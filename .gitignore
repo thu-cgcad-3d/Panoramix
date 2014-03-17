@@ -1,0 +1,4 @@
+*.sublime-workspace
+gtest-1.7.0
+build
+.tags*
