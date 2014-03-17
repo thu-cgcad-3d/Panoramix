@@ -33,8 +33,7 @@ namespace panoramix {
 		}
         
         template <class VertDataT, class HalfDataT, class FaceDataT, class VertMakerT = VertConstructorMaker<VertDataT, Eigen::Vector3f>>
-        void MakeQuadFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> & mesh, VertMakerT vmt = VertMakerT())
-        {
+        void MakeQuadFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> & mesh, VertMakerT vmt = VertMakerT()) {
             /*
              * 4 ----- 5
               /		  /|

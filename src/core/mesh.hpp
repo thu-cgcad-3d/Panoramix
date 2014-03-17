@@ -15,8 +15,7 @@ namespace panoramix {
          * @brief Handle struct
          */
 		template <class Tag>
-		struct Handle
-		{
+		struct Handle {
 			int32_t id;
 			inline Handle(int32_t id_ = -1) : id(id_){}
 			inline bool operator == (Handle h) const { return id == h.id; }
@@ -36,13 +35,11 @@ namespace panoramix {
 		struct VertTopo;
 		struct HalfTopo;
 		struct FaceTopo;
-		struct VertTopo
-		{
+		struct VertTopo {
 			Handle<VertTopo> hd;
 			HandleArray<HalfTopo> halfedges;
 		};
-		struct HalfTopo
-		{
+		struct HalfTopo {
 			Handle<HalfTopo> hd;
 			Handle<VertTopo> endVertices[2];
 			inline Handle<VertTopo> & from() { return endVertices[0]; }
@@ -52,8 +49,7 @@ namespace panoramix {
 			Handle<HalfTopo> opposite;
 			Handle<FaceTopo> face;
 		};
-		struct FaceTopo
-		{
+		struct FaceTopo {
 			Handle<FaceTopo> hd;
 			HandleArray<HalfTopo> halfedges;
 		};
@@ -62,8 +58,7 @@ namespace panoramix {
          * @brief Triplet struct
          */
 		template <class TopoT, class DataT>
-		struct Triplet
-		{
+		struct Triplet {
 			TopoT topo;
 			uint16_t exists;
 			DataT data;
@@ -76,8 +71,7 @@ namespace panoramix {
          * @brief Helper functions for the Mesh class
          */
 		template <class ComponentTableT, class UpdateHandleTableT>
-		void RemoveAndMap(ComponentTableT & v, UpdateHandleTableT & newlocations)
-		{
+		void RemoveAndMap(ComponentTableT & v, UpdateHandleTableT & newlocations) {
 			// ComponentTableT : std::vector<Triplet<TopoT, DataT>>
 			// UpdateHandleTableT: std::vector<Handle<TopoT>>
 			newlocations.resize(v.size());
@@ -92,22 +86,19 @@ namespace panoramix {
 			}
 		}
 		template <class UpdateHandleTableT, class TopoT>
-		inline void UpdateOldHandle(const UpdateHandleTableT & newlocationTable, Handle<TopoT> & h)
-		{
+		inline void UpdateOldHandle(const UpdateHandleTableT & newlocationTable, Handle<TopoT> & h) {
 			// UpdateHandleTableT: std::vector<Handle<TopoT>>
 			h = newlocationTable[h.id];
 		}
 		template <class UpdateHandleTableT, class ContainerT>
-		inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, ContainerT & hs)
-		{
+		inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, ContainerT & hs) {
 			// UpdateHandleTableT: std::vector<Handle<TopoT>>
 			for (auto & h : hs){
 				h = newlocationTable[h.id];
 			}
 		}
 		template <class ContainerT>
-		inline void RemoveInValidHandleFromContainer(ContainerT & hs)
-		{
+		inline void RemoveInValidHandleFromContainer(ContainerT & hs) {
 			auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
 			invalid.reset();
 			hs.erase(std::remove(std::begin(hs), std::end(hs), invalid), std::end(hs));
@@ -117,8 +108,7 @@ namespace panoramix {
          * @brief The Mesh class, halfedge structure
          */
 		template <class VertDataT, class HalfDataT = Dummy, class FaceDataT = Dummy>
-		class Mesh
-		{
+		class Mesh {
             
 		public:
 			inline Mesh(){}
@@ -201,16 +191,14 @@ namespace panoramix {
         
 		template <class VertDataT, class HalfDataT, class FaceDataT>
 		typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addVertex(const VertDataT & vd)
-		{
+        Mesh<VertDataT, HalfDataT, FaceDataT>::addVertex(const VertDataT & vd) {
             _verts.push_back({ { { _verts.size() }, {} }, true, vd });
             return _verts.back().topo.hd;
         }
         
 		template <class VertDataT, class HalfDataT, class FaceDataT>
 		typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addEdge(VertHandle from, VertHandle to, const HalfDataT & hd, const HalfDataT & hdrev)
-		{
+        Mesh<VertDataT, HalfDataT, FaceDataT>::addEdge(VertHandle from, VertHandle to, const HalfDataT & hd, const HalfDataT & hdrev) {
             if (from == to){
                 return HalfHandle();
             }
@@ -237,8 +225,7 @@ namespace panoramix {
         
 		template <class VertDataT, class HalfDataT, class FaceDataT>
 		typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(const HandleArray<HalfTopo> & halfedges, const FaceDataT & fd)
-		{
+        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(const HandleArray<HalfTopo> & halfedges, const FaceDataT & fd) {
             _faces.push_back({ { { _faces.size() }, halfedges }, true, fd });
             for (HalfHandle hh : halfedges){
                 _halfs[hh.id].topo.face = _faces.back().topo.hd;
@@ -248,8 +235,7 @@ namespace panoramix {
         
 		template <class VertDataT, class HalfDataT, class FaceDataT>
 		typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(const HandleArray<VertTopo> & vertices, bool autoflip, const FaceDataT & fd)
-		{
+        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(const HandleArray<VertTopo> & vertices, bool autoflip, const FaceDataT & fd) {
             HandleArray<HalfTopo> halfs;
             assert(vertices.size() >= 3);
             HalfHandle hh = findEdge(vertices.back(), vertices.front());
@@ -267,8 +253,7 @@ namespace panoramix {
         
 		template <class VertDataT, class HalfDataT, class FaceDataT>
 		typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::findEdge(VertHandle from, VertHandle to) const
-		{
+        Mesh<VertDataT, HalfDataT, FaceDataT>::findEdge(VertHandle from, VertHandle to) const {
             for (HalfHandle hh : _verts[from.id].topo.halfedges){
                 assert(_halfs[hh.id].topo.endVertices[0] == from);
                 if (_halfs[hh.id].topo.endVertices[1] == to){
@@ -279,8 +264,7 @@ namespace panoramix {
         }
         
 		template <class VertDataT, class HalfDataT, class FaceDataT>
-		void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(FaceHandle f)
-		{
+		void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(FaceHandle f) {
 			if (f.isInValid() || removed(f))
 				return;
 			_faces[f.id].exists = false;
@@ -290,8 +274,7 @@ namespace panoramix {
 		}
         
 		template <class VertDataT, class HalfDataT, class FaceDataT>
-		void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(HalfHandle h)
-		{
+		void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(HalfHandle h) {
 			if (h.isInValid() || removed(h))
 				return;
 			HalfHandle hop = _halfs[h.id].topo.opposite;
@@ -308,8 +291,7 @@ namespace panoramix {
 		}
         
 		template <class VertDataT, class HalfDataT, class FaceDataT>
-		void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(VertHandle v)
-		{
+		void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(VertHandle v) {
 			if (v.isInValid() || removed(v))
 				return;
 			_verts[v.id].exists = false;
@@ -319,8 +301,7 @@ namespace panoramix {
 		}
         
 		template <class VertDataT, class HalfDataT, class FaceDataT>
-		Mesh<VertDataT, HalfDataT, FaceDataT>& Mesh<VertDataT, HalfDataT, FaceDataT>::unite(const Mesh & m)
-		{
+		Mesh<VertDataT, HalfDataT, FaceDataT>& Mesh<VertDataT, HalfDataT, FaceDataT>::unite(const Mesh & m) {
 			std::vector<VertHandle> vtable(m.internalVertices().size());
 			std::vector<HalfHandle> htable(m.internalHalfEdges().size());
 			std::vector<FaceHandle> ftable(m.internalFaces().size());
@@ -353,8 +334,7 @@ namespace panoramix {
 		template <class VertHandlePtrContainerT, class HalfHandlePtrContainerT, class FaceHandlePtrContainerT>
 		void Mesh<VertDataT, HalfDataT, FaceDataT>::gc(const VertHandlePtrContainerT & vps,
                                                        const HalfHandlePtrContainerT & hps,
-                                                       const FaceHandlePtrContainerT & fps)
-		{
+                                                       const FaceHandlePtrContainerT & fps){
 			std::vector<VertHandle> vnlocs;
 			std::vector<HalfHandle> hnlocs;
 			std::vector<FaceHandle> fnlocs;
@@ -362,8 +342,7 @@ namespace panoramix {
 			RemoveAndMap(_halfs, hnlocs);
 			RemoveAndMap(_faces, fnlocs);
             
-			for (size_t i = 0; i < _verts.size(); i++)
-			{
+			for (size_t i = 0; i < _verts.size(); i++){
 				UpdateOldHandle(vnlocs, _verts[i].topo.hd);
 				UpdateOldHandleContainer(hnlocs, _verts[i].topo.halfedges);
 				RemoveInValidHandleFromContainer(_verts[i].topo.halfedges);
@@ -391,8 +370,7 @@ namespace panoramix {
 		}
         
 		template <class VertDataT, class HalfDataT, class FaceDataT>
-		void Mesh<VertDataT, HalfDataT, FaceDataT>::clear()
-		{
+		void Mesh<VertDataT, HalfDataT, FaceDataT>::clear() {
 			_verts.clear();
 			_halfs.clear();
 			_faces.clear();

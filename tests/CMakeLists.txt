@@ -1,5 +1,17 @@
+# define test data location
+set(src_dir "@CMAKE_CURRENT_SOURCE_DIR@")
+get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
+message (STATUS "test data directory: " ${TEST_DATA_DIR})
+if (MSVC)
+	add_definitions ( "/DPROJECT_TEST_DATA_DIR_STR=\"${TEST_DATA_DIR}\"" )
+else ()
+	add_definitions ( "-DPROJECT_TEST_DATA_DIR_STR=\"${TEST_DATA_DIR}\"" )
+endif ()
 
-set (TESTNAMES config_test mesh_test)
+
+# set all tests
+set (TESTNAMES config_test mesh_test feature_test)
+
 
 # the JOIN FUNCTION
 # JOIN("${somelist}" ":" output)
@@ -36,3 +48,4 @@ foreach (T ${TESTNAMES})
 	set_tests_properties(${T} PROPERTIES ENVIRONMENT "${LD_VARNAME}=${LD_PATH}" )
 	# input vars and environment vars do not apply on IDEs (VS and XCode), manual settings are needed
 endforeach ()
+

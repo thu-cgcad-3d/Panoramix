@@ -9,8 +9,7 @@ namespace panoramix {
  
 		// elements of container MUST support .exists
 		template <class BoolExistIteratorT>
-		class JumpIterator
-		{
+		class JumpIterator {
 
 		public:
 			using Iterator = BoolExistIteratorT;
@@ -26,8 +25,7 @@ namespace panoramix {
 			* @param end_
 			*/
 			inline JumpIterator(Iterator it_, Iterator end_)
-				: _it(it_), _end(end_)
-			{
+				: _it(it_), _end(end_) {
 				if (_it != _end && !_it->exists)
 					++ (*this);
 			}
@@ -36,8 +34,7 @@ namespace panoramix {
 			* @brief operator ++
 			* @return
 			*/
-			inline JumpIterator & operator++()
-			{
+			inline JumpIterator & operator++() {
 				assert(_it != _end);
 				++_it;
 				while (_it != _end && !_it->exists)
@@ -49,8 +46,7 @@ namespace panoramix {
 			* @brief operator *
 			* @return
 			*/
-			inline reference operator * () const
-			{
+			inline reference operator * () const {
 				return *_it;
 			}
 
@@ -58,8 +54,7 @@ namespace panoramix {
 			* @brief operator ->
 			* @return
 			*/
-			inline pointer operator -> () const
-			{
+			inline pointer operator -> () const {
 				return &(*_it);
 			}
 
@@ -68,8 +63,7 @@ namespace panoramix {
 			* @param i
 			* @return
 			*/
-			inline bool operator == (const JumpIterator & i) const
-			{
+			inline bool operator == (const JumpIterator & i) const {
 				return _it == i._it;
 			}
 
@@ -78,8 +72,7 @@ namespace panoramix {
 			* @param i
 			* @return
 			*/
-			inline bool operator != (const JumpIterator & i) const
-			{
+			inline bool operator != (const JumpIterator & i) const {
 				return !(*this == i);
 			}
 
@@ -87,8 +80,7 @@ namespace panoramix {
 			* @brief internalIterator
 			* @return
 			*/
-			inline Iterator internalIterator() const
-			{
+			inline Iterator internalIterator() const {
 				return _it;
 			}
 
@@ -101,8 +93,7 @@ namespace panoramix {
 		* @brief class JumpContainerWrapper
 		*/
 		template <class BoolExistContainerT>
-		class JumpContainerWrapper
-		{
+		class JumpContainerWrapper {
 		public:
 			using BoolExistIteratorT = typename BoolExistContainerT::iterator;
 			using iterator = JumpIterator<BoolExistIteratorT>;
@@ -122,8 +113,7 @@ namespace panoramix {
 		* @brief class ConstJumpContainerWrapper
 		*/
 		template <class BoolExistContainerT>
-		class ConstJumpContainerWrapper
-		{
+		class ConstJumpContainerWrapper {
 		public:
 			using BoolExistIteratorT = typename BoolExistContainerT::const_iterator;
 			using iterator = JumpIterator<BoolExistIteratorT>;
