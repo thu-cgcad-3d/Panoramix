@@ -11,11 +11,23 @@ namespace panoramix {
         using Eigen::Vector2d;
         using Eigen::Vector3d;
         
-		class Panorama {
+        
+        class View {
+        public:
             
-            double _radius;
-            Mat _im;
+        private:
+
         };
+        
+
+        class Image {
+        public:
+
+        private:
+            View * _view;
+            cv::Mat _im;
+        };
+        
  
 	}
 }

@@ -6,6 +6,7 @@
 
 using namespace panoramix;
 
+// PROJECT_TEST_DATA_DIR_STR is predefined using CMake
 static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
 
 TEST(Feature, ExtractLines) {
@@ -18,9 +19,6 @@ TEST(Feature, ExtractLines) {
     core::ExtractLines(im, lines, 150);
     
     EXPECT_GT(lines.size(), 0);
-    
-    
-    
 }
 
 
