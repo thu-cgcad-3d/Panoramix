@@ -1,5 +1,5 @@
 
-set (TESTNAMES config_test mesh_test.cpp readwrite_test.cpp)
+set (TESTNAMES config_test mesh_test)
 
 # the JOIN FUNCTION
 # JOIN("${somelist}" ":" output)

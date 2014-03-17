@@ -2,6 +2,7 @@
 #define PANORAMIX_CORE_MESH_HPP
 
 #include <vector>
+#include <cstdint>
 
 #include "utilities.hpp"
 
