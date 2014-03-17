@@ -16,6 +16,12 @@ TEST(MeshTest, Tetrahedron) {
 	EXPECT_EQ(4, mesh.internalVertices().size());
 	EXPECT_EQ(12, mesh.internalHalfEdges().size());
 	EXPECT_EQ(4, mesh.internalFaces().size());
+
+	int a = 1, b = 2;
+	std::vector<int*> v = {};
+	for (auto vp : v){
+		std::cout << *vp << std::endl;
+	}
     
     for (int i = 0; i < mesh.internalVertices().size(); i++) {
         TestMesh nmesh = mesh;

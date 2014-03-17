@@ -175,9 +175,9 @@ namespace panoramix {
 			class HalfHandlePtrContainerT = HandlePtrArray<HalfTopo>,
 			class FaceHandlePtrContainerT = HandlePtrArray<FaceTopo>
 			>
-			void gc(const VertHandlePtrContainerT & vps = {},
-                    const HalfHandlePtrContainerT & hps = {},
-                    const FaceHandlePtrContainerT & fps = {});
+			void gc(const VertHandlePtrContainerT & vps = VertHandlePtrContainerT(),
+					const HalfHandlePtrContainerT & hps = HalfHandlePtrContainerT(),
+					const FaceHandlePtrContainerT & fps = FaceHandlePtrContainerT());
             
 			void clear();
             
@@ -192,7 +192,11 @@ namespace panoramix {
 		template <class VertDataT, class HalfDataT, class FaceDataT>
 		typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle
         Mesh<VertDataT, HalfDataT, FaceDataT>::addVertex(const VertDataT & vd) {
-            _verts.push_back({ { { _verts.size() }, {} }, true, vd });
+			Triplet<VertTopo, VertDataT> t;
+			t.data = vd;
+			t.topo.hd.id = _verts.size();
+			t.exists = true;
+            _verts.push_back(t);
             return _verts.back().topo.hd;
         }
         
@@ -210,10 +214,23 @@ namespace panoramix {
                 return hh;
             }
             
-            HalfHandle hh1{ _halfs.size() };
-            _halfs.push_back({ { { _halfs.size() }, { from, to }, { -1 }, { -1 } }, true, hd });
-            HalfHandle hh2{ _halfs.size() };
-            _halfs.push_back({ { { _halfs.size() }, { to, from }, { -1 }, { -1 } }, true, hdrev });
+            HalfHandle hh1(_halfs.size());
+			Triplet<HalfTopo, HalfDataT> ht;
+			ht.topo.hd.id = _halfs.size();
+			ht.topo.from() = from;
+			ht.topo.to() = to;
+			ht.exists = true;
+			ht.data = hd;
+            //_halfs.push_back({ { { _halfs.size() }, { from, to }, { -1 }, { -1 } }, true, hd });
+			_halfs.push_back(ht);
+            HalfHandle hh2(_halfs.size());
+			ht.topo.hd.id = _halfs.size();
+			ht.topo.from() = to;
+			ht.topo.to() = from;
+			ht.exists = true;
+			ht.data = hdrev;
+            //_halfs.push_back({ { { _halfs.size() }, { to, from }, { -1 }, { -1 } }, true, hdrev });
+			_halfs.push_back(ht);
             
             _halfs[hh1.id].topo.opposite = hh2;
             _halfs[hh2.id].topo.opposite = hh1;
@@ -226,7 +243,13 @@ namespace panoramix {
 		template <class VertDataT, class HalfDataT, class FaceDataT>
 		typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
         Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(const HandleArray<HalfTopo> & halfedges, const FaceDataT & fd) {
-            _faces.push_back({ { { _faces.size() }, halfedges }, true, fd });
+			Triplet<FaceTopo, FaceDataT> ft;
+			ft.topo.hd.id = _faces.size();
+			ft.topo.halfedges = halfedges;
+			ft.exists = true;
+			ft.data = fd;
+            //_faces.push_back({ { { _faces.size() }, halfedges }, true, fd });
+			_faces.push_back(ft);
             for (HalfHandle hh : halfedges){
                 _halfs[hh.id].topo.face = _faces.back().topo.hd;
             }

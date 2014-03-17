@@ -15,6 +15,9 @@ foreach (S ${SOURCES})
 	message (STATUS "Source: " ${S})
 endforeach ()
 
+if (MSVC)
+	add_definitions ("/D_USE_MATH_DEFINES")
+endif ()
 
 add_library (${PROJECT_LIB_STATIC_NAME} STATIC ${SOURCES} ${HEADERS})
 #add_library (${PROJECT_LIB_SHARED_NAME} SHARED ${SOURCES})
