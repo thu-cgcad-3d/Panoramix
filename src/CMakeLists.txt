@@ -15,7 +15,8 @@ foreach (S ${SOURCES})
 	message (STATUS "Source: " ${S})
 endforeach ()
 
-add_library (${PROJECT_LIB_STATIC_NAME} STATIC ${SOURCES})
+
+add_library (${PROJECT_LIB_STATIC_NAME} STATIC ${SOURCES} ${HEADERS})
 #add_library (${PROJECT_LIB_SHARED_NAME} SHARED ${SOURCES})
 
 target_link_libraries (${PROJECT_LIB_STATIC_NAME} ${THIRDPARTY_LIBS})
