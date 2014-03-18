@@ -9,6 +9,15 @@
 using namespace panoramix;
 using TestMesh = core::Mesh<Eigen::Vector3f>;
 
+TEST(MeshTest, Conversion) {
+	using CVMesh = core::Mesh<cv::Vec3f>;
+	CVMesh mesh;
+	core::MakeTetrahedron(mesh);
+	EXPECT_EQ(4, mesh.internalVertices().size());
+	EXPECT_EQ(12, mesh.internalHalfEdges().size());
+	EXPECT_EQ(4, mesh.internalFaces().size());
+}
+
 TEST(MeshTest, Tetrahedron) {
 
 	TestMesh mesh;

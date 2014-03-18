@@ -3,8 +3,10 @@
 
 #include <cmath>
 
+#include <opencv2/opencv.hpp>
 #include <Eigen/Core>
 
+#include "utilities.hpp"
 #include "mesh.hpp"
  
 namespace panoramix {
@@ -14,6 +16,12 @@ namespace panoramix {
 		struct VertConstructorMaker {
 			inline VertDataT operator () (const VectorT & v) const {
 				return VertDataT(v);
+			}
+		};
+		template <class ValueT, int dim>
+		struct VertConstructorMaker<cv::Vec<ValueT, dim>, Eigen::Matrix<ValueT, dim, 1>> {
+			inline cv::Vec<ValueT, dim> operator () (const Eigen::Matrix<ValueT, dim, 1> & v) const {
+				return CVVec(v);
 			}
 		};
  
