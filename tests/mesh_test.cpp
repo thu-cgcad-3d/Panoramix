@@ -32,6 +32,26 @@ TEST(MeshTest, Tetrahedron) {
         EXPECT_EQ(6, nmesh.internalHalfEdges().size());
         EXPECT_EQ(1, nmesh.internalFaces().size());
     }
+
+	for (int i = 0; i < mesh.internalHalfEdges().size(); i++){
+		TestMesh nmesh = mesh;
+		nmesh.remove(TestMesh::HalfHandle(i));
+		nmesh.gc();
+
+		EXPECT_EQ(4, nmesh.internalVertices().size());
+		EXPECT_EQ(10, nmesh.internalHalfEdges().size());
+		EXPECT_EQ(2, nmesh.internalFaces().size());
+	}
+
+	for (int i = 0; i < mesh.internalFaces().size(); i++) {
+		TestMesh nmesh = mesh;
+		nmesh.remove(TestMesh::FaceHandle(i));
+		nmesh.gc();
+
+		EXPECT_EQ(4, nmesh.internalVertices().size());
+		EXPECT_EQ(12, nmesh.internalHalfEdges().size());
+		EXPECT_EQ(3, nmesh.internalFaces().size());
+	}
     
 }
 
@@ -52,6 +72,26 @@ TEST(MeshTest, Cube) {
         EXPECT_EQ(18, nmesh.internalHalfEdges().size());
         EXPECT_EQ(3, nmesh.internalFaces().size());
     }
+
+	for (int i = 0; i < mesh.internalHalfEdges().size(); i++){
+		TestMesh nmesh = mesh;
+		nmesh.remove(TestMesh::HalfHandle(i));
+		nmesh.gc();
+
+		EXPECT_EQ(8, nmesh.internalVertices().size());
+		EXPECT_EQ(22, nmesh.internalHalfEdges().size());
+		EXPECT_EQ(4, nmesh.internalFaces().size());
+	}
+
+	for (int i = 0; i < mesh.internalFaces().size(); i++) {
+		TestMesh nmesh = mesh;
+		nmesh.remove(TestMesh::FaceHandle(i));
+		nmesh.gc();
+
+		EXPECT_EQ(8, nmesh.internalVertices().size());
+		EXPECT_EQ(24, nmesh.internalHalfEdges().size());
+		EXPECT_EQ(5, nmesh.internalFaces().size());
+	}
     
 }
 
