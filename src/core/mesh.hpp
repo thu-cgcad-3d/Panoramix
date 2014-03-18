@@ -4,7 +4,7 @@
 #include <vector>
 #include <cstdint>
 
-#include "utilities.hpp"
+#include "misc.hpp"
 
 namespace panoramix {
 	namespace core {

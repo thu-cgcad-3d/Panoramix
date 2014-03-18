@@ -1,17 +1,13 @@
-#include "../src/config.hpp"
-#include "../src/core/Dummy.hpp"
+#include "../src/core/version.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
 
 using namespace panoramix;
 
-TEST(DummyTest, Zero) {
-	EXPECT_EQ(PANORAMIX_VERSION_MAJOR, core::MakeAnIntDummy().a);
-}
-
-TEST(DummyTest, One) {
-	EXPECT_EQ(PANORAMIX_VERSION_MINOR, core::MakeAnIntDummy().b);
+TEST(ConfigTest, Version) {
+	EXPECT_EQ(PANORAMIX_VERSION_MAJOR, core::GetVersion().major);
+	EXPECT_EQ(PANORAMIX_VERSION_MINOR, core::GetVersion().minor);
 }
 
 int main(int argc, char * argv[], char * envp[])

@@ -1,17 +1,20 @@
-set (CMAKE_ALLOW_LOOSE_CONSTRUCTS true)
-
 cmake_minimum_required (VERSION 2.8)
 
+# project name
 set (PROJECT_NAME Panoramix)
+string (TOUPPER ${PROJECT_NAME} PROJECT_NAME_UPPER) # upper case name
+
+# project version
+set (PROJECT_VERSION_MAJOR 0)
+set (PROJECT_VERSION_MINOR 1)
+set (PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR})
+
+set (CMAKE_ALLOW_LOOSE_CONSTRUCTS true)
 project (${PROJECT_NAME})
 enable_testing ()
 
 set (PROJECT_LIB_STATIC_NAME ${PROJECT_NAME}Static)
 set (PROJECT_LIB_SHARED_NAME ${PROJECT_NAME})
-
-set (PROJECT_VERSION_MAJOR 0)
-set (PROJECT_VERSION_MINOR 1)
-set (PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR})
 
 set (CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 if (NOT DEFINED MSVC)
@@ -46,7 +49,19 @@ set (GTEST_DIR "gtest-1.7.0")
 
 
 # global includes
-include_directories (${THIRDPARTY_INCLUDES} ${GTEST_DIR}/include ${PROJECT_BINARY_DIR}/include)
+include_directories (${THIRDPARTY_INCLUDES} ${GTEST_DIR}/include)
+
+# global definitions
+if (MSVC)
+	add_definitions ( "/D${PROJECT_NAME_UPPER}_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}" )
+	add_definitions ( "/D${PROJECT_NAME_UPPER}_VERSION_MINOR=${PROJECT_VERSION_MINOR}" )
+	add_definitions ( "/D${PROJECT_NAME_UPPER}_VERSION_${PROJECT_VERSION_MAJOR}_${PROJECT_VERSION_MINOR}" )
+	add_definitions ( "/D_USE_MATH_DEFINES")
+else ()
+	add_definitions ( "-D${PROJECT_NAME_UPPER}_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}" )
+	add_definitions ( "-D${PROJECT_NAME_UPPER}_VERSION_MINOR=${PROJECT_VERSION_MINOR}" )
+	add_definitions ( "-D${PROJECT_NAME_UPPER}_VERSION_${PROJECT_VERSION_MAJOR}_${PROJECT_VERSION_MINOR}" )
+endif ()
 
 add_subdirectory (src lib)
 add_subdirectory (${GTEST_DIR})

@@ -1,16 +1,16 @@
-# define test data location
-get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
-message (STATUS "test data directory: " ${TEST_DATA_DIR})
-if (MSVC)
-	add_definitions ( "/D_USE_MATH_DEFINES" )
-	add_definitions ( "/DPROJECT_TEST_DATA_DIR_STR=\"${TEST_DATA_DIR}\"" )
-else ()
-	add_definitions ( "-DPROJECT_TEST_DATA_DIR_STR=\"${TEST_DATA_DIR}\"" )
-endif ()
 
 
 # set all tests
 set (TESTNAMES test_config test_mesh test_feature)
+
+# define test data location
+get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
+message (STATUS "test data directory: " ${TEST_DATA_DIR})
+if (MSVC)
+	add_definitions ( "/DPROJECT_TEST_DATA_DIR_STR=\"${TEST_DATA_DIR}\"" )
+else ()
+	add_definitions ( "-DPROJECT_TEST_DATA_DIR_STR=\"${TEST_DATA_DIR}\"" )
+endif ()
 
 
 # the JOIN FUNCTION

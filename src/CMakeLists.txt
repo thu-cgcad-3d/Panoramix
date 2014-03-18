@@ -1,27 +1,26 @@
-set(src_dir "@CMAKE_CURRENT_SOURCE_DIR@")
-configure_file (
-	"${src_dir}/config.hpp.cmake" 
-	"${src_dir}/config.hpp"
-)
 
-file (GLOB_RECURSE HEADERS ./*.hpp)
-file (GLOB_RECURSE SOURCES ./*.cpp)
+set (SRC_MODULES core io)
 
-foreach (H ${HEADERS})
-	message (STATUS "Header: " ${H})
+foreach (M ${SRC_MODULES})
+	message (STATUS "module name: " ${M})
+	file (GLOB_RECURSE M_HEADERS ${CMAKE_CURRENT_SOURCE_DIR}/${M}/*.hpp)
+	file (GLOB_RECURSE M_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/${M}/*.cpp)
+	foreach (H ${M_HEADERS})
+		message (STATUS "	header: " ${H})
+	endforeach ()
+	foreach (S ${M_SOURCES})
+		message (STATUS "	source: " ${S})
+	endforeach ()
+	list (APPEND HEADERS ${M_HEADERS})
+	list (APPEND SOURCES ${M_SOURCES})
+	source_group (${M} FILES ${M_HEADERS} ${M_SOURCES})
 endforeach ()
 
-foreach (S ${SOURCES})
-	message (STATUS "Source: " ${S})
-endforeach ()
-
-if (MSVC)
-	add_definitions ("/D_USE_MATH_DEFINES")
-endif ()
 
 add_library (${PROJECT_LIB_STATIC_NAME} STATIC ${SOURCES} ${HEADERS})
 #add_library (${PROJECT_LIB_SHARED_NAME} SHARED ${SOURCES})
 
 target_link_libraries (${PROJECT_LIB_STATIC_NAME} ${THIRDPARTY_LIBS})
 #target_link_libraries (${PROJECT_LIB_SHARED_NAME} ${THIRDPARTY_LIBS})
+
 

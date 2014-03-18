@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_UTILITIES_HPP
-#define PANORAMIX_CORE_UTILITIES_HPP
+#ifndef PANORAMIX_CORE_MISC_HPP
+#define PANORAMIX_CORE_MISC_HPP
 
 #include <iterator>
 #include <cassert>
