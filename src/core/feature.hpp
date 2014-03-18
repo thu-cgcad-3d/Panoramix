@@ -13,11 +13,13 @@ namespace panoramix {
 			using Vec3 = Eigen::Vector3d;
 			using Vec4 = Eigen::Vector4d;
 			using Mat4 = Eigen::Matrix4d;
+			using Size2 = cv::Size2i;
 
 		public:
 			Camera(int w, int h, double focal, const Vec3 & eye, 
-				const Vec3 & center = Vec3(0, 0, 0), const Vec3 & up = Vec3(0, 1, 0));
-			
+				const Vec3 & center = Vec3(0, 0, 0), const Vec3 & up = Vec3(0, 0, 1));
+
+			inline Size2 screenSize() const { return Size2(_screenW, _screenH); }
 			Vec2 screenProjection(const Vec3 & p3d) const;
 			Vec3 spatialDirection(const Vec2 & p2d) const;
 
@@ -26,6 +28,27 @@ namespace panoramix {
 			double _focal;
 			Vec3 _eye, _center, _up;
 			Mat4 _viewMatrix, _projectionMatrix, _viewProjectionMatrix, _viewProjectionMatrixInv;
+		};
+
+		class PanoramicCamera {
+		public:
+			using Vec2 = Eigen::Vector2d;
+			using Vec3 = Eigen::Vector3d;
+			using Vec4 = Eigen::Vector4d;
+			using Mat4 = Eigen::Matrix4d;
+			using Size2 = cv::Size2f;
+
+		public:
+			PanoramicCamera(double focal, const Vec3 & eye,
+				const Vec3 & center = Vec3(0, 0, 0), const Vec3 & up = Vec3(0, 0, 1));
+
+			inline Size2 screenSize() const { return Size2(_focal * 2 * M_PI, _focal * M_PI); }
+			Vec2 screenProjection(const Vec3 & p3d) const;
+			Vec3 spatialDirection(const Vec2 & p2d) const;
+
+		private:
+			double _focal;
+			Vec3 _eye, _center, _up;
 		};
 
 
@@ -37,6 +60,16 @@ namespace panoramix {
 			Image operator() (const Image & panorama) const;
 		private:
 			Camera _cam;
+		};
+
+		
+		class FeatureExtractor {
+		public:
+			using Image = cv::Mat;
+		public:
+			std::vector<Image> operator() (const Image & im) const;
+		private:
+
 		};
 
 		

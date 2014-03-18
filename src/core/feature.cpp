@@ -22,7 +22,7 @@ namespace panoramix {
 			_viewMatrix = Matrix4MakeLookAt(eye, center, up, m);
 			
 			double verticalViewAngle = atan(_screenH / 2.0 / _focal) * 2;
-			double aspect = _screenW / _screenH;
+			double aspect = double(_screenW) / double(_screenH);
 			_projectionMatrix = Matrix4MakePerspective(verticalViewAngle, aspect, 0.1, 1e4, m);
 
 			_viewProjectionMatrix = _projectionMatrix * _viewMatrix;
@@ -43,13 +43,66 @@ namespace panoramix {
 			double xratio = (p2d(0) / _screenW - 0.5) * 2;
 			double yratio = ((_screenH - p2d(1)) / _screenH - 0.5) * 2;
 			Vec4 position(xratio, yratio, 1, 1);
-			Vec4 realPosition = _viewProjectionMatrixInv * position;
-			return Vec3(realPosition(0) / realPosition(3), realPosition(1) / realPosition(3), realPosition(2) / realPosition(3));
+			Vec4 real_position = _viewProjectionMatrixInv * position;
+			return Vec3(real_position(0) / real_position(3), real_position(1) / real_position(3), real_position(2) / real_position(3));
+		}
+
+
+		PanoramicCamera::PanoramicCamera(double focal, const Vec3 & eye,
+			const Vec3 & center, const Vec3 & up)
+			: _focal(focal), _eye(eye), _center(center), _up(up) {
+		}
+
+		PanoramicCamera::Vec2 PanoramicCamera::screenProjection(const Vec3 & p3) const {
+			Vec3 y = (_center - _eye).normalized();
+			Vec3 x = y.cross(_up).normalized();
+			Vec3 z = x.cross(y);
+			double xx = p3.dot(x);
+			double yy = p3.dot(y);
+			double zz = p3.dot(z);
+			// TODO
+		}
+
+		PanoramicCamera::Vec3 PanoramicCamera::spatialDirection(const Vec2 & p2d) const {
+			
 		}
 
 
 		PerspectiveSampler::Image PerspectiveSampler::operator()(const Image & panorama) const {
-			
+			Image undistorted_im;
+			cv::Mat mapx = cv::Mat::zeros(_cam.screenSize(), CV_32FC1);
+			cv::Mat mapy = cv::Mat::zeros(_cam.screenSize(), CV_32FC1);
+			for (int i = 0; i < _cam.screenSize().width; i++){
+				for (int j = 0; j < _cam.screenSize().height; j++){
+					Camera::Vec2 screenp(i, j);
+					Camera::Vec3 p3 = _cam.spatialDirection(screenp);
+					Camera::Vec2 longla;
+					LongitudeLatitudeFromDirection(p3, longla);
+					int panWidth = panorama.cols;
+					int panHeight = panorama.rows;
+					float x = (longla(0) + M_PI) / 2.0 / M_PI * panWidth;
+					float y = (longla(1) + M_PI_2) / M_PI * panHeight;
+					x = WrapBetween(x, 0, panWidth);
+					y = WrapBetween(y, - panHeight * 0.5, panHeight * 1.5);
+					if (y < 0){
+						y += panHeight;
+						x = WrapBetween(x + panWidth/2, 0, panWidth);
+					} else if (y > panHeight){
+						y -= panHeight;
+						x = WrapBetween(x + panWidth/2, 0, panWidth);
+					}
+					if (!(x >= 0 && x <= panWidth)){
+						assert(false);
+					}
+					if (!(y >= 0 && y <= panHeight)){
+						assert(false);
+					}
+					mapx.at<float>(j, i) = x;
+					mapy.at<float>(j, i) = y;
+				}
+			}
+			cv::remap(panorama, undistorted_im, mapx, mapy, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+			return undistorted_im;
 		}
 
 
