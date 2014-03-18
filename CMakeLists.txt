@@ -52,4 +52,3 @@ add_subdirectory (src lib)
 add_subdirectory (${GTEST_DIR})
 add_subdirectory (tests bin)
 
-

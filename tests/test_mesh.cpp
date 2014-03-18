@@ -26,7 +26,7 @@ TEST(MeshTest, Tetrahedron) {
 	EXPECT_EQ(12, mesh.internalHalfEdges().size());
 	EXPECT_EQ(4, mesh.internalFaces().size());
     
-    for (int i = 0; i < mesh.internalVertices().size(); i++) {
+    for (size_t i = 0; i < mesh.internalVertices().size(); i++) {
         TestMesh nmesh = mesh;
         nmesh.remove(TestMesh::VertHandle(i));
         nmesh.gc();
@@ -36,7 +36,7 @@ TEST(MeshTest, Tetrahedron) {
         EXPECT_EQ(1, nmesh.internalFaces().size());
     }
 
-	for (int i = 0; i < mesh.internalHalfEdges().size(); i++){
+	for (size_t i = 0; i < mesh.internalHalfEdges().size(); i++){
 		TestMesh nmesh = mesh;
 		nmesh.remove(TestMesh::HalfHandle(i));
 		nmesh.gc();
@@ -46,7 +46,7 @@ TEST(MeshTest, Tetrahedron) {
 		EXPECT_EQ(2, nmesh.internalFaces().size());
 	}
 
-	for (int i = 0; i < mesh.internalFaces().size(); i++) {
+	for (size_t i = 0; i < mesh.internalFaces().size(); i++) {
 		TestMesh nmesh = mesh;
 		nmesh.remove(TestMesh::FaceHandle(i));
 		nmesh.gc();
@@ -66,7 +66,7 @@ TEST(MeshTest, Cube) {
 	EXPECT_EQ(24, mesh.internalHalfEdges().size());
 	EXPECT_EQ(6, mesh.internalFaces().size());
     
-    for (int i = 0; i < mesh.internalVertices().size(); i++) {
+    for (size_t i = 0; i < mesh.internalVertices().size(); i++) {
         TestMesh nmesh = mesh;
         nmesh.remove(TestMesh::VertHandle(i));
         nmesh.gc();
@@ -76,7 +76,7 @@ TEST(MeshTest, Cube) {
         EXPECT_EQ(3, nmesh.internalFaces().size());
     }
 
-	for (int i = 0; i < mesh.internalHalfEdges().size(); i++){
+	for (size_t i = 0; i < mesh.internalHalfEdges().size(); i++){
 		TestMesh nmesh = mesh;
 		nmesh.remove(TestMesh::HalfHandle(i));
 		nmesh.gc();
@@ -86,7 +86,7 @@ TEST(MeshTest, Cube) {
 		EXPECT_EQ(4, nmesh.internalFaces().size());
 	}
 
-	for (int i = 0; i < mesh.internalFaces().size(); i++) {
+	for (size_t i = 0; i < mesh.internalFaces().size(); i++) {
 		TestMesh nmesh = mesh;
 		nmesh.remove(TestMesh::FaceHandle(i));
 		nmesh.gc();
@@ -96,6 +96,13 @@ TEST(MeshTest, Cube) {
 		EXPECT_EQ(5, nmesh.internalFaces().size());
 	}
     
+}
+
+TEST(MeshTest, Sphere) {
+
+	TestMesh mesh;
+	core::MakeQuadFacedSphere(mesh, 10, 5);
+
 }
 
 int main(int argc, char * argv[], char * envp[])

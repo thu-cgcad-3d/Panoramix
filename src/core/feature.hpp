@@ -20,7 +20,7 @@ namespace panoramix {
                           int minlen = 20, int xborderw = 10, int yborderw = 20,
                           int numdir = 8);
         
- 
+		
         
         
         

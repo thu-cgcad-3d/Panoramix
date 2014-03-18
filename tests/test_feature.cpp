@@ -16,9 +16,9 @@ TEST(Feature, ExtractLines) {
 	EXPECT_EQ(2000, im.rows);
 	
     std::list<core::LineData<double, 2>> lines;
-    core::ExtractLines(im, lines, 150);
+    core::ExtractLines(im, lines, 150, 10, 20, 8);
     
-    EXPECT_GT(lines.size(), 0);
+    EXPECT_EQ(254, lines.size());
 }
 
 
