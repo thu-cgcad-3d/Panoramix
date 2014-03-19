@@ -66,11 +66,12 @@ namespace panoramix {
 		template <class VertDataT, class HalfDataT, class FaceDataT, class Vert3MakerT = Vert3MakerDefault<VertDataT, double>>
 		void MakeQuadFacedSphere(Mesh<VertDataT, HalfDataT, FaceDataT> & mesh, int m = 5, int n = 10, Vert3MakerT vmt = Vert3MakerT()) {
 			using ThisMesh = Mesh<VertDataT, HalfDataT, FaceDataT>;
+            using ThisVertHandle = typename ThisMesh::VertHandle;
 			mesh.clear();
 			mesh.internalVertices().reserve(m * n);
 			mesh.internalHalfEdges().reserve(4 * m * n);
 			mesh.internalFaces().reserve(m * n);
-			std::vector<std::vector<ThisMesh::VertHandle>> vhs(m, std::vector<ThisMesh::VertHandle>(n-1));
+			std::vector<std::vector<ThisVertHandle>> vhs(m, std::vector<ThisVertHandle>(n-1));
 			for (int i = 0; i < m; i++){
 				for (int j = 0; j < n - 1; j++){
 					double xratio = 1.0f - 1.0f / (n - 1) * j;

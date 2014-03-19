@@ -49,7 +49,7 @@ TEST(Feature, PerspectiveCameraRandom){
 }
 
 
-TEST(Feature, DISABLED_CameraSampler) {
+TEST(Feature, CameraSampler) {
 	cv::Mat im = cv::imread(ProjectTestDataDirStr + "/" + "panofactory.jpg");
 
 	EXPECT_EQ(4000, im.cols);
