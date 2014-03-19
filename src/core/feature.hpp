@@ -1,23 +1,26 @@
 #ifndef PANORAMIX_CORE_FEATURE_HPP
 #define PANORAMIX_CORE_FEATURE_HPP
 
-#include <Eigen/Core>
-#include <opencv2/opencv.hpp>
+#include "basic_types.hpp"
+
+#include <opencv2/features2d/features2d.hpp>
+#include <opencv2/nonfree/features2d.hpp>
  
 namespace panoramix {
 	namespace core {
         
 		// perspective camera
-		class Camera {
+		class PerspectiveCamera {
 		public:
+			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			using Vec2 = Eigen::Vector2d;
 			using Vec3 = Eigen::Vector3d;
 			using Vec4 = Eigen::Vector4d;
 			using Mat4 = Eigen::Matrix4d;
-			using Size2 = cv::Size2i;
+			using Size2 = cv::Size2f;
 
 		public:
-			explicit Camera(int w, int h, double focal, const Vec3 & eye = Vec3(0, 0, 0),
+			explicit PerspectiveCamera(int w, int h, double focal, const Vec3 & eye = Vec3(0, 0, 0),
 				const Vec3 & center = Vec3(1, 0, 0), const Vec3 & up = Vec3(0, 0, 1));
 
 			inline Size2 screenSize() const { return Size2(_screenW, _screenH); }
@@ -42,6 +45,7 @@ namespace panoramix {
 		// panoramic camera
 		class PanoramicCamera {
 		public:
+			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 			using Vec2 = Eigen::Vector2d;
 			using Vec3 = Eigen::Vector3d;
 			using Vec4 = Eigen::Vector4d;
@@ -62,14 +66,13 @@ namespace panoramix {
 		private:
 			double _focal;
 			Vec3 _eye, _center, _up;
+			Vec3 _xaxis, _yaxis, _zaxis;
 		};
 
 
-		// sample image from image
+		// sample image from image using camera conversion
 		template <class OutCameraT, class InCameraT>
 		class CameraSampler {
-		public:
-			using Image = cv::Mat;
 		public:
 			explicit inline CameraSampler(const OutCameraT & outCam, const InCameraT & inCam)
 				: _outCam(outCam), _inCam(inCam) {
@@ -82,51 +85,94 @@ namespace panoramix {
 		};
 
 		template <class OutCameraT, class InCameraT>
-		typename CameraSampler<OutCameraT, InCameraT>::Image CameraSampler<OutCameraT, InCameraT>::operator() (const Image & inputIm) const {
-			Image undistorted_im;
+		Image CameraSampler<OutCameraT, InCameraT>::operator() (const Image & inputIm) const {
+			Image result;
 			cv::Mat mapx = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
 			cv::Mat mapy = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
 			for (int i = 0; i < _outCam.screenSize().width; i++){
 				for (int j = 0; j < _outCam.screenSize().height; j++){
-					Camera::Vec2 screenp(i, j);
-					Camera::Vec3 p3 = _outCam.spatialDirection(screenp);
-					Camera::Vec2 screenpOnInCam = _inCam.screenProjection(p3);
+					typename OutCameraT::Vec2 screenp(i, j);
+					typename OutCameraT::Vec3 p3 = _outCam.spatialDirection(screenp);
+					typename InCameraT::Vec2 screenpOnInCam = _inCam.screenProjection(p3);
 					mapx.at<float>(j, i) = screenpOnInCam(0);
 					mapy.at<float>(j, i) = screenpOnInCam(1);
 				}
 			}
-			cv::remap(inputIm, undistorted_im, mapx, mapy, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-			return undistorted_im;
+			cv::remap(inputIm, result, mapx, mapy, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+			return result;
 		}
 
 
-		
-
-
-
 
 
 		
 
-		using cv::Mat;
-		using cv::Vec2d;
-		using cv::Vec3d;
+		/// features
 
-		template <class ValueT, int dim>
-		struct LineData {
-			cv::Vec<ValueT, dim> p1, p2;
+
+		// line extractor
+		class LineSegmentExtractor {
+		public:
+			using Feature = std::list<Line2>;
+			struct Params {
+				inline Params() : minLength(20), xBorderWidth(10), yBorderWidth(10), numDirs(8) {}
+				int minLength;
+				int xBorderWidth, yBorderWidth;
+				int numDirs;
+			};
+		public:
+			inline explicit LineSegmentExtractor(const Params & params = Params()) : _params(params){}
+			Feature operator() (const Image & im) const;
+		private:
+			Params _params;
 		};
 
-		void ExtractLines(const Mat& im,
-			std::list<LineData<double, 2>> & lines,
-			int minlen = 20, int xborderw = 10, int yborderw = 20,
-			int numdir = 8);
+		// point feature extractor
+		template <class CVFeatureT>
+		class CVFeatureExtractor {
+		public:
+			using Feature = std::vector<cv::KeyPoint>;
+		public:
+			template <class ... ArgT>
+			explicit inline CVFeatureExtractor(ArgT ... args) : _feature2D(args ...) {}
+			inline Feature operator() (const Image & im, const Image & mask = cv::Mat(), 
+				cv::OutputArray descriptors = cv::noArray()) const {
+				Feature fea;
+				_feature2D(im, mask, fea, descriptors);
+				return fea;
+			}
+		private:
+			CVFeatureT _feature2D;
+		};
 
-		void EstimateOrientationMap(const Mat& im, Mat & omap);
+		// region feature extractor
+		// manhattan junction
+		class ManhattanJunctionExtractor {
+		public:
+			using Feature = Image;
+			struct Params {
+				inline Params() {}
+			};
+		public:
+			inline explicit ManhattanJunctionExtractor(const Params & params = Params()) : _params(params) {}
+			Feature operator () (const Image & im) const { return Feature(); }
+		private:
+			Params _params;
+		};
 
-		void EstimateGeometricContext(const Mat& im, Mat& gcim);
-
-		void EstimateManhattanJunctionDistribution(const Mat & im, Mat & mjim);
+		// geometric context
+		class GeometricContextExtractor {
+		public:
+			using Feature = Image;
+			struct Params {
+				inline Params() {}
+			};
+		public:
+			inline explicit GeometricContextExtractor(const Params & params = Params()) : _params(params) {}
+			Feature operator () (const Image & im) const { return Feature(); }
+		private:
+			Params _params;
+		};
 
 	}
 }

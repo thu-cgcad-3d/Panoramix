@@ -4,8 +4,6 @@
 namespace panoramix {
 	namespace core {
 
-
-
 		template <class T>
 		inline T Square(const T & v) {
 			return v * v;
@@ -33,7 +31,8 @@ namespace panoramix {
 		}
  
 		template <class Mat4T, class Vec3T>
-		Mat4T Matrix4MakeLookAt(const Vec3T & eye, const Vec3T & center, const Vec3T & up, const Mat4T & base) {
+		Mat4T Matrix4MakeLookAt(const Vec3T & eye, const Vec3T & center, 
+			const Vec3T & up, const Mat4T & base) {
 			Vec3T zaxis = (center - eye).normalized();
 			Vec3T xaxis = up.cross(zaxis).normalized();
 			Vec3T yaxis = zaxis.cross(xaxis);
@@ -47,8 +46,8 @@ namespace panoramix {
 		}
 
 		template <class Mat4T, class ValueT>
-		Mat4T Matrix4MakePerspective(const ValueT & fovyRadians, const ValueT & aspect, const ValueT & nearZ, const ValueT & farZ, const Mat4T & base) {
-			//assert(fovyRadians > 0 && aspect != 0);
+		Mat4T Matrix4MakePerspective(const ValueT & fovyRadians, const ValueT & aspect, 
+			const ValueT & nearZ, const ValueT & farZ, const Mat4T & base) {
 			ValueT cotan = ValueT(1.0) / std::tan(fovyRadians / 2.0);
 			Mat4T m;
 			m <<

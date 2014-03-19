@@ -3,9 +3,6 @@
 
 #include <cmath>
 
-#include <opencv2/opencv.hpp>
-#include <Eigen/Core>
-
 #include "mesh.hpp"
  
 namespace panoramix {
