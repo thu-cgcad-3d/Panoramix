@@ -4,6 +4,24 @@
 namespace panoramix {
 	namespace core {
 
+
+
+		template <class T>
+		inline T Square(const T & v) {
+			return v * v;
+		}
+
+		template <class Vec3T, class ValueT>
+		inline void LongitudeLatitudeFromDirection(const Vec3T & d, ValueT & longi, ValueT & lati) {
+			longi = atan2(d(1), d(0));
+			lati = atan(d(2) / sqrt(Square(d(1)) + Square(d(0))));
+		}
+
+		template <class Vec3T, class ValueT>
+		inline void DirectionFromLongitudeLatitude(const ValueT & longi, const ValueT & lati, Vec3T & d) {
+			d = Vec3T(cos(longi)*cos(lati), sin(longi)*cos(lati), sin(lati));
+		}
+
 		template <class T, class K>
 		inline T WrapBetween(const T& input, const K& low, const K& high) {
 			if (low >= high)
@@ -16,20 +34,21 @@ namespace panoramix {
  
 		template <class Mat4T, class Vec3T>
 		Mat4T Matrix4MakeLookAt(const Vec3T & eye, const Vec3T & center, const Vec3T & up, const Mat4T & base) {
-			Vec3T n = - (eye - center).normalized();
-			Vec3T u = up.cross(n).normalized();
-			Vec3T v = n.cross(u);
+			Vec3T zaxis = (center - eye).normalized();
+			Vec3T xaxis = up.cross(zaxis).normalized();
+			Vec3T yaxis = zaxis.cross(xaxis);
 			Mat4T m;
 			m <<
-				u(0), v(0), n(0), 0,
-				u(1), v(1), n(1), 0,
-				u(2), v(2), n(2), 0,
-				(-u).dot(eye), (-v).dot(eye), (-n).dot(eye), 1;
-			return m * base;
+				xaxis(0), yaxis(0), zaxis(0), 0,
+				xaxis(1), yaxis(1), zaxis(1), 0,
+				xaxis(2), yaxis(2), zaxis(2), 0,
+				-xaxis.dot(eye), -yaxis.dot(eye), -zaxis.dot(eye), 1;
+			return m.transpose() * base;
 		}
 
 		template <class Mat4T, class ValueT>
 		Mat4T Matrix4MakePerspective(const ValueT & fovyRadians, const ValueT & aspect, const ValueT & nearZ, const ValueT & farZ, const Mat4T & base) {
+			//assert(fovyRadians > 0 && aspect != 0);
 			ValueT cotan = ValueT(1.0) / std::tan(fovyRadians / 2.0);
 			Mat4T m;
 			m <<
@@ -37,21 +56,9 @@ namespace panoramix {
 				0, cotan, 0, 0,
 				0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
 				0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0;
-			return m * base;
+			return m.transpose() * base;
 		}
 
-		template <class Vec3T, class Vec2T>
-		void LongitudeLatitudeFromDirection(const Vec3T & d, Vec2T & longilati) {
-			auto longi = atan2(d(1), d(0));
-			auto lati = atan(d(2) / sqrt(d(1)*d(1) + d(0)*d(0)));
-			longilati = Vec2T(longi, lati);
-		}
-
-		template <class Vec3T, class Vec2T>
-		Vec3T DirectionFromLongitudeLatitude(const Vec2T & d) {
-
-		}
- 
 	}
 }
  

@@ -98,7 +98,7 @@ TEST(MeshTest, Cube) {
     
 }
 
-TEST(MeshTest, Sphere) {
+TEST(MeshTest, DISABLED_Sphere) {
 
 	TestMesh mesh;
 	core::MakeQuadFacedSphere(mesh, 10, 5);
@@ -109,5 +109,4 @@ int main(int argc, char * argv[], char * envp[])
 {
 	testing::InitGoogleTest(&argc, argv);
 	return RUN_ALL_TESTS();
-	return 0;
 }
