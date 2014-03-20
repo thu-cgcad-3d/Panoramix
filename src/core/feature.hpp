@@ -1,10 +1,10 @@
 #ifndef PANORAMIX_CORE_FEATURE_HPP
 #define PANORAMIX_CORE_FEATURE_HPP
 
-#include "basic_types.hpp"
-
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/nonfree/features2d.hpp>
+
+#include "basic_types.hpp"
  
 namespace panoramix {
 	namespace core {
@@ -12,23 +12,27 @@ namespace panoramix {
 		// perspective camera
 		class PerspectiveCamera {
 		public:
-			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-			using Vec2 = Eigen::Vector2d;
-			using Vec3 = Eigen::Vector3d;
-			using Vec4 = Eigen::Vector4d;
-			using Mat4 = Eigen::Matrix4d;
+			using Vec2 = Eigen::Matrix<double, 2, 1, Eigen::DontAlign>;
+			using Vec3 = Eigen::Matrix<double, 3, 1, Eigen::DontAlign>;
+			using Vec4 = Eigen::Matrix<double, 4, 1, Eigen::DontAlign>;
+			using Mat4 = Eigen::Matrix<double, 4, 4, Eigen::DontAlign>;
 			using Size2 = cv::Size2f;
 
 		public:
-			explicit PerspectiveCamera(int w, int h, double focal, const Vec3 & eye = Vec3(0, 0, 0),
-				const Vec3 & center = Vec3(1, 0, 0), const Vec3 & up = Vec3(0, 0, 1));
+			explicit PerspectiveCamera(int w = 500, int h = 500, double focal = 250, 
+				const Vec3 & eye = Vec3(0, 0, 0),
+				const Vec3 & center = Vec3(1, 0, 0), 
+				const Vec3 & up = Vec3(0, 0, 1));
 
 			inline Size2 screenSize() const { return Size2(_screenW, _screenH); }
+			inline double focal() const { return _focal; }
 			inline const Vec3 & eye() const { return _eye; }
 			inline const Vec3 & center() const { return _center; }
 			inline const Vec3 & up() const { return _up; }
 			Vec2 screenProjection(const Vec3 & p3d) const;
+			inline core::Point2 screenProjection(const core::Point3 & p3d) const { return CVVec(screenProjection(EigenVec(p3d))); }
 			Vec3 spatialDirection(const Vec2 & p2d) const;
+			inline core::Point3 spatialDirection(const core::Point2 & p2d) const { return CVVec(spatialDirection(EigenVec(p2d))); }
 
 			inline const Mat4 & viewMatrix() const { return _viewMatrix; }
 			inline const Mat4 & projectionMatrix() const { return _viewProjectionMatrix; }
@@ -45,23 +49,27 @@ namespace panoramix {
 		// panoramic camera
 		class PanoramicCamera {
 		public:
-			EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-			using Vec2 = Eigen::Vector2d;
-			using Vec3 = Eigen::Vector3d;
-			using Vec4 = Eigen::Vector4d;
-			using Mat4 = Eigen::Matrix4d;
+			using Vec2 = Eigen::Matrix<double, 2, 1, Eigen::DontAlign>;
+			using Vec3 = Eigen::Matrix<double, 3, 1, Eigen::DontAlign>;
+			using Vec4 = Eigen::Matrix<double, 4, 1, Eigen::DontAlign>;
+			using Mat4 = Eigen::Matrix<double, 4, 4, Eigen::DontAlign>;
 			using Size2 = cv::Size2f;
 
 		public:
-			explicit PanoramicCamera(double focal, const Vec3 & eye = Vec3(0, 0, 0),
-				const Vec3 & center = Vec3(1, 0, 0), const Vec3 & up = Vec3(0, 0, 1));
+			explicit PanoramicCamera(double focal = 250, 
+				const Vec3 & eye = Vec3(0, 0, 0),
+				const Vec3 & center = Vec3(1, 0, 0), 
+				const Vec3 & up = Vec3(0, 0, 1));
 
 			inline Size2 screenSize() const { return Size2(_focal * 2 * M_PI, _focal * M_PI); }
+			inline double focal() const { return _focal; }
 			inline const Vec3 & eye() const { return _eye; }
 			inline const Vec3 & center() const { return _center; }
 			inline const Vec3 & up() const { return _up; }
 			Vec2 screenProjection(const Vec3 & p3d) const;
+			inline core::Point2 screenProjection(const core::Point3 & p3d) const { return CVVec(screenProjection(EigenVec(p3d))); }
 			Vec3 spatialDirection(const Vec2 & p2d) const;
+			inline core::Point3 spatialDirection(const core::Point2 & p2d) const { return CVVec(spatialDirection(EigenVec(p2d))); }
 
 		private:
 			double _focal;
@@ -79,8 +87,7 @@ namespace panoramix {
 				assert(outCam.eye() == inCam.eye());
 			}
 			
-			Image operator() (const Image & inputIm) const {
-				Image result;
+			Image operator() (const Image & inputIm, Image & outputIm) const {
 				cv::Mat mapx = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
 				cv::Mat mapy = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
 				for (int i = 0; i < _outCam.screenSize().width; i++){
@@ -92,8 +99,8 @@ namespace panoramix {
 						mapy.at<float>(j, i) = screenpOnInCam(1);
 					}
 				}
-				cv::remap(inputIm, result, mapx, mapy, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-				return result;
+				cv::remap(inputIm, outputIm, mapx, mapy, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+				return outputIm;
 			}
 
 		private:
@@ -107,18 +114,11 @@ namespace panoramix {
 		
 
 		/// features
-		template <class FeatureExtractorT>
-		struct FeatureConfigure {
-			FeatureExtractorT extractor;
-			typename FeatureExtractorT::Feature feature;
-			inline void compute(const Image & image) { feature = extractor(image); }
-		};
-
 
 		// line extractor
 		class LineSegmentExtractor {
 		public:
-			using Feature = std::list<Line2>;
+			using Feature = std::vector<Line2>;
 			struct Params {
 				inline Params() : minLength(20), xBorderWidth(10), yBorderWidth(10), numDirs(8) {}
 				int minLength;
@@ -127,21 +127,6 @@ namespace panoramix {
 			};
 		public:
 			inline explicit LineSegmentExtractor(const Params & params = Params()) : _params(params){}
-			Feature operator() (const Image & im) const;
-		private:
-			Params _params;
-		};
-
-
-		// vanishing point extractor
-		class VanishingPointExtractor {
-		public:
-			struct Params {
-
-			};
-			using Feature = std::array<KeyPoint, 3>;
-		public:
-			inline explicit VanishingPointExtractor(const Params & params = Params()) : _params(params){}
 			Feature operator() (const Image & im) const;
 		private:
 			Params _params;
@@ -167,24 +152,17 @@ namespace panoramix {
 		};
 
 		// region feature extractor
-		// manhattan junction
-		class ManhattanJunctionExtractor {
-		public:
-			using Feature = Image;
-			struct Params {
-				inline Params() {}
-			};
-		public:
-			inline explicit ManhattanJunctionExtractor(const Params & params = Params()) : _params(params) {}
-			Feature operator () (const Image & im) const { return Feature(); }
-		private:
-			Params _params;
+
+		// segmentation
+		class SegmentationExtractor {
+
 		};
+
 
 		// geometric context
 		class GeometricContextExtractor {
 		public:
-			using Feature = Image;
+			using Feature = std::vector<Image>;
 			struct Params {
 				inline Params() {}
 			};

@@ -1,7 +1,5 @@
 #ifndef PANORAMIX_CORE_VIEWS_NET_HPP
 #define PANORAMIX_CORE_VIEWS_NET_HPP
- 
-#include <memory>
 
 #include "basic_types.hpp"
 #include "feature.hpp"
@@ -10,75 +8,75 @@
 namespace panoramix {
 	namespace core { 
 
-		// perspective view
-		class PerspectiveView {
-		public:
-			using Camera = PerspectiveCamera;
-			struct FeatureConfigures {
-				FeatureConfigure<LineSegmentExtractor> lineSegmentConfig;
-				FeatureConfigure<CVFeatureExtractor<cv::SIFT>> siftConfig;
-				FeatureConfigure<CVFeatureExtractor<cv::SURF>> surfConfig;
-				FeatureConfigure<ManhattanJunctionExtractor> manhattanJunctionConfig;
-				FeatureConfigure<GeometricContextExtractor> geometricContextConfig;
-			};
-
-		public:
-			inline explicit PerspectiveView(const Image & image, const PerspectiveCamera & camera)
-				: _image(image), _camera(camera), _correctedCamera(camera) {}
-
-			inline const Image & image() const { return _image; }
-			inline const Camera & camera() const { return _camera; }
-			inline const Camera & correctedCamera() const { return _correctedCamera; }
-			inline Camera & correctedCamera() { return _correctedCamera; }
-
-			inline const FeatureConfigures & featureConfigures() const { return _featureConfigs; }
-			inline FeatureConfigures & featureConfigures() { return _featureConfigs; }
-
-		private:
-			const Image _image;
-			const Camera _camera;
-
-			Camera _correctedCamera;
-			FeatureConfigures _featureConfigs;
-		};
-
-		// panoramic view
-		class PanoramicView {
-		public:
-			using Camera = PanoramicCamera;
-
-
-			inline const Image & image() const { return _image; }
-			inline const Camera & camera() const { return _camera; }
-
-		public:
-			const Image _image;
-			const Camera _camera;
-		};
-
-
-		// relation between a pair of views
-		template <class View1T, class View2T = View1T>
-		class ViewRelation {
-
-		};
-
-
 		// views net
 		class ViewsNet {
 		public:
-			using ViewMesh = Mesh<std::shared_ptr<PerspectiveView>, std::shared_ptr<ViewRelation<PerspectiveView>>>;
-			using ViewHandle = ViewMesh::VertHandle;
-			using ViewRelationHandle = ViewMesh::HalfHandle;
+			struct VertData;
+			struct HalfData;
+			struct Params {
+				inline Params() 
+					: camera(250.0),
+					  lineSegmentWeight(1.0), siftWeight(1.0), 
+					  surfWeight(1.0), cameraAngleScaler(1.8){}
+				PanoramicCamera camera; // camera for generating the panorama
+				double lineSegmentWeight;
+				double siftWeight;
+				double surfWeight;
+				LineSegmentExtractor lineSegmentExtractor;
+				CVFeatureExtractor<cv::SIFT> siftExtractor;
+				CVFeatureExtractor<cv::SURF> surfExtractor;
+				double cameraAngleScaler;
+			};
+
+			using ViewMesh = Mesh<VertData, HalfData>;
+			using VertHandle = ViewMesh::VertHandle;
+			using HalfHandle = ViewMesh::HalfHandle;
 
 		public:
-			ViewsNet(){}
+			inline explicit ViewsNet(const Params params = Params()) : _params(params){}
+			inline const Params & params() const { return _params; }
 			
-			
+			inline VertHandle insertVertex(const VertData & vd) { return _views.addVertex(vd); }
+			VertHandle insertPhoto(const Image & im, const PerspectiveCamera & cam);
+
+			void computeFeatures(VertHandle h);
+			int updateConnections(VertHandle h);
+			void computeTransformationOnConnections(VertHandle h);
+			void calibrateCamera(VertHandle h); 
+			void calibrateAllCameras();
+			void computeGlobalFeatures();
+
+		public:
+			struct VertData {
+				PerspectiveCamera originalCamera, camera;
+				Image image;
+				double weight;
+				LineSegmentExtractor::Feature featureLineSegment;
+				std::vector<core::HPoint2> featureLineIntersections;
+				std::vector<std::pair<int, int>> featureLineIntersectionLineIDs;
+				CVFeatureExtractor<cv::SIFT>::Feature featureSIFT;
+				CVFeatureExtractor<cv::SURF>::Feature featureSURF;
+			};
+			struct HalfData {
+				double cameraAngleDistance;
+				double weight;
+				Eigen::Matrix<double, 4, 4, Eigen::DontAlign> from2ToTransformation;
+			};
+			struct GlobalData {
+				Image panorama;
+				std::array<Vec3, 3> vanishingPoints;
+				std::vector<Image> geometricContext;
+				std::vector<Image> manhattanJunctionDistribution;
+				std::vector<Line3> spatialLineSegments;
+			};
+
+			inline const ViewMesh & views() const { return _views; }
+			inline const GlobalData & globalData() const { return _globalData; }
 
 		private:
 			ViewMesh _views;
-
+			Params _params;
+			GlobalData _globalData;
 		};
 
  

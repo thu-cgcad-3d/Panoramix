@@ -1,15 +1,11 @@
 #include "feature.hpp"
 
-#include <map>
-#include <unordered_map>
-#include <unordered_set>
 #include <iostream>
-#include <cstdint>
 #include <chrono>
 
 #include <Eigen/Dense>
 
-#include "util.hpp"
+#include "utilities.hpp"
 
 namespace panoramix {
 	namespace core {
@@ -81,7 +77,7 @@ namespace panoramix {
 		namespace {
 
 			template <class T, int N>
-			void ExtractLines(const cv::Mat& im, std::list<Line<T, N>> & lines,
+			void ExtractLines(const cv::Mat& im, std::vector<Line<T, N>> & lines,
 				int minlen, int xborderw, int yborderw, int numdir) {
 				using namespace std::chrono;
 				auto start = high_resolution_clock::now();
@@ -227,6 +223,7 @@ namespace panoramix {
 
 		LineSegmentExtractor::Feature LineSegmentExtractor::operator() (const Image & im) const {
 			LineSegmentExtractor::Feature lines;
+			lines.reserve(200);
 			ExtractLines(im, lines, _params.minLength, _params.xBorderWidth, _params.yBorderWidth, _params.numDirs);
 			return lines;
 		}

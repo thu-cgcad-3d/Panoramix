@@ -6,23 +6,6 @@
  
 namespace panoramix {
 	namespace core {
-
-		template <class ValueT, int dim>
-		inline Eigen::Matrix<ValueT, dim, 1> EigenVec(const cv::Vec<ValueT, dim> & v) {
-			Eigen::Matrix<ValueT, dim, 1> m;
-			for(int i = 0; i < dim; i++)
-				m(i) = v(i);
-			return m;
-		}
-
-		template <class ValueT, int dim>
-		inline cv::Vec<ValueT, dim> CVVec(const Eigen::Matrix<ValueT, dim, 1> & v) {
-			cv::Vec<ValueT, dim> m;
-			for(int i = 0; i < dim; i++)
-				m(i) = v(i);
-			return m;
-		}
-
  
 		// elements of container MUST support .exists
 		template <class BoolExistIteratorT>

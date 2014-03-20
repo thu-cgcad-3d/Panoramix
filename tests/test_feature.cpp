@@ -55,16 +55,16 @@ TEST(Feature, CameraSampler) {
 	EXPECT_EQ(4000, im.cols);
 	EXPECT_EQ(2000, im.rows);
 	cv::resize(im, im, cv::Size(1000, 500));
-	cv::imshow("panorama", im);
+	core::ImageFeatureVisualizer viz(im);
+	viz.params.alphaForNewImage = 0.3;
 
 	core::PanoramicCamera originCam(im.cols / M_PI / 2.0);
 	core::PanoramicCamera newCam(im.cols / M_PI / 2.0, 
 		core::PanoramicCamera::Vec3(0, 0, 0), 
 		core::PanoramicCamera::Vec3(0, 0, 1),
 		core::PanoramicCamera::Vec3(0, 1, 0));
-	cv::imshow("panorama ii", 
-		core::CameraSampler<core::PanoramicCamera, core::PanoramicCamera>(newCam, originCam)(im));
-	cv::waitKey();
+	viz << core::CameraSampler<core::PanoramicCamera, core::PanoramicCamera>(newCam, originCam)(im, core::Image());
+	viz.visualize();
 
 	float camPositions[4][3] = {
 		{1, 0, 0},
@@ -80,7 +80,7 @@ TEST(Feature, CameraSampler) {
 			core::PerspectiveCamera::Vec3(0, 0, -1));
 		core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera> sampler(cam,
 			core::PanoramicCamera(im.cols / M_PI / 2.0));
-		cv::Mat sampledIm = sampler(im);
+		cv::Mat sampledIm = sampler(im, core::Image());
 		core::ImageFeatureVisualizer viz(sampledIm);
 	}
 }
@@ -93,11 +93,9 @@ TEST(Feature, FeatureExtractor) {
 	for (int i = 0; i < 4; i++) {
 		std::string name = ProjectTestDataDirStr + "/" + "sampled_" + std::to_string(i) + ".png";
 		cv::Mat im = cv::imread(name);
-		core::ImageFeatureVisualizer viz(im);
-		viz.params().winName = name;
-		viz << lineSegmentExtractor(im);
-		viz << sift(im);
-		viz << surf(im);
+		core::ImageFeatureVisualizer(im) 
+			<< [](core::ImageFeatureVisualizer & viz) { viz.params.winName = "haha"; }
+			<< lineSegmentExtractor(im) <<  sift(im) << surf(im);
 	}
 }
 

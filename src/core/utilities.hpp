@@ -1,7 +1,7 @@
-#ifndef PANORAMIX_CORE_UTIL_HPP
-#define PANORAMIX_CORE_UTIL_HPP
+#ifndef PANORAMIX_CORE_UTILITIES_HPP
+#define PANORAMIX_CORE_UTILITIES_HPP
 
-#include <vector>
+#include "basic_types.hpp"
  
 namespace panoramix {
 	namespace core {
@@ -9,6 +9,11 @@ namespace panoramix {
 		template <class T>
 		inline T Square(const T & v) {
 			return v * v;
+		}
+
+		template <class Vec3T1, class Vec3T2, class ValueT>
+		inline void AngleBetweenDirections(const Vec3T1 & v1, const Vec3T2 & v2, ValueT & angle) {
+			angle = acos(v1.dot(v2) / v1.norm() / v2.norm());
 		}
 
 		template <class Vec3T, class ValueT>
@@ -124,6 +129,9 @@ namespace panoramix {
 			gBegins.push_back(end);
 			return gBegins;
 		}
+
+
+
 
 	}
 }

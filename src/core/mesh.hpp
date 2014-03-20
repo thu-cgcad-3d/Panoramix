@@ -1,9 +1,7 @@
 #ifndef PANORAMIX_CORE_MESH_HPP
 #define PANORAMIX_CORE_MESH_HPP
 
-#include <vector>
-#include <cstdint>
-
+#include "basic_types.hpp"
 #include "misc.hpp"
 
 namespace panoramix {
