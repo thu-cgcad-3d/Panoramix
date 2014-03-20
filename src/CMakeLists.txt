@@ -22,3 +22,4 @@ add_library (${PROJECT_LIB_STATIC_NAME} STATIC ${SOURCES} ${HEADERS})
 
 target_link_libraries (${PROJECT_LIB_STATIC_NAME} ${THIRDPARTY_LIBS})
 #target_link_libraries (${PROJECT_LIB_SHARED_NAME} ${THIRDPARTY_LIBS})
+

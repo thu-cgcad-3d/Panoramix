@@ -9,35 +9,59 @@ namespace panoramix {
 		class ImageFeatureVisualizer {
 		public:
 			using Image = cv::Mat;
+			struct Params {
+				inline Params() 
+					: winName("Image Feature Visualizer"), 
+					  color(255, 255, 255), thickness(1), 
+					  lineType(8), shift(0), alphaForNewImage(0.5) {}
+
+				std::string winName;
+				Color color;
+				int thickness;
+				int lineType;
+				int shift;
+				float alphaForNewImage;
+			};
+		public:
 			inline explicit ImageFeatureVisualizer(const Image & im, 
-				const std::string & name = "Image Feature Visualizer") 
-				: _name(name) {
+				const Params & params = Params()) 
+				: _params(params) {
 				im.copyTo(_image);
 			}
 			inline ~ ImageFeatureVisualizer() { 
-				cv::imshow(_name, _image); 
+				cv::imshow(_params.winName, _image); 
 				cv::waitKey(); 
 			}
 			inline Image & image() { return _image; }
+			inline Params & params() { return _params; }
+			inline const Params & params() const { return _params; }
 		private:
 			Image _image;
-			const std::string _name;
+			Params _params;
 		};
 
-		inline ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const Line2 & line) {
+		template <class T>
+		inline ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const Line<T, 2> & line) {
 			cv::line(viz.image(), cv::Point(line.first(0), line.first(1)),
 				cv::Point(line.second(0), line.second(1)),
-				cv::Scalar(255, 255, 255), 2);
+				viz.params().color, viz.params().thickness, viz.params().lineType, viz.params().shift);
 			return viz;
 		}
 
 		inline ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const KeyPoint & p) {
-			cv::circle(viz.image(), p.pt, p.size, cv::Scalar(255, 200, 200));
+			cv::circle(viz.image(), p.pt, p.size, viz.params().color, viz.params().thickness, viz.params().lineType, viz.params().shift);
 			return viz;
 		}
 
 		inline ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const Image & im) {
-			viz.image() = viz.image() * 0.75 + im * 0.25;
+			viz.image() = viz.image() * (1 - viz.params().alphaForNewImage) + im * viz.params().alphaForNewImage;
+			return viz;
+		}
+
+		template <class T, int N>
+		inline ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const std::array<T, N> & a) {
+			for (auto & e : c)
+				viz << e;
 			return viz;
 		}
 

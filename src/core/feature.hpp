@@ -78,29 +78,28 @@ namespace panoramix {
 				: _outCam(outCam), _inCam(inCam) {
 				assert(outCam.eye() == inCam.eye());
 			}
-			Image operator() (const Image & inputIm) const;
+			
+			Image operator() (const Image & inputIm) const {
+				Image result;
+				cv::Mat mapx = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
+				cv::Mat mapy = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
+				for (int i = 0; i < _outCam.screenSize().width; i++){
+					for (int j = 0; j < _outCam.screenSize().height; j++){
+						typename OutCameraT::Vec2 screenp(i, j);
+						typename OutCameraT::Vec3 p3 = _outCam.spatialDirection(screenp);
+						typename InCameraT::Vec2 screenpOnInCam = _inCam.screenProjection(p3);
+						mapx.at<float>(j, i) = screenpOnInCam(0);
+						mapy.at<float>(j, i) = screenpOnInCam(1);
+					}
+				}
+				cv::remap(inputIm, result, mapx, mapy, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+				return result;
+			}
+
 		private:
 			OutCameraT _outCam;
 			InCameraT _inCam;
 		};
-
-		template <class OutCameraT, class InCameraT>
-		Image CameraSampler<OutCameraT, InCameraT>::operator() (const Image & inputIm) const {
-			Image result;
-			cv::Mat mapx = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
-			cv::Mat mapy = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
-			for (int i = 0; i < _outCam.screenSize().width; i++){
-				for (int j = 0; j < _outCam.screenSize().height; j++){
-					typename OutCameraT::Vec2 screenp(i, j);
-					typename OutCameraT::Vec3 p3 = _outCam.spatialDirection(screenp);
-					typename InCameraT::Vec2 screenpOnInCam = _inCam.screenProjection(p3);
-					mapx.at<float>(j, i) = screenpOnInCam(0);
-					mapy.at<float>(j, i) = screenpOnInCam(1);
-				}
-			}
-			cv::remap(inputIm, result, mapx, mapy, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
-			return result;
-		}
 
 
 
@@ -108,6 +107,12 @@ namespace panoramix {
 		
 
 		/// features
+		template <class FeatureExtractorT>
+		struct FeatureConfigure {
+			FeatureExtractorT extractor;
+			typename FeatureExtractorT::Feature feature;
+			inline void compute(const Image & image) { feature = extractor(image); }
+		};
 
 
 		// line extractor
@@ -126,6 +131,22 @@ namespace panoramix {
 		private:
 			Params _params;
 		};
+
+
+		// vanishing point extractor
+		class VanishingPointExtractor {
+		public:
+			struct Params {
+
+			};
+			using Feature = std::array<KeyPoint, 3>;
+		public:
+			inline explicit VanishingPointExtractor(const Params & params = Params()) : _params(params){}
+			Feature operator() (const Image & im) const;
+		private:
+			Params _params;
+		};
+
 
 		// point feature extractor
 		template <class CVFeatureT>

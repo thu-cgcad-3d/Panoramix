@@ -1,6 +1,7 @@
 #include "../src/core/util.hpp"
 
 #include <random>
+#include <list>
 
 #include <Eigen/Core>
 
@@ -37,6 +38,29 @@ TEST(UtilTest, MatrixLookAt) {
 	Vec4 p = m * Vec4(1, 0, 0, 1);
 	Vec3 pj = Vec3(p(0), p(1), p(2)) / p(3);
 	ASSERT_LT((pj - Vec3(0, 0, 1)).norm(), 2);
+}
+
+TEST(UtilTest, MergeNear) {
+	std::list<double> arr1;
+	arr1.resize(1000);
+	std::generate(arr1.begin(), arr1.end(), std::rand);
+	std::vector<double> arr2(arr1.begin(), arr1.end());
+
+	double thres = 10;
+	auto gBegins1 = core::MergeNear(std::begin(arr1), std::end(arr1), std::false_type(), thres);
+	auto gBegins2 = core::MergeNear(std::begin(arr2), std::end(arr2), std::true_type(), thres);
+	ASSERT_EQ(gBegins1.size(), gBegins2.size());
+	auto i = gBegins1.begin();
+	auto j = gBegins2.begin();
+	for (; *i != arr1.end() && i != gBegins1.end(); ++i, ++j){
+		EXPECT_EQ(**i, **j);
+	}
+	for (auto i = gBegins2.begin(), inext = std::next(i); inext != gBegins2.end(); ++i, ++inext){
+		auto beginVal = **i;
+		for (auto j = *i; j != *inext; ++j){
+			EXPECT_NEAR(*j, beginVal, thres);
+		}
+	}
 }
 
 

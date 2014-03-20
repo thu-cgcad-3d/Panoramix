@@ -7,6 +7,7 @@
 #include <set>
 #include <unordered_set>
 #include <forward_list>
+#include <array>
 
 #include <opencv2/opencv.hpp>
 #include <Eigen/Core>
@@ -37,6 +38,8 @@ namespace panoramix {
 		using Circle3 = Circle<double, 3>;
 
 		using Image = cv::Mat;
+
+		using Color = cv::Scalar;
  
 	}
 }

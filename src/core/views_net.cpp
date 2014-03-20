@@ -1,4 +1,4 @@
-#include "predictor.hpp"
+#include "views_net.hpp"
 
 #include <opencv2/opencv.hpp>
 

@@ -1,5 +1,7 @@
 #ifndef PANORAMIX_CORE_UTIL_HPP
 #define PANORAMIX_CORE_UTIL_HPP
+
+#include <vector>
  
 namespace panoramix {
 	namespace core {
@@ -56,6 +58,71 @@ namespace panoramix {
 				0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
 				0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0;
 			return m.transpose() * base;
+		}
+
+		// merge, rearrange the input array
+		// DistanceFunctorT(a, b) -> DistanceT
+		// returns the begin iterators of each group
+		template <class IteratorT, class DistanceT, class DistanceFunctorT = std::minus<DistanceT>>
+		std::vector<IteratorT> MergeNear(IteratorT begin, IteratorT end, std::true_type,
+			DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
+			if (begin == end)
+				return std::vector<IteratorT>();
+			
+			std::vector<IteratorT> gBegins(1, begin);
+			for (auto i = std::next(begin); i != end; ++i){
+				DistanceT minDist = std::numeric_limits<DistanceT>::max();
+				auto nearestGBeginIter = gBegins.end();
+				for (auto giter = gBegins.begin(); giter != gBegins.end(); ++ giter) {
+					auto gBegin = *giter;
+					DistanceT dist = std::abs(distFun(*gBegin, *i));
+					if (dist <= thres && dist < minDist){
+						minDist = dist;
+						nearestGBeginIter = giter;
+					}
+				}
+				if (nearestGBeginIter != gBegins.end()){ // found group
+					if (std::next(nearestGBeginIter) != gBegins.end()){
+						auto nextGBegin = *std::next(nearestGBeginIter);
+						std::rotate(nextGBegin, i, std::next(i));
+						for (auto j = std::next(nearestGBeginIter); j != gBegins.end(); ++j)
+							++ (*j);
+					}
+				} else { // add new group
+					gBegins.push_back(i);
+				}
+			}
+
+			gBegins.push_back(end);
+			return gBegins;
+		}
+
+		// merge, without rearrangement
+		// DistanceFunctorT(a, b) -> DistanceT
+		// returns the begin iterators of each group
+		template <class IteratorT, class DistanceT, class DistanceFunctorT = std::minus<DistanceT>>
+		std::vector<IteratorT> MergeNear(IteratorT begin, IteratorT end, std::false_type,
+			DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
+			if (begin == end)
+				return std::vector<IteratorT>();
+
+			std::vector<IteratorT> gBegins(1, begin);
+			for (auto i = std::next(begin); i != end; ++i){
+				auto giter = gBegins.begin();
+				for (; giter != gBegins.end(); ++giter) {
+					auto gBegin = *giter;
+					DistanceT dist = std::abs(distFun(*gBegin, *i));
+					if (dist <= thres){
+						break;
+					}
+				}
+				if (giter == gBegins.end()){ // add new group
+					gBegins.push_back(i);
+				}
+			}
+
+			gBegins.push_back(end);
+			return gBegins;
 		}
 
 	}

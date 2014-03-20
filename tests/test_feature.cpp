@@ -81,8 +81,7 @@ TEST(Feature, CameraSampler) {
 		core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera> sampler(cam,
 			core::PanoramicCamera(im.cols / M_PI / 2.0));
 		cv::Mat sampledIm = sampler(im);
-		cv::imshow("sampled_" + std::to_string(i), sampledIm);
-		cv::waitKey();
+		core::ImageFeatureVisualizer viz(sampledIm);
 	}
 }
 
@@ -94,7 +93,8 @@ TEST(Feature, FeatureExtractor) {
 	for (int i = 0; i < 4; i++) {
 		std::string name = ProjectTestDataDirStr + "/" + "sampled_" + std::to_string(i) + ".png";
 		cv::Mat im = cv::imread(name);
-		core::ImageFeatureVisualizer viz(im, name);
+		core::ImageFeatureVisualizer viz(im);
+		viz.params().winName = name;
 		viz << lineSegmentExtractor(im);
 		viz << sift(im);
 		viz << surf(im);
