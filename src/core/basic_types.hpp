@@ -31,6 +31,7 @@ namespace panoramix {
         using Point3 = Point<double, 3>;
         using Point4 = Point<double, 4>;
 
+
         // private tools
         namespace {
             template <class T, int N> 
@@ -48,6 +49,7 @@ namespace panoramix {
                 return v;
             }
         }
+
 
         // homogeneous point
         template <class T, int N>
@@ -74,6 +76,28 @@ namespace panoramix {
         using HPoint3 = HPoint<double, 3>;
         using HPoint4 = HPoint<double, 4>;
 
+
+        // geographic coordinate
+        struct GeoCoord {
+            inline GeoCoord(double longi = 0.0, double lati = 0.0)
+                : longitude(longi), latitude(lati) {}
+            template <class T>
+            inline GeoCoord(const Vec<T, 3> & d)
+                : longitude(atan2(d(1), d(0))),
+                latitude(atan(d(2) / sqrt((d(1)*d(1)) + (d(0)*d(0)))))
+            {}
+            template <class T = double>
+            inline Vec<T, 3> toVector() const {
+                return Vec<T, 3>(static_cast<T>(cos(longitude)*cos(latitude)),
+                    static_cast<T>(sin(longitude)*cos(latitude)),
+                    static_cast<T>(sin(latitude)));
+            }
+            double longitude; // - M_PI ~ + M_PI
+            double latitude; // - M_PI_2 ~ + M_PI_2
+        };
+
+
+
         // key point
         using KeyPoint = cv::KeyPoint;
         
@@ -88,7 +112,7 @@ namespace panoramix {
             Point<T, N> minCorner;
             Vec<T, N> size;
             inline Point<T, N> maxCorner() const { return minCorner + size; }
-            inline Point<T, N> center() const { return minCorner + (size / 2); }
+            inline Point<T, N> center() const { return minCorner + static_cast<T>(size / 2.0); }
             inline bool contains(const Point<T, N> & p) const {
                 for (int i = 0; i < N; i++){
                     if (minCorner[i] > p[i] || minCorner[i] + size[i] < p[i])
@@ -115,9 +139,11 @@ namespace panoramix {
         template <class T, int N> 
         struct Line {
             Point<T, N> first, second;
+            inline Point<T, N> center() const { return (first + second) / 2.0; }
         };
         using Line2 = Line<double, 2>;
         using Line3 = Line<double, 3>;
+
 
         // homogeneous line
         template <class T, int N>

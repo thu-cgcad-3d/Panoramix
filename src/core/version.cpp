@@ -1,13 +1,13 @@
 #include "version.hpp"
 
 namespace panoramix {
-	namespace core {
+    namespace core {
  
-		Version GetVersion() {
-			Version v = { PANORAMIX_VERSION_MAJOR, PANORAMIX_VERSION_MINOR };
-			return v;
-		}
+        Version GetVersion() {
+            Version v = { PANORAMIX_VERSION_MAJOR, PANORAMIX_VERSION_MINOR };
+            return v;
+        }
  
-	}
+    }
 }
 

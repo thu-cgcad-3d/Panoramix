@@ -14,9 +14,9 @@ namespace panoramix {
             struct VertData;
             struct HalfData;
             struct Params {
-                Params() : camera(250.0),
-                      lineSegmentWeight(1.0), siftWeight(1.0), 
-                      surfWeight(1.0), cameraAngleScaler(1.8){}
+                Params() : camera(250.0), lineSegmentWeight(1.0), siftWeight(1.0), 
+                      surfWeight(1.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05), 
+                      linePieceSpanAngle(M_PI / 32.0) {}
                 PanoramicCamera camera; // camera for generating the panorama
                 double lineSegmentWeight;
                 double siftWeight;
@@ -24,7 +24,9 @@ namespace panoramix {
                 LineSegmentExtractor lineSegmentExtractor;
                 CVFeatureExtractor<cv::SIFT> siftExtractor;
                 CVFeatureExtractor<cv::SURF> surfExtractor;
-                double cameraAngleScaler;
+                double cameraAngleScaler; // angle scalar to judge whether two views may share certain common features
+                double smallCameraAngleScalar; // angle scalar to judge whether two views are too close
+                double linePieceSpanAngle;
             };
 
             using ViewMesh = Mesh<VertData, HalfData>;
@@ -40,21 +42,23 @@ namespace panoramix {
 
             void computeFeatures(VertHandle h);
             int updateConnections(VertHandle h);
+            VertHandle isTooCloseToAnyExistingView(VertHandle h) const;
             void computeTransformationOnConnections(VertHandle h);
             void calibrateCamera(VertHandle h); 
             void calibrateAllCameras();
-            void computeGlobalFeatures();
+            void estimateVanishingPointsAndClassifyLines();
 
         public:
             struct VertData {
                 PerspectiveCamera originalCamera, camera;
                 Image image;
                 double weight;
-                LineSegmentExtractor::Feature featureLineSegment;
-                std::vector<core::HPoint2> featureLineIntersections;
-                std::vector<std::pair<int, int>> featureLineIntersectionLineIDs;
-                CVFeatureExtractor<cv::SIFT>::Feature featureSIFT;
-                CVFeatureExtractor<cv::SURF>::Feature featureSURF;
+                LineSegmentExtractor::Feature lineSegments;
+                std::vector<core::HPoint2> lineSegmentIntersections;
+                std::vector<std::pair<int, int>> lineSegmentIntersectionLineIDs;
+                std::vector<int> lineSegmentClasses;
+                CVFeatureExtractor<cv::SIFT>::Feature SIFTs;
+                CVFeatureExtractor<cv::SURF>::Feature SURFs;
             };
             struct HalfData {
                 double cameraAngleDistance;
@@ -67,6 +71,7 @@ namespace panoramix {
                 std::vector<Image> geometricContext;
                 std::vector<Image> manhattanJunctionDistribution;
                 std::vector<Line3> spatialLineSegments;
+                std::vector<int> spatialLineSegmentClasses;
             };
 
             inline const ViewMesh & views() const { return _views; }

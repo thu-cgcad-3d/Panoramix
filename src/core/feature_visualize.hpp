@@ -20,11 +20,11 @@ namespace panoramix {
                 int thickness;
                 int lineType;
                 int shift;
-                float alphaForNewImage;
+                double alphaForNewImage;
             };
 
         public:
-            inline explicit ImageFeatureVisualizer(const Image & im, 
+            inline explicit ImageFeatureVisualizer(const Image & im = Image(), 
                 const Params & p = Params()) 
                 : params(p), _visualized(false) {
                 im.copyTo(_image);
@@ -106,6 +106,9 @@ namespace panoramix {
             smanip.func(viz, smanip.arg);
             return viz;
         }
+
+        
+
 
         // points
         template <class T, int N>

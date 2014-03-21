@@ -54,18 +54,18 @@ namespace panoramix {
         void ViewsNet::computeFeatures(VertHandle h) {
             auto & vd = _views.data(h);
             const Image & im = vd.image;
-            vd.featureLineSegment = _params.lineSegmentExtractor(im);
-            vd.featureSIFT = _params.siftExtractor(im);
-            vd.featureSURF = _params.surfExtractor(im);
-            vd.weight = vd.featureLineSegment.size() * _params.lineSegmentWeight +
-                vd.featureSIFT.size() * _params.siftWeight +
-                vd.featureSURF.size() * _params.surfWeight;
+            vd.lineSegments = _params.lineSegmentExtractor(im);
+            vd.SIFTs = _params.siftExtractor(im);
+            vd.SURFs = _params.surfExtractor(im);
+            vd.weight = vd.lineSegments.size() * _params.lineSegmentWeight +
+                vd.SIFTs.size() * _params.siftWeight +
+                vd.SURFs.size() * _params.surfWeight;
 
-            vd.featureLineIntersections.clear();
-            vd.featureLineIntersectionLineIDs.clear();
-            LineIntersectons(vd.featureLineSegment, 
-                vd.featureLineIntersections, 
-                vd.featureLineIntersectionLineIDs, true);
+            vd.lineSegmentIntersections.clear();
+            vd.lineSegmentIntersectionLineIDs.clear();
+            LineIntersectons(vd.lineSegments, 
+                vd.lineSegmentIntersections, 
+                vd.lineSegmentIntersectionLineIDs, true);
         }
 
         namespace {
@@ -98,6 +98,23 @@ namespace panoramix {
             return _views.topo(h).halfedges.size();
         }
 
+        ViewsNet::VertHandle ViewsNet::isTooCloseToAnyExistingView(VertHandle h) const {
+            auto & camera = _views.data(h).camera;
+            double cameraRadius = PerspectiveCameraAngleRadius(camera);
+            auto connections = _views.topo(h).halfedges;
+            for (auto & con : connections){
+                auto & neighborCamera = _views.data(_views.topo(con).to()).camera;
+                double cameraAngle = 0;
+                AngleBetweenDirections(camera.center(), neighborCamera.center(), cameraAngle);
+                double neighborCameraRadius = PerspectiveCameraAngleRadius(camera);
+                if (cameraAngle <= (cameraRadius + neighborCameraRadius) * _params.smallCameraAngleScalar){ // too close
+                    return _views.topo(con).to();
+                }
+            }
+            return VertHandle();
+        }
+
+
         void ViewsNet::computeTransformationOnConnections(VertHandle h) {
             
         }
@@ -112,85 +129,211 @@ namespace panoramix {
 
         namespace {
 
-            void FindVanishingPoints(const std::vector<Vec2>& spinterps, std::vector<Vec2>& vps)
-            {
-                vps.resize(3);
-                int longtdiv = 1000, latdiv = 500;
-                cv::Mat votepanel = cv::Mat::zeros(longtdiv, latdiv, CV_32FC1);
-                static_assert(sizeof(float) == 4, "invalid double size!");
-                int pn = spinterps.size();
-                for (const cv::Vec2d& p : spinterps){
-                    int longtid = int(p[0] * longtdiv / M_PI / 2);
-                    int latid = int((p[1] + M_PI_2) * latdiv / M_PI);
-                    longtid = (longtid % longtdiv + longtdiv) % longtdiv;
-                    latid = (latid % latdiv + latdiv) % latdiv;
-                    votepanel.at<float>(longtid, latid) += 1;
+            inline cv::Point PixelIndexFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv) {
+                int longtid = static_cast<int>((p.longitude + M_PI) * longidiv / M_PI / 2);
+                int latid = static_cast<int>((p.latitude + M_PI_2) * latidiv / M_PI);
+                longtid = (longtid % longidiv + longidiv) % longidiv;
+                latid = (latid % latidiv + latidiv) % latidiv;
+                return cv::Point(longtid, latid);
+            }
+
+            inline GeoCoord GeoCoordFromPixelIndex(const cv::Point & pixel, int longidiv, int latidiv) {
+                return GeoCoord{ pixel.x * M_PI * 2 / longidiv - M_PI, pixel.y * M_PI / latidiv - M_PI_2 };
+            }
+
+            inline double LatitudeFromLongitudeAndNormalVector(double longitude, const Vec3 & normal) {
+                // normal(0)*cos(long)*cos(la) + normal(1)*sin(long)*cos(lat) + normal(2)*sin(la) = 0
+                // normal(0)*cos(long) + normal(1)*sin(long) + normal(2)*tan(la) = 0
+                return -atan((normal(0)*cos(longitude) + normal(1)*sin(longitude)) / normal(2));
+            }
+
+            inline double Longitude1FromLatitudeAndNormalVector(double latitude, const Vec3 & normal) {
+                double a = normal(1) * cos(latitude);
+                double b = normal(0) * cos(latitude);
+                double c = -normal(2) * sin(latitude);
+                double sinLong = (a * c + sqrt(Square(a*c) - (Square(a) + Square(b))*(Square(c) - Square(b)))) / (Square(a) + Square(b));
+                return asin(sinLong);
+            }
+
+            inline double Longitude2FromLatitudeAndNormalVector(double latitude, const Vec3 & normal) {
+                double a = normal(1) * cos(latitude);
+                double b = normal(0) * cos(latitude);
+                double c = -normal(2) * sin(latitude);
+                double sinLong = (a * c - sqrt(Square(a*c) - (Square(a) + Square(b))*(Square(c) - Square(b)))) / (Square(a) + Square(b));
+                return asin(sinLong);
+            }
+
+            inline double UnOrthogonality(const Vec3 & v1, const Vec3 & v2, const Vec3 & v3) {
+                return cv::norm(Vec3(v1.dot(v2), v2.dot(v3), v3.dot(v1)));
+            }
+
+            std::array<Vec3, 3> FindVanishingPoints(const std::vector<Vec3>& intersections,
+                int longitudeDivideNum = 1000, int latitudeDivideNum = 500) {
+
+                std::array<Vec3, 3> vps;
+
+                cv::Mat votePanel = cv::Mat::zeros(longitudeDivideNum, latitudeDivideNum, CV_32FC1);
+
+                int pn = intersections.size();
+                for (const Vec3& p : intersections){
+                    cv::Point pixel = PixelIndexFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
+                    votePanel.at<float>(pixel.x, pixel.y) += 1.0;
                 }
-                cv::GaussianBlur(votepanel, votepanel, cv::Size((longtdiv / 50) * 2 + 1, (latdiv / 50) * 2 + 1),
+                cv::GaussianBlur(votePanel, votePanel, cv::Size((longitudeDivideNum / 50) * 2 + 1, (latitudeDivideNum / 50) * 2 + 1),
                     4, 4, cv::BORDER_REPLICATE);
 
-                double minval = 0, maxval = 0;
-                int maxidx[] = { -1, -1 };
-                cv::minMaxIdx(votepanel, &minval, &maxval, 0, maxidx);
+                double minVal = 0, maxVal = 0;
+                int maxIndex[] = { -1, -1 };
+                cv::minMaxIdx(votePanel, & minVal, & maxVal, 0, maxIndex);
+                cv::Point maxPixel(maxIndex[0], maxIndex[1]);
 
-                vps[0] = cv::Vec2d(maxidx[0] * M_PI * 2 / longtdiv, maxidx[1] * M_PI / latdiv - M_PI_2);
-                cv::Vec3d vec0(cos(vps[0][0])*cos(vps[0][1]), sin(vps[0][0])*cos(vps[0][1]), sin(vps[0][1]));
+                vps[0] = GeoCoordFromPixelIndex(maxPixel, longitudeDivideNum, latitudeDivideNum).toVector();
+                const Vec3 & vec0 = vps[0];
 
                 // iterate locations orthogonal to vps[0]
-                double maxscore = -1;
-                for (int x = 0; x < longtdiv; x++){
-                    double longt1 = double(x) / longtdiv*M_PI * 2;
-                    double lat1 = -atan((vec0[0] * cos(longt1) + vec0[1] * sin(longt1)) / vec0[2]);
-                    double longt1rev = longt1 + M_PI;
-                    double lat1rev = -lat1;
-                    double longt2 = longt1 + M_PI_2;
-                    double lat2 = -atan((vec0[0] * cos(longt2) + vec0[1] * sin(longt2)) / vec0[2]);
-                    double longt2rev = longt2 + M_PI;
-                    double lat2rev = -lat2;
-
-                    double longts[] = { longt1, longt1rev, longt2, longt2rev };
-                    double lats[] = { lat1, lat1rev, lat2, lat2rev };
+                double maxScore = -1;
+                for (int x = 0; x < longitudeDivideNum; x++){
+                    double longt1 = double(x) / longitudeDivideNum * M_PI * 2 - M_PI;
+                    double lat1 = LatitudeFromLongitudeAndNormalVector(longt1, vec0);
+                    Vec3 vec1 = GeoCoord(longt1, lat1).toVector();
+                    Vec3 vec1rev = -vec1;
+                    Vec3 vec2 = vec0.cross(vec1);
+                    Vec3 vec2rev = -vec2;
+                    Vec3 vecs[] = { vec1, vec1rev, vec2, vec2rev };
 
                     double score = 0;
-                    for (int k = 0; k < 4; k++){
-                        int xx = int(longts[k] / M_PI / 2 * longtdiv) % longtdiv;
-                        if (xx == -1) xx = 0;
-                        if (xx == longtdiv) xx = longtdiv;
-                        int yy = int((lats[k] / M_PI + 0.5)*latdiv);
-                        if (yy == -1) yy = 0;
-                        if (yy == latdiv) yy = latdiv - 1;
-                        score += votepanel.at<float>(xx, yy);
-
+                    for (Vec3 & v : vecs){
+                        cv::Point pixel = PixelIndexFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                        score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum), WrapBetween(pixel.y, 0, latitudeDivideNum));
                     }
-                    if (score > maxscore){
-                        maxscore = score;
-                        vps[1] = cv::Vec2d(longt1, lat1);
-                        vps[2] = cv::Vec2d(longt2, lat2);
+                    if (score > maxScore){
+                        maxScore = score;
+                        vps[1] = vec1;
+                        vps[2] = vec2;
                     }
                 }
+
+                if (UnOrthogonality(vps[0], vps[1], vps[2]) < 0.1)
+                    return vps;
+                
+                maxScore = -1;
+                for (int y = 0; y < latitudeDivideNum; y++){
+                    double lat1 = double(y) / latitudeDivideNum * M_PI - M_PI_2;
+                    double longt1s[] = { Longitude1FromLatitudeAndNormalVector(lat1, vec0), Longitude2FromLatitudeAndNormalVector(lat1, vec0) };
+                    for (double longt1 : longt1s){
+                        Vec3 vec1 = GeoCoord(longt1, lat1).toVector();
+                        Vec3 vec1rev = -vec1;
+                        Vec3 vec2 = vec0.cross(vec1);
+                        Vec3 vec2rev = -vec2;
+                        Vec3 vecs[] = { vec1, vec1rev, vec2, vec2rev };
+
+                        double score = 0;
+                        for (Vec3 & v : vecs){
+                            cv::Point pixel = PixelIndexFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                            score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum), WrapBetween(pixel.y, 0, latitudeDivideNum));
+                        }
+                        if (score > maxScore){
+                            maxScore = score;
+                            vps[1] = vec1;
+                            vps[2] = vec2;
+                        }
+                    }
+                }
+
+                return vps;
 
             }
 
+            template <class Vec3Container>
+            std::vector<int> ClassifyLines(const Vec3Container & points, const std::vector<Line3> & lines,
+                double angleThreshold = M_PI/3, double sigma = 0.1) {
+                
+                size_t nlines = lines.size();
+                std::vector<int> lineClasses(nlines, -1);
+                size_t npoints = points.size();
+
+                for (size_t i = 0; i < nlines; i++){
+                    Vec3 a = lines[i].first;
+                    Vec3 b = lines[i].second;
+                    Vec3 normab = a.cross(b);
+                    normab /= cv::norm(normab);
+
+                    std::vector<double> lineangles(npoints);
+                    std::vector<double> linescores(npoints);
+
+                    for (int j = 0; j < npoints; j++){
+                        Vec3 point = points[j];
+                        double angle = abs(asin(normab.dot(point)));
+                        lineangles[j] = angle;
+                    }
+
+                    // get score based on angle
+                    for (int j = 0; j < npoints; j++){
+                        double angle = lineangles[j];
+                        double score = exp(-(angle / angleThreshold) * (angle / angleThreshold) / sigma / sigma / 2);
+                        linescores[j] = (angle > angleThreshold) ? 0 : score;
+                    }
+
+                    // classify lines
+                    lineClasses[i] = -1;
+                    float curscore = 0.8;
+                    for (int j = 0; j < npoints; j++){
+                        if (linescores[j] > curscore){
+                            lineClasses[i] = j;
+                            curscore = linescores[j];
+                        }
+                    }
+                }
+
+                return lineClasses;
+            }
+
+            inline Vec3 RotateDirectionTo(const Vec3 & from, const Vec3 & toDirection, double angle) {
+                Vec3 tovec = from.cross(toDirection).cross(from);
+                Vec3 result3 = from + tovec * tan(angle);
+                return result3 / cv::norm(result3);
+            }
         }
 
 
-        void ViewsNet::computeGlobalFeatures() {
-            GlobalData newgb;
+        void ViewsNet::estimateVanishingPointsAndClassifyLines() {
 
-            // estimate vanishing points
+            // pick separated views only
+            auto seperatedViewIters = MergeNear(_views.vertices().begin(), _views.vertices().end(), std::false_type(),
+                _params.smallCameraAngleScalar, [](const ViewMesh::Vertex & v1, const ViewMesh::Vertex & v2) -> double{
+                double angleDistance = 0;
+                AngleBetweenDirections(v1.data.camera.center(), v2.data.camera.center(), angleDistance);
+                return angleDistance / 
+                    (PerspectiveCameraAngleRadius(v1.data.camera) + PerspectiveCameraAngleRadius(v2.data.camera));
+            });
 
+            // collect line intersections
+            int lineIntersectionsNum = 0;
+            for (const auto & vIter : seperatedViewIters) // count intersecton num
+                lineIntersectionsNum += vIter->data.lineSegmentIntersections.size();
+            std::vector<Vec3> intersections(lineIntersectionsNum);
+            auto intersectionsBegin = intersections.begin();
+            for (const auto & vIter : seperatedViewIters){ // projection 2d intersections to global GeoCoord
+                intersectionsBegin = std::transform(vIter->data.lineSegmentIntersections.begin(), 
+                    vIter->data.lineSegmentIntersections.end(),
+                    intersectionsBegin, 
+                    [&vIter](const HPoint2 & p) -> Vec3 {
+                    Vec3 p3 = vIter->data.camera.spatialDirection(p.toPoint());
+                    return p3;
+                });
+            }
 
-            // classify lines
+            // find vanishing points; 
+            _globalData.vanishingPoints = FindVanishingPoints(intersections);                        
 
-
-            // add spatial line segments
+            // add spatial line segments from line segments of all views
             int spatialLineSegmentsNum = 0;
             for (auto & v : _views.vertices())
-                spatialLineSegmentsNum += v.data.featureLineSegment.size();
-            newgb.spatialLineSegments.resize(spatialLineSegmentsNum);
-            auto spatialLineSegmentBegin = newgb.spatialLineSegments.begin();
+                spatialLineSegmentsNum += v.data.lineSegments.size();
+            _globalData.spatialLineSegments.resize(spatialLineSegmentsNum);
+            auto spatialLineSegmentBegin = _globalData.spatialLineSegments.begin();
             for (auto & v : _views.vertices()){
-                spatialLineSegmentBegin = std::transform(v.data.featureLineSegment.begin(), v.data.featureLineSegment.end(),
+                spatialLineSegmentBegin = std::transform(v.data.lineSegments.begin(), v.data.lineSegments.end(),
                     spatialLineSegmentBegin, [&v](const Line2 & line) -> Line3{
                     auto & p1 = line.first;
                     auto & p2 = line.second;
@@ -199,6 +342,20 @@ namespace panoramix {
                     return Line3{ pp1, pp2 };
                 });
             }
+
+            // classify lines
+            _globalData.spatialLineSegmentClasses = ClassifyLines(_globalData.vanishingPoints, _globalData.spatialLineSegments);
+     
+            // project line classes back to perspective views
+            auto spatialLineSegmentClassesBegin = _globalData.spatialLineSegmentClasses.begin();
+            for (auto & v : _views.vertices()){
+                v.data.lineSegmentClasses.resize(v.data.lineSegments.size());
+                for (auto & lineClass : v.data.lineSegmentClasses){
+                    lineClass = *spatialLineSegmentClassesBegin;
+                    ++spatialLineSegmentClassesBegin;
+                }
+            }
+
 
         }
  

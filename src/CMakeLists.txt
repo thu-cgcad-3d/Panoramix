@@ -1,5 +1,5 @@
 
-set (SRC_MODULES core io)
+set (SRC_MODULES core)
 
 foreach (M ${SRC_MODULES})
 	message (STATUS "module name: " ${M})

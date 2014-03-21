@@ -98,7 +98,6 @@ namespace panoramix {
                 }
             }
 
-            gBegins.push_back(end);
             return gBegins;
         }
 
@@ -126,11 +125,8 @@ namespace panoramix {
                 }
             }
 
-            gBegins.push_back(end);
             return gBegins;
         }
-
-
 
 
     }

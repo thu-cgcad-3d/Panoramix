@@ -1,4 +1,4 @@
-#include "../src/core/util.hpp"
+#include "../src/core/utilities.hpp"
 
 #include <random>
 #include <list>
@@ -52,12 +52,15 @@ TEST(UtilTest, MergeNear) {
     ASSERT_EQ(gBegins1.size(), gBegins2.size());
     auto i = gBegins1.begin();
     auto j = gBegins2.begin();
-    for (; *i != arr1.end() && i != gBegins1.end(); ++i, ++j){
+    for (; i != gBegins1.end(); ++i, ++j){
         EXPECT_EQ(**i, **j);
     }
-    for (auto i = gBegins2.begin(), inext = std::next(i); inext != gBegins2.end(); ++i, ++inext){
-        auto beginVal = **i;
-        for (auto j = *i; j != *inext; ++j){
+    for (auto i = gBegins2.begin(); i != gBegins2.end(); ++i){
+        auto inext = std::next(i);
+        auto begin = *i;
+        auto end = inext == gBegins2.end() ? std::end(arr2) : *inext;
+        auto beginVal = *begin;
+        for (auto j = begin; j != end; ++j){
             EXPECT_NEAR(*j, beginVal, thres);
         }
     }

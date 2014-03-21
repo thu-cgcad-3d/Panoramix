@@ -117,6 +117,9 @@ namespace panoramix {
             using VertsTable = TripletArray<VertTopo, VertDataT>;
             using HalfsTable = TripletArray<HalfTopo, HalfDataT>;
             using FacesTable = TripletArray<FaceTopo, FaceDataT>;
+            using Vertex = typename VertsTable::value_type;
+            using HalfEdge = typename HalfsTable::value_type;
+            using Face = typename FacesTable::value_type;
             
             inline VertsTable & internalVertices() { return _verts; }
             inline HalfsTable & internalHalfEdges() { return _halfs; }
