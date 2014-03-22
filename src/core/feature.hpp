@@ -90,8 +90,8 @@ namespace panoramix {
             Image operator() (const Image & inputIm, Image & outputIm) const {
                 cv::Mat mapx = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
                 cv::Mat mapy = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
-                for (int i = 0; i < _outCam.screenSize().width; i++){
-                    for (int j = 0; j < _outCam.screenSize().height; j++){
+                for (int j = 0; j < _outCam.screenSize().height; j++){
+                    for (int i = 0; i < _outCam.screenSize().width; i++){
                         typename OutCameraT::Vec2 screenp(i, j);
                         typename OutCameraT::Vec3 p3 = _outCam.spatialDirection(screenp);
                         typename InCameraT::Vec2 screenpOnInCam = _inCam.screenProjection(p3);
