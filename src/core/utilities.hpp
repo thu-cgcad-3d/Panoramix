@@ -16,17 +16,6 @@ namespace panoramix {
             angle = acos(v1.dot(v2) / v1.norm() / v2.norm());
         }
 
-        template <class Vec3T, class ValueT>
-        inline void LongitudeLatitudeFromDirection(const Vec3T & d, ValueT & longi, ValueT & lati) {
-            longi = atan2(d(1), d(0));
-            lati = atan(d(2) / sqrt(Square(d(1)) + Square(d(0))));
-        }
-
-        template <class Vec3T, class ValueT>
-        inline void DirectionFromLongitudeLatitude(const ValueT & longi, const ValueT & lati, Vec3T & d) {
-            d = Vec3T(cos(longi)*cos(lati), sin(longi)*cos(lati), sin(lati));
-        }
-
         template <class T, class K>
         inline T WrapBetween(const T& input, const K& low, const K& high) {
             if (low >= high)

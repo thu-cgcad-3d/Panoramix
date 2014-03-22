@@ -55,11 +55,10 @@ namespace panoramix {
             double xx = p3.dot(_xaxis);
             double yy = p3.dot(_yaxis);
             double zz = p3.dot(_zaxis);
-            double longi, lati;
-            LongitudeLatitudeFromDirection(Vec3(xx, yy, zz), longi, lati);
+            GeoCoord pg = core::Vec3(xx, yy, zz);
             auto sz = screenSize();
-            double x = (longi + M_PI) / 2.0 / M_PI * sz.width;
-            double y = (lati + M_PI_2) / M_PI * sz.height;
+            double x = (pg.longitude + M_PI) / 2.0 / M_PI * sz.width;
+            double y = (pg.latitude + M_PI_2) / M_PI * sz.height;
             return Vec2(x, y);
         }
 
@@ -67,8 +66,7 @@ namespace panoramix {
             auto sz = screenSize();
             double longi = p2d(0) / double(sz.width) * 2 * M_PI - M_PI;
             double lati = p2d(1) / double(sz.height) * M_PI - M_PI_2;
-            Vec3 dd;
-            DirectionFromLongitudeLatitude(longi, lati, dd);
+            Vec3 dd = EigenVec(GeoCoord(longi, lati).toVector());
             return dd(0) * _xaxis + dd(1) * _yaxis + dd(2) * _zaxis;
         }
 

@@ -173,7 +173,20 @@ namespace panoramix {
 
         // color
         using Color = cv::Scalar;
-
+        enum class ColorTag {
+            Transparent,
+            White,
+            Black,
+            Gray,
+            Red,
+            Green,
+            Blue,
+            Yellow,
+            Magenta,
+            Cyan,
+            Orange
+        };
+        Color ColorFromTag(ColorTag t);
 
 
         template <class ValueT, int dim>
