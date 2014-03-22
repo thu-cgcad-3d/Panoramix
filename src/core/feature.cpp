@@ -1,7 +1,6 @@
 #include "feature.hpp"
 
 #include <iostream>
-#include <chrono>
 
 #include <Eigen/Dense>
 
@@ -79,8 +78,6 @@ namespace panoramix {
             template <class T, int N>
             void ExtractLines(const cv::Mat& im, std::vector<Line<T, N>> & lines,
                 int minlen, int xborderw, int yborderw, int numdir) {
-                using namespace std::chrono;
-                auto start = high_resolution_clock::now();
 
                 cv::Mat gim;
                 cv::cvtColor(im, gim, CV_BGR2GRAY);
@@ -213,9 +210,6 @@ namespace panoramix {
                         }
                     }
                 }
-
-                auto time = duration_cast<duration<double>>(high_resolution_clock::now() - start);
-                std::cout << "extractlines time: " << time.count() << std::endl;
             }
 
         }
