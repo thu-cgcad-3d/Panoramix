@@ -5,7 +5,7 @@ namespace panoramix {
 
         ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet::VertData & vd) {
             static const Color colors[] = { Color(255, 0, 0), Color(0, 255, 0), Color(0, 0, 255) };
-            viz.image() = vd.image;
+            viz.setImage(vd.image);
             viz.params.thickness = 2;
             for (size_t i = 0; i < vd.lineSegments.size(); ++i){
                 viz.params.color = vd.lineSegmentClasses[i] < 0 ? ColorFromTag(ColorTag::White) : colors[vd.lineSegmentClasses[i]];

@@ -31,14 +31,6 @@ TEST(UtilTest, WrapBetween) {
     }
 }
 
-TEST(UtilTest, MatrixLookAt) {
-    Mat4 m;
-    m.setIdentity();
-    m = core::Matrix4MakeLookAt(Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 0, 1), m);
-    Vec4 p = m * Vec4(1, 0, 0, 1);
-    Vec3 pj = Vec3(p(0), p(1), p(2)) / p(3);
-    ASSERT_LT((pj - Vec3(0, 0, 1)).norm(), 2);
-}
 
 TEST(UtilTest, MergeNear) {
     std::list<double> arr1;

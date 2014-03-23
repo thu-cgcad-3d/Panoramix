@@ -30,6 +30,7 @@ namespace panoramix {
                 im.copyTo(_image);
             }
 
+            inline void setImage(const Image & im) { im.copyTo(_image); }
             inline Image & image() { return _image; }
 
         public:
