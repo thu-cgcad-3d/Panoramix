@@ -64,6 +64,7 @@ TEST(Feature, CameraSampler) {
         core::PanoramicCamera::Vec3(0, 0, 1),
         core::PanoramicCamera::Vec3(0, 1, 0));
     viz << core::CameraSampler<core::PanoramicCamera, core::PanoramicCamera>(newCam, originCam)(im)
+        << core::SegmentationExtractor()(im, true)
         << core::manip::Show();
 
     float camPositions[4][3] = {
@@ -87,6 +88,7 @@ TEST(Feature, CameraSampler) {
 
 
 TEST(Feature, FeatureExtractor) {
+    core::SegmentationExtractor segmenter;
     core::LineSegmentExtractor lineSegmentExtractor;
     core::CVFeatureExtractor<cv::SIFT> sift;
     core::CVFeatureExtractor<cv::SURF> surf(300.0);
@@ -95,7 +97,9 @@ TEST(Feature, FeatureExtractor) {
         cv::Mat im = cv::imread(name);
         core::ImageFeatureVisualizer(im) 
             << [](core::ImageFeatureVisualizer & viz) { viz.params.winName = "haha"; }
-            << lineSegmentExtractor(im) <<  sift(im) << surf(im)
+            << segmenter(im, true)    
+            << lineSegmentExtractor(im) 
+            << sift(im) << surf(im)
             << core::manip::Show();
     }
 }

@@ -152,27 +152,24 @@ namespace panoramix {
             CVFeatureT _feature2D;
         };
 
-        // region feature extractor
-
         // segmentation
         class SegmentationExtractor {
-
-        };
-
-
-        // geometric context
-        class GeometricContextExtractor {
         public:
-            using Feature = std::vector<Image>;
+            using Feature = Image; // CV_32SC1, from 0 to numRegion
             struct Params {
-                inline Params() {}
+                inline Params() : sigma(0.8), c(100), minSize(100) {}
+                float sigma; // for smoothing
+                float c; // threshold function
+                int minSize; // min component size
             };
         public:
-            inline explicit GeometricContextExtractor(const Params & params = Params()) : _params(params) {}
-            Feature operator () (const Image & im) const { return Feature(); }
+            inline explicit SegmentationExtractor(const Params & params = Params()) : _params(params){}
+            Feature operator() (const Image & im, bool forVisualization = false) const;
         private:
             Params _params;
         };
+
+
 
     }
 }

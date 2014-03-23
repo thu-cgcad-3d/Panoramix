@@ -1,9 +1,11 @@
 #include "feature.hpp"
 
 #include <iostream>
+#include <unordered_map>
 
 #include <Eigen/Dense>
 
+#include "mesh.hpp"
 #include "utilities.hpp"
 
 namespace panoramix {
@@ -251,7 +253,220 @@ namespace panoramix {
             return lines;
         }
 
+
+        namespace {
+
+            std::string ImageDepth2Str(int depth)
+            {
+                switch (depth)
+                {
+                case CV_8U: return "CV_8U";
+                case CV_8S: return "CV_8S";
+                case CV_16U: return "CV_16U";
+                case CV_16S: return "CV_16S";
+                case CV_32S: return "CV_32S";
+                case CV_32F: return "CV_32F";
+                case CV_64F: return "CV_64F";
+                default:
+                    return "unknown depth type";
+                }
+            }
+
+            struct Edge {
+                float w;
+                int a, b;
+            };
+
+            class Universe {
+            public:
+                struct Element {
+                    int rank;
+                    int p;
+                    int size;
+                };
+                inline Universe(int eleNum) : elements(eleNum), num(eleNum) {
+                    for (int i = 0; i < eleNum; i++){
+                        elements[i].rank = 0;
+                        elements[i].size = 1;
+                        elements[i].p = i;
+                    }
+                }
+                int find(int x) {
+                    int y = x;
+                    while (y != elements[y].p)
+                        y = elements[y].p;
+                    elements[x].p = y;
+                    return y;
+                }
+                void join(int x, int y) {
+                    if (elements[x].rank > elements[y].rank) {
+                        elements[y].p = x;
+                        elements[x].size += elements[y].size;
+                    } else {
+                        elements[x].p = y;
+                        elements[y].size += elements[x].size;
+                        if (elements[x].rank == elements[y].rank)
+                            elements[y].rank++;
+                    }
+                    num--;
+                }
+                inline int size(int x) const { return elements[x].size; }
+                inline int numSets() const { return num; }
+            private:
+                int num;
+                std::vector<Element> elements;
+            };
+
+            inline float Threshold(int size, float c) {
+                return c / size;
+            }
+
+            Universe SegmentGraph(int numVertices, std::vector<Edge> & edges, float c) {
+                std::sort(edges.begin(), edges.end(), [](const Edge & e1, const Edge & e2){
+                    return e1.w < e2.w;
+                });
+
+                Universe u(numVertices);
+                std::vector<float> threshold(numVertices);
+
+                for (int i = 0; i < numVertices; i++)
+                    threshold[i] = Threshold(1, c);
+
+                for (int i = 0; i < edges.size(); i++) {
+                    const Edge & edge = edges[i];
+
+                    // components conected by this edge
+                    int a = u.find(edge.a);
+                    int b = u.find(edge.b);
+                    if (a != b) {
+                        if ((edge.w <= threshold[a]) &&
+                            (edge.w <= threshold[b])) {
+                            u.join(a, b);
+                            a = u.find(a);
+                            threshold[a] = edge.w + Threshold(u.size(a), c);
+                        }
+                    }
+                }
+
+                return u;
+            }
+
+            inline float PixelDiff(const Image & im, const cv::Point & p1, const cv::Point & p2) {
+                assert(im.depth() == CV_8U && im.channels() == 3);
+                Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
+                Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
+                return norm(c1 - c2);
+            }
+
+            // first return is CV_32SC1, the second is CV_8UC3 (for display)
+            std::pair<Image, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, 
+                int & numCCs, bool returnColoredResult = false) {
+
+                assert(im.depth() == CV_8U && im.channels() == 3);
+                //std::cout << "depth: " << ImageDepth2Str(im.depth()) << std::endl;
+                //std::cout << "channels: " << im.channels() << std::endl;
+
+                int width = im.cols;
+                int height = im.rows;
+                Image smoothed;
+                cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
+
+                // build pixel graph
+                std::vector<Edge> edges;
+                edges.reserve(width * height * 4);
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        if (x < width - 1) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = y * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y });
+                            edges.push_back(edge);
+                        }
+
+                        if (y < height - 1) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y + 1) * width + x;
+                            edge.w = PixelDiff(smoothed, { x, y }, { x, y + 1 });
+                            edges.push_back(edge);
+                        }
+
+                        if ((x < width - 1) && (y < height - 1)) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y + 1) * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y + 1 });
+                            edges.push_back(edge);
+                        }
+
+                        if ((x < width - 1) && (y > 0)) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y - 1) * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y - 1 });
+                            edges.push_back(edge);
+                        }
+                    }
+                }
+
+                int num = edges.size();
+                Universe u = SegmentGraph(width * height, edges, c);
+
+                for (int i = 0; i < num; i++) {
+                    int a = u.find(edges[i].a);
+                    int b = u.find(edges[i].b);
+                    if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize)))
+                        u.join(a, b);
+                }
+
+                numCCs = u.numSets();
+                std::unordered_map<int, int> compIntSet;
+                Image output(im.size(), CV_32SC1);
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        int comp = u.find(y * width + x);
+                        if (compIntSet.find(comp) == compIntSet.end()){
+                            compIntSet.insert(std::make_pair(comp, compIntSet.size()));
+                        }
+                        output.at<int32_t>(cv::Point(x, y)) = compIntSet[comp];
+                    }
+                }
+                assert(compIntSet.size() == numCCs);
+
+                if (!returnColoredResult){
+                    return std::make_pair(output, Image());
+                }
+
+                Image coloredOutput(im.size(), CV_8UC3);
+                std::vector<cv::Vec<uint8_t, 3>> colors(numCCs);
+                std::generate(colors.begin(), colors.end(), [](){
+                    return cv::Vec<uint8_t, 3>(uint8_t(std::rand() % 256), 
+                        uint8_t(std::rand() % 256), 
+                        uint8_t(std::rand() % 256));
+                });
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        coloredOutput.at<cv::Vec<uint8_t, 3>>(cv::Point(x, y)) = 
+                            colors[output.at<int32_t>(cv::Point(x, y))];
+                    }
+                }
+
+                //cv::imshow("result", coloredOutput);
+                //cv::waitKey();
+
+                return std::make_pair(output, coloredOutput);
+            }
+        }
+
+
+        SegmentationExtractor::Feature SegmentationExtractor::operator() (const Image & im, 
+            bool forVisualization) const {
+            int numCCs;
+            return forVisualization ? SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, true).second : SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
+        }
+
     }
 }
 
-
+    
