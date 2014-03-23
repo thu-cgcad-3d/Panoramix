@@ -31,5 +31,5 @@ Panoramix 相对于其它类似技术拥有如下优势：
 - 配置与开发 -
 ==============
 
-见 `./doc/project_configuration.md`
+见 `./doc/FOR_DEVELOPERS.md`
 
