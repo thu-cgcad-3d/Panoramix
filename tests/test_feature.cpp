@@ -63,8 +63,8 @@ TEST(Feature, CameraSampler) {
         core::PanoramicCamera::Vec3(0, 0, 0), 
         core::PanoramicCamera::Vec3(0, 0, 1),
         core::PanoramicCamera::Vec3(0, 1, 0));
-    viz << core::CameraSampler<core::PanoramicCamera, core::PanoramicCamera>(newCam, originCam)(im, core::Image());
-    viz.visualize();
+    viz << core::CameraSampler<core::PanoramicCamera, core::PanoramicCamera>(newCam, originCam)(im)
+        << core::manip::Show();
 
     float camPositions[4][3] = {
         {1, 0, 0},
@@ -80,8 +80,8 @@ TEST(Feature, CameraSampler) {
             core::PerspectiveCamera::Vec3(0, 0, -1));
         core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera> sampler(cam,
             core::PanoramicCamera(im.cols / M_PI / 2.0));
-        cv::Mat sampledIm = sampler(im, core::Image());
-        core::ImageFeatureVisualizer viz(sampledIm);
+        cv::Mat sampledIm = sampler(im);
+        core::ImageFeatureVisualizer(sampledIm) << core::manip::Show();
     }
 }
 
@@ -95,7 +95,8 @@ TEST(Feature, FeatureExtractor) {
         cv::Mat im = cv::imread(name);
         core::ImageFeatureVisualizer(im) 
             << [](core::ImageFeatureVisualizer & viz) { viz.params.winName = "haha"; }
-            << lineSegmentExtractor(im) <<  sift(im) << surf(im);
+            << lineSegmentExtractor(im) <<  sift(im) << surf(im)
+            << core::manip::Show();
     }
 }
 
