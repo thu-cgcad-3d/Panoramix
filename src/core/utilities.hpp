@@ -11,10 +11,6 @@ namespace panoramix {
             return v * v;
         }
 
-        template <class Vec3T1, class Vec3T2, class ValueT>
-        inline void AngleBetweenDirections(const Vec3T1 & v1, const Vec3T2 & v2, ValueT & angle) {
-            angle = acos(v1.dot(v2) / v1.norm() / v2.norm());
-        }
 
         template <class T, class K>
         inline T WrapBetween(const T& input, const K& low, const K& high) {
@@ -25,37 +21,9 @@ namespace panoramix {
             const K sz = high - low;
             return input - int((input - low) / sz) * sz + (input < low ? sz : 0);
         }
- 
-        template <class Mat4T, class Vec3T>
-        Mat4T Matrix4MakeLookAt(const Vec3T & eye, const Vec3T & center, 
-            const Vec3T & up, const Mat4T & base) {
-            Vec3T zaxis = (center - eye).normalized();
-            Vec3T xaxis = up.cross(zaxis).normalized();
-            Vec3T yaxis = zaxis.cross(xaxis);
-            Mat4T m;
-            m <<
-                xaxis(0), yaxis(0), zaxis(0), 0,
-                xaxis(1), yaxis(1), zaxis(1), 0,
-                xaxis(2), yaxis(2), zaxis(2), 0,
-                -xaxis.dot(eye), -yaxis.dot(eye), -zaxis.dot(eye), 1;
-            return m.transpose() * base;
-        }
-
-        template <class Mat4T, class ValueT>
-        Mat4T Matrix4MakePerspective(const ValueT & fovyRadians, const ValueT & aspect, 
-            const ValueT & nearZ, const ValueT & farZ, const Mat4T & base) {
-            ValueT cotan = ValueT(1.0) / std::tan(fovyRadians / 2.0);
-            Mat4T m;
-            m <<
-                cotan / aspect, 0, 0, 0,
-                0, cotan, 0, 0,
-                0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
-                0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0;
-            return m.transpose() * base;
-        }
 
         // merge, rearrange the input array
-        // DistanceFunctorT(a, b) -> DistanceT
+        // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the begin iterators of each group
         template <class IteratorT, class DistanceT, class DistanceFunctorT = std::minus<DistanceT>>
         std::vector<IteratorT> MergeNear(IteratorT begin, IteratorT end, std::true_type,
@@ -91,7 +59,7 @@ namespace panoramix {
         }
 
         // merge, without rearrangement
-        // DistanceFunctorT(a, b) -> DistanceT
+        // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the begin iterators of each group
         template <class IteratorT, class DistanceT, class DistanceFunctorT = std::minus<DistanceT>>
         std::vector<IteratorT> MergeNear(IteratorT begin, IteratorT end, std::false_type,
@@ -116,6 +84,57 @@ namespace panoramix {
 
             return gBegins;
         }
+
+        /// optimizations
+
+        // graph topology
+        template <class VertHandleIteratorT, class EdgeHandleIteratorT,
+        class EdgeFromGetterT, class EdgeToGetterT, 
+        class VertEdgeBeginGetterT, class VertEdgeEndGetterT
+        >
+        struct DirectedGraphTopology {
+            using VertHandle = typename std::iterator_traits<VertHandleIteratorT>::value_type;
+            using EdgeHandle = typename std::iterator_traits<EdgeHandleIteratorT>::value_type;
+            
+            VertHandleIteratorT vertsBegin, vertsEnd;
+            EdgeHandleIteratorT edgesBegin, edgesEnd;
+            EdgeFromGetterT fromOfEdge; // EdgeFromGetterT(EdgeHandle h) -> VertHandle
+            EdgeToGetterT toOfEdge; 
+            VertEdgeBeginGetterT edgesBeginOfVert; // VertEdgeBeginGetterT(VertHandle h) -> EdgeHandleIteratorT
+            VertEdgeEndGetterT edgesEndOfVert; // VertEdgeEndGetterT(VertHandle h) -> EdgeHandleIteratorT
+        };
+        template <class VertHandleIteratorT, class EdgeHandleIteratorT,
+        class EdgeFromGetterT, class EdgeToGetterT,
+        class VertEdgeBeginGetterT, class VertEdgeEndGetterT
+        >
+        inline DirectedGraphTopology <VertHandleIteratorT, EdgeHandleIteratorT, 
+                                        EdgeFromGetterT, EdgeToGetterT, 
+                                        VertEdgeBeginGetterT, VertEdgeEndGetterT>
+        MakeDirectedGraphTopology(VertHandleIteratorT vertsBegin, VertHandleIteratorT vertsEnd, 
+            EdgeHandleIteratorT edgesBegin, EdgeHandleIteratorT edgesEnd,
+            EdgeFromGetterT fromOfEdge, EdgeToGetterT toOfEdge, 
+            VertEdgeBeginGetterT edgesBeginOfVert, VertEdgeEndGetterT edgesEndOfVert) {
+            return { vertsBegin, vertsEnd, edgesBegin, edgesEnd, fromOfEdge, toOfEdge, edgesBeginOfVert, edgesEndOfVert };
+        }
+
+
+        // graph cut
+        template <class VertHandleIteratorT, class EdgeHandleIteratorT, 
+        class EdgeFromGetterT, class EdgeToGetterT, 
+        class VertEdgeBeginGetterT, class VertEdgeEndGetterT,
+        class VertEnergyGetterT, class EdgeEnergyGetterT,
+        class VertLabelGetterSetterT
+        >
+        void GraphCut(
+            const DirectedGraphTopology<VertHandleIteratorT, EdgeHandleIteratorT,
+                EdgeFromGetterT, EdgeToGetterT, VertEdgeBeginGetterT, VertEdgeEndGetterT> & graphTopo,
+            VertEnergyGetterT energyOfVert, EdgeEnergyGetterT energyOfEdge, VertLabelGetterSetterT labelOfVert){
+
+
+
+        }
+
+        
 
 
     }

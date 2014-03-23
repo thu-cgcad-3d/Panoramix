@@ -9,6 +9,37 @@
 namespace panoramix {
     namespace core {
 
+        namespace {
+
+            template <class Mat4T, class Vec3T>
+            Mat4T Matrix4MakeLookAt(const Vec3T & eye, const Vec3T & center,
+                const Vec3T & up, const Mat4T & base) {
+                Vec3T zaxis = (center - eye).normalized();
+                Vec3T xaxis = up.cross(zaxis).normalized();
+                Vec3T yaxis = zaxis.cross(xaxis);
+                Mat4T m;
+                m <<
+                    xaxis(0), yaxis(0), zaxis(0), 0,
+                    xaxis(1), yaxis(1), zaxis(1), 0,
+                    xaxis(2), yaxis(2), zaxis(2), 0,
+                    -xaxis.dot(eye), -yaxis.dot(eye), -zaxis.dot(eye), 1;
+                return m.transpose() * base;
+            }
+
+            template <class Mat4T, class ValueT>
+            Mat4T Matrix4MakePerspective(const ValueT & fovyRadians, const ValueT & aspect,
+                const ValueT & nearZ, const ValueT & farZ, const Mat4T & base) {
+                ValueT cotan = ValueT(1.0) / std::tan(fovyRadians / 2.0);
+                Mat4T m;
+                m <<
+                    cotan / aspect, 0, 0, 0,
+                    0, cotan, 0, 0,
+                    0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
+                    0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0;
+                return m.transpose() * base;
+            }
+        }
+
         PerspectiveCamera::PerspectiveCamera(int w, int h, double focal, const Vec3 & eye,
             const Vec3 & center, const Vec3 & up) 
         : _screenW(w), _screenH(h), _focal(focal), _eye(eye), _center(center), _up(up) {

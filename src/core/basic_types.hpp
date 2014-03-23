@@ -23,6 +23,8 @@ namespace panoramix {
         
         // vectors/points
         template <class T, int N> using Vec = cv::Vec<T, N>;
+        template <class T, int N> using EVec = Eigen::Matrix<T, N, 1>;
+        template <class T, int N> using EUAVec = Eigen::Matrix<T, N, 1, Eigen::Unaligned>;
         using Vec2 = Vec<double, 2>;
         using Vec3 = Vec<double, 3>;
         using Vec4 = Vec<double, 4>;
@@ -30,6 +32,13 @@ namespace panoramix {
         using Point2 = Point<double, 2>;
         using Point3 = Point<double, 3>;
         using Point4 = Point<double, 4>;
+
+        using cv::norm;
+
+        template <class T, int N>
+        inline T AngleBetweenDirections(const Vec<T, N> & v1, const Vec<T, N> & v2) {
+            return acos(v1.dot(v2) / norm(v1) / norm(v2));
+        }
 
 
         // private tools
@@ -173,7 +182,7 @@ namespace panoramix {
 
         // color
         using Color = cv::Scalar;
-        enum class ColorTag {
+        enum class ColorTag : int8_t {
             Transparent,
             White,
             Black,

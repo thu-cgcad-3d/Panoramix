@@ -86,8 +86,7 @@ namespace panoramix {
                 const PerspectiveCamera & vcam = v.data.originalCamera;
                 double vCamAngleRadius = PerspectiveCameraAngleRadius(vcam);
                 vCamAngleRadius *= _params.cameraAngleScaler;
-                double angleDistance = 0;
-                AngleBetweenDirections(thisvCam.center(), vcam.center(), angleDistance);
+                double angleDistance = AngleBetweenDirections(CVVec(thisvCam.center()), CVVec(vcam.center()));
                 if (angleDistance <= thisvCamAngleRadius + vCamAngleRadius){
                     // may overlap
                     HalfData hd;
@@ -104,8 +103,7 @@ namespace panoramix {
             auto connections = _views.topo(h).halfedges;
             for (auto & con : connections){
                 auto & neighborCamera = _views.data(_views.topo(con).to()).camera;
-                double cameraAngle = 0;
-                AngleBetweenDirections(camera.center(), neighborCamera.center(), cameraAngle);
+                double cameraAngle = AngleBetweenDirections(CVVec(camera.center()), CVVec(neighborCamera.center()));
                 double neighborCameraRadius = PerspectiveCameraAngleRadius(camera);
                 if (cameraAngle <= (cameraRadius + neighborCameraRadius) * _params.smallCameraAngleScalar){ // too close
                     return _views.topo(con).to();
@@ -301,8 +299,7 @@ namespace panoramix {
             // pick separated views only
             auto seperatedViewIters = MergeNear(_views.vertices().begin(), _views.vertices().end(), std::false_type(),
                 _params.smallCameraAngleScalar, [](const ViewMesh::Vertex & v1, const ViewMesh::Vertex & v2) -> double{
-                double angleDistance = 0;
-                AngleBetweenDirections(v1.data.camera.center(), v2.data.camera.center(), angleDistance);
+                double angleDistance = AngleBetweenDirections(CVVec(v1.data.camera.center()), CVVec(v2.data.camera.center()));
                 return angleDistance / 
                     (PerspectiveCameraAngleRadius(v1.data.camera) + PerspectiveCameraAngleRadius(v2.data.camera));
             });
@@ -323,7 +320,7 @@ namespace panoramix {
                 });
             }
 
-            // find vanishing points; 
+            // find vanishing points;
             _globalData.vanishingPoints = FindVanishingPoints(intersections);                        
 
             // add spatial line segments from line segments of all views
