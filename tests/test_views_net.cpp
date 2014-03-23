@@ -32,8 +32,7 @@ TEST(ViewsNet, ViewsNet) {
     std::transform(cams.begin(), cams.end(), ims.begin(),
         [&panorama, &originCam](const core::PerspectiveCamera & pcam){
         core::Image im;
-        core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera>(pcam, originCam)(panorama, im);
-        return im;
+        return core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera>(pcam, originCam)(panorama);
     });
 
     /// insert into views net
@@ -41,17 +40,18 @@ TEST(ViewsNet, ViewsNet) {
     core::ViewsNet net;
     for (int i = 0; i < cams.size(); i++){
         auto & camera = cams[i];
-        auto & im = ims[i];
+        const auto & im = ims[i];
         auto viewHandle = net.insertPhoto(im, camera);
         
         net.computeFeatures(viewHandle);
-        core::ImageFeatureVisualizer(im) << 
-            core::manip::SetColor(core::Color(0, 0, 255)) <<
-            core::manip::SetThickness(2) <<
-            net.views().data(viewHandle).lineSegments <<
-            core::manip::SetColor(core::Color(255, 0, 0)) << 
-            core::manip::SetThickness(1) <<
-            net.views().data(viewHandle).lineSegmentIntersections;
+        core::ImageFeatureVisualizer (im)
+            << core::manip::SetColor(core::Color(0, 0, 255))
+            << core::manip::SetThickness(2)
+            << net.views().data(viewHandle).lineSegments
+            << core::manip::SetColor(core::Color(255, 0, 0))
+            << core::manip::SetThickness(1)
+            << net.views().data(viewHandle).lineSegmentIntersections
+            << core::manip::Show();
 
         net.updateConnections(viewHandle);
         net.computeTransformationOnConnections(viewHandle);
@@ -82,13 +82,16 @@ TEST(ViewsNet, ViewsNet) {
             return originCam.screenProjection(p3);
         });
 
-        core::ImageFeatureVisualizer(panorama) <<
-            core::manip::SetWindowName("Vanishing points") <<
-            core::manip::SetColor(core::Color(0, 0, 255)) <<
-            core::manip::SetThickness(3) <<
-            vp2s;
+        core::ImageFeatureVisualizer(panorama)
+            << core::manip::SetWindowName("Vanishing points")
+            << core::manip::SetColor(core::Color(0, 0, 255))
+            << core::manip::SetThickness(3)
+            << vp2s
+            << core::manip::Show();
 
-        core::ImageFeatureVisualizer() << net.views().data(viewHandle);
+        core::ImageFeatureVisualizer()
+            << net.views().data(viewHandle)
+            << core::manip::Show();
 
     }
 

@@ -87,7 +87,8 @@ namespace panoramix {
                 assert(outCam.eye() == inCam.eye());
             }
             
-            Image operator() (const Image & inputIm, Image & outputIm) const {
+            Image operator() (const Image & inputIm) const {
+                Image outputIm;
                 cv::Mat mapx = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
                 cv::Mat mapy = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
                 for (int j = 0; j < _outCam.screenSize().height; j++){

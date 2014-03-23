@@ -63,7 +63,8 @@ namespace panoramix {
         // homogeneous point
         template <class T, int N>
         struct HPoint {
-            inline HPoint(const Point<T, N> & c = Point<T, N>(), T s = 1) : coord(c), scalar(s) {}
+            inline HPoint() : coord(), scalar(1){}
+            inline HPoint(const Point<T, N> & c, T s = 1) : coord(c), scalar(s) {}
             inline Point<T, N> toPoint() const { return coord / scalar; }
             Vec<T, N + 1> toVector() const { 
                 Vec<T, N + 1> v; 

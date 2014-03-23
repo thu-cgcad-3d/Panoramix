@@ -7,11 +7,11 @@
 namespace panoramix {
     namespace core {
 
-        ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const ViewsNet::VertData & vd);
+        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet::VertData & vd);
 
-        ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const ViewsNet::GlobalData & netgb);
+        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet::GlobalData & netgb);
 
-        ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const ViewsNet & net);
+        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet & net);
 
     }
 }

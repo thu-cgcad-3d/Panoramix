@@ -3,7 +3,7 @@
 namespace panoramix {
     namespace core {
 
-        ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const ViewsNet::VertData & vd) {
+        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet::VertData & vd) {
             static const Color colors[] = { Color(255, 0, 0), Color(0, 255, 0), Color(0, 0, 255) };
             viz.image() = vd.image;
             viz.params.thickness = 2;
@@ -17,12 +17,12 @@ namespace panoramix {
             return viz;
         }
 
-        ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const ViewsNet::GlobalData & netgb) {
+        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet::GlobalData & netgb) {
             
             return viz;
         }
 
-        ImageFeatureVisualizer & operator << (ImageFeatureVisualizer & viz, const ViewsNet & net) {
+        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet & net) {
 
             return viz;
         }
