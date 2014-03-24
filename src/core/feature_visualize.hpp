@@ -13,7 +13,8 @@ namespace panoramix {
                 inline Params() 
                     : winName("Image Feature Visualizer"), 
                       color(255, 255, 255), thickness(1), 
-                      lineType(8), shift(0), alphaForNewImage(0.5f) {}
+                      lineType(8), shift(0), alphaForNewImage(0.5f), 
+                      colorTableDescriptor(ColorTableDescriptor::AllColors) {}
 
                 std::string winName;
                 Color color;
@@ -21,6 +22,7 @@ namespace panoramix {
                 int lineType;
                 int shift;
                 float alphaForNewImage;
+                ColorTableDescriptor colorTableDescriptor;
             };
 
         public:
@@ -79,6 +81,13 @@ namespace panoramix {
                     viz.params.alphaForNewImage = alpha; },
                         a);
             }
+
+            inline Manipulator<ColorTableDescriptor> SetColorTableDescriptor(ColorTableDescriptor descriptor) {
+                return Manipulator<ColorTableDescriptor>(
+                    [](ImageFeatureVisualizer & viz, ColorTableDescriptor d){
+                    viz.params.colorTableDescriptor = d; },
+                        descriptor);
+            }
             
             Manipulator<int> Show(int delay = 0);
         }
@@ -135,6 +144,16 @@ namespace panoramix {
             cv::drawKeypoints(viz.image(), ps, viz.image(), viz.params.color);
             return viz;
         }
+
+        // classified thing
+        template <class T>
+        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const Classified<T> & thing) {
+            static const auto WhiteColor = ColorFromTag(ColorTag::White);
+            auto & predefinedColorTable = PredefinedColorTable(viz.params.colorTableDescriptor);
+            viz.params.color = thing.claz < 0 ? WhiteColor : predefinedColorTable[thing.claz % predefinedColorTable.size()];
+            return viz << thing.component;
+        }
+
 
         // image
         ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const Image & im);

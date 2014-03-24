@@ -50,18 +50,16 @@ namespace panoramix {
             void calibrateAllCameras();
             void updateExternalRegionConnections(VertHandle h); // build region connections across views
             void estimateVanishingPointsAndClassifyLines();
-
-
+            void rectifySpatialLines(); // 
 
         public:
             struct VertData {
                 PerspectiveCamera originalCamera, camera;
                 Image image;
                 double weight;
-                LineSegmentExtractor::Feature lineSegments;
+                std::vector<Classified<Line2>> lineSegments;
                 std::vector<core::HPoint2> lineSegmentIntersections;
                 std::vector<std::pair<int, int>> lineSegmentIntersectionLineIDs;
-                std::vector<int> lineSegmentClasses;
                 CVFeatureExtractor<cv::SIFT>::Feature SIFTs;
                 CVFeatureExtractor<cv::SURF>::Feature SURFs;
                 SegmentationExtractor::Feature segmentedRegions;
@@ -71,15 +69,15 @@ namespace panoramix {
             struct HalfData {
                 double cameraAngleDistance;
                 double weight;
-                Eigen::Matrix<double, 4, 4, Eigen::DontAlign> from2ToTransformation;
+                // transform //
             };
             struct GlobalData {
                 Image panorama;
                 std::array<Vec3, 3> vanishingPoints;
                 std::vector<Image> geometricContext;
                 std::vector<Image> manhattanJunctionDistribution;
-                std::vector<Line3> spatialLineSegments;
-                std::vector<int> spatialLineSegmentClasses;
+                std::vector<Classified<Line3>> spatialLineSegments;
+                std::vector<Classified<Line3>> mergedSpatialLineSegments;
             };
 
             inline const ViewMesh & views() const { return _views; }

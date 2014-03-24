@@ -14,17 +14,17 @@ namespace panoramix {
 
         namespace {
 
-            void LineIntersectons(const std::vector<Line2> & lines,
+            void LineIntersectons(const std::vector<Classified<Line2>> & lines,
                 std::vector<HPoint2> & hinterps, std::vector<std::pair<int, int>> & lineids,
                 bool suppresscross)
             {
                 int lnum = lines.size();
                 for (int i = 0; i < lnum; i++){
-                    auto eqi = cv::Vec3d(lines[i].first[0], lines[i].first[1], 1)
-                        .cross(cv::Vec3d(lines[i].second[0], lines[i].second[1], 1));
+                    auto eqi = cv::Vec3d(lines[i].component.first[0], lines[i].component.first[1], 1)
+                        .cross(cv::Vec3d(lines[i].component.second[0], lines[i].component.second[1], 1));
                     for (int j = i + 1; j < lnum; j++){
-                        auto eqj = cv::Vec3d(lines[j].first[0], lines[j].first[1], 1)
-                            .cross(cv::Vec3d(lines[j].second[0], lines[j].second[1], 1));
+                        auto eqj = cv::Vec3d(lines[j].component.first[0], lines[j].component.first[1], 1)
+                            .cross(cv::Vec3d(lines[j].component.second[0], lines[j].component.second[1], 1));
                         auto interp = eqi.cross(eqj);
                         if (interp[0] == 0 && interp[1] == 0 && interp[2] == 0){ // lines overlapped
                             interp[0] = -eqi[1];
@@ -33,10 +33,10 @@ namespace panoramix {
                         interp /= cv::norm(interp);
 
                         if (suppresscross){
-                            auto& a1 = lines[i].first;
-                            auto& a2 = lines[i].second;
-                            auto& b1 = lines[j].first;
-                            auto& b2 = lines[j].second;
+                            auto& a1 = lines[i].component.first;
+                            auto& a2 = lines[i].component.second;
+                            auto& b1 = lines[j].component.first;
+                            auto& b2 = lines[j].component.second;
                             double q = a1[0] * b1[1] - a1[1] * b1[0] - a1[0] * b2[1] + a1[1] * b2[0] -
                                 a2[0] * b1[1] + a2[1] * b1[0] + a2[0] * b2[1] - a2[1] * b2[0];
                             double t = (a1[0] * b1[1] - a1[1] * b1[0] - a1[0] * b2[1] +
@@ -54,7 +54,13 @@ namespace panoramix {
         void ViewsNet::computeFeatures(VertHandle h) {
             auto & vd = _views.data(h);
             const Image & im = vd.image;
-            vd.lineSegments = _params.lineSegmentExtractor(im);
+            auto lineSegments = _params.lineSegmentExtractor(im);
+            vd.lineSegments.resize(lineSegments.size());
+            for (size_t i = 0; i < lineSegments.size(); i++){
+                vd.lineSegments[i].claz = -1;
+                vd.lineSegments[i].component = lineSegments[i];
+            }
+
             vd.SIFTs = _params.siftExtractor(im);
             vd.SURFs = _params.surfExtractor(im);
             vd.weight = vd.lineSegments.size() * _params.lineSegmentWeight +
@@ -247,16 +253,15 @@ namespace panoramix {
             }
 
             template <class Vec3Container>
-            std::vector<int> ClassifyLines(const Vec3Container & points, const std::vector<Line3> & lines,
+            void ClassifyLines(const Vec3Container & points, std::vector<Classified<Line3>> & lines,
                 double angleThreshold = M_PI/3, double sigma = 0.1) {
                 
                 size_t nlines = lines.size();
-                std::vector<int> lineClasses(nlines, -1);
                 size_t npoints = points.size();
 
                 for (size_t i = 0; i < nlines; i++){
-                    Vec3 a = lines[i].first;
-                    Vec3 b = lines[i].second;
+                    Vec3 a = lines[i].component.first;
+                    Vec3 b = lines[i].component.second;
                     Vec3 normab = a.cross(b);
                     normab /= cv::norm(normab);
 
@@ -277,17 +282,15 @@ namespace panoramix {
                     }
 
                     // classify lines
-                    lineClasses[i] = -1;
+                    lines[i].claz = -1;
                     float curscore = 0.8;
                     for (int j = 0; j < npoints; j++){
                         if (linescores[j] > curscore){
-                            lineClasses[i] = j;
+                            lines[i].claz = j;
                             curscore = linescores[j];
                         }
                     }
                 }
-
-                return lineClasses;
             }
 
             inline Vec3 RotateDirectionTo(const Vec3 & from, const Vec3 & toDirection, double angle) {
@@ -335,29 +338,35 @@ namespace panoramix {
             auto spatialLineSegmentBegin = _globalData.spatialLineSegments.begin();
             for (auto & v : _views.vertices()){
                 spatialLineSegmentBegin = std::transform(v.data.lineSegments.begin(), v.data.lineSegments.end(),
-                    spatialLineSegmentBegin, [&v](const Line2 & line) -> Line3{
-                    auto & p1 = line.first;
-                    auto & p2 = line.second;
+                    spatialLineSegmentBegin, [&v](const Classified<Line2> & line) -> Classified<Line3>{
+                    auto & p1 = line.component.first;
+                    auto & p2 = line.component.second;
                     auto pp1 = v.data.camera.spatialDirection(p1);
                     auto pp2 = v.data.camera.spatialDirection(p2);
-                    return Line3{ pp1, pp2 };
+                    Classified<Line3> cline3;
+                    cline3.claz = line.claz;
+                    cline3.component = Line3{ pp1, pp2 };
+                    return cline3;
                 });
             }
 
             // classify lines
-            _globalData.spatialLineSegmentClasses = ClassifyLines(_globalData.vanishingPoints, _globalData.spatialLineSegments);
+            ClassifyLines(_globalData.vanishingPoints, _globalData.spatialLineSegments);
      
             // project line classes back to perspective views
-            auto spatialLineSegmentClassesBegin = _globalData.spatialLineSegmentClasses.begin();
+            spatialLineSegmentBegin = _globalData.spatialLineSegments.begin();
             for (auto & v : _views.vertices()){
-                v.data.lineSegmentClasses.resize(v.data.lineSegments.size());
-                for (auto & lineClass : v.data.lineSegmentClasses){
-                    lineClass = *spatialLineSegmentClassesBegin;
-                    ++spatialLineSegmentClassesBegin;
+                for (auto & line : v.data.lineSegments){
+                    line.claz = spatialLineSegmentBegin->claz;
+                    ++ spatialLineSegmentBegin;
                 }
             }
 
 
+        }
+
+        void ViewsNet::rectifySpatialLines() {
+            // TODO
         }
  
     }

@@ -30,6 +30,38 @@ namespace panoramix {
             }
         }
 
+        const std::vector<Color> & PredefinedColorTable(ColorTableDescriptor descriptor) {
+            static const std::vector<Color> allColorTable = {
+                ColorFromTag(ColorTag::White),
+                ColorFromTag(ColorTag::Black),
+                ColorFromTag(ColorTag::Gray),
+                ColorFromTag(ColorTag::Red),
+                ColorFromTag(ColorTag::Green),
+                ColorFromTag(ColorTag::Blue),
+                ColorFromTag(ColorTag::Yellow),
+                ColorFromTag(ColorTag::Magenta),
+                ColorFromTag(ColorTag::Cyan),
+                ColorFromTag(ColorTag::Orange)
+            };
+            static const std::vector<Color> WRGBColorTable = {
+                ColorFromTag(ColorTag::White),
+                ColorFromTag(ColorTag::Red),
+                ColorFromTag(ColorTag::Green),
+                ColorFromTag(ColorTag::Blue),
+            };
+            static const std::vector<Color> RGBColorTable = {
+                ColorFromTag(ColorTag::Red),
+                ColorFromTag(ColorTag::Green),
+                ColorFromTag(ColorTag::Blue),
+            };
+            
+            switch (descriptor){
+            case ColorTableDescriptor::WRGB: return WRGBColorTable;
+            case ColorTableDescriptor::RGB: return RGBColorTable;
+            default: return allColorTable;
+            }
+        }
+
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im) {
             PixelLoc minLoc, maxLoc;
             double minVal, maxVal;
