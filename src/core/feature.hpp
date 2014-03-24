@@ -152,10 +152,11 @@ namespace panoramix {
             CVFeatureT _feature2D;
         };
 
+
         // segmentation
         class SegmentationExtractor {
         public:
-            using Feature = Image; // CV_32SC1, from 0 to numRegion
+            using Feature = Image; // CV_32SC1, from 0 to numRegion, use at<int32_t> to extract
             struct Params {
                 inline Params() : sigma(0.8), c(100), minSize(100) {}
                 float sigma; // for smoothing
@@ -168,8 +169,6 @@ namespace panoramix {
         private:
             Params _params;
         };
-
-
 
     }
 }

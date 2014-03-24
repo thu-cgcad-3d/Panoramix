@@ -66,6 +66,10 @@ namespace panoramix {
             LineIntersectons(vd.lineSegments, 
                 vd.lineSegmentIntersections, 
                 vd.lineSegmentIntersectionLineIDs, true);
+
+            vd.regionNet = std::make_shared<RegionsNet>(vd.image);
+            vd.regionNet->buildNetAndComputeGeometricFeatures();
+            vd.regionNet->computeImageFeatures();
         }
 
         namespace {

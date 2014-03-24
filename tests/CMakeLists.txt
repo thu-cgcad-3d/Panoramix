@@ -1,7 +1,7 @@
 
 
 # set all tests
-set (TESTNAMES test_basic test_util test_mesh test_feature test_views_net)
+set (TESTNAMES test_basic test_util test_mesh test_feature test_views_net test_regions_net)
 
 # define test data location
 get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)

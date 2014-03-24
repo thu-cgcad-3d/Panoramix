@@ -13,24 +13,20 @@ namespace panoramix {
                 inline Params() 
                     : winName("Image Feature Visualizer"), 
                       color(255, 255, 255), thickness(1), 
-                      lineType(8), shift(0), alphaForNewImage(0.5) {}
+                      lineType(8), shift(0), alphaForNewImage(0.5f) {}
 
                 std::string winName;
                 Color color;
                 int thickness;
                 int lineType;
                 int shift;
-                double alphaForNewImage;
+                float alphaForNewImage;
             };
 
         public:
-            inline explicit ImageFeatureVisualizer(const Image & im = Image(), 
-                const Params & p = Params()) 
-                : params(p) {
-                im.copyTo(_image);
-            }
+            explicit ImageFeatureVisualizer(const Image & im = Image(), const Params & p = Params());
 
-            inline void setImage(const Image & im) { im.copyTo(_image); }
+            void setImage(const Image & im);
             inline Image & image() { return _image; }
 
         public:
@@ -77,19 +73,14 @@ namespace panoramix {
                         type);
             }
 
-            inline Manipulator<double> SetAlphaForNewImage(double a) {
-                return Manipulator<double>(
-                    [](ImageFeatureVisualizer & viz, double alpha){
+            inline Manipulator<float> SetAlphaForNewImage(float a) {
+                return Manipulator<float>(
+                    [](ImageFeatureVisualizer & viz, float alpha){
                     viz.params.alphaForNewImage = alpha; },
                         a);
             }
             
-            inline Manipulator<int> Show(int delay = 0) {
-                return Manipulator<int>([](ImageFeatureVisualizer & viz, int d){
-                    cv::imshow(viz.params.winName, viz.image());
-                    cv::waitKey(d);
-                }, delay);
-            }
+            Manipulator<int> Show(int delay = 0);
         }
 
         inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, void (*func)(ImageFeatureVisualizer&)) {
@@ -146,10 +137,8 @@ namespace panoramix {
         }
 
         // image
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const Image & im) {
-            viz.image() = viz.image() * (1 - viz.params.alphaForNewImage) + im * viz.params.alphaForNewImage;
-            return viz;
-        }
+        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const Image & im);
+
 
         // containers
         template <class T, int N>

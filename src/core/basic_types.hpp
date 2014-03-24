@@ -179,6 +179,9 @@ namespace panoramix {
 
         // image
         using Image = cv::Mat;
+        using PixelLoc = cv::Point;        
+        std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im);
+        std::pair<double, double> MinMaxValOfImage(const Image & im);
 
 
         // color

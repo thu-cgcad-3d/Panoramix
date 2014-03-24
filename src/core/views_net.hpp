@@ -3,7 +3,7 @@
 
 #include "basic_types.hpp"
 #include "feature.hpp"
-#include "mesh.hpp"
+#include "regions_net.hpp"
 
 namespace panoramix {
     namespace core { 
@@ -11,8 +11,7 @@ namespace panoramix {
         // views net
         class ViewsNet {
         public:
-            struct VertData;
-            struct HalfData;
+
             struct Params {
                 Params() : camera(250.0), lineSegmentWeight(1.0), siftWeight(1.0), 
                       surfWeight(1.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05), 
@@ -24,11 +23,14 @@ namespace panoramix {
                 LineSegmentExtractor lineSegmentExtractor;
                 CVFeatureExtractor<cv::SIFT> siftExtractor;
                 CVFeatureExtractor<cv::SURF> surfExtractor;
+                SegmentationExtractor segmenter;
                 double cameraAngleScaler; // angle scalar to judge whether two views may share certain common features
                 double smallCameraAngleScalar; // angle scalar to judge whether two views are too close
                 double linePieceSpanAngle;
             };
 
+            struct VertData;
+            struct HalfData;
             using ViewMesh = Mesh<VertData, HalfData>;
             using VertHandle = ViewMesh::VertHandle;
             using HalfHandle = ViewMesh::HalfHandle;
@@ -46,7 +48,10 @@ namespace panoramix {
             void computeTransformationOnConnections(VertHandle h);
             void calibrateCamera(VertHandle h); 
             void calibrateAllCameras();
+            void updateExternalRegionConnections(VertHandle h); // build region connections across views
             void estimateVanishingPointsAndClassifyLines();
+
+
 
         public:
             struct VertData {
@@ -59,6 +64,9 @@ namespace panoramix {
                 std::vector<int> lineSegmentClasses;
                 CVFeatureExtractor<cv::SIFT>::Feature SIFTs;
                 CVFeatureExtractor<cv::SURF>::Feature SURFs;
+                SegmentationExtractor::Feature segmentedRegions;
+
+                std::shared_ptr<RegionsNet> regionNet;
             };
             struct HalfData {
                 double cameraAngleDistance;

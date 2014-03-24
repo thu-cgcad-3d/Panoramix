@@ -5,7 +5,6 @@
 
 #include <Eigen/Dense>
 
-#include "mesh.hpp"
 #include "utilities.hpp"
 
 namespace panoramix {
