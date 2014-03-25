@@ -24,7 +24,7 @@ namespace panoramix {
                 const Vec3 & center = Vec3(1, 0, 0), 
                 const Vec3 & up = Vec3(0, 0, 1));
 
-            inline Size2 screenSize() const { return Size2(_screenW, _screenH); }
+            inline Size2 screenSize() const { return Size2(static_cast<float>(_screenW), static_cast<float>(_screenH)); }
             inline double focal() const { return _focal; }
             inline const Vec3 & eye() const { return _eye; }
             inline const Vec3 & center() const { return _center; }
@@ -61,7 +61,7 @@ namespace panoramix {
                 const Vec3 & center = Vec3(1, 0, 0), 
                 const Vec3 & up = Vec3(0, 0, 1));
 
-            inline Size2 screenSize() const { return Size2(_focal * 2 * M_PI, _focal * M_PI); }
+            inline Size2 screenSize() const { return Size2(static_cast<float>(_focal * 2 * M_PI), static_cast<float>(_focal * M_PI)); }
             inline double focal() const { return _focal; }
             inline const Vec3 & eye() const { return _eye; }
             inline const Vec3 & center() const { return _center; }
@@ -158,7 +158,7 @@ namespace panoramix {
         public:
             using Feature = Image; // CV_32SC1, from 0 to numRegion, use at<int32_t> to extract
             struct Params {
-                inline Params() : sigma(0.8), c(100), minSize(100) {}
+                inline Params() : sigma(0.8f), c(100.0f), minSize(100) {}
                 float sigma; // for smoothing
                 float c; // threshold function
                 int minSize; // min component size

@@ -1,5 +1,5 @@
 #include "../src/core/feature.hpp"
-#include "../src/vis/feature_visualize.hpp"
+#include "../src/vis/visualize2d.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
@@ -55,7 +55,7 @@ TEST(Feature, CameraSampler) {
     EXPECT_EQ(4000, im.cols);
     EXPECT_EQ(2000, im.rows);
     cv::resize(im, im, cv::Size(1000, 500));
-    vis::ImageFeatureVisualizer viz(im);
+    vis::Visualizer2D viz(im);
     viz.params.alphaForNewImage = 0.3;
 
     core::PanoramicCamera originCam(im.cols / M_PI / 2.0);
@@ -82,7 +82,7 @@ TEST(Feature, CameraSampler) {
         core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera> sampler(cam,
             core::PanoramicCamera(im.cols / M_PI / 2.0));
         cv::Mat sampledIm = sampler(im);
-        vis::ImageFeatureVisualizer(sampledIm) << vis::manip::Show();
+        vis::Visualizer2D(sampledIm) << vis::manip::Show();
     }
 }
 
@@ -95,8 +95,8 @@ TEST(Feature, FeatureExtractor) {
     for (int i = 0; i < 4; i++) {
         std::string name = ProjectTestDataDirStr + "/" + "sampled_" + std::to_string(i) + ".png";
         cv::Mat im = cv::imread(name);
-        vis::ImageFeatureVisualizer(im) 
-            << [](vis::ImageFeatureVisualizer & viz) { viz.params.winName = "haha"; }
+        vis::Visualizer2D(im) 
+            << [](vis::Visualizer2D & viz) { viz.params.winName = "haha"; }
             << segmenter(im, true)    
             << lineSegmentExtractor(im) 
             << sift(im) << surf(im)

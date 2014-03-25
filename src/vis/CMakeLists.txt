@@ -16,3 +16,4 @@ add_library (${VIS_STATIC_LIB} STATIC ${VIS_SOURCES} ${VIS_HEADERS} ${RESOURCE_A
 target_link_libraries (${VIS_STATIC_LIB} ${CORE_STATIC_LIB} ${Fundamental_LIBS} ${Qt_LIBS})
 
 qt5_use_modules(${VIS_STATIC_LIB} ${Qt_MODULES_REQUIRED})
+

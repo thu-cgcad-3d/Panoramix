@@ -1,5 +1,5 @@
 #include "../src/core/regions_net.hpp"
-#include "../src/vis/feature_visualize.hpp"
+#include "../src/vis/visualize2d.hpp"
 #include "../src/vis/regions_net_visualize.hpp"
 #include "gtest/gtest.h"
 
@@ -20,7 +20,7 @@ TEST(RegionsNet, RegionsNet) {
         core::RegionsNet regNet(im);
         regNet.buildNetAndComputeGeometricFeatures();
         regNet.computeImageFeatures();
-        vis::ImageFeatureVisualizer()
+        vis::Visualizer2D()
             << regNet
             << vis::manip::Show();
     }

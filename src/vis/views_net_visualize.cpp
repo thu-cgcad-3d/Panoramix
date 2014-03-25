@@ -5,7 +5,7 @@ namespace panoramix {
 
         using namespace core;
 
-        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet::VertData & vd) {
+        Visualizer2D operator << (Visualizer2D viz, const ViewsNet::VertData & vd) {
             static const Color colors[] = { Color(255, 0, 0), Color(0, 255, 0), Color(0, 0, 255) };
             viz.setImage(vd.image);
             
@@ -20,12 +20,12 @@ namespace panoramix {
             return viz;
         }
 
-        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet::GlobalData & netgb) {
+        Visualizer2D operator << (Visualizer2D viz, const ViewsNet::GlobalData & netgb) {
             
             return viz;
         }
 
-        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet & net) {
+        Visualizer2D operator << (Visualizer2D viz, const ViewsNet & net) {
 
             return viz;
         }

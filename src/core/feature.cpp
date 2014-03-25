@@ -193,7 +193,7 @@ namespace panoramix {
                             head++;
                         }
 
-                        int edgesize = xs.size();
+                        int edgesize = (int)xs.size();
                         if (edgesize < minlen)
                             continue;
 
@@ -354,7 +354,7 @@ namespace panoramix {
                 assert(im.depth() == CV_8U && im.channels() == 3);
                 Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
                 Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
-                return norm(c1 - c2);
+                return static_cast<float>(norm(c1 - c2));
             }
 
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
@@ -409,7 +409,7 @@ namespace panoramix {
                     }
                 }
 
-                int num = edges.size();
+                int num = (int)edges.size();
                 Universe u = SegmentGraph(width * height, edges, c);
 
                 for (int i = 0; i < num; i++) {
@@ -426,7 +426,7 @@ namespace panoramix {
                     for (int x = 0; x < width; x++) {
                         int comp = u.find(y * width + x);
                         if (compIntSet.find(comp) == compIntSet.end()){
-                            compIntSet.insert(std::make_pair(comp, compIntSet.size()));
+                            compIntSet.insert(std::make_pair(comp, (int)compIntSet.size()));
                         }
                         output.at<int32_t>(cv::Point(x, y)) = compIntSet[comp];
                     }

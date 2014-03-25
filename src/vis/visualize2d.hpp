@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_VIS_FEATURE_VISUALIZE_HPP
-#define PANORAMIX_VIS_FEATURE_VISUALIZE_HPP
+#ifndef PANORAMIX_VIS_VISUALIZE2D_HPP
+#define PANORAMIX_VIS_VISUALIZE2D_HPP
 
 #include "../core/basic_types.hpp"
 
@@ -8,9 +8,8 @@ namespace panoramix {
 
         using namespace core;
 
-        class ImageFeatureVisualizer {
+        class Visualizer2D {
         public:
-            using Image = cv::Mat;
             struct Params {
                 inline Params() 
                     : winName("Image Feature Visualizer"), 
@@ -28,7 +27,7 @@ namespace panoramix {
             };
 
         public:
-            explicit ImageFeatureVisualizer(const Image & im = Image(), const Params & p = Params());
+            explicit Visualizer2D(const Image & im = Image(), const Params & p = Params());
 
             void setImage(const Image & im);
             inline Image & image() { return _image; }
@@ -44,49 +43,49 @@ namespace panoramix {
         namespace manip{
             template <class ArgT>
             struct Manipulator {
-                inline Manipulator(void(f)(ImageFeatureVisualizer &, ArgT), ArgT a) : func(f), arg(a){}
-                void(*func)(ImageFeatureVisualizer &, ArgT);    // the function pointer
+                inline Manipulator(void(f)(Visualizer2D &, ArgT), ArgT a) : func(f), arg(a){}
+                void(*func)(Visualizer2D &, ArgT);    // the function pointer
                 ArgT arg;   // the argument value
             };
 
             inline Manipulator<const std::string &> SetWindowName(const std::string & name) {
                 return Manipulator<const std::string &>(
-                    [](ImageFeatureVisualizer & viz, const std::string & name){
+                    [](Visualizer2D & viz, const std::string & name){
                     viz.params.winName = name; },
                         name);
             }
 
             inline Manipulator<const Color &> SetColor(const Color & color) {
                 return Manipulator<const Color &>(
-                    [](ImageFeatureVisualizer & viz, const Color & c){
+                    [](Visualizer2D & viz, const Color & c){
                     viz.params.color = c; },
                         color);
             }
 
             inline Manipulator<int> SetThickness(int thickness) {
                 return Manipulator<int>(
-                    [](ImageFeatureVisualizer & viz, int t){
+                    [](Visualizer2D & viz, int t){
                     viz.params.thickness = t; },
                         thickness);
             }
 
             inline Manipulator<int> SetLineType(int type) {
                 return Manipulator<int>(
-                    [](ImageFeatureVisualizer & viz, int t){
+                    [](Visualizer2D & viz, int t){
                     viz.params.lineType = t; },
                         type);
             }
 
             inline Manipulator<float> SetAlphaForNewImage(float a) {
                 return Manipulator<float>(
-                    [](ImageFeatureVisualizer & viz, float alpha){
+                    [](Visualizer2D & viz, float alpha){
                     viz.params.alphaForNewImage = alpha; },
                         a);
             }
 
             inline Manipulator<ColorTableDescriptor> SetColorTableDescriptor(ColorTableDescriptor descriptor) {
                 return Manipulator<ColorTableDescriptor>(
-                    [](ImageFeatureVisualizer & viz, ColorTableDescriptor d){
+                    [](Visualizer2D & viz, ColorTableDescriptor d){
                     viz.params.colorTableDescriptor = d; },
                         descriptor);
             }
@@ -94,13 +93,13 @@ namespace panoramix {
             Manipulator<int> Show(int delay = 0);
         }
 
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, void (*func)(ImageFeatureVisualizer&)) {
+        inline Visualizer2D operator << (Visualizer2D viz, void (*func)(Visualizer2D&)) {
             func(viz);
             return viz;
         }
 
         template <class ArgT>
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, manip::Manipulator<ArgT> smanip) {
+        inline Visualizer2D operator << (Visualizer2D viz, manip::Manipulator<ArgT> smanip) {
             smanip.func(viz, smanip.arg);
             return viz;
         }
@@ -109,22 +108,22 @@ namespace panoramix {
 
 
         // points
-        template <class T, int N>
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const Point<T, N> & p) {
+        template <class T>
+        inline Visualizer2D operator << (Visualizer2D viz, const Point<T, 2> & p) {
             int x = static_cast<int>(std::round(p[0]));
-            int y = N < 2 ? 0 : static_cast<int>(std::round(p[1]));
+            int y = static_cast<int>(std::round(p[1]));
             cv::circle(viz.image(), cv::Point(x, y), 1, viz.params.color, viz.params.thickness, viz.params.lineType, viz.params.shift);
             return viz;
         }
 
-        template <class T, int N>
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const HPoint<T, N> & p) {
+        template <class T>
+        inline Visualizer2D operator << (Visualizer2D viz, const HPoint<T, 2> & p) {
             return viz << p.toPoint();
         }
 
         // lines
         template <class T>
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const Line<T, 2> & line) {
+        inline Visualizer2D operator << (Visualizer2D viz, const Line<T, 2> & line) {
             cv::line(viz.image(), cv::Point(static_cast<int>(line.first(0)), static_cast<int>(line.first(1))),
                 cv::Point(static_cast<int>(line.second(0)), static_cast<int>(line.second(1))),
                 viz.params.color, viz.params.thickness, viz.params.lineType, viz.params.shift);
@@ -132,24 +131,24 @@ namespace panoramix {
         }
 
         template <class T>
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const HLine<T, 2> & line) {
+        inline Visualizer2D operator << (Visualizer2D viz, const HLine<T, 2> & line) {
             return viz << line.toLine();
         }
 
         // keypoints
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const KeyPoint & p) {
+        inline Visualizer2D operator << (Visualizer2D viz, const KeyPoint & p) {
             cv::drawKeypoints(viz.image(), std::vector<KeyPoint>(1, p), viz.image(), viz.params.color);
             return viz;
         }
 
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const std::vector<KeyPoint> & ps) {
+        inline Visualizer2D operator << (Visualizer2D viz, const std::vector<KeyPoint> & ps) {
             cv::drawKeypoints(viz.image(), ps, viz.image(), viz.params.color);
             return viz;
         }
 
         // classified thing
         template <class T>
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const Classified<T> & thing) {
+        inline Visualizer2D operator << (Visualizer2D viz, const Classified<T> & thing) {
             static const auto WhiteColor = ColorFromTag(ColorTag::White);
             auto & predefinedColorTable = PredefinedColorTable(viz.params.colorTableDescriptor);
             viz.params.color = thing.claz < 0 ? WhiteColor : predefinedColorTable[thing.claz % predefinedColorTable.size()];
@@ -158,19 +157,19 @@ namespace panoramix {
 
 
         // image
-        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const Image & im);
+        Visualizer2D operator << (Visualizer2D viz, const Image & im);
 
 
         // containers
         template <class T, int N>
-        inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const std::array<T, N> & a) {
+        inline Visualizer2D operator << (Visualizer2D viz, const std::array<T, N> & a) {
             for (auto & e : a)
                 viz << e;
             return viz;
         }
 
         template <class ContainerT>
-        inline ImageFeatureVisualizer VisualizeAllInContainer(ImageFeatureVisualizer viz, const ContainerT & c) {
+        inline Visualizer2D VisualizeAllInContainer(Visualizer2D viz, const ContainerT & c) {
             for (auto & e : c)
                 viz << e;
             return viz;
@@ -178,7 +177,7 @@ namespace panoramix {
 
         #define VISUALIZE_AS_CONTAINER(claz) \
             template <class T> \
-            inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const claz<T> & c) { \
+            inline Visualizer2D operator << (Visualizer2D viz, const claz<T> & c) { \
                 return VisualizeAllInContainer(viz, c); \
             }
 

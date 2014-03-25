@@ -1,5 +1,4 @@
 #include "../src/core/views_net.hpp"
-#include "../src/vis/feature_visualize.hpp"
 #include "../src/vis/views_net_visualize.hpp"
 #include "gtest/gtest.h"
 
@@ -44,7 +43,7 @@ TEST(ViewsNet, ViewsNet) {
         auto viewHandle = net.insertPhoto(im, camera);
         
         net.computeFeatures(viewHandle);
-        vis::ImageFeatureVisualizer (im)
+        vis::Visualizer2D (im)
             << vis::manip::SetColor(core::Color(0, 0, 255))
             << vis::manip::SetThickness(2)
             << net.views().data(viewHandle).lineSegments
@@ -82,14 +81,14 @@ TEST(ViewsNet, ViewsNet) {
             return originCam.screenProjection(p3);
         });
 
-        vis::ImageFeatureVisualizer(panorama)
+        vis::Visualizer2D(panorama)
             << vis::manip::SetWindowName("Vanishing points")
             << vis::manip::SetColor(core::Color(0, 0, 255))
             << vis::manip::SetThickness(3)
             << vp2s
             << vis::manip::Show();
 
-        vis::ImageFeatureVisualizer()
+        vis::Visualizer2D()
             << net.views().data(viewHandle)
             << vis::manip::Show();
 

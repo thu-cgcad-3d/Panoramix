@@ -5,7 +5,7 @@ namespace panoramix {
 
         using namespace core;
 
-        ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const RegionsNet & net) {
+        Visualizer2D operator << (Visualizer2D viz, const RegionsNet & net) {
             viz.setImage(net.image());
             
             int height = net.image().rows;
@@ -25,7 +25,7 @@ namespace panoramix {
                 }
             }
 
-            viz.params.alphaForNewImage = 0.3;
+            viz.params.alphaForNewImage = 0.3f;
             viz << coloredOutput;
 
             viz.params.thickness = 1;
