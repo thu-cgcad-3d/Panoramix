@@ -1,7 +1,9 @@
 #include "views_net_visualize.hpp"
 
 namespace panoramix {
-    namespace core {
+    namespace vis {
+
+        using namespace core;
 
         ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const ViewsNet::VertData & vd) {
             static const Color colors[] = { Color(255, 0, 0), Color(0, 255, 0), Color(0, 0, 255) };

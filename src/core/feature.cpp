@@ -462,7 +462,8 @@ namespace panoramix {
         SegmentationExtractor::Feature SegmentationExtractor::operator() (const Image & im, 
             bool forVisualization) const {
             int numCCs;
-            return forVisualization ? SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, true).second : SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
+            return forVisualization ? SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, true).second 
+                : SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
         }
 
     }

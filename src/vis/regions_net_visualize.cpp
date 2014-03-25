@@ -1,7 +1,9 @@
 #include "regions_net_visualize.hpp"
 
 namespace panoramix {
-    namespace core {
+    namespace vis {
+
+        using namespace core;
 
         ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const RegionsNet & net) {
             viz.setImage(net.image());

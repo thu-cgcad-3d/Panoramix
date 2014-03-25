@@ -1,11 +1,13 @@
-#ifndef PANORAMIX_CORE_FEATURE_VISUALIZE_HPP
-#define PANORAMIX_CORE_FEATURE_VISUALIZE_HPP
+#ifndef PANORAMIX_VIS_FEATURE_VISUALIZE_HPP
+#define PANORAMIX_VIS_FEATURE_VISUALIZE_HPP
 
-#include "basic_types.hpp"
+#include "../core/basic_types.hpp"
 
 namespace panoramix {
-    namespace core {
- 
+    namespace vis {
+
+        using namespace core;
+
         class ImageFeatureVisualizer {
         public:
             using Image = cv::Mat;
@@ -43,8 +45,8 @@ namespace panoramix {
             template <class ArgT>
             struct Manipulator {
                 inline Manipulator(void(f)(ImageFeatureVisualizer &, ArgT), ArgT a) : func(f), arg(a){}
-                void(*func)(ImageFeatureVisualizer &, ArgT);	// the function pointer
-                ArgT arg;	// the argument value
+                void(*func)(ImageFeatureVisualizer &, ArgT);    // the function pointer
+                ArgT arg;   // the argument value
             };
 
             inline Manipulator<const std::string &> SetWindowName(const std::string & name) {
@@ -123,8 +125,8 @@ namespace panoramix {
         // lines
         template <class T>
         inline ImageFeatureVisualizer operator << (ImageFeatureVisualizer viz, const Line<T, 2> & line) {
-            cv::line(viz.image(), cv::Point(line.first(0), line.first(1)),
-                cv::Point(line.second(0), line.second(1)),
+            cv::line(viz.image(), cv::Point(static_cast<int>(line.first(0)), static_cast<int>(line.first(1))),
+                cv::Point(static_cast<int>(line.second(0)), static_cast<int>(line.second(1))),
                 viz.params.color, viz.params.thickness, viz.params.lineType, viz.params.shift);
             return viz;
         }
@@ -187,7 +189,7 @@ namespace panoramix {
         VISUALIZE_AS_CONTAINER(std::unordered_set)
         VISUALIZE_AS_CONTAINER(std::forward_list)
 
- 
+
     }
 }
  

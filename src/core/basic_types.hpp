@@ -166,14 +166,6 @@ namespace panoramix {
         using HLine2 = HLine<double, 2>;
         using HLine3 = HLine<double, 3>;
 
-
-        // somthing classified
-        template <class T>
-        struct Classified {
-            int claz;
-            T component;
-        };
-
         
         // circles (spheres)
         template <class T, int N>
@@ -215,6 +207,14 @@ namespace panoramix {
         };
         const std::vector<Color> & 
             PredefinedColorTable(ColorTableDescriptor descriptor = ColorTableDescriptor::AllColors);
+
+
+        // somthing classified
+        template <class T>
+        struct Classified {
+            int claz;
+            T component;
+        };
 
 
         template <class ValueT, int dim>

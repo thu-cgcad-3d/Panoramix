@@ -1,7 +1,7 @@
 #include "feature_visualize.hpp"
 
 namespace panoramix {
-    namespace core {
+    namespace vis {
 
         ImageFeatureVisualizer::ImageFeatureVisualizer(const Image & im, const Params & p) : params(p) {
             setImage(im);

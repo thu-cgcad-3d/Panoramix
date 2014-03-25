@@ -1,6 +1,6 @@
 #include "../src/core/regions_net.hpp"
-#include "../src/core/feature_visualize.hpp"
-#include "../src/core/regions_net_visualize.hpp"
+#include "../src/vis/feature_visualize.hpp"
+#include "../src/vis/regions_net_visualize.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
@@ -20,9 +20,9 @@ TEST(RegionsNet, RegionsNet) {
         core::RegionsNet regNet(im);
         regNet.buildNetAndComputeGeometricFeatures();
         regNet.computeImageFeatures();
-        core::ImageFeatureVisualizer()
+        vis::ImageFeatureVisualizer()
             << regNet
-            << core::manip::Show();
+            << vis::manip::Show();
     }
     
 }

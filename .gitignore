@@ -1,5 +1,6 @@
 *.sublime-workspace
 gtest-1.7.0
 build
+tests/gtest*
 unused
 .tags*
