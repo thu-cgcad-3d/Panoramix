@@ -96,7 +96,7 @@ namespace panoramix {
                 const PerspectiveCamera & vcam = v.data.originalCamera;
                 double vCamAngleRadius = PerspectiveCameraAngleRadius(vcam);
                 vCamAngleRadius *= _params.cameraAngleScaler;
-                double angleDistance = AngleBetweenDirections(CVVec(thisvCam.center()), CVVec(vcam.center()));
+                double angleDistance = AngleBetweenDirections(thisvCam.center(), vcam.center());
                 if (angleDistance <= thisvCamAngleRadius + vCamAngleRadius){
                     // may overlap
                     HalfData hd;
@@ -113,7 +113,7 @@ namespace panoramix {
             auto connections = _views.topo(h).halfedges;
             for (auto & con : connections){
                 auto & neighborCamera = _views.data(_views.topo(con).to()).camera;
-                double cameraAngle = AngleBetweenDirections(CVVec(camera.center()), CVVec(neighborCamera.center()));
+                double cameraAngle = AngleBetweenDirections(camera.center(), neighborCamera.center());
                 double neighborCameraRadius = PerspectiveCameraAngleRadius(camera);
                 if (cameraAngle <= (cameraRadius + neighborCameraRadius) * _params.smallCameraAngleScalar){ // too close
                     return _views.topo(con).to();
@@ -263,7 +263,7 @@ namespace panoramix {
                     Vec3 a = lines[i].component.first;
                     Vec3 b = lines[i].component.second;
                     Vec3 normab = a.cross(b);
-                    normab /= cv::norm(normab);
+                    normab /= core::norm(normab);
 
                     std::vector<double> lineangles(npoints);
                     std::vector<double> linescores(npoints);
@@ -306,7 +306,7 @@ namespace panoramix {
             // pick separated views only
             auto seperatedViewIters = MergeNear(_views.vertices().begin(), _views.vertices().end(), std::false_type(),
                 _params.smallCameraAngleScalar, [](const ViewMesh::Vertex & v1, const ViewMesh::Vertex & v2) -> double{
-                double angleDistance = AngleBetweenDirections(CVVec(v1.data.camera.center()), CVVec(v2.data.camera.center()));
+                double angleDistance = AngleBetweenDirections(v1.data.camera.center(), v2.data.camera.center());
                 return angleDistance / 
                     (PerspectiveCameraAngleRadius(v1.data.camera) + PerspectiveCameraAngleRadius(v2.data.camera));
             });
@@ -366,7 +366,19 @@ namespace panoramix {
         }
 
         void ViewsNet::rectifySpatialLines() {
-            // TODO
+            for (auto & line : _globalData.spatialLineSegments){
+                if (line.claz == -1)
+                    continue;
+                Vec3 direction = _globalData.vanishingPoints[line.claz];
+                direction /= norm(direction);
+                auto center = line.component.center();
+                double len = line.component.length();
+                line.component.first = center - len / 2.0 * direction;
+                line.component.second = center + len / 2.0 * direction;
+            }
+
+            // find possible connections
+
         }
  
     }

@@ -15,48 +15,49 @@ namespace panoramix {
             template <class Mat4T, class Vec3T>
             Mat4T Matrix4MakeLookAt(const Vec3T & eye, const Vec3T & center,
                 const Vec3T & up, const Mat4T & base) {
-                Vec3T zaxis = (center - eye).normalized();
-                Vec3T xaxis = up.cross(zaxis).normalized();
+                Vec3T zaxis = (center - eye); zaxis /= cv::norm(zaxis);
+                Vec3T xaxis = up.cross(zaxis); xaxis /= cv::norm(xaxis);
                 Vec3T yaxis = zaxis.cross(xaxis);
-                Mat4T m;
-                m <<
-                    xaxis(0), yaxis(0), zaxis(0), 0,
-                    xaxis(1), yaxis(1), zaxis(1), 0,
-                    xaxis(2), yaxis(2), zaxis(2), 0,
-                    -xaxis.dot(eye), -yaxis.dot(eye), -zaxis.dot(eye), 1;
-                return m.transpose() * base;
+                Mat4T m(
+                    -xaxis(0), yaxis(0), -zaxis(0), 0,
+                    -xaxis(1), yaxis(1), -zaxis(1), 0,
+                    -xaxis(2), yaxis(2), -zaxis(2), 0,
+                    xaxis.dot(eye), -yaxis.dot(eye), zaxis.dot(eye), 1);
+                return m.t() * base;
             }
 
             template <class Mat4T, class ValueT>
             Mat4T Matrix4MakePerspective(const ValueT & fovyRadians, const ValueT & aspect,
                 const ValueT & nearZ, const ValueT & farZ, const Mat4T & base) {
                 ValueT cotan = ValueT(1.0) / std::tan(fovyRadians / 2.0);
-                Mat4T m;
-                m <<
+                Mat4T m(
                     cotan / aspect, 0, 0, 0,
                     0, cotan, 0, 0,
                     0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
-                    0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0;
-                return m.transpose() * base;
+                    0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0);
+                return m.t() * base;
             }
         }
 
         PerspectiveCamera::PerspectiveCamera(int w, int h, double focal, const Vec3 & eye,
-            const Vec3 & center, const Vec3 & up) 
-        : _screenW(w), _screenH(h), _focal(focal), _eye(eye), _center(center), _up(up) {
-            Mat4 m;
-            m.setIdentity();
-            _viewMatrix = Matrix4MakeLookAt(eye, center, up, m);
-            
-            double verticalViewAngle = atan(_screenH / 2.0 / _focal) * 2;
-            double aspect = double(_screenW) / double(_screenH);
-            _projectionMatrix = Matrix4MakePerspective(verticalViewAngle, aspect, 0.1, 1e4, m);
-
-            _viewProjectionMatrix = _projectionMatrix * _viewMatrix;
-            _viewProjectionMatrixInv = _viewProjectionMatrix.inverse();
+            const Vec3 & center, const Vec3 & up, double near, double far) 
+        : _screenW(w), _screenH(h), _focal(focal), _eye(eye), _center(center), _up(up), _near(near), _far(far) {
+            updateMatrices();
         }
 
-        PerspectiveCamera::Vec2 PerspectiveCamera::screenProjection(const Vec3 & p3) const {
+        void PerspectiveCamera::updateMatrices() {
+            Mat4 m = Mat4::eye();
+            _viewMatrix = Matrix4MakeLookAt(_eye, _center, _up, m);
+
+            double verticalViewAngle = atan(_screenH / 2.0 / _focal) * 2;
+            double aspect = double(_screenW) / double(_screenH);
+            _projectionMatrix = Matrix4MakePerspective(verticalViewAngle, aspect, _near, _far, m);
+
+            _viewProjectionMatrix = _projectionMatrix * _viewMatrix;
+            _viewProjectionMatrixInv = _viewProjectionMatrix.inv();
+        }
+
+        Vec2 PerspectiveCamera::screenProjection(const Vec3 & p3) const {
             Vec4 p4(p3(0), p3(1), p3(2), 1);
             Vec4 position = _viewProjectionMatrix * p4;
             double xratio = position(0) / position(3) / 2;
@@ -66,7 +67,7 @@ namespace panoramix {
             return Vec2(x, y);
         }
 
-        PerspectiveCamera::Vec3 PerspectiveCamera::spatialDirection(const Vec2 & p2d) const {
+        Vec3 PerspectiveCamera::spatialDirection(const Vec2 & p2d) const {
             double xratio = (p2d(0) / _screenW - 0.5) * 2;
             double yratio = ((_screenH - p2d(1)) / _screenH - 0.5) * 2;
             Vec4 position(xratio, yratio, 1, 1);
@@ -74,16 +75,67 @@ namespace panoramix {
             return Vec3(realPosition(0) / realPosition(3), realPosition(1) / realPosition(3), realPosition(2) / realPosition(3));
         }
 
+        void PerspectiveCamera::resizeScreen(const Size & sz, bool updateMat) {
+            if (_screenH == sz.height && _screenW == sz.width)
+                return;
+            _screenH = sz.height;
+            _screenW = sz.width;
+            if (updateMat)
+                updateMatrices();
+        }
+
+        void PerspectiveCamera::setFocal(double f, bool updateMat) {
+            if (f == _focal)
+                return;
+            _focal = f;
+            if (updateMat)
+                updateMatrices();
+        }
+
+        void PerspectiveCamera::setEye(const Vec3 & e, bool updateMat) {
+            if (_eye == e)
+                return;
+            _eye = e;
+            if (updateMat)
+                updateMatrices();
+        }
+
+        void PerspectiveCamera::setCenter(const Vec3 & c, bool updateMat) {
+            if (_center == c)
+                return;
+            _center = c;
+            if (updateMat)
+                updateMatrices();
+        }
+
+        void PerspectiveCamera::setUp(const Vec3 & up, bool updateMat) {
+            if (_up == up)
+                return;
+            _up = up;
+            if (updateMat)
+                updateMatrices();
+        }
+
+        void PerspectiveCamera::setNearAndFarPlanes(double near, double far, bool updateMat) {
+            if (_near == near && _far == far)
+                return;
+            _near = near;
+            _far = far;
+            if (updateMat)
+                updateMatrices();
+        }
+
+
 
         PanoramicCamera::PanoramicCamera(double focal, const Vec3 & eye,
             const Vec3 & center, const Vec3 & up)
             : _focal(focal), _eye(eye), _center(center), _up(up) {
-            _xaxis = (_center - _eye).normalized();
-            _yaxis = _up.cross(_xaxis).normalized();
+            _xaxis = (_center - _eye); _xaxis /= cv::norm(_xaxis);
+            _yaxis = _up.cross(_xaxis); _yaxis /= cv::norm(_yaxis);
             _zaxis = _xaxis.cross(_yaxis);
         }
 
-        PanoramicCamera::Vec2 PanoramicCamera::screenProjection(const Vec3 & p3) const {
+        Vec2 PanoramicCamera::screenProjection(const Vec3 & p3) const {
             double xx = p3.dot(_xaxis);
             double yy = p3.dot(_yaxis);
             double zz = p3.dot(_zaxis);
@@ -94,13 +146,15 @@ namespace panoramix {
             return Vec2(x, y);
         }
 
-        PanoramicCamera::Vec3 PanoramicCamera::spatialDirection(const Vec2 & p2d) const {
+        Vec3 PanoramicCamera::spatialDirection(const Vec2 & p2d) const {
             auto sz = screenSize();
             double longi = p2d(0) / double(sz.width) * 2 * M_PI - M_PI;
             double lati = p2d(1) / double(sz.height) * M_PI - M_PI_2;
-            Vec3 dd = EigenVec(GeoCoord(longi, lati).toVector());
+            Vec3 dd = (GeoCoord(longi, lati).toVector());
             return dd(0) * _xaxis + dd(1) * _yaxis + dd(2) * _zaxis;
         }
+
+
 
 
         namespace {

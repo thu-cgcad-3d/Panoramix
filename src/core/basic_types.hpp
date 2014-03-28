@@ -23,8 +23,6 @@ namespace panoramix {
         
         // vectors/points
         template <class T, int N> using Vec = cv::Vec<T, N>;
-        template <class T, int N> using EVec = Eigen::Matrix<T, N, 1>;
-        template <class T, int N> using EUAVec = Eigen::Matrix<T, N, 1, Eigen::Unaligned>;
         using Vec2 = Vec<double, 2>;
         using Vec3 = Vec<double, 3>;
         using Vec4 = Vec<double, 4>;
@@ -32,6 +30,9 @@ namespace panoramix {
         using Point2 = Point<double, 2>;
         using Point3 = Point<double, 3>;
         using Point4 = Point<double, 4>;
+        template <class T, int M, int N> using Mat = cv::Matx<T, M, N>;
+        using Mat3 = Mat<double, 3, 3>;
+        using Mat4 = Mat<double, 4, 4>;
 
         using cv::norm;
 
@@ -114,6 +115,7 @@ namespace panoramix {
 
         // size
         using Size = cv::Size2f;
+        using SizeI = cv::Size2i;
 
         
         // box
@@ -150,6 +152,7 @@ namespace panoramix {
         struct Line {
             Point<T, N> first, second;
             inline Point<T, N> center() const { return (first + second) / 2.0; }
+            inline T length() const { return norm(first - second); }
         };
         using Line2 = Line<double, 2>;
         using Line3 = Line<double, 3>;
@@ -216,22 +219,12 @@ namespace panoramix {
             T component;
         };
 
-
-        template <class ValueT, int dim>
-        inline Eigen::Matrix<ValueT, dim, 1> EigenVec(const cv::Vec<ValueT, dim> & v) {
-            Eigen::Matrix<ValueT, dim, 1> m;
-            for (int i = 0; i < dim; i++)
-                m(i) = v(i);
-            return m;
-        }
-
-        template <class ValueT, int dim, int options>
-        inline cv::Vec<ValueT, dim> CVVec(const Eigen::Matrix<ValueT, dim, 1, options> & v) {
-            cv::Vec<ValueT, dim> m;
-            for (int i = 0; i < dim; i++)
-                m(i) = v(i);
-            return m;
-        }
+        // things with a model matrix
+        template <class T>
+        struct Transformed {
+            core::Mat4 modelMatrix;
+            T component;
+        };
  
     }
 }

@@ -39,7 +39,8 @@ include (LocateFundamentalLibs)
 
 # get Qt libs
 set (Qt_DIR "" CACHE PATH "Qt root directory here")
-set (Qt_MODULES_REQUIRED Widgets OpenGL)
+set (Qt_MODULES_REQUIRED Core Gui Widgets OpenGL)
+set (USE_NATIVE_OPENGL off)
 include (LocateQtLibs)
 
 # set path env

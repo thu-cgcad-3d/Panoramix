@@ -25,6 +25,11 @@ namespace panoramix {
             return viz;
         }
 
+        Visualizer3D operator << (Visualizer3D viz, const core::ViewsNet::GlobalData & netgb) {
+            viz << netgb.spatialLineSegments;
+            return viz;
+        }
+
         Visualizer2D operator << (Visualizer2D viz, const ViewsNet & net) {
 
             return viz;

@@ -3,7 +3,7 @@ include_directories (${GTEST_DIR}/include)
 
 # set all tests
 set (TESTNAMES test_basic)
-set (TESTNAMES_WITH_VIS test_qt test_util test_mesh test_feature test_views_net test_regions_net)
+set (TESTNAMES_WITH_VIS test_util test_mesh test_feature test_views_net test_regions_net)
 
 # define test data location
 get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
@@ -35,7 +35,7 @@ endforeach ()
 foreach (T ${TESTNAMES_WITH_VIS})
 	include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES})
 	add_executable (${T} ${T}.cpp)
-	target_link_libraries (${T} ${CORE_STATIC_LIB} ${VIS_STATIC_LIB})
+	target_link_libraries (${T} ${CORE_STATIC_LIB} ${VIS_STATIC_LIB} ${Qt_LIBS})
 	add_test (NAME ${T} COMMAND ${T})
 	set_tests_properties (${T} PROPERTIES ENVIRONMENT "${LD_VARNAME}=${LD_PATH}" )
 endforeach()

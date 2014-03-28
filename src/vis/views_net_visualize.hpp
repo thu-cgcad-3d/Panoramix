@@ -2,6 +2,7 @@
 #define PANORAMIX_VIS_VIEWS_NET_VISUALIZE_HPP
 
 #include "visualize2d.hpp"
+#include "visualize3d.hpp"
 #include "../core/views_net.hpp"
  
 namespace panoramix {
@@ -10,6 +11,7 @@ namespace panoramix {
         Visualizer2D operator << (Visualizer2D viz, const core::ViewsNet::VertData & vd);
 
         Visualizer2D operator << (Visualizer2D viz, const core::ViewsNet::GlobalData & netgb);
+        Visualizer3D operator << (Visualizer3D viz, const core::ViewsNet::GlobalData & netgb);
 
         Visualizer2D operator << (Visualizer2D viz, const core::ViewsNet & net);
 

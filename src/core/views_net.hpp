@@ -62,7 +62,8 @@ namespace panoramix {
                 std::vector<std::pair<int, int>> lineSegmentIntersectionLineIDs;
                 CVFeatureExtractor<cv::SIFT>::Feature SIFTs;
                 CVFeatureExtractor<cv::SURF>::Feature SURFs;
-                SegmentationExtractor::Feature segmentedRegions;
+                //SegmentationExtractor::Feature segmentedRegions;
+                //Image segmentedRegionsForDisplay;
 
                 std::shared_ptr<RegionsNet> regionNet;
             };

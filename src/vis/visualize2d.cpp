@@ -26,7 +26,7 @@ namespace panoramix {
             return viz;
         }
 
-        namespace manip {
+        namespace manip2d {
 
             Manipulator<int> Show(int delay) {
                 return Manipulator<int>([](Visualizer2D & viz, int d) {

@@ -12,36 +12,45 @@ namespace panoramix {
         // perspective camera
         class PerspectiveCamera {
         public:
-            using Vec2 = Eigen::Matrix<double, 2, 1, Eigen::DontAlign>;
-            using Vec3 = Eigen::Matrix<double, 3, 1, Eigen::DontAlign>;
-            using Vec4 = Eigen::Matrix<double, 4, 1, Eigen::DontAlign>;
-            using Mat4 = Eigen::Matrix<double, 4, 4, Eigen::DontAlign>;
-            using Size2 = cv::Size2f;
-
-        public:
             explicit PerspectiveCamera(int w = 500, int h = 500, double focal = 250, 
                 const Vec3 & eye = Vec3(0, 0, 0),
                 const Vec3 & center = Vec3(1, 0, 0), 
-                const Vec3 & up = Vec3(0, 0, 1));
+                const Vec3 & up = Vec3(0, 0, 1),
+                double nearPlane = 0.01, double farPlane = 1e4);
 
-            inline Size2 screenSize() const { return Size2(static_cast<float>(_screenW), static_cast<float>(_screenH)); }
+            inline Size screenSize() const { return Size(static_cast<float>(_screenW), static_cast<float>(_screenH)); }
+            inline double fovRadians() const { return atan(_screenH / 2.0 / _focal) * 2; }
+            inline double fovAngles() const { return fovRadians() * 180.0 / M_PI; }
+            inline double aspect() const { return double(_screenW) / double(_screenH); }
             inline double focal() const { return _focal; }
             inline const Vec3 & eye() const { return _eye; }
             inline const Vec3 & center() const { return _center; }
             inline const Vec3 & up() const { return _up; }
+            inline double nearPlane() const { return _near; }
+            inline double farPlane() const { return _far; }
             Vec2 screenProjection(const Vec3 & p3d) const;
-            inline core::Point2 screenProjection(const core::Point3 & p3d) const { return CVVec(screenProjection(EigenVec(p3d))); }
             Vec3 spatialDirection(const Vec2 & p2d) const;
-            inline core::Point3 spatialDirection(const core::Point2 & p2d) const { return CVVec(spatialDirection(EigenVec(p2d))); }
 
             inline const Mat4 & viewMatrix() const { return _viewMatrix; }
-            inline const Mat4 & projectionMatrix() const { return _viewProjectionMatrix; }
+            inline const Mat4 & projectionMatrix() const { return _projectionMatrix; }
             inline const Mat4 & viewProjectionMatrix() const { return _viewProjectionMatrix; }
             inline const Mat4 & viewProjectionMatrixInv() const { return _viewProjectionMatrixInv; }
+
+            // operations
+            void resizeScreen(const Size & sz, bool updateMat = true);
+            void setFocal(double f, bool updateMat = true);
+            void setEye(const Vec3 & e, bool updateMat = true);
+            void setCenter(const Vec3 & c, bool updateMat = true);
+            void setUp(const Vec3 & up, bool updateMat = true);
+            void setNearAndFarPlanes(double nearPlane, double farPlane, bool updateMat = true);
+
+        private:
+            void updateMatrices();
 
         private:
             int _screenW, _screenH;
             double _focal;
+            double _near, _far;
             Vec3 _eye, _center, _up;
             Mat4 _viewMatrix, _projectionMatrix, _viewProjectionMatrix, _viewProjectionMatrixInv;
         };
@@ -49,27 +58,18 @@ namespace panoramix {
         // panoramic camera
         class PanoramicCamera {
         public:
-            using Vec2 = Eigen::Matrix<double, 2, 1, Eigen::DontAlign>;
-            using Vec3 = Eigen::Matrix<double, 3, 1, Eigen::DontAlign>;
-            using Vec4 = Eigen::Matrix<double, 4, 1, Eigen::DontAlign>;
-            using Mat4 = Eigen::Matrix<double, 4, 4, Eigen::DontAlign>;
-            using Size2 = cv::Size2f;
-
-        public:
             explicit PanoramicCamera(double focal = 250, 
                 const Vec3 & eye = Vec3(0, 0, 0),
                 const Vec3 & center = Vec3(1, 0, 0), 
                 const Vec3 & up = Vec3(0, 0, 1));
 
-            inline Size2 screenSize() const { return Size2(static_cast<float>(_focal * 2 * M_PI), static_cast<float>(_focal * M_PI)); }
+            inline Size screenSize() const { return Size(static_cast<float>(_focal * 2 * M_PI), static_cast<float>(_focal * M_PI)); }
             inline double focal() const { return _focal; }
             inline const Vec3 & eye() const { return _eye; }
             inline const Vec3 & center() const { return _center; }
             inline const Vec3 & up() const { return _up; }
             Vec2 screenProjection(const Vec3 & p3d) const;
-            inline core::Point2 screenProjection(const core::Point3 & p3d) const { return CVVec(screenProjection(EigenVec(p3d))); }
             Vec3 spatialDirection(const Vec2 & p2d) const;
-            inline core::Point3 spatialDirection(const core::Point2 & p2d) const { return CVVec(spatialDirection(EigenVec(p2d))); }
 
         private:
             double _focal;
@@ -93,9 +93,9 @@ namespace panoramix {
                 cv::Mat mapy = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
                 for (int j = 0; j < _outCam.screenSize().height; j++){
                     for (int i = 0; i < _outCam.screenSize().width; i++){
-                        typename OutCameraT::Vec2 screenp(i, j);
-                        typename OutCameraT::Vec3 p3 = _outCam.spatialDirection(screenp);
-                        typename InCameraT::Vec2 screenpOnInCam = _inCam.screenProjection(p3);
+                        Vec2 screenp(i, j);
+                        Vec3 p3 = _outCam.spatialDirection(screenp);
+                        Vec2 screenpOnInCam = _inCam.screenProjection(p3);
                         mapx.at<float>(j, i) = screenpOnInCam(0);
                         mapy.at<float>(j, i) = screenpOnInCam(1);
                     }

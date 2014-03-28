@@ -12,7 +12,7 @@ namespace panoramix {
         public:
             struct Params {
                 inline Params() 
-                    : winName("Image Feature Visualizer"), 
+                    : winName("2D Visualizer"), 
                       color(255, 255, 255), thickness(1), 
                       lineType(8), shift(0), alphaForNewImage(0.5f), 
                       colorTableDescriptor(ColorTableDescriptor::AllColors) {}
@@ -40,7 +40,7 @@ namespace panoramix {
 
 
         // manipulators
-        namespace manip{
+        namespace manip2d{
             template <class ArgT>
             struct Manipulator {
                 inline Manipulator(void(f)(Visualizer2D &, ArgT), ArgT a) : func(f), arg(a){}
@@ -99,7 +99,7 @@ namespace panoramix {
         }
 
         template <class ArgT>
-        inline Visualizer2D operator << (Visualizer2D viz, manip::Manipulator<ArgT> smanip) {
+        inline Visualizer2D operator << (Visualizer2D viz, manip2d::Manipulator<ArgT> smanip) {
             smanip.func(viz, smanip.arg);
             return viz;
         }
@@ -175,18 +175,18 @@ namespace panoramix {
             return viz;
         }
 
-        #define VISUALIZE_AS_CONTAINER(claz) \
+        #define VISUALIZE2D_AS_CONTAINER(claz) \
             template <class T> \
             inline Visualizer2D operator << (Visualizer2D viz, const claz<T> & c) { \
                 return VisualizeAllInContainer(viz, c); \
             }
 
-        VISUALIZE_AS_CONTAINER(std::list)
-        VISUALIZE_AS_CONTAINER(std::vector)
-        VISUALIZE_AS_CONTAINER(std::deque)
-        VISUALIZE_AS_CONTAINER(std::set)
-        VISUALIZE_AS_CONTAINER(std::unordered_set)
-        VISUALIZE_AS_CONTAINER(std::forward_list)
+        VISUALIZE2D_AS_CONTAINER(std::list)
+        VISUALIZE2D_AS_CONTAINER(std::vector)
+        VISUALIZE2D_AS_CONTAINER(std::deque)
+        VISUALIZE2D_AS_CONTAINER(std::set)
+        VISUALIZE2D_AS_CONTAINER(std::unordered_set)
+        VISUALIZE2D_AS_CONTAINER(std::forward_list)
 
 
     }

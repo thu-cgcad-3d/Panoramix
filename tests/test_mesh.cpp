@@ -1,8 +1,13 @@
 #include <Eigen/Core>
 #include <opencv2/opencv.hpp>
 
+#include <QApplication>
+#include <QDialog>
+
 #include "../src/core/mesh.hpp"
 #include "../src/core/mesh_maker.hpp"
+#include "../src/vis/visualize3d.hpp"
+#include "../src/vis/qt_resources.hpp"
 
 #include "gtest/gtest.h"
 
@@ -10,12 +15,36 @@ using namespace panoramix;
 using TestMesh = core::Mesh<Eigen::Vector3f>;
 
 TEST(MeshTest, Conversion) {
-    using CVMesh = core::Mesh<cv::Vec3f>;
+    using CVMesh = core::Mesh<core::Point3>;
     CVMesh mesh;
-    core::MakeTetrahedron(mesh);
-    EXPECT_EQ(4, mesh.internalVertices().size());
-    EXPECT_EQ(12, mesh.internalHalfEdges().size());
-    EXPECT_EQ(4, mesh.internalFaces().size());
+    core::MakeQuadFacedCube(mesh);
+    EXPECT_EQ(8, mesh.internalVertices().size());
+    EXPECT_EQ(24, mesh.internalHalfEdges().size());
+    EXPECT_EQ(6, mesh.internalFaces().size());
+
+    std::vector<core::Line3> lines;
+    std::vector<core::Point3> points;
+    for (auto h : mesh.halfedges()){
+        auto p1 = mesh.data(h.topo.from());
+        auto p2 = mesh.data(h.topo.to());
+        lines.push_back({ p1, p2 });
+    }
+    for (auto v : mesh.vertices()){
+        points.push_back(v.data);
+    }
+
+    vis::Visualizer3D()
+        << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
+        << vis::manip3d::SetDefaultColor(core::ColorFromTag(core::ColorTag::Black))
+        << lines
+        << vis::manip3d::SetDefaultColor(core::ColorFromTag(core::ColorTag::Red))
+        << vis::manip3d::SetPointSize(20)
+        << points
+        << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500, 
+            core::Vec3(-3, 0, 0), 
+            core::Vec3(0.5, 0.5, 0.5)))
+        << vis::manip3d::SetBackgroundColor(core::ColorFromTag(core::ColorTag::White))
+        << vis::manip3d::Show();
 }
 
 TEST(MeshTest, Tetrahedron) {
@@ -108,5 +137,6 @@ TEST(MeshTest, DISABLED_Sphere) {
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
+    vis::InitGui(argc, argv);
     return RUN_ALL_TESTS();
 }

@@ -22,7 +22,7 @@ TEST(RegionsNet, RegionsNet) {
         regNet.computeImageFeatures();
         vis::Visualizer2D()
             << regNet
-            << vis::manip::Show();
+            << vis::manip2d::Show();
     }
     
 }
