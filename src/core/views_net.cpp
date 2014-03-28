@@ -327,6 +327,17 @@ namespace panoramix {
                 });
             }
 
+            // get merged intersections
+            auto mergedIntersectionsIters = MergeNear(intersections.begin(), intersections.end(), std::false_type(), 
+                M_PI / 150.0, [](const Vec3 & p1, const Vec3 & p2) -> double {
+                return AngleBetweenDirections(p1, p2);
+            });
+            _globalData.mergedSpatialLineSegmentIntersections.clear();
+            _globalData.mergedSpatialLineSegmentIntersections.reserve(mergedIntersectionsIters.size());
+            for (auto intersectionIter : mergedIntersectionsIters) {
+                _globalData.mergedSpatialLineSegmentIntersections.push_back(*intersectionIter);
+            }
+
             // find vanishing points;
             _globalData.vanishingPoints = FindVanishingPoints(intersections);                        
 
@@ -378,7 +389,7 @@ namespace panoramix {
             }
 
             // find possible connections
-
+            
         }
  
     }

@@ -24,7 +24,9 @@ namespace panoramix {
             defaultColor(10, 10, 10),
             pointSize(10.0f),
             lineWidth(2.0f),
-            colorTableDescriptor(ColorTableDescriptor::AllColors)
+            colorTableDescriptor(ColorTableDescriptor::AllColors),
+            renderMode(RenderModeFlag::All),
+            modelMatrix(core::Mat4::eye())
         {}
 
         struct Visualizer3D::Entities {
@@ -88,11 +90,18 @@ namespace panoramix {
                         descriptor);
             }
 
-            Manipulator<RenderModeFlags> SetRanderMode(RenderModeFlags mode) {
+            Manipulator<RenderModeFlags> SetRenderMode(RenderModeFlags mode) {
                 return Manipulator<RenderModeFlags>(
                     [](Visualizer3D & viz, RenderModeFlags d){
                     viz.params.renderMode = d; },
                         mode);
+            }
+
+            Manipulator<const core::Mat4 &> SetModelMatrix(const core::Mat4 & mat) {
+                return Manipulator<const core::Mat4 &>(
+                    [](Visualizer3D & viz, const core::Mat4 & m){
+                    viz.params.modelMatrix = m; },
+                        mat);
             }
 
             void AutoSetCamera(Visualizer3D & viz) {
@@ -160,15 +169,17 @@ namespace panoramix {
                         glEnable(GL_CULL_FACE);
                         glEnable(GL_DEPTH_TEST);
                         glEnable(GL_STENCIL_TEST);
-                        glEnable(GL_LINE_WIDTH);
+                        glEnable(GL_ALPHA_TEST_QCOM);
 
                         glEnable(GL_BLEND);
                         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
                         glLineWidth(_viz.params.lineWidth);
                         core::PerspectiveCamera & camera = _viz.params.camera;
-                        QMatrix4x4 modelMatrix;
+                        QMatrix4x4 modelMatrix = MakeQMatrix(_viz.params.modelMatrix);
                         _object->render(_viz.params.renderMode, 
-                            MakeQMatrix(camera.projectionMatrix()), MakeQMatrix(camera.viewMatrix()), modelMatrix);
+                            MakeQMatrix(camera.projectionMatrix()), 
+                            MakeQMatrix(camera.viewMatrix()), 
+                            modelMatrix);
                         
                         glDisable(GL_DEPTH_TEST);
                         glDisable(GL_CULL_FACE);
@@ -183,11 +194,10 @@ namespace panoramix {
                 private:
                     void moveCameraEyeWithCenterFixed(const QVector3D & t) {
                         core::PerspectiveCamera & camera = _viz.params.camera;
-                        //auto sc = core::norm(camera.eye() - camera.center());
                         QVector3D eye = MakeQVec(camera.eye());
                         QVector3D center = MakeQVec(camera.center());
                         QVector3D up = MakeQVec(camera.up());
-                        QVector3D tt = t * (eye - center).length() * 0.002;
+                        QVector3D tt = t * (eye - center).length() * 0.002f;
 
                         QVector3D xv = QVector3D::crossProduct(center - eye, up).normalized();
                         QVector3D yv = QVector3D::crossProduct(xv, center - eye).normalized();
@@ -199,8 +209,8 @@ namespace panoramix {
                         _viz.params.camera.setEye(MakeCoreVec(eye), false);
                         _viz.params.camera.setUp(MakeCoreVec(up), false);
                         
-                        auto meshCenter = (_meshBox.first + _meshBox.second) / 2.0;
-                        auto meshRadius = (_meshBox.second - _meshBox.first).length() / 2.0;
+                        auto meshCenter = (_meshBox.first + _meshBox.second) / 2.0f;
+                        auto meshRadius = (_meshBox.second - _meshBox.first).length() / 2.0f;
                         auto nearPlane = (eye - meshCenter).length() - meshRadius;
                         nearPlane = nearPlane < 1e-3 ? 1e-3 : nearPlane;
                         auto farPlane = (eye - meshCenter).length() + meshRadius;
@@ -209,7 +219,6 @@ namespace panoramix {
 
                     void moveCameraCenterAndCenter(const QVector3D & t) {
                         core::PerspectiveCamera & camera = _viz.params.camera;
-                        //float sc = std::max(camera.screenSize().width, camera.screenSize().height) * 0.001;
                         QVector3D eye = MakeQVec(camera.eye());
                         QVector3D center = MakeQVec(camera.center());
                         QVector3D up = MakeQVec(camera.up());
@@ -311,13 +320,15 @@ namespace panoramix {
 
         Visualizer3D operator << (Visualizer3D viz, const core::Line3 & p) {
             auto & mesh = viz.entities()->mesh;
-            viz << p.first;
-            mesh.vertices.back().lineWidth1 = viz.params.lineWidth;
-            mesh.vertices.back().pointSize1 = viz.params.lineWidth;
-            viz << p.second;
-            mesh.vertices.back().lineWidth1 = viz.params.lineWidth;
-            mesh.vertices.back().pointSize1 = viz.params.lineWidth;
-            mesh.addLine(mesh.vertices.size() - 2, mesh.vertices.size() - 1);
+            core::Point3 ps[] = { p.first, p.second };
+            OpenGLMeshData::Vertex vs[2];
+            for (int i = 0; i < 2; i++){
+                vs[i].position4 = MakeQVec(core::HPoint3(ps[i], 1.0).toVector());
+                vs[i].color4 = MakeQVec(viz.params.defaultColor) / 255.0f;
+                vs[i].lineWidth1 = viz.params.lineWidth;
+                vs[i].pointSize1 = viz.params.pointSize;
+            }
+            viz.entities()->mesh.addIsolatedLine(vs[0], vs[1]);
             return viz;
         }
 

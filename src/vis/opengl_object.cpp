@@ -25,10 +25,28 @@ namespace panoramix {
             return iLines.size() / 2;
         }
 
+        OpenGLMeshData::LineHandle OpenGLMeshData::addIsolatedLine(const Vertex & v1, const Vertex & v2) {
+            vertices.push_back(v1);
+            iLines.push_back(vertices.size() - 1);
+            vertices.push_back(v2);
+            iLines.push_back(vertices.size() - 1);
+            return iLines.size() / 2;
+        }
+
         OpenGLMeshData::TriangleHandle OpenGLMeshData::addTriangle(OpenGLMeshData::VertHandle v1, OpenGLMeshData::VertHandle v2, OpenGLMeshData::VertHandle v3) {
             iTriangles.push_back(v1);
             iTriangles.push_back(v2);
             iTriangles.push_back(v3);
+            return iTriangles.size() / 3;
+        }
+
+        OpenGLMeshData::TriangleHandle OpenGLMeshData::addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3) {
+            vertices.push_back(v1);
+            iTriangles.push_back(vertices.size() - 1);
+            vertices.push_back(v2);
+            iTriangles.push_back(vertices.size() - 1);
+            vertices.push_back(v3);
+            iTriangles.push_back(vertices.size() - 1);
             return iTriangles.size() / 3;
         }
 
@@ -213,10 +231,17 @@ namespace panoramix {
         // opengl object implementation
         OpenGLObject::OpenGLObject(QObject *parent) : QObject(parent), _texture(NULL) {
             _program = new QOpenGLShaderProgram(this);
+            _vertexArrayBuffer = _pointsIndicesBuffer = _linesIndicesBuffer = _trianglesIndicesBuffer = 0;
+            glGenBuffers(1, &_vertexArrayBuffer);
+            glGenBuffers(1, &_pointsIndicesBuffer);
+            glGenBuffers(1, &_linesIndicesBuffer);
+            glGenBuffers(1, &_trianglesIndicesBuffer);
         }
 
         OpenGLObject::~OpenGLObject() {
             delete _texture;
+            GLuint buffers[] = { _vertexArrayBuffer, _pointsIndicesBuffer, _linesIndicesBuffer, _trianglesIndicesBuffer };
+            glDeleteBuffers(4, buffers);
         }
 
         void OpenGLObject::setUpShaders(const OpenGLShaderSource & ss){
@@ -254,6 +279,19 @@ namespace panoramix {
 
         void OpenGLObject::setUpMesh(const OpenGLMeshData & m){
             _mesh = m;
+
+            glBindBuffer(GL_ARRAY_BUFFER, _vertexArrayBuffer);
+            glBufferData(GL_ARRAY_BUFFER, _mesh.vertices.size() * sizeof(OpenGLMeshData::Vertex), _mesh.vertices.data(), GL_STATIC_DRAW);            
+           
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _pointsIndicesBuffer);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, _mesh.iPoints.size() * sizeof(OpenGLMeshData::VertHandle), _mesh.iPoints.data(), GL_STATIC_DRAW);
+            
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _linesIndicesBuffer);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, _mesh.iLines.size() * sizeof(OpenGLMeshData::VertHandle), _mesh.iLines.data(), GL_STATIC_DRAW);
+            
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _trianglesIndicesBuffer);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, _mesh.iTriangles.size() * sizeof(OpenGLMeshData::VertHandle), _mesh.iTriangles.data(), GL_STATIC_DRAW);
+
         }
 
         void OpenGLObject::render(RenderModeFlags mode, const QMatrix4x4 & projection,
@@ -265,22 +303,38 @@ namespace panoramix {
             Q_ASSERT(_program->isLinked());
             _program->bind();
 
-            //Q_ASSERT(_texture->isCreated());
             if (_texture && _texture->isCreated())
                 _texture->bind(0);
 
-            //_program->setUniformValue("matrix", mat);
+            glBindBuffer(GL_ARRAY_BUFFER, _vertexArrayBuffer);
+
             _program->setUniformValue("projectionMatrix", projection);
             _program->setUniformValue("viewMatrix", view);
             _program->setUniformValue("modelMatrix", model);
             _program->setUniformValue("tex", 0);
             _program->setUniformValue("panoramaCenter", QVector3D(0, 0, 0));
 
-            _program->setAttributeArray("position", GL_FLOAT, &(_mesh.vertices.first().position4), 3, sizeof(OpenGLMeshData::Vertex));
+            glVertexAttribPointer(_program->attributeLocation("position"), 4, GL_FLOAT, GL_FALSE, 
+                sizeof(OpenGLMeshData::Vertex), 
+                OFFSET_OF(_mesh.vertices.first().position4, _mesh.vertices.first().position4));
+            glVertexAttribPointer(_program->attributeLocation("normal"), 3, GL_FLOAT, GL_FALSE,
+                sizeof(OpenGLMeshData::Vertex),
+                OFFSET_OF(_mesh.vertices.first().normal3, _mesh.vertices.first().position4));
+            glVertexAttribPointer(_program->attributeLocation("color"), 4, GL_FLOAT, GL_FALSE,
+                sizeof(OpenGLMeshData::Vertex),
+                OFFSET_OF(_mesh.vertices.first().color4, _mesh.vertices.first().position4));
+            glVertexAttribPointer(_program->attributeLocation("texCoord"), 2, GL_FLOAT, GL_FALSE,
+                sizeof(OpenGLMeshData::Vertex),
+                OFFSET_OF(_mesh.vertices.first().texCoord2, _mesh.vertices.first().position4));
+            glVertexAttribPointer(_program->attributeLocation("pointSize"), 1, GL_FLOAT, GL_FALSE,
+                sizeof(OpenGLMeshData::Vertex),
+                OFFSET_OF(_mesh.vertices.first().pointSize1, _mesh.vertices.first().position4));
+
+            /*_program->setAttributeArray("position", GL_FLOAT, &(_mesh.vertices.first().position4), 3, sizeof(OpenGLMeshData::Vertex));
             _program->setAttributeArray("normal", GL_FLOAT, &(_mesh.vertices.first().normal3), 3, sizeof(OpenGLMeshData::Vertex));
             _program->setAttributeArray("color", GL_FLOAT, &(_mesh.vertices.first().color4), 4, sizeof(OpenGLMeshData::Vertex));
             _program->setAttributeArray("texCoord", GL_FLOAT, &(_mesh.vertices.first().texCoord2), 2, sizeof(OpenGLMeshData::Vertex));
-            _program->setAttributeArray("pointSize", GL_FLOAT, &(_mesh.vertices.first().pointSize1), 1, sizeof(OpenGLMeshData::Vertex));
+            _program->setAttributeArray("pointSize", GL_FLOAT, &(_mesh.vertices.first().pointSize1), 1, sizeof(OpenGLMeshData::Vertex));*/
 
             _program->enableAttributeArray("position");
             _program->enableAttributeArray("normal");
@@ -289,13 +343,21 @@ namespace panoramix {
             _program->enableAttributeArray("pointSize");
 
             if (mode & RenderModeFlag::Triangles){
-                glDrawElements(GL_TRIANGLES, _mesh.iTriangles.size(), GL_UNSIGNED_INT, _mesh.iTriangles.data());
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _trianglesIndicesBuffer);
+                //glDrawElements(GL_TRIANGLES, _mesh.iTriangles.size(), GL_UNSIGNED_INT, _mesh.iTriangles.data());
+                glDrawElements(GL_TRIANGLES, _mesh.iTriangles.size(), GL_UNSIGNED_INT, 0);
             }
+
             if (mode & RenderModeFlag::Lines) {
-                glDrawElements(GL_LINES, _mesh.iLines.size(), GL_UNSIGNED_INT, _mesh.iLines.data());
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _linesIndicesBuffer);
+                //glDrawElements(GL_LINES, _mesh.iLines.size(), GL_UNSIGNED_INT, _mesh.iLines.data());
+                glDrawElements(GL_LINES, _mesh.iLines.size(), GL_UNSIGNED_INT, 0);
             }
+
             if (mode & RenderModeFlag::Points){
-                glDrawElements(GL_POINTS, _mesh.iPoints.size(), GL_UNSIGNED_INT, _mesh.iPoints.data());
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _pointsIndicesBuffer);
+                //glDrawElements(GL_POINTS, _mesh.iPoints.size(), GL_UNSIGNED_INT, _mesh.iPoints.data());
+                glDrawElements(GL_POINTS, _mesh.iPoints.size(), GL_UNSIGNED_INT, 0);
             }
 
             _program->disableAttributeArray("position");

@@ -20,14 +20,13 @@ namespace panoramix {
             return viz;
         }
 
-        Visualizer2D operator << (Visualizer2D viz, const ViewsNet::GlobalData & netgb) {
-            
-            return viz;
-        }
-
         Visualizer3D operator << (Visualizer3D viz, const core::ViewsNet::GlobalData & netgb) {
-            viz << netgb.spatialLineSegments;
-            return viz;
+            return viz
+                << vis::manip3d::SetDefaultColor(core::ColorFromTag(core::ColorTag::Black))
+                << netgb.mergedSpatialLineSegmentIntersections
+                << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
+                << vis::manip3d::SetLineWidth(2.0f)
+                << netgb.spatialLineSegments;
         }
 
         Visualizer2D operator << (Visualizer2D viz, const ViewsNet & net) {

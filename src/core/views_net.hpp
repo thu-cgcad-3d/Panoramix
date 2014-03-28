@@ -78,6 +78,7 @@ namespace panoramix {
                 std::vector<Image> geometricContext;
                 std::vector<Image> manhattanJunctionDistribution;
                 std::vector<Classified<Line3>> spatialLineSegments;
+                std::vector<Vec3> mergedSpatialLineSegmentIntersections;
                 std::vector<Classified<Line3>> mergedSpatialLineSegments;
             };
 

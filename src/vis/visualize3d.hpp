@@ -21,6 +21,7 @@ namespace panoramix {
                 float lineWidth;
                 core::ColorTableDescriptor colorTableDescriptor;
                 RenderModeFlags renderMode;
+                core::Mat4 modelMatrix;
             };
             struct Entities;
             using EntitiesPtr = std::shared_ptr<Entities>;
@@ -53,7 +54,8 @@ namespace panoramix {
             Manipulator<float> SetPointSize(float pointSize);
             Manipulator<float> SetLineWidth(float lineWidth);
             Manipulator<core::ColorTableDescriptor> SetColorTableDescriptor(core::ColorTableDescriptor descriptor);
-            Manipulator<RenderModeFlags> SetRanderMode(RenderModeFlags mode);
+            Manipulator<RenderModeFlags> SetRenderMode(RenderModeFlags mode);
+            Manipulator<const core::Mat4 &> SetModelMatrix(const core::Mat4 & mat);
             Manipulator<bool> Show(bool doModel = true);
 
             void AutoSetCamera(Visualizer3D & viz);

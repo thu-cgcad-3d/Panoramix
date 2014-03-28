@@ -17,6 +17,7 @@ namespace panoramix {
                 QVector2D texCoord2;
                 float pointSize1;
                 float lineWidth1;
+                float a, b;
             };
 
             using VertHandle = uint32_t;
@@ -32,7 +33,9 @@ namespace panoramix {
                 const QVector4D & c = QVector4D(),
                 const QVector2D & t = QVector2D());
             LineHandle addLine(VertHandle v1, VertHandle v2);
+            LineHandle addIsolatedLine(const Vertex & v1, const Vertex & v2);
             TriangleHandle addTriangle(VertHandle v1, VertHandle v2, VertHandle v3);
+            TriangleHandle addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3);
             void addQuad(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4);
             void addPolygon(const QList<VertHandle> & vhs);
 
@@ -75,6 +78,8 @@ namespace panoramix {
             OpenGLMeshData _mesh;
             QOpenGLShaderProgram * _program;
             QOpenGLTexture * _texture;
+            GLuint _vertexArrayBuffer;
+            GLuint _pointsIndicesBuffer, _linesIndicesBuffer, _trianglesIndicesBuffer;
         };
 
 

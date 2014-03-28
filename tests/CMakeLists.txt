@@ -3,7 +3,14 @@ include_directories (${GTEST_DIR}/include)
 
 # set all tests
 set (TESTNAMES test_basic)
-set (TESTNAMES_WITH_VIS test_util test_mesh test_feature test_views_net test_regions_net)
+set (TESTNAMES_WITH_VIS 
+	test_util 
+	test_mesh 
+	test_feature 
+	test_views_net 
+	test_regions_net
+	test_vis3d
+)
 
 # define test data location
 get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)

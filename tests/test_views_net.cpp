@@ -39,9 +39,9 @@ TEST(ViewsNet, ViewsNet) {
         return core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera>(pcam, originCam)(panorama);
     });
 
-    for (auto & im : ims) {
+   /* for (auto & im : ims) {
         vis::Visualizer2D(im) << vis::manip2d::Show();
-    }
+    }*/
 
     /// insert into views net
 
@@ -120,13 +120,11 @@ TEST(ViewsNet, ViewsNet) {
 
         net.rectifySpatialLines();
         vis::Visualizer3D()
-            << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1), core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
+            << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1)/2, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
             << vis::manip3d::SetBackgroundColor(core::Color(200, 200, 200))
-            << vis::manip3d::SetLineWidth(2.0)
-            << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
-            << vis::manip3d::SetRanderMode(vis::RenderModeFlag::Lines)
             << net.globalData()
             << vis::manip3d::AutoSetCamera
+            << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
             << vis::manip3d::Show();
 
     }
