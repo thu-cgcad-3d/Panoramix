@@ -6,7 +6,6 @@ namespace panoramix {
         using namespace core;
 
         Visualizer2D operator << (Visualizer2D viz, const ViewsNet::VertData & vd) {
-            static const Color colors[] = { Color(255, 0, 0), Color(0, 255, 0), Color(0, 0, 255) };
             viz.setImage(vd.image);
             
             viz.params.thickness = 2;
@@ -23,7 +22,6 @@ namespace panoramix {
         Visualizer3D operator << (Visualizer3D viz, const core::ViewsNet::GlobalData & netgb) {
             return viz
                 << vis::manip3d::SetDefaultColor(core::ColorFromTag(core::ColorTag::Black))
-                //<< netgb.mergedSpatialLineSegmentIntersections
                 << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
                 << vis::manip3d::SetLineWidth(2.0f)
                 << netgb.spatialLineSegments;

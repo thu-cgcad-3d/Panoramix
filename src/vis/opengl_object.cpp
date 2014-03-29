@@ -206,7 +206,7 @@ namespace panoramix {
             QPair<QVector3D, QVector3D> box(vertices.front().position4.toVector3DAffine(), 
                 vertices.front().position4.toVector3DAffine());
             for (auto & v : vertices){
-                auto & p = v.position4.toVector3DAffine();
+                auto p = v.position4.toVector3DAffine();
                 for (int i = 0; i < 3; i++){
                     if (box.first[i] > p[i])
                         box.first[i] = p[i];
