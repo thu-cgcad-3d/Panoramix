@@ -218,10 +218,91 @@ namespace panoramix {
         }
 
 
+        namespace {
 
-        OpenGLShaderSource PredefinedShaderSource(const QString & name) {
-            //return panoramaSource;
-            throw "unimplemented";
+            static const OpenGLShaderSource SSNormalPoints = {
+                "attribute highp vec4 position;\n"
+                "attribute lowp float pointSize;\n"
+                "attribute highp vec3 normal;\n"
+                "attribute lowp vec4 color;\n"
+                "attribute lowp vec2 texCoord;\n"
+                "uniform highp mat4 viewMatrix;\n"
+                "uniform highp mat4 modelMatrix;\n"
+                "uniform highp mat4 projectionMatrix;\n"
+                "varying vec4 pixelColor;\n"
+                "void main(void)\n"
+                "{\n"
+                "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
+                "    gl_PointSize = pointSize;\n"
+                "    pixelColor = color;\n"
+                "}\n",
+
+                "varying lowp vec4 pixelColor;\n"
+                "void main(void)\n"
+                "{\n"
+                    "gl_FragColor = pixelColor;\n"
+                    "lowp float distance = length(gl_PointCoord - vec2(0.5));\n"
+                    "if(distance > 0.4)\n"
+                        "gl_FragColor.a = 1.0 - (distance - 0.4) * 0.1;\n"
+                "}\n"
+            };
+
+            static const OpenGLShaderSource SSNormalLines = {
+                "attribute highp vec4 position;\n"
+                "attribute lowp float pointSize;\n"
+                "attribute highp vec3 normal;\n"
+                "attribute lowp vec4 color;\n"
+                "attribute lowp vec2 texCoord;\n"
+                "uniform highp mat4 viewMatrix;\n"
+                "uniform highp mat4 modelMatrix;\n"
+                "uniform highp mat4 projectionMatrix;\n"
+                "varying vec4 pixelColor;\n"
+                "void main(void)\n"
+                "{\n"
+                "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
+                "    pixelColor = color;\n"
+                "}\n",
+
+                "varying lowp vec4 pixelColor;\n"
+                "void main(void)\n"
+                "{\n"
+                "    gl_FragColor = pixelColor;\n"
+                "}\n"
+            };
+
+            static const OpenGLShaderSource SSNormalTriangles = {
+                "attribute highp vec4 position;\n"
+                "attribute lowp float pointSize;\n"
+                "attribute highp vec3 normal;\n"
+                "attribute lowp vec4 color;\n"
+                "attribute lowp vec2 texCoord;\n"
+                "uniform highp mat4 viewMatrix;\n"
+                "uniform highp mat4 modelMatrix;\n"
+                "uniform highp mat4 projectionMatrix;\n"
+                "varying vec4 pixelColor;\n"
+                "void main(void)\n"
+                "{\n"
+                "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
+                "    pixelColor = color;\n"
+                "}\n",
+
+                "varying lowp vec4 pixelColor;\n"
+                "void main(void)\n"
+                "{\n"
+                "    gl_FragColor = pixelColor;\n"
+                "}\n"
+            };
+
+        }
+
+
+
+        OpenGLShaderSource PredefinedShaderSource(OpenGLShaderSourceName name) {
+            switch (name) {
+            case OpenGLShaderSourceName::NormalPoints: return SSNormalPoints;
+            case OpenGLShaderSourceName::NormalLines: return SSNormalLines;
+            case OpenGLShaderSourceName::NormalTriangles: return SSNormalTriangles;
+            }
         }
 
 

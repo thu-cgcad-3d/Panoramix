@@ -8,9 +8,6 @@
 #include "gtest/gtest.h"
 
 using namespace panoramix;
-using Mat4 = Eigen::Matrix4d;
-using Vec3 = Eigen::Vector3d;
-using Vec4 = Eigen::Vector4d;
 
 TEST(UtilTest, WrapBetween) {
     for (int i = 0; i < 10000; i++){
@@ -29,6 +26,17 @@ TEST(UtilTest, WrapBetween) {
         ASSERT_LE(a, xx);
         ASSERT_LT(xx, b);
     }
+}
+
+TEST(UtilTest, AngleBetweenDirections) {
+    core::Vec2 v1(1, 0), v2(1, 1);
+    ASSERT_DOUBLE_EQ(M_PI_4, core::AngleBetweenDirections(v1, v2));
+    ASSERT_DOUBLE_EQ(M_PI_4, core::SignedAngleBetweenDirections(v1, v2, false));
+    ASSERT_DOUBLE_EQ(-M_PI_4, core::SignedAngleBetweenDirections(v1, v2, true));
+    ASSERT_DOUBLE_EQ(-M_PI_4, core::SignedAngleBetweenDirections(v1, v2));
+    core::Vec2 v3(-1, -1);
+    ASSERT_DOUBLE_EQ(-M_PI_4 * 3, core::SignedAngleBetweenDirections(v1, v3, false));
+    ASSERT_DOUBLE_EQ(M_PI_4 * 3, core::SignedAngleBetweenDirections(v1, v3, true));
 }
 
 

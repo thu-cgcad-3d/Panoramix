@@ -24,17 +24,24 @@ namespace panoramix {
                 core::Mat4 modelMatrix;
             };
             struct Entities;
+            struct Widgets;
             using EntitiesPtr = std::shared_ptr<Entities>;
+            using WidgetsPtr = std::shared_ptr<Widgets>;
             
             explicit Visualizer3D(const Params & p = Params());
+            ~Visualizer3D();
+
             inline EntitiesPtr entities() { return _ents; }
             inline const EntitiesPtr & entities() const { return _ents; }
+            inline WidgetsPtr widgets() { return _widgets; }
+            inline const WidgetsPtr & widgets() const{ return _widgets; }
 
         public:
             Params params;
 
         private:
-            std::shared_ptr<Entities> _ents;
+            EntitiesPtr _ents;
+            WidgetsPtr _widgets;
         };
 
 

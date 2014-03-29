@@ -5,6 +5,8 @@
 #include "../core/basic_types.hpp"
 #include "misc.hpp"
 
+#define GL_ALPHA_TEST 0x0BC0
+
 namespace panoramix {
     namespace vis {
 
@@ -50,7 +52,12 @@ namespace panoramix {
             QByteArray vertexShaderSource;
             QByteArray fragmentShaderSource;
         };
-        OpenGLShaderSource PredefinedShaderSource(const QString & name);
+        enum class OpenGLShaderSourceName {
+            NormalPoints,
+            NormalLines,
+            NormalTriangles
+        };
+        OpenGLShaderSource PredefinedShaderSource(OpenGLShaderSourceName name);
 
 
         // opengl object class
@@ -62,6 +69,7 @@ namespace panoramix {
             ~ OpenGLObject();
 
             void setUpShaders(const OpenGLShaderSource & ss);
+            inline void setUpShaders(OpenGLShaderSourceName ssName) { setUpShaders(PredefinedShaderSource(ssName)); }
             void setUpMesh(const OpenGLMeshData & mesh);
             void setUpTexture(const QImage & tex);
 

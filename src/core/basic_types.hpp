@@ -1,10 +1,9 @@
 #ifndef PANORAMIX_CORE_BASIC_TYPES_HPP
 #define PANORAMIX_CORE_BASIC_TYPES_HPP
 
-#include <Eigen/StdVector>
-#include <Eigen/StdList>
-#include <Eigen/StdDeque>
-
+#include <vector>
+#include <list>
+#include <deque>
 #include <set>
 #include <unordered_set>
 #include <forward_list>
@@ -15,8 +14,6 @@
 #include <cstdint>
 
 #include <opencv2/opencv.hpp>
-#include <Eigen/Core>
-#include <Eigen/Dense>
 
 namespace panoramix {
     namespace core {
@@ -35,11 +32,6 @@ namespace panoramix {
         using Mat4 = Mat<double, 4, 4>;
 
         using cv::norm;
-
-        template <class T, int N>
-        inline T AngleBetweenDirections(const Vec<T, N> & v1, const Vec<T, N> & v2) {
-            return acos(v1.dot(v2) / norm(v1) / norm(v2));
-        }
 
 
         // private tools
@@ -189,14 +181,22 @@ namespace panoramix {
 
         // color
         using Color = cv::Scalar;
-        enum class ColorTag : int8_t {
+        enum ColorTag {
             Transparent,
+
             White,
             Black,
+
+            DimGray,
             Gray,
+            DarkGray,
+            Silver,
+            LightGray,
+
             Red,
             Green,
             Blue,
+
             Yellow,
             Magenta,
             Cyan,

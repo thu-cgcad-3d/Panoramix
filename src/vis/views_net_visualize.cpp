@@ -23,7 +23,7 @@ namespace panoramix {
         Visualizer3D operator << (Visualizer3D viz, const core::ViewsNet::GlobalData & netgb) {
             return viz
                 << vis::manip3d::SetDefaultColor(core::ColorFromTag(core::ColorTag::Black))
-                << netgb.mergedSpatialLineSegmentIntersections
+                //<< netgb.mergedSpatialLineSegmentIntersections
                 << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
                 << vis::manip3d::SetLineWidth(2.0f)
                 << netgb.spatialLineSegments;

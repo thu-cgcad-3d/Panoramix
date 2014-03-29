@@ -3,11 +3,8 @@
 #include <QtOpenGL>
 #include <QtWidgets>
 #include <QWidget>
-//#include <gl/GL.h>
-//#include <gl/GLU.h>
 
 #include "opengl_object.hpp"
-//#include "opengl_widgets.hpp"
 
 namespace panoramix {
     namespace vis {
@@ -32,11 +29,20 @@ namespace panoramix {
         struct Visualizer3D::Entities {
             OpenGLMeshData mesh;
         };
+
+        struct Visualizer3D::Widgets {
+            QList<QWidget *> ws;
+        };
         
 
         Visualizer3D::Visualizer3D(const Params & p) 
             : params(p), 
-            _ents(std::make_shared<Entities>()) {}
+            _ents(std::make_shared<Entities>()),
+            _widgets(std::make_shared<Widgets>()) {}
+
+        Visualizer3D::~Visualizer3D() {
+            qDeleteAll(_widgets->ws);
+        }
 
         // manipulators
         namespace manip3d {
@@ -117,32 +123,6 @@ namespace panoramix {
 
             namespace {
 
-                static const char *vsrc =
-                    //"attribute lowp float typeFlag;\n" // points (=0) < 0.3; triangles (=1) > 0.7; lines (=0.5) otherwise
-                    "attribute highp vec4 position;\n"
-                    "attribute lowp float pointSize;\n"
-                    "attribute highp vec3 normal;\n"
-                    "attribute lowp vec4 color;\n"
-                    "attribute lowp vec2 texCoord;\n"
-                    "uniform highp mat4 viewMatrix;\n"
-                    "uniform highp mat4 modelMatrix;\n"
-                    "uniform highp mat4 projectionMatrix;\n"
-                    "varying vec4 pixelColor;\n"
-                    "void main(void)\n"
-                    "{\n"
-                    "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
-                    //"    if (typeFlag < 0.3) \n"
-                    "       gl_PointSize = pointSize;\n"
-                    "    pixelColor = color;\n"
-                    "}\n";
-                static const char *fsrc =
-                    "varying lowp vec4 pixelColor;\n"
-                    "void main(void)\n"
-                    "{\n"
-                    "    gl_FragColor = pixelColor;\n"
-                    "}\n";
-
-
                 // visualizer widget
                 class Visualizer3DWidget : public QGLWidget, protected QGLFunctions {
                 public:
@@ -156,30 +136,52 @@ namespace panoramix {
                 protected:
                     void initializeGL() {
                         qglClearColor(MakeQColor(_viz.params.backgroundColor));
-                        _object = new OpenGLObject(this);
-                        _object->setUpShaders({ vsrc, fsrc });
-                        _object->setUpMesh(_viz.entities()->mesh);
+                        _trianglesObject = new OpenGLObject(this);
+                        _trianglesObject->setUpShaders(OpenGLShaderSourceName::NormalTriangles);
+                        _trianglesObject->setUpMesh(_viz.entities()->mesh);
+                        _linesObject = new OpenGLObject(this);
+                        _linesObject->setUpShaders(OpenGLShaderSourceName::NormalLines);
+                        _linesObject->setUpMesh(_viz.entities()->mesh);
+                        _pointsObject = new OpenGLObject(this);
+                        _pointsObject->setUpShaders(OpenGLShaderSourceName::NormalPoints);
+                        _pointsObject->setUpMesh(_viz.entities()->mesh);
                     }
 
                     void paintGL() {
                         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-                        glFrontFace(GL_CW);
-                        glCullFace(GL_FRONT);
+                        glFrontFace(GL_CW); // face direction set to clockwise
+                        glCullFace(GL_FRONT); // specify whether front- or back-facing facets can be culled
                         glEnable(GL_CULL_FACE);
                         glEnable(GL_DEPTH_TEST);
                         glEnable(GL_STENCIL_TEST);
-                        glEnable(GL_ALPHA_TEST_QCOM);
+
+                        glEnable(GL_ALPHA_TEST);
 
                         glEnable(GL_BLEND);
                         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                        glLineWidth(_viz.params.lineWidth);
+                        //glLineWidth(_viz.params.lineWidth);
                         core::PerspectiveCamera & camera = _viz.params.camera;
                         QMatrix4x4 modelMatrix = MakeQMatrix(_viz.params.modelMatrix);
-                        _object->render(_viz.params.renderMode, 
-                            MakeQMatrix(camera.projectionMatrix()), 
-                            MakeQMatrix(camera.viewMatrix()), 
-                            modelMatrix);
+
+                        if (_viz.params.renderMode & RenderModeFlag::Triangles){
+                            _trianglesObject->render(RenderModeFlag::Triangles,
+                                MakeQMatrix(camera.projectionMatrix()),
+                                MakeQMatrix(camera.viewMatrix()),
+                                modelMatrix);
+                        }
+                        if (_viz.params.renderMode & RenderModeFlag::Points){
+                            _pointsObject->render(RenderModeFlag::Points,
+                                MakeQMatrix(camera.projectionMatrix()),
+                                MakeQMatrix(camera.viewMatrix()),
+                                modelMatrix);
+                        }
+                        if (_viz.params.renderMode & RenderModeFlag::Lines){
+                            _linesObject->render(RenderModeFlag::Lines,
+                                MakeQMatrix(camera.projectionMatrix()),
+                                MakeQMatrix(camera.viewMatrix()),
+                                modelMatrix);
+                        }
                         
                         glDisable(GL_DEPTH_TEST);
                         glDisable(GL_CULL_FACE);
@@ -278,7 +280,9 @@ namespace panoramix {
                 private:
                     Visualizer3D & _viz;
                     QPointF _lastPos;
-                    OpenGLObject * _object;
+                    OpenGLObject * _linesObject;
+                    OpenGLObject * _pointsObject;
+                    OpenGLObject * _trianglesObject;
                     QPair<QVector3D, QVector3D> _meshBox;
                 };
                 
@@ -288,17 +292,32 @@ namespace panoramix {
 
             Manipulator<bool> Show(bool doModel) {
                 return Manipulator<bool>(
-                    [](Visualizer3D & viz, bool t){                  
+                    [](Visualizer3D & viz, bool modal){                  
 
-                    QDialog dialog;
-                    dialog.setWindowTitle(QString::fromStdString(viz.params.winName));
-                    QVBoxLayout * layout = new QVBoxLayout;
-                    Visualizer3DWidget * w = new Visualizer3DWidget(viz, &dialog);
-                    layout->addWidget(w);
-                    layout->setContentsMargins(0, 0, 0, 0);
-                    dialog.setLayout(layout);
-                    dialog.resize(MakeQSize(viz.params.camera.screenSize()));
-                    dialog.exec();
+                    if (modal){
+                        QDialog dialog;
+                        dialog.setWindowTitle(QString::fromStdString(viz.params.winName));
+                        QVBoxLayout * layout = new QVBoxLayout;
+                        Visualizer3DWidget * w = new Visualizer3DWidget(viz, &dialog);
+                        layout->addWidget(w);
+                        layout->setContentsMargins(0, 0, 0, 0);
+                        dialog.setLayout(layout);
+                        dialog.resize(MakeQSize(viz.params.camera.screenSize()));
+                        dialog.exec();
+                    }
+                    else {
+                        QDialog * d = new QDialog;
+                        QDialog & dialog = *d;
+                        dialog.setWindowTitle(QString::fromStdString(viz.params.winName));
+                        QVBoxLayout * layout = new QVBoxLayout;
+                        Visualizer3DWidget * w = new Visualizer3DWidget(viz, &dialog);
+                        layout->addWidget(w);
+                        layout->setContentsMargins(0, 0, 0, 0);
+                        dialog.setLayout(layout);
+                        dialog.resize(MakeQSize(viz.params.camera.screenSize()));
+                        viz.widgets()->ws.append(d);
+                        d->show();
+                    }
 
                 },
                     doModel);

@@ -12,31 +12,30 @@ namespace panoramix {
 
         namespace {
 
-            template <class Mat4T, class Vec3T>
-            Mat4T Matrix4MakeLookAt(const Vec3T & eye, const Vec3T & center,
-                const Vec3T & up, const Mat4T & base) {
-                Vec3T zaxis = (center - eye); zaxis /= cv::norm(zaxis);
-                Vec3T xaxis = up.cross(zaxis); xaxis /= cv::norm(xaxis);
-                Vec3T yaxis = zaxis.cross(xaxis);
-                Mat4T m(
+            Mat4 MakeMat4LookAt(const Vec3 & eye, const Vec3 & center,
+                const Vec3 & up) {
+                Vec3 zaxis = (center - eye); zaxis /= core::norm(zaxis);
+                Vec3 xaxis = up.cross(zaxis); xaxis /= core::norm(xaxis);
+                Vec3 yaxis = zaxis.cross(xaxis);
+                Mat4 m(
                     -xaxis(0), yaxis(0), -zaxis(0), 0,
                     -xaxis(1), yaxis(1), -zaxis(1), 0,
                     -xaxis(2), yaxis(2), -zaxis(2), 0,
                     xaxis.dot(eye), -yaxis.dot(eye), zaxis.dot(eye), 1);
-                return m.t() * base;
+                return m.t();
             }
 
-            template <class Mat4T, class ValueT>
-            Mat4T Matrix4MakePerspective(const ValueT & fovyRadians, const ValueT & aspect,
-                const ValueT & nearZ, const ValueT & farZ, const Mat4T & base) {
-                ValueT cotan = ValueT(1.0) / std::tan(fovyRadians / 2.0);
-                Mat4T m(
+            Mat4 MakeMat4Perspective(const double & fovyRadians, const double & aspect,
+                const double & nearZ, const double & farZ) {
+                double cotan = double(1.0) / std::tan(fovyRadians / 2.0);
+                Mat4 m(
                     cotan / aspect, 0, 0, 0,
                     0, cotan, 0, 0,
                     0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
                     0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0);
-                return m.t() * base;
+                return m.t();
             }
+
         }
 
         PerspectiveCamera::PerspectiveCamera(int w, int h, double focal, const Vec3 & eye,
@@ -46,12 +45,11 @@ namespace panoramix {
         }
 
         void PerspectiveCamera::updateMatrices() {
-            Mat4 m = Mat4::eye();
-            _viewMatrix = Matrix4MakeLookAt(_eye, _center, _up, m);
+            _viewMatrix = MakeMat4LookAt(_eye, _center, _up);
 
             double verticalViewAngle = atan(_screenH / 2.0 / _focal) * 2;
             double aspect = double(_screenW) / double(_screenH);
-            _projectionMatrix = Matrix4MakePerspective(verticalViewAngle, aspect, _near, _far, m);
+            _projectionMatrix = MakeMat4Perspective(verticalViewAngle, aspect, _near, _far);
 
             _viewProjectionMatrix = _projectionMatrix * _viewMatrix;
             _viewProjectionMatrixInv = _viewProjectionMatrix.inv();
@@ -130,8 +128,8 @@ namespace panoramix {
         PanoramicCamera::PanoramicCamera(double focal, const Vec3 & eye,
             const Vec3 & center, const Vec3 & up)
             : _focal(focal), _eye(eye), _center(center), _up(up) {
-            _xaxis = (_center - _eye); _xaxis /= cv::norm(_xaxis);
-            _yaxis = _up.cross(_xaxis); _yaxis /= cv::norm(_yaxis);
+            _xaxis = (_center - _eye); _xaxis /= core::norm(_xaxis);
+            _yaxis = _up.cross(_xaxis); _yaxis /= core::norm(_yaxis);
             _zaxis = _xaxis.cross(_yaxis);
         }
 

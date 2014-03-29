@@ -30,7 +30,7 @@ namespace panoramix {
                             interp[0] = -eqi[1];
                             interp[1] = eqi[0];
                         }
-                        interp /= cv::norm(interp);
+                        interp /= norm(interp);
 
                         if (suppresscross){
                             auto& a1 = lines[i].component.first;
@@ -73,6 +73,7 @@ namespace panoramix {
                 vd.lineSegmentIntersections, 
                 vd.lineSegmentIntersectionLineIDs, true);
 
+            // build region net
             vd.regionNet = std::make_shared<RegionsNet>(vd.image);
             vd.regionNet->buildNetAndComputeGeometricFeatures();
             vd.regionNet->computeImageFeatures();
@@ -172,7 +173,7 @@ namespace panoramix {
             }
 
             inline double UnOrthogonality(const Vec3 & v1, const Vec3 & v2, const Vec3 & v3) {
-                return cv::norm(Vec3(v1.dot(v2), v2.dot(v3), v3.dot(v1)));
+                return norm(Vec3(v1.dot(v2), v2.dot(v3), v3.dot(v1)));
             }
 
             std::array<Vec3, 3> FindVanishingPoints(const std::vector<Vec3>& intersections,
@@ -263,7 +264,7 @@ namespace panoramix {
                     Vec3 a = lines[i].component.first;
                     Vec3 b = lines[i].component.second;
                     Vec3 normab = a.cross(b);
-                    normab /= core::norm(normab);
+                    normab /= norm(normab);
 
                     std::vector<double> lineangles(npoints);
                     std::vector<double> linescores(npoints);
@@ -296,7 +297,7 @@ namespace panoramix {
             inline Vec3 RotateDirectionTo(const Vec3 & from, const Vec3 & toDirection, double angle) {
                 Vec3 tovec = from.cross(toDirection).cross(from);
                 Vec3 result3 = from + tovec * tan(angle);
-                return result3 / cv::norm(result3);
+                return result3 / norm(result3);
             }
         }
 
@@ -376,20 +377,155 @@ namespace panoramix {
 
         }
 
-        void ViewsNet::rectifySpatialLines() {
-            for (auto & line : _globalData.spatialLineSegments){
-                if (line.claz == -1)
-                    continue;
-                Vec3 direction = _globalData.vanishingPoints[line.claz];
-                direction /= norm(direction);
-                auto center = line.component.center();
-                double len = line.component.length();
-                line.component.first = center - len / 2.0 * direction;
-                line.component.second = center + len / 2.0 * direction;
+
+        namespace {
+
+            std::vector<Classified<Line3>> MergeColinearSpatialLines(const std::vector<Classified<Line3>> & oldLines) {
+                
+                std::vector<Classified<Line3>> lines(oldLines);
+
+                // normalize line point directions
+                for (auto & line : lines) {
+                    line.component.first /= norm(line.component.first);
+                    line.component.second /= norm(line.component.second);
+                }
+
+                // group all colinear spatial lines
+                auto colinearLineIters = MergeNear(lines.begin(), lines.end(), std::true_type(), 
+                    0.01, [](const Classified<Line3> & line1, const Classified<Line3> & line2) -> double{
+                    if (line1.claz != line2.claz)
+                        return 100.0;
+                    auto normal1 = line1.component.first.cross(line1.component.second);
+                    normal1 /= norm(normal1);
+                    auto normal2 = line2.component.first.cross(line2.component.second);
+                    normal2 /= norm(normal2);
+                    double angle = abs(asin(norm(normal1.cross(normal2))));
+                    return angle;
+                });
+
+
+                std::vector<Classified<Line3>> mergedLines;
+                mergedLines.reserve(oldLines.size());
+                
+                assert(!colinearLineIters.empty());
+                colinearLineIters.push_back(lines.end());
+                auto colinearedBeginIter = colinearLineIters.begin();                
+                for (; *colinearedBeginIter != lines.end(); ++colinearedBeginIter) {
+                    auto colinearedBegin = *colinearedBeginIter;
+                    auto colinearedEnd = *std::next(colinearedBeginIter);
+                    assert(colinearedBegin != colinearedEnd); // not empty
+                    int claz = colinearedBegin->claz;
+
+                    size_t lineNum = std::distance(colinearedBegin, colinearedEnd);
+                    if (lineNum == 1){ // only one line, no need to merge
+                        mergedLines.push_back(*colinearedBegin);
+                        continue;
+                    }
+                    
+                    auto & firstLine = *colinearedBegin; // get the normal direction of first line
+                    /*
+                        second point
+                        ^     \
+                        |      \
+                        x ----- >first point
+                        normal
+                    */
+                    auto firstNormal = firstLine.component.first.cross(firstLine.component.second);
+                    firstNormal /= norm(firstNormal);
+                    
+                    for (auto lineIter = colinearedBegin; lineIter != colinearedEnd; ++lineIter) {
+                        assert(lineIter->claz == claz); // all lines in the same group should be in the same class
+                        auto & line = *lineIter;
+                        auto normal = line.component.first.cross(line.component.second);
+                        normal /= norm(normal);
+                        if (normal.dot(firstNormal) < 0) { // not same direction, then must be opposite
+                            // swap order of the line to make all line directions in this group consistent
+                            std::swap(line.component.first, line.component.second); 
+                        }
+                    }
+
+                    auto firstPointDirection = firstLine.component.first;
+                    auto firstNormalCrossPoint = firstNormal.cross(firstPointDirection);
+
+                    // compute line projection angles
+                    std::vector<std::pair<double, double>> lineAngleSegments(lineNum);
+                    size_t count = 0;
+                    for (auto lineIter = colinearedBegin; lineIter != colinearedEnd; ++lineIter){
+                        const auto & line = *lineIter;
+                        auto & pdir1 = line.component.first;
+                        Vec2 pdv1(pdir1.dot(firstPointDirection), pdir1.dot(firstNormalCrossPoint));
+                        double angle1 = SignedAngleBetweenDirections(pdv1, Vec2(1, 0), true);
+                        double angle2 = angle1 + AngleBetweenDirections(line.component.first, line.component.second); // may be higher than + M_PI
+                        lineAngleSegments[count++] = std::make_pair(angle1, angle2);
+                    }
+
+                    // sort the angles
+                    std::sort(lineAngleSegments.begin(), lineAngleSegments.end(), 
+                        [](const std::pair<double, double> & a1, const std::pair<double, double> & a2){
+                        return a1.first < a2.first;
+                    });
+
+                    // now merge line angles
+                    std::vector<std::pair<double, double>> mergedLineAngleSegments;
+                    double curFrom = lineAngleSegments.front().first;
+                    double curTo = lineAngleSegments.front().second;
+                    for (auto & lineAngle : lineAngleSegments) {
+                        if (lineAngle.first <= curTo){
+                            curTo = lineAngle.second;
+                        } else {
+                            if (curTo - curFrom >= M_PI){
+                                mergedLineAngleSegments.push_back(std::make_pair(curFrom, (curFrom + curTo) / 2.0));
+                                mergedLineAngleSegments.push_back(std::make_pair((curFrom + curTo) / 2.0, curTo));
+                            }else
+                                mergedLineAngleSegments.push_back(std::make_pair(curFrom, curTo));
+                            curFrom = lineAngle.first;
+                            curTo = lineAngle.second;
+                        }
+                    }
+                    if (curTo - curFrom >= M_PI){
+                        mergedLineAngleSegments.push_back(std::make_pair(curFrom, (curFrom + curTo) / 2.0));
+                        mergedLineAngleSegments.push_back(std::make_pair((curFrom + curTo) / 2.0, curTo));
+                    }
+                    else
+                        mergedLineAngleSegments.push_back(std::make_pair(curFrom, curTo));
+
+
+                    // recover lines from angle pairs
+                    for (auto & lineAngle : mergedLineAngleSegments) {
+                        Vec3 d1 = Vec3(1, 0, 0) * cos(lineAngle.first) + Vec3(0, 1, 0) * sin(lineAngle.first);
+                        Vec3 dd1 = d1(0) * firstPointDirection + d1(1) * firstNormalCrossPoint + d1(2) * firstNormal;
+                        Vec3 d2 = Vec3(1, 0, 0) * cos(lineAngle.second) + Vec3(0, 1, 0) * sin(lineAngle.second);
+                        Vec3 dd2 = d2(0) * firstPointDirection + d2(1) * firstNormalCrossPoint + d2(2) * firstNormal;
+                        Classified<Line3> line;
+                        line.claz = claz;
+                        line.component.first = dd1;
+                        line.component.second = dd2;
+                        mergedLines.push_back(line);
+                    }
+                }
+
+                return mergedLines;
             }
 
-            // find possible connections
-            
+        }
+
+
+        void ViewsNet::rectifySpatialLines() {
+            // merge lines
+            _globalData.mergedSpatialLineSegments = MergeColinearSpatialLines(_globalData.spatialLineSegments);
+
+            // build constraint graph
+            struct ConstriantData {
+                int lineids[2];
+                Vec3 position;
+                double weight;
+                enum {
+                    Intersection,
+                    Incidence
+                } type;
+            };
+            std::vector<ConstriantData> constraints;
+            constraints.reserve(Square(_globalData.spatialLineSegments.size()));
         }
  
     }

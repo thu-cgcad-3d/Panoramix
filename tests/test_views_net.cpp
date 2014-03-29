@@ -39,6 +39,9 @@ TEST(ViewsNet, ViewsNet) {
         return core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera>(pcam, originCam)(panorama);
     });
 
+    ims.insert(ims.begin(), ims.front());
+    cams.insert(cams.begin(), cams.front());
+
    /* for (auto & im : ims) {
         vis::Visualizer2D(im) << vis::manip2d::Show();
     }*/
@@ -57,14 +60,14 @@ TEST(ViewsNet, ViewsNet) {
 
         net.computeFeatures(viewHandle);
 
-        vis::Visualizer2D(im)
+        /*vis::Visualizer2D(im)
             << net.views().data(viewHandle).SIFTs
             << net.views().data(viewHandle).SURFs
-            << vis::manip2d::Show();
+            << vis::manip2d::Show();*/
 
-        vis::Visualizer2D() 
-            << *(net.views().data(viewHandle).regionNet) 
-            << vis::manip2d::Show();
+        //vis::Visualizer2D() 
+        //    << *(net.views().data(viewHandle).regionNet) 
+        //    << vis::manip2d::Show();
 
         vis::Visualizer2D (im)
             << vis::manip2d::SetColor(core::Color(0, 0, 255))
@@ -81,6 +84,7 @@ TEST(ViewsNet, ViewsNet) {
         net.calibrateAllCameras();
 
         if (net.isTooCloseToAnyExistingView(viewHandle).isValid()){
+            qDebug() << "too close to existing view, skipped";
             continue;
         }
 
@@ -90,8 +94,8 @@ TEST(ViewsNet, ViewsNet) {
         net.estimateVanishingPointsAndClassifyLines();
         auto vps = net.globalData().vanishingPoints;
         for (auto & vp : vps)
-            vp /= cv::norm(vp);
-        double ortho = cv::norm(core::Vec3(vps[0].dot(vps[1]), vps[1].dot(vps[2]), vps[2].dot(vps[0])));
+            vp /= core::norm(vp);
+        double ortho = core::norm(core::Vec3(vps[0].dot(vps[1]), vps[1].dot(vps[2]), vps[2].dot(vps[0])));
         EXPECT_LT(ortho, 1e-1);
         
         auto antivps = vps;
@@ -119,21 +123,30 @@ TEST(ViewsNet, ViewsNet) {
             << vis::manip2d::Show();
 
         net.rectifySpatialLines();
-        vis::Visualizer3D()
-            << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1)/2, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
+        vis::Visualizer3D viz;
+        viz << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1)/2, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
             << vis::manip3d::SetBackgroundColor(core::Color(200, 200, 200))
-            << net.globalData()
+            << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
+            << net.globalData().spatialLineSegments
             << vis::manip3d::AutoSetCamera
             << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
-            << vis::manip3d::Show();
+            << vis::manip3d::Show(true);
 
+        vis::Visualizer3D viz2;
+        viz2 << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 2, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
+            << vis::manip3d::SetBackgroundColor(core::Color(200, 200, 200))
+            << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
+            << net.globalData().mergedSpatialLineSegments
+            << vis::manip3d::AutoSetCamera
+            << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
+            << vis::manip3d::Show(true);
     }
     
 }
 
 int main(int argc, char * argv[], char * envp[])
 {
-    srand(clock());
+    srand(0);
     testing::InitGoogleTest(&argc, argv);
     vis::InitGui(argc, argv);
     return RUN_ALL_TESTS();

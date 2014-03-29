@@ -18,10 +18,10 @@ TEST(BasicTypeTest, HPoint) {
 		std::generate(v4.val, v4.val + 4, std::rand);
 		auto hp = core::HPointFromVector(v4);
 		auto p = hp.toVector();
-		ASSERT_LT(cv::norm(p - v4), 1e-5);
+		ASSERT_LT(core::norm(p - v4), 1e-5);
 		core::HPoint<double, 4> hp5 = v4;
 		auto p5 = hp5.toPoint();
-		ASSERT_LT(cv::norm(p5 - v4), 1e-5);
+		ASSERT_LT(core::norm(p5 - v4), 1e-5);
 	}
 }
 
