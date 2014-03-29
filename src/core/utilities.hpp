@@ -35,6 +35,24 @@ namespace panoramix {
             return closewiseIsPositive ? angle : -angle;
         }
 
+        // for lines
+        template <class T, int N>
+        std::pair<T, Point<T, N>> DistanceFromPointToLine(const Point<T, N> & p, const Line<T, N> & line) {
+            Vec<T, N> lineDir = line.second - line.first;
+            lineDir /= norm(lineDir);
+            T projLen = (p - line.first).dot(lineDir);
+            if (projLen >= 0 && projLen <= line.length()){ // on line
+                Point<T, N> nearest = line.first + lineDir * projLen;
+                T distance = norm(p - nearest);
+                return std::make_pair(distance, nearest);
+            } else if(projLen < 0) {
+                return std::make_pair(norm(p - line.first), line.first);
+            } else {
+                return std::make_pair(norm(p - line.second), line.second);
+            }
+        }
+
+
         // generic algorithms
 
         // merge, rearrange the input array

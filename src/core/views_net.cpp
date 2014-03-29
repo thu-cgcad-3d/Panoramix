@@ -379,8 +379,20 @@ namespace panoramix {
 
 
         namespace {
+            
+            // build constraint graph
+            struct ConstraintData {
+                size_t lineids[2];
+                Vec3 position;
+                double weight;
+                enum {
+                    Intersection,
+                    Incidence
+                } type;
+            };
 
-            std::vector<Classified<Line3>> MergeColinearSpatialLines(const std::vector<Classified<Line3>> & oldLines) {
+            std::vector<Classified<Line3>> MergeColinearSpatialLines(const std::vector<Classified<Line3>> & oldLines, 
+                std::vector<int> & chainIds, std::vector<ConstraintData> & constraints, double consAngleThres) {
                 
                 std::vector<Classified<Line3>> lines(oldLines);
 
@@ -406,11 +418,14 @@ namespace panoramix {
 
                 std::vector<Classified<Line3>> mergedLines;
                 mergedLines.reserve(oldLines.size());
+                chainIds.clear();
+                chainIds.reserve(mergedLines.capacity());
+                int chainId = 0;
                 
                 assert(!colinearLineIters.empty());
                 colinearLineIters.push_back(lines.end());
                 auto colinearedBeginIter = colinearLineIters.begin();                
-                for (; *colinearedBeginIter != lines.end(); ++colinearedBeginIter) {
+                for (; *colinearedBeginIter != lines.end(); ++colinearedBeginIter, ++chainId) {
                     auto colinearedBegin = *colinearedBeginIter;
                     auto colinearedEnd = *std::next(colinearedBeginIter);
                     assert(colinearedBegin != colinearedEnd); // not empty
@@ -419,6 +434,7 @@ namespace panoramix {
                     size_t lineNum = std::distance(colinearedBegin, colinearedEnd);
                     if (lineNum == 1){ // only one line, no need to merge
                         mergedLines.push_back(*colinearedBegin);
+                        chainIds.push_back(chainId);
                         continue;
                     }
                     
@@ -500,7 +516,22 @@ namespace panoramix {
                         line.claz = claz;
                         line.component.first = dd1;
                         line.component.second = dd2;
+                        
+                        if (!chainIds.empty() && chainIds.back() == chainId) { // insert a new incidence constraint
+                            Vec3 lastEndPoint = mergedLines.back().component.second;
+                            if (AngleBetweenDirections(lastEndPoint, line.component.first) <= 2 * consAngleThres){
+                                Vec3 mid = (lastEndPoint + line.component.first) / 2.0;
+                                ConstraintData cons;
+                                cons.lineids[0] = mergedLines.size() - 1;
+                                cons.lineids[1] = mergedLines.size();
+                                cons.position = mid / norm(mid);
+                                cons.type = ConstraintData::Incidence;
+                                cons.weight = 0.0;
+                                constraints.push_back(cons);
+                            }
+                        }                        
                         mergedLines.push_back(line);
+                        chainIds.push_back(chainId);                        
                     }
                 }
 
@@ -511,21 +542,58 @@ namespace panoramix {
 
 
         void ViewsNet::rectifySpatialLines() {
-            // merge lines
-            _globalData.mergedSpatialLineSegments = MergeColinearSpatialLines(_globalData.spatialLineSegments);
+            // merge lines, and get all incidence constraints
+            std::vector<ConstraintData> constraints;
+            constraints.reserve(Square(_globalData.mergedSpatialLineSegments.size()) / 4);
 
-            // build constraint graph
-            struct ConstriantData {
-                int lineids[2];
-                Vec3 position;
-                double weight;
-                enum {
-                    Intersection,
-                    Incidence
-                } type;
-            };
-            std::vector<ConstriantData> constraints;
-            constraints.reserve(Square(_globalData.spatialLineSegments.size()));
+            _globalData.mergedSpatialLineSegments = MergeColinearSpatialLines(_globalData.spatialLineSegments, 
+                _globalData.mergedSpatialLineSegmentChainIds, constraints, _params.connectedLinesDistanceAngleThreshold);
+
+            // get all intersection constraints
+            for (size_t i = 0; i < _globalData.mergedSpatialLineSegments.size(); i++){
+                auto & linei = _globalData.mergedSpatialLineSegments[i];
+                if (linei.claz == -1)
+                    continue;
+                auto normali = linei.component.first.cross(linei.component.second);
+                for (size_t j = i + 1; j < _globalData.mergedSpatialLineSegments.size(); j++){
+                    auto & linej = _globalData.mergedSpatialLineSegments[j];
+                    if (linej.claz == -1)
+                        continue;
+                    if (linei.claz == linej.claz) // incidence constraints already got
+                        continue;
+
+                    auto normalj = linej.component.first.cross(linej.component.second);
+
+                    // get intersection point direction
+                    Vec3 intersection = normali.cross(normalj);
+                    intersection /= norm(intersection);
+                    // get distances
+                    Vec3 nearesti = DistanceFromPointToLine(intersection, linei.component).second;
+                    double anglei = AngleBetweenDirections(intersection, nearesti);
+                    Vec3 nearestj = DistanceFromPointToLine(intersection, linej.component).second;
+                    double anglej = AngleBetweenDirections(intersection, nearestj);
+
+                    if (anglei <= _params.connectedLinesDistanceAngleThreshold &&
+                        anglej <= _params.connectedLinesDistanceAngleThreshold){
+                        // insert an intersection constraint
+                        ConstraintData cons;
+                        cons.lineids[0] = i;
+                        cons.lineids[1] = j;
+                        cons.position = intersection;
+                        cons.weight = 0.0;
+                        cons.type = ConstraintData::Intersection;
+                        constraints.push_back(cons);
+                    }
+                }
+            }            
+            
+            // vote for the position of each constraint
+            auto constraintGroupIters = MergeNear(constraints.begin(), constraints.end(), 
+                std::true_type(), 0.005, [](const ConstraintData & cd1, const ConstraintData & cd2) -> double{
+                return AngleBetweenDirections(cd1.position, cd2.position);
+            });
+
+
         }
  
     }

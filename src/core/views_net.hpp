@@ -14,8 +14,8 @@ namespace panoramix {
 
             struct Params {
                 Params() : camera(250.0), lineSegmentWeight(1.0), siftWeight(1.0), 
-                      surfWeight(1.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05), 
-                      linePieceSpanAngle(M_PI / 32.0) {}
+                      surfWeight(1.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
+                      connectedLinesDistanceAngleThreshold(M_PI / 18.0) {}
                 PanoramicCamera camera; // camera for generating the panorama
                 double lineSegmentWeight;
                 double siftWeight;
@@ -26,7 +26,9 @@ namespace panoramix {
                 SegmentationExtractor segmenter;
                 double cameraAngleScaler; // angle scalar to judge whether two views may share certain common features
                 double smallCameraAngleScalar; // angle scalar to judge whether two views are too close
-                double linePieceSpanAngle;
+                // angle threshold to judge whether two lines are constrained (intersection/incidence), 
+                // used for building the Constraint Graph
+                double connectedLinesDistanceAngleThreshold; 
             };
 
             struct VertData;
@@ -77,6 +79,7 @@ namespace panoramix {
                 std::vector<Classified<Line3>> spatialLineSegments;
                 std::vector<Vec3> mergedSpatialLineSegmentIntersections;
                 std::vector<Classified<Line3>> mergedSpatialLineSegments;
+                std::vector<int> mergedSpatialLineSegmentChainIds;
             };
 
             inline const ViewMesh & views() const { return _views; }

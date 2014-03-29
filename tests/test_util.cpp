@@ -39,6 +39,24 @@ TEST(UtilTest, AngleBetweenDirections) {
     ASSERT_DOUBLE_EQ(M_PI_4 * 3, core::SignedAngleBetweenDirections(v1, v3, true));
 }
 
+TEST(UtilTest, DistanceFromPointToLine) {
+    core::Line3 l;
+    l.first = { 1, 0, 0 };
+    l.second = { -1, 0, 0 };
+    for (double x = -3; x <= 3; x += 0.5) {
+        core::Point3 p(x, 1, 0);
+        if (x < -1){
+            ASSERT_DOUBLE_EQ(core::norm(l.second - p), core::DistanceFromPointToLine(p, l).first);
+        }
+        else if (x > 1){
+            ASSERT_DOUBLE_EQ(core::norm(l.first - p), core::DistanceFromPointToLine(p, l).first);
+        }
+        else{
+            ASSERT_DOUBLE_EQ(1, core::DistanceFromPointToLine(p, l).first);
+        }
+    }
+}
+
 
 TEST(UtilTest, MergeNear) {
     std::list<double> arr1;
