@@ -142,12 +142,27 @@ namespace panoramix {
         // line
         template <class T, int N> 
         struct Line {
-            Point<T, N> first, second;
+            inline Line(){}
+            inline Line(const Point<T, N> & f, const Point<T, N> & s) 
+                : first(f), second(s) {}
             inline Point<T, N> center() const { return (first + second) / 2.0; }
             inline T length() const { return norm(first - second); }
+            inline Vec<T, N> direction() const { return second - first; }
+            Point<T, N> first, second;
         };
         using Line2 = Line<double, 2>;
         using Line3 = Line<double, 3>;
+
+        
+        // position on line
+        template <class T, int N>
+        struct PositionOnLine {
+            inline PositionOnLine(){}
+            inline PositionOnLine(const Line<T, N> & line, const T & r)
+                : ratio(r), position(line.first + (line.second - line.first) * ratio) {}
+            T ratio; // [0 ~ 1]: on line
+            Point<T, N> position; // position = line.first + (line.second - line.fist) * ratio
+        };
 
 
         // homogeneous line

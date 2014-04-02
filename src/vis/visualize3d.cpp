@@ -15,7 +15,7 @@ namespace panoramix {
         // visualizer parameters
         Visualizer3D::Params::Params()
             :
-            winName("Image Feature Visualizer"),
+            winName("Visualizer 3D"),
             backgroundColor(200, 200, 2200),
             camera(600, 600, 300.0, core::Vec3(1, 1, 0), core::Vec3(0, 0, 0)),
             defaultColor(10, 10, 10),

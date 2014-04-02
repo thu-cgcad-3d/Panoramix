@@ -57,6 +57,7 @@ namespace panoramix {
             Manipulator<const std::string &> SetWindowName(const std::string & name);
             Manipulator<const core::Color &> SetDefaultColor(const core::Color & color);
             Manipulator<const core::Color &> SetBackgroundColor(const core::Color & color);
+            inline Manipulator<const core::Color &> SetBackgroundColor(const core::ColorTag & tag){ return SetBackgroundColor(core::ColorFromTag(tag)); }
             Manipulator<const core::PerspectiveCamera &> SetCamera(const core::PerspectiveCamera & camera);
             Manipulator<float> SetPointSize(float pointSize);
             Manipulator<float> SetLineWidth(float lineWidth);

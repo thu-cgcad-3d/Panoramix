@@ -2,12 +2,19 @@ set (GTEST_DIR "gtest-1.7.0")
 include_directories (${GTEST_DIR}/include)
 
 # set all tests
-set (TESTNAMES test_basic)
+set (TESTNAMES 
+	test_basic
+	test_util
+	test_optimization
+	test_template_utilities
+	test_expression
+)
 set (TESTNAMES_WITH_VIS 
-	test_util 
 	test_mesh 
-	test_feature 
+	test_feature
 	test_views_net 
+	test_views_net_incremented
+	test_views_net_outdoor
 	test_regions_net
 	test_vis3d
 )
@@ -46,4 +53,5 @@ foreach (T ${TESTNAMES_WITH_VIS})
 	add_test (NAME ${T} COMMAND ${T})
 	set_tests_properties (${T} PROPERTIES ENVIRONMENT "${LD_VARNAME}=${LD_PATH}" )
 endforeach()
+
 

@@ -1,9 +1,16 @@
 #include "views_net.hpp"
 
 #include "utilities.hpp"
+#include "optimization.hpp"
 
 namespace panoramix {
     namespace core {
+
+        ViewsNet::Params::Params() 
+            : camera(250.0), lineSegmentWeight(1.0), siftWeight(1.0),
+            surfWeight(1.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
+            connectedLinesDistanceAngleThreshold(0.15),
+            mjWeightTriplet(5.0), mjWeightX(5.0), mjWeightT(0.0), mjWeightL(1.0), mjWeightI(2.0) {}
 
         ViewsNet::VertHandle ViewsNet::insertPhoto(const Image & im, const PerspectiveCamera & cam) {
             VertData vd;
@@ -52,6 +59,8 @@ namespace panoramix {
         }
 
         void ViewsNet::computeFeatures(VertHandle h) {
+            //std::cout << "computing fea of photo " << h.id << std::endl;
+
             auto & vd = _views.data(h);
             const Image & im = vd.image;
             auto lineSegments = _params.lineSegmentExtractor(im);
@@ -61,11 +70,11 @@ namespace panoramix {
                 vd.lineSegments[i].component = lineSegments[i];
             }
 
-            vd.SIFTs = _params.siftExtractor(im);
+            /*vd.SIFTs = _params.siftExtractor(im);
             vd.SURFs = _params.surfExtractor(im);
             vd.weight = vd.lineSegments.size() * _params.lineSegmentWeight +
                 vd.SIFTs.size() * _params.siftWeight +
-                vd.SURFs.size() * _params.surfWeight;
+                vd.SURFs.size() * _params.surfWeight;*/
 
             vd.lineSegmentIntersections.clear();
             vd.lineSegmentIntersectionLineIDs.clear();
@@ -74,9 +83,9 @@ namespace panoramix {
                 vd.lineSegmentIntersectionLineIDs, true);
 
             // build region net
-            vd.regionNet = std::make_shared<RegionsNet>(vd.image);
-            vd.regionNet->buildNetAndComputeGeometricFeatures();
-            vd.regionNet->computeImageFeatures();
+            //vd.regionNet = std::make_shared<RegionsNet>(vd.image);
+            //vd.regionNet->buildNetAndComputeGeometricFeatures();
+            //vd.regionNet->computeImageFeatures();
         }
 
         namespace {
@@ -225,6 +234,7 @@ namespace panoramix {
                 if (UnOrthogonality(vps[0], vps[1], vps[2]) < 0.1)
                     return vps;
                 
+                // failed, then use y instead of x
                 maxScore = -1;
                 for (int y = 0; y < latitudeDivideNum; y++){
                     double lat1 = double(y) / latitudeDivideNum * M_PI - M_PI_2;
@@ -373,26 +383,42 @@ namespace panoramix {
                     ++ spatialLineSegmentBegin;
                 }
             }
-
-
         }
 
 
         namespace {
             
-            // build constraint graph
+            // for constraint graph construction
             struct ConstraintData {
+                inline ConstraintData(){
+                    lineids[0] = lineids[1] = 0;
+                    weight = 0.0;
+                    std::memset(lineVotings, 0, sizeof(lineVotings));
+                }
+
                 size_t lineids[2];
+
                 Vec3 position;
                 double weight;
+                // [i][0] -> line lengths with class i lying between vp[i] and position
+                // [i][1] -> line lengths with class i lying between position and anti-vp[i]
+                double lineVotings[3][2];
+                struct JunctionWeights {
+                    double I, L, X, T, Triplet;
+                } junctionWeights;
                 enum {
                     Intersection,
                     Incidence
                 } type;
+
+                double slackValue; // retreived after optimization
             };
 
-            std::vector<Classified<Line3>> MergeColinearSpatialLines(const std::vector<Classified<Line3>> & oldLines, 
-                std::vector<int> & chainIds, std::vector<ConstraintData> & constraints, double consAngleThres) {
+            // merge colinear spatial lines and find some incidence constraints
+            std::vector<Classified<Line3>> MergeColinearSpatialLinesAndAppendIncidenceConstraints(
+                const std::vector<Classified<Line3>> & oldLines, 
+                std::vector<int> & chainIds, std::vector<ConstraintData> & constraints, 
+                double mergeAngleThres, double consAngleThres) {
                 
                 std::vector<Classified<Line3>> lines(oldLines);
 
@@ -404,15 +430,14 @@ namespace panoramix {
 
                 // group all colinear spatial lines
                 auto colinearLineIters = MergeNear(lines.begin(), lines.end(), std::true_type(), 
-                    0.01, [](const Classified<Line3> & line1, const Classified<Line3> & line2) -> double{
+                    mergeAngleThres,
+                    [](const Classified<Line3> & line1, const Classified<Line3> & line2) -> double{
                     if (line1.claz != line2.claz)
                         return 100.0;
                     auto normal1 = line1.component.first.cross(line1.component.second);
-                    normal1 /= norm(normal1);
                     auto normal2 = line2.component.first.cross(line2.component.second);
-                    normal2 /= norm(normal2);
-                    double angle = abs(asin(norm(normal1.cross(normal2))));
-                    return angle;
+                    return std::min(AngleBetweenDirections(normal1, normal2), 
+                        AngleBetweenDirections(normal1, -normal2));
                 });
 
 
@@ -442,7 +467,7 @@ namespace panoramix {
                     /*
                         second point
                         ^     \
-                        |      \
+                        |      \ the line
                         x ----- >first point
                         normal
                     */
@@ -489,7 +514,7 @@ namespace panoramix {
                         if (lineAngle.first <= curTo){
                             curTo = lineAngle.second;
                         } else {
-                            if (curTo - curFrom >= M_PI){
+                            if (curTo - curFrom >= M_PI){ // break the major arcs
                                 mergedLineAngleSegments.push_back(std::make_pair(curFrom, (curFrom + curTo) / 2.0));
                                 mergedLineAngleSegments.push_back(std::make_pair((curFrom + curTo) / 2.0, curTo));
                             }else
@@ -498,7 +523,7 @@ namespace panoramix {
                             curTo = lineAngle.second;
                         }
                     }
-                    if (curTo - curFrom >= M_PI){
+                    if (curTo - curFrom >= M_PI){ // break the major arcs
                         mergedLineAngleSegments.push_back(std::make_pair(curFrom, (curFrom + curTo) / 2.0));
                         mergedLineAngleSegments.push_back(std::make_pair((curFrom + curTo) / 2.0, curTo));
                     }
@@ -507,6 +532,7 @@ namespace panoramix {
 
 
                     // recover lines from angle pairs
+                    size_t firstLineIdInThisChain = chainIds.size();
                     for (auto & lineAngle : mergedLineAngleSegments) {
                         Vec3 d1 = Vec3(1, 0, 0) * cos(lineAngle.first) + Vec3(0, 1, 0) * sin(lineAngle.first);
                         Vec3 dd1 = d1(0) * firstPointDirection + d1(1) * firstNormalCrossPoint + d1(2) * firstNormal;
@@ -530,71 +556,599 @@ namespace panoramix {
                                 constraints.push_back(cons);
                             }
                         }                        
-                        mergedLines.push_back(line);
-                        chainIds.push_back(chainId);                        
+                        mergedLines.push_back(line); // insert new merged line
+                        chainIds.push_back(chainId); // insert the chainId of this new merged line  
+                    }
+                    // check whether the head and tail of this chain can form an incidence constraint
+                    assert(chainIds[firstLineIdInThisChain] == chainIds.back());
+                    Vec3 tailPoint = mergedLines.back().component.second;
+                    Vec3 headPoint = mergedLines[firstLineIdInThisChain].component.first;
+                    if (AngleBetweenDirections(tailPoint, headPoint) <= consAngleThres * 2){
+                        Vec3 mid = (tailPoint + headPoint) / 2.0;
+                        ConstraintData cons;
+                        cons.lineids[0] = mergedLines.size() - 1;
+                        cons.lineids[1] = firstLineIdInThisChain;
+                        cons.position = mid / norm(mid);
+                        cons.type = ConstraintData::Incidence;
+                        cons.weight = 0.0;
+                        constraints.push_back(cons);
                     }
                 }
 
                 return mergedLines;
             }
 
+            // find intersection and incidence constraints
+            void AppendIntersectionAndOptionallyIncidenceConstraints(const std::vector<Classified<Line3>> & mergedLines,
+                std::vector<ConstraintData> & constraints, double consAngleThres, bool appendIncidenceCons = true){
+                for (size_t i = 0; i < mergedLines.size(); i++){
+                    auto & linei = mergedLines[i];
+                    if (linei.claz == -1)
+                        continue;
+                    auto normali = linei.component.first.cross(linei.component.second);
+                    for (size_t j = i + 1; j < mergedLines.size(); j++){
+                        auto & linej = mergedLines[j];
+                        if (linej.claz == -1)
+                            continue;
+                        if (linei.claz == linej.claz && !appendIncidenceCons)
+                            continue;
+
+                        // we MUST ENSURE that all point direction vector are NORMALIED!!!!!!!!!!!
+                        auto nearestPoss = DistanceBetweenTwoLines(linei.component, linej.component).second;
+                        double angleDist = AngleBetweenDirections(nearestPoss.first.position, nearestPoss.second.position);
+                        if (angleDist >= consAngleThres * 2)
+                            continue;
+
+                        if (linei.claz == linej.claz){ // incidence
+                            ConstraintData cons;
+                            cons.lineids[0] = i;
+                            cons.lineids[1] = j;
+                            cons.position = (nearestPoss.first.position + nearestPoss.second.position) / 2.0;
+                            cons.weight = 0.0;
+                            cons.type = ConstraintData::Incidence;
+                            constraints.push_back(cons);
+                            continue;
+                        }
+
+                        auto normalj = linej.component.first.cross(linej.component.second);
+
+                        // get intersection point direction
+                        Vec3 intersection = normali.cross(normalj);
+                        intersection /= norm(intersection);
+                        // get distances
+                        Vec3 nearesti = DistanceFromPointToLine(intersection, linei.component).second.position;
+                        double anglei = AngleBetweenDirections(intersection, nearesti);
+                        Vec3 nearestj = DistanceFromPointToLine(intersection, linej.component).second.position;
+                        double anglej = AngleBetweenDirections(intersection, nearestj);
+
+                        if (anglei <= consAngleThres &&
+                            anglej <= consAngleThres){
+                            // insert an intersection constraint
+                            ConstraintData cons;
+                            cons.lineids[0] = i;
+                            cons.lineids[1] = j;
+                            cons.position = intersection;
+                            cons.weight = 0.0;
+                            cons.type = ConstraintData::Intersection;
+                            constraints.push_back(cons);
+                        }
+                    }
+                }
+            }
+
+            // compute manhattan junction weights
+            void VoteManhattanJunctionWeightsOnConstraints(const std::vector<Classified<Line3>> & mergedLines,
+                const std::array<Vec3, 3> & vanishingPoints,
+                std::vector<ConstraintData> & constraints) {
+                // compute line votings
+                for (auto & cons : constraints){
+                    Vec3 position = cons.position;
+                    for (auto & line : mergedLines) {
+                        if (line.claz == -1)
+                            continue;
+                        int vpid = line.claz;
+                        const Vec3 & vp = vanishingPoints[vpid];
+
+                        Vec3 p1 = line.component.first;
+                        Vec3 p2 = line.component.second;
+
+                        if (vp.cross(position).dot(p1.cross(p2)) < 0)
+                            std::swap(p1, p2); // make vp->position and p1->p2 share the same order
+
+                        Vec3 vpPositionPlaneNormal = vp.cross(position);
+                        vpPositionPlaneNormal /= norm(vpPositionPlaneNormal);
+                        Vec3 p12PlaneNormal = p1.cross(p2);
+                        p12PlaneNormal /= norm(p12PlaneNormal);
+                        double angle = AngleBetweenDirections(vpPositionPlaneNormal, p12PlaneNormal);
+                        if (angle > M_PI / 15.0)
+                            continue;  // this position is not on the line (nor its extension), continue
+
+                        double weight = exp(-Square(angle / (M_PI / 30.0)));
+
+                        Line3 spans[2] = { { vp, position }, { position, -vp } };
+                        for (size_t i = 0; i < 2; i++){
+                            auto proj1 = ProjectionOfPointOnLine(p1, spans[i]);
+                            if (proj1.ratio > 1.0)
+                                continue;
+                            Vec3 lowb = proj1.ratio < 0 ? spans[i].first : p1; // lower bound of the overlapped arc
+                            auto proj2 = ProjectionOfPointOnLine(p2, spans[i]);
+                            Vec3 highb = proj2.ratio > 1.0 ? spans[i].second : p2; // higher bound of the overlapped arc
+                            cons.lineVotings[vpid][i] += AngleBetweenDirections(lowb, highb) * weight;
+                        }
+                    }
+                }
+
+                // compute junction weights
+                for (auto & cons : constraints){
+                    cons.weight = 0.0;
+                    auto & v = cons.lineVotings;                   
+
+                    // compute Triplet junctions
+                    double Tp = 0.0;
+                    for (int i = 0; i < 3; i++){
+                        for (int j = i + 1; j < 3; j++){
+                            int k = 3 - i - j;
+                            Tp += (v[i][0] + v[i][1]) * (v[j][0] + v[j][1]) * (v[k][0] + v[k][1]);
+                        }
+                    }
+                    cons.junctionWeights.Triplet = Tp;
+                    // compute X junction
+                    double X = 0.0;
+                    for (int i = 0; i < 3; i++){
+                        for (int j = i + 1; j < 3; j++){
+                            int k = 3 - i - j;
+                            X += v[i][0] * v[i][1] * v[j][0] * v[j][1] * DiracDelta(v[k][0] + v[k][1]);
+                        }
+                    }
+                    cons.junctionWeights.X = X;
+                    // compute T junction
+                    double T = 0.0;
+                    for (int i = 0; i < 3; i++){
+                        for (int j = 0; j < 3; j++){
+                            if (i == j)
+                                continue;
+                            int k = 3 - i - j;
+                            T += v[i][0] * v[i][1] * v[j][0] * DiracDelta(v[j][1] + v[k][0] + v[k][1]);
+                            T += v[i][0] * v[i][1] * v[j][1] * DiracDelta(v[j][0] + v[k][0] + v[k][1]);
+                        }
+                    }
+                    cons.junctionWeights.T = T;
+                    // compute L junction
+                    double L = 0.0;
+                    for (int i = 0; i < 3; i++){
+                        for (int j = i + 1; j < 3; j++){
+                            int k = 3 - i - j;
+                            for (int a = 0; a < 2; a++){
+                                int nota = 1 - a;
+                                for (int b = 0; b < 2; b++){
+                                    int notb = 1 - b;
+                                    L += v[i][a] * v[j][b] * DiracDelta(v[i][nota] + v[j][notb] + v[k][0] + v[k][1]);
+                                }
+                            }
+                        }
+                    }
+                    cons.junctionWeights.L = L;
+                    // compute I junction
+                    double I = 0.0;
+                    for (int i = 0; i < 3; i++){
+                        for (int j = i + 1; j < 3; j++){
+                            int k = 3 - i - j;
+                            I += (v[i][0] + v[i][1]) * DiracDelta(v[j][0] + v[j][1] + v[k][0] + v[k][1]);
+                        }
+                    }
+                    cons.junctionWeights.I = I;
+                }
+            }
+
+            inline bool MaybeVanishingPoint(const Vec3 & p, const std::array<Vec3, 3> & vps, double thres) {
+                return AngleBetweenDirections(vps[0], p) < thres ||
+                    AngleBetweenDirections(vps[1], p) < thres ||
+                    AngleBetweenDirections(vps[2], p) < thres ||
+                    AngleBetweenDirections(-vps[0], p) < thres ||
+                    AngleBetweenDirections(-vps[1], p) < thres ||
+                    AngleBetweenDirections(-vps[2], p) < thres;
+            }
+
+            // optimize lines using constraints
+            void OptimizeLines(std::vector<Classified<Line3>> & lines, std::vector<ConstraintData> & constraints, 
+                const std::array<Vec3, 3> & vps ) {
+                // build equations
+                // get all line factors
+                struct LineDeterminer {
+                    Vec3 firstPointFactor; // \lambda * firstPointFactor = line.first
+                    Vec3 secondPointFactor; // \lambda * secondPointFactor = line.second
+                    inline Line3 operator()(double lambda) const {
+                        return Line3(firstPointFactor * lambda, secondPointFactor * lambda);
+                    }
+                };
+                std::vector<LineDeterminer> lineDeterminers(lines.size());
+                for (size_t i = 0; i < lineDeterminers.size(); i++){
+                    auto & line = lines[i];
+                    if (line.claz == -1)
+                        continue;
+                    auto vp = vps[line.claz];
+                    auto p1 = line.component.first;
+                    auto p2 = line.component.second;
+                    if (vp.dot(p2 - p1) < 0){
+                        vp = -vp; // make p1->p2 and vp direction consistent
+                    }
+                    lineDeterminers[i].firstPointFactor = p1 / norm(p1);
+                    // use the Law of sines
+                    double innerAngleOfLine = AngleBetweenDirections(p1, p2);
+                    double innerAngleAtFirstPoint = AngleBetweenDirections(vp, -p1); // corresponding to second point factor
+                    double innerAngleAtSecondPoint = AngleBetweenDirections(-vp, -p2); // corresponding to first point factor
+                    double innerAngleSum = innerAngleOfLine + innerAngleAtFirstPoint + innerAngleAtSecondPoint;
+                    assert(FuzzyEquals(innerAngleSum, M_PI, 1e-1));
+                    lineDeterminers[i].secondPointFactor = p2 / norm(p2) *
+                        sin(innerAngleAtFirstPoint) / sin(innerAngleAtSecondPoint);
+                    assert(FuzzyEquals(AngleBetweenDirections(lineDeterminers[i](1.0).direction(), vp), 0.0, 1e-1));
+                }
+
+                // build constraint equations
+                struct VariableInfo {
+                    int varId;
+                    bool isSlackVariable;
+                    int constraintId; // if is slack variable
+                    int lineId; // if is not slack variable
+                    double weightInObjectiveFunction;
+                };
+
+                /*
+                    min 0.5 * x G x + g0 x //G=0
+                    s.t.
+                        CE^T x + ce0 = 0
+                        CI^T x + ci0 >= 0
+                */
+                /***
+                    min \Sum w_ij * [s_ij]
+                    s.t.
+                        [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
+                        [\lambda_j] * d_ja - [\lambda_i] * d_ia <= s_ij \foreach constraint (i, j)
+                        [\lambda_i] >= 1 \foreach line (i)
+                ***/
+                struct ConstraintInequationInfo { // [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
+                    int equationId;
+                    int lambda_iId;
+                    double d_ia;
+                    int lambda_jId;
+                    double d_ja;
+                    int s_ijId;
+                };
+                struct ScaleInequationInfo { // [\lambda_i] >= 1 \foreach line(i)
+                    int equationId;
+                    int lambdaId; 
+                };
+
+                int varIdGenerator = 0;
+                int equationIdGenerator = 0;
+
+                std::vector<VariableInfo> lambdas(lines.size()); // \lambda depth variables
+                std::vector<ScaleInequationInfo> scaleInequations(lines.size());
+                for (size_t i = 0; i < lines.size(); i++){
+                    // \lambda_i
+                    lambdas[i].varId = varIdGenerator++;
+                    lambdas[i].isSlackVariable = false;
+                    lambdas[i].lineId = i;
+                    lambdas[i].weightInObjectiveFunction = 0.0; // not appeared in objective function
+                    scaleInequations[i].equationId = equationIdGenerator++;
+                    scaleInequations[i].lambdaId = lambdas[i].varId;
+                }
+
+                std::vector<VariableInfo> slacks; // slack variables
+                std::vector<ConstraintInequationInfo> constraintInequations;
+                slacks.reserve(constraints.size());
+                constraintInequations.reserve(constraints.size() * 3);
+                for (size_t i = 0; i < constraints.size(); i++){
+                    auto & cons = constraints[i];
+                    bool maybeVanishingPoint =
+                        MaybeVanishingPoint(cons.position, vps, M_PI / 100.0);
+                    if (maybeVanishingPoint)
+                        continue;
+
+                    const auto & line1 = lines[cons.lineids[0]];
+                    const auto & line2 = lines[cons.lineids[1]];
+                    static const int nearestPointPairsTable[4][2] = {
+                        {0, 0},
+                        {0, 1},
+                        {1, 0},
+                        {1, 1}
+                    };
+                    int minId = -1;
+                    double minAngle = std::numeric_limits<double>::max();
+                    for (int j = 0; j < 4; j++){
+                        double angle = AngleBetweenDirections(nearestPointPairsTable[j][0] == 0 ?
+                            line1.component.first : line1.component.second,
+                            nearestPointPairsTable[j][1] == 0 ?
+                            line2.component.first : line2.component.second);
+                        if (angle < minAngle){
+                            minAngle = angle;
+                            minId = j;
+                        }
+                    }
+                    assert(minId != -1);
+                    auto nearestPointPair = nearestPointPairsTable[minId];
+                    const auto & lineDet1 = lineDeterminers[cons.lineids[0]];
+                    const auto & lineDet2 = lineDeterminers[cons.lineids[1]];
+                    Vec3 di = nearestPointPair[0] == 0 ? lineDet1.firstPointFactor : lineDet1.secondPointFactor;
+                    Vec3 dj = nearestPointPair[1] == 0 ? lineDet2.firstPointFactor : lineDet2.secondPointFactor;
+                    Vec3 ddi(di.dot(vps[0]), di.dot(vps[1]), di.dot(vps[2]));
+                    Vec3 ddj(dj.dot(vps[0]), dj.dot(vps[1]), dj.dot(vps[2]));
+
+                    // slack variable
+                    VariableInfo slackVar;
+                    slackVar.varId = varIdGenerator++;
+                    slackVar.isSlackVariable = true;
+                    slackVar.constraintId = i;
+                    slackVar.weightInObjectiveFunction = cons.weight; // weight of constraint
+                    slacks.push_back(slackVar);                    
+                    
+                    if (cons.type == ConstraintData::Intersection){
+                        // [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
+                        for (int k = 0; k < 3; k++){
+                            ConstraintInequationInfo eq;
+                            eq.equationId = equationIdGenerator++;
+                            eq.lambda_iId = lambdas[cons.lineids[0]].varId;
+                            eq.d_ia = ddi[k];
+                            eq.lambda_jId = lambdas[cons.lineids[1]].varId;
+                            eq.d_ja = ddj[k];
+                            eq.s_ijId = slacks.back().varId;
+                            constraintInequations.push_back(eq);
+                        }
+                        // [\lambda_j] * d_ja - [\lambda_i] * d_ia <= s_ij
+                        for (int k = 0; k < 3; k++){
+                            ConstraintInequationInfo eq;
+                            eq.equationId = equationIdGenerator++;
+                            eq.lambda_jId = lambdas[cons.lineids[0]].varId;
+                            eq.d_ja = ddi[k];
+                            eq.lambda_iId = lambdas[cons.lineids[1]].varId;
+                            eq.d_ia = ddj[k];
+                            eq.s_ijId = slacks.back().varId;
+                            constraintInequations.push_back(eq);
+                        }
+                    }
+                    else {
+                        // [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
+                        for (int k = 0; k < 3; k++){
+                            if (k == line1.claz)
+                                continue;
+                            ConstraintInequationInfo eq;
+                            eq.equationId = equationIdGenerator++;
+                            eq.lambda_iId = lambdas[cons.lineids[0]].varId;
+                            eq.d_ia = ddi[k];
+                            eq.lambda_jId = lambdas[cons.lineids[1]].varId;
+                            eq.d_ja = ddj[k];
+                            eq.s_ijId = slacks.back().varId;
+                            constraintInequations.push_back(eq);
+                        }
+                        // [\lambda_j] * d_ja - [\lambda_i] * d_ia <= s_ij
+                        for (int k = 0; k < 3; k++){
+                            if (k == line1.claz)
+                                continue;
+                            ConstraintInequationInfo eq;
+                            eq.equationId = equationIdGenerator++;
+                            eq.lambda_jId = lambdas[cons.lineids[0]].varId;
+                            eq.d_ja = ddi[k];
+                            eq.lambda_iId = lambdas[cons.lineids[1]].varId;
+                            eq.d_ia = ddj[k];
+                            eq.s_ijId = slacks.back().varId;
+                            constraintInequations.push_back(eq);
+                        }
+                    }
+                }
+
+
+
+                /*
+                    min 0.5 * x G x + g0 x //G=0
+                    s.t.
+                        CE^T x + ce0 = 0
+                        CI^T x + ci0 >= 0
+                */
+                /***
+                    min \Sum w_ij * [s_ij]
+                    s.t.
+                        [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
+                        [\lambda_j] * d_ja - [\lambda_i] * d_ia <= s_ij \foreach constraint (i, j)
+                        [\lambda_i] >= 1 \foreach line (i)
+                ***/
+
+                int varNum = varIdGenerator;
+                int equationNum = equationIdGenerator;
+
+                sinfo *info;
+                info = (sinfo*)malloc(sizeof(sinfo));
+                info->env = (jmp_buf *)malloc(sizeof(jmp_buf));
+                info->text = "This information was passed to the hook function.";
+                setjmp(*(info->env));
+                glp_error_hook(glpErrorHook, info);
+
+
+                glp_prob * problem = glp_create_prob();
+                glp_set_prob_name(problem, "Optimize Lines");
+                glp_set_obj_name(problem, "Optimize Lines: Objective");
+                glp_set_obj_dir(problem, GLP_MIN);
+
+                glp_add_rows(problem, equationNum+1); // add rows
+                glp_add_cols(problem, varNum+1); // add cols
+
+                // add scale inequations
+                for (auto & var : lambdas){
+                    glp_set_col_bnds(problem, var.varId + 1, GLP_LO, 3.0, 1e5);
+                }
+                for (auto & var : slacks){
+                    glp_set_col_bnds(problem, var.varId + 1, GLP_LO, 0.0, 1e5);
+                }
+
+                // add constrant iequations
+                for (auto & ie : constraintInequations){
+                    glp_set_row_bnds(problem, ie.equationId+1, GLP_UP, -1e5, 0.0); // ... <= 0.0
+                }
+                for (auto & ie : constraintInequations){
+                    int varIds[] = { -1, ie.lambda_iId+1, ie.lambda_jId+1, ie.s_ijId+1 };
+                    //std::cout << "constraint: lambda_i-" << (ie.lambda_iId + 1) << 
+                    //    "  lambda_j-" << (ie.lambda_jId + 1) << 
+                    //    " s_ij-" << (ie.s_ijId + 1) << std::endl;
+                    double coefs[] = { 0.0, ie.d_ia, -ie.d_ja, -1.0 };
+                    if (ie.lambda_iId == ie.lambda_jId || ie.lambda_iId == ie.s_ijId || ie.lambda_jId == ie.s_ijId){
+                        std::cout << "f" << std::endl;
+                    }
+                    glp_set_mat_row(problem, ie.equationId + 1, 3, varIds, coefs);
+                }
+
+                // set objective coefs
+                // only slacks appear in objective function
+                for (auto & var : slacks){
+                    glp_set_obj_coef(problem, var.varId+1, var.weightInObjectiveFunction);
+                }
+                
+                glp_adv_basis(problem, 0);
+
+                bool useSimplex = true;
+                if (useSimplex){
+                    glp_smcp params;
+                    glp_init_smcp(&params);
+                    params.msg_lev = GLP_MSG_ON;
+                    int stat = glp_simplex(problem, &params);
+
+                    // retrieve results
+                    for (auto & var : lambdas){
+                        double lambda = glp_get_col_prim(problem, var.varId+1);
+                        // update line coordinates
+                        lines[var.lineId].component = lineDeterminers[var.lineId](lambda);
+                    }
+                    for (auto & var : slacks){
+                        double s = glp_get_col_prim(problem, var.varId+1);
+                        // set the slack value for constraint
+                        constraints[var.constraintId].slackValue = s;
+                    }
+                }
+                else{
+                    glp_iptcp params;
+                    glp_init_iptcp(&params);
+                    params.msg_lev = GLP_MSG_ON;
+                    int stat = glp_interior(problem, &params);
+
+                    // retrieve results
+                    for (auto & var : lambdas){
+                        double lambda = glp_ipt_col_prim(problem, var.varId+1);
+                        // update line coordinates
+                        lines[var.lineId].component = lineDeterminers[var.lineId](lambda);
+                    }
+                    for (auto & var : slacks){
+                        double s = glp_ipt_col_prim(problem, var.varId+1);
+                        // set the slack value for constraint
+                        constraints[var.constraintId].slackValue = s;
+                    }
+                }
+
+                glp_delete_prob(problem);
+
+
+                glp_error_hook(NULL, NULL);
+                free(info->env);
+                free(info);
+                
+            }
+
+
         }
 
 
         void ViewsNet::rectifySpatialLines() {
-            // merge lines, and get all incidence constraints
             std::vector<ConstraintData> constraints;
             constraints.reserve(Square(_globalData.mergedSpatialLineSegments.size()) / 4);
 
-            _globalData.mergedSpatialLineSegments = MergeColinearSpatialLines(_globalData.spatialLineSegments, 
-                _globalData.mergedSpatialLineSegmentChainIds, constraints, _params.connectedLinesDistanceAngleThreshold);
+            // merge lines, and get (some) incidence constraints
+            _globalData.mergedSpatialLineSegments = 
+                MergeColinearSpatialLinesAndAppendIncidenceConstraints(
+                _globalData.spatialLineSegments,
+                _globalData.mergedSpatialLineSegmentChainIds, 
+                constraints, 
+                _params.connectedLinesDistanceAngleThreshold/2.0,
+                _params.connectedLinesDistanceAngleThreshold);
 
-            // get all intersection constraints
-            for (size_t i = 0; i < _globalData.mergedSpatialLineSegments.size(); i++){
-                auto & linei = _globalData.mergedSpatialLineSegments[i];
-                if (linei.claz == -1)
+            // make all point directions of lines normalized
+            for (auto & line : _globalData.mergedSpatialLineSegments){
+                line.component.first /= norm(line.component.first);
+                line.component.second /= norm(line.component.second);
+            }
+
+            // get all intersection and incidence constraints
+            AppendIntersectionAndOptionallyIncidenceConstraints(_globalData.mergedSpatialLineSegments,
+                constraints, _params.connectedLinesDistanceAngleThreshold, true);
+
+            // remove all duplicated constraints
+            // remove all self connected lines
+            // remove all constraints close to any vanishing points
+            auto uniqueConsIters = MergeNear(constraints.begin(), constraints.end(), std::false_type(), 
+                1, [](const ConstraintData & cons1, const ConstraintData & cons2){
+                return (cons1.type == cons2.type && 
+                    std::is_permutation(std::begin(cons1.lineids), std::end(cons1.lineids), 
+                    std::begin(cons2.lineids))) ? 0 : 2;
+            });
+            std::vector<ConstraintData> uniqueCons;
+            for (auto consIter : uniqueConsIters){
+                auto & cons = *consIter;
+                if (cons.lineids[0] == cons.lineids[1] ||
+                    MaybeVanishingPoint(cons.position, _globalData.vanishingPoints, 
+                    _params.connectedLinesDistanceAngleThreshold))
                     continue;
-                auto normali = linei.component.first.cross(linei.component.second);
-                for (size_t j = i + 1; j < _globalData.mergedSpatialLineSegments.size(); j++){
-                    auto & linej = _globalData.mergedSpatialLineSegments[j];
-                    if (linej.claz == -1)
-                        continue;
-                    if (linei.claz == linej.claz) // incidence constraints already got
-                        continue;
-
-                    auto normalj = linej.component.first.cross(linej.component.second);
-
-                    // get intersection point direction
-                    Vec3 intersection = normali.cross(normalj);
-                    intersection /= norm(intersection);
-                    // get distances
-                    Vec3 nearesti = DistanceFromPointToLine(intersection, linei.component).second;
-                    double anglei = AngleBetweenDirections(intersection, nearesti);
-                    Vec3 nearestj = DistanceFromPointToLine(intersection, linej.component).second;
-                    double anglej = AngleBetweenDirections(intersection, nearestj);
-
-                    if (anglei <= _params.connectedLinesDistanceAngleThreshold &&
-                        anglej <= _params.connectedLinesDistanceAngleThreshold){
-                        // insert an intersection constraint
-                        ConstraintData cons;
-                        cons.lineids[0] = i;
-                        cons.lineids[1] = j;
-                        cons.position = intersection;
-                        cons.weight = 0.0;
-                        cons.type = ConstraintData::Intersection;
-                        constraints.push_back(cons);
-                    }
-                }
-            }            
+                uniqueCons.push_back(cons);
+            }
+            constraints = uniqueCons;
             
             // vote for the position of each constraint
-            auto constraintGroupIters = MergeNear(constraints.begin(), constraints.end(), 
-                std::true_type(), 0.005, [](const ConstraintData & cd1, const ConstraintData & cd2) -> double{
-                return AngleBetweenDirections(cd1.position, cd2.position);
+            VoteManhattanJunctionWeightsOnConstraints(_globalData.mergedSpatialLineSegments,
+                _globalData.vanishingPoints, constraints);
+
+            // compute weights of contraints 
+            for (auto & cons : constraints){
+                cons.weight = cons.junctionWeights.Triplet * _params.mjWeightTriplet + 
+                    cons.junctionWeights.T * _params.mjWeightT + 
+                    cons.junctionWeights.X * _params.mjWeightX + 
+                    cons.junctionWeights.L * _params.mjWeightL +
+                    cons.junctionWeights.I * _params.mjWeightI;
+            }           
+            std::sort(constraints.begin(), constraints.end(), 
+                [](const ConstraintData & cons1, const ConstraintData & cons2){
+                return cons1.weight > cons2.weight;
             });
 
+            std::cout << "line num: " << _globalData.mergedSpatialLineSegments.size() << std::endl;
+            std::cout << "constraint num: " << constraints.size() << std::endl;
 
+            // optimize lines
+            OptimizeLines(_globalData.mergedSpatialLineSegments, 
+                constraints, _globalData.vanishingPoints);
+
+            // find necessary constraints using MST with slackValues
+            std::vector<size_t> lineIds(_globalData.mergedSpatialLineSegments.size()), 
+                consIds(constraints.size());
+            for (size_t i = 0; i < lineIds.size(); i++)
+                lineIds[i] = i;
+            for (size_t i = 0; i < consIds.size(); i++)
+                consIds[i] = i;
+            std::vector<size_t> MSTconsIds;
+            MSTconsIds.reserve(constraints.size());
+            MinimumSpanningTree(lineIds.begin(), lineIds.end(), consIds.begin(), consIds.end(),
+                std::back_inserter(MSTconsIds),
+                [&constraints](size_t e){return std::make_pair(constraints[e].lineids[0], constraints[e].lineids[1]); },
+                [&constraints](size_t e){return constraints[e].slackValue; }
+            );
+            std::vector<ConstraintData> MSTconstraints(MSTconsIds.size());
+            for (size_t i = 0; i < MSTconsIds.size(); i++){
+                MSTconstraints[i] = constraints[MSTconsIds[i]];
+            }
+
+            std::cout << "line num: " << _globalData.mergedSpatialLineSegments.size() << std::endl;
+            std::cout << "mst constraint num: " << MSTconstraints.size() << std::endl;
+
+            // optimize lines again
+            OptimizeLines(_globalData.mergedSpatialLineSegments,
+                MSTconstraints, _globalData.vanishingPoints);
         }
  
+
+
     }
 }

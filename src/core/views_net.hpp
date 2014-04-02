@@ -11,11 +11,8 @@ namespace panoramix {
         // views net
         class ViewsNet {
         public:
-
             struct Params {
-                Params() : camera(250.0), lineSegmentWeight(1.0), siftWeight(1.0), 
-                      surfWeight(1.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
-                      connectedLinesDistanceAngleThreshold(M_PI / 18.0) {}
+                Params();
                 PanoramicCamera camera; // camera for generating the panorama
                 double lineSegmentWeight;
                 double siftWeight;
@@ -28,7 +25,10 @@ namespace panoramix {
                 double smallCameraAngleScalar; // angle scalar to judge whether two views are too close
                 // angle threshold to judge whether two lines are constrained (intersection/incidence), 
                 // used for building the Constraint Graph
-                double connectedLinesDistanceAngleThreshold; 
+                double connectedLinesDistanceAngleThreshold;
+                // manhattan junction weights
+                // mjWeightTriplet includes the Y W and K junctions
+                double mjWeightTriplet, mjWeightX, mjWeightT, mjWeightL, mjWeightI;
             };
 
             struct VertData;
@@ -53,6 +53,7 @@ namespace panoramix {
             void updateExternalRegionConnections(VertHandle h); // build region connections across views
             void estimateVanishingPointsAndClassifyLines();
             void rectifySpatialLines(); // 
+            //void estimateLayoutStructure();
 
         public:
             struct VertData {

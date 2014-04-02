@@ -302,6 +302,8 @@ namespace panoramix {
             case OpenGLShaderSourceName::NormalPoints: return SSNormalPoints;
             case OpenGLShaderSourceName::NormalLines: return SSNormalLines;
             case OpenGLShaderSourceName::NormalTriangles: return SSNormalTriangles;
+            default:
+                return OpenGLShaderSource();
             }
         }
 

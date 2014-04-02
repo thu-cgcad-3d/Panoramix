@@ -1,24 +1,48 @@
 #ifndef PANORAMIX_CORE_UTILITIES_HPP
 #define PANORAMIX_CORE_UTILITIES_HPP
 
+#include <iterator>
 #include "basic_types.hpp"
  
 namespace panoramix {
     namespace core {
+        
 
         // for numerics
+        template <class T>
+        inline bool FuzzyEquals(const T & a, const T & b, const T & epsilon){
+            return std::abs(a - b) <= epsilon;
+        }
+
+        template <class T>
+        inline int DiracDelta(const T & v) {
+            return v == 0 ? 1 : 0;
+        }
+
         template <class T>
         inline T Square(const T & v) {
             return v * v;
         }
 
-        template <class T, class K>
-        inline T WrapBetween(const T& input, const K& low, const K& high) {
+        template <class T, class K1, class K2>
+        inline bool IsBetween(const T & v, const K1 & low, const K2 & high) {
+            return !(v < low) && !(high < v);
+        }
+
+        template <class T, class K1, class K2>
+        inline T BoundBetween(const T & v, const K1 & low, const K2 & high) {
+            if (v < low)
+                return low;
+            return v < high ? v : high;
+        }
+
+        template <class T, class K1, class K2>
+        inline T WrapBetween(const T& input, const K1 & low, const K2 & high) {
             if (low >= high)
                 return input;
             if (low <= input && input < high)
                 return input;
-            const K sz = high - low;
+            const auto sz = high - low;
             return input - int((input - low) / sz) * sz + (input < low ? sz : 0);
         }
 
@@ -35,25 +59,66 @@ namespace panoramix {
             return closewiseIsPositive ? angle : -angle;
         }
 
-        // for lines
+        // for lines and points
+        // returns projection position
         template <class T, int N>
-        std::pair<T, Point<T, N>> DistanceFromPointToLine(const Point<T, N> & p, const Line<T, N> & line) {
+        PositionOnLine<T, N> ProjectionOfPointOnLine(const Point<T, N> & p, const Line<T, N> & line) {
             Vec<T, N> lineDir = line.second - line.first;
             lineDir /= norm(lineDir);
-            T projLen = (p - line.first).dot(lineDir);
-            if (projLen >= 0 && projLen <= line.length()){ // on line
-                Point<T, N> nearest = line.first + lineDir * projLen;
-                T distance = norm(p - nearest);
-                return std::make_pair(distance, nearest);
-            } else if(projLen < 0) {
-                return std::make_pair(norm(p - line.first), line.first);
-            } else {
-                return std::make_pair(norm(p - line.second), line.second);
+            T projRatio = (p - line.first).dot(lineDir) / line.length();
+            return PositionOnLine<T, N>(line, projRatio);
+        }
+
+        // returns (distance, nearest position)
+        template <class T, int N>
+        std::pair<T, PositionOnLine<T, N>> DistanceFromPointToLine(const Point<T, N> & p, const Line<T, N> & line) {
+            Vec<T, N> lineDir = line.second - line.first;
+            lineDir /= norm(lineDir);
+            T projRatio = (p - line.first).dot(lineDir) / line.length();
+            projRatio = BoundBetween(projRatio, 0, 1);
+            PositionOnLine<T, N> pos(line, projRatio);
+            return std::make_pair(norm(p - pos.position), pos);
+        }
+
+        // returns (distance, (nearest position on line1, nearest position on line2))
+        template <class T, int N>
+        std::pair<T, std::pair<PositionOnLine<T, N>, PositionOnLine<T, N>>> DistanceBetweenTwoLines(
+            const Line<T, N> & line1, const Line<T, N> & line2) {
+            auto u = line1.direction();
+            auto v = line2.direction();
+            auto w0 = line1.first - line2.first;
+            auto a = u.dot(u), b = u.dot(v), c = v.dot(v), d = u.dot(w0), e = v.dot(w0);
+            auto p = (a*c - b*b);
+            auto t1 = (b*e - c*d) / p;
+            auto t2 = (a*e - b*d) / p;
+            if (p == 0){ // is parallel
+                t1 = -e / b;
+                t2 = e / c;
             }
+            t1 = BoundBetween(t1, 0, 1);
+            t2 = BoundBetween(t2, 0, 1);
+            PositionOnLine<T, N> pos1(line1, t1);
+            PositionOnLine<T, N> pos2(line2, t2);
+            return std::make_pair(norm(pos1.position - pos2.position), std::make_pair(pos1, pos2));
         }
 
 
         // generic algorithms
+
+        // fill the container with linear sequence
+        template <class IteratorT>
+        void CreateLinearSequence(IteratorT begin, IteratorT end, 
+            const typename std::iterator_traits<IteratorT>::value_type& low, 
+            const typename std::iterator_traits<IteratorT>::value_type& high){
+            auto dist = std::distance(begin, end);
+            auto w = high - low;
+            int id = 0;
+            while(begin != end){
+                *begin = (id++) * w / dist + low;
+                ++begin;
+            }
+        }        
+
 
         // merge, rearrange the input array
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
@@ -118,55 +183,60 @@ namespace panoramix {
             return gBegins;
         }
 
-        /// optimizations
-
-        // graph topology
-        template <class VertHandleIteratorT, class EdgeHandleIteratorT,
-        class EdgeFromGetterT, class EdgeToGetterT, 
-        class VertEdgeBeginGetterT, class VertEdgeEndGetterT
-        >
-        struct DirectedGraphTopology {
-            using VertHandle = typename std::iterator_traits<VertHandleIteratorT>::value_type;
-            using EdgeHandle = typename std::iterator_traits<EdgeHandleIteratorT>::value_type;
+        
+        // Minimum Spanning Tree
+        // EdgeVertsGetterT(Edge e)->std::pair<Vert,Vert>
+        //      bool operator==(Vert,Vert) must be available
+        // EdgeWeightGetterT(Edge e)->Scalar
+        template <class VertIteratorT, class EdgeIteratorT, 
+        class EdgeVertsGetterT, class EdgeWeightGetterT, 
+        class EdgeOutputIteratorT, 
+        class VertCompareT = std::less<typename std::iterator_traits<VertIteratorT>::value_type>>
+        void MinimumSpanningTree(
+            VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+            EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
+            EdgeOutputIteratorT MSTedges,
+            EdgeVertsGetterT vertsGetter, 
+            EdgeWeightGetterT weightGetter,
+            VertCompareT vertCompare = VertCompareT()
+            ) {
             
-            VertHandleIteratorT vertsBegin, vertsEnd;
-            EdgeHandleIteratorT edgesBegin, edgesEnd;
-            EdgeFromGetterT fromOfEdge; // EdgeFromGetterT(EdgeHandle h) -> VertHandle
-            EdgeToGetterT toOfEdge; 
-            VertEdgeBeginGetterT edgesBeginOfVert; // VertEdgeBeginGetterT(VertHandle h) -> EdgeHandleIteratorT
-            VertEdgeEndGetterT edgesEndOfVert; // VertEdgeEndGetterT(VertHandle h) -> EdgeHandleIteratorT
-        };
-        template <class VertHandleIteratorT, class EdgeHandleIteratorT,
-        class EdgeFromGetterT, class EdgeToGetterT,
-        class VertEdgeBeginGetterT, class VertEdgeEndGetterT
-        >
-        inline DirectedGraphTopology <VertHandleIteratorT, EdgeHandleIteratorT, 
-                                        EdgeFromGetterT, EdgeToGetterT, 
-                                        VertEdgeBeginGetterT, VertEdgeEndGetterT>
-        MakeDirectedGraphTopology(VertHandleIteratorT vertsBegin, VertHandleIteratorT vertsEnd, 
-            EdgeHandleIteratorT edgesBegin, EdgeHandleIteratorT edgesEnd,
-            EdgeFromGetterT fromOfEdge, EdgeToGetterT toOfEdge, 
-            VertEdgeBeginGetterT edgesBeginOfVert, VertEdgeEndGetterT edgesEndOfVert) {
-            return { vertsBegin, vertsEnd, edgesBegin, edgesEnd, fromOfEdge, toOfEdge, edgesBeginOfVert, edgesEndOfVert };
-        }
+            using Edge = typename std::iterator_traits<typename EdgeIteratorT>::value_type;
+            using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
+            static_assert(typename std::is_same<std::pair<Vert, Vert>, decltype(vertsGetter(*edgesBegin))>::value,
+                "result of EdgeVertsGetterT must be std::pair<Vert, Vert>!");
+            using T = decltype(weightGetter(*edgesBegin));
+            
+            std::vector<Edge> edges(edgesBegin, edgesEnd);
+            std::sort(edges.begin(), edges.end(), [weightGetter](const Edge & e1, const Edge & e2){
+                return weightGetter(e1) < weightGetter(e2);
+            });
 
+            std::map<Vert, int, VertCompareT> vertSetIds(vertCompare);
+            int idx = 0;
+            for (auto i = vertsBegin; i != vertsEnd; ++i)
+                vertSetIds.insert(std::make_pair((*i), idx++));
 
-        // graph cut
-        template <class VertHandleIteratorT, class EdgeHandleIteratorT, 
-        class EdgeFromGetterT, class EdgeToGetterT, 
-        class VertEdgeBeginGetterT, class VertEdgeEndGetterT,
-        class VertEnergyGetterT, class EdgeEnergyGetterT,
-        class VertLabelGetterSetterT
-        >
-        void GraphCut(
-            const DirectedGraphTopology<VertHandleIteratorT, EdgeHandleIteratorT,
-                EdgeFromGetterT, EdgeToGetterT, VertEdgeBeginGetterT, VertEdgeEndGetterT> & graphTopo,
-            VertEnergyGetterT energyOfVert, EdgeEnergyGetterT energyOfEdge, VertLabelGetterSetterT labelOfVert){
-
-
+            auto remainedEdgesBegin = edges.begin();
+            while (remainedEdgesBegin != edges.end()){
+                Edge e = *remainedEdgesBegin;
+                auto verts = vertsGetter(e);
+                int fromid = vertSetIds[verts.first];
+                int toid = vertSetIds[verts.second];
+                if (fromid != toid){
+                    *MSTedges++ = e;
+                    for (auto & vtoid : vertSetIds){
+                        if (vtoid.second == toid){
+                            vtoid.second = fromid;
+                        }
+                    }
+                }
+                ++remainedEdgesBegin;
+            }
 
         }
 
+        
         
 
 
