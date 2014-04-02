@@ -111,14 +111,14 @@ namespace panoramix {
         template <class T, int N>
         inline Visualizer3D operator << (Visualizer3D viz, const std::array<T, N> & a) {
             for (auto & e : a)
-                viz << e;
+                viz = viz << e;
             return viz;
         }
 
         template <class ContainerT>
         inline Visualizer3D VisualizeAllInContainer(Visualizer3D viz, const ContainerT & c) {
             for (auto & e : c)
-                viz << e;
+                viz = viz << e;
             return viz;
         }
 

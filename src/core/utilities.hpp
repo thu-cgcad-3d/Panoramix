@@ -37,14 +37,21 @@ namespace panoramix {
         }
 
         template <class T, class K1, class K2>
-        inline T WrapBetween(const T& input, const K1 & low, const K2 & high) {
+        T WrapBetween(const T& input, const K1 & low, const K2 & high) {
             if (low >= high)
                 return input;
             if (low <= input && input < high)
                 return input;
             const auto sz = high - low;
-            return input - int((input - low) / sz) * sz + (input < low ? sz : 0);
+            auto result = input - int((input - low) / sz) * sz + (input < low ? sz : 0);
+            return result == high ? low : result;
         }
+
+        template <class T, int N>
+        T EncodeSubscriptToIndex(const Point<T, N> & subscript, const Vec<T, N> & dimension) {
+            // TODO
+        }
+
 
         // for vectors
         template <class T, int N>

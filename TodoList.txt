@@ -1,5 +1,5 @@
-
-
+1. 可视化 constraints
+2. 增加非 manhattan 边的约束类型
 
 
 

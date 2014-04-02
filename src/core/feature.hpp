@@ -123,10 +123,11 @@ namespace panoramix {
         public:
             using Feature = std::vector<Line2>;
             struct Params {
-                inline Params() : minLength(15), xBorderWidth(3), yBorderWidth(3), numDirs(8) {}
+                inline Params() : minLength(15), xBorderWidth(3), yBorderWidth(3), numDirs(8), useExperimentalAlgorithm(false) {}
                 int minLength;
                 int xBorderWidth, yBorderWidth;
                 int numDirs;
+                bool useExperimentalAlgorithm;
             };
         public:
             inline explicit LineSegmentExtractor(const Params & params = Params()) : _params(params){}

@@ -39,6 +39,23 @@ TEST(UtilTest, WrapBetween) {
         ASSERT_LE(a, xx);
         ASSERT_LT(xx, b);
     }
+
+    // int test
+    int x = core::WrapBetween(0, 1, 2);
+    for (int i = 0; i < 10000; i++){
+        int x = rand();
+        int a = rand();
+        int b = a + abs(rand());
+        if (a == b)
+            continue;
+
+        if (core::WrapBetween(x, a, b) == b){
+            std::cout << a << b << std::endl;
+        }
+
+        EXPECT_LE(a, core::WrapBetween(x, a, b));
+        EXPECT_LT(core::WrapBetween(x, a, b), b);
+    }
 }
 
 TEST(UtilTest, AngleBetweenDirections) {

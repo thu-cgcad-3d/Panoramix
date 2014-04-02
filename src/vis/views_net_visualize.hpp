@@ -11,6 +11,7 @@ namespace panoramix {
         // 2d vis for vertdata
         Visualizer2D operator << (Visualizer2D viz, const core::ViewsNet::VertData & vd);
 
+
         // 3d vis for globaldata
         Visualizer3D operator << (Visualizer3D viz, const core::ViewsNet::GlobalData & netgb);
 

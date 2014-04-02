@@ -11,7 +11,7 @@ using namespace panoramix;
 // PROJECT_TEST_DATA_DIR_STR is predefined using CMake
 static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
 
-TEST(Feature, PerspectiveCamera){
+TEST(Feature, DISABLED_PerspectiveCamera){
     core::PerspectiveCamera cam(1000, 1000, 500, 
         core::Vec3(0, 0, 0), 
         core::Vec3(1, 0, 0));
@@ -28,7 +28,7 @@ TEST(Feature, PerspectiveCamera){
     ASSERT_LT(dist, 2);
 }
 
-TEST(Feature, PerspectiveCameraRandom){
+TEST(Feature, DISABLED_PerspectiveCameraRandom){
     for (int k = 0; k < 100; k++) {
         core::PerspectiveCamera cam(abs(rand()) % 500, abs(rand()) % 400, abs(rand()) % 600,
             core::Vec3(rand(), rand(), rand()),
@@ -49,7 +49,7 @@ TEST(Feature, PerspectiveCameraRandom){
 }
 
 
-TEST(Feature, CameraSampler) {
+TEST(Feature, DISABLED_CameraSampler) {
     cv::Mat im = cv::imread(ProjectTestDataDirStr + "/" + "panofactory.jpg");
 
     EXPECT_EQ(4000, im.cols);
@@ -89,7 +89,10 @@ TEST(Feature, CameraSampler) {
 
 TEST(Feature, FeatureExtractor) {
     core::SegmentationExtractor segmenter;
-    core::LineSegmentExtractor lineSegmentExtractor;
+    core::LineSegmentExtractor::Params params;
+    params.useExperimentalAlgorithm = false;
+    core::LineSegmentExtractor lineSegmentExtractor(params);
+    
     core::CVFeatureExtractor<cv::SIFT> sift;
     core::CVFeatureExtractor<cv::SURF> surf(300.0);
     for (int i = 0; i < 4; i++) {

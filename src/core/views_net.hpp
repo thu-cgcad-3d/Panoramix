@@ -26,6 +26,8 @@ namespace panoramix {
                 // angle threshold to judge whether two lines are constrained (intersection/incidence), 
                 // used for building the Constraint Graph
                 double connectedLinesDistanceAngleThreshold;
+                // angle threshold to judge whether two colineared lines should be merged
+                double mergeLineDistanceAngleThreshold;
                 // manhattan junction weights
                 // mjWeightTriplet includes the Y W and K junctions
                 double mjWeightTriplet, mjWeightX, mjWeightT, mjWeightL, mjWeightI;
@@ -67,11 +69,27 @@ namespace panoramix {
                 CVFeatureExtractor<cv::SURF>::Feature SURFs;
                 std::shared_ptr<RegionsNet> regionNet;
             };
+
             struct HalfData {
                 double cameraAngleDistance;
                 double weight;
                 // transform //
             };
+
+            struct ConstraintData {
+                ConstraintData();
+                size_t mergedSpatialLineSegmentIds[2]; // corresponded mergedSpatialLineSegments ids
+                Vec3 position; // location of intersecion
+                
+                // [i][0] -> line lengths with class i lying between vp[i] and position
+                // [i][1] -> line lengths with class i lying between position and anti-vp[i]
+                double lineVotings[3][2];
+                double weight;
+                struct JunctionWeights { double I, L, X, T, Triplet; } junctionWeights;
+                enum { Intersection,  Incidence } type;
+                double slackValue; // retreived after optimization
+            };
+
             struct GlobalData {
                 Image panorama;
                 std::array<Vec3, 3> vanishingPoints;
@@ -81,6 +99,7 @@ namespace panoramix {
                 std::vector<Vec3> mergedSpatialLineSegmentIntersections;
                 std::vector<Classified<Line3>> mergedSpatialLineSegments;
                 std::vector<int> mergedSpatialLineSegmentChainIds;
+                std::vector<ConstraintData> constraints, refinedConstraints;
             };
 
             inline const ViewMesh & views() const { return _views; }
