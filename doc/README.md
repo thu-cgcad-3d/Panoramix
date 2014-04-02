@@ -25,11 +25,11 @@ Panoramix 相对于其它类似技术拥有如下优势：
 - 流程 -
 ========
 
-见 `./doc/workflow_v1.jpg`
+见 [./doc/workflow_v1.jpg](https://github.com/YANG-H/Panoramix/blob/develop/doc/workflow_v1.jpg)
 
 
 - 配置与开发 -
 ==============
 
-见 `./doc/FOR_DEVELOPERS.md`
+见 [./doc/FOR_DEVELOPERS.md](https://github.com/YANG-H/Panoramix/blob/develop/doc/FOR_DEVELOPERS.md)
 
