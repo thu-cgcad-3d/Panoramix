@@ -1,11 +1,12 @@
 工程配置方法：
 
-1. 安装 CMake，需 2.8 或以上版本；
-2. 安装 OpenCV 2.4.8，不保证更高版本可用性；
-3. 安装 Eigen 3.2.0，不保证更高版本可用性；
-4. 安装 Qt 5.2.x
-5. 下载并解压 google test 1.7.0 到工程根目录，路径应为 `./tests/gtest-1.7.0`，若使用其它版本 gtest，则需要在  `./tests/CMakeLists.txt` 中更改 `set (GTEST_DIR "gtest-x.y.z")` 以匹配 gtest 路径；
-6. 使用 CMake 构建工程文件，构建中需要指定所依赖的第三方库的位置。本项目代码需要编译器支持大部分 C++0x/C++11 以及部分 C++1y 标准，因此对于 Visual Studio 仅支持 VS2013 及以上版本；
+1. 安装 CMake，需 2.8 或更新版本；
+2. 安装 OpenCV 2.4.8，或更新版本；
+3. 安装 Eigen 3.2.0 或更新版本；
+4. 安装 GLPK 4.5.4 或更新版本； 
+5. 安装 Qt 5.2 或更新版本
+6. 下载并解压 google test 1.7.0 到 ./test 目录下，路径应为 `./tests/gtest-1.7.0`，若使用其它版本 gtest，则需要在  `./tests/CMakeLists.txt` 中更改 `set (GTEST_DIR "gtest-x.y.z")` 以匹配 gtest 路径；
+7. 使用 CMake 构建工程文件，构建中需要指定所依赖的第三方库的位置。本项目代码需要编译器支持大部分 C++0x/C++11 以及部分 C++1y 标准，因此对于 Visual Studio 仅支持 VS2013 及更新版本；
 6. 编译工程文件。
 
 开发者请注意：
