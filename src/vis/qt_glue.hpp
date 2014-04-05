@@ -1,26 +1,14 @@
-#ifndef PANORAMIX_VIS_MISC_HPP
-#define PANORAMIX_VIS_MISC_HPP
+#ifndef PANORAMIX_VIS_QT_GLUE_HPP
+#define PANORAMIX_VIS_QT_GLUE_HPP
 
 #include <QtCore>
 #include <QtGui>
 
 #include "../core/basic_types.hpp"
+#include "basic_types.hpp"
 
 namespace panoramix {
     namespace vis {
-
-        // render mode
-        using RenderModeFlags = int8_t;
-        enum RenderModeFlag : RenderModeFlags {
-            Points      = 1,
-            Lines       = 1 << 1,
-            Triangles   = 1 << 2,
-            All         = (1 << 3) - 1
-        };
-        inline RenderModeFlags operator | (RenderModeFlag f1, RenderModeFlag f2) {
-            return static_cast<RenderModeFlags>(f1) | static_cast<RenderModeFlags>(f2);
-        }
-
 
 
         // color
@@ -32,9 +20,6 @@ namespace panoramix {
         inline QColor MakeQColor(const core::Color & c) {
             return QColor(MakeQRgb(c));
         }
-
-
-
 
 
         // vector

@@ -47,8 +47,15 @@ namespace panoramix {
             return result == high ? low : result;
         }
 
-        template <class T, int N>
-        T EncodeSubscriptToIndex(const Point<T, N> & subscript, const Vec<T, N> & dimension) {
+        template <class T, int ...Dims>
+        T EncodeSubscriptToIndex(const Point<T, sizeof...(Dims)> & subscript, 
+            Dimension<Dims...> dimension) {
+            // TODO
+        }
+
+        template <class T, int ...Dims>
+        Point<T, sizeof...(Dims)> DecodeIndexToSubscript(const T & index, 
+            Dimension<Dims...> dimension) {
             // TODO
         }
 
@@ -61,9 +68,9 @@ namespace panoramix {
 
         template <class T>
         inline T SignedAngleBetweenDirections(const Vec<T, 2> & from, const Vec<T, 2> & to, 
-            bool closewiseIsPositive = true) {
+            bool defineClockwiseAsPositive = true) {
             double angle = atan2(- from(0)*to(1) + to(0)*from(1), from(1)*to(1) + from(0)*to(0));
-            return closewiseIsPositive ? angle : -angle;
+            return defineClockwiseAsPositive ? angle : -angle;
         }
 
         // for lines and points

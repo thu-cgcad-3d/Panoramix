@@ -4,7 +4,7 @@
 #include "../core/basic_types.hpp"
 #include "../core/feature.hpp"
 
-#include "misc.hpp"
+#include "basic_types.hpp"
 
 namespace panoramix {
     namespace vis {
@@ -23,24 +23,24 @@ namespace panoramix {
                 RenderModeFlags renderMode;
                 core::Mat4 modelMatrix;
             };
-            struct Entities;
+            struct VisualData;
             struct Widgets;
-            using EntitiesPtr = std::shared_ptr<Entities>;
+            using VisualDataPtr = std::shared_ptr<VisualData>;
             using WidgetsPtr = std::shared_ptr<Widgets>;
             
             explicit Visualizer3D(const Params & p = Params());
             ~Visualizer3D();
 
-            inline EntitiesPtr entities() { return _ents; }
-            inline const EntitiesPtr & entities() const { return _ents; }
+            inline VisualDataPtr data() { return _data; }
+            inline const VisualDataPtr & data() const { return _data; }
             inline WidgetsPtr widgets() { return _widgets; }
             inline const WidgetsPtr & widgets() const{ return _widgets; }
 
         public:
-            Params params;
+            Params & params() const;
 
         private:
-            EntitiesPtr _ents;
+            VisualDataPtr _data;
             WidgetsPtr _widgets;
         };
 
@@ -54,17 +54,18 @@ namespace panoramix {
                 ArgT arg;   // the argument value
             };
 
-            Manipulator<const std::string &> SetWindowName(const std::string & name);
-            Manipulator<const core::Color &> SetDefaultColor(const core::Color & color);
-            Manipulator<const core::Color &> SetBackgroundColor(const core::Color & color);
-            inline Manipulator<const core::Color &> SetBackgroundColor(const core::ColorTag & tag){ return SetBackgroundColor(core::ColorFromTag(tag)); }
-            Manipulator<const core::PerspectiveCamera &> SetCamera(const core::PerspectiveCamera & camera);
+            Manipulator<std::string> SetWindowName(std::string name);
+            Manipulator<core::Color> SetDefaultColor(core::Color color);
+            inline Manipulator<core::Color> SetDefaultColor(core::ColorTag tag){ return SetDefaultColor(core::ColorFromTag(tag)); }
+            Manipulator<core::Color> SetBackgroundColor(core::Color color);
+            inline Manipulator<core::Color> SetBackgroundColor(core::ColorTag tag){ return SetBackgroundColor(core::ColorFromTag(tag)); }
+            Manipulator<core::PerspectiveCamera> SetCamera(core::PerspectiveCamera camera);
             Manipulator<float> SetPointSize(float pointSize);
             Manipulator<float> SetLineWidth(float lineWidth);
             Manipulator<core::ColorTableDescriptor> SetColorTableDescriptor(core::ColorTableDescriptor descriptor);
             Manipulator<RenderModeFlags> SetRenderMode(RenderModeFlags mode);
-            Manipulator<const core::Mat4 &> SetModelMatrix(const core::Mat4 & mat);
-            Manipulator<bool> Show(bool doModel = true);
+            Manipulator<core::Mat4> SetModelMatrix(core::Mat4 mat);
+            Manipulator<bool> Show(bool block = true);
 
             void AutoSetCamera(Visualizer3D & viz);
         }
@@ -101,8 +102,8 @@ namespace panoramix {
         template <class T>
         inline Visualizer3D operator << (Visualizer3D viz, const core::Classified<T> & thing) {
             static const auto WhiteColor = core::ColorFromTag(core::ColorTag::White);
-            auto & predefinedColorTable = core::PredefinedColorTable(viz.params.colorTableDescriptor);
-            viz.params.defaultColor = thing.claz < 0 ? WhiteColor : predefinedColorTable[thing.claz % predefinedColorTable.size()];
+            auto & predefinedColorTable = core::PredefinedColorTable(viz.params().colorTableDescriptor);
+            viz.params().defaultColor = thing.claz < 0 ? WhiteColor : predefinedColorTable[thing.claz % predefinedColorTable.size()];
             return viz << thing.component;
         }
 

@@ -34,6 +34,7 @@ namespace panoramix {
 
         public:
             Params params;
+
         private:
             Image _image;
         };

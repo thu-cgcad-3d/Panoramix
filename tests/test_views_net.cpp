@@ -3,15 +3,13 @@
 #include "../src/core/views_net.hpp"
 #include "../src/vis/views_net_visualize.hpp"
 #include "../src/vis/regions_net_visualize.hpp"
-#include "../src/vis/qt_resources.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
 #include <string>
 #include <random>
 #include <thread>
-
-#include <QApplication>
+#include <chrono>
 
 using namespace panoramix;
 
@@ -27,12 +25,11 @@ TEST(ViewsNet, ViewsNet) {
 
     std::vector<core::PerspectiveCamera> cams;
     core::Mesh<core::Vec3> cameraStand;
-    core::MakeQuadFacedSphere(cameraStand, 6, 12);
+    core::MakeQuadFacedSphere(cameraStand, 7, 10);
     for (auto & v : cameraStand.vertices()){
         core::Vec3 direction = v.data;
         if (core::AngleBetweenDirections(direction, core::Vec3(0, 0, 1)) <= 0.1 ||
             core::AngleBetweenDirections(direction, core::Vec3(0, 0, -1)) <= 0.1){
-            //cams.emplace_back(700, 700, originCam.focal(), core::Vec3(0, 0, 0), direction, core::Vec3(0, 1, 0));
             continue;
         }
         else{
@@ -45,12 +42,17 @@ TEST(ViewsNet, ViewsNet) {
     std::transform(cams.begin(), cams.end(), ims.begin(),
         [&panorama, &originCam](const core::PerspectiveCamera & pcam){
         core::Image im;
-        qDebug() << "sampling photo ...";
+        std::cout << "sampling photo ..." << std::endl;
         return core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera>(pcam, originCam)(panorama);
     });
 
     /// insert all into views net
-    core::ViewsNet net;
+    core::ViewsNet::Params params;
+    params.mjWeightT = 2.0;
+    params.intersectionConstraintLineDistanceAngleThreshold = 0.05;
+    params.incidenceConstraintLineDistanceAngleThreshold = 0.2;
+    params.mergeLineDistanceAngleThreshold = 0.05;
+    core::ViewsNet net(params);
     
     std::vector<core::ViewsNet::VertHandle> viewHandles;
     for (int i = 0; i < cams.size(); i++){
@@ -59,32 +61,44 @@ TEST(ViewsNet, ViewsNet) {
         viewHandles.push_back(net.insertPhoto(im, camera));
     }
 
-    auto computeFea = [](core::ViewsNet* netptr, core::ViewsNet::VertHandle vh){
-        qDebug() << "photo " << vh.id;
-        qDebug() << "computing features ...";
-        netptr->computeFeatures(vh);
-        qDebug() << "done " << vh.id;
-    };
+    {
+        using namespace std::chrono;
+        auto startTime = high_resolution_clock::now();
+        
+        auto computeFea = [](core::ViewsNet* netptr, core::ViewsNet::VertHandle vh){
+            std::cout << "photo " << vh.id << std::endl;
+            std::cout << "computing features ..." << std::endl;
+            netptr->computeFeatures(vh);
+            std::cout << "done " << vh.id << std::endl;
+        };
 
-    int vid = 0;
-    while(vid < net.views().internalVertices().size()){
-        std::vector<std::thread> t4(std::min(net.views().internalVertices().size() - vid, 4ull));
-        for (auto & t : t4)
-            t = std::thread(computeFea, &net, core::ViewsNet::VertHandle(vid++));
-        for (auto & t : t4)
-            t.join();
+        int vid = 0;
+        while (vid < net.views().internalVertices().size()){
+            std::vector<std::thread> t4(std::min(net.views().internalVertices().size() - vid, 4ull));
+            for (auto & t : t4)
+                t = std::thread(computeFea, &net, core::ViewsNet::VertHandle(vid++));
+            for (auto & t : t4)
+                t.join();
+        }
+
+        auto endTime = high_resolution_clock::now();
+        auto secTime = duration_cast<seconds>(endTime - startTime).count();
+        std::cout << "time cost: " << secTime << "s" << std::endl;
     }
 
     for (auto & vh : viewHandles){
-        qDebug() << "photo " << vh.id;
+        std::cout << "photo " << vh.id << std::endl;
         //net.computeFeatures(vh);
         net.updateConnections(vh);
-        net.computeTransformationOnConnections(vh);
         net.calibrateCamera(vh);
     }
 
+
     {
-        qDebug() << "estimating vanishing points ...";
+        using namespace std::chrono;
+        auto startTime = high_resolution_clock::now();
+
+        std::cout << "estimating vanishing points ..." << std::endl;
         // estimate vanishing points and classify lines
         net.estimateVanishingPointsAndClassifyLines();
         auto vps = net.globalData().vanishingPoints;
@@ -105,23 +119,33 @@ TEST(ViewsNet, ViewsNet) {
             [&originCam](const core::Vec3 & p3){
             return originCam.screenProjection(p3);
         });
+
+        auto endTime = high_resolution_clock::now();
+        auto secTime = duration_cast<seconds>(endTime - startTime).count();
+        std::cout << "time cost: " << secTime << "s" << std::endl;
     }
 
     {
         vis::Visualizer3D viz;
         viz << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
-            << vis::manip3d::SetBackgroundColor(core::Black)
+            << vis::manip3d::SetBackgroundColor(core::ColorTag::Black)
             << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
             << net.globalData().spatialLineSegments
             << vis::manip3d::AutoSetCamera
             << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
             << vis::manip3d::Show();
 
+        using namespace std::chrono;
+        auto startTime = high_resolution_clock::now();
+        std::cout << "reconstructing spatial lines ..." << std::endl;
         net.rectifySpatialLines();
+        auto endTime = high_resolution_clock::now();
+        auto secTime = duration_cast<seconds>(endTime - startTime).count();
+        std::cout << "time cost: " << secTime << "s" << std::endl;
 
         vis::Visualizer3D viz2;
         viz2 << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
-            << vis::manip3d::SetBackgroundColor(core::Black)
+            << vis::manip3d::SetBackgroundColor(core::ColorTag::Black)
             << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
             << net.globalData().mergedSpatialLineSegments
             << vis::manip3d::AutoSetCamera
@@ -136,7 +160,5 @@ int main(int argc, char * argv[], char * envp[])
 {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    vis::InitGui(argc, argv);
     return RUN_ALL_TESTS();
-    //return app->exec();
 }

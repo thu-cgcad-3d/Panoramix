@@ -11,12 +11,33 @@ namespace panoramix {
 
         namespace {
 
+            template <int ... Dims>
+            struct Dimension {};
+
+            template <class T>
+            struct DimensionOfType {
+                using type = Dimension<1>;
+            };
+
+            template <class T, int M, int N>
+            struct DimensionOfType<Mat<T, M, N>> {
+                using type = Dimension<M, N>;
+            };
+
+            template <class A, class B>
+            struct DescartesProductDimension {
+                using type = Dimension<1>;
+            };
+            
+
+
             // fundamental structure
             // base of all expressions whose return type is T
             template <class T>
             struct ExpressionContentBase {
                 virtual T eval() const = 0;
                 virtual ExpressionContentBase * derivative(T * var) const { return nullptr; }
+                virtual std::string texify() const { return ""; }
             };
             template <class T>
             using ExpressionContentBasePtr = std::shared_ptr<ExpressionContentBase<T>>;
@@ -156,6 +177,17 @@ namespace panoramix {
 
         inline Expression<float> sqrt(const Expression<float> & a) {
             return PerformOperation(std::sqrtf, a);
+        }
+
+        template <class T, int N>
+        inline Expression<Vec<T, N>> sqrt(const Expression<Vec<T, N>> & a) {
+            return PerformOperation([](const Vec<T, N> & aa){
+                Vec<T, N> r;
+                for (int i = 0; i < N; i++){
+                    r[i] = sqrt(aa[i]);
+                }
+                return r;
+            }, a);
         }
 
     }

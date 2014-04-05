@@ -5,10 +5,10 @@ namespace panoramix {
 
         namespace {
             inline Color rgb(int R, int G, int B) {
-                return Color(G, B, R);
+                return Color(B, G, R);
             }
             inline Color rgba(int R, int G, int B, int A) {
-                return Color(G, B, R, A);
+                return Color(B, G, R, A);
             }
         }
 

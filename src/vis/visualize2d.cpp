@@ -3,7 +3,7 @@
 namespace panoramix {
     namespace vis {
 
-        Visualizer2D::Visualizer2D(const Image & im, const Params & p) : params(p) {
+        Visualizer2D::Visualizer2D(const Image & im, const Params & p) : params(p){
             setImage(im);
         }
 

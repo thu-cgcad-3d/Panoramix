@@ -8,7 +8,7 @@
 using namespace panoramix;
 
 
-TEST(Expression, Expression) {   
+TEST(Expression, Basic) {   
 
     core::Expression<float> e = 1.0f;
     core::Expression<int> f = 1;
@@ -40,6 +40,20 @@ TEST(Expression, Expression) {
         ASSERT_EQ(v1 + v2, var12.eval());
     }
     
+}
+
+TEST(Expression, Derivative) {
+
+    using namespace core;
+
+    auto a = MakeConstantValue(Vec4(1.0, 1.0, 1.0));
+    Vec4 xdata, ydata;
+    auto x = MakeVariableAt(&xdata);
+    auto y = MakeVariableAt(&ydata);
+    
+    auto axy = a * x * y;
+    //auto axy_dx = axy.derivativeOn(x);
+
 }
 
 int main(int argc, char * argv[], char * envp[])

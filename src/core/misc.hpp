@@ -1,11 +1,32 @@
 #ifndef PANORAMIX_CORE_MISC_HPP
 #define PANORAMIX_CORE_MISC_HPP
 
+#include <stack>
 #include <iterator>
 #include <cassert>
  
 namespace panoramix {
     namespace core {
+
+
+        template <class T>
+        class ObjectWithParamStack {
+            using P = typename T::Params;
+        public:
+            inline ObjectWithParamStack(const P & p) : params(p) {}
+            inline void storeParam() { _paramStack.push(params); }
+            inline void restoreParam() { 
+                params = _paramStack.top(); 
+                _paramStack.pop(); 
+            }
+
+        public:
+            P params;
+        protected:
+            std::stack<P> _paramStack;
+        };
+
+
  
         // elements of container MUST support .exists
         template <class BoolExistIteratorT>

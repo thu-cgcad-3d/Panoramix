@@ -9,13 +9,18 @@ namespace panoramix {
         ViewsNet::Params::Params() 
             : camera(250.0), lineSegmentWeight(1.0), siftWeight(1.0),
             surfWeight(1.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
-            connectedLinesDistanceAngleThreshold(0.10),
-            mergeLineDistanceAngleThreshold(0.08),
-            mjWeightTriplet(5.0), mjWeightX(5.0), mjWeightT(0.0), mjWeightL(1.0), mjWeightI(2.0) {}
+            intersectionConstraintLineDistanceAngleThreshold(0.06),
+            incidenceConstraintLineDistanceAngleThreshold(0.2),
+            mergeLineDistanceAngleThreshold(0.05),
+            mjWeightTriplet(5.0), mjWeightX(5.0), mjWeightT(2.0), mjWeightL(1.0), mjWeightI(2.0) {}
 
-        ViewsNet::VertHandle ViewsNet::insertPhoto(const Image & im, const PerspectiveCamera & cam) {
+        ViewsNet::VertHandle ViewsNet::insertPhoto(const Image & im, const PerspectiveCamera & cam,
+            double cameraDirectionErrorScale,
+            double cameraPositionErrorScale) {
             VertData vd;
             vd.camera = vd.originalCamera = cam;
+            vd.cameraDirectionErrorScale = cameraDirectionErrorScale;
+            vd.cameraPositionErrorScale = cameraPositionErrorScale;
             vd.image = im;
             return insertVertex(vd);
         }
@@ -71,11 +76,11 @@ namespace panoramix {
                 vd.lineSegments[i].component = lineSegments[i];
             }
 
-            /*vd.SIFTs = _params.siftExtractor(im);
+            vd.SIFTs = _params.siftExtractor(im);
             vd.SURFs = _params.surfExtractor(im);
             vd.weight = vd.lineSegments.size() * _params.lineSegmentWeight +
                 vd.SIFTs.size() * _params.siftWeight +
-                vd.SURFs.size() * _params.surfWeight;*/
+                vd.SURFs.size() * _params.surfWeight;
 
             vd.lineSegmentIntersections.clear();
             vd.lineSegmentIntersectionLineIDs.clear();
@@ -84,9 +89,9 @@ namespace panoramix {
                 vd.lineSegmentIntersectionLineIDs, true);
 
             // build region net
-            //vd.regionNet = std::make_shared<RegionsNet>(vd.image);
-            //vd.regionNet->buildNetAndComputeGeometricFeatures();
-            //vd.regionNet->computeImageFeatures();
+            vd.regionNet = std::make_shared<RegionsNet>(vd.image);
+            vd.regionNet->buildNetAndComputeGeometricFeatures();
+            vd.regionNet->computeImageFeatures();
         }
 
         namespace {
@@ -133,13 +138,11 @@ namespace panoramix {
             return VertHandle();
         }
 
-
-        void ViewsNet::computeTransformationOnConnections(VertHandle h) {
-            
-        }
-
         void ViewsNet::calibrateCamera(VertHandle h) {
-            
+            auto & vd = _views.data(h);
+            if (vd.cameraDirectionErrorScale == 0 && vd.cameraPositionErrorScale == 0)
+                return;
+            // TODO
         }
 
         void ViewsNet::calibrateAllCameras() {
@@ -400,7 +403,7 @@ namespace panoramix {
             std::vector<Classified<Line3>> MergeColinearSpatialLinesAndAppendIncidenceConstraints(
                 const std::vector<Classified<Line3>> & oldLines, 
                 std::vector<int> & chainIds, std::vector<ViewsNet::ConstraintData> & constraints, 
-                double mergeAngleThres, double consAngleThres) {
+                double mergeAngleThres, double incidenceAngleThres) {
                 
                 std::vector<Classified<Line3>> lines(oldLines);
 
@@ -415,7 +418,7 @@ namespace panoramix {
                     mergeAngleThres,
                     [](const Classified<Line3> & line1, const Classified<Line3> & line2) -> double{
                     if (line1.claz != line2.claz)
-                        return 100.0;
+                        return 100.0; // never merge lines with different classes
                     auto normal1 = line1.component.first.cross(line1.component.second);
                     auto normal2 = line2.component.first.cross(line2.component.second);
                     return std::min(AngleBetweenDirections(normal1, normal2), 
@@ -470,7 +473,7 @@ namespace panoramix {
                     auto firstPointDirection = firstLine.component.first;
                     auto firstNormalCrossPoint = firstNormal.cross(firstPointDirection);
 
-                    // compute line projection angles
+                    // compute line projection angle spans
                     std::vector<std::pair<double, double>> lineAngleSegments(lineNum);
                     size_t count = 0;
                     for (auto lineIter = colinearedBegin; lineIter != colinearedEnd; ++lineIter){
@@ -482,13 +485,13 @@ namespace panoramix {
                         lineAngleSegments[count++] = std::make_pair(angle1, angle2);
                     }
 
-                    // sort the angles
+                    // sort lines in start-angle's ascending order
                     std::sort(lineAngleSegments.begin(), lineAngleSegments.end(), 
                         [](const std::pair<double, double> & a1, const std::pair<double, double> & a2){
                         return a1.first < a2.first;
                     });
 
-                    // now merge line angles
+                    // now merge line angle spans
                     std::vector<std::pair<double, double>> mergedLineAngleSegments;
                     double curFrom = lineAngleSegments.front().first;
                     double curTo = lineAngleSegments.front().second;
@@ -496,7 +499,7 @@ namespace panoramix {
                         if (lineAngle.first <= curTo){
                             curTo = lineAngle.second;
                         } else {
-                            if (curTo - curFrom >= M_PI){ // break the major arcs
+                            if (curTo - curFrom >= M_PI){ // break major arcs
                                 mergedLineAngleSegments.push_back(std::make_pair(curFrom, (curFrom + curTo) / 2.0));
                                 mergedLineAngleSegments.push_back(std::make_pair((curFrom + curTo) / 2.0, curTo));
                             }else
@@ -505,7 +508,7 @@ namespace panoramix {
                             curTo = lineAngle.second;
                         }
                     }
-                    if (curTo - curFrom >= M_PI){ // break the major arcs
+                    if (curTo - curFrom >= M_PI){ // break major arcs
                         mergedLineAngleSegments.push_back(std::make_pair(curFrom, (curFrom + curTo) / 2.0));
                         mergedLineAngleSegments.push_back(std::make_pair((curFrom + curTo) / 2.0, curTo));
                     }
@@ -527,7 +530,7 @@ namespace panoramix {
                         
                         if (!chainIds.empty() && chainIds.back() == chainId) { // insert a new incidence constraint
                             Vec3 lastEndPoint = mergedLines.back().component.second;
-                            if (AngleBetweenDirections(lastEndPoint, line.component.first) <= 2 * consAngleThres){
+                            if (AngleBetweenDirections(lastEndPoint, line.component.first) <= incidenceAngleThres){
                                 Vec3 mid = (lastEndPoint + line.component.first) / 2.0;
                                 ViewsNet::ConstraintData cons;
                                 cons.mergedSpatialLineSegmentIds[0] = mergedLines.size() - 1;
@@ -545,7 +548,7 @@ namespace panoramix {
                     assert(chainIds[firstLineIdInThisChain] == chainIds.back());
                     Vec3 tailPoint = mergedLines.back().component.second;
                     Vec3 headPoint = mergedLines[firstLineIdInThisChain].component.first;
-                    if (AngleBetweenDirections(tailPoint, headPoint) <= consAngleThres * 2){
+                    if (AngleBetweenDirections(tailPoint, headPoint) <= incidenceAngleThres){
                         Vec3 mid = (tailPoint + headPoint) / 2.0;
                         ViewsNet::ConstraintData cons;
                         cons.mergedSpatialLineSegmentIds[0] = mergedLines.size() - 1;
@@ -562,7 +565,9 @@ namespace panoramix {
 
             // find intersection and incidence constraints
             void AppendIntersectionAndOptionallyIncidenceConstraints(const std::vector<Classified<Line3>> & mergedLines,
-                std::vector<ViewsNet::ConstraintData> & constraints, double consAngleThres, bool appendIncidenceCons = true){
+                std::vector<ViewsNet::ConstraintData> & constraints, 
+                double intersectionAngleThres, double incidenceAngleThres,
+                bool appendIncidenceCons = true){
                 for (size_t i = 0; i < mergedLines.size(); i++){
                     auto & linei = mergedLines[i];
                     if (linei.claz == -1)
@@ -574,14 +579,19 @@ namespace panoramix {
                             continue;
                         if (linei.claz == linej.claz && !appendIncidenceCons)
                             continue;
+                        auto normalj = linej.component.first.cross(linej.component.second);
 
-                        // we MUST ENSURE that all point direction vector are NORMALIED!!!!!!!!!!!
+                        // we MUST ENSURE that all point direction vectors are NORMALIED!!!!!!!!!!!
+
                         auto nearestPoss = DistanceBetweenTwoLines(linei.component, linej.component).second;
                         double angleDist = AngleBetweenDirections(nearestPoss.first.position, nearestPoss.second.position);
-                        if (angleDist >= consAngleThres * 2)
-                            continue;
 
-                        if (linei.claz == linej.claz){ // incidence
+                        if (linei.claz == linej.claz && angleDist <= incidenceAngleThres){ // incidence
+                            // the angle distance vertical to lines direction must be lower than the intersectionAngleThres
+                            if (std::min(AngleBetweenDirections(normali, normalj), 
+                                    AngleBetweenDirections(normali, -normalj)) > 
+                                intersectionAngleThres)
+                                continue;
                             ViewsNet::ConstraintData cons;
                             cons.mergedSpatialLineSegmentIds[0] = i;
                             cons.mergedSpatialLineSegmentIds[1] = j;
@@ -591,21 +601,15 @@ namespace panoramix {
                             constraints.push_back(cons);
                             continue;
                         }
+                        else if (angleDist <= intersectionAngleThres){
+                            // get intersection point direction
+                            Vec3 intersection = normali.cross(normalj); // the direction may be opposited
+                            intersection /= norm(intersection);
+                            auto nearestPosMid = (nearestPoss.first.position + nearestPoss.second.position) / 2.0;
+                            if (AngleBetweenDirections(nearestPosMid, intersection) >
+                                AngleBetweenDirections(nearestPosMid, -intersection))
+                                intersection = -intersection; // fix the direction
 
-                        auto normalj = linej.component.first.cross(linej.component.second);
-
-                        // get intersection point direction
-                        Vec3 intersection = normali.cross(normalj);
-                        intersection /= norm(intersection);
-                        // get distances
-                        Vec3 nearesti = DistanceFromPointToLine(intersection, linei.component).second.position;
-                        double anglei = AngleBetweenDirections(intersection, nearesti);
-                        Vec3 nearestj = DistanceFromPointToLine(intersection, linej.component).second.position;
-                        double anglej = AngleBetweenDirections(intersection, nearestj);
-
-                        if (anglei <= consAngleThres &&
-                            anglej <= consAngleThres){
-                            // insert an intersection constraint
                             ViewsNet::ConstraintData cons;
                             cons.mergedSpatialLineSegmentIds[0] = i;
                             cons.mergedSpatialLineSegmentIds[1] = j;
@@ -1041,7 +1045,7 @@ namespace panoramix {
                 _globalData.mergedSpatialLineSegmentChainIds, 
                 _globalData.constraints, 
                 _params.mergeLineDistanceAngleThreshold,
-                _params.connectedLinesDistanceAngleThreshold);
+                _params.incidenceConstraintLineDistanceAngleThreshold);
 
             // make all point directions of lines normalized
             for (auto & line : _globalData.mergedSpatialLineSegments){
@@ -1051,7 +1055,9 @@ namespace panoramix {
 
             // get all intersection and incidence constraints
             AppendIntersectionAndOptionallyIncidenceConstraints(_globalData.mergedSpatialLineSegments,
-                _globalData.constraints, _params.connectedLinesDistanceAngleThreshold, true);
+                _globalData.constraints, 
+                _params.intersectionConstraintLineDistanceAngleThreshold, 
+                _params.incidenceConstraintLineDistanceAngleThreshold, false);
 
             // remove all duplicated constraints
             // remove all self connected lines
@@ -1067,7 +1073,7 @@ namespace panoramix {
                 auto & cons = *consIter;
                 if (cons.mergedSpatialLineSegmentIds[0] == cons.mergedSpatialLineSegmentIds[1] ||
                     MaybeVanishingPoint(cons.position, _globalData.vanishingPoints, 
-                    _params.connectedLinesDistanceAngleThreshold))
+                    _params.intersectionConstraintLineDistanceAngleThreshold))
                     continue;
                 uniqueCons.push_back(cons);
             }
@@ -1084,7 +1090,7 @@ namespace panoramix {
                     cons.junctionWeights.X * _params.mjWeightX + 
                     cons.junctionWeights.L * _params.mjWeightL +
                     cons.junctionWeights.I * _params.mjWeightI;
-                std::cout << "cons weight: " << cons.weight << std::endl;
+                //std::cout << "cons weight: " << cons.weight << std::endl;
                 assert(cons.weight >= 0);
             }           
             std::sort(_globalData.constraints.begin(), _globalData.constraints.end(),

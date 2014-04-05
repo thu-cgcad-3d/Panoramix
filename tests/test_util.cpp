@@ -67,6 +67,7 @@ TEST(UtilTest, AngleBetweenDirections) {
     core::Vec2 v3(-1, -1);
     ASSERT_DOUBLE_EQ(-M_PI_4 * 3, core::SignedAngleBetweenDirections(v1, v3, false));
     ASSERT_DOUBLE_EQ(M_PI_4 * 3, core::SignedAngleBetweenDirections(v1, v3, true));
+    ASSERT_FLOAT_EQ(M_PI, core::AngleBetweenDirections(v2, v3));
 }
 
 TEST(UtilTest, DistanceFromPointToLine) {

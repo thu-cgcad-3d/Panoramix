@@ -25,7 +25,8 @@ namespace panoramix {
                 double smallCameraAngleScalar; // angle scalar to judge whether two views are too close
                 // angle threshold to judge whether two lines are constrained (intersection/incidence), 
                 // used for building the Constraint Graph
-                double connectedLinesDistanceAngleThreshold;
+                double intersectionConstraintLineDistanceAngleThreshold;
+                double incidenceConstraintLineDistanceAngleThreshold; // for incidence constraits
                 // angle threshold to judge whether two colineared lines should be merged
                 double mergeLineDistanceAngleThreshold;
                 // manhattan junction weights
@@ -44,22 +45,40 @@ namespace panoramix {
             inline const Params & params() const { return _params; }
             
             inline VertHandle insertVertex(const VertData & vd) { return _views.addVertex(vd); }
-            VertHandle insertPhoto(const Image & im, const PerspectiveCamera & cam);
 
+            // insert a new photo, with known parameters
+            VertHandle insertPhoto(const Image & im, const PerspectiveCamera & cam, 
+                double cameraDirectionErrorScale = 0.0,
+                double cameraPositionErrorScale = 0.0);
+
+            // compute features for a single view
             void computeFeatures(VertHandle h);
+
+            // connect this view to neighbor views
             int updateConnections(VertHandle h);
+
+            // whether this view overlaps some existing views a lot, measured by the smallCameraAngleScalar parameter
             VertHandle isTooCloseToAnyExistingView(VertHandle h) const;
-            void computeTransformationOnConnections(VertHandle h);
+
+            // calibrate camera parameters of this view, and if an error loop is closed, calibrate all related view cameras
             void calibrateCamera(VertHandle h); 
+
+            // calibrate all cameras
             void calibrateAllCameras();
-            void updateExternalRegionConnections(VertHandle h); // build region connections across views
+
+            // build region connections across views
+            void updateExternalRegionConnections(VertHandle h);
+            
+            // estimate vanishing points using lines extract from all views, classify this lines and lift them all to space
             void estimateVanishingPointsAndClassifyLines();
-            void rectifySpatialLines(); // 
-            //void estimateLayoutStructure();
+
+            // build constraints on spatial lines and rectify their parameters to build a more reasonable 3D sketch
+            void rectifySpatialLines();
 
         public:
             struct VertData {
                 PerspectiveCamera originalCamera, camera;
+                double cameraDirectionErrorScale, cameraPositionErrorScale;
                 Image image;
                 double weight;
                 std::vector<Classified<Line2>> lineSegments;

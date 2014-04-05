@@ -196,7 +196,7 @@ namespace panoramix {
 
         // color
         using Color = cv::Scalar;
-        enum ColorTag {
+        enum class ColorTag {
             Transparent,
 
             White,
@@ -232,14 +232,20 @@ namespace panoramix {
         struct Classified {
             int claz;
             T component;
-        };
+        }; 
 
-        // things with a model matrix
-        template <class T>
+
+        // somthing transformed in N-d space
+        template <class T, int N>
         struct Transformed {
-            core::Mat4 modelMatrix;
+            Mat<double, N+1, N+1> transform;
             T component;
         };
+
+
+        // dimension
+        template <int ... Dims>
+        struct Dimension {};
  
     }
 }

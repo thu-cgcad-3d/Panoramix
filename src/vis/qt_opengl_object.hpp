@@ -1,9 +1,10 @@
-#ifndef PANORAMIX_VIS_OPENGL_OBJECT_HPP
-#define PANORAMIX_VIS_OPENGL_OBJECT_HPP
+#ifndef PANORAMIX_VIS_QT_OPENGL_OBJECT_HPP
+#define PANORAMIX_VIS_QT_OPENGL_OBJECT_HPP
 
 #include <QtOpenGL>
 #include "../core/basic_types.hpp"
-#include "misc.hpp"
+
+#include "qt_glue.hpp"
 
 #define GL_ALPHA_TEST 0x0BC0
 
@@ -51,6 +52,8 @@ namespace panoramix {
         struct OpenGLShaderSource {
             QByteArray vertexShaderSource;
             QByteArray fragmentShaderSource;
+            QByteArray geometryShaderSource;
+            
         };
         enum class OpenGLShaderSourceName {
             NormalPoints,

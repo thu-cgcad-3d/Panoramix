@@ -15,15 +15,13 @@ namespace panoramix {
             viz << vd.lineSegments;
 
             viz.params.thickness = 1;
-            viz.params.color = ColorFromTag(White);
+            viz.params.color = ColorFromTag(ColorTag::White);
             viz << vd.lineSegmentIntersections;
             
             return viz;
         }
 
         Visualizer3D operator << (Visualizer3D viz, const core::ViewsNet::GlobalData & netgb) {
-            viz = viz << vis::manip3d::SetDefaultColor(Yellow);
-            viz = viz << vis::manip3d::SetPointSize(10.0);
             std::vector<Line3> consLines;
             std::vector<Point3> consPoints;
             consLines.reserve(netgb.constraints.size());
@@ -35,10 +33,12 @@ namespace panoramix {
                 consLines.push_back(Line3(pp.second.first.position, pp.second.second.position));
                 consPoints.push_back(cons.position);
             }
-            viz = viz << vis::manip3d::SetLineWidth(1.0f) << consLines;
-
+            viz << vis::manip3d::SetDefaultColor(ColorTag::Yellow)
+                << vis::manip3d::SetPointSize(10.0)
+                << vis::manip3d::SetLineWidth(1.0f)
+                << consLines;
             return viz
-                << vis::manip3d::SetDefaultColor(Black)
+                << vis::manip3d::SetDefaultColor(ColorTag::Black)
                 << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
                 << vis::manip3d::SetLineWidth(2.0f)
                 << netgb.mergedSpatialLineSegments;

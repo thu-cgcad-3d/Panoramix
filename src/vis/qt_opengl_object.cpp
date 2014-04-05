@@ -1,4 +1,4 @@
-#include "opengl_object.hpp"
+#include "qt_opengl_object.hpp"
 
 namespace panoramix {
     namespace vis {
@@ -240,11 +240,15 @@ namespace panoramix {
                 "varying lowp vec4 pixelColor;\n"
                 "void main(void)\n"
                 "{\n"
-                    "gl_FragColor = pixelColor;\n"
-                    "lowp float distance = length(gl_PointCoord - vec2(0.5));\n"
-                    "if(distance > 0.4)\n"
-                        "gl_FragColor.a = 1.0 - (distance - 0.4) * 0.1;\n"
+                "   gl_FragColor = pixelColor;\n"
+                "   lowp float distance = length(gl_PointCoord - vec2(0.5));\n"
+                "   if(distance > 0.4 && distance <= 0.5)\n"
+                "       gl_FragColor.a = 1.0 - (distance - 0.4) * 0.1;\n"
+                "   else if(distance > 0.5)\n"
+                "       discard;\n"
                 "}\n"
+
+                ""
             };
 
             static const OpenGLShaderSource SSNormalLines = {
@@ -332,6 +336,8 @@ namespace panoramix {
                 error(_program->log());
             if (!_program->addShaderFromSourceCode(QOpenGLShader::Fragment, ss.fragmentShaderSource))
                 error(_program->log());
+            /*if (!_program->addShaderFromSourceCode(QOpenGLShader::Geometry, ss.geometryShaderSource))
+                error(_program->log());*/
             if (!_program->link() || !_program->bind()){
                 error(_program->log());
                 return;
@@ -357,9 +363,6 @@ namespace panoramix {
             _program->release();
         }
 
-
-#define OFFSET_OF(a, b) (const void*)((ptrdiff_t)(&(a)) - (ptrdiff_t)(&(b)))
-
         void OpenGLObject::setUpMesh(const OpenGLMeshData & m){
             _mesh = m;
 
@@ -377,6 +380,8 @@ namespace panoramix {
 
         }
 
+#define OFFSET_OF(a, b) (const void*)((ptrdiff_t)(&(a)) - (ptrdiff_t)(&(b)))
+
         void OpenGLObject::render(RenderModeFlags mode, const QMatrix4x4 & projection,
             const QMatrix4x4 & view, const QMatrix4x4 & model) {
 
@@ -389,6 +394,7 @@ namespace panoramix {
             if (_texture && _texture->isCreated())
                 _texture->bind(0);
 
+            glLineWidth(_mesh.vertices.first().lineWidth1);
             glBindBuffer(GL_ARRAY_BUFFER, _vertexArrayBuffer);
 
             _program->setUniformValue("projectionMatrix", projection);
@@ -412,34 +418,29 @@ namespace panoramix {
             glVertexAttribPointer(_program->attributeLocation("pointSize"), 1, GL_FLOAT, GL_FALSE,
                 sizeof(OpenGLMeshData::Vertex),
                 OFFSET_OF(_mesh.vertices.first().pointSize1, _mesh.vertices.first().position4));
-
-            /*_program->setAttributeArray("position", GL_FLOAT, &(_mesh.vertices.first().position4), 3, sizeof(OpenGLMeshData::Vertex));
-            _program->setAttributeArray("normal", GL_FLOAT, &(_mesh.vertices.first().normal3), 3, sizeof(OpenGLMeshData::Vertex));
-            _program->setAttributeArray("color", GL_FLOAT, &(_mesh.vertices.first().color4), 4, sizeof(OpenGLMeshData::Vertex));
-            _program->setAttributeArray("texCoord", GL_FLOAT, &(_mesh.vertices.first().texCoord2), 2, sizeof(OpenGLMeshData::Vertex));
-            _program->setAttributeArray("pointSize", GL_FLOAT, &(_mesh.vertices.first().pointSize1), 1, sizeof(OpenGLMeshData::Vertex));*/
+            glVertexAttribPointer(_program->attributeLocation("lineWidth"), 1, GL_FLOAT, GL_FALSE,
+                sizeof(OpenGLMeshData::Vertex),
+                OFFSET_OF(_mesh.vertices.first().lineWidth1, _mesh.vertices.first().position4));
 
             _program->enableAttributeArray("position");
             _program->enableAttributeArray("normal");
             _program->enableAttributeArray("color");
             _program->enableAttributeArray("texCoord");
             _program->enableAttributeArray("pointSize");
+            _program->enableAttributeArray("lineWidth");
 
             if (mode & RenderModeFlag::Triangles){
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _trianglesIndicesBuffer);
-                //glDrawElements(GL_TRIANGLES, _mesh.iTriangles.size(), GL_UNSIGNED_INT, _mesh.iTriangles.data());
                 glDrawElements(GL_TRIANGLES, _mesh.iTriangles.size(), GL_UNSIGNED_INT, 0);
             }
 
             if (mode & RenderModeFlag::Lines) {
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _linesIndicesBuffer);
-                //glDrawElements(GL_LINES, _mesh.iLines.size(), GL_UNSIGNED_INT, _mesh.iLines.data());
                 glDrawElements(GL_LINES, _mesh.iLines.size(), GL_UNSIGNED_INT, 0);
             }
 
             if (mode & RenderModeFlag::Points){
                 glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _pointsIndicesBuffer);
-                //glDrawElements(GL_POINTS, _mesh.iPoints.size(), GL_UNSIGNED_INT, _mesh.iPoints.data());
                 glDrawElements(GL_POINTS, _mesh.iPoints.size(), GL_UNSIGNED_INT, 0);
             }
 
@@ -448,6 +449,7 @@ namespace panoramix {
             _program->disableAttributeArray("color");
             _program->disableAttributeArray("texCoord");
             _program->disableAttributeArray("pointSize");
+            _program->disableAttributeArray("lineWidth");
 
             _program->release();
         }
