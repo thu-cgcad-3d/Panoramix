@@ -47,16 +47,23 @@ namespace panoramix {
             return result == high ? low : result;
         }
 
-        template <class T, int ...Dims>
-        T EncodeSubscriptToIndex(const Point<T, sizeof...(Dims)> & subscript, 
-            Dimension<Dims...> dimension) {
-            // TODO
+        template <class T, int N>
+        T EncodeSubscriptToIndex(const Point<T, N> & subscript, const Vec<T, N> & dimension) {
+            T index = subscript[0];
+            for (int i = 1; i < N; i++){
+                index = index * dimension[i] + subscript[i];
+            }
+            return index;
         }
 
-        template <class T, int ...Dims>
-        Point<T, sizeof...(Dims)> DecodeIndexToSubscript(const T & index, 
-            Dimension<Dims...> dimension) {
-            // TODO
+        template <class T, int N>
+        Point<T, N> DecodeIndexToSubscript(T index, const Vec<T, N> & dimension) {
+            Point<T, N> subscript;
+            for (int i = N-1; i >=0; i--){
+                subscript[i] = WrapBetween(index, 0, dimension[i]);
+                index = (index - subscript[i]) / dimension[i];
+            }
+            return subscript;
         }
 
 

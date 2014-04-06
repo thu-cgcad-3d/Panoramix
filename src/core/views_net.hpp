@@ -65,16 +65,13 @@ namespace panoramix {
 
             // calibrate all cameras
             void calibrateAllCameras();
-
-            // build region connections across views
-            void updateExternalRegionConnections(VertHandle h);
             
             // estimate vanishing points using lines extract from all views, classify this lines and lift them all to space
             void estimateVanishingPointsAndClassifyLines();
 
             // build constraints on spatial lines and rectify their parameters to build a more reasonable 3D sketch
             void rectifySpatialLines();
-
+                
         public:
             struct VertData {
                 PerspectiveCamera originalCamera, camera;

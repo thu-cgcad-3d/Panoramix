@@ -14,8 +14,8 @@ namespace panoramix {
          */
         template <class Tag>
         struct Handle {
-            int32_t id;
-            inline Handle(int32_t id_ = -1) : id(id_){}
+            int64_t id;
+            inline Handle(int64_t id_ = -1) : id(id_){}
             inline bool operator == (Handle h) const { return id == h.id; }
             inline bool operator != (Handle h) const { return id != h.id; }
             inline void reset() { id = -1; }
@@ -73,7 +73,7 @@ namespace panoramix {
             // ComponentTableT : std::vector<Triplet<TopoT, DataT>>
             // UpdateHandleTableT: std::vector<Handle<TopoT>>
             newlocations.resize(v.size());
-            int32_t index = 0;
+            int64_t index = 0;
             for (size_t i = 0; i < v.size(); i++){
                 newlocations[i] = { v[i].exists == false ? -1 : (index++) };
             }

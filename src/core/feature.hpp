@@ -48,7 +48,7 @@ namespace panoramix {
             void updateMatrices();
 
         private:
-            int _screenW, _screenH;
+            double _screenW, _screenH;
             double _focal;
             double _near, _far;
             Vec3 _eye, _center, _up;
@@ -96,8 +96,8 @@ namespace panoramix {
                         Vec2 screenp(i, j);
                         Vec3 p3 = _outCam.spatialDirection(screenp);
                         Vec2 screenpOnInCam = _inCam.screenProjection(p3);
-                        mapx.at<float>(j, i) = screenpOnInCam(0);
-                        mapy.at<float>(j, i) = screenpOnInCam(1);
+                        mapx.at<float>(j, i) = static_cast<float>(screenpOnInCam(0));
+                        mapy.at<float>(j, i) = static_cast<float>(screenpOnInCam(1));
                     }
                 }
                 cv::remap(inputIm, outputIm, mapx, mapy, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
@@ -116,7 +116,7 @@ namespace panoramix {
 
         
 
-        /// features
+        /// feature extractors
 
         // line extractor
         class LineSegmentExtractor {
@@ -172,6 +172,16 @@ namespace panoramix {
         private:
             Params _params;
         };
+
+
+
+
+
+
+        /// feature evaluators & matchers
+
+
+
 
     }
 }

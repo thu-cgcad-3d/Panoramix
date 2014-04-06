@@ -31,7 +31,7 @@ namespace panoramix {
                 std::vector<HPoint2> & hinterps, std::vector<std::pair<int, int>> & lineids,
                 bool suppresscross)
             {
-                int lnum = lines.size();
+                size_t lnum = lines.size();
                 for (int i = 0; i < lnum; i++){
                     auto eqi = cv::Vec3d(lines[i].component.first[0], lines[i].component.first[1], 1)
                         .cross(cv::Vec3d(lines[i].component.second[0], lines[i].component.second[1], 1));
@@ -65,8 +65,6 @@ namespace panoramix {
         }
 
         void ViewsNet::computeFeatures(VertHandle h) {
-            //std::cout << "computing fea of photo " << h.id << std::endl;
-
             auto & vd = _views.data(h);
             const Image & im = vd.image;
             auto lineSegments = _params.lineSegmentExtractor(im);
@@ -94,6 +92,13 @@ namespace panoramix {
             vd.regionNet->computeImageFeatures();
         }
 
+
+
+
+
+
+
+
         namespace {
             inline double PerspectiveCameraAngleRadius(const PerspectiveCamera & cam) {
                 return atan(sqrt(Square(cam.screenSize().height) + Square(cam.screenSize().width)) /
@@ -120,7 +125,7 @@ namespace panoramix {
                     _views.addEdge(h, v.topo.hd, hd);
                 }
             }
-            return _views.topo(h).halfedges.size();
+            return static_cast<int>(_views.topo(h).halfedges.size());
         }
 
         ViewsNet::VertHandle ViewsNet::isTooCloseToAnyExistingView(VertHandle h) const {
@@ -138,6 +143,17 @@ namespace panoramix {
             return VertHandle();
         }
 
+
+
+
+        namespace {
+
+            
+
+        }
+        
+
+
         void ViewsNet::calibrateCamera(VertHandle h) {
             auto & vd = _views.data(h);
             if (vd.cameraDirectionErrorScale == 0 && vd.cameraPositionErrorScale == 0)
@@ -148,6 +164,16 @@ namespace panoramix {
         void ViewsNet::calibrateAllCameras() {
             
         }
+
+
+
+
+
+
+
+
+
+
 
         namespace {
 
@@ -160,7 +186,7 @@ namespace panoramix {
             }
 
             inline GeoCoord GeoCoordFromPixelIndex(const cv::Point & pixel, int longidiv, int latidiv) {
-                return GeoCoord{ pixel.x * M_PI * 2 / longidiv - M_PI, pixel.y * M_PI / latidiv - M_PI_2 };
+                return GeoCoord{ pixel .x * M_PI * 2 / longidiv - M_PI, pixel.y * M_PI / latidiv - M_PI_2 };
             }
 
             inline double LatitudeFromLongitudeAndNormalVector(double longitude, const Vec3 & normal) {
@@ -196,13 +222,16 @@ namespace panoramix {
 
                 cv::Mat votePanel = cv::Mat::zeros(longitudeDivideNum, latitudeDivideNum, CV_32FC1);
 
-                int pn = intersections.size();
+                std::cout << "begin voting ..." << std::endl;
+                size_t pn = intersections.size();
                 for (const Vec3& p : intersections){
                     cv::Point pixel = PixelIndexFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
                     votePanel.at<float>(pixel.x, pixel.y) += 1.0;
                 }
+                std::cout << "begin gaussian bluring ..." << std::endl;
                 cv::GaussianBlur(votePanel, votePanel, cv::Size((longitudeDivideNum / 50) * 2 + 1, (latitudeDivideNum / 50) * 2 + 1),
                     4, 4, cv::BORDER_REPLICATE);
+                std::cout << "done voting" << std::endl;
 
                 double minVal = 0, maxVal = 0;
                 int maxIndex[] = { -1, -1 };
@@ -388,6 +417,22 @@ namespace panoramix {
                 }
             }
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         ViewsNet::ConstraintData::ConstraintData(){

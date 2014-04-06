@@ -58,6 +58,33 @@ TEST(UtilTest, WrapBetween) {
     }
 }
 
+TEST(UtilTest, SubscriptAndIndex) {
+
+    auto i = core::EncodeSubscriptToIndex(core::Point<int, 2>(1, 2), core::Vec<int, 2>(2, 3));
+    ASSERT_EQ(5, i);
+
+    int trueIndex = 0;
+    for (int a = 0; a < 10; a++){
+        for (int b = 0; b < 20; b++){
+            for (int c = 0; c < 15; c++){
+                for (int d = 0; d < 9; d++){
+                    
+                    int index = core::EncodeSubscriptToIndex(core::Point<int, 4>(a, b, c, d), 
+                        core::Vec<int, 4>(10, 20, 15, 9));
+                    ASSERT_EQ(trueIndex, index);
+                    
+                    auto subs = core::DecodeIndexToSubscript(index, core::Vec<int, 4>(10, 20, 15, 9));
+                    ASSERT_EQ(0, core::norm(core::Point<int, 4>(a, b, c, d) - subs));
+                    
+                    trueIndex++;
+                }
+            }
+        }
+    }
+
+}
+
+
 TEST(UtilTest, AngleBetweenDirections) {
     core::Vec2 v1(1, 0), v2(1, 1);
     ASSERT_DOUBLE_EQ(M_PI_4, core::AngleBetweenDirections(v1, v2));
