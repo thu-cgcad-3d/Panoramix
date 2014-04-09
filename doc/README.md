@@ -1,4 +1,4 @@
-- 介绍 -
+介绍
 ========
 
 Panoramix 致力于提供基于全景照片拍摄来重建 Manhattan 场景的功能。
@@ -10,10 +10,10 @@ Panoramix 被用于构建一个平台，用于拍摄场景照片并实时自动�
 该平台包括移动终端与后台两部分，前者使用TCP与后台通信以实时利用其计算能力。
 
 
-- 优势 -
+优势
 ========
 
-Panoramix 相对于其它类似技术拥有如下优势：
+Panoramix 相对于其它类似技术预期拥有如下优势：
 
 0. 与立体视觉技术相比，Panoramix 不需要双目设定；无需两个或两个以上相机；无需两相机 baseline 分离；使用者只需站在原地使用唯一的移动端相机拍摄即可。
 
@@ -21,14 +21,29 @@ Panoramix 相对于其它类似技术拥有如下优势：
 
 2. 基于移动端拍摄全景图，比使用距离传感器更加方便，设备更便宜更便捷。
 
+与类似方向研究的对比：
 
-- 流程 -
+1. [Piecewise Planar and Compact Floorplan Reconstruction from Images, CVPR2014](http://www.andrew.cmu.edu/user/rcabral/CabralFurukawaCVPR2014.pdf)
+
+    1.1 Panoramix 速度更快
+
+    1.2 Panoramix 不需要多张全景图
+
+2. Box Layout Indoor Reconstruction Papers
+
+    2.1 Panoramix 速度更快
+
+    2.2 Panoramix 支持更复杂的室内结构
+
+
+
+流程
 ========
 
-见 [./doc/workflow_v1.jpg](https://github.com/YANG-H/Panoramix/blob/develop/doc/workflow_v1.jpg)
+基本流程见 [./doc/workflow_v1.jpg](https://github.com/YANG-H/Panoramix/blob/develop/doc/workflow_v1.jpg)
 
 
-- 配置与开发 -
+配置与开发
 ==============
 
 见 [./doc/FOR_DEVELOPERS.md](https://github.com/YANG-H/Panoramix/blob/develop/doc/FOR_DEVELOPERS.md)
