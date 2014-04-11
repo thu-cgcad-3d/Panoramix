@@ -115,6 +115,7 @@ namespace panoramix {
                 std::vector<Vec3> mergedSpatialLineSegmentIntersections;
                 std::vector<Classified<Line3>> mergedSpatialLineSegments;
                 std::vector<int> mergedSpatialLineSegmentChainIds;
+                // constraints for 3D lines reconstruction
                 std::vector<ConstraintData> constraints, refinedConstraints;
             };
 

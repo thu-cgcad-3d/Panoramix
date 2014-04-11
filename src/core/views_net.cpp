@@ -327,7 +327,7 @@ namespace panoramix {
 
                     // classify lines
                     lines[i].claz = -1;
-                    float curscore = 0.8;
+                    double curscore = 0.8;
                     for (int j = 0; j < npoints; j++){
                         if (linescores[j] > curscore){
                             lines[i].claz = j;
@@ -356,7 +356,7 @@ namespace panoramix {
             });
 
             // collect line intersections
-            int lineIntersectionsNum = 0;
+            size_t lineIntersectionsNum = 0;
             for (const auto & vIter : seperatedViewIters) // count intersecton num
                 lineIntersectionsNum += vIter->data.lineSegmentIntersections.size();
             std::vector<Vec3> intersections(lineIntersectionsNum);
@@ -367,14 +367,16 @@ namespace panoramix {
                     intersectionsBegin, 
                     [&vIter](const HPoint2 & p) -> Vec3 {
                     Vec3 p3 = vIter->data.camera.spatialDirection(p.toPoint());
-                    return p3;
+                    return p3 / norm(p3); // normalized
                 });
             }
 
             // get merged intersections
+            // bottleneck!!!!!
             auto mergedIntersectionsIters = MergeNear(intersections.begin(), intersections.end(), std::false_type(), 
-                M_PI / 150.0, [](const Vec3 & p1, const Vec3 & p2) -> double {
-                return AngleBetweenDirections(p1, p2);
+                2 * sin(M_PI / 150.0 / 2.0), 
+                [](const Vec3 & p1, const Vec3 & p2) -> double {
+                return norm(p1 - p2);
             });
             _globalData.mergedSpatialLineSegmentIntersections.clear();
             _globalData.mergedSpatialLineSegmentIntersections.reserve(mergedIntersectionsIters.size());
@@ -382,11 +384,12 @@ namespace panoramix {
                 _globalData.mergedSpatialLineSegmentIntersections.push_back(*intersectionIter);
             }
 
+
             // find vanishing points;
             _globalData.vanishingPoints = FindVanishingPoints(intersections);                        
 
             // add spatial line segments from line segments of all views
-            int spatialLineSegmentsNum = 0;
+            size_t spatialLineSegmentsNum = 0;
             for (auto & v : _views.vertices())
                 spatialLineSegmentsNum += v.data.lineSegments.size();
             _globalData.spatialLineSegments.resize(spatialLineSegmentsNum);
@@ -859,7 +862,7 @@ namespace panoramix {
                     // \lambda_i
                     lambdas[i].varId = varIdGenerator++;
                     lambdas[i].isSlackVariable = false;
-                    lambdas[i].lineId = i;
+                    lambdas[i].lineId = static_cast<int>(i);
                     lambdas[i].weightInObjectiveFunction = 0.0; // not appeared in objective function
                     scaleInequations[i].equationId = equationIdGenerator++;
                     scaleInequations[i].lambdaId = lambdas[i].varId;
@@ -909,7 +912,7 @@ namespace panoramix {
                     VariableInfo slackVar;
                     slackVar.varId = varIdGenerator++;
                     slackVar.isSlackVariable = true;
-                    slackVar.constraintId = i;
+                    slackVar.constraintId = static_cast<int>(i);
                     slackVar.weightInObjectiveFunction = cons.weight; // weight of constraint
                     slacks.push_back(slackVar);                    
                     

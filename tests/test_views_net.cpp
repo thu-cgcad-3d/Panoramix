@@ -25,7 +25,7 @@ TEST(ViewsNet, ViewsNet) {
 
     std::vector<core::PerspectiveCamera> cams;
     core::Mesh<core::Vec3> cameraStand;
-    core::MakeQuadFacedSphere(cameraStand, 7, 10);
+    core::MakeQuadFacedSphere(cameraStand, 3, 5);
     for (auto & v : cameraStand.vertices()){
         core::Vec3 direction = v.data;
         if (core::AngleBetweenDirections(direction, core::Vec3(0, 0, 1)) <= 0.1 ||
@@ -88,7 +88,7 @@ TEST(ViewsNet, ViewsNet) {
 
     for (auto & vh : viewHandles){
         std::cout << "photo " << vh.id << std::endl;
-        //net.computeFeatures(vh);
+        net.computeFeatures(vh);
         net.updateConnections(vh);
         net.calibrateCamera(vh);
     }

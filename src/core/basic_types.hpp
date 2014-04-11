@@ -8,9 +8,7 @@
 #include <unordered_set>
 #include <forward_list>
 #include <array>
-
 #include <memory>
-
 #include <cstdint>
 
 #include <opencv2/opencv.hpp>
@@ -242,10 +240,6 @@ namespace panoramix {
             T component;
         };
 
-
-        // dimension
-        template <int ... Dims>
-        struct Dimension {};
  
     }
 }

@@ -67,8 +67,7 @@ TEST(UtilTest, SubscriptAndIndex) {
     for (int a = 0; a < 10; a++){
         for (int b = 0; b < 20; b++){
             for (int c = 0; c < 15; c++){
-                for (int d = 0; d < 9; d++){
-                    
+                for (int d = 0; d < 9; d++){                    
                     int index = core::EncodeSubscriptToIndex(core::Point<int, 4>(a, b, c, d), 
                         core::Vec<int, 4>(10, 20, 15, 9));
                     ASSERT_EQ(trueIndex, index);

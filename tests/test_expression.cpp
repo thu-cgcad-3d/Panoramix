@@ -24,7 +24,7 @@ TEST(Expression, Basic) {
     auto vvv = v * core::MakeConstantValue(3);
     auto vv = vvv - v;
     
-    ASSERT_FLOAT_EQ(2, cv::norm(vv.eval()));
+    ASSERT_FLOAT_EQ(2.0f, cv::norm(vv.eval()));
 
     int a = 0;
     auto s = core::MakeConstantValue(a);

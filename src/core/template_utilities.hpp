@@ -35,7 +35,12 @@ namespace panoramix {
                 typename SequenceGenerator<std::tuple_size<TupleT>::value>::type());
         }
 
-
+        // invoke a function with tuple args without the original return value
+        template <class FunctorT, class TupleT>
+        inline void InvokeWithoutReturn(FunctorT fun, TupleT args) {
+            InvokeWithEachTupleArg(fun, args,
+                typename SequenceGenerator<std::tuple_size<TupleT>::value>::type());
+        }
 
 
     }

@@ -36,8 +36,8 @@ namespace panoramix {
             return v < high ? v : high;
         }
 
-        template <class T, class K1, class K2>
-        T WrapBetween(const T& input, const K1 & low, const K2 & high) {
+        template <class T>
+        T WrapBetween(const T & input, const T & low, const T & high) {
             if (low >= high)
                 return input;
             if (low <= input && input < high)
@@ -67,6 +67,11 @@ namespace panoramix {
         }
 
 
+
+
+
+
+
         // for vectors
         template <class T, int N>
         inline T AngleBetweenDirections(const Vec<T, N> & v1, const Vec<T, N> & v2) {
@@ -75,9 +80,9 @@ namespace panoramix {
 
         template <class T>
         inline T SignedAngleBetweenDirections(const Vec<T, 2> & from, const Vec<T, 2> & to, 
-            bool defineClockwiseAsPositive = true) {
+            bool clockwiseAsPositive = true) {
             double angle = atan2(- from(0)*to(1) + to(0)*from(1), from(1)*to(1) + from(0)*to(0));
-            return defineClockwiseAsPositive ? angle : -angle;
+            return clockwiseAsPositive ? angle : -angle;
         }
 
         // for lines and points
@@ -122,6 +127,16 @@ namespace panoramix {
             PositionOnLine<T, N> pos2(line2, t2);
             return std::make_pair(norm(pos1.position - pos2.position), std::make_pair(pos1, pos2));
         }
+
+
+
+
+
+
+
+
+
+
 
 
         // generic algorithms
@@ -203,6 +218,14 @@ namespace panoramix {
 
             return gBegins;
         }
+
+        //// merge, using buckets
+        //template <class IteratorT, class HasherT = std::hash<typename std::iterator_traits<IteratorT>::value_type>>
+        //std::vector<IteratorT> MergeUsingBuckets(IteratorT begin, IteratorT end, size_t bucketCount, HasherT hasher = HasherT()) {
+        //    using T = typename std::iterator_traits<IteratorT>::value_type;
+        //    std::unordered_multiset<T, HasherT> mset(bucketCount, hasher);
+        //    
+        //}
 
         
         // Minimum Spanning Tree
