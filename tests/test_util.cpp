@@ -144,15 +144,15 @@ TEST(UtilTest, CreateLinearSequence) {
 }
 
 
-TEST(UtilTest, MergeNear) {
+TEST(UtilTest, NaiveMergeNear) {
     std::list<double> arr1;
     arr1.resize(1000);
     std::generate(arr1.begin(), arr1.end(), std::rand);
     std::vector<double> arr2(arr1.begin(), arr1.end());
 
     double thres = 10;
-    auto gBegins1 = core::MergeNear(std::begin(arr1), std::end(arr1), std::false_type(), thres);
-    auto gBegins2 = core::MergeNear(std::begin(arr2), std::end(arr2), std::true_type(), thres);
+    auto gBegins1 = core::NaiveMergeNear(std::begin(arr1), std::end(arr1), std::false_type(), thres);
+    auto gBegins2 = core::NaiveMergeNear(std::begin(arr2), std::end(arr2), std::true_type(), thres);
     ASSERT_EQ(gBegins1.size(), gBegins2.size());
     auto i = gBegins1.begin();
     auto j = gBegins2.begin();

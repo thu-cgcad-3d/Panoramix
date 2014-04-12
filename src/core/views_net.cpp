@@ -348,7 +348,7 @@ namespace panoramix {
         void ViewsNet::estimateVanishingPointsAndClassifyLines() {
 
             // pick separated views only
-            auto seperatedViewIters = MergeNear(_views.vertices().begin(), _views.vertices().end(), std::false_type(),
+            auto seperatedViewIters = NaiveMergeNear(_views.vertices().begin(), _views.vertices().end(), std::false_type(),
                 _params.smallCameraAngleScalar, [](const ViewMesh::Vertex & v1, const ViewMesh::Vertex & v2) -> double{
                 double angleDistance = AngleBetweenDirections(v1.data.camera.center(), v2.data.camera.center());
                 return angleDistance / 
@@ -373,7 +373,7 @@ namespace panoramix {
 
             // get merged intersections
             // bottleneck!!!!!
-            auto mergedIntersectionsIters = MergeNear(intersections.begin(), intersections.end(), std::false_type(), 
+            auto mergedIntersectionsIters = NaiveMergeNear(intersections.begin(), intersections.end(), std::false_type(), 
                 2 * sin(M_PI / 150.0 / 2.0), 
                 [](const Vec3 & p1, const Vec3 & p2) -> double {
                 return norm(p1 - p2);
@@ -462,7 +462,7 @@ namespace panoramix {
                 }
 
                 // group all colinear spatial lines
-                auto colinearLineIters = MergeNear(lines.begin(), lines.end(), std::true_type(), 
+                auto colinearLineIters = NaiveMergeNear(lines.begin(), lines.end(), std::true_type(), 
                     mergeAngleThres,
                     [](const Classified<Line3> & line1, const Classified<Line3> & line2) -> double{
                     if (line1.claz != line2.claz)
@@ -1110,7 +1110,7 @@ namespace panoramix {
             // remove all duplicated constraints
             // remove all self connected lines
             // remove all constraints close to any vanishing points
-            auto uniqueConsIters = MergeNear(_globalData.constraints.begin(), _globalData.constraints.end(), std::false_type(),
+            auto uniqueConsIters = NaiveMergeNear(_globalData.constraints.begin(), _globalData.constraints.end(), std::false_type(),
                 1, [](const ConstraintData & cons1, const ConstraintData & cons2){
                 return (cons1.type == cons2.type && 
                     std::is_permutation(std::begin(cons1.mergedSpatialLineSegmentIds), std::end(cons1.mergedSpatialLineSegmentIds), 

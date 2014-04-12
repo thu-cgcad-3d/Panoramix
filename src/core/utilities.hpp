@@ -160,7 +160,7 @@ namespace panoramix {
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the begin iterators of merged groups
         template <class IteratorT, class DistanceT, class DistanceFunctorT = std::minus<DistanceT>>
-        std::vector<IteratorT> MergeNear(IteratorT begin, IteratorT end, std::true_type,
+        std::vector<IteratorT> NaiveMergeNear(IteratorT begin, IteratorT end, std::true_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
                 return std::vector<IteratorT>();
@@ -196,7 +196,7 @@ namespace panoramix {
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the iterators pointing to group leaders
         template <class IteratorT, class DistanceT, class DistanceFunctorT = std::minus<DistanceT>>
-        std::vector<IteratorT> MergeNear(IteratorT begin, IteratorT end, std::false_type,
+        std::vector<IteratorT> NaiveMergeNear(IteratorT begin, IteratorT end, std::false_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
                 return std::vector<IteratorT>();
