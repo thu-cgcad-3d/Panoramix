@@ -26,6 +26,14 @@ namespace panoramix {
             return fun(std::get<S>(args) ...);
         }
 
+        template <class FunctorT, class ElementFunctorT, class TupleT, int ...S>
+        inline auto InvokeWithEachTupleArgPreprocessed(FunctorT fun, ElementFunctorT elementPreprocessor, 
+            TupleT args, Sequence<S...>)
+            -> decltype(fun(std::get<S>(args) ...)) {
+            return fun(elementPreprocessor(std::get<S>(args)) ...);
+        }
+
+
         // invoke a function with tuple args
         template <class FunctorT, class TupleT>
         inline auto Invoke(FunctorT fun, TupleT args)
@@ -34,6 +42,15 @@ namespace panoramix {
             return InvokeWithEachTupleArg(fun, args,
                 typename SequenceGenerator<std::tuple_size<TupleT>::value>::type());
         }
+
+        template <class FunctorT, class ElementFunctorT, class TupleT>
+        inline auto InvokeWithPreprocessor(FunctorT fun, ElementFunctorT elementPreprocessor, TupleT args)
+            -> decltype(InvokeWithEachTupleArgPreprocessed(fun, elementPreprocessor, args,
+            typename SequenceGenerator<std::tuple_size<TupleT>::value>::type())) {
+            return InvokeWithEachTupleArg(fun, args,
+                typename SequenceGenerator<std::tuple_size<TupleT>::value>::type());
+        }
+
 
         // invoke a function with tuple args without the original return value
         template <class FunctorT, class TupleT>
