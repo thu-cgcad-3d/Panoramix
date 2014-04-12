@@ -23,6 +23,9 @@ TEST(Expression, Basic) {
         }
     }
 
+    //auto earr = MakeConstantValue(arr);
+    
+
 }
 
 TEST(Expression, Speed1) {

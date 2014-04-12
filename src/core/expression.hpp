@@ -39,6 +39,24 @@ namespace panoramix {
             }
         };
 
+        template <class T, int M>
+        struct TensorTraits<T[M]> {
+            static const int Rank = TensorTraits<T>::Rank + 1;
+            using ElementType = typename TensorTraits<T>::ElementType;
+            static ElementType ValueAt(const T(& m)[M], SubscriptIter subs) {
+                return TensorTraits<T>::ValueAt(m[*subs], subs + 1);
+            }
+        };
+
+        template <class T>
+        struct TensorTraits<T[]> {
+            static const int Rank = TensorTraits<T>::Rank + 1;
+            using ElementType = typename TensorTraits<T>::ElementType;
+            static ElementType ValueAt(const T(&m)[], SubscriptIter subs) {
+                return TensorTraits<T>::ValueAt(m[*subs], subs + 1);
+            }
+        };
+
         template <class T, int M, int N>
         struct TensorTraits<Mat<T, M, N>> {
             static const int Rank = TensorTraits<T>::Rank + 2;
@@ -51,6 +69,9 @@ namespace panoramix {
 
         
         // expression content structs
+
+        // cache for expression calculation
+
 
         // base content
         template <class ElementT>
