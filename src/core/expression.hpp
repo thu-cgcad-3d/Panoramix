@@ -86,8 +86,8 @@ namespace panoramix {
         using ExpressionContentPtr = std::shared_ptr<ExpressionContent<ElementT>>;
 
         namespace  { // details
-            template <class TensorFunctorT, class TupleT, int ...S>
-            inline auto TensorInvokeWithEachTupleArg(TensorFunctorT fun,
+            template <class TensorOperatorT, class TupleT, int ...S>
+            inline auto TensorInvokeWithEachTupleArg(TensorOperatorT fun,
                 TupleT args, Subscript subs, Sequence<S...>)
                 -> decltype(fun(subs, *std::get<S>(args) ...)) {
                 return fun(subs, *std::get<S>(args) ...);
@@ -95,9 +95,9 @@ namespace panoramix {
         }
 
         // tensor operation content
-        template <class ElementT, class TensorFunctorT, class ...ArgTs>
+        template <class ElementT, class TensorOperatorT, class ...ArgTs>
         struct TensorExpressionContent : public ExpressionContent<ElementT> {
-            inline TensorExpressionContent(TensorFunctorT f, ExpressionContentPtr<ArgTs>... a)
+            inline TensorExpressionContent(TensorOperatorT f, ExpressionContentPtr<ArgTs>... a)
             : fun(f), args(std::forward_as_tuple(a...)) {}
 
             virtual ElementType eval(Subscript subs) const override {
@@ -106,7 +106,7 @@ namespace panoramix {
             }
 
             std::tuple<ExpressionContentPtr<ArgTs>...> args;
-            TensorFunctorT fun;
+            TensorOperatorT fun;
         };
 
 
@@ -127,6 +127,10 @@ namespace panoramix {
             inline ElementT operator()(int r, int c) const { return eval({ r, c }); }
             inline ElementT operator()(int r, int c, int d) const { return eval({ r, c, d }); }
 
+            template <class DerivElementT>
+            inline ElementT derivative(Subscript subs, 
+                const Expression<DerivElementT> & d, Subscript dsubs) const;
+
         private:
             ExpressionContentPtr<ElementT> _p;
         };
@@ -137,14 +141,19 @@ namespace panoramix {
 
 
         // operators
+        template <class ResultT>
+        struct TensorOperatorBase {
+            using ResultType = ResultT;
+        };
+
 
         // Constant
         template <class T>
-        struct Constant {
-            inline Constant(){}
-            inline Constant(const T & v) : value(v){}
-            inline Constant(T && v) : value(v){}
-            inline typename TensorTraits<T>::ElementType operator()(Subscript subs) const {
+        struct ConstantOperator : public TensorOperatorBase<typename TensorTraits<T>::ElementType> {
+            inline ConstantOperator(){}
+            inline ConstantOperator(const T & v) : value(v){}
+            inline ConstantOperator(T && v) : value(v){}
+            inline ResultType operator()(Subscript subs) const {
                 return TensorTraits<T>::ValueAt(value, subs.begin());
             }
             T value;
@@ -155,8 +164,8 @@ namespace panoramix {
             MakeConstantValue(const T & value){
             using ResultType = typename TensorTraits<T>::ElementType;
             return Expression<ResultType>
-                (std::make_shared<TensorExpressionContent<ResultType, Constant<T>>>
-                (Constant<T>(value)));
+                (std::make_shared<TensorExpressionContent<ResultType, ConstantOperator<T>>>
+                (ConstantOperator<T>(value)));
         }
 
         template <class T>
@@ -165,16 +174,16 @@ namespace panoramix {
             using PureT = std::remove_reference_t<T>;
             using ResultType = typename TensorTraits<PureT>::ElementType;
             return Expression<ResultType>
-                (std::make_shared<TensorExpressionContent<ResultType, Constant<PureT>>>
-                (Constant<PureT>(value)));
+                (std::make_shared<TensorExpressionContent<ResultType, ConstantOperator<PureT>>>
+                (ConstantOperator<PureT>(value)));
         }
 
 
         // Variable
         template <class T>
-        struct VariableRef {
-            inline VariableRef(T * v) : value(v){}
-            inline typename TensorTraits<T>::ElementType operator()(Subscript subs) const {
+        struct VariableRefOperator : public TensorOperatorBase<typename TensorTraits<T>::ElementType> {
+            inline VariableRefOperator(T * v) : value(v){}
+            inline ResultType operator()(Subscript subs) const {
                 return TensorTraits<T>::ValueAt(*value, subs.begin());
             }
             T * value;
@@ -184,15 +193,15 @@ namespace panoramix {
         inline Expression<typename TensorTraits<T>::ElementType> MakeVariableAt(T * v) {
             using ResultType = typename TensorTraits<T>::ElementType;
             return Expression<ResultType>
-                (std::make_shared<TensorExpressionContent<ResultType, VariableRef<T>>>(VariableRef<T>(v)));
+                (std::make_shared<TensorExpressionContent<ResultType, VariableRefOperator<T>>>
+                (VariableRefOperator<T>(v)));
         }
 
 
 
         // Element Wise Operation
         template <class ResultT, class ElementWiseFunctorT, class ...ArgTs>
-        struct ElementWiseOperator {
-            using ResultType = ResultT;
+        struct ElementWiseOperator : public TensorOperatorBase<ResultT> {
             inline ElementWiseOperator(ElementWiseFunctorT ef) : eleFun(eleFun){}
             inline ResultType operator()(Subscript subs, const ExpressionContent<ArgTs> &... args) const {
                 return eleFun(args.eval(subs)...);
