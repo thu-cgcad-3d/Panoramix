@@ -13,13 +13,12 @@ TEST(MiscToolsTest, ConditionalIterator) {
     std::generate_n(std::back_inserter(ds), 100, std::rand);
     
     auto fun = [](int dd){return dd > 50; };
-    auto conditionalDs = core::MakeConditionalContainer(&ds, fun);
     
     std::vector<int> correct;
     std::copy_if(ds.begin(), ds.end(), std::back_inserter(correct), fun);
     
     auto correctIter = correct.begin();
-    for (auto d : conditionalDs){
+    for (auto d : core::MakeConditionalContainer(&ds, fun)){
         ASSERT_EQ(*correctIter, d);
         ++correctIter;
     }
