@@ -54,6 +54,9 @@ namespace panoramix {
             // compute features for a single view
             void computeFeatures(VertHandle h);
 
+            // segment view image and build net of regions for a single view
+            void buildRegionNet(VertHandle h);
+
             // connect this view to neighbor views
             int updateConnections(VertHandle h);
 

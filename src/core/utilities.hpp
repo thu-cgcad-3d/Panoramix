@@ -223,8 +223,10 @@ namespace panoramix {
         
         // Minimum Spanning Tree
         // EdgeVertsGetterT(Edge e)->std::pair<Vert,Vert>
-        //      bool operator==(Vert,Vert) must be available
-        // EdgeWeightGetterT(Edge e)->Scalar
+        // EdgeCompareOnWeightT(Edge e1, Edge e2)->bool 
+        //     determins whether weight of e1 is lower than weight of e2
+        // VertCompareT(Vert v1, Vert v2)->bool
+        //     used in std::map to register set id of vertices
         template <class VertIteratorT, class EdgeIteratorT, 
         class EdgeVertsGetterT,
         class EdgeOutputIteratorT, 
@@ -235,7 +237,7 @@ namespace panoramix {
             EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
             EdgeOutputIteratorT MSTedges,
             EdgeVertsGetterT vertsGetter, 
-            EdgeCompareOnWeightT edgeCompareOnWeight = EdgeCompareOnWeightT(),
+            EdgeCompareOnWeightT edgeCompareOnWeight,
             VertCompareT vertCompare = VertCompareT()
             ) {
             
