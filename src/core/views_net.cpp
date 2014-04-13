@@ -178,12 +178,12 @@ namespace panoramix {
 
         namespace {
 
-            inline cv::Point PixelIndexFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv) {
+            inline PixelLoc PixelIndexFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv) {
                 int longtid = static_cast<int>((p.longitude + M_PI) * longidiv / M_PI / 2);
                 int latid = static_cast<int>((p.latitude + M_PI_2) * latidiv / M_PI);
                 longtid = (longtid % longidiv + longidiv) % longidiv;
                 latid = (latid % latidiv + latidiv) % latidiv;
-                return cv::Point(longtid, latid);
+                return PixelLoc(longtid, latid);
             }
 
             inline GeoCoord GeoCoordFromPixelIndex(const cv::Point & pixel, int longidiv, int latidiv) {
@@ -226,7 +226,7 @@ namespace panoramix {
                 std::cout << "begin voting ..." << std::endl;
                 size_t pn = intersections.size();
                 for (const Vec3& p : intersections){
-                    cv::Point pixel = PixelIndexFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
+                    PixelLoc pixel = PixelIndexFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
                     votePanel.at<float>(pixel.x, pixel.y) += 1.0;
                 }
                 std::cout << "begin gaussian bluring ..." << std::endl;
@@ -255,7 +255,7 @@ namespace panoramix {
 
                     double score = 0;
                     for (Vec3 & v : vecs){
-                        cv::Point pixel = PixelIndexFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                        PixelLoc pixel = PixelIndexFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
                         score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum), WrapBetween(pixel.y, 0, latitudeDivideNum));
                     }
                     if (score > maxScore){
@@ -282,7 +282,7 @@ namespace panoramix {
 
                         double score = 0;
                         for (Vec3 & v : vecs){
-                            cv::Point pixel = PixelIndexFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                            PixelLoc pixel = PixelIndexFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
                             score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum), WrapBetween(pixel.y, 0, latitudeDivideNum));
                         }
                         if (score > maxScore){
@@ -359,7 +359,7 @@ namespace panoramix {
                         minCorner(i) -= 2 * distThres;
                         maxCorner(i) += 2 * distThres;
                     }
-                    // take care: avoid adding varibales to the lambda function in case the Search method throws SEH exception with code 0x00000005
+                    // take care: avoid adding references to the lambda function in case the Search method throws SEH exception with code 0x00000005
                     int foundCount = rtree.Search(minCorner.val, maxCorner.val, [distThres, &points, k](int32_t pid){
                         if (norm(points[pid] - points[k]) <= distThres){
                             return false;

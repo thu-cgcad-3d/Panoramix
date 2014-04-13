@@ -28,124 +28,96 @@ namespace panoramix {
 
 
  
-        // elements of container MUST support .exists
-        template <class BoolExistIteratorT>
-        class JumpIterator {
+        // element of container MUST support PredT(ele) -> bool
+        // ConditionalIterator will automatically skip elements which do not satisfy PredT in iteration
+        template <class IteratorT, class PredT>
+        class ConditionalIterator : public std::iterator<std::forward_iterator_tag, 
+            typename std::iterator_traits<IteratorT>::value_type,
+            typename std::iterator_traits<IteratorT>::difference_type,
+            typename std::iterator_traits<IteratorT>::pointer,
+            typename std::iterator_traits<IteratorT>::reference> {
 
         public:
-            using Iterator = BoolExistIteratorT;
-            using value_type = typename std::iterator_traits<Iterator>::value_type;
-            using reference = typename std::iterator_traits<Iterator>::reference;
-            using pointer = typename std::iterator_traits<Iterator>::pointer;
-            using difference_type = typename std::iterator_traits<Iterator>::difference_type;
-            using iterator_category = std::forward_iterator_tag;
+            using Iterator = IteratorT;
 
-            /**
-            * @brief JumpIterator
-            * @param it_
-            * @param end_
-            */
-            inline JumpIterator(Iterator it_, Iterator end_)
-                : _it(it_), _end(end_) {
-                if (_it != _end && !_it->exists)
+            inline ConditionalIterator(Iterator it_, Iterator end_, PredT pred_ = PredT())
+                : _it(it_), _end(end_), _pred(pred_) {
+                if (_it != _end && !_pred(*_it))
                     ++ (*this);
             }
 
-            /**
-            * @brief operator ++
-            * @return
-            */
-            inline JumpIterator & operator++() {
+            inline ConditionalIterator & operator++() {
                 assert(_it != _end);
                 ++_it;
-                while (_it != _end && !_it->exists)
+                while (_it != _end && !_pred(*_it))
                     ++_it;
                 return *this;
             }
 
-            /**
-            * @brief operator *
-            * @return
-            */
             inline reference operator * () const {
                 return *_it;
             }
 
-            /**
-            * @brief operator ->
-            * @return
-            */
             inline pointer operator -> () const {
                 return &(*_it);
             }
 
-            /**
-            * @brief operator ==
-            * @param i
-            * @return
-            */
-            inline bool operator == (const JumpIterator & i) const {
+            inline bool operator == (const ConditionalIterator & i) const {
                 return _it == i._it;
             }
 
-            /**
-            * @brief operator !=
-            * @param i
-            * @return
-            */
-            inline bool operator != (const JumpIterator & i) const {
+            inline bool operator != (const ConditionalIterator & i) const {
                 return !(*this == i);
             }
 
-            /**
-            * @brief internalIterator
-            * @return
-            */
             inline Iterator internalIterator() const {
                 return _it;
             }
 
         private:
-            BoolExistIteratorT _it;
-            BoolExistIteratorT _end;
+            IteratorT _it;
+            IteratorT _end;
+            PredT _pred;
         };
 
-        /**
-        * @brief class JumpContainerWrapper
-        */
-        template <class BoolExistContainerT>
-        class JumpContainerWrapper {
+
+        // class ConditionalContainerWrapper
+        template <class ContainerT, class ElementPredT>
+        class ConditionalContainerWrapper {
         public:
-            using BoolExistIteratorT = typename BoolExistContainerT::iterator;
-            using iterator = JumpIterator<BoolExistIteratorT>;
+            using OriginalIterator = typename ContainerT::iterator;
+            using iterator = ConditionalIterator<OriginalIterator, ElementPredT>;
             using value_type = typename std::iterator_traits<iterator>::value_type;
 
-            inline JumpContainerWrapper(BoolExistContainerT * cont_) : _cont(cont_){}
-            inline iterator begin() { return iterator(std::begin(*_cont), std::end(*_cont)); }
-            inline iterator end() { return iterator(std::end(*_cont), std::end(*_cont)); }
-            inline iterator begin() const { return iterator(std::begin(*_cont), std::end(*_cont)); }
-            inline iterator end() const { return iterator(std::end(*_cont), std::end(*_cont)); }
+            inline ConditionalContainerWrapper(ContainerT * cont_, ElementPredT elePred_ = ElementPredT()) 
+                : _cont(cont_), _elePred(elePred_){}
+            inline iterator begin() { return iterator(std::begin(*_cont), std::end(*_cont), _elePred); }
+            inline iterator end() { return iterator(std::end(*_cont), std::end(*_cont), _elePred); }
+            inline iterator begin() const { return iterator(std::begin(*_cont), std::end(*_cont), _elePred); }
+            inline iterator end() const { return iterator(std::end(*_cont), std::end(*_cont), _elePred); }
 
         private:
-            BoolExistContainerT * _cont;
+            ContainerT * _cont;
+            ElementPredT _elePred;
         };
 
-        /**
-        * @brief class ConstJumpContainerWrapper
-        */
-        template <class BoolExistContainerT>
-        class ConstJumpContainerWrapper {
+
+        // class ConstConditionalContainerWrapper
+        template <class ContainerT, class ElementPredT>
+        class ConstConditionalContainerWrapper {
         public:
-            using BoolExistIteratorT = typename BoolExistContainerT::const_iterator;
-            using iterator = JumpIterator<BoolExistIteratorT>;
+            using OriginalIterator = typename ContainerT::const_iterator;
+            using iterator = ConditionalIterator<OriginalIterator, ElementPredT>;
             using value_type = typename std::iterator_traits<iterator>::value_type;
 
-            inline ConstJumpContainerWrapper(const BoolExistContainerT * cont_) : _cont(cont_){}
-            inline iterator begin() const { return iterator(std::begin(*_cont), std::end(*_cont)); }
-            inline iterator end() const { return iterator(std::end(*_cont), std::end(*_cont)); }
+            inline ConstConditionalContainerWrapper(const ContainerT * cont_, ElementPredT elePred_ = ElementPredT()) 
+                : _cont(cont_), _elePred(elePred_){}
+            inline iterator begin() const { return iterator(std::begin(*_cont), std::end(*_cont), _elePred); }
+            inline iterator end() const { return iterator(std::end(*_cont), std::end(*_cont), _elePred); }
 
         private:
-            const BoolExistContainerT * _cont;
+            const ContainerT * _cont;
+            ElementPredT _elePred;
         };
  
     }

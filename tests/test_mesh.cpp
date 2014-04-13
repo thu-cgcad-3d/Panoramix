@@ -24,6 +24,9 @@ TEST(MeshTest, Conversion) {
 
     std::vector<core::Line3> lines;
     std::vector<core::Point3> points;
+    
+    mesh.remove(CVMesh::VertHandle(0));
+
     for (auto h : mesh.halfedges()){
         auto p1 = mesh.data(h.topo.from());
         auto p2 = mesh.data(h.topo.to());
@@ -35,15 +38,16 @@ TEST(MeshTest, Conversion) {
 
     vis::Visualizer3D()
         << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
-        << vis::manip3d::SetDefaultColor(core::ColorFromTag(core::ColorTag::Black))
+        << vis::manip3d::SetDefaultColor(core::ColorTag::Black)
         << lines
-        << vis::manip3d::SetDefaultColor(core::ColorFromTag(core::ColorTag::Red))
+        << vis::manip3d::SetDefaultColor(core::ColorTag::Red)
         << vis::manip3d::SetPointSize(20)
         << points
         << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500, 
             core::Vec3(-3, 0, 0), 
             core::Vec3(0.5, 0.5, 0.5)))
-        << vis::manip3d::SetBackgroundColor(core::ColorFromTag(core::ColorTag::White))
+        << vis::manip3d::SetBackgroundColor(core::ColorTag::White)
+        << vis::manip3d::AutoSetCamera
         << vis::manip3d::Show();
 }
 

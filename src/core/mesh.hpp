@@ -58,8 +58,14 @@ namespace panoramix {
         template <class TopoT, class DataT>
         struct Triplet {
             TopoT topo;
-            uint16_t exists;
+            uint8_t exists;
             DataT data;
+        };
+        template <class TopoT, class DataT>
+        struct TripletExistsPred {
+            inline uint8_t operator()(const Triplet<TopoT, DataT> & t) const { 
+                return t.exists; 
+            }
         };
         template <class TopoT, class DataT>
         using TripletArray = std::vector<Triplet<TopoT, DataT>>;
@@ -114,9 +120,15 @@ namespace panoramix {
             using VertHandle = Handle<VertTopo>;
             using HalfHandle = Handle<HalfTopo>;
             using FaceHandle = Handle<FaceTopo>;
+            
             using VertsTable = TripletArray<VertTopo, VertDataT>;
             using HalfsTable = TripletArray<HalfTopo, HalfDataT>;
             using FacesTable = TripletArray<FaceTopo, FaceDataT>;
+            
+            using VertExistsPred = TripletExistsPred<VertTopo, VertDataT>;
+            using HalfExistsPred = TripletExistsPred<HalfTopo, HalfDataT>;
+            using FaceExistsPred = TripletExistsPred<FaceTopo, FaceDataT>;
+
             using Vertex = typename VertsTable::value_type;
             using HalfEdge = typename HalfsTable::value_type;
             using Face = typename FacesTable::value_type;
@@ -128,12 +140,24 @@ namespace panoramix {
             inline const HalfsTable & internalHalfEdges() const { return _halfs; }
             inline const FacesTable & internalFaces() const { return _faces; }
             
-            inline JumpContainerWrapper<VertsTable> vertices() { return JumpContainerWrapper<VertsTable>(&_verts); }
-            inline JumpContainerWrapper<HalfsTable> halfedges() { return JumpContainerWrapper<HalfsTable>(&_halfs); }
-            inline JumpContainerWrapper<FacesTable> faces() { return JumpContainerWrapper<FacesTable>(&_faces); }
-            inline ConstJumpContainerWrapper<VertsTable> vertices() const { return ConstJumpContainerWrapper<VertsTable>(&_verts); }
-            inline ConstJumpContainerWrapper<HalfsTable> halfedges() const { return ConstJumpContainerWrapper<HalfsTable>(&_halfs); }
-            inline ConstJumpContainerWrapper<FacesTable> faces() const { return ConstJumpContainerWrapper<FacesTable>(&_faces); }
+            inline ConditionalContainerWrapper<VertsTable, VertExistsPred> vertices() { 
+                return ConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts); 
+            }
+            inline ConditionalContainerWrapper<HalfsTable, HalfExistsPred> halfedges() { 
+                return ConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs); 
+            }
+            inline ConditionalContainerWrapper<FacesTable, FaceExistsPred> faces() { 
+                return ConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces); 
+            }
+            inline ConstConditionalContainerWrapper<VertsTable, VertExistsPred> vertices() const { 
+                return ConstConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts); 
+            }
+            inline ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred> halfedges() const { 
+                return ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs); 
+            }
+            inline ConstConditionalContainerWrapper<FacesTable, FaceExistsPred> faces() const { 
+                return ConstConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces); 
+            }
             
             inline VertTopo & topo(VertHandle v) { return _verts[v.id].topo; }
             inline HalfTopo & topo(HalfHandle h) { return _halfs[h.id].topo; }
