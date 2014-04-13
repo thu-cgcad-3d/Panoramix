@@ -219,13 +219,6 @@ namespace panoramix {
             return gBegins;
         }
 
-        //// merge, using buckets
-        //template <class IteratorT, class HasherT = std::hash<typename std::iterator_traits<IteratorT>::value_type>>
-        //std::vector<IteratorT> MergeUsingBuckets(IteratorT begin, IteratorT end, size_t bucketCount, HasherT hasher = HasherT()) {
-        //    using T = typename std::iterator_traits<IteratorT>::value_type;
-        //    std::unordered_multiset<T, HasherT> mset(bucketCount, hasher);
-        //    
-        //}
 
         
         // Minimum Spanning Tree

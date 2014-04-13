@@ -1,5 +1,6 @@
 #include "views_net.hpp"
 
+#include "rtree.h"
 #include "utilities.hpp"
 #include "optimization.hpp"
 
@@ -342,6 +343,37 @@ namespace panoramix {
                 Vec3 result3 = from + tovec * tan(angle);
                 return result3 / norm(result3);
             }
+
+            // merge points using R-Tree
+            template <class T, int N>
+            std::vector<Point<T, N>> MergePointsUsingRTree(const std::vector<Point<T, N>> & points, T distThres) {
+                third_party::RTree<int32_t, T, N> rtree;
+                rtree.RemoveAll();
+                std::vector<Point<T, N>> mergedPoints;
+                mergedPoints.reserve(points.size() * 3 / 2);
+                for (int k = 0; k < points.size(); k++){
+                    const Point<T, N> & p = points[k];
+                    Point<T, N> minCorner = p;
+                    Point<T, N> maxCorner = p;
+                    for (int i = 0; i < N; i++){
+                        minCorner(i) -= 2 * distThres;
+                        maxCorner(i) += 2 * distThres;
+                    }
+                    // take care: avoid adding varibales to the lambda function in case the Search method throws SEH exception with code 0x00000005
+                    int foundCount = rtree.Search(minCorner.val, maxCorner.val, [distThres, &points, k](int32_t pid){
+                        if (norm(points[pid] - points[k]) <= distThres){
+                            return false;
+                        }
+                        return true;
+                    });
+                    if (foundCount == 0){
+                        rtree.Insert(minCorner.val, maxCorner.val, static_cast<int32_t>(k));
+                        mergedPoints.push_back(points[k]);
+                    }
+                }
+                return mergedPoints;
+            }
+            
         }
 
 
@@ -372,18 +404,12 @@ namespace panoramix {
             }
 
             // get merged intersections
-            // bottleneck!!!!!
-            auto mergedIntersectionsIters = NaiveMergeNear(intersections.begin(), intersections.end(), std::false_type(), 
-                2 * sin(M_PI / 150.0 / 2.0), 
-                [](const Vec3 & p1, const Vec3 & p2) -> double {
-                return norm(p1 - p2);
-            });
-            _globalData.mergedSpatialLineSegmentIntersections.clear();
-            _globalData.mergedSpatialLineSegmentIntersections.reserve(mergedIntersectionsIters.size());
-            for (auto intersectionIter : mergedIntersectionsIters) {
-                _globalData.mergedSpatialLineSegmentIntersections.push_back(*intersectionIter);
+            // normalize spatial intersections
+            for (auto & p : intersections){
+                p /= norm(p);
             }
-
+            // merge using R-Tree
+            _globalData.mergedSpatialLineSegmentIntersections = MergePointsUsingRTree(intersections, 2 * sin(M_PI / 150.0 / 2.0));
 
             // find vanishing points;
             _globalData.vanishingPoints = FindVanishingPoints(intersections);                        
