@@ -193,8 +193,8 @@ TEST(UtilTest, MinimumSpanningTree) {
         [&edgeProperties](int e){ // get vertices of edge
             return std::make_pair(edgeProperties[e].fromv, edgeProperties[e].tov); 
         },
-        [&edgeProperties](int e){ // get weight of edge
-            return edgeProperties[e].w; 
+        [&edgeProperties](int e1, int e2){ // compare weights of edges
+            return edgeProperties[e1].w < edgeProperties[e2].w; 
         }
     );
     

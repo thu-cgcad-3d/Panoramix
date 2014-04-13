@@ -119,7 +119,21 @@ namespace panoramix {
             const ContainerT * _cont;
             ElementPredT _elePred;
         };
+
  
+        // make conditional container
+        template <class ContainerT, class ElementPredT>
+        ConditionalContainerWrapper<ContainerT, ElementPredT> 
+            MakeConditionalContainer(ContainerT * cont_, ElementPredT elePred_ = ElementPredT()) {
+            return ConditionalContainerWrapper<ContainerT, ElementPredT>(cont_, elePred_);
+        }
+
+        template <class ContainerT, class ElementPredT>
+        ConstConditionalContainerWrapper<ContainerT, ElementPredT> 
+            MakeConditionalContainer(const ContainerT * cont_, ElementPredT elePred_ = ElementPredT()) {
+            return ConstConditionalContainerWrapper<ContainerT, ElementPredT>(cont_, elePred_);
+        }
+
     }
 }
  

@@ -226,15 +226,16 @@ namespace panoramix {
         //      bool operator==(Vert,Vert) must be available
         // EdgeWeightGetterT(Edge e)->Scalar
         template <class VertIteratorT, class EdgeIteratorT, 
-        class EdgeVertsGetterT, class EdgeWeightGetterT, 
+        class EdgeVertsGetterT,
         class EdgeOutputIteratorT, 
+        class EdgeCompareOnWeightT,
         class VertCompareT = std::less<typename std::iterator_traits<VertIteratorT>::value_type>>
         void MinimumSpanningTree(
             VertIteratorT vertsBegin, VertIteratorT vertsEnd,
             EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
             EdgeOutputIteratorT MSTedges,
             EdgeVertsGetterT vertsGetter, 
-            EdgeWeightGetterT weightGetter,
+            EdgeCompareOnWeightT edgeCompareOnWeight = EdgeCompareOnWeightT(),
             VertCompareT vertCompare = VertCompareT()
             ) {
             
@@ -242,12 +243,9 @@ namespace panoramix {
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
             static_assert(typename std::is_same<std::pair<Vert, Vert>, decltype(vertsGetter(*edgesBegin))>::value,
                 "result of EdgeVertsGetterT must be std::pair<Vert, Vert>!");
-            using T = decltype(weightGetter(*edgesBegin));
             
             std::vector<Edge> edges(edgesBegin, edgesEnd);
-            std::sort(edges.begin(), edges.end(), [weightGetter](const Edge & e1, const Edge & e2){
-                return weightGetter(e1) < weightGetter(e2);
-            });
+            std::sort(edges.begin(), edges.end(), edgeCompareOnWeight);
 
             std::map<Vert, int, VertCompareT> vertSetIds(vertCompare);
             int idx = 0;

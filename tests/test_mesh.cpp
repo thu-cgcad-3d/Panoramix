@@ -1,18 +1,30 @@
-#include <Eigen/Core>
-#include <opencv2/opencv.hpp>
-
-#include <QApplication>
-#include <QDialog>
-
 #include "../src/core/mesh.hpp"
 #include "../src/core/mesh_maker.hpp"
 #include "../src/vis/visualize3d.hpp"
-#include "../src/vis/qt_resources.hpp"
 
 #include "gtest/gtest.h"
 
 using namespace panoramix;
-using TestMesh = core::Mesh<Eigen::Vector3f>;
+using TestMesh = core::Mesh<core::Vec3>;
+
+TEST(MiscToolsTest, ConditionalIterator) {
+
+    std::list<int> ds;
+    std::generate_n(std::back_inserter(ds), 100, std::rand);
+    
+    auto fun = [](int dd){return dd > 50; };
+    auto conditionalDs = core::MakeConditionalContainer(&ds, fun);
+    
+    std::vector<int> correct;
+    std::copy_if(ds.begin(), ds.end(), std::back_inserter(correct), fun);
+    
+    auto correctIter = correct.begin();
+    for (auto d : conditionalDs){
+        ASSERT_EQ(*correctIter, d);
+        ++correctIter;
+    }
+
+}
 
 TEST(MeshTest, Conversion) {
     using CVMesh = core::Mesh<core::Point3>;
@@ -141,6 +153,5 @@ TEST(MeshTest, DISABLED_Sphere) {
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
-    vis::InitGui(argc, argv);
     return RUN_ALL_TESTS();
 }

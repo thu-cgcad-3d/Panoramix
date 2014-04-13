@@ -1192,7 +1192,7 @@ namespace panoramix {
                 std::back_inserter(MSTconsIds),
                 [this](size_t e){return std::make_pair(_globalData.constraints[e].mergedSpatialLineSegmentIds[0], 
                     _globalData.constraints[e].mergedSpatialLineSegmentIds[1]); },
-                [this](size_t e){return _globalData.constraints[e].slackValue; }
+                [this](size_t e1, size_t e2){return _globalData.constraints[e1].slackValue < _globalData.constraints[e2].slackValue; }
             );
             std::vector<ConstraintData> MSTconstraints(MSTconsIds.size());
             for (size_t i = 0; i < MSTconsIds.size(); i++){
