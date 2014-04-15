@@ -13,9 +13,9 @@ namespace panoramix {
         
 
         // for numerics
-        template <class T>
-        inline bool FuzzyEquals(const T & a, const T & b, const T & epsilon){
-            return std::abs(a - b) <= epsilon;
+        template <class T, class K> 
+        inline bool FuzzyEquals(const T & a, const T & b, const K & epsilon){
+            return Distance(a, b) <= epsilon; // not only numerics
         }
 
         template <class T>
@@ -163,13 +163,13 @@ namespace panoramix {
         // merge, rearrange the input array
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the begin iterators of merged groups
-        template <class IteratorT, class DistanceT, 
+        template <class IteratorT, class OutIterIteratorT, class DistanceT, 
         class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>>
-        std::vector<IteratorT> MergeNearNaive(IteratorT begin, IteratorT end, std::true_type,
+        void MergeNearNaive(IteratorT begin, IteratorT end, OutIterIteratorT itersOut, std::true_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
-                return std::vector<IteratorT>();
-            
+                return;
+
             std::vector<IteratorT> gBegins(1, begin);
             for (auto i = std::next(begin); i != end; ++i){
                 DistanceT minDist = std::numeric_limits<DistanceT>::max();
@@ -193,20 +193,20 @@ namespace panoramix {
                     gBegins.push_back(i);
                 }
             }
-
-            return gBegins;
+            std::copy(gBegins.begin(), gBegins.end(), itersOut);
         }
 
         // merge, without rearrangement
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the iterators pointing to group leaders
-        template <class IteratorT, class DistanceT, 
+        template <class IteratorT, class OutIterIteratorT, class DistanceT,
         class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>>
-        std::vector<IteratorT> MergeNearNaive(IteratorT begin, IteratorT end, std::false_type,
+        void MergeNearNaive(IteratorT begin, IteratorT end, OutIterIteratorT itersOut, std::false_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
-                return std::vector<IteratorT>();
+                return;
 
+            *(itersOut++) = begin;
             std::vector<IteratorT> gBegins(1, begin);
             for (auto i = std::next(begin); i != end; ++i){
                 auto giter = gBegins.begin();
@@ -219,33 +219,31 @@ namespace panoramix {
                 }
                 if (giter == gBegins.end()){ // add new group
                     gBegins.push_back(i);
+                    *(itersOut++) = i;
                 }
             }
-
-            return gBegins;
         }
 
 
 
         // merge using RTree, without rearrangement
-        // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
+        // DistanceFunctorT(a, b) -> ? : compute the distance from a to b
+        // BoundingBoxFunctorT(a) -> Box<?,?> : compute the bounding box of a
         // returns the iterators pointing to group leaders
-        template <class IteratorT, class DistanceT, 
+        template <class IteratorT, class OutIterIteratorT, class DistanceT,
         class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>,
         class BoundingBoxFunctorT = BoundingBoxFunctor<typename std::iterator_traits<IteratorT>::value_type>
         >
-        std::vector<IteratorT> MergeNearRTree(IteratorT begin, IteratorT end, std::false_type,
+        void MergeNearRTree(IteratorT begin, IteratorT end, OutIterIteratorT itersOut, std::false_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT(), 
             BoundingBoxFunctorT getBoundingBox = BoundingBoxFunctorT()) {
             
             if (begin == end)
-                return std::vector<IteratorT>();
+                return;
 
             using BoxType = decltype(getBoundingBox(*begin));
             using T = typename BoxType::Type;
             static const int N = BoxType::Dimension;
-
-            std::vector<IteratorT> gBegins;
 
             third_party::RTree<IteratorT, T, N> rtree;
             for (auto i = begin; i != end; ++i){
@@ -266,11 +264,9 @@ namespace panoramix {
                 });
                 if (foundCount == 0){
                     rtree.Insert(box.minCorner.val, box.maxCorner.val, i);
-                    gBegins.push_back(i);
+                    *(itersOut)++ = i;
                 }
             }
-
-            return gBegins;
         }
 
 

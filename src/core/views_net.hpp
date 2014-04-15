@@ -1,6 +1,8 @@
 #ifndef PANORAMIX_CORE_VIEWS_NET_HPP
 #define PANORAMIX_CORE_VIEWS_NET_HPP
 
+
+
 #include "basic_types.hpp"
 #include "feature.hpp"
 #include "regions_net.hpp"
@@ -21,8 +23,11 @@ namespace panoramix {
                 CVFeatureExtractor<cv::SIFT> siftExtractor;
                 CVFeatureExtractor<cv::SURF> surfExtractor;
                 SegmentationExtractor segmenter;
-                double cameraAngleScaler; // angle scalar to judge whether two views may share certain common features
-                double smallCameraAngleScalar; // angle scalar to judge whether two views are too close
+
+                // angle scalar to judge whether two views may share certain common features
+                double cameraAngleScaler; 
+                // angle scalar to judge whether two views are too close
+                double smallCameraAngleScalar; 
                 // angle threshold to judge whether two lines are constrained (intersection/incidence), 
                 // used for building the Constraint Graph
                 double intersectionConstraintLineDistanceAngleThreshold;
@@ -57,8 +62,8 @@ namespace panoramix {
             // segment view image and build net of regions for a single view
             void buildRegionNet(VertHandle h);
 
-            // connect this view to neighbor views
-            int updateConnections(VertHandle h);
+            // connect this view to neighbor views who may overlap with h
+            size_t updateConnections(VertHandle h);
 
             // whether this view overlaps some existing views a lot, measured by the smallCameraAngleScalar parameter
             VertHandle isTooCloseToAnyExistingView(VertHandle h) const;
@@ -89,10 +94,11 @@ namespace panoramix {
                 std::shared_ptr<RegionsNet> regionNet;
             };
 
+            struct CVMatchesData;
             struct HalfData {
                 double cameraAngleDistance;
                 double weight;
-                // transform //
+                std::shared_ptr<CVMatchesData> matchesData;
             };
 
             struct ConstraintData {

@@ -1,5 +1,17 @@
-#include "views_net.hpp"
+#include "opencv2/opencv_modules.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/stitching/detail/autocalib.hpp"
+#include "opencv2/stitching/detail/blenders.hpp"
+#include "opencv2/stitching/detail/camera.hpp"
+#include "opencv2/stitching/detail/exposure_compensate.hpp"
+#include "opencv2/stitching/detail/matchers.hpp"
+#include "opencv2/stitching/detail/motion_estimators.hpp"
+#include "opencv2/stitching/detail/seam_finders.hpp"
+#include "opencv2/stitching/detail/util.hpp"
+#include "opencv2/stitching/detail/warpers.hpp"
+#include "opencv2/stitching/warpers.hpp"
 
+#include "views_net.hpp"
 #include "utilities.hpp"
 #include "optimization.hpp"
 
@@ -108,7 +120,7 @@ namespace panoramix {
             }
         }
 
-        int ViewsNet::updateConnections(VertHandle h) {
+        size_t ViewsNet::updateConnections(VertHandle h) {
             auto & thisv = _views.data(h);
             const PerspectiveCamera & thisvCam = thisv.originalCamera;
             double thisvCamAngleRadius = PerspectiveCameraAngleRadius(thisvCam);
@@ -127,7 +139,7 @@ namespace panoramix {
                     _views.addEdge(h, v.topo.hd, hd);
                 }
             }
-            return static_cast<int>(_views.topo(h).halfedges.size());
+            return _views.topo(h).halfedges.size();
         }
 
         ViewsNet::VertHandle ViewsNet::isTooCloseToAnyExistingView(VertHandle h) const {
@@ -146,7 +158,10 @@ namespace panoramix {
         }
 
 
-
+        struct ViewsNet::CVMatchesData {
+            cv::detail::MatchesInfo info;
+            cv::detail::BundleAdjusterReproj s;
+        };
 
         namespace {
 
@@ -351,7 +366,8 @@ namespace panoramix {
         void ViewsNet::estimateVanishingPointsAndClassifyLines() {
 
             // pick separated views only
-            auto seperatedViewIters = MergeNearNaive(_views.vertices().begin(), _views.vertices().end(), std::false_type(),
+            std::vector<decltype(_views.vertices().begin())> seperatedViewIters;
+            MergeNearNaive(_views.vertices().begin(), _views.vertices().end(), std::back_inserter(seperatedViewIters), std::false_type(),
                 _params.smallCameraAngleScalar, [](const ViewMesh::Vertex & v1, const ViewMesh::Vertex & v2) -> double{
                 double angleDistance = AngleBetweenDirections(v1.data.camera.center(), v2.data.camera.center());
                 return angleDistance / 
@@ -378,7 +394,9 @@ namespace panoramix {
             // normalize spatial intersections
             auto intersectionValidEnd = std::remove_if(intersections.begin(), intersections.end(),
                 [](const Vec3 & v){return std::isnan(v[0]) || std::isnan(v[1]) || std::isnan(v[2]); });
-            auto mergedIntersectionsIters = MergeNearRTree(intersections.begin(), intersectionValidEnd, std::false_type(),
+            std::vector<decltype(intersections.begin())> mergedIntersectionsIters;
+            mergedIntersectionsIters.reserve(intersections.size() / 2);
+            MergeNearRTree(intersections.begin(), intersectionValidEnd, std::back_inserter(mergedIntersectionsIters), std::false_type(),
                 2 * sin(M_PI / 150.0 / 2.0));
             _globalData.mergedSpatialLineSegmentIntersections.clear();
             _globalData.mergedSpatialLineSegmentIntersections.reserve(mergedIntersectionsIters.size());
@@ -464,7 +482,8 @@ namespace panoramix {
                 }
 
                 // group all colinear spatial lines
-                auto colinearLineIters = MergeNearNaive(lines.begin(), lines.end(), std::true_type(), 
+                std::vector<decltype(lines.begin())> colinearLineIters;
+                MergeNearNaive(lines.begin(), lines.end(), std::back_inserter(colinearLineIters), std::true_type(), 
                     mergeAngleThres,
                     [](const Classified<Line3> & line1, const Classified<Line3> & line2) -> double{
                     if (line1.claz != line2.claz)
@@ -1112,7 +1131,8 @@ namespace panoramix {
             // remove all duplicated constraints
             // remove all self connected lines
             // remove all constraints close to any vanishing points
-            auto uniqueConsIters = MergeNearNaive(_globalData.constraints.begin(), _globalData.constraints.end(), std::false_type(),
+            std::vector<decltype(_globalData.constraints.begin())> uniqueConsIters;
+            MergeNearNaive(_globalData.constraints.begin(), _globalData.constraints.end(), std::back_inserter(uniqueConsIters), std::false_type(),
                 1, [](const ConstraintData & cons1, const ConstraintData & cons2){
                 return (cons1.type == cons2.type && 
                     std::is_permutation(std::begin(cons1.mergedSpatialLineSegmentIds), std::end(cons1.mergedSpatialLineSegmentIds), 

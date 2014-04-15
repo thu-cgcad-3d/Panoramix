@@ -1,10 +1,9 @@
-#include "feature.hpp"
-
 #include <iostream>
 #include <unordered_map>
 
 #include <Eigen/Dense>
 
+#include "feature.hpp"
 #include "utilities.hpp"
 
 namespace panoramix {

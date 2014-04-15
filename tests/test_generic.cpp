@@ -7,8 +7,15 @@
 
 using namespace panoramix;
 
+TEST(GenericTest, Distance){
+    using namespace core;
 
-TEST(BoundingBoxTest, Box) {
+    auto d = Distance(std::complex<double>(1, 2), std::complex<double>(3, 4));
+    ASSERT_DOUBLE_EQ(2 * sqrt(2), d);
+
+}
+
+TEST(GenericTest, BoundingBox) {
     
     using namespace core;
     Line3 l1(Point3(0.5, 0.1, 1), Point3(1, 0.4, 0.7));

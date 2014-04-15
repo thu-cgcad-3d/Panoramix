@@ -144,15 +144,17 @@ TEST(UtilTest, CreateLinearSequence) {
 }
 
 
-TEST(UtilTest, MergeNearNaive) {
+TEST(UtilTest, MergeNearNaiveCorrectness) {
     std::list<double> arr1;
-    arr1.resize(500000);
+    arr1.resize(1000);
     std::generate(arr1.begin(), arr1.end(), std::rand);
     std::vector<double> arr2(arr1.begin(), arr1.end());
 
-    double thres = 10;
-    auto gBegins1 = core::MergeNearNaive(std::begin(arr1), std::end(arr1), std::false_type(), thres);
-    auto gBegins2 = core::MergeNearNaive(std::begin(arr2), std::end(arr2), std::false_type(), thres);
+    double thres = 100;
+    std::vector<std::list<double>::iterator> gBegins1;
+    core::MergeNearNaive(std::begin(arr1), std::end(arr1), std::back_inserter(gBegins1), std::false_type(), thres);
+    std::vector<std::vector<double>::iterator> gBegins2;
+    core::MergeNearNaive(std::begin(arr2), std::end(arr2), std::back_inserter(gBegins2), std::true_type(), thres);
     ASSERT_EQ(gBegins1.size(), gBegins2.size());
     auto i = gBegins1.begin();
     auto j = gBegins2.begin();
@@ -170,16 +172,18 @@ TEST(UtilTest, MergeNearNaive) {
     }
 }
 
-TEST(UtilTest, MergeNearRTree) {
+TEST(UtilTest, MergeNearRTreeCorrectness) {
 
     std::list<double> arr1;
-    arr1.resize(500000);
+    arr1.resize(1000);
     std::generate(arr1.begin(), arr1.end(), std::rand);
     std::vector<double> arr2(arr1.begin(), arr1.end());
 
-    double thres = 10;
-    auto gBegins1 = core::MergeNearRTree(std::begin(arr1), std::end(arr1), std::false_type(), thres);
-    auto gBegins2 = core::MergeNearNaive(std::begin(arr2), std::end(arr2), std::false_type(), thres);
+    double thres = 100;
+    std::vector<std::list<double>::iterator> gBegins1;
+    core::MergeNearRTree(std::begin(arr1), std::end(arr1), std::back_inserter(gBegins1), std::false_type(), thres);
+    std::vector<std::vector<double>::iterator> gBegins2;
+    core::MergeNearNaive(std::begin(arr2), std::end(arr2), std::back_inserter(gBegins2), std::false_type(), thres);
     ASSERT_EQ(gBegins1.size(), gBegins2.size());
     auto i = gBegins1.begin();
     auto j = gBegins2.begin();
@@ -190,6 +194,35 @@ TEST(UtilTest, MergeNearRTree) {
     }
 
 }
+
+
+TEST(UtilTest, MergeNearRTreeEfficiency) {
+    std::list<core::Vec4> arr1;
+    std::srand(0);
+    arr1.resize(500000);
+    std::generate(arr1.begin(), arr1.end(), [](){ return core::Vec4(std::rand() % 100, std::rand() % 100, std::rand() % 100, std::rand() % 100); });
+    double thres = 2;
+    std::vector<decltype(arr1.begin())> gBegins;
+    gBegins.reserve(arr1.size() / 2);
+    core::MergeNearRTree(std::begin(arr1), std::end(arr1), std::back_inserter(gBegins), std::false_type(), thres);
+    std::cout << gBegins.size() << std::endl;
+}
+
+TEST(UtilTest, MergeNearNaiveEfficiency) {
+    std::list<core::Vec4> arr1;
+    std::srand(0);
+    arr1.resize(500000);
+    std::generate(arr1.begin(), arr1.end(), [](){ return core::Vec4(std::rand()%100, std::rand()%100, std::rand()%100, std::rand()%100); });
+    double thres = 2;
+    std::vector<decltype(arr1.begin())> gBegins;
+    gBegins.reserve(arr1.size() / 2);
+    core::MergeNearNaive(std::begin(arr1), std::end(arr1), std::back_inserter(gBegins), std::false_type(), thres);
+    std::cout << gBegins.size() << std::endl;
+}
+
+
+
+
 
 
 TEST(UtilTest, MinimumSpanningTree) {   

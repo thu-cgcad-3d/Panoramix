@@ -10,6 +10,7 @@
 #include <array>
 #include <memory>
 #include <cstdint>
+#include <complex>
 
 #include <opencv2/opencv.hpp>
 

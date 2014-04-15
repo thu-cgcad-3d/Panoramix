@@ -7,9 +7,15 @@ namespace panoramix {
     namespace core {
 
         /// distance functions
+        // for real numbers
         template <class T>
         inline std::enable_if_t<std::is_arithmetic<T>::value, T> 
             Distance(const T & a, const T & b) {
+            return std::abs(a - b);
+        }
+        // for complex numbers
+        template <class T>
+        inline T Distance(const std::complex<T> & a, const std::complex<T> & b) {
             return std::abs(a - b);
         }
 
@@ -111,6 +117,11 @@ namespace panoramix {
         inline std::enable_if_t<std::is_arithmetic<T>::value, Box<T, 1>> 
             BoundingBox(const T & t) {
             return Box<T, 1>(Point<T, 1>(t), Point<T, 1>(t));
+        }
+
+        template <class T>
+        inline Box<T, 2> BoundingBox(const std::complex<T> & c) {
+            return Box<T, 2>(Point<T, 2>(c.real(), c.imag()), Point<T, 2>(c.real(), c.imag()));
         }
         
 
