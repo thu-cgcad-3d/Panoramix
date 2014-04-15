@@ -32,25 +32,6 @@ namespace panoramix {
         using cv::norm;
 
 
-        // private tools
-        namespace {
-            template <class T, int N> 
-            Vec<T, N> MakeMin(const Vec<T, N>& v1, const Vec<T, N>& v2) {
-                Vec<T, N> v;
-                for (int i = 0; i < N; i++)
-                    v[i] = v1[i] < v2[i] ? v1[i] : v2[i];
-                return v;
-            }
-            template <class T, int N>
-            Vec<T, N> MakeMax(const Vec<T, N>& v1, const Vec<T, N>& v2) {
-                Vec<T, N> v;
-                for (int i = 0; i < N; i++)
-                    v[i] = v1[i] < v2[i] ? v2[i] : v1[i];
-                return v;
-            }
-        }
-
-
         // homogeneous point
         template <class T, int N>
         struct HPoint {
@@ -80,7 +61,7 @@ namespace panoramix {
 
         // geographic coordinate
         struct GeoCoord {
-            inline GeoCoord(double longi = 0.0, double lati = 0.0)
+            inline explicit GeoCoord(double longi = 0.0, double lati = 0.0)
                 : longitude(longi), latitude(lati) {}
             template <class T>
             inline GeoCoord(const Vec<T, 3> & d)
@@ -106,35 +87,6 @@ namespace panoramix {
         // size
         using Size = cv::Size2f;
         using SizeI = cv::Size2i;
-
-        
-        // box
-        template <class T, int N>
-        struct Box {
-            Point<T, N> minCorner;
-            Vec<T, N> size;
-            inline Point<T, N> maxCorner() const { return minCorner + size; }
-            inline Point<T, N> center() const { return minCorner + static_cast<T>(size / 2.0); }
-            inline bool contains(const Point<T, N> & p) const {
-                for (int i = 0; i < N; i++){
-                    if (minCorner[i] > p[i] || minCorner[i] + size[i] < p[i])
-                        return false;
-                }
-                return true;
-            }
-            inline Box & operator |= (const Box & b) {
-                minCorner = MakeMin(minCorner, b.minCorner); 
-                size = MakeMax(maxCorner(), b.maxCorner()) - minCorner; 
-                return *this;
-            }
-        };
-        template <class T, int N>
-        inline Box<T, N> operator | (const Box<T, N> & b1, const Box<T, N> & b2){
-            Box<T, N> b12 = b1;
-            return b12 |= b2;
-        }
-        using Box2 = Box<double, 2>;
-        using Box3 = Box<double, 3>;
 
 
         // line
@@ -173,16 +125,6 @@ namespace panoramix {
         };
         using HLine2 = HLine<double, 2>;
         using HLine3 = HLine<double, 3>;
-
-        
-        // circles (spheres)
-        template <class T, int N>
-        struct Circle {
-            Point<T, N> center;
-            T radius;
-        };
-        using Circle2 = Circle<double, 2>;
-        using Circle3 = Circle<double, 3>;
 
 
         // image

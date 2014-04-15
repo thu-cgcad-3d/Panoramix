@@ -5,11 +5,9 @@
 
 namespace panoramix {
     namespace core {
-        namespace traits {
+        
 
-            
 
-        }
     }
 }
  

@@ -4,10 +4,12 @@ include_directories (${GTEST_DIR}/include)
 # set all tests
 set (TESTNAMES 
 	test_basic
+	test_generic
 	test_util
 	test_optimization
 	test_template_utilities
 	test_expression
+	test_opencv_stitching
 )
 set (TESTNAMES_WITH_VIS 
 	test_mesh 

@@ -144,15 +144,15 @@ TEST(UtilTest, CreateLinearSequence) {
 }
 
 
-TEST(UtilTest, NaiveMergeNear) {
+TEST(UtilTest, MergeNearNaive) {
     std::list<double> arr1;
-    arr1.resize(1000);
+    arr1.resize(500000);
     std::generate(arr1.begin(), arr1.end(), std::rand);
     std::vector<double> arr2(arr1.begin(), arr1.end());
 
     double thres = 10;
-    auto gBegins1 = core::NaiveMergeNear(std::begin(arr1), std::end(arr1), std::false_type(), thres);
-    auto gBegins2 = core::NaiveMergeNear(std::begin(arr2), std::end(arr2), std::true_type(), thres);
+    auto gBegins1 = core::MergeNearNaive(std::begin(arr1), std::end(arr1), std::false_type(), thres);
+    auto gBegins2 = core::MergeNearNaive(std::begin(arr2), std::end(arr2), std::false_type(), thres);
     ASSERT_EQ(gBegins1.size(), gBegins2.size());
     auto i = gBegins1.begin();
     auto j = gBegins2.begin();
@@ -170,7 +170,29 @@ TEST(UtilTest, NaiveMergeNear) {
     }
 }
 
-TEST(UtilTest, MinimumSpanningTree) {
+TEST(UtilTest, MergeNearRTree) {
+
+    std::list<double> arr1;
+    arr1.resize(500000);
+    std::generate(arr1.begin(), arr1.end(), std::rand);
+    std::vector<double> arr2(arr1.begin(), arr1.end());
+
+    double thres = 10;
+    auto gBegins1 = core::MergeNearRTree(std::begin(arr1), std::end(arr1), std::false_type(), thres);
+    auto gBegins2 = core::MergeNearNaive(std::begin(arr2), std::end(arr2), std::false_type(), thres);
+    ASSERT_EQ(gBegins1.size(), gBegins2.size());
+    auto i = gBegins1.begin();
+    auto j = gBegins2.begin();
+    for (; i != gBegins1.end(); ++i, ++j){
+        auto iv = **i;
+        auto jv = **j;
+        EXPECT_DOUBLE_EQ(0, core::Distance(**i, **j));
+    }
+
+}
+
+
+TEST(UtilTest, MinimumSpanningTree) {   
     std::vector<int> verts = { 0, 1, 2, 3, 4, 5};
     std::vector<int> edges = { 0, 1, 2, 3, 4, 5, 6, 7 };
     struct EdgeProperty { int fromv, tov; double w; };

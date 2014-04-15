@@ -2,7 +2,11 @@
 #define PANORAMIX_CORE_UTILITIES_HPP
 
 #include <iterator>
+
+#include "rtree.h"
+
 #include "basic_types.hpp"
+#include "generic.hpp"
  
 namespace panoramix {
     namespace core {
@@ -159,8 +163,9 @@ namespace panoramix {
         // merge, rearrange the input array
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the begin iterators of merged groups
-        template <class IteratorT, class DistanceT, class DistanceFunctorT = std::minus<DistanceT>>
-        std::vector<IteratorT> NaiveMergeNear(IteratorT begin, IteratorT end, std::true_type,
+        template <class IteratorT, class DistanceT, 
+        class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>>
+        std::vector<IteratorT> MergeNearNaive(IteratorT begin, IteratorT end, std::true_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
                 return std::vector<IteratorT>();
@@ -171,7 +176,7 @@ namespace panoramix {
                 auto nearestGBeginIter = gBegins.end();
                 for (auto giter = gBegins.begin(); giter != gBegins.end(); ++ giter) {
                     auto gBegin = *giter;
-                    DistanceT dist = std::abs(distFun(*gBegin, *i));
+                    DistanceT dist = distFun(*gBegin, *i);
                     if (dist <= thres && dist < minDist){
                         minDist = dist;
                         nearestGBeginIter = giter;
@@ -195,8 +200,9 @@ namespace panoramix {
         // merge, without rearrangement
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the iterators pointing to group leaders
-        template <class IteratorT, class DistanceT, class DistanceFunctorT = std::minus<DistanceT>>
-        std::vector<IteratorT> NaiveMergeNear(IteratorT begin, IteratorT end, std::false_type,
+        template <class IteratorT, class DistanceT, 
+        class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>>
+        std::vector<IteratorT> MergeNearNaive(IteratorT begin, IteratorT end, std::false_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
                 return std::vector<IteratorT>();
@@ -206,12 +212,60 @@ namespace panoramix {
                 auto giter = gBegins.begin();
                 for (; giter != gBegins.end(); ++giter) {
                     auto gBegin = *giter;
-                    DistanceT dist = std::abs(distFun(*gBegin, *i));
+                    auto dist = distFun(*gBegin, *i);
                     if (dist <= thres){
                         break;
                     }
                 }
                 if (giter == gBegins.end()){ // add new group
+                    gBegins.push_back(i);
+                }
+            }
+
+            return gBegins;
+        }
+
+
+
+        // merge using RTree, without rearrangement
+        // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
+        // returns the iterators pointing to group leaders
+        template <class IteratorT, class DistanceT, 
+        class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>,
+        class BoundingBoxFunctorT = BoundingBoxFunctor<typename std::iterator_traits<IteratorT>::value_type>
+        >
+        std::vector<IteratorT> MergeNearRTree(IteratorT begin, IteratorT end, std::false_type,
+            DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT(), 
+            BoundingBoxFunctorT getBoundingBox = BoundingBoxFunctorT()) {
+            
+            if (begin == end)
+                return std::vector<IteratorT>();
+
+            using BoxType = decltype(getBoundingBox(*begin));
+            using T = typename BoxType::Type;
+            static const int N = BoxType::Dimension;
+
+            std::vector<IteratorT> gBegins;
+
+            third_party::RTree<IteratorT, T, N> rtree;
+            for (auto i = begin; i != end; ++i){
+                Box<T, N> box = getBoundingBox(*i);
+                for (int k = 0; k < N; k++){ // extend the box
+                    box.minCorner[k] -= thres * 2;
+                    box.maxCorner[k] += thres * 2;
+                }
+                // search in RTree
+                int foundCount = 0;
+                rtree.Search(box.minCorner.val, box.maxCorner.val,
+                    [distFun, i, thres, &foundCount](IteratorT it){
+                    if (distFun(*i, *it) <= thres){
+                        foundCount++;
+                        return false;
+                    }
+                    return true;
+                });
+                if (foundCount == 0){
+                    rtree.Insert(box.minCorner.val, box.maxCorner.val, i);
                     gBegins.push_back(i);
                 }
             }

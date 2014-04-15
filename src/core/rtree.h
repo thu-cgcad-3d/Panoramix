@@ -20,13 +20,18 @@ LICENSE:
         Entirely free for all uses. Enjoy!
 */
 
-// a new Search method with a templated callback functor is added by Yang Hao
+// a new Search method with a templated callback functor is added
+// the use of union is abandoned for generality
+//  by Yang Hao
 
 #pragma once
 #include <stdio.h>
 #include <math.h>
 #include <assert.h>
 #include <stdlib.h>
+
+#include <algorithm>
+#include <utility>
 
 namespace third_party
 {
@@ -310,11 +315,11 @@ namespace third_party
     struct Branch
     {
       Rect m_rect;                                  ///< Bounds
-      union
-      {
+      //union
+      //{
         Node* m_child;                              ///< Child node
         DATATYPE m_data;                            ///< Data Id or Ptr
-      };
+      //};
     };
 
     /// Node for each branch level
@@ -482,7 +487,7 @@ namespace third_party
 
     // We only support machine word size simple data type eg. integer index or object pointer.
     // Since we are storing as union with non data branch
-    ASSERT(sizeof(DATATYPE) == sizeof(void*) || sizeof(DATATYPE) == sizeof(int));
+    //ASSERT(sizeof(DATATYPE) == sizeof(void*) || sizeof(DATATYPE) == sizeof(int));
 
     // Precomputed volumes of the unit spheres for the first few dimensions
     const float UNIT_SPHERE_VOLUMES[] = {
@@ -967,7 +972,9 @@ namespace third_party
     else if(a_node->m_level == a_level) // Have reached level for insertion. Add rect, split if necessary
     {
       branch.m_rect = *a_rect;
-      branch.m_child = (Node*) a_id;
+      //// branch.m_child = (Node*) a_id;
+      branch.m_child = nullptr;
+      branch.m_data = a_id;
       // Child field of leaves contains id of data record
       return AddBranch(&branch, a_node, a_newNode);
     }
@@ -1554,7 +1561,7 @@ namespace third_party
     {
       for(int index = 0; index < a_node->m_count; ++index)
       {
-        if(a_node->m_branch[index].m_child == (Node*)a_id)
+        if(a_node->m_branch[index].m_child == nullptr)
         {
           DisconnectBranch(a_node, index); // Must return after this call as count has changed
           return false;

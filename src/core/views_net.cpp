@@ -1,6 +1,5 @@
 #include "views_net.hpp"
 
-#include "rtree.h"
 #include "utilities.hpp"
 #include "optimization.hpp"
 
@@ -345,36 +344,6 @@ namespace panoramix {
                 Vec3 result3 = from + tovec * tan(angle);
                 return result3 / norm(result3);
             }
-
-            // merge points using R-Tree
-            template <class T, int N>
-            std::vector<Point<T, N>> MergePointsUsingRTree(const std::vector<Point<T, N>> & points, T distThres) {
-                third_party::RTree<int32_t, T, N> rtree;
-                rtree.RemoveAll();
-                std::vector<Point<T, N>> mergedPoints;
-                mergedPoints.reserve(points.size() * 3 / 2);
-                for (int k = 0; k < points.size(); k++){
-                    const Point<T, N> & p = points[k];
-                    Point<T, N> minCorner = p;
-                    Point<T, N> maxCorner = p;
-                    for (int i = 0; i < N; i++){
-                        minCorner(i) -= 2 * distThres;
-                        maxCorner(i) += 2 * distThres;
-                    }
-                    // take care: avoid adding references to the lambda function in case the Search method throws SEH exception with code 0x00000005
-                    int foundCount = rtree.Search(minCorner.val, maxCorner.val, [distThres, &points, k](int32_t pid){
-                        if (norm(points[pid] - points[k]) <= distThres){
-                            return false;
-                        }
-                        return true;
-                    });
-                    if (foundCount == 0){
-                        rtree.Insert(minCorner.val, maxCorner.val, static_cast<int32_t>(k));
-                        mergedPoints.push_back(points[k]);
-                    }
-                }
-                return mergedPoints;
-            }
             
         }
 
@@ -382,7 +351,7 @@ namespace panoramix {
         void ViewsNet::estimateVanishingPointsAndClassifyLines() {
 
             // pick separated views only
-            auto seperatedViewIters = NaiveMergeNear(_views.vertices().begin(), _views.vertices().end(), std::false_type(),
+            auto seperatedViewIters = MergeNearNaive(_views.vertices().begin(), _views.vertices().end(), std::false_type(),
                 _params.smallCameraAngleScalar, [](const ViewMesh::Vertex & v1, const ViewMesh::Vertex & v2) -> double{
                 double angleDistance = AngleBetweenDirections(v1.data.camera.center(), v2.data.camera.center());
                 return angleDistance / 
@@ -407,11 +376,16 @@ namespace panoramix {
 
             // get merged intersections
             // normalize spatial intersections
-            for (auto & p : intersections){
-                p /= norm(p);
+            auto intersectionValidEnd = std::remove_if(intersections.begin(), intersections.end(),
+                [](const Vec3 & v){return std::isnan(v[0]) || std::isnan(v[1]) || std::isnan(v[2]); });
+            auto mergedIntersectionsIters = MergeNearRTree(intersections.begin(), intersectionValidEnd, std::false_type(),
+                2 * sin(M_PI / 150.0 / 2.0));
+            _globalData.mergedSpatialLineSegmentIntersections.clear();
+            _globalData.mergedSpatialLineSegmentIntersections.reserve(mergedIntersectionsIters.size());
+            for (auto intersectionIter : mergedIntersectionsIters) {
+                _globalData.mergedSpatialLineSegmentIntersections.push_back(*intersectionIter);
             }
-            // merge using R-Tree
-            _globalData.mergedSpatialLineSegmentIntersections = MergePointsUsingRTree(intersections, 2 * sin(M_PI / 150.0 / 2.0));
+
 
             // find vanishing points;
             _globalData.vanishingPoints = FindVanishingPoints(intersections);                        
@@ -490,7 +464,7 @@ namespace panoramix {
                 }
 
                 // group all colinear spatial lines
-                auto colinearLineIters = NaiveMergeNear(lines.begin(), lines.end(), std::true_type(), 
+                auto colinearLineIters = MergeNearNaive(lines.begin(), lines.end(), std::true_type(), 
                     mergeAngleThres,
                     [](const Classified<Line3> & line1, const Classified<Line3> & line2) -> double{
                     if (line1.claz != line2.claz)
@@ -1138,7 +1112,7 @@ namespace panoramix {
             // remove all duplicated constraints
             // remove all self connected lines
             // remove all constraints close to any vanishing points
-            auto uniqueConsIters = NaiveMergeNear(_globalData.constraints.begin(), _globalData.constraints.end(), std::false_type(),
+            auto uniqueConsIters = MergeNearNaive(_globalData.constraints.begin(), _globalData.constraints.end(), std::false_type(),
                 1, [](const ConstraintData & cons1, const ConstraintData & cons2){
                 return (cons1.type == cons2.type && 
                     std::is_permutation(std::begin(cons1.mergedSpatialLineSegmentIds), std::end(cons1.mergedSpatialLineSegmentIds), 
