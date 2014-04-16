@@ -4,7 +4,6 @@ include_directories (${GTEST_DIR}/include)
 # set all tests
 set (TESTNAMES 
 	test_basic
-	test_generic
 	test_util
 	test_optimization
 	test_template_utilities

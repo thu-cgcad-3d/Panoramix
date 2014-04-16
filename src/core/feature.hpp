@@ -30,6 +30,7 @@ namespace panoramix {
             inline double farPlane() const { return _far; }
             Vec2 screenProjection(const Vec3 & p3d) const;
             Vec3 spatialDirection(const Vec2 & p2d) const;
+            inline Vec3 spatialDirection(const PixelLoc & p) const { return spatialDirection(Vec2(p.x, p.y)); }
 
             inline const Mat4 & viewMatrix() const { return _viewMatrix; }
             inline const Mat4 & projectionMatrix() const { return _projectionMatrix; }
@@ -175,10 +176,18 @@ namespace panoramix {
 
 
 
+        /// homography estimation
+        std::pair<double, double> ComputeFocalsFromHomography(const Mat3 & H, std::pair<bool, bool> * ok = nullptr);
+
 
 
 
         /// feature evaluators & matchers
+        class VanishingPoint2DEstimator {
+
+        };
+
+
 
 
 

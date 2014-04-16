@@ -8,12 +8,12 @@
 namespace panoramix {
     namespace core {
 
-
+        // somthing with restorable parameters
         template <class T>
-        class ObjectWithParamStack {
+        class ParamRestorable {
             using P = typename T::Params;
         public:
-            inline ObjectWithParamStack(const P & p) : params(p) {}
+            inline explicit ParamRestorable(const P & p) : params(p) {}
             inline void storeParam() { _paramStack.push(params); }
             inline void restoreParam() { 
                 params = _paramStack.top(); 
@@ -29,7 +29,7 @@ namespace panoramix {
 
  
         // element of container MUST support PredT(ele) -> bool
-        // ConditionalIterator will automatically skip elements which do not satisfy PredT in iteration
+        // ConditionalIterator will automatically skip elements which DO NOT satisfy PredT in iteration
         template <class IteratorT, class PredT>
         class ConditionalIterator : public std::iterator<std::forward_iterator_tag, 
             typename std::iterator_traits<IteratorT>::value_type,

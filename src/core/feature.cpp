@@ -818,6 +818,49 @@ namespace panoramix {
                 : SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
         }
 
+
+
+
+
+        std::pair<double, double> ComputeFocalsFromHomography(const Mat3 & H, std::pair<bool, bool> * ok) {
+            /// from OpenCV code
+
+            const double* h = reinterpret_cast<const double*>(H.val);
+
+            double d1, d2; // Denominators
+            double v1, v2; // Focal squares value candidates
+            double f0, f1;
+
+            if (ok)
+                ok->second = true;
+            d1 = h[6] * h[7];
+            d2 = (h[7] - h[6]) * (h[7] + h[6]);
+            v1 = -(h[0] * h[1] + h[3] * h[4]) / d1;
+            v2 = (h[0] * h[0] + h[3] * h[3] - h[1] * h[1] - h[4] * h[4]) / d2;
+            if (v1 < v2) std::swap(v1, v2);
+            if (v1 > 0 && v2 > 0) f1 = sqrt(std::abs(d1) > std::abs(d2) ? v1 : v2);
+            else if (v1 > 0) f1 = sqrt(v1);
+            else if(ok) 
+                ok->second = false;
+
+            if (ok)
+                ok->first = true;
+            d1 = h[0] * h[3] + h[1] * h[4];
+            d2 = h[0] * h[0] + h[1] * h[1] - h[3] * h[3] - h[4] * h[4];
+            v1 = -h[2] * h[5] / d1;
+            v2 = (h[5] * h[5] - h[2] * h[2]) / d2;
+            if (v1 < v2) std::swap(v1, v2);
+            if (v1 > 0 && v2 > 0) f0 = sqrt(std::abs(d1) > std::abs(d2) ? v1 : v2);
+            else if (v1 > 0) f0 = sqrt(v1);
+            else if(ok)
+                ok->first = false;
+
+            return std::make_pair(f0, f1);
+        }
+
+
+
+
     }
 }
 

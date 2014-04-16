@@ -1,10 +1,9 @@
 #ifndef PANORAMIX_CORE_VIEWS_NET_HPP
 #define PANORAMIX_CORE_VIEWS_NET_HPP
 
-
-
 #include "basic_types.hpp"
 #include "feature.hpp"
+#include "utilities.hpp"
 #include "regions_net.hpp"
 
 namespace panoramix {
@@ -53,11 +52,13 @@ namespace panoramix {
 
             // insert a new photo, with known parameters
             VertHandle insertPhoto(const Image & im, const PerspectiveCamera & cam, 
-                double cameraDirectionErrorScale = 0.0,
-                double cameraPositionErrorScale = 0.0);
+                double cameraDirectionErrorScale = 0.0);
 
             // compute features for a single view
             void computeFeatures(VertHandle h);
+
+            // build RTrees for features in calibration of a single view
+            void buildRTrees(VertHandle h);
 
             // segment view image and build net of regions for a single view
             void buildRegionNet(VertHandle h);
@@ -83,22 +84,25 @@ namespace panoramix {
         public:
             struct VertData {
                 PerspectiveCamera originalCamera, camera;
-                double cameraDirectionErrorScale, cameraPositionErrorScale;
+                double cameraDirectionErrorScale;
                 Image image;
                 double weight;
-                std::vector<Classified<Line2>> lineSegments;
-                std::vector<core::HPoint2> lineSegmentIntersections;
-                std::vector<std::pair<int, int>> lineSegmentIntersectionLineIDs;
-                CVFeatureExtractor<cv::SIFT>::Feature SIFTs;
-                CVFeatureExtractor<cv::SURF>::Feature SURFs;
+                std::vector<Classified<Line2>> lineSegments;                
+                std::vector<HPoint2> lineSegmentIntersections;
+                std::vector<std::pair<int, int>> lineSegmentIntersectionLineIDs;                
+                std::vector<KeyPoint> SIFTs;                
+                std::vector<KeyPoint> SURFs;                
                 std::shared_ptr<RegionsNet> regionNet;
+
+                RTreeWrapper<Vec3> spatialLineSegmentIntersectionsRTree;
+                RTreeWrapper<Vec3> spatialSIFTsRTree;
+                RTreeWrapper<Vec3> spatialSURFsRTree;
             };
 
-            struct CVMatchesData;
             struct HalfData {
                 double cameraAngleDistance;
                 double weight;
-                std::shared_ptr<CVMatchesData> matchesData;
+                cv::Mat homography;
             };
 
             struct ConstraintData {

@@ -68,6 +68,7 @@ TEST(ViewsNet, FixedCamera) {
             << vis::manip2d::Show();
 
         net.updateConnections(viewHandle);
+        net.buildRTrees(viewHandle);
         net.calibrateCamera(viewHandle);
         net.calibrateAllCameras();
 

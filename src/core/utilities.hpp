@@ -2,17 +2,313 @@
 #define PANORAMIX_CORE_UTILITIES_HPP
 
 #include <iterator>
-
 #include "rtree.h"
 
 #include "basic_types.hpp"
-#include "generic.hpp"
  
 namespace panoramix {
     namespace core {
-        
 
-        // for numerics
+        // squared
+        template <class T>
+        inline T Square(const T & v) {
+            return v * v;
+        }
+
+        
+        /// distance functions
+        // for real numbers
+        template <class T>
+        inline std::enable_if_t<std::is_arithmetic<T>::value, T> Distance(const T & a, const T & b) {
+            return std::abs(a - b);
+        }
+
+        // for complex numbers
+        template <class T>
+        inline T Distance(const std::complex<T> & a, const std::complex<T> & b) {
+            return std::abs(a - b);
+        }
+
+        template <class T, int N>
+        inline T Distance(const Point<T, N> & a, const Point<T, N> & b) {
+            return norm(a - b);
+        }
+
+        inline double Distance(const PixelLoc & a, const PixelLoc & b) {
+            return sqrt(Square(a.x - b.x) + Square(a.y - b.y));
+        }
+
+        inline double Distance(const KeyPoint & a, const KeyPoint & b) {
+            return sqrt(Square(a.pt.x - b.pt.x) + Square(a.pt.y - b.pt.y));
+        }
+
+        template <class T, int N>
+        inline T Distance(const HPoint<T, N> & a, const HPoint<T, N> & b) {
+            return norm(a.toPoint() - b.toPoint());
+        }
+
+        template <class T, int N>
+        inline T Distance(const PositionOnLine<T, N> & a, const PositionOnLine<T, N> & b) {
+            return norm(a.position - b.position);
+        }
+
+
+        // standard distance functor
+        template <class T>
+        struct DistanceFunctor {
+            using DistanceType = decltype(Distance(std::declval<T>(), std::declval<T>()));
+            inline DistanceType operator()(const T & a, const T & b) const {
+                return Distance(a, b);
+            }
+        };
+
+
+
+        namespace {
+            template <class T, int N>
+            Vec<T, N> MakeMin(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+                Vec<T, N> v;
+                for (int i = 0; i < N; i++)
+                    v[i] = v1[i] < v2[i] ? v1[i] : v2[i];
+                return v;
+            }
+            template <class T, int N>
+            Vec<T, N> MakeMax(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+                Vec<T, N> v;
+                for (int i = 0; i < N; i++)
+                    v[i] = v1[i] < v2[i] ? v2[i] : v1[i];
+                return v;
+            }
+        }
+
+
+        /// bounding box functions
+
+        // box
+        template <class T, int N>
+        struct Box {
+            using Type = T;
+            static const int Dimension = N;
+
+            Point<T, N> minCorner, maxCorner;
+            bool isNull;
+
+            inline Box() : isNull(true){}
+            inline Box(const Point<T, N> & c1, const Point<T, N> & c2)
+                : minCorner(MakeMin(c1, c2)), maxCorner(MakeMax(c1, c2)), isNull(false) {}
+
+            inline Vec<T, N> size() const { return maxCorner - minCorner; }
+            inline Point<T, N> center() const { return (maxCorner + minCorner) * (0.5); }
+            inline bool contains(const Point<T, N> & p) const {
+                if (isNull)
+                    return false;
+                for (int i = 0; i < N; i++){
+                    if (minCorner[i] > p[i] || maxCorner[i] < p[i])
+                        return false;
+                }
+                return true;
+            }
+            inline bool contains(const Box & b) const {
+                return b.isNull ? true : contains(b.minCorner) && contains(b.maxCorner);
+            }
+            inline bool operator == (const Box & b) const {
+                return isNull ? b.isNull : (!b.isNull && minCorner == b.minCorner && maxCorner == b.maxCorner);
+            }
+            inline bool operator != (const Box & b) const { return !(*this == b); }
+
+            inline Box & operator |= (const Box & b) {
+                if (isNull){
+                    *this = b;
+                    return *this;
+                }
+                if (b.isNull)
+                    return *this;
+                minCorner = MakeMin(minCorner, b.minCorner);
+                maxCorner = MakeMax(maxCorner, b.maxCorner);
+                return *this;
+            }
+        };
+
+        template <class T, int N>
+        inline Box<T, N> operator | (const Box<T, N> & b1, const Box<T, N> & b2){
+            Box<T, N> b12 = b1;
+            return b12 |= b2;
+        }
+        using Box2 = Box<double, 2>;
+        using Box3 = Box<double, 3>;
+
+        // for scalars
+        template <class T>
+        inline std::enable_if_t<std::is_arithmetic<T>::value, Box<T, 1>> BoundingBox(const T & t) {
+            return Box<T, 1>(Point<T, 1>(t), Point<T, 1>(t));
+        }
+
+        template <class T>
+        inline Box<T, 2> BoundingBox(const std::complex<T> & c) {
+            return Box<T, 2>(Point<T, 2>(c.real(), c.imag()), Point<T, 2>(c.real(), c.imag()));
+        }
+
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const Box<T, N> & b){
+            return b;
+        }
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const Point<T, N> & p){
+            return Box<T, N>(p, p);
+        }
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const HPoint<T, N> & hp) {
+            return BoundingBox(hp.toPoint());
+        }
+
+        inline Box2 BoundingBox(const PixelLoc & p) {
+            return Box2(Point2(p.x, p.y), Point2(p.x, p.y));
+        }
+
+        inline Box2 BoundingBox(const KeyPoint & p) {
+            return Box2(Point2(p.pt.x, p.pt.y), Point2(p.pt.x, p.pt.y));
+        }
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const Line<T, N> & l) {
+            return Box<T, N>(l.first, l.second);
+        }
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const HLine<T, N> & l) {
+            return BoundingBox(l.toLine());
+        }
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const PositionOnLine<T, N> & p) {
+            return BoundingBox(p.position);
+        }
+
+        template <class T>
+        inline auto BoundingBox(const Classified<T> & c) -> decltype(BoundingBox(c.component)) {
+            return BoundingBox(c.component);
+        }
+
+        // bounding box of range
+        template <class IteratorT>
+        auto BoundingBoxOfRange(IteratorT begin, IteratorT end) -> decltype(BoundingBox(*begin)) {
+            using BoxType = decltype(BoundingBox(*begin));
+            BoxType box; // a null box
+            while (begin != end){
+                auto b = BoundingBox(*begin);
+                box |= b;
+                ++begin;
+            }
+            return box;
+        }
+
+        // bounding box of container
+        template <class ContainerT>
+        inline auto BoundingBoxOfContainer(const ContainerT & cont)
+            -> decltype(BoundingBoxOfRange(std::begin(cont), std::end(cont))) {
+            return BoundingBoxOfRange(std::begin(cont), std::end(cont));
+        }
+
+
+
+        // the standard bounding box functor
+        template <class T>
+        struct BoundingBoxFunctor {
+            using BoxType = decltype(BoundingBox(std::declval<T>()));
+            inline BoxType operator()(const T & t) const {
+                return BoundingBox(t);
+            }
+        };
+
+
+        // the standard influence box functor
+        template <class T>
+        struct InfluenceBoxFunctor {
+            using BoxType = decltype(BoundingBox(std::declval<T>()));
+            using ValueType = typename BoxType::Type;
+
+            inline explicit InfluenceBoxFunctor(const ValueType & extSz = 0) : extendedSize(extSz){}
+            inline BoxType operator()(const T & t) const {
+                auto box = BoundingBox(t);
+                for (int i = 0; i < BoxType::Dimension; i++){
+                    box.minCorner[i] -= extendedSize;
+                    box.maxCorner[i] += extendedSize;
+                }
+                return box;
+            }
+            const ValueType extendedSize;
+        };
+
+
+
+
+        // a simple RTree Wrapper
+        template <class T, class BoundingBoxFunctorT = BoundingBoxFunctor<T>>
+        class RTreeWrapper {
+        public:
+            using BoxType = decltype(std::declval<BoundingBoxFunctorT>()(std::declval<T>()));
+            using ValueType = typename BoxType::Type;
+            static const int Dimension = BoxType::Dimension;
+
+            inline explicit RTreeWrapper(BoundingBoxFunctorT getBB = BoundingBoxFunctorT())
+                : _rtree(std::make_shared<third_party::RTree<T, ValueType, Dimension>>()), 
+                _getBoundingBox(getBB) {}
+
+            template <class IteratorT>
+            inline RTreeWrapper(IteratorT begin, IteratorT end, BoundingBoxFunctorT getBB = BoundingBoxFunctorT()) 
+                : _getBoundingBox(getBB){
+                insert(begin, end);
+            }
+
+        public:
+            inline size_t size() const { return _rtree->Count(); }
+            inline bool empty() const { return size() == 0; }
+
+            inline void clear() { return _rtree->RemoveAll(); }
+
+            inline void insert(const T & t) {
+                BoxType box = _getBoundingBox(t);
+                _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
+            }
+
+            template <class IteratorT>
+            void insert(IteratorT begin, IteratorT end) {
+                while (begin != end){
+                    insert(*begin);
+                    ++begin;
+                }
+            }
+
+            template <class CallbackFunctorT>
+            inline int search(const BoxType & b, CallbackFunctorT callback) const {
+                return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
+            }
+
+        private:
+            std::shared_ptr<third_party::RTree<T, ValueType, Dimension>> _rtree;
+            BoundingBoxFunctorT _getBoundingBox;
+        };
+
+
+
+
+        // spheres
+        template <class T, int N>
+        struct Sphere {
+            Point<T, N> center;
+            T radius;
+        };
+        using Sphere2 = Sphere<double, 2>;
+        using Sphere3 = Sphere<double, 3>;
+
+
+
+
+
+        // tools
         template <class T, class K> 
         inline bool FuzzyEquals(const T & a, const T & b, const K & epsilon){
             return Distance(a, b) <= epsilon; // not only numerics
@@ -21,11 +317,6 @@ namespace panoramix {
         template <class T>
         inline int DiracDelta(const T & v) {
             return v == 0 ? 1 : 0;
-        }
-
-        template <class T>
-        inline T Square(const T & v) {
-            return v * v;
         }
 
         template <class T, class K1, class K2>
@@ -141,8 +432,6 @@ namespace panoramix {
 
 
 
-
-
         // generic algorithms
 
         // fill the container with linear sequence
@@ -163,12 +452,12 @@ namespace panoramix {
         // merge, rearrange the input array
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the begin iterators of merged groups
-        template <class IteratorT, class OutIterIteratorT, class DistanceT, 
+        template <class IteratorT, class IterOutIteratorT, class DistanceT, 
         class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>>
-        void MergeNearNaive(IteratorT begin, IteratorT end, OutIterIteratorT itersOut, std::true_type,
+        IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::true_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
-                return;
+                return itersOut;
 
             std::vector<IteratorT> gBegins(1, begin);
             for (auto i = std::next(begin); i != end; ++i){
@@ -193,18 +482,18 @@ namespace panoramix {
                     gBegins.push_back(i);
                 }
             }
-            std::copy(gBegins.begin(), gBegins.end(), itersOut);
+            return std::copy(gBegins.begin(), gBegins.end(), itersOut);
         }
 
         // merge, without rearrangement
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the iterators pointing to group leaders
-        template <class IteratorT, class OutIterIteratorT, class DistanceT,
+        template <class IteratorT, class IterOutIteratorT, class DistanceT,
         class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>>
-        void MergeNearNaive(IteratorT begin, IteratorT end, OutIterIteratorT itersOut, std::false_type,
+        IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
-                return;
+                return itersOut;
 
             *(itersOut++) = begin;
             std::vector<IteratorT> gBegins(1, begin);
@@ -222,6 +511,8 @@ namespace panoramix {
                     *(itersOut++) = i;
                 }
             }
+
+            return itersOut;
         }
 
 
@@ -230,16 +521,16 @@ namespace panoramix {
         // DistanceFunctorT(a, b) -> ? : compute the distance from a to b
         // BoundingBoxFunctorT(a) -> Box<?,?> : compute the bounding box of a
         // returns the iterators pointing to group leaders
-        template <class IteratorT, class OutIterIteratorT, class DistanceT,
+        template <class IteratorT, class IterOutIteratorT, class DistanceT,
         class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>,
         class BoundingBoxFunctorT = BoundingBoxFunctor<typename std::iterator_traits<IteratorT>::value_type>
         >
-        void MergeNearRTree(IteratorT begin, IteratorT end, OutIterIteratorT itersOut, std::false_type,
+        IterOutIteratorT MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT(), 
             BoundingBoxFunctorT getBoundingBox = BoundingBoxFunctorT()) {
             
             if (begin == end)
-                return;
+                return itersOut;
 
             using BoxType = decltype(getBoundingBox(*begin));
             using T = typename BoxType::Type;
@@ -267,6 +558,8 @@ namespace panoramix {
                     *(itersOut)++ = i;
                 }
             }
+
+            return itersOut;
         }
 
 

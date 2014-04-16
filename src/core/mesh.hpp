@@ -60,6 +60,9 @@ namespace panoramix {
             TopoT topo;
             uint8_t exists;
             DataT data;
+            inline Triplet(){}
+            inline Triplet(const TopoT & t, const DataT & d, uint8_t e = true) 
+                : topo(t), exists(e), data(d){}
         };
         template <class TopoT, class DataT>
         struct TripletExistsPred {
@@ -217,11 +220,9 @@ namespace panoramix {
         template <class VertDataT, class HalfDataT, class FaceDataT>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle
         Mesh<VertDataT, HalfDataT, FaceDataT>::addVertex(const VertDataT & vd) {
-            Triplet<VertTopo, VertDataT> t;
-            t.data = vd;
-            t.topo.hd.id = _verts.size();
-            t.exists = true;
-            _verts.push_back(t);
+            VertTopo topo;
+            topo.hd.id = _verts.size();
+            _verts.emplace_back(std::move(topo), vd, true);
             return _verts.back().topo.hd;
         }
         

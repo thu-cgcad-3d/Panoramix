@@ -7,6 +7,35 @@
 
 using namespace panoramix;
 
+TEST(UtilTest, Distance){
+    using namespace core;
+
+    auto d = Distance(std::complex<double>(1, 2), std::complex<double>(3, 4));
+    ASSERT_DOUBLE_EQ(2 * sqrt(2), d);
+
+}
+
+TEST(UtilTest, BoundingBox) {
+
+    using namespace core;
+    Line3 l1(Point3(0.5, 0.1, 1), Point3(1, 0.4, 0.7));
+    Line3 l2(Point3(0.6, 1, 0.9), Point3(0.2, -1, 0.5));
+
+    Line3 lines[] = { l1, l2 };
+    auto box = BoundingBoxOfContainer(lines);
+
+    ASSERT_EQ(0.2, box.minCorner[0]);
+    ASSERT_EQ(1, box.maxCorner[0]);
+
+    ASSERT_EQ(-1, box.minCorner[1]);
+    ASSERT_EQ(1, box.maxCorner[1]);
+
+    ASSERT_EQ(0.5, box.minCorner[2]);
+    ASSERT_EQ(1, box.maxCorner[2]);
+
+}
+
+
 TEST(UtilTest, BoundBetween) {
     for (int i = 0; i < 10000; i++){
         double x = double(rand()) / rand() + rand();
@@ -193,13 +222,17 @@ TEST(UtilTest, MergeNearRTreeCorrectness) {
         EXPECT_DOUBLE_EQ(0, core::Distance(**i, **j));
     }
 
+    core::RTreeWrapper<core::Line2> lines;
+    lines.insert({ { 1, 2 }, { 3, 4 } });
+    lines.insert({ { 2, 3 }, { 4, 5 } });
+
 }
 
 
 TEST(UtilTest, MergeNearRTreeEfficiency) {
     std::list<core::Vec4> arr1;
     std::srand(0);
-    arr1.resize(500000);
+    arr1.resize(5000);
     std::generate(arr1.begin(), arr1.end(), [](){ return core::Vec4(std::rand() % 100, std::rand() % 100, std::rand() % 100, std::rand() % 100); });
     double thres = 2;
     std::vector<decltype(arr1.begin())> gBegins;
@@ -211,7 +244,7 @@ TEST(UtilTest, MergeNearRTreeEfficiency) {
 TEST(UtilTest, MergeNearNaiveEfficiency) {
     std::list<core::Vec4> arr1;
     std::srand(0);
-    arr1.resize(500000);
+    arr1.resize(5000);
     std::generate(arr1.begin(), arr1.end(), [](){ return core::Vec4(std::rand()%100, std::rand()%100, std::rand()%100, std::rand()%100); });
     double thres = 2;
     std::vector<decltype(arr1.begin())> gBegins;
