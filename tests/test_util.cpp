@@ -172,6 +172,21 @@ TEST(UtilTest, CreateLinearSequence) {
     }
 }
 
+TEST(UtilTest, RTreeWrapperLargeData) {
+//void run(){
+    std::list<core::Line2> lines;
+    std::generate_n(std::back_inserter(lines), 100000,
+        [](){
+        return core::Line2{ 
+            core::Point2(std::rand(), std::rand()), 
+            core::Point2(std::rand(), std::rand()) 
+        };
+    });
+    core::RTreeWrapper<core::Line2> rtree(lines.begin(), lines.end());
+    EXPECT_EQ(lines.size(), rtree.size());
+
+}
+
 
 TEST(UtilTest, MergeNearNaiveCorrectness) {
     std::list<double> arr1;

@@ -16,6 +16,7 @@ using namespace panoramix;
 static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
 
 TEST(ViewsNet, FixedCamera) {
+//void run(){
 
     cv::Mat panorama = cv::imread(ProjectTestDataDirStr + "/13.jpg");
     cv::resize(panorama, panorama, cv::Size(2000, 1000));
@@ -136,6 +137,7 @@ TEST(ViewsNet, FixedCamera) {
 int main(int argc, char * argv[], char * envp[])
 {
     srand(clock());
+    //run();
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }

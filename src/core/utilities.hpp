@@ -55,7 +55,7 @@ namespace panoramix {
 
         // standard distance functor
         template <class T>
-        struct DistanceFunctor {
+        struct DefaultDistanceFunctor {
             using DistanceType = decltype(Distance(std::declval<T>(), std::declval<T>()));
             inline DistanceType operator()(const T & a, const T & b) const {
                 return Distance(a, b);
@@ -216,7 +216,7 @@ namespace panoramix {
 
         // the standard bounding box functor
         template <class T>
-        struct BoundingBoxFunctor {
+        struct DefaultBoundingBoxFunctor {
             using BoxType = decltype(BoundingBox(std::declval<T>()));
             inline BoxType operator()(const T & t) const {
                 return BoundingBox(t);
@@ -226,11 +226,11 @@ namespace panoramix {
 
         // the standard influence box functor
         template <class T>
-        struct InfluenceBoxFunctor {
+        struct DefaultInfluenceBoxFunctor {
             using BoxType = decltype(BoundingBox(std::declval<T>()));
             using ValueType = typename BoxType::Type;
 
-            inline explicit InfluenceBoxFunctor(const ValueType & extSz = 0) : extendedSize(extSz){}
+            inline explicit DefaultInfluenceBoxFunctor(const ValueType & extSz = 0) : extendedSize(extSz){}
             inline BoxType operator()(const T & t) const {
                 auto box = BoundingBox(t);
                 for (int i = 0; i < BoxType::Dimension; i++){
@@ -246,7 +246,7 @@ namespace panoramix {
 
 
         // a simple RTree Wrapper
-        template <class T, class BoundingBoxFunctorT = BoundingBoxFunctor<T>>
+        template <class T, class BoundingBoxFunctorT = DefaultBoundingBoxFunctor<T>>
         class RTreeWrapper {
         public:
             using BoxType = decltype(std::declval<BoundingBoxFunctorT>()(std::declval<T>()));
@@ -259,7 +259,8 @@ namespace panoramix {
 
             template <class IteratorT>
             inline RTreeWrapper(IteratorT begin, IteratorT end, BoundingBoxFunctorT getBB = BoundingBoxFunctorT()) 
-                : _getBoundingBox(getBB){
+                : _rtree(std::make_shared<third_party::RTree<T, ValueType, Dimension>>()),
+                _getBoundingBox(getBB){
                 insert(begin, end);
             }
 
@@ -271,6 +272,12 @@ namespace panoramix {
 
             inline void insert(const T & t) {
                 BoxType box = _getBoundingBox(t);
+                for (int i = 0; i < Dimension; i++){
+                    if (box.minCorner[i] > box.maxCorner[i]){
+                        std::cout << "invalid box type" << std::endl;
+                        return;
+                    }
+                }
                 _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
             }
 
@@ -453,7 +460,7 @@ namespace panoramix {
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the begin iterators of merged groups
         template <class IteratorT, class IterOutIteratorT, class DistanceT, 
-        class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>>
+        class DistanceFunctorT = DefaultDistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>>
         IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::true_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
@@ -489,7 +496,7 @@ namespace panoramix {
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the iterators pointing to group leaders
         template <class IteratorT, class IterOutIteratorT, class DistanceT,
-        class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>>
+        class DistanceFunctorT = DefaultDistanceFunctor<typename std::iterator_traits<IteratorT>::value_type >>
         IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
@@ -522,8 +529,8 @@ namespace panoramix {
         // BoundingBoxFunctorT(a) -> Box<?,?> : compute the bounding box of a
         // returns the iterators pointing to group leaders
         template <class IteratorT, class IterOutIteratorT, class DistanceT,
-        class DistanceFunctorT = DistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>,
-        class BoundingBoxFunctorT = BoundingBoxFunctor<typename std::iterator_traits<IteratorT>::value_type>
+        class DistanceFunctorT = DefaultDistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>,
+        class BoundingBoxFunctorT = DefaultBoundingBoxFunctor<typename std::iterator_traits<IteratorT>::value_type>
         >
         IterOutIteratorT MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
             DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT(), 

@@ -949,7 +949,8 @@ namespace third_party
 
     int index;
     Branch branch;
-    Node* otherNode;
+    branch.m_child = nullptr;
+    Node* otherNode = nullptr;
 
     // Still above level for insertion, go down tree recursively
     if(a_node->m_level > a_level)

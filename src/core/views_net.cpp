@@ -100,14 +100,13 @@ namespace panoramix {
         void ViewsNet::buildRTrees(VertHandle h) {
             auto & vd = _views.data(h);
 
-            // add features used in calibration into RTree
+            // add features used in calibration into RTree            
             vd.spatialLineSegmentIntersectionsRTree.clear();
             for (auto & p : vd.lineSegmentIntersections){
                 auto sp = vd.camera.spatialDirection(p.toPoint());
                 sp /= norm(sp);
                 vd.spatialLineSegmentIntersectionsRTree.insert(sp);
             }
-            assert(vd.spatialLineSegmentIntersectionsRTree.size() == vd.lineSegmentIntersections.size());
             
             vd.spatialSIFTsRTree.clear();
             for (auto & p : vd.SIFTs){
@@ -123,7 +122,6 @@ namespace panoramix {
                 sp /= norm(sp);
                 vd.spatialSURFsRTree.insert(sp);
             }
-            assert(vd.spatialSURFsRTree.size() == vd.SURFs.size());
         }
 
         void ViewsNet::buildRegionNet(VertHandle h) {
@@ -377,15 +375,15 @@ namespace panoramix {
 
             }
 
-            std::unique_ptr<CVBundleAdjusterLazyRay> estimator = std::make_unique<CVBundleAdjusterLazyRay>();
-            estimator->setConfThresh(0.1);
+            //std::unique_ptr<CVBundleAdjusterLazyRay> estimator = std::make_unique<CVBundleAdjusterLazyRay>();
+            //estimator->setConfThresh(0.1);
             //estimator->setRefinementMask()
 
             // install current cameras
             std::vector<cv::detail::CameraParams> cams;
 
             // estimate camera
-            (*estimator)(features, matchesInfo, cams);
+            //(*estimator)(features, matchesInfo, cams);
 
             // setup cameras for each views
             for (auto & v : _views.vertices()){
