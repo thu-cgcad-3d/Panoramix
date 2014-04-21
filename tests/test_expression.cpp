@@ -179,6 +179,10 @@ TEST(Expression, Basic) {
     
     EXPECT_EQ(45, e123.eval(0, 1));
 
+    double data[] = { 1, 2, 3, 4 };
+    auto v = graph.addExpression<Var<double>>(Shape<>(), {}, data);
+    auto ders = graph.createDerivativeGraph(v.handle);
+
 }
 
 

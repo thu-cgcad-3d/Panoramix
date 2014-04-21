@@ -422,7 +422,7 @@ namespace panoramix {
                 std::vector<ExpressionHandle> inputs;
                 inputs.reserve(_g.topo(h).halfedges.size());
                 for (auto hh : _g.topo(h).halfedges){
-                    if (_g.exists(hh) && isBackwardConnection(hh)){
+                    if (!_g.removed(hh) && isBackwardConnection(hh)){
                         inputs.push_back(_g.topo(hh).to());
                     }
                 }
@@ -440,7 +440,7 @@ namespace panoramix {
                 std::vector<ExpressionHandle> idToDerivsSumTable(cost.id + 1);
                 for (int i = cost.id; i >= 0; i--){
                     ExpressionHandle self(i);
-                    if (!_g.exists(self))
+                    if (_g.removed(self))
                         continue;
 
                     // this expression is not used by cost at all
@@ -454,7 +454,7 @@ namespace panoramix {
                     // get all inputs
                     std::vector<ExpressionHandle> inputs;
                     for (auto conh : _g.topo(self).halfedges){
-                        if (_g.exists(conh) && isBackwardConnection(conh)){
+                        if (!_g.removed(conh) && isBackwardConnection(conh)){
                             auto input = _g.topo(conh).to();
                             inputs.push_back(input);
                         }                        
@@ -465,7 +465,7 @@ namespace panoramix {
                         _g.data(self).op->makeInputDerivatives(this, self,
                         std::move(inputs), idToDerivsSum);
 
-                    assert(inputDerivs.size() == inputs);
+                    assert(inputDerivs.size() == inputs.size());
 
                     // store the input derivatives
                     for (int k = 0; k < inputs.size(); k++){
@@ -530,7 +530,7 @@ namespace panoramix {
                 ExpressionHandle self,
                 std::vector<ExpressionHandle> && inputs,
                 ExpressionHandle outputDerivsSum) const {
-                return std::vector<ExpressionHandle>(inputs.size());
+                throw "not implemented!";
             }
 
             const bool isConstant;
@@ -559,6 +559,14 @@ namespace panoramix {
                 std::vector<ExpressionHandle> && inputs,
                 ExpressionHandle self, int index) const {
                 return value[index];
+            }
+
+            virtual std::vector<ExpressionHandle> makeInputDerivatives(ExpressionGraph<ET> * const g,
+                ExpressionHandle self,
+                std::vector<ExpressionHandle> && inputs,
+                ExpressionHandle outputDerivsSum) const {
+                assert(inputs.size() == 0);
+                return std::vector<ExpressionHandle>();
             }
 
             const ET * value;
