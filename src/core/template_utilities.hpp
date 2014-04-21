@@ -11,6 +11,26 @@ namespace panoramix {
         template<int ...>
         struct Sequence { };
 
+        template <>
+        struct Sequence<> {
+            static const int Count = 0;
+            static const int Sum = 0;
+            static const int Product = 1;
+        };
+        template <int N>
+        struct Sequence<N> {
+            static const int Count = 1;
+            static const int Sum = N;
+            static const int Product = N;
+        };
+        template <int N, int ...S>
+        struct Sequence<N, S...> {
+            static const int Count = 1 + Sequence<S...>::Count;
+            static const int Sum = N + Sequence<S...>::Sum;
+            static const int Product = N * Sequence<S...>::Product;
+        };
+
+
         // use SequenceGenerator<N>::type to deduct Sequence<0, 1, 2, 3, ..., N-1>
         template<int N, int ...S>
         struct SequenceGenerator : SequenceGenerator<N - 1, N - 1, S...> { };
