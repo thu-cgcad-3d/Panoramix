@@ -5,15 +5,20 @@
 #include <utility>
 #include <initializer_list>
 
+#include <Eigen/Dense>
+#include <Eigen/Sparse>
+
 #include "basic_types.hpp"
 #include "template_utilities.hpp"
 #include "mesh.hpp"
+#include "data_traits.hpp"
 
 namespace panoramix {
     namespace core {
 
+        /*
         enum DimensionType : int {
-            Dynamic = 0
+            Dyn = 0
         };
 
 
@@ -100,16 +105,16 @@ namespace panoramix {
 
         // shape with dynamic dimension
         template <int ... Ds>
-        class Shape<Dynamic, Ds...> : private Shape<Ds...>{
+        class Shape<Dyn, Ds...> : private Shape<Ds...>{
         public:
             using BaseType = Shape<Ds...>;
             static const bool LengthIsDynamic = true;
-            static const int StaticLength = Dynamic;
-            static const int StaticVolume = Dynamic;
+            static const int StaticLength = Dyn;
+            static const int StaticVolume = Dyn;
             static const int Rank = sizeof...(Ds)+1;
             static const int DynamicNum = BaseType::DynamicNum + 1;
 
-            // set size for Dynamic dimension
+            // set size for Dyn dimension
             template <class Int, class... Ints>
             inline explicit Shape(Int i, Ints ... ints)
                 : BaseType(ints...), _length(i){}
@@ -336,15 +341,9 @@ namespace panoramix {
                 typename SequenceGenerator<DNB>::type());
         }
 
-        // make a new shape to represent result of matrix multiplication
-        template <int M, int N, int P, int ...ADs, int ...BDs>
-        inline Shape<M, P, ADs..., BDs...> MakeMatrixProductShape(const Shape<M, N, ADs...> & a, const Shape<N, P, BDs...> & b) {
-            static const int DNA = Shape<M, N, ADs...>::DynamicNum;
-            static const int DNB = Shape<N, P, BDs...>::DynamicNum;
-            return MakeMatrixProductShapeUsingSequence(a, b,
-                typename SequenceGenerator<DNA>::type(),
-                typename SequenceGenerator<DNB>::type());
-        }
+
+
+
 
         // dynamic shape
         class DShape {
@@ -362,188 +361,291 @@ namespace panoramix {
             std::vector<int> _lengths;
         };
 
+        */
 
 
-        template <class ET, int ...Ds>
-        struct Expr;
 
-        template <class ET>
+
+
+        class ExpressionGraph;
         struct Op;
 
-        template <class ET>
-        struct Const;
+        using GraphType = Mesh<std::shared_ptr<Op>>;
+        using EHandle = GraphType::VertHandle;
+        using CHandle = GraphType::HalfHandle;
 
-        template <class ET>
-        struct Plus;
+        template <class DataT>
+        struct OpWithAValue;
+        
+        // operator base
+        struct Op {
 
-        template <class ET>
+            // evaluate and get result
+            virtual void eval(ExpressionGraph const * const g, std::vector<EHandle> && inputs) {}
+
+            // make input derivative expressions based on inputs and output derivative expressions
+            // returns derivative Ops corresponding to inputs
+            virtual std::vector<EHandle> makeInputDerivatives(ExpressionGraph * const g,
+                EHandle self,
+                std::vector<EHandle> && inputs,
+                EHandle outputDerivsSum) const {
+                return std::vector<EHandle>();
+            }
+
+            virtual std::shared_ptr<Op> makeZero() const = 0;
+            virtual std::shared_ptr<Op> makeOne() const = 0;
+            virtual std::shared_ptr<Op> makePlus() const = 0; // support > 2 args
+            virtual std::shared_ptr<Op> makeMult() const = 0; // support > 2 args
+
+            template <class DataT>
+            const OpWithAValue<DataT> & as() const { return *static_cast<const OpWithAValue<DataT> *>(this); }
+
+        };
+
+
+
+        template <class DataT>
+        struct OpWithAValue : public Op {
+            virtual DataT value() const = 0;
+            virtual std::shared_ptr<Op> makeZero() const override { return std::make_shared<OpWithAZeroValue<DataT>>(); }
+            virtual std::shared_ptr<Op> makeOne() const override { return std::make_shared<OpWithAOneValue<DataT>>(); }
+            virtual std::shared_ptr<Op> makePlus() const override { return std::make_shared<Plus<DataT>>(); }
+            virtual std::shared_ptr<Op> makeMult() const override { return std::make_shared<Mult<DataT>>(); }
+        };
+
+        template <class DataT>
+        struct OpWithAZeroValue : public OpWithAValue<DataT> {
+            virtual DataT value() const override{ return DataTraits<DataT>::zero(); }
+        };
+
+        template <class DataT>
+        struct OpWithAOneValue : public OpWithAValue<DataT> {
+            virtual DataT value() const override{ return DataTraits<DataT>::one(); }
+        };
+
+        template <class DataT>
+        struct OpWithACache : public OpWithAValue<DataT> {
+            inline OpWithACache(const DataT & d = DataTraits<DataT>::zero()) : cache(d){}
+            virtual DataT value() const override { return cache; }
+            
+            virtual void eval(ExpressionGraph const * const g, std::vector<EHandle> && inputs) override {}
+            virtual std::vector<EHandle> makeInputDerivatives(ExpressionGraph * const g,
+                EHandle self,
+                std::vector<EHandle> && inputs,
+                EHandle outputDerivsSum) const override {
+                return std::vector<EHandle>();
+            }
+
+            DataT cache;
+        };
+
+
+
+        template <class DataT>
+        struct Plus : public OpWithACache<DataT> {
+            // evaluate and get result
+            virtual void eval(ExpressionGraph const * const g, std::vector<EHandle> && inputs) {
+                cache = DataTraits<DataT>::zero();
+                for (auto h : inputs){
+                    cache += g->op(h)->as<DataT>().value();
+                }
+            }
+
+            // make input derivative expressions based on inputs and output derivative expressions
+            // returns derivative Ops corresponding to inputs
+            virtual std::vector<EHandle> makeInputDerivatives(ExpressionGraph * const g,
+                EHandle self,
+                std::vector<EHandle> && inputs,
+                EHandle outputDerivsSum) const {
+                std::vector<EHandle> inputDerivs(inputs.size(), outputDerivsSum);
+                return inputDerivs;
+            }
+        };
+
+
+        template <class DataT>
+        struct Mult : public OpWithACache<DataT> {
+            // evaluate and get result
+            virtual void eval(ExpressionGraph const * const g, std::vector<EHandle> && inputs) {
+                cache = DataTraits<DataT>::one();
+                for (auto h : inputs){
+                    cache *= g->op(h)->as<DataT>().value();
+                }
+            }
+
+            // make input derivative expressions based on inputs and output derivative expressions
+            // returns derivative Ops corresponding to inputs
+            virtual std::vector<EHandle> makeInputDerivatives(ExpressionGraph * const g,
+                EHandle self,
+                std::vector<EHandle> && inputs,
+                EHandle outputDerivsSum) const {
+
+                std::vector<EHandle> inputDerivs(inputs.size());
+                for (int i = 0; i < inputs.size(); i++){
+                    std::vector<EHandle> toMults(1, outputDerivsSum);
+                    toMults.reserve(inputs.size());
+                    for (int j = 0; j < inputs.size(); j++){
+                        if (j == i)
+                            continue;
+                        toMults.push_back(inputs[j]);
+                    }
+                    inputDerivs[i] = toMults.size() == 1 ? toMults.front() :
+                        g->addMult(toMults);
+                }
+
+                return inputDerivs;
+            }
+        };
+
+
+
+
         class ExpressionGraph {
         public:
-            struct ExpressionData;
-            struct ConnectionData;
-            
-            using GraphType = Mesh<ExpressionData, ConnectionData>;
-            using ExpressionHandle = typename GraphType::VertHandle;
-            using ConnectionHandle = typename GraphType::HalfHandle;
-            
-            struct ExpressionData {
-                DShape dshape;
-                std::shared_ptr<Op<ET>> op;
+            struct IsForwardConnectionPred {
+                inline IsForwardConnectionPred(const ExpressionGraph & g) :graph(g){}
+                inline bool operator()(CHandle ch) const { return graph.isForwardConnection(ch); }
+                const ExpressionGraph & graph;
             };
 
-            struct ConnectionData {
-               
+            struct IsBackwardConnectionPred {
+                inline IsBackwardConnectionPred(const ExpressionGraph & g) :graph(g){}
+                inline bool operator()(CHandle ch) const { return graph.isBackwardConnection(ch); }
+                const ExpressionGraph & graph;
             };
 
         public:
 
-            // checks whether this is a forward connection 
-            // (from inputs to outputs, from old expressions to newly created expressions)
-            inline bool isForwardConnection(ConnectionHandle h) const {
-                auto & topo = _g.topo(h);
-                return topo.from().id < topo.to().id;
-            }
-            inline bool isBackwardConnection(ConnectionHandle h) const { return !isForwardConnection(h); }
-
-            // add expression
-            // OpT must be a subclass of Op<ET>
-            template <class OpT, class ...OpArgTs>
-            ExpressionHandle addNode(const DShape & dshape, const std::vector<ExpressionHandle>& inputs, OpArgTs... opArgs) {
-                auto h = _g.addVertex();
-                _g.data(h).dshape = dshape;
-                _g.data(h).op = std::make_shared<OpT>(opArgs...);
-                for (auto & ih : inputs){
-                    _g.addEdge(ih, h);
-                }
-                return h;
-            }
-
-            ET evaluate(ExpressionHandle h, int index) const {
-                std::vector<ExpressionHandle> inputs;
-                inputs.reserve(_g.topo(h).halfedges.size());
-                for (auto hh : _g.topo(h).halfedges){
-                    if (!_g.removed(hh) && isBackwardConnection(hh)){
-                        inputs.push_back(_g.topo(hh).to());
-                    }
-                }
-                return _g.data(h).op->eval(this, std::move(inputs), h, index);
-            }
-
-            std::vector<ExpressionHandle> createDerivativeGraph(ExpressionHandle cost) {
-                assert(_g.data(cost).dshape.rank() == 0); // cost MUST be a scalar!
-
-                // the id of expression handles record the topological order
-                // idToDeriv[exprHandle.id] stores the derivative handle of exprHandle
-                std::vector<std::vector<ExpressionHandle>> idToDerivs(cost.id + 1);
-                idToDerivs[cost.id] = { addNode<Const<ET>>(_g.data(cost).dshape, {}, 1) };
-
-                std::vector<ExpressionHandle> idToDerivsSumTable(cost.id + 1);
-                for (int i = cost.id; i >= 0; i--){
-                    ExpressionHandle self(i);
-                    if (_g.removed(self))
-                        continue;
-
-                    // this expression is not used by cost at all
-                    if (idToDerivs[self.id].empty())
-                        continue;
-
-                    // sum all derivatives of self outputs
-                    auto idToDerivsSum = idToDerivs[self.id].size() == 1 ? idToDerivs[self.id].front() :
-                        addNode<Plus<ET>>(_g.data(self).dshape, idToDerivs[self.id]);
-
-                    // get all inputs
-                    std::vector<ExpressionHandle> inputs;
-                    for (auto conh : _g.topo(self).halfedges){
-                        if (!_g.removed(conh) && isBackwardConnection(conh)){
-                            auto input = _g.topo(conh).to();
-                            inputs.push_back(input);
-                        }                        
-                    }
-
-                    // compute input derivatives
-                    std::vector<ExpressionHandle> inputDerivs =
-                        _g.data(self).op->makeInputDerivatives(this, self,
-                        std::move(inputs), idToDerivsSum);
-
-                    assert(inputDerivs.size() == inputs.size());
-
-                    // store the input derivatives
-                    for (int k = 0; k < inputs.size(); k++){
-                        idToDerivs[inputs[k].id].push_back(inputDerivs[k]);
-                    }
-
-                    idToDerivsSumTable[self.id] = idToDerivsSum;
-                } 
-
-                return idToDerivsSumTable;
-            }
-
-
-
-        public:
-            template <class OpT, int ...Ds, class ...OpArgTs>
-            inline Expr<ET, Ds...> addExpression(const Shape<Ds...> & shape, 
-                std::initializer_list<ExpressionHandle> inputHandles, OpArgTs... opArgs){
-                return Expr<ET, Ds...>(this, addNode<OpT, OpArgTs...>(shape, inputHandles, opArgs...), shape);
-            }
-
+            // the internal graph structure
             inline const GraphType & graph() const { return _g; }
+
+            // get expression op
+            inline const Op * op(EHandle h) const { return _g.data(h).get(); }
+            template <class DataT>
+            inline DataT value(EHandle h) const { return op(h)->as<DataT>().value(); }
+
+            // get connected expression handle
+            inline EHandle connected(CHandle ch) const { return _g.topo(ch).to(); }
+
+            // check whether this is a forward connection, old -> new
+            bool isForwardConnection(CHandle h) const;
+            // check whether this is a backward connection, new -> old
+            inline bool isBackwardConnection(CHandle h) const { return !isForwardConnection(h); }
+
+            // get all forward connections to retrieve outputed expressions
+            inline ConstConditionalContainerWrapper<HandleArray<HalfTopo>, IsForwardConnectionPred> 
+                forwardConnections(EHandle h) const  {
+                return MakeConditionalContainer(&(_g.topo(h).halfedges), IsForwardConnectionPred(*this));
+            }
+            // get all backward connections to retrieve inputed expressions
+            inline ConstConditionalContainerWrapper<HandleArray<HalfTopo>, IsBackwardConnectionPred>
+                backwardConnections(EHandle h) const  {
+                return MakeConditionalContainer(&(_g.topo(h).halfedges), IsBackwardConnectionPred(*this));
+            }
+
+            // add new node
+            EHandle addNode(std::shared_ptr<Op> op, const std::vector<EHandle>& inputs = std::vector<EHandle>());
+            EHandle addPlus(const std::vector<EHandle>& inputs) { return addNode(op(inputs.front())->makePlus(), inputs); }
+            EHandle addMult(const std::vector<EHandle>& inputs) { return addNode(op(inputs.front())->makeMult(), inputs); }
+            template <class DataT>
+            EHandle addValue(const DataT & d) { return addNode(std::make_shared<OpWithACache<DataT>>(d)); }
+
+            // evaluate the expression
+            void evaluate(EHandle h) const;
+            template <class DataT>
+            inline DataT evaluate(EHandle h) const { evaluate(h);  return op(h)->as<DataT>().value(); }
+
+            // create derivative graph
+            // returns the derivative nodes of vars
+            std::vector<EHandle> createDerivatives(EHandle cost, const std::vector<EHandle> & vars);
+            template <class ... EHandleTs>
+            inline std::tuple<EHandleTs...> createDerivatives(EHandle cost, EHandleTs... vars){
+                return createDerivativesUsingSequence(cost, SequenceGenerator<sizeof...(EHandleTs)>::type(), vars...);
+            }
+
+        private:
+            template <class ... EHandleTs, int ... S>
+            inline std::tuple<EHandleTs...> createDerivativesUsingSequence(EHandle cost, Sequence<S...>, EHandleTs... vars){
+                std::vector<EHandle> derivs = createDerivatives(cost, std::vector<EHandle>{vars...});
+                return std::make_tuple(derivs[S]...);
+            }
+
+            //// OpT must be a subclass of Op
+            //// typename OpT::ElementType MUST exists
+            //template <class OpT, int ...Ds, class ...OpArgTs>
+            //inline Expr<typename OpT::ElementType, Ds...> addExpression(const Shape<Ds...> & shape, 
+            //    std::initializer_list<EHandle> inputs, OpArgTs... opArgs){
+            //    return Expr<typename OpT::ElementType, Ds...>(this, addNode(shape, std::make_shared<OpT>(opArgs...), inputs), shape);
+            //}
+           
 
         private:
             GraphType _g;
         };
 
+        
 
+
+        
+
+
+       
+
+
+
+        /*
         template <class ET, int ...Ds>
         struct Expr {
-            inline Expr(typename ExpressionGraph<ET> * const g,
-                typename ExpressionGraph<ET>::ExpressionHandle h,
-                const Shape<Ds...> & s)
+            inline Expr(typename ExpressionGraph<ET> * const g, EHandle<ET> h, const Shape<Ds...> & s)
                 : graph(g), handle(h), resultShape(s){}
 
             template <class ...Ints>
-            inline ET eval(Ints... ints) const { 
+            inline ET operator()(Ints... ints) const { 
                 return graph->evaluate(handle, IndexFromSubs(resultShape, ints...)); 
             }
 
             Shape<Ds...> resultShape;
-            typename ExpressionGraph<ET> const * const graph;
-            typename ExpressionGraph<ET>::ExpressionHandle handle;
+            ExpressionGraph<ET> const * const graph;
+            EHandle<ET> handle;
         };
 
 
-        // operator base
         template <class ET>
-        struct Op {
-            using ExpressionData = typename ExpressionGraph<ET>::ExpressionData;
-            using ExpressionHandle = typename ExpressionGraph<ET>::ExpressionHandle;
+        struct Cache {
+            inline Cache(int len) : data(new ET[len]), needsUpdate(true){}
+            inline ~Cache(){ delete[] data; }
+            ET * data; 
+            bool needsUpdate;
+        };
 
-            inline Op(bool isConst = false) : isConstant(isConst){}
 
-            // evaluate result
-            virtual ET eval(ExpressionGraph<ET> const * const g, 
-                std::vector<ExpressionHandle> && inputs,
-                ExpressionHandle self, int index) const = 0;
-            
-            // make input derivative expressions based on inputs and output derivative expressions 
-            virtual std::vector<ExpressionHandle> makeInputDerivatives(ExpressionGraph<ET> * const g, 
-                ExpressionHandle self,
-                std::vector<ExpressionHandle> && inputs,
-                ExpressionHandle outputDerivsSum) const {
-                throw "not implemented!";
+
+
+        // operator without inputs
+        template <class ET>
+        struct SrcOp : public Op<ET> {
+            inline SrcOp(bool isConst = false) : Op<ET>(isConst){}
+
+            virtual std::vector<EHandle<ET>> makeInputDerivatives(ExpressionGraph<ET> * const g,
+                EHandle<ET> self,
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> outputDerivsSum) const {
+
+                assert(inputs.size() == 0);
+                return std::vector<EHandle<ET>>();
             }
-
-            const bool isConstant;
         };
 
         // constant
         template <class ET>
-        struct Const : public Op<ET> {
-            inline Const(const ET & c) : Op<ET>(true), constant(c){}
+        struct Const : public SrcOp<ET> {
+            inline Const(const ET & c) : SrcOp<ET>(true), constant(c){}
             
             virtual ET eval(ExpressionGraph<ET> const * const g, 
-                std::vector<ExpressionHandle> && inputs,
-                ExpressionHandle self, int index) const {
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> self, 
+                int index) const {
+
                 return constant;
             }
 
@@ -552,33 +654,24 @@ namespace panoramix {
 
         // variable
         template <class ET>
-        struct Var : public Op<ET> {
-            inline Var(const ET * c) : Op<ET>(), value(c){}
+        struct Var : public SrcOp<ET> {
+            inline Var(const ET * c) : SrcOp<ET>(false), value(c){}
 
             virtual ET eval(ExpressionGraph<ET> const * const g, 
-                std::vector<ExpressionHandle> && inputs,
-                ExpressionHandle self, int index) const {
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> self, int index) const {
                 return value[index];
-            }
-
-            virtual std::vector<ExpressionHandle> makeInputDerivatives(ExpressionGraph<ET> * const g,
-                ExpressionHandle self,
-                std::vector<ExpressionHandle> && inputs,
-                ExpressionHandle outputDerivsSum) const {
-                assert(inputs.size() == 0);
-                return std::vector<ExpressionHandle>();
             }
 
             const ET * value;
         };
 
-
+        // elementwise plus
         template <class ET>
         struct Plus : public Op<ET> {
-
             virtual ET eval(ExpressionGraph<ET> const * const g,
-                std::vector<ExpressionHandle> && inputs,
-                ExpressionHandle self, int index) const {
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> self, int index) const {
                 ET s = 0;
                 for (auto i : inputs){
                     s += g->evaluate(i, index);
@@ -586,19 +679,105 @@ namespace panoramix {
                 return s;
             }
 
-            virtual std::vector<ExpressionHandle> makeInputDerivatives(ExpressionGraph<ET> * const g,
-                ExpressionHandle self,
-                std::vector<ExpressionHandle> && inputs,
-                ExpressionHandle outputDerivsSum) const {
+            virtual std::vector<EHandle<ET>> makeInputDerivatives(ExpressionGraph<ET> * const g,
+                EHandle<ET> self,
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> outputDerivsSum) const {
 
-                return std::vector<ExpressionHandle>(inputs.size());
-            }
-            
+                std::vector<EHandle<ET>> inputDerivs(inputs.size(), outputDerivsSum);
+                return inputDerivs;
+            }            
         };
 
+        // elementwise mul
+        template <class ET>
+        struct Mul : public Op<ET> {            
+            virtual ET eval(ExpressionGraph<ET> const * const g,
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> self,
+                int index) const {
 
+                ET s = 1;
+                for (auto i : inputs){
+                    s *= g->evaluate(i, index);
+                }
+                return s;
+            }
 
+            virtual std::vector<EHandle<ET>> makeInputDerivatives(ExpressionGraph<ET> * const g,
+                EHandle<ET> self,
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> outputDerivsSum) const {
 
+                std::vector<EHandle<ET>> inputDerivs(inputs.size());
+                for (int i = 0; i < inputs.size(); i++){
+                    std::vector<EHandle<ET>> toMults(1, outputDerivsSum);
+                    toMults.reserve(inputs.size());
+                    for (int j = 0; j < inputs.size(); j++){
+                        if (j == i)
+                            continue;
+                        toMults.push_back(inputs[j]);
+                    }
+                    inputDerivs[i] = toMults.size() == 1 ? toMults.front() :
+                        g->addNode<Mul<ET>>(g->data(self).dshape, toMults);
+                }
+
+                return inputDerivs;
+            }
+        };
+
+        // elementwise exponent
+        template <class ET>
+        struct Exp : public Op<ET> {
+            
+            virtual ET eval(ExpressionGraph<ET> const * const g,
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> self,
+                int index) const {
+
+                assert(inputs.size() == 1);
+                return exp(g->evaluate(inputs.front(), index));                
+            }
+
+            virtual std::vector<EHandle<ET>> makeInputDerivatives(ExpressionGraph<ET> * const g,
+                EHandle<ET> self,
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> outputDerivsSum) const {
+           
+                return{ g->addNode<Mul<ET>>(g->data(self).dshape,
+                    outputDerivsSum,
+                    g->addNode<Exp<ET>>(g->data(self).dshape)) };
+            }
+
+        };
+
+        // matrix mul
+        template <class ET>
+        struct MatrixMul : public Op<ET> {
+
+            virtual ET eval(ExpressionGraph<ET> const * const g,
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> self,
+                int index) const {
+
+                assert(inputs.size() == 2);
+                
+                // TODO
+                return exp(g->evaluate(inputs.front(), index));
+            }
+
+            virtual std::vector<EHandle<ET>> makeInputDerivatives(ExpressionGraph<ET> * const g,
+                EHandle<ET> self,
+                std::vector<EHandle<ET>> && inputs,
+                EHandle<ET> outputDerivsSum) const {
+
+                // TODO
+                return{ g->addNode<Mul<ET>>(g->data(self).dshape,
+                    outputDerivsSum,
+                    g->addNode<Exp<ET>>(g->data(self).dshape)) };
+            }
+
+        };
 
 
 
@@ -684,299 +863,14 @@ namespace panoramix {
 
         //}
 
-        //template <class ET>
-        //struct Var;
-        //template <class ET>
-        //struct Node;
 
-
-        //template <class ET>
-        //struct ExprGraph {
-        //    struct Vertex {
-        //        bool isVar;
-        //        Node<ET> * node;
-        //        Var<ET> * var;
-        //    };
-
-        //    using Graph = Mesh<Vertex>;
-        //    Graph g;
-        //};
-
-        //template <class ET>
-        //using VarHandle = typename ExprGraph<ET>::Graph::HalfHandle;
-        //using NodeHandle = typename ExprGraph<ET>::Graph::VertHandle;
-        //
-
-        //
-        //// vars
-        //template <class ET>
-        //struct Var {
-        //    virtual const ET * valueArray(const ExprGraph<ET> & g, VarHandle<ET> h) const { return nullptr; }
-        //    virtual ET valueAt(int index, const ExprGraph<ET> & g, VarHandle<ET> h) const { return 0; }
-        //    virtual int valueNum() const { return std::numeric_limit<int>::max(); }
-        //};
-
-        //template <class ET>
-        //struct VarFinite : public Var<ET> {
-        //    inline VarFinite(int n) : num(n){}
-        //    virtual int valueNum() const { return num; }
-        //    int num;
-        //};
-
-        //template <class ET, class ShapeT>
-        //struct VarShaped : public VarFinite<ET> {
-        //    inline VarShaped(const ShapeT & s) : VarFinite<ET>(s.volume()), shape(s){}
-        //    ShapeT shape;
-        //};
-
-        //template <class ET, class ShapeT>
-        //struct Constant : public VarShaped<ET, ShapeT> {
-        //    inline Constant(const ET & c, const ShapeT & s) : VarShaped<ET, ShapeT>(s), constant(c){}
-        //    virtual ET valueAt(int index, const ExprGraph<ET> & g, VarHandle<ET> h) const { return constant; }
-        //    ET constant;
-        //};
-        //
-        //// nodes
-        //template <class ET>
-        //struct Node {
-
-        //    // back propagate
-        //    //virtual void createInputGradients(
-        //    //    const std::vector<Var<ET>*> & outputGrads, 
-        //    //     std::vector<Var<ET>*> & inputGrads) {}
-        //    
-        //    virtual 
-        //    virtual Node<ET>* createBackPropagateNode() const { return nullptr; }
-        //};
-
-
-
-
-        //
+ 
 
 
 
 
 
-        //// convenient base for operators
-        //template <class ET, class ShapeOutT, class ...ShapeInTs>
-        //struct OpBase {
-        //    using ShapeOutType = ShapeOutT;
-
-        //    std::tuple<Var<ET, ShapeInTs> *...> inputs;
-        //    Var<ET, ShapeOutT> * output;
-        //};
-
-        //template <class ET, class ShapeT>
-        //struct PlusOp : public OpBase<ET, ShapeT, ShapeT, ShapeT>{
-
-        //    inline void grad()
-
-        //};
-
-
-        //template <class ET>
-        //class ExprCache;
-        //
-        //// expression tools
-        //template <class ET>
-        //struct ExprPerformer {
-        //    virtual int shapeVolume() const { return 1; }
-        //    virtual ET value(int index) const { return 0; }
-        //    virtual ET value(int index, ExprCache<ET> * cache) const { return value(index); }
-        //    virtual ExprPerformer * createGradientPerformer(const ExprPerformer * d) const { return nullptr; }
-        //};
-
-        //// square eye performer
-        //template <class ET>
-        //struct SquareEyeConstPerformer : public ExprPerformer<ET> {
-        //    inline SquareEyeConstPerformer(int sv1, int sv2) : inShapeVolume1(sv1), inShapeVolume2(sv2){}
-        //    virtual int shapeVolume() const { return inShapeVolume1 * inShapeVolume2; }
-        //    virtual ET value(int index) const {
-        //        return (index % inShapeVolume1 == index / inShapeVolume1) ? 1 : 0;
-        //    }
-        //    virtual ExprPerformer * createGradientPerformer(const ExprPerformer * d) const {
-        //        return this == d ? new SquareEyeConstPerformer(shapeVolume(), d->shapeVolume()) 
-        //            : new ZeroPerformer<ET>(shapeVolume() * d->shapeVolume());
-        //    }
-        //    int inShapeVolume1, inShapeVolume2;
-        //};
-
-        //// element wise plus performer
-        //template <class ET>
-        //struct ElementWisePlusPerformer : public ExprPerformer<ET> {
-        //    inline ElementWisePlusPerformer(ExprPerformer * mm1, ExprPerformer * mm2)
-        //        : m1(mm1), m2(mm2) {}
-        //    virtual int shapeVolume() const { return std::min(m1->shapeVolume(), m2->shapeVolume()); }
-        //    virtual ET value(int index) const { return m1->value(index) + m2->value(index); }
-        //    virtual ExprPerformer * createGradientPerformer(const ExprPerformer * d) const {
-        //        return this == d ? new SquareEyeConstPerformer<ET>(shapeVolume(), d->shapeVolume()) 
-        //            : new ElementWisePlusPerformer<ET>(
-        //            m1->createGradientPerformer(d), 
-        //            m2->createGradientPerformer(d));
-        //    }
-
-        //    ExprPerformer * m1;
-        //    ExprPerformer * m2;
-        //};
-
-        //// element wise mult performer
-        //template <class ET>
-        //struct ElementWiseMultPerformer : public ExprPerformer<ET> {
-        //    inline ElementWiseMultPerformer(ExprPerformer * mm1, ExprPerformer * mm2) 
-        //        : m1(mm1), m2(mm2){}
-        //    virtual int shapeVolume() const { return std::min(m1->shapeVolume(), m2->shapeVolume()); }
-        //    virtual ET value(int index) const { return m1->value(index) * m2->value(index); }
-        //    virtual ExprPerformer * createGradientPerformer(const ExprPerformer * d) const {
-        //        return this == d ? new SquareEyeConstPerformer<ET>(shapeVolume(), d->shapeVolume()) 
-        //            : new ElementWisePlusPerformer<ET>(
-        //            new ElementWiseMultPerformer(m1->createGradientPerformer(d), m2), 
-        //            new ElementWiseMultPerformer(m1, m2->createGradientPerformer(d)));
-        //    }
-
-        //    ExprPerformer * m1;
-        //    ExprPerformer * m2;
-        //};
-
-
-        //// zeroary performer [LEAF]
-        //template <class ET, class FunT>
-        //struct ElementWiseZeroaryPerformer : public ExprPerformer<ET> {
-        //    inline ElementWiseZeroaryPerformer(int sv, FunT f = FunT()) : outShapeVolume(sv), fun(f){}
-        //    virtual int shapeVolume() const { return outShapeVolume; }
-        //    virtual ET value(int index) const { return fun(); }
-        //    virtual ExprPerformer * createGradientPerformer(const ExprPerformer * d) const {
-        //        return this == d ? new SquareEyeConstPerformer(shapeVolume(), d->shapeVolume())
-        //            : new ZeroPerformer<ET>(shapeVolume() * d->shapeVolume());
-        //    }
-
-        //    FunT fun;
-        //    int outShapeVolume;
-        //};
-
-
-        //// general unary performer on each single element
-        //template <class ET, class FunT>
-        //struct ElementWiseUnaryPerformer : public ExprPerformer<ET> {
-        //    inline ElementWiseUnaryPerformer(ExprPerformer * mm, FunT f = FunT()) : m(mm), fun(f){}
-        //    virtual int shapeVolume() const { return m->shapeVolume(); }
-        //    virtual ET value(int index) const { return fun(m->value(index)); }
-        //    virtual ExprPerformer * createGradientPerformer(const ExprPerformer * d) const {
-        //        if (this == d)
-        //            return new SquareEyeConstPerformer(shapeVolume(), d->shapeVolume());
-        //        auto gradientFun = MakeGradientFunctor(fun);
-        //        using GradientType = decltype(gradientFun);
-        //        return new ElementWiseMultPerformer<ET>(
-        //            new ElementWiseUnaryPerformer<GradientType>(m, gradientFun), 
-        //            m->createGradientPerformer(d));
-        //    }
-
-        //    ExprPerformer * m;
-        //    FunT fun;
-        //};
-
-        //// all sum
-        ////template <class ET>
-        ////struct AllSumPerformer : public ExprPerformer<ET> {
-        ////    inline AllSumPerformer(ExprPerformer * mm) : m(mm){}
-        ////    virtual int shapeVolume() const { return 1; }
-        ////    virtual ET value(int index) const {
-        ////        ET sum = 0;
-        ////        for (int i = 0; i < shapeVolume; i++){
-        ////            sum += m->value(i);
-        ////        }
-        ////        return sum;
-        ////    }
-        ////    virtual ExprPerformer * createGradientPerformer(const ExprPerformer * d) const {
-        ////        if (this == d)
-        ////            return new SquareEyeConstPerformer(shapeVolume(), d->shapeVolume());
-        ////        return new OnePerformer<ET>(shapeVolume() * d->shapeVolume());
-        ////    }
-
-        ////    ExprPerformer * m;
-        ////};
-
-
-        //template <class ET, class Shape1, class Shape2>
-        //struct MatrixMultPerformer : public ExprPerformer<ET> {
-        //    static_assert(Shape1::Rank >= 2 && Shape2::Rank >= 2, "shape ranks must be over 2!");
-        //    static const int Size10 = Shape1::StaticLength;
-        //    static const int Size11 = Shape1::BaseType::StaticLength;
-        //    static const int Size20 = Shape2::StaticLength;
-        //    static const int Size21 = Shape2::BaseType::StaticLength;
-        //    static_assert(Size11 == Size20, "shape sizes not compatible!");
-        //    using ResultShapeType = decltype(MakeMatrixProductShape(std::declval<Shape1>(), std::declval<Shape2>()));
-
-        //    MatrixMultPerformer(ExprPerformer * mm1, ExprPerformer * mm2, const Shape1 & s1, const Shape2 & s2)
-        //        : m1(mm1), m2(mm2), shape1(s1), shape2(s2), resultShape(MakeMatrixProductShape(s1, s2)){
-        //        assert(s1.size<1>() == s2.size<0>());
-        //    }
-
-        //    virtual int shapeVolume() const { return resultShape.volume(); }
-        //    virtual ET value(int index) const {
-        //        // convert index back to subscript
-        //        std::array<int, ResultShapeType::Rank> resultSubs;
-        //        SubsFromIndex(resultShape, index, resultSubs);
-        //        // get subscripts of the two inputs
-        //        std::array<int, Shape1::Rank> subs1;
-        //        std::array<int, Shape2::Rank> subs2;
-        //        std::copy(resultSubs.begin() + 3, resultSubs.end(), subs1.begin() + 3);
-        //        std::copy(resultSubs.begin() + 3, resultSubs.end(), subs2.begin() + 3);
-        //        subs1[0] = resultSubs[0];
-        //        subs2[1] = resultSubs[1];
-        //        static const int N = Size11;
-        //        ET sum = 0;
-        //        for (int i = 0; i < N; i++){
-        //            subs1[1] = subs2[0] = i;
-        //            sum += m1->value(IndexFromSubs(shape1, subs1)) * m2->value(IndexFromSubs(shape2, subs2));
-        //        }
-        //        return sum;
-        //    }
-
-        //    virtual ExprPerformer * createGradientPerformer(const ExprPerformer * d) const {
-        //        
-        //    }
-
-        //    Shape1 shape1;
-        //    Shape2 shape2;
-        //    ResultShapeType resultShape;
-        //    ExprPerformer * m1;
-        //    ExprPerformer * m2;
-        //};
-
-
-
-
-
-        /*template <class ET, int ... Ds>
-        class Expr {
-        public:
-            using ShapeType = Shape<Ds...>;
-
-            template <class... Ints>
-            explicit Expr(Ints ... ints) : _shape(ints...), _data(std::make_shared<ExprPerformer<ET>>()) {}
-
-            Expr(std::shared_ptr<ExprPerformer<ET>> ptr, const ShapeType & s) : _shape(s), _data(ptr) {}
-
-            inline ShapeType shape() const {
-                return _shape;
-            }
-
-            Expr<ET, Ds..., 1> promote() const {
-                return Expr<ET, Ds..., 1>(_data, MakeShapeFromDynamicSizes<Ds..., 1>(_shape));
-            }
-
-            template <int ... OtherDs>
-            Expr<ET, OtherDs...> reshape(const Shape<OtherDs...> & s) const {
-                static_assert(Shape<OtherDs...>::StaticVolume == ShapeType::StaticVolume, "shape volume not compatible!");
-                assert(s.volume() == _shape.volume());
-                return Expr<ET, OtherDs...>(_data, s);
-            }
-
-        private:
-            ShapeType _shape;
-            std::shared_ptr<ExprPerformer<ET>> _data;
-        };
+        /*
 
 
         template <class ET, int ...A, int ...B>

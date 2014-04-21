@@ -1,5 +1,3 @@
-#include "../src/core/basic_types.hpp"
-#include "../src/core/utilities.hpp"
 #include "../src/core/expression.hpp"
 #include "gtest/gtest.h"
 
@@ -11,7 +9,8 @@ using namespace panoramix::core;
 
 TEST(Expression, Shape) {
 
-    Shape<1, 2, Dynamic, 3, Dynamic, Dynamic> s(5, 6, 7);
+    /*
+    Shape<1, 2, Dyn, 3, Dyn, Dyn> s(5, 6, 7);
 
     EXPECT_EQ(6, s.Rank);
     EXPECT_EQ(3, s.DynamicNum);
@@ -108,7 +107,7 @@ TEST(Expression, Shape) {
 
 
     // make shape from dynamic sizes of a existing shape
-    auto s2 = MakeShapeFromDynamicSizes<Dynamic, Dynamic, Dynamic>(s);
+    auto s2 = MakeShapeFromDynamicSizes<Dyn, Dyn, Dyn>(s);
 
     EXPECT_EQ(3, s2.Rank);
     EXPECT_EQ(3, s2.DynamicNum);
@@ -133,16 +132,6 @@ TEST(Expression, Shape) {
     EXPECT_EQ(6, s_s2.size<7>());
     EXPECT_EQ(7, s_s2.size<8>());
 
-    // make matrix product shape
-    Shape<5, 6, Dynamic> aa(10);
-    Shape<6, 2, 4> bb;
-    auto aabb = MakeMatrixProductShape(aa, bb);
-
-    EXPECT_EQ(5, aabb.size<0>());
-    EXPECT_EQ(2, aabb.size<1>());
-    EXPECT_EQ(10, aabb.size<2>());
-    EXPECT_EQ(4, aabb.size<3>());
-
 
     // directly instantiate a static shape
     Shape<5, 6, 7> s3;
@@ -166,47 +155,37 @@ TEST(Expression, Shape) {
     EXPECT_EQ(6, ss.size<4>());
     EXPECT_EQ(7, ss.size<5>());
     EXPECT_EQ(1 * 2 * 5 * 3 * 6 * 7, ss.volume());    
-
+    */
 }
 
 TEST(Expression, Basic) {
 
-    ExpressionGraph<double> graph;
-    auto e1 = graph.addExpression<Const<double>>(Shape<2, 3>(), {}, 5);
-    auto e2 = graph.addExpression<Const<double>>(Shape<2, 3>(), {}, 10);
-    auto e3 = graph.addExpression<Const<double>>(Shape<2, 3>(), {}, 30);
-    auto e123 = graph.addExpression<Plus<double>>(Shape<2, Dynamic>(3), {e1.handle, e2.handle, e3.handle});
-    
-    EXPECT_EQ(45, e123.eval(0, 1));
+    ExpressionGraph graph;
+    auto e1 = graph.addValue<double>(5);
+    auto e2 = graph.addValue<double>(6);
+    auto e12 = graph.addMult({ e1, e2 });
+    double d12 = graph.evaluate<double>(e12);
+    EHandle de1, de2;
+    std::tie(de1, de2) = graph.createDerivatives(e12, e1, e2);
+    ASSERT_EQ(6, graph.evaluate<double>(de1));
+    ASSERT_EQ(5, graph.evaluate<double>(de2));
 
-    double data[] = { 1, 2, 3, 4 };
-    auto v = graph.addExpression<Var<double>>(Shape<>(), {}, data);
-    auto ders = graph.createDerivativeGraph(v.handle);
+}
+
+TEST(Expression, Eigen) {
+
+    using namespace Eigen;
+
+    MatrixXd m1(3, 3);
+    MatrixXd m2(3, 3);
+    auto m12 = m1 + m2 * m1;
 
 }
 
 
 TEST(Expression, NN) {   
     
-    //Expr<double, Dynamic> in(10);
-    //Expr<double, Dynamic, Dynamic> w(10, 10);
-    
-    //Expr<double, Dynamic, 1> p = MatrixMult(w, in.promote());
-    //Expr<double, Dynamic, Dynamic> j = JacobianMatrix(p, w);
-
-
-
-    /*
-    Expr<double, Dynamic> nnOutputs = 1.0 / (1.0 + exp(-nnDirectOutputs));
-    
-    Expr<double, Dynamic> expectedOutputs;
-
-    Expr<double> squaredSumError = SumAll(Square(expectedOutputs - nnOutputs));
-    Expr<double, Dynamic, Dynamic> nnDeltaWeights = JacobianMatrix(squaredSumError, nnWeights).reshape(nnWeights.shape()) * 0.3;
-
-    Expr<double, Dynamic, Dynamic> newNNWeights = nnWeights - nnDeltaWeights;*/
-
-    
+        
 
 }
 
