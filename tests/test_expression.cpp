@@ -1,4 +1,6 @@
 #include "../src/core/expression.hpp"
+#include "../src/core/expression_ops.hpp"
+
 #include "gtest/gtest.h"
 
 #include <iostream>
@@ -7,193 +9,316 @@
 
 using namespace panoramix::core;
 
-TEST(Expression, Shape) {
 
-    /*
-    Shape<1, 2, Dyn, 3, Dyn, Dyn> s(5, 6, 7);
-
-    EXPECT_EQ(6, s.Rank);
-    EXPECT_EQ(3, s.DynamicNum);
-    
-    // sizes
-    EXPECT_EQ(1, s.size<0>());
-    EXPECT_EQ(2, s.size<1>());
-    EXPECT_EQ(5, s.size<2>());
-    EXPECT_EQ(3, s.size<3>());
-    EXPECT_EQ(6, s.size<4>());
-    EXPECT_EQ(7, s.size<5>());
-
-    // resize
-    s.resize<2>(500);
-    s.resize<4>(600);
-    s.resize<5>(700);
-
-    EXPECT_EQ(500, s.size<2>());
-    EXPECT_EQ(600, s.size<4>());
-    EXPECT_EQ(700, s.size<5>());
-
-    s.resize<2>(5);
-    s.resize<4>(6);
-    s.resize<5>(7);
-
-    // dynamic sizes
-    EXPECT_EQ(5, s.dsize<0>());
-    EXPECT_EQ(6, s.dsize<1>());
-    EXPECT_EQ(7, s.dsize<2>());
-
-    // dynamic resize
-    s.dresize<0>(50);
-    s.dresize<1>(60);
-    s.dresize<2>(70);
-
-    EXPECT_EQ(50, s.dsize<0>());
-    EXPECT_EQ(60, s.dsize<1>());
-    EXPECT_EQ(70, s.dsize<2>());
-
-    s.dresize<0>(5);
-    s.dresize<1>(6);
-    s.dresize<2>(7);
-
-    // static sizes
-    EXPECT_EQ(1, s.ssize<0>());
-    EXPECT_EQ(2, s.ssize<1>());
-    EXPECT_EQ(3, s.ssize<2>());
-
-    // volume
-    EXPECT_EQ(1 * 2 * 5 * 3 * 6 * 7, s.volume());
-
-    // shape to array
-    auto arr = MakeArrayFromShape(s);
-    EXPECT_EQ(1, arr[0]);
-    EXPECT_EQ(2, arr[1]);
-    EXPECT_EQ(5, arr[2]);
-    EXPECT_EQ(3, arr[3]);
-    EXPECT_EQ(6, arr[4]);
-    EXPECT_EQ(7, arr[5]);
-
-    auto tp = MakeTupleFromShape(s);
-    EXPECT_TRUE(std::make_tuple(1, 2, 5, 3, 6, 7) == tp);
-
-    // sub2ind & ind2sub
-    EXPECT_EQ(0, IndexFromSubs(s, 0, 0, 0, 0, 0, 0));
-    EXPECT_EQ(1, IndexFromSubs(s, 0, 1, 0, 0, 0, 0));
-
-    int correctInd = 0;
-    for (int f = 0; f < s.size<5>(); f++){
-        for (int e = 0; e < s.size<4>(); e++){
-            for (int d = 0; d < s.size<3>(); d++){
-                for (int c = 0; c < s.size<2>(); c++){
-                    for (int b = 0; b < s.size<1>(); b++){
-                        for (int a = 0; a < s.size<0>(); a++){
-                            int ind = IndexFromSubs(s, a, b, c, d, e, f);
-                            int ind2 = IndexFromSubs(s, std::array<int, 6>{{ a, b, c, d, e, f }});
-                            ASSERT_EQ(correctInd, ind);
-                            ASSERT_EQ(correctInd, ind2);
-                            correctInd++;
-
-                            int aa, bb, cc, dd, ee, ff;
-                            SubsFromIndex(s, ind, aa, bb, cc, dd, ee, ff);
-                            std::array<int, 6> subs;
-                            SubsFromIndex(s, ind, subs);
-                            ASSERT_TRUE(std::tie(a, b, c, d, e, f) == std::tie(aa, bb, cc, dd, ee, ff));
-                            ASSERT_TRUE(std::tie(a, b, c, d, e, f) == std::tie(subs[0], subs[1], subs[2], subs[3], subs[4], subs[5]));
-                        }
-                    }
-                }
-            }
-        }
-    }
-   
-
-
-    // make shape from dynamic sizes of a existing shape
-    auto s2 = MakeShapeFromDynamicSizes<Dyn, Dyn, Dyn>(s);
-
-    EXPECT_EQ(3, s2.Rank);
-    EXPECT_EQ(3, s2.DynamicNum);
-    EXPECT_EQ(5, s2.size<0>());
-    EXPECT_EQ(6, s2.size<1>());
-    EXPECT_EQ(7, s2.size<2>());
-    EXPECT_EQ(5 * 6 * 7, s2.volume());
-
-    // make descartes product shape
-    auto s_s2 = MakeDescartesProductShape(s, s2);
-
-    EXPECT_EQ(s.Rank + s2.Rank, s_s2.Rank);
-    EXPECT_EQ(s.DynamicNum + s2.DynamicNum, s_s2.DynamicNum);
-
-    EXPECT_EQ(1, s_s2.size<0>());
-    EXPECT_EQ(2, s_s2.size<1>());
-    EXPECT_EQ(5, s_s2.size<2>());
-    EXPECT_EQ(3, s_s2.size<3>());
-    EXPECT_EQ(6, s_s2.size<4>());
-    EXPECT_EQ(7, s_s2.size<5>());
-    EXPECT_EQ(5, s_s2.size<6>());
-    EXPECT_EQ(6, s_s2.size<7>());
-    EXPECT_EQ(7, s_s2.size<8>());
-
-
-    // directly instantiate a static shape
-    Shape<5, 6, 7> s3;
-
-    EXPECT_EQ(3, s3.Rank);
-    EXPECT_EQ(0, s3.DynamicNum);
-    EXPECT_EQ(5, s3.size<0>());
-    EXPECT_EQ(6, s3.size<1>());
-    EXPECT_EQ(7, s3.size<2>());
-    EXPECT_EQ(5 * 6 * 7, s3.volume());
-
-    // copy
-    auto ss = s;
-
-    EXPECT_EQ(6, ss.Rank);
-    EXPECT_EQ(3, ss.DynamicNum);
-    EXPECT_EQ(1, ss.size<0>());
-    EXPECT_EQ(2, ss.size<1>());
-    EXPECT_EQ(5, ss.size<2>());
-    EXPECT_EQ(3, ss.size<3>());
-    EXPECT_EQ(6, ss.size<4>());
-    EXPECT_EQ(7, ss.size<5>());
-    EXPECT_EQ(1 * 2 * 5 * 3 * 6 * 7, ss.volume());    
-    */
-}
-
-TEST(Expression, Basic) {
+TEST(Expression, addConst) {
 
     ExpressionGraph graph;
-    auto e1 = graph.addValue<double>(5);
-    auto e2 = graph.addValue<double>(6);
-    auto e12 = graph.addMult({ e1, e2 });
-    double d12 = graph.evaluate<double>(e12);
-    EHandle de1, de2;
-    std::tie(de1, de2) = graph.createDerivatives(e12, e1, e2);
-    ASSERT_EQ(6, graph.evaluate<double>(de1));
-    ASSERT_EQ(5, graph.evaluate<double>(de2));
-
-}
-
-TEST(Expression, Eigen) {
-
-    using namespace Eigen;
-
-    MatrixXd m1(3, 3);
-    MatrixXd m2(3, 3);
-    auto m12 = m1 + m2 * m1;
-
-}
-
-
-TEST(Expression, NN) {   
     
-        
+    auto m1 = graph.addConst(Matrix<double, 4, 5>::Ones());
+    EXPECT_TRUE(m1.eval() == (Matrix<double, 4, 5>::Ones()));
+
+    auto m2 = graph.addConst(Matrix<float, 5, 10>::Identity() * Matrix<float, 10, 6>::Ones());
+    EXPECT_TRUE(m2.eval() == (Matrix<float, 5, 10>::Identity() * Matrix<float, 10, 6>::Ones()));
+
+    MatrixXd m3d(5, 2);
+    m3d << 1, 2, 3, 4, 5, 6, 7, 8, 9, 0;
+    auto m3 = graph.addConst(m3d * Matrix<double, 2, 6>::Ones());
+    EXPECT_TRUE(m3.eval() == (m3d * Matrix<double, 2, 6>::Ones()));
+
+    SparseMatrix<double> m4d;
+    m4d.resize(5, 5);
+    m4d.setIdentity();
+    Fill(m4d, 5);
+    auto m4 = graph.addConst(m4d);
+    EXPECT_TRUE(MatrixXd(m4d) == MatrixXd(m4.eval()));
 
 }
+
+TEST(Expression, addRef) {
+
+    ExpressionGraph graph;
+    MatrixXd a(4, 5);
+    a.fill(5.5);   
+
+    auto aa = graph.addRef(a);
+    EXPECT_TRUE(aa.eval() == a);
+
+    a.fill(2.2);
+    EXPECT_TRUE(aa.eval() == a);
+
+    a.resize(7, 4);
+    EXPECT_TRUE(aa.eval() == a);
+
+    a.transposeInPlace();
+    EXPECT_TRUE(aa.eval() == a);
+
+    a *= Matrix<double, 7, 8>::Identity();
+    EXPECT_TRUE(aa.eval() == a);
+    
+}
+
+
+TEST(Expression, Scalars) {
+
+    ExpressionGraph graph;
+
+    double x = 1.0;
+    auto xx = graph.addRef(x);
+
+    EXPECT_EQ(x, xx.eval());
+    x = 3.0;
+    EXPECT_EQ(x, xx.eval());
+
+    float y = 2.0;
+    auto yy = graph.addRef(y);
+
+    EXPECT_EQ(y, yy.eval());
+    y = 10;
+    EXPECT_EQ(y, yy.eval());
+
+    std::complex<double> c(4, 3);
+    auto cc = graph.addRef(c);
+
+    EXPECT_TRUE(cc.eval() == c);
+    c.imag(5);
+    EXPECT_TRUE(cc.eval() == c);
+
+}
+
+
+TEST(Expression, ScalarOp) {
+    ExpressionGraph graph;
+
+    double xv = 9.0;
+    double yv = 5.0;
+    
+    auto x = graph.addRef(xv, "x");
+    auto y = graph.addRef(yv, "y");
+
+    {
+        // plus
+        auto f = x + y;
+        // plus deriv
+        auto df = f.derivatives(x, y);
+        auto dfdx = std::get<0>(df);
+        auto dfdy = std::get<1>(df);
+
+        for (int i = 0; i < 10; i++) {
+            xv = (std::rand() % 100000) / 100000.0;
+            yv = (std::rand() % 100000) / 100000.0;
+            EXPECT_DOUBLE_EQ(xv + yv, f.eval());
+            EXPECT_DOUBLE_EQ(1.0, dfdx.eval());
+            EXPECT_DOUBLE_EQ(1.0, dfdy.eval());
+        }
+    }
+
+    {
+        // multiplication
+        auto f = x * y;
+        auto df = f.derivatives(x, y);
+        auto dfdx = std::get<0>(df);
+        auto dfdy = std::get<1>(df);
+        for (int i = 0; i < 10; i++) {
+            xv = (std::rand() % 100000) / 100000.0;
+            yv = (std::rand() % 100000) / 100000.0;
+            EXPECT_NEAR(xv * yv, f.eval(), 0.01);
+            EXPECT_NEAR(y.eval(), dfdx.eval(), 0.01);
+            EXPECT_NEAR(x.eval(), dfdy.eval(), 0.01);
+        }
+    }
+
+    {
+        // exp
+        auto f = exp(x);
+        auto df = f.derivatives(x, y);
+        auto dfdx = std::get<0>(df);
+        for (int i = 0; i < 10; i++) {
+            xv = (std::rand() % 100000) / 100000.0;
+            EXPECT_NEAR(exp(xv), f.eval(), 0.01);
+            EXPECT_NEAR(f.eval(), dfdx.eval(), 0.01);
+        }
+    }
+
+    {
+        // exp(x+y)
+        auto f = exp(x + y);
+        auto df = f.derivatives(x, y);
+        auto dfdx = std::get<0>(df);
+        auto dfdy = std::get<1>(df);
+        for (int i = 0; i < 10; i++) {
+            xv = (std::rand() % 100000) / 100000.0;
+            yv = (std::rand() % 100000) / 100000.0;
+            EXPECT_NEAR(exp(xv + yv), f.eval(), 0.01);
+            EXPECT_NEAR(f.eval(), dfdx.eval(), 0.01);
+            EXPECT_NEAR(f.eval(), dfdy.eval(), 0.01);
+        }
+    }
+
+    {
+        // exp(x*y)
+        auto f = exp(x * y);
+        auto df = f.derivatives(x, y);
+        auto dfdx = std::get<0>(df);
+        auto dfdy = std::get<1>(df);
+        for (int i = 0; i < 10; i++) {
+            xv = (std::rand() % 100000) / 100000.0;
+            yv = (std::rand() % 100000) / 100000.0;
+            EXPECT_NEAR(exp(xv * yv), f.eval(), 0.01);
+            EXPECT_NEAR(exp(xv * yv) * yv, dfdx.eval(), 0.01);
+            EXPECT_NEAR(exp(xv * yv) * xv, dfdy.eval(), 0.01);
+        }
+    }
+
+    {
+        // exp(x*y)+x+y
+        auto f = exp(x * y) + x + y;
+        auto df = f.derivatives(x, y);
+        auto dfdx = std::get<0>(df);
+        auto dfdy = std::get<1>(df);
+        for (int i = 0; i < 10; i++) {
+            xv = (std::rand() % 100000) / 100000.0;
+            yv = (std::rand() % 100000) / 100000.0;
+            EXPECT_NEAR(exp(xv * yv) + xv + yv, f.eval(), 0.01);
+            EXPECT_NEAR(exp(xv * yv) * yv + 1, dfdx.eval(), 0.01);
+            EXPECT_NEAR(exp(xv * yv) * xv + 1, dfdy.eval(), 0.01);
+        }
+    }
+
+    {
+        // exp(x*exp(y))
+        auto f = exp(x * exp(y));
+        auto df = f.derivatives(x, y);
+        auto dfdx = std::get<0>(df);
+        auto dfdy = std::get<1>(df);
+        for (int i = 0; i < 10; i++) {
+            xv = (std::rand() % 100000) / 100000.0;
+            yv = (std::rand() % 100000) / 100000.0;
+            EXPECT_NEAR(exp(xv * exp(yv)), f.eval(), 0.01);
+            EXPECT_NEAR(exp(xv * exp(yv)) * exp(yv), dfdx.eval(), 0.01);
+            EXPECT_NEAR(exp(xv * exp(yv)) * xv * exp(yv), dfdy.eval(), 0.01);
+        }
+    }
+
+}
+
+namespace Helper {
+
+    template<typename DerivedA, typename DerivedB>
+    bool allclose(const Eigen::DenseBase<DerivedA>& a,
+        const Eigen::DenseBase<DerivedB>& b,
+        const typename DerivedA::RealScalar& rtol
+        = Eigen::NumTraits<typename DerivedA::RealScalar>::dummy_precision(),
+        const typename DerivedA::RealScalar& atol
+        = Eigen::NumTraits<typename DerivedA::RealScalar>::epsilon())
+    {
+        return ((a.derived() - b.derived()).array().abs()
+            <= (atol + rtol * b.derived().array().abs())).all();
+    }
+
+#define EXPECT_MATRIX_EQ(a, b) EXPECT_TRUE(Helper::allclose(a, b))
+
+}
+
+template <class T>
+void foo(const T & t){
+    std::cout << "default" << std::endl;
+}
+
+template <class Derived>
+void foo(const Eigen::MatrixBase<Derived> & t) {
+    std::cout << "dense version" << std::endl;
+}
+
+TEST(Expression, TemplateMatching) {
+    MatrixXd xv;
+    foo(xv);
+}
+
+template <class T, class T1, class T2>
+T passValue(T1 && t1, T2 && t2) {
+    return t1 + t2 * 2;
+}
+
+TEST(Expression, EigenExprTypePassing) {
+    MatrixXd x;
+    MatrixXd y;
+    x.setRandom(2, 2);
+    y.setRandom(2, 2);
+    using T = decltype(x + y * 2);
+    auto m = passValue<T>(x, y);
+
+    MatrixXd sum = m;
+    EXPECT_MATRIX_EQ(sum, x + y * 2);
+}
+
+
+TEST(Expression, MatrixOp) {
+
+    ExpressionGraph graph;
+
+    Matrix<double, Dynamic, Dynamic> xv;
+    Matrix<double, Dynamic, Dynamic> yv;
+
+    auto x = graph.addRef(xv);
+    auto y = graph.addRef(yv);
+
+    {
+        // +
+        // plus
+        auto f = SumElements(x + y);
+        // plus deriv
+        auto df = f.derivatives(x, y);
+        auto dfdx = std::get<0>(df);
+        auto dfdy = std::get<1>(df);
+
+        for (int i = 0; i < 10; i++) {
+            int r = std::rand() % 100 + 1;
+            int c = std::rand() % 100 + 1;
+            xv.setRandom(r, c);
+            yv.setRandom(r, c);
+            EXPECT_DOUBLE_EQ((xv + yv).sum(), f.eval());
+            EXPECT_MATRIX_EQ(MatrixXd::Ones(r, c), dfdx.eval());
+            EXPECT_MATRIX_EQ(MatrixXd::Ones(r, c), dfdy.eval());
+        }
+    }
+
+
+
+    //{
+    //    // *
+    //    // mult
+    //    auto f = SumElements(x * y);
+    //    // plus deriv
+    //    auto df = f.derivatives(x, y);
+    //    auto dfdx = std::get<0>(df);
+    //    auto dfdy = std::get<1>(df);
+
+    //    for (int i = 0; i < 10; i++) {
+    //        int a = std::rand() % 100 + 1;
+    //        int b = std::rand() % 100 + 1;
+    //        int c = std::rand() % 100 + 1;
+    //        xv.setRandom(a, b);
+    //        yv.setRandom(b, c);
+    //        EXPECT_DOUBLE_EQ((xv * yv).sum(), f.eval());
+    //        EXPECT_MATRIX_EQ(yv.transpose(), dfdx.eval());
+    //        EXPECT_MATRIX_EQ(xv.transpose(), dfdy.eval());
+    //    }
+    //}
+
+}
+
+
+
+
+
 
 
 
 int main(int argc, char * argv[], char * envp[])
 {
 	testing::InitGoogleTest(&argc, argv);
+    testing::GTEST_FLAG(catch_exceptions) = true;
+    testing::GTEST_FLAG(show_internal_stack_frames) = true;
     return RUN_ALL_TESTS();
 }
 

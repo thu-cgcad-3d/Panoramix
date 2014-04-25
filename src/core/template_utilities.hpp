@@ -16,18 +16,24 @@ namespace panoramix {
             static const int Count = 0;
             static const int Sum = 0;
             static const int Product = 1;
+            static const bool All = (Product != 0);
+            static const bool Any = (Sum != 0);
         };
         template <int N>
         struct Sequence<N> {
             static const int Count = 1;
             static const int Sum = N;
             static const int Product = N;
+            static const bool All = (Product != 0);
+            static const bool Any = (Sum != 0);
         };
         template <int N, int ...S>
         struct Sequence<N, S...> {
             static const int Count = 1 + Sequence<S...>::Count;
             static const int Sum = N + Sequence<S...>::Sum;
             static const int Product = N * Sequence<S...>::Product;
+            static const bool All = (Product != 0);
+            static const bool Any = (Sum != 0);
         };
 
 
