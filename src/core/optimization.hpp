@@ -11,6 +11,8 @@
 #include <setjmp.h>
 
 #include "basic_types.hpp"
+#include "expression.hpp"
+
 
 namespace panoramix {
     namespace core {

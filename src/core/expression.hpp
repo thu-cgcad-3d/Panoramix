@@ -7,18 +7,12 @@
 #include <numeric>
 #include <initializer_list>
 
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
-
-#include "basic_types.hpp"
 #include "template_utilities.hpp"
 #include "mesh.hpp"
 #include "data_traits.hpp"
-#include "simple_data_traits.hpp"
 
 namespace panoramix {
     namespace core {
-
 
         class ExpressionGraph;
         struct Op;
@@ -26,58 +20,12 @@ namespace panoramix {
         using GraphType = Mesh<std::shared_ptr<Op>>;
         using EHandle = GraphType::VertHandle;
         using CHandle = GraphType::HalfHandle;
-
-        // the expression wrapper
-        template <class DataT>
-        struct Expression {
-            static_assert(IsActive<DataT>::value, "type is not currently supported!");
-
-        public:
-            using Type = DataT;
-            inline Expression(EHandle h = EHandle(), ExpressionGraph * g = nullptr) : _h(h), _g(g){}
-
-            inline EHandle handle() const { return _h; }
-            inline ExpressionGraph * g() const { return _g; }
-
-            // the current value in expression data
-            inline const DataT & value() const { return _g->op(_h).as<DataT>().value(); }
-
-            // evaluate the expression and return the newest value
-            template <class ... VarTs>
-            inline const DataT & eval(const Expression<VarTs> &... vars) const { 
-                assert(_h.isValid() && "Invalid expression handle!");
-                return evalUsingSequence(typename SequenceGenerator<sizeof...(VarTs)>::type(), vars...);
-            }
-
-            template <class ... VarTs>
-            inline std::tuple<Expression<VarTs>...> derivatives(const Expression<VarTs> &... vars){
-                assert(GetSize(value()) == 1 && "The cost function must has a scalar value!");
-                assert(_h.isValid() && "Invalid expression handle!");
-                return derivativesUsingSequence(typename SequenceGenerator<sizeof...(VarTs)>::type(), vars...);
-            }
-
-        private:
-            template <class ... VarTs, int ...S>
-            inline const DataT & evalUsingSequence(Sequence<S...>, const Expression<VarTs> &... vars) const {
-                _g->evaluate(_h, {vars.handle()...});
-                return value();
-            }
-
-            template <class ... VarTs, int ...S>
-            inline std::tuple<Expression<VarTs>...> derivativesUsingSequence(Sequence<S...>, 
-                const Expression<VarTs> &... vars){
-                auto derivHandles = _g->createDerivatives(_h, std::vector<EHandle>{vars.handle()...});
-                return std::make_tuple(Expression<VarTs>(derivHandles[S], _g)...);
-            }            
-
-        private:
-            EHandle _h;
-            ExpressionGraph * _g;
-        };
+        using std::ostream;
 
 
-        template <class DataT>
-        struct OpWithAValue;
+        template <class T> struct OpWithValue;
+        template <class T> struct OpWithCache;
+        template <class T> struct Expression;
         
         // operator base
         struct Op {
@@ -91,220 +39,854 @@ namespace panoramix {
             // stream to string
             virtual std::ostream & toString(std::ostream & os) const = 0;
 
-            // evaluate and get result
-            virtual void eval(ExpressionGraph const * const g, std::vector<EHandle> && inputs) {}
+
+            // execute the operator
+            // called in forward propagation
+            virtual void forwardPropagateExecute() {}
+
 
             // make input derivative expressions based on inputs and output derivative expressions
-            // returns derivative Ops corresponding to inputs
-            virtual std::vector<EHandle> makeInputDerivatives(ExpressionGraph * const g,
-                EHandle self,
-                std::vector<EHandle> && inputs,
-                EHandle outputDerivsSum) const {
-                return std::vector<EHandle>();
-            }
+            // the input derivatives should be calculated based on 
+            //  1. the sum of outputDerivs 
+            //  2. the inputs
+            // returns
+            //  1. the sum of outputDerivs
+            //  2. derivative Ops corresponding to inputs
+            // dinputs size MUST be same with inputs number
+            virtual EHandle homomorphicSum(const std::vector<EHandle> & doutputs) const = 0;
+            virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const = 0;
 
-            // make a new Op which accepts the current Op as input, 
-            // reserve the input Op's shape, and its function is to fill the shape with ones
-            virtual std::shared_ptr<Op> makeOnes() const = 0;
 
-            // make a new Op which accepts multiple inputs all with the same type the current Op, 
-            // its function is to sum all the inputs
-            virtual std::shared_ptr<Op> makePlus() const = 0; // support > 2 args, all inputs must share the same type
+            // make a new Op which makes a scalar one
+            // requires that the Op represents a scalar
+            virtual std::shared_ptr<Op> one() const = 0;
 
-            // convert to op with a value to retrieve a value
-            template <class DataT>
-            const OpWithAValue<DataT> & as() const { 
-                return *static_cast<const OpWithAValue<DataT> *>(this); 
-            }
 
             // check whether this op has the value type
-            template <class DataT>
-            bool has() const { 
-                return dynamic_cast<const OpWithAValue<DataT> *>(this) != nullptr; 
+            template <class T>
+            bool hasValue() const { 
+                return dynamic_cast<const OpWithValue<T> *>(this) != nullptr; 
+            }
+
+            // convert to op with a value to retrieve a value
+            template <class T>
+            T value() const {
+                return static_cast<const OpWithValue<T> *>(this)->value();
+            }
+
+            // check whether has cache
+            template <class T>
+            bool hasCache() const {
+                return dynamic_cast<const OpWithCache<T> *>(this) != nullptr;
+            }
+
+            // convert to op with a cache to retrieve cache
+            template <class T>
+            const storage_type<T> & cache() const {
+                return static_cast<const OpWithCache<T> *>(this)->cache;
             }
 
         };
 
         // base op for expressions
-        template <class DataT>
-        struct OpWithAValue : public Op {
-            virtual const DataT & value() const = 0;
-            virtual std::shared_ptr<Op> makeOnes() const override { return std::make_shared<SetConstantOp<DataT>>(value(), ElementType<DataT>(1)); }
-            virtual std::shared_ptr<Op> makePlus() const override { return std::make_shared<ElementWiseSumOp<DataT>>(value()); }
-        };
+        template <class T>
+        struct OpWithValue : public Op {
+
+            // compute value
+            virtual T value() const = 0;
+
+            // do nothing
+            virtual void forwardPropagateExecute() {}
+
+            // make a scalar one to initialize automatic derivation
+            virtual std::shared_ptr<Op> one() const override {
+                static std::shared_ptr<Op> _one = 
+                    std::make_shared<OpWithConstant<DerivativeType<T>>>(traits<DerivativeType<T>>::one());
+                return _one; 
+            }
+
+            // homomorphicSum
+            virtual EHandle homomorphicSum(const std::vector<EHandle> & doutputs) const override {
+                assert(doutputs.size() > 0 && "doutputs size is zero!");
+                if (doutputs.size() == 1)
+                    return doutputs.front();
+                return HSum<DerivativeType<T>>(graph, doutputs);
+            }
+        };        
 
         // using a value cache to store data
-        template <class DataT>
-        struct OpWithACache : public OpWithAValue<DataT> {
-            inline OpWithACache(const DataT & d, const std::string nm = "") 
-                : cache(d), givenName(nm)
+        template <class T>
+        struct OpWithCache : public OpWithValue<T> {
+            using ST = storage_type<T>;
+            static_assert(std::is_assignable<ST&, T>::value, "T cannot be assigned to ST&!");
+            inline OpWithCache(const ST & c = ST(), const std::string nm = "")
+                : cache(c), givenName(nm)
             {}
-            virtual std::ostream & toString(std::ostream & os) const { os << "{" << givenName << "}"; return os; }
-            virtual const DataT & value() const override { return cache; }            
-            DataT cache;
+
+            virtual std::ostream & toString(std::ostream & os) const override { 
+                os << givenName; 
+                return os; 
+            }
+
+            // compute value and store in cache
+            virtual void forwardPropagateExecute() { cache = traits<T>::eval(value()); }
+
+            ST cache;
             std::string givenName;
+        };
+
+        // constant
+        template <class T>
+        struct OpWithConstant : public OpWithCache<T> {
+            static_assert(is_storage_type<T>::value, "T must be a storage type!");
+            inline OpWithConstant(const T & c, const std::string nm = "") : OpWithCache<T>(c, nm) {}
+            virtual std::ostream & toString(std::ostream & os) const override {
+                os << givenName << "[" << cache << "]";
+                return os;
+            }
+            virtual T value() const override { return cache; }
+            virtual void forwardPropagateExecute() override {}
+            virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const override { return std::vector<EHandle>(); }
         };
 
         // using a reference type to reference data
-        template <class DataT>
-        struct OpWithAReference : public OpWithAValue<DataT> {
-            inline OpWithAReference(DataT & m, const std::string & nm = "") 
-                : ref(m), givenName(nm)
-            {}
-            virtual std::ostream & toString(std::ostream & os) const { os << "{" << givenName << "&}"; return os; }
-            virtual const DataT & value() const override { return ref; }
-            DataT & ref;
+        template <class T>
+        struct OpWithReference : public OpWithValue<const T &> {
+            inline OpWithReference(const T & c, const std::string & nm = "ref") 
+                : OpWithValue<const T &>(), ref(c), givenName(nm) {}
+            
+            virtual ostream & toString(ostream & os) const override {
+                os << givenName;
+                return os;
+            }
+
+            virtual const T & value() const override { return ref; }
+            virtual void forwardPropagateExecute() override {}
+            virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const override { return std::vector<EHandle>(); }
+
+            const T & ref;
             std::string givenName;
         };
 
-        // using delayed computation
-        template <class DataT, class DirectOutputT>
-        struct OpDelayed : public OpWithACache<DataT> {
-            //virtual DirectOutputT directValue(const std::vector<EHandle>)
+
+
+
+
+
+
+
+
+
+        // traits about op
+        struct result_retrieved_by_value {};
+        struct result_retrieved_by_cache {};
+        template <class T>
+        struct result_tag {
+            using type = 
+            std::conditional_t < std::is_lvalue_reference<T>::value, result_retrieved_by_value,
+            std::conditional_t < traits<T>::should_be_cached, result_retrieved_by_cache,
+            result_retrieved_by_value >> ;
+        };
+
+        template <class T, class ResultTag = typename result_tag<T>::type>
+        struct TraitsAboutOp {};
+
+        template <class T> // by value
+        struct TraitsAboutOp<T, result_retrieved_by_value> { 
+            using OpType = OpWithValue<T>;
+            using ResultType = T;
+            static T Result(Op const & op) { 
+                if (!op.hasValue<T>()){
+                    throw std::runtime_error(std::string("it is determined that ") + typeid(T).name() + 
+                        " is retrieved by value(), but current op doesn't has the correct value!");
+                }
+                return op.value<T>(); 
+            }
+        };
+
+        template <class T>
+        struct TraitsAboutOp<T, result_retrieved_by_cache> { // by cache
+            using OpType = OpWithCache<T>;
+            using ResultType = const storage_type<T> &;
+            static ResultType Result(Op const & op) { 
+                if (!op.hasCache<T>()){
+                    throw std::runtime_error(std::string("it is determined that ") + typeid(T).name() +
+                        " is retrieved by cache(), but current op doesn't has the correct cache!");
+                }
+                return op.cache<T>(); 
+            }
         };
 
 
-        // basic utility Ops
+        // smartly determines whether cache should be used
+        template <class T>
+        using OpBaseType = typename TraitsAboutOp<T>::OpType;
+        
+        // smartly determins the result return type
+        template <class T>
+        using ResultType = typename TraitsAboutOp<T>::ResultType;
 
-        // use the shape of the input value and fill it with a scalar constant
-        template <class DataT>
-        struct SetConstantOp : public OpWithACache<DataT> {
-            using ScalarType = ElementType<DataT>;
+        // type of derivative
+        template <class T>
+        using DerivativeType = storage_type<T>;
 
-            inline SetConstantOp(const DataT & init, const ScalarType & ss) : OpWithACache<DataT>(init), s(ss){}
+        // type of derivative expression
+        template <class T>
+        using DerivativeExpression = Expression<storage_type<T>>;
+        
+        // the functional op wrapper
+        template <class OutputT, class ...InputTs>
+        struct OpTraitsBase {
+            using OutputType = OutputT;
+            using OutputExpressionType = Expression<OutputT>;
 
-            virtual std::ostream & toString(std::ostream & os) const { os << "SetConstant[" << s << "]"; return os; }
+            static const int InputsNumber = sizeof...(InputTs);
+            using InputIndices = typename SequenceGenerator<sizeof...(InputTs)>::type;
+            using InputTuple = std::tuple<InputTs...>;
 
-            virtual void eval(ExpressionGraph const * const g, std::vector<EHandle> && inputs) {
-                assert(inputs.size() == 1);
-                assert(g->op(inputs.front()).has<DataT>());
-                cache = g->op(inputs.front()).as<DataT>().value(); // get shape information
-                Fill(cache, s); // Fill with scalar
-            }
+            template <int I>
+            struct InputTypeStruct {
+                using type = typename std::tuple_element<I, InputTuple>::type;
+            };
+            template <int I>
+            using InputType = typename InputTypeStruct<I>::type;
 
-            virtual std::vector<EHandle> makeInputDerivatives(ExpressionGraph * const g,
-                EHandle self,
-                std::vector<EHandle> && inputs,
-                EHandle outputDerivsSum) const {
-                assert(inputs.size() == 1);
-                assert(g->op(outputDerivsSum).has<DataT>());
-                // create a SetConstant(~, 0) for input since the values in input do not affect the output at all
-                // since SetConstant is used as the source for derivative graph construction,
-                // this indicates that the constructed derivative graph is connected with the original expression graph
-                return std::vector<EHandle>{g->addNode(std::make_shared<SetConstantOp<DataT>>(value(), ScalarType(0)), { outputDerivsSum })};
-            }
-
-            ScalarType s;
+            // to string
+            virtual ostream & toString(ostream & os) const { os << "unknown op"; return os; }
         };
 
-        template <class DataT>
-        Expression<DataT> SetConstant(const Expression<DataT> & e, const ElementType<DataT> & s) {
-            return Expression<DataT>(e.g()->addNode(std::make_shared<SetConstantOp<DataT>>(e.value(), s), { e.handle() }), e.g());
+        // first  -> original expression
+        // second -> derivative expression 
+        template <class T>
+        using OriginalAndDerivativeExpression = std::pair<Expression<T>, DerivativeExpression<T> &>;
+        template <class T>
+        OriginalAndDerivativeExpression<T>
+            MakeOriginalAndDerivative(Expression<T> && input, DerivativeExpression<T> & dinput) {
+            return std::pair<Expression<T>, DerivativeExpression<T> &>{input, dinput};
+        }
+
+        namespace {
+            // functional op
+            template <class OpTraitsT>
+            class FunctionalOp : public OpBaseType<typename OpTraitsT::OutputType> {
+            private:
+                using InputIndices = typename OpTraitsT::InputIndices;
+
+                using OutputType = typename OpTraitsT::OutputType;
+                using InputTuple = typename OpTraitsT::InputTuple;
+                static const int InputsNumber = OpTraitsT::InputsNumber;
+                template <int I>
+                struct InputTypeStruct {
+                    using type = typename std::tuple_element<I, InputTuple>::type;
+                };
+                template <int I>
+                using InputType = typename InputTypeStruct<I>::type;
+
+            public:
+                inline explicit FunctionalOp(OpTraitsT t) : OpBaseType<typename OpTraitsT::OutputType>(), _opTraits(t) {}
+
+            private:
+                template <int ...S>
+                inline OutputType valueUsingSequence(std::vector<EHandle> && inputs, Sequence<S...>) const {
+                    assert(inputs.size() == InputsNumber);
+                    // inputs -> ResultType<inputs> -> output
+                    return _opTraits.value(TraitsAboutOp<InputType<S>>::Result(graph->op(inputs[S])) ...);
+                }
+
+                template <int ...S>
+                inline std::vector<EHandle> backPropagateGradientUsingSequence(
+                    std::vector<EHandle> && inputs,
+                    EHandle sumOfDOutputs,
+                    Sequence<S...>) const {                    
+
+                    // inputs + doutputs -> dinputs
+                    std::tuple<DerivativeExpression<InputType<S>>...> dinputs;
+                    _opTraits.derivatives(
+                        graph->as<OutputType>(self), // output
+                        graph->asDerivative<OutputType>(sumOfDOutputs), // DOutput
+                        MakeOriginalAndDerivative(graph->as<InputType<S>>(inputs[S]), std::get<S>(dinputs))...);
+                    return std::vector<EHandle>{std::get<S>(dinputs).handle()...};
+                }
+
+            public:
+                // get name
+                virtual std::ostream & toString(std::ostream & os) const {
+                    return _opTraits.toString(os);
+                }
+
+                virtual OutputType value() const override {
+                    return valueUsingSequence(graph->inputs(self), InputIndices());
+                }
+
+                virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const {
+                    return backPropagateGradientUsingSequence(graph->inputs(self), sumOfDOutputs, InputIndices());
+                }
+
+                OpTraitsT _opTraits;
+            };
+        }
+
+        // compose Expression using FunctionalOp
+        template <class OpTraitsT, class InputT, class ...InputTs>
+        inline Expression<typename OpTraitsT::OutputType> ComposeExpression(
+            OpTraitsT opTraits,
+            const Expression<InputT> & firstInput,
+            const Expression<InputTs> & ... inputs){
+            static_assert(OpTraitsT::InputsNumber == 1 + sizeof...(inputs), "inputs number mismatch!");
+            return firstInput.g()->as<typename OpTraitsT::OutputType>(firstInput.g()->
+                addNode(std::make_shared<FunctionalOp<OpTraitsT>>(opTraits), {
+                firstInput.handle(), inputs.handle()...
+            }));
         }
 
 
-        // elementwise plus
-        template <class DataT>
-        struct ElementWiseSumOp : public OpWithACache<DataT> {
-            inline ElementWiseSumOp(const DataT & init) : OpWithACache<DataT>(init){}
 
-            virtual std::ostream & toString(std::ostream & os) const { os << "ElementWiseSum"; return os; }
 
-            // evaluate and get result
-            virtual void eval(ExpressionGraph const * const g, std::vector<EHandle> && inputs) {
-                Fill<DataT>(cache, 0);
-                for (auto h : inputs){
-                    cache += g->op(h).as<DataT>().value();
+
+
+
+
+
+
+
+
+
+
+
+
+        // op traits
+        // expression cast
+        namespace {
+            // implicit assign // =
+            template <class A, class B>
+            struct ExpressionAssignTraits : public OpTraitsBase<A, B> {
+                inline A value(ResultType<B> b) const {
+                    return b;
+                }
+                inline void derivatives(
+                    Expression<A> output,
+                    DerivativeExpression<A> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<B> from) const {
+                    from.second =
+                        ComposeExpression(ExpressionAssignTraits<DerivativeType<B>, DerivativeType<A>>(), sumOfDOutputs);
+                }
+                virtual ostream & toString(ostream & os) const { os << "assign"; return os; }
+            };
+
+            // cast // data_cast
+            template <class To, class From>
+            struct ExpressionCastTraits : public OpTraitsBase<To, From> {
+                inline To value(ResultType<From> from) const {
+                    return data_cast<To>(from);
+                }
+                inline void derivatives(
+                    Expression<To> output,
+                    DerivativeExpression<To> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<From> from) const {
+                    from.second = 
+                        ComposeExpression(ExpressionCastTraits<DerivativeType<From>, DerivativeType<To>>(), 
+                        sumOfDOutputs);
+                }
+                virtual ostream & toString(ostream & os) const { os << "cast"; return os; }
+            };
+
+            // eval // .eval()
+            template <class T>
+            struct ExpressionEvalTraits : public OpTraitsBase<storage_type<ResultType<T>>, T> {
+                inline OutputType value(ResultType<T> from) const {
+                    return traits<ResultType<T>>::eval(from);
+                }
+                static_assert(std::is_same<DerivativeExpression<OutputType>,
+                    DerivativeExpression<T>>::value, "should be the same!");
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> from) const {
+                    from.second = sumOfDOutputs;
+                }
+                virtual ostream & toString(ostream & os) const { os << "eval"; return os; }
+            };
+        }
+
+        template <class To, class From>
+        inline std::enable_if_t<std::is_same<To, From>::value, Expression<To>> 
+            expression_assign_to(const Expression<From> & from) {
+            return from;
+        }
+
+        template <class To, class From>
+        inline std::enable_if_t<!std::is_same<To, From>::value, Expression<To>> 
+            expression_assign_to(const Expression<From> & from) {
+            return ComposeExpression(ExpressionAssignTraits<To, From>(), from);
+        }
+
+        template <class To, class From>
+        inline std::enable_if_t<std::is_same<To, From>::value, Expression<To>> 
+            expression_cast(const Expression<From> & from) {
+            return from;
+        }
+
+        template <class To, class From>
+        inline std::enable_if_t<!std::is_same<To, From>::value, Expression<To>> 
+            expression_cast(const Expression<From> & from) {
+            return ComposeExpression(ExpressionCastTraits<To, From>(), from);
+        }
+
+        template <class T>
+        inline std::enable_if_t<is_storage_type<ResultType<T>>::value,
+            typename ExpressionEvalTraits<T>::OutputExpressionType> 
+            expression_eval(const Expression<T> & from) {
+            return from;
+        }
+
+        template <class T>
+        inline std::enable_if_t<!is_storage_type<ResultType<T>>::value, 
+            typename ExpressionEvalTraits<T>::OutputExpressionType>
+            expression_eval(const Expression<T> & from) {
+            return ComposeExpression(ExpressionEvalTraits<T>(), from);
+        }
+
+
+        // set constant
+        namespace {
+            template <class T>
+            struct SetConstantTraits : public OpTraitsBase<storage_type<ResultType<T>>, T> {
+                using Scalar = scalar_type<ResultType<T>>;
+                inline explicit SetConstantTraits(const Scalar & ss) : s(ss) {}
+                inline OutputType value(ResultType<T> t) const {
+                    return traits<ResultType<T>>::fill(t, s);
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> from) const {
+                    from.second = DerivativeExpression<T>(); // disconnected
+                }
+                virtual ostream & toString(ostream & os) const { os << "setConstant[" << s << "]"; return os; }
+                Scalar s;
+            };
+        }
+
+        template <class T>
+        inline typename SetConstantTraits<T>::OutputExpressionType set_constant(Expression<T> t, scalar_type<ResultType<T>> s) {
+            return ComposeExpression(SetConstantTraits<T>(s), t);
+        }
+
+
+        // linear combination
+        namespace {
+
+            template <class T>
+            inline T SumAll(T && t){
+                return t;
+            }
+
+            template <class T, class ... Ts>
+            inline auto SumAll(T && t, Ts &&... ts) 
+                -> decltype(t + SumAll(ts...)) {
+                return t + SumAll(ts...);
+            }
+
+            template <class ...Ts>
+            struct LinearCombResult {
+                using type = decltype(SumAll(std::declval<ResultType<Ts>>() * std::declval<scalar_type<ResultType<Ts>>>() ...));
+            };
+            template <class ...Ts>
+            using LinearCombResultType = typename LinearCombResult<Ts...>::type;
+
+            template <class ...Ts>
+            struct LinearCombTraits : public OpTraitsBase<LinearCombResultType<Ts...>, Ts...> {
+                inline explicit LinearCombTraits(scalar_type<ResultType<Ts>> ... cs) : coeffs(std::make_tuple(cs...)) {}
+                inline OutputType value(ResultType<Ts> ... inputs) const {
+                    return valueUsingSequence(typename SequenceGenerator<InputsNumber>::type(), inputs...);
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<Ts> ... inputs) const {
+                    derivativesUsingSequence(typename SequenceGenerator<InputsNumber>::type(), sumOfDOutputs, inputs...);
+                }
+
+                virtual ostream & toString(ostream & os) const { os << "linsum"; return os; }
+
+            private:
+                template <int ...S>
+                inline OutputType valueUsingSequence(Sequence<S...>, ResultType<Ts> ... inputs) const {
+                    return SumAll((inputs * std::get<S>(coeffs)) ...);
+                }
+
+                template <int ...S>
+                inline void derivativesUsingSequence(Sequence<S...>,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<Ts> ... inputs) const {
+                    std::tie(inputs.second ...) = 
+                        std::tie((sumOfDOutputs * static_cast<scalar_type<DerivativeType<OutputType>>>(std::get<S>(coeffs)))
+                        .castTo<DerivativeType<Ts>>()
+                        .eval()...);
+                }
+
+            public:
+                std::tuple<scalar_type<ResultType<Ts>>...> coeffs;
+            };
+
+           
+
+        }
+
+        template <class T1, class T2>
+        inline typename LinearCombTraits<T1, T2>::OutputExpressionType operator + (Expression<T1> a, Expression<T2> b) {
+            return ComposeExpression(LinearCombTraits<T1, T2>(1.0, 1.0), a, b);
+        }
+        
+        template <class T1, class T2>
+        inline typename LinearCombTraits<T1, T2>::OutputExpressionType operator - (Expression<T1> a, Expression<T2> b) {
+            return ComposeExpression(LinearCombTraits<T1, T2>(1.0, -1.0), a, b);
+        }
+
+        template <class T>
+        inline typename LinearCombTraits<T>::OutputExpressionType operator - (Expression<T> a) {
+            return ComposeExpression(LinearCombTraits<T>(-1.0), a);
+        }
+
+        template <class T>
+        inline typename LinearCombTraits<T>::OutputExpressionType operator * (Expression<T> a, scalar_type<T> b) {
+            return ComposeExpression(LinearCombTraits<T>(b), a);
+        }
+
+        template <class T>
+        inline typename LinearCombTraits<T>::OutputExpressionType operator / (Expression<T> a, scalar_type<T> b) {
+            return ComposeExpression(LinearCombTraits<T>(1.0/b), a);
+        }
+
+        template <class T>
+        inline typename LinearCombTraits<T>::OutputExpressionType operator * (scalar_type<T> b, Expression<T> a) {
+            return ComposeExpression(LinearCombTraits<T>(b), a);
+        }
+
+        namespace {
+
+            template <class T, class EHandleIteratorT>
+            inline EHandle HSum2(ExpressionGraph * graph, EHandleIteratorT inpuths) {
+                return ComposeExpression(LinearCombTraits<T, T>(1, 1),
+                    graph->as<T>(*(inpuths)),
+                    graph->as<T>(*(inpuths+1))).eval().handle();
+            }
+            template <class T, class EHandleIteratorT>
+            inline EHandle HSum3(ExpressionGraph * graph, EHandleIteratorT inpuths) {
+                return ComposeExpression(LinearCombTraits<T, T, T>(1, 1, 1),
+                    graph->as<T>(*(inpuths)),
+                    graph->as<T>(*(inpuths+1)),
+                    graph->as<T>(*(inpuths+2))).eval().handle();
+            }
+            template <class T, class EHandleIteratorT>
+            inline EHandle HSum4(ExpressionGraph * graph, EHandleIteratorT inpuths) {
+                return ComposeExpression(LinearCombTraits<T, T, T, T>(1, 1, 1, 1),
+                    graph->as<T>(*(inpuths)),
+                    graph->as<T>(*(inpuths+1)),
+                    graph->as<T>(*(inpuths+2)),
+                    graph->as<T>(*(inpuths+3))).eval().handle();
+            }
+            template <class T, class EHandleIteratorT>
+            inline EHandle HSum5(ExpressionGraph * graph, EHandleIteratorT inpuths) {
+                return ComposeExpression(LinearCombTraits<T, T, T, T, T>(1, 1, 1, 1, 1),
+                    graph->as<T>(*(inpuths)),
+                    graph->as<T>(*(inpuths+1)),
+                    graph->as<T>(*(inpuths+2)),
+                    graph->as<T>(*(inpuths+3)),
+                    graph->as<T>(*(inpuths+4))).eval().handle();
+            }
+        }
+
+        template <class T>
+        inline EHandle HSum(ExpressionGraph * graph, const std::vector<EHandle> & inpuths) {
+            std::vector<EHandle> Q(inpuths);
+            auto head = Q.begin();
+            while (std::distance(head, Q.end()) > 0){
+                EHandle s;
+                switch (std::distance(head, Q.end()))
+                {
+                case 1:
+                    return *head;
+                case 2:
+                    s = HSum2<T>(graph, head);
+                    head += 1;
+                    *head = s;
+                    break;
+                case 3:
+                    s = HSum3<T>(graph, head);
+                    head += 2;
+                    *head = s;
+                    break;
+                case 4:
+                    s = HSum4<T>(graph, head);
+                    head += 3;
+                    *head = s;
+                    break;
+                case 5:
+                default:
+                    s = HSum5<T>(graph, head);
+                    head += 4;
+                    *head = s;
+                    break;
                 }
             }
-
-            // make input derivative expressions based on inputs and output derivative expressions
-            // returns derivative Ops corresponding to inputs
-            virtual std::vector<EHandle> makeInputDerivatives(ExpressionGraph * const g,
-                EHandle self,
-                std::vector<EHandle> && inputs,
-                EHandle outputDerivsSum) const {
-                std::vector<EHandle> inputDerivs(inputs.size(), outputDerivsSum);
-                return inputDerivs;
-            }
-        };
-
-        template <class DataT1, class ... DataTs>
-        Expression<DataT1> ElementWiseSum(const Expression<DataT1> & a, const Expression<DataTs> & ... others) {
-            static_assert(Sequence<std::is_same<DataTs, DataT1>::value...>::All,
-                "all input expressions must share the same type!");
-            ExpressionGraph * g = a.g();
-            // compute current sum value
-            DataT1 vals[] = { a.value(), others.value()... };
-            DataT1 sumVal;
-            Fill<DataT1>(sumVal, 0);
-            for (DataT1 & v : vals){
-                sumVal += v;
-            }
-            
-            EHandle h = g->addNode(std::make_shared<ElementWiseSumOp<DataT1>>(sumVal),
-                {a.handle(), others.handle()...});
-            return Expression<DataT1>(h, g);
+            return EHandle();
         }
+
+
+        // sum all elements
+        namespace {
+            template <class T>
+            struct SumElementsTraits : public OpTraitsBase<scalar_type<ResultType<T>>, T> {
+                inline OutputType value(ResultType<T> t) const {
+                    return t.sum(); // only eigen is supported
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> from) const {
+                    from.second = set_constant(from.first, 1);
+                }
+                virtual ostream & toString(ostream & os) const { os << "sumElements"; return os; }
+            };
+        }
+
+        template <class T>
+        Expression<scalar_type<ResultType<T>>> sum_elements(const Expression<T> & e){
+            return ComposeExpression(SumElementsTraits<T>(), e);
+        }
+
+
+        // transpose
+        namespace {
+            template <class T>
+            struct TransposeTraits : public OpTraitsBase<decltype(traits<ResultType<T>>::transpose(std::declval<ResultType<T>>())), T> {
+                inline OutputType value(ResultType<T> from) const {
+                    return traits<ResultType<T>>::transpose(from);
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> from) const {
+                    from.second = transpose(sumOfDOutputs).eval();
+                }
+                virtual ostream & toString(ostream & os) const { os << "transpose"; return os; }
+            };
+
+            template <class T>
+            using TransposeResultType = typename TransposeTraits<T>::OutputType;
+        }
+
+        template <class T>
+        Expression<TransposeResultType<T>> 
+            transpose(const Expression<T> & e) {
+            return ComposeExpression(TransposeTraits<T>(), e);
+        }
+
+
+        // product
+        namespace {
+
+            // cwise product
+            template <class T>
+            inline T CWiseProdAll(T && t){
+                return t;
+            }
+
+            template <class T, class ... Ts>
+            inline auto CWiseProdAll(T && t, Ts &&... ts)
+                -> decltype(data_cwise_product(t, CWiseProdAll(ts...))) {
+                return data_cwise_product(t, CWiseProdAll(ts...));
+            }
+
+
+            template <class T, class ...Ts>
+            struct CWiseProductionResult {
+                using ScalarType = scalar_type<ResultType<T>>;
+                static_assert(Sequence<std::is_same<scalar_type<ResultType<Ts>>, ScalarType>::value...>::All,
+                     "all scalar types of Ts MUST be the same!");
+                using type = 
+                    decltype(CWiseProdAll(std::declval<ResultType<T>>(), std::declval<ResultType<Ts>>() ...));
+            };
+            template <class T, class ...Ts>
+            using CWiseProductionResultType = typename CWiseProductionResult<T, Ts...>::type;
+                
+
+            // cwise product traits
+            template <class T, class ...Ts>
+            struct CWiseProductionTraits : public OpTraitsBase<CWiseProductionResultType<T, Ts...>, T, Ts...> {
+                inline OutputType value(ResultType<T> input1, ResultType<Ts> ... inputs) const {
+                    return CWiseProdAll(input1, inputs...);
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> input1,
+                    OriginalAndDerivativeExpression<Ts> ... inputs) const {
+                    derivativesUsingSequence(typename SequenceGenerator<InputsNumber>::type(),
+                        sumOfDOutputs, input1, inputs...);
+                }
+                virtual ostream & toString(ostream & os) const { os << "cwiseProd"; return os; }
+
+            private:
+                template <int ...S>
+                inline void derivativesUsingSequence(
+                    Sequence<S...> seq,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> input1,
+                    OriginalAndDerivativeExpression<Ts> ... inputs) const {
+                    // tuple of original input expressions
+                    auto inputsTuple = std::make_tuple(input1.first, inputs.first ...);
+                    std::tie(input1.second, inputs.second ...) =
+                        std::tie(derivativeWithInputIdx<S>(seq, 
+                        sumOfDOutputs, inputsTuple)...);
+                }
+
+                template <int I, int Idx, class InputExprsTupleT>
+                struct _ForEachInputToComposeDInputI {
+                    using Type = InputType<I>;
+                    inline static Expression<Type> expression(
+                        DerivativeExpression<OutputType> sumOfDOutputs,
+                        const InputExprsTupleT & inputs) {
+                        return std::get<I>(inputs);
+                    }
+                };
+
+                template <int Idx, class InputExprsTupleT>
+                struct _ForEachInputToComposeDInputI<Idx, Idx, InputExprsTupleT> {
+                    using Type = DerivativeType<OutputType>;
+                    inline static Expression<Type> expression(
+                        DerivativeExpression<OutputType> sumOfDOutputs,
+                        const InputExprsTupleT & inputs) {
+                        return sumOfDOutputs;
+                    }
+                };
+
+                // compute derivative of each input with split
+                template <int InputIdx, class InputExprsTupleT, int ...S>
+                inline DerivativeExpression<InputType<InputIdx>> derivativeWithInputIdx(
+                    Sequence<S...>, 
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    const InputExprsTupleT & inputs) const {
+
+                    using TraitsType = CWiseProductionTraits<typename _ForEachInputToComposeDInputI<S, InputIdx, InputExprsTupleT>::Type...>;
+                    return ComposeExpression(TraitsType(), 
+                        _ForEachInputToComposeDInputI<S, InputIdx, InputExprsTupleT>::expression(sumOfDOutputs, inputs)...).eval();
+                }
+
+            };
+
+
+
+
+
+            // general product
+            template <class T>
+            inline T ProdAll(T && t){
+                return t;
+            }
+
+            template <class T, class ... Ts>
+            inline auto ProdAll(T && t, Ts &&... ts)
+                -> decltype(t * ProdAll(ts...)) {
+                return t * ProdAll(ts...);
+            }
+
+            template <class T, class ...Ts>
+            struct ProductionResult {
+                using ScalarType = scalar_type<ResultType<T>>;
+                static_assert(Sequence<std::is_same<scalar_type<ResultType<Ts>>, ScalarType>::value...>::All,
+                    "all scalar types of Ts MUST be the same!");
+                using type =
+                    decltype(ProdAll(std::declval<ResultType<T>>(), std::declval<ResultType<Ts>>() ...));
+            };
+            template <class T, class ...Ts>
+            using ProductionResultType = typename ProductionResult<T, Ts...>::type;
+
+                       
+            // genral product traits
+            template <class T, class ...Ts>
+            struct ProductionTraits : public OpTraitsBase<ProductionResultType<T, Ts...>, T, Ts...> {
+                inline OutputType value(ResultType<T> input1, ResultType<Ts> ... inputs) const {
+                    return ProdAll(input1, inputs...);
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> input1,
+                    OriginalAndDerivativeExpression<Ts> ... inputs) const {
+                    derivativesUsingSequence(typename SequenceGenerator<InputsNumber>::type(),
+                        sumOfDOutputs, input1, inputs...);
+                }
+                virtual ostream & toString(ostream & os) const { os << "prod"; return os; }
+
+            private:
+                template <int ...S>
+                inline void derivativesUsingSequence(
+                    Sequence<S...> seq,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> input1,
+                    OriginalAndDerivativeExpression<Ts> ... inputs) const {
+                    auto inputsTuple = std::make_tuple(input1.first, inputs.first ...);
+                    std::tie(input1.second, inputs.second ...) = 
+                        std::tie(derivativeWithInputIdx<S>(seq, sumOfDOutputs, inputsTuple)...);
+                }
+
+                template <int I, int Idx, class InputExprsTupleT>
+                struct _ForEachInputToComposeDInputI {
+                    using Type = DerivativeType<TransposeResultType<InputType<I>>>;
+                    inline static Expression<Type> expression(
+                        DerivativeExpression<OutputType> sumOfDOutputs,
+                        const InputExprsTupleT & inputs) {
+                        return transpose(std::get<I>(inputs)).eval();
+                    }
+                };
+
+                template <int Idx, class InputExprsTupleT>
+                struct _ForEachInputToComposeDInputI<Idx, Idx, InputExprsTupleT> {
+                    using Type = DerivativeType<OutputType>;
+                    inline static Expression<Type> expression(
+                        DerivativeExpression<OutputType> sumOfDOutputs,
+                        const InputExprsTupleT & inputs) {
+                        return sumOfDOutputs;
+                    }
+                };                
+
+                template <int InputIdx, class InputExprsTupleT, int ...S>
+                inline DerivativeExpression<InputType<InputIdx>> derivativeWithInputIdx(
+                    Sequence<S...>,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    const InputExprsTupleT & inputs) const {
+
+                    using TraitsType = ProductionTraits<typename 
+                        _ForEachInputToComposeDInputI<S, InputIdx, InputExprsTupleT>::Type ...>;
+                    auto dinput = ComposeExpression(TraitsType(),
+                        _ForEachInputToComposeDInputI<S, InputIdx, InputExprsTupleT>::expression(sumOfDOutputs, inputs)...).eval();
+                    return expression_assign_to<DerivativeType<InputType<InputIdx>>>(dinput);
+                }
+            };
+
+        }
+
+        template <class T, class ...Ts>
+        inline Expression<CWiseProductionResultType<T, Ts...>> cwise_product(const Expression<T> & a, const Expression<Ts> & ...inputs) {
+            return ComposeExpression(CWiseProductionTraits<T, Ts...>(), a, inputs...);
+        }
+
+        template <class T, class ...Ts>
+        inline Expression<ProductionResultType<T, Ts...>> general_product(const Expression<T> & a, const Expression<Ts> & ...inputs) {
+            return ComposeExpression(ProductionTraits<T, Ts...>(), a, inputs...);
+        }
+
+        template <class T1, class T2>
+        inline Expression<ProductionResultType<T1, T2>> operator * (const Expression<T1> & a, const Expression<T2> & b) {
+            return general_product(a, b);
+        }
+
+
+
 
         
-        // elementwise multiplication of multiple inputs
-        template <class DataT>
-        struct ElementWiseProductOp : public OpWithACache<DataT> {
-            inline ElementWiseProductOp(const DataT & init) : OpWithACache<DataT>(init){}
-
-            virtual std::ostream & toString(std::ostream & os) const { os << "ElementWiseProduct"; return os; }
-
-            // evaluate and get result
-            virtual void eval(ExpressionGraph const * const g, std::vector<EHandle> && inputs) {
-                Fill<DataT>(cache, 1);
-                for (auto h : inputs){
-                    assert(g->op(h).has<DataT>());
-                    ElementWiseMult<DataT>(cache, g->op(h).as<DataT>().value(), cache);
-                }
-            }
-
-            // make input derivative expressions based on inputs and output derivative expressions
-            // returns derivative Ops corresponding to inputs
-            virtual std::vector<EHandle> makeInputDerivatives(ExpressionGraph * const g,
-                EHandle self,
-                std::vector<EHandle> && inputs,
-                EHandle outputDerivsSum) const {
-
-                std::vector<EHandle> inputDerivs(inputs.size());
-                for (int i = 0; i < inputs.size(); i++){
-                    std::vector<EHandle> toMults(1, outputDerivsSum);
-                    toMults.reserve(inputs.size());
-                    for (int j = 0; j < inputs.size(); j++){
-                        if (j == i)
-                            continue;
-                        toMults.push_back(inputs[j]);
-                    }
-                    inputDerivs[i] = toMults.size() == 1 ? toMults.front() :
-                        g->addNode(std::make_shared<ElementWiseProductOp<DataT>>(value()), toMults);
-                }
-
-                return inputDerivs;
-            }
-        };
-
-        template <class DataT1, class ... DataTs>
-        Expression<DataT1> ElementWiseProduct(const Expression<DataT1> & a, const Expression<DataTs> & ... others) {
-            static_assert(Sequence<std::is_same<DataTs, DataT1>::value...>::All,
-                "all input expressions must share the same type!");
-            ExpressionGraph * g = a.g();
-            // compute current product value
-            DataT1 vals[] = { a.value(), others.value()... };
-            DataT1 prodVal;
-            Fill<DataT1>(prodVal, 1);
-            for (DataT1 & v : vals){
-                ElementWiseMult<DataT1>(prodVal, v, prodVal);
-            }
-
-            EHandle h = g->addNode(std::make_shared<ElementWiseProductOp<DataT1>>(prodVal), 
-                { a.handle(), others.handle()... });
-            return Expression<DataT1>(h, g);
-        }
 
 
 
@@ -367,27 +949,33 @@ namespace panoramix {
             EHandle addNode(std::shared_ptr<Op> op, const std::vector<EHandle>& inputs = std::vector<EHandle>());
 
             // add a constant value expression 
-            template <class DataT>
-            inline Expression<EvaluatedType<DataT>> addConst(const DataT & d, const std::string & nm = "") {
-                return Expression<EvaluatedType<DataT>>(
-                    addNode(std::make_shared<OpWithACache<EvaluatedType<DataT>>>(d, nm)), 
-                    this);
+            template <class T>
+            inline Expression<storage_type<T>> addConst(const T & d, const std::string & nm = "") {
+                return as<storage_type<T>>(addNode(std::make_shared<OpWithConstant<storage_type<T>>>(d, nm)));
             }
 
             // add a reference expression
-            template <class DataT>
-            inline Expression<EvaluatedType<DataT>> addRef(DataT & p, const std::string & nm = "") {
-                return Expression<EvaluatedType<DataT>>(
-                    addNode(std::make_shared<OpWithAReference<EvaluatedType<DataT>>>(p, nm)),
-                    this);
+            template <class T>
+            inline Expression<const T&> addRef(T & p, const std::string & nm = "") {
+                return as<const T&>(addNode(std::make_shared<OpWithReference<T>>(p, nm)));
+            }
+
+            template <class T>
+            inline Expression<T> as(EHandle h) {
+                return Expression<T>(_g.data(h).get());
+            }
+
+            template <class T>
+            inline DerivativeExpression<T> asDerivative(EHandle h) {
+                return DerivativeExpression<T>(_g.data(h).get());
             }
 
             // evaluate the expression based on current values of vars
-            void evaluate(EHandle result, const std::set<EHandle, EHandleComp> & vars) const;
+            void forwardPropagateExecute(EHandle result, const std::set<EHandle, EHandleComp> & vars) const;
 
             // create derivative graph
             // returns the derivative nodes of vars
-            std::vector<EHandle> createDerivatives(EHandle cost, const std::vector<EHandle> & vars); 
+            std::vector<EHandle> backPropagateGradient(EHandle cost, const std::vector<EHandle> & vars);
 
             // get expression string
             std::ostream & toString(std::ostream & os, EHandle h) const;
@@ -396,10 +984,85 @@ namespace panoramix {
             GraphType _g;
         };
 
+
+
+
+        // the expression wrapper
+        template <class T>
+        struct Expression {
+        public:
+            using Type = T;
+            using StorageType = storage_type<T>;
+            inline explicit Expression(Op * op = nullptr) : _op(op){}
+
+            inline bool isValid() const { return _op && _op->graph && _op->self.isValid(); }
+
+            inline EHandle handle() const { return _op ? _op->self : EHandle(); }
+            inline ExpressionGraph * g() const { return _op ? _op->graph : nullptr; }
+
+            // the current value in expression data
+            inline bool hasValue() const { return _op->hasValue<T>(); }
+            inline T value() const { return _op->value<T>(); }
+            inline bool hasCache() const { return _op->hasCache<T>(); }
+            inline const StorageType & cache() const { return _op->cache<T>(); }
+
+            inline ResultType<T> result() const { return TraitsAboutOp<T>::Result(*_op); }
+
+            // execute the expression graph to get value updated
+            template <class ... VarTs>
+            inline ResultType<T> execute(const Expression<VarTs> &... vars) const {
+                assert(isValid() && "Invalid expression!");
+                executeUsingSequence(typename SequenceGenerator<sizeof...(VarTs)>::type(), vars...);
+                return result();
+            }
+
+            template <class ... VarTs>
+            inline std::tuple<DerivativeExpression<VarTs>...> derivatives(const Expression<VarTs> &... vars){
+                assert(traits<T>::is_scalar && "The cost function must has a scalar value!");
+                assert(isValid() && "Invalid expression!");
+                return backPropagateGradientUsingSequence(typename SequenceGenerator<sizeof...(VarTs)>::type(), vars...);
+            }
+
+            // expression cast
+            template <class K>
+            inline Expression<K> castTo() const { return expression_cast<K>(*this); }
+            // expression eval
+            inline Expression<storage_type<T>> eval() const { return expression_eval(*this); }
+            // expression assign
+            /*inline Expression & operator = (const Expression & e) { _op = e._op; return *this; }
+            template <class K>
+            inline Expression & operator = (const Expression<K> & e) { 
+                return *this = ComposeExpression(ExpressionAssignTraits<T, K>(), e);
+            }*/
+
+            // sum 
+            inline Expression<scalar_type<T>> sum() const { return sum_elements(*this); }
+
+        private:
+            template <class ... VarTs, int ...S>
+            inline void executeUsingSequence(Sequence<S...>, const Expression<VarTs> &... vars) const {
+                _op->graph->forwardPropagateExecute(_op->self, { vars.handle()... });
+            }
+
+            template <class ... VarTs, int ...S>
+            inline std::tuple<DerivativeExpression<VarTs>...> backPropagateGradientUsingSequence(Sequence<S...>,
+                const Expression<VarTs> &... vars){
+                auto derivHandles = _op->graph->backPropagateGradient(_op->self, std::vector<EHandle>{vars.handle()...});
+                return std::make_tuple(_op->graph->asDerivative<VarTs>(derivHandles[S])...);
+            }
+
+        private:
+            Op * _op;
+        };
+
         
+
+
 
     }
 }
+
+
 
 namespace std {
 
@@ -409,6 +1072,10 @@ namespace std {
     }
 
 }
+
+
+
+
 
 
  

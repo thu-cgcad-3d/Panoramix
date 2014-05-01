@@ -178,7 +178,7 @@ namespace panoramix {
             
             VertHandle addVertex(const VertDataT & vd = VertDataT());
             HalfHandle addEdge(VertHandle from, VertHandle to,
-                               const HalfDataT & hd = HalfDataT(), const HalfDataT & hdrev = HalfDataT());
+                const HalfDataT & hd = HalfDataT(), const HalfDataT & hdrev = HalfDataT(), bool mergeDuplicateEdge = true);
             FaceHandle addFace(const HandleArray<HalfTopo> & halfedges,
                                const FaceDataT & fd = FaceDataT());
             FaceHandle addFace(const HandleArray<VertTopo> & vertices, bool autoflip = true,
@@ -228,16 +228,18 @@ namespace panoramix {
         
         template <class VertDataT, class HalfDataT, class FaceDataT>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addEdge(VertHandle from, VertHandle to, const HalfDataT & hd, const HalfDataT & hdrev) {
+        Mesh<VertDataT, HalfDataT, FaceDataT>::addEdge(VertHandle from, VertHandle to, const HalfDataT & hd, const HalfDataT & hdrev, bool mergeDuplicateEdge) {
             if (from == to){
                 return HalfHandle();
             }
             // find existed halfedge
-            HalfHandle hh = findEdge(from, to);
-            if (hh.isValid()){
-                _halfs[hh.id].data = hd;
-                _halfs[_halfs[hh.id].topo.opposite.id].data = hdrev;
-                return hh;
+            if (mergeDuplicateEdge){
+                HalfHandle hh = findEdge(from, to);
+                if (hh.isValid()){
+                    _halfs[hh.id].data = hd;
+                    _halfs[_halfs[hh.id].topo.opposite.id].data = hdrev;
+                    return hh;
+                }
             }
             
             HalfHandle hh1(_halfs.size());

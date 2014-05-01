@@ -42,7 +42,15 @@ namespace panoramix {
         struct SequenceGenerator : SequenceGenerator<N - 1, N - 1, S...> { };
         template<int ...S>
         struct SequenceGenerator<0, S...> {
-            typedef Sequence<S...> type;
+            using type = Sequence<S...>;
+        };
+
+        // use SequenceRangeGenerator<From, To>::type to deduct Sequence<From, From+1, ..., To-1>
+        template <int From, int To, int ...S>
+        struct SequenceRangeGenerator : SequenceRangeGenerator<From, To - 1, To - 1, S...>{};
+        template <int From, int ...S>
+        struct SequenceRangeGenerator<From, From, S...> {
+            using type = Sequence<S...>;
         };
 
 

@@ -360,6 +360,9 @@ namespace panoramix {
             if (vd.cameraDirectionErrorScale == 0)
                 return;
             
+            // camera params
+            using namespace Eigen;
+            MatrixXd camParams(_views.internalVertices().size(), 3);
             
         }
 
