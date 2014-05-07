@@ -30,7 +30,7 @@ namespace panoramix {
         }
 
         template <class T>
-        inline Expression<DataStorageType<ResultType<T>>> FillWithScalar(Expression<T> t, DataScalarType<ResultType<T>> s) {
+        inline Expression<DataStorageType<ResultType<T>>> fillWithScalar(Expression<T> t, DataScalarType<ResultType<T>> s) {
             return ComposeExpression(FillWithScalarTraits<T>(s), t);
         }
 
@@ -45,13 +45,15 @@ namespace panoramix {
             }
 
             template <class T, class ... Ts>
-            inline auto SumAll(T && t, Ts &&... ts)
-                -> decltype(t + SumAll(ts...)) {
+            inline auto SumAll(T && t, Ts &&... ts) -> decltype(t + SumAll(ts...)) {
                 return t + SumAll(ts...);
             }
 
             template <class ...T>
             struct SumResult;
+
+            template <>
+            struct SumResult<> {};
 
             template <class T>
             struct SumResult<T> {
@@ -85,13 +87,13 @@ namespace panoramix {
         }
 
         template <class ...Ts>
-        inline Expression<SumResultType<Ts...>> GeneralSum(Expression<Ts>... inputs) {
+        inline Expression<SumResultType<Ts...>> generalSum(Expression<Ts>... inputs) {
             return ComposeExpression(SumTraits<Ts...>(), inputs...);
         }
 
         template <class T1, class T2>
-        inline auto operator + (Expression<T1> a, Expression<T2> b) -> Expression<decltype(a.result() + b.result())> {
-            return ComposeExpression(SumTraits<T1, T2>(), a, b);
+        inline auto operator + (Expression<T1> a, Expression<T2> b) -> decltype(generalSum(a, b)) {
+            return generalSum(a, b);
         }
 
 
@@ -129,42 +131,42 @@ namespace panoramix {
                     graph->as<T>(*(inpuths + 3)),
                     graph->as<T>(*(inpuths + 4))).eval().handle();
             }
+        }
 
-            template <class T>
-            inline EHandle HSum(ExpressionGraph * graph, const std::vector<EHandle> & inpuths) {
-                std::vector<EHandle> Q(inpuths);
-                auto head = Q.begin();
-                while (std::distance(head, Q.end()) > 0){
-                    EHandle s;
-                    switch (std::distance(head, Q.end()))
-                    {
-                    case 1:
-                        return *head;
-                    case 2:
-                        s = HSum2<T>(graph, head);
-                        head += 1;
-                        *head = s;
-                        break;
-                    case 3:
-                        s = HSum3<T>(graph, head);
-                        head += 2;
-                        *head = s;
-                        break;
-                    case 4:
-                        s = HSum4<T>(graph, head);
-                        head += 3;
-                        *head = s;
-                        break;
-                    case 5:
-                    default:
-                        s = HSum5<T>(graph, head);
-                        head += 4;
-                        *head = s;
-                        break;
-                    }
+        template <class T>
+        inline EHandle HSum(ExpressionGraph * graph, const std::vector<EHandle> & inpuths) {
+            std::vector<EHandle> Q(inpuths);
+            auto head = Q.begin();
+            while (std::distance(head, Q.end()) > 0){
+                EHandle s;
+                switch (std::distance(head, Q.end()))
+                {
+                case 1:
+                    return *head;
+                case 2:
+                    s = HSum2<T>(graph, head);
+                    head += 1;
+                    *head = s;
+                    break;
+                case 3:
+                    s = HSum3<T>(graph, head);
+                    head += 2;
+                    *head = s;
+                    break;
+                case 4:
+                    s = HSum4<T>(graph, head);
+                    head += 3;
+                    *head = s;
+                    break;
+                case 5:
+                default:
+                    s = HSum5<T>(graph, head);
+                    head += 4;
+                    *head = s;
+                    break;
                 }
-                return EHandle();
             }
+            return EHandle();
         }
 
 
@@ -206,13 +208,12 @@ namespace panoramix {
 
             // general product
             template <class T>
-            inline T ProdAll(T && t){
+            inline T ProdAll(T && t) {
                 return t;
             }
 
             template <class T, class ... Ts>
-            inline auto ProdAll(T && t, Ts &&... ts)
-                -> decltype(t * ProdAll(ts...)) {
+            inline auto ProdAll(T && t, Ts && ... ts) -> decltype(t * ProdAll(ts...)) {
                 return t * ProdAll(ts...);
             }
 
@@ -233,14 +234,16 @@ namespace panoramix {
                     std::declval<typename ProductResult<Ts...>::type>());
             };
 
+           
             template <class ...Ts>
-            using ProductResultType = typename ProductResult<Ts...>::type;
+            using ProductResultType = DataStorageType<typename ProductResult<Ts...>::type>;
 
 
             // general product DataTraits
             template <class ...Ts>
             struct ProductTraits : public OpTraitsBase<ProductResultType<Ts...>, Ts...> {
                 static_assert(sizeof...(Ts) >= 1, "inputs number must be positive!");
+                //static_assert(sizeof...(Ts) <= 2, "TODO: more inputs will cause error when using eigen matrices");
                 inline OutputType value(ResultType<Ts> ... inputs) const {
                     return ProdAll(inputs...);
                 }
@@ -294,20 +297,20 @@ namespace panoramix {
                         _ForEachInputToComposeDInputI<S, InputIdx, InputExprsTupleT>::Type ...>;
                     auto dinput = ComposeExpression(TraitsType(),
                         _ForEachInputToComposeDInputI<S, InputIdx, InputExprsTupleT>::expression(sumOfDOutputs, inputs)...).eval();
-                    return ExpressionAssign<DerivativeType<InputType<InputIdx>>>(dinput);
+                    return expressionAssign<DerivativeType<InputType<InputIdx>>>(dinput);
                 }
             };
 
         }
 
         template <class ...Ts>
-        inline Expression<ProductResultType<Ts...>> GeneralProd(const Expression<Ts> & ...inputs) {
+        inline Expression<ProductResultType<Ts...>> generalProd(const Expression<Ts> & ...inputs) {
             return ComposeExpression(ProductTraits<Ts...>(), inputs...);
         }
 
         template <class T1, class T2>
-        inline auto operator * (const Expression<T1> & a, const Expression<T2> & b) -> decltype(GeneralProd(a, b)) {
-            return GeneralProd(a, b);
+        inline auto operator * (const Expression<T1> & a, const Expression<T2> & b) -> decltype(generalProd(a, b)) {
+            return generalProd(a, b);
         }
 
 
@@ -324,6 +327,7 @@ namespace panoramix {
                     OriginalAndDerivativeExpression<T> da) const {
                     da.second = (-sumOfDOutputs).cast<DerivativeType<T>>().eval();
                 }
+                virtual ostream & toString(ostream & os) const { os << "negate"; return os; }
             };
         }
 
@@ -350,6 +354,7 @@ namespace panoramix {
                     da.second = sumOfDOutputs.cast<DerivativeType<T1>>().eval();
                     db.second = (-sumOfDOutputs).cast<DerivativeType<T2>>().eval();
                 }
+                virtual ostream & toString(ostream & os) const { os << "subtract"; return os; }
             };
         }
 
@@ -375,7 +380,7 @@ namespace panoramix {
                     OriginalAndDerivativeExpression<T> da) const {
                     da.second = (sumOfDOutputs * s).cast<DerivativeType<T>>().eval();
                 }
-
+                virtual ostream & toString(ostream & os) const { os << "multScalar[" << s << "]"; return os; }
                 DataScalarType<ResultType<T>> s;
             };
         }
@@ -387,9 +392,59 @@ namespace panoramix {
         }
 
         template <class T>
+        inline auto operator / (Expression<T> a, DataScalarType<ResultType<T>> b)
+            ->Expression<decltype(std::declval<ResultType<T>>() * std::declval<DataScalarType<ResultType<T>>>())> {
+            return ComposeExpression(MultScalar<T>(1.0/b), a);
+        }
+
+        template <class T>
         inline auto operator * (DataScalarType<ResultType<T>> b, Expression<T> a)
             ->Expression<decltype(std::declval<ResultType<T>>() * std::declval<DataScalarType<ResultType<T>>>())> {
             return ComposeExpression(MultScalar<T>(b), a);
+        }
+
+        // plus scalar
+        namespace  {
+            template <class T>
+            struct PlusScalar : public OpTraitsBase<
+                decltype(std::declval<ResultType<T>>() + std::declval<DataScalarType<ResultType<T>>>()), T> {
+
+                inline explicit PlusScalar(DataScalarType<ResultType<T>> ss) : s(ss) {}
+                inline OutputType value(ResultType<T> a) const {
+                    return a + s;
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> da) const {
+                    da.second = (sumOfDOutputs).cast<DerivativeType<T>>().eval();
+                }
+                virtual ostream & toString(ostream & os) const { os << "plusScalar[" << s << "]"; return os; }
+                DataScalarType<ResultType<T>> s;
+            };
+        }
+
+        template <class T>
+        inline auto operator + (Expression<T> a, DataScalarType<ResultType<T>> b)
+            ->Expression<decltype(std::declval<ResultType<T>>() + std::declval<DataScalarType<ResultType<T>>>())> {
+            return ComposeExpression(PlusScalar<T>(b), a);
+        }
+
+        template <class T>
+        inline auto operator + (DataScalarType<ResultType<T>> b, Expression<T> a)
+            ->Expression<decltype(std::declval<ResultType<T>>() + std::declval<DataScalarType<ResultType<T>>>())> {
+            return ComposeExpression(PlusScalar<T>(b), a);
+        }
+
+        template <class T>
+        inline auto operator - (Expression<T> a, DataScalarType<ResultType<T>> b)
+            ->Expression<decltype(std::declval<ResultType<T>>() - std::declval<DataScalarType<ResultType<T>>>())> {
+            return ComposeExpression(PlusScalar<T>(-b), a);
+        }
+
+        template <class T>
+        inline auto operator - (DataScalarType<ResultType<T>> b, Expression<T> a) -> decltype((-a) + b) {
+            return (-a) + b;
         }
 
 
@@ -422,7 +477,7 @@ namespace panoramix {
 
             template <class T, class ... Ts>
             struct CWiseProductResult<T, Ts...> {
-                using type = decltype(DataTraits<T>::cwiseProduct(std::declval<ResultType<T>>(), 
+                using type = decltype(DataTraits<ResultType<T>>::cwiseProduct(std::declval<ResultType<T>>(),
                     std::declval<typename CWiseProductResult<Ts...>::type>()));
             };
 
@@ -496,7 +551,7 @@ namespace panoramix {
         }
 
         template <class ...Ts>
-        inline Expression<CWiseProductResultType<Ts...>> CWiseProd(const Expression<Ts> & ...inputs) {
+        inline Expression<CWiseProductResultType<Ts...>> cwiseProd(const Expression<Ts> & ...inputs) {
             return ComposeExpression(CWiseProductTraits<Ts...>(), inputs...);
         }
 
@@ -526,7 +581,7 @@ namespace panoramix {
                     Expression<OutputType> output,
                     DerivativeExpression<OutputType> sumOfDOutputs,
                     OriginalAndDerivativeExpression<T> input) const {
-                    input.second = CWiseProd(pow(input.first, exponent - 1.0) * exponent, sumOfDOutputs).eval();
+                    input.second = cwiseProd(pow(input.first, exponent - 1.0) * exponent, sumOfDOutputs).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "pow[" << exponent << "]"; return os; }
                 DataScalarType<T> exponent;
@@ -544,8 +599,8 @@ namespace panoramix {
         }
 
         template <class T1, class T2>
-        inline auto CWiseQuotient(const Expression<T1> & a, const Expression<T2> & b) -> decltype(CWiseProd(a, pow(b, -1))) {
-            return CWiseProd(a, pow(b, -1));
+        inline auto CWiseQuotient(const Expression<T1> & a, const Expression<T2> & b) -> decltype(cwiseProd(a, pow(b, -1))) {
+            return cwiseProd(a, pow(b, -1));
         }
 
 
@@ -569,7 +624,7 @@ namespace panoramix {
                     Expression<OutputType> output,
                     DerivativeExpression<OutputType> sumOfDOutputs,
                     OriginalAndDerivativeExpression<T> input) const {
-                    input.second = CWiseProd(sumOfDOutputs, output).eval();
+                    input.second = cwiseProd(sumOfDOutputs, output).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "exp"; return os; }
             };
@@ -615,40 +670,41 @@ namespace panoramix {
         }
 
 
-        //// sigmoid
-        //namespace {
-        //    
-        //    using std::exp;
-        //    
-        //    template <class T>
-        //    struct SigmoidResult {
-        //        using ScalarType = DataScalarType<T>;
-        //        using type = decltype(std::declval<ScalarType>() / 
-        //            (std::declval<ScalarType>() + exp(-std::declval<ResultType<T>>())));
-        //    };
-        //    template <class T>
-        //    using SigmoidResultType = typename SigmoidResult<T>::type;
+        // sigmoid
+        namespace {
+            
+            using std::exp;
+            
+            template <class T>
+            struct SigmoidResult {
+                using ScalarType = DataScalarType<T>;
+                using type = decltype(std::declval<ScalarType>() / 
+                    (std::declval<ScalarType>() + exp(-std::declval<ResultType<T>>())));
+            };
+            template <class T>
+            using SigmoidResultType = typename SigmoidResult<T>::type;
 
-        //    template <class T>
-        //    struct SigmoidTraits : public OpTraitsBase<SigmoidResultType<T>, T> {
-        //        inline OutputType value(ResultType<T> input) const {
-        //            return static_cast<DataScalarType<T>>(1) / (static_cast<DataScalarType<T>>(1) + exp(-input));
-        //        }
-        //        inline void derivatives(
-        //            Expression<OutputType> output,
-        //            DerivativeExpression<OutputType> sumOfDOutputs,
-        //            OriginalAndDerivativeExpression<T> input) const {
-        //            input.second = cwise_product(output, 1 - output, sumOfDOutputs).eval();
-        //        }
-        //        virtual ostream & toString(ostream & os) const { os << "sigmoid"; return os; }
-        //    };
+            template <class T>
+            struct SigmoidTraits : public OpTraitsBase<SigmoidResultType<T>, T> {
+                inline OutputType value(ResultType<T> input) const {
+                    //std::cout << r << std::endl;
+                    return 1 / (1 + exp(-input));
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> input) const {
+                    input.second = cwiseProd(output, 1 - output, sumOfDOutputs).eval();
+                }
+                virtual ostream & toString(ostream & os) const { os << "sigmoid"; return os; }
+            };
 
-        //}
+        }
 
-        //template <class T, IF_FLOATING_POINT(T)>
-        //inline Expression<SigmoidResultType<T>> sigmoid(const Expression<T> & e) {
-        //    return ComposeExpression(SigmoidTraits<T>(), e);
-        //}
+        template <class T>
+        inline Expression<SigmoidResultType<T>> sigmoid(const Expression<T> & e) {
+            return ComposeExpression(SigmoidTraits<T>(), e);
+        }
 
 
 

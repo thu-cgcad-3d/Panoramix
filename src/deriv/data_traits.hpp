@@ -64,8 +64,12 @@ namespace panoramix {
         using RemoveAllType = typename RemoveAll<T>::type;
 
 
-
-
+        // use for checking whether a member type / member function / member field exists
+        template <class T> struct StructWithAnInt { using type = int; };
+#define IF_TYPE_EXISTS(TypeExpr) \
+    typename StructWithAnInt<TypeExpr>::type = 0
+#define IF_MEMBER_EXISTS(MemberExpr) \
+    IF_TYPE_EXISTS(decltype(MemberExpr))
 
 
     }

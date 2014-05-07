@@ -4,9 +4,7 @@
 
 #include "gtest/gtest.h"
 
-#include "../src/deriv/expression_ops_common.hpp"
-#include "../src/deriv/expression_ops_floatingpoint.hpp"
-#include "../src/deriv/expression_ops_eigen.hpp"
+#include "../src/deriv/derivative.hpp"
 
 using namespace panoramix::deriv;
 using namespace Eigen;
@@ -28,9 +26,9 @@ TEST(Expression, addConst) {
 
     auto aaa = graph.addConst(1.0);
     auto bbb = graph.addConst(2.0);
-    auto ccc = GeneralSum(aaa, bbb);
+    auto ccc = generalSum(aaa, bbb);
     EXPECT_EQ(3.0, ccc.execute());
-    auto ddd = GeneralProd(aaa, bbb);
+    auto ddd = generalProd(aaa, bbb);
     EXPECT_EQ(2.0, ddd.execute());
     
     MatrixXd m3d(5, 2);
@@ -127,7 +125,7 @@ TEST(Expression, ScalarOp) {
 
     {
         // multiplication
-        auto f = CWiseProd(x, y);
+        auto f = cwiseProd(x, y);
 
         auto df = f.derivatives(x, y);
         auto dfdx = std::get<0>(df);
@@ -341,7 +339,7 @@ TEST(Expression, ArrayOp){
 
     {       
         auto xy = x * y;
-        auto f = SumElements(xy);
+        auto f = sumElements(xy);
 
         // mult deriv
         auto df = f.derivatives(x, y);
@@ -360,8 +358,8 @@ TEST(Expression, ArrayOp){
     }
 
     {
-        auto xy = CWiseProd(x, y);
-        auto f = SumElements(xy);
+        auto xy = cwiseProd(x, y);
+        auto f = sumElements(xy);
 
         // mult deriv
         auto df = f.derivatives(x, y);
@@ -383,7 +381,7 @@ TEST(Expression, ArrayOp){
 
     {
         auto x2 = pow(x, 2.0);
-        auto f = SumElements(x2);
+        auto f = sumElements(x2);
         auto df = std::get<0>(f.derivatives(x));
 
         for (int i = 0; i < 10; i++) {
@@ -399,7 +397,7 @@ TEST(Expression, ArrayOp){
 
     {
         // exp
-        auto f = SumElements(exp(x));
+        auto f = sumElements(exp(x));
         auto df = f.derivatives(x);
         auto dfdx = std::get<0>(df);
         for (int i = 0; i < 10; i++) {
@@ -414,7 +412,7 @@ TEST(Expression, ArrayOp){
 
     {
         // exp(x*y)+x*2+y+x*x
-        auto f = SumElements(exp(x * y) + x * 2 + y + x * x);
+        auto f = sumElements(exp(x * y) + x * 2 + y + x * x);
         auto df = f.derivatives(x, y);
 
         auto dfdx = std::get<0>(df);
@@ -431,6 +429,27 @@ TEST(Expression, ArrayOp){
         }
     }
 
+    {
+        // log(exp(x*y)+x*2+y+x*x)
+        auto f = sumElements(log(exp(x * y) + x * 2 + y + x * x));
+        auto df = f.derivatives(x, y);
+
+        auto dfdx = std::get<0>(df);
+        auto dfdy = std::get<1>(df);
+
+        for (int i = 0; i < 10; i++) {
+            int a = std::rand() % 100 + 1;
+            int b = std::rand() % 100 + 1;
+            xv.setRandom(a, b);
+            xv = xv.abs() + 1;
+            yv.setRandom(a, b);
+            yv = yv.abs() + 1;
+            EXPECT_DOUBLE_EQ(log((xv * yv).exp() + xv * 2 + yv + xv * xv).sum(), f.execute());
+            EXPECT_MATRIX_EQ(((xv * yv).exp() * yv + 2 + 2 * xv).cwiseQuotient((xv * yv).exp() + xv * 2 + yv + xv * xv), dfdx.execute());
+            EXPECT_MATRIX_EQ(((xv * yv).exp() * xv + 1).cwiseQuotient((xv * yv).exp() + xv * 2 + yv + xv * xv), dfdy.execute());
+        }
+    }
+
 }
 
 
@@ -444,7 +463,7 @@ TEST(Expression, MatrixOp1) {
     auto ttx = transpose(tx);
     auto tttx = transpose(ttx);
 
-    auto f = SumElements(tttx);
+    auto f = sumElements(tttx);
     auto df = std::get<0>(f.derivatives(x));
 
     for (int i = 0; i < 10; i++){
@@ -475,7 +494,7 @@ TEST(Expression, MatrixOp2) {
     {
         // +
         // plus
-        auto f = SumElements(x + y * 2);
+        auto f = sumElements(x + y * 2);
 
         // plus deriv
         auto df = f.derivatives(x, y);
@@ -498,17 +517,16 @@ TEST(Expression, MatrixOp2) {
 TEST(Expression, MatrixOp3){
 //void run(){
 
-    // mult
-
     ExpressionGraph graph;
     MatrixXd xv;
     MatrixXd yv;
-    auto x = graph.addRef(xv);
-    auto y = graph.addRef(yv);    
+    auto x = graph.addRef(xv, "x");
+    auto y = graph.addRef(yv, "y");
 
     {
+        // mult
         auto xy = x * y;
-        auto f = SumElements(xy);
+        auto f = sumElements(xy);
         auto df = f.derivatives(x, y);
         auto dfdx = std::get<0>(df);
         auto dfdy = std::get<1>(df);
@@ -526,8 +544,35 @@ TEST(Expression, MatrixOp3){
         }
     }
 
+    {
+       /* xv.setRandom(3, 4);
+        yv.setRandom(4, 4);
+        auto z = xv * (yv * yv);
+        auto zz = yv * yv;
+        auto zzz = xv * zz;
+        std::cout << z << std::endl;
+        std::cout << zz << std::endl;
+        std::cout << zzz << std::endl;*/
+
+    }
+
+    {
+        //// general product -> eval
+        //xv.setRandom(3, 4);
+        //yv.setRandom(4, 4);
+        //auto xy = generalProd(x, y).eval();
+        //std::cout << xy << std::endl;
+        //std::cout << xy.execute() << std::endl;
+
+        ////auto a = xv * yv * yv * yv;       
+        /*xv.setRandom(3, 4);
+        yv.setRandom(4, 4);
+        auto z = ProdAll(xv, yv, yv, yv);
+        std::cout << z << std::endl;*/
+    }
+
     { // matrix array conversion
-        auto xx = ArrayToMatrix(MatrixToArray(x).eval());
+        auto xx = arrayToMatrix(matrixToArray(x).eval());
         for (int i = 0; i < 10; i++){
             int a = std::rand() % 100 + 1;
             int b = std::rand() % 100 + 1;
@@ -539,16 +584,29 @@ TEST(Expression, MatrixOp3){
             EXPECT_MATRIX_EQ(xv, xx.execute());
         }
 
-        auto xxp = pow(MatrixToArray(x).eval(), 2);
+        auto xxp = pow(matrixToArray(x).eval(), 2);
         for (int i = 0; i < 10; i++) {
             int a = std::rand() % 100 + 1;
             int b = std::rand() % 100 + 1;
             xv.setRandom(a, b);
-            
-            auto dxxp = std::get<0>(SumElements(xxp).derivatives(x));
+
+            auto dxxp = std::get<0>(sumElements(xxp).derivatives(x));
 
             EXPECT_MATRIX_EQ(xv.array().pow(2).matrix(), xxp.execute().matrix());
             EXPECT_MATRIX_EQ(xv * 2, dxxp.execute().matrix());
+        }
+    }
+
+    { 
+        // matrix inverse
+        auto xinv = inverseMatrix(x);
+        for (int i = 0; i < 1; i++) {
+            int a = std::rand() % 100 + 1;
+            xv.setRandom(a, a);
+            auto dxinv = std::get<0>(sumElements(xinv).derivatives(x));
+            EXPECT_MATRIX_EQ(xv.inverse(), xinv.execute());
+            auto grad = dxinv.execute();
+            EXPECT_MATRIX_EQ((xv.inverse() * -MatrixXd::Ones(a, a) * xv.inverse()).transpose(), dxinv.execute());
         }
     }
 

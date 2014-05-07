@@ -157,10 +157,6 @@ namespace panoramix {
 
         /////////////////////////////////////////////////////////////////////////////////////
         // op with typed value
-        namespace  {
-            template <class T> EHandle HSum(ExpressionGraph * graph, const std::vector<EHandle> & inpuths);
-        }
-
         template <class T>
         struct OpWithValue : public Op {
 
@@ -404,32 +400,41 @@ namespace panoramix {
         }
 
         template <class To, class From>
-        std::enable_if_t<std::is_same<To, From>::value, Expression<To>> ExpressionAssign(const Expression<From> & from) {
+        std::enable_if_t<std::is_same<To, From>::value, Expression<To>> 
+            expressionAssign(const Expression<From> & from) {
             return from;
         }
 
         template <class To, class From>
-        std::enable_if_t<!std::is_same<To, From>::value, Expression<To>> ExpressionAssign(const Expression<From> & from) {
+        std::enable_if_t<!std::is_same<To, From>::value, Expression<To>> 
+            expressionAssign(const Expression<From> & from) {
             return ComposeExpression(ExpressionAssignTraits<To, From>(), from);
         }
 
         template <class To, class From>
-        std::enable_if_t<std::is_same<DataStorageType<To>, From>::value, Expression<DataStorageType<To>>> ExpressionCast(const Expression<From> & from) {
+        std::enable_if_t<std::is_same<DataStorageType<To>, From>::value, 
+            Expression<DataStorageType<To>>> 
+            expressionCast(const Expression<From> & from) {
             return from;
         }
 
         template <class To, class From>
-        std::enable_if_t<!std::is_same<DataStorageType<To>, From>::value, Expression<DataStorageType<To>>> ExpressionCast(const Expression<From> & from) {
+        std::enable_if_t<!std::is_same<DataStorageType<To>, From>::value, Expression<DataStorageType<To>>>
+            expressionCast(const Expression<From> & from) {
             return ComposeExpression(ExpressionCastTraits<To, From>(), from);
         }
 
         template <class T>
-        std::enable_if_t<IsStorageType<ResultType<T>>::value, Expression<DataStorageType<ResultType<T>>>> ExpressionEval(const Expression<T> & from) {
+        std::enable_if_t<std::is_same<DataStorageType<T>, T>::value, 
+            Expression<DataStorageType<T>>> 
+            expressionEval(const Expression<T> & from) {
             return from;
         }
 
         template <class T>
-        std::enable_if_t<!(IsStorageType<ResultType<T>>::value), Expression<DataStorageType<ResultType<T>>>> ExpressionEval(const Expression<T> & from) {
+        std::enable_if_t<!(std::is_same<DataStorageType<T>, T>::value), 
+            Expression<DataStorageType<T>>>
+            expressionEval(const Expression<T> & from) {
             return ComposeExpression(ExpressionEvalTraits<T>(), from);
         }
 
@@ -619,16 +624,22 @@ namespace panoramix {
 
             // expression assign
             template <class K>
-            inline Expression<K> assign() const { return ExpressionAssign<K>(*this); }
+            inline Expression<K> assign() const { return expressionAssign<K>(*this); }
 
             // expression cast
             template <class K>
-            inline Expression<DataStorageType<K>> cast() const { return ExpressionCast<K>(*this); }
+            inline Expression<DataStorageType<K>> cast() const { return expressionCast<K>(*this); }
 
             // expression eval
-            inline Expression<DataStorageType<T>> eval() const { return ExpressionEval<T>(*this); }
+            inline Expression<DataStorageType<T>> eval() const {
+                return expressionEval<T>(*this); 
+            }
+
 
             void printType() const { std::cout << typeid(T).name() << std::endl; }
+
+
+            inline Expression<DataScalarType<T>> sum() const { return sumElements(*this); }
 
         private:
             template <class ... VarTs, int ...S>
