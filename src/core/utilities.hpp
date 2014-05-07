@@ -245,7 +245,7 @@ namespace panoramix {
 
 
 
-        // a simple RTree Wrapper
+        // RTree Wrapper
         template <class T, class BoundingBoxFunctorT = DefaultBoundingBoxFunctor<T>>
         class RTreeWrapper {
         public:
@@ -273,9 +273,10 @@ namespace panoramix {
             inline void insert(const T & t) {
                 BoxType box = _getBoundingBox(t);
                 for (int i = 0; i < Dimension; i++){
-                    if (box.minCorner[i] > box.maxCorner[i]){
-                        std::cout << "invalid box type" << std::endl;
-                        return;
+                    if (!(box.minCorner[i] <= box.maxCorner[i])){
+                        std::cout << "invalid box type, replaced with a null box" << std::endl;
+                        box = BoxType();
+                        //return;
                     }
                 }
                 _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
@@ -429,7 +430,6 @@ namespace panoramix {
             PositionOnLine<T, N> pos2(line2, t2);
             return std::make_pair(norm(pos1.position - pos2.position), std::make_pair(pos1, pos2));
         }
-
 
 
 

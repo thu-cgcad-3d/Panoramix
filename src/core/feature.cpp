@@ -69,7 +69,9 @@ namespace panoramix {
             double yratio = ((_screenH - p2d(1)) / _screenH - 0.5) * 2;
             Vec4 position(xratio, yratio, 1, 1);
             Vec4 realPosition = _viewProjectionMatrixInv * position;
-            return Vec3(realPosition(0) / realPosition(3), realPosition(1) / realPosition(3), realPosition(2) / realPosition(3));
+            return Vec3(realPosition(0) / realPosition(3), 
+                realPosition(1) / realPosition(3), 
+                realPosition(2) / realPosition(3));
         }
 
         void PerspectiveCamera::resizeScreen(const Size & sz, bool updateMat) {

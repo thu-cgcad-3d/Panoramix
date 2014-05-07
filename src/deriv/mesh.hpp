@@ -1,11 +1,13 @@
 #ifndef PANORAMIX_CORE_MESH_HPP
 #define PANORAMIX_CORE_MESH_HPP
 
-#include "basic_types.hpp"
+#include <cstdint>
+#include <vector>
+
 #include "misc.hpp"
 
 namespace panoramix {
-    namespace core {
+    namespace deriv {
         
         struct Dummy {};
         
@@ -353,9 +355,9 @@ namespace panoramix {
         
         template <class VertDataT, class HalfDataT, class FaceDataT>
         Mesh<VertDataT, HalfDataT, FaceDataT>& Mesh<VertDataT, HalfDataT, FaceDataT>::unite(const Mesh & m) {
-            std::vector<VertHandle> vtable(m.internalVertices().size());
-            std::vector<HalfHandle> htable(m.internalHalfEdges().size());
-            std::vector<FaceHandle> ftable(m.internalFaces().size());
+            std::vector<VertHandle> vtable(m.Vertices().size());
+            std::vector<HalfHandle> htable(m.HalfEdges().size());
+            std::vector<FaceHandle> ftable(m.Faces().size());
             
             for (auto v : m.vertices()){
                 vtable[v.topo.hd.id] = addVertex(v.data);

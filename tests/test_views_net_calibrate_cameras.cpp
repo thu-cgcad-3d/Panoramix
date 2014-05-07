@@ -1,4 +1,4 @@
-#include "../src/core/mesh_maker.hpp"
+#include "../src/deriv/mesh_maker.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/core/views_net.hpp"
 #include "../src/vis/views_net_visualize.hpp"
@@ -24,7 +24,7 @@ TEST(ViewsNet, FixedCamera) {
 
     std::vector<core::PerspectiveCamera> cams;
     core::Mesh<core::Vec3> cameraStand;
-    core::MakeQuadFacedSphere(cameraStand, 6, 12);
+    deriv::MakeQuadFacedSphere(cameraStand, 6, 12);
     for (auto & v : cameraStand.vertices()){
         core::Vec3 direction = v.data;
         if (core::AngleBetweenDirections(direction, core::Vec3(0, 0, 1)) <= 0.1 ||
@@ -36,7 +36,7 @@ TEST(ViewsNet, FixedCamera) {
             cams.emplace_back(700, 700, originCam.focal(), core::Vec3(0, 0, 0), direction, core::Vec3(0, 0, -1));
         }
     }
-    std::random_shuffle(cams.begin(), cams.end());
+    //std::random_shuffle(cams.begin(), cams.end());
 
 
     /// insert into views net
@@ -58,6 +58,7 @@ TEST(ViewsNet, FixedCamera) {
         std::cout << "extracting features ...";
 
         net.computeFeatures(viewHandle);
+        net.buildRTrees(viewHandle);
 
         vis::Visualizer2D(im)
             << vis::manip2d::SetColor(core::Color(0, 0, 255))
@@ -69,7 +70,8 @@ TEST(ViewsNet, FixedCamera) {
             << vis::manip2d::Show();
 
         net.updateConnections(viewHandle);
-        net.buildRTrees(viewHandle);
+        net.findMatchesToConnectedViews(viewHandle);
+
         net.calibrateCamera(viewHandle);
         net.calibrateAllCameras();
 

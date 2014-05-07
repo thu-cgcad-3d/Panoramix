@@ -1,11 +1,13 @@
 #ifndef PANORAMIX_CORE_REGIONS_NET_HPP
 #define PANORAMIX_CORE_REGIONS_NET_HPP
 
+#include "../deriv/mesh.hpp"
 #include "feature.hpp"
-#include "mesh.hpp"
 
 namespace panoramix {
     namespace core {
+
+        using deriv::Mesh;
 
         // net of segmented image regions
         class RegionsNet {

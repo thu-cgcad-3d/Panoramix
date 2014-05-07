@@ -1,11 +1,18 @@
+#include <map>
+
 #include "expression.hpp"
 
 namespace panoramix {
-    namespace core {
+    namespace deriv {
 
         bool ExpressionGraph::isForwardConnection(CHandle h) const {
             auto & topo = _g.topo(h);
             return topo.from().id < topo.to().id;
+        }
+
+        void ExpressionGraph::reserve(size_t sz) {
+            _g.internalVertices().reserve(sz);
+            _g.internalHalfEdges().reserve(sz * 4);
         }
 
         std::vector<EHandle> ExpressionGraph::inputs(EHandle self) const {
@@ -23,9 +30,6 @@ namespace panoramix {
             auto h = _g.addVertex(op);
             _g.data(h)->graph = this;
             _g.data(h)->self = h;
-            if (h.id == 77){
-                std::cout << "" << std::endl;
-            }
             for (auto & ih : inputs){
                 _g.addEdge(ih, h, Dummy(), Dummy(), false); // do not merge duplicate edges
             }
@@ -76,7 +80,7 @@ namespace panoramix {
                 if (std::find(vars.begin(), vars.end(), curToCheck) == vars.end()){
                     // add all inputs
                     for (auto hh : _g.topo(curToCheck).halfedges){
-                        if (!_g.removed(hh) && isBackwardConnection(hh)){
+                        if (!_g.removed(hh) && isBackwardConnection(hh)) {
                             related.push_back(_g.topo(hh).to());
                         }
                     }

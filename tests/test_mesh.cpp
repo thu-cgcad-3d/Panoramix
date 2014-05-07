@@ -1,11 +1,11 @@
-#include "../src/core/mesh.hpp"
-#include "../src/core/mesh_maker.hpp"
+#include "../src/deriv/mesh.hpp"
+#include "../src/deriv/mesh_maker.hpp"
 #include "../src/vis/visualize3d.hpp"
 
 #include "gtest/gtest.h"
 
 using namespace panoramix;
-using TestMesh = core::Mesh<core::Vec3>;
+using TestMesh = deriv::Mesh<core::Vec3>;
 
 TEST(MiscToolsTest, ConditionalIterator) {
 
@@ -18,7 +18,7 @@ TEST(MiscToolsTest, ConditionalIterator) {
     std::copy_if(ds.begin(), ds.end(), std::back_inserter(correct), fun);
     
     auto correctIter = correct.begin();
-    for (auto d : core::MakeConditionalContainer(&ds, fun)){
+    for (auto d : deriv::MakeConditionalContainer(&ds, fun)){
         ASSERT_EQ(*correctIter, d);
         ++correctIter;
     }
@@ -26,9 +26,9 @@ TEST(MiscToolsTest, ConditionalIterator) {
 }
 
 TEST(MeshTest, Conversion) {
-    using CVMesh = core::Mesh<core::Point3>;
+    using CVMesh = deriv::Mesh<core::Point3>;
     CVMesh mesh;
-    core::MakeQuadFacedCube(mesh);
+    deriv::MakeQuadFacedCube(mesh);
     EXPECT_EQ(8, mesh.internalVertices().size());
     EXPECT_EQ(24, mesh.internalHalfEdges().size());
     EXPECT_EQ(6, mesh.internalFaces().size());
@@ -65,7 +65,7 @@ TEST(MeshTest, Conversion) {
 TEST(MeshTest, Tetrahedron) {
 
     TestMesh mesh;
-    core::MakeTetrahedron(mesh);
+    deriv::MakeTetrahedron(mesh);
     EXPECT_EQ(4, mesh.internalVertices().size());
     EXPECT_EQ(12, mesh.internalHalfEdges().size());
     EXPECT_EQ(4, mesh.internalFaces().size());
@@ -105,7 +105,7 @@ TEST(MeshTest, Tetrahedron) {
 TEST(MeshTest, Cube) {
     
     TestMesh mesh;
-    core::MakeQuadFacedCube(mesh);
+    deriv::MakeQuadFacedCube(mesh);
     EXPECT_EQ(8, mesh.internalVertices().size());
     EXPECT_EQ(24, mesh.internalHalfEdges().size());
     EXPECT_EQ(6, mesh.internalFaces().size());
@@ -145,7 +145,7 @@ TEST(MeshTest, Cube) {
 TEST(MeshTest, DISABLED_Sphere) {
 
     TestMesh mesh;
-    core::MakeQuadFacedSphere(mesh, 10, 5);
+    deriv::MakeQuadFacedSphere(mesh, 10, 5);
 
 }
 

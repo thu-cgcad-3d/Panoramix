@@ -9,8 +9,6 @@ set (TESTNAMES
 	test_template_utilities
 	test_expression
 	test_opencv_stitching
-)
-set (TESTNAMES_WITH_VIS 
 	test_mesh 
 	test_feature
 	test_views_net 
@@ -21,6 +19,7 @@ set (TESTNAMES_WITH_VIS
 	test_vis2d
 	test_vis3d
 )
+
 
 # define test data location
 get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
@@ -41,21 +40,20 @@ endif ()
 
 
 foreach (T ${TESTNAMES})
-	include_directories (${Fundamental_INCLUDES})
-	add_executable (${T} ${T}.cpp)
-	target_link_libraries (${T} ${CORE_STATIC_LIB})
-	add_test (NAME ${T} COMMAND ${T})
-	set_tests_properties (${T} PROPERTIES ENVIRONMENT "${LD_VARNAME}=${LD_PATH}" )
-	# input vars and environment vars do not apply on IDEs (VS and XCode), manual settings are needed
-endforeach ()
-
-
-foreach (T ${TESTNAMES_WITH_VIS})
 	include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES})
 	add_executable (${T} ${T}.cpp)
-	target_link_libraries (${T} ${CORE_STATIC_LIB} ${VIS_STATIC_LIB} ${Qt_LIBS})
+	target_link_libraries (${T} ${DERIV_STATIC_LIB} ${CORE_STATIC_LIB} ${VIS_STATIC_LIB} ${Qt_LIBS})
 	add_test (NAME ${T} COMMAND ${T})
 	set_tests_properties (${T} PROPERTIES ENVIRONMENT "${LD_VARNAME}=${LD_PATH}" )
 endforeach()
+
+
+# sandbox TEST
+set (SBTESTNAME test_sandbox)
+include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES})
+add_executable(${SBTESTNAME} ${SBTESTNAME}.cpp)
+target_link_libraries (${SBTESTNAME} ${SANDBOX_STATIC_LIB} ${Qt_LIBS})
+add_test (NAME ${SBTESTNAME} COMMAND ${SBTESTNAME})
+set_tests_properties (${SBTESTNAME} PROPERTIES ENVIRONMENT "${LD_VARNAME}=${LD_PATH}" )
 
 

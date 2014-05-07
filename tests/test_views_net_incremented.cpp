@@ -57,6 +57,7 @@ TEST(ViewsNet, FixedCamera) {
         std::cout << "extracting features ...";
 
         net.computeFeatures(viewHandle);
+        net.buildRTrees(viewHandle);
 
         vis::Visualizer2D(im)
             << vis::manip2d::SetColor(core::Color(0, 0, 255))
@@ -68,6 +69,8 @@ TEST(ViewsNet, FixedCamera) {
             << vis::manip2d::Show();
 
         net.updateConnections(viewHandle);
+        net.findMatchesToConnectedViews(viewHandle);
+
         net.calibrateCamera(viewHandle);
         net.calibrateAllCameras();
 

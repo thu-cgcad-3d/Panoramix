@@ -1,13 +1,31 @@
 #ifndef PANORAMIX_CORE_VIEWS_NET_HPP
 #define PANORAMIX_CORE_VIEWS_NET_HPP
 
+#include <opencv2/opencv_modules.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/stitching/detail/autocalib.hpp>
+#include <opencv2/stitching/detail/blenders.hpp>
+#include <opencv2/stitching/detail/camera.hpp>
+#include <opencv2/stitching/detail/exposure_compensate.hpp>
+#include <opencv2/stitching/detail/matchers.hpp>
+#include <opencv2/stitching/detail/motion_estimators.hpp>
+#include <opencv2/stitching/detail/seam_finders.hpp>
+#include <opencv2/stitching/detail/util.hpp>
+#include <opencv2/stitching/detail/warpers.hpp>
+#include <opencv2/stitching/warpers.hpp>
+
 #include "basic_types.hpp"
 #include "feature.hpp"
 #include "utilities.hpp"
 #include "regions_net.hpp"
+#include "../deriv/expression.hpp"
 
 namespace panoramix {
     namespace core { 
+
+        using deriv::Mesh;
+        using deriv::Expression;
+        using deriv::ExpressionGraph;
 
         // views net
         class ViewsNet {
@@ -21,6 +39,7 @@ namespace panoramix {
                 LineSegmentExtractor lineSegmentExtractor;
                 CVFeatureExtractor<cv::SIFT> siftExtractor;
                 CVFeatureExtractor<cv::SURF> surfExtractor;
+                cv::Ptr<cv::detail::FeaturesFinder> featuresFinderForMatching;
                 SegmentationExtractor segmenter;
 
                 // angle scalar to judge whether two views may share certain common features
@@ -58,6 +77,7 @@ namespace panoramix {
             void computeFeatures(VertHandle h);
 
             // build RTrees for features in calibration of a single view
+            // after computeFeatures(h)
             void buildRTrees(VertHandle h);
 
             // segment view image and build net of regions for a single view
@@ -68,6 +88,10 @@ namespace panoramix {
 
             // whether this view overlaps some existing views a lot, measured by the smallCameraAngleScalar parameter
             VertHandle isTooCloseToAnyExistingView(VertHandle h) const;
+
+            // find the feature matches to connected views
+            // after computeFeatures(h) and buildRTrees(h)
+            void findMatchesToConnectedViews(VertHandle h);            
 
             // calibrate camera parameters of this view, and if an error loop is closed, calibrate all related view cameras
             void calibrateCamera(VertHandle h); 
@@ -94,15 +118,20 @@ namespace panoramix {
                 std::vector<KeyPoint> SURFs;                
                 std::shared_ptr<RegionsNet> regionNet;
 
-                RTreeWrapper<Vec3> spatialLineSegmentIntersectionsRTree;
-                RTreeWrapper<Vec3> spatialSIFTsRTree;
-                RTreeWrapper<Vec3> spatialSURFsRTree;
+                RTreeWrapper<HPoint2> lineSegmentIntersectionsRTree;
+                RTreeWrapper<KeyPoint> SIFTsRTree;
+                RTreeWrapper<KeyPoint> SURFsRTree;
+
+                cv::detail::ImageFeatures featuresForMatching;
+
+                //Expression<Eigen::Vector3d> cameraDirectionVar;
+                //Expression<double> cameraFocalVar;
+                //Expression<double> cameraBiasCostVar;
             };
 
             struct HalfData {
-                double cameraAngleDistance;
-                double weight;
-                cv::Mat homography;
+                cv::detail::MatchesInfo matchInfo;
+                //Expression<double> cameraConsistencyVar;
             };
 
             struct ConstraintData {
@@ -139,6 +168,7 @@ namespace panoramix {
             ViewMesh _views;
             Params _params;
             GlobalData _globalData;
+            //ExpressionGraph _expressions;
         };
 
  

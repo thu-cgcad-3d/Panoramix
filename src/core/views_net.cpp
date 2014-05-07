@@ -1,15 +1,3 @@
-#include "opencv2/opencv_modules.hpp"
-#include "opencv2/highgui/highgui.hpp"
-#include "opencv2/stitching/detail/autocalib.hpp"
-#include "opencv2/stitching/detail/blenders.hpp"
-#include "opencv2/stitching/detail/camera.hpp"
-#include "opencv2/stitching/detail/exposure_compensate.hpp"
-#include "opencv2/stitching/detail/matchers.hpp"
-#include "opencv2/stitching/detail/motion_estimators.hpp"
-#include "opencv2/stitching/detail/seam_finders.hpp"
-#include "opencv2/stitching/detail/util.hpp"
-#include "opencv2/stitching/detail/warpers.hpp"
-#include "opencv2/stitching/warpers.hpp"
 
 #include "views_net.hpp"
 #include "optimization.hpp"
@@ -23,7 +11,9 @@ namespace panoramix {
             intersectionConstraintLineDistanceAngleThreshold(0.06),
             incidenceConstraintLineDistanceAngleThreshold(0.2),
             mergeLineDistanceAngleThreshold(0.05),
-            mjWeightTriplet(5.0), mjWeightX(5.0), mjWeightT(2.0), mjWeightL(1.0), mjWeightI(2.0) {}
+            mjWeightTriplet(5.0), mjWeightX(5.0), mjWeightT(2.0), mjWeightL(1.0), mjWeightI(2.0) {
+            featuresFinderForMatching = new cv::detail::SurfFeaturesFinder;
+        }
 
         ViewsNet::VertHandle ViewsNet::insertPhoto(const Image & im, const PerspectiveCamera & cam,
             double cameraDirectionErrorScale) {
@@ -89,6 +79,13 @@ namespace panoramix {
                 vd.SIFTs.size() * _params.siftWeight +
                 vd.SURFs.size() * _params.surfWeight;
 
+            // find features for matching
+            assert(!_params.featuresFinderForMatching.empty() && "featuresFinderForMatching not created!");
+            (*_params.featuresFinderForMatching)(im, vd.featuresForMatching);
+            vd.featuresForMatching.img_idx = h.id;
+            vd.featuresForMatching.img_size = im.size();
+
+            // compute line intersections
             vd.lineSegmentIntersections.clear();
             vd.lineSegmentIntersectionLineIDs.clear();
             LineIntersectons(vd.lineSegments, 
@@ -101,27 +98,11 @@ namespace panoramix {
             auto & vd = _views.data(h);
 
             // add features used in calibration into RTree            
-            vd.spatialLineSegmentIntersectionsRTree.clear();
-            for (auto & p : vd.lineSegmentIntersections){
-                auto sp = vd.camera.spatialDirection(p.toPoint());
-                sp /= norm(sp);
-                vd.spatialLineSegmentIntersectionsRTree.insert(sp);
-            }
-            
-            vd.spatialSIFTsRTree.clear();
-            for (auto & p : vd.SIFTs){
-                auto sp = vd.camera.spatialDirection(p.pt);
-                sp /= norm(sp);
-                vd.spatialSIFTsRTree.insert(sp);
-            }
-            assert(vd.spatialSIFTsRTree.size() == vd.SIFTs.size());
-            
-            vd.spatialSURFsRTree.clear();
-            for (auto & p : vd.SURFs){
-                auto sp = vd.camera.spatialDirection(p.pt);
-                sp /= norm(sp);
-                vd.spatialSURFsRTree.insert(sp);
-            }
+            vd.lineSegmentIntersectionsRTree = 
+                RTreeWrapper<HPoint2>(vd.lineSegmentIntersections.begin(), vd.lineSegmentIntersections.end());
+            vd.SIFTsRTree = RTreeWrapper<KeyPoint>(vd.SIFTs.begin(), vd.SIFTs.end());            
+            vd.SURFsRTree = RTreeWrapper<KeyPoint>(vd.SURFs.begin(), vd.SURFs.end());
+
         }
 
         void ViewsNet::buildRegionNet(VertHandle h) {
@@ -158,7 +139,7 @@ namespace panoramix {
                 if (angleDistance <= thisvCamAngleRadius + vCamAngleRadius){
                     // may overlap
                     HalfData hd;
-                    hd.cameraAngleDistance = angleDistance;
+                    //hd.cameraAngleDistance = angleDistance;
                     _views.addEdge(h, v.topo.hd, hd);
                 }
             }
@@ -180,176 +161,29 @@ namespace panoramix {
             return VertHandle();
         }
 
+        void ViewsNet::findMatchesToConnectedViews(VertHandle h) {
+            cv::detail::BestOf2NearestMatcher matcher(false, 0.3f);
+            auto & thisVD = _views.data(h);
+            auto & connections = _views.topo(h).halfedges;
+            for (auto & con : connections) {
+                auto & conData = _views.data(con);
+                auto & revConData = _views.data(_views.topo(con).opposite);
+                auto & neighborVD = _views.data(_views.topo(con).to());
+                // find homography
+                matcher(thisVD.featuresForMatching, neighborVD.featuresForMatching, conData.matchInfo);
+                conData.matchInfo.src_img_idx = h.id;
+                conData.matchInfo.dst_img_idx = _views.topo(con).to().id;
+                
+                matcher(neighborVD.featuresForMatching, thisVD.featuresForMatching, revConData.matchInfo);
+                revConData.matchInfo.dst_img_idx = h.id;
+                revConData.matchInfo.src_img_idx = _views.topo(con).to().id;
+            }
+        }
+
 
         namespace {
 
-            using namespace cv;
-            using namespace detail;
 
-            cv::detail::CameraParams MakeCVCameraParams(const PerspectiveCamera & cam) {
-                cv::detail::CameraParams cp;
-                cp.aspect = cam.aspect();
-                cp.focal = cam.focal();
-                cp.ppx = cam.screenSize().width / 2;
-                cp.ppy = cam.screenSize().height / 2;
-                /// TODO
-                //cp.R = 
-
-                return cp;
-            }
-
-            // seems that the used fields of MatchesInfo in BundleAdjusterBase::estimation (and the calcErrror/calcJacobian) are:
-            // MatchesInfo.confidence
-            // MatchesInfo.inliers_mask
-            // MatchesInfo.matches.queryIdx
-            // MatchesInfo.matches.trainIdx
-
-
-            // the customized bundle adjuster based on ray-to-ray distance, and the stickness to original camera
-            class CVBundleAdjusterLazyRay : public BundleAdjusterBase {
-            public:
-                CVBundleAdjusterLazyRay() : BundleAdjusterBase(4, 3) {}
-
-            private:
-                void setUpInitialCameraParams(const std::vector<CameraParams> &cameras);
-                void obtainRefinedCameraParams(std::vector<CameraParams> &cameras) const;
-                void calcError(cv::Mat &err);
-                void calcJacobian(cv::Mat &jac);
-
-                cv::Mat err1_, err2_;
-            };
-
-            void CVBundleAdjusterLazyRay::setUpInitialCameraParams(const std::vector<CameraParams> &cameras) {
-                cam_params_.create(num_images_ * 4, 1, CV_64F);
-                SVD svd;
-                for (int i = 0; i < num_images_; ++i) {
-                    cam_params_.at<double>(i * 4, 0) = cameras[i].focal;
-
-                    svd(cameras[i].R, SVD::FULL_UV);
-                    cv::Mat R = svd.u * svd.vt;
-                    if (determinant(R) < 0)
-                        R *= -1;
-
-                    cv::Mat rvec;
-                    Rodrigues(R, rvec);
-                    CV_Assert(rvec.type() == CV_32F);
-                    cam_params_.at<double>(i * 4 + 1, 0) = rvec.at<float>(0, 0);
-                    cam_params_.at<double>(i * 4 + 2, 0) = rvec.at<float>(1, 0);
-                    cam_params_.at<double>(i * 4 + 3, 0) = rvec.at<float>(2, 0);
-                }
-            }
-
-            void CVBundleAdjusterLazyRay::obtainRefinedCameraParams(std::vector<CameraParams> &cameras) const {
-                for (int i = 0; i < num_images_; ++i) {
-                    cameras[i].focal = cam_params_.at<double>(i * 4, 0);
-
-                    cv::Mat rvec(3, 1, CV_64F);
-                    rvec.at<double>(0, 0) = cam_params_.at<double>(i * 4 + 1, 0);
-                    rvec.at<double>(1, 0) = cam_params_.at<double>(i * 4 + 2, 0);
-                    rvec.at<double>(2, 0) = cam_params_.at<double>(i * 4 + 3, 0);
-                    Rodrigues(rvec, cameras[i].R);
-
-                    cv::Mat tmp;
-                    cameras[i].R.convertTo(tmp, CV_32F);
-                    cameras[i].R = tmp;
-                }
-            }
-
-            void CVBundleAdjusterLazyRay::calcError(cv::Mat &err) {
-                /// TODO: add other constraints
-
-                err.create(total_num_matches_ * 3, 1, CV_64F);
-
-                int match_idx = 0;
-                for (size_t edge_idx = 0; edge_idx < edges_.size(); ++edge_idx) {
-                    int i = edges_[edge_idx].first;
-                    int j = edges_[edge_idx].second;
-                    double f1 = cam_params_.at<double>(i * 4, 0);
-                    double f2 = cam_params_.at<double>(j * 4, 0);
-
-                    double R1[9];
-                    cv::Mat R1_(3, 3, CV_64F, R1);
-                    cv::Mat rvec(3, 1, CV_64F);
-                    rvec.at<double>(0, 0) = cam_params_.at<double>(i * 4 + 1, 0);
-                    rvec.at<double>(1, 0) = cam_params_.at<double>(i * 4 + 2, 0);
-                    rvec.at<double>(2, 0) = cam_params_.at<double>(i * 4 + 3, 0);
-                    Rodrigues(rvec, R1_);
-
-                    double R2[9];
-                    cv::Mat R2_(3, 3, CV_64F, R2);
-                    rvec.at<double>(0, 0) = cam_params_.at<double>(j * 4 + 1, 0);
-                    rvec.at<double>(1, 0) = cam_params_.at<double>(j * 4 + 2, 0);
-                    rvec.at<double>(2, 0) = cam_params_.at<double>(j * 4 + 3, 0);
-                    Rodrigues(rvec, R2_);
-
-                    const ImageFeatures& features1 = features_[i];
-                    const ImageFeatures& features2 = features_[j];
-                    const MatchesInfo& matches_info = pairwise_matches_[i * num_images_ + j];
-
-                    Mat_<double> K1 = cv::Mat::eye(3, 3, CV_64F);
-                    K1(0, 0) = f1; K1(0, 2) = features1.img_size.width * 0.5;
-                    K1(1, 1) = f1; K1(1, 2) = features1.img_size.height * 0.5;
-
-                    Mat_<double> K2 = cv::Mat::eye(3, 3, CV_64F);
-                    K2(0, 0) = f2; K2(0, 2) = features2.img_size.width * 0.5;
-                    K2(1, 1) = f2; K2(1, 2) = features2.img_size.height * 0.5;
-
-                    Mat_<double> H1 = R1_ * K1.inv();
-                    Mat_<double> H2 = R2_ * K2.inv();
-
-                    for (size_t k = 0; k < matches_info.matches.size(); ++k)  {
-                        if (!matches_info.inliers_mask[k])
-                            continue;
-
-                        const DMatch& m = matches_info.matches[k];
-
-                        Point2f p1 = features1.keypoints[m.queryIdx].pt;
-                        double x1 = H1(0, 0)*p1.x + H1(0, 1)*p1.y + H1(0, 2);
-                        double y1 = H1(1, 0)*p1.x + H1(1, 1)*p1.y + H1(1, 2);
-                        double z1 = H1(2, 0)*p1.x + H1(2, 1)*p1.y + H1(2, 2);
-                        double len = sqrt(x1*x1 + y1*y1 + z1*z1);
-                        x1 /= len; y1 /= len; z1 /= len;
-
-                        Point2f p2 = features2.keypoints[m.trainIdx].pt;
-                        double x2 = H2(0, 0)*p2.x + H2(0, 1)*p2.y + H2(0, 2);
-                        double y2 = H2(1, 0)*p2.x + H2(1, 1)*p2.y + H2(1, 2);
-                        double z2 = H2(2, 0)*p2.x + H2(2, 1)*p2.y + H2(2, 2);
-                        len = sqrt(x2*x2 + y2*y2 + z2*z2);
-                        x2 /= len; y2 /= len; z2 /= len;
-
-                        double mult = sqrt(f1 * f2);
-                        err.at<double>(3 * match_idx, 0) = mult * (x1 - x2);
-                        err.at<double>(3 * match_idx + 1, 0) = mult * (y1 - y2);
-                        err.at<double>(3 * match_idx + 2, 0) = mult * (z1 - z2);
-
-                        match_idx++;
-                    }
-                }
-            }
-
-            void calcDeriv(const cv::Mat &err1, const cv::Mat &err2, double h, cv::Mat res) {
-                for (int i = 0; i < err1.rows; ++i)
-                    res.at<double>(i, 0) = (err2.at<double>(i, 0) - err1.at<double>(i, 0)) / h;
-            }
-
-            void CVBundleAdjusterLazyRay::calcJacobian(cv::Mat &jac){
-                jac.create(total_num_matches_ * 3, num_images_ * 4, CV_64F);
-
-                double val;
-                const double step = 1e-3;
-
-                for (int i = 0; i < num_images_; ++i)  {
-                    for (int j = 0; j < 4; ++j)  {
-                        val = cam_params_.at<double>(i * 4 + j, 0);
-                        cam_params_.at<double>(i * 4 + j, 0) = val - step;
-                        calcError(err1_);
-                        cam_params_.at<double>(i * 4 + j, 0) = val + step;
-                        calcError(err2_);
-                        calcDeriv(err1_, err2_, 2 * step, jac.col(i * 4 + j));
-                        cam_params_.at<double>(i * 4 + j, 0) = val;
-                    }
-                }
-            }
 
         }
         
@@ -368,30 +202,7 @@ namespace panoramix {
 
         void ViewsNet::calibrateAllCameras() {
             
-            // collect features
-            std::vector<cv::detail::ImageFeatures> features;
-            // TODO
-
-            // collect matches info
-            std::vector<cv::detail::MatchesInfo> matchesInfo;
-            for (auto & h : _views.halfedges()){
-
-            }
-
-            //std::unique_ptr<CVBundleAdjusterLazyRay> estimator = std::make_unique<CVBundleAdjusterLazyRay>();
-            //estimator->setConfThresh(0.1);
-            //estimator->setRefinementMask()
-
-            // install current cameras
-            std::vector<cv::detail::CameraParams> cams;
-
-            // estimate camera
-            //(*estimator)(features, matchesInfo, cams);
-
-            // setup cameras for each views
-            for (auto & v : _views.vertices()){
-                // TODO
-            }
+            
 
         }
 
