@@ -1,6 +1,8 @@
 #include "../src/sandbox/for_expression.hpp"
 #include "../src/sandbox/for_expression2.hpp"
 
+#include "../src/deriv/data_traits_definitions.hpp"
+
 #include "gtest/gtest.h"
 
 template <class T>
@@ -52,6 +54,25 @@ TEST(ForExpression, TemplateTrick) {
     Traits<Eigen::Array22cf>::print();
 }
 
+
+TEST(FunctionMatching, Cast) {
+
+    using namespace Eigen;
+
+    MatrixXf d;
+    ArrayXXf a = ArrayXXf::Zero(2, 3);
+    auto & dd = d;
+    panoramix::deriv::common::Cast(MatrixXd::Ones(3, 4) * 2, dd);
+    std::cout << d << std::endl;
+
+    double aa = 5, bb;
+    panoramix::deriv::common::CWiseSelect(aa, aa, bb);
+    auto r = panoramix::deriv::common::CWiseSelect(d, a, aa);
+    auto rr = panoramix::deriv::common::Eval(r);
+    std::cout << rr << std::endl;
+    auto k = panoramix::deriv::common::GeneralTranspose(a);
+
+}
 
 int main(int argc, char * argv[], char * envp[])
 {

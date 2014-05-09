@@ -9,34 +9,6 @@
 namespace panoramix {
     namespace core {
 
-        namespace {
-
-            Mat4 MakeMat4LookAt(const Vec3 & eye, const Vec3 & center,
-                const Vec3 & up) {
-                Vec3 zaxis = (center - eye); zaxis /= core::norm(zaxis);
-                Vec3 xaxis = up.cross(zaxis); xaxis /= core::norm(xaxis);
-                Vec3 yaxis = zaxis.cross(xaxis);
-                Mat4 m(
-                    -xaxis(0), yaxis(0), -zaxis(0), 0,
-                    -xaxis(1), yaxis(1), -zaxis(1), 0,
-                    -xaxis(2), yaxis(2), -zaxis(2), 0,
-                    xaxis.dot(eye), -yaxis.dot(eye), zaxis.dot(eye), 1);
-                return m.t();
-            }
-
-            Mat4 MakeMat4Perspective(const double & fovyRadians, const double & aspect,
-                const double & nearZ, const double & farZ) {
-                double cotan = double(1.0) / std::tan(fovyRadians / 2.0);
-                Mat4 m(
-                    cotan / aspect, 0, 0, 0,
-                    0, cotan, 0, 0,
-                    0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
-                    0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0);
-                return m.t();
-            }
-
-        }
-
         PerspectiveCamera::PerspectiveCamera(int w, int h, double focal, const Vec3 & eye,
             const Vec3 & center, const Vec3 & up, double near, double far) 
         : _screenW(w), _screenH(h), _focal(focal), _eye(eye), _center(center), _up(up), _near(near), _far(far) {

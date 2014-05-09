@@ -30,7 +30,9 @@ TEST(Expression, addConst) {
     EXPECT_EQ(3.0, ccc.execute());
     auto ddd = generalProd(aaa, bbb);
     EXPECT_EQ(2.0, ddd.execute());
-    
+    auto n1 = -m1;
+    auto dn1 = n1.sum().derivatives(m1);
+
     MatrixXd m3d(5, 2);
     auto m3f = m3d.cast<float>().eval();
 
@@ -175,7 +177,19 @@ TEST(Expression, ScalarOp) {
         for (int i = 0; i < 10; i++) {
             xv = (std::rand() % 100000) / 100000.0;
             EXPECT_NEAR(log(xv), f.execute(), 0.01);
-            EXPECT_NEAR(1.0/xv, dfdx.execute(), 0.01);
+            EXPECT_NEAR(1.0 / xv, dfdx.execute(), 0.01);
+        }
+    }
+
+    {
+        // select
+        auto f = cwiseSelect(x, x, -x);
+        auto dfdx = std::get<0>(f.derivatives(x));
+        for (int i = 0; i < 10; i++) {
+            xv = (std::rand() % 100000) / 100000.0;
+            auto v = f.execute();
+            EXPECT_NEAR(xv > 0 ? xv : -xv, v, 0.01);
+            EXPECT_NEAR(xv > 0 ? 1 : -1, dfdx.execute(), 0.01);
         }
     }
 
@@ -376,6 +390,20 @@ TEST(Expression, ArrayOp){
             EXPECT_DOUBLE_EQ((xv.cwiseProduct(yv)).sum(), f.execute());
             EXPECT_MATRIX_EQ(yv, dfdx.execute());
             EXPECT_MATRIX_EQ(xv, dfdy.execute());
+        }
+    }
+
+    {
+        // select
+        auto f = cwiseSelect(x, x, -x).sum();
+        auto dfdx = std::get<0>(f.derivatives(x));
+        for (int i = 0; i < 10; i++) {
+            int a = std::rand() % 100 + 1;
+            int b = std::rand() % 100 + 1;
+            xv.setRandom(a, b);
+            auto v = f.execute();
+            EXPECT_NEAR(xv.abs().sum(), v, 0.01);
+            EXPECT_MATRIX_EQ((xv > 0).select(ArrayXXd::Ones(xv.rows(), xv.cols()), -1), dfdx.execute());
         }
     }
 
@@ -609,6 +637,26 @@ TEST(Expression, MatrixOp3){
             EXPECT_MATRIX_EQ((xv.inverse() * -MatrixXd::Ones(a, a) * xv.inverse()).transpose(), dxinv.execute());
         }
     }
+
+}
+
+
+
+TEST(Expression, CVOp) {
+
+    //ExpressionGraph graph;
+
+    //cv::Vec3d xv(1, 2, 3);
+    //cv::Matx33d yv = cv::Matx33d::eye();
+    //auto x = graph.addRef(xv, "x");
+    //auto y = graph.addRef(yv, "y");
+
+    //auto xx = cvSumElements(y * cwiseProd(x, x) + y * cvInverseMatrix(y) * x * 5);
+    //std::cout << xx << std::endl;
+    //std::cout << xx.execute() << std::endl;
+
+    //auto g = std::get<0>(xx.derivatives(x));
+    //std::cout << g << std::endl;
 
 }
 

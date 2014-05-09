@@ -13,6 +13,7 @@
 #include <complex>
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/stitching/detail/matchers.hpp>
 
 namespace panoramix {
     namespace core {

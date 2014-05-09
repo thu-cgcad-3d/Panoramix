@@ -2,6 +2,7 @@
 #define PANORAMIX_CORE_DATA_TRAITS_HPP
 
 #include <type_traits>
+#include <iterator>
 
 namespace panoramix {
     namespace deriv {
@@ -12,6 +13,8 @@ namespace panoramix {
         struct TagStructName {}; \
         template <class T> \
         std::enable_if_t<(Checker), TagStructName> TAG() { return TagStructName(); }
+#define SATISFIES(TypeName, TagStructName) \
+    std::enable_if_t<std::is_same<TagStructName, decltype(TAG<TypeName>())>::value, int> = 0
 
         namespace {
             template <class T>
@@ -22,7 +25,7 @@ namespace panoramix {
         template <class T>
         using TagType = typename TagStruct<T>::type;
 
-        // use DataTraits<T> to retrieve traits
+        // use DataTraits<T> to retrieve traits of data
         template <class T, class Tag = TagType<T>>
         struct DataTraits {};
 
@@ -31,16 +34,15 @@ namespace panoramix {
             struct DataStorageStruct {
                 using type = typename DataTraits<T>::StorageType;
             };
-        }
-        template <class T>
-        using DataStorageType = typename DataStorageStruct<T>::type;
-
-        namespace {
             template <class T>
             struct DataScalarStruct {
                 using type = typename DataTraits<T>::ScalarType;
             };
         }
+        
+        template <class T>
+        using DataStorageType = typename DataStorageStruct<T>::type;
+
         template <class T>
         using DataScalarType = typename DataScalarStruct<T>::type;
 
@@ -64,13 +66,15 @@ namespace panoramix {
         using RemoveAllType = typename RemoveAll<T>::type;
 
 
-        // use for checking whether a member type / member function / member field exists
-        template <class T> struct StructWithAnInt { using type = int; };
-#define IF_TYPE_EXISTS(TypeExpr) \
-    typename StructWithAnInt<TypeExpr>::type = 0
-#define IF_MEMBER_EXISTS(MemberExpr) \
-    IF_TYPE_EXISTS(decltype(MemberExpr))
-
+        struct ResultRetrievedByValueTag {};
+        struct ResultRetrievedByCacheTag {};
+        template <class T>
+        struct ResultTag {
+            using type =
+                std::conditional_t < std::is_lvalue_reference<T>::value, ResultRetrievedByValueTag,
+                std::conditional_t < DataTraits<T>::shouldBeCached, ResultRetrievedByCacheTag,
+                ResultRetrievedByValueTag >> ;
+        };
 
     }
 }

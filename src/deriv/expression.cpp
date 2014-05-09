@@ -15,6 +15,10 @@ namespace panoramix {
             _g.internalHalfEdges().reserve(sz * 4);
         }
 
+        void ExpressionGraph::invalidateAll() {
+            _g.clear();
+        }
+
         std::vector<EHandle> ExpressionGraph::inputs(EHandle self) const {
             std::vector<EHandle> inputs; // input ops
             inputs.reserve(_g.topo(self).halfedges.size());

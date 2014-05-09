@@ -2,6 +2,7 @@
 #define PANORAMIX_CORE_FEATURE_HPP
 
 #include <opencv2/features2d/features2d.hpp>
+#include <opencv2/stitching/detail/matchers.hpp>
 #include <opencv2/nonfree/features2d.hpp>
 
 #include "basic_types.hpp"
@@ -139,10 +140,10 @@ namespace panoramix {
 
 
         // point feature extractor
-        template <class CVFeatureT>
+        template <class CVFeatureExtractorT, class FeatureT = std::vector<cv::KeyPoint>>
         class CVFeatureExtractor {
         public:
-            using Feature = std::vector<cv::KeyPoint>;
+            using Feature = FeatureT;
         public:
             template <class ... ArgT>
             explicit inline CVFeatureExtractor(ArgT ... args) : _feature2D(args ...) {}
@@ -153,8 +154,10 @@ namespace panoramix {
                 return fea;
             }
         private:
-            CVFeatureT _feature2D;
+            CVFeatureExtractorT _feature2D;
         };
+
+
 
 
         // segmentation

@@ -10,7 +10,10 @@
 #include <glpk.h>
 #include <setjmp.h>
 
+#include "../deriv/derivative.hpp"
+
 #include "basic_types.hpp"
+#include "utilities.hpp"
 
 
 namespace panoramix {
@@ -20,18 +23,13 @@ namespace panoramix {
             char * text;
             jmp_buf * env;
         };
-        
+
         void glpErrorHook(void * in){
             sinfo * info = (sinfo*)in;
             glp_free_env();
             longjmp(*(info->env), 1);
         }
-
-
     }
-
-
-
 }
  
 #endif

@@ -13,8 +13,8 @@
 #include "template_utilities.hpp"
 #include "mesh.hpp"
 
-#include "data_traits.hpp"
-
+//#include "data_traits.hpp"
+#include "data_traits_definitions.hpp"
 
 namespace panoramix {
     namespace deriv {
@@ -102,16 +102,6 @@ namespace panoramix {
 
         //////////////////////////////////////////////////////////////////////////////
         // DataTraits about op
-        struct ResultRetrievedByValueTag {};
-        struct ResultRetrievedByCacheTag {};
-        template <class T>
-        struct ResultTag {
-            using type =
-            std::conditional_t < std::is_lvalue_reference<T>::value, ResultRetrievedByValueTag,
-            std::conditional_t < DataTraits<T>::shouldBeCached, ResultRetrievedByCacheTag,
-            ResultRetrievedByValueTag >> ;
-        };
-
         template <class T, class ResultTag = typename ResultTag<T>::type>
         struct TraitsAboutOp {};
 
@@ -195,7 +185,7 @@ namespace panoramix {
             }
 
             // compute value and store in cache
-            virtual void forwardPropagateExecute() { cache = DataTraits<T>::eval(value()); }
+            virtual void forwardPropagateExecute() { cache = common::Eval(value()); }
 
             ST cache;
             std::string givenName;
@@ -233,217 +223,144 @@ namespace panoramix {
             const T & ref;
             std::string givenName;
         };
-
-
-
         
 
         
 
-        ////////////////////////////////////////////////////////////////////////////
-        // the functional op wrapper
-        template <class OutputT, class ...InputTs>
-        struct OpTraitsBase {
-            using OutputType = OutputT;
-            using OutputExpressionType = Expression<OutputT>;
 
-            static const int InputsNumber = sizeof...(InputTs);
-            using InputIndices = typename SequenceGenerator<sizeof...(InputTs)>::type;
-            using InputTuple = std::tuple<InputTs...>;
 
-            template <int I>
-            struct InputTypeStruct {
-                using type = typename std::tuple_element<I, InputTuple>::type;
-            };
-            template <int I>
-            using InputType = typename InputTypeStruct<I>::type;
 
-            // to string
-            virtual ostream & toString(ostream & os) const { os << "unknown op"; return os; }
-        };
-
-        // first  -> original expression
-        // second -> derivative expression &
-        template <class T>
-        using OriginalAndDerivativeExpression = std::pair<Expression<T>, DerivativeExpression<T> &>;
-        template <class T>
-        inline OriginalAndDerivativeExpression<T>
-            MakeOriginalAndDerivative(Expression<T> && input, DerivativeExpression<T> & dinput) {
-            return std::pair<Expression<T>, DerivativeExpression<T> &>{input, dinput};
+        // expression assign
+        template <class To, class From>
+        inline std::enable_if_t<std::is_same<To, From>::value, Expression<To>> 
+            expressionAssign(const Expression<From> & from) {
+            return from;
         }
 
-        namespace {
-            // functional op
-            template <class OpTraitsT>
-            class FunctionalOp : public OpBaseType<typename OpTraitsT::OutputType> {
-            private:
-                using InputIndices = typename OpTraitsT::InputIndices;
-
-                using OutputType = typename OpTraitsT::OutputType;
-                using InputTuple = typename OpTraitsT::InputTuple;
-                static const int InputsNumber = OpTraitsT::InputsNumber;
-                template <int I>
-                struct InputTypeStruct {
-                    using type = typename std::tuple_element<I, InputTuple>::type;
-                };
-                template <int I>
-                using InputType = typename InputTypeStruct<I>::type;
-
-            public:
-                inline explicit FunctionalOp(OpTraitsT t) : OpBaseType<typename OpTraitsT::OutputType>(), _opTraits(t) {}
-
-            private:
-                template <int ...S>
-                inline OutputType valueUsingSequence(std::vector<EHandle> && inputs, Sequence<S...>) const {
-                    assert(inputs.size() == InputsNumber);
-                    // inputs -> ResultType<inputs> -> output
-                    return _opTraits.value(TraitsAboutOp<InputType<S>>::Result(graph->op(inputs[S])) ...);
-                }
-
-                template <int ...S>
-                inline std::vector<EHandle> backPropagateGradientUsingSequence(
-                    std::vector<EHandle> && inputs,
-                    EHandle sumOfDOutputs,
-                    Sequence<S...>) const {                    
-
-                    // inputs + doutputs -> dinputs
-                    std::tuple<DerivativeExpression<InputType<S>>...> dinputs;
-                    _opTraits.derivatives(
-                        graph->as<OutputType>(self), // output
-                        graph->asDerived<OutputType>(sumOfDOutputs), // DOutput
-                        MakeOriginalAndDerivative(graph->as<InputType<S>>(inputs[S]), std::get<S>(dinputs))...);
-                    return std::vector<EHandle>{std::get<S>(dinputs).handle()...};
-                }
-
-            public:
-                // get name
+        template <class To, class From>
+        inline std::enable_if_t<!std::is_same<To, From>::value, Expression<To>>
+            expressionAssign(const Expression<From> & from) {
+            struct AssignerOp : public OpBaseType<To> {
                 virtual std::ostream & toString(std::ostream & os) const {
-                    return _opTraits.toString(os);
+                    os << "assign";
+                    return os;
                 }
-
-                virtual OutputType value() const override {
-                    return valueUsingSequence(graph->inputs(self), InputIndices());
+                virtual To value() const override {
+                    std::vector<EHandle> inp = graph->inputs(self);
+                    assert(inp.size() == 1 && "wrong inputs number");
+                    return TraitsAboutOp<From>::Result(graph->op(inp.front()));
                 }
-
                 virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const {
-                    return backPropagateGradientUsingSequence(graph->inputs(self), sumOfDOutputs, InputIndices());
+                    return std::vector<EHandle>(1, 
+                        expressionAssign<DerivativeType<From>, DerivativeType<To>>(
+                        graph->as<DerivativeType<To>>(sumOfDOutputs)).handle());
                 }
-
-                OpTraitsT _opTraits;
             };
-        }
-
-        // compose Expression using FunctionalOp
-        template <class OpTraitsT, class InputT, class ...InputTs>
-        inline Expression<typename OpTraitsT::OutputType> ComposeExpression(
-            OpTraitsT opTraits,
-            const Expression<InputT> & firstInput,
-            const Expression<InputTs> & ... inputs){
-            static_assert(OpTraitsT::InputsNumber == 1 + sizeof...(inputs), "inputs number mismatch!");
-            return firstInput.g()->as<typename OpTraitsT::OutputType>(firstInput.g()->
-                addNode(std::make_shared<FunctionalOp<OpTraitsT>>(opTraits), {
-                firstInput.handle(), inputs.handle()...
-            }));
+            return from.g()->as<To>(from.g()->addNode(std::make_shared<AssignerOp>(), {from.handle()}));
         }
 
         // expression cast
-        namespace  {
-            // implicit assign // =
-            template <class A, class B>
-            struct ExpressionAssignTraits : public OpTraitsBase<A, B> {
-                inline A value(ResultType<B> b) const {
-                    return b;
-                }
-                inline void derivatives(
-                    Expression<A> output,
-                    DerivativeExpression<A> sumOfDOutputs,
-                    OriginalAndDerivativeExpression<B> from) const {
-                    from.second =
-                        ComposeExpression(ExpressionAssignTraits<DerivativeType<B>, DerivativeType<A>>(), sumOfDOutputs);
-                }
-                virtual ostream & toString(ostream & os) const { os << "assign"; return os; }
-            };
-
-            // cast // data_cast
-            template <class To, class From>
-            struct ExpressionCastTraits : public OpTraitsBase<DataStorageType<To>, From> {
-                inline DataStorageType<To> value(ResultType<From> from) const {
-                    return DataTraits<To>::castFromWithScalarConversion<ResultType<From>>(from);
-                }
-                inline void derivatives(
-                    Expression<To> output,
-                    DerivativeExpression<To> sumOfDOutputs,
-                    OriginalAndDerivativeExpression<From> from) const {
-                    from.second =
-                        ComposeExpression(ExpressionCastTraits<DerivativeType<From>, DerivativeType<To>>(),
-                        sumOfDOutputs);
-                }
-                virtual ostream & toString(ostream & os) const { os << "cast"; return os; }
-            };
-
-            // eval
-            template <class T>
-            struct ExpressionEvalTraits : public OpTraitsBase<DataStorageType<ResultType<T>>, T> {
-                inline OutputType value(ResultType<T> from) const {
-                    return DataTraits<ResultType<T>>::eval(std::move(from));
-                }
-                static_assert(std::is_same<DerivativeExpression<OutputType>,
-                    DerivativeExpression<T >> ::value, "should be the same!");
-                inline void derivatives(
-                    Expression<OutputType> output,
-                    DerivativeExpression<OutputType> sumOfDOutputs,
-                    OriginalAndDerivativeExpression<T> from) const {
-                    from.second = sumOfDOutputs;
-                }
-                virtual ostream & toString(ostream & os) const { os << "eval"; return os; }
-            };
-        }
-
         template <class To, class From>
-        std::enable_if_t<std::is_same<To, From>::value, Expression<To>> 
-            expressionAssign(const Expression<From> & from) {
-            return from;
-        }
-
-        template <class To, class From>
-        std::enable_if_t<!std::is_same<To, From>::value, Expression<To>> 
-            expressionAssign(const Expression<From> & from) {
-            return ComposeExpression(ExpressionAssignTraits<To, From>(), from);
-        }
-
-        template <class To, class From>
-        std::enable_if_t<std::is_same<DataStorageType<To>, From>::value, 
-            Expression<DataStorageType<To>>> 
+        inline std::enable_if_t<std::is_same<To, From>::value,
+            Expression<To>> 
             expressionCast(const Expression<From> & from) {
             return from;
         }
 
         template <class To, class From>
-        std::enable_if_t<!std::is_same<DataStorageType<To>, From>::value, Expression<DataStorageType<To>>>
+        inline std::enable_if_t<!std::is_same<To, From>::value, Expression<To>> 
             expressionCast(const Expression<From> & from) {
-            return ComposeExpression(ExpressionCastTraits<To, From>(), from);
+            struct CasterOp : public OpBaseType<To> {
+                virtual std::ostream & toString(std::ostream & os) const {
+                    os << "cast";
+                    return os;
+                }
+                virtual To value() const override {
+                    std::vector<EHandle> inp = graph->inputs(self);
+                    assert(inp.size() == 1 && "wrong inputs number");
+                    To to;
+                    common::Cast(TraitsAboutOp<From>::Result(graph->op(inp.front())), to);
+                    return to;
+                    //return DataTraits<To>::castFromWithScalarConversion(TraitsAboutOp<From>::Result(graph->op(inp.front())));
+                }
+                virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const {
+                    return std::vector<EHandle>(1,
+                        expressionCast<DerivativeType<From>, DerivativeType<To>>(
+                        graph->as<DerivativeType<To>>(sumOfDOutputs)).handle());
+                }
+            };
+            return from.g()->as<To>(from.g()->addNode(std::make_shared<CasterOp>(), { from.handle() }));
         }
 
+        // expression eval
         template <class T>
-        std::enable_if_t<std::is_same<DataStorageType<T>, T>::value, 
+        inline std::enable_if_t<std::is_same<DataStorageType<T>, T>::value,
             Expression<DataStorageType<T>>> 
             expressionEval(const Expression<T> & from) {
             return from;
         }
 
         template <class T>
-        std::enable_if_t<!(std::is_same<DataStorageType<T>, T>::value), 
+        inline std::enable_if_t<!(std::is_same<DataStorageType<T>, T>::value), 
             Expression<DataStorageType<T>>>
             expressionEval(const Expression<T> & from) {
-            return ComposeExpression(ExpressionEvalTraits<T>(), from);
+            struct EvalOp : public OpBaseType<DataStorageType<T>> {
+                virtual std::ostream & toString(std::ostream & os) const {
+                    os << "eval";
+                    return os;
+                }
+                virtual DataStorageType<T> value() const override {
+                    std::vector<EHandle> inp = graph->inputs(self);
+                    assert(inp.size() == 1 && "wrong inputs number");
+                    //return DataTraits<T>::eval(TraitsAboutOp<T>::Result(graph->op(inp.front())));
+                    return common::Eval(TraitsAboutOp<T>::Result(graph->op(inp.front())));
+                }
+                virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const {
+                    return std::vector<EHandle>(1, sumOfDOutputs);
+                }
+            };
+            return from.g()->as<DataStorageType<T>>(from.g()->addNode(std::make_shared<EvalOp>(), { from.handle() }));
         }
 
-
-
-
-
-
-       
+        //// expression conditional branch
+        //template <class T, class SelectorT, class ConditionT, class ExpressionTIteratorT>
+        //inline Expression<T> expressionOnCondition(SelectorT && cc,
+        //    const Expression<ConditionT> & cond,
+        //    ExpressionTIteratorT candidatesBegin, ExpressionTIteratorT candidatesEnd) {
+        //    typename InputType = typename std::iterator_traits<ExpressionTIteratorT>::value_type::Type;
+        //    static_assert(std::is_same<T, InputType>::value, "invalid inputs type!");
+        //    struct OnConditionOp : public OpBaseType<T> {
+        //        inline explicit OnConditionOp(SelectorT && cc) : selector(std::forward<SelectorT>(cc)) {}
+        //        virtual std::ostream & toString(std::ostream & os) const {
+        //            os << "onCondition";
+        //            return os;
+        //        }
+        //        virtual T value() const override {
+        //            std::vector<EHandle> inp = graph->inputs(self);
+        //            assert(inp.size() >= 1 && "wrong inputs number");
+        //            int choice = selector(TraitsAboutOp<T>::Result(graph->op(inp.front())));
+        //            assert(choice >= 0 && choice < inp.size() - 1 && "invalid choice!");
+        //            return TraitsAboutOp<T>::Result(graph->op(inp[choice + 1]));
+        //        }
+        //        virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const {
+        //            std::vector<EHandle> inp = graph->inputs(self);
+        //            assert(inp.size() >= 1 && "wrong inputs number");
+        //            int choice = selector(TraitsAboutOp<T>::Result(graph->op(inp.front())));
+        //            assert(choice >= 0 && choice < inp.size() && "invalid choice!");
+        //            std::vector<EHandle> dinputs(inp.size());
+        //            dinputs[choice + 1] = sumOfDOutputs;
+        //            return dinputs;
+        //        }
+        //        SelectorT selector;
+        //    };
+        //    std::vector<EHandle> inputs(1, cond.handle());
+        //    std::transform(candidatesBegin, candidatesEnd, std::back_inserter(inputs), 
+        //        [](const Expression<T> & branch){
+        //        return branch.handle(); 
+        //    });
+        //    return cond.g()->as<T>(cond.g()
+        //        ->addNode(std::make_shared<OnConditionOp>(std::forward<SelectorT>(cc)), inputs));
+        //}     
 
 
        
@@ -487,6 +404,9 @@ namespace panoramix {
 
             // reserve expressions number
             void reserve(size_t sz);
+
+            // invalidate all expressions
+            void invalidateAll();
 
             // input handles
             std::vector<EHandle> inputs(EHandle h) const;

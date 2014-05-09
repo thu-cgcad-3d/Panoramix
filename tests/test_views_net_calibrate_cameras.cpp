@@ -72,8 +72,25 @@ TEST(ViewsNet, FixedCamera) {
         net.updateConnections(viewHandle);
         net.findMatchesToConnectedViews(viewHandle);
 
-        net.calibrateCamera(viewHandle);
+        // show matches
+        auto & thisVD = net.views().data(viewHandle);
+        auto & connections = net.views().topo(viewHandle).halfedges;
+        for (auto & con : connections) {
+            auto & conData = net.views().data(con);
+            auto & revConData = net.views().data(net.views().topo(con).opposite);
+            auto & neighborVD = net.views().data(net.views().topo(con).to());
+            cv::Mat im;
+            cv::drawMatches(thisVD.image, thisVD.keypointsForMatching, 
+                neighborVD.image, neighborVD.keypointsForMatching, 
+                conData.matchInfo.matches, im);
+            cv::imshow("matches", im);
+            cv::waitKey();
+        }
+
+
+        //net.calibrateCamera(viewHandle);
         net.calibrateAllCameras();
+
 
         if (net.isTooCloseToAnyExistingView(viewHandle).isValid()){
             std::cout << "too close to existing view, skipped";

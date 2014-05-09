@@ -1,31 +1,15 @@
 #ifndef PANORAMIX_CORE_VIEWS_NET_HPP
 #define PANORAMIX_CORE_VIEWS_NET_HPP
 
-#include <opencv2/opencv_modules.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/stitching/detail/autocalib.hpp>
-#include <opencv2/stitching/detail/blenders.hpp>
-#include <opencv2/stitching/detail/camera.hpp>
-#include <opencv2/stitching/detail/exposure_compensate.hpp>
-#include <opencv2/stitching/detail/matchers.hpp>
-#include <opencv2/stitching/detail/motion_estimators.hpp>
-#include <opencv2/stitching/detail/seam_finders.hpp>
-#include <opencv2/stitching/detail/util.hpp>
-#include <opencv2/stitching/detail/warpers.hpp>
-#include <opencv2/stitching/warpers.hpp>
-
 #include "basic_types.hpp"
 #include "feature.hpp"
 #include "utilities.hpp"
 #include "regions_net.hpp"
-#include "../deriv/expression.hpp"
 
 namespace panoramix {
     namespace core { 
 
         using deriv::Mesh;
-        using deriv::Expression;
-        using deriv::ExpressionGraph;
 
         // views net
         class ViewsNet {
@@ -39,7 +23,6 @@ namespace panoramix {
                 LineSegmentExtractor lineSegmentExtractor;
                 CVFeatureExtractor<cv::SIFT> siftExtractor;
                 CVFeatureExtractor<cv::SURF> surfExtractor;
-                cv::Ptr<cv::detail::FeaturesFinder> featuresFinderForMatching;
                 SegmentationExtractor segmenter;
 
                 // angle scalar to judge whether two views may share certain common features
@@ -91,12 +74,10 @@ namespace panoramix {
 
             // find the feature matches to connected views
             // after computeFeatures(h) and buildRTrees(h)
-            void findMatchesToConnectedViews(VertHandle h);            
-
-            // calibrate camera parameters of this view, and if an error loop is closed, calibrate all related view cameras
-            void calibrateCamera(VertHandle h); 
+            void findMatchesToConnectedViews(VertHandle h); 
 
             // calibrate all cameras
+            // after findMatchesToConnectedViews(h)
             void calibrateAllCameras();
             
             // estimate vanishing points using lines extract from all views, classify this lines and lift them all to space
@@ -108,30 +89,24 @@ namespace panoramix {
         public:
             struct VertData {
                 PerspectiveCamera originalCamera, camera;
+
                 double cameraDirectionErrorScale;
                 Image image;
-                double weight;
                 std::vector<Classified<Line2>> lineSegments;                
                 std::vector<HPoint2> lineSegmentIntersections;
                 std::vector<std::pair<int, int>> lineSegmentIntersectionLineIDs;                
-                std::vector<KeyPoint> SIFTs;                
-                std::vector<KeyPoint> SURFs;                
+                
+                std::vector<KeyPoint> keypointsForMatching;
+                cv::Mat descriptorsForMatching;
+
                 std::shared_ptr<RegionsNet> regionNet;
 
                 RTreeWrapper<HPoint2> lineSegmentIntersectionsRTree;
-                RTreeWrapper<KeyPoint> SIFTsRTree;
-                RTreeWrapper<KeyPoint> SURFsRTree;
-
-                cv::detail::ImageFeatures featuresForMatching;
-
-                //Expression<Eigen::Vector3d> cameraDirectionVar;
-                //Expression<double> cameraFocalVar;
-                //Expression<double> cameraBiasCostVar;
+                RTreeWrapper<KeyPoint> keypointsForMatchingRTree;
             };
 
             struct HalfData {
                 cv::detail::MatchesInfo matchInfo;
-                //Expression<double> cameraConsistencyVar;
             };
 
             struct ConstraintData {
@@ -168,7 +143,6 @@ namespace panoramix {
             ViewMesh _views;
             Params _params;
             GlobalData _globalData;
-            //ExpressionGraph _expressions;
         };
 
  

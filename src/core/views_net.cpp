@@ -1,6 +1,7 @@
+#include <Eigen/StdVector>
 
-#include "views_net.hpp"
 #include "optimization.hpp"
+#include "views_net.hpp"
 
 namespace panoramix {
     namespace core {
@@ -12,7 +13,6 @@ namespace panoramix {
             incidenceConstraintLineDistanceAngleThreshold(0.2),
             mergeLineDistanceAngleThreshold(0.05),
             mjWeightTriplet(5.0), mjWeightX(5.0), mjWeightT(2.0), mjWeightL(1.0), mjWeightI(2.0) {
-            featuresFinderForMatching = new cv::detail::SurfFeaturesFinder;
         }
 
         ViewsNet::VertHandle ViewsNet::insertPhoto(const Image & im, const PerspectiveCamera & cam,
@@ -73,17 +73,7 @@ namespace panoramix {
                 vd.lineSegments[i].component = lineSegments[i];
             }
 
-            vd.SIFTs = _params.siftExtractor(im);
-            vd.SURFs = _params.surfExtractor(im);
-            vd.weight = vd.lineSegments.size() * _params.lineSegmentWeight +
-                vd.SIFTs.size() * _params.siftWeight +
-                vd.SURFs.size() * _params.surfWeight;
-
-            // find features for matching
-            assert(!_params.featuresFinderForMatching.empty() && "featuresFinderForMatching not created!");
-            (*_params.featuresFinderForMatching)(im, vd.featuresForMatching);
-            vd.featuresForMatching.img_idx = h.id;
-            vd.featuresForMatching.img_size = im.size();
+            vd.keypointsForMatching = _params.surfExtractor(im, cv::Mat(), vd.descriptorsForMatching);
 
             // compute line intersections
             vd.lineSegmentIntersections.clear();
@@ -100,8 +90,7 @@ namespace panoramix {
             // add features used in calibration into RTree            
             vd.lineSegmentIntersectionsRTree = 
                 RTreeWrapper<HPoint2>(vd.lineSegmentIntersections.begin(), vd.lineSegmentIntersections.end());
-            vd.SIFTsRTree = RTreeWrapper<KeyPoint>(vd.SIFTs.begin(), vd.SIFTs.end());            
-            vd.SURFsRTree = RTreeWrapper<KeyPoint>(vd.SURFs.begin(), vd.SURFs.end());
+            vd.keypointsForMatchingRTree = RTreeWrapper<KeyPoint>(vd.keypointsForMatching.begin(), vd.keypointsForMatching.end());            
 
         }
 
@@ -169,40 +158,52 @@ namespace panoramix {
                 auto & conData = _views.data(con);
                 auto & revConData = _views.data(_views.topo(con).opposite);
                 auto & neighborVD = _views.data(_views.topo(con).to());
+                
                 // find homography
-                matcher(thisVD.featuresForMatching, neighborVD.featuresForMatching, conData.matchInfo);
+                cv::detail::ImageFeatures thisFea;
+                thisFea.descriptors = thisVD.descriptorsForMatching;
+                thisFea.keypoints = thisVD.keypointsForMatching;
+
+                cv::detail::ImageFeatures neighborFea;
+                neighborFea.descriptors = neighborVD.descriptorsForMatching;
+                neighborFea.keypoints = neighborVD.keypointsForMatching;
+
+                matcher(thisFea, neighborFea, conData.matchInfo);
                 conData.matchInfo.src_img_idx = h.id;
                 conData.matchInfo.dst_img_idx = _views.topo(con).to().id;
                 
-                matcher(neighborVD.featuresForMatching, thisVD.featuresForMatching, revConData.matchInfo);
+                matcher(neighborFea, thisFea, revConData.matchInfo);
                 revConData.matchInfo.dst_img_idx = h.id;
                 revConData.matchInfo.src_img_idx = _views.topo(con).to().id;
             }
         }
 
-
         namespace {
 
+            void DecodeLookAtMatGradient(const Eigen::MatrixXd & m4, Vec3 & deye, Vec3 & dcenter, Vec3 & dup) {
 
+            }
 
-        }
-        
-
-
-        void ViewsNet::calibrateCamera(VertHandle h) {
-            auto & vd = _views.data(h);
-            if (vd.cameraDirectionErrorScale == 0)
-                return;
-            
-            // camera params
-            using namespace Eigen;
-            MatrixXd camParams(_views.internalVertices().size(), 3);
-            
         }
 
         void ViewsNet::calibrateAllCameras() {
             
+            using namespace deriv;
             
+            ExpressionGraph graph;
+            std::vector<Expression<Eigen::MatrixXd>> cameraViewMats(_views.internalVertices().size());
+            //std::vector<Eigen::MatrixXd> 
+
+            for (auto & v : _views.vertices()){
+                cameraViewMats[v.topo.hd.id] = deriv::composeFunction(graph, 
+                    [&v](){
+                    return deriv::CVMatToEigenMatX(v.data.camera.viewMatrix()); 
+                });
+            }
+
+            for (auto & c : _views.halfedges()){
+
+            }
 
         }
 
