@@ -1,8 +1,8 @@
 #include "../src/core/mesh_maker.hpp"
 #include "../src/core/utilities.hpp"
-#include "../src/core/views_net.hpp"
-#include "../src/vis/views_net_visualize.hpp"
-#include "../src/vis/regions_net_visualize.hpp"
+#include "../src/rec/views_net.hpp"
+#include "../src/rec/views_net_visualize.hpp"
+#include "../src/rec/regions_net_visualize.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
@@ -49,21 +49,21 @@ TEST(ViewsNet, ViewsNet) {
     });
 
     /// insert all into views net
-    core::ViewsNet::Params params;
+    rec::ViewsNet::Params params;
     params.mjWeightT = 2.0;
     params.intersectionConstraintLineDistanceAngleThreshold = 0.05;
     params.incidenceConstraintLineDistanceAngleThreshold = 0.2;
     params.mergeLineDistanceAngleThreshold = 0.05;
-    core::ViewsNet net(params);
+    rec::ViewsNet net(params);
 
-    std::vector<core::ViewsNet::VertHandle> viewHandles;
+    std::vector<rec::ViewsNet::VertHandle> viewHandles;
     for (int i = 0; i < cams.size(); i++){
         auto & camera = cams[i];
         const auto & im = ims[i];
         viewHandles.push_back(net.insertPhoto(im, camera));
     }
 
-    auto computeFea = [](core::ViewsNet* netptr, core::ViewsNet::VertHandle vh){
+    auto computeFea = [](rec::ViewsNet* netptr, rec::ViewsNet::VertHandle vh){
         std::cout << "photo " << vh.id << std::endl;
         std::cout << "computing features ..." << std::endl;
         netptr->computeFeatures(vh);
@@ -74,7 +74,7 @@ TEST(ViewsNet, ViewsNet) {
     while (vid < net.views().internalVertices().size()){
         std::vector<std::thread> t4(std::min(net.views().internalVertices().size() - vid, 4ull));
         for (auto & t : t4)
-            t = std::thread(computeFea, &net, core::ViewsNet::VertHandle(vid++));
+            t = std::thread(computeFea, &net, rec::ViewsNet::VertHandle(vid++));
         for (auto & t : t4)
             t.join();
     }
@@ -82,7 +82,7 @@ TEST(ViewsNet, ViewsNet) {
     for (auto & vh : viewHandles){
         std::cout << "photo " << vh.id << std::endl;
         net.updateConnections(vh);
-        net.calibrateCamera(vh);
+        //net.calibrateCamera(vh);
     }
 
     {

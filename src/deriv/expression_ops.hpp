@@ -391,17 +391,12 @@ namespace panoramix {
         // general product
         namespace  {
 
+            // mat * mat
             template <class T1, class T2>
-            struct ProductResult{
-                using type = DataStorageType<decltype(std::declval<ResultType<T1>>() * std::declval<ResultType<T2>>())>;
-            };
-
-            template <class T1, class T2>
-            using ProductResultType = typename ProductResult<T1, T2>::type;
-
-            // general product DataTraits
-            template <class T1, class T2>
-            struct ProductTraits : public OpTraitsBase<ProductResultType<T1, T2>, T1, T2> {
+            struct MatrixMatrixProductTraits 
+                : public OpTraitsBase<DataStorageType<decltype(std::declval<ResultType<T1>>() * std::declval<ResultType<T2>>())>, T1, T2> {
+                static_assert(DataTraits<T1>::roleInProduct == RoleInProduct::Matrix, "T1 must be a matrix");
+                static_assert(DataTraits<T2>::roleInProduct == RoleInProduct::Matrix, "T2 must be a matrix");
                 inline OutputType value(ResultType<T1> a, ResultType<T2> b) const {
                     return common::Eval(a * b);
                 }
@@ -413,14 +408,134 @@ namespace panoramix {
                     a.second = generalProd(sumOfDOutputs, transpose(b.first)).eval().assign<DerivativeType<T1>>();
                     b.second = generalProd(transpose(a.first), sumOfDOutputs).eval().assign<DerivativeType<T2>>();
                 }
-                virtual ostream & toString(ostream & os) const { os << "prod"; return os; }
+                virtual ostream & toString(ostream & os) const { os << "mmProd"; return os; }
             };
 
+            // matrix/array * scalar
+            template <class T1, class T2>
+            struct MAScalarProductTraits 
+                : public OpTraitsBase<decltype(std::declval<ResultType<T1>>() * std::declval<ResultType<T2>>()), T1, T2> {
+                static_assert(DataTraits<T1>::roleInProduct == RoleInProduct::Matrix || 
+                    DataTraits<T1>::roleInProduct == RoleInProduct::Array, "T1 must be a matrix/array");
+                static_assert(DataTraits<T2>::roleInProduct == RoleInProduct::Scalar, "T2 must be a scalar");
+                inline OutputType value(ResultType<T1> a, ResultType<T2> b) const {
+                    return a * b;
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T1> a,
+                    OriginalAndDerivativeExpression<T2> b) const {
+                    a.second = generalProd(sumOfDOutputs, b.first).eval();
+                    b.second = sumElements(cwiseProd(sumOfDOutputs, a.first)).eval();
+                }
+                virtual ostream & toString(ostream & os) const { os << "msProd"; return os; }
+            };
+
+            // scalar * matrix/array
+            template <class T1, class T2>
+            struct ScalarMAProductTraits 
+                : public OpTraitsBase<decltype(std::declval<ResultType<T1>>() * std::declval<ResultType<T2>>()), T1, T2> {
+                static_assert(DataTraits<T1>::roleInProduct == RoleInProduct::Scalar, "T1 must be a scalar");
+                static_assert(DataTraits<T1>::roleInProduct == RoleInProduct::Matrix || 
+                    DataTraits<T1>::roleInProduct == RoleInProduct::Array, "T2 must be a matrix/array");
+                inline OutputType value(ResultType<T1> a, ResultType<T2> b) const {
+                    return a * b;
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T1> a,
+                    OriginalAndDerivativeExpression<T2> b) const {
+                    a.second = sumElements(cwiseProd(sumOfDOutputs, b.first)).eval();
+                    b.second = generalProd(sumOfDOutputs, a.first).eval();                    
+                }
+                virtual ostream & toString(ostream & os) const { os << "smProd"; return os; }
+            };
+
+            // array * array
+            template <class T1, class T2>
+            struct ArrayArrayProductTraits 
+                : public OpTraitsBase<decltype(std::declval<ResultType<T1>>() * std::declval<ResultType<T2>>()), T1, T2> {
+                static_assert(DataTraits<T1>::roleInProduct == RoleInProduct::Array, "T1 must be an array");
+                static_assert(DataTraits<T2>::roleInProduct == RoleInProduct::Array, "T2 must be an array");
+                inline OutputType value(ResultType<T1> a, ResultType<T2> b) const {
+                    return a * b;
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T1> a,
+                    OriginalAndDerivativeExpression<T2> b) const {
+                    a.second = cwiseProd(b.first, sumOfDOutputs).eval();
+                    b.second = cwiseProd(a.first, sumOfDOutputs).eval();
+                }
+                virtual ostream & toString(ostream & os) const { os << "aaProd"; return os; }
+            };
+
+            // scalar * scalar
+            template <class T1, class T2>
+            struct ScalarScalarProductTraits
+                : public OpTraitsBase<decltype(std::declval<ResultType<T1>>() * std::declval<ResultType<T2>>()), T1, T2> {
+                static_assert(DataTraits<T1>::roleInProduct == RoleInProduct::Scalar, "T1 must be a scalar");
+                static_assert(DataTraits<T2>::roleInProduct == RoleInProduct::Scalar, "T2 must be a scalar");
+                inline OutputType value(ResultType<T1> a, ResultType<T2> b) const {
+                    return a * b;
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T1> a,
+                    OriginalAndDerivativeExpression<T2> b) const {
+                    a.second = cwiseProd(b.first, sumOfDOutputs).eval();
+                    b.second = cwiseProd(a.first, sumOfDOutputs).eval();
+                }
+                virtual ostream & toString(ostream & os) const { os << "ssProd"; return os; }
+            };
+
+            template <class T1, class T2, RoleInProduct R1 = DataTraits<T1>::roleInProduct, RoleInProduct R2 = DataTraits<T2>::roleInProduct>
+            struct ProductTraits {};
+
+            template <class T1, class T2>
+            struct ProductTraits<T1, T2, RoleInProduct::Matrix, RoleInProduct::Matrix> {
+                using type = MatrixMatrixProductTraits<T1, T2>;
+            };
+
+            template <class T1, class T2>
+            struct ProductTraits<T1, T2, RoleInProduct::Matrix, RoleInProduct::Scalar> {
+                using type = MAScalarProductTraits<T1, T2>;
+            };
+
+            template <class T1, class T2>
+            struct ProductTraits<T1, T2, RoleInProduct::Array, RoleInProduct::Scalar> {
+                using type = MAScalarProductTraits<T1, T2>;
+            };
+
+            template <class T1, class T2>
+            struct ProductTraits<T1, T2, RoleInProduct::Scalar, RoleInProduct::Matrix> {
+                using type = ScalarMAProductTraits<T1, T2>;
+            };
+
+            template <class T1, class T2>
+            struct ProductTraits<T1, T2, RoleInProduct::Scalar, RoleInProduct::Array> {
+                using type = ScalarMAProductTraits<T1, T2>;
+            };
+
+            template <class T1, class T2>
+            struct ProductTraits<T1, T2, RoleInProduct::Array, RoleInProduct::Array> {
+                using type = ArrayArrayProductTraits<T1, T2>;
+            };
+
+            template <class T1, class T2>
+            struct ProductTraits<T1, T2, RoleInProduct::Scalar, RoleInProduct::Scalar> {
+                using type = ScalarScalarProductTraits<T1, T2>;
+            };
         }
 
         template <class T1, class T2>
-        inline Expression<ProductResultType<T1, T2>> generalProd(const Expression<T1> & a, const Expression<T2> & b) {
-            return ComposeExpression(ProductTraits<T1, T2>(), a, b);
+        inline auto generalProd(const Expression<T1> & a, const Expression<T2> & b) 
+            -> decltype(ComposeExpression(typename ProductTraits<T1, T2>::type(), a, b)) {
+            return ComposeExpression(typename ProductTraits<T1, T2>::type(), a, b);
         }
 
         template <class T1, class T2>
@@ -493,7 +608,7 @@ namespace panoramix {
                     Expression<OutputType> output,
                     DerivativeExpression<OutputType> sumOfDOutputs,
                     OriginalAndDerivativeExpression<T> da) const {
-                    da.second = (sumOfDOutputs * s).cast<DerivativeType<T>>().eval();
+                    da.second = (sumOfDOutputs * s).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "multScalar[" << s << "]"; return os; }
                 DataScalarType<ResultType<T>> s;
@@ -568,8 +683,12 @@ namespace panoramix {
         namespace {
 
             template <class T1, class T2>
-            using CWiseProductResultType = decltype(common::CWiseProd(std::declval<T1>(), std::declval<T2>()));
+            struct CWiseProductResult{
+                using type = decltype(common::CWiseProd(std::declval<ResultType<T1>>(), std::declval<ResultType<T2>>()));
+            };
 
+            template <class T1, class T2>
+            using CWiseProductResultType = typename CWiseProductResult<T1, T2>::type;
 
             // cwise product traits
             template <class T1, class T2>
@@ -634,12 +753,17 @@ namespace panoramix {
 
         template <class T>
         inline auto operator / (DataScalarType<T> a, const Expression<T> & b) -> decltype(a * pow(b, -1)) {
-            return a * pow(b, -1.0);
+            return a * pow(b, -1);
         }
 
         template <class T1, class T2>
         inline auto CWiseQuotient(const Expression<T1> & a, const Expression<T2> & b) -> decltype(cwiseProd(a, pow(b, -1))) {
             return cwiseProd(a, pow(b, -1));
+        }
+
+        template <class T1, class T2>
+        inline auto operator / (const Expression<T1> & a, const Expression<T2> & b) -> decltype(a * pow(b, -1)) {
+            return a * pow(b, -1);
         }
 
 
@@ -776,8 +900,8 @@ namespace panoramix {
             };
 
             template <class CondT, class IfT, class ElseT>
-            struct CWiseSelectIfRetConstTraits : public OpTraitsBase<CWiseSelectResultType<CondT, IfT, ElseT>, CondT, ElseT> {
-                inline explicit CWiseSelectIfRetConstTraits(IfT ifv) : ifval(ifv) {}
+            struct CWiseSelectWhenIfRetIsConstTraits : public OpTraitsBase<CWiseSelectResultType<CondT, IfT, ElseT>, CondT, ElseT> {
+                inline explicit CWiseSelectWhenIfRetIsConstTraits(IfT ifv) : ifval(ifv) {}
                 inline OutputType value(ResultType<CondT> cond, ResultType<ElseT> elseval) const {
                     return common::CWiseSelect(cond, ifval, elseval);
                 }
@@ -793,8 +917,8 @@ namespace panoramix {
             };
 
             template <class CondT, class IfT, class ElseT>
-            struct CWiseSelectElseRetConstTraits : public OpTraitsBase<CWiseSelectResultType<CondT, IfT, ElseT>, CondT, IfT> {
-                inline explicit CWiseSelectElseRetConstTraits(ElseT elsev) : elseval(elsev) {}
+            struct CWiseSelectWhenElseRetIsConstTraits : public OpTraitsBase<CWiseSelectResultType<CondT, IfT, ElseT>, CondT, IfT> {
+                inline explicit CWiseSelectWhenElseRetIsConstTraits(ElseT elsev) : elseval(elsev) {}
                 inline OutputType value(ResultType<CondT> cond, ResultType<IfT> ifval) const {
                     return common::CWiseSelect(cond, ifval, elseval);
                 }
@@ -819,14 +943,14 @@ namespace panoramix {
         template <class CondT, class ElseT>
         inline Expression<CWiseSelectResultType<CondT, DataScalarType<ElseT>, ElseT>> cwiseSelect(
             const Expression<CondT> & cond, DataScalarType<ElseT> ifval, const Expression<ElseT> & elseval) {
-            return ComposeExpression(CWiseSelectIfRetConstTraits<CondT, DataScalarType<ElseT>, ElseT>(
+            return ComposeExpression(CWiseSelectWhenIfRetIsConstTraits<CondT, DataScalarType<ElseT>, ElseT>(
                 static_cast<DataScalarType<ElseT>>(ifval)), cond, elseval);
         }
 
         template <class CondT, class IfT>
         inline Expression<CWiseSelectResultType<CondT, IfT, DataScalarType<IfT>>> cwiseSelect(
             const Expression<CondT> & cond, const Expression<IfT> & ifval, DataScalarType<IfT> elseval) {
-            return ComposeExpression(CWiseSelectElseRetConstTraits<CondT, IfT, DataScalarType<IfT>>(
+            return ComposeExpression(CWiseSelectWhenElseRetIsConstTraits<CondT, IfT, DataScalarType<IfT>>(
                 static_cast<DataScalarType<IfT>>(elseval)), cond, ifval);
         }
 
@@ -972,36 +1096,37 @@ namespace panoramix {
             return ComposeExpression(ArrayToMatrixTraits<ArrayT>(), a);
         }
 
+        // mapping
+        namespace {
+            template <class To, class From, class MappingFunT, class ReverseMappingFunT>
+            struct MappingTraits : public OpTraitsBase<To, From> {
+                static_assert(IsStorageType<To>::value && IsStorageType<From>::value, "To and From must both be storage types!");
+                inline explicit MappingTraits(MappingFunT mf, ReverseMappingFunT rmf, 
+                    const std::string & nm = "map", const std::string & rnm = "map") 
+                    : mappingFun(mf), reverseMappingFun(rmf), name(nm), reversedName(rnm) {}
+                inline To value(ResultType<From> from) const {
+                    return mappingFun(from);
+                }
+                inline void derivatives(
+                    Expression<To> to,
+                    DerivativeExpression<To> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<From> from) const {
+                    from.second = ComposeExpression(MappingTraits<From, To, ReverseMappingFunT, MappingFunT>
+                        (reverseMappingFun, mappingFun), sumOfDOutputs);
+                }
+                virtual ostream & toString(ostream & os) const { os << name; return os; }
+                MappingFunT mappingFun;
+                ReverseMappingFunT reverseMappingFun;
+                std::string name, reversedName;
+            };
+        }
 
-        //// conjugate twin operators
-        //namespace {
-        //    template <class To, class From, class FunForwardT, class FunBackwardT>
-        //    struct TwinTraits :
-        //        public OpTraitsBase<To, From> {
-        //        inline TwinTraits(FunForwardT funa, FunBackwardT funb) : forwardFun(funa), backwardFun(funb) {}
-        //        inline OutputType value(ResultType<From> in) const {
-        //            return forwardFun(in);
-        //        }
-        //        inline void derivatives(
-        //            Expression<OutputType> output,
-        //            DerivativeExpression<OutputType> sumOfDOutputs,
-        //            OriginalAndDerivativeExpression<InputTypes<0>> input) const {
-        //            input.second =
-        //                ComposeExpression(TwinTraits<From, To, FunBackwardT, FunForwardT>(backwardFun, forwardFun), 
-        //                sumOfDOutputs);
-        //        }
-        //        FunForwardT forwardFun;
-        //        FunBackwardT backwardFun;
-        //    };
-        //}
-
-
-        //template <class To, class From, class FunForwardT, class FunBackwardT>
-        //inline Expression<To> composeTwinOp(const Expression<From> & e, FunForwardT forwardFun, FunBackwardT backwardFun){
-        //    return ComposeExpression(TwinTraits<To, From, FunForwardT, FunBackwardT>(forwardFun, backwardFun), e);
-        //}
-
-       
+        template <class To, class From, class MappingFunT, class ReverseMappingFunT>
+        inline Expression<To> composeMappingFunction(const Expression<From> & from, 
+            MappingFunT mf, ReverseMappingFunT rmf, const std::string & nm = "map", const std::string & rnm = "map") {
+            return ComposeExpression(MappingTraits<To, From, MappingFunT, ReverseMappingFunT>(mf, rmf, nm, rnm), from);
+        }
+        
         
 
     }

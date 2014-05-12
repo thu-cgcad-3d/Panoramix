@@ -40,9 +40,11 @@ namespace panoramix {
             };
         }
         
+        // storage type
         template <class T>
         using DataStorageType = typename DataStorageStruct<T>::type;
 
+        // scalar type
         template <class T>
         using DataScalarType = typename DataScalarStruct<T>::type;
 
@@ -51,6 +53,17 @@ namespace panoramix {
 
         template <class T>
         struct IsScalarType : public std::is_same<DataStorageType<T>, DataScalarType<T>> {};
+
+        // role in product
+        enum class RoleInProduct {
+            Scalar,
+            Array,
+            Matrix
+        };
+
+#define SATISFIES_SCALAR(T) std::enable_if_t<DataTraits<T>::roleInProduct == RoleInProduct::Scalar, int> = 0
+#define SATISFIES_ARRAY(T) std::enable_if_t<DataTraits<T>::roleInProduct == RoleInProduct::Array, int> = 0
+#define SATISFIES_MATRIX(T) std::enable_if_t<DataTraits<T>::roleInProduct == RoleInProduct::Matrix, int> = 0
 
         namespace  {
             template<class T> struct RemoveAll { typedef T type; };

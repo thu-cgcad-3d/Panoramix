@@ -1,7 +1,7 @@
 #include "regions_net_visualize.hpp"
 
 namespace panoramix {
-    namespace vis {
+    namespace rec {
 
         using namespace core;
 

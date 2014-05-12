@@ -6,7 +6,7 @@
 #include <cassert>
  
 namespace panoramix {
-    namespace deriv {
+    namespace core {
 
         // somthing with restorable parameters
         template <class T>

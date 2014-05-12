@@ -4,7 +4,7 @@
 #include "views_net.hpp"
 
 namespace panoramix {
-    namespace core {
+    namespace rec {
 
         ViewsNet::Params::Params() 
             : camera(250.0), lineSegmentWeight(1.0), siftWeight(1.0),
@@ -97,7 +97,7 @@ namespace panoramix {
         void ViewsNet::buildRegionNet(VertHandle h) {
             auto & vd = _views.data(h);
             vd.regionNet = std::make_shared<RegionsNet>(vd.image);
-            vd.regionNet->buildNetAndComputeGeometricFeatures();
+            vd.regionNet->buildNetAndComputeGeometricFeatures(vd.lineSegments, vd.image.size());
             vd.regionNet->computeImageFeatures();
         }
 
@@ -1125,6 +1125,105 @@ namespace panoramix {
             }
 
 
+            // optimize lines using constraints based on expressions
+            void OptimizeLinesUsingExpressions(std::vector<Classified<Line3>> & lines, std::vector<ViewsNet::ConstraintData> & constraints,
+                const std::array<Vec3, 3> & vps) {
+                using namespace deriv;
+                using namespace Eigen;
+                ExpressionGraph graph;
+
+                // build equations
+                // get all line factors
+                MatrixX3d firstPointFactorValues = MatrixX3d::Zero(lines.size(), 3);
+                MatrixX3d secondPointFactorValues = MatrixX3d::Zero(lines.size(), 3);
+                auto firstPointFactors = graph.addRef(firstPointFactorValues, "firstPointFactors");
+                auto secondPointFactors = graph.addRef(secondPointFactorValues, "secondPointFactors");
+
+                for (size_t i = 0; i < lines.size(); i++){
+                    auto & line = lines[i];
+                    if (line.claz == -1)
+                        continue;
+                    auto vp = vps[line.claz];
+                    auto p1 = line.component.first;
+                    auto p2 = line.component.second;
+                    if (vp.dot(p2 - p1) < 0){
+                        vp = -vp; // make p1->p2 and vp direction consistent
+                    }
+                    firstPointFactorValues.row(i) = CVMatToEigenMat(p1 / norm(p1));
+                    // use the Law of sines
+                    double innerAngleOfLine = AngleBetweenDirections(p1, p2);
+                    double innerAngleAtFirstPoint = AngleBetweenDirections(vp, -p1); // corresponding to second point factor
+                    double innerAngleAtSecondPoint = AngleBetweenDirections(-vp, -p2); // corresponding to first point factor
+                    double innerAngleSum = innerAngleOfLine + innerAngleAtFirstPoint + innerAngleAtSecondPoint;
+                    assert(FuzzyEquals(innerAngleSum, M_PI, 1e-1));
+                    secondPointFactorValues.row(i) = CVMatToEigenMat(p2 / norm(p2) *
+                        sin(innerAngleAtFirstPoint) / sin(innerAngleAtSecondPoint));
+                }
+
+
+                VectorXd lambdaValues = VectorXd::Ones(lines.size());               
+                auto lambdas = graph.addRef(lambdaValues, "lambdas").assign<VectorXd>();
+                
+                // broad cast for multiplication
+                auto broadcast3 = [](const VectorXd & v) {
+                    MatrixX3d mat;
+                    mat << v, v, v;
+                    return mat;
+                };
+                auto broadcast3Back = [](const MatrixX3d & mat) {
+                    VectorXd v = mat.rowwise().sum();
+                    return v;
+                };
+
+                auto firstPoints = cwiseProd(
+                    composeMappingFunction<MatrixX3d, VectorXd>(lambdas.assign<VectorXd>(), 
+                        broadcast3, broadcast3Back, "broadcast3", "broadcast3back"), 
+                    firstPointFactors).eval();
+                auto secondPoints = cwiseProd(
+                    composeMappingFunction<MatrixX3d, VectorXd>(lambdas.assign<VectorXd>(),
+                        broadcast3, broadcast3Back, "broadcast3", "broadcast3back"),
+                    secondPointFactors).eval();
+
+                // TODO
+
+                // select lines for constrained lines
+                // lines1
+                //auto selectLambdasOfConstrainedLines1 = [&constraints](const MatrixX3d & lmds) {
+                //    MatrixX3d slmds = MatrixX3d::Zero(constraints.size(), 3);
+                //    for (int i = 0; i < constraints.size(); i++) {
+                //        slmds.row(i) = lmds.row(constraints[i].mergedSpatialLineSegmentIds[0]);
+                //    }
+                //    return slmds;
+                //};
+                //auto selectLambdasOfConstrainedLines1Back = [&constraints, &lines](const MatrixX3d & slmds) {
+                //    VectorXd lmds = VectorXd::Zero(lines.size());
+                //    for (int i = 0; i < constraints.size(); i++) {
+                //        lmds(constraints[i].mergedSpatialLineSegmentIds[0]) += slmds(i);
+                //    }
+                //    return lmds;
+                //};
+
+                //// lines2
+                //auto selectLambdasOfConstrainedLines2 = [&constraints](const MatrixX3d & lmds) {
+                //    VectorXd slmds = VectorXd::Zero(constraints.size());
+                //    for (int i = 0; i < constraints.size(); i++) {
+                //        slmds(i) = lmds(constraints[i].mergedSpatialLineSegmentIds[1]);
+                //    }
+                //    return slmds;
+                //};
+                //auto selectLambdasOfConstrainedLines2Back = [&constraints, &lines](const MatrixX3d & slmds) {
+                //    VectorXd lmds = VectorXd::Zero(lines.size());
+                //    for (int i = 0; i < constraints.size(); i++) {
+                //        lmds(constraints[i].mergedSpatialLineSegmentIds[1]) += slmds(i);
+                //    }
+                //    return lmds;
+                //};
+
+                //auto lambdas1 = composeMappingFunction<VectorXd, VectorXd>(lambdas,
+                //    selectLambdasOfConstrainedLines1, selectLambdasOfConstrainedLines1Back);
+                //auto lambdas2 = composeMappingFunction<VectorXd, VectorXd>(lambdas,
+                //    selectLambdasOfConstrainedLines2, selectLambdasOfConstrainedLines2Back);
+            }
         }
 
 
@@ -1199,6 +1298,9 @@ namespace panoramix {
             // optimize lines
             OptimizeLines(_globalData.mergedSpatialLineSegments, 
                 _globalData.constraints, _globalData.vanishingPoints);
+            ///// TODO
+            OptimizeLinesUsingExpressions(_globalData.mergedSpatialLineSegments,
+                _globalData.constraints, _globalData.vanishingPoints);
 
             // find necessary constraints using MST with slackValues
             std::vector<size_t> lineIds(_globalData.mergedSpatialLineSegments.size()), 
@@ -1211,9 +1313,13 @@ namespace panoramix {
             MSTconsIds.reserve(_globalData.constraints.size());
             MinimumSpanningTree(lineIds.begin(), lineIds.end(), consIds.begin(), consIds.end(),
                 std::back_inserter(MSTconsIds),
-                [this](size_t e){return std::make_pair(_globalData.constraints[e].mergedSpatialLineSegmentIds[0], 
-                    _globalData.constraints[e].mergedSpatialLineSegmentIds[1]); },
-                [this](size_t e1, size_t e2){return _globalData.constraints[e1].slackValue < _globalData.constraints[e2].slackValue; }
+                [this](size_t e){
+                return std::make_pair(_globalData.constraints[e].mergedSpatialLineSegmentIds[0], 
+                    _globalData.constraints[e].mergedSpatialLineSegmentIds[1]); 
+            },
+                [this](size_t e1, size_t e2){
+                return _globalData.constraints[e1].slackValue < _globalData.constraints[e2].slackValue; 
+            }
             );
             std::vector<ConstraintData> MSTconstraints(MSTconsIds.size());
             for (size_t i = 0; i < MSTconsIds.size(); i++){

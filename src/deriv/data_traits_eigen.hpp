@@ -68,10 +68,14 @@ namespace panoramix {
         };
 
         template <class T>
-        struct DataTraits<T, EigenArrayTag> : public DataTraits<T, EigenDenseTag>{};
+        struct DataTraits<T, EigenArrayTag> : public DataTraits<T, EigenDenseTag>{
+            static const RoleInProduct roleInProduct = RoleInProduct::Array;
+        };
 
         template <class T>
-        struct DataTraits<T, EigenMatrixTag> : public DataTraits<T, EigenDenseTag>{};
+        struct DataTraits<T, EigenMatrixTag> : public DataTraits<T, EigenDenseTag>{
+            static const RoleInProduct roleInProduct = RoleInProduct::Matrix;
+        };
 
 
         namespace common {
@@ -154,6 +158,7 @@ namespace panoramix {
                 return d.sum();
             }
 
+
         }
 
 
@@ -163,7 +168,21 @@ namespace panoramix {
             template <class D>
             auto InverseMatrix(const Eigen::MatrixBase<D> & m) -> decltype(m.inverse()) {
                 return m.inverse();
-            }        
+            }   
+
+            // dot product
+            template <class D1, class D2>
+            auto DotProduct(const Eigen::MatrixBase<D1> & a, const Eigen::MatrixBase<D2> & b)
+                -> decltype(a.dot(b)) {
+                return a.dot(b);
+            }
+
+            // cross3 prodcut
+            template <class D1, class D2>
+            auto Cross3Product(const Eigen::MatrixBase<D1> & a, const Eigen::MatrixBase<D2> & b)
+                -> decltype(a.cross3(b)) {
+                return a.cross3(b);
+            }
 
         }
 

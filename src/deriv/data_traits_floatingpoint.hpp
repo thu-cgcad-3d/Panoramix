@@ -16,10 +16,10 @@ namespace panoramix {
             using StorageType = std::decay_t<T>;
             using ScalarType = std::decay_t<T>;
 
+            static const RoleInProduct roleInProduct = RoleInProduct::Scalar;
             static const bool shouldBeCached = true;
 
             static StorageType one() { return 1; }
-
             static StorageType zero() { return 0; }
 
         };

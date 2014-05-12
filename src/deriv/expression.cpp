@@ -5,6 +5,8 @@
 namespace panoramix {
     namespace deriv {
 
+        using namespace core;
+
         bool ExpressionGraph::isForwardConnection(CHandle h) const {
             auto & topo = _g.topo(h);
             return topo.from().id < topo.to().id;
@@ -35,7 +37,7 @@ namespace panoramix {
             _g.data(h)->graph = this;
             _g.data(h)->self = h;
             for (auto & ih : inputs){
-                _g.addEdge(ih, h, Dummy(), Dummy(), false); // do not merge duplicate edges
+                _g.addEdge(ih, h, core::Dummy(), core::Dummy(), false); // do not merge duplicate edges
             }
             return h;
         }

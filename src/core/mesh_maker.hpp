@@ -6,7 +6,7 @@
 #include "mesh.hpp"
  
 namespace panoramix {
-    namespace deriv {
+    namespace core {
 
         template <class VertDataT, class InputValueT>
         struct Vert3MakerDefault {

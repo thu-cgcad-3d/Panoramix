@@ -7,7 +7,7 @@
 #include "misc.hpp"
 
 namespace panoramix {
-    namespace deriv {
+    namespace core {
         
         struct Dummy {};
         

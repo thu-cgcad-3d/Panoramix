@@ -1,6 +1,6 @@
-#include "../src/core/regions_net.hpp"
+#include "../src/rec/regions_net.hpp"
 #include "../src/vis/visualize2d.hpp"
-#include "../src/vis/regions_net_visualize.hpp"
+#include "../src/rec/regions_net_visualize.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
@@ -17,7 +17,7 @@ TEST(RegionsNet, RegionsNet) {
     for (int i = 0; i < 4; i++) {
         std::string name = ProjectTestDataDirStr + "/" + "sampled_" + std::to_string(i) + ".png";
         cv::Mat im = cv::imread(name);
-        core::RegionsNet regNet(im);
+        rec::RegionsNet regNet(im);
         regNet.buildNetAndComputeGeometricFeatures();
         regNet.computeImageFeatures();
         vis::Visualizer2D()

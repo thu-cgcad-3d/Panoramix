@@ -1,8 +1,8 @@
 #include "../src/core/mesh_maker.hpp"
 #include "../src/core/utilities.hpp"
-#include "../src/core/views_net.hpp"
-#include "../src/vis/views_net_visualize.hpp"
-#include "../src/vis/regions_net_visualize.hpp"
+#include "../src/rec/views_net.hpp"
+#include "../src/rec/views_net_visualize.hpp"
+#include "../src/rec/regions_net_visualize.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
@@ -39,12 +39,12 @@ TEST(ViewsNet, FixedCamera) {
 
 
     /// insert into views net
-    core::ViewsNet::Params params;
+    rec::ViewsNet::Params params;
     params.mjWeightT = 2.0;
     params.intersectionConstraintLineDistanceAngleThreshold = 0.05;
     params.incidenceConstraintLineDistanceAngleThreshold = 0.2;
     params.mergeLineDistanceAngleThreshold = 0.05;
-    core::ViewsNet net(params);
+    rec::ViewsNet net(params);
 
     for (int i = 0; i < cams.size(); i++){
         std::cout << "photo: " << i << std::endl;
@@ -71,7 +71,7 @@ TEST(ViewsNet, FixedCamera) {
         net.updateConnections(viewHandle);
         net.findMatchesToConnectedViews(viewHandle);
 
-        net.calibrateCamera(viewHandle);
+        //net.calibrateCamera(viewHandle);
         net.calibrateAllCameras();
 
         if (net.isTooCloseToAnyExistingView(viewHandle).isValid()){

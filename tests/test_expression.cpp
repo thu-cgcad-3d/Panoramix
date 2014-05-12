@@ -625,10 +625,10 @@ TEST(Expression, MatrixOp3){
         }
     }
 
-    { 
+    {
         // matrix inverse
         auto xinv = inverseMatrix(x);
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 10; i++) {
             int a = std::rand() % 100 + 1;
             xv.setRandom(a, a);
             auto dxinv = std::get<0>(sumElements(xinv).derivatives(x));
@@ -641,25 +641,63 @@ TEST(Expression, MatrixOp3){
 }
 
 
+TEST(Expression, VectorOp) {
 
-TEST(Expression, CVOp) {
+    ExpressionGraph graph;
+    VectorXd xv, yv;
+    auto x = graph.addRef(xv, "x");
+    auto y = graph.addRef(yv, "y");
 
-    //ExpressionGraph graph;
+    {
+        // dot product
+        auto d = dotProd(x, y);
+        auto dd = d.derivatives(x, y);
+        auto dddx = std::get<0>(dd);
+        auto dddy = std::get<1>(dd);
+        for (int i = 0; i < 10; i++){
+            int a = std::rand() % 100 + 1;
+            xv.setRandom(a);
+            yv.setRandom(a);
+            EXPECT_NEAR(xv.dot(yv), d.execute(), 0.01);
+            EXPECT_MATRIX_EQ(xv, dddy.execute());
+            EXPECT_MATRIX_EQ(yv, dddx.execute());
+        }
+    }
 
-    //cv::Vec3d xv(1, 2, 3);
-    //cv::Matx33d yv = cv::Matx33d::eye();
-    //auto x = graph.addRef(xv, "x");
-    //auto y = graph.addRef(yv, "y");
+    {
+        // cross product
+        auto c = makeCross3ProductMatrix<Matrix3d>(x.assign<Vector3d>()) * y.assign<Vector3d>();
+        std::cout << c << std::endl;
+        auto dc = c.sum().derivatives(x, y);
+        auto dcdx = std::get<0>(dc);
+        auto dcdy = std::get<1>(dc);
+        for (int i = 0; i < 10; i++){
+            xv.setRandom(3);
+            yv.setRandom(3);
+            EXPECT_MATRIX_EQ(x.assign<Vector3d>().execute().cross(y.assign<Vector3d>().execute()), 
+                c.execute());
+            dcdx.execute();
+            dcdy.execute();
+        }
+    }
 
-    //auto xx = cvSumElements(y * cwiseProd(x, x) + y * cvInverseMatrix(y) * x * 5);
-    //std::cout << xx << std::endl;
-    //std::cout << xx.execute() << std::endl;
-
-    //auto g = std::get<0>(xx.derivatives(x));
-    //std::cout << g << std::endl;
+    {
+        // norm
+        auto n = norm(x);
+        auto nx = x / n;
+        auto dn = std::get<0>(n.derivatives(x));
+        auto dnx = std::get<0>(nx.sum().derivatives(x));
+        for (int i = 0; i < 10; i++){
+            int a = std::rand() % 100 + 1;
+            xv.setRandom(a);
+            EXPECT_NEAR(xv.norm(), n.execute(), 0.001);
+            EXPECT_MATRIX_EQ(xv.normalized(), nx.execute());
+            EXPECT_MATRIX_EQ(xv.normalized(), dn.execute());
+            dnx.execute();
+        }
+    }
 
 }
-
 
 
 

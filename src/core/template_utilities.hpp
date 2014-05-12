@@ -4,7 +4,7 @@
 #include <tuple>
 
 namespace panoramix {
-    namespace deriv {
+    namespace core {
 
         
         // a templated integer sequence

@@ -10,8 +10,8 @@
 #include <set>
 #include <initializer_list>
 
-#include "template_utilities.hpp"
-#include "mesh.hpp"
+#include "../core/template_utilities.hpp"
+#include "../core/mesh.hpp"
 
 //#include "data_traits.hpp"
 #include "data_traits_definitions.hpp"
@@ -20,9 +20,11 @@ namespace panoramix {
     namespace deriv {
 
         using std::ostream;
+        using core::Sequence;
+        using core::SequenceGenerator;
 
         struct Op;
-        using GraphType = Mesh<std::shared_ptr<Op>>;
+        using GraphType = core::Mesh<std::shared_ptr<Op>>;
         using EHandle = GraphType::VertHandle;
         using CHandle = GraphType::HalfHandle;
 
@@ -424,14 +426,14 @@ namespace panoramix {
             inline bool isBackwardConnection(CHandle h) const { return !isForwardConnection(h); }
 
             // get all forward connections to retrieve outputed expressions
-            inline ConstConditionalContainerWrapper<HandleArray<HalfTopo>, IsForwardConnectionPred> 
+            inline core::ConstConditionalContainerWrapper<core::HandleArray<core::HalfTopo>, IsForwardConnectionPred> 
                 forwardConnections(EHandle h) const  {
-                return MakeConditionalContainer(&(_g.topo(h).halfedges), IsForwardConnectionPred(*this));
+                return core::MakeConditionalContainer(&(_g.topo(h).halfedges), IsForwardConnectionPred(*this));
             }
             // get all backward connections to retrieve inputed expressions
-            inline ConstConditionalContainerWrapper<HandleArray<HalfTopo>, IsBackwardConnectionPred>
+            inline core::ConstConditionalContainerWrapper<core::HandleArray<core::HalfTopo>, IsBackwardConnectionPred>
                 backwardConnections(EHandle h) const  {
-                return MakeConditionalContainer(&(_g.topo(h).halfedges), IsBackwardConnectionPred(*this));
+                return core::MakeConditionalContainer(&(_g.topo(h).halfedges), IsBackwardConnectionPred(*this));
             }
 
             // add new node

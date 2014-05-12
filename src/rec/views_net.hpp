@@ -1,15 +1,15 @@
 #ifndef PANORAMIX_CORE_VIEWS_NET_HPP
 #define PANORAMIX_CORE_VIEWS_NET_HPP
 
-#include "basic_types.hpp"
-#include "feature.hpp"
-#include "utilities.hpp"
+#include "../core/basic_types.hpp"
+#include "../core/feature.hpp"
+#include "../core/utilities.hpp"
 #include "regions_net.hpp"
 
 namespace panoramix {
-    namespace core { 
+    namespace rec { 
 
-        using deriv::Mesh;
+        using namespace core;
 
         // views net
         class ViewsNet {
@@ -64,6 +64,7 @@ namespace panoramix {
             void buildRTrees(VertHandle h);
 
             // segment view image and build net of regions for a single view
+            // after computeFeatures(h)
             void buildRegionNet(VertHandle h);
 
             // connect this view to neighbor views who may overlap with h

@@ -1,32 +1,34 @@
 #include "regions_net.hpp"
 
 namespace panoramix {
-    namespace core {
+    namespace rec {
 
-        RegionsNet::RegionsNet(const Image & image, const Params & params) : _image(image), _params(params){}
+        RegionsNet::RegionsNet(const Image & image, const Params & params) 
+            : _image(image), _params(params), _regionsRTree(VertDataBoundingBoxFunctor(_regions)){}
 
         namespace {
 
             void ComputeRegionProperties(const Image & regionMask, const Image & image,
-                Vec2 & center, double & area) {
-
+                Vec2 & center, double & area, Box2 & boundingBox) {
                 assert(regionMask.depth() == CV_8U && regionMask.channels() == 1);
                 center = { 0, 0 };
                 area = 0;
+                boundingBox = Box2();
                 for (auto i = regionMask.begin<uint8_t>(); i != regionMask.end<uint8_t>(); ++i){
                     if (*i) { // masked
                         area += 1.0;
                         PixelLoc p = i.pos();
+                        boundingBox |= BoundingBox(p);
                         center += Vec2(p.x, p.y);
                     }
                 }
                 center /= area;
-
             }
 
         }
 
-        void RegionsNet::buildNetAndComputeGeometricFeatures() {
+        void RegionsNet::buildNetAndComputeGeometricFeatures(const std::vector<Classified<Line2>> & classifiedLines,
+            const Size & imageSizeContainingLines) {
             _segmentedRegions = _params.segmenter(_image);
             int regionNum = static_cast<int>(MinMaxValOfImage(_segmentedRegions).second) + 1;
             _regions.internalVertices().reserve(regionNum);
@@ -34,9 +36,22 @@ namespace panoramix {
                 VertData vd;
                 vd.borderLength = 0.0;
                 vd.regionMask = (_segmentedRegions == i);
-                ComputeRegionProperties(vd.regionMask, _image, vd.center, vd.area);
-                _regions.addVertex(vd);
+                ComputeRegionProperties(vd.regionMask, _image, vd.center, vd.area, vd.boundingBox);
+                auto vh = _regions.addVertex(vd);
+                _regionsRTree.insert(vh);
             }
+
+            // compute line class scores for regions along the lines
+            static const double sampleLen = 3;
+            for (auto & l : classifiedLines) {
+                auto & line = l.component;
+                int claz = l.claz;
+                // sample on line
+                double len = line.length();
+                int num = len / sampleLen;
+                // TODO
+            }
+
             // find connections
             int width = _segmentedRegions.cols;
             int height = _segmentedRegions.rows;

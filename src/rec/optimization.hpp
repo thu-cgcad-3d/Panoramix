@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_OPTIMIZATION_HPP
-#define PANORAMIX_CORE_OPTIMIZATION_HPP
+#ifndef PANORAMIX_REC_OPTIMIZATION_HPP
+#define PANORAMIX_REC_OPTIMIZATION_HPP
  
 #include <Eigen/Core>
 #include <Eigen/Dense>
@@ -12,12 +12,12 @@
 
 #include "../deriv/derivative.hpp"
 
-#include "basic_types.hpp"
-#include "utilities.hpp"
+#include "../core/basic_types.hpp"
+#include "../core/utilities.hpp"
 
 
 namespace panoramix {
-    namespace core {
+    namespace rec {
 
         struct sinfo {
             char * text;

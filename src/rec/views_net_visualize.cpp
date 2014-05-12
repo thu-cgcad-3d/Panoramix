@@ -3,7 +3,7 @@
 #include "../core/utilities.hpp"
 
 namespace panoramix {
-    namespace vis {
+    namespace rec {
 
         using namespace core;
 
@@ -21,7 +21,7 @@ namespace panoramix {
             return viz;
         }
 
-        Visualizer3D operator << (Visualizer3D viz, const core::ViewsNet::GlobalData & netgb) {
+        Visualizer3D operator << (Visualizer3D viz, const ViewsNet::GlobalData & netgb) {
             std::vector<Line3> consLines;
             std::vector<Point3> consPoints;
             consLines.reserve(netgb.constraints.size());
@@ -29,7 +29,7 @@ namespace panoramix {
             for (auto & cons : netgb.refinedConstraints){
                 auto & line1 = netgb.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[0]].component;
                 auto & line2 = netgb.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[1]].component;
-                auto pp = core::DistanceBetweenTwoLines(line1, line2);
+                auto pp = DistanceBetweenTwoLines(line1, line2);
                 consLines.push_back(Line3(pp.second.first.position, pp.second.second.position));
                 consPoints.push_back(cons.position);
             }
