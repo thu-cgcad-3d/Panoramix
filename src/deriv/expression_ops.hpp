@@ -195,10 +195,27 @@ namespace panoramix {
         // fill with scalar
         namespace  {
             template <class T>
-            struct FillWithScalarTraits : public OpTraitsBase<DataStorageType<ResultType<T>>, T> {
+            struct FillWithScalarTraits : public OpTraitsBase<DataStorageType<T>, T, DataScalarType<T>> {
+                using Scalar = DataScalarType<T>;
+                inline OutputType value(ResultType<T> t, ResultType<Scalar> s) const {
+                    return common::FillWithScalar(t, s);
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> t,
+                    OriginalAndDerivativeExpression<Scalar> s) const {
+                    t.second = DerivativeExpression<T>(); // disconnected
+                    s.second = sumOfDOutputs.sum().eval();
+                }
+                virtual ostream & toString(ostream & os) const { os << "fillWitScalar"; return os; }
+            };
+
+            template <class T>
+            struct FillWithScalarWhenScalarIsConstTraits : public OpTraitsBase<DataStorageType<T>, T> {
                 //static_assert(Fun_fillWithScalar_DefinedInDataTraits<T>::value, "fillWithScalar not defined!");
-                using Scalar = DataScalarType<ResultType<T>>;
-                inline explicit FillWithScalarTraits(const Scalar & ss) : s(ss) {}
+                using Scalar = DataScalarType<T>;
+                inline explicit FillWithScalarWhenScalarIsConstTraits(const Scalar & ss) : s(ss) {}
                 inline OutputType value(ResultType<T> t) const {
                     //return DataTraits<ResultType<T>>::fillWithScalar(std::move(t), s);
                     return common::FillWithScalar(t, s);
@@ -215,8 +232,13 @@ namespace panoramix {
         }
 
         template <class T>
-        inline Expression<DataStorageType<ResultType<T>>> fillWithScalar(Expression<T> t, DataScalarType<ResultType<T>> s) {
-            return ComposeExpression(FillWithScalarTraits<T>(s), t);
+        inline Expression<DataStorageType<T>> fillWithScalar(Expression<T> t, Expression<DataScalarType<T>> & s) {
+            return ComposeExpression(FillWithScalarTraits<T>(), t, s);
+        }
+
+        template <class T>
+        inline Expression<DataStorageType<T>> fillWithScalar(Expression<T> t, DataScalarType<T> s) {
+            return ComposeExpression(FillWithScalarWhenScalarIsConstTraits<T>(s), t);
         }
 
 
@@ -272,7 +294,8 @@ namespace panoramix {
         }
 
         template <class ...Ts>
-        inline Expression<SumResultType<Ts...>> generalSum(Expression<Ts>... inputs) {
+        inline auto generalSum(Expression<Ts>... inputs) 
+            -> decltype(ComposeExpression(SumTraits<Ts...>(), inputs...)) {
             return ComposeExpression(SumTraits<Ts...>(), inputs...);
         }
 
@@ -358,17 +381,12 @@ namespace panoramix {
 
         // transpose
         namespace  {
-            template <class T>
-            struct TransposeResult {
-                using type = DataStorageType<decltype(common::GeneralTranspose(std::declval<ResultType<T>>()))>;
-            };
-            template <class T>
-            using TransposeResultType = typename TransposeResult<T>::type;
 
             template <class T>
-            struct TransposeTraits : public OpTraitsBase<TransposeResultType<T>, T> {
+            struct TransposeTraits 
+                : public OpTraitsBase<decltype(common::Eval(common::GeneralTranspose(std::declval<ResultType<T>>()))), T> {
                 inline OutputType value(ResultType<T> from) const {
-                    return common::GeneralTranspose(from);
+                    return common::Eval(common::GeneralTranspose(from));
                 }
                 inline void derivatives(
                     Expression<OutputType> output,
@@ -381,7 +399,7 @@ namespace panoramix {
         }
 
         template <class T>
-        Expression<TransposeResultType<T>> transpose(const Expression<T> & e) {
+        inline auto transpose(const Expression<T> & e) -> decltype(ComposeExpression(TransposeTraits<T>(), e)) {
             return ComposeExpression(TransposeTraits<T>(), e);
         }
 
@@ -394,7 +412,7 @@ namespace panoramix {
             // mat * mat
             template <class T1, class T2>
             struct MatrixMatrixProductTraits 
-                : public OpTraitsBase<DataStorageType<decltype(std::declval<ResultType<T1>>() * std::declval<ResultType<T2>>())>, T1, T2> {
+                : public OpTraitsBase<decltype(common::Eval(std::declval<ResultType<T1>>() * std::declval<ResultType<T2>>())), T1, T2> {
                 static_assert(DataTraits<T1>::roleInProduct == RoleInProduct::Matrix, "T1 must be a matrix");
                 static_assert(DataTraits<T2>::roleInProduct == RoleInProduct::Matrix, "T2 must be a matrix");
                 inline OutputType value(ResultType<T1> a, ResultType<T2> b) const {
@@ -682,17 +700,10 @@ namespace panoramix {
         // cwise product
         namespace {
 
-            template <class T1, class T2>
-            struct CWiseProductResult{
-                using type = decltype(common::CWiseProd(std::declval<ResultType<T1>>(), std::declval<ResultType<T2>>()));
-            };
-
-            template <class T1, class T2>
-            using CWiseProductResultType = typename CWiseProductResult<T1, T2>::type;
-
             // cwise product traits
             template <class T1, class T2>
-            struct CWiseProductTraits : public OpTraitsBase<CWiseProductResultType<T1, T2>, T1, T2> {
+            struct CWiseProductTraits 
+                : public OpTraitsBase<decltype(common::CWiseProd(std::declval<ResultType<T1>>(), std::declval<ResultType<T2>>())), T1, T2> {
                 inline OutputType value(ResultType<T1> a, ResultType<T2> b) const {
                     return common::CWiseProd(a, b);
                 }
@@ -710,7 +721,7 @@ namespace panoramix {
         }
 
         template <class T1, class T2>
-        inline Expression<CWiseProductResultType<T1, T2>> cwiseProd(const Expression<T1> & a, const Expression<T2> & b) {
+        inline auto cwiseProd(const Expression<T1> & a, const Expression<T2> & b) -> decltype(ComposeExpression(CWiseProductTraits<T1, T2>(), a, b)) {
             return ComposeExpression(CWiseProductTraits<T1, T2>(), a, b);
         }
 
@@ -722,15 +733,8 @@ namespace panoramix {
             using std::pow;
 
             template <class T>
-            struct PowResult {
-                using type = decltype(pow(std::declval<ResultType<T>>(), 
-                    std::declval<DataScalarType<T>>()));
-            };
-            template <class T>
-            using PowResultType = typename PowResult<T>::type;
-
-            template <class T>
-            struct PowTraits : public OpTraitsBase<PowResultType<T>, T> {
+            struct PowTraits
+                : public OpTraitsBase<decltype(pow(std::declval<ResultType<T>>(), std::declval<DataScalarType<T>>())), T> {
                 inline PowTraits(DataScalarType<T> e) : exponent(e) {}
                 inline OutputType value(ResultType<T> input) const {
                     return pow(input, exponent);
@@ -747,7 +751,7 @@ namespace panoramix {
         }
 
         template <class T>
-        inline Expression<PowResultType<T>> pow(const Expression<T> & a, DataScalarType<T> exponent) {
+        inline auto pow(const Expression<T> & a, DataScalarType<T> exponent) -> decltype(ComposeExpression(PowTraits<T>(exponent), a)) {
             return ComposeExpression(PowTraits<T>(exponent), a);
         }
 
@@ -772,14 +776,7 @@ namespace panoramix {
             using std::exp;
 
             template <class T>
-            struct ExpResult {
-                using type = decltype(exp(std::declval<ResultType<T>>()));
-            };
-            template <class T>
-            using ExpResultType = typename ExpResult<T>::type;
-
-            template <class T>
-            struct ExpTraits : public OpTraitsBase<ExpResultType<T>, T> {
+            struct ExpTraits : public OpTraitsBase<decltype(exp(std::declval<ResultType<T>>())), T> {
                 inline OutputType value(ResultType<T> input) const {
                     return exp(input);
                 }
@@ -795,7 +792,7 @@ namespace panoramix {
         }
 
         template <class T>
-        inline Expression<ExpResultType<T>> exp(const Expression<T> & a) {
+        inline auto exp(const Expression<T> & a) -> decltype(ComposeExpression(ExpTraits<T>(), a)){
             return ComposeExpression(ExpTraits<T>(), a);
         }
 
@@ -803,16 +800,9 @@ namespace panoramix {
         // log
         namespace {            
             using std::log;
-            
-            template <class T>
-            struct LogResult {
-                using type = decltype(log(std::declval<ResultType<T>>()));
-            };
-            template <class T>
-            using LogResultType = typename LogResult<T>::type;
 
             template <class T>
-            struct LogTraits : public OpTraitsBase<LogResultType<T>, T> {
+            struct LogTraits : public OpTraitsBase<decltype(log(std::declval<ResultType<T>>())), T> {
                 inline OutputType value(ResultType<T> input) const {
                     return log(input);
                 }
@@ -828,29 +818,17 @@ namespace panoramix {
         }
 
         template <class T>
-        inline Expression<LogResultType<T>> log(const Expression<T> & a) {
+        inline auto log(const Expression<T> & a) -> decltype(ComposeExpression(LogTraits<T>(), a)) {
             return ComposeExpression(LogTraits<T>(), a);
         }
 
 
         // sigmoid
         namespace {
-            
-            using std::exp;
-            
             template <class T>
-            struct SigmoidResult {
-                using ScalarType = DataScalarType<T>;
-                using type = decltype(std::declval<ScalarType>() / 
-                    (std::declval<ScalarType>() + exp(-std::declval<ResultType<T>>())));
-            };
-            template <class T>
-            using SigmoidResultType = typename SigmoidResult<T>::type;
-
-            template <class T>
-            struct SigmoidTraits : public OpTraitsBase<SigmoidResultType<T>, T> {
+            struct SigmoidTraits : public OpTraitsBase<decltype(common::Sigmoid(std::declval<ResultType<T>>())), T> {
                 inline OutputType value(ResultType<T> input) const {
-                    return 1.0 / (1.0 + exp(-input));
+                    return common::Sigmoid(input);
                 }
                 inline void derivatives(
                     Expression<OutputType> output,
@@ -860,30 +838,48 @@ namespace panoramix {
                 }
                 virtual ostream & toString(ostream & os) const { os << "sigmoid"; return os; }
             };
-
         }
 
         template <class T>
-        inline Expression<SigmoidResultType<T>> sigmoid(const Expression<T> & e) {
+        inline auto sigmoid(const Expression<T> & e) -> decltype(ComposeExpression(SigmoidTraits<T>(), e)) {
             return ComposeExpression(SigmoidTraits<T>(), e);
         }
+
+        // tanh
+        namespace {
+            using std::tanh;
+            template <class T>
+            struct TanhTraits : public OpTraitsBase<decltype(tanh(std::declval<ResultType<T>>())), T> {
+                inline OutputType value(ResultType<T> input) const {
+                    return tanh(input);
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> input) const { // dtanh(x) = (1-tanh(x))^2
+                    input.second = cwiseProd(cwiseProd(1.0 - output, 1.0 - output), sumOfDOutputs).eval();
+                }
+                virtual ostream & toString(ostream & os) const { os << "tanh"; return os; }
+            };
+        }
+
+        template <class T>
+        inline auto tanh(const Expression<T> & e) -> decltype(ComposeExpression(TanhTraits<T>(), e)) {
+            return ComposeExpression(TanhTraits<T>(), e);
+        }
+
 
         
         // cwiseSelect
         namespace {
 
             template <class CondT, class IfT, class ElseT>
-            struct CWiseSelectResult {
-                using type = decltype(common::CWiseSelect(
-                    std::declval<ResultType<CondT>>(), 
-                    std::declval<ResultType<IfT>>(), 
-                    std::declval<ResultType<ElseT>>()));
-            };
-            template <class CondT, class IfT, class ElseT>
-            using CWiseSelectResultType = typename CWiseSelectResult<CondT, IfT, ElseT>::type;
+            struct CWiseSelectTraitsWithoutConsts 
+                : public OpTraitsBase<decltype(common::CWiseSelect(
+                std::declval<ResultType<CondT>>(),
+                std::declval<ResultType<IfT>>(),
+                std::declval<ResultType<ElseT>>())), CondT, IfT, ElseT> {
 
-            template <class CondT, class IfT, class ElseT>
-            struct CWiseSelectTraits : public OpTraitsBase<CWiseSelectResultType<CondT, IfT, ElseT>, CondT, IfT, ElseT> {
                 inline OutputType value(ResultType<CondT> cond, ResultType<IfT> ifval, ResultType<ElseT> elseval) const {
                     return common::CWiseSelect(cond, ifval, elseval);
                 }
@@ -893,15 +889,20 @@ namespace panoramix {
                     OriginalAndDerivativeExpression<CondT> cond,
                     OriginalAndDerivativeExpression<IfT> ifval,
                     OriginalAndDerivativeExpression<ElseT> elseval) const {
-                    ifval.second = cwiseSelect(cond.first, sumOfDOutputs, 0).eval();
-                    elseval.second = cwiseSelect(cond.first, 0, sumOfDOutputs).eval();
+                    ifval.second = cwiseSelect(cond.first, sumOfDOutputs, 0.0).eval();
+                    elseval.second = cwiseSelect(cond.first, 0.0, sumOfDOutputs).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "cwiseSelect"; return os; }
             };
 
             template <class CondT, class IfT, class ElseT>
-            struct CWiseSelectWhenIfRetIsConstTraits : public OpTraitsBase<CWiseSelectResultType<CondT, IfT, ElseT>, CondT, ElseT> {
-                inline explicit CWiseSelectWhenIfRetIsConstTraits(IfT ifv) : ifval(ifv) {}
+            struct CWiseSelectWhenIfRetIsConstTraits 
+                : public OpTraitsBase<decltype(common::CWiseSelect(
+                std::declval<ResultType<CondT>>(),
+                std::declval<ResultType<DataStorageType<IfT>>>(),
+                std::declval<ResultType<ElseT>>())), CondT, ElseT> {
+
+                inline explicit CWiseSelectWhenIfRetIsConstTraits(const IfT & ifv) : ifval(ifv) {}
                 inline OutputType value(ResultType<CondT> cond, ResultType<ElseT> elseval) const {
                     return common::CWiseSelect(cond, ifval, elseval);
                 }
@@ -910,15 +911,20 @@ namespace panoramix {
                     DerivativeExpression<OutputType> sumOfDOutputs,
                     OriginalAndDerivativeExpression<CondT> cond,
                     OriginalAndDerivativeExpression<ElseT> elseval) const {
-                    elseval.second = cwiseSelect(cond.first, 0, sumOfDOutputs).eval();
+                    elseval.second = cwiseSelect(cond.first, 0.0, sumOfDOutputs).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "cwiseSelect[ifthen:" << ifval << "]"; return os; }
-                IfT ifval;
+                DataStorageType<IfT> ifval;
             };
 
             template <class CondT, class IfT, class ElseT>
-            struct CWiseSelectWhenElseRetIsConstTraits : public OpTraitsBase<CWiseSelectResultType<CondT, IfT, ElseT>, CondT, IfT> {
-                inline explicit CWiseSelectWhenElseRetIsConstTraits(ElseT elsev) : elseval(elsev) {}
+            struct CWiseSelectWhenElseRetIsConstTraits 
+                : public OpTraitsBase<decltype(common::CWiseSelect(
+                std::declval<ResultType<CondT>>(),
+                std::declval<ResultType<IfT>>(),
+                std::declval<ResultType<DataStorageType<ElseT>>>())), CondT, IfT> {
+
+                inline explicit CWiseSelectWhenElseRetIsConstTraits(const ElseT & elsev) : elseval(elsev) {}
                 inline OutputType value(ResultType<CondT> cond, ResultType<IfT> ifval) const {
                     return common::CWiseSelect(cond, ifval, elseval);
                 }
@@ -927,31 +933,32 @@ namespace panoramix {
                     DerivativeExpression<OutputType> sumOfDOutputs,
                     OriginalAndDerivativeExpression<CondT> cond,
                     OriginalAndDerivativeExpression<IfT> ifval) const {
-                    ifval.second = cwiseSelect(cond.first, sumOfDOutputs, 0).eval();
+                    ifval.second = cwiseSelect(cond.first, sumOfDOutputs, 0.0).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "cwiseSelect[elsethen:" << elseval << "]"; return os; }
-                ElseT elseval;
+                DataStorageType<ElseT> elseval;
             };
+
         }
 
         template <class CondT, class IfT, class ElseT>
-        inline Expression<CWiseSelectResultType<CondT, IfT, ElseT>> cwiseSelect(
-            const Expression<CondT> & cond, const Expression<IfT> & ifval, const Expression<ElseT> & elseval) {
-            return ComposeExpression(CWiseSelectTraits<CondT, IfT, ElseT>(), cond, ifval, elseval);
+        inline auto cwiseSelect(const Expression<CondT> & cond, const Expression<IfT> & ifval, const Expression<ElseT> & elseval) 
+            -> decltype(ComposeExpression(CWiseSelectTraitsWithoutConsts<CondT, IfT, ElseT>(), cond, ifval, elseval)) {
+            return ComposeExpression(CWiseSelectTraitsWithoutConsts<CondT, IfT, ElseT>(), cond, ifval, elseval);
         }
 
-        template <class CondT, class ElseT>
-        inline Expression<CWiseSelectResultType<CondT, DataScalarType<ElseT>, ElseT>> cwiseSelect(
-            const Expression<CondT> & cond, DataScalarType<ElseT> ifval, const Expression<ElseT> & elseval) {
-            return ComposeExpression(CWiseSelectWhenIfRetIsConstTraits<CondT, DataScalarType<ElseT>, ElseT>(
-                static_cast<DataScalarType<ElseT>>(ifval)), cond, elseval);
+        template <class CondT, class ElseT, class IfT>
+        inline auto cwiseSelect(const Expression<CondT> & cond, const IfT & ifval, const Expression<ElseT> & elseval, 
+            std::enable_if_t<!IsExpression<IfT>::value, int> = 0)
+            -> decltype(ComposeExpression(CWiseSelectWhenIfRetIsConstTraits<CondT, IfT, ElseT>(ifval), cond, elseval)) {
+            return ComposeExpression(CWiseSelectWhenIfRetIsConstTraits<CondT, IfT, ElseT>(ifval), cond, elseval);
         }
 
-        template <class CondT, class IfT>
-        inline Expression<CWiseSelectResultType<CondT, IfT, DataScalarType<IfT>>> cwiseSelect(
-            const Expression<CondT> & cond, const Expression<IfT> & ifval, DataScalarType<IfT> elseval) {
-            return ComposeExpression(CWiseSelectWhenElseRetIsConstTraits<CondT, IfT, DataScalarType<IfT>>(
-                static_cast<DataScalarType<IfT>>(elseval)), cond, ifval);
+        template <class CondT, class IfT, class ElseT>
+        inline auto cwiseSelect(const Expression<CondT> & cond, const Expression<IfT> & ifval, const ElseT & elseval, 
+            std::enable_if_t<!IsExpression<IfT>::value, int> = 0)
+            -> decltype(ComposeExpression(CWiseSelectWhenElseRetIsConstTraits<CondT, IfT, ElseT>(elseval), cond, ifval)) {
+            return ComposeExpression(CWiseSelectWhenElseRetIsConstTraits<CondT, IfT, ElseT>(elseval), cond, ifval);
         }
 
 
@@ -961,14 +968,7 @@ namespace panoramix {
             using std::abs;
 
             template <class T>
-            struct AbsResult {
-                using type = decltype(abs(std::declval<T>()));
-            };
-            template <class T>
-            using AbsResultType = typename AbsResult<T>::type;
-
-            template <class T>
-            struct AbsTraits : public OpTraitsBase<AbsResultType<T>, T> {
+            struct AbsTraits : public OpTraitsBase<decltype(abs(std::declval<ResultType<T>>())), T> {
                 inline OutputType value(ResultType<T> input) const {
                     return abs(input);
                 }
@@ -976,14 +976,14 @@ namespace panoramix {
                     Expression<OutputType> output,
                     DerivativeExpression<OutputType> sumOfDOutputs,
                     OriginalAndDerivativeExpression<T> input) const {
-                    input.second = cwiseSelect(input.first, sumOfDOutputs, -sumOfDOutputs);
+                    input.second = cwiseSelect(input.first, sumOfDOutputs, -sumOfDOutputs).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "abs"; return os; }
             };
         }
 
         template <class T>
-        inline Expression<AbsResultType<T>> abs(const Expression<T> & e) {
+        inline auto abs(const Expression<T> & e) -> decltype(ComposeExpression(AbsTraits<T>(), e)) {
             return ComposeExpression(AbsTraits<T>(), e);
         }
 
@@ -1041,23 +1041,10 @@ namespace panoramix {
         // array to matrix
         namespace  {
 
-            template <class T>
-            struct MatrixToArrayResult {
-                using type = DataStorageType<decltype(std::declval<ResultType<T>>().array())>;
-            };
-            template <class T>
-            using MatrixToArrayResultType = typename MatrixToArrayResult<T>::type;
-
-            template <class T>
-            struct ArrayToMatrixResult {
-                using type = DataStorageType<decltype(std::declval<ResultType<T>>().matrix())>;
-            };
-            template <class T>
-            using ArrayToMatrixResultType = typename ArrayToMatrixResult<T>::type;
-
             // matrix to array
             template <class T>
-            struct MatrixToArrayTraits : public OpTraitsBase<MatrixToArrayResultType<T>, T> {
+            struct MatrixToArrayTraits 
+                : public OpTraitsBase<decltype(common::Eval(std::declval<ResultType<T>>().array())), T> {
                 inline OutputType value(ResultType<T> input) const {
                     return input.array();
                 }
@@ -1065,14 +1052,15 @@ namespace panoramix {
                     Expression<OutputType> output,
                     DerivativeExpression<OutputType> sumOfDOutputs,
                     OriginalAndDerivativeExpression<T> input) const {
-                    input.second = arrayToMatrix(sumOfDOutputs);
+                    input.second = arrayToMatrix(sumOfDOutputs).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "matrixToArray"; return os; }
             };
 
             // array to matrix
             template <class T>
-            struct ArrayToMatrixTraits : public OpTraitsBase<ArrayToMatrixResultType<T>, T> {
+            struct ArrayToMatrixTraits 
+                : public OpTraitsBase<decltype(common::Eval(std::declval<ResultType<T>>().matrix())), T> {
                 inline OutputType value(ResultType<T> input) const {
                     return input.matrix();
                 }
@@ -1080,19 +1068,21 @@ namespace panoramix {
                     Expression<OutputType> output,
                     DerivativeExpression<OutputType> sumOfDOutputs,
                     OriginalAndDerivativeExpression<T> input) const {
-                    input.second = matrixToArray(sumOfDOutputs);
+                    input.second = matrixToArray(sumOfDOutputs).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "arrayToMatrix"; return os; }
             };
         }
 
         template <class MatrixT>
-        inline Expression<MatrixToArrayResultType<MatrixT>> matrixToArray(const Expression<MatrixT> & m) {
+        inline auto matrixToArray(const Expression<MatrixT> & m) 
+            -> decltype(ComposeExpression(MatrixToArrayTraits<MatrixT>(), m)) {
             return ComposeExpression(MatrixToArrayTraits<MatrixT>(), m);
         }
 
         template <class ArrayT>
-        inline Expression<ArrayToMatrixResultType<ArrayT>> arrayToMatrix(const Expression<ArrayT> & a) {
+        inline auto arrayToMatrix(const Expression<ArrayT> & a) 
+            -> decltype(ComposeExpression(ArrayToMatrixTraits<ArrayT>(), a)) {
             return ComposeExpression(ArrayToMatrixTraits<ArrayT>(), a);
         }
 

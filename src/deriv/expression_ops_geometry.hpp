@@ -33,15 +33,8 @@ namespace panoramix {
         namespace {
 
             template <class T1, class T2>
-            struct DotProductResult{
-                using type = decltype(specific::DotProduct(std::declval<ResultType<T1>>(), std::declval<ResultType<T2>>()));
-            };
-
-            template <class T1, class T2>
-            using DotProductResultType = typename DotProductResult<T1, T2>::type;
-
-            template <class T1, class T2>
-            struct DotProductTraits : public OpTraitsBase<DotProductResultType<T1, T2>, T1, T2 > {
+            struct DotProductTraits 
+                : public OpTraitsBase<decltype(specific::DotProduct(std::declval<ResultType<T1>>(), std::declval<ResultType<T2>>())), T1, T2 > {
                 inline OutputType value(ResultType<T1> a, ResultType<T2> b) const {
                     return specific::DotProduct(a, b);
                 }
@@ -59,7 +52,8 @@ namespace panoramix {
         }
 
         template <class T1, class T2>
-        inline Expression<DotProductResultType<T1, T2>> dotProd(const Expression<T1> & a, const Expression<T2> & b) {
+        inline auto dotProd(const Expression<T1> & a, const Expression<T2> & b) 
+            -> decltype(ComposeExpression(DotProductTraits<T1, T2>(), a, b)) {
             return ComposeExpression(DotProductTraits<T1, T2>(), a, b);
         }
 
@@ -74,7 +68,7 @@ namespace panoramix {
                     Expression<OutputType> output,
                     DerivativeExpression<OutputType> sumOfDOutputs,
                     OriginalAndDerivativeExpression<T> a) const {
-                    a.second = (a.first * sumOfDOutputs * pow(output, -1)).eval();
+                    a.second = (a.first * sumOfDOutputs / output).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "norm"; return os; }
             };

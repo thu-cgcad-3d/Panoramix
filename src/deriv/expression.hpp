@@ -11,9 +11,9 @@
 #include <initializer_list>
 
 #include "../core/template_utilities.hpp"
+#include "../core/misc.hpp"
 #include "../core/mesh.hpp"
 
-//#include "data_traits.hpp"
 #include "data_traits_definitions.hpp"
 
 namespace panoramix {
@@ -33,6 +33,9 @@ namespace panoramix {
         template <class T> struct OpWithValue;
         template <class T> struct OpWithCache;
         template <class T> struct Expression;
+
+        template <class T> struct IsExpression : public std::false_type {};
+        template <class T> struct IsExpression<Expression<T>> : public std::true_type {};
 
         template <class T> using DerivativeType = DataStorageType<T>;
         template <class T> using DerivativeExpression = Expression<DataStorageType<T>>;
@@ -487,6 +490,7 @@ namespace panoramix {
         struct Expression {
         public:
             using Type = T;
+
             inline explicit Expression(Op * op = nullptr) : _op(op){}
 
             inline bool isValid() const { return _op && _op->graph && _op->self.isValid(); }

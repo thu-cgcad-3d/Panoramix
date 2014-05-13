@@ -7,6 +7,10 @@
 using namespace panoramix;
 using TestMesh = core::Mesh<core::Vec3>;
 
+void foo(){
+    NOT_IMPLEMENTED_YET();
+}
+
 TEST(MiscToolsTest, ConditionalIterator) {
 
     std::list<int> ds;

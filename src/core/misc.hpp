@@ -6,25 +6,7 @@
 #include <cassert>
  
 namespace panoramix {
-    namespace core {
-
-        // somthing with restorable parameters
-        template <class T>
-        class ParamRestorable {
-            using P = typename T::Params;
-        public:
-            inline explicit ParamRestorable(const P & p) : params(p) {}
-            inline void storeParam() { _paramStack.push(params); }
-            inline void restoreParam() { 
-                params = _paramStack.top(); 
-                _paramStack.pop(); 
-            }
-
-        public:
-            P params;
-        protected:
-            std::stack<P> _paramStack;
-        };
+    namespace core {    
 
 
  
@@ -135,6 +117,13 @@ namespace panoramix {
         }
 
 
+
+        // not implemented error
+#define NOT_IMPLEMENTED_YET() \
+    throw std::runtime_error("This feature has not yet been implemented! \n" \
+        "in function: "__FUNCSIG__ "\n" \
+        "in line: " + std::to_string(__LINE__) + "\n" \
+        "in file: "__FILE__)
 
        
     }

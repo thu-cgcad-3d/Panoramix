@@ -183,6 +183,7 @@ TEST(Expression, ScalarOp) {
 
     {
         // select
+        auto fv = common::CWiseSelect(xv, xv, -xv);
         auto f = cwiseSelect(x, x, -x);
         auto dfdx = std::get<0>(f.derivatives(x));
         for (int i = 0; i < 10; i++) {
@@ -475,6 +476,19 @@ TEST(Expression, ArrayOp){
             EXPECT_DOUBLE_EQ(log((xv * yv).exp() + xv * 2 + yv + xv * xv).sum(), f.execute());
             EXPECT_MATRIX_EQ(((xv * yv).exp() * yv + 2 + 2 * xv).cwiseQuotient((xv * yv).exp() + xv * 2 + yv + xv * xv), dfdx.execute());
             EXPECT_MATRIX_EQ(((xv * yv).exp() * xv + 1).cwiseQuotient((xv * yv).exp() + xv * 2 + yv + xv * xv), dfdy.execute());
+        }
+    }
+
+    {
+        // tanh
+        auto f = tanh(x).sum();
+        auto df = std::get<0>(f.derivatives(x));
+        for (int i = 0; i < 10; i++) {
+            int a = std::rand() % 100 + 1;
+            int b = std::rand() % 100 + 1;
+            xv.setRandom(a, b);
+            EXPECT_DOUBLE_EQ(tanh(xv).sum(), f.execute());
+            EXPECT_MATRIX_EQ(((1 - tanh(xv))*(1 - tanh(xv))).matrix(), df.execute().matrix());
         }
     }
 

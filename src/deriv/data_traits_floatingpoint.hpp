@@ -65,7 +65,7 @@ namespace panoramix {
                 SATISFIES(T, FloatingPointTag),
                 SATISFIES(IfT, FloatingPointTag),
                 SATISFIES(ElseT, FloatingPointTag)>
-            auto CWiseSelect(T cond, IfT ifval, ElseT elseval) -> std::decay_t<decltype(cond > 0 ? ifval : elseval)> {
+            auto CWiseSelect(const T & cond, const IfT & ifval, const ElseT & elseval) -> std::decay_t<decltype(cond > 0 ? ifval : elseval)> {
                 return cond > 0 ? ifval : elseval;
             }
 
