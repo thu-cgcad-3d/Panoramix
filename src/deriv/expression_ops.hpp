@@ -580,7 +580,7 @@ namespace panoramix {
         }
 
         template <class T>
-        inline auto operator - (Expression<T> a) -> Expression<decltype(-a.result())> {
+        inline auto operator - (Expression<T> a) -> decltype(ComposeExpression(NegateTraits<T>(), a)) {
             return ComposeExpression(NegateTraits<T>(), a);
         }
 
@@ -588,9 +588,8 @@ namespace panoramix {
         // subtract
         namespace  {
             template <class T1, class T2>
-            struct SubtractTraits : public OpTraitsBase<
-                decltype(std::declval<ResultType<T1>>() - std::declval<ResultType<T2>>()), T1, T2> {
-
+            struct SubtractTraits 
+                : public OpTraitsBase<decltype(std::declval<ResultType<T1>>() - std::declval<ResultType<T2>>()), T1, T2> {
                 inline OutputType value(ResultType<T1> a, ResultType<T2> b) const {
                     return a - b;
                 }
@@ -607,7 +606,7 @@ namespace panoramix {
         }
 
         template <class T1, class T2>
-        inline auto operator - (Expression<T1> a, Expression<T2> b) -> Expression<decltype(a.result() - b.result())> {
+        inline auto operator - (Expression<T1> a, Expression<T2> b) -> decltype(ComposeExpression(SubtractTraits<T1, T2>(), a, b)) {
             return ComposeExpression(SubtractTraits<T1, T2>(), a, b);
         }
 
@@ -615,9 +614,8 @@ namespace panoramix {
         // mult scalar
         namespace  {
             template <class T>
-            struct MultScalar : public OpTraitsBase<
-                decltype(std::declval<ResultType<T>>() * std::declval<DataScalarType<ResultType<T>>>()), T> {
-
+            struct MultScalar 
+                : public OpTraitsBase<decltype(std::declval<ResultType<T>>() * std::declval<DataScalarType<ResultType<T>>>()), T> {
                 inline explicit MultScalar(DataScalarType<ResultType<T>> ss) : s(ss) {}
                 inline OutputType value(ResultType<T> a) const {
                     return a * s;
@@ -634,29 +632,25 @@ namespace panoramix {
         }
 
         template <class T>
-        inline auto operator * (Expression<T> a, DataScalarType<ResultType<T>> b)
-            ->Expression<decltype(std::declval<ResultType<T>>() * std::declval<DataScalarType<ResultType<T>>>())> {
+        inline auto operator * (Expression<T> a, DataScalarType<ResultType<T>> b) -> decltype(ComposeExpression(MultScalar<T>(b), a)) {
             return ComposeExpression(MultScalar<T>(b), a);
         }
 
         template <class T>
-        inline auto operator / (Expression<T> a, DataScalarType<ResultType<T>> b)
-            ->Expression<decltype(std::declval<ResultType<T>>() * std::declval<DataScalarType<ResultType<T>>>())> {
+        inline auto operator / (Expression<T> a, DataScalarType<ResultType<T>> b) -> decltype(ComposeExpression(MultScalar<T>(1.0 / b), a)) {
             return ComposeExpression(MultScalar<T>(1.0/b), a);
         }
 
         template <class T>
-        inline auto operator * (DataScalarType<ResultType<T>> b, Expression<T> a)
-            ->Expression<decltype(std::declval<ResultType<T>>() * std::declval<DataScalarType<ResultType<T>>>())> {
+        inline auto operator * (DataScalarType<ResultType<T>> b, Expression<T> a) -> decltype(ComposeExpression(MultScalar<T>(b), a)) {
             return ComposeExpression(MultScalar<T>(b), a);
         }
 
         // plus scalar
         namespace  {
             template <class T>
-            struct PlusScalar : public OpTraitsBase<
-                decltype(std::declval<ResultType<T>>() + std::declval<DataScalarType<ResultType<T>>>()), T> {
-
+            struct PlusScalar 
+                : public OpTraitsBase<decltype(std::declval<ResultType<T>>() + std::declval<DataScalarType<ResultType<T>>>()), T> {
                 inline explicit PlusScalar(DataScalarType<ResultType<T>> ss) : s(ss) {}
                 inline OutputType value(ResultType<T> a) const {
                     return a + s;
@@ -673,20 +667,17 @@ namespace panoramix {
         }
 
         template <class T>
-        inline auto operator + (Expression<T> a, DataScalarType<ResultType<T>> b)
-            ->Expression<decltype(std::declval<ResultType<T>>() + std::declval<DataScalarType<ResultType<T>>>())> {
+        inline auto operator + (Expression<T> a, DataScalarType<ResultType<T>> b) -> decltype(ComposeExpression(PlusScalar<T>(b), a)) {
             return ComposeExpression(PlusScalar<T>(b), a);
         }
 
         template <class T>
-        inline auto operator + (DataScalarType<ResultType<T>> b, Expression<T> a)
-            ->Expression<decltype(std::declval<ResultType<T>>() + std::declval<DataScalarType<ResultType<T>>>())> {
+        inline auto operator + (DataScalarType<ResultType<T>> b, Expression<T> a) -> decltype(ComposeExpression(PlusScalar<T>(b), a)) {
             return ComposeExpression(PlusScalar<T>(b), a);
         }
 
         template <class T>
-        inline auto operator - (Expression<T> a, DataScalarType<ResultType<T>> b)
-            ->Expression<decltype(std::declval<ResultType<T>>() - std::declval<DataScalarType<ResultType<T>>>())> {
+        inline auto operator - (Expression<T> a, DataScalarType<ResultType<T>> b) -> decltype(ComposeExpression(PlusScalar<T>(-b), a)) {
             return ComposeExpression(PlusScalar<T>(-b), a);
         }
 
@@ -939,9 +930,46 @@ namespace panoramix {
                 DataStorageType<ElseT> elseval;
             };
 
+            template <class CondT, class IfT, class ElseT>
+            struct CWiseSelectTraits {
+                inline static Expression<IfT> Compose(const CondT & cond, const IfT & ifval, const ElseT & elseval) {
+                    SHOULD_NEVER_BE_INSTANCIATED();
+                }
+            };
+
+            template <class CondT, class IfT, class ElseT>
+            struct CWiseSelectTraits<Expression<CondT>, IfT, Expression<ElseT>> {
+                inline static auto Compose(const Expression<CondT> & cond, const IfT & ifval, const Expression<ElseT> & elseval)
+                -> decltype(ComposeExpression(CWiseSelectWhenIfRetIsConstTraits<CondT, IfT, ElseT>(ifval), cond, elseval)) {
+                    return ComposeExpression(CWiseSelectWhenIfRetIsConstTraits<CondT, IfT, ElseT>(ifval), cond, elseval);
+                }
+            };
+
+            template <class CondT, class IfT, class ElseT>
+            struct CWiseSelectTraits<Expression<CondT>, Expression<IfT>, ElseT> {
+                inline static auto Compose(const Expression<CondT> & cond, const Expression<IfT> & ifval, const ElseT & elseval)
+                -> decltype(ComposeExpression(CWiseSelectWhenElseRetIsConstTraits<CondT, IfT, ElseT>(elseval), cond, ifval)) {
+                    return ComposeExpression(CWiseSelectWhenElseRetIsConstTraits<CondT, IfT, ElseT>(elseval), cond, ifval);
+                }
+            };
+
+            template <class CondT, class IfT, class ElseT>
+            struct CWiseSelectTraits<Expression<CondT>, Expression<IfT>, Expression<ElseT>> {
+                inline static auto Compose(const Expression<CondT> & cond, const Expression<IfT> & ifval, const Expression<ElseT> & elseval)
+                -> decltype(ComposeExpression(CWiseSelectTraitsWithoutConsts<CondT, IfT, ElseT>(), cond, ifval, elseval)) {
+                    return ComposeExpression(CWiseSelectTraitsWithoutConsts<CondT, IfT, ElseT>(), cond, ifval, elseval);
+                }
+            };
+
         }
 
         template <class CondT, class IfT, class ElseT>
+        inline auto cwiseSelect(const CondT & cond, const IfT & ifval, const ElseT & elseval)
+            -> decltype(CWiseSelectTraits<CondT, IfT, ElseT>::Compose(cond, ifval, elseval)) {
+            return CWiseSelectTraits<CondT, IfT, ElseT>::Compose(cond, ifval, elseval);
+        }
+
+        /*template <class CondT, class IfT, class ElseT>
         inline auto cwiseSelect(const Expression<CondT> & cond, const Expression<IfT> & ifval, const Expression<ElseT> & elseval) 
             -> decltype(ComposeExpression(CWiseSelectTraitsWithoutConsts<CondT, IfT, ElseT>(), cond, ifval, elseval)) {
             return ComposeExpression(CWiseSelectTraitsWithoutConsts<CondT, IfT, ElseT>(), cond, ifval, elseval);
@@ -959,7 +987,9 @@ namespace panoramix {
             std::enable_if_t<!IsExpression<IfT>::value, int> = 0)
             -> decltype(ComposeExpression(CWiseSelectWhenElseRetIsConstTraits<CondT, IfT, ElseT>(elseval), cond, ifval)) {
             return ComposeExpression(CWiseSelectWhenElseRetIsConstTraits<CondT, IfT, ElseT>(elseval), cond, ifval);
-        }
+        }*/
+
+
 
 
         // abs

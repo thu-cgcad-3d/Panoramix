@@ -184,6 +184,11 @@ TEST(Expression, ScalarOp) {
     {
         // select
         auto fv = common::CWiseSelect(xv, xv, -xv);
+        using TT = CWiseSelectWhenElseRetIsConstTraits<const double &, const double &, const double &>::OutputType;
+        using TTT = decltype(TAG<TT>()); 
+
+        using KK = decltype(-x);
+        
         auto f = cwiseSelect(x, x, -x);
         auto dfdx = std::get<0>(f.derivatives(x));
         for (int i = 0; i < 10; i++) {
@@ -614,7 +619,7 @@ TEST(Expression, MatrixOp3){
     }
 
     { // matrix array conversion
-        auto xx = arrayToMatrix(matrixToArray(x).eval());
+        auto xx = arrayToMatrix(matrixToArray(x));
         for (int i = 0; i < 10; i++){
             int a = std::rand() % 100 + 1;
             int b = std::rand() % 100 + 1;
