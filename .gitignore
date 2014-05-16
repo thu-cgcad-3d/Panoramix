@@ -1,6 +1,10 @@
 *.sublime-workspace
-gtest-1.7.0
 build
 tests/gtest*
 unused
 .tags*
+doc/paperscript/*/*.aux
+doc/paperscript/*/*.fdb_latexmk
+doc/paperscript/*/*.log
+doc/paperscript/*/*.pdf
+doc/paperscript/*/*.synctex.gz
