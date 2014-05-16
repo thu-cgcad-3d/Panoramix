@@ -15,12 +15,14 @@ using namespace panoramix;
 
 // PROJECT_TEST_DATA_DIR_STR is predefined using CMake
 static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
+static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + "/normal";
+static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
+static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
 
 TEST(ViewsNet, ViewsNet) {
-    cv::Mat panorama = cv::imread(ProjectTestDataDirStr + "/13.jpg");
+    cv::Mat panorama = cv::imread(ProjectTestDataDirStr_PanoramaIndoor + "/13.jpg");
     cv::resize(panorama, panorama, cv::Size(2000, 1000));
 
-    //vis::Visualizer2D(panorama) << vis::manip2d::Show();
     core::PanoramicCamera originCam(panorama.cols / M_PI / 2.0);
 
     std::vector<core::PerspectiveCamera> cams;
@@ -69,7 +71,6 @@ TEST(ViewsNet, ViewsNet) {
             std::cout << "photo " << vh.id << std::endl;
             std::cout << "computing features ..." << std::endl;
             netptr->computeFeatures(vh);
-            netptr->buildRTrees(vh);
             netptr->buildRegionNet(vh);
             std::cout << "done " << vh.id << std::endl;
         };
@@ -90,9 +91,7 @@ TEST(ViewsNet, ViewsNet) {
 
     for (auto & vh : viewHandles){
         std::cout << "photo " << vh.id << std::endl;
-        //net.computeFeatures(vh);
         net.updateConnections(vh);
-        //net.calibrateCamera(vh);
     }
 
 
@@ -127,6 +126,8 @@ TEST(ViewsNet, ViewsNet) {
     }
 
     {
+        vis::Visualizer2D(panorama) << core::SegmentationExtractor()(panorama, true) << vis::manip2d::Show();
+
         vis::Visualizer3D viz;
         viz << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
             << vis::manip3d::SetBackgroundColor(core::ColorTag::Black)

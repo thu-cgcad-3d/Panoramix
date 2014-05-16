@@ -7,9 +7,6 @@
 using namespace panoramix;
 using TestMesh = core::Mesh<core::Vec3>;
 
-void foo(){
-    NOT_IMPLEMENTED_YET();
-}
 
 TEST(MiscToolsTest, ConditionalIterator) {
 
@@ -146,12 +143,6 @@ TEST(MeshTest, Cube) {
     
 }
 
-TEST(MeshTest, DISABLED_Sphere) {
-
-    TestMesh mesh;
-    core::MakeQuadFacedSphere(mesh, 10, 5);
-
-}
 
 int main(int argc, char * argv[], char * envp[])
 {

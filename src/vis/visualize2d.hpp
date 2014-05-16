@@ -56,11 +56,15 @@ namespace panoramix {
                         name);
             }
 
-            inline Manipulator<const Color &> SetColor(const Color & color) {
-                return Manipulator<const Color &>(
-                    [](Visualizer2D & viz, const Color & c){
+            inline Manipulator<Color> SetColor(const Color & color) {
+                return Manipulator<Color>(
+                    [](Visualizer2D & viz, Color c){
                     viz.params.color = c; },
                         color);
+            }
+
+            inline Manipulator<Color> SetColor(const ColorTag & color) {
+                return SetColor(ColorFromTag(color));
             }
 
             inline Manipulator<int> SetThickness(int thickness) {

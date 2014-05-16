@@ -14,10 +14,13 @@ using namespace panoramix;
 
 // PROJECT_TEST_DATA_DIR_STR is predefined using CMake
 static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
+static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + "/normal";
+static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
+static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
 
 TEST(ViewsNet, FixedCamera) {
 
-    cv::Mat panorama = cv::imread(ProjectTestDataDirStr + "/13.jpg");
+    cv::Mat panorama = cv::imread(ProjectTestDataDirStr_PanoramaIndoor + "/13.jpg");
     cv::resize(panorama, panorama, cv::Size(2000, 1000));
     core::PanoramicCamera originCam(panorama.cols / M_PI / 2.0);
 
@@ -57,7 +60,6 @@ TEST(ViewsNet, FixedCamera) {
         std::cout << "extracting features ...";
 
         net.computeFeatures(viewHandle);
-        net.buildRTrees(viewHandle);
 
         vis::Visualizer2D(im)
             << vis::manip2d::SetColor(core::Color(0, 0, 255))
@@ -71,8 +73,7 @@ TEST(ViewsNet, FixedCamera) {
         net.updateConnections(viewHandle);
         net.findMatchesToConnectedViews(viewHandle);
 
-        //net.calibrateCamera(viewHandle);
-        net.calibrateAllCameras();
+        //net.calibrateAllCameras();
 
         if (net.isTooCloseToAnyExistingView(viewHandle).isValid()){
             std::cout << "too close to existing view, skipped";

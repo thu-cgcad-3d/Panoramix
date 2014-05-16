@@ -848,7 +848,8 @@ namespace panoramix {
                     Expression<OutputType> output,
                     DerivativeExpression<OutputType> sumOfDOutputs,
                     OriginalAndDerivativeExpression<T> input) const { // dtanh(x) = (1-tanh(x))^2
-                    input.second = cwiseProd(cwiseProd(1.0 - output, 1.0 - output), sumOfDOutputs).eval();
+                    auto oneMinusOutput = 1.0 - output;
+                    input.second = cwiseProd(cwiseProd(oneMinusOutput, oneMinusOutput), sumOfDOutputs).eval();
                 }
                 virtual ostream & toString(ostream & os) const { os << "tanh"; return os; }
             };
@@ -1067,6 +1068,53 @@ namespace panoramix {
 
 
         // for eigen
+        // matrix/array replicate
+        //namespace {
+        //    template <class T, int RowFactor, int ColFactor>
+        //    struct StaticReplicateTraits
+        //        : public OpTraitsBase<decltype(std::declval<ResultType<T>>().template replicate<RowFactor, ColFactor>()), T> {
+        //        inline OutputType value(ResultType<T> from) const {
+        //            return from.template replicate<RowFactor, ColFactor>();
+        //        }
+        //        inline void derivatives(
+        //            Expression<OutputType> to,
+        //            DerivativeExpression<OutputType> sumOfDOutputs,
+        //            OriginalAndDerivativeExpression<T> from) const {
+        //            // TODO
+        //        }
+        //        virtual ostream & toString(ostream & os) const { 
+        //            os << "replicate[" << RowFactor << "," ColFactor << "]"; 
+        //            return os; 
+        //        }
+        //    };
+
+        //    template <class T>
+        //    struct ReplicateTraits
+        //        : public OpTraitsBase<decltype(std::declval<ResultType<T>>().replicate(0, 0)), T> {
+        //        inline ReplicateTraits(int r, int c) : rowFactor(r), colFactor(c) {}
+        //        inline OutputType value(ResultType<T> from) const {
+        //            return from.replicate(rowFactor, colFactor);
+        //        }
+        //        inline void derivatives(
+        //            Expression<OutputType> to,
+        //            DerivativeExpression<OutputType> sumOfDOutputs,
+        //            OriginalAndDerivativeExpression<T> from) const {
+        //            const auto & sumOfDOutputsVal = sumOfDOutputs.result();
+        //            assert(sumOfDOutputsVal.rows() % rowFactor == 0 && 
+        //                sumOfDOutputsVal.cols() % colFactor == 0 &&
+        //                "invalid output matrices/array size for 'replicate'!");
+        //            // 
+        //        }
+        //        virtual ostream & toString(ostream & os) const {
+        //            os << "replicate[" << rowFactor << "," colFactor << "]";
+        //            return os;
+        //        }
+        //        int rowFactor, colFactor;
+        //    };
+        //}
+
+
+
         // matrix to array
         // array to matrix
         namespace  {
@@ -1116,6 +1164,7 @@ namespace panoramix {
             return ComposeExpression(ArrayToMatrixTraits<ArrayT>(), a);
         }
 
+
         // mapping
         namespace {
             template <class To, class From, class MappingFunT, class ReverseMappingFunT>
@@ -1146,6 +1195,8 @@ namespace panoramix {
             MappingFunT mf, ReverseMappingFunT rmf, const std::string & nm = "map", const std::string & rnm = "map") {
             return ComposeExpression(MappingTraits<To, From, MappingFunT, ReverseMappingFunT>(mf, rmf, nm, rnm), from);
         }
+
+        
         
         
 

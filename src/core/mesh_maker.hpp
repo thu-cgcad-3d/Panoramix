@@ -9,13 +9,13 @@ namespace panoramix {
     namespace core {
 
         template <class VertDataT, class InputValueT>
-        struct Vert3MakerDefault {
+        struct DefaultVert3Makder {
             inline VertDataT operator () (const InputValueT & v1, const InputValueT & v2, const InputValueT & v3) const {
                 return VertDataT(v1, v2, v3);
             }
         };
  
-        template <class VertDataT, class HalfDataT, class FaceDataT, class Vert3MakerT = Vert3MakerDefault<VertDataT, float>>
+        template <class VertDataT, class HalfDataT, class FaceDataT, class Vert3MakerT = DefaultVert3Makder<VertDataT, float>>
         void MakeTetrahedron(Mesh<VertDataT, HalfDataT, FaceDataT> & mesh, Vert3MakerT vmt = Vert3MakerT()) {
             mesh.clear();
             auto v1 = mesh.addVertex(vmt(0, 0, 0));
@@ -29,7 +29,7 @@ namespace panoramix {
             mesh.addFace({ v2, v4, v3 });
         }
         
-        template <class VertDataT, class HalfDataT, class FaceDataT, class Vert3MakerT = Vert3MakerDefault<VertDataT, float>>
+        template <class VertDataT, class HalfDataT, class FaceDataT, class Vert3MakerT = DefaultVert3Makder<VertDataT, float>>
         void MakeQuadFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> & mesh, Vert3MakerT vmt = Vert3MakerT()) {
             /*
                    4 ----- 5
@@ -63,7 +63,7 @@ namespace panoramix {
             
         }
 
-        template <class VertDataT, class HalfDataT, class FaceDataT, class Vert3MakerT = Vert3MakerDefault<VertDataT, double>>
+        template <class VertDataT, class HalfDataT, class FaceDataT, class Vert3MakerT = DefaultVert3Makder<VertDataT, double>>
         void MakeQuadFacedSphere(Mesh<VertDataT, HalfDataT, FaceDataT> & mesh, int m = 5, int n = 10, Vert3MakerT vmt = Vert3MakerT()) {
             using ThisMesh = Mesh<VertDataT, HalfDataT, FaceDataT>;
             using ThisVertHandle = typename ThisMesh::VertHandle;

@@ -16,9 +16,12 @@ using namespace panoramix;
 
 // PROJECT_TEST_DATA_DIR_STR is predefined using CMake
 static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
+static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + "/normal";
+static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
+static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
 
 TEST(ViewsNet, ViewsNet) {
-    cv::Mat panorama = cv::imread(ProjectTestDataDirStr + "/14.jpg");
+    cv::Mat panorama = cv::imread(ProjectTestDataDirStr_PanoramaOutdoor + "/panohk.png");
     cv::resize(panorama, panorama, cv::Size(2000, 1000));
 
     //vis::Visualizer2D(panorama) << vis::manip2d::Show();

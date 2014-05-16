@@ -511,7 +511,7 @@ namespace panoramix {
 
             // execute the expression graph to get value updated
             template <class ExpressionIteratorT>
-            inline ResultType<T> execute(ExpressionIteratorT begin, ExpressionIteratorT end) const {
+            inline ResultType<T> executeRange(ExpressionIteratorT begin, ExpressionIteratorT end) const {
                 assert(isValid() && "Invalid expression!");
                 std::set<EHandle, ExpressionGraph::EHandleComp> dependencies;
                 for (auto i = begin; i != end; ++i)
@@ -530,7 +530,7 @@ namespace panoramix {
 
             // compute the derivative of current expression
             template <class ExpressionIteratorT, class ExpressionOutIteratorT>
-            inline void derivatives(ExpressionIteratorT varsBegin, ExpressionIteratorT varsEnd, ExpressionOutIteratorT derivsBegin) const {
+            inline void derivativesRange(ExpressionIteratorT varsBegin, ExpressionIteratorT varsEnd, ExpressionOutIteratorT derivsBegin) const {
                 assert(IsScalarType<T>::value && "The cost function must has a scalar value!");
                 assert(isValid() && "Invalid expression!");
 

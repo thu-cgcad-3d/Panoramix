@@ -21,7 +21,7 @@ namespace panoramix {
             vd.camera = vd.originalCamera = cam;
             vd.cameraDirectionErrorScale = cameraDirectionErrorScale;
             vd.image = im;
-            return insertVertex(std::move(vd));
+            return insertVertex(vd);
         }
 
         namespace {
@@ -73,8 +73,6 @@ namespace panoramix {
                 vd.lineSegments[i].component = lineSegments[i];
             }
 
-            vd.keypointsForMatching = _params.surfExtractor(im, cv::Mat(), vd.descriptorsForMatching);
-
             // compute line intersections
             vd.lineSegmentIntersections.clear();
             vd.lineSegmentIntersectionLineIDs.clear();
@@ -82,16 +80,13 @@ namespace panoramix {
                 vd.lineSegmentIntersections, 
                 vd.lineSegmentIntersectionLineIDs, true);
             
-        }
-
-        void ViewsNet::buildRTrees(VertHandle h) {
-            auto & vd = _views.data(h);
-
-            // add features used in calibration into RTree            
-            vd.lineSegmentIntersectionsRTree = 
+            // collect keypoints/decriptors for matching
+            vd.keypointsForMatching = _params.surfExtractor(im, cv::Mat(), vd.descriptorsForMatching);
+            // and build RTree for the keypoints
+            vd.lineSegmentIntersectionsRTree =
                 RTreeWrapper<HPoint2>(vd.lineSegmentIntersections.begin(), vd.lineSegmentIntersections.end());
-            vd.keypointsForMatchingRTree = RTreeWrapper<KeyPoint>(vd.keypointsForMatching.begin(), vd.keypointsForMatching.end());            
-
+            vd.keypointsForMatchingRTree = 
+                RTreeWrapper<KeyPoint>(vd.keypointsForMatching.begin(), vd.keypointsForMatching.end());
         }
 
         void ViewsNet::buildRegionNet(VertHandle h) {
@@ -159,7 +154,7 @@ namespace panoramix {
                 auto & revConData = _views.data(_views.topo(con).opposite);
                 auto & neighborVD = _views.data(_views.topo(con).to());
                 
-                // find homography
+                // find matches and estimate homography using opencv
                 cv::detail::ImageFeatures thisFea;
                 thisFea.descriptors = thisVD.descriptorsForMatching;
                 thisFea.keypoints = thisVD.keypointsForMatching;
@@ -204,6 +199,8 @@ namespace panoramix {
             for (auto & c : _views.halfedges()){
 
             }
+
+            NOT_IMPLEMENTED_YET();
 
         }
 

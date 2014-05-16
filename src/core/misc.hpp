@@ -134,7 +134,7 @@ namespace panoramix {
 
         // should never be instanciated error
 #define SHOULD_NEVER_BE_INSTANCIATED() \
-    static_assert(false, "This feature should never be instanciated! \n" \
+    static_assert(false, "This feature should never be instanciated by compiler! \n" \
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \
     "in file: "__FILE__)

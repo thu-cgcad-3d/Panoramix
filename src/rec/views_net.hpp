@@ -59,10 +59,6 @@ namespace panoramix {
             // compute features for a single view
             void computeFeatures(VertHandle h);
 
-            // build RTrees for features in calibration of a single view
-            // after computeFeatures(h)
-            void buildRTrees(VertHandle h);
-
             // segment view image and build net of regions for a single view
             // after computeFeatures(h)
             void buildRegionNet(VertHandle h);

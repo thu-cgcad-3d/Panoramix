@@ -8,10 +8,34 @@
 
 using namespace panoramix;
 
-// PROJECT_TEST_DATA_DIR_STR is predefined using CMake
 static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
+static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + "/normal";
+static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
+static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
 
-TEST(Feature, DISABLED_PerspectiveCamera){
+TEST(Feature, SegmentationExtractor) {
+    core::SegmentationExtractor::Params p;
+    p.c = 5;
+    p.minSize = 400;
+    p.sigma = 1;
+    core::SegmentationExtractor seg(p);
+    core::Image im = cv::imread(ProjectTestDataDirStr_Normal + "/75.jpg");
+    vis::Visualizer2D(im) << vis::manip2d::Show();
+    core::Image segim = seg(im, true);
+    vis::Visualizer2D(segim) << vis::manip2d::Show();
+}
+
+TEST(Feature, LineSegmentExtractor) {
+    core::LineSegmentExtractor lineseg;
+    core::Image im = cv::imread(ProjectTestDataDirStr_Normal + "/2148.jpg");
+    vis::Visualizer2D(im) 
+        << vis::manip2d::SetColor(core::ColorTag::Yellow) 
+        << vis::manip2d::SetThickness(2) << 
+        lineseg(im) 
+        << vis::manip2d::Show();
+}
+
+TEST(Feature, PerspectiveCamera){
     core::PerspectiveCamera cam(1000, 1000, 500, 
         core::Vec3(0, 0, 0), 
         core::Vec3(1, 0, 0));
@@ -28,7 +52,7 @@ TEST(Feature, DISABLED_PerspectiveCamera){
     ASSERT_LT(dist, 2);
 }
 
-TEST(Feature, DISABLED_PerspectiveCameraRandom){
+TEST(Feature, PerspectiveCameraRandom){
     for (int k = 0; k < 100; k++) {
         core::PerspectiveCamera cam(abs(rand()) % 500, abs(rand()) % 400, abs(rand()) % 600,
             core::Vec3(rand(), rand(), rand()),
@@ -49,8 +73,8 @@ TEST(Feature, DISABLED_PerspectiveCameraRandom){
 }
 
 
-TEST(Feature, DISABLED_CameraSampler) {
-    cv::Mat im = cv::imread(ProjectTestDataDirStr + "/" + "panofactory.jpg");
+TEST(Feature, CameraSampler) {
+    cv::Mat im = cv::imread(ProjectTestDataDirStr_PanoramaOutdoor + "/panofactory.jpg");
 
     EXPECT_EQ(4000, im.cols);
     EXPECT_EQ(2000, im.rows);
@@ -96,7 +120,7 @@ TEST(Feature, FeatureExtractor) {
     core::CVFeatureExtractor<cv::SIFT> sift;
     core::CVFeatureExtractor<cv::SURF> surf(300.0);
     for (int i = 0; i < 4; i++) {
-        std::string name = ProjectTestDataDirStr + "/" + "sampled_" + std::to_string(i) + ".png";
+        std::string name = ProjectTestDataDirStr_Normal + "/" + "sampled_" + std::to_string(i) + ".png";
         cv::Mat im = cv::imread(name);
         vis::Visualizer2D(im) 
             << [](vis::Visualizer2D & viz) { viz.params.winName = "haha"; }

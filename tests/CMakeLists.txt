@@ -8,7 +8,6 @@ set (TESTNAMES
 	test_optimization
 	test_template_utilities
 	test_expression
-	test_opencv_stitching
 	test_mesh 
 	test_feature
 	test_views_net 
@@ -38,13 +37,14 @@ if (MSVC)
 		"therefore you have to do this manually: add 'PATH=\$(PATH);${LD_PATH};' to [Project Property]->[Debug]->[Environment] ")
 endif ()
 
-
+set_property(GLOBAL PROPERTY USE_FOLDERS On)
 foreach (T ${TESTNAMES})
 	include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES})
 	add_executable (${T} ${T}.cpp)
 	target_link_libraries (${T} ${CORE_STATIC_LIB} ${DERIV_STATIC_LIB} ${VIS_STATIC_LIB} ${REC_STATIC_LIB} ${Qt_LIBS})
 	add_test (NAME ${T} COMMAND ${T})
 	set_tests_properties (${T} PROPERTIES ENVIRONMENT "${LD_VARNAME}=${LD_PATH}" )
+	set_property(TARGET ${T} PROPERTY FOLDER "${PROJECT_NAME}.Tests")
 endforeach()
 
 
@@ -55,5 +55,6 @@ add_executable(${SBTESTNAME} ${SBTESTNAME}.cpp)
 target_link_libraries (${SBTESTNAME} ${SANDBOX_STATIC_LIB} ${Qt_LIBS})
 add_test (NAME ${SBTESTNAME} COMMAND ${SBTESTNAME})
 set_tests_properties (${SBTESTNAME} PROPERTIES ENVIRONMENT "${LD_VARNAME}=${LD_PATH}" )
+set_property(TARGET ${SBTESTNAME} PROPERTY FOLDER "${PROJECT_NAME}.Tests")
 
 

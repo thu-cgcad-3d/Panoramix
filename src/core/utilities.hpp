@@ -274,7 +274,7 @@ namespace panoramix {
                 BoxType box = _getBoundingBox(t);
                 for (int i = 0; i < Dimension; i++){
                     if (!(box.minCorner[i] <= box.maxCorner[i])){
-                        std::cout << "invalid box type, replaced with a null box" << std::endl;
+                        std::cerr << "invalid box type, replaced with a null box" << std::endl;
                         box = BoxType();
                         //return;
                     }

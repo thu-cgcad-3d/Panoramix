@@ -592,6 +592,9 @@ TEST(Expression, MatrixOp3){
     }
 
     {
+        auto xxx = xv.block(1, 1, 2, 2).eval();
+        //auto xxxx = xv.array().replicate<2, 2>().eval();
+        //xv.replicate<2, 2>().eval()
        /* xv.setRandom(3, 4);
         yv.setRandom(4, 4);
         auto z = xv * (yv * yv);
