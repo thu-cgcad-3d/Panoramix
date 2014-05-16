@@ -1,0 +1,151 @@
+% Updated in September 2012 by In Kyu Park
+% Updated in April 2002 by Antje Endemann, ...., and in September 2010 by Reinhard Klette
+% Based on CVPR 07 and LNCS style, with modifications by DAF, AZ and elle 2008, AA 2010, ACCV 2010, ACCV 2012
+
+\documentclass[runningheads]{llncs}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb} % define this before the line numbering.
+\usepackage{lineno}
+\usepackage{color}
+
+%===========================================================
+\begin{document}
+
+%macro for raising the point in decimal numbers; see example in the abstract
+\newcommand{\point}{
+    \raise0.7ex\hbox{.}
+    }
+
+%Do   -- NOT --    use any additional macros
+
+\pagestyle{headings}
+
+\mainmatter
+
+%===========================================================
+\title{3D Indoor Reconstruction from Panoramic Image} % Replace with your title
+
+\titlerunning{3D Indoor Reconstruction from Panoramic Image} % Replace with your title
+
+\authorrunning{Hao Yang, Hui Zhang} % Replace with your names
+
+\author{Hao Yang, Hui Zhang} % Replace with your names
+\institute{Institude of CAD and Computer Graphics, Tsinghua University} % Replace with your institute's address
+
+\maketitle
+
+%===========================================================
+\begin{abstract}
+% The abstract should summarize the contents of the paper and should
+% contain at least 70 and at most 300 words. It should be set in 9-point
+% font size and should be inset $1\point0$~cm from the right and left margins.
+
+% Please follow the instructions as outlined below. This will save time for all involved.
+% We aim at a uniform appearance of the proceedings.
+\end{abstract}
+
+%===========================================================
+\section{Introduction}
+
+// Current approaches for recovering 3D structures from 2D image(s):
+// 1. Structure from Motion (SfM) or Stereo Vision
+//    requires: video/multiple images with varied eye (projection center) positions
+//    time consuming/not applicable in large scale scenes since the user must MOVE
+// 2. Reconstruction from a single image
+//    restrictions to scenes, time consuming, relatively poor performance
+// 
+
+\section{Related Work}
+
+// Structure from Motion (SfM) or Stereo Vision
+// ...
+// Reconstruction from a single image
+// ...
+// Indoor scene understanding from a single image
+// ...
+// ... from multiple panoramas (CVPR2014)
+
+\section{3D Indoor Model Reconstruction from one Panoramic Image}
+
+%-------------------------------------------------------------------------
+\subsection{Overview of the Proposed Method}
+
+
+
+%-------------------------------------------------------------------------
+\subsection{3D Line Segments Recovery}
+
+\subsubsection {Extract and Classify 2D Lines}
+
+\subsubsection {Geometric Constraints}
+
+
+%-------------------------------------------------------------------------
+\subsection{Region Reasoning for Face Construction}
+
+\subsubsection {Key Regions and Region-Graph} % regions connecting isolated(without constraints) lines
+
+\subsubsection {Graph Optimization}
+
+%-------------------------------------------------------------------------
+\subsection{Experimental Results}
+
+\subsubsection {}
+
+
+
+%===========================================================
+\bibliographystyle{splncs}
+
+\begin{thebibliography}{1}
+
+\bibitem{Alpher02}
+Alpher, A.:
+Advances in Frobnication.
+J. of Foo
+\textbf{12} (2002)  234--778
+
+\bibitem{Alpher03}
+Alpher, A., Fotheringham-Smythe, J.P.N.:
+Frobnication revisited.
+J. of Foo
+\textbf{13} (2003)  234--778
+
+\bibitem{Herman04}
+Herman, S., Fotheringham-Smythe, J.P.N., Gamow, G.:
+Can a machine frobnicate?
+J. of Foo
+\textbf{14} (2004)  234--778
+
+\bibitem{Smith09}
+Smith, F.:
+{\it The Frobnicatable Foo Filter}.
+GreatBooks, Atown (2009)
+
+\bibitem{Wills99}
+Wills, H.:
+Frobnication tutorial.
+Technical report CS-1204, XYZ University, Btown (1999)
+
+\end{thebibliography}
+
+%this would normally be the end of your paper, but you may also have an appendix
+%within the given limit of number of pages
+%\end{document}
+
+%===========================================================
+\clearpage\mbox{}Page \thepage\ of the manuscript.
+\clearpage\mbox{}Page \thepage\ of the manuscript.
+\clearpage\mbox{}Page \thepage\ of the manuscript.
+\clearpage\mbox{}Page \thepage\ of the manuscript.
+12 pages are without extra charge for additional pages.
+\par\vfill\par
+This is the standard number of pages required for ACCV 2012.
+
+\clearpage\mbox{}Page \thepage\ of the manuscript.
+\clearpage\mbox{}Page \thepage\ of the manuscript.
+Pages 13 and 14 are ``additional pages''; they will need extra payment.
+\par\vfill\par
+Now we have reached the maximum size of the ACCV 2012 final paper.
+
+\end{document}
