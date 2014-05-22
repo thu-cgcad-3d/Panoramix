@@ -468,7 +468,6 @@ namespace panoramix {
                 return result();
             }
 
-            // execute the expression graph to get value updated
             template <class ExpressionIteratorT>
             inline ResultType<T> executeRange(ExpressionIteratorT begin, ExpressionIteratorT end) const {
                 assert(isValid() && "Invalid expression!");
@@ -480,6 +479,12 @@ namespace panoramix {
             }
 
             // compute the derivative of current expression
+            template <class VarT>
+            inline DerivativeExpression<VarT> derivative(const Expression<VarT> & var) const {
+                assert(IsScalarType<T>::value && "The cost function must has a scalar value!");
+                return std::get<0>(backPropagateGradientUsingSequence(Sequence<0>(), var));
+            }
+
             template <class ... VarTs>
             inline std::tuple<DerivativeExpression<VarTs>...> derivatives(const Expression<VarTs> &... vars) const {
                 assert(IsScalarType<T>::value && "The cost function must has a scalar value!");
@@ -487,13 +492,6 @@ namespace panoramix {
                 return backPropagateGradientUsingSequence(typename SequenceGenerator<sizeof...(VarTs)>::type(), vars...);
             }
 
-            template <class VarT>
-            inline DerivativeExpression<VarT> derivative(const Expression<VarT> & var) const {
-                assert(IsScalarType<T>::value && "The cost function must has a scalar value!");
-                return std::get<0>(backPropagateGradientUsingSequence(Sequence<0>(), var));
-            }
-
-            // compute the derivative of current expression
             template <class ExpressionIteratorT, class ExpressionOutIteratorT>
             inline void derivativesRange(ExpressionIteratorT varsBegin, ExpressionIteratorT varsEnd, ExpressionOutIteratorT derivsBegin) const {
                 assert(IsScalarType<T>::value && "The cost function must has a scalar value!");

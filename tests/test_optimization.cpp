@@ -25,7 +25,7 @@ TEST(Optimization, Quadratic) {
     auto A = graph.addConst(Av);
 
     auto f = (transpose(x) * A * x).sum();
-    auto df = std::get<0>(f.derivatives(x));
+    auto df = f.derivative(x);
 
     for (int i = 0; i < 50; i++){
         std::cout << "f: " << f.execute() << std::endl;

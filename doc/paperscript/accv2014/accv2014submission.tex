@@ -75,22 +75,73 @@
 %-------------------------------------------------------------------------
 \subsection{3D Line Segments Recovery}
 
-\subsubsection {Extract and Classify 2D Lines}
-
 \subsubsection {Geometric Constraints}
+
+// Locate 3 orthogonal vanishing points;
+// Classify lines
+// Locate other horizontal vanishing points
+// -> Detect horizontal (but not classified) lines
+// -> Locate perpendicularities among horizontal lines
+
+// Detect symmetric line pairs on vertical planes
+// HOW?
+
+\subsubsection {Reconstruct Line Segment Parts}
+
+// Constraints on single line:
+//   class of line
+
+// Detect line junctions
+//   I, X junction (incidence)
+//   L, X, Y, W junction (intersection)
+//   T junction (occludeness)
+
+// Constraints between adjoint lines
+//   incidence, intersection
+//   geometric constraint between two lines (horizontal orthogonality, symmetry)
+
+// Reconstruct line segment parts
+// result: locally constrained lines, several connected components, no face construction
 
 
 %-------------------------------------------------------------------------
 \subsection{Region Reasoning for Face Construction}
 
-\subsubsection {Key Regions and Region-Graph} % regions connecting isolated(without constraints) lines
+// use regions to stitch line segment parts and construct faces
+
+\subsubsection {Boundary Regions and Region-Graph} % regions connecting isolated(without constraints) lines
+
+// Assumption:
+// 1. Pixels in each region satisfy piecewise planarity (one region one plane)
+// 2. Occluding edges are visualized as T junctions
+
+// Labeling regions: horizontal? vertical? neither horizontal nor vertical?
+
+
+// Constraints on single region:
+//  regions containing (close to) vertical lines (if not occluding lines) should be vertical 
+//  regions containing (close to) horizontal lines should be ...
+//	other region features ...
+
+// Constraints between adjacent regions:
+//   three kinds of Relation between adjacent regions:
+//   1. Continuity, same orientation label, and connected
+//   2. Connectivity, different orientation label but connected
+//   3. Disconnectivity, not connected
+
+
 
 \subsubsection {Graph Optimization}
 
-%-------------------------------------------------------------------------
-\subsection{Experimental Results}
+// Design energy function
+//  1. punish disconnectivities between adjacent regions
+//  2. punish (slightly) discontinuities between adjacent regions
+//  3. punish spatial inconsistencies between reconstructed region faces and reconstructed line segments
 
-\subsubsection {}
+%-------------------------------------------------------------------------
+\section{Experimental Results}
+
+\subsection {}
 
 
 
