@@ -1,12 +1,12 @@
-#ifndef PANORAMIX_DERIV_EXPRESSION_OPS_GEOMETRY_HPP
-#define PANORAMIX_DERIV_EXPRESSION_OPS_GEOMETRY_HPP
-
-#include "expression_ops.hpp"
+#pragma once
+#ifndef PANORAMIX_DERIV_OPTRAITS_GEOMETRY_HPP
+#define PANORAMIX_DERIV_OPTRAITS_GEOMETRY_HPP
+ 
+#include "optraits_base.hpp"
 
 namespace panoramix {
     namespace deriv {
 
-        
         // map to cross product matrix
         template <class Mat3T, class Vec3T>
         inline Expression<DataStorageType<Mat3T>> makeCross3ProductMatrix(const Expression<Vec3T> & v) {
@@ -79,7 +79,9 @@ namespace panoramix {
             ->Expression<decltype(std::declval<ResultType<T>>().norm())> {
             return ComposeExpression(NormTraits<T>(), e);
         }
+
     }
 }
+
  
 #endif

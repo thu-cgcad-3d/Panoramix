@@ -21,6 +21,5 @@ int main(int argc, char * argv[], char * envp[])
 {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    vis::InitGui(argc, argv);
     return RUN_ALL_TESTS();
 }

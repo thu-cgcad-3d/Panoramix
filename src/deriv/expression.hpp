@@ -1,3 +1,4 @@
+#pragma once
 #ifndef PANORAMIX_CORE_EXPRESSION_HPP
 #define PANORAMIX_CORE_EXPRESSION_HPP
 
@@ -32,6 +33,7 @@ namespace panoramix {
 
         template <class T> struct OpWithValue;
         template <class T> struct OpWithCache;
+
         template <class T> struct Expression;
 
         template <class T> struct IsExpression : public std::false_type {};
@@ -325,50 +327,7 @@ namespace panoramix {
                 }
             };
             return from.g()->as<DataStorageType<T>>(from.g()->addNode(std::make_shared<EvalOp>(), { from.handle() }));
-        }
-
-        //// expression conditional branch
-        //template <class T, class SelectorT, class ConditionT, class ExpressionTIteratorT>
-        //inline Expression<T> expressionOnCondition(SelectorT && cc,
-        //    const Expression<ConditionT> & cond,
-        //    ExpressionTIteratorT candidatesBegin, ExpressionTIteratorT candidatesEnd) {
-        //    typename InputType = typename std::iterator_traits<ExpressionTIteratorT>::value_type::Type;
-        //    static_assert(std::is_same<T, InputType>::value, "invalid inputs type!");
-        //    struct OnConditionOp : public OpBaseType<T> {
-        //        inline explicit OnConditionOp(SelectorT && cc) : selector(std::forward<SelectorT>(cc)) {}
-        //        virtual std::ostream & toString(std::ostream & os) const {
-        //            os << "onCondition";
-        //            return os;
-        //        }
-        //        virtual T value() const override {
-        //            std::vector<EHandle> inp = graph->inputs(self);
-        //            assert(inp.size() >= 1 && "wrong inputs number");
-        //            int choice = selector(TraitsAboutOp<T>::Result(graph->op(inp.front())));
-        //            assert(choice >= 0 && choice < inp.size() - 1 && "invalid choice!");
-        //            return TraitsAboutOp<T>::Result(graph->op(inp[choice + 1]));
-        //        }
-        //        virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const {
-        //            std::vector<EHandle> inp = graph->inputs(self);
-        //            assert(inp.size() >= 1 && "wrong inputs number");
-        //            int choice = selector(TraitsAboutOp<T>::Result(graph->op(inp.front())));
-        //            assert(choice >= 0 && choice < inp.size() && "invalid choice!");
-        //            std::vector<EHandle> dinputs(inp.size());
-        //            dinputs[choice + 1] = sumOfDOutputs;
-        //            return dinputs;
-        //        }
-        //        SelectorT selector;
-        //    };
-        //    std::vector<EHandle> inputs(1, cond.handle());
-        //    std::transform(candidatesBegin, candidatesEnd, std::back_inserter(inputs), 
-        //        [](const Expression<T> & branch){
-        //        return branch.handle(); 
-        //    });
-        //    return cond.g()->as<T>(cond.g()
-        //        ->addNode(std::make_shared<OnConditionOp>(std::forward<SelectorT>(cc)), inputs));
-        //}     
-
-
-       
+        }   
 
 
 
@@ -526,6 +485,12 @@ namespace panoramix {
                 assert(IsScalarType<T>::value && "The cost function must has a scalar value!");
                 assert(isValid() && "Invalid expression!");
                 return backPropagateGradientUsingSequence(typename SequenceGenerator<sizeof...(VarTs)>::type(), vars...);
+            }
+
+            template <class VarT>
+            inline DerivativeExpression<VarT> derivative(const Expression<VarT> & var) const {
+                assert(IsScalarType<T>::value && "The cost function must has a scalar value!");
+                return std::get<0>(backPropagateGradientUsingSequence(Sequence<0>(), var));
             }
 
             // compute the derivative of current expression

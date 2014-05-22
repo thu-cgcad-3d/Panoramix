@@ -1,17 +1,10 @@
 #include "../src/core/feature.hpp"
 #include "../src/vis/visualize2d.hpp"
-#include "gtest/gtest.h"
 
-#include <iostream>
-#include <string>
-#include <random>
+#include "test_config.hpp"
 
 using namespace panoramix;
-
-static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
-static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + "/normal";
-static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
-static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
+using namespace test;
 
 TEST(Feature, SegmentationExtractor) {
     core::SegmentationExtractor::Params p;

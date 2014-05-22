@@ -22,7 +22,6 @@ namespace panoramix {
                 double area;
                 double borderLength;
                 Box2 boundingBox;
-                int lineClassScore;
             };
             struct HalfData {
                 double boundaryLength;

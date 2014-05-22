@@ -487,7 +487,7 @@ TEST(Expression, ArrayOp){
     {
         // tanh
         auto f = tanh(x).sum();
-        auto df = std::get<0>(f.derivatives(x));
+        auto df = f.derivative(x);
         for (int i = 0; i < 10; i++) {
             int a = std::rand() % 100 + 1;
             int b = std::rand() % 100 + 1;
@@ -495,6 +495,22 @@ TEST(Expression, ArrayOp){
             EXPECT_DOUBLE_EQ(tanh(xv).sum(), f.execute());
             EXPECT_MATRIX_EQ(((1 - tanh(xv))*(1 - tanh(xv))).matrix(), df.execute().matrix());
         }
+    }
+
+    {
+        // replicate
+        auto f = replicate(x, 2, 3).sum();
+        auto df = f.derivative(x);
+        for (int i = 0; i < 10; i++) {
+            int a = std::rand() % 100 + 1;
+            int b = std::rand() % 100 + 1;
+            xv.setRandom(a, b);
+            EXPECT_FLOAT_EQ(xv.replicate(2, 3).eval().sum(), f.execute());
+            auto xxv = xv;
+            xxv.setConstant(2 * 3);
+            EXPECT_MATRIX_EQ(xxv, df.execute());
+        }
+
     }
 
 }
@@ -592,7 +608,7 @@ TEST(Expression, MatrixOp3){
     }
 
     {
-        auto xxx = xv.block(1, 1, 2, 2).eval();
+        //auto xxx = xv.block(1, 1, 2, 2).eval();
         //auto xxxx = xv.array().replicate<2, 2>().eval();
         //xv.replicate<2, 2>().eval()
        /* xv.setRandom(3, 4);

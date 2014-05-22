@@ -20,6 +20,8 @@ namespace panoramix {
                 double nearPlane = 0.01, double farPlane = 1e4);
 
             inline Size screenSize() const { return Size(static_cast<float>(_screenW), static_cast<float>(_screenH)); }
+            inline double screenWidth() const { return _screenW; }
+            inline double screenHeight() const { return _screenH; }
             inline double fovRadians() const { return atan(_screenH / 2.0 / _focal) * 2; }
             inline double fovAngles() const { return fovRadians() * 180.0 / M_PI; }
             inline double aspect() const { return double(_screenW) / double(_screenH); }

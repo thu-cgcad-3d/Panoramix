@@ -34,7 +34,6 @@ TEST(ViewsNet, ViewsNet) {
         core::Vec3 direction = v.data;
         if (core::AngleBetweenDirections(direction, core::Vec3(0, 0, 1)) <= 0.1 ||
             core::AngleBetweenDirections(direction, core::Vec3(0, 0, -1)) <= 0.1){
-            //cams.emplace_back(700, 700, originCam.focal(), core::Vec3(0, 0, 0), direction, core::Vec3(0, 1, 0));
             continue;
         }
         else{

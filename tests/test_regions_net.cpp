@@ -1,19 +1,11 @@
 #include "../src/rec/regions_net.hpp"
 #include "../src/vis/visualize2d.hpp"
 #include "../src/rec/regions_net_visualize.hpp"
-#include "gtest/gtest.h"
 
-#include <iostream>
-#include <string>
-#include <random>
+#include "test_config.hpp"
 
 using namespace panoramix;
-
-// PROJECT_TEST_DATA_DIR_STR is predefined using CMake
-static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
-static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + "/normal";
-static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
-static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
+using namespace test;
 
 TEST(RegionsNet, RegionsNet) {
 
