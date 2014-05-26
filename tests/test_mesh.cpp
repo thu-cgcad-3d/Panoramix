@@ -190,6 +190,63 @@ TEST(ConstraintGraphTest, Basic) {
 }
 
 
+TEST(GraphicalModelTest, Basic) {
+
+    using CGraph = core::GraphicalModel<core::Dummy, core::LayerConfig<core::Dummy, core::Dynamic>>;
+
+    CGraph cgraph;
+    auto c0 = cgraph.add();
+    auto c1 = cgraph.add();
+    auto c2 = cgraph.add();
+    auto c3 = cgraph.add();
+
+    auto cc012 = cgraph.add<1>({ c0, c1, c2 });
+    auto cc123 = cgraph.add<1>({ c1, c2, c3 });
+    auto cc230 = cgraph.add<1>({ c2, c3, c0 });
+    auto cc301 = cgraph.add<1>({ c3, c0, c1 });
+
+    EXPECT_EQ(4, cgraph.internalElements<0>().size());
+    EXPECT_EQ(4, cgraph.internalElements<1>().size());
+
+    for (size_t i = 0; i < cgraph.internalElements<0>().size(); i++){
+        CGraph ncgraph = cgraph;
+        ncgraph.remove(core::HandleAtLevel<0>(i));
+        ncgraph.gc();
+
+        EXPECT_EQ(3, ncgraph.internalElements<0>().size());
+        EXPECT_EQ(1, ncgraph.internalElements<1>().size());
+    }
+
+    for (size_t i = 0; i < cgraph.internalElements<0>().size(); i++){
+        CGraph ncgraph = cgraph;
+        ncgraph.remove(core::HandleAtLevel<0>(i));
+        ncgraph.remove(core::HandleAtLevel<0>((i+1) % ncgraph.internalElements<0>().size()));
+        ncgraph.gc();
+
+        EXPECT_EQ(2, ncgraph.internalElements<0>().size());
+        EXPECT_EQ(0, ncgraph.internalElements<1>().size());
+    }
+
+    for (size_t i = 0; i < cgraph.internalElements<1>().size(); i++){
+        CGraph ncgraph = cgraph;
+        ncgraph.remove(core::HandleAtLevel<1>(i));
+        ncgraph.gc();
+
+        EXPECT_EQ(4, ncgraph.internalElements<0>().size());
+        EXPECT_EQ(3, ncgraph.internalElements<1>().size());
+    }
+
+    cgraph.remove(c0);
+    cgraph.remove(c1);
+    cgraph.gc();
+
+    EXPECT_EQ(2, cgraph.internalElements<0>().size());
+    EXPECT_EQ(0, cgraph.internalElements<1>().size());
+
+
+}
+
+
 
 int main(int argc, char * argv[], char * envp[])
 {

@@ -31,59 +31,31 @@ namespace panoramix {
             glp_free_env();
             longjmp(*(info->env), 1);
         }
+        
 
-        //// component expression wrappers
-        //template <class T>
-        //struct DefaultComponentExpressionWrapper {
-        //    using WrappedType = const T &;
-        //    inline deriv::Expression<WrappedType> make(deriv::ExpressionGraph & graph, const T & t) const {
-        //        return graph.addRef(t); 
-        //    }
-        //    inline void update(T & t, const deriv::DerivativeType<WrappedType> & derivExprResult) const {
-        //        t -= derivExprResult;
-        //    }
-        //};
+        // optimization method tag
+        struct OptimizeUsingGradientTag {};
+        struct OptimizeUsingGaussNewtonTag {};
+        struct OptimizeUsingLevenbergMarquardtTag {};
 
-        //template <class T, int N>
-        //struct DefaultComponentExpressionWrapper<core::Line<T, N>> {
-        //    using WrappedType = Eigen::Matrix<T, N, 2>;
-        //    deriv::Expression<WrappedType> make(deriv::ExpressionGraph & graph, const core::Line<T, N> & t) const {
-        //        return deriv::composeFunction(graph, []() -> Eigen::Matrix<T, N, 2> {
-        //            Eigen::Matrix<T, N, 2> result;  
-        //            result << deriv::CVMatToEigenMat(t.first), deriv::CVMatToEigenMat(t.second);
-        //            return result;
-        //        });
-        //    }
-        //    inline void update(core::Line<T, N> & t, const deriv::DerivativeType<WrappedType> & derivExprResult) const {
-        //        t.first -= deriv::EigenMatToCVMat(derivExprResult.col(0).eval());
-        //        t.second -= deriv::EigenMatToCVMat(derivExprResult.col(1).eval());
-        //    }
-        //};
 
-        //// constraint expression wrappers
-
+        
 
 
         // optimize constraint graph
         template <class ComponentDataT, class ConstraintDataT, class ComponentUpdaterT,
         class ComponentExpressionMakerT, class ConstraintExpressionMakerT, class CostExpressionMakerT>
-        int OptimizeConstraintGraphUsingGradient(
+        int OptimizeConstraintGraph(
             core::ConstraintGraph<ComponentDataT, ConstraintDataT> & consGraph, 
             ComponentUpdaterT compUpdator = ComponentUpdaterT(),
             ComponentExpressionMakerT compExprMaker = ComponentExpressionMakerT(),
             ConstraintExpressionMakerT consExprMaker = ConstraintExpressionMakerT(),
-            CostExpressionMakerT costExprMaker = CostExpressionMakerT()) {
+            CostExpressionMakerT costExprMaker = CostExpressionMakerT(),
+            OptimizeUsingGradientTag tag = OptimizeUsingGradientTag()) {
             
             using ConsGraph = core::ConstraintGraph<ComponentDataT, ConstraintDataT>;
             using CompHandle = typename ConsGraph::ComponentHandle;
             using ConsHandle = typename ConsGraph::ConstraintHandle;
-            
-            template <class T>
-            struct CompareHandle {
-                inline bool operator < (const core::Handle<T> & a, const core::Handle<T> & b) const {
-                    return a.id < b.id; 
-                }
-            };
 
             deriv::ExpressionGraph graph;
             
@@ -146,11 +118,7 @@ namespace panoramix {
         }
 
 
-        template <class ComponentDataT, class ConstraintDataT>
-        void OptimizeConstraintGraphUsingGraphCut(core::ConstraintGraph<ComponentDataT, ConstraintDataT> & consGraph) {
-
-        }
-
+        
 
     }
 }

@@ -24,7 +24,7 @@ namespace panoramix {
         Visualizer3D operator << (Visualizer3D viz, const ViewsNet::GlobalData & netgb) {
             std::vector<Line3> consLines;
             std::vector<Point3> consPoints;
-            consLines.reserve(netgb.constraints.size());
+            /*consLines.reserve(netgb.constraints.size());
             consPoints.reserve(netgb.constraints.size());
             for (auto & cons : netgb.refinedConstraints){
                 auto & line1 = netgb.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[0]].component;
@@ -36,7 +36,7 @@ namespace panoramix {
             viz << vis::manip3d::SetDefaultColor(ColorTag::Yellow)
                 << vis::manip3d::SetPointSize(10.0)
                 << vis::manip3d::SetLineWidth(1.0f)
-                << consLines;
+                << consLines;*/
             return viz
                 << vis::manip3d::SetDefaultColor(ColorTag::Black)
                 << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)

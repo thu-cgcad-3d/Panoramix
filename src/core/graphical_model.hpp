@@ -2,8 +2,13 @@
 #define PANORAMIX_CORE_GRAPHICAL_MODEL_HPP
 
 #include <cstdint>
+#include <array>
+#include <set>
 #include <vector>
 
+#include <Eigen/Core>
+
+#include "template_utilities.hpp"
 #include "misc.hpp"
 
 namespace panoramix {
@@ -28,6 +33,27 @@ namespace panoramix {
         using HandleArray = std::vector<Handle<Tag>>;
         template <class Tag>
         using HandlePtrArray = std::vector<Handle<Tag>*>;
+        template <class Tag>
+        struct CompareHandle {
+            inline bool operator()(Handle<Tag> a, Handle<Tag> b) const {
+                return a.id < b.id;
+            }
+        };
+        template <class Tag>
+        struct HashHandle {
+            inline uint64_t operator()(Handle<Tag> a) const {
+                return static_cast<uint64_t>(a.id);
+            }
+        };
+
+        template <int L>
+        struct AtLevel {
+            static const int Level = L;
+        };
+        template <int L>
+        using HandleAtLevel = Handle<AtLevel<L>>;
+
+
         
         /**
          * @brief Topology structs
@@ -80,7 +106,7 @@ namespace panoramix {
          * @brief Helper functions for the Mesh class
          */
         template <class ComponentTableT, class UpdateHandleTableT>
-        void RemoveAndMap(ComponentTableT & v, UpdateHandleTableT & newlocations) {
+        int RemoveAndMap(ComponentTableT & v, UpdateHandleTableT & newlocations) {
             // ComponentTableT : std::vector<Triplet<TopoT, DataT>>
             // UpdateHandleTableT: std::vector<Handle<TopoT>>
             newlocations.resize(v.size());
@@ -93,6 +119,7 @@ namespace panoramix {
                     v.erase(v.begin() + i);
                 }
             }
+            return 0;
         }
         template <class UpdateHandleTableT, class TopoT>
         inline void UpdateOldHandle(const UpdateHandleTableT & newlocationTable, Handle<TopoT> & h) {
@@ -112,15 +139,15 @@ namespace panoramix {
             invalid.reset();
             hs.erase(std::remove(std::begin(hs), std::end(hs), invalid), std::end(hs));
         }
+
         
         /**
          * @brief The Mesh class, halfedge structure
          */
         template <class VertDataT, class HalfDataT = Dummy, class FaceDataT = Dummy>
-        class Mesh {
-            
+        class Mesh {            
         public:
-            inline Mesh(){}
+            static const int LayerNum = 2;
             
             using VertHandle = Handle<VertTopo>;
             using HalfHandle = Handle<HalfTopo>;
@@ -594,6 +621,280 @@ namespace panoramix {
             _constraints.clear();
             _components.clear();
         }
+
+
+
+
+
+
+        using Eigen::Dynamic;
+
+        // fix sized
+        template <int L, int ChildN>
+        struct Topo {
+            static const int Level = L;
+            std::array<Handle<AtLevel<Level - 1>>, ChildN> lowers; // use std::array
+            std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
+            HandleAtLevel<Level>hd;
+            explicit inline Topo(int id = -1) : hd(id){}
+            explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls) : hd(id) {
+                assert(ls.size() == lowers.size());
+                std::copy(ls.begin(), ls.end(), lowers.begin());
+            }
+        };
+
+        // dynamic sized
+        template <int L>
+        struct Topo<L, Dynamic> {
+            static const int Level = L;
+            std::vector<Handle<AtLevel<Level - 1>>> lowers; // use std::array
+            std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
+            HandleAtLevel<Level>hd;
+            explicit inline Topo(int id = -1) : hd(id){}
+            explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls)
+                : hd(id), lowers(ls) {}
+        };
+
+
+        // zero sized
+        template <int L>
+        struct Topo<L, 0> {
+            static const int Level = L;
+            std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
+            HandleAtLevel<Level>hd;
+            explicit inline Topo(int id = -1) : hd(id){}
+            explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls)
+                : hd(id) {
+                assert(ls.size() == 0);
+            }
+        };
+
+        // configuration for each layer
+        template <class DataT, int ChildN>
+        struct LayerConfig {
+            using DataType = DataT;
+            static const int ChildNum = ChildN;
+        };
+
+        template <class T>
+        struct IsLayerConfig : public std::false_type {};
+
+        template <class DataT, int ChildN>
+        struct IsLayerConfig<LayerConfig<DataT, ChildN>> : public std::true_type{};
+
+        // content of each layer
+        template <int Level, class T>
+        struct LayerContent {};
+
+        template <int Level, class DataT, int ChildN>
+        struct LayerContent<Level, LayerConfig<DataT, ChildN>> {
+            using TopoType = Topo<Level, ChildN>;
+            using DataType = DataT;
+            using TripletType = Triplet<TopoType, DataT>;
+            using TableType = TripletArray<TopoType, DataT>;
+            TableType contentTable;
+        };
+
+        template <class CConfTupleT, int Level>
+        struct LayerContentFromConfigTuple {
+            using type = LayerContent<Level, typename std::tuple_element<size_t(Level), CConfTupleT>::type>;
+        };
+
+        // make a layer content tuple with levels
+        template <class CConfTupleT, class SequenceT>
+        struct LayerContentTuple {};
+
+        template <class CConfTupleT, int ...Levels>
+        struct LayerContentTuple<CConfTupleT, Sequence<Levels...>> {
+            using type = std::tuple<typename LayerContentFromConfigTuple<CConfTupleT, Levels>::type...>;
+        };
+
+
+
+        // Graphical Model
+        template <class BaseDataT, class ...CConfs>
+        class GraphicalModel {
+            static const unsigned LayerNum = sizeof...(CConfs)+1;
+
+            using ContentsType =
+                typename LayerContentTuple<std::tuple<LayerConfig<BaseDataT, 0>, CConfs...>,
+                typename SequenceGenerator<LayerNum>::type>::type;
+
+            template <int Level>
+            struct LayerContentTypeStruct {
+                using type = typename std::tuple_element<Level, ContentsType>::type;
+            };
+
+            template <int Level>
+            using ElementExistsPred = TripletExistsPred<typename LayerContentTypeStruct<Level>::type::TopoType,
+                typename LayerContentTypeStruct<Level>::type::DataType>;
+
+        public:
+
+            // internal elements
+            template <int Level>
+            inline const typename LayerContentTypeStruct<Level>::type::TableType & internalElements() const {
+                return std::get<Level>(_contents).contentTable;
+            }
+
+            template <int Level>
+            inline typename LayerContentTypeStruct<Level>::type::TableType & internalElements() {
+                return std::get<Level>(_contents).contentTable;
+            }
+
+
+            // topo
+            template <int Level>
+            inline const typename LayerContentTypeStruct<Level>::type::TopoType & topo(HandleAtLevel<Level> h) const {
+                return internalElements<Level>()[h.id].topo;
+            }
+
+            template <int Level>
+            inline typename LayerContentTypeStruct<Level>::type::TopoType & topo(HandleAtLevel<Level> h) {
+                return internalElements<Level>()[h.id].topo;
+            }
+
+            // data
+            template <int Level>
+            inline const typename LayerContentTypeStruct<Level>::type::DataType & data(HandleAtLevel<Level> h) const {
+                return internalElements<Level>()[h.id].data;
+            }
+
+            template <int Level>
+            inline typename LayerContentTypeStruct<Level>::type::DataType & data(HandleAtLevel<Level> h) {
+                return internalElements<Level>()[h.id].data;
+            }
+
+            // traverse
+            template <int Level>
+            inline ConditionalContainerWrapper<typename LayerContentTypeStruct<Level>::type::TableType, ElementExistsPred<Level>> elements() {
+                return ConditionalContainerWrapper<typename LayerContentTypeStruct<Level>::type::TableType, ElementExistsPred<Level>>(
+                    &(internalElements<Level>()));
+            }
+
+            template <int Level>
+            inline ConstConditionalContainerWrapper<typename LayerContentTypeStruct<Level>::type::TableType, ElementExistsPred<Level>> elements() const {
+                return ConstConditionalContainerWrapper<typename LayerContentTypeStruct<Level>::type::TableType, ElementExistsPred<Level>>(
+                    &(internalElements<Level>()));
+            }
+
+
+            // add element
+            template <int Level>
+            HandleAtLevel<Level> add(std::initializer_list<HandleAtLevel<Level - 1>> depends,
+                const typename LayerContentTypeStruct<Level>::type::DataType & d = typename LayerContentTypeStruct<Level>::type::DataType()) {
+                int id = internalElements<Level>().size();
+                internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, depends), d, true);
+                for (const HandleAtLevel<Level - 1> & lowh : depends) {
+                    topo(lowh).uppers.insert(HandleAtLevel<Level>(id));
+                }
+                return HandleAtLevel<Level>(id);
+            }
+
+            // add element of the lowest level
+            HandleAtLevel<0> add(const typename LayerContentTypeStruct<0>::type::DataType & d = LayerContentTypeStruct<0>::type::DataType()) {
+                int id = internalElements<0>().size();
+                internalElements<0>().emplace_back(typename LayerContentTypeStruct<0>::type::TopoType(id), d, true);
+                return HandleAtLevel<0>(id);
+            }
+
+            // removed
+            template <int Level>
+            inline bool removed(HandleAtLevel<Level> h) const {
+                return !internalElements<Level>()[h.id].exists;
+            }
+
+            // remove
+            template <int Level>
+            void remove(HandleAtLevel<Level> h) {
+                if (h.isInValid() || removed(h))
+                    return;
+                cleanLowers<Level>(h, std::integral_constant<bool, (Level>0) > ());
+                internalElements<Level>()[h.id].exists = false; // mark as deleted
+                cleanUppers<Level>(h, std::integral_constant < bool, (Level<LayerNum - 1)>());
+            }
+
+        private:
+            template <int Level>
+            inline void cleanLowers(HandleAtLevel<Level> h, std::false_type) {}
+            template <int Level>
+            void cleanLowers(HandleAtLevel<Level> h, std::true_type) {
+                auto & c = internalElements<Level>()[h.id];
+                auto & clowerTable = internalElements<Level - 1>();
+
+                for (auto & lowh : c.topo.lowers) { // remove this h from all lowers' uppers set
+                    if (lowh.isInValid() || removed(lowh))
+                        continue;
+                    auto & low = clowerTable[lowh.id];
+                    low.topo.uppers.erase(h);
+                }
+            }
+
+            template <int Level>
+            inline void cleanUppers(HandleAtLevel<Level> h, std::false_type) {}
+            template <int Level>
+            void cleanUppers(HandleAtLevel<Level> h, std::true_type) {
+                auto & c = internalElements<Level>()[h.id];
+                for (auto & uph : c.topo.uppers) {
+                    remove(uph);
+                }
+            }
+
+
+        public:
+            // garbage collection
+            inline void gc() {
+                gcUsingSequence(typename SequenceGenerator<LayerNum>::type());
+            }
+
+        private:
+            template <int ...S>
+            void gcUsingSequence(Sequence<S...>) {
+                std::tuple<std::vector<HandleAtLevel<S>>...> nlocs;
+                int dummy[] = { RemoveAndMap(internalElements<S>(), std::get<S>(nlocs))... };
+
+            }
+
+            template <int Level, class NLocTupleT>
+            inline void updateEachLayerHandles(const NLocTupleT & nlocs) {
+                auto & eles = internalElements<Level>();
+                for (size_t i = 0; i < eles.size(); i++){
+                    UpdateOldHandle(std::get<Level>(nlocs), eles[i].topo.hd);
+                }
+                updateLowers<Level>(nlocs, std::integral_constant<bool, (Level > 0)>());
+                updateUppers<Level>(nlocs, std::integral_constant<bool, (Level<LayerNum - 1)>());
+            }
+
+            template <int Level, class NLocTupleT>
+            inline void updateLowers(const NLocTupleT & nlocs, std::false_type) {}
+            template <int Level, class NLocTupleT>
+            inline void updateLowers(const NLocTupleT & nlocs, std::true_type) {
+                auto & eles = internalElements<Level>();
+                for (size_t i = 0; i < eles.size(); i++){
+                    UpdateOldHandleContainer(std::get<Level - 1>(nlocs), eles[i].topo.lowers);
+                    RemoveInValidHandleFromContainer(eles[i].topo.lowers);
+                }
+            }
+
+            template <int Level, class NLocTupleT>
+            inline void updateUppers(const NLocTupleT & nlocs, std::false_type) {}
+            template <int Level, class NLocTupleT>
+            inline void updateUppers(const NLocTupleT & nlocs, std::true_type) {
+                auto & eles = internalElements<Level>();
+                for (size_t i = 0; i < eles.size(); i++){
+                    UpdateOldHandleContainer(std::get<Level + 1>(nlocs), eles[i].topo.uppers);
+                    RemoveInValidHandleFromContainer(eles[i].topo.uppers);
+                }
+            }
+
+        private:
+            ContentsType _contents;
+        };
+
+
+
+
+
 
     }
 }

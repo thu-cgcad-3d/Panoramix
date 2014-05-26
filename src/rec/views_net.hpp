@@ -106,20 +106,6 @@ namespace panoramix {
                 cv::detail::MatchesInfo matchInfo;
             };
 
-            struct ConstraintData {
-                ConstraintData();
-                size_t mergedSpatialLineSegmentIds[2]; // corresponded mergedSpatialLineSegments ids
-                Vec3 position; // location of intersecion
-                
-                // [i][0] -> line lengths with class i lying between vp[i] and position
-                // [i][1] -> line lengths with class i lying between position and anti-vp[i]
-                double lineVotings[3][2];
-                double weight;
-                struct JunctionWeights { double I, L, X, T, Triplet; } junctionWeights;
-                enum { Intersection,  Incidence } type;
-                double slackValue; // retreived after optimization
-            };
-
             struct GlobalData {
                 Image panorama;
                 std::array<Vec3, 3> vanishingPoints;
@@ -129,8 +115,6 @@ namespace panoramix {
                 std::vector<Vec3> mergedSpatialLineSegmentIntersections;
                 std::vector<Classified<Line3>> mergedSpatialLineSegments;
                 std::vector<int> mergedSpatialLineSegmentChainIds;
-                // constraints for 3D lines reconstruction
-                std::vector<ConstraintData> constraints, refinedConstraints;
             };
 
             inline const ViewMesh & views() const { return _views; }
