@@ -117,27 +117,51 @@ namespace panoramix {
         }
 
 
+        // make an iterator
+        template <class CoreDataT, class GetValueT, class SetToNextT, class CompareCoreDataT = std::equal_to<CoreDataT>>
+        class EasyForwardIterator : public std::iterator<std::forward_iterator_tag, 
+            decltype(std::declval<GetValueT>()(std::declval<CoreDataT>()))> {
+        public:
+            inline explicit EasyForwardIterator(const CoreDataT & cdata, GetValueT getValue, SetToNextT setToNext, 
+                CompareCoreDataT cmpCData = CompareCoreDataT())
+                : _coreData(cdata), _getValue(getValue), _setToNext(setToNext), _compareCoreData(cmpCData) {}
+            inline EasyForwardIterator & operator++() {
+                _setToNext(_coreData);
+                return *this;
+            }
 
-        // not implemented error
-#define NOT_IMPLEMENTED_YET() \
-    throw std::runtime_error("This feature has not yet been implemented! \n" \
-    "in function: "__FUNCSIG__ "\n" \
-    "in line: " + std::to_string(__LINE__) + "\n" \
-    "in file: "__FILE__)
+            inline value_type operator * () const {
+                return _getValue(_coreData);
+            }
 
-        // should never be called error
-#define SHOULD_NEVER_BE_CALLED() \
-    throw std::runtime_error("This feature should never be called! \n" \
-    "in function: "__FUNCSIG__ "\n" \
-    "in line: " + std::to_string(__LINE__) + "\n" \
-    "in file: "__FILE__)
+            inline pointer operator -> () const {
+                return &(_getValue(_coreData));
+            }
 
-        // should never be instanciated error
-#define SHOULD_NEVER_BE_INSTANCIATED() \
-    static_assert(false, "This feature should never be instanciated by compiler! \n" \
-    "in function: "__FUNCSIG__ "\n" \
-    "in line: " + std::to_string(__LINE__) + "\n" \
-    "in file: "__FILE__)
+            inline bool operator == (const EasyForwardIterator & i) const {
+                return _compareCoreData(_coreData, i._coreData);
+            }
+
+            inline bool operator != (const EasyForwardIterator & i) const {
+                return !(*this == i);
+            }
+
+            inline const CoreDataT & coreData() const {
+                return _coreData;
+            }
+        private:
+            CoreDataT _coreData;
+            GetValueT _getValue;
+            SetToNextT _setToNext;
+            CompareCoreDataT _compareCoreData;
+        };
+
+        // make easy forward iterator
+        template <class CoreDataT, class GetValueT, class SetToNextT, class CompareCoreDataT = std::equal_to<CoreDataT>>
+        inline EasyForwardIterator<CoreDataT, GetValueT, SetToNextT, CompareCoreDataT> 
+            MakeEasyForwardIterator(const CoreDataT & cdata, GetValueT getValue, SetToNextT setToNext, CompareCoreDataT cmpCData = CompareCoreDataT()) {
+            return EasyForwardIterator<CoreDataT, GetValueT, SetToNextT, CompareCoreDataT>(cdata, getValue, setToNext, cmpCData);
+        }
        
     }
 }

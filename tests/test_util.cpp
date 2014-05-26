@@ -1,3 +1,4 @@
+#include "../src/core/misc.hpp"
 #include "../src/core/utilities.hpp"
 
 #include <random>
@@ -305,9 +306,95 @@ TEST(UtilTest, MinimumSpanningTree) {
     EXPECT_TRUE(std::is_permutation(MST.begin(), MST.end(), correctMST.begin()));
 }
 
+TEST(UtilTest, MinimumSpanningTree2) {
+    std::vector<int> verts = { 0, 1, 2, 3, 4, 5, 6 };
+    std::vector<int> edges = { 0, 1, 2, 3, 4, 5, 6, 7 };
+    struct EdgeProperty { int fromv, tov; double w; };
+    std::vector<EdgeProperty> edgeProperties = {
+        { 0, 1, 0.1 },
+        { 1, 2, 0.5 },
+        { 2, 3, 0.2 },
+        { 0, 3, 0.6 },
+        { 0, 2, 0.2 },
+
+        { 4, 5, 0.3 },
+        { 4, 6, 0.8 },
+        { 5, 6, 0.2 }
+    };
+
+    std::vector<int> MST;
+    MST.reserve(5);
+    core::MinimumSpanningTree(
+        verts.begin(), verts.end(), edges.begin(), edges.end(),
+        std::back_inserter(MST),
+        [&edgeProperties](int e){ // get vertices of edge
+        return std::make_pair(edgeProperties[e].fromv, edgeProperties[e].tov);
+    },
+        [&edgeProperties](int e1, int e2){ // compare weights of edges
+        return edgeProperties[e1].w < edgeProperties[e2].w;
+    }
+    );
+
+    std::vector<int> correctMST = { 0, 4, 2, 5, 7 };
+    EXPECT_TRUE(std::is_permutation(MST.begin(), MST.end(), correctMST.begin()));
+}
+
+
+TEST(UtilTest, DFS) {
+    std::vector<int> verts = { 0, 1, 2, 3, 4, 5, 6 };
+    struct EdgeProperty { int fromv, tov; double w; };
+    std::vector<EdgeProperty> edgeProperties = {
+        { 0, 1, 0.1 },
+        { 1, 2, 0.5 },
+        { 2, 4, 0.2 },
+        { 0, 4, 0.6 },
+        { 0, 2, 0.2 },
+
+        { 3, 5, 0.3 },
+        { 3, 6, 0.8 },
+        { 5, 6, 0.2 }
+    };
+
+    struct Data { std::shared_ptr<std::vector<int>> vntable; int vid; };
+    auto compData = [](const Data & a, const Data & b) {return a.vntable == b.vntable && a.vid == b.vid; };
+    auto getValue = [](const Data & cdata) -> int {return (*(cdata.vntable))[cdata.vid]; };
+    auto setToNext = [](Data & cdata){cdata.vid++; };
+
+    auto vNeighborsRangeGetter = [&verts, &edgeProperties, &compData, &getValue, &setToNext](int v) {
+        auto vns = std::make_shared<std::vector<int>>();
+        for (auto & edge : edgeProperties) {
+            if (edge.fromv == v)
+                vns->push_back(edge.tov);
+            if (edge.tov == v)
+                vns->push_back(edge.fromv);
+        }
+        auto vnBegin = core::MakeEasyForwardIterator(Data{ vns, 0 }, getValue, setToNext, compData);
+        auto vnEnd = core::MakeEasyForwardIterator(Data{ vns, (int)vns->size() }, getValue, setToNext, compData);
+        return std::make_pair(vnBegin, vnEnd);
+    };
+
+    std::vector<int> visitedVids;
+    core::DepthFirstSearch(verts.begin(), verts.end(), vNeighborsRangeGetter, 
+        [&visitedVids](int vid){visitedVids.push_back(vid); return true; });
+    std::vector<int> correctVisitedVids = {0, 1, 2, 4, 3, 5, 6};
+    EXPECT_TRUE(std::equal(visitedVids.begin(), visitedVids.end(), correctVisitedVids.begin()));
+
+    std::vector<int> ccids;
+    int ccnum = core::ConnectedComponents(verts.begin(), verts.end(), vNeighborsRangeGetter, 
+        [&ccids](int vid, int cid){
+        ccids.push_back(cid); 
+    });
+    std::vector<int> correctCCids = { 0, 0, 0, 0, 1, 1, 1 };
+
+    EXPECT_EQ(2, ccnum);
+    EXPECT_TRUE(std::equal(ccids.begin(), ccids.end(), correctCCids.begin()));
+}
+
+
 
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
+    //testing::FLAGS_gtest_filter = "UtilTest.DFS";
     return RUN_ALL_TESTS();
 }

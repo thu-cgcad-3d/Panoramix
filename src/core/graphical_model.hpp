@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_MESH_HPP
-#define PANORAMIX_CORE_MESH_HPP
+#ifndef PANORAMIX_CORE_GRAPHICAL_MODEL_HPP
+#define PANORAMIX_CORE_GRAPHICAL_MODEL_HPP
 
 #include <cstdint>
 #include <vector>
@@ -428,7 +428,173 @@ namespace panoramix {
             _halfs.clear();
             _faces.clear();
         }
+
+
+
+
+
+        /**
+         * @brief The ConstraintGraph class
+         */
+        struct ConstraintTopo;
+        struct ComponentTopo {
+            Handle<ComponentTopo> hd;
+            HandleArray<ConstraintTopo> constraints;
+        };
+        struct ConstraintTopo {
+            Handle<ConstraintTopo> hd;
+            HandleArray<ComponentTopo> components;
+        };
+
+        template <class ComponentDataT, class ConstraintDataT>
+        class ConstraintGraph {
+        public:
+            inline ConstraintGraph(){}
+
+            using ComponentHandle = Handle<ComponentTopo>;
+            using ConstraintHandle = Handle<ConstraintTopo>;
+
+            using ComponentsTable = TripletArray<ComponentTopo, ComponentDataT>;
+            using ConstraintsTable = TripletArray<ConstraintTopo, ConstraintDataT>;
+
+            using ComponentExistsPred = TripletExistsPred<ComponentTopo, ComponentDataT>;
+            using ConstraintExistsPred = TripletExistsPred<ConstraintTopo, ConstraintDataT>;
+
+            using Component = typename ComponentsTable::value_type;
+            using Constraint = typename ConstraintsTable::value_type;
+
+            inline ComponentsTable & internalComponents() { return _components; }
+            inline ConstraintsTable & internalConstraints() { return _constraints; }
+            inline const ComponentsTable & internalComponents() const { return _components; }
+            inline const ConstraintsTable & internalConstraints() const { return _constraints; }
+
+            inline ConditionalContainerWrapper<ComponentsTable, ComponentExistsPred> components() {
+                return ConditionalContainerWrapper<ComponentsTable, ComponentExistsPred>(&_components);
+            }
+            inline ConditionalContainerWrapper<ConstraintsTable, ConstraintExistsPred> constraints() {
+                return ConditionalContainerWrapper<ConstraintsTable, ComponentExistsPred>(&_constraints);
+            }
+            inline ConstConditionalContainerWrapper<ComponentsTable, ComponentExistsPred> components() const {
+                return ConstConditionalContainerWrapper<ComponentsTable, ComponentExistsPred>(&_components);
+            }
+            inline ConstConditionalContainerWrapper<ConstraintsTable, ConstraintExistsPred> constraints() const {
+                return ConstConditionalContainerWrapper<ConstraintsTable, ComponentExistsPred>(&_constraints);
+            }
+
+
+            inline ComponentTopo & topo(ComponentHandle h) { return _components[h.id].topo; }
+            inline ConstraintTopo & topo(ConstraintHandle h) { return _constraints[h.id].topo; }
+            inline const ComponentTopo & topo(ComponentHandle h) const { return _components[h.id].topo; }
+            inline const ConstraintTopo & topo(ConstraintHandle h) const { return _constraints[h.id].topo; }
+
+            inline ComponentDataT & data(ComponentHandle h) { return _components[h.id].data; }
+            inline ConstraintDataT & data(ConstraintHandle h) { return _constraints[h.id].data; }
+            inline const ComponentDataT & data(ComponentHandle h) const { return _components[h.id].data; }
+            inline const ConstraintDataT & data(ConstraintHandle h) const { return _constraints[h.id].data; }
+
+            ComponentHandle addComponent(const ComponentDataT & compData = ComponentDataT());
+            ConstraintHandle addConstraint(const HandleArray<ComponentTopo> & components, const ConstraintDataT & consData = ConstraintDataT());
+
+            inline bool removed(ComponentHandle f) const { return !_components[f.id].exists; }
+            inline bool removed(ConstraintHandle e) const { return !_constraints[e.id].exists; }
+
+            inline void remove(ComponentHandle f);
+            inline void remove(ConstraintHandle e);
+
+            /**
+            * @brief garbage collection
+            */
+            template <class ComponentHandlePtrContainerT = HandlePtrArray<ComponentTopo>,
+                class ConstraintHandlePtrContainerT = HandlePtrArray<ConstraintTopo>>
+            void gc(const ComponentHandlePtrContainerT & compps = ComponentHandlePtrContainerT(),
+            const ConstraintHandlePtrContainerT & consps = ConstraintHandlePtrContainerT());
+
+            void clear();
+
+        private:
+            ComponentsTable _components;
+            ConstraintsTable _constraints;
+        };
+
+
+        // implementation of ConstraintGraph
+        template <class ComponentDataT, class ConstraintDataT>
+        typename ConstraintGraph<ComponentDataT, ConstraintDataT>::ComponentHandle 
+            ConstraintGraph<ComponentDataT, ConstraintDataT>::addComponent(const ComponentDataT & compData) {
+            ComponentTopo topo;
+            topo.hd.id = _components.size();
+            _components.emplace_back(std::move(topo), compData, true);
+            return _components.back().topo.hd;
+        }
+
+        template <class ComponentDataT, class ConstraintDataT>
+        typename ConstraintGraph<ComponentDataT, ConstraintDataT>::ConstraintHandle
+            ConstraintGraph<ComponentDataT, ConstraintDataT>::addConstraint(const HandleArray<ComponentTopo> & components, const ConstraintDataT & consData) {
+            ConstraintTopo topo;
+            topo.hd.id = _constraints.size();
+            topo.components = components;
+            for (auto & component : components) {
+                _components[component.id].topo.constraints.push_back(topo.hd);
+            }
+            _constraints.emplace_back(std::move(topo), consData, true);
+            return _constraints.back().topo.hd;
+        }
         
+        template <class ComponentDataT, class ConstraintDataT>
+        void ConstraintGraph<ComponentDataT, ConstraintDataT>::remove(ConstraintHandle h) {
+            if (h.isInValid() || removed(h))
+                return;
+            _constraints[h.id].exists = false;
+            for (auto & comp : _constraints[h.id].topo.components){
+                comp.reset();
+            }
+        }
+
+        template <class ComponentDataT, class ConstraintDataT>
+        void ConstraintGraph<ComponentDataT, ConstraintDataT>::remove(ComponentHandle h) {
+            if (h.isInValid() || removed(h))
+                return;
+            _components[h.id].exists = false;
+            for (ConstraintHandle hh : _components[h.id].topo.constraints)
+                remove(hh);
+            _components[h.id].topo.constraints.clear();
+        }
+
+
+        template <class ComponentDataT, class ConstraintDataT>
+        template <class ComponentHandlePtrContainerT, class ConstraintHandlePtrContainerT>
+        void ConstraintGraph<ComponentDataT, ConstraintDataT>::gc(const ComponentHandlePtrContainerT & compps,
+            const ConstraintHandlePtrContainerT & consps){
+            std::vector<ComponentHandle> vnlocs;
+            std::vector<ConstraintHandle> hnlocs;
+            RemoveAndMap(_components, vnlocs);
+            RemoveAndMap(_constraints, hnlocs);
+
+            for (size_t i = 0; i < _components.size(); i++){
+                UpdateOldHandle(vnlocs, _components[i].topo.hd);
+                UpdateOldHandleContainer(hnlocs, _components[i].topo.constraints);
+                RemoveInValidHandleFromContainer(_components[i].topo.constraints);
+            }
+            for (size_t i = 0; i < _constraints.size(); i++){
+                UpdateOldHandle(hnlocs, _constraints[i].topo.hd);
+                UpdateOldHandleContainer(vnlocs, _constraints[i].topo.components);
+                RemoveInValidHandleFromContainer(_constraints[i].topo.components);
+            }
+
+            for (auto compp : compps){
+                UpdateOldHandle(vnlocs, *compp);
+            }
+            for (auto consp : consps){
+                UpdateOldHandle(hnlocs, *consp);
+            }
+        }
+
+        template <class ComponentDataT, class ConstraintDataT>
+        void ConstraintGraph<ComponentDataT, ConstraintDataT>::clear() {
+            _constraints.clear();
+            _components.clear();
+        }
+
     }
 }
 

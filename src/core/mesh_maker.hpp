@@ -3,7 +3,7 @@
 
 #include <cmath>
 
-#include "mesh.hpp"
+#include "graphical_model.hpp"
  
 namespace panoramix {
     namespace core {

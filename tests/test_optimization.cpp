@@ -1,8 +1,7 @@
 #include <iostream>
 #include <random>
 
-#include "../src/deriv/derivative.hpp"
-#include "../src/core/feature.hpp"
+#include "../src/rec/optimization.hpp"
 
 #include "gtest/gtest.h"
 
@@ -10,6 +9,7 @@ using namespace Eigen;
 
 using namespace panoramix::core;
 using namespace panoramix::deriv;
+using namespace panoramix::rec;
 
 
 TEST(Optimization, Quadratic) {
@@ -82,7 +82,7 @@ TEST(Optimization, ANNLite) {
     for (double delta : deltas){
 
         int inputn = 100, hidn = 80, outputn = 10;
-        int samplesn = 300;
+        int samplesn = 1000;
 
         ExpressionGraph graph;
         MatrixXd weightVals1, weightVals2;
@@ -161,12 +161,9 @@ TEST(Optimization, ANNLite) {
 }
 
 
-TEST(Optimization, Camera) {
+TEST(Optimization, ConstraintGraph) {
 
-    PerspectiveCamera cam1, cam2;
-    ExpressionGraph graph;
-
-
+    
 
 }
 

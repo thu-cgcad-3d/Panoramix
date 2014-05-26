@@ -1,7 +1,7 @@
 #ifndef PANORAMIX_CORE_REGIONS_NET_HPP
 #define PANORAMIX_CORE_REGIONS_NET_HPP
 
-#include "../core/mesh.hpp"
+#include "../core/graphical_model.hpp"
 #include "../core/utilities.hpp"
 #include "../core/feature.hpp"
 

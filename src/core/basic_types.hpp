@@ -11,6 +11,7 @@
 #include <memory>
 #include <cstdint>
 #include <complex>
+#include <functional>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/stitching/detail/matchers.hpp>

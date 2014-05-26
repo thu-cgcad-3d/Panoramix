@@ -1,4 +1,4 @@
-#include "../src/core/mesh.hpp"
+#include "../src/core/graphical_model.hpp"
 #include "../src/core/mesh_maker.hpp"
 #include "../src/vis/visualize3d.hpp"
 
@@ -142,6 +142,53 @@ TEST(MeshTest, Cube) {
     }
     
 }
+
+
+TEST(ConstraintGraphTest, Basic) {
+    
+    using CGraph = core::ConstraintGraph<core::Dummy, core::Dummy>;
+
+    CGraph cgraph;
+    auto c0 = cgraph.addComponent();
+    auto c1 = cgraph.addComponent();
+    auto c2 = cgraph.addComponent();
+    auto c3 = cgraph.addComponent();
+
+    auto cc012 = cgraph.addConstraint({ c0, c1, c2 });
+    auto cc123 = cgraph.addConstraint({ c1, c2, c3 });
+    auto cc230 = cgraph.addConstraint({ c2, c3, c0 });
+    auto cc301 = cgraph.addConstraint({ c3, c0, c1 });
+
+    EXPECT_EQ(4, cgraph.internalComponents().size());
+    EXPECT_EQ(4, cgraph.internalConstraints().size());
+    
+    for (size_t i = 0; i < cgraph.internalComponents().size(); i++){
+        CGraph ncgraph = cgraph;
+        ncgraph.remove(CGraph::ComponentHandle(i));
+        ncgraph.gc();
+
+        EXPECT_EQ(3, ncgraph.internalComponents().size());
+        EXPECT_EQ(1, ncgraph.internalConstraints().size());
+    }
+
+    for (size_t i = 0; i < cgraph.internalConstraints().size(); i++){
+        CGraph ncgraph = cgraph;
+        ncgraph.remove(CGraph::ConstraintHandle(i));
+        ncgraph.gc();
+
+        EXPECT_EQ(4, ncgraph.internalComponents().size());
+        EXPECT_EQ(3, ncgraph.internalConstraints().size());
+    }
+
+    cgraph.remove(c0);
+    cgraph.remove(c1);
+    cgraph.gc();
+
+    EXPECT_EQ(2, cgraph.internalComponents().size());
+    EXPECT_EQ(0, cgraph.internalConstraints().size());
+
+}
+
 
 
 int main(int argc, char * argv[], char * envp[])

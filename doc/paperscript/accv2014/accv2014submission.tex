@@ -134,6 +134,11 @@
 \subsubsection {Graph Optimization}
 
 // Design energy function
+//  0. imagine this:
+//       treat each region as a patch/ a piece of cloth with some elasticity, 
+//       if l1, l2, ... l_{n_r} are lines contained in region r,
+//       then pin r with those corresponding reconstructed lines in 3D space
+//       well 
 //  1. punish disconnectivities between adjacent regions
 //  2. punish (slightly) discontinuities between adjacent regions
 //  3. punish spatial inconsistencies between reconstructed region faces and reconstructed line segments

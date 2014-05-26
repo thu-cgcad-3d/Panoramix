@@ -1,5 +1,6 @@
 #include <Eigen/StdVector>
 
+#include "../core/errors.hpp"
 #include "optimization.hpp"
 #include "views_net.hpp"
 
@@ -1123,10 +1124,25 @@ namespace panoramix {
 
 
             // optimize lines using constraints based on expressions
-            void OptimizeLinesUsingExpressions(std::vector<Classified<Line3>> & lines, std::vector<ViewsNet::ConstraintData> & constraints,
+            void OptimizeLinesUsingConstraintGraph(std::vector<Classified<Line3>> & lines, 
+                std::vector<ViewsNet::ConstraintData> & constraints,
                 const std::array<Vec3, 3> & vps) {
                 using namespace deriv;
                 using namespace Eigen;
+
+                using ConsGraph = ConstraintGraph<int, int>;
+                ConsGraph consGraph;
+                for (int i = 0; i < lines.size(); i++)
+                    consGraph.addComponent(i);
+                for (int i = 0; i < constraints.size(); i++)
+                    consGraph.addConstraint({ 
+                    ConsGraph::ComponentHandle(constraints[i].mergedSpatialLineSegmentIds[0]), 
+                    ConsGraph::ComponentHandle(constraints[i].mergedSpatialLineSegmentIds[1]) 
+                }, i);
+                
+
+
+
                 ExpressionGraph graph;
 
                 // build equations
@@ -1295,9 +1311,9 @@ namespace panoramix {
             // optimize lines
             OptimizeLines(_globalData.mergedSpatialLineSegments, 
                 _globalData.constraints, _globalData.vanishingPoints);
-            ///// TODO
-            OptimizeLinesUsingExpressions(_globalData.mergedSpatialLineSegments,
-                _globalData.constraints, _globalData.vanishingPoints);
+            /////// TODO
+            //OptimizeLinesUsingConstraintGraph(_globalData.mergedSpatialLineSegments,
+            //    _globalData.constraints, _globalData.vanishingPoints);
 
             // find necessary constraints using MST with slackValues
             std::vector<size_t> lineIds(_globalData.mergedSpatialLineSegments.size()), 
@@ -1329,6 +1345,11 @@ namespace panoramix {
             // optimize lines again
             OptimizeLines(_globalData.mergedSpatialLineSegments,
                 _globalData.refinedConstraints, _globalData.vanishingPoints);
+            /*OptimizeLinesUsingConstraintGraph(_globalData.mergedSpatialLineSegments,
+                _globalData.refinedConstraints, _globalData.vanishingPoints);*/
+
+
+
         }
  
 

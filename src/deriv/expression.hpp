@@ -13,7 +13,7 @@
 
 #include "../core/template_utilities.hpp"
 #include "../core/misc.hpp"
-#include "../core/mesh.hpp"
+#include "../core/graphical_model.hpp"
 
 #include "data_traits_definitions.hpp"
 
@@ -409,7 +409,7 @@ namespace panoramix {
 
             // add a reference expression
             template <class T>
-            inline Expression<const T&> addRef(T & p, const std::string & nm = "") {
+            inline Expression<const T&> addRef(const T & p, const std::string & nm = "") {
                 return as<const T&>(addNode(std::make_shared<OpWithReference<T>>(p, nm)));
             }
 
