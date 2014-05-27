@@ -215,6 +215,15 @@ TEST(GraphicalModelTest, Basic) {
 
         EXPECT_EQ(3, ncgraph.internalElements<0>().size());
         EXPECT_EQ(1, ncgraph.internalElements<1>().size());
+
+        int id = 0;
+        for (auto c : ncgraph.internalElements<0>()){
+            EXPECT_EQ(id++, c.topo.hd.id);
+        }
+        id = 0;
+        for (auto c : ncgraph.internalElements<1>()){
+            EXPECT_EQ(id++, c.topo.hd.id);
+        }
     }
 
     for (size_t i = 0; i < cgraph.internalElements<0>().size(); i++){
@@ -225,6 +234,15 @@ TEST(GraphicalModelTest, Basic) {
 
         EXPECT_EQ(2, ncgraph.internalElements<0>().size());
         EXPECT_EQ(0, ncgraph.internalElements<1>().size());
+
+        int id = 0;
+        for (auto c : ncgraph.internalElements<0>()){
+            EXPECT_EQ(id++, c.topo.hd.id);
+        }
+        id = 0;
+        for (auto c : ncgraph.internalElements<1>()){
+            EXPECT_EQ(id++, c.topo.hd.id);
+        }
     }
 
     for (size_t i = 0; i < cgraph.internalElements<1>().size(); i++){
@@ -234,6 +252,15 @@ TEST(GraphicalModelTest, Basic) {
 
         EXPECT_EQ(4, ncgraph.internalElements<0>().size());
         EXPECT_EQ(3, ncgraph.internalElements<1>().size());
+
+        int id = 0;
+        for (auto c : ncgraph.internalElements<0>()){
+            EXPECT_EQ(id++, c.topo.hd.id);
+        }
+        id = 0;
+        for (auto c : ncgraph.internalElements<1>()){
+            EXPECT_EQ(id++, c.topo.hd.id);
+        }
     }
 
     cgraph.remove(c0);
@@ -243,7 +270,14 @@ TEST(GraphicalModelTest, Basic) {
     EXPECT_EQ(2, cgraph.internalElements<0>().size());
     EXPECT_EQ(0, cgraph.internalElements<1>().size());
 
-
+    int id = 0;
+    for (auto c : cgraph.internalElements<0>()){
+        EXPECT_EQ(id++, c.topo.hd.id);
+    }
+    id = 0;
+    for (auto c : cgraph.internalElements<1>()){
+        EXPECT_EQ(id++, c.topo.hd.id);
+    }
 }
 
 

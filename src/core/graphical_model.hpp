@@ -133,11 +133,26 @@ namespace panoramix {
                 h = newlocationTable[h.id];
             }
         }
+        template <class UpdateHandleTableT, class K, class CompareK, class AllocK>
+        inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, std::set<K, CompareK, AllocK> & hs) {
+            // UpdateHandleTableT: std::vector<Handle<TopoT>>
+            std::set<K, CompareK, AllocK> oldhs = hs;
+            hs.clear();
+            for (const auto & oldh : oldhs) {
+                hs.insert(newlocationTable[oldh.id]);
+            }
+        }
         template <class ContainerT>
         inline void RemoveInValidHandleFromContainer(ContainerT & hs) {
             auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
             invalid.reset();
             hs.erase(std::remove(std::begin(hs), std::end(hs), invalid), std::end(hs));
+        }
+        template <class K, class CompareK, class AllocK>
+        inline void RemoveInValidHandleFromContainer(std::set<K, CompareK, AllocK> & hs) {
+            auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
+            invalid.reset();
+            hs.erase(invalid);
         }
 
         
@@ -714,17 +729,18 @@ namespace panoramix {
         // Graphical Model
         template <class BaseDataT, class ...CConfs>
         class GraphicalModel {
+            // number of layers
             static const unsigned LayerNum = sizeof...(CConfs)+1;
-
+            // tuple of all layers
             using ContentsType =
                 typename LayerContentTuple<std::tuple<LayerConfig<BaseDataT, 0>, CConfs...>,
                 typename SequenceGenerator<LayerNum>::type>::type;
-
+            // layer content type at level Level
             template <int Level>
             struct LayerContentTypeStruct {
                 using type = typename std::tuple_element<Level, ContentsType>::type;
             };
-
+            // predicate of element existance at level Level
             template <int Level>
             using ElementExistsPred = TripletExistsPred<typename LayerContentTypeStruct<Level>::type::TopoType,
                 typename LayerContentTypeStruct<Level>::type::DataType>;
@@ -811,7 +827,7 @@ namespace panoramix {
                     return;
                 cleanLowers<Level>(h, std::integral_constant<bool, (Level>0) > ());
                 internalElements<Level>()[h.id].exists = false; // mark as deleted
-                cleanUppers<Level>(h, std::integral_constant < bool, (Level<LayerNum - 1)>());
+                cleanUppers<Level>(h, std::integral_constant < bool, (Level < LayerNum - 1)>());
             }
 
         private:
@@ -852,17 +868,18 @@ namespace panoramix {
             void gcUsingSequence(Sequence<S...>) {
                 std::tuple<std::vector<HandleAtLevel<S>>...> nlocs;
                 int dummy[] = { RemoveAndMap(internalElements<S>(), std::get<S>(nlocs))... };
-
+                int dummy2[] = { updateEachLayerHandles<S>(nlocs)... };
             }
 
             template <int Level, class NLocTupleT>
-            inline void updateEachLayerHandles(const NLocTupleT & nlocs) {
+            inline int updateEachLayerHandles(const NLocTupleT & nlocs) {
                 auto & eles = internalElements<Level>();
                 for (size_t i = 0; i < eles.size(); i++){
                     UpdateOldHandle(std::get<Level>(nlocs), eles[i].topo.hd);
                 }
                 updateLowers<Level>(nlocs, std::integral_constant<bool, (Level > 0)>());
-                updateUppers<Level>(nlocs, std::integral_constant<bool, (Level<LayerNum - 1)>());
+                updateUppers<Level>(nlocs, std::integral_constant<bool, (Level < LayerNum - 1)>());
+                return 0;
             }
 
             template <int Level, class NLocTupleT>
