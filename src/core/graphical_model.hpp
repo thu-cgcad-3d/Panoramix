@@ -732,8 +732,7 @@ namespace panoramix {
             // number of layers
             static const unsigned LayerNum = sizeof...(CConfs)+1;
             // tuple of all layers
-            using ContentsType =
-                typename LayerContentTuple<std::tuple<LayerConfig<BaseDataT, 0>, CConfs...>,
+            using ContentsType = typename LayerContentTuple<std::tuple<LayerConfig<BaseDataT, 0>, CConfs...>,
                 typename SequenceGenerator<LayerNum>::type>::type;
             // layer content type at level Level
             template <int Level>
@@ -799,7 +798,7 @@ namespace panoramix {
             template <int Level>
             HandleAtLevel<Level> add(std::initializer_list<HandleAtLevel<Level - 1>> depends,
                 const typename LayerContentTypeStruct<Level>::type::DataType & d = typename LayerContentTypeStruct<Level>::type::DataType()) {
-                int id = internalElements<Level>().size();
+                int id = static_cast<int>(internalElements<Level>().size());
                 internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, depends), d, true);
                 for (const HandleAtLevel<Level - 1> & lowh : depends) {
                     topo(lowh).uppers.insert(HandleAtLevel<Level>(id));
@@ -809,7 +808,7 @@ namespace panoramix {
 
             // add element of the lowest level
             HandleAtLevel<0> add(const typename LayerContentTypeStruct<0>::type::DataType & d = LayerContentTypeStruct<0>::type::DataType()) {
-                int id = internalElements<0>().size();
+                int id = static_cast<int>(internalElements<0>().size());
                 internalElements<0>().emplace_back(typename LayerContentTypeStruct<0>::type::TopoType(id), d, true);
                 return HandleAtLevel<0>(id);
             }
@@ -825,9 +824,9 @@ namespace panoramix {
             void remove(HandleAtLevel<Level> h) {
                 if (h.isInValid() || removed(h))
                     return;
-                cleanLowers<Level>(h, std::integral_constant<bool, (Level>0) > ());
+                cleanLowers<Level>(h, std::integral_constant<bool, (Level > 0)>());
                 internalElements<Level>()[h.id].exists = false; // mark as deleted
-                cleanUppers<Level>(h, std::integral_constant < bool, (Level < LayerNum - 1)>());
+                cleanUppers<Level>(h, std::integral_constant<bool, (Level < LayerNum - 1)>());
             }
 
         private:
@@ -872,7 +871,7 @@ namespace panoramix {
             }
 
             template <int Level, class NLocTupleT>
-            inline int updateEachLayerHandles(const NLocTupleT & nlocs) {
+            int updateEachLayerHandles(const NLocTupleT & nlocs) {
                 auto & eles = internalElements<Level>();
                 for (size_t i = 0; i < eles.size(); i++){
                     UpdateOldHandle(std::get<Level>(nlocs), eles[i].topo.hd);
@@ -885,7 +884,7 @@ namespace panoramix {
             template <int Level, class NLocTupleT>
             inline void updateLowers(const NLocTupleT & nlocs, std::false_type) {}
             template <int Level, class NLocTupleT>
-            inline void updateLowers(const NLocTupleT & nlocs, std::true_type) {
+            void updateLowers(const NLocTupleT & nlocs, std::true_type) {
                 auto & eles = internalElements<Level>();
                 for (size_t i = 0; i < eles.size(); i++){
                     UpdateOldHandleContainer(std::get<Level - 1>(nlocs), eles[i].topo.lowers);
@@ -896,7 +895,7 @@ namespace panoramix {
             template <int Level, class NLocTupleT>
             inline void updateUppers(const NLocTupleT & nlocs, std::false_type) {}
             template <int Level, class NLocTupleT>
-            inline void updateUppers(const NLocTupleT & nlocs, std::true_type) {
+            void updateUppers(const NLocTupleT & nlocs, std::true_type) {
                 auto & eles = internalElements<Level>();
                 for (size_t i = 0; i < eles.size(); i++){
                     UpdateOldHandleContainer(std::get<Level + 1>(nlocs), eles[i].topo.uppers);
@@ -908,10 +907,17 @@ namespace panoramix {
             ContentsType _contents;
         };
 
+        template <class VertDataT, class EdgeDataT>
+        using GraphicalModel02 = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, 2>>;
 
+        template <class VertDataT, class EdgeDataT>
+        using GraphicalModel03 = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, 3>>;
 
+        template <class VertDataT, class EdgeDataT>
+        using GraphicalModel0X = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, Dynamic>>;
 
-
+        template <class VertDataT, class EdgeDataT, class FaceDataT>
+        using GraphicalModel023 = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, 2>, LayerConfig<FaceDataT, 3>>;
 
     }
 }

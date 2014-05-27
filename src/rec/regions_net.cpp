@@ -4,7 +4,7 @@ namespace panoramix {
     namespace rec {
 
         RegionsNet::RegionsNet(const Image & image, const Params & params) 
-            : _image(image), _params(params), _regionsRTree(VertDataBoundingBoxFunctor(_regions)){}
+            : _image(image), _params(params), _regionsRTree(RegionDataBoundingBoxFunctor(_regions)){}
 
         namespace {
 
@@ -31,13 +31,13 @@ namespace panoramix {
             const Size & imageSizeContainingLines) {
             _segmentedRegions = _params.segmenter(_image);
             int regionNum = static_cast<int>(MinMaxValOfImage(_segmentedRegions).second) + 1;
-            _regions.internalVertices().reserve(regionNum);
+            _regions.internalElements<0>().reserve(regionNum);
             for (int i = 0; i < regionNum; i++){
-                VertData vd;
+                RegionData vd;
                 vd.borderLength = 0.0;
                 vd.regionMask = (_segmentedRegions == i);
                 ComputeRegionProperties(vd.regionMask, _image, vd.center, vd.area, vd.boundingBox);
-                auto vh = _regions.addVertex(vd);
+                auto vh = _regions.add(vd);
                 _regionsRTree.insert(vh);
             }
 
@@ -68,8 +68,8 @@ namespace panoramix {
                         double blen = 1.0;
                         boundaryLengths[r1 * regionNum + r2] += blen;
                         boundaryLengths[r2 * regionNum + r1] += blen;
-                        _regions.data(VertHandle(r1)).borderLength += blen;
-                        _regions.data(VertHandle(r2)).borderLength += blen;
+                        _regions.data(RegionHandle(r1)).borderLength += blen;
+                        _regions.data(RegionHandle(r2)).borderLength += blen;
                         connections.insert(std::make_pair(r1, r2));
                         connections.insert(std::make_pair(r2, r1));
                     }
@@ -77,8 +77,8 @@ namespace panoramix {
                         double blen = 1.0;
                         boundaryLengths[r1 * regionNum + r3] += blen;
                         boundaryLengths[r3 * regionNum + r1] += blen;
-                        _regions.data(VertHandle(r1)).borderLength += blen;
-                        _regions.data(VertHandle(r3)).borderLength += blen;
+                        _regions.data(RegionHandle(r1)).borderLength += blen;
+                        _regions.data(RegionHandle(r3)).borderLength += blen;
                         connections.insert(std::make_pair(r1, r3));
                         connections.insert(std::make_pair(r3, r1));
                     }
@@ -86,8 +86,8 @@ namespace panoramix {
                         double blen = 1.4;
                         boundaryLengths[r1 * regionNum + r4] += blen;
                         boundaryLengths[r4 * regionNum + r1] += blen;
-                        _regions.data(VertHandle(r1)).borderLength += blen;
-                        _regions.data(VertHandle(r4)).borderLength += blen;
+                        _regions.data(RegionHandle(r1)).borderLength += blen;
+                        _regions.data(RegionHandle(r4)).borderLength += blen;
                         connections.insert(std::make_pair(r1, r4));
                         connections.insert(std::make_pair(r4, r1));
                     }
@@ -96,9 +96,9 @@ namespace panoramix {
 
             for (auto con : connections) {
                 if (con.first < con.second){
-                    HalfData hd;
+                    BoundaryData hd;
                     hd.boundaryLength = boundaryLengths[con.first * regionNum + con.second];
-                    _regions.addEdge(VertHandle(con.first), VertHandle(con.second), hd, hd);
+                    _regions.add<1>({ RegionHandle(con.first), RegionHandle(con.second) }, hd);
                 }
             }
         }
