@@ -22,7 +22,7 @@ namespace panoramix {
             vd.camera = vd.originalCamera = cam;
             vd.cameraDirectionErrorScale = cameraDirectionErrorScale;
             vd.image = im;
-            return insertVertex(vd);
+            return insertView(vd);
         }
 
         namespace {
@@ -1325,9 +1325,6 @@ namespace panoramix {
             // optimize lines
             OptimizeLines(_globalData.mergedSpatialLineSegments, 
                 constraints, _globalData.vanishingPoints);
-            /////// TODO
-            //OptimizeLinesUsingConstraintGraph(_globalData.mergedSpatialLineSegments,
-            //    _globalData.constraints, _globalData.vanishingPoints);
 
             // find necessary constraints using MST with slackValues
             std::vector<size_t> lineIds(_globalData.mergedSpatialLineSegments.size()), 
@@ -1359,9 +1356,6 @@ namespace panoramix {
             // optimize lines again
             OptimizeLines(_globalData.mergedSpatialLineSegments,
                 refinedConstraints, _globalData.vanishingPoints);
-            /*OptimizeLinesUsingConstraintGraph(_globalData.mergedSpatialLineSegments,
-                _globalData.refinedConstraints, _globalData.vanishingPoints);*/
-
 
 
         }

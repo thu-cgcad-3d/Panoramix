@@ -487,68 +487,70 @@ namespace panoramix {
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the begin iterators of merged groups
         template < class IteratorT, class IterOutIteratorT, class DistanceT,
-        class DistanceFunctorT = DefaultDistanceFunctor < typename std::iterator_traits<IteratorT>::value_type >>
-            IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::true_type,
-            DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
-                if (begin == end)
-                    return itersOut;
+        class DistanceFunctorT = DefaultDistanceFunctor < typename std::iterator_traits<IteratorT>::value_type >
+        >
+        IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::true_type,
+        DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
+            if (begin == end)
+                return itersOut;
 
-                std::vector<IteratorT> gBegins(1, begin);
-                for (auto i = std::next(begin); i != end; ++i){
-                    DistanceT minDist = std::numeric_limits<DistanceT>::max();
-                    auto nearestGBeginIter = gBegins.end();
-                    for (auto giter = gBegins.begin(); giter != gBegins.end(); ++giter) {
-                        auto gBegin = *giter;
-                        DistanceT dist = distFun(*gBegin, *i);
-                        if (dist <= thres && dist < minDist){
-                            minDist = dist;
-                            nearestGBeginIter = giter;
-                        }
-                    }
-                    if (nearestGBeginIter != gBegins.end()){ // found group
-                        if (std::next(nearestGBeginIter) != gBegins.end()){
-                            auto nextGBegin = *std::next(nearestGBeginIter);
-                            std::rotate(nextGBegin, i, std::next(i));
-                            for (auto j = std::next(nearestGBeginIter); j != gBegins.end(); ++j)
-                                ++ (*j);
-                        }
-                    }
-                    else { // add new group
-                        gBegins.push_back(i);
+            std::vector<IteratorT> gBegins(1, begin);
+            for (auto i = std::next(begin); i != end; ++i){
+                DistanceT minDist = std::numeric_limits<DistanceT>::max();
+                auto nearestGBeginIter = gBegins.end();
+                for (auto giter = gBegins.begin(); giter != gBegins.end(); ++giter) {
+                    auto gBegin = *giter;
+                    DistanceT dist = distFun(*gBegin, *i);
+                    if (dist <= thres && dist < minDist){
+                        minDist = dist;
+                        nearestGBeginIter = giter;
                     }
                 }
-                return std::copy(gBegins.begin(), gBegins.end(), itersOut);
+                if (nearestGBeginIter != gBegins.end()){ // found group
+                    if (std::next(nearestGBeginIter) != gBegins.end()){
+                        auto nextGBegin = *std::next(nearestGBeginIter);
+                        std::rotate(nextGBegin, i, std::next(i));
+                        for (auto j = std::next(nearestGBeginIter); j != gBegins.end(); ++j)
+                            ++ (*j);
+                    }
+                }
+                else { // add new group
+                    gBegins.push_back(i);
+                }
             }
+            return std::copy(gBegins.begin(), gBegins.end(), itersOut);
+        }
 
         // merge, without rearrangement
         // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
         // returns the iterators pointing to group leaders
         template < class IteratorT, class IterOutIteratorT, class DistanceT,
-        class DistanceFunctorT = DefaultDistanceFunctor < typename std::iterator_traits<IteratorT>::value_type >>
-            IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
-            DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
-                if (begin == end)
-                    return itersOut;
+        class DistanceFunctorT = DefaultDistanceFunctor < typename std::iterator_traits<IteratorT>::value_type >
+        >
+        IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
+        DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
+            if (begin == end)
+                return itersOut;
 
-                *(itersOut++) = begin;
-                std::vector<IteratorT> gBegins(1, begin);
-                for (auto i = std::next(begin); i != end; ++i){
-                    auto giter = gBegins.begin();
-                    for (; giter != gBegins.end(); ++giter) {
-                        auto gBegin = *giter;
-                        auto dist = distFun(*gBegin, *i);
-                        if (dist <= thres){
-                            break;
-                        }
-                    }
-                    if (giter == gBegins.end()){ // add new group
-                        gBegins.push_back(i);
-                        *(itersOut++) = i;
+            *(itersOut++) = begin;
+            std::vector<IteratorT> gBegins(1, begin);
+            for (auto i = std::next(begin); i != end; ++i){
+                auto giter = gBegins.begin();
+                for (; giter != gBegins.end(); ++giter) {
+                    auto gBegin = *giter;
+                    auto dist = distFun(*gBegin, *i);
+                    if (dist <= thres){
+                        break;
                     }
                 }
-
-                return itersOut;
+                if (giter == gBegins.end()){ // add new group
+                    gBegins.push_back(i);
+                    *(itersOut++) = i;
+                }
             }
+
+            return itersOut;
+        }
 
 
 
@@ -609,122 +611,123 @@ namespace panoramix {
         class EdgeVertsGetterT,
         class EdgeOutputIteratorT,
         class EdgeCompareOnWeightT,
-        class VertCompareT = std::less < typename std::iterator_traits<VertIteratorT>::value_type >>
-            void MinimumSpanningTree(
-            VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-            EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
-            EdgeOutputIteratorT MSTedges,
-            EdgeVertsGetterT vertsGetter,
-            EdgeCompareOnWeightT edgeCompareOnWeight,
-            VertCompareT vertCompare = VertCompareT()
-            ) {
+        class VertCompareT = std::less < typename std::iterator_traits<VertIteratorT>::value_type >
+        >
+        void MinimumSpanningTree(
+        VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+        EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
+        EdgeOutputIteratorT MSTedges,
+        EdgeVertsGetterT vertsGetter,
+        EdgeCompareOnWeightT edgeCompareOnWeight,
+        VertCompareT vertCompare = VertCompareT()
+        ) {
 
-                using Edge = typename std::iterator_traits<typename EdgeIteratorT>::value_type;
-                using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
-                static_assert(typename std::is_same<std::pair<Vert, Vert>, decltype(vertsGetter(*edgesBegin))>::value,
-                    "result of EdgeVertsGetterT must be std::pair<Vert, Vert>!");
+            using Edge = typename std::iterator_traits<typename EdgeIteratorT>::value_type;
+            using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
+            static_assert(typename std::is_same<std::pair<Vert, Vert>, decltype(vertsGetter(*edgesBegin))>::value,
+                "result of EdgeVertsGetterT must be std::pair<Vert, Vert>!");
 
-                std::vector<Edge> edges(edgesBegin, edgesEnd);
-                std::sort(edges.begin(), edges.end(), edgeCompareOnWeight);
+            std::vector<Edge> edges(edgesBegin, edgesEnd);
+            std::sort(edges.begin(), edges.end(), edgeCompareOnWeight);
 
-                std::map<Vert, int, VertCompareT> vertSetIds(vertCompare);
-                int idx = 0;
-                for (auto i = vertsBegin; i != vertsEnd; ++i)
-                    vertSetIds.insert(std::make_pair((*i), idx++));
+            std::map<Vert, int, VertCompareT> vertSetIds(vertCompare);
+            int idx = 0;
+            for (auto i = vertsBegin; i != vertsEnd; ++i)
+                vertSetIds.insert(std::make_pair((*i), idx++));
 
-                auto remainedEdgesBegin = edges.begin();
-                while (remainedEdgesBegin != edges.end()){
-                    Edge e = *remainedEdgesBegin;
-                    auto verts = vertsGetter(e);
-                    int fromid = vertSetIds[verts.first];
-                    int toid = vertSetIds[verts.second];
-                    if (fromid != toid){
-                        *MSTedges++ = e;
-                        for (auto & vtoid : vertSetIds){
-                            if (vtoid.second == toid){
-                                vtoid.second = fromid;
-                            }
+            auto remainedEdgesBegin = edges.begin();
+            while (remainedEdgesBegin != edges.end()){
+                Edge e = *remainedEdgesBegin;
+                auto verts = vertsGetter(e);
+                int fromid = vertSetIds[verts.first];
+                int toid = vertSetIds[verts.second];
+                if (fromid != toid){
+                    *MSTedges++ = e;
+                    for (auto & vtoid : vertSetIds){
+                        if (vtoid.second == toid){
+                            vtoid.second = fromid;
                         }
                     }
-                    ++remainedEdgesBegin;
                 }
-
+                ++remainedEdgesBegin;
             }
+
+        }
 
 
         // DepthFirstSearch
-        template < class VertIteratorT, class NeighborVertsRangeGetterT, class VertCallbackT,
-        class VertCompareT = std::less < typename std::iterator_traits<VertIteratorT>::value_type >>
-            void DepthFirstSearch(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-            NeighborVertsRangeGetterT neighborVertsRangeGetter,
-            VertCallbackT vertCallback,
-            VertCompareT vertCompare = VertCompareT()) {
+        template < class VertIteratorT, class NeighborVertsContainerGetterT, class VertCallbackT,
+        class VertCompareT = std::less < typename std::iterator_traits<VertIteratorT>::value_type >
+        >
+        void DepthFirstSearch(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+        NeighborVertsContainerGetterT neighborVertsContainerGetter,
+        VertCallbackT vertCallback,
+        VertCompareT vertCompare = VertCompareT()) {
 
-                using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
-                static_assert(std::is_same<Vert, std::decay_t<decltype(*std::get<0>(neighborVertsRangeGetter(std::declval<Vert>())))>>::value,
-                    "NeighborVertsRangeGetterT should returns (VertIterator vbegin, VertIterator vend)");
-                static_assert(std::is_same<Vert, std::decay_t<decltype(*std::get<1>(neighborVertsRangeGetter(std::declval<Vert>())))>>::value,
-                    "NeighborVertsRangeGetterT should returns (VertIterator vbegin, VertIterator vend)");
+            using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
+            static_assert(std::is_same<Vert, std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
+                "NeighborVertsContainerGetterT should returns a container of Vert");
+            static_assert(std::is_same<Vert, std::decay_t<decltype(*std::end(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
+                "NeighborVertsContainerGetterT should returns a container of Vert");
 
-                struct {
-                    bool operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited, NeighborVertsRangeGetterT vNeighborsGetter, VertCallbackT vCallback) {
-                        if (vVisited[root])
-                            return true;
-                        if (!vCallback(root))
-                            return false;
-
-                        vVisited[root] = true;
-                        auto vNeighborsRange = vNeighborsGetter(root);
-                        for (auto nextv = std::get<0>(vNeighborsRange); nextv != std::get<1>(vNeighborsRange); ++nextv) {
-                            //static_assert(typename std::is_same<Vert, decltype(*nextv)>>::value, "*nextv should be of type Vert");
-                            if (!(*this)(*nextv, vVisited, vNeighborsGetter, vCallback))
-                                return false;
-                        }
+            struct {
+                bool operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited, NeighborVertsContainerGetterT vNeighborsGetter, VertCallbackT vCallback) {
+                    if (vVisited[root])
                         return true;
-                    }
-                } depthFirstSearchOneTree;
+                    if (!vCallback(root))
+                        return false;
 
-                std::map<Vert, bool, VertCompareT> visited(vertCompare);
-                for (auto i = vertsBegin; i != vertsEnd; ++i)
-                    visited[*i] = false;
-                while (true) {
-                    auto rootIter = vertsBegin;
-                    while (rootIter != vertsEnd && visited[*rootIter]){
-                        ++rootIter;
+                    vVisited[root] = true;
+                    auto vNeighborsContainer = vNeighborsGetter(root);
+                    for (const auto & v : vNeighborsContainer) {
+                        if (!(*this)(v, vVisited, vNeighborsGetter, vCallback))
+                            return false;
                     }
-                    if (rootIter == vertsEnd)
-                        break;
-                    if (!depthFirstSearchOneTree(*rootIter, visited, neighborVertsRangeGetter, vertCallback))
-                        break;
+                    return true;
                 }
+            } depthFirstSearchOneTree;
+
+            std::map<Vert, bool, VertCompareT> visited(vertCompare);
+            for (auto i = vertsBegin; i != vertsEnd; ++i)
+                visited[*i] = false;
+            while (true) {
+                auto rootIter = vertsBegin;
+                while (rootIter != vertsEnd && visited[*rootIter]){
+                    ++rootIter;
+                }
+                if (rootIter == vertsEnd)
+                    break;
+                if (!depthFirstSearchOneTree(*rootIter, visited, neighborVertsContainerGetter, vertCallback))
+                    break;
             }
+        }
 
 
         // Connected Components
-        template < class VertIteratorT, class NeighborVertsRangeGetterT, class VertexTypeRecorderT,
+        template < class VertIteratorT, class NeighborVertsContainerGetterT, class VertexTypeRecorderT,
         class VertCompareT = std::less < typename std::iterator_traits<VertIteratorT>::value_type >
         >
         int ConnectedComponents(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-            NeighborVertsRangeGetterT neighborVertsRangeGetter,
-            VertexTypeRecorderT vertTypeRecorder,
-            VertCompareT vertCompare = VertCompareT()) {
+        NeighborVertsContainerGetterT neighborVertsContainerGetter,
+        VertexTypeRecorderT vertTypeRecorder,
+        VertCompareT vertCompare = VertCompareT()) {
 
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
-            static_assert(std::is_same<Vert, std::decay_t<decltype(*std::get<0>(neighborVertsRangeGetter(std::declval<Vert>())))>>::value,
-                "NeighborVertsRangeGetterT should returns (VertIterator vbegin, VertIterator vend)");
-            static_assert(std::is_same<Vert, std::decay_t<decltype(*std::get<1>(neighborVertsRangeGetter(std::declval<Vert>())))>>::value,
-                "NeighborVertsRangeGetterT should returns (VertIterator vbegin, VertIterator vend)");
+            static_assert(std::is_same<Vert, std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
+                "NeighborVertsContainerGetterT should returns a container of Vert");
+            static_assert(std::is_same<Vert, std::decay_t<decltype(*std::end(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
+                "NeighborVertsContainerGetterT should returns a container of Vert");
 
             struct {
-                void operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited, NeighborVertsRangeGetterT vNeighborsGetter, VertexTypeRecorderT vTypeRecorder, int cid) {
+                void operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited, NeighborVertsContainerGetterT vNeighborsGetter, VertexTypeRecorderT vTypeRecorder, int cid) {
                     if (vVisited[root])
                         return;
                     vTypeRecorder(root, cid);
                     vVisited[root] = true;
-                    auto vNeighborsRange = vNeighborsGetter(root);
-                    for (auto nextv = std::get<0>(vNeighborsRange); nextv != std::get<1>(vNeighborsRange); ++nextv) {
+                    auto vNeighborsContainer = vNeighborsGetter(root);
+                    for (const auto & v : vNeighborsContainer) {
                         //static_assert(typename std::is_same<Vert, decltype(*nextv)>>::value, "*nextv should be of type Vert");
-                        (*this)(*nextv, vVisited, vNeighborsGetter, vTypeRecorder, cid);
+                        (*this)(v, vVisited, vNeighborsGetter, vTypeRecorder, cid);
                     }
                 }
             } depthFirstSearchOneTree;
@@ -742,7 +745,7 @@ namespace panoramix {
                 }
                 if (rootIter == vertsEnd)
                     break;
-                depthFirstSearchOneTree(*rootIter, visited, neighborVertsRangeGetter, vertTypeRecorder, cid);
+                depthFirstSearchOneTree(*rootIter, visited, neighborVertsContainerGetter, vertTypeRecorder, cid);
                 cid++;
             }
 

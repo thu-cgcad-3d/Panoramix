@@ -360,27 +360,25 @@ TEST(UtilTest, DFS) {
     auto getValue = [](const Data & cdata) -> int {return (*(cdata.vntable))[cdata.vid]; };
     auto setToNext = [](Data & cdata){cdata.vid++; };
 
-    auto vNeighborsRangeGetter = [&verts, &edgeProperties, &compData, &getValue, &setToNext](int v) {
-        auto vns = std::make_shared<std::vector<int>>();
+    auto vNeighborsContainerGetter = [&verts, &edgeProperties, &compData, &getValue, &setToNext](int v) {
+        std::vector<int> vns;
         for (auto & edge : edgeProperties) {
             if (edge.fromv == v)
-                vns->push_back(edge.tov);
+                vns.push_back(edge.tov);
             if (edge.tov == v)
-                vns->push_back(edge.fromv);
+                vns.push_back(edge.fromv);
         }
-        auto vnBegin = core::MakeEasyForwardIterator(Data{ vns, 0 }, getValue, setToNext, compData);
-        auto vnEnd = core::MakeEasyForwardIterator(Data{ vns, (int)vns->size() }, getValue, setToNext, compData);
-        return std::make_pair(vnBegin, vnEnd);
+        return vns;
     };
 
     std::vector<int> visitedVids;
-    core::DepthFirstSearch(verts.begin(), verts.end(), vNeighborsRangeGetter, 
+    core::DepthFirstSearch(verts.begin(), verts.end(), vNeighborsContainerGetter,
         [&visitedVids](int vid){visitedVids.push_back(vid); return true; });
     std::vector<int> correctVisitedVids = {0, 1, 2, 4, 3, 5, 6};
     EXPECT_TRUE(std::equal(visitedVids.begin(), visitedVids.end(), correctVisitedVids.begin()));
 
     std::vector<int> ccids;
-    int ccnum = core::ConnectedComponents(verts.begin(), verts.end(), vNeighborsRangeGetter, 
+    int ccnum = core::ConnectedComponents(verts.begin(), verts.end(), vNeighborsContainerGetter,
         [&ccids](int vid, int cid){
         ccids.push_back(cid); 
     });

@@ -50,7 +50,7 @@ namespace panoramix {
             inline explicit ViewsNet(const Params params = Params()) : _params(params){}
             inline const Params & params() const { return _params; }
             
-            inline ViewHandle insertVertex(const ViewData & vd) { return _views.add(vd); }
+            inline ViewHandle insertView(const ViewData & vd) { return _views.add(vd); }
 
             // insert a new photo, with known parameters
             ViewHandle insertPhoto(const Image & im, const PerspectiveCamera & cam, 
@@ -82,6 +82,9 @@ namespace panoramix {
 
             // build constraints on spatial lines and rectify their parameters to build a more reasonable 3D sketch
             void rectifySpatialLines();
+
+            // reconstruct regions
+            void reconstructFaces();
                 
         public:
             struct ViewData {
@@ -115,6 +118,8 @@ namespace panoramix {
                 std::vector<Vec3> mergedSpatialLineSegmentIntersections;
                 std::vector<Classified<Line3>> mergedSpatialLineSegments;
                 std::vector<int> mergedSpatialLineSegmentChainIds;
+
+                std::vector<std::vector<Line3>> spatialLineStructures;
             };
 
             inline const ViewsGraph & views() const { return _views; }

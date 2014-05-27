@@ -926,6 +926,9 @@ namespace panoramix {
         template <class VertDataT, class EdgeDataT, class ConstraintDataT>
         using GraphicalModel02X = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, 2>, LayerConfig<ConstraintDataT, Dynamic>>;
 
+        template <class VertDataT, class ConstraintDataT, class HyperConstraintDataT>
+        using GraphicalModel0XX = GraphicalModel<VertDataT, LayerConfig<ConstraintDataT, Dynamic>, LayerConfig<HyperConstraintDataT, Dynamic>>;
+
     }
 }
 
