@@ -666,23 +666,23 @@ namespace panoramix {
                 static_assert(std::is_same<Vert, std::decay_t<decltype(*std::get<1>(neighborVertsRangeGetter(std::declval<Vert>())))>>::value,
                     "NeighborVertsRangeGetterT should returns (VertIterator vbegin, VertIterator vend)");
 
-                static const std::function<bool(Vert, std::map<Vert, bool, VertCompareT>&, NeighborVertsRangeGetterT, VertCallbackT)>
-                    depthFirstSearchOneTree = []
-                    (Vert root, std::map<Vert, bool, VertCompareT>& vVisited, NeighborVertsRangeGetterT vNeighborsGetter, VertCallbackT vCallback) -> bool {
-                    if (vVisited[root])
-                        return true;
-                    if (!vCallback(root))
-                        return false;
-
-                    vVisited[root] = true;
-                    auto vNeighborsRange = vNeighborsGetter(root);
-                    for (auto nextv = std::get<0>(vNeighborsRange); nextv != std::get<1>(vNeighborsRange); ++nextv) {
-                        //static_assert(typename std::is_same<Vert, decltype(*nextv)>>::value, "*nextv should be of type Vert");
-                        if (!depthFirstSearchOneTree(*nextv, vVisited, vNeighborsGetter, vCallback))
+                struct {
+                    bool operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited, NeighborVertsRangeGetterT vNeighborsGetter, VertCallbackT vCallback) {
+                        if (vVisited[root])
+                            return true;
+                        if (!vCallback(root))
                             return false;
+
+                        vVisited[root] = true;
+                        auto vNeighborsRange = vNeighborsGetter(root);
+                        for (auto nextv = std::get<0>(vNeighborsRange); nextv != std::get<1>(vNeighborsRange); ++nextv) {
+                            //static_assert(typename std::is_same<Vert, decltype(*nextv)>>::value, "*nextv should be of type Vert");
+                            if (!(*this)(*nextv, vVisited, vNeighborsGetter, vCallback))
+                                return false;
+                        }
+                        return true;
                     }
-                    return true;
-                };
+                } depthFirstSearchOneTree;
 
                 std::map<Vert, bool, VertCompareT> visited(vertCompare);
                 for (auto i = vertsBegin; i != vertsEnd; ++i)
@@ -715,19 +715,20 @@ namespace panoramix {
             static_assert(std::is_same<Vert, std::decay_t<decltype(*std::get<1>(neighborVertsRangeGetter(std::declval<Vert>())))>>::value,
                 "NeighborVertsRangeGetterT should returns (VertIterator vbegin, VertIterator vend)");
 
-            static const std::function<void(Vert, std::map<Vert, bool, VertCompareT>&, NeighborVertsRangeGetterT, VertexTypeRecorderT, int cid)>
-                depthFirstSearchOneTree = []
-                (Vert root, std::map<Vert, bool, VertCompareT>& vVisited, NeighborVertsRangeGetterT vNeighborsGetter, VertexTypeRecorderT vTypeRecorder, int cid) {
-                if (vVisited[root])
-                    return;
-                vTypeRecorder(root, cid);
-                vVisited[root] = true;
-                auto vNeighborsRange = vNeighborsGetter(root);
-                for (auto nextv = std::get<0>(vNeighborsRange); nextv != std::get<1>(vNeighborsRange); ++nextv) {
-                    //static_assert(typename std::is_same<Vert, decltype(*nextv)>>::value, "*nextv should be of type Vert");
-                    depthFirstSearchOneTree(*nextv, vVisited, vNeighborsGetter, vTypeRecorder, cid);
+            struct {
+                void operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited, NeighborVertsRangeGetterT vNeighborsGetter, VertexTypeRecorderT vTypeRecorder, int cid) {
+                    if (vVisited[root])
+                        return;
+                    vTypeRecorder(root, cid);
+                    vVisited[root] = true;
+                    auto vNeighborsRange = vNeighborsGetter(root);
+                    for (auto nextv = std::get<0>(vNeighborsRange); nextv != std::get<1>(vNeighborsRange); ++nextv) {
+                        //static_assert(typename std::is_same<Vert, decltype(*nextv)>>::value, "*nextv should be of type Vert");
+                        (*this)(*nextv, vVisited, vNeighborsGetter, vTypeRecorder, cid);
+                    }
                 }
-            };
+            } depthFirstSearchOneTree;
+
 
             std::map<Vert, bool, VertCompareT> visited(vertCompare);
             for (auto i = vertsBegin; i != vertsEnd; ++i)
