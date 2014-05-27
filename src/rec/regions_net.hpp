@@ -22,6 +22,7 @@ namespace panoramix {
                 double area;
                 double borderLength;
                 Box2 boundingBox;
+                int orientationClass; // -1 0 1 2
             };
             struct BoundaryData {
                 double boundaryLength;                
@@ -46,12 +47,12 @@ namespace panoramix {
             RegionsGraph _regions;
             Params _params;
 
-            struct VertDataBoundingBoxFunctor {
-                inline explicit VertDataBoundingBoxFunctor(const RegionsGraph & r) : regions(r) {}
+            struct RegionDataBoundingBoxFunctor {
+                inline explicit RegionDataBoundingBoxFunctor(const RegionsGraph & r) : regions(r) {}
                 inline Box2 operator()(RegionHandle vh) const { return regions.data(vh).boundingBox; }
                 const RegionsGraph & regions;
             };
-            RTreeWrapper<RegionHandle, VertDataBoundingBoxFunctor> _regionsRTree;
+            RTreeWrapper<RegionHandle, RegionDataBoundingBoxFunctor> _regionsRTree;
         };
 
     }

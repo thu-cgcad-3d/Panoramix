@@ -16,9 +16,9 @@ namespace panoramix {
             mjWeightTriplet(5.0), mjWeightX(5.0), mjWeightT(2.0), mjWeightL(1.0), mjWeightI(2.0) {
         }
 
-        ViewsNet::VertHandle ViewsNet::insertPhoto(const Image & im, const PerspectiveCamera & cam,
+        ViewsNet::ViewHandle ViewsNet::insertPhoto(const Image & im, const PerspectiveCamera & cam,
             double cameraDirectionErrorScale) {
-            VertData vd;
+            ViewData vd;
             vd.camera = vd.originalCamera = cam;
             vd.cameraDirectionErrorScale = cameraDirectionErrorScale;
             vd.image = im;
@@ -64,7 +64,7 @@ namespace panoramix {
             }
         }
 
-        void ViewsNet::computeFeatures(VertHandle h) {
+        void ViewsNet::computeFeatures(ViewHandle h) {
             auto & vd = _views.data(h);
             const Image & im = vd.image;
             auto lineSegments = _params.lineSegmentExtractor(im);
@@ -90,7 +90,7 @@ namespace panoramix {
                 RTreeWrapper<KeyPoint>(vd.keypointsForMatching.begin(), vd.keypointsForMatching.end());
         }
 
-        void ViewsNet::buildRegionNet(VertHandle h) {
+        void ViewsNet::buildRegionNet(ViewHandle h) {
             auto & vd = _views.data(h);
             vd.regionNet = std::make_shared<RegionsNet>(vd.image);
             vd.regionNet->buildNetAndComputeGeometricFeatures(vd.lineSegments, vd.image.size());
@@ -109,12 +109,12 @@ namespace panoramix {
             }
         }
 
-        size_t ViewsNet::updateConnections(VertHandle h) {
+        size_t ViewsNet::updateConnections(ViewHandle h) {
             auto & thisv = _views.data(h);
             const PerspectiveCamera & thisvCam = thisv.originalCamera;
             double thisvCamAngleRadius = PerspectiveCameraAngleRadius(thisvCam);
             thisvCamAngleRadius *= _params.cameraAngleScaler;
-            for (auto & v : _views.vertices()){
+            for (auto & v : _views.elements<0>()){
                 if (v.topo.hd == h)
                     continue;
                 const PerspectiveCamera & vcam = v.data.originalCamera;
@@ -123,37 +123,39 @@ namespace panoramix {
                 double angleDistance = AngleBetweenDirections(thisvCam.center(), vcam.center());
                 if (angleDistance <= thisvCamAngleRadius + vCamAngleRadius){
                     // may overlap
-                    HalfData hd;
+                    ViewConnectionData hd;
                     //hd.cameraAngleDistance = angleDistance;
-                    _views.addEdge(h, v.topo.hd, hd);
+                    _views.add<1>({ h, v.topo.hd }, hd);
                 }
             }
-            return _views.topo(h).halfedges.size();
+            return _views.topo(h).uppers.size();
         }
 
-        ViewsNet::VertHandle ViewsNet::isTooCloseToAnyExistingView(VertHandle h) const {
+        ViewsNet::ViewHandle ViewsNet::isTooCloseToAnyExistingView(ViewHandle h) const {
             auto & camera = _views.data(h).camera;
             double cameraRadius = PerspectiveCameraAngleRadius(camera);
-            auto connections = _views.topo(h).halfedges;
+            auto connections = _views.topo(h).uppers;
             for (auto & con : connections){
-                auto & neighborCamera = _views.data(_views.topo(con).to()).camera;
+                auto to = _views.topo(con).lowers[0];
+                if (to == h)
+                    to = _views.topo(con).lowers[1];
+                auto & neighborCamera = _views.data(to).camera;
                 double cameraAngle = AngleBetweenDirections(camera.center(), neighborCamera.center());
                 double neighborCameraRadius = PerspectiveCameraAngleRadius(camera);
                 if (cameraAngle <= (cameraRadius + neighborCameraRadius) * _params.smallCameraAngleScalar){ // too close
-                    return _views.topo(con).to();
+                    return to;
                 }
             }
-            return VertHandle();
+            return ViewHandle();
         }
 
-        void ViewsNet::findMatchesToConnectedViews(VertHandle h) {
+        void ViewsNet::findMatchesToConnectedViews(ViewHandle h) {
             cv::detail::BestOf2NearestMatcher matcher(false, 0.3f);
-            auto & thisVD = _views.data(h);
-            auto & connections = _views.topo(h).halfedges;
+            auto & connections = _views.topo(h).uppers;
             for (auto & con : connections) {
                 auto & conData = _views.data(con);
-                auto & revConData = _views.data(_views.topo(con).opposite);
-                auto & neighborVD = _views.data(_views.topo(con).to());
+                auto & thisVD = _views.data(_views.topo(con).lowers[0]);
+                auto & neighborVD = _views.data(_views.topo(con).lowers[1]);
                 
                 // find matches and estimate homography using opencv
                 cv::detail::ImageFeatures thisFea;
@@ -165,12 +167,8 @@ namespace panoramix {
                 neighborFea.keypoints = neighborVD.keypointsForMatching;
 
                 matcher(thisFea, neighborFea, conData.matchInfo);
-                conData.matchInfo.src_img_idx = h.id;
-                conData.matchInfo.dst_img_idx = _views.topo(con).to().id;
-                
-                matcher(neighborFea, thisFea, revConData.matchInfo);
-                revConData.matchInfo.dst_img_idx = h.id;
-                revConData.matchInfo.src_img_idx = _views.topo(con).to().id;
+                conData.matchInfo.src_img_idx = _views.topo(con).lowers[0].id;
+                conData.matchInfo.dst_img_idx = _views.topo(con).lowers[1].id;
             }
         }
 
@@ -187,17 +185,17 @@ namespace panoramix {
             using namespace deriv;
             
             ExpressionGraph graph;
-            std::vector<Expression<Eigen::MatrixXd>> cameraViewMats(_views.internalVertices().size());
+            std::vector<Expression<Eigen::MatrixXd>> cameraViewMats(_views.internalElements<0>().size());
             //std::vector<Eigen::MatrixXd> 
 
-            for (auto & v : _views.vertices()){
+            for (auto & v : _views.elements<0>()){
                 cameraViewMats[v.topo.hd.id] = deriv::composeFunction(graph, 
                     [&v](){
                     return deriv::CVMatToEigenMatX(v.data.camera.viewMatrix()); 
                 });
             }
 
-            for (auto & c : _views.halfedges()){
+            for (auto & c : _views.elements<1>()){
 
             }
 
@@ -389,9 +387,10 @@ namespace panoramix {
         void ViewsNet::estimateVanishingPointsAndClassifyLines() {
 
             // pick separated views only
-            std::vector<decltype(_views.vertices().begin())> seperatedViewIters;
-            MergeNearNaive(_views.vertices().begin(), _views.vertices().end(), std::back_inserter(seperatedViewIters), std::false_type(),
-                _params.smallCameraAngleScalar, [](const ViewMesh::Vertex & v1, const ViewMesh::Vertex & v2) -> double{
+            std::vector<decltype(_views.elements<0>().begin())> seperatedViewIters;
+            MergeNearNaive(_views.elements<0>().begin(), _views.elements<0>().end(), std::back_inserter(seperatedViewIters), std::false_type(),
+                _params.smallCameraAngleScalar,
+                [](const ViewsGraph::TripletType<0> & v1, const ViewsGraph::TripletType<0> & v2) -> double{
                 double angleDistance = AngleBetweenDirections(v1.data.camera.center(), v2.data.camera.center());
                 return angleDistance / 
                     (PerspectiveCameraAngleRadius(v1.data.camera) + PerspectiveCameraAngleRadius(v2.data.camera));
@@ -433,11 +432,11 @@ namespace panoramix {
 
             // add spatial line segments from line segments of all views
             size_t spatialLineSegmentsNum = 0;
-            for (auto & v : _views.vertices())
+            for (auto & v : _views.elements<0>())
                 spatialLineSegmentsNum += v.data.lineSegments.size();
             _globalData.spatialLineSegments.resize(spatialLineSegmentsNum);
             auto spatialLineSegmentBegin = _globalData.spatialLineSegments.begin();
-            for (auto & v : _views.vertices()){
+            for (auto & v : _views.elements<0>()){
                 spatialLineSegmentBegin = std::transform(v.data.lineSegments.begin(), v.data.lineSegments.end(),
                     spatialLineSegmentBegin, [&v](const Classified<Line2> & line) -> Classified<Line3>{
                     auto & p1 = line.component.first;
@@ -456,7 +455,7 @@ namespace panoramix {
      
             // project line classes back to perspective views
             spatialLineSegmentBegin = _globalData.spatialLineSegments.begin();
-            for (auto & v : _views.vertices()){
+            for (auto & v : _views.elements<0>()){
                 for (auto & line : v.data.lineSegments){
                     line.claz = spatialLineSegmentBegin->claz;
                     ++ spatialLineSegmentBegin;

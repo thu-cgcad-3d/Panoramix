@@ -40,38 +40,38 @@ namespace panoramix {
                 double mjWeightTriplet, mjWeightX, mjWeightT, mjWeightL, mjWeightI;
             };
 
-            struct VertData;
-            struct HalfData;
-            using ViewMesh = Mesh<VertData, HalfData>;
-            using VertHandle = ViewMesh::VertHandle;
-            using HalfHandle = ViewMesh::HalfHandle;
+            struct ViewData;
+            struct ViewConnectionData;
+            using ViewsGraph = GraphicalModel02<ViewData, ViewConnectionData>;
+            using ViewHandle = HandleAtLevel<0>;
+            using ViewConnectionHandle = HandleAtLevel<1>;
 
         public:
             inline explicit ViewsNet(const Params params = Params()) : _params(params){}
             inline const Params & params() const { return _params; }
             
-            inline VertHandle insertVertex(const VertData & vd) { return _views.addVertex(vd); }
+            inline ViewHandle insertVertex(const ViewData & vd) { return _views.add(vd); }
 
             // insert a new photo, with known parameters
-            VertHandle insertPhoto(const Image & im, const PerspectiveCamera & cam, 
+            ViewHandle insertPhoto(const Image & im, const PerspectiveCamera & cam, 
                 double cameraDirectionErrorScale = 0.0);
 
             // compute features for a single view
-            void computeFeatures(VertHandle h);
+            void computeFeatures(ViewHandle h);
 
             // segment view image and build net of regions for a single view
             // after computeFeatures(h)
-            void buildRegionNet(VertHandle h);
+            void buildRegionNet(ViewHandle h);
 
             // connect this view to neighbor views who may overlap with h
-            size_t updateConnections(VertHandle h);
+            size_t updateConnections(ViewHandle h);
 
             // whether this view overlaps some existing views a lot, measured by the smallCameraAngleScalar parameter
-            VertHandle isTooCloseToAnyExistingView(VertHandle h) const;
+            ViewHandle isTooCloseToAnyExistingView(ViewHandle h) const;
 
             // find the feature matches to connected views
             // after computeFeatures(h) and buildRTrees(h)
-            void findMatchesToConnectedViews(VertHandle h); 
+            void findMatchesToConnectedViews(ViewHandle h); 
 
             // calibrate all cameras
             // after findMatchesToConnectedViews(h)
@@ -84,7 +84,7 @@ namespace panoramix {
             void rectifySpatialLines();
                 
         public:
-            struct VertData {
+            struct ViewData {
                 PerspectiveCamera originalCamera, camera;
 
                 double cameraDirectionErrorScale;
@@ -102,7 +102,7 @@ namespace panoramix {
                 RTreeWrapper<KeyPoint> keypointsForMatchingRTree;
             };
 
-            struct HalfData {
+            struct ViewConnectionData {
                 cv::detail::MatchesInfo matchInfo;
             };
 
@@ -117,11 +117,11 @@ namespace panoramix {
                 std::vector<int> mergedSpatialLineSegmentChainIds;
             };
 
-            inline const ViewMesh & views() const { return _views; }
+            inline const ViewsGraph & views() const { return _views; }
             inline const GlobalData & globalData() const { return _globalData; }
 
         private:
-            ViewMesh _views;
+            ViewsGraph _views;
             Params _params;
             GlobalData _globalData;
         };

@@ -746,6 +746,10 @@ namespace panoramix {
 
         public:
 
+            // element triplet type at level Level
+            template <int Level>
+            using TripletType = typename LayerContentTypeStruct<Level>::type::TableType::value_type;
+
             // internal elements
             template <int Level>
             inline const typename LayerContentTypeStruct<Level>::type::TableType & internalElements() const {
@@ -910,14 +914,17 @@ namespace panoramix {
         template <class VertDataT, class EdgeDataT>
         using GraphicalModel02 = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, 2>>;
 
-        template <class VertDataT, class EdgeDataT>
-        using GraphicalModel03 = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, 3>>;
+        template <class VertDataT, class ConstraintDataT>
+        using GraphicalModel03 = GraphicalModel<VertDataT, LayerConfig<ConstraintDataT, 3>>;
 
-        template <class VertDataT, class EdgeDataT>
-        using GraphicalModel0X = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, Dynamic>>;
+        template <class VertDataT, class ConstraintDataT>
+        using GraphicalModel0X = GraphicalModel<VertDataT, LayerConfig<ConstraintDataT, Dynamic>>;
 
-        template <class VertDataT, class EdgeDataT, class FaceDataT>
-        using GraphicalModel023 = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, 2>, LayerConfig<FaceDataT, 3>>;
+        template <class VertDataT, class EdgeDataT, class ConstraintDataT>
+        using GraphicalModel023 = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, 2>, LayerConfig<ConstraintDataT, 3>>;
+
+        template <class VertDataT, class EdgeDataT, class ConstraintDataT>
+        using GraphicalModel02X = GraphicalModel<VertDataT, LayerConfig<EdgeDataT, 2>, LayerConfig<ConstraintDataT, Dynamic>>;
 
     }
 }

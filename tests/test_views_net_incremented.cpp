@@ -60,6 +60,7 @@ TEST(ViewsNet, FixedCamera) {
         std::cout << "extracting features ...";
 
         net.computeFeatures(viewHandle);
+        net.buildRegionNet(viewHandle);
 
         vis::Visualizer2D(im)
             << vis::manip2d::SetColor(core::Color(0, 0, 255))

@@ -7,7 +7,7 @@ namespace panoramix {
 
         using namespace core;
 
-        Visualizer2D operator << (Visualizer2D viz, const ViewsNet::VertData & vd) {
+        Visualizer2D operator << (Visualizer2D viz, const ViewsNet::ViewData & vd) {
             viz.setImage(vd.image);
             
             viz.params.thickness = 2;
