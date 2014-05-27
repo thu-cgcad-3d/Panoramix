@@ -380,10 +380,10 @@ namespace panoramix {
 
         }
 
-#define OFFSET_OF(a, b) (const void*)((ptrdiff_t)(&(a)) - (ptrdiff_t)(&(b)))
-
         void OpenGLObject::render(RenderModeFlags mode, const QMatrix4x4 & projection,
             const QMatrix4x4 & view, const QMatrix4x4 & model) {
+
+            
 
             if (_mesh.vertices.isEmpty())
                 return;
@@ -403,24 +403,30 @@ namespace panoramix {
             _program->setUniformValue("tex", 0);
             _program->setUniformValue("panoramaCenter", QVector3D(0, 0, 0));
 
-            glVertexAttribPointer(_program->attributeLocation("position"), 4, GL_FLOAT, GL_FALSE, 
-                sizeof(OpenGLMeshData::Vertex), 
-                OFFSET_OF(_mesh.vertices.first().position4, _mesh.vertices.first().position4));
+            glVertexAttribPointer(_program->attributeLocation("position"), 4, GL_FLOAT, GL_FALSE,
+                sizeof(OpenGLMeshData::Vertex),
+                //OFFSET_OF(_mesh.vertices.first().position4, _mesh.vertices.first().position4));
+                (const void*)offsetof(OpenGLMeshData::Vertex, position4));
             glVertexAttribPointer(_program->attributeLocation("normal"), 3, GL_FLOAT, GL_FALSE,
                 sizeof(OpenGLMeshData::Vertex),
-                OFFSET_OF(_mesh.vertices.first().normal3, _mesh.vertices.first().position4));
+                //OFFSET_OF(_mesh.vertices.first().normal3, _mesh.vertices.first().position4));
+                (const void*)offsetof(OpenGLMeshData::Vertex, normal3));
             glVertexAttribPointer(_program->attributeLocation("color"), 4, GL_FLOAT, GL_FALSE,
                 sizeof(OpenGLMeshData::Vertex),
-                OFFSET_OF(_mesh.vertices.first().color4, _mesh.vertices.first().position4));
+                //OFFSET_OF(_mesh.vertices.first().color4, _mesh.vertices.first().position4));
+                (const void*)offsetof(OpenGLMeshData::Vertex, color4));
             glVertexAttribPointer(_program->attributeLocation("texCoord"), 2, GL_FLOAT, GL_FALSE,
                 sizeof(OpenGLMeshData::Vertex),
-                OFFSET_OF(_mesh.vertices.first().texCoord2, _mesh.vertices.first().position4));
+                //OFFSET_OF(_mesh.vertices.first().texCoord2, _mesh.vertices.first().position4));
+                (const void*)offsetof(OpenGLMeshData::Vertex, texCoord2));
             glVertexAttribPointer(_program->attributeLocation("pointSize"), 1, GL_FLOAT, GL_FALSE,
                 sizeof(OpenGLMeshData::Vertex),
-                OFFSET_OF(_mesh.vertices.first().pointSize1, _mesh.vertices.first().position4));
+                //OFFSET_OF(_mesh.vertices.first().pointSize1, _mesh.vertices.first().position4));
+                (const void*)offsetof(OpenGLMeshData::Vertex, pointSize1));
             glVertexAttribPointer(_program->attributeLocation("lineWidth"), 1, GL_FLOAT, GL_FALSE,
                 sizeof(OpenGLMeshData::Vertex),
-                OFFSET_OF(_mesh.vertices.first().lineWidth1, _mesh.vertices.first().position4));
+                //OFFSET_OF(_mesh.vertices.first().lineWidth1, _mesh.vertices.first().position4));
+                (const void*)offsetof(OpenGLMeshData::Vertex, lineWidth1));
 
             _program->enableAttributeArray("position");
             _program->enableAttributeArray("normal");

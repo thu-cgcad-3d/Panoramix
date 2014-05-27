@@ -39,9 +39,9 @@ namespace panoramix {
                 << consLines;*/
             return viz
                 << vis::manip3d::SetDefaultColor(ColorTag::Black)
-                << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
+                << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::AllColors)
                 << vis::manip3d::SetLineWidth(2.0f)
-                << netgb.mergedSpatialLineSegments;
+                << netgb.mergedSpatialLineSegmentsClassifiedWithStructureIds;
         }
 
         Visualizer2D operator << (Visualizer2D viz, const ViewsNet & net) {

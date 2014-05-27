@@ -27,7 +27,6 @@ namespace panoramix {
     "in file: "__FILE__)
 
 
-
     }
 }
  

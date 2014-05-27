@@ -1,6 +1,9 @@
 #include <Eigen/StdVector>
 
 #include "../core/errors.hpp"
+
+#include "../vis/visualize3d.hpp"
+
 #include "optimization.hpp"
 #include "views_net.hpp"
 
@@ -84,10 +87,10 @@ namespace panoramix {
             // collect keypoints/decriptors for matching
             vd.keypointsForMatching = _params.surfExtractor(im, cv::Mat(), vd.descriptorsForMatching);
             // and build RTree for the keypoints
-            vd.lineSegmentIntersectionsRTree =
+            /*vd.lineSegmentIntersectionsRTree =
                 RTreeWrapper<HPoint2>(vd.lineSegmentIntersections.begin(), vd.lineSegmentIntersections.end());
             vd.keypointsForMatchingRTree = 
-                RTreeWrapper<KeyPoint>(vd.keypointsForMatching.begin(), vd.keypointsForMatching.end());
+                RTreeWrapper<KeyPoint>(vd.keypointsForMatching.begin(), vd.keypointsForMatching.end());*/
         }
 
         void ViewsNet::buildRegionNet(ViewHandle h) {
@@ -1299,6 +1302,32 @@ namespace panoramix {
                 uniqueCons.push_back(cons);
             }
             constraints = uniqueCons;
+
+            // debug constraints
+#ifdef DEBUG_USING_VISUALIZERS
+
+            std::vector<Line3> consLines;
+            std::vector<Point3> consPoints;
+            consLines.reserve(constraints.size());
+            consPoints.reserve(constraints.size());
+            for (auto & cons : constraints){
+                auto & line1 = _globalData.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[0]].component;
+                auto & line2 = _globalData.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[1]].component;
+                auto pp = DistanceBetweenTwoLines(line1, line2);
+                consLines.push_back(Line3(pp.second.first.position, pp.second.second.position));
+                consPoints.push_back(cons.position);
+            }
+            vis::Visualizer3D viz;
+            viz << vis::manip3d::SetWindowName("show constraints recognized")
+                << vis::manip3d::SetDefaultColor(ColorTag::Yellow)
+                << vis::manip3d::SetColorTableDescriptor(ColorTableDescriptor::RGB)
+                << _globalData.mergedSpatialLineSegments;
+            viz << vis::manip3d::SetDefaultColor(ColorTag::DimGray)
+                << consLines
+                << vis::manip3d::AutoSetCamera
+                << vis::manip3d::Show(true);
+
+#endif
             
             // vote for the position of each constraint
             VoteManhattanJunctionWeightsOnConstraints(_globalData.mergedSpatialLineSegments,
@@ -1337,13 +1366,8 @@ namespace panoramix {
             MSTconsIds.reserve(constraints.size());
             MinimumSpanningTree(lineIds.begin(), lineIds.end(), consIds.begin(), consIds.end(),
                 std::back_inserter(MSTconsIds),
-                [&constraints](size_t e){
-                return std::make_pair(constraints[e].mergedSpatialLineSegmentIds[0], 
-                    constraints[e].mergedSpatialLineSegmentIds[1]); 
-            },
-                [&constraints](size_t e1, size_t e2){
-                return constraints[e1].slackValue < constraints[e2].slackValue; 
-            }
+                [&constraints](size_t e){ return std::make_pair(constraints[e].mergedSpatialLineSegmentIds[0], constraints[e].mergedSpatialLineSegmentIds[1]); },
+                [&constraints](size_t e1, size_t e2){ return constraints[e1].slackValue < constraints[e2].slackValue;}
             );
             std::vector<ConstraintData> MSTconstraints(MSTconsIds.size());
             for (size_t i = 0; i < MSTconsIds.size(); i++){
@@ -1356,6 +1380,28 @@ namespace panoramix {
             // optimize lines again
             OptimizeLines(_globalData.mergedSpatialLineSegments,
                 refinedConstraints, _globalData.vanishingPoints);
+
+            // compute connected components of mergedSpatialLineSegments using constraint connections
+            std::vector<int> mergedSpatialLineSegmentIds(_globalData.mergedSpatialLineSegments.size());
+            for (int i = 0; i < mergedSpatialLineSegmentIds.size(); i++){
+                mergedSpatialLineSegmentIds[i] = i;
+            }
+            _globalData.mergedSpatialLineSegmentsClassifiedWithStructureIds = _globalData.mergedSpatialLineSegments;
+            ConnectedComponents(mergedSpatialLineSegmentIds.begin(), mergedSpatialLineSegmentIds.end(), 
+                [&refinedConstraints](int lineid){
+                std::vector<int> lineidsInRelation;
+                for (auto & con : refinedConstraints) {
+                    if (con.mergedSpatialLineSegmentIds[0] == lineid)
+                        lineidsInRelation.push_back(con.mergedSpatialLineSegmentIds[1]);
+                    if (con.mergedSpatialLineSegmentIds[1] == lineid)
+                        lineidsInRelation.push_back(con.mergedSpatialLineSegmentIds[0]);
+                }
+                return lineidsInRelation;
+            }, 
+                [this](int lineid, int ccid){
+                _globalData.spatialStructuresOfMergedSpatialLineIds[ccid].push_back(lineid);
+                _globalData.mergedSpatialLineSegmentsClassifiedWithStructureIds[lineid].claz = ccid;
+            });
 
 
         }

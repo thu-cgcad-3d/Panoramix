@@ -45,8 +45,8 @@ namespace panoramix {
         }
 
         inline QVector4D MakeQVec(const core::Color & v) {
-            return QVector4D(static_cast<float>(v[0]), static_cast<float>(v[1]),
-                static_cast<float>(v[2]), static_cast<float>(v[3] == 0.0 ? 255.0f : v[3]));
+            return QVector4D(static_cast<float>(v[2]), static_cast<float>(v[1]),
+                static_cast<float>(v[0]), static_cast<float>(v[3] == 0.0 ? 255.0f : v[3]));
         }
 
 

@@ -41,7 +41,6 @@ namespace panoramix {
         const std::vector<Color> & PredefinedColorTable(ColorTableDescriptor descriptor) {
             static const std::vector<Color> allColorTable = {
                 ColorFromTag(ColorTag::White),
-                ColorFromTag(ColorTag::Black),
                 ColorFromTag(ColorTag::Gray),
                 ColorFromTag(ColorTag::Red),
                 ColorFromTag(ColorTag::Green),

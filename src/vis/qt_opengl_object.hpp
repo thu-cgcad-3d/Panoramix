@@ -52,8 +52,7 @@ namespace panoramix {
         struct OpenGLShaderSource {
             QByteArray vertexShaderSource;
             QByteArray fragmentShaderSource;
-            QByteArray geometryShaderSource;
-            
+            QByteArray geometryShaderSource;            
         };
         enum class OpenGLShaderSourceName {
             NormalPoints,

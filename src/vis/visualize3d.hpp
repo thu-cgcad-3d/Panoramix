@@ -101,10 +101,14 @@ namespace panoramix {
         // classified thing
         template <class T>
         inline Visualizer3D operator << (Visualizer3D viz, const core::Classified<T> & thing) {
-            static const auto WhiteColor = core::ColorFromTag(core::ColorTag::White);
+            auto oldDefaultColor = viz.params().defaultColor;
             auto & predefinedColorTable = core::PredefinedColorTable(viz.params().colorTableDescriptor);
-            viz.params().defaultColor = thing.claz < 0 ? WhiteColor : predefinedColorTable[thing.claz % predefinedColorTable.size()];
-            return viz << thing.component;
+            if (thing.claz >= 0){
+                viz.params().defaultColor = predefinedColorTable[thing.claz % predefinedColorTable.size()];
+            }
+            viz << thing.component;
+            viz.params().defaultColor = oldDefaultColor;
+            return viz;
         }
 
 

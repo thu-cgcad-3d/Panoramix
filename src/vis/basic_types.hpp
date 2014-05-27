@@ -4,7 +4,7 @@
 namespace panoramix {
     namespace vis {
 
-                // render mode
+        // render mode
         using RenderModeFlags = int8_t;
         enum RenderModeFlag : RenderModeFlags {
             Points      = 1,

@@ -10,6 +10,8 @@ namespace panoramix {
 
         // get lib version
         Version GetVersion();
+
+#define DEBUG_USING_VISUALIZERS true
  
     }
 }

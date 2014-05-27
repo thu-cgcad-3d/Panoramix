@@ -52,6 +52,10 @@ namespace panoramix {
             return norm(a.position - b.position);
         }
 
+        inline double Distance(const Color & a, const Color & b) {
+            return norm(a - b);
+        }
+
 
         // standard distance functor
         template <class T>
@@ -273,10 +277,17 @@ namespace panoramix {
             inline void insert(const T & t) {
                 BoxType box = _getBoundingBox(t);
                 for (int i = 0; i < Dimension; i++){
-                    if (!(box.minCorner[i] <= box.maxCorner[i])){
-                        std::cerr << "invalid box type, replaced with a null box" << std::endl;
-                        box = BoxType();
-                        //return;
+                    if (isnan(box.minCorner[i]) || isnan(box.maxCorner[i])){
+#ifdef _DEBUG
+                        std::cout << "invalid box type (NaN value), ignore this element" << std::endl;
+#endif
+                        return;
+                    }
+                    if (!(box.minCorner[i] <= box.maxCorner[i])) {
+#ifdef _DEBUG
+                        std::cout << "invalid box type (minCorner[i] > maxCorner[i]), ignore this element" << std::endl;
+#endif
+                        return;
                     }
                 }
                 _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
@@ -726,7 +737,6 @@ namespace panoramix {
                     vVisited[root] = true;
                     auto vNeighborsContainer = vNeighborsGetter(root);
                     for (const auto & v : vNeighborsContainer) {
-                        //static_assert(typename std::is_same<Vert, decltype(*nextv)>>::value, "*nextv should be of type Vert");
                         (*this)(v, vVisited, vNeighborsGetter, vTypeRecorder, cid);
                     }
                 }

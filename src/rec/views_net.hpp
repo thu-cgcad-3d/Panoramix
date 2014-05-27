@@ -101,8 +101,8 @@ namespace panoramix {
 
                 std::shared_ptr<RegionsNet> regionNet;
 
-                RTreeWrapper<HPoint2> lineSegmentIntersectionsRTree;
-                RTreeWrapper<KeyPoint> keypointsForMatchingRTree;
+                //RTreeWrapper<HPoint2> lineSegmentIntersectionsRTree;
+                //RTreeWrapper<KeyPoint> keypointsForMatchingRTree;
             };
 
             struct ViewConnectionData {
@@ -119,7 +119,10 @@ namespace panoramix {
                 std::vector<Classified<Line3>> mergedSpatialLineSegments;
                 std::vector<int> mergedSpatialLineSegmentChainIds;
 
-                std::vector<std::vector<Line3>> spatialLineStructures;
+                //std::vector<std::pair<int, int>> constraintsOnMergedSpatialLineSegments;
+
+                std::map<int, std::vector<int>> spatialStructuresOfMergedSpatialLineIds;
+                std::vector<Classified<Line3>> mergedSpatialLineSegmentsClassifiedWithStructureIds;
             };
 
             inline const ViewsGraph & views() const { return _views; }

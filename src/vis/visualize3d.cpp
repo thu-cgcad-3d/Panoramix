@@ -1,10 +1,12 @@
-#include "visualize3D.hpp"
 
 #include <QtOpenGL>
 #include <QtWidgets>
 #include <QWidget>
 
+#include "../src/core/utilities.hpp"
+
 #include "qt_resources.hpp"
+#include "visualize3D.hpp"
 
 namespace panoramix {
     namespace vis {
@@ -16,9 +18,9 @@ namespace panoramix {
         Visualizer3D::Params::Params()
             :
             winName("Visualizer 3D"),
-            backgroundColor(200, 200, 2200),
-            camera(600, 600, 300.0, core::Vec3(1, 1, 0), core::Vec3(0, 0, 0)),
-            defaultColor(10, 10, 10),
+            backgroundColor(10, 10, 10),
+            camera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)),
+            defaultColor(255, 255, 255),
             pointSize(10.0f),
             lineWidth(2.0f),
             colorTableDescriptor(ColorTableDescriptor::AllColors),
@@ -51,7 +53,7 @@ namespace panoramix {
         // manipulators
         namespace manip3d {
 
-            Manipulator<std::string> SetWindowName(std::string && name) {
+            Manipulator<std::string> SetWindowName(std::string name) {
                 return Manipulator<std::string>(
                     [](Visualizer3D & viz, std::string name){
                     viz.params().winName = name; },
@@ -331,6 +333,9 @@ namespace panoramix {
             auto & mesh = viz.data()->mesh;
             core::Point3 ps[] = { p.first, p.second };
             OpenGLMeshData::Vertex vs[2];
+            if (core::FuzzyEquals(viz.params().defaultColor, ColorFromTag(ColorTag::White), 2)){
+                std::cout << "fuck!" << std::endl;
+            }
             for (int i = 0; i < 2; i++){
                 vs[i].position4 = MakeQVec(core::HPoint3(ps[i], 1.0).toVector());
                 vs[i].color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
