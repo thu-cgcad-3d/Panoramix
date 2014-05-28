@@ -1,7 +1,5 @@
 #include <Eigen/StdVector>
 
-#include "../core/errors.hpp"
-
 #include "../vis/visualize3d.hpp"
 
 #include "optimization.hpp"
@@ -1303,9 +1301,8 @@ namespace panoramix {
             }
             constraints = uniqueCons;
 
-            // debug constraints
-#ifdef DEBUG_USING_VISUALIZERS
-            {
+            IF_DEBUG_USING_VISUALIZERS {
+                // debug constraints
                 std::vector<Line3> consLines;
                 std::vector<Point3> consPoints;
                 consLines.reserve(constraints.size());
@@ -1327,7 +1324,6 @@ namespace panoramix {
                     << vis::manip3d::AutoSetCamera
                     << vis::manip3d::Show(false);
             }
-#endif
             
             // vote for the position of each constraint
             VoteManhattanJunctionWeightsOnConstraints(_globalData.mergedSpatialLineSegments,
@@ -1355,9 +1351,7 @@ namespace panoramix {
             OptimizeLines(_globalData.mergedSpatialLineSegments, 
                 constraints, _globalData.vanishingPoints);
 
-
-#ifdef DEBUG_USING_VISUALIZERS
-            {
+            IF_DEBUG_USING_VISUALIZERS {
                 std::vector<Line3> consLines;
                 consLines.reserve(constraints.size());
                 double maxAngle = 0;
@@ -1383,8 +1377,6 @@ namespace panoramix {
                     << vis::manip3d::AutoSetCamera
                     << vis::manip3d::Show(false);
             }
-#endif
-
 
             // find necessary constraints using MST with slackValues
             std::vector<size_t> lineIds(_globalData.mergedSpatialLineSegments.size()), 
@@ -1413,8 +1405,7 @@ namespace panoramix {
                 refinedConstraints, _globalData.vanishingPoints);
 
 
-#ifdef DEBUG_USING_VISUALIZERS
-            {
+            IF_DEBUG_USING_VISUALIZERS {
                 std::vector<Line3> consLines;
                 consLines.reserve(refinedConstraints.size());
                 double maxAngle = 0;
@@ -1440,7 +1431,6 @@ namespace panoramix {
                     << vis::manip3d::AutoSetCamera
                     << vis::manip3d::Show(true);
             }
-#endif
 
 
             // compute connected components of mergedSpatialLineSegments using constraint connections

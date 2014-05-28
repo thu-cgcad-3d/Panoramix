@@ -17,6 +17,7 @@
 #include <opencv2/stitching/detail/matchers.hpp>
 
 #include "version.hpp"
+#include "macros.hpp"
 
 namespace panoramix {
     namespace core {

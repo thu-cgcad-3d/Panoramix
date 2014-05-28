@@ -1,9 +1,11 @@
-#ifndef PANORAMIX_CORE_ERRORS_HPP
-#define PANORAMIX_CORE_ERRORS_HPP
+#ifndef PANORAMIX_CORE_MACROS_HPP
+#define PANORAMIX_CORE_MACROS_HPP
  
 namespace panoramix {
     namespace core {
-            
+
+#define DEBUG_USING_VISUALIZERS false
+#define IF_DEBUG_USING_VISUALIZERS if(DEBUG_USING_VISUALIZERS)            
 
         // not implemented error
 #define NOT_IMPLEMENTED_YET() \

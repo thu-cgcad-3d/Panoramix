@@ -208,7 +208,6 @@ TEST(UtilTest, DistanceBetweenTwoLines) {
     ASSERT_LE(pab.first, core::Distance(a.second, b.first));
     ASSERT_LE(pab.first, core::Distance(a.second, b.second));
 
-    static const int N = 100000;
     for (int i = 0; i < 1000; i++){
         core::Line3 aa = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
         core::Line3 bb = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
