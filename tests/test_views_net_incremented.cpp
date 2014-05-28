@@ -105,35 +105,7 @@ void run(){
             return originCam.screenProjection(p3);
         });
 
-        //vis::Visualizer2D()
-        //    << net.views().data(viewHandle)
-        //    << vis::manip2d::Show();
-
-        //vis::Visualizer3D() << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
-        //    << vis::manip3d::SetBackgroundColor(core::ColorTag::Black)
-        //    << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
-        //    << net.globalData().spatialLineSegments
-        //    << vis::manip3d::AutoSetCamera
-        //    << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
-        //    << vis::manip3d::Show(false);
-
         net.rectifySpatialLines();
-
-        //vis::Visualizer3D() << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
-        //    << vis::manip3d::SetBackgroundColor(core::ColorTag::Black)
-        //    << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
-        //    << net.globalData().mergedSpatialLineSegments
-        //    << vis::manip3d::AutoSetCamera
-        //    << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
-        //    << vis::manip3d::Show(false);
-
-        //vis::Visualizer3D() << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
-        //    << vis::manip3d::SetBackgroundColor(core::ColorTag::Black)
-        //    << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
-        //    << net.globalData()
-        //    << vis::manip3d::AutoSetCamera
-        //    << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
-        //    << vis::manip3d::Show();
     }
 
 }

@@ -882,7 +882,7 @@ namespace panoramix {
                     int varId;
                     bool isSlackVariable;
                     int constraintId; // if is slack variable
-                    int lineId; // if is not slack variable
+                    int lineId; // if is not slack variable (the lambda variable)
                     double weightInObjectiveFunction;
                 };
 
@@ -964,8 +964,8 @@ namespace panoramix {
                     const auto & lineDet2 = lineDeterminers[cons.mergedSpatialLineSegmentIds[1]];
                     Vec3 di = nearestPointPair[0] == 0 ? lineDet1.firstPointFactor : lineDet1.secondPointFactor;
                     Vec3 dj = nearestPointPair[1] == 0 ? lineDet2.firstPointFactor : lineDet2.secondPointFactor;
-                    Vec3 ddi(di.dot(vps[0]), di.dot(vps[1]), di.dot(vps[2]));
-                    Vec3 ddj(dj.dot(vps[0]), dj.dot(vps[1]), dj.dot(vps[2]));
+                    Vec3 ddi(di.dot(vps[0] / norm(vps[0])), di.dot(vps[1] / norm(vps[1])), di.dot(vps[2] / norm(vps[2])));
+                    Vec3 ddj(dj.dot(vps[0] / norm(vps[0])), dj.dot(vps[1] / norm(vps[1])), dj.dot(vps[2] / norm(vps[2])));
 
                     // slack variable
                     VariableInfo slackVar;
@@ -1305,28 +1305,28 @@ namespace panoramix {
 
             // debug constraints
 #ifdef DEBUG_USING_VISUALIZERS
-
-            std::vector<Line3> consLines;
-            std::vector<Point3> consPoints;
-            consLines.reserve(constraints.size());
-            consPoints.reserve(constraints.size());
-            for (auto & cons : constraints){
-                auto & line1 = _globalData.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[0]].component;
-                auto & line2 = _globalData.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[1]].component;
-                auto pp = DistanceBetweenTwoLines(line1, line2);
-                consLines.push_back(Line3(pp.second.first.position, pp.second.second.position));
-                consPoints.push_back(cons.position);
+            {
+                std::vector<Line3> consLines;
+                std::vector<Point3> consPoints;
+                consLines.reserve(constraints.size());
+                consPoints.reserve(constraints.size());
+                for (auto & cons : constraints){
+                    auto & line1 = _globalData.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[0]].component;
+                    auto & line2 = _globalData.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[1]].component;
+                    auto pp = DistanceBetweenTwoLines(line1, line2);
+                    consLines.push_back(Line3(pp.second.first.position, pp.second.second.position));
+                    consPoints.push_back(cons.position);
+                }
+                vis::Visualizer3D viz;
+                viz << vis::manip3d::SetWindowName("show constraints recognized")
+                    << vis::manip3d::SetDefaultColor(ColorTag::Yellow)
+                    << vis::manip3d::SetColorTableDescriptor(ColorTableDescriptor::RGB)
+                    << _globalData.mergedSpatialLineSegments;
+                viz << vis::manip3d::SetDefaultColor(ColorTag::DimGray)
+                    << consLines
+                    << vis::manip3d::AutoSetCamera
+                    << vis::manip3d::Show(false);
             }
-            vis::Visualizer3D viz;
-            viz << vis::manip3d::SetWindowName("show constraints recognized")
-                << vis::manip3d::SetDefaultColor(ColorTag::Yellow)
-                << vis::manip3d::SetColorTableDescriptor(ColorTableDescriptor::RGB)
-                << _globalData.mergedSpatialLineSegments;
-            viz << vis::manip3d::SetDefaultColor(ColorTag::DimGray)
-                << consLines
-                << vis::manip3d::AutoSetCamera
-                << vis::manip3d::Show(true);
-
 #endif
             
             // vote for the position of each constraint
@@ -1355,6 +1355,37 @@ namespace panoramix {
             OptimizeLines(_globalData.mergedSpatialLineSegments, 
                 constraints, _globalData.vanishingPoints);
 
+
+#ifdef DEBUG_USING_VISUALIZERS
+            {
+                std::vector<Line3> consLines;
+                consLines.reserve(constraints.size());
+                double maxAngle = 0;
+                ConstraintData * maxCons = nullptr;
+                for (auto & cons : constraints){
+                    auto & line1 = _globalData.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[0]].component;
+                    auto & line2 = _globalData.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[1]].component;
+                    auto pp = DistanceBetweenTwoLines(line1, line2);
+                    if (pp.first > maxAngle){
+                        maxAngle = pp.first;
+                        maxCons = &cons;
+                    }
+                    consLines.push_back(Line3(pp.second.first.position, pp.second.second.position));
+                }
+                std::cout << "max distance between constrained lines: " << maxAngle << std::endl;
+                vis::Visualizer3D viz;
+                viz << vis::manip3d::SetWindowName("constraints and optimized lines")
+                    << vis::manip3d::SetDefaultColor(ColorTag::Yellow)
+                    << vis::manip3d::SetColorTableDescriptor(ColorTableDescriptor::RGB)
+                    << _globalData.mergedSpatialLineSegments;
+                viz << vis::manip3d::SetDefaultColor(ColorTag::DimGray)
+                    << consLines
+                    << vis::manip3d::AutoSetCamera
+                    << vis::manip3d::Show(false);
+            }
+#endif
+
+
             // find necessary constraints using MST with slackValues
             std::vector<size_t> lineIds(_globalData.mergedSpatialLineSegments.size()), 
                 consIds(constraints.size());
@@ -1380,6 +1411,37 @@ namespace panoramix {
             // optimize lines again
             OptimizeLines(_globalData.mergedSpatialLineSegments,
                 refinedConstraints, _globalData.vanishingPoints);
+
+
+#ifdef DEBUG_USING_VISUALIZERS
+            {
+                std::vector<Line3> consLines;
+                consLines.reserve(refinedConstraints.size());
+                double maxAngle = 0;
+                ConstraintData * maxCons = nullptr;
+                for (auto & cons : refinedConstraints){
+                    auto & line1 = _globalData.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[0]].component;
+                    auto & line2 = _globalData.mergedSpatialLineSegments[cons.mergedSpatialLineSegmentIds[1]].component;
+                    auto pp = DistanceBetweenTwoLines(line1, line2);
+                    if (pp.first > maxAngle){
+                        maxAngle = pp.first;
+                        maxCons = &cons;
+                    }
+                    consLines.push_back(Line3(pp.second.first.position, pp.second.second.position));
+                }
+                std::cout << "max distance between constrained lines (after refinement): " << maxAngle << std::endl;
+                vis::Visualizer3D viz;
+                viz << vis::manip3d::SetWindowName("refined constraints and again-optimized lines")
+                    << vis::manip3d::SetDefaultColor(ColorTag::Yellow)
+                    << vis::manip3d::SetColorTableDescriptor(ColorTableDescriptor::RGB)
+                    << _globalData.mergedSpatialLineSegments;
+                viz << vis::manip3d::SetDefaultColor(ColorTag::DimGray)
+                    << consLines
+                    << vis::manip3d::AutoSetCamera
+                    << vis::manip3d::Show(true);
+            }
+#endif
+
 
             // compute connected components of mergedSpatialLineSegments using constraint connections
             std::vector<int> mergedSpatialLineSegmentIds(_globalData.mergedSpatialLineSegments.size());
