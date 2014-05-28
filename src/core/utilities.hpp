@@ -421,25 +421,76 @@ namespace panoramix {
         }
 
         // returns (distance, (nearest position on line1, nearest position on line2))
+        // see http://geomalgorithms.com/a07-_distance.html for explainations
         template <class T, int N>
         std::pair<T, std::pair<PositionOnLine<T, N>, PositionOnLine<T, N>>> DistanceBetweenTwoLines(
             const Line<T, N> & line1, const Line<T, N> & line2) {
+
             auto u = line1.direction();
             auto v = line2.direction();
-            auto w0 = line1.first - line2.first;
-            auto a = u.dot(u), b = u.dot(v), c = v.dot(v), d = u.dot(w0), e = v.dot(w0);
-            auto p = (a*c - b*b);
-            auto t1 = (b*e - c*d) / p;
-            auto t2 = (a*e - b*d) / p;
-            if (p == 0){ // is parallel
-                t1 = -e / b;
-                t2 = e / c;
+            auto w = line1.first - line2.first;
+            auto a = u.dot(u);         // always >= 0
+            auto b = u.dot(v);
+            auto c = v.dot(v);         // always >= 0
+            auto d = u.dot(w);
+            auto e = v.dot(w);
+            auto D = a*c - b*b;        // always >= 0
+            T    sc, sN, sD = D;       // sc = sN / sD, default sD = D >= 0
+            T    tc, tN, tD = D;       // tc = tN / tD, default tD = D >= 0
+
+            static const double SMALL_NUM = 0;
+            // compute the line parameters of the two closest points
+            if (D <= SMALL_NUM) { // the lines are almost parallel
+                sN = 0.0;         // force using point P0 on segment S1
+                sD = 1.0;         // to prevent possible division by 0.0 later
+                tN = e;
+                tD = c;
+            } else {                 // get the closest points on the infinite lines
+                sN = (b*e - c*d);
+                tN = (a*e - b*d);
+                if (sN < 0.0) {        // sc < 0 => the s=0 edge is visible
+                    sN = 0.0;
+                    tN = e;
+                    tD = c;
+                } else if (sN > sD) {  // sc > 1  => the s=1 edge is visible
+                    sN = sD;
+                    tN = e + b;
+                    tD = c;
+                }
             }
-            t1 = BoundBetween(t1, 0, 1);
-            t2 = BoundBetween(t2, 0, 1);
-            PositionOnLine<T, N> pos1(line1, t1);
-            PositionOnLine<T, N> pos2(line2, t2);
-            return std::make_pair(norm(pos1.position - pos2.position), std::make_pair(pos1, pos2));
+
+            if (tN < 0.0) {            // tc < 0 => the t=0 edge is visible
+                tN = 0.0;
+                // recompute sc for this edge
+                if (-d < 0.0)
+                    sN = 0.0;
+                else if (-d > a)
+                    sN = sD;
+                else {
+                    sN = -d;
+                    sD = a;
+                }
+            } else if (tN > tD) {      // tc > 1  => the t=1 edge is visible
+                tN = tD;
+                // recompute sc for this edge
+                if ((-d + b) < 0.0)
+                    sN = 0;
+                else if ((-d + b) > a)
+                    sN = sD;
+                else {
+                    sN = (-d + b);
+                    sD = a;
+                }
+            }
+
+            // finally do the division to get sc and tc
+            sc = (IsBetween(sN, -SMALL_NUM, +SMALL_NUM) ? 0.0 : sN / sD);
+            tc = (IsBetween(tN, -SMALL_NUM, +SMALL_NUM) ? 0.0 : tN / tD);
+
+            PositionOnLine<T, N> pos1(line1, sc);
+            PositionOnLine<T, N> pos2(line2, tc);
+            auto dist = norm(pos1.position - pos2.position);
+            return std::make_pair(dist, std::make_pair(pos1, pos2));
         }
 
 

@@ -103,6 +103,7 @@ namespace panoramix {
             inline Point<T, N> center() const { return (first + second) / 2.0; }
             inline T length() const { return norm(first - second); }
             inline Vec<T, N> direction() const { return second - first; }
+            inline Line reversed() const { return Line(second, first); }
             Point<T, N> first, second;
         };
         using Line2 = Line<double, 2>;

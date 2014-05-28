@@ -8,6 +8,10 @@
 
 using namespace panoramix;
 
+double randf(){
+    return (std::rand() % 100000) / 100000.0;
+}
+
 TEST(UtilTest, Distance){
     using namespace core;
 
@@ -150,16 +154,71 @@ TEST(UtilTest, DistanceBetweenTwoLines) {
     core::Line3 l2 = { { 0, 1, 1 }, { 0, -1, 1 } };
     core::Line3 l3 = { { 0, 2, 1 }, { 0, 3, 1 } };
     ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l2).first);
+    ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l2.reversed()).first);
+    ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1.reversed(), l2).first);
     ASSERT_DOUBLE_EQ(core::norm(l3.first - l1.center()), core::DistanceBetweenTwoLines(l1, l3).first);
+    ASSERT_DOUBLE_EQ(core::norm(l3.first - l1.center()), core::DistanceBetweenTwoLines(l1.reversed(), l3).first);
+    ASSERT_DOUBLE_EQ(core::norm(l3.first - l1.center()), core::DistanceBetweenTwoLines(l1, l3.reversed()).first);
+
+    double dd = 1;
+    ASSERT_DOUBLE_EQ(dd, core::DistanceBetweenTwoLines(
+        core::Line3{ { 0, 0, 0 }, { 1, 0, 0 } }, 
+        core::Line3{ { 0, 0, dd }, { 1, 0, dd + 0.01 } }.reversed()).first);
+    ASSERT_DOUBLE_EQ(dd, core::DistanceBetweenTwoLines(
+        core::Line3{ { 0, 0, 0 }, { 1, 0, 0 } },
+        core::Line3{ { 0, 0, dd }, { 1, 0, dd } }.reversed()).first);
 
     core::Line3 l4 = { { 1, 1, 0 }, { -1, 1, 0 } };
     ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l4).first);
+    ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l4.reversed()).first);
+    ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1.reversed(), l4).first);
 
     core::Line3 l5 = { { 2, 1, 0 }, { 3, 1, 0 } };
     ASSERT_DOUBLE_EQ(core::norm(l1.first, l5.first), core::DistanceBetweenTwoLines(l1, l5).first);
+    ASSERT_DOUBLE_EQ(core::norm(l1.first, l5.first), core::DistanceBetweenTwoLines(l1.reversed(), l5).first);
+    ASSERT_DOUBLE_EQ(core::norm(l1.first, l5.first), core::DistanceBetweenTwoLines(l1, l5.reversed()).first);
 
     core::Line3 l6 = { { 2, 1, 0 }, { -2, 1, 0 } };
     ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l6).first);
+    ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l6.reversed()).first);
+    ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1.reversed(), l6).first);
+
+    core::Line3 l7 = { { 0, 0, 1 }, { 1, 0, 1 } };
+    core::Line3 l8 = { { 0, 1, 0 }, { 0, 2, 0 } };
+    ASSERT_DOUBLE_EQ(sqrt(2.0), core::DistanceBetweenTwoLines(l7, l8).first);
+
+    core::Line3 l9 = { { 1, 0, 1 }, { 0, 0, 1 } };
+    core::Line3 l10 = { { 0, 2, 0 }, { 0, 1, 0 } };
+    ASSERT_DOUBLE_EQ(sqrt(2.0), core::DistanceBetweenTwoLines(l7, l10).first);
+    ASSERT_DOUBLE_EQ(sqrt(2.0), core::DistanceBetweenTwoLines(l9, l8).first);
+    ASSERT_DOUBLE_EQ(sqrt(2.0), core::DistanceBetweenTwoLines(l9, l10).first);
+
+    ASSERT_DOUBLE_EQ(0, core::DistanceBetweenTwoLines(l7, l7).first);
+    ASSERT_DOUBLE_EQ(0, core::DistanceBetweenTwoLines(l10, l10).first);
+
+    ASSERT_DOUBLE_EQ(0, core::DistanceBetweenTwoLines(l7, l9).first);
+    ASSERT_DOUBLE_EQ(0, core::DistanceBetweenTwoLines(l8, l10).first);
+
+    core::Line3 a = { { 0.32060601460883287, 0.92543477139591090, -0.20194619899378968 }, { 0.24497237141965944, 0.95024535429166723, -0.19241180807874725 } };
+    core::Line3 b = { { 0.15085395484832950, 0.90385564866472523, -0.40035990144304773 }, { 0.096251150572768340, 0.90140252138592014, -0.42214832754912596 } };
+    auto pab = core::DistanceBetweenTwoLines(a, b);
+
+    ASSERT_LE(pab.first, core::Distance(a.first, b.first));
+    ASSERT_LE(pab.first, core::Distance(a.first, b.second));
+    ASSERT_LE(pab.first, core::Distance(a.second, b.first));
+    ASSERT_LE(pab.first, core::Distance(a.second, b.second));
+
+    static const int N = 100000;
+    for (int i = 0; i < 1000; i++){
+        core::Line3 aa = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
+        core::Line3 bb = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
+        auto p = core::DistanceBetweenTwoLines(aa, bb);
+
+        EXPECT_LE(p.first - 0.1, core::Distance(aa.first, bb.first));
+        EXPECT_LE(p.first - 0.1, core::Distance(aa.first, bb.second));
+        EXPECT_LE(p.first - 0.1, core::Distance(aa.second, bb.first));
+        EXPECT_LE(p.first - 0.1, core::Distance(aa.second, bb.second));
+    }
 }
 
 
