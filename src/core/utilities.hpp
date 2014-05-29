@@ -370,14 +370,31 @@ namespace panoramix {
             return index;
         }
 
-        template <class T, int N>
-        Point<T, N> DecodeIndexToSubscript(T index, const Vec<T, N> & dimension) {
-            Point<T, N> subscript;
-            for (int i = N - 1; i >= 0; i--){
-                subscript[i] = WrapBetween(index, 0, dimension[i]);
-                index = (index - subscript[i]) / dimension[i];
+        namespace {
+            template <class T, int N>
+            Point<T, N> DecodeIndexToSubscriptPrivate(T index, const Vec<T, N> & dimension, const std::false_type &) {
+                Point<T, N> subscript;
+                for (int i = N - 1; i >= 0; i--){
+                    subscript[i] = WrapBetween(index, 0, dimension[i]);
+                    index = (index - subscript[i]) / dimension[i];
+                }
+                return subscript;
             }
-            return subscript;
+
+            template <class T, int N>
+            Point<T, N> DecodeIndexToSubscriptPrivate(T index, const Vec<T, N> & dimension, const std::true_type &) {
+                Point<T, N> subscript;
+                for (int i = N - 1; i >= 0; i--){
+                    subscript[i] = index % dimension[i];
+                    index = index / dimension[i];
+                }
+                return subscript;
+            }
+        }
+
+        template <class T, int N>
+        inline Point<T, N> DecodeIndexToSubscript(T index, const Vec<T, N> & dimension) {
+            return DecodeIndexToSubscriptPrivate(index, dimension, std::is_integral<T>());
         }
 
 
@@ -403,7 +420,7 @@ namespace panoramix {
         // returns projection position
         template <class T, int N>
         PositionOnLine<T, N> ProjectionOfPointOnLine(const Point<T, N> & p, const Line<T, N> & line) {
-            Vec<T, N> lineDir = line.second - line.first;
+            Vec<T, N> lineDir = line.direction();
             lineDir /= norm(lineDir);
             T projRatio = (p - line.first).dot(lineDir) / line.length();
             return PositionOnLine<T, N>(line, projRatio);
@@ -412,7 +429,7 @@ namespace panoramix {
         // returns (distance, nearest position)
         template <class T, int N>
         std::pair<T, PositionOnLine<T, N>> DistanceFromPointToLine(const Point<T, N> & p, const Line<T, N> & line) {
-            Vec<T, N> lineDir = line.second - line.first;
+            Vec<T, N> lineDir = line.direction();
             lineDir /= norm(lineDir);
             T projRatio = (p - line.first).dot(lineDir) / line.length();
             projRatio = BoundBetween(projRatio, 0, 1);
