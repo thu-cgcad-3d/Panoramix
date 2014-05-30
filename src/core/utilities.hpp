@@ -52,7 +52,7 @@ namespace panoramix {
             return norm(a.position - b.position);
         }
 
-        inline double Distance(const Color & a, const Color & b) {
+        inline double Distance(const cv::Scalar & a, const cv::Scalar & b) {
             return norm(a - b);
         }
 
@@ -350,16 +350,37 @@ namespace panoramix {
             return v < high ? v : high;
         }
 
-        template <class T>
-        T WrapBetween(const T & input, const T & low, const T & high) {
-            if (low >= high)
-                return input;
-            if (low <= input && input < high)
-                return input;
-            const auto sz = high - low;
-            auto result = input - int((input - low) / sz) * sz + (input < low ? sz : 0);
-            return result == high ? low : result;
+        namespace {
+
+            template <class T>
+            T WrapBetweenPrivate(const T & input, const T & low, const T & high, const std::false_type &) {
+                if (low >= high)
+                    return input;
+                if (low <= input && input < high)
+                    return input;
+                const auto sz = high - low;
+                auto result = input - int((input - low) / sz) * sz + (input < low ? sz : 0);
+                return result == high ? low : result;
+            }
+
+            template <class T>
+            T WrapBetweenPrivate(const T & input, const T & low, const T & high, const std::true_type &) {
+                if (low >= high)
+                    return input;
+                if (low <= input && input < high)
+                    return input;
+                const auto sz = high - low;
+                auto result = (input - low) % sz + low + (input < low ? sz : 0);
+                return result == high ? low : result;
+            }
+
         }
+
+        template <class T>
+        inline T WrapBetween(const T & input, const T & low, const T & high) {
+            return WrapBetweenPrivate(input, low, high, std::is_integral<T>());
+        }
+
 
         template <class T, int N>
         T EncodeSubscriptToIndex(const Point<T, N> & subscript, const Vec<T, N> & dimension) {

@@ -1316,10 +1316,10 @@ namespace panoramix {
                 }
                 vis::Visualizer3D viz;
                 viz << vis::manip3d::SetWindowName("show constraints recognized")
-                    << vis::manip3d::SetDefaultColor(ColorTag::Yellow)
-                    << vis::manip3d::SetColorTableDescriptor(ColorTableDescriptor::RGB)
+                    << vis::manip3d::SetDefaultColor(vis::ColorTag::Yellow)
+                    << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
                     << _globalData.mergedSpatialLineSegments;
-                viz << vis::manip3d::SetDefaultColor(ColorTag::DimGray)
+                viz << vis::manip3d::SetDefaultColor(vis::ColorTag::DimGray)
                     << consLines
                     << vis::manip3d::AutoSetCamera
                     << vis::manip3d::Show(false);
@@ -1369,10 +1369,10 @@ namespace panoramix {
                 std::cout << "max distance between constrained lines: " << maxAngle << std::endl;
                 vis::Visualizer3D viz;
                 viz << vis::manip3d::SetWindowName("constraints and optimized lines")
-                    << vis::manip3d::SetDefaultColor(ColorTag::Yellow)
-                    << vis::manip3d::SetColorTableDescriptor(ColorTableDescriptor::RGB)
+                    << vis::manip3d::SetDefaultColor(vis::ColorTag::Yellow)
+                    << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
                     << _globalData.mergedSpatialLineSegments;
-                viz << vis::manip3d::SetDefaultColor(ColorTag::DimGray)
+                viz << vis::manip3d::SetDefaultColor(vis::ColorTag::DimGray)
                     << consLines
                     << vis::manip3d::AutoSetCamera
                     << vis::manip3d::Show(false);
@@ -1423,10 +1423,10 @@ namespace panoramix {
                 std::cout << "max distance between constrained lines (after refinement): " << maxAngle << std::endl;
                 vis::Visualizer3D viz;
                 viz << vis::manip3d::SetWindowName("refined constraints and again-optimized lines")
-                    << vis::manip3d::SetDefaultColor(ColorTag::Yellow)
-                    << vis::manip3d::SetColorTableDescriptor(ColorTableDescriptor::RGB)
+                    << vis::manip3d::SetDefaultColor(vis::ColorTag::Yellow)
+                    << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
                     << _globalData.mergedSpatialLineSegments;
-                viz << vis::manip3d::SetDefaultColor(ColorTag::DimGray)
+                viz << vis::manip3d::SetDefaultColor(vis::ColorTag::DimGray)
                     << consLines
                     << vis::manip3d::AutoSetCamera
                     << vis::manip3d::Show(true);
@@ -1458,6 +1458,13 @@ namespace panoramix {
 
         }
  
+
+        void ViewsNet::reconstructFaces() {
+
+            // build the holistic region map
+
+
+        }
 
 
     }

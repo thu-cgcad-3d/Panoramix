@@ -95,7 +95,7 @@ namespace panoramix {
                         lineWidth);
             }
 
-            Manipulator<core::ColorTableDescriptor> SetColorTableDescriptor(core::ColorTableDescriptor descriptor) {
+            Manipulator<vis::ColorTableDescriptor> SetColorTableDescriptor(vis::ColorTableDescriptor descriptor) {
                 return Manipulator<ColorTableDescriptor>(
                     [](Visualizer3D & viz, ColorTableDescriptor d){
                     viz.params().colorTableDescriptor = d; },

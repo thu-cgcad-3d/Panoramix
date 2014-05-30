@@ -49,16 +49,16 @@ TEST(MeshTest, Conversion) {
     }
 
     vis::Visualizer3D()
-        << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
-        << vis::manip3d::SetDefaultColor(core::ColorTag::Black)
+        << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
+        << vis::manip3d::SetDefaultColor(vis::ColorTag::Black)
         << lines
-        << vis::manip3d::SetDefaultColor(core::ColorTag::Red)
+        << vis::manip3d::SetDefaultColor(vis::ColorTag::Red)
         << vis::manip3d::SetPointSize(20)
         << points
         << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500, 
             core::Vec3(-3, 0, 0), 
             core::Vec3(0.5, 0.5, 0.5)))
-        << vis::manip3d::SetBackgroundColor(core::ColorTag::White)
+        << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
         << vis::manip3d::AutoSetCamera
         << vis::manip3d::Show();
 }

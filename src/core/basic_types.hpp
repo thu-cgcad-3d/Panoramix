@@ -141,38 +141,6 @@ namespace panoramix {
         std::pair<double, double> MinMaxValOfImage(const Image & im);
 
 
-        // color
-        using Color = cv::Scalar;
-        enum class ColorTag {
-            Transparent,
-
-            White,
-            Black,
-
-            DimGray,
-            Gray,
-            DarkGray,
-            Silver,
-            LightGray,
-
-            Red,
-            Green,
-            Blue,
-
-            Yellow,
-            Magenta,
-            Cyan,
-            Orange
-        };
-        Color ColorFromTag(ColorTag t);
-        enum class ColorTableDescriptor : int8_t {
-            RGB,
-            WRGB,
-            AllColors
-        };
-        const std::vector<Color> & 
-            PredefinedColorTable(ColorTableDescriptor descriptor = ColorTableDescriptor::AllColors);
-
 
         // somthing classified
         template <class T>

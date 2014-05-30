@@ -22,7 +22,7 @@ TEST(Feature, LineSegmentExtractor) {
     core::LineSegmentExtractor lineseg;
     core::Image im = cv::imread(ProjectTestDataDirStr_Normal + "/2148.jpg");
     vis::Visualizer2D(im) 
-        << vis::manip2d::SetColor(core::ColorTag::Yellow) 
+        << vis::manip2d::SetColor(vis::ColorTag::Yellow) 
         << vis::manip2d::SetThickness(2) << 
         lineseg(im) 
         << vis::manip2d::Show();

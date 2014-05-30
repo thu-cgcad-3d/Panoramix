@@ -64,10 +64,10 @@ TEST(ViewsNet, FixedCamera) {
         net.buildRegionNet(viewHandle);
 
         vis::Visualizer2D(im)
-            << vis::manip2d::SetColor(core::Color(0, 0, 255))
+            << vis::manip2d::SetColor(vis::Color(0, 0, 255))
             << vis::manip2d::SetThickness(2)
             << net.views().data(viewHandle).lineSegments
-            << vis::manip2d::SetColor(core::Color(255, 0, 0))
+            << vis::manip2d::SetColor(vis::Color(255, 0, 0))
             << vis::manip2d::SetThickness(1)
             << net.views().data(viewHandle).lineSegmentIntersections
             << vis::manip2d::Show();
@@ -126,8 +126,8 @@ TEST(ViewsNet, FixedCamera) {
             << vis::manip2d::Show();
 
         vis::Visualizer3D() << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
-            << vis::manip3d::SetBackgroundColor(core::ColorTag::Black)
-            << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
+            << vis::manip3d::SetBackgroundColor(vis::ColorTag::Black)
+            << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
             << net.globalData().spatialLineSegments
             << vis::manip3d::AutoSetCamera
             << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
@@ -136,16 +136,16 @@ TEST(ViewsNet, FixedCamera) {
         net.rectifySpatialLines();
 
         vis::Visualizer3D() << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
-            << vis::manip3d::SetBackgroundColor(core::ColorTag::Black)
-            << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
+            << vis::manip3d::SetBackgroundColor(vis::ColorTag::Black)
+            << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
             << net.globalData().mergedSpatialLineSegments
             << vis::manip3d::AutoSetCamera
             << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
             << vis::manip3d::Show();
 
         vis::Visualizer3D() << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
-            << vis::manip3d::SetBackgroundColor(core::ColorTag::Black)
-            << vis::manip3d::SetColorTableDescriptor(core::ColorTableDescriptor::RGB)
+            << vis::manip3d::SetBackgroundColor(vis::ColorTag::Black)
+            << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
             << net.globalData()
             << vis::manip3d::AutoSetCamera
             << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)

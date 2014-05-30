@@ -14,12 +14,12 @@ namespace panoramix {
             struct Params { // global parameters
                 Params();
                 std::string winName;
-                core::Color backgroundColor;
+                vis::Color backgroundColor;
                 core::PerspectiveCamera camera;
-                core::Color defaultColor;
+                vis::Color defaultColor;
                 float pointSize;
                 float lineWidth;
-                core::ColorTableDescriptor colorTableDescriptor;
+                vis::ColorTableDescriptor colorTableDescriptor;
                 RenderModeFlags renderMode;
                 core::Mat4 modelMatrix;
             };
@@ -55,14 +55,14 @@ namespace panoramix {
             };
 
             Manipulator<std::string> SetWindowName(std::string name);
-            Manipulator<core::Color> SetDefaultColor(core::Color color);
-            inline Manipulator<core::Color> SetDefaultColor(core::ColorTag tag){ return SetDefaultColor(core::ColorFromTag(tag)); }
-            Manipulator<core::Color> SetBackgroundColor(core::Color color);
-            inline Manipulator<core::Color> SetBackgroundColor(core::ColorTag tag){ return SetBackgroundColor(core::ColorFromTag(tag)); }
+            Manipulator<vis::Color> SetDefaultColor(vis::Color color);
+            inline Manipulator<vis::Color> SetDefaultColor(vis::ColorTag tag){ return SetDefaultColor(vis::ColorFromTag(tag)); }
+            Manipulator<vis::Color> SetBackgroundColor(vis::Color color);
+            inline Manipulator<vis::Color> SetBackgroundColor(vis::ColorTag tag){ return SetBackgroundColor(vis::ColorFromTag(tag)); }
             Manipulator<core::PerspectiveCamera> SetCamera(core::PerspectiveCamera camera);
             Manipulator<float> SetPointSize(float pointSize);
             Manipulator<float> SetLineWidth(float lineWidth);
-            Manipulator<core::ColorTableDescriptor> SetColorTableDescriptor(core::ColorTableDescriptor descriptor);
+            Manipulator<vis::ColorTableDescriptor> SetColorTableDescriptor(vis::ColorTableDescriptor descriptor);
             Manipulator<RenderModeFlags> SetRenderMode(RenderModeFlags mode);
             Manipulator<core::Mat4> SetModelMatrix(core::Mat4 mat);
             Manipulator<bool> Show(bool block = true);
@@ -102,7 +102,7 @@ namespace panoramix {
         template <class T>
         inline Visualizer3D operator << (Visualizer3D viz, const core::Classified<T> & thing) {
             auto oldDefaultColor = viz.params().defaultColor;
-            auto & predefinedColorTable = core::PredefinedColorTable(viz.params().colorTableDescriptor);
+            auto & predefinedColorTable = PredefinedColorTable(viz.params().colorTableDescriptor);
             if (thing.claz >= 0){
                 viz.params().defaultColor = predefinedColorTable[thing.claz % predefinedColorTable.size()];
             }

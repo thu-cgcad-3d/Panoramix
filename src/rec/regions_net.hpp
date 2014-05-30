@@ -22,10 +22,12 @@ namespace panoramix {
                 double area;
                 double borderLength;
                 Box2 boundingBox;
+                
                 int orientationClass; // -1 0 1 2
             };
             struct BoundaryData {
-                double boundaryLength;                
+                double boundaryLength;
+                
             };
             using RegionsGraph = GraphicalModel02<RegionData, BoundaryData>;
             using RegionHandle = HandleAtLevel<0>;

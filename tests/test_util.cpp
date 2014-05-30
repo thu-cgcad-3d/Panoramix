@@ -69,9 +69,9 @@ TEST(UtilTest, WrapBetween) {
         if (std::isnan(rem)){
             assert(0);
         }
-        ASSERT_NEAR(0, rem, 1e-5);
-        ASSERT_LE(a, xx);
-        ASSERT_LT(xx, b);
+        EXPECT_NEAR(0, rem, 1e-5);
+        EXPECT_LE(a, xx);
+        EXPECT_LT(xx, b);
     }
 
     // int test

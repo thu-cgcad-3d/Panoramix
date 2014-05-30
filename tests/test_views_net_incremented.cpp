@@ -1,3 +1,5 @@
+#define TEST_VIEWS_NET_INCREMENTED
+
 #include "../src/core/mesh_maker.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/rec/views_net.hpp"
@@ -64,10 +66,10 @@ void run(){
         net.buildRegionNet(viewHandle);
 
         vis::Visualizer2D(im)
-            << vis::manip2d::SetColor(core::Color(0, 0, 255))
+            << vis::manip2d::SetColor(vis::Color(0, 0, 255))
             << vis::manip2d::SetThickness(2)
             << net.views().data(viewHandle).lineSegments
-            << vis::manip2d::SetColor(core::Color(255, 0, 0))
+            << vis::manip2d::SetColor(vis::Color(255, 0, 0))
             << vis::manip2d::SetThickness(1)
             << net.views().data(viewHandle).lineSegmentIntersections
             << vis::manip2d::Show();

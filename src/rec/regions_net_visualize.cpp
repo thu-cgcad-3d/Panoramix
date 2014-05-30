@@ -4,6 +4,7 @@ namespace panoramix {
     namespace rec {
 
         using namespace core;
+        using namespace vis;
 
         Visualizer2D operator << (Visualizer2D viz, const RegionsNet & net) {
             viz.setImage(net.image());
