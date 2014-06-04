@@ -3,9 +3,11 @@
 #include <QtWidgets>
 #include <QWidget>
 
-#include "../src/core/utilities.hpp"
+#include "../core/utilities.hpp"
 
-#include "qt_resources.hpp"
+#include "qt_glue.hpp"
+#include "qt_opengl_object.hpp"
+#include "singleton.hpp"
 #include "visualize3D.hpp"
 
 namespace panoramix {
@@ -302,14 +304,14 @@ namespace panoramix {
             Manipulator<bool> Show(bool doModel) {
                 return Manipulator<bool>(
                     [](Visualizer3D & viz, bool modal){                  
-                    auto app = InitGui();
+                    auto app = Singleton::InitGui();
                     Visualizer3DWidget * w = new Visualizer3DWidget(viz);
                     viz.widgets()->ws.append(w);
                     w->resize(MakeQSize(viz.data()->params.camera.screenSize()));
                     w->setWindowTitle(QString::fromStdString(viz.data()->params.winName));
                     w->show();
                     if (modal){                        
-                        ContinueGui(); // qApp->exec()
+                        Singleton::ContinueGui(); // qApp->exec()
                     }               
                 },
                     doModel);

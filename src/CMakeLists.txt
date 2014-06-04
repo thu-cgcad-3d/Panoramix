@@ -1,4 +1,3 @@
-include_directories (${CMAKE_CURRENT_SOURCE_DIR})
 
 # core MODULE
 set (CORE_MODULE_NAME ${PROJECT_NAME}.Core)
@@ -19,8 +18,6 @@ set (DERIV_SHARED_LIB ${DERIV_MODULE_NAME}.Shared CACHE STRING
 	"shared lib name of module ${DERIV_MODULE_NAME}")
 
 add_subdirectory("deriv")
-
-
 
 # vis MODULE
 set (VIS_MODULE_NAME ${PROJECT_NAME}.Vis)

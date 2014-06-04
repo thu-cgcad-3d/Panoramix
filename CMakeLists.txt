@@ -18,8 +18,9 @@ enable_testing ()
 ### env setting ###
 # set cmake module paths
 list (APPEND CMAKE_MODULE_PATH 
-	${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules 
-	${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts
+	${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/ 
+	${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts/
+	"E:/Tools/ogre/v1-9/CMake"
 )
 
 
@@ -28,6 +29,7 @@ if (NOT DEFINED MSVC)
 	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
 endif ()
 
+
 # global definitions
 include (DefineCompilerMacros)
 
@@ -35,6 +37,9 @@ include (DefineCompilerMacros)
 ### 3rd party libs setting ###
 # get fundamental libs
 include (LocateFundamentalLibs)
+
+#get ORGRE
+include (LocateOGRE)
 
 
 # get Qt libs
@@ -47,6 +52,11 @@ include (LocateQtLibs)
 include (DefineAddToEnvPath)
 ADDTO_ENVPATH (Fundamental_PATH)
 ADDTO_ENVPATH (Qt_PATH)
+
+
+# include third party codes
+set (THIRDPARTY_HEADERS "src/thirdparty/misc" "src/thirdparty/cereal/include")
+include_directories (${THIRDPARTY_HEADERS})
 
 
 # the libs

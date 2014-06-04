@@ -3,6 +3,50 @@
 namespace panoramix {
     namespace vis {
 
+        const std::vector<ColorTag> & AllColorTags() {
+            static const std::vector<ColorTag> _allColorTags = {
+                ColorTag::Transparent,
+                ColorTag::White,
+                ColorTag::Gray,
+                ColorTag::Red,
+                ColorTag::Green,
+                ColorTag::Blue,
+                ColorTag::Yellow,
+                ColorTag::Magenta,
+                ColorTag::Cyan,
+                ColorTag::Orange
+            };
+            return _allColorTags;
+        }
+
+        std::ostream & operator << (std::ostream & os, ColorTag ct) {
+            switch (ct){
+            case ColorTag::Transparent: os << "Transparent"; break;
+
+            case ColorTag::White: os << "White"; break;
+            case ColorTag::Black: os << "Black"; break;
+
+            case ColorTag::DimGray: os << "DimGray"; break;
+            case ColorTag::Gray: os << "Gray"; break;
+            case ColorTag::DarkGray: os << "DarkGray"; break;
+            case ColorTag::Silver: os << "Silver"; break;
+            case ColorTag::LightGray: os << "LightGray"; break;
+
+            case ColorTag::Red: os << "Red"; break;
+            case ColorTag::Green: os << "Green"; break;
+            case ColorTag::Blue: os << "Blue"; break;
+
+            case ColorTag::Yellow: os << "Yellow"; break;
+            case ColorTag::Magenta: os << "Magenta"; break;
+            case ColorTag::Cyan: os << "Cyan"; break;
+            case ColorTag::Orange: os << "Orange"; break;
+            default:
+                os << "Unknown Color"; break;
+            }
+
+            return os;
+        }
+
         namespace {
             inline Color rgb(int R, int G, int B) {
                 return Color(B, G, R);

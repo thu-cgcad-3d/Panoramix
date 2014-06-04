@@ -60,6 +60,10 @@ namespace panoramix {
             hp.scalar = v[N-1];
             return hp;
         }
+        template <class T, int N>
+        inline bool operator == (const HPoint<T, N> & a, const HPoint<T, N> & b) {
+            return a.coord == b.coord && a.scalar == b.scalar;
+        }
         using HPoint2 = HPoint<double, 2>;
         using HPoint3 = HPoint<double, 3>;
         using HPoint4 = HPoint<double, 4>;
@@ -83,7 +87,9 @@ namespace panoramix {
             double longitude; // - M_PI ~ + M_PI
             double latitude; // - M_PI_2 ~ + M_PI_2
         };
-
+        inline bool operator == (const GeoCoord & a, const GeoCoord & b) {
+            return a.longitude == b.longitude && a.latitude == b.latitude;
+        }
 
 
         // key point
@@ -107,6 +113,10 @@ namespace panoramix {
             inline Line reversed() const { return Line(second, first); }
             Point<T, N> first, second;
         };
+        template <class T, int N>
+        inline bool operator == (const Line<T, N> & a, const Line<T, N> & b) {
+            return a.first == b.first && a.second == b.second;
+        }
         using Line2 = Line<double, 2>;
         using Line3 = Line<double, 3>;
 
@@ -120,6 +130,10 @@ namespace panoramix {
             T ratio; // [0 ~ 1]: on line
             Point<T, N> position; // position = line.first + (line.second - line.fist) * ratio
         };
+        template <class T, int N>
+        inline bool operator == (const PositionOnLine<T, N> & a, const PositionOnLine<T, N> & b) {
+            return a.ratio == b.ratio && a.position == b.position;
+        }
 
 
         // homogeneous line
@@ -130,6 +144,10 @@ namespace panoramix {
                 return Line<T, N>{first.toPoint(), second.toPoint()};
             }
         };
+        template <class T, int N>
+        inline bool operator ==  (const HLine<T, N> & a, const HLine<T, N> & b) {
+            return a.first == b.first && a.second == b.second;
+        }
         using HLine2 = HLine<double, 2>;
         using HLine3 = HLine<double, 3>;
 
@@ -147,15 +165,82 @@ namespace panoramix {
         struct Classified {
             int claz;
             T component;
-        }; 
-
-
-        // somthing transformed in N-d space
-        template <class T, int N>
-        struct Transformed {
-            Mat<double, N+1, N+1> transform;
-            T component;
         };
+        template <class T>
+        inline bool operator == (const Classified<T> & a, const Classified<T> & b) {
+            return a.claz == b.claz && a.component == b.component;
+        }
+
+
+        namespace {
+            template <class T, int N>
+            Vec<T, N> MakeMin(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+                Vec<T, N> v;
+                for (int i = 0; i < N; i++)
+                    v[i] = v1[i] < v2[i] ? v1[i] : v2[i];
+                return v;
+            }
+            template <class T, int N>
+            Vec<T, N> MakeMax(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+                Vec<T, N> v;
+                for (int i = 0; i < N; i++)
+                    v[i] = v1[i] < v2[i] ? v2[i] : v1[i];
+                return v;
+            }
+        }
+
+        // box
+        template <class T, int N>
+        struct Box {
+            using Type = T;
+            static const int Dimension = N;
+
+            Point<T, N> minCorner, maxCorner;
+            bool isNull;
+
+            inline Box() : isNull(true) {}
+            inline Box(const Point<T, N> & c1, const Point<T, N> & c2)
+                : minCorner(MakeMin(c1, c2)), maxCorner(MakeMax(c1, c2)), isNull(false) {}
+
+            inline Vec<T, N> size() const { return maxCorner - minCorner; }
+            inline Point<T, N> center() const { return (maxCorner + minCorner) * (0.5); }
+            inline bool contains(const Point<T, N> & p) const {
+                if (isNull)
+                    return false;
+                for (int i = 0; i < N; i++) {
+                    if (minCorner[i] > p[i] || maxCorner[i] < p[i])
+                        return false;
+                }
+                return true;
+            }
+            inline bool contains(const Box & b) const {
+                return b.isNull ? true : contains(b.minCorner) && contains(b.maxCorner);
+            }
+            inline bool operator != (const Box & b) const { return !(*this == b); }
+
+            inline Box & operator |= (const Box & b) {
+                if (isNull) {
+                    *this = b;
+                    return *this;
+                }
+                if (b.isNull)
+                    return *this;
+                minCorner = MakeMin(minCorner, b.minCorner);
+                maxCorner = MakeMax(maxCorner, b.maxCorner);
+                return *this;
+            }
+        };
+        template <class T, int N>
+        inline bool operator == (const Box<T, N> & a, const Box<T, N> & b) {
+            return a.isNull ? b.isNull : (!b.isNull && a.minCorner == b.minCorner && a.maxCorner == b.maxCorner);
+        }
+        template <class T, int N>
+        inline Box<T, N> operator | (const Box<T, N> & b1, const Box<T, N> & b2) {
+            Box<T, N> b12 = b1;
+            return b12 |= b2;
+        }
+        using Box2 = Box<double, 2>;
+        using Box3 = Box<double, 3>;
 
  
     }

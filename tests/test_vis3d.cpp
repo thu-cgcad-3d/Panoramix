@@ -1,4 +1,5 @@
 #include "../src/vis/visualize3d.hpp"
+#include "../src/vis/ogre_resources.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
@@ -12,19 +13,18 @@ static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
 
 TEST(Visualizer3D, Background){
 
-    
-    vis::Visualizer3D()
-        << vis::manip3d::SetWindowName("red backgroud")
-        << vis::manip3d::SetBackgroundColor(vis::ColorTag::Red)
-        << vis::manip3d::Show(false)
-        << vis::manip3d::SetWindowName("gray backgroud")
-        << vis::manip3d::SetBackgroundColor(vis::ColorTag::Gray)
-        << vis::manip3d::Show();
-
+    for (auto c : vis::AllColorTags()){
+        std::stringstream ss;
+        ss << c;
+        vis::Visualizer3D()
+            << vis::manip3d::SetBackgroundColor(c)
+            << vis::manip3d::SetWindowName(ss.str())
+            << vis::manip3d::Show(false);
+    }
 
 }
 
-TEST(Visualizer3D, 3D) {
+TEST(Visualizer3D, 3D) { 
 
     vis::Visualizer3D()
         << vis::manip3d::SetLineWidth(10)

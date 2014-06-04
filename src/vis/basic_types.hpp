@@ -30,7 +30,24 @@ namespace panoramix {
             Cyan,
             Orange
         };
+
+        const std::vector<ColorTag> & AllColorTags();
+        std::ostream & operator << (std::ostream & os, ColorTag ct);
         Color ColorFromTag(ColorTag t);
+        
+
+        // line style
+        enum class PenStyle {
+            NoPen,
+            SolidLine,	//1	A plain line.
+            DashLine,	//2	Dashes separated by a few pixels.
+            DotLine,	    //3	Dots separated by a few pixels.
+            DashDotLine,	//4	Alternate dots and dashes.
+            DashDotDotLine,	//5	One dash, two dots, one dash, two dots.
+            CustomDashLine
+        };
+
+
         enum class ColorTableDescriptor : int8_t {
             RGB,
             WRGB,
