@@ -1,5 +1,11 @@
 # set OGRE
 
+set (OGRE_DIR "" CACHE PATH "Root directory of OGRE")
+list (APPEND CMAKE_MODULE_PATH 
+	${OGRE_DIR}/cmake
+)
+set(OGRE_HOME ${OGRE_DIR})
+
 find_package (OGRE REQUIRED)
 # OGRE_INCLUDE_DIR
 # OGRE_LIBRARY_DBG

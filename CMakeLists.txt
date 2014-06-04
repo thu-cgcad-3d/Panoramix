@@ -20,7 +20,6 @@ enable_testing ()
 list (APPEND CMAKE_MODULE_PATH 
 	${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/ 
 	${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts/
-	"E:/Tools/ogre/v1-9/CMake"
 )
 
 
