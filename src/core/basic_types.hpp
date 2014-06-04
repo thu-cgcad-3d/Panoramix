@@ -18,6 +18,7 @@
 
 #include "version.hpp"
 #include "macros.hpp"
+#include "serialization.hpp"
 
 namespace panoramix {
     namespace core {
@@ -64,6 +65,10 @@ namespace panoramix {
         inline bool operator == (const HPoint<T, N> & a, const HPoint<T, N> & b) {
             return a.coord == b.coord && a.scalar == b.scalar;
         }
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, HPoint<T, N> & p) {
+            ar(p.coord, p.scalar);
+        }
         using HPoint2 = HPoint<double, 2>;
         using HPoint3 = HPoint<double, 3>;
         using HPoint4 = HPoint<double, 4>;
@@ -89,6 +94,10 @@ namespace panoramix {
         };
         inline bool operator == (const GeoCoord & a, const GeoCoord & b) {
             return a.longitude == b.longitude && a.latitude == b.latitude;
+        }
+        template <class Archive>
+        inline void serialize(Archive & ar, GeoCoord & gc) {
+            ar(gc.longitude, gc.latitude);
         }
 
 
@@ -117,6 +126,10 @@ namespace panoramix {
         inline bool operator == (const Line<T, N> & a, const Line<T, N> & b) {
             return a.first == b.first && a.second == b.second;
         }
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, Line<T, N> & l) {
+            ar(l.first, l.second);
+        }
         using Line2 = Line<double, 2>;
         using Line3 = Line<double, 3>;
 
@@ -134,6 +147,12 @@ namespace panoramix {
         inline bool operator == (const PositionOnLine<T, N> & a, const PositionOnLine<T, N> & b) {
             return a.ratio == b.ratio && a.position == b.position;
         }
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, PositionOnLine<T, N> & p) {
+            ar(p.ratio, p.position);
+        }
+        using PositionOnLine2 = PositionOnLine<double, 2>;
+        using PositionOnLine3 = PositionOnLine<double, 3>;
 
 
         // homogeneous line
@@ -147,6 +166,10 @@ namespace panoramix {
         template <class T, int N>
         inline bool operator ==  (const HLine<T, N> & a, const HLine<T, N> & b) {
             return a.first == b.first && a.second == b.second;
+        }
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, HLine<T, N> & l) {
+            ar(l.first, l.second);
         }
         using HLine2 = HLine<double, 2>;
         using HLine3 = HLine<double, 3>;
@@ -169,6 +192,10 @@ namespace panoramix {
         template <class T>
         inline bool operator == (const Classified<T> & a, const Classified<T> & b) {
             return a.claz == b.claz && a.component == b.component;
+        }
+        template <class Archive, class T>
+        inline void serialize(Archive & ar, Classified<T> & c) {
+            ar(c.claz, c.component);
         }
 
 
@@ -234,6 +261,10 @@ namespace panoramix {
         inline bool operator == (const Box<T, N> & a, const Box<T, N> & b) {
             return a.isNull ? b.isNull : (!b.isNull && a.minCorner == b.minCorner && a.maxCorner == b.maxCorner);
         }
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, Box<T, N> & b) {
+            ar(b.isNull, b.minCorner, b.maxCorner);
+        }
         template <class T, int N>
         inline Box<T, N> operator | (const Box<T, N> & b1, const Box<T, N> & b2) {
             Box<T, N> b12 = b1;
@@ -245,5 +276,7 @@ namespace panoramix {
  
     }
 }
+
+
  
 #endif

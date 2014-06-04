@@ -14,7 +14,9 @@
 namespace panoramix {
     namespace core {
         
-        struct Dummy {};
+        struct Dummy {
+            template <class Archive> inline void serialize(Archive & ar) {}
+        };
         
         /**
          * @brief Handle struct
@@ -28,6 +30,7 @@ namespace panoramix {
             inline void reset() { id = -1; }
             inline bool isValid() const { return id >= 0; }
             inline bool isInValid() const { return id < 0; }
+            template <class Archive> inline void serialize(Archive & ar) { ar(id); }
         };
         template <class Tag>
         using HandleArray = std::vector<Handle<Tag>>;
@@ -64,6 +67,7 @@ namespace panoramix {
         struct VertTopo {
             Handle<VertTopo> hd;
             HandleArray<HalfTopo> halfedges;
+            template <class Archive> inline void serialize(Archive & ar) { ar(hd, halfedges); }
         };
         struct HalfTopo {
             Handle<HalfTopo> hd;
@@ -74,10 +78,12 @@ namespace panoramix {
             inline const Handle<VertTopo> & to() const { return endVertices[1]; }
             Handle<HalfTopo> opposite;
             Handle<FaceTopo> face;
+            template <class Archive> inline void serialize(Archive & ar) { ar(hd, endVertices, opposite, face); }
         };
         struct FaceTopo {
             Handle<FaceTopo> hd;
             HandleArray<HalfTopo> halfedges;
+            template <class Archive> inline void serialize(Archive & ar) { ar(hd, halfedges); }
         };
         
         /**
@@ -91,6 +97,7 @@ namespace panoramix {
             inline Triplet(){}
             inline Triplet(const TopoT & t, const DataT & d, uint8_t e = true) 
                 : topo(t), exists(e), data(d){}
+            template <class Archive> inline void serialize(Archive & ar) { ar(topo, exists, data); }
         };
         template <class TopoT, class DataT>
         struct TripletExistsPred {
@@ -252,6 +259,8 @@ namespace panoramix {
                     const FaceHandlePtrContainerT & fps = FaceHandlePtrContainerT());
             
             void clear();
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(_verts, _halfs, _faces); }
             
         private:
             VertsTable _verts;
@@ -482,10 +491,12 @@ namespace panoramix {
         struct ComponentTopo {
             Handle<ComponentTopo> hd;
             HandleArray<ConstraintTopo> constraints;
+            template <class Archive> inline void serialize(Archive & ar) { ar(hd, constraints); }
         };
         struct ConstraintTopo {
             Handle<ConstraintTopo> hd;
             HandleArray<ComponentTopo> components;
+            template <class Archive> inline void serialize(Archive & ar) { ar(hd, components); }
         };
 
         template <class ComponentDataT, class ConstraintDataT>
@@ -552,6 +563,8 @@ namespace panoramix {
             const ConstraintHandlePtrContainerT & consps = ConstraintHandlePtrContainerT());
 
             void clear();
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(_components, _constraints); }
 
         private:
             ComponentsTable _components;
@@ -650,12 +663,13 @@ namespace panoramix {
             static const int Level = L;
             std::array<Handle<AtLevel<Level - 1>>, ChildN> lowers; // use std::array
             std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
-            HandleAtLevel<Level>hd;
+            HandleAtLevel<Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
             explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls) : hd(id) {
                 assert(ls.size() == lowers.size());
                 std::copy(ls.begin(), ls.end(), lowers.begin());
             }
+            template <class Archive> inline void serialize(Archive & ar) { ar(lowers, uppers, hd); }
         };
 
         // dynamic sized
@@ -664,10 +678,11 @@ namespace panoramix {
             static const int Level = L;
             std::vector<Handle<AtLevel<Level - 1>>> lowers; // use std::array
             std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
-            HandleAtLevel<Level>hd;
+            HandleAtLevel<Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
             explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls)
                 : hd(id), lowers(ls) {}
+            template <class Archive> inline void serialize(Archive & ar) { ar(lowers, uppers, hd); }
         };
 
 
@@ -676,12 +691,13 @@ namespace panoramix {
         struct Topo<L, 0> {
             static const int Level = L;
             std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
-            HandleAtLevel<Level>hd;
+            HandleAtLevel<Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
             explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls)
                 : hd(id) {
                 assert(ls.size() == 0);
             }
+            template <class Archive> inline void serialize(Archive & ar) { ar(uppers, hd); }
         };
 
         // configuration for each layer
@@ -708,6 +724,7 @@ namespace panoramix {
             using TripletType = Triplet<TopoType, DataT>;
             using TableType = TripletArray<TopoType, DataT>;
             TableType contentTable;
+            template <class Archive> inline void serialize(Archive & ar) { ar(contentTable); }
         };
 
         template <class CConfTupleT, int Level>
@@ -906,6 +923,9 @@ namespace panoramix {
                     RemoveInValidHandleFromContainer(eles[i].topo.uppers);
                 }
             }
+
+        public:
+            template <class Archive> inline void serialize(Archive & ar) { ar(_contents); }
 
         private:
             ContentsType _contents;

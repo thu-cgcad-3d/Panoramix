@@ -1,4 +1,5 @@
-#include "../src/core/basic_types_serialization.hpp"
+#include "../src/core/basic_types.hpp"
+#include "../src/core/graphical_model.hpp"
 
 #include <random>
 
@@ -13,7 +14,7 @@ double randf(){
     return (std::rand() % 100000) / 100000.0;
 }
 
-TEST(Serialization, BasicTypesOutput) {
+TEST(Serialization, BasicTypes) {
 
     std::vector<core::Classified<std::pair<core::Line3, core::HPoint2>>> data1(1000);
     std::vector<core::Classified<std::pair<core::Line3, core::HPoint2>>> data1c;
@@ -51,6 +52,42 @@ TEST(Serialization, BasicTypesOutput) {
     for (int i = 0; i < 1000; i++) {
         EXPECT_TRUE(data2[std::to_string(i)] == data2c[std::to_string(i)]);
     }
+
+}
+
+TEST(Serialization, GraphicalModel) {
+
+    using CGraph = core::GraphicalModel<core::Dummy, core::LayerConfig<core::Dummy, core::Dynamic>, core::LayerConfig<core::Point3, 4>>;
+
+    CGraph cgraph, cgraph2;
+    auto c0 = cgraph.add();
+    auto c1 = cgraph.add();
+    auto c2 = cgraph.add();
+    auto c3 = cgraph.add();
+
+    auto cc012 = cgraph.add<1>({ c0, c1, c2 });
+    auto cc123 = cgraph.add<1>({ c1, c2, c3 });
+    auto cc230 = cgraph.add<1>({ c2, c3, c0 });
+    auto cc301 = cgraph.add<1>({ c3, c0, c1 });
+
+    auto ccc = cgraph.add<2>({ cc012, cc123, cc230, cc301 }, core::Point3(1, 2, 3));
+
+    {
+        std::ofstream os(ProjectTestDataDirStr_Serialization + "/gm.cereal", std::ios::binary);
+        cereal::BinaryOutputArchive archive(os);
+        archive(cgraph);
+    }
+    {
+        std::ifstream is(ProjectTestDataDirStr_Serialization + "/gm.cereal", std::ios::binary);
+        cereal::BinaryInputArchive archive(is);
+        archive(cgraph2);
+    }
+
+    EXPECT_EQ(cgraph.internalElements<0>().size(), cgraph2.internalElements<0>().size());
+    EXPECT_EQ(cgraph.internalElements<1>().size(), cgraph2.internalElements<1>().size());
+    EXPECT_EQ(cgraph.internalElements<2>().size(), cgraph2.internalElements<2>().size());
+
+    EXPECT_TRUE(cgraph.data(ccc) == cgraph2.data(ccc));
 
 }
 
