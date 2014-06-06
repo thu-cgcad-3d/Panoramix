@@ -9,7 +9,6 @@ int main(int argc, char** argv) {
 	//Q_INIT_RESOURCE(reconstruction);
     
     MainWind mwind;
-    mwind.setWindowIcon(QIcon(":/resources/dragon-icon.png"));
     mwind.show();
 
 	return app.exec();

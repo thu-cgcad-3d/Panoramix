@@ -147,6 +147,7 @@ void OgreWidget::initializeGL() {
         entNode->attachObject(ent);
         _sceneMgr->getRootSceneNode()->addChild(entNode);
         entNode->setPosition(0, 0, 0);
+        _focusedNode = entNode;
     }
     {
         Entity* ent = _sceneMgr->createEntity("dragon.mesh");
@@ -162,6 +163,14 @@ void OgreWidget::initializeGL() {
         _sceneMgr->getRootSceneNode()->addChild(entNode);
         entNode->setPosition(0, 0, 0);
     }
+
+    // Create a plane
+    {
+       
+    }
+
+    assert(_focusedNode);
+    _camera->lookAt(_focusedNode->getPosition());
 }
 
 
@@ -181,3 +190,72 @@ void OgreWidget::paintGL() {
     assert(_window);
     _root->renderOneFrame();
 }
+
+void OgreWidget::mousePressEvent(QMouseEvent * e) {
+    _lastPos = e->pos();
+    if (e->buttons() & Qt::RightButton)
+        setCursor(Qt::OpenHandCursor);
+    else if (e->buttons() & Qt::MidButton)
+        setCursor(Qt::SizeAllCursor);
+}
+
+void OgreWidget::mouseMoveEvent(QMouseEvent * e) {
+    QVector3D t(e->pos() - _lastPos);
+    t.setX(-t.x());
+    if (e->buttons() & Qt::RightButton) {
+        moveCameraEyeWithCenterFixed(t);
+        setCursor(Qt::ClosedHandCursor);
+        update();
+    } else if (e->buttons() & Qt::MidButton) {
+        moveCameraCenterAndCenter(t);
+        update();
+    }
+    _lastPos = e->pos();
+}
+
+void OgreWidget::wheelEvent(QWheelEvent * e) {
+    moveCameraCenterAndCenter(QVector3D(0, 0, e->delta() / 10));
+    update();
+}
+
+void OgreWidget::mouseReleaseEvent(QMouseEvent *) {
+    unsetCursor();
+}
+
+void OgreWidget::moveCameraEyeWithCenterFixed(const QVector3D & t) {
+    auto & camera = *_camera;
+    auto eye = camera.getPosition();
+    auto center = _focusedNode->getPosition();
+    auto up = camera.getUp();
+    auto tt = t * (eye - center).length() * 0.002f;
+
+    auto xv = (center - eye).crossProduct(up).normalisedCopy();
+    auto yv = xv.crossProduct(center - eye).normalisedCopy();
+    auto xyTrans = xv * tt.x() + yv * tt.y();
+    double r = ((eye - center).length() - tt.z()) /
+        (eye + xyTrans - center).length();
+    eye = (eye + xyTrans - center) * r + center;
+    up = yv.normalisedCopy();
+
+    camera.setPosition(eye);
+    camera.lookAt(center);
+}
+
+void OgreWidget::moveCameraCenterAndCenter(const QVector3D & t) {
+    auto & camera = *_camera;
+    auto eye = camera.getPosition();
+    auto center = _focusedNode->getPosition();
+    auto up = camera.getUp();
+    auto tt = t * (eye - center).length() * 0.002f;
+
+    auto xv = (center - eye).crossProduct(up).normalisedCopy();
+    auto yv = xv.crossProduct(center - eye).normalisedCopy();
+    auto zv = (center - eye).normalisedCopy();
+    auto trans = xv * tt.x() + yv * tt.y() + zv * tt.z();
+    eye += trans;
+    center += trans;
+    camera.setPosition(eye);
+    camera.lookAt(center);
+}
+
+
