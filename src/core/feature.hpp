@@ -48,6 +48,13 @@ namespace panoramix {
             void setUp(const Vec3 & up, bool updateMat = true);
             void setNearAndFarPlanes(double nearPlane, double farPlane, bool updateMat = true);
 
+            template <class Archive> inline void serialize(Archive & ar) { 
+                ar(_screenW, _screenH); 
+                ar(_focal, _near, _far);
+                ar(_eye, _center, _up);
+                ar(_viewMatrix, _projectionMatrix, _viewProjectionMatrix, _viewProjectionMatrixInv);
+            }
+
         private:
             void updateMatrices();
 
@@ -74,6 +81,12 @@ namespace panoramix {
             inline const Vec3 & up() const { return _up; }
             Vec2 screenProjection(const Vec3 & p3d) const;
             Vec3 spatialDirection(const Vec2 & p2d) const;
+
+            template <class Archive> inline void serialize(Archive & ar) {
+                ar(_focal);
+                ar(_eye, _center, _up);
+                ar(_xaxis, _yaxis, _zaxis);
+            }
 
         private:
             double _focal;
@@ -108,6 +121,8 @@ namespace panoramix {
                 return outputIm;
             }
 
+            template <class Archive> inline void serialize(Archive & ar) { ar(_outCam, _inCam); }
+
         private:
             OutCameraT _outCam;
             InCameraT _inCam;
@@ -132,10 +147,14 @@ namespace panoramix {
                 int xBorderWidth, yBorderWidth;
                 int numDirs;
                 bool useExperimentalAlgorithm;
+                template <class Archive> inline void serialize(Archive & ar) { 
+                    ar(minLength, xBorderWidth, yBorderWidth, numDirs, useExperimentalAlgorithm); 
+                }
             };
         public:
             inline explicit LineSegmentExtractor(const Params & params = Params()) : _params(params){}
             Feature operator() (const Image & im) const;
+            template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
             Params _params;
         };
@@ -171,10 +190,12 @@ namespace panoramix {
                 float sigma; // for smoothing
                 float c; // threshold function
                 int minSize; // min component size
+                template <class Archive> inline void serialize(Archive & ar) { ar(sigma, c, minSize); }
             };
         public:
             inline explicit SegmentationExtractor(const Params & params = Params()) : _params(params){}
             Feature operator() (const Image & im, bool forVisualization = false) const;
+            template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
             Params _params;
         };

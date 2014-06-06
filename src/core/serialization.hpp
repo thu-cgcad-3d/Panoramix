@@ -78,6 +78,14 @@ namespace cv {
         ar(p.pt, p.size, p.angle, p.response, p.octave, p.class_id);
     }
 
+    // Serialization for cv::Moments
+    template <class Archive>
+    inline void serialize(Archive & ar, Moments & m) {
+        ar(m.m00, m.m10, m.m01, m.m20, m.m11, m.m02, m.m30, m.m21, m.m12, m.m03);
+        ar(m.mu20, m.mu11, m.mu02, m.mu30, m.mu21, m.mu12, m.mu03);
+        ar(m.nu20, m.nu11, m.nu02, m.nu30, m.nu21, m.nu12, m.nu03);
+    }
+
 }
 
 #endif

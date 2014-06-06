@@ -57,23 +57,6 @@ TEST(Optimization, DISABLED_InverseMatrix){
 }
 
 
-template <class T, int InputN, int OutputN>
-struct ANNLayer {
-    template <class WDerived, class BDerived>
-    inline ANNLayer(ExpressionGraph & graph,
-        const MatrixBase<WDerived> & initw, const MatrixBase<BDerived> & initb) 
-        : weightVals(initw), biasVals(initb) {
-        weights = graph.addRef(weightVals);
-        bias = graph.addRef(biasVals);
-    }
-
-    Matrix<T, InputN, OutputN> weightVals;
-    Matrix<T, 1, OutputN> biasVals;
-    Expression<Matrix<T, InputN, OutputN>> weights;
-    Expression<Matrix<T, 1, OutputN>> bias;
-};
-
-
 TEST(Optimization, ANNLite) {
 //void run(){
 
