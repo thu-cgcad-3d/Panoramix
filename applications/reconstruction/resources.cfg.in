@@ -1,0 +1,38 @@
+# Resources required by the sample browser and most samples.
+[Essential]
+Zip=${OGRE_MEDIA_FOLDER}/packs/SdkTrays.zip
+Zip=${OGRE_MEDIA_FOLDER}/packs/profiler.zip
+FileSystem=${OGRE_MEDIA_FOLDER}/thumbnails
+
+# Common sample resources needed by many of the samples.
+# Rarely used resources should be separately loaded by the
+# samples which require them.
+[Popular]
+FileSystem=${OGRE_MEDIA_FOLDER}/fonts
+FileSystem=${OGRE_MEDIA_FOLDER}/materials/programs
+FileSystem=${OGRE_MEDIA_FOLDER}/materials/programs/cg
+FileSystem=${OGRE_MEDIA_FOLDER}/materials/programs/hlsl
+#FileSystem=${OGRE_MEDIA_FOLDER}/materials/scripts
+FileSystem=${OGRE_MEDIA_FOLDER}/materials/textures
+FileSystem=${OGRE_MEDIA_FOLDER}/materials/textures/nvidia
+FileSystem=${OGRE_MEDIA_FOLDER}/models
+FileSystem=${OGRE_MEDIA_FOLDER}/particle
+FileSystem=${OGRE_MEDIA_FOLDER}/DeferredShadingMedia
+FileSystem=${OGRE_MEDIA_FOLDER}/PCZAppMedia
+FileSystem=${OGRE_MEDIA_FOLDER}/RTShaderLib
+FileSystem=${OGRE_MEDIA_FOLDER}/RTShaderLib/materials
+FileSystem=${OGRE_MEDIA_FOLDER}/materials/scripts/SSAO
+FileSystem=${OGRE_MEDIA_FOLDER}/materials/textures/SSAO
+FileSystem=${OGRE_MEDIA_FOLDER}/volumeTerrain
+Zip=${OGRE_MEDIA_FOLDER}/packs/cubemap.zip
+Zip=${OGRE_MEDIA_FOLDER}/packs/cubemapsJS.zip
+Zip=${OGRE_MEDIA_FOLDER}/packs/dragon.zip
+Zip=${OGRE_MEDIA_FOLDER}/packs/fresneldemo.zip
+Zip=${OGRE_MEDIA_FOLDER}/packs/ogretestmap.zip
+Zip=${OGRE_MEDIA_FOLDER}/packs/ogredance.zip
+Zip=${OGRE_MEDIA_FOLDER}/packs/Sinbad.zip
+Zip=${OGRE_MEDIA_FOLDER}/packs/skybox.zip
+Zip=${OGRE_MEDIA_FOLDER}/volumeTerrain/volumeTerrainBig.zip
+
+[General]
+FileSystem=${OGRE_MEDIA_FOLDER}

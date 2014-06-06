@@ -9,6 +9,18 @@
 #include "gtest/gtest.h"
 
 
+using Ogre::Camera;
+using Ogre::SceneManager;
+using Ogre::ResourceGroupManager;
+using Ogre::Light;
+using Ogre::String;
+using Ogre::NameValuePairList;
+using Ogre::Entity;
+using Ogre::SceneNode;
+using Ogre::Viewport;
+using Ogre::Real;
+
+
 class OgreWidget : public QGLWidget {
 public:
     OgreWidget(QWidget * parent = nullptr) : QGLWidget(parent) {
@@ -29,17 +41,6 @@ public:
     }
 
     virtual void initializeGL() {
-
-        using Ogre::Camera;
-        using Ogre::SceneManager;
-        using Ogre::ResourceGroupManager;
-        using Ogre::Light;
-        using Ogre::String;
-        using Ogre::NameValuePairList;
-        using Ogre::Entity;
-        using Ogre::SceneNode;
-        using Ogre::Viewport;
-        using Ogre::Real;
 
         {
             //== Creating and Acquiring Ogre Window ==//
@@ -81,7 +82,7 @@ public:
         Ogre::SceneType scene_manager_type = Ogre::ST_GENERIC;
 
         _sceneMgr = _root->createSceneManager(scene_manager_type);
-        _sceneMgr->setAmbientLight(Ogre::ColourValue(0, 0, 0));
+        _sceneMgr->setAmbientLight(Ogre::ColourValue(0.2, 0, 0));
 
         // Create a new _camera
         _camera = _sceneMgr->createCamera("Camera");
@@ -123,7 +124,7 @@ public:
             // Set Light Reflective Color
             light2->setSpecularColour(1.0f, 0.0f, 0.0f);
             // Set Light (Range, Brightness, Fade Speed, Rapid Fade Speed)
-            light2->setAttenuation(100, 0.05, 0.045, 0.0);
+            light2->setAttenuation(100, 0.1, 0.045, 0.0);
 
             Entity* lightEnt = _sceneMgr->createEntity("LightEntity2", "sphere.mesh");
             SceneNode* lightNode = _sceneMgr->createSceneNode("LightNode2");
@@ -137,7 +138,7 @@ public:
 
         // Using the _camera create a _viewport and set the background color to black
         _viewport = _window->addViewport(_camera);
-        _viewport->setBackgroundColour(Ogre::ColourValue(0.0, 0.0, 0.0));
+        _viewport->setBackgroundColour(Ogre::ColourValue(0.2, 0.0, 0.0));
 
         // Use the _viewport to set the aspect ratio of the _camera
         _camera->setAspectRatio(Real(_viewport->getActualWidth()) /
@@ -170,6 +171,9 @@ public:
 
     virtual void resizeGL(int width, int height) {
         assert(_window);
+        if (_camera && _viewport) {
+            _camera->setAutoAspectRatio(true);            
+        }
         _window->reposition(this->pos().x(),
             this->pos().y());
         _window->resize(width, height);
@@ -178,7 +182,6 @@ public:
 
     virtual void paintGL() {
         // Be sure to call "OgreWidget->repaint();" to call paintGL
-        //swapBuffers();
         assert(_window);
         _root->renderOneFrame();
     }
