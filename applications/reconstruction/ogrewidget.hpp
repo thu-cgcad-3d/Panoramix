@@ -12,10 +12,14 @@ public:
     virtual ~OgreWidget();
 
 private:
+    static void createCube(const Ogre::String & name);
+    static void createSphere(const Ogre::String & name, const float r, const int nRings = 16, const int nSegments = 16);
+
     void createCamera();
     void createViewports();
     void prepareResources();
     void prepareMeshes();
+    void prepareMaterials();
     void createScene();
 
 protected:
