@@ -11,6 +11,13 @@ public:
     OgreWidget(QWidget * parent = nullptr);
     virtual ~OgreWidget();
 
+private:
+    void createCamera();
+    void createViewports();
+    void prepareResources();
+    void prepareMeshes();
+    void createScene();
+
 protected:
     virtual void initializeGL();
     virtual void resizeGL(int width, int height);
