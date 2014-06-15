@@ -478,6 +478,14 @@ namespace panoramix {
                 return result();
             }
 
+            template <class EHandleIteratorT>
+            inline ResultType<T> executeHandlesRange(EHandleIteratorT begin, EHandleIteratorT end) const {
+                assert(isValid() && "Invalid expression!");
+                std::set<EHandle, ExpressionGraph::EHandleComp> dependencies(begin, end);
+                _op->graph->forwardPropagateExecute(_op->self, dependencies);
+                return result();
+            }
+
             // compute the derivative of current expression
             template <class VarT>
             inline DerivativeExpression<VarT> derivative(const Expression<VarT> & var) const {
@@ -511,6 +519,14 @@ namespace panoramix {
                 });
             }
 
+            template <class EHandleIteratorT, class EHandleOutIteratorT>
+            inline void derivativesHandlesRange(EHandleIteratorT varsBegin, EHandleIteratorT varsEnd, EHandleOutIteratorT derivsBegin) const {
+                std::vector<EHandle> varHandles(varsBegin, varsEnd);
+                auto derivHandles = _op->graph->backPropagateGradient(_op->self, varHandles);
+                std::copy(derivHandles.begin(), derivHandles.end(), derivsBegin);
+            }
+
+
             // expression assign
             template <class K>
             inline Expression<K> assign() const { return expressionAssign<K>(*this); }
@@ -529,6 +545,8 @@ namespace panoramix {
 
 
             inline Expression<DataScalarType<T>> sum() const { return sumElements(*this); }
+            inline Expression<DataScalarType<T>> prod() const { return prodElements(*this); }
+
 
         private:
             template <class ... VarTs, int ...S>

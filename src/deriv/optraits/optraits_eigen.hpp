@@ -46,13 +46,13 @@ namespace panoramix {
 
         template <class MatrixT>
         inline auto matrixToArray(const Expression<MatrixT> & m) 
-            -> decltype(ComposeExpression(MatrixToArrayTraits<MatrixT>(), m)) {
+            -> decltype(std::declval<MatrixT>().array(), ComposeExpression(MatrixToArrayTraits<MatrixT>(), m)) {
             return ComposeExpression(MatrixToArrayTraits<MatrixT>(), m);
         }
 
         template <class ArrayT>
         inline auto arrayToMatrix(const Expression<ArrayT> & a) 
-            -> decltype(ComposeExpression(ArrayToMatrixTraits<ArrayT>(), a)) {
+            -> decltype(std::declval<ArrayT>().matrix(), ComposeExpression(ArrayToMatrixTraits<ArrayT>(), a)) {
             return ComposeExpression(ArrayToMatrixTraits<ArrayT>(), a);
         }
 
@@ -103,6 +103,23 @@ namespace panoramix {
                 int rowFactor, colFactor;
             };
 
+            template <class T, class RowPred, class ColPred>
+            struct replicateTraits
+                : public OpTraitsBase<decltype(Replicate(std::declval<ResultType<T>>(), std::declval<RowPred>()(), std::declval<ColPred>()())), T> {
+                inline explicit replicateTraits(RowPred r, ColPred c) : rowFactor(r), colFactor(c) {}
+                inline OutputType value(ResultType<T> input) const {
+                    return Replicate(input, rowFactor(), colFactor());
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> input) const {
+                    input.second = foldSumWithPred(sumOfDOutputs, rowFactor, colFactor).eval().assign<DerivativeType<T>>();
+                }
+                virtual ostream & toString(ostream & os) const { os << "replicate"; return os; }
+                RowPred rowFactor;
+                ColPred colFactor;
+            };
             
             template <class T>
             struct FoldSumTraits
@@ -121,19 +138,50 @@ namespace panoramix {
                 int rowFactor, colFactor;
             };
 
+            template <class T, class RowPred, class ColPred>
+            struct FoldSumWithPredTraits
+                : public OpTraitsBase<decltype(FoldSum(std::declval<ResultType<T>>(), std::declval<RowPred>()(), std::declval<ColPred>()())), T> {
+                inline explicit FoldSumWithPredTraits(RowPred r, ColPred c) : rowFactor(r), colFactor(c) {}
+                inline OutputType value(ResultType<T> input) const {
+                    return FoldSum(input, rowFactor(), colFactor());
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> input) const {
+                    input.second = replicate(sumOfDOutputs, rowFactor, colFactor).eval().assign<DerivativeType<T>>();
+                }
+                virtual ostream & toString(ostream & os) const { os << "disreplicate"; return os; }
+                RowPred rowFactor;
+                ColPred colFactor;
+            };
+
         }
 
 
         template <class T>
         inline auto replicate(const Expression<T> & a, int rowFactor, int colFactor)
-            -> decltype(ComposeExpression(ReplicateTraits<T>(rowFactor, colFactor), a)) {
+            -> decltype(Replicate(std::declval<T>(), rowFactor, colFactor), ComposeExpression(ReplicateTraits<T>(rowFactor, colFactor), a)) {
             return ComposeExpression(ReplicateTraits<T>(rowFactor, colFactor), a);
         }
 
+        template <class T, class RowPred, class ColPred>
+        inline auto replicate(const Expression<T> & a, RowPred rowFactor, ColPred colFactor)
+            -> decltype(Replicate(std::declval<T>(), rowFactor(), colFactor()), ComposeExpression(replicateTraits<T, RowPred, ColPred>(rowFactor, colFactor), a)) {
+            return ComposeExpression(replicateTraits<T, RowPred, ColPred>(rowFactor, colFactor), a);
+        }
+
+
         template <class T>
         inline auto foldSum(const Expression<T> & a, int rowFactor, int colFactor)
-            -> decltype(ComposeExpression(FoldSumTraits<T>(rowFactor, colFactor), a)) {
+            -> decltype(FoldSum(std::declval<T>(), rowFactor, colFactor), ComposeExpression(FoldSumTraits<T>(rowFactor, colFactor), a)) {
             return ComposeExpression(FoldSumTraits<T>(rowFactor, colFactor), a);
+        }
+
+        template <class T, class RowPred, class ColPred>
+        inline auto foldSumWithPred(const Expression<T> & a, RowPred rowFactor, ColPred colFactor)
+            -> decltype(FoldSum(std::declval<T>(), rowFactor(), colFactor()), ComposeExpression(FoldSumWithPredTraits<T, RowPred, ColPred>(rowFactor, colFactor), a)) {
+            return ComposeExpression(FoldSumWithPredTraits<T, RowPred, ColPred>(rowFactor, colFactor), a);
         }
 
     }

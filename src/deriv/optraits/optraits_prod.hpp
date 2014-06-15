@@ -188,7 +188,9 @@ namespace panoramix {
         }
 
         template <class T1, class T2>
-        inline auto cwiseProd(const Expression<T1> & a, const Expression<T2> & b) -> decltype(ComposeExpression(CWiseProductTraits<T1, T2>(), a, b)) {
+        inline auto cwiseProd(const Expression<T1> & a, const Expression<T2> & b) 
+            -> decltype(common::CWiseProd(std::declval<ResultType<T1>>(), std::declval<ResultType<T2>>()), 
+                ComposeExpression(CWiseProductTraits<T1, T2>(), a, b)) {
             return ComposeExpression(CWiseProductTraits<T1, T2>(), a, b);
         }
 

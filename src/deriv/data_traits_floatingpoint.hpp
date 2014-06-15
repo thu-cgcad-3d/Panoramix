@@ -75,7 +75,11 @@ namespace panoramix {
                 return d;
             }
 
-            
+            // prod of elements
+            template <class T, SATISFIES(T, FloatingPointTag)>
+            std::decay_t<T> ProdElements(const T & d) {
+                return d;
+            }
 
         }
 

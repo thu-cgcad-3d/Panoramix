@@ -24,7 +24,8 @@ TEST(Optimization, Quadratic) {
     Matrix<double, D, D> Av = Matrix<double, D, D>::Random().cwiseAbs();
     auto A = graph.addConst(Av);
 
-    auto f = (transpose(x) * A * x).sum();
+    auto f = (transpose(x) * A * x).eval().sum();
+
     auto df = f.derivative(x);
 
     for (int i = 0; i < 50; i++){
@@ -57,7 +58,10 @@ TEST(Optimization, DISABLED_InverseMatrix){
 }
 
 
-TEST(Optimization, ANNLite) {
+
+
+
+TEST(Optimization, DISABLED_ANNLite) {
 //void run(){
 
     double deltas[] = { 0.01 };
@@ -144,7 +148,7 @@ TEST(Optimization, ANNLite) {
 }
 
 
-TEST(Optimization, ConstraintGraph) {
+TEST(Optimization, ANN) {
 
     
 

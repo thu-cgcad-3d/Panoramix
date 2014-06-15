@@ -513,6 +513,18 @@ TEST(Expression, ArrayOp){
 
     }
 
+    {
+        auto f = x.prod();
+        auto df = f.derivative(x);
+        for (int i = 0; i < 10; i++) {
+            int a = std::rand() % 100 + 1;
+            int b = std::rand() % 100 + 1;
+            xv.setRandom(a, b);
+            EXPECT_FLOAT_EQ(xv.prod(), f.execute());
+            EXPECT_MATRIX_EQ(df.execute(), xv.prod() / xv);
+        }
+    }
+
 }
 
 

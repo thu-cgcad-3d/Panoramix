@@ -217,6 +217,17 @@ namespace panoramix {
                 return d.sum();
             }
 
+            // prod elements
+            template <class D>
+            typename D::Scalar ProdElements(const Eigen::DenseBase<D> & d) {
+                return d.prod();
+            }
+
+            template <class D>
+            typename D::Scalar ProdElements(const Eigen::SparseMatrixBase<D> & d) {
+                return d.prod();
+            }
+
         }
 
 
