@@ -1,0 +1,20 @@
+#version 150
+
+
+uniform sampler2D Image;
+uniform vec3 CasterCenter;
+
+in vec3 pixelPosition;
+in vec3 pixelNormal;
+
+out vec4 fragColor;
+
+void main(void)
+{
+    vec3 direction = pixelPosition - CasterCenter;
+    float longi = atan(direction.z, direction.x);
+    float lati = - asin(direction.y / length(direction));
+    vec2 texCoord = vec2(longi / 3.1415926535897932 / 2.0 + 0.5, lati / 3.1415926535897932 + 0.5);
+    fragColor = texture2D(Image, texCoord);
+    //fragColor = vec4(1.0, 1.0, 0.0, 1.0);
+}

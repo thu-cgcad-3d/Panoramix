@@ -1,10 +1,10 @@
 #pragma once
 
-#include <QtGui>
-#include <QtOpenGL>
-
 #include <Ogre.h>
 #include <OgreFrameListener.h>
+
+#include <QtGui>
+#include <QtOpenGL>
 
 class OgreWidget : public QGLWidget {
 public:

@@ -2,6 +2,7 @@
 
 #include "ogrewidget.hpp"
 
+
 using Ogre::Camera;
 using Ogre::SceneManager;
 using Ogre::ResourceGroupManager;
@@ -26,7 +27,7 @@ using Ogre::VertexElement;
 using Ogre::Root;
 
 
-Ogre::ColourValue QgreColourFromQColor(QColor c) {
+Ogre::ColourValue ToQgreColour(QColor c) {
     return Ogre::ColourValue(c.redF(), c.greenF(), c.blueF(), c.alphaF());
 }
 
@@ -36,10 +37,10 @@ OgreWidget::OgreWidget(QWidget * parent) : QGLWidget(parent) {
     _root = new Ogre::Root;
 
     // Configures the application
-    if (!_root->restoreConfig()) {
+    //if (!_root->restoreConfig()) {
         _root->showConfigDialog();
         _root->saveConfig();
-    }
+    //}
     _root->initialise(false);
 }
 
@@ -53,7 +54,7 @@ OgreWidget::~OgreWidget() {
 
 void OgreWidget::createCube(const Ogre::String & name) {
     /// Create the mesh via the MeshManager
-    Ogre::MeshPtr msh = MeshManager::getSingleton().createManual(name, "General");
+    Ogre::MeshPtr msh = MeshManager::getSingleton().createManual(name, ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
 
     /// Create one submesh
     SubMesh* sub = msh->createSubMesh();
@@ -211,10 +212,12 @@ void OgreWidget::createSphere(const Ogre::String & name, const float r, const in
 
     // allocate the vertex buffer
     vertexData->vertexCount = (nRings + 1) * (nSegments + 1);
-    HardwareVertexBufferSharedPtr vBuf = HardwareBufferManager::getSingleton().createVertexBuffer(vertexDecl->getVertexSize(0), vertexData->vertexCount, HardwareBuffer::HBU_STATIC_WRITE_ONLY, false);
+    HardwareVertexBufferSharedPtr vBuf = HardwareBufferManager::getSingleton().createVertexBuffer(vertexDecl->getVertexSize(0), 
+        vertexData->vertexCount, HardwareBuffer::HBU_STATIC_WRITE_ONLY, false);
     VertexBufferBinding* binding = vertexData->vertexBufferBinding;
     binding->setBinding(0, vBuf);
     float* pVertex = static_cast<float*>(vBuf->lock(HardwareBuffer::HBL_DISCARD));
+
 
     // allocate index buffer
     pSphereVertex->indexData->indexCount = 6 * nRings * (nSegments + 1);
@@ -286,7 +289,7 @@ void OgreWidget::createCamera() {
 void OgreWidget::createViewports() {
     // Using the _camera create a _viewport and set the background color to black
     _viewport = _window->addViewport(_camera);
-    _viewport->setBackgroundColour(QgreColourFromQColor(Qt::black));
+    _viewport->setBackgroundColour(ToQgreColour(Qt::black));
 
     // Use the _viewport to set the aspect ratio of the _camera
     _camera->setAutoAspectRatio(true);
@@ -297,14 +300,17 @@ void OgreWidget::prepareResources() {
     ResourceGroupManager::getSingleton().addResourceLocation(OGRE_MEDIA_FOLDER "/packs/dragon.zip", "Zip");
     ResourceGroupManager::getSingleton().addResourceLocation(OGRE_MEDIA_FOLDER "/models/", "FileSystem");
     //ResourceGroupManager::getSingleton().addResourceLocation(OGRE_MEDIA_FOLDER "/materials/scripts/", "FileSystem");
+   // ResourceGroupManager::getSingleton().addResourceLocation(OGRE_MEDIA_FOLDER "/materials/programs/Cg/", "FileSystem", ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME, true);
+    //ResourceGroupManager::getSingleton().addResourceLocation(OGRE_MEDIA_FOLDER "/materials/programs/glsl/", "FileSystem", ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME, true);
     ResourceGroupManager::getSingleton().addResourceLocation(OGRE_MEDIA_FOLDER "/materials/textures/", "FileSystem");
     ResourceGroupManager::getSingleton().addResourceLocation(PROJECT_DATA_DIR_STR "/", "FileSystem");
+
     ResourceGroupManager::getSingleton().initialiseAllResourceGroups();
 }
 
 void OgreWidget::prepareMeshes() {
     createCube("Cube");
-    createSphere("Sphere", 100, 30, 30);
+    createSphere("Sphere", 100, 50, 50);
 }
 
 
@@ -330,19 +336,15 @@ void OgreWidget::createScene() {
     _sceneMgr->getRootSceneNode()->createChildSceneNode()->attachObject(entGround);
 
     entGround->setMaterialName("Examples/Rockwall");
+    //entGround->setMaterialName("Panorama/Test");
     entGround->setCastShadows(false);
 
     
 
     // custom cube
-    MaterialPtr material = MaterialManager::getSingleton().create(
-        "Test/ColourTest", ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
-    material->getTechnique(0)->getPass(0)->setVertexColourTracking(Ogre::TVC_AMBIENT);
-    material->getTechnique(0)->getPass(0)->createTextureUnitState("frost.png");
+
     Entity* entCube = _sceneMgr->createEntity("cc", "Sphere");
-    entCube->setMaterialName("Panorama/Simple");
-    //entCube->setMaterial(material);
-    //entCube->setMaterialName("Test/ColourTest");
+    entCube->setMaterialName("Panorama/Panorama");
 
     SceneNode* cubeNode = _sceneMgr->getRootSceneNode()->createChildSceneNode();
     cubeNode->setPosition(-200, 100, 0);
@@ -355,20 +357,20 @@ void OgreWidget::createScene() {
     pointLight->setType(Ogre::Light::LT_POINT);
     pointLight->setPosition(Ogre::Vector3(0, 350, 250));
 
-    pointLight->setDiffuseColour(QgreColourFromQColor(Qt::gray));
-    pointLight->setSpecularColour(QgreColourFromQColor(Qt::gray));
+    pointLight->setDiffuseColour(ToQgreColour(Qt::gray));
+    pointLight->setSpecularColour(ToQgreColour(Qt::gray));
 
     Ogre::Light* directionalLight = _sceneMgr->createLight("directionalLight");
     directionalLight->setType(Ogre::Light::LT_DIRECTIONAL);
-    directionalLight->setDiffuseColour(QgreColourFromQColor(Qt::darkYellow));
-    directionalLight->setSpecularColour(QgreColourFromQColor(Qt::yellow));
+    directionalLight->setDiffuseColour(ToQgreColour(Qt::darkYellow));
+    directionalLight->setSpecularColour(ToQgreColour(Qt::yellow));
 
     directionalLight->setDirection(Ogre::Vector3(0, -1, 1));
 
     Ogre::Light* spotLight = _sceneMgr->createLight("spotLight");
     spotLight->setType(Ogre::Light::LT_SPOTLIGHT);
-    spotLight->setDiffuseColour(QgreColourFromQColor(Qt::cyan));
-    spotLight->setSpecularColour(QgreColourFromQColor(Qt::cyan));
+    spotLight->setDiffuseColour(ToQgreColour(Qt::cyan));
+    spotLight->setSpecularColour(ToQgreColour(Qt::cyan));
     spotLight->setAttenuation(1000, 0.2, 1, 0);
 
     spotLight->setDirection(-1, -1, 0);
@@ -422,7 +424,7 @@ void OgreWidget::initializeGL() {
     //Ogre::SceneType scene_manager_type = Ogre::ST_EXTERIOR_CLOSE;
     Ogre::SceneType scene_manager_type = Ogre::ST_GENERIC;
     _sceneMgr = _root->createSceneManager(scene_manager_type);
-    _sceneMgr->setAmbientLight(QgreColourFromQColor(Qt::gray));
+    _sceneMgr->setAmbientLight(ToQgreColour(Qt::gray));
     _sceneMgr->setShadowTechnique(Ogre::SHADOWDETAILTYPE_ADDITIVE);
 
     createCamera();
