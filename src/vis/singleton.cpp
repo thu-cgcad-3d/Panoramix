@@ -30,7 +30,7 @@ namespace panoramix {
                 qDebug() << "call InitGui first!";
                 return;
             }
-            qApp->setQuitOnLastWindowClosed(true);
+            qApp->setQuitOnLastWindowClosed(true);            
             qApp->exec();
         }
 

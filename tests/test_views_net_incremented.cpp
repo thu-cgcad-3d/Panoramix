@@ -108,6 +108,7 @@ void run(){
         });
 
         net.rectifySpatialLines();
+        net.reconstructFaces();
     }
 
 }

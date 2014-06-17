@@ -21,13 +21,13 @@ namespace panoramix {
                 Vec2 center;
                 double area;
                 double borderLength;
+                std::vector<PixelLoc> contour;
                 Box2 boundingBox;
-                
-                int orientationClass; // -1 0 1 2
             };
             struct BoundaryData {
-                double boundaryLength;
-                
+                double length;
+                Line2 line;
+                double roughness;
             };
             using RegionsGraph = GraphicalModel02<RegionData, BoundaryData>;
             using RegionHandle = HandleAtLevel<0>;
@@ -35,13 +35,16 @@ namespace panoramix {
 
         public:
             explicit RegionsNet(const Image & image, const Params & params = Params());
-            void buildNetAndComputeGeometricFeatures(const std::vector<Classified<Line2>> & classifiedLines = std::vector<Classified<Line2>>(),
-                const Size & imageSizeContainingLines = Size(0, 0));
-            void computeImageFeatures();
+            void buildNetAndComputeGeometricFeatures();
+            void computeImageFeatures();            
 
             inline const RegionsGraph & regions() const { return _regions; }
             inline const Image & image() const { return _image; }
+
+            // 32SC1
             inline const SegmentationExtractor::Feature & segmentedRegions() const { return _segmentedRegions; }
+
+
 
         private:
             Image _image;
@@ -49,12 +52,12 @@ namespace panoramix {
             RegionsGraph _regions;
             Params _params;
 
-            struct RegionDataBoundingBoxFunctor {
+           /* struct RegionDataBoundingBoxFunctor {
                 inline explicit RegionDataBoundingBoxFunctor(const RegionsGraph & r) : regions(r) {}
                 inline Box2 operator()(RegionHandle vh) const { return regions.data(vh).boundingBox; }
                 const RegionsGraph & regions;
             };
-            RTreeWrapper<RegionHandle, RegionDataBoundingBoxFunctor> _regionsRTree;
+            RTreeWrapper<RegionHandle, RegionDataBoundingBoxFunctor> _regionsRTree;*/
         };
 
     }

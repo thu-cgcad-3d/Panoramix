@@ -37,6 +37,7 @@ include (DefineCompilerMacros)
 # get fundamental libs
 include (LocateFundamentalLibs)
 
+
 #get ORGRE
 include (LocateOGRE)
 
@@ -54,8 +55,9 @@ ADDTO_ENVPATH (Qt_PATH)
 
 
 # include third party codes
-set (THIRDPARTY_HEADERS "src/thirdparty/misc" "src/thirdparty/cereal/include")
-include_directories (${THIRDPARTY_HEADERS})
+add_subdirectory ("thirdparty")
+list (APPEND Fundamental_INCLUDES ${ThirdParty_INCLUDES})
+list (APPEND Fundamental_LIBS ${ThirdParty_LIBS})
 
 
 # the libs

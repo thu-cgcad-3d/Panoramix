@@ -118,8 +118,9 @@ QProgressBar::chunk {
     <addaction name="actionOpen"/>
     <addaction name="actionSave"/>
     <addaction name="actionSave_As"/>
+    <addaction name="actionInsert_View"/>
+    <addaction name="actionInsert_Panorama"/>
     <addaction name="separator"/>
-    <addaction name="actionLoad_Meshes"/>
     <addaction name="actionExport_Mesh"/>
     <addaction name="separator"/>
     <addaction name="actionExit"/>
@@ -595,6 +596,19 @@ QProgressBar::chunk {
    </property>
    <property name="shortcut">
     <string>Q</string>
+   </property>
+  </action>
+  <action name="actionInsert_View">
+   <property name="text">
+    <string>Insert View</string>
+   </property>
+   <property name="toolTip">
+    <string>Insert a new view photo</string>
+   </property>
+  </action>
+  <action name="actionInsert_Panorama">
+   <property name="text">
+    <string>Insert Panorama</string>
    </property>
   </action>
  </widget>

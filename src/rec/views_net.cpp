@@ -1,5 +1,10 @@
 #include <Eigen/StdVector>
 
+extern "C" {
+    #include "gpc.h"
+}
+
+#include "../vis/visualize2d.hpp"
 #include "../vis/visualize3d.hpp"
 
 #include "optimization.hpp"
@@ -24,6 +29,18 @@ namespace panoramix {
             vd.cameraDirectionErrorScale = cameraDirectionErrorScale;
             vd.image = im;
             return insertView(vd);
+        }
+
+        void ViewsNet::insertPanorama(const Image & panorama, const std::vector<PerspectiveCamera> & viewCams,
+            const PanoramicCamera & panCam) {
+            for (int i = 0; i < viewCams.size(); i++) {
+                auto & camera = viewCams[i];
+                const auto im =
+                    core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera>(camera, panCam)(panorama);
+                auto viewHandle = insertPhoto(im, camera);
+                updateConnections(viewHandle);
+            }
+            _globalData.panorama = panorama;
         }
 
         namespace {
@@ -94,7 +111,7 @@ namespace panoramix {
         void ViewsNet::buildRegionNet(ViewHandle h) {
             auto & vd = _views.data(h);
             vd.regionNet = std::make_shared<RegionsNet>(vd.image);
-            vd.regionNet->buildNetAndComputeGeometricFeatures(vd.lineSegments, vd.image.size());
+            vd.regionNet->buildNetAndComputeGeometricFeatures();
             vd.regionNet->computeImageFeatures();
         }
 
@@ -202,6 +219,11 @@ namespace panoramix {
 
             NOT_IMPLEMENTED_YET();
 
+        }
+
+
+        void ViewsNet::stitchPanorama() {
+            NOT_IMPLEMENTED_YET();
         }
 
 
@@ -1457,12 +1479,209 @@ namespace panoramix {
 
 
         }
+
+
+        namespace {
+
+            struct RegionIndex {
+                ViewsNet::ViewHandle viewHandle;
+                RegionsNet::RegionHandle regionHandle;
+            };
+
+            inline bool operator == (const RegionIndex & a, const RegionIndex & b) {
+                return a.viewHandle == b.viewHandle && a.regionHandle == b.regionHandle;
+            }
+
+            struct RegionBoundaryIndex {
+                ViewsNet::ViewHandle viewHandle;
+                RegionsNet::BoundaryHandle boundaryHandle;
+            };            
+
+            struct RegionMapVertex {
+                RegionIndex regionIndex;
+                int orientation;
+            };
+
+            struct RegionMapEdge {
+                bool isOverlap;
+                struct {
+                    RegionBoundaryIndex boundaryIndex;
+                } asBoundary; // isOverlap
+                struct {
+                    double overlapRatio;
+                } asOverlap; // !isOverlap
+            };
+
+            using HolisticRegionMap = GraphicalModel02<RegionMapVertex, RegionMapEdge>;
+
+            void ConvertToGPCPolygon(const std::vector<PixelLoc> & pts, gpc_polygon & poly) {
+                poly.num_contours = 1;
+                poly.contour = new gpc_vertex_list[1];
+                poly.contour[0].num_vertices = pts.size();
+                poly.contour[0].vertex = new gpc_vertex[pts.size()];
+                for (int i = 0; i < pts.size(); i++) {
+                    poly.contour[0].vertex[i].x = pts[i].x;
+                    poly.contour[0].vertex[i].y = pts[i].y;
+                }
+                poly.hole = new int[1];
+                poly.hole[0] = 0;
+            }
+
+            void ConvertToPixelVector(const gpc_polygon & poly, std::vector<PixelLoc> & pts) {
+                pts.clear();
+                pts.resize(poly.contour[0].num_vertices);
+                for (int i = 0; i < pts.size(); i++) {
+                    pts[i].x = poly.contour[0].vertex[i].x;
+                    pts[i].y = poly.contour[0].vertex[i].y;
+                }
+            }
+        }
  
 
         void ViewsNet::reconstructFaces() {
 
-            // build the holistic region map
+            //NOT_IMPLEMENTED_YET();
 
+            // compute spatial positions of each region
+            struct {
+                inline uint64_t operator()(const RegionIndex & ri) const {
+                    return static_cast<uint64_t>((ri.viewHandle.id << 4) + ri.regionHandle.id);
+                }
+            } hashRegionIndex;
+            std::unordered_map<RegionIndex, std::vector<Vec3>, decltype(hashRegionIndex)> 
+                regionSpatialContours(10000, hashRegionIndex);          
+            for (auto & view : _views.elements<0>()) {
+                const auto & regions = * view.data.regionNet;
+                for (auto & region : regions.regions().elements<0>()) {
+                    RegionIndex ri = { view.topo.hd, region.topo.hd };
+                    const ViewsNet::ViewData & vd = view.data;
+                    const RegionsNet::RegionData & rd = region.data;
+
+                    assert(!rd.contour.empty() && "Region contour not initialized yet?");
+                    std::vector<Vec3> spatialContour;
+                    spatialContour.reserve(rd.contour.size());
+                    std::transform(rd.contour.begin(), rd.contour.end(), std::back_inserter(spatialContour), 
+                        [&vd](const PixelLoc & p) {
+                        return vd.camera.spatialDirection(p);
+                    });
+                    regionSpatialContours[ri] = spatialContour;
+                }
+            }
+
+            // build rtree for regions
+            auto lookupRegionBB = [&regionSpatialContours](const RegionIndex& ri) {
+                return BoundingBoxOfContainer(regionSpatialContours[ri]);
+            };
+            RTreeWrapper<RegionIndex, decltype(lookupRegionBB)> regionsRTree(lookupRegionBB);
+            for (auto & region : regionSpatialContours) {
+                regionsRTree.insert(region.first);
+            }
+            
+            // store overlapping ratios between overlapped regions
+            struct {
+                inline uint64_t operator()(const std::pair<RegionIndex, RegionIndex> & vhp) const {
+                    return static_cast<uint64_t>(
+                        (((vhp.first.regionHandle.id << 3) + vhp.first.viewHandle.id) << 10) + 
+                        ((vhp.second.regionHandle.id << 3) + vhp.second.viewHandle.id));
+                }
+            } hashRegionIndexPair;
+            std::unordered_map<std::pair<RegionIndex, RegionIndex>, double, decltype(hashRegionIndexPair)> 
+                overlappedRegionIndexPairs(1000, hashRegionIndexPair);
+            
+            for (auto & rip : regionSpatialContours) {
+                auto & ri = rip.first;
+                auto & riContour2d = _views.data(ri.viewHandle).regionNet->regions().data(ri.regionHandle).contour;
+                auto & riCamera = _views.data(ri.viewHandle).camera;
+                double riArea = _views.data(ri.viewHandle).regionNet->regions().data(ri.regionHandle).area;
+
+                gpc_polygon riPoly;
+                ConvertToGPCPolygon(riContour2d, riPoly);
+
+                regionsRTree.search(lookupRegionBB(ri), 
+                    [&ri, &riContour2d, &riPoly, &riCamera, riArea, &overlappedRegionIndexPairs, &regionSpatialContours](
+                    const RegionIndex & relatedRi) {
+
+                    if (ri.viewHandle == relatedRi.viewHandle) {
+                        return true;
+                    }
+
+                    // project relatedRi contour to ri's camera plane
+                    auto & relatedRiContour3d = regionSpatialContours[relatedRi];
+                    std::vector<PixelLoc> relatedRiContour2d(relatedRiContour3d.size());
+                    for (int i = 0; i < relatedRiContour3d.size(); i++) {
+                        auto p = riCamera.screenProjection(relatedRiContour3d[i]);
+                        relatedRiContour2d[i] = PixelLoc(p);
+                    }
+                    gpc_polygon relatedRiPoly;
+                    ConvertToGPCPolygon(relatedRiContour2d, relatedRiPoly);
+
+                    // compute overlapping degree
+                    gpc_polygon intersectedPoly;
+                    gpc_polygon_clip(GPC_INT, &relatedRiPoly, &riPoly, &intersectedPoly);
+
+                    if (intersectedPoly.num_contours > 0 && intersectedPoly.contour[0].num_vertices > 0) {
+                        std::vector<PixelLoc> intersected;
+                        ConvertToPixelVector(intersectedPoly, intersected);
+                        double intersectedArea = cv::contourArea(intersected);
+
+                        double overlapRatio = intersectedArea / riArea;
+                        assert(overlapRatio <= 1.0 && "Invalid overlap ratio!");
+
+                        if (overlapRatio > 0.2)
+                            overlappedRegionIndexPairs[std::make_pair(relatedRi, ri)] = overlapRatio;
+                    }
+
+                    gpc_free_polygon(&relatedRiPoly);
+                    gpc_free_polygon(&intersectedPoly);
+
+                    return true;
+                });
+
+                gpc_free_polygon(&riPoly);
+            }
+
+            for (auto & riPair : overlappedRegionIndexPairs) {
+                auto revRiPair = std::make_pair(riPair.first.second, riPair.first.first);
+                std::cout << "a-b: " << riPair.second;
+                if (overlappedRegionIndexPairs.find(revRiPair) != overlappedRegionIndexPairs.end())
+                    std::cout << "   b-a: " << overlappedRegionIndexPairs[revRiPair];
+                std::cout << std::endl;
+            }
+
+
+            // build the holistic region map
+            HolisticRegionMap regionMap;
+            regionMap.internalElements<0>().reserve(regionsRTree.size());
+            regionMap.internalElements<1>().reserve(overlappedRegionIndexPairs.size() + regionsRTree.size());
+
+            // add vertices
+            std::unordered_map<RegionIndex, HandleAtLevel<0>, decltype(hashRegionIndex)> ri2Handle(50000, hashRegionIndex);
+            for (auto & r : regionSpatialContours) {
+                RegionMapVertex v;
+                v.orientation = -1;
+                v.regionIndex = r.first;
+                ri2Handle[r.first] = regionMap.add(v);
+            }
+            // add overlap edges
+            for (auto & o : overlappedRegionIndexPairs) {
+                auto h1 = ri2Handle[o.first.first];
+                auto h2 = ri2Handle[o.first.second];
+                RegionMapEdge e;
+                e.isOverlap = true;
+                e.asOverlap.overlapRatio = o.second;
+                regionMap.add<1>({ h1, h2 }, e);
+            }
+            // add boundary edges
+            
+            
+
+
+
+            // inference region orientations and spatial connectivity of boundaries
+
+
+            
+            // reconstruct faces
 
         }
 

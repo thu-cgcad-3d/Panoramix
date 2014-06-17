@@ -15,6 +15,10 @@ public:
 
     void initGui();
 
+public slots:
+    void on_actionInsert_Panorama_triggered();
+    void on_actionInsert_View_triggered();
+
 private:
     OgreWidget * _w;
     Ui::MainWind _ui;

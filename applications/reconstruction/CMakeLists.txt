@@ -54,7 +54,9 @@ configure_file (${CMAKE_CURRENT_SOURCE_DIR}/plugins_d.cfg.in ${CMAKE_CURRENT_BIN
 
 
 add_executable (${APP_NAME} ${APP_SOURCES} ${APP_HEADERS} ${UI_ADDED} ${RESOURCE_ADDED})
-target_link_libraries (${APP_NAME} ${CORE_STATIC_LIB} ${DERIV_STATIC_LIB} ${VIS_STATIC_LIB} ${Fundamental_LIBS} ${Qt_LIBS} ${OGRE_LIBS})
+target_link_libraries (${APP_NAME} 
+	${CORE_STATIC_LIB} ${DERIV_STATIC_LIB} ${VIS_STATIC_LIB} ${REC_STATIC_LIB} 
+	${Fundamental_LIBS} ${Qt_LIBS} ${OGRE_LIBS})
 
 
 set_property(GLOBAL PROPERTY USE_FOLDERS On)

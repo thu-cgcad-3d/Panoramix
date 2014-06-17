@@ -56,7 +56,7 @@ TEST(ViewsNet, ViewsNet) {
     params.mergeLineDistanceAngleThreshold = 0.05;
     rec::ViewsNet net(params);
     
-    std::vector<rec::ViewsNet::VertHandle> viewHandles;
+    std::vector<rec::ViewsNet::ViewHandle> viewHandles;
     for (int i = 0; i < cams.size(); i++){
         auto & camera = cams[i];
         const auto & im = ims[i];
@@ -67,7 +67,7 @@ TEST(ViewsNet, ViewsNet) {
         using namespace std::chrono;
         auto startTime = high_resolution_clock::now();
         
-        auto computeFea = [](rec::ViewsNet* netptr, rec::ViewsNet::VertHandle vh){
+        auto computeFea = [](rec::ViewsNet* netptr, rec::ViewsNet::ViewHandle vh){
             std::cout << "photo " << vh.id << std::endl;
             std::cout << "computing features ..." << std::endl;
             netptr->computeFeatures(vh);
@@ -76,10 +76,10 @@ TEST(ViewsNet, ViewsNet) {
         };
 
         int vid = 0;
-        while (vid < net.views().internalVertices().size()){
-            std::vector<std::thread> t4(std::min(net.views().internalVertices().size() - vid, 4ull));
+        while (vid < net.views().internalElements<0>().size()){
+            std::vector<std::thread> t4(std::min(net.views().internalElements<0>().size() - vid, 4ull));
             for (auto & t : t4)
-                t = std::thread(computeFea, &net, rec::ViewsNet::VertHandle(vid++));
+                t = std::thread(computeFea, &net, rec::ViewsNet::ViewHandle(vid++));
             for (auto & t : t4)
                 t.join();
         }

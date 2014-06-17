@@ -17,3 +17,15 @@ void MainWind::initGui() {
 
 }
 
+void MainWind::on_actionInsert_Panorama_triggered() {
+    QString fn = QFileDialog::getOpenFileName(this, tr("Choose a panoramic image file"), tr(PROJECT_DATA_DIR_STR),
+        tr("Image file (*.png;*.jpg);;All Files (*.*)"));
+    if (fn.isEmpty())
+        return;
+    _w->setupPanorama(fn);
+}
+
+void MainWind::on_actionInsert_View_triggered() {
+    qDebug() << "new view inserted!";
+}
+

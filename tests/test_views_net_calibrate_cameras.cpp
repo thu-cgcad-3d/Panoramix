@@ -77,7 +77,7 @@ TEST(ViewsNet, FixedCamera) {
 
         // show matches
         auto & thisVD = net.views().data(viewHandle);
-        auto & connections = net.views().topo(viewHandle).halfedges;
+        auto & connections = net.views().topo(viewHandle).uppers;
         for (auto & con : connections) {
             auto & conData = net.views().data(con);
             auto & revConData = net.views().data(net.views().topo(con).opposite);

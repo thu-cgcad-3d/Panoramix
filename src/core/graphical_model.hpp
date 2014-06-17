@@ -43,7 +43,7 @@ namespace panoramix {
             }
         };
         template <class Tag>
-        struct HashHandle {
+        struct HandleHasher {
             inline uint64_t operator()(Handle<Tag> a) const {
                 return static_cast<uint64_t>(a.id);
             }

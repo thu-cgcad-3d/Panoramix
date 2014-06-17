@@ -56,6 +56,10 @@ namespace panoramix {
             ViewHandle insertPhoto(const Image & im, const PerspectiveCamera & cam, 
                 double cameraDirectionErrorScale = 0.0);
 
+            // insert a new panoramic image and connect close views and set panorama
+            void insertPanorama(const Image & panorama, const std::vector<PerspectiveCamera> & viewCams, 
+                const PanoramicCamera & panCam);
+
             // compute features for a single view
             void computeFeatures(ViewHandle h);
 
@@ -76,6 +80,9 @@ namespace panoramix {
             // calibrate all cameras
             // after findMatchesToConnectedViews(h)
             void calibrateAllCameras();
+
+            // stitch panorama
+            void stitchPanorama();
             
             // estimate vanishing points using lines extract from all views, classify this lines and lift them all to space
             void estimateVanishingPointsAndClassifyLines();
@@ -88,9 +95,11 @@ namespace panoramix {
                 
         public:
             struct ViewData {
+                // cameras
                 PerspectiveCamera originalCamera, camera;
-
                 double cameraDirectionErrorScale;
+                
+                // image and 2d image features
                 Image image;
                 std::vector<Classified<Line2>> lineSegments;                
                 std::vector<HPoint2> lineSegmentIntersections;
@@ -99,6 +108,7 @@ namespace panoramix {
                 std::vector<KeyPoint> keypointsForMatching;
                 cv::Mat descriptorsForMatching;
 
+                // regions
                 std::shared_ptr<RegionsNet> regionNet;
 
                 //RTreeWrapper<HPoint2> lineSegmentIntersectionsRTree;
@@ -111,6 +121,7 @@ namespace panoramix {
 
             struct GlobalData {
                 Image panorama;
+
                 std::array<Vec3, 3> vanishingPoints;
                 std::vector<Image> geometricContext;
                 std::vector<Image> manhattanJunctionDistribution;

@@ -99,25 +99,27 @@ namespace panoramix {
         template <class OutCameraT, class InCameraT>
         class CameraSampler {
         public:
-            explicit inline CameraSampler(const OutCameraT & outCam, const InCameraT & inCam)
+            CameraSampler(const OutCameraT & outCam, const InCameraT & inCam)
                 : _outCam(outCam), _inCam(inCam) {
                 assert(outCam.eye() == inCam.eye());
-            }
-            
-            Image operator() (const Image & inputIm) const {
-                Image outputIm;
-                cv::Mat mapx = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
-                cv::Mat mapy = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
-                for (int j = 0; j < _outCam.screenSize().height; j++){
-                    for (int i = 0; i < _outCam.screenSize().width; i++){
+                _mapx = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
+                _mapy = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
+                for (int j = 0; j < _outCam.screenSize().height; j++) {
+                    for (int i = 0; i < _outCam.screenSize().width; i++) {
                         Vec2 screenp(i, j);
                         Vec3 p3 = _outCam.spatialDirection(screenp);
                         Vec2 screenpOnInCam = _inCam.screenProjection(p3);
-                        mapx.at<float>(j, i) = static_cast<float>(screenpOnInCam(0));
-                        mapy.at<float>(j, i) = static_cast<float>(screenpOnInCam(1));
+                        _mapx.at<float>(j, i) = static_cast<float>(screenpOnInCam(0));
+                        _mapy.at<float>(j, i) = static_cast<float>(screenpOnInCam(1));
                     }
                 }
-                cv::remap(inputIm, outputIm, mapx, mapy, cv::INTER_LINEAR, cv::BORDER_REPLICATE);
+            }
+            
+            Image operator() (const Image & inputIm, 
+                int borderMode = cv::BORDER_REPLICATE, 
+                const cv::Scalar & borderValue = cv::Scalar(0, 0, 0, 1)) const {
+                Image outputIm;                
+                cv::remap(inputIm, outputIm, _mapx, _mapy, cv::INTER_LINEAR, borderMode, borderValue);
                 return outputIm;
             }
 
@@ -126,6 +128,7 @@ namespace panoramix {
         private:
             OutCameraT _outCam;
             InCameraT _inCam;
+            cv::Mat _mapx, _mapy;
         };
 
 

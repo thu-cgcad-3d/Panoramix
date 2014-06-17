@@ -6,10 +6,14 @@
 #include <QtGui>
 #include <QtOpenGL>
 
+#include "../../src/rec/views_net.hpp"
+
 class OgreWidget : public QGLWidget {
 public:
     OgreWidget(QWidget * parent = nullptr);
     virtual ~OgreWidget();
+
+    void setupPanorama(const QString & filename);
 
 private:
     static void createCube(const Ogre::String & name);
@@ -44,4 +48,6 @@ private:
     Ogre::Viewport *_viewport;
     Ogre::SceneManager *_sceneMgr;
     QPointF _lastPos;
+
+    panoramix::rec::ViewsNet _viewsNet;
 };

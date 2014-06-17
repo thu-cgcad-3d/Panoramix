@@ -175,6 +175,27 @@ namespace panoramix {
         using HLine3 = HLine<double, 3>;
 
 
+        // plane
+        template <class T, int N>
+        struct Plane {
+            Point<T, N> anchor;
+            Vec<T, N> normal;
+        };
+        template <class T, int N>
+        inline bool operator == (const Plane<T, N> & a, const Plane<T, N> & b) {
+            return a.anchor == b.anchor && a.normal == b.normal;
+        }
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, Plane<T, N> & p) {
+            ar(p.anchor, p.normal);
+        }
+        using Plane3 = Plane<double, 3>;
+
+
+
+
+
+
         // image
         using Image = cv::Mat;
         using PixelLoc = cv::Point;        
@@ -231,6 +252,7 @@ namespace panoramix {
 
             inline Vec<T, N> size() const { return maxCorner - minCorner; }
             inline Point<T, N> center() const { return (maxCorner + minCorner) * (0.5); }
+
             inline bool contains(const Point<T, N> & p) const {
                 if (isNull)
                     return false;

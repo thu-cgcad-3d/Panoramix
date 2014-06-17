@@ -4,7 +4,7 @@ namespace panoramix {
     namespace rec {
 
         RegionsNet::RegionsNet(const Image & image, const Params & params) 
-            : _image(image), _params(params), _regionsRTree(RegionDataBoundingBoxFunctor(_regions)){}
+            : _image(image), _params(params)/*, _regionsRTree(RegionDataBoundingBoxFunctor(_regions))*/{}
 
         namespace {
 
@@ -27,8 +27,7 @@ namespace panoramix {
 
         }
 
-        void RegionsNet::buildNetAndComputeGeometricFeatures(const std::vector<Classified<Line2>> & classifiedLines,
-            const Size & imageSizeContainingLines) {
+        void RegionsNet::buildNetAndComputeGeometricFeatures() {
             _segmentedRegions = _params.segmenter(_image);
             int regionNum = static_cast<int>(MinMaxValOfImage(_segmentedRegions).second) + 1;
             _regions.internalElements<0>().reserve(regionNum);
@@ -37,19 +36,17 @@ namespace panoramix {
                 vd.borderLength = 0.0;
                 vd.regionMask = (_segmentedRegions == i);
                 ComputeRegionProperties(vd.regionMask, _image, vd.center, vd.area, vd.boundingBox);
-                auto vh = _regions.add(vd);
-                _regionsRTree.insert(vh);
-            }
 
-            // compute line class scores for regions along the lines
-            static const double sampleLen = 3;
-            for (auto & l : classifiedLines) {
-                auto & line = l.component;
-                int claz = l.claz;
-                // sample on line
-                double len = line.length();
-                int num = len / sampleLen;
-                // TODO
+                // find contour of the region
+                cv::Mat regionMaskCopy;
+                vd.regionMask.copyTo(regionMaskCopy);
+                std::vector<std::vector<PixelLoc>> contours;
+                cv::findContours(regionMaskCopy, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+                vd.contour = contours.front();
+                assert(!vd.contour.empty() && "no contour? impossible~");
+               
+                auto vh = _regions.add(vd);
+                //_regionsRTree.insert(vh);  
             }
 
             // find connections
@@ -97,14 +94,17 @@ namespace panoramix {
             for (auto con : connections) {
                 if (con.first < con.second){
                     BoundaryData hd;
-                    hd.boundaryLength = boundaryLengths[con.first * regionNum + con.second];
+                    hd.length = boundaryLengths[con.first * regionNum + con.second];
                     _regions.add<1>({ RegionHandle(con.first), RegionHandle(con.second) }, hd);
                 }
             }
+
+            // todo: compute boundary line, boundary roughness
+            //NOT_IMPLEMENTED_YET();
         }
 
         void RegionsNet::computeImageFeatures() {
-
+            // NOT_IMPLEMENTED_YET();
         }
 
     }
