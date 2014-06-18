@@ -1615,7 +1615,7 @@ namespace panoramix {
                     gpc_polygon relatedRiPoly;
                     ConvertToGPCPolygon(relatedRiContour2d, relatedRiPoly);
 
-                    // compute overlapping degree
+                    // compute overlapping area ratio
                     gpc_polygon intersectedPoly;
                     gpc_polygon_clip(GPC_INT, &relatedRiPoly, &riPoly, &intersectedPoly);
 
@@ -1672,12 +1672,27 @@ namespace panoramix {
                 regionMap.add<1>({ h1, h2 }, e);
             }
             // add boundary edges
-            
-            
+            for (auto & vd : _views.elements<0>()) {
+                auto & regions = * vd.data.regionNet;
+                for (auto & regionBoundaryData : regions.regions().elements<1>()) {
+                    auto & rids = regionBoundaryData.topo.lowers;
+                    RegionIndex ri1 = { vd.topo.hd, rids[0] };
+                    RegionIndex ri2 = { vd.topo.hd, rids[1] };
+                    auto rh1 = ri2Handle[ri1];
+                    auto rh2 = ri2Handle[ri2];
+                    RegionMapEdge e;
+                    e.isOverlap = false;
+                    e.asBoundary.boundaryIndex = { vd.topo.hd, regionBoundaryData.topo.hd };
+                    regionMap.add<1>({ rh1, rh2 }, e);
+                    regionMap.add<1>({ rh2, rh1 }, e);
+                }
+            }
 
-
+            std::cout << "region num: " << regionMap.internalElements<0>().size() << std::endl;
+            std::cout << "edge num: " << regionMap.internalElements<1>().size() << std::endl;
 
             // inference region orientations and spatial connectivity of boundaries
+                        
 
 
             
