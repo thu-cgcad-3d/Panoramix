@@ -1,4 +1,5 @@
 #include <Eigen/StdVector>
+#include <filesystem>
 
 extern "C" {
     #include "gpc.h"
@@ -1483,6 +1484,7 @@ namespace panoramix {
 
         namespace {
 
+            // index
             struct RegionIndex {
                 ViewsNet::ViewHandle viewHandle;
                 RegionsNet::RegionHandle regionHandle;
@@ -1495,17 +1497,32 @@ namespace panoramix {
             struct RegionBoundaryIndex {
                 ViewsNet::ViewHandle viewHandle;
                 RegionsNet::BoundaryHandle boundaryHandle;
-            };            
+            };    
 
+            inline bool operator == (const RegionBoundaryIndex & a, const RegionBoundaryIndex & b) {
+                return a.viewHandle == b.viewHandle && a.boundaryHandle == b.boundaryHandle;
+            }
+
+
+            // region map
             struct RegionMapVertex {
                 RegionIndex regionIndex;
-                int orientation;
+
+                // (a,b,c) representing the plane: ax + by + cz = 1 
+                // => a(kA) + b(kB) + c(kC) = 1 
+                // => k = 1/(aA + bB + cC), 
+                // (A, B, C) is the spatial direction of a given point, norm(A, B, C) = 1, k is the depth
+                Vec3 planeCoeffs; 
+
+                bool isVoid;
             };
 
             struct RegionMapEdge {
                 bool isOverlap;
+                inline bool isBoundary() const { return !isOverlap; }
                 struct {
                     RegionBoundaryIndex boundaryIndex;
+                    bool isOccludingBoundary; // true/false -> disconnected/connected spatially
                 } asBoundary; // isOverlap
                 struct {
                     double overlapRatio;
@@ -1514,6 +1531,8 @@ namespace panoramix {
 
             using HolisticRegionMap = GraphicalModel02<RegionMapVertex, RegionMapEdge>;
 
+
+            // polygon conversion
             void ConvertToGPCPolygon(const std::vector<PixelLoc> & pts, gpc_polygon & poly) {
                 poly.num_contours = 1;
                 poly.contour = new gpc_vertex_list[1];
@@ -1531,9 +1550,70 @@ namespace panoramix {
                 pts.clear();
                 pts.resize(poly.contour[0].num_vertices);
                 for (int i = 0; i < pts.size(); i++) {
-                    pts[i].x = poly.contour[0].vertex[i].x;
-                    pts[i].y = poly.contour[0].vertex[i].y;
+                    pts[i].x = static_cast<int>(poly.contour[0].vertex[i].x);
+                    pts[i].y = static_cast<int>(poly.contour[0].vertex[i].y);
                 }
+            }
+
+            class Polygon2 {
+            public:
+                inline Polygon2() : _p(nullptr) {}
+                inline Polygon2(const std::vector<PixelLoc> & pts) {
+                    _p = new gpc_polygon;
+                    ConvertToGPCPolygon(pts, *_p);
+                }
+                inline Polygon2(const Image & mask) {
+                    NOT_IMPLEMENTED_YET();
+                }
+
+                inline ~Polygon2() {
+                    gpc_free_polygon(_p);
+                    delete _p;
+                }
+                inline Polygon2(const Polygon2 & p) {
+                    NOT_IMPLEMENTED_YET();
+                }
+                inline Polygon2(Polygon2 && p) {
+                    std::swap(_p, p._p);
+                }
+
+                inline std::vector<PixelLoc> toPixels() const {
+                    std::vector<PixelLoc> pixels;
+                    ConvertToPixelVector(*_p, pixels);
+                    return pixels;
+                }
+                inline double area() const {
+                    return cv::contourArea(toPixels());
+                }
+
+                inline Polygon2 & operator &= (const Polygon2 & p) {
+                    NOT_IMPLEMENTED_YET();
+                }
+                inline Polygon2 & operator |= (const Polygon2 & p) {
+                    NOT_IMPLEMENTED_YET();
+                }
+                inline Polygon2 & operator -= (const Polygon2 & p) {
+                    NOT_IMPLEMENTED_YET();
+                }
+
+            private:
+                gpc_polygon * _p;
+            };
+
+            inline Polygon2 operator & (const Polygon2 & a, const Polygon2 & b) {
+                Polygon2 r = a;
+                r &= b;
+                return r;
+            }
+            inline Polygon2 operator | (const Polygon2 & a, const Polygon2 & b) {
+                Polygon2 r = a;
+                r |= b;
+                return r;
+            }
+            inline Polygon2 operator - (const Polygon2 & a, const Polygon2 & b) {
+                Polygon2 r = a;
+                r -= b;
+                return r;
             }
         }
  
@@ -1568,7 +1648,7 @@ namespace panoramix {
                 }
             }
 
-            // build rtree for regions
+            // build spatial rtree for regions
             auto lookupRegionBB = [&regionSpatialContours](const RegionIndex& ri) {
                 return BoundingBoxOfContainer(regionSpatialContours[ri]);
             };
@@ -1658,8 +1738,8 @@ namespace panoramix {
             std::unordered_map<RegionIndex, HandleAtLevel<0>, decltype(hashRegionIndex)> ri2Handle(50000, hashRegionIndex);
             for (auto & r : regionSpatialContours) {
                 RegionMapVertex v;
-                v.orientation = -1;
                 v.regionIndex = r.first;
+                v.isVoid = false;
                 ri2Handle[r.first] = regionMap.add(v);
             }
             // add overlap edges
@@ -1684,7 +1764,6 @@ namespace panoramix {
                     e.isOverlap = false;
                     e.asBoundary.boundaryIndex = { vd.topo.hd, regionBoundaryData.topo.hd };
                     regionMap.add<1>({ rh1, rh2 }, e);
-                    regionMap.add<1>({ rh2, rh1 }, e);
                 }
             }
 
@@ -1692,7 +1771,20 @@ namespace panoramix {
             std::cout << "edge num: " << regionMap.internalElements<1>().size() << std::endl;
 
             // inference region orientations and spatial connectivity of boundaries
-                        
+            // unary potentials:
+            //  1. coincidence with principle directions
+            //  2. connectivity with line sketches
+
+
+
+
+            // pairwise potentials:
+            //  1. disconnect punishment between adjacent regions
+            //  2. fold punishment between adjacent regions
+            //  3. overlapped regions
+
+
+            
 
 
             

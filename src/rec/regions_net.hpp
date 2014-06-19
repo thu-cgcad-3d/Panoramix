@@ -20,14 +20,12 @@ namespace panoramix {
                 Image regionMask; // 8UC1
                 Vec2 center;
                 double area;
-                double borderLength;
                 std::vector<PixelLoc> contour;
                 Box2 boundingBox;
             };
             struct BoundaryData {
+                std::vector<std::vector<PixelLoc>> edges;
                 double length;
-                Line2 line;
-                double roughness;
             };
             using RegionsGraph = GraphicalModel02<RegionData, BoundaryData>;
             using RegionHandle = HandleAtLevel<0>;
