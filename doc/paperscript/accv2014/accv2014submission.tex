@@ -134,14 +134,44 @@
 \subsubsection {Graph Optimization}
 
 // Design energy function
-//  0. imagine this:
-//       treat each region as a patch/ a piece of cloth with some elasticity, 
-//       if l1, l2, ... l_{n_r} are lines contained in region r,
-//       then pin r with those corresponding reconstructed lines in 3D space
-//       well 
-//  1. punish disconnectivities between adjacent regions
-//  2. punish (slightly) discontinuities between adjacent regions
-//  3. punish spatial inconsistencies between reconstructed region faces and reconstructed line segments
+
+/*
+
+\begin{enumerate}
+  \item imagine this:
+       treat each region as a patch/ a piece of cloth with some elasticity, 
+       if $l_1, l_2, ... l_{n_r}$ are lines contained in region r,
+       then pin r with those corresponding reconstructed lines in 3D space
+       well 
+  \item punish disconnectednesses between adjacent regions, more punishment if the boundaries are rougher
+  \item punish (slightly) discontinuities between adjacent regions, more punishment if the boundaries are rougher
+  \item punish spatial inconsistencies between reconstructed region faces and reconstructed line segments, 
+  	more punishment if the line segments pass through the regions
+  \item punish the violation of Manhattan world assumption, the more the normal directions vary from the principle directions, 
+		the more punishment there will be
+  \item punish the inconsistencies between overlapping regions from different views
+\end{enumerate}
+
+*/
+
+Variables:
+3-vector representing the 3D plane equation of each region, $N$ is the number of regions:
+		\[p_i = (a_i, b_i, c_i), i = 1, ..., N\]
+scalar depths for each localized line structure, $M$ is the number of isolated line structures:
+		\[s_j, j = 1, ..., M\]
+
+Unary potentials:
+\begin{enumerate}
+\item violation of Manhattan world assumption
+\[
+	E^M_i = 1-exp\left( - \min_{k \in \{1,2,3\}} \left\{ \angle(p_i, d_k), \angle(p_i, -d_k) \right\} ^2/\theta^2\right)
+\]
+
+\item spatial inconsistency with reconstructed line segment $$
+
+
+\end{enumerate}
+
 
 %-------------------------------------------------------------------------
 \section{Experimental Results}
