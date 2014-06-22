@@ -1,3 +1,6 @@
 [submodule "thirdparty/cereal"]
 	path = thirdparty/cereal
 	url = https://github.com/USCiLab/cereal.git
+[submodule "thirdparty/dlib"]
+	path = thirdparty/dlib
+	url = https://github.com/davisking/dlib.git

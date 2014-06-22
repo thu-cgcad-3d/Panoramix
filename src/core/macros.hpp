@@ -4,7 +4,7 @@
 namespace panoramix {
     namespace core {
 
-#define DEBUG_USING_VISUALIZERS false
+#define DEBUG_USING_VISUALIZERS true
 #define IF_DEBUG_USING_VISUALIZERS if(DEBUG_USING_VISUALIZERS)            
 
         // not implemented error

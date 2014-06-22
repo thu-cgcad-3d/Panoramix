@@ -1,9 +1,12 @@
-#include <Eigen/StdVector>
 #include <filesystem>
 
 extern "C" {
-    #include "gpc.h"
+    #include <gpc.h>
 }
+
+#include <Eigen/StdVector>
+#include <dlib/matrix.h>
+#include <dlib/optimization.h>
 
 #include "../vis/visualize2d.hpp"
 #include "../vis/visualize3d.hpp"
@@ -907,12 +910,7 @@ namespace panoramix {
                     double weightInObjectiveFunction;
                 };
 
-                /*
-                    min 0.5 * x G x + g0 x //G=0
-                    s.t.
-                        CE^T x + ce0 = 0
-                        CI^T x + ci0 >= 0
-                */
+
                 /***
                     min \Sum w_ij * [s_ij]
                     s.t.
@@ -1074,8 +1072,8 @@ namespace panoramix {
                 glp_set_obj_name(problem, "Optimize Lines: Objective");
                 glp_set_obj_dir(problem, GLP_MIN);
 
-                glp_add_rows(problem, equationNum+1); // add rows
-                glp_add_cols(problem, varNum+1); // add cols
+                glp_add_rows(problem, equationNum); // add rows
+                glp_add_cols(problem, varNum); // add cols
 
                 // add scale inequations
                 for (auto & var : lambdas){
@@ -1109,12 +1107,34 @@ namespace panoramix {
                 
                 glp_adv_basis(problem, 0);
 
-                bool useSimplex = true;
-                if (useSimplex){
+                enum Method {Simplex, Exact, Interior};
+                Method method = Simplex;
+                if (method == Simplex){
                     glp_smcp params;
                     glp_init_smcp(&params);
+                    params.tol_bnd = 1e-10;
+                    params.tol_dj = 1e-10;
+                    params.tol_piv = 1e-13;
+                    params.presolve = GLP_ON;
+                    params.meth = GLP_DUALP;
+                    //params.r_test = GLP_RT_STD;
+
                     params.msg_lev = GLP_MSG_ON;
                     int stat = glp_simplex(problem, &params);
+                    switch (stat) {
+                    case 0: std::cout << "solved" << std::endl; break;
+                    case GLP_EBADB: std::cout << "GLP_EBADB" << std::endl; break;
+                    case GLP_ESING: std::cout << "GLP_ESING" << std::endl; break;
+                    case GLP_ECOND: std::cout << "GLP_ECOND" << std::endl; break;
+                    case GLP_EBOUND: std::cout << "GLP_EBOUND" << std::endl; break;
+                    case GLP_EFAIL: std::cout << "GLP_EFAIL" << std::endl; break;
+                    case GLP_EOBJLL: std::cout << "GLP_EOBJLL" << std::endl; break;
+                    case GLP_EOBJUL: std::cout << "GLP_EOBJUL" << std::endl; break;
+                    case GLP_EITLIM: std::cout << "GLP_EITLIM" << std::endl; break;
+                    case GLP_ETMLIM: std::cout << "GLP_ETMLIM" << std::endl; break;
+                    case GLP_ENOPFS: std::cout << "GLP_ENOPFS" << std::endl; break;
+                    case GLP_ENODFS: std::cout << "GLP_ENODFS" << std::endl; break;
+                    }
 
                     // retrieve results
                     for (auto & var : lambdas){
@@ -1128,11 +1148,52 @@ namespace panoramix {
                         constraints[var.constraintId].slackValue = s;
                     }
                 }
-                else{
+                else if (method == Exact) {
+                    glp_smcp params;
+                    glp_init_smcp(&params);
+
+                    params.msg_lev = GLP_MSG_ON;
+                    int stat = glp_exact(problem, &params);
+                    switch (stat) {
+                    case 0: std::cout << "solved" << std::endl; break;
+                    case GLP_EBADB: std::cout << "GLP_EBADB" << std::endl; break;
+                    case GLP_ESING: std::cout << "GLP_ESING" << std::endl; break;
+                    case GLP_ECOND: std::cout << "GLP_ECOND" << std::endl; break;
+                    case GLP_EBOUND: std::cout << "GLP_EBOUND" << std::endl; break;
+                    case GLP_EFAIL: std::cout << "GLP_EFAIL" << std::endl; break;
+                    case GLP_EOBJLL: std::cout << "GLP_EOBJLL" << std::endl; break;
+                    case GLP_EOBJUL: std::cout << "GLP_EOBJUL" << std::endl; break;
+                    case GLP_EITLIM: std::cout << "GLP_EITLIM" << std::endl; break;
+                    case GLP_ETMLIM: std::cout << "GLP_ETMLIM" << std::endl; break;
+                    case GLP_ENOPFS: std::cout << "GLP_ENOPFS" << std::endl; break;
+                    case GLP_ENODFS: std::cout << "GLP_ENODFS" << std::endl; break;
+                    }
+
+                    // retrieve results
+                    for (auto & var : lambdas) {
+                        double lambda = glp_get_col_prim(problem, var.varId + 1);
+                        // update line coordinates
+                        lines[var.lineId].component = lineDeterminers[var.lineId](lambda);
+                    }
+                    for (auto & var : slacks) {
+                        double s = glp_get_col_prim(problem, var.varId + 1);
+                        // set the slack value for constraint
+                        constraints[var.constraintId].slackValue = s;
+                    }
+                }
+                else if(method == Interior){
                     glp_iptcp params;
+                    
                     glp_init_iptcp(&params);
                     params.msg_lev = GLP_MSG_ON;
                     int stat = glp_interior(problem, &params);
+                    switch (stat) {
+                    case 0: std::cout << "solved" << std::endl; break;
+                    case GLP_EFAIL: std::cout << "GLP_EFAIL" << std::endl; break;
+                    case GLP_ENOCVG: std::cout << "GLP_ENOCVG" << std::endl; break;
+                    case GLP_EITLIM: std::cout << "GLP_EITLIM" << std::endl; break;
+                    case GLP_EINSTAB: std::cout << "GLP_EINSTAB" << std::endl; break;
+                    }
 
                     // retrieve results
                     for (auto & var : lambdas){
@@ -1413,7 +1474,7 @@ namespace panoramix {
             MinimumSpanningTree(lineIds.begin(), lineIds.end(), consIds.begin(), consIds.end(),
                 std::back_inserter(MSTconsIds),
                 [&constraints](size_t e){ return std::make_pair(constraints[e].mergedSpatialLineSegmentIds[0], constraints[e].mergedSpatialLineSegmentIds[1]); },
-                [&constraints](size_t e1, size_t e2){ return constraints[e1].slackValue < constraints[e2].slackValue;}
+                [&constraints](size_t e1, size_t e2){ return abs(constraints[e1].slackValue) < abs(constraints[e2].slackValue);}
             );
             std::vector<ConstraintData> MSTconstraints(MSTconsIds.size());
             for (size_t i = 0; i < MSTconsIds.size(); i++){
@@ -1642,7 +1703,8 @@ namespace panoramix {
                     spatialContour.reserve(rd.contour.size());
                     std::transform(rd.contour.begin(), rd.contour.end(), std::back_inserter(spatialContour), 
                         [&vd](const PixelLoc & p) {
-                        return vd.camera.spatialDirection(p);
+                        auto direction = vd.camera.spatialDirection(p);
+                        return direction / norm(direction);
                     });
                     regionSpatialContours[ri] = spatialContour;
                 }
@@ -1776,6 +1838,7 @@ namespace panoramix {
             //  2. connectivity with line sketches
 
 
+            
 
 
             // pairwise potentials:

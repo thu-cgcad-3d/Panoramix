@@ -216,7 +216,7 @@ namespace panoramix {
         }
 
         void RegionsNet::computeImageFeatures() {
-            NOT_IMPLEMENTED_YET();
+            //NOT_IMPLEMENTED_YET();
         }
 
     }
