@@ -1699,10 +1699,10 @@ namespace panoramix {
                     const ViewsNet::ViewData & vd = view.data;
                     const RegionsNet::RegionData & rd = region.data;
 
-                    assert(!rd.contour.empty() && "Region contour not initialized yet?");
+                    assert(!rd.contours.empty() && "Region contour not initialized yet?");
                     std::vector<Vec3> spatialContour;
-                    spatialContour.reserve(rd.contour.size());
-                    std::transform(rd.contour.begin(), rd.contour.end(), std::back_inserter(spatialContour), 
+                    spatialContour.reserve(rd.contours.front().size());
+                    std::transform(rd.contours.front().begin(), rd.contours.front().end(), std::back_inserter(spatialContour), 
                         [&vd](const PixelLoc & p) {
                         auto direction = vd.camera.spatialDirection(p);
                         return direction / norm(direction);
@@ -1733,7 +1733,7 @@ namespace panoramix {
             
             for (auto & rip : regionSpatialContours) {
                 auto & ri = rip.first;
-                auto & riContour2d = _views.data(ri.viewHandle).regionNet->regions().data(ri.regionHandle).contour;
+                auto & riContour2d = _views.data(ri.viewHandle).regionNet->regions().data(ri.regionHandle).contours.front();
                 auto & riCamera = _views.data(ri.viewHandle).camera;
                 double riArea = _views.data(ri.viewHandle).regionNet->regions().data(ri.regionHandle).area;
 

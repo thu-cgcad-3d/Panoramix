@@ -20,7 +20,7 @@ namespace panoramix {
                 Image regionMask; // 8UC1
                 Vec2 center;
                 double area;
-                std::vector<PixelLoc> contour;
+                std::vector<std::vector<PixelLoc>> contours;
                 Box2 boundingBox;
             };
             struct BoundaryData {

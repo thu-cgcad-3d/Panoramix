@@ -21,6 +21,12 @@ namespace panoramix {
             return std::exp(- Square(x / sigma) / 2.0);
         }
 
+        // pitfall
+        template <class T, class K>
+        inline T Pitfall(const T & x, const K & sigma) {
+            return abs(x) <= sigma ? Square(x / sigma) : 1;
+        }
+
 
         /// distance functions
         // for real numbers
@@ -208,6 +214,7 @@ namespace panoramix {
             inline bool empty() const { return size() == 0; }
 
             inline void clear() { return _rtree->RemoveAll(); }
+            inline const BoundingBoxFunctorT & getBoundingBox() const { return _getBoundingBox; }
 
             inline void insert(const T & t) {
                 BoxType box = _getBoundingBox(t);
@@ -238,6 +245,12 @@ namespace panoramix {
 
             template <class CallbackFunctorT>
             inline int search(const BoxType & b, CallbackFunctorT callback) const {
+                return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
+            }
+
+            template <class CallbackFunctorT>
+            inline int searchNear(const T & t, CallbackFunctorT callback) const {
+                auto b = _getBoundingBox(t);
                 return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
             }
 

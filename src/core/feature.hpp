@@ -189,7 +189,7 @@ namespace panoramix {
         public:
             using Feature = Image; // CV_32SC1, from 0 to numRegion, use at<int32_t> to extract
             struct Params {
-                inline Params() : sigma(0.8f), c(100.0f), minSize(100) {}
+                inline Params() : sigma(0.8f), c(100.0f), minSize(200) {}
                 float sigma; // for smoothing
                 float c; // threshold function
                 int minSize; // min component size
