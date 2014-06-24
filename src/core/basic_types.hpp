@@ -110,6 +110,51 @@ namespace panoramix {
         using SizeI = cv::Size2i;
 
 
+
+        // infinite line
+        template <class T, int N>
+        struct InfiniteLine {
+            inline InfiniteLine() {}
+            inline InfiniteLine(const Point<T, N> & a, const Vec<T, N> & d) : anchor(a), direction(d) {}
+            Point<T, N> anchor;
+            Vec<T, N> direction;
+        };
+        template <class T, int N>
+        inline bool operator == (const InfiniteLine<T, N> & a, const InfiniteLine<T, N> & b) {
+            return a.anchor == b.anchor && a.direction == b.direction;
+        }
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, InfiniteLine<T, N> & p) {
+            ar(p.anchor, p.direction);
+        }
+        using InfiniteLine2 = InfiniteLine<double, 2>;
+        template <class T>
+        inline Vec<T, 3> GetLine2Coeffs(const InfiniteLine<T, 2> & line) {
+            return Vec<T, 3>{line.direction[1], 
+                -line.direction[0], 
+                -(line.direction[1] * line.anchor[0] - line.direction[0] * line.anchor[1])
+            };
+        }
+
+
+        // plane
+        template <class T, int N>
+        struct Plane {
+            Point<T, N> anchor;
+            Vec<T, N> normal;
+        };
+        template <class T, int N>
+        inline bool operator == (const Plane<T, N> & a, const Plane<T, N> & b) {
+            return a.anchor == b.anchor && a.normal == b.normal;
+        }
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, Plane<T, N> & p) {
+            ar(p.anchor, p.normal);
+        }
+        using Plane3 = Plane<double, 3>;
+
+
+
         // line
         template <class T, int N> 
         struct Line {
@@ -120,6 +165,7 @@ namespace panoramix {
             inline T length() const { return norm(first - second); }
             inline Vec<T, N> direction() const { return second - first; }
             inline Line reversed() const { return Line(second, first); }
+            inline InfiniteLine<T, N> infinieLine() const { return InfiniteLine<T, N>{ first, second - first }; }
             Point<T, N> first, second;
         };
         template <class T, int N>
@@ -173,23 +219,6 @@ namespace panoramix {
         }
         using HLine2 = HLine<double, 2>;
         using HLine3 = HLine<double, 3>;
-
-
-        // plane
-        template <class T, int N>
-        struct Plane {
-            Point<T, N> anchor;
-            Vec<T, N> normal;
-        };
-        template <class T, int N>
-        inline bool operator == (const Plane<T, N> & a, const Plane<T, N> & b) {
-            return a.anchor == b.anchor && a.normal == b.normal;
-        }
-        template <class Archive, class T, int N>
-        inline void serialize(Archive & ar, Plane<T, N> & p) {
-            ar(p.anchor, p.normal);
-        }
-        using Plane3 = Plane<double, 3>;
 
 
 

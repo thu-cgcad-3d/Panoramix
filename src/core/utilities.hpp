@@ -15,6 +15,12 @@ namespace panoramix {
             return v * v;
         }
 
+        // gaussian
+        template <class T, class K>
+        inline T Gaussian(const T & x, const K & sigma) {
+            return std::exp(- Square(x / sigma) / 2.0);
+        }
+
 
         /// distance functions
         // for real numbers
@@ -364,6 +370,22 @@ namespace panoramix {
             lineDir /= norm(lineDir);
             T projRatio = (p - line.first).dot(lineDir) / line.length();
             return PositionOnLine<T, N>(line, projRatio);
+        }
+
+        // returns (distance, nearest point)
+        template <class T, int N>
+        std::pair<T, Point<T, N>> DistanceFromPointToLine(const Point<T, N> & p, const InfiniteLine<T, N> & line) {
+            Vec<T, N> lineDir = line.direction;
+            lineDir /= norm(lineDir);
+            auto root = (p - line.anchor).dot(lineDir) * lineDir + line.anchor;
+            return std::make_pair(norm(p - root), root);
+        }
+
+        // returns signed distance
+        template <class T>
+        T SignedDistanceFromPointToLine(const Point<T, 2> & p, const InfiniteLine<T, 2> & line) {
+            auto coeffs = GetLine2Coeffs(line);
+            return (coeffs[0] * p[0] + coeffs[1] * p[1] + coeffs[2]) / sqrt(Square(coeffs[0]) + Square(coeffs[1]));
         }
 
         // returns (distance, nearest position)

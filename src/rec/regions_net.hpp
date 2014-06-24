@@ -26,6 +26,10 @@ namespace panoramix {
             struct BoundaryData {
                 std::vector<std::vector<PixelLoc>> edges;
                 double length;
+                InfiniteLine2 fittedLine;
+                double straightness;
+                double tjunctionLikelihood;
+                std::vector<std::vector<Point2>> sampledPoints;
             };
             using RegionsGraph = GraphicalModel02<RegionData, BoundaryData>;
             using RegionHandle = HandleAtLevel<0>;

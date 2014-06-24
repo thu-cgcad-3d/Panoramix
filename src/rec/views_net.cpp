@@ -1676,6 +1676,7 @@ namespace panoramix {
                 r -= b;
                 return r;
             }
+
         }
  
 
@@ -1825,29 +1826,32 @@ namespace panoramix {
                     RegionMapEdge e;
                     e.isOverlap = false;
                     e.asBoundary.boundaryIndex = { vd.topo.hd, regionBoundaryData.topo.hd };
+                    e.asBoundary.isOccludingBoundary = false;          
+                   
+                    
+
                     regionMap.add<1>({ rh1, rh2 }, e);
                 }
             }
+
 
             std::cout << "region num: " << regionMap.internalElements<0>().size() << std::endl;
             std::cout << "edge num: " << regionMap.internalElements<1>().size() << std::endl;
 
             // inference region orientations and spatial connectivity of boundaries
-            // unary potentials:
-            //  1. coincidence with principle directions
-            //  2. connectivity with line sketches
-
-
+            using namespace deriv;
+            ExpressionGraph graph;
             
+            // r
+            std::vector<Expression<Eigen::Vector3d>> thetas(regionMap.internalElements<0>().size());
+            for (auto & r : regionMap.elements<0>()) {
+                thetas[r.topo.hd.id] = composeFunction(graph, [&r]() {return CVMatToEigenMat(r.data.planeCoeffs); });
+            }
+
+            // l
+            std::vector<Expression<double>> etas;
 
 
-            // pairwise potentials:
-            //  1. disconnect punishment between adjacent regions
-            //  2. fold punishment between adjacent regions
-            //  3. overlapped regions
-
-
-            
 
 
             

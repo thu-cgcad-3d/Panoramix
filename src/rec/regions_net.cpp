@@ -144,6 +144,19 @@ namespace panoramix {
 
             }
 
+            double ComputeSpanningArea(const Point2 & a, const Point2 & b, const InfiniteLine2 & line) {
+                auto ad = SignedDistanceFromPointToLine(a, line);
+                auto bd = SignedDistanceFromPointToLine(b, line);
+                auto ap = DistanceFromPointToLine(a, line).second;
+                auto bp = DistanceFromPointToLine(b, line).second;
+                if (ad * bd >= 0) {
+                    return norm(ap - bp) * std::abs(ad + bd) / 2.0;
+                }
+                ad = abs(ad);
+                bd = abs(bd);
+                auto len = norm(ap - bp);
+                return (ad * ad + bd * bd) * len / (ad + bd) / 2.0;
+            }
         }
 
         void RegionsNet::buildNetAndComputeGeometricFeatures() {
@@ -185,34 +198,79 @@ namespace panoramix {
                     for (int i = 0; i < e.size()-1; i++) {
                         bd.length += Distance(e[i], e[i + 1]);
                     }
-                }                
+                } 
+
+                // compute straightness
+                std::vector<Point<float, 2>> points;
+                for (auto & e : edges) {
+                    for (auto & p : e) {
+                        points.push_back(Point<float, 2>(p.x, p.y));
+                    }
+                }
+
+                cv::Vec4f line;
+                cv::fitLine(points, line, CV_DIST_L2, 0, 0.01, 0.01);
+                bd.fittedLine = InfiniteLine2({ line[2], line[3] }, { line[0], line[1] });
+                double interArea = 0;
+                for (auto & e : edges) {
+                    for (int i = 0; i < e.size() - 1; i++) {
+                        interArea += ComputeSpanningArea(
+                            Point2(e[i].x, e[i].y),
+                            Point2(e[i + 1].x, e[i + 1].y),
+                            bd.fittedLine);
+                    }
+                }
+
+                bd.straightness = Gaussian(interArea / bd.length, 0.3);
+                if (edges.size() == 1 && edges.front().size() == 2) {
+                    assert(FuzzyEquals(bd.straightness, 1.0, 0.01) && "simple line should has the best straightness..");
+                }
+
+                // compute tjunction likelihood
+                for (auto & e : edges) {
+                    if (e.size() <= 1)
+                        continue;
+                    auto head = e.front();
+                    auto tail = e.back();
+                    // TODO
+                }
+
+                // collect sampled points
+                // TODO
+
                 _regions.add<1>({ RegionHandle(rids.first), RegionHandle(rids.second) }, bd);
             }
 
             // visualize region contours
-            Image regionVis(_image.rows, _image.cols, CV_8UC3, vis::Color(100, 100, 100));
-            std::vector<std::vector<std::vector<PixelLoc>>> boundaries;
-            boundaries.reserve(_regions.internalElements<1>().size());
-            for (auto & b : _regions.elements<1>()) {
-                boundaries.push_back(b.data.edges);
-            }
-            auto & ctable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
-            for (auto & r : _regions.elements<0>()) {
-                auto color = vis::Color(0, 0, 0, 1);
-                auto & polyline = r.data.contour;
-                for (int j = 0; j < polyline.size() - 1; j++) {
-                    cv::line(regionVis, polyline[j], polyline[j + 1], color, 2);
+            IF_DEBUG_USING_VISUALIZERS {
+                Image regionVis(_image.rows, _image.cols, CV_8UC3, vis::Color(100, 100, 100));
+                std::vector<std::vector<std::vector<PixelLoc>>> boundaries;
+                std::vector<double> straightnesses;
+                boundaries.reserve(_regions.internalElements<1>().size());
+                straightnesses.reserve(_regions.internalElements<1>().size());
+                for (auto & b : _regions.elements<1>()) {
+                    boundaries.push_back(b.data.edges);
+                    straightnesses.push_back(b.data.straightness);
                 }
-            }
-            for (int i = 0; i < boundaries.size(); i++) {
-                auto color = ctable[i % ctable.size()];
-                for (auto & polyline : boundaries[i]) {
+                auto & ctable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
+                for (auto & r : _regions.elements<0>()) {
+                    auto color = vis::Color(0, 0, 0, 1);
+                    auto & polyline = r.data.contour;
                     for (int j = 0; j < polyline.size() - 1; j++) {
-                        cv::line(regionVis, polyline[j], polyline[j + 1], color);
+                        cv::line(regionVis, polyline[j], polyline[j + 1], color, 2);
                     }
                 }
+                for (int i = 0; i < boundaries.size(); i++) {
+                    //auto color = ctable[i % ctable.size()];
+                    auto color = vis::Color(255, 255, 255, 1)*straightnesses[i];
+                    for (auto & polyline : boundaries[i]) {
+                        for (int j = 0; j < polyline.size() - 1; j++) {
+                            cv::line(regionVis, polyline[j], polyline[j + 1], color);
+                        }
+                    }
+                }
+                vis::Visualizer2D(regionVis) << vis::manip2d::Show();
             }
-            vis::Visualizer2D(regionVis) << vis::manip2d::Show();
         }
 
         void RegionsNet::computeImageFeatures() {
