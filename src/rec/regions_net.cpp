@@ -144,6 +144,14 @@ namespace panoramix {
 
             }
 
+            inline Point2 ToPoint2(const PixelLoc & p) {
+                return Point2(p.x, p.y);
+            }
+
+            inline PixelLoc ToPixelLoc(const Point2 & p) {
+                return PixelLoc(static_cast<int>(p[0]), static_cast<int>(p[1]));
+            }
+
             double ComputeSpanningArea(const Point2 & a, const Point2 & b, const InfiniteLine2 & line) {
                 auto ad = SignedDistanceFromPointToLine(a, line);
                 auto bd = SignedDistanceFromPointToLine(b, line);
@@ -180,8 +188,6 @@ namespace panoramix {
                 //_regionsRTree.insert(vh);  
             }
 
-            // find tri-pixel which are adjacent to >3 regions
-            // break contours of regions with tri-pixel
             std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges;
             std::map<std::tuple<int, int, int>, std::set<PixelLoc, ComparePixelLoc>> triPixels;
             FindContoursOfRegionsAndBoundaries(_segmentedRegions, regionNum, boundaryEdges, triPixels);
@@ -221,35 +227,62 @@ namespace panoramix {
                     }
                 }
 
-                bd.straightness = Gaussian(interArea / bd.length, 0.3);
+                bd.straightness = Gaussian(interArea / bd.length, 1.0);
                 if (edges.size() == 1 && edges.front().size() == 2) {
                     assert(FuzzyEquals(bd.straightness, 1.0, 0.01) && "simple line should has the best straightness..");
                 }
 
+                // collect sampled points
+                static const double stepLen = 8;
+                bd.sampledPoints.resize(bd.edges.size());
+                for (int i = 0; i < bd.edges.size(); i++) {
+                    auto & e = bd.edges[i];
+                    assert(e.size() >= 2 && "invalid point num for an edge");
+                    double remLen = 0;
+                    auto & s = bd.sampledPoints[i];
+                    s.push_back(ToPoint2(e.front()));
+                    for (int k = 1; k < e.size(); k++){
+                        auto & nextP = ToPoint2(e[k]);
+                        remLen += Distance(s.back(), nextP);
+                        while (remLen >= stepLen) {
+                            auto p = s.back() + (nextP - s.back()) * stepLen / remLen;
+                            s.push_back(p);
+                            remLen -= stepLen;
+                        }
+                    }
+                }
+
+                _regions.add<1>({ RegionHandle(rids.first), RegionHandle(rids.second) }, bd);
+            }
+
+            for (auto & boundary : _regions.elements<1>()) {
                 // compute tjunction likelihood
-                for (auto & e : edges) {
+                auto & bd = boundary.data;
+                auto rh1 = boundary.topo.lowers[0];
+                auto rh2 = boundary.topo.lowers[1];
+                
+                for (auto & e : bd.edges) {
                     if (e.size() <= 1)
                         continue;
                     auto head = e.front();
                     auto tail = e.back();
-                    // TODO
+
                 }
-
-                // collect sampled points
-                // TODO
-
-                _regions.add<1>({ RegionHandle(rids.first), RegionHandle(rids.second) }, bd);
             }
+
 
             // visualize region contours
             IF_DEBUG_USING_VISUALIZERS {
                 Image regionVis(_image.rows, _image.cols, CV_8UC3, vis::Color(100, 100, 100));
                 std::vector<std::vector<std::vector<PixelLoc>>> boundaries;
+                std::vector<std::vector<std::vector<Point2>>> sampledPoints;
                 std::vector<double> straightnesses;
                 boundaries.reserve(_regions.internalElements<1>().size());
+                sampledPoints.reserve(_regions.internalElements<1>().size());
                 straightnesses.reserve(_regions.internalElements<1>().size());
                 for (auto & b : _regions.elements<1>()) {
                     boundaries.push_back(b.data.edges);
+                    sampledPoints.push_back(b.data.sampledPoints);
                     straightnesses.push_back(b.data.straightness);
                 }
                 auto & ctable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
@@ -257,15 +290,20 @@ namespace panoramix {
                     auto color = vis::Color(0, 0, 0, 1);
                     auto & polyline = r.data.contour;
                     for (int j = 0; j < polyline.size() - 1; j++) {
-                        cv::line(regionVis, polyline[j], polyline[j + 1], color, 2);
+                        cv::line(regionVis, polyline[j], polyline[j + 1], color, 1);
                     }
                 }
                 for (int i = 0; i < boundaries.size(); i++) {
-                    //auto color = ctable[i % ctable.size()];
                     auto color = vis::Color(255, 255, 255, 1)*straightnesses[i];
                     for (auto & polyline : boundaries[i]) {
                         for (int j = 0; j < polyline.size() - 1; j++) {
                             cv::line(regionVis, polyline[j], polyline[j + 1], color);
+                        }
+                    }
+                    auto pcolor = ctable[i % ctable.size()];
+                    for (auto & s : sampledPoints[i]) {
+                        for (auto & p : s) {
+                            cv::circle(regionVis, ToPixelLoc(p), 1, pcolor);
                         }
                     }
                 }
