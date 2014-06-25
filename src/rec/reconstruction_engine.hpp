@@ -1,9 +1,12 @@
-#ifndef PANORAMIX_CORE_VIEWS_NET_HPP
-#define PANORAMIX_CORE_VIEWS_NET_HPP
+#ifndef PANORAMIX_CORE_RECONSTRUCTION_ENGINE_HPP
+#define PANORAMIX_CORE_RECONSTRUCTION_ENGINE_HPP
 
 #include "../core/basic_types.hpp"
 #include "../core/feature.hpp"
 #include "../core/utilities.hpp"
+
+#include "../deriv/derivative.hpp"
+
 #include "regions_net.hpp"
 
 namespace panoramix {
@@ -101,6 +104,7 @@ namespace panoramix {
             void reconstructFaces();
                 
         public:
+            // view data
             struct ViewData {
                 // cameras
                 PerspectiveCamera originalCamera, camera;
@@ -122,10 +126,28 @@ namespace panoramix {
                 //RTreeWrapper<KeyPoint> keypointsForMatchingRTree;
             };
 
+            // view connection data
             struct ViewConnectionData {
                 cv::detail::MatchesInfo matchInfo;
             };
 
+
+
+            // component data
+            struct LineStructureComponentData {
+                double eta;
+                deriv::Expression<const double &> etaExpr;
+                std::vector<int> mergedSpatialLineSegmentIds;
+            };
+
+            struct RegionComponentData {
+                Vec3 theta;
+                deriv::Expression<Eigen::Vector3d> thetaExpr;
+                deriv::Expression<double> manhattanEnergy;
+                bool isVoid;
+                ReconstructionEngine::ViewHandle viewHandle;
+                RegionsNet::RegionHandle regionHandle;
+            };
 
             struct ComponentData {
                 enum class Type {
@@ -134,59 +156,56 @@ namespace panoramix {
                     Region
                 };
                 explicit ComponentData(Type t = Type::UnInitialized);
-
                 Type type;
-                struct {
-                    double eta;
-                    std::vector<int> mergedSpatialLineSegmentIds;
-                } asLineStructure;
-                struct {
-                    Vec3 theta;
-                    bool isVoid;
-                    ReconstructionEngine::ViewHandle viewHandle;
-                    RegionsNet::RegionHandle regionHandle;
-                } asRegion;
+                LineStructureComponentData asLineStructure;
+                RegionComponentData asRegion;
+            };
+
+            // constraint data
+            struct RegionOverlapConstraintData {
+                double overlapRatio;
+            };
+
+            struct LineStructureConnectivityConstraintData {
+                LineStructureConnectivityConstraintData();
+
+                size_t mergedSpatialLineSegmentIds[2]; // corresponded mergedSpatialLineSegments ids
+                Vec3 position; // location of intersecion
+
+                // [i][0] -> line lengths with class i lying between vp[i] and position
+                // [i][1] -> line lengths with class i lying between position and anti-vp[i]
+                double lineVotings[3][2];
+                double weight;
+                struct { double I, L, X, T, Triplet; } junctionWeights;
+                enum { Intersection, Incidence } type;
+                double slackValue; // retreived after optimization
+            };
+
+            struct RegionPairConsistencyConstraintData {
+                ReconstructionEngine::ViewHandle viewHandle;
+                RegionsNet::BoundaryHandle boundaryHandle;
+                bool isOccludingBoundary;
             };
 
             struct ConstraintData {
                 enum class Type {
                     UnInitialized,
-                    Overlap,
-                    Manhattan,
+                    RegionOverlap,
                     LineStructureConnectivity,
-                    RegionConnectivity,
-                    NormalConsistency
+                    RegionPairConsistency
                 };
                 explicit ConstraintData(Type t = Type::UnInitialized);
 
                 Type type;
-                struct {
+                RegionOverlapConstraintData asRegionOverlap;
+                LineStructureConnectivityConstraintData asLineStructureConnectivity;
+                RegionPairConsistencyConstraintData asRegionPairConsistency;
 
-                } asOverlap;
-                struct {
-
-                } asManhattan;
-                struct LineStructureConnectivity {
-                    size_t mergedSpatialLineSegmentIds[2]; // corresponded mergedSpatialLineSegments ids
-                    Vec3 position; // location of intersecion
-
-                    // [i][0] -> line lengths with class i lying between vp[i] and position
-                    // [i][1] -> line lengths with class i lying between position and anti-vp[i]
-                    double lineVotings[3][2];
-                    double weight;
-                    struct { double I, L, X, T, Triplet; } junctionWeights;
-                    enum { Intersection, Incidence } type;
-                    double slackValue; // retreived after optimization
-                } asLineStructureConnectivity;
-                struct {
-
-                } asRegionConnectivity;
-                struct {
-
-                } asNormalConsistency;
+                deriv::Expression<double> constraintEnergy;
             };
 
 
+            // global data
             struct GlobalData {
                 Image panorama;
 

@@ -15,7 +15,7 @@ namespace panoramix {
             namespace detail {
                 //! Used to delay a static_assert until template instantiation
                 template <class T>
-                struct delay_static_assert : std::false_type {};
+                struct delay_static_assert : no {};
             } // namespace detail
 
             //! Creates a test for whether a non const member function exists

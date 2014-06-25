@@ -3,7 +3,7 @@
 #include "../src/core/mesh_maker.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/rec/reconstruction_engine.hpp"
-#include "../src/rec/views_net_visualize.hpp"
+#include "../src/rec/reconstruction_engine_visualize.hpp"
 #include "../src/rec/regions_net_visualize.hpp"
 #include "gtest/gtest.h"
 
