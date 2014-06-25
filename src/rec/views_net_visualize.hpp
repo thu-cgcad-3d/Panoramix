@@ -3,7 +3,7 @@
 
 #include "../vis/visualize2d.hpp"
 #include "../vis/visualize3d.hpp"
-#include "views_net.hpp"
+#include "reconstruction_engine.hpp"
  
 namespace panoramix {
     namespace rec {
@@ -12,14 +12,14 @@ namespace panoramix {
         using vis::Visualizer3D;
 
         // 2d vis for vertdata
-        Visualizer2D operator << (Visualizer2D viz, const ViewsNet::ViewData & vd);
+        Visualizer2D operator << (Visualizer2D viz, const ReconstructionEngine::ViewData & vd);
 
 
         // 3d vis for globaldata
-        Visualizer3D operator << (Visualizer3D viz, const ViewsNet::GlobalData & netgb);
+        Visualizer3D operator << (Visualizer3D viz, const ReconstructionEngine::GlobalData & netgb);
 
         // 2d for whole net
-        Visualizer2D operator << (Visualizer2D viz, const ViewsNet & net);
+        Visualizer2D operator << (Visualizer2D viz, const ReconstructionEngine & net);
 
     }
 }

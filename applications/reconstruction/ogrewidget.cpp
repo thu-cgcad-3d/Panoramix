@@ -1,6 +1,6 @@
 
-#include "../../core/mesh_maker.hpp"
-#include "../../rec/views_net_visualize.hpp"
+#include "../../src/core/mesh_maker.hpp"
+#include "../../src/rec/views_net_visualize.hpp"
 
 #include "ogrewidget.hpp"
 
@@ -75,18 +75,18 @@ void OgreWidget::setupPanorama(const QString & filename) {
 
 
     /// insert into views net
-    rec::ViewsNet::Params params;
+    rec::ReconstructionEngine::Params params;
     params.mjWeightT = 2.0;
     params.intersectionConstraintLineDistanceAngleThreshold = 0.05;
     params.incidenceConstraintLineDistanceAngleThreshold = 0.2;
     params.mergeLineDistanceAngleThreshold = 0.05;
-    rec::ViewsNet net(params);
+    rec::ReconstructionEngine net(params);
 
     net.insertPanorama(panorama, cams, originCam);
 
     #pragma omp parallel for
     for (int i = 0; i < net.views().internalElements<0>().size(); i++) {
-        auto viewHandle = rec::ViewsNet::ViewHandle(i);
+        auto viewHandle = rec::ReconstructionEngine::ViewHandle(i);
         net.computeFeatures(viewHandle);
         net.buildRegionNet(viewHandle);
     }

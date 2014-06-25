@@ -704,7 +704,7 @@ namespace panoramix {
         template <class DataT, int ChildN>
         struct LayerConfig {
             using DataType = DataT;
-            static const int ChildNum = ChildN;
+            enum { ChildNum = ChildN };
         };
 
         template <class T>
@@ -948,6 +948,9 @@ namespace panoramix {
 
         template <class VertDataT, class ConstraintDataT, class HyperConstraintDataT>
         using GraphicalModel0XX = GraphicalModel<VertDataT, LayerConfig<ConstraintDataT, Dynamic>, LayerConfig<HyperConstraintDataT, Dynamic>>;
+
+
+        //template <class ComponentData1T, class ComponentData2T, class >
 
     }
 }

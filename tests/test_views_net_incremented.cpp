@@ -2,7 +2,7 @@
 
 #include "../src/core/mesh_maker.hpp"
 #include "../src/core/utilities.hpp"
-#include "../src/rec/views_net.hpp"
+#include "../src/rec/reconstruction_engine.hpp"
 #include "../src/rec/views_net_visualize.hpp"
 #include "../src/rec/regions_net_visualize.hpp"
 #include "gtest/gtest.h"
@@ -45,12 +45,12 @@ void run(){
 
 
     /// insert into views net
-    rec::ViewsNet::Params params;
+    rec::ReconstructionEngine::Params params;
     params.mjWeightT = 2.0;
     params.intersectionConstraintLineDistanceAngleThreshold = 0.05;
     params.incidenceConstraintLineDistanceAngleThreshold = 0.2;
     params.mergeLineDistanceAngleThreshold = 0.05;
-    rec::ViewsNet net(params);
+    rec::ReconstructionEngine net(params);
 
     for (int i = 0; i < cams.size(); i++){
         std::cout << "photo: " << i << std::endl;

@@ -1,6 +1,6 @@
 #include "../src/core/mesh_maker.hpp"
 #include "../src/core/utilities.hpp"
-#include "../src/rec/views_net.hpp"
+#include "../src/rec/reconstruction_engine.hpp"
 #include "../src/rec/views_net_visualize.hpp"
 #include "../src/rec/regions_net_visualize.hpp"
 #include "gtest/gtest.h"
@@ -49,14 +49,14 @@ TEST(ViewsNet, ViewsNet) {
     });
 
     /// insert all into views net
-    rec::ViewsNet::Params params;
+    rec::ReconstructionEngine::Params params;
     params.mjWeightT = 2.0;
     params.intersectionConstraintLineDistanceAngleThreshold = 0.05;
     params.incidenceConstraintLineDistanceAngleThreshold = 0.2;
     params.mergeLineDistanceAngleThreshold = 0.05;
-    rec::ViewsNet net(params);
+    rec::ReconstructionEngine net(params);
     
-    std::vector<rec::ViewsNet::ViewHandle> viewHandles;
+    std::vector<rec::ReconstructionEngine::ViewHandle> viewHandles;
     for (int i = 0; i < cams.size(); i++){
         auto & camera = cams[i];
         const auto & im = ims[i];
@@ -67,7 +67,7 @@ TEST(ViewsNet, ViewsNet) {
         using namespace std::chrono;
         auto startTime = high_resolution_clock::now();
         
-        auto computeFea = [](rec::ViewsNet* netptr, rec::ViewsNet::ViewHandle vh){
+        auto computeFea = [](rec::ReconstructionEngine* netptr, rec::ReconstructionEngine::ViewHandle vh){
             std::cout << "photo " << vh.id << std::endl;
             std::cout << "computing features ..." << std::endl;
             netptr->computeFeatures(vh);
@@ -79,7 +79,7 @@ TEST(ViewsNet, ViewsNet) {
         while (vid < net.views().internalElements<0>().size()){
             std::vector<std::thread> t4(std::min(net.views().internalElements<0>().size() - vid, 4ull));
             for (auto & t : t4)
-                t = std::thread(computeFea, &net, rec::ViewsNet::ViewHandle(vid++));
+                t = std::thread(computeFea, &net, rec::ReconstructionEngine::ViewHandle(vid++));
             for (auto & t : t4)
                 t.join();
         }

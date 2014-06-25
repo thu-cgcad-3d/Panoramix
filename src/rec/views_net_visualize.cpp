@@ -7,7 +7,7 @@ namespace panoramix {
 
         using namespace core;
 
-        Visualizer2D operator << (Visualizer2D viz, const ViewsNet::ViewData & vd) {
+        Visualizer2D operator << (Visualizer2D viz, const ReconstructionEngine::ViewData & vd) {
             viz.setImage(vd.image);
             
             viz.params.thickness = 2;
@@ -21,7 +21,7 @@ namespace panoramix {
             return viz;
         }
 
-        Visualizer3D operator << (Visualizer3D viz, const ViewsNet::GlobalData & netgb) {
+        Visualizer3D operator << (Visualizer3D viz, const ReconstructionEngine::GlobalData & netgb) {
             std::vector<Line3> consLines;
             std::vector<Point3> consPoints;
             /*consLines.reserve(netgb.constraints.size());
@@ -44,7 +44,7 @@ namespace panoramix {
                 << netgb.mergedSpatialLineSegmentsClassifiedWithStructureIds;
         }
 
-        Visualizer2D operator << (Visualizer2D viz, const ViewsNet & net) {
+        Visualizer2D operator << (Visualizer2D viz, const ReconstructionEngine & net) {
 
             return viz;
         }

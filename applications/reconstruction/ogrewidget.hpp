@@ -6,7 +6,7 @@
 #include <QtGui>
 #include <QtOpenGL>
 
-#include "../../src/rec/views_net.hpp"
+#include "../../src/rec/reconstruction_engine.hpp"
 
 class OgreWidget : public QGLWidget {
 public:
@@ -49,5 +49,5 @@ private:
     Ogre::SceneManager *_sceneMgr;
     QPointF _lastPos;
 
-    panoramix::rec::ViewsNet _viewsNet;
+    panoramix::rec::ReconstructionEngine _viewsNet;
 };
