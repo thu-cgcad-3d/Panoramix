@@ -123,6 +123,33 @@ namespace panoramix {
             return graph.as<typename OpTraitsT::OutputType>(graph.addNode(std::make_shared<FunctionalOp<OpTraitsT>>(opTraits)));
         }
 
+        // compose Expression without derivative definition
+        template <class FunT, class InputT, class ...InputTs>
+        inline auto ComposeExpressionWithoutDerivativeDefinition(
+            FunT && fun, 
+            const Expression<InputT> & firstInput, 
+            const Expression<InputTs> & ... inputs)
+            -> Expression<decltype(fun(firstInput.result(), inputs.result()...))> {
+
+            using RetT = decltype(fun(firstInput.result(), inputs.result()...));
+            struct TempTraits : public OpTraitsBase<RetT, InputT, InputTs...> {
+                inline explicit TempTraits(FunT && ff) : f(std::forward<FunT>(ff)) {}
+                inline RetT value(ResultType<InputT> i1, ResultType<InputTs> ... is) const {
+                    return f(i1, is...);
+                }
+                inline void derivatives(
+                    Expression<RetT> output,
+                    DerivativeExpression<RetT> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<InputT> input1,
+                    OriginalAndDerivativeExpression<InputTs> ... inputs) const {
+                    assert(false && "derivative not defined!");
+                }
+                FunT f;
+            };
+            
+            return ComposeExpression(TempTraits(std::forward<FunT>(fun)), firstInput, inputs...);
+        }
+
 
     }
 }

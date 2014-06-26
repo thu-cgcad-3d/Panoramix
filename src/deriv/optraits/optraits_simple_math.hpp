@@ -327,9 +327,28 @@ namespace panoramix {
         }
 
 
-        
-       
+        // acos
+        namespace {
+            using std::acos;
+            template <class T>
+            struct AcosTraits : public OpTraitsBase<decltype(std::acos(std::declval<ResultType<T>>())), T> {
+                inline OutputType value(ResultType<T> input) const {
+                    return std::acos(input);
+                }
+                inline void derivatives(
+                    Expression<OutputType> output,
+                    DerivativeExpression<OutputType> sumOfDOutputs,
+                    OriginalAndDerivativeExpression<T> input) const { // dcos(x) = -1/(1-x^2)^0.5
+                    input.second = (-sumOfDOutputs / pow(1.0 - cwiseProd(input.first, input.first), 0.5)).eval();
+                }
+                virtual ostream & toString(ostream & os) const { os << "acos"; return os; }
+            };
+        }
 
+        template <class T>
+        inline auto acos(const Expression<T> & e) -> decltype(ComposeExpression(AcosTraits<T>(), e)) {
+            return ComposeExpression(AcosTraits<T>(), e);
+        }
 
 
 
@@ -351,6 +370,7 @@ namespace panoramix {
                 }
                 virtual ostream & toString(ostream & os) const { os << "abs"; return os; }
             };
+
         }
 
         template <class T>

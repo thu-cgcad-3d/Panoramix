@@ -46,13 +46,13 @@ namespace panoramix {
 
         template <class MatrixT>
         inline auto matrixToArray(const Expression<MatrixT> & m) 
-            -> decltype(std::declval<MatrixT>().array(), ComposeExpression(MatrixToArrayTraits<MatrixT>(), m)) {
+            -> decltype(ComposeExpression(MatrixToArrayTraits<MatrixT>(), m)) {
             return ComposeExpression(MatrixToArrayTraits<MatrixT>(), m);
         }
 
         template <class ArrayT>
         inline auto arrayToMatrix(const Expression<ArrayT> & a) 
-            -> decltype(std::declval<ArrayT>().matrix(), ComposeExpression(ArrayToMatrixTraits<ArrayT>(), a)) {
+            -> decltype(ComposeExpression(ArrayToMatrixTraits<ArrayT>(), a)) {
             return ComposeExpression(ArrayToMatrixTraits<ArrayT>(), a);
         }
 

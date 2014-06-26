@@ -185,14 +185,19 @@ namespace panoramix {
                 ReconstructionEngine::ViewHandle viewHandle;
                 RegionsNet::BoundaryHandle boundaryHandle;
                 bool isOccludingBoundary;
+                deriv::Expression<double> isOccludingBoundaryExpr; // >0:true; <=0:false
+                deriv::Expression<double> orientationConsistencyEnergyExpr;
+                deriv::Expression<double> connectEnergyExpr;
+                double disconnectEnergy;
             };
 
             struct ConstraintData {
                 enum class Type {
                     UnInitialized,
                     RegionOverlap,
+                    RegionPairConsistency,
                     LineStructureConnectivity,
-                    RegionPairConsistency
+                    RegionLineStructureConnectivity
                 };
                 explicit ConstraintData(Type t = Type::UnInitialized);
 

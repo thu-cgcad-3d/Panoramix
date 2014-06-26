@@ -1694,6 +1694,87 @@ namespace panoramix {
                 return r;
             }*/
 
+
+            struct MinOf6Traits : public deriv::OpTraitsBase<double, double, double, double, double, double, double> {
+                inline double value(const double & e1, const double & e2, const double & e3, const double & e4, const double & e5, const double & e6) const {
+                    return std::min({ e1, e2, e3, e4, e5, e5 });
+                }
+                inline void derivatives(
+                    deriv::Expression<double> output,
+                    deriv::DerivativeExpression<double> sumOfDOutputs,
+                    deriv::OriginalAndDerivativeExpression<double> input1,
+                    deriv::OriginalAndDerivativeExpression<double> input2,
+                    deriv::OriginalAndDerivativeExpression<double> input3,
+                    deriv::OriginalAndDerivativeExpression<double> input4,
+                    deriv::OriginalAndDerivativeExpression<double> input5,
+                    deriv::OriginalAndDerivativeExpression<double> input6) const {
+
+                    std::array<deriv::OriginalAndDerivativeExpression<double>, 6> inputs = { {
+                        input1,
+                        input2,
+                        input3,
+                        input4,
+                        input5,
+                        input6
+                    } };
+                    for (int i = 0; i < 6; i++) {
+                        auto selectMinumunToBeSumOfDOutputs = [output, inputs, i](double sumOfDOutputsVal) -> double {
+                            auto maxPos = std::min_element(inputs.begin(), inputs.end(), 
+                                [](const deriv::OriginalAndDerivativeExpression<double> & a,
+                                const deriv::OriginalAndDerivativeExpression<double> & b) {
+                                return a.first.result() < b.first.result();
+                            });
+                            auto maxId = std::distance(inputs.begin(), maxPos);
+                            if (maxId == i) {
+                                return sumOfDOutputsVal;
+                            } else {
+                                return 0.0;
+                            }
+                        };
+                        inputs[i].second = deriv::ComposeExpressionWithoutDerivativeDefinition(
+                            selectMinumunToBeSumOfDOutputs, sumOfDOutputs);
+                    }                   
+                }
+                virtual std::ostream & toString(std::ostream & os) const { os << "min6"; return os; }
+            };
+
+            inline deriv::Expression<double> minOf6(const std::array<deriv::Expression<double>, 6> & inputs) {
+                return deriv::ComposeExpression(MinOf6Traits(), 
+                    inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5]);
+            }
+
+            inline deriv::Expression<double> gaussianFunc(const deriv::Expression<double> & input, double sigma) {
+                return exp(-input * input / 2.0 / sigma / sigma);
+            }
+
+            struct HFuncTraits : public deriv::OpTraitsBase<double, double> {
+                explicit HFuncTraits(double s) : sigma(s) {}
+                inline double value(const double & e) const {
+                    return abs(e) <= sigma ? Square(e / sigma) : 1.0;
+                }
+                inline void derivatives(deriv::Expression<double> output,
+                    deriv::DerivativeExpression<double> sumOfDOutputs,
+                    deriv::OriginalAndDerivativeExpression<double> input) const {
+                    input.second = deriv::ComposeExpressionWithoutDerivativeDefinition(
+                        [input, this](double sumOfDOutputsVal) -> double{
+                        double inputv = input.first.result();
+                        if (abs(inputv) < sigma) {
+                            return sumOfDOutputsVal * 2.0 * inputv / sigma / sigma;
+                        } else {
+                            return 0.0;
+                        }
+                    }, sumOfDOutputs);
+                }
+                double sigma;
+            };
+
+            inline deriv::Expression<double> hFunc(const deriv::Expression<double> & input, double sigma) {
+                return deriv::ComposeExpression(HFuncTraits(sigma), input);
+            }
+
+            inline deriv::Expression<double> angleFunc(const deriv::Expression<Eigen::Vector3d> & a, const deriv::Expression<Eigen::Vector3d> & b) {
+                return deriv::acos(deriv::dotProd(a, b) / deriv::norm(a) / deriv::norm(b));
+            }
         }
  
 
@@ -1854,30 +1935,141 @@ namespace panoramix {
             std::cout << "component num: " << _constraints.internalElements<0>().size() << std::endl;
             std::cout << "constraint num: " << _constraints.internalElements<1>().size() << std::endl;
 
+            std::cout << "begin building constraints" << std::endl;
+
             // inference region orientations and spatial connectivity of boundaries
             using namespace deriv;
             ExpressionGraph graph;
+
+            std::array<Expression<Eigen::Vector3d>, 6> principleDirectionExprs;
+            for (int i = 0; i < 3; i++) {
+                const Vec3 & vp = _globalData.vanishingPoints[i];
+                principleDirectionExprs[i * 2] = composeFunction(graph, [&vp]() {
+                    return CVMatToEigenMat(vp / norm(vp)); 
+                });
+                principleDirectionExprs[i * 2 + 1] = composeFunction(graph, [&vp]() {
+                    return CVMatToEigenMat(- vp / norm(vp));
+                });
+            }
             
             // component expressions
             for (auto & r : _constraints.elements<0>()) {
                 if (r.data.type == ComponentData::Type::Region) {
+                    // theta
                     r.data.asRegion.thetaExpr = composeFunction(graph, [&r]() {
                         return CVMatToEigenMat(r.data.asRegion.theta); 
                     });
-                    // manhattan energy
-                    // r.data.asRegion.manhattanEnergy = 
+                    // E_manh
+                    std::array<Expression<double>, 6> angles;
+                    for (int i = 0; i < 6; i++) {
+                        angles[i] = angleFunc(r.data.asRegion.thetaExpr, principleDirectionExprs[i]);
+                    }
+                    Expression<double> minAngle = minOf6(angles);
+                    static const double wManh = 1.0;
+                    r.data.asRegion.manhattanEnergy = hFunc(minAngle, M_PI / 6) * wManh;
                 } else {
+                    // eta
                     r.data.asLineStructure.etaExpr = graph.addRef(r.data.asLineStructure.eta);
                 }
             }
 
             // constraint energy expressions
             for (auto & con : _constraints.elements<1>()) {
+                auto & rd1 = _constraints.data(con.topo.lowers[0]);
+                auto & rd2 = _constraints.data(con.topo.lowers[1]);
+               
+                if (con.data.type == ConstraintData::Type::RegionPairConsistency || 
+                    con.data.type == ConstraintData::Type::RegionOverlap) {
 
+                    auto thetaDiffExpr = rd1.asRegion.thetaExpr - rd2.asRegion.thetaExpr;
+                    auto thetaDiffSquaredSum = dotProd(thetaDiffExpr, thetaDiffExpr);
+
+                    static const double wSmooth = 0.5;
+                    static const double wOverlap = 5.0;
+                    static const double wConnect = 1.0;
+                    static const double wDisconnect = 1.0;
+                    if (con.data.type == ConstraintData::Type::RegionOverlap) {
+                        // E_overlap
+                        auto overlapRatio = con.data.asRegionOverlap.overlapRatio;
+                        con.data.constraintEnergy = wOverlap * overlapRatio * thetaDiffSquaredSum;
+                    } else if (con.data.type == ConstraintData::Type::RegionPairConsistency) {
+                        assert(rd1.type == ComponentData::Type::Region && 
+                            rd2.type == ComponentData::Type::Region && 
+                            "invalid component type!");
+
+                        bool isOccludingBoundary = con.data.asRegionPairConsistency.isOccludingBoundary;
+                        con.data.asRegionPairConsistency.isOccludingBoundaryExpr = composeFunction(graph,
+                            [isOccludingBoundary]() {
+                            return isOccludingBoundary ? 1.0 : -1.0; 
+                        });
+
+                        auto & camera = _views.data(con.data.asRegionPairConsistency.viewHandle).camera;
+                        auto & boundaryData = _views.data(con.data.asRegionPairConsistency.viewHandle).regionNet
+                            ->regions().data(con.data.asRegionPairConsistency.boundaryHandle);
+                        auto & sampledPoints = boundaryData.sampledPoints;
+                        auto straightness = boundaryData.straightness;
+
+                        // E_orientcons
+                        static const double wOrientConsistency = 1.0;
+                        static const double sigmaOrientConsistency = M_PI / 6;
+                        auto angleBetweenRegionPair = angleFunc(rd1.asRegion.thetaExpr, rd2.asRegion.thetaExpr);
+                        con.data.asRegionPairConsistency.orientationConsistencyEnergyExpr = 
+                            wOrientConsistency * (1.0 - gaussianFunc(angleBetweenRegionPair, sigmaOrientConsistency)) * (1.0 - straightness);
+
+                        // get sampled direction expressions
+                        std::vector<Expression<Eigen::Vector3d>> sampledDirectionExprs;
+                        sampledDirectionExprs.reserve(boundaryData.length / 5);
+                        for (auto & ps : sampledPoints) {
+                            for (auto & p : ps) {
+                                auto sampledDirectionExpr = composeFunction(graph, [&p, &camera]() {
+                                    auto direction = camera.spatialDirection(p);
+                                    return CVMatToEigenMat(direction / norm(direction));
+                                });
+                                sampledDirectionExprs.push_back(sampledDirectionExpr);
+                            }
+                        }
+                        // get depth expressions of sampled direction
+                        std::vector<Expression<double>> lambdasR1(sampledDirectionExprs.size()), 
+                            lambdasR2(sampledDirectionExprs.size());
+                        std::vector<EHandle> lambdaSquaredDiffHandles(sampledDirectionExprs.size());
+                        for (int i = 0; i < sampledDirectionExprs.size(); i++) {
+                            lambdasR1[i] = dotProd(rd1.asRegion.thetaExpr, rd1.asRegion.thetaExpr) / 
+                                dotProd(rd1.asRegion.thetaExpr, sampledDirectionExprs[i]);
+                            lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr, rd2.asRegion.thetaExpr) / 
+                                dotProd(rd2.asRegion.thetaExpr, sampledDirectionExprs[i]);
+                            lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
+                        }
+                        EHandle lambdaSquaredDiffSumHandle = HSum<double>(&graph, lambdaSquaredDiffHandles);
+                        auto lambdaSquaredDiffSum = graph.as<double>(lambdaSquaredDiffSumHandle);
+
+                        // E_connect
+                        double occludedness = straightness;
+                        static const double wConnect = 1.0;
+                        con.data.asRegionPairConsistency.connectEnergyExpr = 
+                            wConnect * lambdaSquaredDiffSum * occludedness;
+
+                        // E_disconnect
+                        static const double wDisconnect = 2.0;
+                        con.data.asRegionPairConsistency.disconnectEnergy = 
+                            wDisconnect * sampledDirectionExprs.size() * (1.0 - occludedness);
+
+                        // E_regionpair
+                        con.data.constraintEnergy = cwiseSelect(
+                            con.data.asRegionPairConsistency.isOccludingBoundaryExpr,
+                            con.data.asRegionPairConsistency.disconnectEnergy,
+                            con.data.asRegionPairConsistency.connectEnergyExpr + 
+                            con.data.asRegionPairConsistency.orientationConsistencyEnergyExpr);
+
+                    } else if (con.data.type == ConstraintData::Type::LineStructureConnectivity) {
+
+                    }
+                }
             }
 
-            
+            std::cout << "done building constraints" << std::endl;
+
             // reconstruct faces
+            // Eigen::ArrayXXd v;
 
         }
 

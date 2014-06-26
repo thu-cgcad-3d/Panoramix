@@ -85,8 +85,9 @@ namespace panoramix {
         struct ResultTag {
             using type =
                 std::conditional_t < std::is_lvalue_reference<T>::value, ResultRetrievedByValueTag,
+                std::conditional_t < std::is_arithmetic<std::remove_cv_t<T>>::value, ResultRetrievedByValueTag,
                 std::conditional_t < DataTraits<T>::shouldBeCached, ResultRetrievedByCacheTag,
-                ResultRetrievedByValueTag >> ;
+                ResultRetrievedByValueTag >>> ;
         };
 
     }

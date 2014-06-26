@@ -326,6 +326,17 @@ TEST(Expression, ScalarOp) {
         }
     }
 
+    {
+        auto f = acos(x);
+        auto df = f.derivative(x);
+        for (int i = 0; i < 10; i++) {
+            xv = (std::rand() % 100000) / 100000.0;
+            EXPECT_NEAR(std::acos(xv), f.execute(), 0.01);
+            auto s = -std::pow(1.0 - xv * xv, -0.5);
+            EXPECT_NEAR(s, df.execute(), 0.01);
+        }
+    }
+
 }
 
 
@@ -522,6 +533,20 @@ TEST(Expression, ArrayOp){
             xv.setRandom(a, b);
             EXPECT_FLOAT_EQ(xv.prod(), f.execute());
             EXPECT_MATRIX_EQ(df.execute(), xv.prod() / xv);
+        }
+    }
+
+    {
+        auto f = acos(x).sum();
+        auto df = f.derivative(x);
+        for (int i = 0; i < 10; i++) {
+            int a = std::rand() % 100 + 1;
+            int b = std::rand() % 100 + 1;
+            xv.setRandom(a, b);
+            xv = abs(xv) / (xv.maxCoeff() + 1.0);
+            EXPECT_FLOAT_EQ(std::acos(xv).sum(), f.execute());
+            auto s = (- (1.0 - xv.cwiseProduct(xv)).sqrt().cwiseInverse()).eval();
+            EXPECT_MATRIX_EQ(df.execute(), s);
         }
     }
 
@@ -737,7 +762,7 @@ TEST(Expression, VectorOp) {
         auto nx = x / n;
         auto dn = std::get<0>(n.derivatives(x));
         auto dnx = std::get<0>(nx.sum().derivatives(x));
-        for (int i = 0; i < 10; i++){
+        for (int i = 0; i < 10; i++) {
             int a = std::rand() % 100 + 1;
             xv.setRandom(a);
             EXPECT_NEAR(xv.norm(), n.execute(), 0.001);
@@ -746,7 +771,28 @@ TEST(Expression, VectorOp) {
             dnx.execute();
         }
     }
+}
 
+
+TEST(Expression, TempFun) {
+    double av[3];
+    ExpressionGraph graph;
+    Expression<const double &> a[3];
+    for (int i = 0; i < 3; i++) {
+        a[i] = graph.addRef(av[i]);
+    }
+
+    auto mina = ComposeExpressionWithoutDerivativeDefinition(
+        [](double i1, double i2, double i3) -> double {return std::min({ i1, i2, i3 }); }, 
+        a[0], a[1], a[2]);
+
+    for (int i = 0; i < 1000; i++) {
+        for (auto & aa : av) {
+            aa = rand();
+        }
+        ASSERT_EQ(std::min({ av[0], av[1], av[2] }), mina.execute());
+        mina.derivatives(a[0]);
+    }
 }
 
 

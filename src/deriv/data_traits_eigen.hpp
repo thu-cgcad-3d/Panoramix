@@ -272,6 +272,13 @@ namespace panoramix {
                 }
             };
 
+            template <class ScalarType>
+            struct AcosFunctor {
+                const ScalarType operator()(const ScalarType & s) const {
+                    return std::acos(s);
+                }
+            };
+
         }
 
         namespace common {
@@ -288,6 +295,12 @@ namespace panoramix {
                 return arr.unaryExpr(panoramix::deriv::TanhFunctor<typename D::Scalar>());
             }
 
+            // acos
+            template <class D>
+            inline auto Acos(const Eigen::ArrayBase<D> & arr) -> decltype(arr.unaryExpr(panoramix::deriv::AcosFunctor<typename D::Scalar>())) {
+                return arr.unaryExpr(panoramix::deriv::AcosFunctor<typename D::Scalar>());
+            }
+
         }
 
     }
@@ -298,6 +311,11 @@ namespace std {
     template <class D>
     inline auto tanh(const Eigen::ArrayBase<D> & arr) -> decltype(panoramix::deriv::common::Tanh(arr)) {
         return panoramix::deriv::common::Tanh(arr);
+    }
+
+    template <class D>
+    inline auto acos(const Eigen::ArrayBase<D> & arr) -> decltype(panoramix::deriv::common::Acos(arr)) {
+        return panoramix::deriv::common::Acos(arr);
     }
 
 }
