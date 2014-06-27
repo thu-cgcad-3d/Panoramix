@@ -221,22 +221,22 @@ namespace panoramix {
 
         void ReconstructionEngine::calibrateAllCameras() {
             
-            using namespace deriv;
-            
-            ExpressionGraph graph;
-            std::vector<Expression<Eigen::MatrixXd>> cameraViewMats(_views.internalElements<0>().size());
-            //std::vector<Eigen::MatrixXd> 
+            //using namespace deriv;
+            //
+            //ExpressionGraph graph;
+            //std::vector<Expression<Eigen::MatrixXd>> cameraViewMats(_views.internalElements<0>().size());
+            ////std::vector<Eigen::MatrixXd> 
 
-            for (auto & v : _views.elements<0>()){
-                cameraViewMats[v.topo.hd.id] = deriv::composeFunction(graph, 
-                    [&v](){
-                    return deriv::CVMatToEigenMatX(v.data.camera.viewMatrix()); 
-                });
-            }
+            //for (auto & v : _views.elements<0>()){
+            //    cameraViewMats[v.topo.hd.id] = deriv::composeFunction(graph, 
+            //        [&v](){
+            //        return deriv::CVMatToEigenMatX(v.data.camera.viewMatrix()); 
+            //    });
+            //}
 
-            for (auto & c : _views.elements<1>()){
+            //for (auto & c : _views.elements<1>()){
 
-            }
+            //}
 
             NOT_IMPLEMENTED_YET();
 
@@ -419,9 +419,9 @@ namespace panoramix {
                 }
             }
 
-            inline Vec3 RotateDirectionTo(const Vec3 & from, const Vec3 & toDirection, double angle) {
-                Vec3 tovec = from.cross(toDirection).cross(from);
-                Vec3 result3 = from + tovec * tan(angle);
+            inline Vec3 RotateDirectionTo(const Vec3 & originalDirection, const Vec3 & toDirection, double angle) {
+                Vec3 tovec = originalDirection.cross(toDirection).cross(originalDirection);
+                Vec3 result3 = originalDirection + tovec * tan(angle);
                 return result3 / norm(result3);
             }
             
@@ -1236,9 +1236,6 @@ namespace panoramix {
                     ConsGraph::ComponentHandle(constraints[i].mergedSpatialLineSegmentIds[1]) 
                 }, i);
                 
-
-
-
                 ExpressionGraph graph;
 
                 // build equations
@@ -1540,22 +1537,28 @@ namespace panoramix {
 
             // install to constraint graph
             // ignore the connected components, insert each line as individual
+
+            // reset expression graph
+            _exprGraph = deriv::ExpressionGraph();
+            auto & graph = _exprGraph;
+
             _constraints.clear();
             _constraints.internalElements<0>().reserve(_globalData.mergedSpatialLineSegments.size());
             _constraints.internalElements<1>().reserve(refinedConstraints.size());
             for (int i = 0; i < _globalData.mergedSpatialLineSegments.size(); i++) {
-                LineStructureComponentData lineStruct;
+                ComponentData cd(ComponentData::Type::LineStructure);
+                auto h = _constraints.add(cd);
+                LineStructureComponentData & lineStruct = _constraints.data(h).asLineStructure;
                 lineStruct.mergedSpatialLineSegmentIds = { i };
                 lineStruct.eta = norm(_globalData.mergedSpatialLineSegments[i].component.first);
-                ComponentData cd(ComponentData::Type::LineStructure);
-                cd.asLineStructure = lineStruct;
-                _constraints.add(cd);
+                lineStruct.etaExpr = graph.addRef(lineStruct.eta);
             }
             // add refined constraints
             for (auto & con : refinedConstraints) {
                 ConstraintData cd(ConstraintData::Type::LineStructureConnectivity);
                 cd.asLineStructureConnectivity = con;
-                _constraints.add<1>({ ComponentHandle(con.mergedSpatialLineSegmentIds[0]), ComponentHandle(con.mergedSpatialLineSegmentIds[1]) }, cd);
+                _constraints.add<1>({ ComponentHandle(con.mergedSpatialLineSegmentIds[0]), 
+                    ComponentHandle(con.mergedSpatialLineSegmentIds[1]) }, cd);
             }
         }
 
@@ -1570,6 +1573,12 @@ namespace panoramix {
 
             inline bool operator == (const RegionIndex & a, const RegionIndex & b) {
                 return a.viewHandle == b.viewHandle && a.regionHandle == b.regionHandle;
+            }
+
+            inline bool operator < (const RegionIndex & a, const RegionIndex & b) {
+                if (a.viewHandle.id != b.viewHandle.id)
+                    return a.viewHandle.id < b.viewHandle.id;
+                return a.regionHandle.id < b.regionHandle.id;
             }
 
             struct RegionBoundaryIndex {
@@ -1890,6 +1899,44 @@ namespace panoramix {
             }
 
 
+            // build spatial rtree for mergedlines
+           /* auto & mergedSpatialLineSegments = _globalData.mergedSpatialLineSegments;
+            auto lookupMergedLinesIdBB = [&mergedSpatialLineSegments](int lineid) {
+                return BoundingBox(mergedSpatialLineSegments[lineid].component);
+            };
+            RTreeWrapper<int, decltype(lookupMergedLinesIdBB)> mergedSpatialLineSegmentIdsRTree(lookupMergedLinesIdBB);
+            for (int i = 0; i < mergedSpatialLineSegments.size(); i++)
+                mergedSpatialLineSegmentIdsRTree.insert(i);*/
+            // find line-region relations
+            std::map<std::pair<int, RegionIndex>, std::vector<Point2>> lineRegionSharedPoints; // (lineid, regionidx) -> points
+            for (int i = 0; i < _globalData.mergedSpatialLineSegments.size(); i++) {
+                if (_globalData.mergedSpatialLineSegments[i].claz == -1) // ignore non manhattan lines
+                    continue;
+                auto & line = _globalData.mergedSpatialLineSegments[i].component;
+                static const double angleStep = M_PI / 128.0;
+                double spanAngle = AngleBetweenDirections(line.first, line.second);
+                std::vector<Vec3> sampledDirectionsInRegions(static_cast<size_t>(std::ceil(spanAngle / angleStep)));
+                for (int k = 0; k < sampledDirectionsInRegions.size(); k++) {
+                    sampledDirectionsInRegions[k] = RotateDirectionTo(line.first, line.second, k * angleStep / spanAngle);
+                }
+                for (auto & sampledDir : sampledDirectionsInRegions) {
+                    auto sampledBB = DefaultInfluenceBoxFunctor<Vec3>(0.5)(sampledDir / norm(sampledDir));                    
+                    regionsRTree.search(sampledBB, [&line, this, i, &sampledDir, &lineRegionSharedPoints](const RegionIndex & ri) -> bool {
+                        // project line to ri view
+                        auto & cam = _views.data(ri.viewHandle).camera;
+                        auto p = cam.screenProjection(sampledDir);
+                        auto d = cv::pointPolygonTest(_views.data(ri.viewHandle).regionNet->regions().data(ri.regionHandle).contours.front(),
+                            PixelLoc(p[0], p[1]), false);
+                        if (d > 0) { // inside
+                            lineRegionSharedPoints[std::make_pair(i, ri)].push_back(p);
+                        }
+                        return true;
+                    });
+                }
+            }
+
+
+
             // append to constraint graph
             _constraints.internalElements<0>().reserve(_constraints.internalElements<0>().capacity() + regionsRTree.size());
             _constraints.internalElements<1>().reserve(_constraints.internalElements<1>().capacity() + overlappedRegionIndexPairs.size() + regionsRTree.size());
@@ -1939,7 +1986,7 @@ namespace panoramix {
 
             // inference region orientations and spatial connectivity of boundaries
             using namespace deriv;
-            ExpressionGraph graph;
+            ExpressionGraph & graph = _exprGraph;
 
             std::array<Expression<Eigen::Vector3d>, 6> principleDirectionExprs;
             for (int i = 0; i < 3; i++) {
@@ -1988,10 +2035,13 @@ namespace panoramix {
                     static const double wOverlap = 5.0;
                     static const double wConnect = 1.0;
                     static const double wDisconnect = 1.0;
+
                     if (con.data.type == ConstraintData::Type::RegionOverlap) {
+
                         // E_overlap
                         auto overlapRatio = con.data.asRegionOverlap.overlapRatio;
                         con.data.constraintEnergy = wOverlap * overlapRatio * thetaDiffSquaredSum;
+
                     } else if (con.data.type == ConstraintData::Type::RegionPairConsistency) {
                         assert(rd1.type == ComponentData::Type::Region && 
                             rd2.type == ComponentData::Type::Region && 
@@ -2062,9 +2112,14 @@ namespace panoramix {
 
                     } else if (con.data.type == ConstraintData::Type::LineStructureConnectivity) {
 
+
+
                     }
                 }
             }
+
+            // sum all energy
+            // compute derivative
 
             std::cout << "done building constraints" << std::endl;
 

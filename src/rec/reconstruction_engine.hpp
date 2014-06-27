@@ -181,6 +181,11 @@ namespace panoramix {
                 double slackValue; // retreived after optimization
             };
 
+            struct RegionLineStructureConnectivityConstraintData {
+                std::vector<Point2> sampledPoints;
+                double closeness;
+            };
+
             struct RegionPairConsistencyConstraintData {
                 ReconstructionEngine::ViewHandle viewHandle;
                 RegionsNet::BoundaryHandle boundaryHandle;
@@ -235,6 +240,7 @@ namespace panoramix {
         private:
             ViewsGraph _views;
             ConstraintGraph _constraints;
+            deriv::ExpressionGraph _exprGraph;
             Params _params;
             GlobalData _globalData;
         };
