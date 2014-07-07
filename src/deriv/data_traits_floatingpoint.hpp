@@ -13,8 +13,8 @@ namespace panoramix {
 
         template <class T>
         struct DataTraits<T, FloatingPointTag> {
-            using StorageType = std::decay_t<T>;
-            using ScalarType = std::decay_t<T>;
+            using StorageType = RemoveAllType<T>;
+            using ScalarType = RemoveAllType<T>;
 
             static const RoleInProduct roleInProduct = RoleInProduct::Scalar;
             static const bool shouldBeCached = true;
@@ -36,19 +36,19 @@ namespace panoramix {
 
             // eval
             template <class T, SATISFIES(T, FloatingPointTag)>
-            std::decay_t<T> Eval(const T & t){
+            DataStorageType<T> Eval(const T & t){
                 return t;
             }
 
             // fill with scalar
             template <class T>
-            std::decay_t<T> FillWithScalar(const T & t, const T & s){
+            DataScalarType<T> FillWithScalar(const T & t, const T & s){
                 return s;
             }
 
             // general transpose
             template <class T, SATISFIES(T, FloatingPointTag)>
-            std::decay_t<T> GeneralTranspose(const T & t){
+            DataStorageType<T> GeneralTranspose(const T & t){
                 return t;
             }
 
@@ -71,13 +71,13 @@ namespace panoramix {
 
             // sum elements
             template <class T, SATISFIES(T, FloatingPointTag)>
-            std::decay_t<T> SumElements(const T & d) {
+            DataStorageType<T> SumElements(const T & d) {
                 return d;
             }
 
             // prod of elements
             template <class T, SATISFIES(T, FloatingPointTag)>
-            std::decay_t<T> ProdElements(const T & d) {
+            DataStorageType<T> ProdElements(const T & d) {
                 return d;
             }
 

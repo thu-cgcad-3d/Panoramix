@@ -791,7 +791,7 @@ TEST(Expression, TempFun) {
             aa = rand();
         }
         ASSERT_EQ(std::min({ av[0], av[1], av[2] }), mina.execute());
-        mina.derivatives(a[0]);
+        //mina.derivatives(a[0]);
     }
 }
 
@@ -801,7 +801,7 @@ TEST(Expression, TempFun) {
 
 int main(int argc, char * argv[], char * envp[])
 {
-	testing::InitGoogleTest(&argc, argv);
+    testing::InitGoogleTest(&argc, argv);
     testing::GTEST_FLAG(catch_exceptions) = true;
     testing::GTEST_FLAG(show_internal_stack_frames) = true;
     return RUN_ALL_TESTS();

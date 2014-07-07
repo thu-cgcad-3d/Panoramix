@@ -238,14 +238,14 @@ namespace panoramix {
 
 
         // expression assign
-        template <class To, class From>
-        inline std::enable_if_t<std::is_same<To, From>::value, Expression<To>> 
+        template <class To, class From, std::enable_if_t<std::is_same<To, From>::value, int> = 0>
+        inline Expression<To>
             expressionAssign(const Expression<From> & from) {
             return from;
         }
 
-        template <class To, class From>
-        inline std::enable_if_t<!std::is_same<To, From>::value, Expression<To>>
+        template <class To, class From, std::enable_if_t<!std::is_same<To, From>::value, int> = 0>
+        inline Expression<To>
             expressionAssign(const Expression<From> & from) {
             struct AssignerOp : public OpBaseType<To> {
                 virtual std::ostream & toString(std::ostream & os) const {
@@ -267,15 +267,14 @@ namespace panoramix {
         }
 
         // expression cast
-        template <class To, class From>
-        inline std::enable_if_t<std::is_same<To, From>::value,
-            Expression<To>> 
+        template <class To, class From, std::enable_if_t<std::is_same<To, From>::value, int> = 0>
+        inline Expression<To>
             expressionCast(const Expression<From> & from) {
             return from;
         }
 
-        template <class To, class From>
-        inline std::enable_if_t<!std::is_same<To, From>::value, Expression<To>> 
+        template <class To, class From, std::enable_if_t<!std::is_same<To, From>::value, int> = 0>
+        inline Expression<To>
             expressionCast(const Expression<From> & from) {
             struct CasterOp : public OpBaseType<To> {
                 virtual std::ostream & toString(std::ostream & os) const {
@@ -300,16 +299,14 @@ namespace panoramix {
         }
 
         // expression eval
-        template <class T>
-        inline std::enable_if_t<std::is_same<DataStorageType<T>, T>::value,
-            Expression<DataStorageType<T>>> 
+        template <class T, std::enable_if_t<std::is_same<T, DataStorageType<T>>::value, int> = 0>
+        inline Expression<DataStorageType<T>>
             expressionEval(const Expression<T> & from) {
             return from;
         }
 
-        template <class T>
-        inline std::enable_if_t<!(std::is_same<DataStorageType<T>, T>::value), 
-            Expression<DataStorageType<T>>>
+        template <class T, std::enable_if_t<!std::is_same<T, DataStorageType<T>>::value, int> = 0>
+        inline Expression<DataStorageType<T>>
             expressionEval(const Expression<T> & from) {
             struct EvalOp : public OpBaseType<DataStorageType<T>> {
                 virtual std::ostream & toString(std::ostream & os) const {

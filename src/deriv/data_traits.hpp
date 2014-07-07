@@ -11,10 +11,9 @@ namespace panoramix {
         // use this macro to define a catogory tag
 #define DEFINE_DATA_CATEGORY(Checker, TagStructName) \
         struct TagStructName {}; \
-        template <class T> \
-        std::enable_if_t<(Checker), TagStructName> TAG() { return TagStructName(); }
-#define SATISFIES(TypeName, TagStructName) \
-    std::enable_if_t<std::is_same<TagStructName, decltype(TAG<TypeName>())>::value, int> = 0
+        template <class T, std::enable_if_t<Checker, int> = 0> \
+        TagStructName TAG() { return TagStructName(); }
+
 
         namespace {
             template <class T>
@@ -24,6 +23,9 @@ namespace panoramix {
         }
         template <class T>
         using TagType = typename TagStruct<T>::type;
+
+#define SATISFIES(TypeName, TagStructName) \
+    std::enable_if_t<std::is_same<TagStructName,TagType<TypeName>>::value, int> = 0
 
         // use DataTraits<T> to retrieve traits of data
         template <class T, class Tag = TagType<T>>

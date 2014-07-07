@@ -40,10 +40,10 @@ OgreWidget::OgreWidget(QWidget * parent) : QGLWidget(parent) {
     _root = new Ogre::Root;
 
     // Configures the application
-    if (!_root->restoreConfig()) {
+    //if (!_root->restoreConfig()) {
         _root->showConfigDialog();
         _root->saveConfig();
-    }
+    //}
     _root->initialise(false);
 }
 
