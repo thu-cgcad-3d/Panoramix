@@ -1058,6 +1058,7 @@ namespace panoramix {
                 int varNum = varIdGenerator;
                 int equationNum = equationIdGenerator;
 
+
                 sinfo *info;
                 info = (sinfo*)malloc(sizeof(sinfo));
                 info->env = (jmp_buf *)malloc(sizeof(jmp_buf));
@@ -1543,22 +1544,27 @@ namespace panoramix {
             auto & graph = _exprGraph;
 
             _constraints.clear();
+
+            // add line structure components
             _constraints.internalElements<0>().reserve(_globalData.mergedSpatialLineSegments.size());
             _constraints.internalElements<1>().reserve(refinedConstraints.size());
             for (int i = 0; i < _globalData.mergedSpatialLineSegments.size(); i++) {
                 ComponentData cd(ComponentData::Type::LineStructure);
                 auto h = _constraints.add(cd);
                 LineStructureComponentData & lineStruct = _constraints.data(h).asLineStructure;
-                lineStruct.mergedSpatialLineSegmentIds = { i };
+                lineStruct.mergedSpatialLineSegmentId = i;
                 lineStruct.eta = norm(_globalData.mergedSpatialLineSegments[i].component.first);
                 lineStruct.etaExpr = graph.addRef(lineStruct.eta);
             }
-            // add refined constraints
+
+            // add line structure connectivity constraints
             for (auto & con : refinedConstraints) {
                 ConstraintData cd(ConstraintData::Type::LineStructureConnectivity);
                 cd.asLineStructureConnectivity = con;
-                _constraints.add<1>({ ComponentHandle(con.mergedSpatialLineSegmentIds[0]), 
+                auto h = _constraints.add<1>({ ComponentHandle(con.mergedSpatialLineSegmentIds[0]), 
                     ComponentHandle(con.mergedSpatialLineSegmentIds[1]) }, cd);
+                // expression
+                //_constraints.data(h)
             }
         }
 
@@ -1789,8 +1795,6 @@ namespace panoramix {
 
         void ReconstructionEngine::reconstructFaces() {
 
-            //NOT_IMPLEMENTED_YET();
-
             // compute spatial positions of each region
             struct {
                 inline uint64_t operator()(const RegionIndex & ri) const {
@@ -1900,15 +1904,9 @@ namespace panoramix {
 
 
             // build spatial rtree for mergedlines
-           /* auto & mergedSpatialLineSegments = _globalData.mergedSpatialLineSegments;
-            auto lookupMergedLinesIdBB = [&mergedSpatialLineSegments](int lineid) {
-                return BoundingBox(mergedSpatialLineSegments[lineid].component);
-            };
-            RTreeWrapper<int, decltype(lookupMergedLinesIdBB)> mergedSpatialLineSegmentIdsRTree(lookupMergedLinesIdBB);
-            for (int i = 0; i < mergedSpatialLineSegments.size(); i++)
-                mergedSpatialLineSegmentIdsRTree.insert(i);*/
             // find line-region relations
             std::map<std::pair<int, RegionIndex>, std::vector<Point2>> lineRegionSharedPoints; // (lineid, regionidx) -> points
+            std::map<std::pair<int, RegionIndex>, std::vector<Vec3>> lineRegionSharedDirections;
             for (int i = 0; i < _globalData.mergedSpatialLineSegments.size(); i++) {
                 if (_globalData.mergedSpatialLineSegments[i].claz == -1) // ignore non manhattan lines
                     continue;
@@ -1918,10 +1916,12 @@ namespace panoramix {
                 std::vector<Vec3> sampledDirectionsInRegions(static_cast<size_t>(std::ceil(spanAngle / angleStep)));
                 for (int k = 0; k < sampledDirectionsInRegions.size(); k++) {
                     sampledDirectionsInRegions[k] = RotateDirectionTo(line.first, line.second, k * angleStep / spanAngle);
+                    sampledDirectionsInRegions[k] /= norm(sampledDirectionsInRegions[k]);
                 }
                 for (auto & sampledDir : sampledDirectionsInRegions) {
                     auto sampledBB = DefaultInfluenceBoxFunctor<Vec3>(0.5)(sampledDir / norm(sampledDir));                    
-                    regionsRTree.search(sampledBB, [&line, this, i, &sampledDir, &lineRegionSharedPoints](const RegionIndex & ri) -> bool {
+                    regionsRTree.search(sampledBB, 
+                        [&line, this, i, &sampledDir, &lineRegionSharedPoints, &lineRegionSharedDirections](const RegionIndex & ri) -> bool {
                         // project line to ri view
                         auto & cam = _views.data(ri.viewHandle).camera;
                         auto p = cam.screenProjection(sampledDir);
@@ -1929,6 +1929,7 @@ namespace panoramix {
                             PixelLoc(p[0], p[1]), false);
                         if (d > 0) { // inside
                             lineRegionSharedPoints[std::make_pair(i, ri)].push_back(p);
+                            lineRegionSharedDirections[std::make_pair(i, ri)].push_back(sampledDir);
                         }
                         return true;
                     });
@@ -1938,21 +1939,31 @@ namespace panoramix {
 
 
             // append to constraint graph
-            _constraints.internalElements<0>().reserve(_constraints.internalElements<0>().capacity() + regionsRTree.size());
-            _constraints.internalElements<1>().reserve(_constraints.internalElements<1>().capacity() + overlappedRegionIndexPairs.size() + regionsRTree.size());
+            _constraints.internalElements<0>().reserve(_constraints.internalElements<0>().capacity() + 
+                regionsRTree.size());
+            _constraints.internalElements<1>().reserve(_constraints.internalElements<1>().capacity() + 
+                overlappedRegionIndexPairs.size() + regionsRTree.size());
 
             // add region components
             std::unordered_map<RegionIndex, HandleAtLevel<0>, decltype(hashRegionIndex)> ri2Handle(50000, hashRegionIndex);
             for (auto & r : regionSpatialContours) {
                 ComponentData cd(ComponentData::Type::Region);
-                cd.asRegion.isVoid = false;
+                //cd.asRegion.isVoid = false;
                 cd.asRegion.regionHandle = r.first.regionHandle;
                 cd.asRegion.viewHandle = r.first.viewHandle;
                 auto & cam = _views.data(r.first.viewHandle).camera;
                 cd.asRegion.theta = (cam.center() - cam.eye()) / (cam.center() - cam.eye()).dot(cam.center());
                 ri2Handle[r.first] = _constraints.add(cd);
             }
-            // add overlap constraints
+            //// add line structure components
+            //std::vector<HandleAtLevel<0>> mergedLineId2Handle(_globalData.mergedSpatialLineSegments.size());
+            //for (int i = 0; i < _globalData.mergedSpatialLineSegments.size(); i++){
+            //    ComponentData cd(ComponentData::Type::LineStructure);
+            //    cd.asLineStructure.eta = 1.0;
+            //    cd.asLineStructure.mergedSpatialLineSegmentId = i;
+            //    mergedLineId2Handle[i] = _constraints.add(cd);
+            //}
+            // add region overlap constraints
             for (auto & o : overlappedRegionIndexPairs) {
                 auto h1 = ri2Handle[o.first.first];
                 auto h2 = ri2Handle[o.first.second];
@@ -1961,7 +1972,7 @@ namespace panoramix {
                 cd.asRegionOverlap.overlapRatio = o.second;
                 _constraints.add<1>({ h1, h2 }, cd);
             }
-            // add boundary edges
+            // add region connectivity constraints
             for (auto & vd : _views.elements<0>()) {
                 auto & regions = * vd.data.regionNet;
                 for (auto & regionBoundaryData : regions.regions().elements<1>()) {
@@ -1971,19 +1982,32 @@ namespace panoramix {
                     auto rh1 = ri2Handle[ri1];
                     auto rh2 = ri2Handle[ri2];
 
-                    ConstraintData cd(ConstraintData::Type::RegionPairConsistency);
+                    ConstraintData cd(ConstraintData::Type::RegionConnectivity);
                     cd.asRegionPairConsistency.viewHandle = vd.topo.hd;
                     cd.asRegionPairConsistency.boundaryHandle = regionBoundaryData.topo.hd;
-                    cd.asRegionPairConsistency.isOccludingBoundary = false;
                     _constraints.add<1>({ rh1, rh2 }, cd);
                 }
+            }
+            // add region line structure connectivity constraints
+            for (auto & lineRegionData : lineRegionSharedDirections) {
+                if (lineRegionData.second.empty())
+                    continue;
+                ConstraintData cd(ConstraintData::Type::RegionLineStructureConnectivity);
+                cd.asRegionLineStructureConnectivity.sampledPoints = lineRegionData.second;
+                
+                auto lineHandle = HandleAtLevel<0>(lineRegionData.first.first);
+                auto regionHandle = ri2Handle[lineRegionData.first.second];
+                _constraints.add<1>({ lineHandle, regionHandle }, cd);
             }
 
             std::cout << "component num: " << _constraints.internalElements<0>().size() << std::endl;
             std::cout << "constraint num: " << _constraints.internalElements<1>().size() << std::endl;
 
-            std::cout << "begin building constraints" << std::endl;
 
+
+            std::cout << "begin building constraints" << std::endl;
+            
+            
             // inference region orientations and spatial connectivity of boundaries
             using namespace deriv;
             ExpressionGraph & graph = _exprGraph;
@@ -2013,7 +2037,8 @@ namespace panoramix {
                     }
                     Expression<double> minAngle = minOf6(angles);
                     static const double wManh = 1.0;
-                    r.data.asRegion.manhattanEnergy = hFunc(minAngle, M_PI / 6) * wManh;
+                    r.data.asRegion.manhattanEnergyExpr = 
+                        DisableableExpression<double>(hFunc(minAngle, M_PI / 6) * wManh, graph);
                 } else {
                     // eta
                     r.data.asLineStructure.etaExpr = graph.addRef(r.data.asLineStructure.eta);
@@ -2024,98 +2049,124 @@ namespace panoramix {
             for (auto & con : _constraints.elements<1>()) {
                 auto & rd1 = _constraints.data(con.topo.lowers[0]);
                 auto & rd2 = _constraints.data(con.topo.lowers[1]);
-               
-                if (con.data.type == ConstraintData::Type::RegionPairConsistency || 
-                    con.data.type == ConstraintData::Type::RegionOverlap) {
+
+                // region region overlap
+                if (con.data.type == ConstraintData::Type::RegionOverlap) {
+                    assert(rd1.type == ComponentData::Type::Region &&
+                        rd2.type == ComponentData::Type::Region &&
+                        "invalid component type!");
 
                     auto thetaDiffExpr = rd1.asRegion.thetaExpr - rd2.asRegion.thetaExpr;
                     auto thetaDiffSquaredSum = dotProd(thetaDiffExpr, thetaDiffExpr);
-
-                    static const double wSmooth = 0.5;
+                    
                     static const double wOverlap = 5.0;
-                    static const double wConnect = 1.0;
-                    static const double wDisconnect = 1.0;
 
-                    if (con.data.type == ConstraintData::Type::RegionOverlap) {
+                    // E_overlap
+                    auto overlapRatio = con.data.asRegionOverlap.overlapRatio;
+                    con.data.constraintEnergyExpr =
+                        DisableableExpression<double>(wOverlap * overlapRatio * thetaDiffSquaredSum, graph);
 
-                        // E_overlap
-                        auto overlapRatio = con.data.asRegionOverlap.overlapRatio;
-                        con.data.constraintEnergy = wOverlap * overlapRatio * thetaDiffSquaredSum;
-
-                    } else if (con.data.type == ConstraintData::Type::RegionPairConsistency) {
-                        assert(rd1.type == ComponentData::Type::Region && 
-                            rd2.type == ComponentData::Type::Region && 
-                            "invalid component type!");
-
-                        bool isOccludingBoundary = con.data.asRegionPairConsistency.isOccludingBoundary;
-                        con.data.asRegionPairConsistency.isOccludingBoundaryExpr = composeFunction(graph,
-                            [isOccludingBoundary]() {
-                            return isOccludingBoundary ? 1.0 : -1.0; 
-                        });
-
-                        auto & camera = _views.data(con.data.asRegionPairConsistency.viewHandle).camera;
-                        auto & boundaryData = _views.data(con.data.asRegionPairConsistency.viewHandle).regionNet
-                            ->regions().data(con.data.asRegionPairConsistency.boundaryHandle);
-                        auto & sampledPoints = boundaryData.sampledPoints;
-                        auto straightness = boundaryData.straightness;
-
-                        // E_orientcons
-                        static const double wOrientConsistency = 1.0;
-                        static const double sigmaOrientConsistency = M_PI / 6;
-                        auto angleBetweenRegionPair = angleFunc(rd1.asRegion.thetaExpr, rd2.asRegion.thetaExpr);
-                        con.data.asRegionPairConsistency.orientationConsistencyEnergyExpr = 
-                            wOrientConsistency * (1.0 - gaussianFunc(angleBetweenRegionPair, sigmaOrientConsistency)) * (1.0 - straightness);
-
-                        // get sampled direction expressions
-                        std::vector<Expression<Eigen::Vector3d>> sampledDirectionExprs;
-                        sampledDirectionExprs.reserve(boundaryData.length / 5);
-                        for (auto & ps : sampledPoints) {
-                            for (auto & p : ps) {
-                                auto sampledDirectionExpr = composeFunction(graph, [&p, &camera]() {
-                                    auto direction = camera.spatialDirection(p);
-                                    return CVMatToEigenMat(direction / norm(direction));
-                                });
-                                sampledDirectionExprs.push_back(sampledDirectionExpr);
-                            }
-                        }
-                        // get depth expressions of sampled direction
-                        std::vector<Expression<double>> lambdasR1(sampledDirectionExprs.size()), 
-                            lambdasR2(sampledDirectionExprs.size());
-                        std::vector<EHandle> lambdaSquaredDiffHandles(sampledDirectionExprs.size());
-                        for (int i = 0; i < sampledDirectionExprs.size(); i++) {
-                            lambdasR1[i] = dotProd(rd1.asRegion.thetaExpr, rd1.asRegion.thetaExpr) / 
-                                dotProd(rd1.asRegion.thetaExpr, sampledDirectionExprs[i]);
-                            lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr, rd2.asRegion.thetaExpr) / 
-                                dotProd(rd2.asRegion.thetaExpr, sampledDirectionExprs[i]);
-                            lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
-                        }
-                        EHandle lambdaSquaredDiffSumHandle = HSum<double>(&graph, lambdaSquaredDiffHandles);
-                        auto lambdaSquaredDiffSum = graph.as<double>(lambdaSquaredDiffSumHandle);
-
-                        // E_connect
-                        double occludedness = straightness;
-                        static const double wConnect = 1.0;
-                        con.data.asRegionPairConsistency.connectEnergyExpr = 
-                            wConnect * lambdaSquaredDiffSum * occludedness;
-
-                        // E_disconnect
-                        static const double wDisconnect = 2.0;
-                        con.data.asRegionPairConsistency.disconnectEnergy = 
-                            wDisconnect * sampledDirectionExprs.size() * (1.0 - occludedness);
-
-                        // E_regionpair
-                        con.data.constraintEnergy = cwiseSelect(
-                            con.data.asRegionPairConsistency.isOccludingBoundaryExpr,
-                            con.data.asRegionPairConsistency.disconnectEnergy,
-                            con.data.asRegionPairConsistency.connectEnergyExpr + 
-                            con.data.asRegionPairConsistency.orientationConsistencyEnergyExpr);
-
-                    } else if (con.data.type == ConstraintData::Type::LineStructureConnectivity) {
-
-
-
-                    }
                 }
+                // region region connectivity
+                else if (con.data.type == ConstraintData::Type::RegionConnectivity) {
+                    assert(rd1.type == ComponentData::Type::Region &&
+                        rd2.type == ComponentData::Type::Region &&
+                        "invalid component type!");
+
+                    auto & camera = _views.data(con.data.asRegionPairConsistency.viewHandle).camera;
+                    auto & boundaryData = _views.data(con.data.asRegionPairConsistency.viewHandle).regionNet
+                        ->regions().data(con.data.asRegionPairConsistency.boundaryHandle);
+                    auto & sampledPoints = boundaryData.sampledPoints;
+                    auto straightness = boundaryData.straightness;
+
+                    // get sampled direction expressions
+                    std::vector<Expression<Eigen::Vector3d>> sampledDirectionExprs;
+                    sampledDirectionExprs.reserve(boundaryData.length / 5);
+                    for (auto & ps : sampledPoints) {
+                        for (auto & p : ps) {
+                            auto sampledDirectionExpr = composeFunction(graph, [&p, &camera]() {
+                                auto direction = camera.spatialDirection(p);
+                                return CVMatToEigenMat(direction / norm(direction));
+                            });
+                            sampledDirectionExprs.push_back(sampledDirectionExpr);
+                        }
+                    }
+                    // get depth expressions of sampled direction
+                    std::vector<Expression<double>> lambdasR1(sampledDirectionExprs.size()),
+                        lambdasR2(sampledDirectionExprs.size());
+                    std::vector<EHandle> lambdaSquaredDiffHandles(sampledDirectionExprs.size());
+                    for (int i = 0; i < sampledDirectionExprs.size(); i++) {
+                        lambdasR1[i] = dotProd(rd1.asRegion.thetaExpr, rd1.asRegion.thetaExpr) /
+                            dotProd(rd1.asRegion.thetaExpr, sampledDirectionExprs[i]);
+                        lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr, rd2.asRegion.thetaExpr) /
+                            dotProd(rd2.asRegion.thetaExpr, sampledDirectionExprs[i]);
+                        lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
+                    }
+                    EHandle lambdaSquaredDiffSumHandle = HSum<double>(&graph, lambdaSquaredDiffHandles);
+                    auto lambdaSquaredDiffSum = graph.as<double>(lambdaSquaredDiffSumHandle);
+
+                    // E_connect
+                    double occludedness = straightness;
+                    static const double wConnect = 1.0;
+                    con.data.constraintEnergyExpr =
+                        DisableableExpression<double>(wConnect * lambdaSquaredDiffSum * occludedness, graph);
+
+                }
+                // line line connectivity
+                else if (con.data.type == ConstraintData::Type::LineStructureConnectivity) {
+
+                    assert(rd1.type == ComponentData::Type::LineStructure &&
+                        rd2.type == ComponentData::Type::LineStructure &&
+                        "invalid component type!");
+
+                    auto & lineData1 = rd1.asLineStructure;
+                    auto & lineData2 = rd2.asLineStructure;
+                    auto & line1 = _globalData.mergedSpatialLineSegments[lineData1.mergedSpatialLineSegmentId];
+                    auto & line2 = _globalData.mergedSpatialLineSegments[lineData2.mergedSpatialLineSegmentId];
+
+                    auto nearestData = DistanceBetweenTwoLines(line1.component, line2.component).second;
+                    auto sampledPoint = normalize((nearestData.first.position + nearestData.second.position) / 2.0);
+                    double depthOfSampledPointOnLine1 =
+                        norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampledPoint),
+                        line1.component.infinieLine()).second.second);
+                    double depthOfSampledPointOnLine2 =
+                        norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampledPoint),
+                        line2.component.infinieLine()).second.second);
+                    double ratio1 = depthOfSampledPointOnLine1 / norm(line1.component.first);
+                    double ratio2 = depthOfSampledPointOnLine2 / norm(line2.component.first);
+                    auto lambda1 = lineData1.etaExpr * ratio1;
+                    auto lambda2 = lineData2.etaExpr * ratio2;
+
+                    static const double wLineConnect = 2.0;
+                    auto lambdaSquaredDiff = Square(lambda1 - lambda2);
+                    con.data.constraintEnergyExpr =
+                        DisableableExpression<double>((wLineConnect * lambdaSquaredDiff).cast<double>(), graph);
+
+                }
+                // region line connectivity
+                else if (con.data.type == ConstraintData::Type::RegionLineStructureConnectivity) {
+
+                    assert((rd1.type == ComponentData::Type::LineStructure && rd2.type == ComponentData::Type::Region ||
+                        rd1.type == ComponentData::Type::Region && rd2.type == ComponentData::Type::LineStructure) &&
+                        "invalid component type!");
+
+                    auto prrd1 = &rd1, prrd2 = &rd2;
+                    if (rd1.type == ComponentData::Type::LineStructure){
+                        std::swap(prrd1, prrd2);
+                    }
+                    auto & rrd1 = *prrd1;
+                    auto & rrd2 = *prrd2;
+
+                    assert(rrd1.type == ComponentData::Type::Region && 
+                        rrd2.type == ComponentData::Type::LineStructure &&
+                        "invalid component type!");
+
+                    auto & sampledPoints = con.data.asRegionLineStructureConnectivity.sampledPoints;
+
+
+                }
+
+
             }
 
             // sum all energy

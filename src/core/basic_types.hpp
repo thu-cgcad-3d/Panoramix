@@ -37,6 +37,8 @@ namespace panoramix {
         using Mat4 = Mat<double, 4, 4>;
 
         using cv::norm;
+        template <class T>
+        inline T normalize(const T & d) { return d / norm(d); }
 
 
         // homogeneous point
@@ -128,6 +130,7 @@ namespace panoramix {
             ar(p.anchor, p.direction);
         }
         using InfiniteLine2 = InfiniteLine<double, 2>;
+        using InfiniteLine3 = InfiniteLine<double, 3>;
         template <class T>
         inline Vec<T, 3> GetLine2Coeffs(const InfiniteLine<T, 2> & line) {
             return Vec<T, 3>{line.direction[1], 

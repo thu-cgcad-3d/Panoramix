@@ -14,6 +14,29 @@ namespace panoramix {
 
         using namespace core;
 
+
+        template <class T>
+        class DisableableExpression {
+        public:
+            inline DisableableExpression() : _enabled(nullptr) {}
+            inline explicit DisableableExpression(const deriv::Expression<T> & rawExpr, deriv::ExpressionGraph & g)
+                : _enabled(std::make_shared<bool>(true)) {
+                auto enabledExpr = deriv::composeFunction(g, [this]()
+                    -> double {return *_enabled ? 1.0 : -1.0; });
+                _expr = deriv::cwiseSelect(enabledExpr, rawExpr, 0.0);
+            }
+
+            inline deriv::Expression<T> toExpression() const { return _expr; }
+            inline void setEnabled(bool b) { *_enabled = b; }
+            inline void enable() { *_enabled = true; }
+            inline void disable() { *_enabled = false; }
+
+        private:
+            deriv::Expression<T> _expr;
+            std::shared_ptr<bool> _enabled;
+        };
+
+
         // engine
         // ReconstructionEngine
         class ReconstructionEngine {
@@ -104,6 +127,8 @@ namespace panoramix {
             void reconstructFaces();
                 
         public:
+
+            //// views
             // view data
             struct ViewData {
                 // cameras
@@ -121,9 +146,6 @@ namespace panoramix {
 
                 // regions
                 std::shared_ptr<RegionsNet> regionNet;
-
-                //RTreeWrapper<HPoint2> lineSegmentIntersectionsRTree;
-                //RTreeWrapper<KeyPoint> keypointsForMatchingRTree;
             };
 
             // view connection data
@@ -133,18 +155,18 @@ namespace panoramix {
 
 
 
+            //// components and constraints
             // component data
             struct LineStructureComponentData {
                 double eta;
                 deriv::Expression<const double &> etaExpr;
-                std::vector<int> mergedSpatialLineSegmentIds;
+                int mergedSpatialLineSegmentId;
             };
 
             struct RegionComponentData {
                 Vec3 theta;
                 deriv::Expression<Eigen::Vector3d> thetaExpr;
-                deriv::Expression<double> manhattanEnergy;
-                bool isVoid;
+                DisableableExpression<double> manhattanEnergyExpr;
                 ReconstructionEngine::ViewHandle viewHandle;
                 RegionsNet::RegionHandle regionHandle;
             };
@@ -166,10 +188,16 @@ namespace panoramix {
                 double overlapRatio;
             };
 
+            struct RegionConnectivityConstraintData {
+                ReconstructionEngine::ViewHandle viewHandle;
+                RegionsNet::BoundaryHandle boundaryHandle;
+            };
+
             struct LineStructureConnectivityConstraintData {
                 LineStructureConnectivityConstraintData();
 
                 size_t mergedSpatialLineSegmentIds[2]; // corresponded mergedSpatialLineSegments ids
+                PositionOnLine3 positionOnLines[2];
                 Vec3 position; // location of intersecion
 
                 // [i][0] -> line lengths with class i lying between vp[i] and position
@@ -182,25 +210,14 @@ namespace panoramix {
             };
 
             struct RegionLineStructureConnectivityConstraintData {
-                std::vector<Point2> sampledPoints;
-                double closeness;
-            };
-
-            struct RegionPairConsistencyConstraintData {
-                ReconstructionEngine::ViewHandle viewHandle;
-                RegionsNet::BoundaryHandle boundaryHandle;
-                bool isOccludingBoundary;
-                deriv::Expression<double> isOccludingBoundaryExpr; // >0:true; <=0:false
-                deriv::Expression<double> orientationConsistencyEnergyExpr;
-                deriv::Expression<double> connectEnergyExpr;
-                double disconnectEnergy;
+                std::vector<Vec3> sampledPoints;
             };
 
             struct ConstraintData {
                 enum class Type {
                     UnInitialized,
                     RegionOverlap,
-                    RegionPairConsistency,
+                    RegionConnectivity,
                     LineStructureConnectivity,
                     RegionLineStructureConnectivity
                 };
@@ -208,11 +225,14 @@ namespace panoramix {
 
                 Type type;
                 RegionOverlapConstraintData asRegionOverlap;
+                RegionConnectivityConstraintData asRegionPairConsistency;
                 LineStructureConnectivityConstraintData asLineStructureConnectivity;
-                RegionPairConsistencyConstraintData asRegionPairConsistency;
+                RegionLineStructureConnectivityConstraintData asRegionLineStructureConnectivity;
 
-                deriv::Expression<double> constraintEnergy;
+                DisableableExpression<double> constraintEnergyExpr;
             };
+
+
 
 
             // global data

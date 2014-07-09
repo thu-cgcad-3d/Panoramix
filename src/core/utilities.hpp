@@ -412,6 +412,36 @@ namespace panoramix {
             return std::make_pair(norm(p - pos.position), pos);
         }
 
+        // returns (distance, (nearest point on line1, nearest point on line2))
+        // see http://geomalgorithms.com/a07-_distance.html for explainations
+        template <class T, int N>
+        std::pair<T, std::pair<Point<T, N>, Point<T, N>>> DistanceBetweenTwoLines(
+            const InfiniteLine<T, N> & line1, const InfiniteLine<T, N> & line2) {
+            
+            auto u = normalize(line1.direction);
+            auto v = normalize(line2.direction);
+            auto w = line1.anchor - line2.anchor;
+            auto a = u.dot(u);         // always >= 0
+            auto b = u.dot(v);
+            auto c = v.dot(v);         // always >= 0
+            auto d = u.dot(w);
+            auto e = v.dot(w);
+
+            T P = a * c - b * b;
+            if (P == 0){
+                auto ppair = std::make_pair(line1.anchor, 
+                    DistanceFromPointToLine(line1.anchor, line2).second);
+                return std::make_pair(Distance(ppair.first, ppair.second), ppair);
+            }
+
+            T sc = (b*e - c*d) / P;
+            T tc = (a*e - b*d) / P;
+            
+            auto p1 = line1.anchor + sc * u;
+            auto p2 = line2.anchor + tc * v;
+            return std::make_pair(Distance(p1, p2), std::make_pair(p1, p2));
+        }
+
         // returns (distance, (nearest position on line1, nearest position on line2))
         // see http://geomalgorithms.com/a07-_distance.html for explainations
         template <class T, int N>

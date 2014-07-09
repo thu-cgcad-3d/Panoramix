@@ -393,11 +393,11 @@ namespace panoramix {
                             cv::line(regionVis, polyline[j], polyline[j + 1], tjcolor);
                         }
                     }
-                    //for (auto & s : sampledPoints[i]) {
-                    //    for (auto & p : s) {
-                    //        cv::circle(regionVis, ToPixelLoc(p), 1, pcolor);
-                    //    }
-                    //}
+                    for (auto & s : sampledPoints[i]) {
+                        for (auto & p : s) {
+                            cv::circle(regionVis, ToPixelLoc(p), 1, pcolor);
+                        }
+                    }
                 }
                 for (auto & bep : mergedBepsTable) {
                     auto color = vis::ColorFromTag(vis::ColorTag::White);

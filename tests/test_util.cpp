@@ -235,11 +235,16 @@ TEST(UtilTest, DistanceBetweenTwoLines) {
         core::Line3 aa = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
         core::Line3 bb = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
         auto p = core::DistanceBetweenTwoLines(aa, bb);
+        core::InfiniteLine3 iaa = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
+        core::InfiniteLine3 ibb = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
+        auto ip = core::DistanceBetweenTwoLines(iaa, ibb);
 
         EXPECT_LE(p.first - 0.1, core::Distance(aa.first, bb.first));
         EXPECT_LE(p.first - 0.1, core::Distance(aa.first, bb.second));
         EXPECT_LE(p.first - 0.1, core::Distance(aa.second, bb.first));
         EXPECT_LE(p.first - 0.1, core::Distance(aa.second, bb.second));
+
+        EXPECT_LE(ip.first - 0.1, core::Distance(iaa.anchor, ibb.anchor));
     }
 }
 
