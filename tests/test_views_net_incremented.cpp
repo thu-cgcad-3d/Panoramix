@@ -27,21 +27,24 @@ void run(){
     cv::resize(panorama, panorama, cv::Size(2000, 1000));
     core::PanoramicCamera originCam(panorama.cols / M_PI / 2.0);
 
-    std::vector<core::PerspectiveCamera> cams;
-    core::Mesh<core::Vec3> cameraStand;
-    core::MakeQuadFacedSphere(cameraStand, 6, 12);
-    for (auto & v : cameraStand.vertices()){
-        core::Vec3 direction = v.data;
-        if (core::AngleBetweenDirections(direction, core::Vec3(0, 0, 1)) <= 0.1 ||
-            core::AngleBetweenDirections(direction, core::Vec3(0, 0, -1)) <= 0.1){
-            //cams.emplace_back(700, 700, originCam.focal(), core::Vec3(0, 0, 0), direction, core::Vec3(0, 1, 0));
-            continue;
-        }
-        else{
-            cams.emplace_back(700, 700, originCam.focal(), core::Vec3(0, 0, 0), direction, core::Vec3(0, 0, -1));
-        }
-    }
-    std::random_shuffle(cams.begin(), cams.end());
+    std::vector<core::PerspectiveCamera> cams = {
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 })
+    };
+    //core::Mesh<core::Vec3> cameraStand;
+    //core::MakeQuadFacedSphere(cameraStand, 6, 12);
+    //for (auto & v : cameraStand.vertices()){
+    //    core::Vec3 direction = v.data;
+    //    if (core::AngleBetweenDirections(direction, core::Vec3(0, 0, 1)) <= 0.1 ||
+    //        core::AngleBetweenDirections(direction, core::Vec3(0, 0, -1)) <= 0.1){
+    //        //cams.emplace_back(700, 700, originCam.focal(), core::Vec3(0, 0, 0), direction, core::Vec3(0, 1, 0));
+    //        continue;
+    //    }
+    //    else{
+    //        cams.emplace_back(700, 700, originCam.focal(), core::Vec3(0, 0, 0), direction, core::Vec3(0, 0, -1));
+    //    }
+    //}
+    //std::random_shuffle(cams.begin(), cams.end());
 
 
     /// insert into views net
@@ -52,26 +55,41 @@ void run(){
     params.mergeLineDistanceAngleThreshold = 0.05;
     rec::ReconstructionEngine net(params);
 
-    for (int i = 0; i < cams.size(); i++){
+    for (int i = 0; i < cams.size(); i+=2){
         std::cout << "photo: " << i << std::endl;
 
         auto & camera = cams[i];
-        const auto im = 
+        auto im = 
             core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera>(camera, originCam)(panorama);
         auto viewHandle = net.insertPhoto(im, camera);
-
-        std::cout << "extracting features ...";
 
         net.computeFeatures(viewHandle);
         net.buildRegionNet(viewHandle);
 
         vis::Visualizer2D(im)
+            << *(net.views().data(viewHandle).regionNet)
             << vis::manip2d::SetColor(vis::Color(0, 0, 255))
             << vis::manip2d::SetThickness(2)
             << net.views().data(viewHandle).lineSegments
-            << vis::manip2d::SetColor(vis::Color(255, 0, 0))
-            << vis::manip2d::SetThickness(1)
-            << net.views().data(viewHandle).lineSegmentIntersections
+            << vis::manip2d::Show();
+
+
+
+        std::cout << "photo: " << (i+1) << std::endl;
+
+        camera = cams[i + 1];
+        im = core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera>(camera, originCam)(panorama);
+        viewHandle = net.insertPhoto(im, camera);
+
+
+        net.computeFeatures(viewHandle);
+        net.buildRegionNet(viewHandle);
+
+        vis::Visualizer2D(im)
+            << *(net.views().data(viewHandle).regionNet)
+            << vis::manip2d::SetColor(vis::Color(0, 0, 255))
+            << vis::manip2d::SetThickness(2)
+            << net.views().data(viewHandle).lineSegments
             << vis::manip2d::Show();
 
         net.updateConnections(viewHandle);

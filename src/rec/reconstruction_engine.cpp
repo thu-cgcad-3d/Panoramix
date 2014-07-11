@@ -1813,7 +1813,8 @@ namespace panoramix {
                     assert(!rd.contours.empty() && "Region contour not initialized yet?");
                     std::vector<Vec3> spatialContour;
                     spatialContour.reserve(rd.contours.front().size());
-                    std::transform(rd.contours.front().begin(), rd.contours.front().end(), std::back_inserter(spatialContour), 
+                    std::transform(rd.contours.front().begin(), rd.contours.front().end(), 
+                        std::back_inserter(spatialContour), 
                         [&vd](const PixelLoc & p) {
                         auto direction = vd.camera.spatialDirection(p);
                         return direction / norm(direction);
@@ -2003,8 +2004,6 @@ namespace panoramix {
             std::cout << "component num: " << _constraints.internalElements<0>().size() << std::endl;
             std::cout << "constraint num: " << _constraints.internalElements<1>().size() << std::endl;
 
-
-
             std::cout << "begin building constraints" << std::endl;
             
             
@@ -2057,12 +2056,13 @@ namespace panoramix {
                         "invalid component type!");
 
                     auto thetaDiffExpr = rd1.asRegion.thetaExpr - rd2.asRegion.thetaExpr;
-                    auto thetaDiffSquaredSum = dotProd(thetaDiffExpr, thetaDiffExpr);
+                    auto thetaDiffSquaredSum = abs(dotProd(thetaDiffExpr, thetaDiffExpr));
                     
                     static const double wOverlap = 5.0;
 
                     // E_overlap
                     auto overlapRatio = con.data.asRegionOverlap.overlapRatio;
+                    assert(overlapRatio > 0);
                     con.data.constraintEnergyExpr =
                         DisableableExpression<double>(wOverlap * overlapRatio * thetaDiffSquaredSum, graph);
 
@@ -2107,6 +2107,7 @@ namespace panoramix {
 
                     // E_connect
                     double occludedness = straightness;
+                    assert(occludedness > 0);
                     static const double wConnect = 1.0;
                     con.data.constraintEnergyExpr =
                         DisableableExpression<double>(wConnect * lambdaSquaredDiffSum * occludedness, graph);
@@ -2133,7 +2134,9 @@ namespace panoramix {
                         norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampledPoint),
                         line2.component.infinieLine()).second.second);
                     double ratio1 = depthOfSampledPointOnLine1 / norm(line1.component.first);
+                    assert(ratio1 > 0);
                     double ratio2 = depthOfSampledPointOnLine2 / norm(line2.component.first);
+                    assert(ratio2 > 0);
                     auto lambda1 = lineData1.etaExpr * ratio1;
                     auto lambda2 = lineData2.etaExpr * ratio2;
 
@@ -2154,8 +2157,8 @@ namespace panoramix {
                     if (rd1.type == ComponentData::Type::LineStructure){
                         std::swap(prrd1, prrd2);
                     }
-                    auto & rrd1 = *prrd1;
-                    auto & rrd2 = *prrd2;
+                    auto & rrd1 = *prrd1; // region
+                    auto & rrd2 = *prrd2; // linestruct
 
                     assert(rrd1.type == ComponentData::Type::Region && 
                         rrd2.type == ComponentData::Type::LineStructure &&
@@ -2163,19 +2166,71 @@ namespace panoramix {
 
                     auto & sampledPoints = con.data.asRegionLineStructureConnectivity.sampledPoints;
 
+                    // get sampled direction expressions
+                    std::vector<Expression<Eigen::Vector3d>> sampledDirectionExprs;
+                    sampledDirectionExprs.reserve(sampledPoints.size());
+                    for (auto & p : sampledPoints) {
+                        auto sampledDirectionExpr = composeFunction(graph, [&p]() {
+                            return CVMatToEigenMat(normalize(p));
+                        });
+                        sampledDirectionExprs.push_back(sampledDirectionExpr);
+                    }
+                    
+                    // get depth expressions of sampled direction
+                    std::vector<Expression<double>> lambdasR1(sampledDirectionExprs.size()),
+                        lambdasR2(sampledDirectionExprs.size());
+                    std::vector<EHandle> lambdaSquaredDiffHandles(sampledDirectionExprs.size());
+                    for (int i = 0; i < sampledDirectionExprs.size(); i++) {
+                        lambdasR1[i] = dotProd(rrd1.asRegion.thetaExpr, rrd1.asRegion.thetaExpr) /
+                            dotProd(rrd1.asRegion.thetaExpr, sampledDirectionExprs[i]);
+                        /*lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr, rd2.asRegion.thetaExpr) /
+                            dotProd(rd2.asRegion.thetaExpr, sampledDirectionExprs[i]);*/
+                        auto & dir = sampledPoints[i]; // we don't need expression here
+                        auto & line = _globalData.mergedSpatialLineSegments[rrd2.asLineStructure.mergedSpatialLineSegmentId].component;
+                        auto depth = norm(DistanceBetweenTwoLines(InfiniteLine3({ 0, 0, 0 }, dir),
+                            line.infinieLine()).second.second);
+                        double ratio = depth / norm(line.first); // we only need the ratio of the depths
+                        lambdasR2[i] = (rrd2.asLineStructure.etaExpr * ratio).cast<double>();
 
+                        lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
+                    }
+                    EHandle lambdaSquaredDiffSumHandle = HSum<double>(&graph, lambdaSquaredDiffHandles);
+                    auto lambdaSquaredDiffSum = graph.as<double>(lambdaSquaredDiffSumHandle);
+
+                    // E_connect
+                    static const double wConnect = 1.0;
+                    con.data.constraintEnergyExpr =
+                        DisableableExpression<double>(wConnect * lambdaSquaredDiffSum, graph);
+                    
                 }
 
 
             }
 
             // sum all energy
+            std::vector<EHandle> allEnergyHandles;
+            allEnergyHandles.reserve(_constraints.internalElements<1>().size() + _constraints.internalElements<0>().size());
+            // add all E_manh
+            for (auto & rd : _constraints.elements<0>()){
+                if (rd.data.type == ComponentData::Type::Region){
+                    allEnergyHandles.push_back(rd.data.asRegion.manhattanEnergyExpr.toExpression().handle());
+                }
+            }
+            // add all connectivity energies
+            for (auto & cd : _constraints.elements<1>()){
+                allEnergyHandles.push_back(cd.data.constraintEnergyExpr.toExpression().handle());
+            }
+            // sum all
+            auto completeEngergyExpr = graph.as<double>(HSum<double>(&graph, allEnergyHandles));
+            std::cout << "current energy is: " << completeEngergyExpr.execute() << std::endl;
+
             // compute derivative
+
 
             std::cout << "done building constraints" << std::endl;
 
             // reconstruct faces
-            // Eigen::ArrayXXd v;
+            // Eigen::ArrayXXd
 
         }
 

@@ -36,6 +36,35 @@ namespace panoramix {
             std::shared_ptr<bool> _enabled;
         };
 
+        using EHandleTable = std::vector < deriv::EHandle > ;
+
+        template <class T>
+        class OptimizibleExpression {
+        public:
+            inline OptimizibleExpression() :_data(0), _lastChange(0) {}
+            inline explicit OptimizibleExpression(const T & d) : _data(d), _lastChange(0) {}
+
+            void registerHandleTable(EHandleTable & table) { 
+                table.push_back(_expr.handle()); 
+                _positionInHandleTable = table.size() - 1;
+            }
+
+            void getDerivative(const EHandleTable & derivTable) {
+                _dexpr = _expr.g()->asDerived<T>(derivTable[_positionInHandleTable]);
+            }
+
+            void optimizeData(double delta, double momentum){
+
+            }
+
+        private:
+            deriv::Expression<T> _expr;
+            deriv::DerivativeExpression<T> _dexpr;
+            int _positionInHandleTable;
+            T _data;
+            T _lastChange;
+        };
+
 
         // engine
         // ReconstructionEngine
