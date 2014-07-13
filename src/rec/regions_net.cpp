@@ -2,6 +2,8 @@
 
 #include "../vis/visualize2d.hpp"
 
+#include "../core/debug.hpp"
+
 namespace panoramix {
     namespace rec {
 
@@ -179,6 +181,15 @@ namespace panoramix {
                 vd.regionMask.copyTo(regionMaskCopy);
                 cv::findContours(regionMaskCopy, vd.contours, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE);
                 assert(!vd.contours.empty() && "no contour? impossible~");
+
+                int dilationSize = 3;
+                auto dilationElement = cv::getStructuringElement(cv::MORPH_ELLIPSE,
+                    cv::Size(2 * dilationSize + 1, 2 * dilationSize + 1),
+                    cv::Point(dilationSize, dilationSize));
+                vd.regionMask.copyTo(regionMaskCopy);
+                cv::dilate(regionMaskCopy, regionMaskCopy, dilationElement);
+                cv::findContours(regionMaskCopy, vd.dilatedContours, CV_RETR_LIST, CV_CHAIN_APPROX_SIMPLE);
+                assert(!vd.dilatedContours.empty() && "no contour? impossible~");
                
                 auto vh = _regions.add(vd);
                 //_regionsRTree.insert(vh);  
@@ -376,36 +387,36 @@ namespace panoramix {
                     tjunctionlikelihoods.push_back(b.data.tjunctionLikelihood);
                 }
                 auto & ctable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
-                //for (auto & r : _regions.elements<0>()) {
-                //    auto color = vis::Color(0, 0, 0, 1);
-                //    for (auto & polyline : r.data.contours) {
+                for (auto & r : _regions.elements<0>()) {
+                    auto color = vis::Color(0, 0, 0, 1);
+                    for (auto & polyline : r.data.dilatedContours) {
+                        for (int j = 0; j < polyline.size() - 1; j++) {
+                            cv::line(regionVis, polyline[j], polyline[j + 1], color, 1);
+                        }
+                    }
+                }
+                //for (int i = 0; i < boundaries.size(); i++) {
+                //    auto pcolor = ctable[i % ctable.size()];
+                //    auto color = vis::Color(255, 255, 255, 1) * straightnesses[i];
+                //    auto tjcolor = vis::Color(255, 255, 255, 1) * tjunctionlikelihoods[i];
+                //    for (auto & polyline : boundaries[i]) {
                 //        for (int j = 0; j < polyline.size() - 1; j++) {
-                //            cv::line(regionVis, polyline[j], polyline[j + 1], color, 1);
+                //            cv::line(regionVis, polyline[j], polyline[j + 1], tjcolor);
+                //        }
+                //    }
+                //    for (auto & s : sampledPoints[i]) {
+                //        for (auto & p : s) {
+                //            cv::circle(regionVis, ToPixelLoc(p), 1, pcolor);
                 //        }
                 //    }
                 //}
-                for (int i = 0; i < boundaries.size(); i++) {
-                    auto pcolor = ctable[i % ctable.size()];
-                    auto color = vis::Color(255, 255, 255, 1) * straightnesses[i];
-                    auto tjcolor = vis::Color(255, 255, 255, 1) * tjunctionlikelihoods[i];
-                    for (auto & polyline : boundaries[i]) {
-                        for (int j = 0; j < polyline.size() - 1; j++) {
-                            cv::line(regionVis, polyline[j], polyline[j + 1], tjcolor);
-                        }
-                    }
-                    for (auto & s : sampledPoints[i]) {
-                        for (auto & p : s) {
-                            cv::circle(regionVis, ToPixelLoc(p), 1, pcolor);
-                        }
-                    }
-                }
-                for (auto & bep : mergedBepsTable) {
-                    auto color = vis::ColorFromTag(vis::ColorTag::White);
-                    for (auto & p : bep.second) {
-                        //regionVis.at<Vec<uint8_t, 3>>(p.position) = Vec<uint8_t, 3>(255, 255, 255);
-                        cv::circle(regionVis, p.position, 1, color);
-                    }
-                }
+                //for (auto & bep : mergedBepsTable) {
+                //    auto color = vis::ColorFromTag(vis::ColorTag::White);
+                //    for (auto & p : bep.second) {
+                //        //regionVis.at<Vec<uint8_t, 3>>(p.position) = Vec<uint8_t, 3>(255, 255, 255);
+                //        cv::circle(regionVis, p.position, 1, color);
+                //    }
+                //}
                 vis::Visualizer2D(regionVis) << vis::manip2d::Show();
             }
         }

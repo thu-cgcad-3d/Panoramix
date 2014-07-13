@@ -21,6 +21,7 @@ namespace panoramix {
                 Vec2 center;
                 double area;
                 std::vector<std::vector<PixelLoc>> contours;
+                std::vector<std::vector<PixelLoc>> dilatedContours;
                 Box2 boundingBox;
             };
             struct BoundaryData {

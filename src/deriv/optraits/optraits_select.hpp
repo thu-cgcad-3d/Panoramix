@@ -115,6 +115,72 @@ namespace panoramix {
             return CWiseSelectComposer<CondT, IfT, ElseT>::Compose(cond, ifval, elseval);
         }
 
+
+
+        template <class ExprIteratorT>
+        inline Expression<typename std::iterator_traits<ExprIteratorT>::value_type::Type> 
+            minInRange(ExprIteratorT begin, ExprIteratorT end){
+            using T = typename std::iterator_traits<ExprIteratorT>::value_type::Type;
+            static_assert(IsStorageType<T>::value, "T must be a storage type");
+            struct PassIfMinElementIsAssigned : public deriv::OpBaseType < T > {
+                inline PassIfMinElementIsAssigned(const std::vector<EHandle> & in, int aid) : inputs(in), assignedId(aid) {}
+                virtual std::ostream & toString(std::ostream & os) const {
+                    os << "forwardIfMatch";
+                    return os;
+                }
+                virtual T value() const override {
+                    auto curMinIt = std::min_element(inputs.begin(), inputs.end(), [this](EHandle a, EHandle b)->bool {
+                        return graph->as<T>(a).result() < graph->as<T>(b).result();
+                    });
+                    int pos = std::distance(inputs.begin(), curMinIt);
+                    std::vector<EHandle> inp = graph->inputs(self);
+                    assert(inp.size() == 1);
+                    if (pos == assignedId){
+                        return graph->as<T>(inp.front()).result();
+                    }
+                    T v;
+                    return common::FillWithScalar(v, 0.0);
+                }
+                virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const {
+                    assert(false && "not implemented yet");
+                    return std::vector<EHandle>();
+                }
+                std::vector<EHandle> inputs;
+                int assignedId;
+            };
+            struct MinElementOp : public deriv::OpBaseType<T> {
+                virtual std::ostream & toString(std::ostream & os) const {
+                    os << "minElement";
+                    return os;
+                }
+                virtual T value() const override {
+                    std::vector<EHandle> inp = graph->inputs(self);
+                    assert(!inp.empty() && "wrong inputs number");
+                    //return TraitsAboutOp<From>::Result(graph->op(inp.front()));
+                    return graph->as<T>(*std::min_element(inp.begin(), inp.end(), [this](EHandle a, EHandle b)->bool {
+                        return graph->as<T>(a).result() < graph->as<T>(b).result();
+                    })).result();
+                }
+                virtual std::vector<EHandle> backPropagateGradient(EHandle sumOfDOutputs) const {
+                    std::vector<EHandle> inp = graph->inputs(self);
+                    assert(!inp.empty() && "wrong inputs number");
+                    std::vector<EHandle> derivs(inp.size());
+                    for (auto it = derivs.begin(); it != derivs.end(); ++it){
+                        *it = graph->addNode(
+                            std::make_shared<PassIfMinElementIsAssigned>(inp, std::distance(derivs.begin(), it)),
+                            { sumOfDOutputs });
+                    }
+                    return derivs;
+                }
+            };
+
+            std::vector<EHandle> inputHandles;
+            for (auto exprIt = begin; exprIt != end; ++exprIt){
+                inputHandles.push_back(exprIt->handle());
+            }
+            return (*begin).g()->as<T>((*begin).g()->addNode(std::make_shared<MinElementOp>(), inputHandles));
+        }
+
     }
 }
  

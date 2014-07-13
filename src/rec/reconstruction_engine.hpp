@@ -41,8 +41,17 @@ namespace panoramix {
         template <class T>
         class OptimizibleExpression {
         public:
-            inline OptimizibleExpression() :_data(0), _lastChange(0) {}
-            inline explicit OptimizibleExpression(const T & d) : _data(d), _lastChange(0) {}
+            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+        public:
+            inline OptimizibleExpression() {}
+            inline explicit OptimizibleExpression(const T & d, deriv::ExpressionGraph & graph) 
+                : _data(std::make_shared<T>(d)){
+                _lastChange = deriv::common::FillWithScalar(_lastChange, 0.0);
+                T * dataPtr = _data.get();
+                _expr = deriv::composeFunction(graph, [dataPtr]() ->T {
+                    return *dataPtr;
+                });
+            }
 
             void registerHandleTable(EHandleTable & table) { 
                 table.push_back(_expr.handle()); 
@@ -50,18 +59,27 @@ namespace panoramix {
             }
 
             void getDerivative(const EHandleTable & derivTable) {
-                _dexpr = _expr.g()->asDerived<T>(derivTable[_positionInHandleTable]);
+                auto derivHandle = derivTable[_positionInHandleTable];
+                if (derivHandle.isValid())
+                    _dexpr = _expr.g()->asDerived<T>(derivHandle);
             }
 
-            void optimizeData(double delta, double momentum){
-
+            void optimizeData(double delta, double momentum, const EHandleTable & table){
+                if (_dexpr.isValid()){
+                    auto grad = _dexpr.executeHandlesRange(table.begin(), table.end());
+                    _lastChange = (- grad * (1 - momentum) + _lastChange * momentum) * delta;
+                    *_data += _lastChange;
+                }
             }
+
+            inline deriv::Expression<T> expression() const { return _expr; }
+            inline deriv::DerivativeExpression<T> derivativeExpression() const { return _dexpr; }
 
         private:
             deriv::Expression<T> _expr;
             deriv::DerivativeExpression<T> _dexpr;
             int _positionInHandleTable;
-            T _data;
+            std::shared_ptr<T> _data;
             T _lastChange;
         };
 
@@ -187,14 +205,12 @@ namespace panoramix {
             //// components and constraints
             // component data
             struct LineStructureComponentData {
-                double eta;
-                deriv::Expression<const double &> etaExpr;
+                OptimizibleExpression<double> etaExpr;
                 int mergedSpatialLineSegmentId;
             };
 
             struct RegionComponentData {
-                Vec3 theta;
-                deriv::Expression<Eigen::Vector3d> thetaExpr;
+                OptimizibleExpression<Eigen::Vector3d> thetaExpr;
                 DisableableExpression<double> manhattanEnergyExpr;
                 ReconstructionEngine::ViewHandle viewHandle;
                 RegionsNet::RegionHandle regionHandle;

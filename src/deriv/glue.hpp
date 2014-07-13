@@ -40,6 +40,14 @@ namespace panoramix {
             return mm;
         }
 
+        template <class T, int M, int O, int MM, int NN>
+        cv::Vec<T, M> EigenVecToCVVec(const Eigen::Matrix<T, M, 1, O, MM, NN> & m) {
+            cv::Vec<T, M> mm;
+            for (int i = 0; i < M; i++)
+                mm(i) = m(i);
+            return mm;
+        }
+
     }
 }
  

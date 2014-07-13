@@ -2,6 +2,7 @@
 
 #include "../src/core/mesh_maker.hpp"
 #include "../src/core/utilities.hpp"
+#include "../src/core/debug.hpp"
 #include "../src/rec/reconstruction_engine.hpp"
 #include "../src/rec/reconstruction_engine_visualize.hpp"
 #include "../src/rec/regions_net_visualize.hpp"
@@ -20,8 +21,8 @@ static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + 
 static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
 static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
 
-//TEST(ViewsNet, FixedCamera) {
-void run(){
+TEST(ViewsNet, FixedCamera) {
+//void run(){
 
     cv::Mat panorama = cv::imread(ProjectTestDataDirStr_PanoramaIndoor + "/13.jpg");
     cv::resize(panorama, panorama, cv::Size(2000, 1000));
@@ -66,13 +67,14 @@ void run(){
         net.computeFeatures(viewHandle);
         net.buildRegionNet(viewHandle);
 
-        vis::Visualizer2D(im)
-            << *(net.views().data(viewHandle).regionNet)
-            << vis::manip2d::SetColor(vis::Color(0, 0, 255))
-            << vis::manip2d::SetThickness(2)
-            << net.views().data(viewHandle).lineSegments
-            << vis::manip2d::Show();
-
+        IF_DEBUG_USING_VISUALIZERS {
+            vis::Visualizer2D(im)
+                << *(net.views().data(viewHandle).regionNet)
+                << vis::manip2d::SetColor(vis::Color(0, 0, 255))
+                << vis::manip2d::SetThickness(2)
+                << net.views().data(viewHandle).lineSegments
+                << vis::manip2d::Show();
+        }
 
 
         std::cout << "photo: " << (i+1) << std::endl;
@@ -85,12 +87,14 @@ void run(){
         net.computeFeatures(viewHandle);
         net.buildRegionNet(viewHandle);
 
-        vis::Visualizer2D(im)
-            << *(net.views().data(viewHandle).regionNet)
-            << vis::manip2d::SetColor(vis::Color(0, 0, 255))
-            << vis::manip2d::SetThickness(2)
-            << net.views().data(viewHandle).lineSegments
-            << vis::manip2d::Show();
+        IF_DEBUG_USING_VISUALIZERS {
+            vis::Visualizer2D(im)
+                << *(net.views().data(viewHandle).regionNet)
+                << vis::manip2d::SetColor(vis::Color(0, 0, 255))
+                << vis::manip2d::SetThickness(2)
+                << net.views().data(viewHandle).lineSegments
+                << vis::manip2d::Show();
+        }
 
         net.updateConnections(viewHandle);
         net.findMatchesToConnectedViews(viewHandle);
@@ -137,7 +141,7 @@ int main(int argc, char * argv[], char * envp[])
 {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    //return RUN_ALL_TESTS();
-    run();
+    return RUN_ALL_TESTS();
+    //run();
     return 0;
 }

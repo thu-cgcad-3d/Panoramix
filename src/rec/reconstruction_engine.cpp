@@ -14,6 +14,8 @@ extern "C" {
 #include "optimization.hpp"
 #include "reconstruction_engine.hpp"
 
+#include "../core/debug.hpp"
+
 namespace panoramix {
     namespace rec {
 
@@ -1553,8 +1555,8 @@ namespace panoramix {
                 auto h = _constraints.add(cd);
                 LineStructureComponentData & lineStruct = _constraints.data(h).asLineStructure;
                 lineStruct.mergedSpatialLineSegmentId = i;
-                lineStruct.eta = norm(_globalData.mergedSpatialLineSegments[i].component.first);
-                lineStruct.etaExpr = graph.addRef(lineStruct.eta);
+                lineStruct.etaExpr = OptimizibleExpression<double>(
+                    norm(_globalData.mergedSpatialLineSegments[i].component.first), graph);
             }
 
             // add line structure connectivity constraints
@@ -1710,53 +1712,54 @@ namespace panoramix {
             }*/
 
 
-            struct MinOf6Traits : public deriv::OpTraitsBase<double, double, double, double, double, double, double> {
-                inline double value(const double & e1, const double & e2, const double & e3, const double & e4, const double & e5, const double & e6) const {
-                    return std::min({ e1, e2, e3, e4, e5, e5 });
-                }
-                inline void derivatives(
-                    deriv::Expression<double> output,
-                    deriv::DerivativeExpression<double> sumOfDOutputs,
-                    deriv::OriginalAndDerivativeExpression<double> input1,
-                    deriv::OriginalAndDerivativeExpression<double> input2,
-                    deriv::OriginalAndDerivativeExpression<double> input3,
-                    deriv::OriginalAndDerivativeExpression<double> input4,
-                    deriv::OriginalAndDerivativeExpression<double> input5,
-                    deriv::OriginalAndDerivativeExpression<double> input6) const {
+            //struct MinOf6Traits : public deriv::OpTraitsBase<double, double, double, double, double, double, double> {
+            //    inline double value(const double & e1, const double & e2, const double & e3, const double & e4, const double & e5, const double & e6) const {
+            //        return std::min({ e1, e2, e3, e4, e5, e5 });
+            //    }
+            //    inline void derivatives(
+            //        deriv::Expression<double> output,
+            //        deriv::DerivativeExpression<double> sumOfDOutputs,
+            //        deriv::OriginalAndDerivativeExpression<double> input1,
+            //        deriv::OriginalAndDerivativeExpression<double> input2,
+            //        deriv::OriginalAndDerivativeExpression<double> input3,
+            //        deriv::OriginalAndDerivativeExpression<double> input4,
+            //        deriv::OriginalAndDerivativeExpression<double> input5,
+            //        deriv::OriginalAndDerivativeExpression<double> input6) const {
 
-                    std::array<deriv::OriginalAndDerivativeExpression<double>, 6> inputs = { {
-                        input1,
-                        input2,
-                        input3,
-                        input4,
-                        input5,
-                        input6
-                    } };
-                    for (int i = 0; i < 6; i++) {
-                        auto selectMinumunToBeSumOfDOutputs = [output, inputs, i](double sumOfDOutputsVal) -> double {
-                            auto maxPos = std::min_element(inputs.begin(), inputs.end(), 
-                                [](const deriv::OriginalAndDerivativeExpression<double> & a,
-                                const deriv::OriginalAndDerivativeExpression<double> & b) {
-                                return a.first.result() < b.first.result();
-                            });
-                            auto maxId = std::distance(inputs.begin(), maxPos);
-                            if (maxId == i) {
-                                return sumOfDOutputsVal;
-                            } else {
-                                return 0.0;
-                            }
-                        };
-                        inputs[i].second = deriv::ComposeExpressionWithoutDerivativeDefinition(
-                            selectMinumunToBeSumOfDOutputs, sumOfDOutputs);
-                    }                   
-                }
-                virtual std::ostream & toString(std::ostream & os) const { os << "min6"; return os; }
-            };
+            //        std::array<deriv::OriginalAndDerivativeExpression<double>, 6> inputs = { {
+            //            input1,
+            //            input2,
+            //            input3,
+            //            input4,
+            //            input5,
+            //            input6
+            //        } };
+            //        for (int i = 0; i < 6; i++) {
+            //            auto selectMinumunToBeSumOfDOutputs = [output, inputs, i](double sumOfDOutputsVal) -> double {
+            //                auto maxPos = std::min_element(inputs.begin(), inputs.end(), 
+            //                    [](const deriv::OriginalAndDerivativeExpression<double> & a,
+            //                    const deriv::OriginalAndDerivativeExpression<double> & b) {
+            //                    return a.first.result() < b.first.result();
+            //                });
+            //                auto maxId = std::distance(inputs.begin(), maxPos);
+            //                if (maxId == i) {
+            //                    return sumOfDOutputsVal;
+            //                } else {
+            //                    return 0.0;
+            //                }
+            //            };
+            //            inputs[i].second = deriv::ComposeExpressionWithoutDerivativeDefinition(
+            //                selectMinumunToBeSumOfDOutputs, sumOfDOutputs);
+            //        }                   
+            //    }
+            //    virtual std::ostream & toString(std::ostream & os) const { os << "min6"; return os; }
+            //};
 
-            inline deriv::Expression<double> minOf6(const std::array<deriv::Expression<double>, 6> & inputs) {
-                return deriv::ComposeExpression(MinOf6Traits(), 
-                    inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5]);
-            }
+            //inline deriv::Expression<double> minOf6(const std::array<deriv::Expression<double>, 6> & inputs) {
+            //    return deriv::ComposeExpression(MinOf6Traits(), 
+            //        inputs[0], inputs[1], inputs[2], inputs[3], inputs[4], inputs[5]);
+            //}
+
 
             inline deriv::Expression<double> gaussianFunc(const deriv::Expression<double> & input, double sigma) {
                 return exp(-input * input / 2.0 / sigma / sigma);
@@ -1795,6 +1798,8 @@ namespace panoramix {
 
         void ReconstructionEngine::reconstructFaces() {
 
+            using core::PixelLoc;
+
             // compute spatial positions of each region
             struct {
                 inline uint64_t operator()(const RegionIndex & ri) const {
@@ -1802,7 +1807,9 @@ namespace panoramix {
                 }
             } hashRegionIndex;
             std::unordered_map<RegionIndex, std::vector<Vec3>, decltype(hashRegionIndex)> 
-                regionSpatialContours(10000, hashRegionIndex);          
+                regionSpatialContours(10000, hashRegionIndex);
+            //std::unordered_map<RegionIndex, std::vector<Vec3>, decltype(hashRegionIndex)>
+            //    regionDilatedSpatialContours(10000, hashRegionIndex);
             for (auto & view : _views.elements<0>()) {
                 const auto & regions = * view.data.regionNet;
                 for (auto & region : regions.regions().elements<0>()) {
@@ -1812,14 +1819,14 @@ namespace panoramix {
 
                     assert(!rd.contours.empty() && "Region contour not initialized yet?");
                     std::vector<Vec3> spatialContour;
-                    spatialContour.reserve(rd.contours.front().size());
-                    std::transform(rd.contours.front().begin(), rd.contours.front().end(), 
-                        std::back_inserter(spatialContour), 
-                        [&vd](const PixelLoc & p) {
+                    //spatialContour.reserve(rd.contours.front().size());
+                    //dilatedSpatialContour.reserve(rd.dilatedContours.front().size());
+                    for (auto & p : rd.dilatedContours.back()){
                         auto direction = vd.camera.spatialDirection(p);
-                        return direction / norm(direction);
-                    });
+                        spatialContour.push_back(direction / norm(direction));
+                    }
                     regionSpatialContours[ri] = spatialContour;
+                    //regionDilatedSpatialContours[ri] = dilatedSpatialContour;
                 }
             }
 
@@ -1827,9 +1834,15 @@ namespace panoramix {
             auto lookupRegionBB = [&regionSpatialContours](const RegionIndex& ri) {
                 return BoundingBoxOfContainer(regionSpatialContours[ri]);
             };
+            //auto lookupRegionDilatedBB = [&regionDilatedSpatialContours](const RegionIndex& ri) {
+            //    return BoundingBoxOfContainer(regionDilatedSpatialContours[ri]);
+            //};
+            
             RTreeWrapper<RegionIndex, decltype(lookupRegionBB)> regionsRTree(lookupRegionBB);
+            //RTreeWrapper<RegionIndex, decltype(lookupRegionDilatedBB)> regionsDilatedRTree(lookupRegionDilatedBB);
             for (auto & region : regionSpatialContours) {
                 regionsRTree.insert(region.first);
+                //regionsDilatedRTree.insert(region.first);
             }
             
             // store overlapping ratios between overlapped regions
@@ -1862,7 +1875,7 @@ namespace panoramix {
 
                     // project relatedRi contour to ri's camera plane
                     auto & relatedRiContour3d = regionSpatialContours[relatedRi];
-                    std::vector<PixelLoc> relatedRiContour2d(relatedRiContour3d.size());
+                    std::vector<core::PixelLoc> relatedRiContour2d(relatedRiContour3d.size());
                     for (int i = 0; i < relatedRiContour3d.size(); i++) {
                         auto p = riCamera.screenProjection(relatedRiContour3d[i]);
                         relatedRiContour2d[i] = PixelLoc(p);
@@ -1875,7 +1888,7 @@ namespace panoramix {
                     gpc_polygon_clip(GPC_INT, &relatedRiPoly, &riPoly, &intersectedPoly);
 
                     if (intersectedPoly.num_contours > 0 && intersectedPoly.contour[0].num_vertices > 0) {
-                        std::vector<PixelLoc> intersected;
+                        std::vector<core::PixelLoc> intersected;
                         ConvertToPixelVector(intersectedPoly, intersected);
                         double intersectedArea = cv::contourArea(intersected);
 
@@ -1926,7 +1939,8 @@ namespace panoramix {
                         // project line to ri view
                         auto & cam = _views.data(ri.viewHandle).camera;
                         auto p = cam.screenProjection(sampledDir);
-                        auto d = cv::pointPolygonTest(_views.data(ri.viewHandle).regionNet->regions().data(ri.regionHandle).contours.front(),
+                        auto d = cv::pointPolygonTest(_views.data(ri.viewHandle).regionNet->regions()
+                            .data(ri.regionHandle).dilatedContours.back(), ////
                             PixelLoc(p[0], p[1]), false);
                         if (d > 0) { // inside
                             lineRegionSharedPoints[std::make_pair(i, ri)].push_back(p);
@@ -1953,7 +1967,11 @@ namespace panoramix {
                 cd.asRegion.regionHandle = r.first.regionHandle;
                 cd.asRegion.viewHandle = r.first.viewHandle;
                 auto & cam = _views.data(r.first.viewHandle).camera;
-                cd.asRegion.theta = (cam.center() - cam.eye()) / (cam.center() - cam.eye()).dot(cam.center());
+                auto direction = 
+                    cam.spatialDirection(_views.data(r.first.viewHandle).regionNet->regions().data(r.first.regionHandle).center);
+                cd.asRegion.thetaExpr = OptimizibleExpression<Eigen::Vector3d>(
+                    deriv::CVMatToEigenMat(normalize(direction)), 
+                    _exprGraph);
                 ri2Handle[r.first] = _constraints.add(cd);
             }
             //// add line structure components
@@ -2025,22 +2043,15 @@ namespace panoramix {
             // component expressions
             for (auto & r : _constraints.elements<0>()) {
                 if (r.data.type == ComponentData::Type::Region) {
-                    // theta
-                    r.data.asRegion.thetaExpr = composeFunction(graph, [&r]() {
-                        return CVMatToEigenMat(r.data.asRegion.theta); 
-                    });
                     // E_manh
                     std::array<Expression<double>, 6> angles;
                     for (int i = 0; i < 6; i++) {
-                        angles[i] = angleFunc(r.data.asRegion.thetaExpr, principleDirectionExprs[i]);
+                        angles[i] = angleFunc(r.data.asRegion.thetaExpr.expression(), principleDirectionExprs[i]);
                     }
-                    Expression<double> minAngle = minOf6(angles);
-                    static const double wManh = 1.0;
+                    Expression<double> minAngle = deriv::minInRange(angles.begin(), angles.end());
+                    double wManh = 1.0;
                     r.data.asRegion.manhattanEnergyExpr = 
                         DisableableExpression<double>(hFunc(minAngle, M_PI / 6) * wManh, graph);
-                } else {
-                    // eta
-                    r.data.asLineStructure.etaExpr = graph.addRef(r.data.asLineStructure.eta);
                 }
             }
 
@@ -2055,10 +2066,10 @@ namespace panoramix {
                         rd2.type == ComponentData::Type::Region &&
                         "invalid component type!");
 
-                    auto thetaDiffExpr = rd1.asRegion.thetaExpr - rd2.asRegion.thetaExpr;
+                    auto thetaDiffExpr = rd1.asRegion.thetaExpr.expression() - rd2.asRegion.thetaExpr.expression();
                     auto thetaDiffSquaredSum = abs(dotProd(thetaDiffExpr, thetaDiffExpr));
                     
-                    static const double wOverlap = 5.0;
+                    double wOverlap = 10.0;
 
                     // E_overlap
                     auto overlapRatio = con.data.asRegionOverlap.overlapRatio;
@@ -2086,6 +2097,7 @@ namespace panoramix {
                         for (auto & p : ps) {
                             auto sampledDirectionExpr = composeFunction(graph, [&p, &camera]() {
                                 auto direction = camera.spatialDirection(p);
+                                assert(norm(direction) != 0);
                                 return CVMatToEigenMat(direction / norm(direction));
                             });
                             sampledDirectionExprs.push_back(sampledDirectionExpr);
@@ -2096,21 +2108,25 @@ namespace panoramix {
                         lambdasR2(sampledDirectionExprs.size());
                     std::vector<EHandle> lambdaSquaredDiffHandles(sampledDirectionExprs.size());
                     for (int i = 0; i < sampledDirectionExprs.size(); i++) {
-                        lambdasR1[i] = dotProd(rd1.asRegion.thetaExpr, rd1.asRegion.thetaExpr) /
-                            dotProd(rd1.asRegion.thetaExpr, sampledDirectionExprs[i]);
-                        lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr, rd2.asRegion.thetaExpr) /
-                            dotProd(rd2.asRegion.thetaExpr, sampledDirectionExprs[i]);
+                        lambdasR1[i] = dotProd(rd1.asRegion.thetaExpr.expression(), rd1.asRegion.thetaExpr.expression()) /
+                            dotProd(rd1.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
+                        lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr.expression(), rd2.asRegion.thetaExpr.expression()) /
+                            dotProd(rd2.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
                         lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
                     }
                     EHandle lambdaSquaredDiffSumHandle = HSum<double>(&graph, lambdaSquaredDiffHandles);
                     auto lambdaSquaredDiffSum = graph.as<double>(lambdaSquaredDiffSumHandle);
 
                     // E_connect
-                    double occludedness = straightness;
-                    assert(occludedness > 0);
-                    static const double wConnect = 1.0;
+                    double wConnect = 3.0;
+                    assert(straightness >= 0.0 && straightness <= 1.0);
                     con.data.constraintEnergyExpr =
-                        DisableableExpression<double>(wConnect * lambdaSquaredDiffSum * occludedness, graph);
+                        DisableableExpression<double>(wConnect * lambdaSquaredDiffSum * (1.0 - straightness), graph);
+
+                    IF_DEBUG_USING_VISUALIZERS{
+                        double v = con.data.constraintEnergyExpr.toExpression().execute();
+                        assert(!isnan(v) && v >= 0);
+                    }
 
                 }
                 // line line connectivity
@@ -2137,10 +2153,10 @@ namespace panoramix {
                     assert(ratio1 > 0);
                     double ratio2 = depthOfSampledPointOnLine2 / norm(line2.component.first);
                     assert(ratio2 > 0);
-                    auto lambda1 = lineData1.etaExpr * ratio1;
-                    auto lambda2 = lineData2.etaExpr * ratio2;
+                    auto lambda1 = lineData1.etaExpr.expression() * ratio1;
+                    auto lambda2 = lineData2.etaExpr.expression() * ratio2;
 
-                    static const double wLineConnect = 2.0;
+                    double wLineConnect = 8.0;
                     auto lambdaSquaredDiff = Square(lambda1 - lambda2);
                     con.data.constraintEnergyExpr =
                         DisableableExpression<double>((wLineConnect * lambdaSquaredDiff).cast<double>(), graph);
@@ -2181,8 +2197,8 @@ namespace panoramix {
                         lambdasR2(sampledDirectionExprs.size());
                     std::vector<EHandle> lambdaSquaredDiffHandles(sampledDirectionExprs.size());
                     for (int i = 0; i < sampledDirectionExprs.size(); i++) {
-                        lambdasR1[i] = dotProd(rrd1.asRegion.thetaExpr, rrd1.asRegion.thetaExpr) /
-                            dotProd(rrd1.asRegion.thetaExpr, sampledDirectionExprs[i]);
+                        lambdasR1[i] = dotProd(rrd1.asRegion.thetaExpr.expression(), rrd1.asRegion.thetaExpr.expression()) /
+                            dotProd(rrd1.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
                         /*lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr, rd2.asRegion.thetaExpr) /
                             dotProd(rd2.asRegion.thetaExpr, sampledDirectionExprs[i]);*/
                         auto & dir = sampledPoints[i]; // we don't need expression here
@@ -2190,7 +2206,7 @@ namespace panoramix {
                         auto depth = norm(DistanceBetweenTwoLines(InfiniteLine3({ 0, 0, 0 }, dir),
                             line.infinieLine()).second.second);
                         double ratio = depth / norm(line.first); // we only need the ratio of the depths
-                        lambdasR2[i] = (rrd2.asLineStructure.etaExpr * ratio).cast<double>();
+                        lambdasR2[i] = (rrd2.asLineStructure.etaExpr.expression() * ratio).cast<double>();
 
                         lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
                     }
@@ -2198,7 +2214,7 @@ namespace panoramix {
                     auto lambdaSquaredDiffSum = graph.as<double>(lambdaSquaredDiffSumHandle);
 
                     // E_connect
-                    static const double wConnect = 1.0;
+                    double wConnect = 4.0;
                     con.data.constraintEnergyExpr =
                         DisableableExpression<double>(wConnect * lambdaSquaredDiffSum, graph);
                     
@@ -2206,6 +2222,8 @@ namespace panoramix {
 
 
             }
+
+            std::cout << "individual energies defined" << std::endl;
 
             // sum all energy
             std::vector<EHandle> allEnergyHandles;
@@ -2219,18 +2237,148 @@ namespace panoramix {
             // add all connectivity energies
             for (auto & cd : _constraints.elements<1>()){
                 allEnergyHandles.push_back(cd.data.constraintEnergyExpr.toExpression().handle());
+                //std::cout << graph.as<double>(allEnergyHandles.back()).execute() << std::endl;
             }
+
             // sum all
+            
             auto completeEngergyExpr = graph.as<double>(HSum<double>(&graph, allEnergyHandles));
+            std::cout << "final energy expression defined" << std::endl;
             std::cout << "current energy is: " << completeEngergyExpr.execute() << std::endl;
+            
+            // add all E_manh
+            for (auto & rd : _constraints.elements<0>()){
+                if (rd.data.type == ComponentData::Type::Region){
+                    auto r = rd.data.asRegion.manhattanEnergyExpr.toExpression().result();
+                    assert(!isnan(r));
+                    assert(r >= 0);
+                    //std::cout << "E_manh, rd.topo.hd.id=" << rd.topo.hd.id << ": " << r << std::endl;
+                }
+            }
+            // add all connectivity energies
+            for (auto & cd : _constraints.elements<1>()){
+                auto r = cd.data.constraintEnergyExpr.toExpression().result();
+                assert(!isnan(r));
+                assert(r >= 0);
+                //std::cout << "E_cons, cd.topo.hd.id=" << cd.topo.hd.id << ": " << r << std::endl;
+            }
+
 
             // compute derivative
+            EHandleTable handleTable;
+            handleTable.reserve(_constraints.internalElements<0>().size());
+            for (auto & vd : _constraints.elements<0>()){
+                if (vd.data.type == ComponentData::Type::Region){
+                    vd.data.asRegion.thetaExpr.registerHandleTable(handleTable);
+                    for (int i = 0; i < 3; i++)
+                        assert(!isnan(vd.data.asRegion.thetaExpr.expression().execute()[i]));
+                }
+                else if (vd.data.type == ComponentData::Type::LineStructure){
+                    vd.data.asLineStructure.etaExpr.registerHandleTable(handleTable);
+                    assert(!isnan(vd.data.asLineStructure.etaExpr.expression().execute()));
+                }
+                else{
+                    assert(false && "invalid component type!");
+                }
+            }
 
+            EHandleTable derivHandleTable;
+            derivHandleTable.reserve(handleTable.size());
+            completeEngergyExpr.derivativesHandlesRange(handleTable.begin(), handleTable.end(), 
+                std::back_inserter(derivHandleTable));
+
+            for (auto & vd : _constraints.elements<0>()){
+                if (vd.data.type == ComponentData::Type::Region){
+                    vd.data.asRegion.thetaExpr.getDerivative(derivHandleTable);
+                }
+                else if (vd.data.type == ComponentData::Type::LineStructure){
+                    vd.data.asLineStructure.etaExpr.getDerivative(derivHandleTable);
+                }
+                else{
+                    assert(false && "invalid component type!");
+                }
+            }
 
             std::cout << "done building constraints" << std::endl;
 
             // reconstruct faces
-            // Eigen::ArrayXXd
+            double delta = 0.000001;
+            static const double momentum = 0;
+
+            // disable E_manh
+            for (auto & vd : _constraints.elements<0>()){
+                if (vd.data.type == ComponentData::Type::Region){
+                    vd.data.asRegion.manhattanEnergyExpr.disable();
+                }
+            }
+
+            auto startTime = std::chrono::high_resolution_clock::now();
+            double energy = std::numeric_limits<double>::max();
+            for (int i = 0; i < 5000; i++){
+                double curEnergy = completeEngergyExpr.execute();
+                if (curEnergy > energy){
+                    delta *= 0.6;
+                    std::cout << "delta set to " << delta << std::endl;
+                }
+                energy = curEnergy;
+                std::cout << "[" << i << "] current energy: " << energy << std::endl;
+                for (auto & vd : _constraints.elements<0>()){
+                    if (vd.data.type == ComponentData::Type::Region){
+                        vd.data.asRegion.thetaExpr.optimizeData(delta, momentum, handleTable);
+                    }
+                    else if (vd.data.type == ComponentData::Type::LineStructure){
+                        vd.data.asLineStructure.etaExpr.optimizeData(delta, momentum, handleTable);
+                    }
+                    else{
+                        assert(false && "invalid component type!");
+                    }
+                }
+
+                auto timeCost = std::chrono::high_resolution_clock::now() - startTime;
+                std::cout << "time cost: " 
+                    << std::chrono::duration_cast<std::chrono::seconds>(timeCost).count() 
+                    << std::endl;
+
+                // visualize
+                {
+                    std::unordered_map<RegionIndex, vis::Color, decltype(hashRegionIndex)> ri2Color(100, hashRegionIndex);
+                    for (auto & vd : _constraints.elements<0>()){
+                        if (vd.data.type == ComponentData::Type::Region){
+                            Vec3 theta = deriv::EigenVecToCVVec(vd.data.asRegion.thetaExpr.expression().result());
+                            theta = normalize(theta);
+                            Vec3 colorVec = {
+                                abs(theta.dot(_globalData.vanishingPoints[0])),
+                                abs(theta.dot(_globalData.vanishingPoints[1])),
+                                abs(theta.dot(_globalData.vanishingPoints[2]))
+                            };
+                            colorVec *= 255.0;
+                            vis::Color color(colorVec[0], colorVec[1], colorVec[2]);
+                            RegionIndex ri;
+                            ri.regionHandle = vd.data.asRegion.regionHandle;
+                            ri.viewHandle = vd.data.asRegion.viewHandle;
+                            ri2Color[ri] = color;
+                        }
+                    }
+ 
+                    for (auto & vd : _views.elements<0>()){
+                        Image im(vd.data.image.size(), CV_8UC4);
+                        RegionIndex ri;
+                        ri.viewHandle = vd.topo.hd;
+                        auto segmentedRegions = vd.data.regionNet->segmentedRegions();
+                        for (int y = 0; y < segmentedRegions.rows; y++){
+                            for (int x = 0; x < segmentedRegions.cols; x++){
+                                ri.regionHandle.id = segmentedRegions.at<int32_t>(y, x);
+                                im.at<Vec<uint8_t, 4>>(y, x) = ri2Color[ri];
+                            }
+                        }
+                        vis::Visualizer2D viz;
+                        viz.setImage(im);
+                        viz.params.winName = "region orientations " + std::to_string(vd.topo.hd.id);
+                        viz << vd.data.lineSegments;
+                        viz << vis::manip2d::Show(1);
+                    }
+                }
+            }
 
         }
 

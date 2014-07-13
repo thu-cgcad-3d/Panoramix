@@ -41,7 +41,7 @@ namespace panoramix {
             }
 
             // fill with scalar
-            template <class T>
+            template <class T, SATISFIES(T, FloatingPointTag)>
             DataScalarType<T> FillWithScalar(const T & t, const T & s){
                 return s;
             }

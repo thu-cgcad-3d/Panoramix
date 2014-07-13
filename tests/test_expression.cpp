@@ -10,6 +10,35 @@ using namespace panoramix::deriv;
 using namespace Eigen;
 
 
+TEST(Expression, MinInRange){
+    double av[3];
+    ExpressionGraph graph;
+    Expression<double> a[3];
+    for (int i = 0; i < 3; i++) {
+        a[i] = composeFunction(graph, [i, &av](){return av[i]; });
+    }
+
+    auto mina = minInRange(std::begin(a), std::end(a));
+    auto da0 = mina.derivative(a[0]);
+    std::cout << "da0 = " << da0 << std::endl;
+
+    for (int i = 0; i < 1000; i++) {
+        for (auto & aa : av) {
+            aa = rand();
+        }
+        auto minIt = std::min_element(std::begin(av), std::end(av));
+        ASSERT_EQ(*minIt, mina.execute());
+        if (minIt == std::begin(av)){
+            ASSERT_EQ(da0.execute(), 1.0);
+        }
+        else{
+            ASSERT_EQ(da0.execute(), 0.0);
+        }
+    }
+
+}
+
+
 
 TEST(Expression, addConst) {
 
@@ -794,6 +823,9 @@ TEST(Expression, TempFun) {
         //mina.derivatives(a[0]);
     }
 }
+
+
+
 
 
 
