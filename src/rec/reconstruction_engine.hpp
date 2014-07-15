@@ -19,14 +19,15 @@ namespace panoramix {
         class DisableableExpression {
         public:
             inline DisableableExpression() : _enabled(nullptr) {}
-            inline explicit DisableableExpression(const deriv::Expression<T> & rawExpr, deriv::ExpressionGraph & g)
+            inline DisableableExpression(const deriv::Expression<T> & rawExpr)
                 : _enabled(std::make_shared<bool>(true)) {
-                auto enabledExpr = deriv::composeFunction(g, [this]()
+                auto enabledExpr = deriv::composeFunction(*rawExpr.g(), [this]()
                     -> double {return *_enabled ? 1.0 : -1.0; });
                 _expr = deriv::cwiseSelect(enabledExpr, rawExpr, 0.0);
             }
 
-            inline deriv::Expression<T> toExpression() const { return _expr; }
+            inline deriv::Expression<T> expression() const { return _expr; }
+            inline operator deriv::Expression<T>() const { return _expr; }
             inline void setEnabled(bool b) { *_enabled = b; }
             inline void enable() { *_enabled = true; }
             inline void disable() { *_enabled = false; }
@@ -45,7 +46,7 @@ namespace panoramix {
         public:
             inline OptimizibleExpression() {}
             inline explicit OptimizibleExpression(const T & d, deriv::ExpressionGraph & graph) 
-                : _data(std::make_shared<T>(d)){
+                : _data(std::make_shared<T>(d)), _frozen(false) {
                 _lastChange = deriv::common::FillWithScalar(_lastChange, 0.0);
                 T * dataPtr = _data.get();
                 _expr = deriv::composeFunction(graph, [dataPtr]() ->T {
@@ -62,15 +63,20 @@ namespace panoramix {
                 auto derivHandle = derivTable[_positionInHandleTable];
                 if (derivHandle.isValid())
                     _dexpr = _expr.g()->asDerived<T>(derivHandle);
+                else
+                    _dexpr = deriv::DerivativeExpression<T>(); // invalidate
             }
 
             void optimizeData(double delta, double momentum, const EHandleTable & table){
-                if (_dexpr.isValid()){
+                if (_dexpr.isValid() && !_frozen ){
                     auto grad = _dexpr.executeHandlesRange(table.begin(), table.end());
                     _lastChange = (- grad * (1 - momentum) + _lastChange * momentum) * delta;
                     *_data += _lastChange;
                 }
             }
+
+            inline void freeze() { _frozen = true; }
+            inline void unFreeze() { _frozen = false; }
 
             inline deriv::Expression<T> expression() const { return _expr; }
             inline deriv::DerivativeExpression<T> derivativeExpression() const { return _dexpr; }
@@ -81,6 +87,7 @@ namespace panoramix {
             int _positionInHandleTable;
             std::shared_ptr<T> _data;
             T _lastChange;
+            bool _frozen;
         };
 
 
@@ -226,6 +233,7 @@ namespace panoramix {
                 Type type;
                 LineStructureComponentData asLineStructure;
                 RegionComponentData asRegion;
+                DisableableExpression<double> reserveScaleEnergyExpr;
             };
 
             // constraint data
@@ -285,14 +293,11 @@ namespace panoramix {
                 Image panorama;
 
                 std::array<Vec3, 3> vanishingPoints;
-                //std::vector<Image> geometricContext;
-                //std::vector<Image> manhattanJunctionDistribution;
+
                 std::vector<Classified<Line3>> spatialLineSegments;
                 std::vector<Vec3> mergedSpatialLineSegmentIntersections;
                 std::vector<Classified<Line3>> mergedSpatialLineSegments;
                 std::vector<int> mergedSpatialLineSegmentChainIds;
-
-                //std::vector<std::pair<int, int>> constraintsOnMergedSpatialLineSegments;
 
                 std::map<int, std::vector<int>> spatialStructuresOfMergedSpatialLineIds;
                 std::vector<Classified<Line3>> mergedSpatialLineSegmentsClassifiedWithStructureIds;
