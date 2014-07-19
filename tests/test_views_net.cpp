@@ -50,10 +50,10 @@ TEST(ViewsNet, ViewsNet) {
 
     /// insert all into views net
     rec::ReconstructionEngine::Params params;
-    params.mjWeightT = 2.0;
+    /*params.mjWeightT = 2.0;
     params.intersectionConstraintLineDistanceAngleThreshold = 0.05;
     params.incidenceConstraintLineDistanceAngleThreshold = 0.2;
-    params.mergeLineDistanceAngleThreshold = 0.05;
+    params.mergeLineDistanceAngleThreshold = 0.05;*/
     rec::ReconstructionEngine net(params);
     
     std::vector<rec::ReconstructionEngine::ViewHandle> viewHandles;
@@ -71,13 +71,13 @@ TEST(ViewsNet, ViewsNet) {
             std::cout << "photo " << vh.id << std::endl;
             std::cout << "computing features ..." << std::endl;
             netptr->computeFeatures(vh);
-            netptr->buildRegionNet(vh);
+            //netptr->buildRegionNet(vh);
             std::cout << "done " << vh.id << std::endl;
         };
 
         int vid = 0;
         while (vid < net.views().internalElements<0>().size()){
-            std::vector<std::thread> t4(std::min(net.views().internalElements<0>().size() - vid, 4ull));
+            std::vector<std::thread> t4(std::min(net.views().internalElements<0>().size() - vid, 3ull));
             for (auto & t : t4)
                 t = std::thread(computeFea, &net, rec::ReconstructionEngine::ViewHandle(vid++));
             for (auto & t : t4)
@@ -128,31 +128,31 @@ TEST(ViewsNet, ViewsNet) {
     {
         vis::Visualizer2D(panorama) << core::SegmentationExtractor()(panorama, true) << vis::manip2d::Show();
 
-        vis::Visualizer3D viz;
-        viz << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
-            << vis::manip3d::SetBackgroundColor(vis::ColorTag::Black)
-            << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
-            << net.globalData().spatialLineSegments
-            << vis::manip3d::AutoSetCamera
-            << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
-            << vis::manip3d::Show();
+        //vis::Visualizer3D viz;
+        //viz << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
+        //    << vis::manip3d::SetBackgroundColor(vis::ColorTag::Black)
+        //    << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
+        //    << net.globalData().spatialLineSegments
+        //    << vis::manip3d::AutoSetCamera
+        //    << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
+        //    << vis::manip3d::Show();
 
         using namespace std::chrono;
         auto startTime = high_resolution_clock::now();
         std::cout << "reconstructing spatial lines ..." << std::endl;
-        net.rectifySpatialLines();
+        net.reconstructLinesAndFaces();
         auto endTime = high_resolution_clock::now();
         auto secTime = duration_cast<seconds>(endTime - startTime).count();
         std::cout << "time cost: " << secTime << "s" << std::endl;
 
-        vis::Visualizer3D viz2;
-        viz2 << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
-            << vis::manip3d::SetBackgroundColor(vis::ColorTag::Black)
-            << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
-            << net.globalData().mergedSpatialLineSegments
-            << vis::manip3d::AutoSetCamera
-            << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
-            << vis::manip3d::Show();
+        //vis::Visualizer3D viz2;
+        //viz2 << vis::manip3d::SetCamera(core::PerspectiveCamera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)))
+        //    << vis::manip3d::SetBackgroundColor(vis::ColorTag::Black)
+        //    << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
+        //    << net.globalData().mergedSpatialLineSegments
+        //    << vis::manip3d::AutoSetCamera
+        //    << vis::manip3d::SetRenderMode(vis::RenderModeFlag::All)
+        //    << vis::manip3d::Show();
     }
 
     

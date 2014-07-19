@@ -370,7 +370,7 @@ namespace panoramix {
            
 
             // visualize region contours
-            IF_DEBUG_USING_VISUALIZERS {
+            if(false) {
                 Image regionVis(_image.rows, _image.cols, CV_8UC3, vis::Color(100, 100, 100));
                 //Image regionVis = _params.segmenter(_image, true);
                 std::vector<std::vector<std::vector<PixelLoc>>> boundaries;

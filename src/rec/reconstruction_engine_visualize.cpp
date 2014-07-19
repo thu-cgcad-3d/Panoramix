@@ -10,14 +10,15 @@ namespace panoramix {
         Visualizer2D operator << (Visualizer2D viz, const ReconstructionEngine::ViewData & vd) {
             viz.setImage(vd.image);
             
-            viz.params.thickness = 2;
-            viz.params.colorTableDescriptor = vis::ColorTableDescriptor::RGB;
-            viz << vd.lineSegments;
+            if (vd.lineNet){
+                viz.params.thickness = 2;
+                viz.params.colorTableDescriptor = vis::ColorTableDescriptor::RGB;
+                viz << vd.lineNet->lineSegments();
 
-            viz.params.thickness = 1;
-            viz.params.color = vis::ColorFromTag(vis::ColorTag::White);
-            viz << vd.lineSegmentIntersections;
-            
+                viz.params.thickness = 1;
+                viz.params.color = vis::ColorFromTag(vis::ColorTag::White);
+                viz << vd.lineNet->lineSegmentIntersections();
+            }
             return viz;
         }
 
@@ -37,11 +38,12 @@ namespace panoramix {
                 << vis::manip3d::SetPointSize(10.0)
                 << vis::manip3d::SetLineWidth(1.0f)
                 << consLines;*/
-            return viz
+           /* return viz
                 << vis::manip3d::SetDefaultColor(vis::ColorTag::Black)
                 << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::AllColors)
                 << vis::manip3d::SetLineWidth(2.0f)
-                << netgb.mergedSpatialLineSegmentsClassifiedWithStructureIds;
+                << netgb.mergedSpatialLineSegmentsClassifiedWithStructureIds;*/
+            return viz;
         }
 
         Visualizer2D operator << (Visualizer2D viz, const ReconstructionEngine & net) {

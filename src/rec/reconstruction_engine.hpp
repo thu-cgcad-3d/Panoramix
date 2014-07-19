@@ -5,90 +5,16 @@
 #include "../core/feature.hpp"
 #include "../core/utilities.hpp"
 
-#include "../deriv/derivative.hpp"
+#include "optimization.hpp"
 
 #include "regions_net.hpp"
+#include "lines_net.hpp"
 
 namespace panoramix {
     namespace rec { 
 
         using namespace core;
-
-
-        template <class T>
-        class DisableableExpression {
-        public:
-            inline DisableableExpression() : _enabled(nullptr) {}
-            inline DisableableExpression(const deriv::Expression<T> & rawExpr)
-                : _enabled(std::make_shared<bool>(true)) {
-                auto enabledExpr = deriv::composeFunction(*rawExpr.g(), [this]()
-                    -> double {return *_enabled ? 1.0 : -1.0; });
-                _expr = deriv::cwiseSelect(enabledExpr, rawExpr, 0.0);
-            }
-
-            inline deriv::Expression<T> expression() const { return _expr; }
-            inline operator deriv::Expression<T>() const { return _expr; }
-            inline void setEnabled(bool b) { *_enabled = b; }
-            inline void enable() { *_enabled = true; }
-            inline void disable() { *_enabled = false; }
-
-        private:
-            deriv::Expression<T> _expr;
-            std::shared_ptr<bool> _enabled;
-        };
-
-        using EHandleTable = std::vector < deriv::EHandle > ;
-
-        template <class T>
-        class OptimizibleExpression {
-        public:
-            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-        public:
-            inline OptimizibleExpression() {}
-            inline explicit OptimizibleExpression(const T & d, deriv::ExpressionGraph & graph) 
-                : _data(std::make_shared<T>(d)), _frozen(false) {
-                _lastChange = deriv::common::FillWithScalar(_lastChange, 0.0);
-                T * dataPtr = _data.get();
-                _expr = deriv::composeFunction(graph, [dataPtr]() ->T {
-                    return *dataPtr;
-                });
-            }
-
-            void registerHandleTable(EHandleTable & table) { 
-                table.push_back(_expr.handle()); 
-                _positionInHandleTable = table.size() - 1;
-            }
-
-            void getDerivative(const EHandleTable & derivTable) {
-                auto derivHandle = derivTable[_positionInHandleTable];
-                if (derivHandle.isValid())
-                    _dexpr = _expr.g()->asDerived<T>(derivHandle);
-                else
-                    _dexpr = deriv::DerivativeExpression<T>(); // invalidate
-            }
-
-            void optimizeData(double delta, double momentum, const EHandleTable & table){
-                if (_dexpr.isValid() && !_frozen ){
-                    auto grad = _dexpr.executeHandlesRange(table.begin(), table.end());
-                    _lastChange = (- grad * (1 - momentum) + _lastChange * momentum) * delta;
-                    *_data += _lastChange;
-                }
-            }
-
-            inline void freeze() { _frozen = true; }
-            inline void unFreeze() { _frozen = false; }
-
-            inline deriv::Expression<T> expression() const { return _expr; }
-            inline deriv::DerivativeExpression<T> derivativeExpression() const { return _dexpr; }
-
-        private:
-            deriv::Expression<T> _expr;
-            deriv::DerivativeExpression<T> _dexpr;
-            int _positionInHandleTable;
-            std::shared_ptr<T> _data;
-            T _lastChange;
-            bool _frozen;
-        };
+       
 
 
         // engine
@@ -98,27 +24,11 @@ namespace panoramix {
             struct Params {
                 Params();
                 PanoramicCamera camera; // camera for generating the panorama
-                double lineSegmentWeight;
-                double siftWeight;
-                double surfWeight;
-                LineSegmentExtractor lineSegmentExtractor;
-                CVFeatureExtractor<cv::SIFT> siftExtractor;
-                CVFeatureExtractor<cv::SURF> surfExtractor;
-                SegmentationExtractor segmenter;
 
                 // angle scalar to judge whether two views may share certain common features
                 double cameraAngleScaler; 
                 // angle scalar to judge whether two views are too close
                 double smallCameraAngleScalar; 
-                // angle threshold to judge whether two lines are constrained (intersection/incidence), 
-                // used for building the Constraint Graph
-                double intersectionConstraintLineDistanceAngleThreshold;
-                double incidenceConstraintLineDistanceAngleThreshold; // for incidence constraits
-                // angle threshold to judge whether two colineared lines should be merged
-                double mergeLineDistanceAngleThreshold;
-                // manhattan junction weights
-                // mjWeightTriplet includes the Y W and K junctions
-                double mjWeightTriplet, mjWeightX, mjWeightT, mjWeightL, mjWeightI;
             };
 
             struct ViewData;
@@ -150,35 +60,20 @@ namespace panoramix {
             // compute features for a single view
             void computeFeatures(ViewHandle h);
 
-            // segment view image and build net of regions for a single view
-            // after computeFeatures(h)
-            void buildRegionNet(ViewHandle h);
-
             // connect this view to neighbor views who may overlap with h
             size_t updateConnections(ViewHandle h);
 
+            // connect all current views using delauny triangulation 
+            void updateConnections();
+
             // whether this view overlaps some existing views a lot, measured by the smallCameraAngleScalar parameter
             ViewHandle isTooCloseToAnyExistingView(ViewHandle h) const;
-
-            // find the feature matches to connected views
-            // after computeFeatures(h) and buildRTrees(h)
-            void findMatchesToConnectedViews(ViewHandle h); 
-
-            // calibrate all cameras
-            // after findMatchesToConnectedViews(h)
-            void calibrateAllCameras();
-
-            // stitch panorama
-            void stitchPanorama();
             
             // estimate vanishing points using lines extract from all views, classify this lines and lift them all to space
             void estimateVanishingPointsAndClassifyLines();
 
-            // build constraints on spatial lines and rectify their parameters to build a more reasonable 3D sketch
-            void rectifySpatialLines();
-
             // reconstruct regions
-            void reconstructFaces();
+            void reconstructLinesAndFaces();
                 
         public:
 
@@ -191,15 +86,8 @@ namespace panoramix {
                 
                 // image and 2d image features
                 Image image;
-                std::vector<Classified<Line2>> lineSegments;                
-                std::vector<HPoint2> lineSegmentIntersections;
-                std::vector<std::pair<int, int>> lineSegmentIntersectionLineIDs;                
-                
-                std::vector<KeyPoint> keypointsForMatching;
-                cv::Mat descriptorsForMatching;
-
-                // regions
                 std::shared_ptr<RegionsNet> regionNet;
+                std::shared_ptr<LinesNet> lineNet;
             };
 
             // view connection data
@@ -211,9 +99,10 @@ namespace panoramix {
 
             //// components and constraints
             // component data
-            struct LineStructureComponentData {
+            struct LineComponentData {
                 OptimizibleExpression<double> etaExpr;
-                int mergedSpatialLineSegmentId;
+                ReconstructionEngine::ViewHandle viewHandle;
+                LinesNet::LineHandle lineHandle;
             };
 
             struct RegionComponentData {
@@ -226,12 +115,12 @@ namespace panoramix {
             struct ComponentData {
                 enum class Type {
                     UnInitialized,
-                    LineStructure,
+                    Line,
                     Region
                 };
                 explicit ComponentData(Type t = Type::UnInitialized);
                 Type type;
-                LineStructureComponentData asLineStructure;
+                LineComponentData asLine;
                 RegionComponentData asRegion;
                 DisableableExpression<double> reserveScaleEnergyExpr;
             };
@@ -246,23 +135,16 @@ namespace panoramix {
                 RegionsNet::BoundaryHandle boundaryHandle;
             };
 
-            struct LineStructureConnectivityConstraintData {
-                LineStructureConnectivityConstraintData();
-
-                size_t mergedSpatialLineSegmentIds[2]; // corresponded mergedSpatialLineSegments ids
-                PositionOnLine3 positionOnLines[2];
-                Vec3 position; // location of intersecion
-
-                // [i][0] -> line lengths with class i lying between vp[i] and position
-                // [i][1] -> line lengths with class i lying between position and anti-vp[i]
-                double lineVotings[3][2];
-                double weight;
-                struct { double I, L, X, T, Triplet; } junctionWeights;
-                enum { Intersection, Incidence } type;
-                double slackValue; // retreived after optimization
+            struct LineInterViewIncidenceConstraintData {
+                Vec3 relationCenter;
             };
 
-            struct RegionLineStructureConnectivityConstraintData {
+            struct LineConnectivityConstraintData {
+                ReconstructionEngine::ViewHandle viewHandle;
+                LinesNet::LineRelationHandle lineRelationHandle;
+            };
+
+            struct RegionLineConnectivityConstraintData {
                 std::vector<Vec3> sampledPoints;
             };
 
@@ -271,21 +153,21 @@ namespace panoramix {
                     UnInitialized,
                     RegionOverlap,
                     RegionConnectivity,
-                    LineStructureConnectivity,
-                    RegionLineStructureConnectivity
+                    LineConnectivity,
+                    LineInterViewIncidence,
+                    RegionLineConnectivity
                 };
                 explicit ConstraintData(Type t = Type::UnInitialized);
 
                 Type type;
                 RegionOverlapConstraintData asRegionOverlap;
-                RegionConnectivityConstraintData asRegionPairConsistency;
-                LineStructureConnectivityConstraintData asLineStructureConnectivity;
-                RegionLineStructureConnectivityConstraintData asRegionLineStructureConnectivity;
+                RegionConnectivityConstraintData asRegionConnectivity;
+                LineConnectivityConstraintData asLineConnectivity;
+                LineInterViewIncidenceConstraintData asLineInterViewIncidence;
+                RegionLineConnectivityConstraintData asRegionLineConnectivity;
 
                 DisableableExpression<double> constraintEnergyExpr;
             };
-
-
 
 
             // global data
@@ -294,13 +176,15 @@ namespace panoramix {
 
                 std::array<Vec3, 3> vanishingPoints;
 
-                std::vector<Classified<Line3>> spatialLineSegments;
-                std::vector<Vec3> mergedSpatialLineSegmentIntersections;
+                //std::vector<Classified<Line3>> spatialLineSegments;
+                //std::vector<std::pair<ViewHandle, int>> spatialLineSegmentBelongings;
+
+                /*std::vector<Vec3> mergedSpatialLineSegmentIntersections;
                 std::vector<Classified<Line3>> mergedSpatialLineSegments;
                 std::vector<int> mergedSpatialLineSegmentChainIds;
 
                 std::map<int, std::vector<int>> spatialStructuresOfMergedSpatialLineIds;
-                std::vector<Classified<Line3>> mergedSpatialLineSegmentsClassifiedWithStructureIds;
+                std::vector<Classified<Line3>> mergedSpatialLineSegmentsClassifiedWithStructureIds;*/
             };
 
             inline const ViewsGraph & views() const { return _views; }
@@ -310,7 +194,6 @@ namespace panoramix {
         private:
             ViewsGraph _views;
             ConstraintGraph _constraints;
-            deriv::ExpressionGraph _exprGraph;
             Params _params;
             GlobalData _globalData;
         };

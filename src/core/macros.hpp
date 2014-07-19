@@ -2,7 +2,7 @@
 #define PANORAMIX_CORE_MACROS_HPP
  
 namespace panoramix {
-    namespace core {           
+    namespace core {
 
         // not implemented error
 #define NOT_IMPLEMENTED_YET() \
@@ -10,6 +10,13 @@ namespace panoramix {
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \
     "in file: "__FILE__)
+
+        // not tested warning
+#define NOT_TESTED_YET() \
+    std::cout << ("This feature has not yet been tested! \n" \
+    "in function: "__FUNCSIG__ "\n" \
+    "in line: " + std::to_string(__LINE__) + "\n" \
+    "in file: "__FILE__) << std::endl 
 
         // should never be called error
 #define SHOULD_NEVER_BE_CALLED() \

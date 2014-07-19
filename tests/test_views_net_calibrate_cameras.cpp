@@ -44,10 +44,10 @@ TEST(ViewsNet, FixedCamera) {
 
     /// insert into views net
     rec::ReconstructionEngine::Params params;
-    params.mjWeightT = 2.0;
-    params.intersectionConstraintLineDistanceAngleThreshold = 0.05;
-    params.incidenceConstraintLineDistanceAngleThreshold = 0.2;
-    params.mergeLineDistanceAngleThreshold = 0.05;
+   // params.mjWeightT = 2.0;
+   // params.intersectionConstraintLineDistanceAngleThreshold = 0.05;
+   // params.incidenceConstraintLineDistanceAngleThreshold = 0.2;
+   // params.mergeLineDistanceAngleThreshold = 0.05;
     rec::ReconstructionEngine net(params);
 
     for (int i = 0; i < cams.size(); i++){
@@ -61,7 +61,7 @@ TEST(ViewsNet, FixedCamera) {
         std::cout << "extracting features ...";
 
         net.computeFeatures(viewHandle);
-        net.buildRegionNet(viewHandle);
+        //net.buildRegionNet(viewHandle);
 
         vis::Visualizer2D(im)
             << vis::manip2d::SetColor(vis::Color(0, 0, 255))
@@ -73,7 +73,7 @@ TEST(ViewsNet, FixedCamera) {
             << vis::manip2d::Show();
 
         net.updateConnections(viewHandle);
-        net.findMatchesToConnectedViews(viewHandle);
+        //net.findMatchesToConnectedViews(viewHandle);
 
         // show matches
         auto & thisVD = net.views().data(viewHandle);

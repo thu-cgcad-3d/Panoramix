@@ -64,6 +64,10 @@ namespace panoramix {
             return hp;
         }
         template <class T, int N>
+        inline Vec<T, N> operator - (const HPoint<T, N> & a, const HPoint<T, N> & b) {
+            return a.coord * b.scalar - b.coord * a.scalar;
+        }
+        template <class T, int N>
         inline bool operator == (const HPoint<T, N> & a, const HPoint<T, N> & b) {
             return a.coord == b.coord && a.scalar == b.scalar;
         }
@@ -230,6 +234,8 @@ namespace panoramix {
 
         // image
         using Image = cv::Mat;
+        template <class T>
+        using ImageWithType = cv::Mat_<T> ;
         using PixelLoc = cv::Point;        
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im);
         std::pair<double, double> MinMaxValOfImage(const Image & im);

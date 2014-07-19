@@ -4,6 +4,9 @@ extern "C" {
     #include <gpc.h>
 }
 
+#include <glpk.h>
+#include <setjmp.h>
+
 #include <Eigen/StdVector>
 #include <dlib/matrix.h>
 #include <dlib/optimization.h>
@@ -19,28 +22,24 @@ extern "C" {
 namespace panoramix {
     namespace rec {
 
-        ReconstructionEngine::Params::Params() 
-            : camera(250.0), lineSegmentWeight(1.0), siftWeight(1.0),
-            surfWeight(1.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
-            intersectionConstraintLineDistanceAngleThreshold(0.06),
-            incidenceConstraintLineDistanceAngleThreshold(0.2),
-            mergeLineDistanceAngleThreshold(0.05),
-            mjWeightTriplet(5.0), mjWeightX(5.0), mjWeightT(2.0), mjWeightL(1.0), mjWeightI(2.0) {
+        // for glpk
+        struct sinfo {
+            char * text;
+            jmp_buf * env;
+        };
+
+        void glpErrorHook(void * in){
+            sinfo * info = (sinfo*)in;
+            glp_free_env();
+            longjmp(*(info->env), 1);
         }
+
+
+        ReconstructionEngine::Params::Params() 
+            : camera(250.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05)
+        {}
 
         ReconstructionEngine::ComponentData::ComponentData(ReconstructionEngine::ComponentData::Type t) : type(t) {}
-
-        ReconstructionEngine::LineStructureConnectivityConstraintData::LineStructureConnectivityConstraintData() {
-            mergedSpatialLineSegmentIds[0] =
-                mergedSpatialLineSegmentIds[1] = 0;
-            weight = 0.0;
-            std::memset(lineVotings, 0, sizeof(lineVotings));
-            junctionWeights.I =
-                junctionWeights.L =
-                junctionWeights.T =
-                junctionWeights.Triplet =
-                junctionWeights.X = 0.0;
-        }
 
         ReconstructionEngine::ConstraintData::ConstraintData(ReconstructionEngine::ConstraintData::Type t) : type(t) {}
 
@@ -108,34 +107,12 @@ namespace panoramix {
         void ReconstructionEngine::computeFeatures(ViewHandle h) {
             auto & vd = _views.data(h);
             const Image & im = vd.image;
-            auto lineSegments = _params.lineSegmentExtractor(im);
-            vd.lineSegments.resize(lineSegments.size());
-            for (size_t i = 0; i < lineSegments.size(); i++){
-                vd.lineSegments[i].claz = -1;
-                vd.lineSegments[i].component = lineSegments[i];
-            }
 
-            // compute line intersections
-            vd.lineSegmentIntersections.clear();
-            vd.lineSegmentIntersectionLineIDs.clear();
-            LineIntersectons(vd.lineSegments, 
-                vd.lineSegmentIntersections, 
-                vd.lineSegmentIntersectionLineIDs, true);
-            
-            // collect keypoints/decriptors for matching
-            vd.keypointsForMatching = _params.surfExtractor(im, cv::Mat(), vd.descriptorsForMatching);
-            // and build RTree for the keypoints
-            /*vd.lineSegmentIntersectionsRTree =
-                RTreeWrapper<HPoint2>(vd.lineSegmentIntersections.begin(), vd.lineSegmentIntersections.end());
-            vd.keypointsForMatchingRTree = 
-                RTreeWrapper<KeyPoint>(vd.keypointsForMatching.begin(), vd.keypointsForMatching.end());*/
-        }
-
-        void ReconstructionEngine::buildRegionNet(ViewHandle h) {
-            auto & vd = _views.data(h);
             vd.regionNet = std::make_shared<RegionsNet>(vd.image);
             vd.regionNet->buildNetAndComputeGeometricFeatures();
             vd.regionNet->computeImageFeatures();
+
+            vd.lineNet = std::make_shared<LinesNet>(vd.image);
         }
 
 
@@ -172,6 +149,10 @@ namespace panoramix {
             return _views.topo(h).uppers.size();
         }
 
+        void ReconstructionEngine::updateConnections() {
+            NOT_IMPLEMENTED_YET();
+        }
+
         ReconstructionEngine::ViewHandle ReconstructionEngine::isTooCloseToAnyExistingView(ViewHandle h) const {
             auto & camera = _views.data(h).camera;
             double cameraRadius = PerspectiveCameraAngleRadius(camera);
@@ -190,64 +171,6 @@ namespace panoramix {
             return ViewHandle();
         }
 
-        void ReconstructionEngine::findMatchesToConnectedViews(ViewHandle h) {
-            cv::detail::BestOf2NearestMatcher matcher(false, 0.3f);
-            auto & connections = _views.topo(h).uppers;
-            for (auto & con : connections) {
-                auto & conData = _views.data(con);
-                auto & thisVD = _views.data(_views.topo(con).lowers[0]);
-                auto & neighborVD = _views.data(_views.topo(con).lowers[1]);
-                
-                // find matches and estimate homography using opencv
-                cv::detail::ImageFeatures thisFea;
-                thisFea.descriptors = thisVD.descriptorsForMatching;
-                thisFea.keypoints = thisVD.keypointsForMatching;
-
-                cv::detail::ImageFeatures neighborFea;
-                neighborFea.descriptors = neighborVD.descriptorsForMatching;
-                neighborFea.keypoints = neighborVD.keypointsForMatching;
-
-                matcher(thisFea, neighborFea, conData.matchInfo);
-                conData.matchInfo.src_img_idx = _views.topo(con).lowers[0].id;
-                conData.matchInfo.dst_img_idx = _views.topo(con).lowers[1].id;
-            }
-        }
-
-        namespace {
-
-            void DecodeLookAtMatGradient(const Eigen::MatrixXd & m4, Vec3 & deye, Vec3 & dcenter, Vec3 & dup) {
-
-            }
-
-        }
-
-        void ReconstructionEngine::calibrateAllCameras() {
-            
-            //using namespace deriv;
-            //
-            //ExpressionGraph graph;
-            //std::vector<Expression<Eigen::MatrixXd>> cameraViewMats(_views.internalElements<0>().size());
-            ////std::vector<Eigen::MatrixXd> 
-
-            //for (auto & v : _views.elements<0>()){
-            //    cameraViewMats[v.topo.hd.id] = deriv::composeFunction(graph, 
-            //        [&v](){
-            //        return deriv::CVMatToEigenMatX(v.data.camera.viewMatrix()); 
-            //    });
-            //}
-
-            //for (auto & c : _views.elements<1>()){
-
-            //}
-
-            NOT_IMPLEMENTED_YET();
-
-        }
-
-
-        void ReconstructionEngine::stitchPanorama() {
-            NOT_IMPLEMENTED_YET();
-        }
 
 
 
@@ -376,6 +299,8 @@ namespace panoramix {
                     }
                 }
 
+                assert(UnOrthogonality(vps[0], vps[1], vps[2]) < 0.1);
+
                 return vps;
 
             }
@@ -445,12 +370,12 @@ namespace panoramix {
             // collect line intersections
             size_t lineIntersectionsNum = 0;
             for (const auto & vIter : seperatedViewIters) // count intersecton num
-                lineIntersectionsNum += vIter->data.lineSegmentIntersections.size();
+                lineIntersectionsNum += vIter->data.lineNet->lineSegmentIntersections().size();
             std::vector<Vec3> intersections(lineIntersectionsNum);
             auto intersectionsBegin = intersections.begin();
             for (const auto & vIter : seperatedViewIters){ // projection 2d intersections to global GeoCoord
-                intersectionsBegin = std::transform(vIter->data.lineSegmentIntersections.begin(), 
-                    vIter->data.lineSegmentIntersections.end(),
+                intersectionsBegin = std::transform(vIter->data.lineNet->lineSegmentIntersections().begin(), 
+                    vIter->data.lineNet->lineSegmentIntersections().end(),
                     intersectionsBegin, 
                     [&vIter](const HPoint2 & p) -> Vec3 {
                     Vec3 p3 = vIter->data.camera.spatialDirection(p.toPoint());
@@ -458,55 +383,50 @@ namespace panoramix {
                 });
             }
 
-            // get merged intersections
-            // normalize spatial intersections
-            auto intersectionValidEnd = std::remove_if(intersections.begin(), intersections.end(),
-                [](const Vec3 & v){return std::isnan(v[0]) || std::isnan(v[1]) || std::isnan(v[2]); });
-            std::vector<decltype(intersections.begin())> mergedIntersectionsIters;
-            mergedIntersectionsIters.reserve(intersections.size() / 2);
-            MergeNearRTree(intersections.begin(), intersectionValidEnd, std::back_inserter(mergedIntersectionsIters), std::false_type(),
-                2 * sin(M_PI / 150.0 / 2.0));
-            _globalData.mergedSpatialLineSegmentIntersections.clear();
-            _globalData.mergedSpatialLineSegmentIntersections.reserve(mergedIntersectionsIters.size());
-            for (auto intersectionIter : mergedIntersectionsIters) {
-                _globalData.mergedSpatialLineSegmentIntersections.push_back(*intersectionIter);
-            }
-
-
             // find vanishing points;
-            _globalData.vanishingPoints = FindVanishingPoints(intersections);                        
+            _globalData.vanishingPoints = FindVanishingPoints(intersections);           
+
 
             // add spatial line segments from line segments of all views
             size_t spatialLineSegmentsNum = 0;
             for (auto & v : _views.elements<0>())
-                spatialLineSegmentsNum += v.data.lineSegments.size();
-            _globalData.spatialLineSegments.resize(spatialLineSegmentsNum);
-            auto spatialLineSegmentBegin = _globalData.spatialLineSegments.begin();
+                spatialLineSegmentsNum += v.data.lineNet->lineSegments().size();
+            std::vector<Classified<Line3>> spatialLineSegments(spatialLineSegmentsNum);
+            auto spatialLineSegmentBegin = spatialLineSegments.begin();
             for (auto & v : _views.elements<0>()){
-                spatialLineSegmentBegin = std::transform(v.data.lineSegments.begin(), v.data.lineSegments.end(),
-                    spatialLineSegmentBegin, [&v](const Classified<Line2> & line) -> Classified<Line3>{
-                    auto & p1 = line.component.first;
-                    auto & p2 = line.component.second;
+                spatialLineSegmentBegin = std::transform(v.data.lineNet->lineSegments().begin(),
+                    v.data.lineNet->lineSegments().end(),
+                    spatialLineSegmentBegin, [&v](const Line2 & line) -> Classified<Line3>{
+                    auto & p1 = line.first;
+                    auto & p2 = line.second;
                     auto pp1 = v.data.camera.spatialDirection(p1);
                     auto pp2 = v.data.camera.spatialDirection(p2);
                     Classified<Line3> cline3;
-                    cline3.claz = line.claz;
+                    cline3.claz = -1;
                     cline3.component = Line3{ pp1, pp2 };
                     return cline3;
                 });
             }
 
             // classify lines
-            ClassifyLines(_globalData.vanishingPoints, _globalData.spatialLineSegments);
-     
-            // project line classes back to perspective views
-            spatialLineSegmentBegin = _globalData.spatialLineSegments.begin();
+            ClassifyLines(_globalData.vanishingPoints, spatialLineSegments);
+
+            // build lines net and compute features
+            spatialLineSegmentBegin = spatialLineSegments.begin();
             for (auto & v : _views.elements<0>()){
-                for (auto & line : v.data.lineSegments){
-                    line.claz = spatialLineSegmentBegin->claz;
-                    ++ spatialLineSegmentBegin;
+                std::array<HPoint2, 3> projectedVPs;
+                for (int i = 0; i < 3; i++){
+                    projectedVPs[i] = v.data.camera.screenProjectionInHPoint(_globalData.vanishingPoints[i]);
                 }
+                std::vector<int> lineClasses(v.data.lineNet->lineSegments().size());
+                for (auto & lineClass : lineClasses){
+                    lineClass = spatialLineSegmentBegin->claz;
+                    ++spatialLineSegmentBegin;
+                }
+                v.data.lineNet->buildNetAndComputeFeaturesUsingVanishingPoints(projectedVPs, lineClasses);
             }
+
+
         }
 
 
@@ -527,16 +447,41 @@ namespace panoramix {
 
         namespace {
 
-            using LineStructureConnectivityConstraintData = ReconstructionEngine::LineStructureConnectivityConstraintData;
+            struct LineStructureConnectivityConstraintData {
+
+                LineStructureConnectivityConstraintData(){
+                    mergedSpatialLineSegmentIds[0] =
+                        mergedSpatialLineSegmentIds[1] = 0;
+                    weight = 0.0;
+                    std::memset(lineVotings, 0, sizeof(lineVotings));
+                    junctionWeights.I =
+                        junctionWeights.L =
+                        junctionWeights.T =
+                        junctionWeights.Triplet =
+                        junctionWeights.X = 0.0;
+                }
+
+                size_t mergedSpatialLineSegmentIds[2]; // corresponded mergedSpatialLineSegments ids
+                PositionOnLine3 positionOnLines[2];
+                Vec3 position; // location of intersecion
+
+                // [i][0] -> line lengths with class i lying between vp[i] and position
+                // [i][1] -> line lengths with class i lying between position and anti-vp[i]
+                double lineVotings[3][2];
+                double weight;
+                struct { double I, L, X, T, Triplet; } junctionWeights;
+                enum { Intersection, Incidence } type;
+                double slackValue; // retreived after optimization
+            };
 
 
             // merge colinear spatial lines and find some incidence constraints
             std::vector<Classified<Line3>> MergeColinearSpatialLinesAndAppendIncidenceConstraints(
-                const std::vector<Classified<Line3>> & oldLines, 
-                std::vector<int> & chainIds, 
-                std::vector<LineStructureConnectivityConstraintData> & constraints, 
+                const std::vector<Classified<Line3>> & oldLines,
+                std::vector<int> & chainIds,
+                std::vector<LineStructureConnectivityConstraintData> & constraints,
                 double mergeAngleThres, double incidenceAngleThres) {
-                
+
                 std::vector<Classified<Line3>> lines(oldLines);
 
                 // normalize line point directions
@@ -547,14 +492,14 @@ namespace panoramix {
 
                 // group all colinear spatial lines
                 std::vector<decltype(lines.begin())> colinearLineIters;
-                MergeNearNaive(lines.begin(), lines.end(), std::back_inserter(colinearLineIters), std::true_type(), 
+                MergeNearNaive(lines.begin(), lines.end(), std::back_inserter(colinearLineIters), std::true_type(),
                     mergeAngleThres,
                     [](const Classified<Line3> & line1, const Classified<Line3> & line2) -> double{
                     if (line1.claz != line2.claz)
                         return 100.0; // never merge lines with different classes
                     auto normal1 = line1.component.first.cross(line1.component.second);
                     auto normal2 = line2.component.first.cross(line2.component.second);
-                    return std::min(AngleBetweenDirections(normal1, normal2), 
+                    return std::min(AngleBetweenDirections(normal1, normal2),
                         AngleBetweenDirections(normal1, -normal2));
                 });
 
@@ -564,10 +509,10 @@ namespace panoramix {
                 chainIds.clear();
                 chainIds.reserve(mergedLines.capacity());
                 int chainId = 0;
-                
+
                 assert(!colinearLineIters.empty());
                 colinearLineIters.push_back(lines.end());
-                auto colinearedBeginIter = colinearLineIters.begin();                
+                auto colinearedBeginIter = colinearLineIters.begin();
                 for (; *colinearedBeginIter != lines.end(); ++colinearedBeginIter, ++chainId) {
                     auto colinearedBegin = *colinearedBeginIter;
                     auto colinearedEnd = *std::next(colinearedBeginIter);
@@ -580,7 +525,7 @@ namespace panoramix {
                         chainIds.push_back(chainId);
                         continue;
                     }
-                    
+
                     auto & firstLine = *colinearedBegin; // get the normal direction of first line
                     /*
                         second point
@@ -588,10 +533,10 @@ namespace panoramix {
                         |      \ the line
                         x ----- >first point
                         normal
-                    */
+                        */
                     auto firstNormal = firstLine.component.first.cross(firstLine.component.second);
                     firstNormal /= norm(firstNormal);
-                    
+
                     for (auto lineIter = colinearedBegin; lineIter != colinearedEnd; ++lineIter) {
                         assert(lineIter->claz == claz); // all lines in the same group should be in the same class
                         auto & line = *lineIter;
@@ -599,7 +544,7 @@ namespace panoramix {
                         normal /= norm(normal);
                         if (normal.dot(firstNormal) < 0) { // not same direction, reverse it
                             // swap order of the line to make all line directions in this group consistent
-                            std::swap(line.component.first, line.component.second); 
+                            std::swap(line.component.first, line.component.second);
                         }
                     }
 
@@ -619,7 +564,7 @@ namespace panoramix {
                     }
 
                     // sort lines in start-angle's ascending order
-                    std::sort(lineAngleSegments.begin(), lineAngleSegments.end(), 
+                    std::sort(lineAngleSegments.begin(), lineAngleSegments.end(),
                         [](const std::pair<double, double> & a1, const std::pair<double, double> & a2){
                         return a1.first < a2.first;
                     });
@@ -631,11 +576,13 @@ namespace panoramix {
                     for (auto & lineAngle : lineAngleSegments) {
                         if (lineAngle.first <= curTo){ // can extend
                             curTo = lineAngle.second;
-                        } else { // cannot extend
+                        }
+                        else { // cannot extend
                             if (curTo - curFrom >= M_PI){ // break major arcs
                                 mergedLineAngleSegments.push_back(std::make_pair(curFrom, (curFrom + curTo) / 2.0));
                                 mergedLineAngleSegments.push_back(std::make_pair((curFrom + curTo) / 2.0, curTo));
-                            }else
+                            }
+                            else
                                 mergedLineAngleSegments.push_back(std::make_pair(curFrom, curTo));
                             curFrom = lineAngle.first;
                             curTo = lineAngle.second;
@@ -660,7 +607,7 @@ namespace panoramix {
                         line.claz = claz;
                         line.component.first = dd1;
                         line.component.second = dd2;
-                        
+
                         if (!chainIds.empty() && chainIds.back() == chainId) { // insert a new incidence constraint
                             Vec3 lastEndPoint = mergedLines.back().component.second;
                             if (AngleBetweenDirections(lastEndPoint, line.component.first) <= incidenceAngleThres){
@@ -673,7 +620,7 @@ namespace panoramix {
                                 cons.weight = 0.0;
                                 constraints.push_back(cons);
                             }
-                        }                        
+                        }
                         mergedLines.push_back(line); // insert new merged line
                         chainIds.push_back(chainId); // insert the chainId of this new merged line  
                     }
@@ -698,7 +645,7 @@ namespace panoramix {
 
             // find intersection and incidence constraints
             void AppendIntersectionAndOptionallyIncidenceConstraints(const std::vector<Classified<Line3>> & mergedLines,
-                std::vector<LineStructureConnectivityConstraintData> & constraints, 
+                std::vector<LineStructureConnectivityConstraintData> & constraints,
                 double intersectionAngleThres, double incidenceAngleThres,
                 bool appendIncidenceCons = true){
                 for (size_t i = 0; i < mergedLines.size(); i++){
@@ -721,8 +668,8 @@ namespace panoramix {
 
                         if (linei.claz == linej.claz && angleDist <= incidenceAngleThres){ // incidence
                             // the angle distance vertical to lines direction must be lower than the intersectionAngleThres
-                            if (std::min(AngleBetweenDirections(normali, normalj), 
-                                    AngleBetweenDirections(normali, -normalj)) > 
+                            if (std::min(AngleBetweenDirections(normali, normalj),
+                                AngleBetweenDirections(normali, -normalj)) >
                                 intersectionAngleThres)
                                 continue;
                             LineStructureConnectivityConstraintData cons;
@@ -800,7 +747,7 @@ namespace panoramix {
                 // compute junction weights
                 for (auto & cons : constraints){
                     cons.weight = 0.0;
-                    auto & v = cons.lineVotings;                   
+                    auto & v = cons.lineVotings;
 
                     // compute Triplet junctions
                     double Tp = 0.0;
@@ -869,8 +816,9 @@ namespace panoramix {
             }
 
             // optimize lines using constraints
-            void OptimizeLines(std::vector<Classified<Line3>> & lines, std::vector<LineStructureConnectivityConstraintData> & constraints, 
-                const std::array<Vec3, 3> & vps ) {
+            void OptimizeLines(std::vector<Classified<Line3>> & lines, 
+                std::vector<LineStructureConnectivityConstraintData> & constraints,
+                const std::array<Vec3, 3> & vps) {
                 // build equations
                 // get all line factors
                 struct LineDeterminer {
@@ -916,10 +864,10 @@ namespace panoramix {
                 /***
                     min \Sum w_ij * [s_ij]
                     s.t.
-                        [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
-                        [\lambda_j] * d_ja - [\lambda_i] * d_ia <= s_ij \foreach constraint (i, j)
-                        [\lambda_i] >= 1 \foreach line (i)
-                ***/
+                    [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
+                    [\lambda_j] * d_ja - [\lambda_i] * d_ia <= s_ij \foreach constraint (i, j)
+                    [\lambda_i] >= 1 \foreach line (i)
+                    ***/
                 struct ConstraintInequationInfo { // [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
                     int equationId;
                     int lambda_iId;
@@ -930,7 +878,7 @@ namespace panoramix {
                 };
                 struct ScaleInequationInfo { // [\lambda_i] >= 1 \foreach line(i)
                     int equationId;
-                    int lambdaId; 
+                    int lambdaId;
                 };
 
                 int varIdGenerator = 0;
@@ -962,10 +910,10 @@ namespace panoramix {
                     const auto & line1 = lines[cons.mergedSpatialLineSegmentIds[0]];
                     const auto & line2 = lines[cons.mergedSpatialLineSegmentIds[1]];
                     static const int nearestPointPairsTable[4][2] = {
-                        {0, 0},
-                        {0, 1},
-                        {1, 0},
-                        {1, 1}
+                            { 0, 0 },
+                            { 0, 1 },
+                            { 1, 0 },
+                            { 1, 1 }
                     };
                     int minId = -1;
                     double minAngle = std::numeric_limits<double>::max();
@@ -994,8 +942,8 @@ namespace panoramix {
                     slackVar.isSlackVariable = true;
                     slackVar.constraintId = static_cast<int>(i);
                     slackVar.weightInObjectiveFunction = cons.weight; // weight of constraint
-                    slacks.push_back(slackVar);                    
-                    
+                    slacks.push_back(slackVar);
+
                     if (cons.type == LineStructureConnectivityConstraintData::Intersection){
                         // [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
                         for (int k = 0; k < 3; k++){
@@ -1053,10 +1001,10 @@ namespace panoramix {
                 /***
                     min \Sum w_ij * [s_ij]
                     s.t.
-                        [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
-                        [\lambda_j] * d_ja - [\lambda_i] * d_ia <= s_ij \foreach constraint (i, j)
-                        [\lambda_i] >= 1 \foreach line (i)
-                ***/
+                    [\lambda_i] * d_ia - [\lambda_j] * d_ja <= s_ij
+                    [\lambda_j] * d_ja - [\lambda_i] * d_ia <= s_ij \foreach constraint (i, j)
+                    [\lambda_i] >= 1 \foreach line (i)
+                    ***/
 
                 int varNum = varIdGenerator;
                 int equationNum = equationIdGenerator;
@@ -1088,10 +1036,10 @@ namespace panoramix {
 
                 // add constrant iequations
                 for (auto & ie : constraintInequations){
-                    glp_set_row_bnds(problem, ie.equationId+1, GLP_UP, -1e5, 0.0); // ... <= 0.0
+                    glp_set_row_bnds(problem, ie.equationId + 1, GLP_UP, -1e5, 0.0); // ... <= 0.0
                 }
                 for (auto & ie : constraintInequations){
-                    int varIds[] = { -1, ie.lambda_iId+1, ie.lambda_jId+1, ie.s_ijId+1 };
+                    int varIds[] = { -1, ie.lambda_iId + 1, ie.lambda_jId + 1, ie.s_ijId + 1 };
                     //std::cout << "constraint: lambda_i-" << (ie.lambda_iId + 1) << 
                     //    "  lambda_j-" << (ie.lambda_jId + 1) << 
                     //    " s_ij-" << (ie.s_ijId + 1) << std::endl;
@@ -1105,12 +1053,12 @@ namespace panoramix {
                 // set objective coefs
                 // only slacks appear in objective function
                 for (auto & var : slacks){
-                    glp_set_obj_coef(problem, var.varId+1, var.weightInObjectiveFunction);
+                    glp_set_obj_coef(problem, var.varId + 1, var.weightInObjectiveFunction);
                 }
-                
+
                 glp_adv_basis(problem, 0);
 
-                enum Method {Simplex, Exact, Interior};
+                enum Method { Simplex, Exact, Interior };
                 Method method = Simplex;
                 if (method == Simplex){
                     glp_smcp params;
@@ -1141,12 +1089,12 @@ namespace panoramix {
 
                     // retrieve results
                     for (auto & var : lambdas){
-                        double lambda = glp_get_col_prim(problem, var.varId+1);
+                        double lambda = glp_get_col_prim(problem, var.varId + 1);
                         // update line coordinates
                         lines[var.lineId].component = lineDeterminers[var.lineId](lambda);
                     }
                     for (auto & var : slacks){
-                        double s = glp_get_col_prim(problem, var.varId+1);
+                        double s = glp_get_col_prim(problem, var.varId + 1);
                         // set the slack value for constraint
                         constraints[var.constraintId].slackValue = s;
                     }
@@ -1184,9 +1132,9 @@ namespace panoramix {
                         constraints[var.constraintId].slackValue = s;
                     }
                 }
-                else if(method == Interior){
+                else if (method == Interior){
                     glp_iptcp params;
-                    
+
                     glp_init_iptcp(&params);
                     params.msg_lev = GLP_MSG_ON;
                     int stat = glp_interior(problem, &params);
@@ -1200,12 +1148,12 @@ namespace panoramix {
 
                     // retrieve results
                     for (auto & var : lambdas){
-                        double lambda = glp_ipt_col_prim(problem, var.varId+1);
+                        double lambda = glp_ipt_col_prim(problem, var.varId + 1);
                         // update line coordinates
                         lines[var.lineId].component = lineDeterminers[var.lineId](lambda);
                     }
                     for (auto & var : slacks){
-                        double s = glp_ipt_col_prim(problem, var.varId+1);
+                        double s = glp_ipt_col_prim(problem, var.varId + 1);
                         // set the slack value for constraint
                         if (isnan(s))
                             std::cout << "slack value of constraint " << var.constraintId << "is NaN" << std::endl;
@@ -1215,128 +1163,15 @@ namespace panoramix {
 
                 glp_delete_prob(problem);
 
-
                 glp_error_hook(NULL, NULL);
                 free(info->env);
                 free(info);
-                
+
             }
 
-
-            // optimize lines using constraints based on expressions
-            void OptimizeLinesUsingConstraintGraph(std::vector<Classified<Line3>> & lines, 
-                std::vector<LineStructureConnectivityConstraintData> & constraints,
-                const std::array<Vec3, 3> & vps) {
-                using namespace deriv;
-                using namespace Eigen;
-
-                using ConsGraph = ConstraintGraph<int, int>;
-                ConsGraph consGraph;
-                for (int i = 0; i < lines.size(); i++)
-                    consGraph.addComponent(i);
-                for (int i = 0; i < constraints.size(); i++)
-                    consGraph.addConstraint({ 
-                    ConsGraph::ComponentHandle(constraints[i].mergedSpatialLineSegmentIds[0]), 
-                    ConsGraph::ComponentHandle(constraints[i].mergedSpatialLineSegmentIds[1]) 
-                }, i);
-                
-                ExpressionGraph graph;
-
-                // build equations
-                // get all line factors
-                MatrixX3d firstPointFactorValues = MatrixX3d::Zero(lines.size(), 3);
-                MatrixX3d secondPointFactorValues = MatrixX3d::Zero(lines.size(), 3);
-                auto firstPointFactors = graph.addRef(firstPointFactorValues, "firstPointFactors");
-                auto secondPointFactors = graph.addRef(secondPointFactorValues, "secondPointFactors");
-
-                for (size_t i = 0; i < lines.size(); i++){
-                    auto & line = lines[i];
-                    if (line.claz == -1)
-                        continue;
-                    auto vp = vps[line.claz];
-                    auto p1 = line.component.first;
-                    auto p2 = line.component.second;
-                    if (vp.dot(p2 - p1) < 0){
-                        vp = -vp; // make p1->p2 and vp direction consistent
-                    }
-                    firstPointFactorValues.row(i) = CVMatToEigenMat(p1 / norm(p1));
-                    // use the Law of sines
-                    double innerAngleOfLine = AngleBetweenDirections(p1, p2);
-                    double innerAngleAtFirstPoint = AngleBetweenDirections(vp, -p1); // corresponding to second point factor
-                    double innerAngleAtSecondPoint = AngleBetweenDirections(-vp, -p2); // corresponding to first point factor
-                    double innerAngleSum = innerAngleOfLine + innerAngleAtFirstPoint + innerAngleAtSecondPoint;
-                    assert(FuzzyEquals(innerAngleSum, M_PI, 1e-1));
-                    secondPointFactorValues.row(i) = CVMatToEigenMat(p2 / norm(p2) *
-                        sin(innerAngleAtFirstPoint) / sin(innerAngleAtSecondPoint));
-                }
-
-
-                VectorXd lambdaValues = VectorXd::Ones(lines.size());               
-                auto lambdas = graph.addRef(lambdaValues, "lambdas").assign<VectorXd>();
-                
-                // broad cast for multiplication
-                auto broadcast3 = [](const VectorXd & v) {
-                    MatrixX3d mat;
-                    mat << v, v, v;
-                    return mat;
-                };
-                auto broadcast3Back = [](const MatrixX3d & mat) {
-                    VectorXd v = mat.rowwise().sum();
-                    return v;
-                };
-
-                auto firstPoints = cwiseProd(
-                    composeMappingFunction<MatrixX3d, VectorXd>(lambdas.assign<VectorXd>(), 
-                        broadcast3, broadcast3Back, "broadcast3", "broadcast3back"), 
-                    firstPointFactors).eval();
-                auto secondPoints = cwiseProd(
-                    composeMappingFunction<MatrixX3d, VectorXd>(lambdas.assign<VectorXd>(),
-                        broadcast3, broadcast3Back, "broadcast3", "broadcast3back"),
-                    secondPointFactors).eval();
-
-                // TODO
-
-                // select lines for constrained lines
-                // lines1
-                //auto selectLambdasOfConstrainedLines1 = [&constraints](const MatrixX3d & lmds) {
-                //    MatrixX3d slmds = MatrixX3d::Zero(constraints.size(), 3);
-                //    for (int i = 0; i < constraints.size(); i++) {
-                //        slmds.row(i) = lmds.row(constraints[i].mergedSpatialLineSegmentIds[0]);
-                //    }
-                //    return slmds;
-                //};
-                //auto selectLambdasOfConstrainedLines1Back = [&constraints, &lines](const MatrixX3d & slmds) {
-                //    VectorXd lmds = VectorXd::Zero(lines.size());
-                //    for (int i = 0; i < constraints.size(); i++) {
-                //        lmds(constraints[i].mergedSpatialLineSegmentIds[0]) += slmds(i);
-                //    }
-                //    return lmds;
-                //};
-
-                //// lines2
-                //auto selectLambdasOfConstrainedLines2 = [&constraints](const MatrixX3d & lmds) {
-                //    VectorXd slmds = VectorXd::Zero(constraints.size());
-                //    for (int i = 0; i < constraints.size(); i++) {
-                //        slmds(i) = lmds(constraints[i].mergedSpatialLineSegmentIds[1]);
-                //    }
-                //    return slmds;
-                //};
-                //auto selectLambdasOfConstrainedLines2Back = [&constraints, &lines](const MatrixX3d & slmds) {
-                //    VectorXd lmds = VectorXd::Zero(lines.size());
-                //    for (int i = 0; i < constraints.size(); i++) {
-                //        lmds(constraints[i].mergedSpatialLineSegmentIds[1]) += slmds(i);
-                //    }
-                //    return lmds;
-                //};
-
-                //auto lambdas1 = composeMappingFunction<VectorXd, VectorXd>(lambdas,
-                //    selectLambdasOfConstrainedLines1, selectLambdasOfConstrainedLines1Back);
-                //auto lambdas2 = composeMappingFunction<VectorXd, VectorXd>(lambdas,
-                //    selectLambdasOfConstrainedLines2, selectLambdasOfConstrainedLines2Back);
-            }
         }
 
-
+        /*
         void ReconstructionEngine::rectifySpatialLines() {
             // constraints for 3D lines reconstruction
             std::vector<LineStructureConnectivityConstraintData> constraints, refinedConstraints;
@@ -1539,93 +1374,58 @@ namespace panoramix {
                 _globalData.mergedSpatialLineSegmentsClassifiedWithStructureIds[lineid].claz = ccid;
             });
 
-            // install to constraint graph
-            // ignore the connected components, insert each line as individual
-
-            // reset expression graph
-            _exprGraph = deriv::ExpressionGraph();
-            auto & graph = _exprGraph;
-
-            _constraints.clear();
-
-            // add line structure components
-            _constraints.internalElements<0>().reserve(_globalData.mergedSpatialLineSegments.size());
-            _constraints.internalElements<1>().reserve(refinedConstraints.size());
-            for (int i = 0; i < _globalData.mergedSpatialLineSegments.size(); i++) {
-                ComponentData cd(ComponentData::Type::LineStructure);
-                auto h = _constraints.add(cd);
-                LineStructureComponentData & lineStruct = _constraints.data(h).asLineStructure;
-                lineStruct.mergedSpatialLineSegmentId = i;
-                lineStruct.etaExpr = OptimizibleExpression<double>(
-                    norm(_globalData.mergedSpatialLineSegments[i].component.first), graph);
-            }
-
-            // add line structure connectivity constraints
-            for (auto & con : refinedConstraints) {
-                ConstraintData cd(ConstraintData::Type::LineStructureConnectivity);
-                cd.asLineStructureConnectivity = con;
-                auto h = _constraints.add<1>({ ComponentHandle(con.mergedSpatialLineSegmentIds[0]), 
-                    ComponentHandle(con.mergedSpatialLineSegmentIds[1]) }, cd);
-                // expression
-                //_constraints.data(h)
-            }
         }
+        */
 
 
         namespace {
 
-            // index
-            struct RegionIndex {
+            template <class HandleT>
+            struct IndexOfSubStructureInView {
                 ReconstructionEngine::ViewHandle viewHandle;
-                RegionsNet::RegionHandle regionHandle;
+                HandleT handle;
             };
 
-            inline bool operator == (const RegionIndex & a, const RegionIndex & b) {
-                return a.viewHandle == b.viewHandle && a.regionHandle == b.regionHandle;
+            template <class HandleT>
+            inline bool operator == (const IndexOfSubStructureInView<HandleT> & a, 
+                const IndexOfSubStructureInView<HandleT> & b) {
+                return a.viewHandle == b.viewHandle && a.handle == b.handle;
             }
 
-            inline bool operator < (const RegionIndex & a, const RegionIndex & b) {
+            template <class HandleT>
+            inline bool operator < (const IndexOfSubStructureInView<HandleT> & a, 
+                const IndexOfSubStructureInView<HandleT> & b) {
                 if (a.viewHandle.id != b.viewHandle.id)
                     return a.viewHandle.id < b.viewHandle.id;
-                return a.regionHandle.id < b.regionHandle.id;
+                return a.handle.id < b.handle.id;
             }
 
-            struct RegionBoundaryIndex {
-                ReconstructionEngine::ViewHandle viewHandle;
-                RegionsNet::BoundaryHandle boundaryHandle;
-            };    
-
-            inline bool operator == (const RegionBoundaryIndex & a, const RegionBoundaryIndex & b) {
-                return a.viewHandle == b.viewHandle && a.boundaryHandle == b.boundaryHandle;
-            }
-
-
-            // region map
-            struct RegionMapVertex {
-                RegionIndex regionIndex;
-
-                // (a,b,c) representing the plane: ax + by + cz = 1 
-                // => a(kA) + b(kB) + c(kC) = 1 
-                // => k = 1/(aA + bB + cC), 
-                // (A, B, C) is the spatial direction of a given point, norm(A, B, C) = 1, k is the depth
-                Vec3 theta; 
-
-                bool isVoid;
+            template <class IndexT>
+            struct IndexOfSubStructureInViewHasher {
+                inline size_t operator()(const IndexT & idx) const {
+                    return ((idx.viewHandle.id) << 4) + (idx.handle.id);
+                }
             };
 
-            struct RegionMapEdge {
-                bool isOverlap;
-                inline bool isBoundary() const { return !isOverlap; }
-                struct {
-                    RegionBoundaryIndex boundaryIndex;
-                    bool isOccludingBoundary; // true/false -> disconnected/connected spatially
-                } asBoundary; // isOverlap
-                struct {
-                    double overlapRatio;
-                } asOverlap; // !isOverlap
+            template <class IndexT1, class IndexT2>
+            struct IndexOfSubStructureInViewHasher < std::pair<IndexT1, IndexT2> > {
+                inline size_t operator()(const std::pair<IndexT1, IndexT2> & idx) const {
+                    return (((idx.first.viewHandle.id << 3) + idx.first.handle.id) << 10) +
+                        (idx.second.viewHandle.id << 3) + idx.second.handle.id;
+                }
             };
 
-            using HolisticRegionMap = GraphicalModel02<RegionMapVertex, RegionMapEdge>;
+            using RegionIndex = IndexOfSubStructureInView <RegionsNet::RegionHandle> ;
+            using RegionBoundaryIndex = IndexOfSubStructureInView < RegionsNet::BoundaryHandle > ;
+            using LineIndex = IndexOfSubStructureInView <LinesNet::LineHandle> ;
+            using LineRelationIndex = IndexOfSubStructureInView < LinesNet::LineRelationHandle > ;
+
+            template <class T>
+            using IndexHashSet = std::unordered_set<T, IndexOfSubStructureInViewHasher<T>> ;
+
+            template <class KeyT, class ValueT>
+            using IndexHashMap = std::unordered_map<KeyT, ValueT, IndexOfSubStructureInViewHasher<KeyT>> ;
+
 
 
             // polygon conversion
@@ -1651,69 +1451,28 @@ namespace panoramix {
                 }
             }
 
-            /*class Polygon2 {
-            public:
-                inline Polygon2() : _p(nullptr) {}
-                inline Polygon2(const std::vector<PixelLoc> & pts) {
-                    _p = new gpc_polygon;
-                    ConvertToGPCPolygon(pts, *_p);
-                }
-                inline Polygon2(const Image & mask) {
-                    NOT_IMPLEMENTED_YET();
-                }
+            // line depth ratio
+            double ComputeDepthRatioOfPointOnSpatialLine(Vec3 lineFirstPointDir,
+                Vec3 p, Vec3 vp) {
+                // firstp -> p vp
+                //  \      /
+                //   \    /
+                //    center
+                lineFirstPointDir /= norm(lineFirstPointDir);
+                p /= norm(p);
+                vp /= norm(vp);
 
-                inline ~Polygon2() {
-                    gpc_free_polygon(_p);
-                    delete _p;
-                }
-                inline Polygon2(const Polygon2 & p) {
-                    NOT_IMPLEMENTED_YET();
-                }
-                inline Polygon2(Polygon2 && p) {
-                    std::swap(_p, p._p);
-                }
-
-                inline std::vector<PixelLoc> toPixels() const {
-                    std::vector<PixelLoc> pixels;
-                    ConvertToPixelVector(*_p, pixels);
-                    return pixels;
-                }
-                inline double area() const {
-                    return cv::contourArea(toPixels());
-                }
-
-                inline Polygon2 & operator &= (const Polygon2 & p) {
-                    NOT_IMPLEMENTED_YET();
-                }
-                inline Polygon2 & operator |= (const Polygon2 & p) {
-                    NOT_IMPLEMENTED_YET();
-                }
-                inline Polygon2 & operator -= (const Polygon2 & p) {
-                    NOT_IMPLEMENTED_YET();
-                }
-
-            private:
-                gpc_polygon * _p;
-            };
-
-            inline Polygon2 operator & (const Polygon2 & a, const Polygon2 & b) {
-                Polygon2 r = a;
-                r &= b;
-                return r;
+                if ((p - lineFirstPointDir).dot(vp) < 0)
+                    vp = -vp;
+                //double angleCenter = AngleBetweenDirections(lineFirstPointDir, p);
+                double angleFirstP = AngleBetweenDirections(-lineFirstPointDir, vp);
+                double angleP = AngleBetweenDirections(-p, -vp);
+                //assert(FuzzyEquals(angleCenter + angleFirstP + angleP, M_PI, 0.01));
+                return sin(angleFirstP) / sin(angleP);
             }
-            inline Polygon2 operator | (const Polygon2 & a, const Polygon2 & b) {
-                Polygon2 r = a;
-                r |= b;
-                return r;
-            }
-            inline Polygon2 operator - (const Polygon2 & a, const Polygon2 & b) {
-                Polygon2 r = a;
-                r -= b;
-                return r;
-            }*/
 
 
-            inline deriv::Expression<double> gaussianFunc(const deriv::Expression<double> & input, double sigma) {
+            inline deriv::Expression<double> GaussianFunc(const deriv::Expression<double> & input, double sigma) {
                 return exp(-input * input / 2.0 / sigma / sigma);
             }
 
@@ -1738,17 +1497,17 @@ namespace panoramix {
                 double sigma;
             };
 
-            inline deriv::Expression<double> hFunc(const deriv::Expression<double> & input, double sigma) {
+            inline deriv::Expression<double> HFunc(const deriv::Expression<double> & input, double sigma) {
                 return deriv::ComposeExpression(HFuncTraits(sigma), input);
             }
 
-            inline deriv::Expression<double> angleFunc(const deriv::Expression<Eigen::Vector3d> & a, const deriv::Expression<Eigen::Vector3d> & b) {
+            inline deriv::Expression<double> AngleFunc(const deriv::Expression<Eigen::Vector3d> & a, const deriv::Expression<Eigen::Vector3d> & b) {
                 return deriv::acos(deriv::dotProd(a, b) / deriv::norm(a) / deriv::norm(b));
             }
 
 
             template <class CallbackFunctorT>
-            void OptimizeConstraintGraphUsingEnergy (
+            void OptimizeConstraintGraphUsingEnergyExpression (
                 const deriv::Expression<double> & energy, 
                 ReconstructionEngine::ConstraintGraph & constraints,
                 double delta, double momentum, int nepoches,
@@ -1764,9 +1523,9 @@ namespace panoramix {
                         for (int i = 0; i < 3; i++)
                             assert(!isnan(vd.data.asRegion.thetaExpr.expression().execute()[i]));
                     }
-                    else if (vd.data.type == ReconstructionEngine::ComponentData::Type::LineStructure){
-                        vd.data.asLineStructure.etaExpr.registerHandleTable(handleTable);
-                        assert(!isnan(vd.data.asLineStructure.etaExpr.expression().execute()));
+                    else if (vd.data.type == ReconstructionEngine::ComponentData::Type::Line){
+                        vd.data.asLine.etaExpr.registerHandleTable(handleTable);
+                        assert(!isnan(vd.data.asLine.etaExpr.expression().execute()));
                     }
                     else{
                         assert(false && "invalid component type!");
@@ -1782,8 +1541,8 @@ namespace panoramix {
                     if (vd.data.type == ReconstructionEngine::ComponentData::Type::Region){
                         vd.data.asRegion.thetaExpr.getDerivative(derivHandleTable);
                     }
-                    else if (vd.data.type == ReconstructionEngine::ComponentData::Type::LineStructure){
-                        vd.data.asLineStructure.etaExpr.getDerivative(derivHandleTable);
+                    else if (vd.data.type == ReconstructionEngine::ComponentData::Type::Line){
+                        vd.data.asLine.etaExpr.getDerivative(derivHandleTable);
                     }
                     else{
                         assert(false && "invalid component type!");
@@ -1791,9 +1550,6 @@ namespace panoramix {
                 }
 
                 // reconstruct faces
-                //double delta = 0.000001;
-                //static const double momentum = 0;
-
                 auto startTime = std::chrono::high_resolution_clock::now();
                 double energyVal = std::numeric_limits<double>::max();
                 for (int i = 0; i < nepoches; i++){
@@ -1808,8 +1564,8 @@ namespace panoramix {
                         if (vd.data.type == ReconstructionEngine::ComponentData::Type::Region){
                             vd.data.asRegion.thetaExpr.optimizeData(delta, momentum, handleTable);
                         }
-                        else if (vd.data.type == ReconstructionEngine::ComponentData::Type::LineStructure){
-                            vd.data.asLineStructure.etaExpr.optimizeData(delta, momentum, handleTable);
+                        else if (vd.data.type == ReconstructionEngine::ComponentData::Type::Line){
+                            vd.data.asLine.etaExpr.optimizeData(delta, momentum, handleTable);
                         }
                         else{
                             assert(false && "invalid component type!");
@@ -1830,18 +1586,13 @@ namespace panoramix {
         }
  
 
-        void ReconstructionEngine::reconstructFaces() {
+        void ReconstructionEngine::reconstructLinesAndFaces() {
 
-            using core::PixelLoc;
+            //// REGIONS ////
 
             // compute spatial positions of each region
-            struct {
-                inline uint64_t operator()(const RegionIndex & ri) const {
-                    return static_cast<uint64_t>((ri.viewHandle.id << 4) + ri.regionHandle.id);
-                }
-            } hashRegionIndex;
-            std::unordered_map<RegionIndex, std::vector<Vec3>, decltype(hashRegionIndex)> 
-                regionSpatialContours(10000, hashRegionIndex);
+            IndexHashMap<RegionIndex, std::vector<Vec3>> 
+                regionSpatialContours;
             for (auto & view : _views.elements<0>()) {
                 const auto & regions = * view.data.regionNet;
                 for (auto & region : regions.regions().elements<0>()) {
@@ -1870,21 +1621,14 @@ namespace panoramix {
             }
             
             // store overlapping ratios between overlapped regions
-            struct {
-                inline uint64_t operator()(const std::pair<RegionIndex, RegionIndex> & vhp) const {
-                    return static_cast<uint64_t>(
-                        (((vhp.first.regionHandle.id << 3) + vhp.first.viewHandle.id) << 10) + 
-                        ((vhp.second.regionHandle.id << 3) + vhp.second.viewHandle.id));
-                }
-            } hashRegionIndexPair;
-            std::unordered_map<std::pair<RegionIndex, RegionIndex>, double, decltype(hashRegionIndexPair)> 
-                overlappedRegionIndexPairs(1000, hashRegionIndexPair);
+            IndexHashMap<std::pair<RegionIndex, RegionIndex>, double> 
+                overlappedRegionIndexPairs;
             
             for (auto & rip : regionSpatialContours) {
                 auto & ri = rip.first;
-                auto & riContour2d = _views.data(ri.viewHandle).regionNet->regions().data(ri.regionHandle).contours.front();
+                auto & riContour2d = _views.data(ri.viewHandle).regionNet->regions().data(ri.handle).contours.front();
                 auto & riCamera = _views.data(ri.viewHandle).camera;
-                double riArea = _views.data(ri.viewHandle).regionNet->regions().data(ri.regionHandle).area;
+                double riArea = _views.data(ri.viewHandle).regionNet->regions().data(ri.handle).area;
 
                 gpc_polygon riPoly;
                 ConvertToGPCPolygon(riContour2d, riPoly);
@@ -1941,45 +1685,120 @@ namespace panoramix {
             }
 
 
-            // build spatial rtree for mergedlines
-            // find line-region relations
-            /// FIXME: don't use mergedSpatialLineSegments!!! use the original line segments in each view 
-            //// to locate line region connections !
-            std::map<std::pair<int, RegionIndex>, std::vector<Point2>> lineRegionSharedPoints; // (lineid, regionidx) -> points
-            std::map<std::pair<int, RegionIndex>, std::vector<Vec3>> lineRegionSharedDirections;
-            for (int i = 0; i < _globalData.mergedSpatialLineSegments.size(); i++) {
-                if (_globalData.mergedSpatialLineSegments[i].claz == -1) // ignore non manhattan lines
-                    continue;
-                auto & line = _globalData.mergedSpatialLineSegments[i].component;
-                static const double angleStep = M_PI / 128.0;
-                double spanAngle = AngleBetweenDirections(line.first, line.second);
-                std::vector<Vec3> sampledDirectionsInRegions(static_cast<size_t>(std::ceil(spanAngle / angleStep)));
-                for (int k = 0; k < sampledDirectionsInRegions.size(); k++) {
-                    sampledDirectionsInRegions[k] = RotateDirectionTo(line.first, line.second, k * angleStep / spanAngle);
-                    sampledDirectionsInRegions[k] /= norm(sampledDirectionsInRegions[k]);
-                }
-                for (auto & sampledDir : sampledDirectionsInRegions) {
-                    auto sampledBB = DefaultInfluenceBoxFunctor<Vec3>(0.5)(sampledDir / norm(sampledDir));                    
-                    regionsRTree.search(sampledBB, 
-                        [&line, this, i, &sampledDir, &lineRegionSharedPoints, &lineRegionSharedDirections](const RegionIndex & ri) -> bool {
-                        // project line to ri view
-                        auto & cam = _views.data(ri.viewHandle).camera;
-                        auto p = cam.screenProjection(sampledDir);
-                        auto d = cv::pointPolygonTest(_views.data(ri.viewHandle).regionNet->regions()
-                            .data(ri.regionHandle).dilatedContours.back(), ////
-                            PixelLoc(p[0], p[1]), false);
-                        if (d > 0) { // inside
-                            lineRegionSharedPoints[std::make_pair(i, ri)].push_back(p);
-                            lineRegionSharedDirections[std::make_pair(i, ri)].push_back(sampledDir);
-                        }
-                        return true;
-                    });
+            
+            //// LINES ////
+            // compute spatial normal directions for each line
+            IndexHashMap<LineIndex, Classified<Line3>>
+                lineSpatialAvatars;
+            for (auto & vd : _views.elements<0>()){
+                auto & lines = vd.data.lineNet->lines();
+                LineIndex li;
+                li.viewHandle = vd.topo.hd;
+                auto & cam = vd.data.camera;
+                for (auto & ld : lines.elements<0>()){
+                    li.handle = ld.topo.hd;
+                    auto & line = ld.data.line;
+                    Classified<Line3> avatar;
+                    avatar.claz = line.claz;
+                    avatar.component = Line3(
+                        cam.spatialDirection(line.component.first),
+                        cam.spatialDirection(line.component.second)
+                    );
+                    lineSpatialAvatars[li] = avatar;
                 }
             }
 
-            if(true) {
+            // build rtree for lines
+            auto lookupLineNormal = [&lineSpatialAvatars](const LineIndex & li) -> Box3 {
+                auto normal = lineSpatialAvatars[li].component.first.cross(lineSpatialAvatars[li].component.second);
+                Box3 b = BoundingBox(normalize(normal));
+                static const double s = 0.2;
+                b.minCorner = b.minCorner - Vec3(s, s, s);
+                b.maxCorner = b.maxCorner + Vec3(s, s, s);
+                return b;
+            };
+
+            RTreeWrapper<LineIndex, decltype(lookupLineNormal)> linesRTree(lookupLineNormal);
+            for (auto & i : lineSpatialAvatars){
+                linesRTree.insert(i.first);
+            }
+
+            // recognize incidence constraints between lines of different views
+            IndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> lineIncidenceRelations;
+
+            for (auto & i : lineSpatialAvatars){
+                auto li = i.first;
+                auto & lineData = i.second;
+                auto & views = _views;
+                linesRTree.search(lookupLineNormal(li), [&li, &lineSpatialAvatars, &views, &lineIncidenceRelations](const LineIndex & relatedLi) -> bool {
+                    if (li.viewHandle == relatedLi.viewHandle)
+                        return true;
+                    if (relatedLi < li) // make sure one relation is stored only once, avoid storing both a-b and b-a
+                        return true;
+                    auto & line1 = lineSpatialAvatars[li];
+                    auto & line2 = lineSpatialAvatars[relatedLi];
+                    if (line1.claz != line2.claz)
+                        return true;
+                    auto normal1 = normalize(line1.component.first.cross(line1.component.second));
+                    auto normal2 = normalize(line2.component.first.cross(line2.component.second));
+                    auto & vd1 = views.data(li.viewHandle);
+                    auto & vd2 = views.data(relatedLi.viewHandle);
+                    if (std::min(AngleBetweenDirections(normal1, normal2), 
+                            AngleBetweenDirections(normal1, -normal2)) <
+                        vd1.lineNet->params().incidenceDistanceVerticalDirectionThreshold / vd1.camera.focal() +
+                        vd2.lineNet->params().incidenceDistanceVerticalDirectionThreshold / vd2.camera.focal()){
+                        
+                        auto nearest = DistanceBetweenTwoLines(line1.component, line2.component);
+                        auto relationCenter = (nearest.second.first.position + nearest.second.second.position) / 2.0;
+                        relationCenter /= norm(relationCenter);
+                        
+                        lineIncidenceRelations[std::make_pair(li, relatedLi)] = relationCenter;
+                    }
+                    return true;
+                });
+            }
+
+            NOT_TESTED_YET();
+            
+
+            // generate sampled points for line-region connections
+            IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> 
+                regionLineIntersectionSampledPoints;
+            for (auto & vd : _views.elements<0>()){                
+                RegionIndex ri;
+                ri.viewHandle = vd.topo.hd;
+                
+                LineIndex li;
+                li.viewHandle = vd.topo.hd;
+
+                const Image & segmentedRegions = vd.data.regionNet->segmentedRegions();
+                auto & cam = vd.data.camera;
+                
+                for (auto & ld : vd.data.lineNet->lines().elements<0>()){
+                    li.handle = ld.topo.hd;
+                    
+                    auto & line = ld.data.line.component;
+                    auto lineDir = normalize(line.direction());
+                    static const double sampleStep = 4;
+                    int sampledNum = static_cast<int>(std::floor(line.length() / sampleStep));
+                    
+                    for (int i = 0; i < sampledNum; i++){
+                        auto sampledPoint = line.first + lineDir * i * sampleStep;
+                        int x = BoundBetween(static_cast<int>(std::round(sampledPoint[0])), 0, segmentedRegions.cols-1);
+                        int y = BoundBetween(static_cast<int>(std::round(sampledPoint[1])), 0, segmentedRegions.rows-1);
+                        
+                        ri.handle = RegionsNet::RegionHandle(segmentedRegions.at<int32_t>(y, x));
+                        
+                        regionLineIntersectionSampledPoints[std::make_pair(ri, li)]
+                            .push_back(normalize(cam.spatialDirection(sampledPoint)));
+                    }
+                }
+            }
+
+            NOT_TESTED_YET();
+
+            IF_DEBUG_USING_VISUALIZERS {
                 // visualize connections between regions and lines
-                // visualize
                 std::unordered_map<ViewHandle, vis::Visualizer2D, HandleHasher<AtLevel<0>>> vizs;
                 for (auto & vd : _views.elements<0>()){
                     //vis::Visualizer2D viz(vd.data.regionNet->image);
@@ -2010,26 +1829,20 @@ namespace panoramix {
                     //viz.params.thickness = 1;
                     //viz.params.color = vis::ColorFromTag(vis::ColorTag::Black);
                     
-                for (auto & lineIdRi : lineRegionSharedDirections){
-                    auto & ri = lineIdRi.first.second;
-                    int lineId = lineIdRi.first.first;
-                    auto & line = _globalData.mergedSpatialLineSegments[lineId];
+                for (auto & lineIdRi : regionLineIntersectionSampledPoints){
+                    auto & ri = lineIdRi.first.first;
+                    auto & li = lineIdRi.first.second;
+                    auto & cline2 = _views.data(li.viewHandle).lineNet->lines().data(li.handle).line;
                     auto & cam = _views.data(ri.viewHandle).camera;
                     auto & viz = vizs[ri.viewHandle];
-                    Line2 line2 = { 
-                        cam.screenProjection(line.component.first), 
-                        cam.screenProjection(line.component.second) 
-                    };
-                    Classified<Line2> cline2;
-                    cline2.claz = line.claz;
-                    cline2.component = line2;
+
                     /*viz << vis::manip2d::SetColor(vis::ColorTag::White)
                         << vis::manip2d::SetThickness(2);*/
                     //viz << cline2;
 
                     viz << vis::manip2d::SetColor(vis::ColorTag::Black)
                         << vis::manip2d::SetThickness(1);
-                    auto & regionCenter = _views.data(ri.viewHandle).regionNet->regions().data(ri.regionHandle).center;
+                    auto & regionCenter = _views.data(ri.viewHandle).regionNet->regions().data(ri.handle).center;
                     for (auto & d : lineIdRi.second){
                         auto p = cam.screenProjection(d);
                         viz << Line2(regionCenter, p);
@@ -2044,6 +1857,9 @@ namespace panoramix {
 
 
 
+            using namespace deriv;
+            ExpressionGraph graph;
+            
             // append to constraint graph
             _constraints.internalElements<0>().reserve(_constraints.internalElements<0>().capacity() + 
                 regionsRTree.size());
@@ -2051,33 +1867,33 @@ namespace panoramix {
                 overlappedRegionIndexPairs.size() + regionsRTree.size());
 
             // add region components
-            std::unordered_map<RegionIndex, HandleAtLevel<0>, decltype(hashRegionIndex)> ri2Handle(50000, hashRegionIndex);
+            IndexHashMap<RegionIndex, HandleAtLevel<0>> ri2Handle;
             for (auto & r : regionSpatialContours) {
                 ComponentData cd(ComponentData::Type::Region);
                 //cd.asRegion.isVoid = false;
-                cd.asRegion.regionHandle = r.first.regionHandle;
+                cd.asRegion.regionHandle = r.first.handle;
                 cd.asRegion.viewHandle = r.first.viewHandle;
                 auto & cam = _views.data(r.first.viewHandle).camera;
                 auto direction = 
-                    cam.spatialDirection(_views.data(r.first.viewHandle).regionNet->regions().data(r.first.regionHandle).center);
+                    cam.spatialDirection(_views.data(r.first.viewHandle).regionNet->regions().data(r.first.handle).center);
                 cd.asRegion.thetaExpr = OptimizibleExpression<Eigen::Vector3d>(
                     deriv::CVMatToEigenMat(normalize(direction)), 
-                    _exprGraph);
+                    graph);
                 ri2Handle[r.first] = _constraints.add(cd);
             }
-            //// add line structure components
-            //std::vector<HandleAtLevel<0>> mergedLineId2Handle(_globalData.mergedSpatialLineSegments.size());
-            //for (int i = 0; i < _globalData.mergedSpatialLineSegments.size(); i++){
-            //    ComponentData cd(ComponentData::Type::LineStructure);
-            //    cd.asLineStructure.eta = 1.0;
-            //    cd.asLineStructure.mergedSpatialLineSegmentId = i;
-            //    mergedLineId2Handle[i] = _constraints.add(cd);
-            //}
+            // add line components
+            IndexHashMap<LineIndex, ComponentHandle> li2Handle;
+            for (auto & l : lineSpatialAvatars) {
+                ComponentData cd(ComponentData::Type::Line);
+                cd.asLine.lineHandle = l.first.handle;
+                cd.asLine.viewHandle = l.first.viewHandle;
+                cd.asLine.etaExpr = OptimizibleExpression<double>(1.0, graph);
+                li2Handle[l.first] = _constraints.add(cd);
+            }
             // add region overlap constraints
             for (auto & o : overlappedRegionIndexPairs) {
                 auto h1 = ri2Handle[o.first.first];
                 auto h2 = ri2Handle[o.first.second];
-
                 ConstraintData cd(ConstraintData::Type::RegionOverlap);
                 cd.asRegionOverlap.overlapRatio = o.second;
                 _constraints.add<1>({ h1, h2 }, cd);
@@ -2093,20 +1909,44 @@ namespace panoramix {
                     auto rh2 = ri2Handle[ri2];
 
                     ConstraintData cd(ConstraintData::Type::RegionConnectivity);
-                    cd.asRegionPairConsistency.viewHandle = vd.topo.hd;
-                    cd.asRegionPairConsistency.boundaryHandle = regionBoundaryData.topo.hd;
+                    cd.asRegionConnectivity.viewHandle = vd.topo.hd;
+                    cd.asRegionConnectivity.boundaryHandle = regionBoundaryData.topo.hd;
                     _constraints.add<1>({ rh1, rh2 }, cd);
                 }
             }
-            // add region line structure connectivity constraints
-            for (auto & lineRegionData : lineRegionSharedDirections) {
-                if (lineRegionData.second.empty())
+            // add line connectivity
+            for (auto & vd : _views.elements<0>()){
+                auto & lines = *vd.data.lineNet;
+                for (auto & lineRelationData : lines.lines().elements<1>()){
+                    auto & lids = lineRelationData.topo.lowers;
+                    LineIndex li1 = { vd.topo.hd, lids[0] };
+                    LineIndex li2 = { vd.topo.hd, lids[1] };
+                    auto lh1 = li2Handle[li1];
+                    auto lh2 = li2Handle[li2];
+
+                    ConstraintData cd(ConstraintData::Type::LineConnectivity);
+                    cd.asLineConnectivity.viewHandle = vd.topo.hd;
+                    cd.asLineConnectivity.lineRelationHandle = lineRelationData.topo.hd;
+                    _constraints.add<1>({ lh1, lh2 }, cd);
+                }
+            }
+            // add line inter view incidence
+            for (auto & iv : lineIncidenceRelations){
+                auto h1 = li2Handle[iv.first.first];
+                auto h2 = li2Handle[iv.first.second];
+                ConstraintData cd(ConstraintData::Type::LineInterViewIncidence);
+                cd.asLineInterViewIncidence.relationCenter = iv.second;
+                _constraints.add<1>({ h1, h2 }, cd);
+            }
+            // add region line connectivity constraints
+            for (auto & regionLineData : regionLineIntersectionSampledPoints) {
+                if (regionLineData.second.empty())
                     continue;
-                ConstraintData cd(ConstraintData::Type::RegionLineStructureConnectivity);
-                cd.asRegionLineStructureConnectivity.sampledPoints = lineRegionData.second;
+                ConstraintData cd(ConstraintData::Type::RegionLineConnectivity);
+                cd.asRegionLineConnectivity.sampledPoints = regionLineData.second;
                 
-                auto lineHandle = HandleAtLevel<0>(lineRegionData.first.first);
-                auto regionHandle = ri2Handle[lineRegionData.first.second];
+                auto lineHandle = li2Handle[regionLineData.first.second];
+                auto regionHandle = ri2Handle[regionLineData.first.first];
                 _constraints.add<1>({ lineHandle, regionHandle }, cd);
             }
 
@@ -2117,8 +1957,7 @@ namespace panoramix {
             
             
             // inference region orientations and spatial connectivity of boundaries
-            using namespace deriv;
-            ExpressionGraph & graph = _exprGraph;
+
 
             std::array<Expression<Eigen::Vector3d>, 6> principleDirectionExprs;
             for (int i = 0; i < 3; i++) {
@@ -2137,16 +1976,16 @@ namespace panoramix {
                     // E_manh
                     std::array<Expression<double>, 6> angles;
                     for (int i = 0; i < 6; i++) {
-                        angles[i] = angleFunc(r.data.asRegion.thetaExpr.expression(), principleDirectionExprs[i]);
+                        angles[i] = AngleFunc(r.data.asRegion.thetaExpr.expression(), principleDirectionExprs[i]);
                     }
                     Expression<double> minAngle = deriv::minInRange(angles.begin(), angles.end());
                     double wManh = 1.0;
-                    r.data.asRegion.manhattanEnergyExpr = hFunc(minAngle, M_PI / 6) * wManh;
+                    r.data.asRegion.manhattanEnergyExpr = HFunc(minAngle, M_PI / 6) * wManh;
                     auto thetaNorm = norm(r.data.asRegion.thetaExpr.expression());
                     r.data.reserveScaleEnergyExpr = cwiseSelect(thetaNorm - 1.0, 1.0, 1.0 / (thetaNorm + 1e-6));
                 }
-                else if (r.data.type == ComponentData::Type::LineStructure) {
-                    auto etaNorm = abs(r.data.asLineStructure.etaExpr.expression());
+                else if (r.data.type == ComponentData::Type::Line) {
+                    auto etaNorm = abs(r.data.asLine.etaExpr.expression());
                     r.data.reserveScaleEnergyExpr = cwiseSelect(etaNorm - 1.0, 1.0, 1.0 / (etaNorm + 1e-6));
                 }
             }
@@ -2173,15 +2012,15 @@ namespace panoramix {
                     con.data.constraintEnergyExpr = wOverlap * overlapRatio * thetaDiffSquaredSum;
 
                 }
-                // region region connectivity
+                // region connectivity
                 else if (con.data.type == ConstraintData::Type::RegionConnectivity) {
                     assert(rd1.type == ComponentData::Type::Region &&
                         rd2.type == ComponentData::Type::Region &&
                         "invalid component type!");
 
-                    auto & camera = _views.data(con.data.asRegionPairConsistency.viewHandle).camera;
-                    auto & boundaryData = _views.data(con.data.asRegionPairConsistency.viewHandle).regionNet
-                        ->regions().data(con.data.asRegionPairConsistency.boundaryHandle);
+                    auto & camera = _views.data(con.data.asRegionConnectivity.viewHandle).camera;
+                    auto & boundaryData = _views.data(con.data.asRegionConnectivity.viewHandle).regionNet
+                        ->regions().data(con.data.asRegionConnectivity.boundaryHandle);
                     auto & sampledPoints = boundaryData.sampledPoints;
                     auto straightness = boundaryData.straightness;
 
@@ -2224,56 +2063,93 @@ namespace panoramix {
 
                 }
                 // line line connectivity
-                else if (con.data.type == ConstraintData::Type::LineStructureConnectivity) {
+                else if (con.data.type == ConstraintData::Type::LineConnectivity) {
 
-                    assert(rd1.type == ComponentData::Type::LineStructure &&
-                        rd2.type == ComponentData::Type::LineStructure &&
+                    assert(rd1.type == ComponentData::Type::Line &&
+                        rd2.type == ComponentData::Type::Line &&
                         "invalid component type!");
 
-                    auto & lineData1 = rd1.asLineStructure;
-                    auto & lineData2 = rd2.asLineStructure;
-                    auto & line1 = _globalData.mergedSpatialLineSegments[lineData1.mergedSpatialLineSegmentId];
-                    auto & line2 = _globalData.mergedSpatialLineSegments[lineData2.mergedSpatialLineSegmentId];
+                    auto & lineConnectivityData = con.data.asLineConnectivity;
+                    assert(lineConnectivityData.viewHandle == rd1.asLine.viewHandle);
+                    assert(lineConnectivityData.viewHandle == rd2.asLine.viewHandle);
 
-                    auto nearestData = DistanceBetweenTwoLines(line1.component, line2.component).second;
-                    auto sampledPoint = normalize((nearestData.first.position + nearestData.second.position) / 2.0);
-                    double depthOfSampledPointOnLine1 =
-                        norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampledPoint),
-                        line1.component.infinieLine()).second.second);
-                    double depthOfSampledPointOnLine2 =
-                        norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampledPoint),
-                        line2.component.infinieLine()).second.second);
-                    double ratio1 = depthOfSampledPointOnLine1 / norm(line1.component.first);
+                    auto & cam = _views.data(con.data.asLineConnectivity.viewHandle).camera;
+                    auto & linesNet = *_views.data(con.data.asLineConnectivity.viewHandle).lineNet;
+                    auto & lineRelationData = linesNet.lines().data(lineConnectivityData.lineRelationHandle);
+                    auto & lineVotingDistribution = linesNet.lineVotingDistribution()(
+                        PixelLoc(lineRelationData.relationCenter[0], lineRelationData.relationCenter[1]));
+
+                    auto & line1 = linesNet.lines().data(rd1.asLine.lineHandle).line;
+                    auto & line2 = linesNet.lines().data(rd2.asLine.lineHandle).line;
+
+                    auto sampledDir = cam.spatialDirection(lineRelationData.relationCenter);
+
+                    double ratio1 = ComputeDepthRatioOfPointOnSpatialLine(
+                        cam.spatialDirection(line1.component.first), 
+                        sampledDir, 
+                        _globalData.vanishingPoints[line1.claz]);
+                    double ratio2 = ComputeDepthRatioOfPointOnSpatialLine(
+                        cam.spatialDirection(line2.component.first),
+                        sampledDir,
+                        _globalData.vanishingPoints[line2.claz]);
+
                     assert(ratio1 > 0);
-                    double ratio2 = depthOfSampledPointOnLine2 / norm(line2.component.first);
                     assert(ratio2 > 0);
-                    auto lambda1 = lineData1.etaExpr.expression() * ratio1;
-                    auto lambda2 = lineData2.etaExpr.expression() * ratio2;
+
+                    auto lambda1 = rd1.asLine.etaExpr.expression() * ratio1;
+                    auto lambda2 = rd2.asLine.etaExpr.expression() * ratio2;
 
                     double wLineConnect = 8.0;
                     auto lambdaSquaredDiff = Square(lambda1 - lambda2);
                     con.data.constraintEnergyExpr = (wLineConnect * lambdaSquaredDiff).cast<double>();
 
                 }
-                // region line connectivity
-                else if (con.data.type == ConstraintData::Type::RegionLineStructureConnectivity) {
+                // line inter view incidence
+                else if (con.data.type == ConstraintData::Type::LineInterViewIncidence) {
+                    assert(rd1.type == ComponentData::Type::Line && 
+                        rd2.type == ComponentData::Type::Line);
 
-                    assert((rd1.type == ComponentData::Type::LineStructure && rd2.type == ComponentData::Type::Region ||
-                        rd1.type == ComponentData::Type::Region && rd2.type == ComponentData::Type::LineStructure) &&
+                    auto & line1 = lineSpatialAvatars[LineIndex{ rd1.asLine.viewHandle, rd1.asLine.lineHandle }];
+                    auto & line2 = lineSpatialAvatars[LineIndex{ rd2.asLine.viewHandle, rd2.asLine.lineHandle }];
+
+                    auto & relationCenter = con.data.asLineInterViewIncidence.relationCenter;
+
+                    double ratio1 = ComputeDepthRatioOfPointOnSpatialLine(
+                        line1.component.first, relationCenter, _globalData.vanishingPoints[line1.claz]);
+                    double ratio2 = ComputeDepthRatioOfPointOnSpatialLine(
+                        line2.component.first, relationCenter, _globalData.vanishingPoints[line2.claz]);
+
+                    assert(ratio1 > 0);
+                    assert(ratio2 > 0);
+
+                    auto lambda1 = rd1.asLine.etaExpr.expression() * ratio1;
+                    auto lambda2 = rd2.asLine.etaExpr.expression() * ratio2;
+
+                    double wLineConnect = 8.0;
+                    auto lambdaSquaredDiff = Square(lambda1 - lambda2);
+                    con.data.constraintEnergyExpr = (wLineConnect * lambdaSquaredDiff).cast<double>();
+                }
+                // region line connectivity
+                else if (con.data.type == ConstraintData::Type::RegionLineConnectivity) {
+
+                    assert((rd1.type == ComponentData::Type::Line && 
+                        rd2.type == ComponentData::Type::Region ||
+                        rd1.type == ComponentData::Type::Region && 
+                        rd2.type == ComponentData::Type::Line) &&
                         "invalid component type!");
 
                     auto prrd1 = &rd1, prrd2 = &rd2;
-                    if (rd1.type == ComponentData::Type::LineStructure){
+                    if (rd1.type == ComponentData::Type::Line){
                         std::swap(prrd1, prrd2);
                     }
                     auto & rrd1 = *prrd1; // region
                     auto & rrd2 = *prrd2; // linestruct
 
                     assert(rrd1.type == ComponentData::Type::Region && 
-                        rrd2.type == ComponentData::Type::LineStructure &&
+                        rrd2.type == ComponentData::Type::Line &&
                         "invalid component type!");
 
-                    auto & sampledPoints = con.data.asRegionLineStructureConnectivity.sampledPoints;
+                    auto & sampledPoints = con.data.asRegionLineConnectivity.sampledPoints;
 
                     // get sampled direction expressions
                     std::vector<Expression<Eigen::Vector3d>> sampledDirectionExprs;
@@ -2292,15 +2168,17 @@ namespace panoramix {
                     for (int i = 0; i < sampledDirectionExprs.size(); i++) {
                         lambdasR1[i] = dotProd(rrd1.asRegion.thetaExpr.expression(), rrd1.asRegion.thetaExpr.expression()) /
                             dotProd(rrd1.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
-                        /*lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr, rd2.asRegion.thetaExpr) /
-                            dotProd(rd2.asRegion.thetaExpr, sampledDirectionExprs[i]);*/
-                        auto & dir = sampledPoints[i]; // we don't need expression here
-                        auto & line = _globalData.mergedSpatialLineSegments[rrd2.asLineStructure.mergedSpatialLineSegmentId].component;
-                        auto depth = norm(DistanceBetweenTwoLines(InfiniteLine3({ 0, 0, 0 }, dir),
-                            line.infinieLine()).second.second);
-                        double ratio = depth / norm(line.first); // we only need the ratio of the depths
-                        lambdasR2[i] = (rrd2.asLineStructure.etaExpr.expression() * ratio).cast<double>();
 
+                        auto & dir = sampledPoints[i]; // we don't need expression here
+                        auto & line = _views.data(rrd2.asLine.viewHandle).lineNet->lines().data(rrd2.asLine.lineHandle).line;
+                        auto & cam = _views.data(rrd2.asLine.viewHandle).camera;
+                        double ratio = ComputeDepthRatioOfPointOnSpatialLine(
+                            cam.spatialDirection(line.component.first), dir,
+                            _globalData.vanishingPoints[line.claz]);
+
+                        assert(ratio > 0);
+
+                        lambdasR2[i] = (rrd2.asLine.etaExpr.expression() * ratio).cast<double>();
                         lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
                     }
                     EHandle lambdaSquaredDiffSumHandle = HSum<double>(&graph, lambdaSquaredDiffHandles);
@@ -2308,75 +2186,68 @@ namespace panoramix {
 
                     // E_connect
                     double wConnect = 4.0;
-                    con.data.constraintEnergyExpr = wConnect * lambdaSquaredDiffSum;
-                    
+                    con.data.constraintEnergyExpr = wConnect * lambdaSquaredDiffSum;                    
                 }
-
 
             }
 
             std::cout << "individual energies defined" << std::endl;
 
             // sum all energy
-            std::vector<EHandle> allManhattanEnergyHandles, 
-                allLineLineConsEnergyHandles, allLineRegionConsEnergyHandles, 
-                allRegionRegionConsEnergyHandles, allRegionRegionOverlapEnergyHandles,
-                allRegionReserveScaleEnergyHandles, allLineReserveScaleEnergyHandles;
+            std::vector < EHandle >
+                allManhattanEnergyHandles;
+
+            std::map<ConstraintData::Type, std::vector<EHandle>> allConstraintEnergyHandles;
+            std::map<ComponentData::Type, std::vector<EHandle>> allReserveScaleEnergyHandles;
             
+           
             // add all E_manh and reserve scale energies
             for (auto & rd : _constraints.elements<0>()){
                 if (rd.data.type == ComponentData::Type::Region){
                     allManhattanEnergyHandles.push_back(rd.data.asRegion.manhattanEnergyExpr.expression().handle());
-                    allRegionReserveScaleEnergyHandles.push_back(rd.data.reserveScaleEnergyExpr.expression().handle());
-                }else
-                    allLineReserveScaleEnergyHandles.push_back(rd.data.reserveScaleEnergyExpr.expression().handle());
+                    allReserveScaleEnergyHandles[rd.data.type].push_back(rd.data.reserveScaleEnergyExpr.expression().handle());
+                }
+                else if (rd.data.type == ComponentData::Type::Line){
+                    allReserveScaleEnergyHandles[rd.data.type].push_back(rd.data.reserveScaleEnergyExpr.expression().handle());
+                }
             }
+
+            std::cout << "component energies defined" << std::endl;
 
             // add all EnergyHandles
             for (auto & cd : _constraints.elements<1>()){
-                switch (cd.data.type){
-                case ConstraintData::Type::LineStructureConnectivity:
-                    allLineLineConsEnergyHandles.push_back(cd.data.constraintEnergyExpr.expression().handle());
-                    break;
-                case ConstraintData::Type::RegionLineStructureConnectivity:
-                    allLineRegionConsEnergyHandles.push_back(cd.data.constraintEnergyExpr.expression().handle());
-                    break;
-                case ConstraintData::Type::RegionConnectivity:
-                    allRegionRegionConsEnergyHandles.push_back(cd.data.constraintEnergyExpr.expression().handle());
-                    break;
-                case ConstraintData::Type::RegionOverlap:
-                    allRegionRegionOverlapEnergyHandles.push_back(cd.data.constraintEnergyExpr.expression().handle());
-                    break;
-                default:
-                    assert(false && "invalid constraint type!");
-                }
+                allConstraintEnergyHandles[cd.data.type]
+                    .push_back(cd.data.constraintEnergyExpr.expression().handle());
             }
+
+            std::cout << "constraint energies defined" << std::endl;
 
             // sum all
             DisableableExpression<double> allManhattanEnergySumExpr = 
                 graph.as<double>(HSum<double>(&graph, allManhattanEnergyHandles));
-            DisableableExpression<double> allLineLineConsEnergySumExpr = 
-                graph.as<double>(HSum<double>(&graph, allLineLineConsEnergyHandles));
-            DisableableExpression<double> allLineRegionConsEnergySumExpr = 
-                graph.as<double>(HSum<double>(&graph, allLineRegionConsEnergyHandles));
-            DisableableExpression<double> allRegionRegionConsEnergySumExpr = 
-                graph.as<double>(HSum<double>(&graph, allRegionRegionConsEnergyHandles));
-            DisableableExpression<double> allRegionRegionOverlapEnergySumExpr = 
-                graph.as<double>(HSum<double>(&graph, allRegionRegionOverlapEnergyHandles));
-            DisableableExpression<double> allRegionReserveScaleEnergySumExpr =
-                graph.as<double>(HSum<double>(&graph, allRegionReserveScaleEnergyHandles));
-            DisableableExpression<double> allLineReserveScaleEnergySumExpr =
-                graph.as<double>(HSum<double>(&graph, allLineReserveScaleEnergyHandles));
+            std::map<ComponentData::Type, DisableableExpression<double>> allReserveScaleEnergySumExpr;
+            for (auto & allHandles : allReserveScaleEnergyHandles){
+                allReserveScaleEnergySumExpr[allHandles.first] =
+                    graph.as<double>(HSum<double>(&graph, allHandles.second));
+            }
+            std::map<ConstraintData::Type, DisableableExpression<double>> allConstraintEnergySumExpr;
+            for (auto & allHandles : allConstraintEnergyHandles){
+                allConstraintEnergySumExpr[allHandles.first] = 
+                    graph.as<double>(HSum<double>(&graph, allHandles.second));
+            }
+
+            std::cout << "expressions defined" << std::endl;
             
-            auto completeEngergyExpr = deriv::generalSum(
-                allManhattanEnergySumExpr.expression(),
-                allLineLineConsEnergySumExpr.expression(),
-                allLineRegionConsEnergySumExpr.expression(),
-                allRegionRegionConsEnergySumExpr.expression(),
-                allRegionRegionOverlapEnergySumExpr.expression()
-                //allRegionReserveScaleEnergySumExpr.expression(),
-                //allLineReserveScaleEnergySumExpr.expression()
-            );
+            auto completeEngergyExpr = graph.as<double>(HSum<double>(&graph, {
+                allManhattanEnergySumExpr.expression().handle(),
+                allConstraintEnergySumExpr[ConstraintData::Type::LineConnectivity].expression().handle(),
+                allConstraintEnergySumExpr[ConstraintData::Type::LineInterViewIncidence].expression().handle(),
+                allConstraintEnergySumExpr[ConstraintData::Type::RegionConnectivity].expression().handle(),
+                allConstraintEnergySumExpr[ConstraintData::Type::RegionLineConnectivity].expression().handle(),
+                allConstraintEnergySumExpr[ConstraintData::Type::RegionOverlap].expression().handle(),
+                allReserveScaleEnergySumExpr[ComponentData::Type::Region].expression().handle(),
+                allReserveScaleEnergySumExpr[ComponentData::Type::Line].expression().handle()
+            }));
 
             std::cout << "final energy expression defined" << std::endl;
             std::cout << "current energy is: " << completeEngergyExpr.execute() << std::endl;
@@ -2389,9 +2260,9 @@ namespace panoramix {
                     assert(!isnan(r));
                     assert(r >= 0);
                 }
-                else if (rd.data.type == ComponentData::Type::LineStructure) {
+                else if (rd.data.type == ComponentData::Type::Line) {
                     if (!firstLineEtaFrozen){
-                        rd.data.asLineStructure.etaExpr.freeze();
+                        rd.data.asLine.etaExpr.freeze();
                         firstLineEtaFrozen = true;
                     }
                 }
@@ -2409,7 +2280,7 @@ namespace panoramix {
 
 
             //// optimize lines
-            //OptimizeConstraintGraphUsingEnergy(
+            //OptimizeConstraintGraphUsingEnergyExpression(
             //    allLineLineConsEnergySumExpr.expression(), 
             //    _constraints, 1e-1, 0.1, 5000,
             //    [this](int i, double energyVal) -> bool {              
@@ -2428,13 +2299,13 @@ namespace panoramix {
             //});
 
             // reconstruct faces
-            OptimizeConstraintGraphUsingEnergy(completeEngergyExpr, _constraints, 4e-6, 0.0, 1000,
-                [this, &hashRegionIndex](int i, double energyVal) -> bool {
+            OptimizeConstraintGraphUsingEnergyExpression(completeEngergyExpr, _constraints, 4e-6, 0.0, 1000,
+                [this](int i, double energyVal) -> bool {
                 if (i % 10 != 0)
                     return true;
 
                 // visualize
-                std::unordered_map<RegionIndex, vis::Color, decltype(hashRegionIndex)> ri2Color(100, hashRegionIndex);
+                IndexHashMap<RegionIndex, vis::Color> ri2Color;
                 for (auto & vd : _constraints.elements<0>()){
                     if (vd.data.type == ComponentData::Type::Region){
                         Vec3 theta = deriv::EigenVecToCVVec(vd.data.asRegion.thetaExpr.expression().result());
@@ -2447,7 +2318,7 @@ namespace panoramix {
                         colorVec *= 255.0;
                         vis::Color color(colorVec[0], colorVec[1], colorVec[2]);
                         RegionIndex ri;
-                        ri.regionHandle = vd.data.asRegion.regionHandle;
+                        ri.handle = vd.data.asRegion.regionHandle;
                         ri.viewHandle = vd.data.asRegion.viewHandle;
                         ri2Color[ri] = color;
                     }
@@ -2460,14 +2331,14 @@ namespace panoramix {
                     auto segmentedRegions = vd.data.regionNet->segmentedRegions();
                     for (int y = 0; y < segmentedRegions.rows; y++){
                         for (int x = 0; x < segmentedRegions.cols; x++){
-                            ri.regionHandle.id = segmentedRegions.at<int32_t>(y, x);
+                            ri.handle.id = segmentedRegions.at<int32_t>(y, x);
                             im.at<Vec<uint8_t, 4>>(y, x) = ri2Color[ri];
                         }
                     }
                     vis::Visualizer2D viz;
                     viz.setImage(im);
                     viz.params.winName = "region orientations " + std::to_string(vd.topo.hd.id);
-                    viz << vd.data.lineSegments;
+                    viz << vd.data.lineNet->lineSegments();
                     //viz << vis::manip2d::Show();
                     cv::imwrite("region_orientations_" + std::to_string(i) + "_" + 
                         std::to_string(vd.topo.hd.id) + ".png", viz.image());

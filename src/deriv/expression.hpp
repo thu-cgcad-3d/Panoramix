@@ -432,6 +432,9 @@ namespace panoramix {
             // get expression string
             std::ostream & toString(std::ostream & os, EHandle h) const;
 
+            // clear all content
+            void clear() { _g.clear(); }
+
         private:
             GraphType _g;
         };

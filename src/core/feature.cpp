@@ -36,6 +36,18 @@ namespace panoramix {
             return Vec2(x, y);
         }
 
+        HPoint2 PerspectiveCamera::screenProjectionInHPoint(const Vec3 & p3) const {
+            Vec4 p4(p3(0), p3(1), p3(2), 1);
+            Vec4 position = _viewProjectionMatrix * p4;
+            double xratio = position(0) / 2;
+            double yratio = position(1) / 2;
+            double zratio = position(3);
+
+            double x = (xratio + 0.5 * zratio) * _screenW;
+            double y = _screenH * zratio - (yratio + 0.5 * zratio) * _screenH;
+            return HPoint2({x, y}, zratio);
+        }
+
         Vec3 PerspectiveCamera::spatialDirection(const Vec2 & p2d) const {
             double xratio = (p2d(0) / _screenW - 0.5) * 2;
             double yratio = ((_screenH - p2d(1)) / _screenH - 0.5) * 2;

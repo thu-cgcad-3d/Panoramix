@@ -7,9 +7,6 @@
 
 #include <unsupported/Eigen/NonLinearOptimization>
 
-#include <glpk.h>
-#include <setjmp.h>
-
 #include "../deriv/derivative.hpp"
 
 #include "../core/basic_types.hpp"
@@ -20,97 +17,82 @@
 namespace panoramix {
     namespace rec {
 
-        // for glpk
-        struct sinfo {
-            char * text;
-            jmp_buf * env;
+        template <class T>
+        class DisableableExpression {
+        public:
+            inline DisableableExpression() : _enabled(nullptr) {}
+            inline DisableableExpression(const deriv::Expression<T> & rawExpr)
+                : _enabled(std::make_shared<bool>(true)) {
+                auto enabledExpr = deriv::composeFunction(*rawExpr.g(), [this]()
+                    -> double {return *_enabled ? 1.0 : -1.0; });
+                _expr = deriv::cwiseSelect(enabledExpr, rawExpr, 0.0);
+            }
+
+            inline deriv::Expression<T> expression() const { return _expr; }
+            inline operator deriv::Expression<T>() const { return _expr; }
+            inline void setEnabled(bool b) { *_enabled = b; }
+            inline void enable() { *_enabled = true; }
+            inline void disable() { *_enabled = false; }
+
+        private:
+            deriv::Expression<T> _expr;
+            std::shared_ptr<bool> _enabled;
         };
 
-        void glpErrorHook(void * in){
-            sinfo * info = (sinfo*)in;
-            glp_free_env();
-            longjmp(*(info->env), 1);
-        }
-       
+        using EHandleTable = std::vector<deriv::EHandle>;
 
+        template <class T>
+        class OptimizibleExpression {
+        public:
+            EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+        public:
+            inline OptimizibleExpression() {}
+            inline explicit OptimizibleExpression(const T & d, deriv::ExpressionGraph & graph)
+                : _data(std::make_shared<T>(d)), _frozen(false) {
+                _lastChange = deriv::common::FillWithScalar(_lastChange, 0.0);
+                T * dataPtr = _data.get();
+                _expr = deriv::composeFunction(graph, [dataPtr]() ->T {
+                    return *dataPtr;
+                });
+            }
+
+            void registerHandleTable(EHandleTable & table) {
+                table.push_back(_expr.handle());
+                _positionInHandleTable = table.size() - 1;
+            }
+
+            void getDerivative(const EHandleTable & derivTable) {
+                auto derivHandle = derivTable[_positionInHandleTable];
+                if (derivHandle.isValid())
+                    _dexpr = _expr.g()->asDerived<T>(derivHandle);
+                else
+                    _dexpr = deriv::DerivativeExpression<T>(); // invalidate
+            }
+
+            void optimizeData(double delta, double momentum, const EHandleTable & table){
+                if (_dexpr.isValid() && !_frozen){
+                    auto grad = _dexpr.executeHandlesRange(table.begin(), table.end());
+                    _lastChange = (-grad * (1 - momentum) + _lastChange * momentum) * delta;
+                    *_data += _lastChange;
+                }
+            }
+
+            inline void freeze() { _frozen = true; }
+            inline void unFreeze() { _frozen = false; }
+
+            inline deriv::Expression<T> expression() const { return _expr; }
+            inline deriv::DerivativeExpression<T> derivativeExpression() const { return _dexpr; }
+
+        private:
+            deriv::Expression<T> _expr;
+            deriv::DerivativeExpression<T> _dexpr;
+            int _positionInHandleTable;
+            std::shared_ptr<T> _data;
+            T _lastChange;
+            bool _frozen;
+        };
 
         
-
-
-        //// optimize constraint graph
-        //template <class ComponentDataT, class ConstraintDataT, class ComponentUpdaterT,
-        //class ComponentExpressionMakerT, class ConstraintExpressionMakerT, class CostExpressionMakerT>
-        //int OptimizeConstraintGraph(
-        //    core::ConstraintGraph<ComponentDataT, ConstraintDataT> & consGraph, 
-        //    ComponentUpdaterT compUpdator = ComponentUpdaterT(),
-        //    ComponentExpressionMakerT compExprMaker = ComponentExpressionMakerT(),
-        //    ConstraintExpressionMakerT consExprMaker = ConstraintExpressionMakerT(),
-        //    CostExpressionMakerT costExprMaker = CostExpressionMakerT(),
-        //    OptimizeUsingGradientTag tag = OptimizeUsingGradientTag()) {
-        //    
-        //    using ConsGraph = core::ConstraintGraph<ComponentDataT, ConstraintDataT>;
-        //    using CompHandle = typename ConsGraph::ComponentHandle;
-        //    using ConsHandle = typename ConsGraph::ConstraintHandle;
-
-        //    deriv::ExpressionGraph graph;
-        //    
-        //    using ComponentExprType = decltype(compExprMaker(graph, std::declval<ComponentDataT>()));
-        //    using ComponentExprContentType = typename ComponentExprType::Type;            
-
-        //    std::map<CompHandle, ComponentExprType, typename CompareHandle<core::ComponentTopo>> compExprTable;
-        //    std::vector<ComponentExprType> compExprs;
-        //    std::vector<CompHandle> compHandles;
-        //    compExprs.reserve(consGraph.internalComponents().size());
-        //    compHandles.reserve(consGraph.internalComponents().size());
-        //    for (auto & comp : consGraph.components()) {
-        //        compExprs.push_back(compExprTable[comp.topo.hd] = compExprMaker(graph, comp.data).handle());
-        //        comphandles.push_back(comp.topo.hd);
-        //    }
-        //    
-        //    using ConstraintExprType = decltype(consExprMaker(graph, std::declval<ConstraintDataT>(), std::vector<ComponentExprType>()));
-        //    using ConstraintExprContentType = typename ConstraintExprType::Type;
-
-        //    std::map<ConsHandle, ConstraintExprType, typename CompareHandle<core::ConstraintTopo>> consExprTable;
-        //    std::vector<ConstraintExprType> consExprs;
-        //    consExprs.reserve(consGraph.internalConstraints().size());
-        //    for (auto & cons : consGraph.constraints()) {
-        //        std::vector<ComponentExprType> inputs;
-        //        inputs.reserve(cons.topo.components.size());
-        //        for (auto & comp : cons.topo.components) {
-        //            inputs.push_back(compExprTable[comp]);
-        //        }
-        //        consExprs.push_back(consExprTable[cons.topo.hd] = consExprMaker(graph, cons.data, inputs));
-        //    }
-
-        //    using CostExprType = decltype(costExprMaker(graph, std::vector<ConstraintExprType>()));
-        //    using CostExprContentType = typename CostExprType::Type;
-
-        //    // get the final cost function
-        //    CostExprType costExpr = costExprMaker(graph, consExprs);
-
-        //    // compute gradients
-        //    using DerivedComponentExprType = deriv::DerivativeExpression<ComponentExprContentType>;
-        //    std::vector<DerivedComponentExprType> derivs;
-        //    derivs.reserve(compExprs.size());
-        //    costExpr.derivativesRange(compExprs.begin(), compExprs.end(), std::back_inserter(derivs));
-        //    assert(derivs.size() == compExprs.size());
-
-        //    // iterate
-        //    int epoches = 0;
-        //    while (true) {
-        //        bool shouldStop = false;
-        //        for (int i = 0; i < derivs.size(); i++){
-        //            if (compUpdator(consGraph.data(compHandles[i]), derivs[i].execute())){
-        //                shouldStop = true;
-        //            }
-        //        }
-        //        if (shouldStop)
-        //            break;
-        //        epoches++;
-        //    }
-
-        //    return epoches;
-        //}
 
 
         

@@ -14,7 +14,7 @@ set (TESTNAMES
 	test_views_net_incremented
 	test_views_net_calibrate_cameras
 	test_views_net_outdoor
-	test_regions_net
+	test_specific_nets
 	test_vis2d
 	test_vis3d
 	test_ogre
