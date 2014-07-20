@@ -453,12 +453,13 @@ namespace panoramix {
             inline explicit Expression(Op * op = nullptr) : _op(op){}
 
             inline bool isValid() const { return _op && _op->graph && _op->self.isValid(); }
+            inline bool isInValid() const { return !isValid(); }
 
             inline EHandle handle() const { return _op ? _op->self : EHandle(); }
             inline ExpressionGraph * g() const { return _op ? _op->graph : nullptr; }
 
             // the current value in expression data
-            inline ResultType<T> result() const { return TraitsAboutOp<T>::Result(*_op); }
+            inline ResultType<T> result() const { assert(isValid()); return TraitsAboutOp<T>::Result(*_op); }
 
             // execute the expression graph to get value updated
             template <class ... VarTs>

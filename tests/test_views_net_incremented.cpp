@@ -12,6 +12,8 @@
 #include <string>
 #include <random>
 
+#include <Windows.h>
+
 
 using namespace panoramix;
 
@@ -20,6 +22,12 @@ static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
 static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + "/normal";
 static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
 static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
+
+
+int FilterException(int code, PEXCEPTION_POINTERS ex) {
+    std::cout << "Filtering " << std::hex << code << std::endl;
+    return EXCEPTION_EXECUTE_HANDLER;
+};
 
 void ShowPanoramaVPs(const rec::ReconstructionEngine & engine) {
     auto vps = engine.globalData().vanishingPoints;
@@ -49,16 +57,16 @@ void ShowPanoramaVPs(const rec::ReconstructionEngine & engine) {
         << vis::manip2d::Show();
 }
 
-TEST(ViewsNet, FixedCamera) {
-//void run(){
+//TEST(ViewsNet, FixedCamera) {
+void run(){
 
     cv::Mat panorama = cv::imread(ProjectTestDataDirStr_PanoramaIndoor + "/13.jpg");
     cv::resize(panorama, panorama, cv::Size(2000, 1000));
     core::PanoramicCamera originCam(panorama.cols / M_PI / 2.0);
 
     std::vector<core::PerspectiveCamera> cams = {
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 })
-        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 })
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 })
     };
 
     rec::ReconstructionEngine engine;
@@ -83,7 +91,12 @@ int main(int argc, char * argv[], char * envp[])
 {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-    //run();
+    //return RUN_ALL_TESTS();
+    //__try {
+        run();
+   /* }
+    __except (FilterException(GetExceptionCode(), GetExceptionInformation())){
+        std::cout << "caught" << std::endl;
+    }*/
     return 0;
 }

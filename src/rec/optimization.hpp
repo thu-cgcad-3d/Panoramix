@@ -23,8 +23,10 @@ namespace panoramix {
             inline DisableableExpression() : _enabled(nullptr) {}
             inline DisableableExpression(const deriv::Expression<T> & rawExpr)
                 : _enabled(std::make_shared<bool>(true)) {
-                auto enabledExpr = deriv::composeFunction(*rawExpr.g(), [this]()
-                    -> double {return *_enabled ? 1.0 : -1.0; });
+                bool * enabled = _enabled.get();
+                auto enabledExpr = deriv::composeFunction(*rawExpr.g(), [enabled]()
+                    -> double {return *
+                    enabled ? 1.0 : -1.0; });
                 _expr = deriv::cwiseSelect(enabledExpr, rawExpr, 0.0);
             }
 
@@ -74,6 +76,13 @@ namespace panoramix {
                     auto grad = _dexpr.executeHandlesRange(table.begin(), table.end());
                     _lastChange = (-grad * (1 - momentum) + _lastChange * momentum) * delta;
                     *_data += _lastChange;
+                }
+            }
+
+            void deOptimizeData(){
+                if (_dexpr.isValid() && !_frozen){
+                    *_data -= _lastChange;
+                    _lastChange = deriv::common::FillWithScalar(_lastChange, 0.0);
                 }
             }
 

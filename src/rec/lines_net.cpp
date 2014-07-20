@@ -7,9 +7,9 @@ namespace panoramix {
     namespace rec {
 
         LinesNet::Params::Params() :
-            intersectionDistanceThreshold(5),
-            incidenceDistanceAlongDirectionThreshold(10),
-            incidenceDistanceVerticalDirectionThreshold(2) {
+            intersectionDistanceThreshold(10),
+            incidenceDistanceAlongDirectionThreshold(30),
+            incidenceDistanceVerticalDirectionThreshold(3) {
         }
 
         namespace {
@@ -260,7 +260,7 @@ namespace panoramix {
                     viz << ld.data.line;
                 }
                 viz.params.thickness = 1;
-                viz << vis::manip2d::SetColor(vis::ColorTag::Black);
+                viz << vis::manip2d::SetColor(vis::ColorTag::Red);
                 for (auto & rd : _lines.elements<1>()){
                     auto & l1 = _lines.data(rd.topo.lowers[0]).line;
                     auto & l2 = _lines.data(rd.topo.lowers[1]).line;

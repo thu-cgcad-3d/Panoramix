@@ -167,6 +167,7 @@ namespace panoramix {
                 RegionLineConnectivityConstraintData asRegionLineConnectivity;
 
                 DisableableExpression<double> constraintEnergyExpr;
+                deriv::Expression<double> invalidityExpr; // used to select necessary constraints
             };
 
 
