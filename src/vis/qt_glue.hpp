@@ -4,6 +4,8 @@
 #include <QtCore>
 #include <QtGui>
 
+#include <Eigen/Core>
+
 #include "../core/basic_types.hpp"
 #include "basic_types.hpp"
 
@@ -37,6 +39,7 @@ namespace panoramix {
         inline core::Vec3 MakeCoreVec(const QVector3D & v) {
             return core::Vec3(v.x(), v.y(), v.z());
         }
+
 
         template <class T>
         inline QVector4D MakeQVec(const core::Vec<T, 4> & v) {

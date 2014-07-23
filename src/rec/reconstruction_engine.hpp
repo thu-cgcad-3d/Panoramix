@@ -29,6 +29,9 @@ namespace panoramix {
                 double cameraAngleScaler; 
                 // angle scalar to judge whether two views are too close
                 double smallCameraAngleScalar; 
+
+                double samplingStepLengthOnRegionBoundaries;
+                double samplingStepLengthOnLines;
             };
 
             struct ViewData;
@@ -174,18 +177,7 @@ namespace panoramix {
             // global data
             struct GlobalData {
                 Image panorama;
-
                 std::array<Vec3, 3> vanishingPoints;
-
-                //std::vector<Classified<Line3>> spatialLineSegments;
-                //std::vector<std::pair<ViewHandle, int>> spatialLineSegmentBelongings;
-
-                /*std::vector<Vec3> mergedSpatialLineSegmentIntersections;
-                std::vector<Classified<Line3>> mergedSpatialLineSegments;
-                std::vector<int> mergedSpatialLineSegmentChainIds;
-
-                std::map<int, std::vector<int>> spatialStructuresOfMergedSpatialLineIds;
-                std::vector<Classified<Line3>> mergedSpatialLineSegmentsClassifiedWithStructureIds;*/
             };
 
             inline const ViewsGraph & views() const { return _views; }

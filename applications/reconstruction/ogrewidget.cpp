@@ -40,10 +40,10 @@ OgreWidget::OgreWidget(QWidget * parent) : QGLWidget(parent) {
     _root = new Ogre::Root;
 
     // Configures the application
-    //if (!_root->restoreConfig()) {
+    if (!_root->restoreConfig()) {
         _root->showConfigDialog();
         _root->saveConfig();
-    //}
+    }
     _root->initialise(false);
 }
 
@@ -54,52 +54,11 @@ OgreWidget::~OgreWidget() {
 }
 
 
-void OgreWidget::setupPanorama(const QString & filename) {
-    cv::Mat panorama = cv::imread(filename.toStdString());
-    cv::resize(panorama, panorama, cv::Size(2000, 1000));
-    core::PanoramicCamera originCam(panorama.cols / M_PI / 2.0);
-
-    std::vector<core::PerspectiveCamera> cams;
-    core::Mesh<core::Vec3> cameraStand;
-    core::MakeQuadFacedSphere(cameraStand, 6, 12);
-    for (auto & v : cameraStand.vertices()) {
-        core::Vec3 direction = v.data;
-        if (core::AngleBetweenDirections(direction, core::Vec3(0, 0, 1)) <= 0.1 ||
-            core::AngleBetweenDirections(direction, core::Vec3(0, 0, -1)) <= 0.1) {
-            //cams.emplace_back(700, 700, originCam.focal(), core::Vec3(0, 0, 0), direction, core::Vec3(0, 1, 0));
-            continue;
-        } else {
-            cams.emplace_back(700, 700, originCam.focal(), core::Vec3(0, 0, 0), direction, core::Vec3(0, 0, -1));
-        }
-    }
-
-
-    /// insert into views net
-    rec::ReconstructionEngine::Params params;
-    params.mjWeightT = 2.0;
-    params.intersectionConstraintLineDistanceAngleThreshold = 0.05;
-    params.incidenceConstraintLineDistanceAngleThreshold = 0.2;
-    params.mergeLineDistanceAngleThreshold = 0.05;
-    rec::ReconstructionEngine net(params);
-
-    net.insertPanorama(panorama, cams, originCam);
-
-    #pragma omp parallel for
-    for (int i = 0; i < net.views().internalElements<0>().size(); i++) {
-        auto viewHandle = rec::ReconstructionEngine::ViewHandle(i);
-        net.computeFeatures(viewHandle);
-        net.buildRegionNet(viewHandle);
-    }
-
-    std::cout << "calibrating camera and classifying lines ...";
-    net.estimateVanishingPointsAndClassifyLines();
-    net.rectifySpatialLines();
-        
-}
 
 void OgreWidget::createCube(const Ogre::String & name) {
     /// Create the mesh via the MeshManager
-    Ogre::MeshPtr msh = MeshManager::getSingleton().createManual(name, ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
+    Ogre::MeshPtr msh = MeshManager::getSingleton().createManual(name, 
+        ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
 
     /// Create one submesh
     SubMesh* sub = msh->createSubMesh();
@@ -257,7 +216,8 @@ void OgreWidget::createSphere(const Ogre::String & name, const float r, const in
 
     // allocate the vertex buffer
     vertexData->vertexCount = (nRings + 1) * (nSegments + 1);
-    HardwareVertexBufferSharedPtr vBuf = HardwareBufferManager::getSingleton().createVertexBuffer(vertexDecl->getVertexSize(0), 
+    HardwareVertexBufferSharedPtr vBuf = HardwareBufferManager::getSingleton()
+        .createVertexBuffer(vertexDecl->getVertexSize(0), 
         vertexData->vertexCount, HardwareBuffer::HBU_STATIC_WRITE_ONLY, false);
     VertexBufferBinding* binding = vertexData->vertexBufferBinding;
     binding->setBinding(0, vBuf);
@@ -266,7 +226,9 @@ void OgreWidget::createSphere(const Ogre::String & name, const float r, const in
 
     // allocate index buffer
     pSphereVertex->indexData->indexCount = 6 * nRings * (nSegments + 1);
-    pSphereVertex->indexData->indexBuffer = HardwareBufferManager::getSingleton().createIndexBuffer(HardwareIndexBuffer::IT_16BIT, pSphereVertex->indexData->indexCount, HardwareBuffer::HBU_STATIC_WRITE_ONLY, false);
+    pSphereVertex->indexData->indexBuffer = HardwareBufferManager::getSingleton()
+        .createIndexBuffer(HardwareIndexBuffer::IT_16BIT, pSphereVertex->indexData->indexCount, 
+        HardwareBuffer::HBU_STATIC_WRITE_ONLY, false);
     HardwareIndexBufferSharedPtr iBuf = pSphereVertex->indexData->indexBuffer;
     unsigned short* pIndices = static_cast<unsigned short*>(iBuf->lock(HardwareBuffer::HBL_DISCARD));
 
@@ -387,11 +349,11 @@ void OgreWidget::createScene() {
     
 
     // custom cube
-    Entity* entCube = _sceneMgr->createEntity("cc", "Cube");
+    Entity* entCube = _sceneMgr->createEntity("Hero", "Ninja.mesh");
     entCube->setMaterialName("Panorama/Panorama");
 
     SceneNode* cubeNode = _sceneMgr->getRootSceneNode()->createChildSceneNode();
-    cubeNode->setPosition(0, 100, 0);
+    cubeNode->setPosition(0, 0, 0);
     cubeNode->attachObject(entCube);
     _focusedNode = cubeNode;
 
@@ -438,7 +400,7 @@ void OgreWidget::initializeGL() {
 
         // code for Windows and Linux
         params["parentWindowHandle"] = winHandle;
-        params["FSAA"] = "16";
+        params["FSAA"] = "8";
         _window = _root->createRenderWindow("QOgreWidget_RenderWindow",
             this->width(),
             this->height(),

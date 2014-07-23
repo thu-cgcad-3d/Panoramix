@@ -14,7 +14,9 @@ namespace panoramix {
         class RegionsNet {
         public:
             struct Params {
+                Params();
                 SegmentationExtractor segmenter;
+                double samplingStepLengthOnBoundary;
             };
             struct RegionData {
                 Image regionMask; // 8UC1
@@ -28,8 +30,8 @@ namespace panoramix {
                 std::vector<std::vector<PixelLoc>> edges;
                 double length;
                 InfiniteLine2 fittedLine;
-                double straightness;
                 double tjunctionLikelihood;
+                double straightness;
                 std::vector<std::vector<Point2>> sampledPoints;
             };
             using RegionsGraph = GraphicalModel02<RegionData, BoundaryData>;

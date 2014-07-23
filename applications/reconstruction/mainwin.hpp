@@ -5,6 +5,7 @@
 
 #include "ui_mainwin.h"
 #include "ogrewidget.hpp"
+#include "workthread.hpp"
 
 class MainWind : public QMainWindow {
 
@@ -21,5 +22,7 @@ public slots:
 
 private:
     OgreWidget * _w;
+    WorkThread * _thread;
+    QProgressBar * _progressBar;
     Ui::MainWind _ui;
 };

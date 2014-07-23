@@ -13,11 +13,10 @@ public:
     OgreWidget(QWidget * parent = nullptr);
     virtual ~OgreWidget();
 
-    void setupPanorama(const QString & filename);
-
 private:
     static void createCube(const Ogre::String & name);
-    static void createSphere(const Ogre::String & name, const float r, const int nRings = 16, const int nSegments = 16);
+    static void createSphere(const Ogre::String & name, const float r, 
+        const int nRings = 16, const int nSegments = 16);
 
     void createCamera();
     void createViewports();

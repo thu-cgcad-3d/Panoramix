@@ -84,8 +84,6 @@ namespace panoramix {
 
 
 
-
-
         // points
         Visualizer3D operator << (Visualizer3D viz, const core::Point3 & p);
         inline Visualizer3D operator << (Visualizer3D viz, const core::HPoint3 & p) {
@@ -97,6 +95,13 @@ namespace panoramix {
         inline Visualizer3D operator << (Visualizer3D viz, const core::HLine3 & l) {
             return viz << l.toLine();
         }
+
+        // image as texture
+        Visualizer3D operator << (Visualizer3D viz, const core::Image & tex);
+
+        // polygons
+        Visualizer3D operator << (Visualizer3D viz, const std::vector<std::pair<core::Point3, core::Point2>> & polygonWithTexCoords);
+
 
         // classified thing
         template <class T>
@@ -140,7 +145,37 @@ namespace panoramix {
         VISUALIZE3D_AS_CONTAINER(std::set)
         VISUALIZE3D_AS_CONTAINER(std::unordered_set)
         VISUALIZE3D_AS_CONTAINER(std::forward_list)
-            
+           
+
+
+
+        class AdvancedVisualizer3D {
+        public:
+            struct Params { // global parameters
+                Params();
+                std::string winName;
+                vis::Color backgroundColor;
+                core::PerspectiveCamera camera;
+                vis::ColorTableDescriptor colorTableDescriptor;
+                core::Mat4 modelMatrix;
+            };
+
+            struct VisualData;
+            struct Widgets;
+            using VisualDataPtr = std::shared_ptr<VisualData>;
+            using WidgetsPtr = std::shared_ptr<Widgets>;
+
+            explicit AdvancedVisualizer3D(const Params & params = Params());
+            ~AdvancedVisualizer3D();
+
+        public:
+            Params & params() const;
+
+        private:
+            VisualDataPtr _data;
+            WidgetsPtr _widgets;
+        };
+
     }
 }
  

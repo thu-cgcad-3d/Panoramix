@@ -7,6 +7,8 @@
 namespace panoramix {
     namespace rec {
 
+        RegionsNet::Params::Params() : samplingStepLengthOnBoundary(15.0) {}
+
         RegionsNet::RegionsNet(const Image & image, const Params & params) 
             : _image(image), _params(params)/*, _regionsRTree(RegionDataBoundingBoxFunctor(_regions))*/{}
 
@@ -52,10 +54,12 @@ namespace panoramix {
                 for (int y = 0; y < height - 1; y++) {
                     for (int x = 0; x < width - 1; x++) {
                         PixelLoc p1(x, y), p2(x + 1, y), p3(x, y + 1), p4(x + 1, y + 1);
-                        int rs[] = { segRegions.at<int32_t>(p1),
+                        int rs[] = { 
+                            segRegions.at<int32_t>(p1),
                             segRegions.at<int32_t>(p2),
                             segRegions.at<int32_t>(p3),
-                            segRegions.at<int32_t>(p4) };
+                            segRegions.at<int32_t>(p4) 
+                        };
 
                         if (rs[0] != rs[1]) {
                             boundaryPixels[MakeOrderedPair(rs[0], rs[1])].insert(p1);
@@ -243,7 +247,7 @@ namespace panoramix {
                 }
 
                 // collect sampled points
-                static const double stepLen = 8;
+                double stepLen = _params.samplingStepLengthOnBoundary;
                 bd.sampledPoints.resize(edges.size());
                 for (int i = 0; i < edges.size(); i++) {
                     auto & e = edges[i];

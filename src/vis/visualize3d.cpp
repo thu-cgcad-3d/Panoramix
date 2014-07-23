@@ -3,6 +3,7 @@
 #include <QtWidgets>
 #include <QWidget>
 
+#include "../core/macros.hpp"
 #include "../core/utilities.hpp"
 
 #include "qt_glue.hpp"
@@ -26,12 +27,13 @@ namespace panoramix {
             pointSize(10.0f),
             lineWidth(2.0f),
             colorTableDescriptor(ColorTableDescriptor::AllColors),
-            renderMode(RenderModeFlag::All),
+            renderMode(RenderModeFlag::Triangles | RenderModeFlag::Lines),
             modelMatrix(core::Mat4::eye())
         {}
 
         struct Visualizer3D::VisualData {
             OpenGLMeshData mesh;
+            Image texture;
             Visualizer3D::Params params;
         };
 
@@ -150,6 +152,9 @@ namespace panoramix {
                         _trianglesObject = new OpenGLObject(this);
                         _trianglesObject->setUpShaders(OpenGLShaderSourceName::NormalTriangles);
                         _trianglesObject->setUpMesh(data()->mesh);
+                        if (!data()->texture.empty()){
+                            _trianglesObject->setUpTexture(MakeQImage(data()->texture));
+                        }
                         _linesObject = new OpenGLObject(this);
                         _linesObject->setUpShaders(OpenGLShaderSourceName::NormalLines);
                         _linesObject->setUpMesh(data()->mesh);
@@ -347,6 +352,63 @@ namespace panoramix {
             viz.data()->mesh.addIsolatedLine(vs[0], vs[1]);
             return viz;
         }
+
+
+        Visualizer3D operator << (Visualizer3D viz, const Image & tex) {
+            viz.data()->texture = tex;
+            return viz;
+        }
+
+        Visualizer3D operator << (Visualizer3D viz, const std::vector<std::pair<Point3, Point2>> & polygonWithTexCoords) {
+            QList<OpenGLMeshData::VertHandle> vhs;
+            if (polygonWithTexCoords.size() <= 2)
+                return viz; // TODO
+            auto normal = (polygonWithTexCoords[0].first - polygonWithTexCoords[1].first)
+                .cross(polygonWithTexCoords[2].first - polygonWithTexCoords[1].first);
+            normal /= norm(normal);
+            for (auto & p : polygonWithTexCoords){
+                OpenGLMeshData::Vertex v;
+                v.position4 = MakeQVec(core::HPoint3(p.first, 1.0).toVector());
+                v.color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
+                v.lineWidth1 = viz.params().lineWidth;
+                v.pointSize1 = viz.params().pointSize;
+                v.texCoord2 = MakeQVec(p.second);
+                v.normal3 = MakeQVec(normal);
+                vhs.append(viz.data()->mesh.addVertex(v));
+            }
+            viz.data()->mesh.addPolygon(vhs);
+            return viz;
+        }
+
+
+
+
+
+
+
+
+
+
+
+        // visualizer parameters
+        AdvancedVisualizer3D::Params::Params()
+            :
+            winName("Advanced Visualizer 3D"),
+            backgroundColor(10, 10, 10),
+            camera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)),
+            colorTableDescriptor(ColorTableDescriptor::AllColors),
+            modelMatrix(core::Mat4::eye())
+        {}
+
+        struct AdvancedVisualizer3D::VisualData {
+            OpenGLMeshData mesh;
+            Image texture;
+            AdvancedVisualizer3D::Params params;
+        };
+
+        struct AdvancedVisualizer3D::Widgets {
+            QList<QWidget *> ws;
+        };
 
     }
 }

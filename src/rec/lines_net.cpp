@@ -7,8 +7,8 @@ namespace panoramix {
     namespace rec {
 
         LinesNet::Params::Params() :
-            intersectionDistanceThreshold(10),
-            incidenceDistanceAlongDirectionThreshold(30),
+            intersectionDistanceThreshold(8),
+            incidenceDistanceAlongDirectionThreshold(15),
             incidenceDistanceVerticalDirectionThreshold(3) {
         }
 
@@ -166,8 +166,8 @@ namespace panoramix {
                             continue;
 
                         auto dir = normalize(vp - HPoint2(conCenter));
-                        double dAlong = conDir.dot(dir);
-                        double dVert = sqrt(d*d - dAlong*dAlong);
+                        double dAlong = abs(conDir.dot(dir));
+                        double dVert = sqrt(Square(norm(conDir)) - dAlong*dAlong);
 
                         if (dAlong < _params.incidenceDistanceAlongDirectionThreshold &&
                             dVert < _params.incidenceDistanceVerticalDirectionThreshold){

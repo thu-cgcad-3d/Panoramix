@@ -36,7 +36,9 @@ namespace panoramix {
 
 
         ReconstructionEngine::Params::Params() 
-            : camera(250.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05)
+            : camera(250.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
+            samplingStepLengthOnRegionBoundaries(16.0),
+            samplingStepLengthOnLines(8.0)
         {}
 
         ReconstructionEngine::ComponentData::ComponentData(ReconstructionEngine::ComponentData::Type t) : type(t) {}
@@ -108,7 +110,9 @@ namespace panoramix {
             auto & vd = _views.data(h);
             const Image & im = vd.image;
 
-            vd.regionNet = std::make_shared<RegionsNet>(vd.image);
+            RegionsNet::Params regionsNetParams;
+            regionsNetParams.samplingStepLengthOnBoundary = _params.samplingStepLengthOnRegionBoundaries;
+            vd.regionNet = std::make_shared<RegionsNet>(vd.image, regionsNetParams);
             vd.regionNet->buildNetAndComputeGeometricFeatures();
             vd.regionNet->computeImageFeatures();
 
@@ -1467,7 +1471,7 @@ namespace panoramix {
                 double angleCenter = AngleBetweenDirections(lineFirstPointDir, p);
                 double angleFirstP = AngleBetweenDirections(-lineFirstPointDir, vp);
                 double angleP = AngleBetweenDirections(-p, -vp);
-                assert(FuzzyEquals(angleCenter + angleFirstP + angleP, M_PI, 0.01));
+                //assert(FuzzyEquals(angleCenter + angleFirstP + angleP, M_PI, 0.1));
                 return sin(angleFirstP) / sin(angleP);
             }
 
@@ -1804,7 +1808,7 @@ namespace panoramix {
                     
                     auto & line = ld.data.line.component;
                     auto lineDir = normalize(line.direction());
-                    static const double sampleStep = 4;
+                    double sampleStep = _params.samplingStepLengthOnLines;
                     int sampledNum = static_cast<int>(std::floor(line.length() / sampleStep));
                     
                     for (int i = 0; i < sampledNum; i++){
@@ -1908,7 +1912,7 @@ namespace panoramix {
                 auto direction = 
                     cam.spatialDirection(_views.data(r.first.viewHandle).regionNet->regions().data(r.first.handle).center);
                 cd.asRegion.thetaExpr = OptimizibleExpression<Eigen::Vector3d>(
-                    deriv::CVMatToEigenMat(normalize(direction)), 
+                    deriv::MakeEigenMat(normalize(direction)), 
                     graph);
                 ri2Handle[r.first] = _constraints.add(cd);
             }
@@ -1994,10 +1998,10 @@ namespace panoramix {
             for (int i = 0; i < 3; i++) {
                 const Vec3 & vp = _globalData.vanishingPoints[i];
                 principleDirectionExprs[i * 2] = composeFunction(graph, [&vp]() {
-                    return CVMatToEigenMat(vp / norm(vp)); 
+                    return MakeEigenMat(vp / norm(vp)); 
                 });
                 principleDirectionExprs[i * 2 + 1] = composeFunction(graph, [&vp]() {
-                    return CVMatToEigenMat(- vp / norm(vp));
+                    return MakeEigenMat(- vp / norm(vp));
                 });
             }
             
@@ -2054,39 +2058,51 @@ namespace panoramix {
                         ->regions().data(con.data.asRegionConnectivity.boundaryHandle);
                     auto & sampledPoints = boundaryData.sampledPoints;
                     auto straightness = boundaryData.straightness;
+                    auto & fittedLine = boundaryData.fittedLine;
 
-                    // get sampled direction expressions
-                    std::vector<Expression<Eigen::Vector3d>> sampledDirectionExprs; // normalized directions
-                    sampledDirectionExprs.reserve(boundaryData.length / 5);
-                    for (auto & ps : sampledPoints) {
-                        for (auto & p : ps) {
-                            auto sampledDirectionExpr = composeFunction(graph, [&p, &camera]() {
-                                auto direction = camera.spatialDirection(p);
-                                assert(norm(direction) != 0);
-                                return CVMatToEigenMat(direction / norm(direction));
-                            });
-                            sampledDirectionExprs.push_back(sampledDirectionExpr);
+                    static const bool useSampledPoints = true;
+                    if(useSampledPoints){
+                        // get sampled direction expressions
+                        std::vector<Expression<Eigen::Vector3d>> sampledDirectionExprs; // normalized directions
+                        sampledDirectionExprs.reserve(boundaryData.length / 5);
+                        for (auto & ps : sampledPoints) {
+                            for (auto & p : ps) {
+                                auto sampledDirectionExpr = composeFunction(graph, [&p, &camera]() {
+                                    auto direction = camera.spatialDirection(p);
+                                    assert(norm(direction) != 0);
+                                    return MakeEigenMat(direction / norm(direction));
+                                });
+                                sampledDirectionExprs.push_back(sampledDirectionExpr);
+                            }
                         }
-                    }
-                    // get depth expressions of sampled direction
-                    std::vector<Expression<double>> lambdasR1(sampledDirectionExprs.size()),
-                        lambdasR2(sampledDirectionExprs.size());
-                    std::vector<EHandle> lambdaSquaredDiffHandles(sampledDirectionExprs.size());
-                    for (int i = 0; i < sampledDirectionExprs.size(); i++) {
-                        lambdasR1[i] = dotProd(rd1.asRegion.thetaExpr.expression(), rd1.asRegion.thetaExpr.expression()) /
-                            dotProd(rd1.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
-                        lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr.expression(), rd2.asRegion.thetaExpr.expression()) /
-                            dotProd(rd2.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
-                        lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
-                    }
-                    EHandle lambdaSquaredDiffSumHandle = HSum<double>(&graph, lambdaSquaredDiffHandles);
-                    auto lambdaSquaredDiffSum = graph.as<double>(lambdaSquaredDiffSumHandle);
+                        // get depth expressions of sampled direction
+                        std::vector<Expression<double>> lambdasR1(sampledDirectionExprs.size()),
+                            lambdasR2(sampledDirectionExprs.size());
+                        std::vector<EHandle> lambdaSquaredDiffHandles(sampledDirectionExprs.size());
+                        for (int i = 0; i < sampledDirectionExprs.size(); i++) {
+                            lambdasR1[i] = dotProd(rd1.asRegion.thetaExpr.expression(), rd1.asRegion.thetaExpr.expression()) /
+                                dotProd(rd1.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
+                            lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr.expression(), rd2.asRegion.thetaExpr.expression()) /
+                                dotProd(rd2.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
+                            lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
+                        }
+                        EHandle lambdaSquaredDiffSumHandle = HSum<double>(&graph, lambdaSquaredDiffHandles);
+                        auto lambdaSquaredDiffSum = graph.as<double>(lambdaSquaredDiffSumHandle);
 
-                    // E_connect
-                    double wConnect = 10.0;
-                    assert(straightness >= 0.0 && straightness <= 1.0);
-                    con.data.constraintEnergyExpr = wConnect * lambdaSquaredDiffSum;
-                    con.data.invalidityExpr = lambdaSquaredDiffSum / sampledPoints.size();
+
+                        // E_connect
+                        double wConnect = 10.0;
+                        assert(straightness >= 0.0 && straightness <= 1.0);
+                        con.data.constraintEnergyExpr = wConnect * lambdaSquaredDiffSum;
+                        con.data.invalidityExpr = lambdaSquaredDiffSum / sampledPoints.size();
+                    }
+                    else{ // use straightness and fittedline
+
+
+
+                    }
+
+
 
                     IF_DEBUG_USING_VISUALIZERS{
                         double v = con.data.constraintEnergyExpr.expression().execute();
@@ -2193,7 +2209,7 @@ namespace panoramix {
                     sampledDirectionExprs.reserve(sampledPoints.size());
                     for (auto & p : sampledPoints) {
                         auto sampledDirectionExpr = composeFunction(graph, [&p]() {
-                            return CVMatToEigenMat(normalize(p));
+                            return MakeEigenMat(normalize(p));
                         });
                         sampledDirectionExprs.push_back(sampledDirectionExpr);
                     }
@@ -2285,47 +2301,12 @@ namespace panoramix {
 
             std::cout << "expressions defined" << std::endl;
 
-            //auto
-            //    completeEngergyExpr =
-            //    allManhattanEnergySumExpr.expression() +
-            //    allConstraintEnergySumExpr[ConstraintData::Type::LineConnectivity].expression() +
-            //    allConstraintEnergySumExpr[ConstraintData::Type::LineInterViewIncidence].expression() +
-            //    allConstraintEnergySumExpr[ConstraintData::Type::RegionConnectivity].expression()+
-            //    allConstraintEnergySumExpr[ConstraintData::Type::RegionLineConnectivity].expression() +
-            //    allConstraintEnergySumExpr[ConstraintData::Type::RegionOverlap].expression() +
-            //    allReserveScaleEnergySumExpr[ComponentData::Type::Region].expression() +
-            //    allReserveScaleEnergySumExpr[ComponentData::Type::Line].expression();
-
             std::cout << "final energy expression defined" << std::endl;
-           // std::cout << "current energy is: " << completeEngergyExpr.execute() << std::endl;
-           
-
-
-            // test all E_manh
-            /*bool firstLineEtaFrozen = false;
-            for (auto & rd : _constraints.elements<0>()){
-                if (rd.data.type == ComponentData::Type::Region){
-                    auto r = rd.data.asRegion.manhattanEnergyExpr.expression().result();
-                    assert(!isnan(r));
-                    assert(r >= 0);
-                }
-                else if (rd.data.type == ComponentData::Type::Line) {
-                    if (!firstLineEtaFrozen){
-                        rd.data.asLine.etaExpr.freeze();
-                        firstLineEtaFrozen = true;
-                    }
-                }
-            }
-            assert(firstLineEtaFrozen);*/
-
-            //// test all connectivity energies
-            //for (auto & cd : _constraints.elements<1>()){
-            //    auto r = cd.data.constraintEnergyExpr.expression().result();
-            //    assert(!isnan(r));
-            //    assert(r >= 0);
-            //}
 
             std::cout << "done building constraints" << std::endl;
+
+
+            auto startTime = std::chrono::high_resolution_clock::now();
 
 
             //// optimize lines
@@ -2333,13 +2314,13 @@ namespace panoramix {
                 allConstraintEnergySumExpr[ConstraintData::Type::LineConnectivity].expression() +
                 allConstraintEnergySumExpr[ConstraintData::Type::LineInterViewIncidence].expression() +
                 allReserveScaleEnergySumExpr[ComponentData::Type::Line].expression(), 
-                _constraints, 1e-2, 0.01, 50000,
+                _constraints, 1e-2, 0.01, 800,
                 [this, &lineSpatialAvatars](int i, double energyVal, double energyValChange) -> bool { 
 
-                if (abs(energyValChange) <= 1e-4)
+                if (abs(energyValChange) <= 1e-1)
                     return false;
 
-                if (i % 400 != 0)
+                //if (i % 400 != 0)
                     return true;
 
                 std::vector<Classified<Line3>> rectifiedLines;
@@ -2368,6 +2349,11 @@ namespace panoramix {
             });
 
             // reconstruct faces
+            for (auto & cd : _constraints.elements<0>()){
+                if (cd.data.type == ComponentData::Type::Line)
+                    cd.data.asLine.etaExpr.freeze();
+            }
+
             OptimizeConstraintGraphUsingEnergyExpression(
                 allConstraintEnergySumExpr[ConstraintData::Type::LineConnectivity].expression() * 20 +
                 allConstraintEnergySumExpr[ConstraintData::Type::LineInterViewIncidence].expression() * 20 +
@@ -2376,17 +2362,21 @@ namespace panoramix {
                 allConstraintEnergySumExpr[ConstraintData::Type::RegionLineConnectivity].expression() +
                 allConstraintEnergySumExpr[ConstraintData::Type::RegionOverlap].expression()
                 
-                , _constraints, 1e-3, 0.0, 1000,
-                [this, &lineSpatialAvatars](int i, double energyVal, double energyValChange) -> bool {
+                , _constraints, 1e-3, 0.0, 5000,
+                [this, &lineSpatialAvatars, &startTime](int i, double energyVal, double energyValChange) -> bool {
 
-                if (i % 10 != 0)
+
+                auto curTime = std::chrono::high_resolution_clock::now();
+                auto duration = curTime - startTime;
+                auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
+                if (hours.count() < 8)
                     return true;
 
                 // visualize
                 IndexHashMap<RegionIndex, vis::Color> ri2Color;
                 for (auto & vd : _constraints.elements<0>()){
                     if (vd.data.type == ComponentData::Type::Region){
-                        Vec3 theta = deriv::EigenVecToCVVec(vd.data.asRegion.thetaExpr.expression().result());
+                        Vec3 theta = deriv::MakeCoreVec(vd.data.asRegion.thetaExpr.expression().result());
                         theta = normalize(theta);
                         Vec3 colorVec = {
                             abs(theta.dot(_globalData.vanishingPoints[0])),
@@ -2394,7 +2384,7 @@ namespace panoramix {
                             abs(theta.dot(_globalData.vanishingPoints[2]))
                         };
                         colorVec *= 255.0;
-                        vis::Color color(colorVec[0], colorVec[1], colorVec[2]);
+                        vis::Color color(colorVec[0], colorVec[1], colorVec[2], 255.0);
                         RegionIndex ri;
                         ri.handle = vd.data.asRegion.regionHandle;
                         ri.viewHandle = vd.data.asRegion.viewHandle;
@@ -2418,8 +2408,8 @@ namespace panoramix {
                     viz.params.winName = "region orientations " + std::to_string(vd.topo.hd.id);
                     viz << vd.data.lineNet->lineSegments();
                     viz << vis::manip2d::Show();
-                   /* cv::imwrite("region_orientations_" + std::to_string(i) + "_" + 
-                        std::to_string(vd.topo.hd.id) + ".png", viz.image());*/
+                    cv::imwrite("region_orientations_" + std::to_string(i) + "_" + 
+                        std::to_string(vd.topo.hd.id) + ".png", viz.image());
                 }
 
                 std::vector<Classified<Line3>> rectifiedLines;
@@ -2435,13 +2425,41 @@ namespace panoramix {
                     }
                 }
 
-                vis::Visualizer3D viz;
-                viz << vis::manip3d::SetWindowName("optimized lines")
+                std::cout << "now visualize spatial regions" << std::endl;
+
+                // show faces
+                std::vector<std::vector<std::pair<Point3, Point2>>> regions;
+                regions.reserve(constraints().internalElements<0>().size() * 2);
+                for (auto & vd : constraints().elements<0>()){
+                    if (vd.data.type == ReconstructionEngine::ComponentData::Type::Region){
+                        auto theta = deriv::MakeCoreVec(vd.data.asRegion.thetaExpr.expression().result());
+                        auto & cam = views().data(vd.data.asRegion.viewHandle).camera;
+                        auto & regionData =
+                            views().data(vd.data.asRegion.viewHandle).regionNet->regions().data(vd.data.asRegion.regionHandle);
+                        auto & outCountours = regionData.contours.back();
+                        std::vector<std::pair<Point3, Point2>> spatialRegion(outCountours.size());
+                        for (int i = 0; i < outCountours.size(); i++){
+                            Point3 dir = cam.spatialDirection(outCountours[i]);
+                            dir /= norm(dir);
+                            dir *= (theta.dot(theta) / theta.dot(dir));
+                            spatialRegion[i].first = dir;
+                            spatialRegion[i].second = Point2(0.0, 0.0);
+                        }
+
+                        regions.push_back(spatialRegion);
+                        std::reverse(spatialRegion.begin(), spatialRegion.end());
+                        regions.push_back(spatialRegion);
+                    }
+                }
+
+                vis::Visualizer3D()
                     << vis::manip3d::SetDefaultColor(vis::ColorTag::Yellow)
                     << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
-                    << rectifiedLines
+                    //<< rectifiedLines
+                    << regions
+                    //<< vis::manip3d::SetRenderMode(vis::RenderModeFlag::Triangles)
                     << vis::manip3d::AutoSetCamera
-                    << vis::manip3d::Show(true);
+                    << vis::manip3d::Show();
 
                 return true;
             });          

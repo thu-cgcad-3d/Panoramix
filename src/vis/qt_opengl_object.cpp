@@ -287,7 +287,10 @@ namespace panoramix {
                 "void main(void)\n"
                 "{\n"
                 "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
-                "    pixelColor = color;\n"
+                "    highp vec4 transformedNormal = viewMatrix * modelMatrix * vec4(normal, 1.0);\n"
+                "    highp vec3 transformedNormal3 = transformedNormal.xyz / transformedNormal.w;\n"
+                "    pixelColor = abs(dot(transformedNormal3 / length(transformedNormal), vec3(1.0, 0.0, 0.0))) \
+                    * vec4(1.0, 1.0, 1.0, 1.0);\n"
                 "}\n",
 
                 "varying lowp vec4 pixelColor;\n"
@@ -355,7 +358,13 @@ namespace panoramix {
             if (_texture){
                 delete _texture;
             }
-            _texture = new QOpenGLTexture(tex.mirrored());
+
+            Q_ASSERT(QOpenGLContext::currentContext());
+            auto texMirrored = tex.mirrored();
+            _texture = new QOpenGLTexture(QOpenGLTexture::Target::Target2D);
+            Q_ASSERT(_texture->create());
+            _texture->setData(texMirrored);
+            //_texture = new QOpenGLTexture(texMirrored);
             _texture->bind();
             _texture->setMinificationFilter(QOpenGLTexture::Linear);
             _texture->setMagnificationFilter(QOpenGLTexture::Linear);
