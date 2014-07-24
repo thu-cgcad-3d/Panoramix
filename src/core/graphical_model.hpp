@@ -37,11 +37,9 @@ namespace panoramix {
         template <class Tag>
         using HandlePtrArray = std::vector<Handle<Tag>*>;
         template <class Tag>
-        struct CompareHandle {
-            inline bool operator()(Handle<Tag> a, Handle<Tag> b) const {
-                return a.id < b.id;
-            }
-        };
+        inline bool operator < (const Handle<Tag> & a, const Handle<Tag> & b){
+            return a.id < b.id;
+        }
         template <class Tag>
         struct HandleHasher {
             inline uint64_t operator()(Handle<Tag> a) const {
@@ -662,7 +660,7 @@ namespace panoramix {
         struct Topo {
             static const int Level = L;
             std::array<Handle<AtLevel<Level - 1>>, ChildN> lowers; // use std::array
-            std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
+            std::set<Handle<AtLevel<Level + 1>>> uppers;
             HandleAtLevel<Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
             explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls) : hd(id) {
@@ -677,7 +675,7 @@ namespace panoramix {
         struct Topo<L, Dynamic> {
             static const int Level = L;
             std::vector<Handle<AtLevel<Level - 1>>> lowers; // use std::array
-            std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
+            std::set<Handle<AtLevel<Level + 1>>> uppers;
             HandleAtLevel<Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
             explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls)
@@ -690,7 +688,7 @@ namespace panoramix {
         template <int L>
         struct Topo<L, 0> {
             static const int Level = L;
-            std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
+            std::set<Handle<AtLevel<Level + 1>>> uppers;
             HandleAtLevel<Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
             explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls)
@@ -992,7 +990,7 @@ namespace panoramix {
             struct Topo {
                 static const int Level = L;
                 std::array<Handle<AtLevel<Level - 1>>, ChildN> lowers; // use std::array
-                std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
+                std::set<Handle<AtLevel<Level + 1>>> uppers;
                 HandleAtLevel<Level> hd;
                 explicit inline Topo(int id = -1) : hd(id) {}
                 explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls) : hd(id) {
@@ -1007,7 +1005,7 @@ namespace panoramix {
             struct Topo<L, Dynamic> {
                 static const int Level = L;
                 std::vector<Handle<AtLevel<Level - 1>>> lowers; // use std::array
-                std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
+                std::set<Handle<AtLevel<Level + 1>>> uppers;
                 HandleAtLevel<Level> hd;
                 explicit inline Topo(int id = -1) : hd(id) {}
                 explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls)
@@ -1020,7 +1018,7 @@ namespace panoramix {
             template <int L>
             struct Topo<L, 0> {
                 static const int Level = L;
-                std::set<Handle<AtLevel<Level + 1>>, CompareHandle<AtLevel<Level + 1>>> uppers;
+                std::set<Handle<AtLevel<Level + 1>>> uppers;
                 HandleAtLevel<Level> hd;
                 explicit inline Topo(int id = -1) : hd(id) {}
                 explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls)

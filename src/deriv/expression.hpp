@@ -25,7 +25,7 @@ namespace panoramix {
         using core::SequenceGenerator;
 
         struct Op;
-        using GraphType = core::Mesh<std::shared_ptr<Op>>;
+        using GraphType = core::Mesh<std::shared_ptr<Op>, bool>;
         using EHandle = GraphType::VertHandle;
         using CHandle = GraphType::HalfHandle;
 
@@ -369,6 +369,10 @@ namespace panoramix {
             // invalidate all expressions
             void invalidateAll();
 
+            // exchange the two handles role in referenced expressions
+            // ATTENTION: Make sure the two handles are of the same output type!!!
+            void exchangeWhenUsedAsInputs(EHandle a, EHandle b);
+
             // input handles
             std::vector<EHandle> inputs(EHandle h) const;
 
@@ -457,6 +461,15 @@ namespace panoramix {
 
             inline EHandle handle() const { return _op ? _op->self : EHandle(); }
             inline ExpressionGraph * g() const { return _op ? _op->graph : nullptr; }
+
+            // if this expression is referred in other expressions as inputs,
+            // then after using this method, the new expression e becomes the actual inputs to other expressions
+            inline void replacedWithWhenUsedAsInputs(const Expression & e) { 
+                assert(g() == e.g());
+                assert(isValid() && e.isValid());
+                g()->exchangeWhenUsedAsInputs(handle(), e.handle());
+                //std::swap(_op, e._op);
+            }
 
             // the current value in expression data
             inline ResultType<T> result() const { assert(isValid()); return TraitsAboutOp<T>::Result(*_op); }

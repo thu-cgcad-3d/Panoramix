@@ -8,8 +8,7 @@ namespace panoramix {
         using namespace core;
 
         bool ExpressionGraph::isForwardConnection(CHandle h) const {
-            auto & topo = _g.topo(h);
-            return topo.from().id < topo.to().id;
+            return _g.data(h);
         }
 
         void ExpressionGraph::reserve(size_t sz) {
@@ -19,6 +18,50 @@ namespace panoramix {
 
         void ExpressionGraph::invalidateAll() {
             _g.clear();
+        }
+
+        void ExpressionGraph::exchangeWhenUsedAsInputs(EHandle a, EHandle b){
+            // for all expressions who accepts a as input, make it accepts b as input with the same position of a
+            // for all expressions who accepts b as input, make it accepts a as input with the same position of b
+            std::vector<CHandle> a2os, o2as;
+            std::vector<CHandle> b2os, o2bs;
+            for (auto hh : _g.topo(a).halfedges){
+                if (!_g.removed(hh) && isForwardConnection(hh)){
+                    a2os.push_back(hh);
+                    o2as.push_back(_g.topo(hh).opposite);
+                }
+            }
+            for (auto hh : _g.topo(b).halfedges){
+                if (!_g.removed(hh) && isForwardConnection(hh)){
+                    b2os.push_back(hh);
+                    o2bs.push_back(_g.topo(hh).opposite);
+                }
+            }
+
+            for (auto & a2o : a2os){
+                _g.topo(a2o).from() = b;
+            }
+            for (auto & o2a : o2as){
+                _g.topo(o2a).to() = b;
+            }
+            for (auto & b2o : b2os){
+                _g.topo(b2o).from() = a;
+            }
+            for (auto & o2b : o2bs){
+                _g.topo(o2b).to() = a;
+            }
+
+            _g.topo(a).halfedges.erase(
+                std::remove_if(_g.topo(a).halfedges.begin(), _g.topo(a).halfedges.end(),
+                [this](const CHandle & hh){return !_g.removed(hh) && isForwardConnection(hh); }), 
+                _g.topo(a).halfedges.end());
+            _g.topo(a).halfedges.insert(_g.topo(a).halfedges.end(), b2os.begin(), b2os.end());
+
+            _g.topo(b).halfedges.erase(
+                std::remove_if(_g.topo(b).halfedges.begin(), _g.topo(b).halfedges.end(),
+                [this](const CHandle & hh){return !_g.removed(hh) && isForwardConnection(hh); }),
+                _g.topo(b).halfedges.end());
+            _g.topo(b).halfedges.insert(_g.topo(b).halfedges.end(), a2os.begin(), a2os.end());
         }
 
         std::vector<EHandle> ExpressionGraph::inputs(EHandle self) const {
@@ -37,7 +80,7 @@ namespace panoramix {
             _g.data(h)->graph = this;
             _g.data(h)->self = h;
             for (auto & ih : inputs){
-                _g.addEdge(ih, h, core::Dummy(), core::Dummy(), false); // do not merge duplicate edges
+                _g.addEdge(ih, h, true, false, false); // do not merge duplicate edges
             }
             return h;
         }

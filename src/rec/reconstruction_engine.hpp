@@ -32,6 +32,11 @@ namespace panoramix {
 
                 double samplingStepLengthOnRegionBoundaries;
                 double samplingStepLengthOnLines;
+
+                // for line connections
+                double intersectionDistanceThreshold;
+                double incidenceDistanceAlongDirectionThreshold;
+                double incidenceDistanceVerticalDirectionThreshold;
             };
 
             struct ViewData;
@@ -106,6 +111,7 @@ namespace panoramix {
                 OptimizibleExpression<double> etaExpr;
                 ReconstructionEngine::ViewHandle viewHandle;
                 LinesNet::LineHandle lineHandle;
+                int connectedComponentId;
             };
 
             struct RegionComponentData {

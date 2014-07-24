@@ -394,8 +394,8 @@ TEST(Expression, ArrayOp){
     ExpressionGraph graph;
     ArrayXXd xv;
     ArrayXXd yv;
-    auto x = graph.addRef(xv, "x");
-    auto y = graph.addRef(yv, "y");
+    auto x = composeFunction(graph, [&xv](){return xv; });
+    auto y = composeFunction(graph, [&yv](){return yv; });
 
     {       
         auto xy = x * y;
@@ -521,6 +521,22 @@ TEST(Expression, ArrayOp){
             EXPECT_DOUBLE_EQ(log((xv * yv).exp() + xv * 2 + yv + xv * xv).sum(), f.execute());
             EXPECT_MATRIX_EQ(((xv * yv).exp() * yv + 2 + 2 * xv).cwiseQuotient((xv * yv).exp() + xv * 2 + yv + xv * xv), dfdx.execute());
             EXPECT_MATRIX_EQ(((xv * yv).exp() * xv + 1).cwiseQuotient((xv * yv).exp() + xv * 2 + yv + xv * xv), dfdy.execute());
+        }
+
+        // replace x with x+y
+        x.replacedWithWhenUsedAsInputs((y + y).eval());
+
+        // log(exp((x+y)*y)+(x+y)*2+(x+y)*(x+y))
+        for (int i = 0; i < 10; i++){
+            int a = std::rand() % 100 + 1;
+            int b = std::rand() % 100 + 1;
+            xv.setRandom(a, b);
+            xv = xv.abs() + 1;
+            yv.setRandom(a, b);
+            yv = yv.abs() + 1;
+
+            EXPECT_DOUBLE_EQ(log(exp((yv + yv)*yv) + (yv + yv) * 2 + yv + (yv + yv)*(yv + yv)).sum(), f.execute());
+
         }
     }
 

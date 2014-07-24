@@ -38,7 +38,10 @@ namespace panoramix {
         ReconstructionEngine::Params::Params() 
             : camera(250.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
             samplingStepLengthOnRegionBoundaries(16.0),
-            samplingStepLengthOnLines(8.0)
+            samplingStepLengthOnLines(8.0),
+            intersectionDistanceThreshold(8),
+            incidenceDistanceAlongDirectionThreshold(30),
+            incidenceDistanceVerticalDirectionThreshold(3)
         {}
 
         ReconstructionEngine::ComponentData::ComponentData(ReconstructionEngine::ComponentData::Type t) : type(t) {}
@@ -116,7 +119,11 @@ namespace panoramix {
             vd.regionNet->buildNetAndComputeGeometricFeatures();
             vd.regionNet->computeImageFeatures();
 
-            vd.lineNet = std::make_shared<LinesNet>(vd.image);
+            LinesNet::Params linesNetParams;
+            linesNetParams.intersectionDistanceThreshold = _params.intersectionDistanceThreshold;
+            linesNetParams.incidenceDistanceVerticalDirectionThreshold = _params.incidenceDistanceVerticalDirectionThreshold;
+            linesNetParams.incidenceDistanceAlongDirectionThreshold = _params.incidenceDistanceAlongDirectionThreshold;
+            vd.lineNet = std::make_shared<LinesNet>(vd.image, linesNetParams);
         }
 
 
@@ -266,7 +273,8 @@ namespace panoramix {
                     double score = 0;
                     for (Vec3 & v : vecs){
                         PixelLoc pixel = PixelIndexFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
-                        score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum), WrapBetween(pixel.y, 0, latitudeDivideNum));
+                        score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum), 
+                            WrapBetween(pixel.y, 0, latitudeDivideNum));
                     }
                     if (score > maxScore){
                         maxScore = score;
@@ -282,7 +290,8 @@ namespace panoramix {
                 maxScore = -1;
                 for (int y = 0; y < latitudeDivideNum; y++){
                     double lat1 = double(y) / latitudeDivideNum * M_PI - M_PI_2;
-                    double longt1s[] = { Longitude1FromLatitudeAndNormalVector(lat1, vec0), Longitude2FromLatitudeAndNormalVector(lat1, vec0) };
+                    double longt1s[] = { Longitude1FromLatitudeAndNormalVector(lat1, vec0), 
+                        Longitude2FromLatitudeAndNormalVector(lat1, vec0) };
                     for (double longt1 : longt1s){
                         Vec3 vec1 = GeoCoord(longt1, lat1).toVector();
                         Vec3 vec1rev = -vec1;
@@ -293,7 +302,8 @@ namespace panoramix {
                         double score = 0;
                         for (Vec3 & v : vecs){
                             PixelLoc pixel = PixelIndexFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
-                            score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum), WrapBetween(pixel.y, 0, latitudeDivideNum));
+                            score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum), 
+                                WrapBetween(pixel.y, 0, latitudeDivideNum));
                         }
                         if (score > maxScore){
                             maxScore = score;
@@ -2098,6 +2108,10 @@ namespace panoramix {
                     }
                     else{ // use straightness and fittedline
 
+                        auto & thetaExpr1 = rd1.asRegion.thetaExpr;
+                        auto & thetaExpr2 = rd2.asRegion.thetaExpr;
+
+                        // find the folding line
 
 
                     }
@@ -2308,68 +2322,148 @@ namespace panoramix {
 
             auto startTime = std::chrono::high_resolution_clock::now();
 
+            
+
 
             //// optimize lines
             OptimizeConstraintGraphUsingEnergyExpression(
                 allConstraintEnergySumExpr[ConstraintData::Type::LineConnectivity].expression() +
                 allConstraintEnergySumExpr[ConstraintData::Type::LineInterViewIncidence].expression() +
                 allReserveScaleEnergySumExpr[ComponentData::Type::Line].expression(), 
-                _constraints, 1e-2, 0.01, 800,
+                _constraints, 1e-2, 0.01, 800, ///
                 [this, &lineSpatialAvatars](int i, double energyVal, double energyValChange) -> bool { 
 
-                if (abs(energyValChange) <= 1e-1)
-                    return false;
-
-                //if (i % 400 != 0)
-                    return true;
-
-                std::vector<Classified<Line3>> rectifiedLines;
-                for (auto & cd : constraints().elements<0>()){
-                    if (cd.data.type == ComponentData::Type::Line){
-                        auto line = lineSpatialAvatars[LineIndex{ cd.data.asLine.viewHandle, cd.data.asLine.lineHandle }];
-                        auto ratio = ComputeDepthRatioOfPointOnSpatialLine(line.component.first, 
-                            line.component.second, globalData().vanishingPoints[line.claz]);
-                        double eta = cd.data.asLine.etaExpr.expression().result();
-                        line.component.first = normalize(line.component.first) * eta;
-                        line.component.second = normalize(line.component.second) * eta * ratio;
-                        rectifiedLines.push_back(line);
+                if (abs(energyValChange) <= 1e-1){
+                    std::vector<Classified<Line3>> rectifiedLines;
+                    for (auto & cd : constraints().elements<0>()){
+                        if (cd.data.type == ComponentData::Type::Line){
+                            auto line = lineSpatialAvatars[LineIndex{ cd.data.asLine.viewHandle, cd.data.asLine.lineHandle }];
+                            auto ratio = ComputeDepthRatioOfPointOnSpatialLine(line.component.first,
+                                line.component.second, globalData().vanishingPoints[line.claz]);
+                            double eta = cd.data.asLine.etaExpr.expression().result();
+                            line.component.first = normalize(line.component.first) * eta;
+                            line.component.second = normalize(line.component.second) * eta * ratio;
+                            rectifiedLines.push_back(line);
+                        }
                     }
-                }
 
-                vis::Visualizer3D viz;
-                viz << vis::manip3d::SetWindowName("optimized lines")
-                    << vis::manip3d::SetDefaultColor(vis::ColorTag::Yellow)
-                    << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
-                    << rectifiedLines
-                    << vis::manip3d::AutoSetCamera
-                    << vis::manip3d::Show(true);
+                    vis::Visualizer3D viz;
+                    viz << vis::manip3d::SetWindowName("optimized lines")
+                        << vis::manip3d::SetDefaultColor(vis::ColorTag::Yellow)
+                        << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
+                        << rectifiedLines
+                        << vis::manip3d::AutoSetCamera
+                        << vis::manip3d::Show(true);
+
+                    return false;
+                }
 
                 return true;
 
             });
 
-            // reconstruct faces
+
+            using ComponentTriplet = ConstraintGraph::TripletType<0>;
+
+            // find connected components of lines based on line connections & line inter-view incidences
+            std::vector<ComponentHandle> lineCompHandles;
+            lineCompHandles.reserve(_constraints.internalElements<0>().size());
             for (auto & cd : _constraints.elements<0>()){
-                if (cd.data.type == ComponentData::Type::Line)
-                    cd.data.asLine.etaExpr.freeze();
+                if (cd.exists && cd.data.type == ComponentData::Type::Line){
+                    lineCompHandles.push_back(cd.topo.hd);
+                }
+            }
+            auto neighborLinesContainerGetter = [this](const ComponentHandle & ch){
+                std::vector<ComponentHandle> neighbors;
+                neighbors.reserve(5);
+                assert(_constraints.data(ch).type == ComponentData::Type::Line);
+                auto & topo = _constraints.topo(ch);
+                for (auto & conh : topo.uppers){
+                    auto & cdata = _constraints.data(conh);
+                    if (cdata.type != ConstraintData::Type::LineConnectivity &&
+                        cdata.type != ConstraintData::Type::LineInterViewIncidence)
+                        continue;
+                    //std::cout << "!!!!!!!!!!!!!!!!!!!" << std::endl;
+                    auto & ctopo = _constraints.topo(conh);
+                    if (ctopo.lowers[0] == ch)
+                        neighbors.push_back(ctopo.lowers[1]);
+                    if (ctopo.lowers[1] == ch)
+                        neighbors.push_back(ctopo.lowers[0]);
+                }
+                return neighbors;
+            };
+            std::map<int, std::list<ComponentHandle>> ccid2handles;
+            int ncc = ConnectedComponents(lineCompHandles.begin(), lineCompHandles.end(), neighborLinesContainerGetter, 
+                [this, &ccid2handles](const ComponentHandle & ch, int cid){
+                _constraints.data(ch).asLine.connectedComponentId = cid;
+                ccid2handles[cid].push_back(ch);
+            });
+            std::cout << "Connected Components Num of Lines: " << ncc << std::endl;
+            for (auto & cc : ccid2handles){
+                std::cout << "[" << cc.first << "] num: " << cc.second.size();
+                if (cc.first % 10 == 9)
+                    std::cout << std::endl;
             }
 
+
+            std::vector<EHandle> allCCFirstLineReserveScaleEnergyHandles;
+            // refactor the etaExprs in each line component
+            for (auto & chs : ccid2handles){
+                assert(!chs.second.empty());
+                auto firstCh = chs.second.front();
+                auto & firstLineData = _constraints.data(firstCh).asLine;
+                allCCFirstLineReserveScaleEnergyHandles.push_back(_constraints.data(firstCh).reserveScaleEnergyExpr.expression().handle());
+                for (auto ch : chs.second){
+                    if (ch == firstCh)
+                        continue;
+                    auto & currentLineData = _constraints.data(ch).asLine;
+                    auto unitedEtaExpr = firstLineData.etaExpr.expression() *
+                        currentLineData.etaExpr.expression().result() /
+                        firstLineData.etaExpr.expression().result();
+                    // replace all eta expressions
+                    // currentLineData.etaExpr.freeze();
+                    currentLineData.etaExpr.expression().replacedWithWhenUsedAsInputs(unitedEtaExpr);
+                }
+            }
+            auto allCCFirstLineReserveScaleEnergySumExpr = 
+                graph.as<double>(HSum<double>(&graph, allCCFirstLineReserveScaleEnergyHandles));
+
+
+
+
+            // reconstruct faces
             OptimizeConstraintGraphUsingEnergyExpression(
-                allConstraintEnergySumExpr[ConstraintData::Type::LineConnectivity].expression() * 20 +
-                allConstraintEnergySumExpr[ConstraintData::Type::LineInterViewIncidence].expression() * 20 +
-                allReserveScaleEnergySumExpr[ComponentData::Type::Line].expression() +
+                //allConstraintEnergySumExpr[ConstraintData::Type::LineConnectivity].expression() * 20 +
+                //allConstraintEnergySumExpr[ConstraintData::Type::LineInterViewIncidence].expression() * 20 +
+                //allReserveScaleEnergySumExpr[ComponentData::Type::Line].expression() +
+                allCCFirstLineReserveScaleEnergySumExpr +
                 allConstraintEnergySumExpr[ConstraintData::Type::RegionConnectivity].expression() +
                 allConstraintEnergySumExpr[ConstraintData::Type::RegionLineConnectivity].expression() +
                 allConstraintEnergySumExpr[ConstraintData::Type::RegionOverlap].expression()
                 
                 , _constraints, 1e-3, 0.0, 5000,
-                [this, &lineSpatialAvatars, &startTime](int i, double energyVal, double energyValChange) -> bool {
+                [this, &lineSpatialAvatars, &startTime, ncc](int i, double energyVal, double energyValChange) -> bool {
+
+                if (i == 0){
+                    // count functional line etas
+                    int functionalLineEtaNum = 0;
+                    for (auto & cd : _constraints.elements<0>()){
+                        if (cd.data.type == ComponentData::Type::Line){
+                            if (cd.data.asLine.etaExpr.derivativeExpression().isValid())
+                                functionalLineEtaNum++;
+                        }
+                    }
+                    std::cout << "functional line eta num: " << functionalLineEtaNum << std::endl;
+                    assert(functionalLineEtaNum == ncc);
+                }
 
 
-                auto curTime = std::chrono::high_resolution_clock::now();
+                /*auto curTime = std::chrono::high_resolution_clock::now();
                 auto duration = curTime - startTime;
-                auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
-                if (hours.count() < 8)
+                auto minutes = std::chrono::duration_cast<std::chrono::minutes>(duration);
+                if (minutes.count() < 1)
+                    return true;*/
+                if (i % 10 != 0)
                     return true;
 
                 // visualize

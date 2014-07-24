@@ -7,7 +7,13 @@
 namespace panoramix {
     namespace rec {
 
-        RegionsNet::Params::Params() : samplingStepLengthOnBoundary(15.0) {}
+        RegionsNet::Params::Params() : samplingStepLengthOnBoundary(15.0) {
+            SegmentationExtractor::Params segmenterParams;
+            segmenterParams.c = 80;
+            segmenterParams.minSize = 300;
+            segmenterParams.sigma = 1.0;
+            segmenter = SegmentationExtractor(segmenterParams);
+        }
 
         RegionsNet::RegionsNet(const Image & image, const Params & params) 
             : _image(image), _params(params)/*, _regionsRTree(RegionDataBoundingBoxFunctor(_regions))*/{}
@@ -313,13 +319,12 @@ namespace panoramix {
             }
 
             // t-junction likelihood for each bep
-            //std::map<BoundaryHandle, std::vector<double>, CompareHandle<AtLevel<1>>> tjunctionLikeliHoodsTable;
             for (auto & b : _regions.elements<1>()) {
                 b.data.tjunctionLikelihood = 0;
             }
 
             for (auto & beps : mergedBepsTable) {
-                std::set<BoundaryHandle, CompareHandle<AtLevel<1>>> bhs;
+                std::set<BoundaryHandle> bhs;
                 for (auto & bep : beps.second) {
                     bhs.insert(bep.bh);
                 }

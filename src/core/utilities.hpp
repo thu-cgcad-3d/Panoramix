@@ -804,7 +804,10 @@ namespace panoramix {
                 "NeighborVertsContainerGetterT should returns a container of Vert");
 
             struct {
-                void operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited, NeighborVertsContainerGetterT vNeighborsGetter, VertexTypeRecorderT vTypeRecorder, int cid) {
+                void operator()(const Vert & root, std::map<Vert, bool, VertCompareT>& vVisited, 
+                    const NeighborVertsContainerGetterT & vNeighborsGetter, 
+                    const VertexTypeRecorderT & vTypeRecorder, int cid) {
+
                     if (vVisited[root])
                         return;
                     vTypeRecorder(root, cid);

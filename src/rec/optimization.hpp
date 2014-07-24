@@ -17,6 +17,8 @@
 namespace panoramix {
     namespace rec {
 
+        using deriv::Expression;
+
         template <class T>
         class DisableableExpression {
         public:
