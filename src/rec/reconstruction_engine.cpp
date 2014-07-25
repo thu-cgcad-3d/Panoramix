@@ -16,6 +16,7 @@ extern "C" {
 
 #include "optimization.hpp"
 #include "reconstruction_engine.hpp"
+#include "reconstruction_engine_visualize.hpp"
 
 #include "../core/debug.hpp"
 
@@ -1998,6 +1999,60 @@ namespace panoramix {
             std::cout << "component num: " << _constraints.internalElements<0>().size() << std::endl;
             std::cout << "constraint num: " << _constraints.internalElements<1>().size() << std::endl;
 
+
+            IF_DEBUG_USING_VISUALIZERS{
+                // visualize constraint graph
+                auto getRegionCenter = [this](const RegionComponentData & rd) -> Point2 {
+                    auto & regionData = _views.data(rd.viewHandle).regionNet->regions().data(rd.regionHandle);
+                    return regionData.center;
+                };
+                std::map<ViewHandle, vis::Visualizer2D> viewVizs;
+                for (auto & vd : _views.elements<0>()){
+                    viewVizs[vd.topo.hd] = viewVizs[vd.topo.hd] << vd.data;
+                    assert(!viewVizs[vd.topo.hd].image().empty());
+                }
+                std::map<std::pair<ViewHandle, ViewHandle>, Image> viewPairVizs;
+                for (auto & cd : _constraints.elements<1>()){
+                    if (cd.data.type == ConstraintData::Type::RegionOverlap){
+                        auto & rd1 = _constraints.data(cd.topo.lowers[0]).asRegion;
+                        auto & rd2 = _constraints.data(cd.topo.lowers[1]).asRegion;
+                        ViewHandle v1 = rd1.viewHandle;
+                        ViewHandle v2 = rd2.viewHandle;
+                        
+                        Point2 c1 = getRegionCenter(rd1);
+                        Point2 c2 = getRegionCenter(rd2);
+                        if (v2 < v1){
+                            std::swap(v1, v2);
+                            std::swap(c1, c2);
+                        }
+                        Image im1 = viewVizs[v1].image();
+                        Image im2 = viewVizs[v2].image();
+                        if (viewPairVizs.find(std::make_pair(v1, v2)) == viewPairVizs.end()){                           
+                            assert(im1.size == im2.size);
+                            assert(im1.type() == im2.type());
+                            Image im12 = Image::zeros(im1.rows, im1.cols + im2.cols, im1.type());
+                            im12(cv::Range(0, im1.rows), cv::Range(0, im1.cols)) += im1;
+                            im12(cv::Range(0, im2.rows), cv::Range(im1.cols, im1.cols + im2.cols)) += im2;
+                            viewPairVizs[std::make_pair(v1, v2)] = im12;
+                        }
+
+                        vis::Color color(rand() % 255, rand() % 255, rand() % 255, 1);
+                        c2[0] += im1.cols;
+                        cv::line(viewPairVizs[std::make_pair(v1, v2)], PixelLoc(c1[0], c1[1]), PixelLoc(c2[0], c2[1]),
+                            color, 2);
+                    }
+                }
+
+                for (auto & vp : viewPairVizs){
+                    cv::imshow("overlapped regions", vp.second);
+                    cv::waitKey();
+                }
+               
+            }
+
+
+
+
             std::cout << "begin building constraints" << std::endl;
             
             
@@ -2054,7 +2109,9 @@ namespace panoramix {
                     // E_overlap
                     auto overlapRatio = con.data.asRegionOverlap.overlapRatio;
                     assert(overlapRatio > 0);
-                    con.data.constraintEnergyExpr = wOverlap * overlapRatio * thetaDiffSquaredSum;
+                    con.data.constraintEnergyExpr = wOverlap * thetaDiffSquaredSum;
+                    if (overlapRatio < 0.15)
+                        con.data.constraintEnergyExpr.disable();
                     con.data.invalidityExpr = graph.addConst(0.0);
                 }
                 // region connectivity
@@ -2070,52 +2127,39 @@ namespace panoramix {
                     auto straightness = boundaryData.straightness;
                     auto & fittedLine = boundaryData.fittedLine;
 
-                    static const bool useSampledPoints = true;
-                    if(useSampledPoints){
-                        // get sampled direction expressions
-                        std::vector<Expression<Eigen::Vector3d>> sampledDirectionExprs; // normalized directions
-                        sampledDirectionExprs.reserve(boundaryData.length / 5);
-                        for (auto & ps : sampledPoints) {
-                            for (auto & p : ps) {
-                                auto sampledDirectionExpr = composeFunction(graph, [&p, &camera]() {
-                                    auto direction = camera.spatialDirection(p);
-                                    assert(norm(direction) != 0);
-                                    return MakeEigenMat(direction / norm(direction));
-                                });
-                                sampledDirectionExprs.push_back(sampledDirectionExpr);
-                            }
+                    // get sampled direction expressions
+                    std::vector<Expression<Eigen::Vector3d>> sampledDirectionExprs; // normalized directions
+                    sampledDirectionExprs.reserve(boundaryData.length / 5);
+                    for (auto & ps : sampledPoints) {
+                        for (auto & p : ps) {
+                            auto sampledDirectionExpr = composeFunction(graph, [&p, &camera]() {
+                                auto direction = camera.spatialDirection(p);
+                                assert(norm(direction) != 0);
+                                return MakeEigenMat(direction / norm(direction));
+                            });
+                            sampledDirectionExprs.push_back(sampledDirectionExpr);
                         }
-                        // get depth expressions of sampled direction
-                        std::vector<Expression<double>> lambdasR1(sampledDirectionExprs.size()),
-                            lambdasR2(sampledDirectionExprs.size());
-                        std::vector<EHandle> lambdaSquaredDiffHandles(sampledDirectionExprs.size());
-                        for (int i = 0; i < sampledDirectionExprs.size(); i++) {
-                            lambdasR1[i] = dotProd(rd1.asRegion.thetaExpr.expression(), rd1.asRegion.thetaExpr.expression()) /
-                                dotProd(rd1.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
-                            lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr.expression(), rd2.asRegion.thetaExpr.expression()) /
-                                dotProd(rd2.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
-                            lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
-                        }
-                        EHandle lambdaSquaredDiffSumHandle = HSum<double>(&graph, lambdaSquaredDiffHandles);
-                        auto lambdaSquaredDiffSum = graph.as<double>(lambdaSquaredDiffSumHandle);
-
-
-                        // E_connect
-                        double wConnect = 10.0;
-                        assert(straightness >= 0.0 && straightness <= 1.0);
-                        con.data.constraintEnergyExpr = wConnect * lambdaSquaredDiffSum;
-                        con.data.invalidityExpr = lambdaSquaredDiffSum / sampledPoints.size();
                     }
-                    else{ // use straightness and fittedline
-
-                        auto & thetaExpr1 = rd1.asRegion.thetaExpr;
-                        auto & thetaExpr2 = rd2.asRegion.thetaExpr;
-
-                        // find the folding line
-
-
+                    // get depth expressions of sampled direction
+                    std::vector<Expression<double>> lambdasR1(sampledDirectionExprs.size()),
+                        lambdasR2(sampledDirectionExprs.size());
+                    std::vector<EHandle> lambdaSquaredDiffHandles(sampledDirectionExprs.size());
+                    for (int i = 0; i < sampledDirectionExprs.size(); i++) {
+                        lambdasR1[i] = dotProd(rd1.asRegion.thetaExpr.expression(), rd1.asRegion.thetaExpr.expression()) /
+                            dotProd(rd1.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
+                        lambdasR2[i] = dotProd(rd2.asRegion.thetaExpr.expression(), rd2.asRegion.thetaExpr.expression()) /
+                            dotProd(rd2.asRegion.thetaExpr.expression(), sampledDirectionExprs[i]);
+                        lambdaSquaredDiffHandles[i] = Square(lambdasR1[i] - lambdasR2[i]).handle();
                     }
+                    EHandle lambdaSquaredDiffSumHandle = HSum<double>(&graph, lambdaSquaredDiffHandles);
+                    auto lambdaSquaredDiffSum = graph.as<double>(lambdaSquaredDiffSumHandle);
 
+
+                    // E_connect
+                    double wConnect = 10.0;
+                    assert(straightness >= 0.0 && straightness <= 1.0);
+                    con.data.constraintEnergyExpr = wConnect * lambdaSquaredDiffSum;
+                    con.data.invalidityExpr = lambdaSquaredDiffSum / sampledPoints.size();
 
 
                     IF_DEBUG_USING_VISUALIZERS{
@@ -2262,8 +2306,7 @@ namespace panoramix {
             std::cout << "individual energies defined" << std::endl;
 
             // sum all energy
-            std::vector < EHandle >
-                allManhattanEnergyHandles;
+            std::vector<EHandle> allManhattanEnergyHandles;
 
             std::map<ConstraintData::Type, std::vector<EHandle>> allConstraintEnergyHandles;
             std::map<ComponentData::Type, std::vector<EHandle>> allReserveScaleEnergyHandles;
@@ -2360,6 +2403,7 @@ namespace panoramix {
 
                 return true;
 
+
             });
 
 
@@ -2392,41 +2436,135 @@ namespace panoramix {
                 }
                 return neighbors;
             };
-            std::map<int, std::list<ComponentHandle>> ccid2handles;
-            int ncc = ConnectedComponents(lineCompHandles.begin(), lineCompHandles.end(), neighborLinesContainerGetter, 
-                [this, &ccid2handles](const ComponentHandle & ch, int cid){
+            std::map<int, std::list<ComponentHandle>> ccid2LineHandles;
+            int nLineCC = ConnectedComponents(lineCompHandles.begin(), lineCompHandles.end(), neighborLinesContainerGetter, 
+                [this, &ccid2LineHandles](const ComponentHandle & ch, int cid){
                 _constraints.data(ch).asLine.connectedComponentId = cid;
-                ccid2handles[cid].push_back(ch);
+                ccid2LineHandles[cid].push_back(ch);
             });
-            std::cout << "Connected Components Num of Lines: " << ncc << std::endl;
-            for (auto & cc : ccid2handles){
+            std::cout << "Connected Components Num of Lines: " << nLineCC << std::endl;
+            for (auto & cc : ccid2LineHandles){
                 std::cout << "[" << cc.first << "] num: " << cc.second.size();
                 if (cc.first % 10 == 9)
                     std::cout << std::endl;
             }
 
-
             std::vector<EHandle> allCCFirstLineReserveScaleEnergyHandles;
             // refactor the etaExprs in each line component
-            for (auto & chs : ccid2handles){
+            for (auto & chs : ccid2LineHandles){
                 assert(!chs.second.empty());
                 auto firstCh = chs.second.front();
                 auto & firstLineData = _constraints.data(firstCh).asLine;
                 allCCFirstLineReserveScaleEnergyHandles.push_back(_constraints.data(firstCh).reserveScaleEnergyExpr.expression().handle());
                 for (auto ch : chs.second){
-                    if (ch == firstCh)
-                        continue;
                     auto & currentLineData = _constraints.data(ch).asLine;
-                    auto unitedEtaExpr = firstLineData.etaExpr.expression() *
-                        currentLineData.etaExpr.expression().result() /
+                    if (ch == firstCh){
+                        currentLineData.etaRatio = 1.0;
+                        continue;
+                    }
+                    currentLineData.etaRatio = currentLineData.etaExpr.expression().result() /
                         firstLineData.etaExpr.expression().result();
+                    auto unitedEtaExpr = firstLineData.etaExpr.expression() * currentLineData.etaRatio;
                     // replace all eta expressions
-                    // currentLineData.etaExpr.freeze();
                     currentLineData.etaExpr.expression().replacedWithWhenUsedAsInputs(unitedEtaExpr);
+                    currentLineData.etaExpr.freeze();
+                    //currentLineData.etaExpr = unitedEtaExpr; // replaced!!!
                 }
             }
-            auto allCCFirstLineReserveScaleEnergySumExpr = 
+            auto allCCFirstLineReserveScaleEnergySumExpr =
                 graph.as<double>(HSum<double>(&graph, allCCFirstLineReserveScaleEnergyHandles));
+
+
+
+
+
+
+            //// find connected components of regions based on region overlaps & region connections
+            //std::vector<ComponentHandle> regionCompHandles;
+            //regionCompHandles.reserve(_constraints.internalElements<0>().size());
+            //for (auto & cd : _constraints.elements<0>()){
+            //    if (cd.exists && cd.data.type == ComponentData::Type::Region){
+            //        regionCompHandles.push_back(cd.topo.hd);
+            //    }
+            //}
+            //auto neighborRegionsContainerGetter = [this](const ComponentHandle & ch){
+            //    std::vector<ComponentHandle> neighbors;
+            //    neighbors.reserve(5);
+            //    assert(_constraints.data(ch).type == ComponentData::Type::Region);
+            //    auto & topo = _constraints.topo(ch);
+            //    for (auto & conh : topo.uppers){
+            //        auto & cdata = _constraints.data(conh);
+            //        if (cdata.type != ConstraintData::Type::RegionConnectivity &&
+            //            cdata.type != ConstraintData::Type::RegionOverlap)
+            //            continue;
+            //        if (cdata.type == ConstraintData::Type::RegionOverlap){
+            //            if (cdata.asRegionOverlap.overlapRatio < 0.15){
+            //                continue;
+            //            }
+            //        }
+            //        if (cdata.type == ConstraintData::Type::RegionConnectivity){
+            //            auto & regionCon = cdata.asRegionConnectivity;
+            //            auto & boundaryData = _views.data(regionCon.viewHandle).regionNet->regions().data(regionCon.boundaryHandle);
+            //            if (!(boundaryData.length > 50 && boundaryData.straightness < 0.01))
+            //                continue;
+            //        }
+            //        ////std::cout << "!!!!!!!!!!!!!!!!!!!" << std::endl;
+            //        //auto & ctopo = _constraints.topo(conh);
+            //        //if (ctopo.lowers[0] == ch)
+            //        //    neighbors.push_back(ctopo.lowers[1]);
+            //        //if (ctopo.lowers[1] == ch)
+            //        //    neighbors.push_back(ctopo.lowers[0]);
+            //    }
+            //    return neighbors;
+            //};
+            //std::map<int, std::list<ComponentHandle>> ccid2RegionHandles;
+            //int nRegionCC = ConnectedComponents(regionCompHandles.begin(), regionCompHandles.end(), neighborRegionsContainerGetter,
+            //    [this, &ccid2RegionHandles](const ComponentHandle & ch, int cid){
+            //    _constraints.data(ch).asRegion.connectedComponentId = cid;
+            //    ccid2RegionHandles[cid].push_back(ch);
+            //});
+            //std::cout << "Connected Components Num of Regions: " << nRegionCC << std::endl;
+            //for (auto & cc : ccid2RegionHandles){
+            //    std::cout << "[" << cc.first << "] num: " << cc.second.size();
+            //    if (cc.first % 10 == 9)
+            //        std::cout << std::endl;
+            //}
+
+
+            //std::vector<EHandle> allCCFirstRegionReserveScaleEnergyHandles;
+            //// refactor the thetaExprs in each reigon component
+            //for (auto & chs : ccid2RegionHandles){
+            //    assert(!chs.second.empty());
+            //    auto firstCh = chs.second.front();
+            //    auto & firstRegionData = _constraints.data(firstCh).asRegion;
+            //    allCCFirstRegionReserveScaleEnergyHandles.push_back(_constraints.data(firstCh).reserveScaleEnergyExpr.expression().handle());
+            //    for (auto ch : chs.second){
+            //        if (ch == firstCh)
+            //            continue;
+            //        auto & currentRegionData = _constraints.data(ch).asRegion;
+            //        auto unitedThetaExpr = firstRegionData.thetaExpr.expression();
+            //        currentRegionData.thetaExpr.expression().replacedWithWhenUsedAsInputs(unitedThetaExpr);
+            //        currentRegionData.thetaExpr.freeze();
+            //    }
+            //}
+            //auto allCCFirstRegionReserveScaleEnergySumExpr =
+            //    graph.as<double>(HSum<double>(&graph, allCCFirstRegionReserveScaleEnergyHandles));
+            //
+            //// disable region ovelap/connection constraints among the same CC
+            //for (auto & con : _constraints.elements<1>()){
+            //    auto & ctopo = con.topo;
+            //    auto & rd1 = _constraints.data(ctopo.lowers[0]).asRegion;
+            //    auto & rd2 = _constraints.data(ctopo.lowers[1]).asRegion;
+            //    if (rd1.connectedComponentId == rd2.connectedComponentId)
+            //        con.data.constraintEnergyExpr.disable();
+            //}
+            std::map<int, std::list<ComponentHandle>> ccid2RegionHandles;
+            int ccid = 0;
+            for (auto & cd : _constraints.elements<0>()){
+                if (cd.exists && cd.data.type == ComponentData::Type::Region){
+                    ccid2RegionHandles[ccid++] = { cd.topo.hd };
+                }
+            }
 
 
 
@@ -2441,28 +2579,35 @@ namespace panoramix {
                 allConstraintEnergySumExpr[ConstraintData::Type::RegionLineConnectivity].expression() +
                 allConstraintEnergySumExpr[ConstraintData::Type::RegionOverlap].expression()
                 
-                , _constraints, 1e-3, 0.0, 5000,
-                [this, &lineSpatialAvatars, &startTime, ncc](int i, double energyVal, double energyValChange) -> bool {
+                , _constraints, 1e-2, 0.0, 5000,
+                [this, &lineSpatialAvatars, &startTime, nLineCC, &ccid2LineHandles, &ccid2RegionHandles](int i, double energyVal, double energyValChange) -> bool {
 
                 if (i == 0){
-                    // count functional line etas
+                    // count functional eta/thetas
                     int functionalLineEtaNum = 0;
+                    int functionalRegionThetaNum = 0;
                     for (auto & cd : _constraints.elements<0>()){
                         if (cd.data.type == ComponentData::Type::Line){
                             if (cd.data.asLine.etaExpr.derivativeExpression().isValid())
                                 functionalLineEtaNum++;
                         }
+                        else if (cd.data.type == ComponentData::Type::Region){
+                            if (cd.data.asRegion.thetaExpr.derivativeExpression().isValid())
+                                functionalRegionThetaNum++;
+                        }
                     }
                     std::cout << "functional line eta num: " << functionalLineEtaNum << std::endl;
-                    assert(functionalLineEtaNum == ncc);
+                    std::cout << "functional region theta num: " << functionalRegionThetaNum << std::endl;
+                    assert(functionalLineEtaNum == nLineCC);
+                    //assert(functionalRegionThetaNum == nRegionCC);
                 }
 
 
-                /*auto curTime = std::chrono::high_resolution_clock::now();
+                auto curTime = std::chrono::high_resolution_clock::now();
                 auto duration = curTime - startTime;
-                auto minutes = std::chrono::duration_cast<std::chrono::minutes>(duration);
-                if (minutes.count() < 1)
-                    return true;*/
+                auto hours = std::chrono::duration_cast<std::chrono::hours>(duration);
+                //if (hours.count() < 7) // wait 7 hours
+                //    return true;
                 if (i % 10 != 0)
                     return true;
 
@@ -2471,6 +2616,9 @@ namespace panoramix {
                 for (auto & vd : _constraints.elements<0>()){
                     if (vd.data.type == ComponentData::Type::Region){
                         Vec3 theta = deriv::MakeCoreVec(vd.data.asRegion.thetaExpr.expression().result());
+                        /*Vec3 theta = deriv::MakeCoreVec(
+                            _constraints.data(ccid2RegionHandles[vd.data.asRegion.connectedComponentId].front())
+                            .asRegion.thetaExpr.expression().result());*/
                         theta = normalize(theta);
                         Vec3 colorVec = {
                             abs(theta.dot(_globalData.vanishingPoints[0])),
@@ -2500,24 +2648,36 @@ namespace panoramix {
                     vis::Visualizer2D viz;
                     viz.setImage(im);
                     viz.params.winName = "region orientations " + std::to_string(vd.topo.hd.id);
-                    viz << vd.data.lineNet->lineSegments();
+                    viz = viz << vd.data.lineNet->lineSegments();
                     viz << vis::manip2d::Show();
-                    cv::imwrite("region_orientations_" + std::to_string(i) + "_" + 
-                        std::to_string(vd.topo.hd.id) + ".png", viz.image());
+                    //cv::imwrite("region_orientations_" + std::to_string(i) + "_" + 
+                    //    std::to_string(vd.topo.hd.id) + ".png", viz.image());
                 }
 
+                std::cout << "now visualize spatial lines" << std::endl;
+
+                // show lines
                 std::vector<Classified<Line3>> rectifiedLines;
                 for (auto & cd : constraints().elements<0>()){
                     if (cd.data.type == ComponentData::Type::Line){
                         auto line = lineSpatialAvatars[LineIndex{ cd.data.asLine.viewHandle, cd.data.asLine.lineHandle }];
                         auto ratio = ComputeDepthRatioOfPointOnSpatialLine(line.component.first,
                             line.component.second, globalData().vanishingPoints[line.claz]);
-                        double eta = cd.data.asLine.etaExpr.expression().result();
+                        double eta = _constraints.data(ccid2LineHandles[cd.data.asLine.connectedComponentId].front())
+                            .asLine.etaExpr.expression().result() * cd.data.asLine.etaRatio;
                         line.component.first = normalize(line.component.first) * eta;
                         line.component.second = normalize(line.component.second) * eta * ratio;
                         rectifiedLines.push_back(line);
                     }
                 }
+
+                vis::Visualizer3D()
+                    << vis::manip3d::SetDefaultColor(vis::ColorTag::Yellow)
+                    << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
+                    << rectifiedLines
+                    << vis::manip3d::AutoSetCamera
+                    << vis::manip3d::Show(false);
+
 
                 std::cout << "now visualize spatial regions" << std::endl;
 
@@ -2527,6 +2687,9 @@ namespace panoramix {
                 for (auto & vd : constraints().elements<0>()){
                     if (vd.data.type == ReconstructionEngine::ComponentData::Type::Region){
                         auto theta = deriv::MakeCoreVec(vd.data.asRegion.thetaExpr.expression().result());
+                        /*Vec3 theta = deriv::MakeCoreVec(
+                            _constraints.data(ccid2RegionHandles[vd.data.asRegion.connectedComponentId].front())
+                            .asRegion.thetaExpr.expression().result());*/
                         auto & cam = views().data(vd.data.asRegion.viewHandle).camera;
                         auto & regionData =
                             views().data(vd.data.asRegion.viewHandle).regionNet->regions().data(vd.data.asRegion.regionHandle);
@@ -2549,9 +2712,7 @@ namespace panoramix {
                 vis::Visualizer3D()
                     << vis::manip3d::SetDefaultColor(vis::ColorTag::Yellow)
                     << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
-                    //<< rectifiedLines
                     << regions
-                    //<< vis::manip3d::SetRenderMode(vis::RenderModeFlag::Triangles)
                     << vis::manip3d::AutoSetCamera
                     << vis::manip3d::Show();
 

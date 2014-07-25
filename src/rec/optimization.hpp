@@ -52,29 +52,39 @@ namespace panoramix {
         public:
             inline OptimizibleExpression() {}
             inline explicit OptimizibleExpression(const T & d, deriv::ExpressionGraph & graph)
-                : _data(std::make_shared<T>(d)), _frozen(false) {
+                : _data(std::make_shared<T>(d)), _frozen(false), _isOptimizible(true) {
                 _lastChange = deriv::common::FillWithScalar(_lastChange, 0.0);
                 T * dataPtr = _data.get();
                 _expr = deriv::composeFunction(graph, [dataPtr]() ->T {
                     return *dataPtr;
                 });
             }
+            // set to a normal expression without independent variable
+            // not optimizible
+            inline OptimizibleExpression(const deriv::Expression<T> & expr) 
+                : _data(nullptr), _frozen(true), _expr(expr), _isOptimizible(false) {
+                _lastChange = deriv::common::FillWithScalar(_lastChange, 0.0);
+            }
 
             void registerHandleTable(EHandleTable & table) {
-                table.push_back(_expr.handle());
-                _positionInHandleTable = table.size() - 1;
+                if (_isOptimizible){
+                    table.push_back(_expr.handle());
+                    _positionInHandleTable = table.size() - 1;
+                }
             }
 
             void getDerivative(const EHandleTable & derivTable) {
-                auto derivHandle = derivTable[_positionInHandleTable];
-                if (derivHandle.isValid())
-                    _dexpr = _expr.g()->asDerived<T>(derivHandle);
-                else
-                    _dexpr = deriv::DerivativeExpression<T>(); // invalidate
+                if (_isOptimizible){
+                    auto derivHandle = derivTable[_positionInHandleTable];
+                    if (derivHandle.isValid())
+                        _dexpr = _expr.g()->asDerived<T>(derivHandle);
+                    else
+                        _dexpr = deriv::DerivativeExpression<T>(); // invalidate
+                }
             }
 
             void optimizeData(double delta, double momentum, const EHandleTable & table){
-                if (_dexpr.isValid() && !_frozen){
+                if (_dexpr.isValid() && !_frozen && _isOptimizible){
                     auto grad = _dexpr.executeHandlesRange(table.begin(), table.end());
                     _lastChange = (-grad * (1 - momentum) + _lastChange * momentum) * delta;
                     *_data += _lastChange;
@@ -82,7 +92,7 @@ namespace panoramix {
             }
 
             void deOptimizeData(){
-                if (_dexpr.isValid() && !_frozen){
+                if (_dexpr.isValid() && !_frozen && _isOptimizible){
                     *_data -= _lastChange;
                     _lastChange = deriv::common::FillWithScalar(_lastChange, 0.0);
                 }
@@ -95,6 +105,7 @@ namespace panoramix {
             inline deriv::DerivativeExpression<T> derivativeExpression() const { return _dexpr; }
 
         private:
+            bool _isOptimizible;
             deriv::Expression<T> _expr;
             deriv::DerivativeExpression<T> _dexpr;
             int _positionInHandleTable;

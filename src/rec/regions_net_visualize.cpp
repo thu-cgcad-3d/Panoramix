@@ -26,7 +26,7 @@ namespace panoramix {
                 }
             }
 
-            viz.params.alphaForNewImage = 0.3f;
+            viz.params.alphaForNewImage = 0.6f;
             viz << coloredOutput;
 
             viz.params.thickness = 1;

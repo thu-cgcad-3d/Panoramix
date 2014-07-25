@@ -7,16 +7,8 @@ namespace panoramix {
             setImage(im);
         }
 
-        namespace {
-            inline Image ConvertImage(const Image & im) {
-                Image image;
-                im.copyTo(image);
-                return image;
-            }
-        }
-
         void Visualizer2D::setImage(const Image & im) {
-            _image = ConvertImage(im);
+            _image = im.clone();
         }
 
 

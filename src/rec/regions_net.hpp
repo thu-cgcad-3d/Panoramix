@@ -32,6 +32,8 @@ namespace panoramix {
                 InfiniteLine2 fittedLine;
                 double tjunctionLikelihood;
                 double straightness;
+                double interleavedArea;
+                double interleavedLength;
                 std::vector<std::vector<Point2>> sampledPoints;
             };
             using RegionsGraph = GraphicalModel02<RegionData, BoundaryData>;

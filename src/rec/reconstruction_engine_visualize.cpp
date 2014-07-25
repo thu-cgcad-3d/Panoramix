@@ -1,6 +1,7 @@
 #include "reconstruction_engine_visualize.hpp"
 
 #include "../core/utilities.hpp"
+#include "regions_net_visualize.hpp"
 
 namespace panoramix {
     namespace rec {
@@ -10,17 +11,23 @@ namespace panoramix {
         Visualizer2D operator << (Visualizer2D viz, const ReconstructionEngine::ViewData & vd) {
             viz.setImage(vd.image);
             
+            if (vd.regionNet){
+                viz = viz << *vd.regionNet;
+            }
             if (vd.lineNet){
                 viz.params.thickness = 2;
                 viz.params.colorTableDescriptor = vis::ColorTableDescriptor::RGB;
-                viz << vd.lineNet->lineSegments();
+                viz = viz << vd.lineNet->lineSegments();
 
                 viz.params.thickness = 1;
                 viz.params.color = vis::ColorFromTag(vis::ColorTag::White);
-                viz << vd.lineNet->lineSegmentIntersections();
+                viz = viz << vd.lineNet->lineSegmentIntersections();
             }
             return viz;
         }
+
+
+
 
         Visualizer3D operator << (Visualizer3D viz, const ReconstructionEngine::GlobalData & netgb) {
             std::vector<Line3> consLines;

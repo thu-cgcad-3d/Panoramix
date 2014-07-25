@@ -111,6 +111,7 @@ namespace panoramix {
                 OptimizibleExpression<double> etaExpr;
                 ReconstructionEngine::ViewHandle viewHandle;
                 LinesNet::LineHandle lineHandle;
+                double etaRatio;
                 int connectedComponentId;
             };
 
@@ -119,6 +120,7 @@ namespace panoramix {
                 DisableableExpression<double> manhattanEnergyExpr;
                 ReconstructionEngine::ViewHandle viewHandle;
                 RegionsNet::RegionHandle regionHandle;
+                int connectedComponentId;
             };
 
             struct ComponentData {

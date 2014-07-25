@@ -57,8 +57,8 @@ void ShowPanoramaVPs(const rec::ReconstructionEngine & engine) {
         << vis::manip2d::Show();
 }
 
-//TEST(ViewsNet, FixedCamera) {
-void run(){
+TEST(ViewsNet, FixedCamera) {
+//void run(){
 
     cv::Mat panorama = cv::imread(ProjectTestDataDirStr_PanoramaIndoor + "/13.jpg");
     cv::resize(panorama, panorama, cv::Size(2000, 1000));
@@ -66,8 +66,8 @@ void run(){
 
     std::vector<core::PerspectiveCamera> cams = {
         core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 })
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 })//,
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 })
         //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 })
     };
 
@@ -93,6 +93,6 @@ int main(int argc, char * argv[], char * envp[])
 {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    run();
-    return 0;
+    //run();
+    return RUN_ALL_TESTS();
 }

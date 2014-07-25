@@ -9,9 +9,9 @@ namespace panoramix {
 
         RegionsNet::Params::Params() : samplingStepLengthOnBoundary(15.0) {
             SegmentationExtractor::Params segmenterParams;
-            segmenterParams.c = 80;
-            segmenterParams.minSize = 300;
-            segmenterParams.sigma = 1.0;
+            segmenterParams.c = 120;
+            segmenterParams.minSize = 100;
+            segmenterParams.sigma = 0.6;
             segmenter = SegmentationExtractor(segmenterParams);
         }
 
@@ -247,6 +247,8 @@ namespace panoramix {
                     }
                 }
 
+                bd.interleavedArea = interArea;
+                bd.interleavedLength = interLen;
                 bd.straightness = Gaussian(interArea / interLen, 1.0);
                 if (edges.size() == 1 && edges.front().size() == 2) {
                     assert(FuzzyEquals(bd.straightness, 1.0, 0.01) && "simple line should has the best straightness..");
@@ -380,11 +382,11 @@ namespace panoramix {
 
             // visualize region contours
             IF_DEBUG_USING_VISUALIZERS {
-                Image regionVis(_image.rows, _image.cols, CV_8UC3, vis::Color(100, 100, 100));
-                //Image regionVis = _params.segmenter(_image, true);
+                //Image regionVis(_image.rows, _image.cols, CV_8UC3, vis::Color(100, 100, 100));
+                Image regionVis = _params.segmenter(_image, true);
                 std::vector<std::vector<std::vector<PixelLoc>>> boundaries;
                 std::vector<std::vector<std::vector<Point2>>> sampledPoints;
-                std::vector<double> straightnesses, tjunctionlikelihoods;
+                std::vector<double> straightnesses, tjunctionlikelihoods, lengths;
                 boundaries.reserve(_regions.internalElements<1>().size());
                 sampledPoints.reserve(_regions.internalElements<1>().size());
                 straightnesses.reserve(_regions.internalElements<1>().size());
@@ -394,6 +396,7 @@ namespace panoramix {
                     sampledPoints.push_back(b.data.sampledPoints);
                     straightnesses.push_back(b.data.straightness);
                     tjunctionlikelihoods.push_back(b.data.tjunctionLikelihood);
+                    lengths.push_back(b.data.length);
                 }
                 auto & ctable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
                 //for (auto & r : _regions.elements<0>()) {
@@ -405,19 +408,21 @@ namespace panoramix {
                 //    }
                 //}
                 for (int i = 0; i < boundaries.size(); i++) {
-                    auto pcolor = ctable[i % ctable.size()];
+                    //auto pcolor = ctable[i % ctable.size()];
                     auto color = vis::Color(255, 255, 255, 1) * straightnesses[i];
-                    auto tjcolor = vis::Color(255, 255, 255, 1) * tjunctionlikelihoods[i];
+                    auto isConnected = (lengths[i] > 50 && straightnesses[i] < 0.03);
+                    //auto tjcolor = vis::Color(255, 255, 255, 1) * tjunctionlikelihoods[i];
                     for (auto & polyline : boundaries[i]) {
                         for (int j = 0; j < polyline.size() - 1; j++) {
-                            cv::line(regionVis, polyline[j], polyline[j + 1], tjcolor);
+                            cv::line(regionVis, polyline[j], polyline[j + 1], 
+                                isConnected ? vis::Color(255, 255, 255, 1) : vis::Color(0, 0, 0, 1));
                         }
                     }
-                    for (auto & s : sampledPoints[i]) {
-                        for (auto & p : s) {
-                            cv::circle(regionVis, ToPixelLoc(p), 1, pcolor);
-                        }
-                    }
+                    //for (auto & s : sampledPoints[i]) {
+                    //    for (auto & p : s) {
+                    //        cv::circle(regionVis, ToPixelLoc(p), 1, pcolor);
+                    //    }
+                    //}
                 }
                 //for (auto & bep : mergedBepsTable) {
                 //    auto color = vis::ColorFromTag(vis::ColorTag::White);

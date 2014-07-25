@@ -21,6 +21,9 @@ namespace panoramix {
         }
 
         void ExpressionGraph::exchangeWhenUsedAsInputs(EHandle a, EHandle b){
+            if (a == b)
+                return;
+
             // for all expressions who accepts a as input, make it accepts b as input with the same position of a
             // for all expressions who accepts b as input, make it accepts a as input with the same position of b
             std::vector<CHandle> a2os, o2as;

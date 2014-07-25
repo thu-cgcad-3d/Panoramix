@@ -14,6 +14,9 @@ namespace panoramix {
         // 2d vis for vertdata
         Visualizer2D operator << (Visualizer2D viz, const ReconstructionEngine::ViewData & vd);
 
+        // 2d vis for constraints
+        Visualizer2D operator << (Visualizer2D viz, const ReconstructionEngine::ConstraintGraph & cons);
+
         // 3d vis for globaldata
         Visualizer3D operator << (Visualizer3D viz, const ReconstructionEngine::GlobalData & netgb);
 
