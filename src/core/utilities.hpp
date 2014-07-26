@@ -742,7 +742,7 @@ namespace panoramix {
 
         // DepthFirstSearch
         template < class VertIteratorT, class NeighborVertsContainerGetterT, class VertCallbackT,
-        class VertCompareT = std::less < typename std::iterator_traits<VertIteratorT>::value_type >
+        class VertCompareT = std::less <typename std::iterator_traits<VertIteratorT>::value_type>
         >
         void DepthFirstSearch(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
         NeighborVertsContainerGetterT neighborVertsContainerGetter,
@@ -750,13 +750,16 @@ namespace panoramix {
         VertCompareT vertCompare = VertCompareT()) {
 
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
-            static_assert(std::is_same<Vert, std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
+            static_assert(std::is_same<Vert, 
+                std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
                 "NeighborVertsContainerGetterT should returns a container of Vert");
-            static_assert(std::is_same<Vert, std::decay_t<decltype(*std::end(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
+            static_assert(std::is_same<Vert, 
+                std::decay_t<decltype(*std::end(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
                 "NeighborVertsContainerGetterT should returns a container of Vert");
 
             struct {
-                bool operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited, NeighborVertsContainerGetterT vNeighborsGetter, VertCallbackT vCallback) {
+                bool operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited, 
+                    NeighborVertsContainerGetterT vNeighborsGetter, VertCallbackT vCallback) {
                     if (vVisited[root])
                         return true;
                     if (!vCallback(root))
@@ -788,9 +791,61 @@ namespace panoramix {
         }
 
 
+
+        // Topological Sort (using Depth First Search)
+        template <class VertIteratorT, class VertOutIteratorT, class PredecessorVertsContainerGetterT,
+        class VertCompareT = std::less<typename std::iterator_traits<VertIteratorT>::value_type>
+        >
+        void TopologicalSort(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+            VertOutIteratorT sortedVertsBegin,
+            PredecessorVertsContainerGetterT predecessorVertsContainerGetter,
+            VertCompareT vertCompare = VertCompareT()){
+
+            using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
+            static_assert(std::is_same<Vert,
+                std::decay_t<decltype(*std::begin(predecessorVertsContainerGetter(std::declval<Vert>())))>> ::value,
+                "PrecidentVertsContainerGetterT should returns a container of Vert");
+            static_assert(std::is_same<Vert,
+                std::decay_t<decltype(*std::end(predecessorVertsContainerGetter(std::declval<Vert>())))>> ::value,
+                "PrecidentVertsContainerGetterT should returns a container of Vert");
+
+            struct {
+                void operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited,
+                    VertOutIteratorT sortedVertsOut,
+                    PredecessorVertsContainerGetterT predecessorVertsContainerGetter) {
+                    if (vVisited[root])
+                        return;
+
+                    vVisited[root] = true;
+                    auto vPredecessors = predecessorVertsContainerGetter(root);
+                    for (const auto & v : vPredecessors) {
+                        (*this)(v, vVisited, sortedVertsOut, predecessorVertsContainerGetter);
+                    }
+
+                    *sortedVertsOut = root;
+                    ++sortedVertsOut;
+                }
+            } depthFirstSearchOneTree;
+
+            std::map<Vert, bool, VertCompareT> visited(vertCompare);
+            for (auto i = vertsBegin; i != vertsEnd; ++i)
+                visited[*i] = false;
+            while (true) {
+                auto rootIter = vertsBegin;
+                while (rootIter != vertsEnd && visited[*rootIter]){
+                    ++rootIter;
+                }
+                if (rootIter == vertsEnd)
+                    break;
+                depthFirstSearchOneTree(*rootIter, visited, sortedVertsBegin, predecessorVertsContainerGetter);
+            }
+
+        }
+
+
         // Connected Components
-        template < class VertIteratorT, class NeighborVertsContainerGetterT, class VertexTypeRecorderT,
-        class VertCompareT = std::less < typename std::iterator_traits<VertIteratorT>::value_type >
+        template <class VertIteratorT, class NeighborVertsContainerGetterT, class VertexTypeRecorderT,
+        class VertCompareT = std::less<typename std::iterator_traits<VertIteratorT>::value_type>
         >
         int ConnectedComponents(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
         NeighborVertsContainerGetterT neighborVertsContainerGetter,
@@ -838,6 +893,9 @@ namespace panoramix {
 
             return cid;
         }
+
+
+
 
     }
 }

@@ -1,5 +1,7 @@
 #include <map>
 
+#include "../core/utilities.hpp"
+
 #include "expression.hpp"
 
 namespace panoramix {
@@ -142,7 +144,20 @@ namespace panoramix {
 
             // the id of expression handles record the topological order
             // sort from new to old
-            std::sort(related.begin(), related.end(), [](EHandle a, EHandle b){return a.id > b.id; });
+            /////std::sort(related.begin(), related.end(), [](EHandle a, EHandle b){return a.id > b.id; });
+            std::vector<EHandle> temp;
+            temp.reserve(related.size());
+            core::TopologicalSort(related.begin(), related.end(), std::back_inserter(temp), [this](EHandle h){
+                std::vector<EHandle> forwardHandles;
+                for (auto & con : forwardConnections(h)){
+                    assert(_g.topo(con).from() == h);
+                    forwardHandles.push_back(_g.topo(con).to());
+                }
+                return forwardHandles;
+            });
+            related = temp;
+            
+
             auto relatedUniqueEnd = std::unique(related.begin(), related.end());
 
             // idToDeriv[exprHandle.id] stores the derivative handle of exprHandle

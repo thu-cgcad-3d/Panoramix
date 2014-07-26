@@ -2575,12 +2575,30 @@ namespace panoramix {
                 //allConstraintEnergySumExpr[ConstraintData::Type::LineInterViewIncidence].expression() * 20 +
                 //allReserveScaleEnergySumExpr[ComponentData::Type::Line].expression() +
                 allCCFirstLineReserveScaleEnergySumExpr +
-                allConstraintEnergySumExpr[ConstraintData::Type::RegionConnectivity].expression() +
+                allConstraintEnergySumExpr[ConstraintData::Type::RegionConnectivity].expression() * 1 +
                 allConstraintEnergySumExpr[ConstraintData::Type::RegionLineConnectivity].expression() +
-                allConstraintEnergySumExpr[ConstraintData::Type::RegionOverlap].expression()
+                allConstraintEnergySumExpr[ConstraintData::Type::RegionOverlap].expression() * 1
                 
                 , _constraints, 1e-2, 0.0, 5000,
-                [this, &lineSpatialAvatars, &startTime, nLineCC, &ccid2LineHandles, &ccid2RegionHandles](int i, double energyVal, double energyValChange) -> bool {
+                [this, &lineSpatialAvatars, &startTime, nLineCC, &ccid2LineHandles, &ccid2RegionHandles, &allConstraintEnergySumExpr](
+                int i, double energyVal, double energyValChange) -> bool {
+
+                std::cout
+                    << "region connectivity energy: "
+                    << allConstraintEnergySumExpr[ConstraintData::Type::RegionConnectivity].expression().result()
+                    << std::endl
+                    << "region line connectivity energy: "
+                    << allConstraintEnergySumExpr[ConstraintData::Type::RegionLineConnectivity].expression().result()
+                    << std::endl
+                    << "region overlap energy: "
+                    << allConstraintEnergySumExpr[ConstraintData::Type::RegionOverlap].expression().result()
+                    << std::endl
+                    << "line connectivity energy: "
+                    << allConstraintEnergySumExpr[ConstraintData::Type::LineConnectivity].expression().result()
+                    << std::endl
+                    << "line interview: "
+                    << allConstraintEnergySumExpr[ConstraintData::Type::LineInterViewIncidence].expression().result()
+                    << std::endl;
 
                 if (i == 0){
                     // count functional eta/thetas

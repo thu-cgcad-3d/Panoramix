@@ -65,7 +65,7 @@ namespace panoramix {
         template <class FunctorT>
         inline auto composeFunction(const std::string & name, ExpressionGraph & graph, FunctorT && fun) -> Expression<decltype(fun())> {
             return ComposeExpressionWithNoInputs(graph, 
-                FunctorComposerTraits<FunctorT>(name, std::forward<FunctorT>(fun)));
+                FunctorComposerTraits<FunctorT, decltype(fun())>(name, std::forward<FunctorT>(fun)));
         }
 
 

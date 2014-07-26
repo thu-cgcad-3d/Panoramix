@@ -427,7 +427,7 @@ TEST(UtilTest, MinimumSpanningTree2) {
 }
 
 
-TEST(UtilTest, DFS) {
+TEST(UtilTest, DFS_CC) {
     std::vector<int> verts = { 0, 1, 2, 3, 4, 5, 6 };
     struct EdgeProperty { int fromv, tov; double w; };
     std::vector<EdgeProperty> edgeProperties = {
@@ -473,6 +473,37 @@ TEST(UtilTest, DFS) {
 
     EXPECT_EQ(2, ccnum);
     EXPECT_TRUE(std::equal(ccids.begin(), ccids.end(), correctCCids.begin()));
+}
+
+
+TEST(UtilTest, TopologicalSort){
+
+    std::vector<int> verts = { 0, 1, 2, 3, 4, 5, 6 };
+    std::random_shuffle(verts.begin(), verts.end());
+    struct Edge { int from, to; };
+    std::vector<Edge> edges = {
+            {0, 1},
+            {0, 2},
+            {1, 3},
+            {2, 4},
+            {1, 6},
+            {4, 5}
+    };
+    std::vector<int> sortedVerts;
+    core::TopologicalSort(verts.begin(), verts.end(), std::back_inserter(sortedVerts), [&edges](int vert){
+        std::vector<int> predecessors;
+        for (auto & e : edges){
+            if (e.to == vert)
+                predecessors.push_back(e.from);
+        }
+        return predecessors;
+    });
+    for (auto & e : edges){
+        auto fromPos = std::find(sortedVerts.begin(), sortedVerts.end(), e.from) - sortedVerts.begin();
+        auto toPos = std::find(sortedVerts.begin(), sortedVerts.end(), e.to) - sortedVerts.begin();
+        ASSERT_TRUE(fromPos <= toPos);
+    }
+    std::cout << std::endl;
 }
 
 
