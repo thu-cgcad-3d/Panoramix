@@ -371,7 +371,7 @@ namespace panoramix {
 
             // exchange the two handles role in referenced expressions
             // ATTENTION: Make sure the two handles are of the same output type!!!
-            void exchangeWhenUsedAsInputs(EHandle a, EHandle b);
+            //void exchangeWhenUsedAsInputs(EHandle a, EHandle b);
 
             // input handles
             std::vector<EHandle> inputs(EHandle h) const;
@@ -464,12 +464,12 @@ namespace panoramix {
 
             // if this expression is referred in other expressions as inputs,
             // then after using this method, the new expression e becomes the actual inputs to other expressions
-            inline void replacedWithWhenUsedAsInputs(const Expression & e) { 
-                assert(g() == e.g());
-                assert(isValid() && e.isValid());
-                g()->exchangeWhenUsedAsInputs(handle(), e.handle());
-                //std::swap(_op, e._op);
-            }
+            //inline void replacedWithWhenUsedAsInputs(const Expression & e) { 
+            //    assert(g() == e.g());
+            //    assert(isValid() && e.isValid());
+            //    g()->exchangeWhenUsedAsInputs(handle(), e.handle());
+            //    //std::swap(_op, e._op);
+            //}
 
             // the current value in expression data
             inline ResultType<T> result() const { assert(isValid()); return TraitsAboutOp<T>::Result(*_op); }

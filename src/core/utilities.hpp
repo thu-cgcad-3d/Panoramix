@@ -575,7 +575,7 @@ namespace panoramix {
         class DistanceFunctorT = DefaultDistanceFunctor < typename std::iterator_traits<IteratorT>::value_type >
         >
         IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::true_type,
-        DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
+            DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
                 return itersOut;
 
@@ -613,7 +613,7 @@ namespace panoramix {
         class DistanceFunctorT = DefaultDistanceFunctor < typename std::iterator_traits<IteratorT>::value_type >
         >
         IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
-        DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
+            DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
             if (begin == end)
                 return itersOut;
 
@@ -648,8 +648,8 @@ namespace panoramix {
         class BoundingBoxFunctorT = DefaultBoundingBoxFunctor<typename std::iterator_traits<IteratorT>::value_type>
         >
         IterOutIteratorT MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
-        DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT(),
-        BoundingBoxFunctorT getBoundingBox = BoundingBoxFunctorT()) {
+            DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT(),
+            BoundingBoxFunctorT getBoundingBox = BoundingBoxFunctorT()) {
 
             if (begin == end)
                 return itersOut;
@@ -699,12 +699,12 @@ namespace panoramix {
         class VertCompareT = std::less < typename std::iterator_traits<VertIteratorT>::value_type >
         >
         void MinimumSpanningTree(
-        VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-        EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
-        EdgeOutputIteratorT MSTedges,
-        EdgeVertsGetterT vertsGetter,
-        EdgeCompareOnWeightT edgeCompareOnWeight,
-        VertCompareT vertCompare = VertCompareT()
+            VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+            EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
+            EdgeOutputIteratorT MSTedges,
+            EdgeVertsGetterT vertsGetter,
+            EdgeCompareOnWeightT edgeCompareOnWeight,
+            VertCompareT vertCompare = VertCompareT()
         ) {
 
             using Edge = typename std::iterator_traits<typename EdgeIteratorT>::value_type;
@@ -745,9 +745,10 @@ namespace panoramix {
         class VertCompareT = std::less <typename std::iterator_traits<VertIteratorT>::value_type>
         >
         void DepthFirstSearch(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-        NeighborVertsContainerGetterT neighborVertsContainerGetter,
-        VertCallbackT vertCallback,
-        VertCompareT vertCompare = VertCompareT()) {
+            NeighborVertsContainerGetterT neighborVertsContainerGetter,
+            VertCallbackT vertCallback,
+            VertCompareT vertCompare = VertCompareT()
+        ) {
 
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
             static_assert(std::is_same<Vert, 
@@ -848,9 +849,9 @@ namespace panoramix {
         class VertCompareT = std::less<typename std::iterator_traits<VertIteratorT>::value_type>
         >
         int ConnectedComponents(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-        NeighborVertsContainerGetterT neighborVertsContainerGetter,
-        VertexTypeRecorderT vertTypeRecorder,
-        VertCompareT vertCompare = VertCompareT()) {
+            NeighborVertsContainerGetterT neighborVertsContainerGetter,
+            VertexTypeRecorderT vertTypeRecorder,
+            VertCompareT vertCompare = VertCompareT()) {
 
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
             static_assert(std::is_same<Vert, std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,

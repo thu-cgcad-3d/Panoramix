@@ -478,34 +478,59 @@ TEST(UtilTest, DFS_CC) {
 
 TEST(UtilTest, TopologicalSort){
 
-    std::vector<int> verts = { 0, 1, 2, 3, 4, 5, 6 };
-    std::random_shuffle(verts.begin(), verts.end());
-    struct Edge { int from, to; };
-    std::vector<Edge> edges = {
-            {0, 1},
-            {0, 2},
-            {1, 3},
-            {2, 4},
-            {1, 6},
-            {4, 5}
-    };
-    std::vector<int> sortedVerts;
-    core::TopologicalSort(verts.begin(), verts.end(), std::back_inserter(sortedVerts), [&edges](int vert){
-        std::vector<int> predecessors;
+    {
+        std::vector<int> verts = { 0, 1, 2, 3, 4, 5, 6 };
+        std::random_shuffle(verts.begin(), verts.end());
+        struct Edge { int from, to; };
+        std::vector<Edge> edges = {
+                { 0, 1 },
+                { 0, 2 },
+                { 1, 3 },
+                { 2, 4 },
+                { 1, 6 },
+                { 4, 5 }
+        };
+        std::vector<int> sortedVerts;
+        core::TopologicalSort(verts.begin(), verts.end(), std::back_inserter(sortedVerts), [&edges](int vert){
+            std::vector<int> predecessors;
+            for (auto & e : edges){
+                if (e.to == vert)
+                    predecessors.push_back(e.from);
+            }
+            return predecessors;
+        });
         for (auto & e : edges){
-            if (e.to == vert)
-                predecessors.push_back(e.from);
+            auto fromPos = std::find(sortedVerts.begin(), sortedVerts.end(), e.from) - sortedVerts.begin();
+            auto toPos = std::find(sortedVerts.begin(), sortedVerts.end(), e.to) - sortedVerts.begin();
+            ASSERT_TRUE(fromPos <= toPos);
         }
-        return predecessors;
-    });
-    for (auto & e : edges){
-        auto fromPos = std::find(sortedVerts.begin(), sortedVerts.end(), e.from) - sortedVerts.begin();
-        auto toPos = std::find(sortedVerts.begin(), sortedVerts.end(), e.to) - sortedVerts.begin();
-        ASSERT_TRUE(fromPos <= toPos);
     }
-    std::cout << std::endl;
-}
 
+    {
+        std::vector<int> verts(500000);
+        core::CreateLinearSequence(verts.begin(), verts.end(), 0, verts.size() - 1);
+        std::random_shuffle(verts.begin(), verts.end());
+        struct Edge { int from, to; };
+        std::vector<Edge> edges(500000);
+        std::generate(edges.begin(), edges.end(), [&verts](){return Edge{ rand() % verts.size(), rand() % verts.size() }; });
+        std::vector<int> sortedVerts;
+        core::TopologicalSort(verts.begin(), verts.end(), std::back_inserter(sortedVerts), [&edges](int vert){
+            std::vector<int> predecessors;
+            for (auto & e : edges){
+                if (e.to == vert)
+                    predecessors.push_back(e.from);
+            }
+            return predecessors;
+        });
+        for (auto & e : edges){
+            auto fromPos = std::find(sortedVerts.begin(), sortedVerts.end(), e.from) - sortedVerts.begin();
+            auto toPos = std::find(sortedVerts.begin(), sortedVerts.end(), e.to) - sortedVerts.begin();
+
+            EXPECT_TRUE(fromPos <= toPos);
+        }
+    }
+
+}
 
 
 int main(int argc, char * argv[], char * envp[])

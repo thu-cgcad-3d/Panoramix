@@ -11,7 +11,7 @@ file (GLOB VIS_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 file (GLOB VIS_UIS ${CMAKE_CURRENT_SOURCE_DIR}/*.ui)
 file (GLOB VIS_RESOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.qrc)	
 
-source_group ("vis" FILES ${VIS_HEADERS} ${VIS_SOURCES})
+#source_group ("vis" FILES ${VIS_HEADERS} ${VIS_SOURCES})
 qt5_add_resources (RESOURCE_ADDED ${VIS_RESOURCES})
 
 set_source_files_properties(${RESOURCE_ADDED} PROPERTIES GENERATED ON)

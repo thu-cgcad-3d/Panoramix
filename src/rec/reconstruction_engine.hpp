@@ -80,8 +80,11 @@ namespace panoramix {
             // estimate vanishing points using lines extract from all views, classify this lines and lift them all to space
             void estimateVanishingPointsAndClassifyLines();
 
-            // reconstruct regions
+            // reconstruct regions i
             void reconstructLinesAndFaces();
+
+            // reconstruct regions ii
+            void reconstructLinesAndFacesII();
                 
         public:
 
@@ -189,12 +192,10 @@ namespace panoramix {
             };
 
             inline const ViewsGraph & views() const { return _views; }
-            inline const ConstraintGraph & constraints() const { return _constraints; }
             inline const GlobalData & globalData() const { return _globalData; }
 
         private:
             ViewsGraph _views;
-            ConstraintGraph _constraints;
             Params _params;
             GlobalData _globalData;
         };
