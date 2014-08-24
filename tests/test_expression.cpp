@@ -124,11 +124,27 @@ TEST(Expression, Scalars) {
 
 }
 
+struct A {
+    int value;
+};
+
+A operator + (const A & a, const A & b){
+    return A{ a.value + b.value };
+}
+
 
 TEST(Expression, ScalarOp) {
 //void run(){
 
     ExpressionGraph graph;
+
+    A a = { 1 };
+    A b = { 2 };
+    A sum = a + b;
+    std::cout << sum.value << std::endl;
+
+
+
 
     double xv = 9.0;
     double yv = 5.0;

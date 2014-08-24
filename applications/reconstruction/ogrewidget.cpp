@@ -36,6 +36,9 @@ Ogre::ColourValue ToQgreColour(QColor c) {
 
 
 OgreWidget::OgreWidget(QWidget * parent) : QGLWidget(parent) {
+
+    _indoorSize = Ogre::Vector3(150, 100, 200);
+
     // Create an instance of the OGRE Root Class
     _root = new Ogre::Root;
 
@@ -53,6 +56,143 @@ OgreWidget::~OgreWidget() {
     destroy();
 }
 
+
+
+void OgreWidget::createIndoorCube(const Ogre::String & name, const Ogre::Vector3 & sz){
+    /// Create the mesh via the MeshManager
+    Ogre::MeshPtr msh = MeshManager::getSingleton().createManual(name,
+        ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
+
+    /// Create one submesh
+    SubMesh* sub = msh->createSubMesh();
+
+    /// Define the vertices (8 vertices, each consisting of 2 groups of 3 floats
+    Ogre::Vector3 nsz = sz.normalisedCopy();
+    const size_t nVertices = 8;
+    const size_t vbufCount = 3 * 2 * nVertices;
+    float vertices[vbufCount] = {
+        -sz.x, sz.y, -sz.z,        //0 position //
+        -nsz.x, nsz.y, -nsz.z,     //0 normal
+        sz.x, sz.y, -sz.z,         //1 position //
+        nsz.x, nsz.y, -nsz.z,      //1 normal
+        sz.x, -sz.y, -sz.z,        //2 position
+        nsz.x, -nsz.y, -nsz.z,     //2 normal
+        -sz.x, -sz.y, -sz.z,       //3 position
+        -nsz.x, -nsz.y, -nsz.z,    //3 normal
+        -sz.x, sz.y, sz.z,         //4 position //
+        -nsz.x, nsz.y, nsz.z,      //4 normal
+        sz.x, sz.y, sz.z,          //5 position //
+        nsz.x, nsz.y, nsz.z,       //5 normal
+        sz.x, -sz.y, sz.z,         //6 position
+        nsz.x, -nsz.y, nsz.z,      //6 normal
+        -sz.x, -sz.y, sz.z,        //7 position
+        -nsz.x, -nsz.y, nsz.z,     //7 normal
+    };
+
+    RenderSystem* rs = Root::getSingleton().getRenderSystem();
+    RGBA colours[nVertices];
+    RGBA *pColour = colours;
+    // Use render system to convert colour value since colour packing varies
+    rs->convertColourValue(ColourValue(1.0, 0.0, 0.0), pColour++); //0 colour
+    rs->convertColourValue(ColourValue(1.0, 1.0, 0.0), pColour++); //1 colour
+    rs->convertColourValue(ColourValue(0.0, 1.0, 0.0), pColour++); //2 colour
+    rs->convertColourValue(ColourValue(0.0, 0.0, 0.0), pColour++); //3 colour
+    rs->convertColourValue(ColourValue(1.0, 0.0, 1.0), pColour++); //4 colour
+    rs->convertColourValue(ColourValue(1.0, 1.0, 1.0), pColour++); //5 colour
+    rs->convertColourValue(ColourValue(0.0, 1.0, 1.0), pColour++); //6 colour
+    rs->convertColourValue(ColourValue(0.0, 0.0, 1.0), pColour++); //7 colour
+
+
+    /// Define 12 triangles (two triangles per cube face)
+    /// The values in this table refer to vertices in the above table
+    const size_t ibufCount = 34;//36;
+    unsigned short faces[ibufCount] = {
+        0, 2, 3,
+        0, 1, 2,
+        1, 6, 2,
+        1, 5, 6,
+        4, 6, 5,
+        4, 7, 6,
+        0, 7, 4,
+        0, 3, 7,
+        //0, 5, 1,
+        //0, 4, 5,
+        2, 7, 3,
+        2, 6, 7
+    };
+
+    /// Create vertex data structure for 8 vertices shared between submeshes
+    msh->sharedVertexData = new VertexData();
+    msh->sharedVertexData->vertexCount = nVertices;
+
+    /// Create declaration (memory format) of vertex data
+    VertexDeclaration* decl = msh->sharedVertexData->vertexDeclaration;
+    size_t offset = 0;
+
+
+
+
+    // 1st buffer
+    decl->addElement(0, offset, Ogre::VET_FLOAT3, Ogre::VES_POSITION);
+    offset += VertexElement::getTypeSize(Ogre::VET_FLOAT3);
+    decl->addElement(0, offset, Ogre::VET_FLOAT3, Ogre::VES_NORMAL);
+    offset += VertexElement::getTypeSize(Ogre::VET_FLOAT3);
+    /// Allocate vertex buffer of the requested number of vertices (vertexCount) 
+    /// and bytes per vertex (offset)
+    Ogre::HardwareVertexBufferSharedPtr vbuf =
+        Ogre::HardwareBufferManager::getSingleton().createVertexBuffer(
+        offset, msh->sharedVertexData->vertexCount, Ogre::HardwareBuffer::HBU_STATIC_WRITE_ONLY);
+    /// Upload the vertex data to the card
+    vbuf->writeData(0, vbuf->getSizeInBytes(), vertices, true);
+
+    /// Set vertex buffer binding so buffer 0 is bound to our vertex buffer
+    Ogre::VertexBufferBinding* bind = msh->sharedVertexData->vertexBufferBinding;
+    bind->setBinding(0, vbuf);
+
+
+
+
+    // 2nd buffer
+    offset = 0;
+    decl->addElement(1, offset, Ogre::VET_COLOUR, Ogre::VES_DIFFUSE);
+    offset += VertexElement::getTypeSize(Ogre::VET_COLOUR);
+    /// Allocate vertex buffer of the requested number of vertices (vertexCount) 
+    /// and bytes per vertex (offset)
+    vbuf = Ogre::HardwareBufferManager::getSingleton().createVertexBuffer(
+        offset, msh->sharedVertexData->vertexCount, Ogre::HardwareBuffer::HBU_STATIC_WRITE_ONLY);
+    /// Upload the vertex data to the card
+    vbuf->writeData(0, vbuf->getSizeInBytes(), colours, true);
+
+    /// Set vertex buffer binding so buffer 1 is bound to our colour buffer
+    bind->setBinding(1, vbuf);
+
+
+
+    // index buffer
+    /// Allocate index buffer of the requested number of vertices (ibufCount) 
+    Ogre::HardwareIndexBufferSharedPtr ibuf = Ogre::HardwareBufferManager::getSingleton().
+        createIndexBuffer(
+        Ogre::HardwareIndexBuffer::IT_16BIT,
+        ibufCount,
+        Ogre::HardwareBuffer::HBU_STATIC_WRITE_ONLY);
+
+    /// Upload the index data to the card
+    ibuf->writeData(0, ibuf->getSizeInBytes(), faces, true);
+
+    /// Set parameters of the submesh
+    sub->useSharedVertices = true;
+    sub->indexData->indexBuffer = ibuf;
+    sub->indexData->indexCount = ibufCount;
+    sub->indexData->indexStart = 0;
+
+    /// Set bounding information (for culling)
+    msh->_setBounds(Ogre::AxisAlignedBox(-sz.x, -sz.y, -sz.z, sz.x, sz.y, sz.z));
+    msh->_setBoundingSphereRadius(sz.length());
+
+    /// Notify -Mesh object that it has been loaded
+    msh->load();
+
+}
 
 
 void OgreWidget::createCube(const Ogre::String & name) {
@@ -316,6 +456,7 @@ void OgreWidget::prepareResources() {
 }
 
 void OgreWidget::prepareMeshes() {
+    createIndoorCube("Indoor", _indoorSize);
     createCube("Cube");
     createSphere("Sphere", 100, 50, 50);
 }
@@ -331,10 +472,12 @@ void OgreWidget::createScene() {
     _sceneMgr->setShadowTechnique(Ogre::SHADOWTYPE_STENCIL_ADDITIVE);
 
     // entities
-    //Ogre::Entity* entCharacter = _sceneMgr->createEntity("Hero", "Ninja.mesh");
-    //entCharacter->setCastShadows(true);
-    //auto characterNode = _sceneMgr->getRootSceneNode()->createChildSceneNode();
-    //characterNode->attachObject(entCharacter);
+    Ogre::Entity* entCharacter = _sceneMgr->createEntity("Hero", "Ninja.mesh");
+    entCharacter->setCastShadows(true);
+    auto characterNode = _sceneMgr->getRootSceneNode()->createChildSceneNode();
+    characterNode->attachObject(entCharacter);
+    _focusedNode = characterNode;
+
 
     Ogre::Plane plane(Ogre::Vector3::UNIT_Y, 0);
     Ogre::MeshManager::getSingleton().createPlane("ground", Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
@@ -349,13 +492,13 @@ void OgreWidget::createScene() {
     
 
     // custom cube
-    Entity* entCube = _sceneMgr->createEntity("Hero", "Ninja.mesh");
-    entCube->setMaterialName("Panorama/Panorama");
+    //Entity* entCube = _sceneMgr->createEntity("Hero", "Indoor");
+    //entCube->setMaterialName("Panorama/Panorama");
 
-    SceneNode* cubeNode = _sceneMgr->getRootSceneNode()->createChildSceneNode();
-    cubeNode->setPosition(0, 0, 0);
-    cubeNode->attachObject(entCube);
-    _focusedNode = cubeNode;
+    //SceneNode* cubeNode = _sceneMgr->getRootSceneNode()->createChildSceneNode();
+    //cubeNode->setPosition(0, _indoorSize.y + 2, 0);
+    //cubeNode->attachObject(entCube);
+    //_focusedNode = cubeNode;
 
 
     // lights

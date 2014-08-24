@@ -96,6 +96,8 @@ material Panorama/Panorama
         pass ShaderPass
         {
             lighting off
+            cull_hardware none
+            cull_software none
 
             texture_unit
             {

@@ -22,52 +22,52 @@ namespace panoramix {
             _g.clear();
         }
 
-        void ExpressionGraph::exchangeWhenUsedAsInputs(EHandle a, EHandle b){
-            if (a == b)
-                return;
+        //void ExpressionGraph::exchangeWhenUsedAsInputs(EHandle a, EHandle b){
+        //    if (a == b)
+        //        return;
 
-            // for all expressions who accepts a as input, make it accepts b as input with the same position of a
-            // for all expressions who accepts b as input, make it accepts a as input with the same position of b
-            std::vector<CHandle> a2os, o2as;
-            std::vector<CHandle> b2os, o2bs;
-            for (auto hh : _g.topo(a).halfedges){
-                if (!_g.removed(hh) && isForwardConnection(hh)){
-                    a2os.push_back(hh);
-                    o2as.push_back(_g.topo(hh).opposite);
-                }
-            }
-            for (auto hh : _g.topo(b).halfedges){
-                if (!_g.removed(hh) && isForwardConnection(hh)){
-                    b2os.push_back(hh);
-                    o2bs.push_back(_g.topo(hh).opposite);
-                }
-            }
+        //    // for all expressions who accepts a as input, make it accepts b as input with the same position of a
+        //    // for all expressions who accepts b as input, make it accepts a as input with the same position of b
+        //    std::vector<CHandle> a2os, o2as;
+        //    std::vector<CHandle> b2os, o2bs;
+        //    for (auto hh : _g.topo(a).halfedges){
+        //        if (!_g.removed(hh) && isForwardConnection(hh)){
+        //            a2os.push_back(hh);
+        //            o2as.push_back(_g.topo(hh).opposite);
+        //        }
+        //    }
+        //    for (auto hh : _g.topo(b).halfedges){
+        //        if (!_g.removed(hh) && isForwardConnection(hh)){
+        //            b2os.push_back(hh);
+        //            o2bs.push_back(_g.topo(hh).opposite);
+        //        }
+        //    }
 
-            for (auto & a2o : a2os){
-                _g.topo(a2o).from() = b;
-            }
-            for (auto & o2a : o2as){
-                _g.topo(o2a).to() = b;
-            }
-            for (auto & b2o : b2os){
-                _g.topo(b2o).from() = a;
-            }
-            for (auto & o2b : o2bs){
-                _g.topo(o2b).to() = a;
-            }
+        //    for (auto & a2o : a2os){
+        //        _g.topo(a2o).from() = b;
+        //    }
+        //    for (auto & o2a : o2as){
+        //        _g.topo(o2a).to() = b;
+        //    }
+        //    for (auto & b2o : b2os){
+        //        _g.topo(b2o).from() = a;
+        //    }
+        //    for (auto & o2b : o2bs){
+        //        _g.topo(o2b).to() = a;
+        //    }
 
-            _g.topo(a).halfedges.erase(
-                std::remove_if(_g.topo(a).halfedges.begin(), _g.topo(a).halfedges.end(),
-                [this](const CHandle & hh){return !_g.removed(hh) && isForwardConnection(hh); }), 
-                _g.topo(a).halfedges.end());
-            _g.topo(a).halfedges.insert(_g.topo(a).halfedges.end(), b2os.begin(), b2os.end());
+        //    _g.topo(a).halfedges.erase(
+        //        std::remove_if(_g.topo(a).halfedges.begin(), _g.topo(a).halfedges.end(),
+        //        [this](const CHandle & hh){return !_g.removed(hh) && isForwardConnection(hh); }), 
+        //        _g.topo(a).halfedges.end());
+        //    _g.topo(a).halfedges.insert(_g.topo(a).halfedges.end(), b2os.begin(), b2os.end());
 
-            _g.topo(b).halfedges.erase(
-                std::remove_if(_g.topo(b).halfedges.begin(), _g.topo(b).halfedges.end(),
-                [this](const CHandle & hh){return !_g.removed(hh) && isForwardConnection(hh); }),
-                _g.topo(b).halfedges.end());
-            _g.topo(b).halfedges.insert(_g.topo(b).halfedges.end(), a2os.begin(), a2os.end());
-        }
+        //    _g.topo(b).halfedges.erase(
+        //        std::remove_if(_g.topo(b).halfedges.begin(), _g.topo(b).halfedges.end(),
+        //        [this](const CHandle & hh){return !_g.removed(hh) && isForwardConnection(hh); }),
+        //        _g.topo(b).halfedges.end());
+        //    _g.topo(b).halfedges.insert(_g.topo(b).halfedges.end(), a2os.begin(), a2os.end());
+        //}
 
         std::vector<EHandle> ExpressionGraph::inputs(EHandle self) const {
             std::vector<EHandle> inputs; // input ops
@@ -144,9 +144,10 @@ namespace panoramix {
 
             // the id of expression handles record the topological order
             // sort from new to old
-            /////std::sort(related.begin(), related.end(), [](EHandle a, EHandle b){return a.id > b.id; });
+            std::sort(related.begin(), related.end(), [](EHandle a, EHandle b){return a.id > b.id; });
+            /*std::cout << "topological sort in backPropagateGradient with " << related.size() << " related variables started" << std::endl;
             std::vector<EHandle> temp;
-            temp.reserve(related.size());
+            temp.reserve(related.size());            
             core::TopologicalSort(related.begin(), related.end(), std::back_inserter(temp), [this](EHandle h){
                 std::vector<EHandle> forwardHandles;
                 for (auto & con : forwardConnections(h)){
@@ -156,7 +157,7 @@ namespace panoramix {
                 return forwardHandles;
             });
             related = temp;
-            
+            std::cout << "topological sort in backPropagateGradient with " << related.size() << " related variables ended" << std::endl;*/
 
             auto relatedUniqueEnd = std::unique(related.begin(), related.end());
 

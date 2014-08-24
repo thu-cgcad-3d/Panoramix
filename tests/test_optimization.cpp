@@ -160,7 +160,7 @@ TEST(Optimization, ANN) {
 
 int main(int argc, char * argv[], char * envp[])
 {
-	testing::InitGoogleTest(&argc, argv);
+    testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
     //run();
     return 1;

@@ -14,6 +14,7 @@ public:
     virtual ~OgreWidget();
 
 private:
+    static void createIndoorCube(const Ogre::String & name, const Ogre::Vector3 & sz);
     static void createCube(const Ogre::String & name);
     static void createSphere(const Ogre::String & name, const float r, 
         const int nRings = 16, const int nSegments = 16);
@@ -48,5 +49,6 @@ private:
     Ogre::SceneManager *_sceneMgr;
     QPointF _lastPos;
 
+    Ogre::Vector3 _indoorSize;
     panoramix::rec::ReconstructionEngine _viewsNet;
 };

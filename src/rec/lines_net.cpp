@@ -155,10 +155,10 @@ namespace panoramix {
                     assert(clazj != -1);
                     
                     auto nearest = DistanceBetweenTwoLines(linei, linej);
-                    double d = nearest.first;
-                    auto conCenter = (nearest.second.first.position + nearest.second.second.position) / 2.0;
+                    double d = nearest.first;                    
            
-                    if (clazi == clazj){                        
+                    if (clazi == clazj){     
+                        auto conCenter = (nearest.second.first.position + nearest.second.second.position) / 2.0;
                         auto conDir = (nearest.second.first.position - nearest.second.second.position);
                         auto & vp = vps[clazi];
 
@@ -179,6 +179,8 @@ namespace panoramix {
                     }
                     else {
                         if (d < _params.intersectionDistanceThreshold){
+                            auto conCenter = HPointFromVector(GetLine2Coeffs(linei.infinieLine())
+                                .cross(GetLine2Coeffs(linej.infinieLine()))).toPoint();
                             LineRelationData lrd;
                             lrd.type = LineRelationData::Type::Intersection;
                             lrd.relationCenter = conCenter;
@@ -229,6 +231,7 @@ namespace panoramix {
                 }
             }
 
+
             IF_DEBUG_USING_VISUALIZERS {
 
                 float distributionMaxVal = std::numeric_limits<float>::lowest();
@@ -250,27 +253,39 @@ namespace panoramix {
                     dim /= distributionMaxVal;
                 }
 
-                vis::Visualizer2D(distributionImages[0]) << vis::manip2d::Show();
-                vis::Visualizer2D(distributionImages[1]) << vis::manip2d::Show();
+                //vis::Visualizer2D(distributionImages[0]) << vis::manip2d::Show();
+                //vis::Visualizer2D(distributionImages[1]) << vis::manip2d::Show();
+                cv::imshow("distribution 0", distributionImages[0]);
+                cv::imshow("distribution 1", distributionImages[1]);
 
                 vis::Visualizer2D viz(_image);
                 viz.params.thickness = 2;
                 viz.params.colorTableDescriptor = vis::ColorTableDescriptor::RGB;
                 for (auto & ld : _lines.elements<0>()){
-                    viz << ld.data.line;
+                    viz = viz << ld.data.line;
                 }
                 viz.params.thickness = 1;
-                viz << vis::manip2d::SetColor(vis::ColorTag::Red);
+                viz = viz << vis::manip2d::SetColor(vis::ColorTag::Red);
                 for (auto & rd : _lines.elements<1>()){
                     auto & l1 = _lines.data(rd.topo.lowers[0]).line;
                     auto & l2 = _lines.data(rd.topo.lowers[1]).line;
-                    auto nearest = DistanceBetweenTwoLines(l1.component, l2.component);
-                    Line2 conLine = { nearest.second.first.position, nearest.second.second.position };
-                    viz << conLine;
+                    if (rd.data.type == LineRelationData::Type::Incidence){
+                        auto nearest = DistanceBetweenTwoLines(l1.component, l2.component);
+                        Line2 conLine = { nearest.second.first.position, nearest.second.second.position };
+                        viz = viz << conLine;
+                    }
+                    else if (rd.data.type == LineRelationData::Type::Intersection){
+                        auto nearest = DistanceBetweenTwoLines(l1.component, l2.component);
+                        auto & relationCenter = rd.data.relationCenter;
+                        viz = viz
+                            << Line2(nearest.second.first.position, relationCenter)
+                            << Line2(relationCenter, nearest.second.second.position);
+                    }
                 }
 
-                viz << vis::manip2d::Show();
-
+                //viz << vis::manip2d::Show();
+                cv::imshow("lines", viz.image());
+                cv::waitKey();
             }
             
 
