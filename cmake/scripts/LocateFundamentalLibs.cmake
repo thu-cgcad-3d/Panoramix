@@ -1,13 +1,13 @@
 # set Fundamental_INCLUDES, Fundamental_LIBS, Fundamental_PATHS
 
-find_package (Eigen3 REQUIRED)
+#find_package (Eigen3 REQUIRED)
 find_package (OpenCV REQUIRED)
 find_package (GLPK REQUIRED)
 find_package (GLEW REQUIRED)
 # find_package (Armadillo REQUIRED CONFIG)
 
 set (Fundamental_INCLUDES 
-	${EIGEN3_INCLUDE_DIR} 
+	#${EIGEN3_INCLUDE_DIR} 
 	${OpenCV_INCLUDE_DIRS} 
 	${GLPK_INCLUDE_DIR} 
 	${GLEW_INCLUDE_DIRS} 
