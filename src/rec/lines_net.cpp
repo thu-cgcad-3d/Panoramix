@@ -142,14 +142,14 @@ namespace panoramix {
             _lines.internalElements<1>().reserve(lines.size() * (lines.size()-1) / 2);
             for (int i = 0; i < lines.size(); i++){
                 auto & linei = lines[i];
-                if (handles[i].isInValid())
+                if (handles[i].isInvalid())
                     continue;
                 int clazi = _lines.data(handles[i]).line.claz;
                 assert(clazi != -1);
 
                 for (int j = i + 1; j < lines.size(); j++){                    
                     auto & linej = lines[j];
-                    if (handles[j].isInValid())
+                    if (handles[j].isInvalid())
                         continue;
                     int clazj = _lines.data(handles[j]).line.claz;
                     assert(clazj != -1);

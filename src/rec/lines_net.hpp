@@ -49,9 +49,6 @@ namespace panoramix {
             inline const ImageWithType<Mat<float, 3, 2>> & lineVotingDistribution() const { 
                 return _lineVotingDistribution; 
             }
-            //inline const ImageWithType<Mat<float, 3, 2>> & normalizedLineVotingDistribution() const { 
-            //    return _normalizedLineVotingDistribution; 
-            //}
 
             inline const Params & params() const { return _params; }
 

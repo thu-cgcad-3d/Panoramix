@@ -193,7 +193,7 @@ namespace panoramix {
                 for (int k = 0; k < inp.size(); k++){
                     // ignore disconnected derivatives represented by invalid handles
                     // meaning that values in the corresponding inputs[k] does not affect at all the value of self
-                    if (inputDerivs[k].isInValid())
+                    if (inputDerivs[k].isInvalid())
                         continue;
                     idToDerivs[inp[k]].push_back(inputDerivs[k]);
                 }

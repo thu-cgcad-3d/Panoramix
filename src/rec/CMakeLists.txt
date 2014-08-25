@@ -9,3 +9,4 @@ file (GLOB REC_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
 add_library (${REC_STATIC_LIB} STATIC ${REC_SOURCES} ${REC_HEADERS})
 target_link_libraries (${REC_STATIC_LIB} ${CORE_STATIC_LIB} ${DERIV_STATIC_LIB} ${VIS_STATIC_LIB} ${Fundamental_LIBS})
+

@@ -15,8 +15,6 @@ namespace panoramix {
 
         using namespace core;
        
-
-
         // engine
         // ReconstructionEngine
         class ReconstructionEngine {
@@ -45,11 +43,60 @@ namespace panoramix {
             using ViewHandle = HandleAtLevel<0>;
             using ViewConnectionHandle = HandleAtLevel<1>;
 
-            struct ComponentData;
-            struct ConstraintData;
-            using ConstraintGraph = GraphicalModel02<ComponentData, ConstraintData>;
-            using ComponentHandle = HandleAtLevel<0>;
-            using ConstraintHandle = HandleAtLevel<1>;
+        private:            
+            template <class HandleT>
+            struct IndexOfSubStructureInView {
+                ViewHandle viewHandle;
+                HandleT handle;
+            };
+
+            template <class IndexT>
+            struct IndexOfSubStructureInViewHasher {
+                inline size_t operator()(const IndexT & idx) const {
+                    return ((idx.viewHandle.id) << 4) + (idx.handle.id);
+                }
+            };
+
+            template <class IndexT1, class IndexT2>
+            struct IndexOfSubStructureInViewHasher < std::pair<IndexT1, IndexT2> > {
+                inline size_t operator()(const std::pair<IndexT1, IndexT2> & idx) const {
+                    return (((idx.first.viewHandle.id << 3) + idx.first.handle.id) << 10) +
+                        (idx.second.viewHandle.id << 3) + idx.second.handle.id;
+                }
+            };
+
+            using RegionIndex = IndexOfSubStructureInView <RegionsNet::RegionHandle>;
+            using RegionBoundaryIndex = IndexOfSubStructureInView < RegionsNet::BoundaryHandle >;
+            using LineIndex = IndexOfSubStructureInView <LinesNet::LineHandle>;
+            using LineRelationIndex = IndexOfSubStructureInView < LinesNet::LineRelationHandle >;
+
+            inline const RegionsNet::RegionData & regionData(const RegionIndex & ri) const { 
+                return _views.data(ri.viewHandle).regionNet->regions().data(ri.handle); 
+            }
+            inline const RegionsNet::BoundaryData & regionBoundaryData(const RegionBoundaryIndex & rbi) const {
+                return _views.data(rbi.viewHandle).regionNet->regions().data(rbi.handle);
+            }
+
+            inline const LinesNet::LineData & lineData(const LineIndex & li) const {
+                return _views.data(li.viewHandle).lineNet->lines().data(li.handle);
+            }
+            inline const LinesNet::LineRelationData & lineRelationData(const LineRelationIndex & lri) const {
+                return _views.data(lri.viewHandle).lineNet->lines().data(lri.handle);
+            }
+
+            template <class T>
+            using IndexHashSet = std::unordered_set<T, IndexOfSubStructureInViewHasher<T>>;
+
+            template <class KeyT, class ValueT>
+            using IndexHashMap = std::unordered_map<KeyT, ValueT, IndexOfSubStructureInViewHasher<KeyT>>;
+
+            template <class HandleT>
+            friend bool operator == (const IndexOfSubStructureInView<HandleT> & a, 
+                const IndexOfSubStructureInView<HandleT> & b);
+
+            template <class HandleT>
+            friend bool operator < (const IndexOfSubStructureInView<HandleT> & a,
+                const IndexOfSubStructureInView<HandleT> & b);
 
         public:
             inline explicit ReconstructionEngine(const Params params = Params()) : _params(params) {}
@@ -69,10 +116,8 @@ namespace panoramix {
             void computeFeatures(ViewHandle h);
 
             // connect this view to neighbor views who may overlap with h
+            // we don't use delaunay triangulation here because overlapping view connections may be 'crossed' 
             size_t updateConnections(ViewHandle h);
-
-            // connect all current views using delauny triangulation 
-            void updateConnections();
 
             // whether this view overlaps some existing views a lot, measured by the smallCameraAngleScalar parameter
             ViewHandle isTooCloseToAnyExistingView(ViewHandle h) const;
@@ -80,11 +125,17 @@ namespace panoramix {
             // estimate vanishing points using lines extract from all views, classify this lines and lift them all to space
             void estimateVanishingPointsAndClassifyLines();
 
-            // reconstruct regions i
-            void reconstructLinesAndFaces();
+            // construct region-line net
+            void recognizeRegionLineRelations();
 
-            // reconstruct regions ii
-            void reconstructLinesAndFacesII();
+
+
+            // estimate spatial line depths
+            void estimateSpatialLineDepths();
+
+            // classify regions using classfied line labels
+            void estimateRegionOrientations();
+
                 
         public:
 
@@ -102,93 +153,15 @@ namespace panoramix {
             };
 
             // view connection data
-            struct ViewConnectionData {
-                cv::detail::MatchesInfo matchInfo;
-            };
-
-
-
-            //// components and constraints
-            // component data
-            struct LineComponentData {
-                OptimizibleExpression<double> etaExpr;
-                ReconstructionEngine::ViewHandle viewHandle;
-                LinesNet::LineHandle lineHandle;
-                double etaRatio;
-                int connectedComponentId;
-            };
-
-            struct RegionComponentData {
-                OptimizibleExpression<Eigen::Vector3d> thetaExpr;
-                DisableableExpression<double> manhattanEnergyExpr;
-                ReconstructionEngine::ViewHandle viewHandle;
-                RegionsNet::RegionHandle regionHandle;
-                int connectedComponentId;
-            };
-
-            struct ComponentData {
-                enum class Type {
-                    UnInitialized,
-                    Line,
-                    Region
-                };
-                explicit ComponentData(Type t = Type::UnInitialized);
-                Type type;
-                LineComponentData asLine;
-                RegionComponentData asRegion;
-                DisableableExpression<double> reserveScaleEnergyExpr;
-            };
-
-            // constraint data
-            struct RegionOverlapConstraintData {
-                double overlapRatio;
-            };
-
-            struct RegionConnectivityConstraintData {
-                ReconstructionEngine::ViewHandle viewHandle;
-                RegionsNet::BoundaryHandle boundaryHandle;
-            };
-
-            struct LineInterViewIncidenceConstraintData {
-                Vec3 relationCenter;
-            };
-
-            struct LineConnectivityConstraintData {
-                ReconstructionEngine::ViewHandle viewHandle;
-                LinesNet::LineRelationHandle lineRelationHandle;
-            };
-
-            struct RegionLineConnectivityConstraintData {
-                std::vector<Vec3> sampledPoints;
-            };
-
-            struct ConstraintData {
-                enum class Type {
-                    UnInitialized,
-                    RegionOverlap,
-                    RegionConnectivity,
-                    LineConnectivity,
-                    LineInterViewIncidence,
-                    RegionLineConnectivity
-                };
-                explicit ConstraintData(Type t = Type::UnInitialized);
-
-                Type type;
-                RegionOverlapConstraintData asRegionOverlap;
-                RegionConnectivityConstraintData asRegionConnectivity;
-                LineConnectivityConstraintData asLineConnectivity;
-                LineInterViewIncidenceConstraintData asLineInterViewIncidence;
-                RegionLineConnectivityConstraintData asRegionLineConnectivity;
-
-                DisableableExpression<double> constraintEnergyExpr;
-                deriv::Expression<double> invalidityExpr; // used to select necessary constraints
-            };
-
+            struct ViewConnectionData { };
 
             // global data
             struct GlobalData {
                 Image panorama;
                 std::array<Vec3, 3> vanishingPoints;
+                IndexHashMap<std::pair<RegionIndex, RegionIndex>, double> overlappedRegionIndexPairs;
+                IndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> lineIncidenceRelationsAcrossViews;
+                IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> regionLineIntersectionSampledPoints;
             };
 
             inline const ViewsGraph & views() const { return _views; }
@@ -199,6 +172,23 @@ namespace panoramix {
             Params _params;
             GlobalData _globalData;
         };
+
+
+
+
+        template <class HandleT>
+        inline bool operator == (const ReconstructionEngine::IndexOfSubStructureInView<HandleT> & a,
+            const ReconstructionEngine::IndexOfSubStructureInView<HandleT> & b) {
+            return a.viewHandle == b.viewHandle && a.handle == b.handle;
+        }
+
+        template <class HandleT>
+        inline bool operator < (const ReconstructionEngine::IndexOfSubStructureInView<HandleT> & a,
+            const ReconstructionEngine::IndexOfSubStructureInView<HandleT> & b) {
+            if (a.viewHandle.id != b.viewHandle.id)
+                return a.viewHandle.id < b.viewHandle.id;
+            return a.handle.id < b.handle.id;
+        }
 
  
     }

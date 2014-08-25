@@ -4,7 +4,6 @@
 #include "../src/core/utilities.hpp"
 #include "../src/core/debug.hpp"
 #include "../src/rec/reconstruction_engine.hpp"
-#include "../src/rec/reconstruction_engine_visualize.hpp"
 #include "../src/rec/regions_net_visualize.hpp"
 #include "gtest/gtest.h"
 
@@ -22,12 +21,6 @@ static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
 static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + "/normal";
 static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
 static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
-
-
-int FilterException(int code, PEXCEPTION_POINTERS ex) {
-    std::cout << "Filtering " << std::hex << code << std::endl;
-    return EXCEPTION_EXECUTE_HANDLER;
-};
 
 void ShowPanoramaVPs(const rec::ReconstructionEngine & engine) {
     auto vps = engine.globalData().vanishingPoints;
@@ -66,11 +59,11 @@ TEST(ViewsNet, FixedCamera) {
 
     std::vector<core::PerspectiveCamera> cams = {
         core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 })//,
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
     };
 
     rec::ReconstructionEngine engine;
@@ -85,7 +78,8 @@ TEST(ViewsNet, FixedCamera) {
 
     // estimate vanishing points and classify lines
     engine.estimateVanishingPointsAndClassifyLines();
-    engine.reconstructLinesAndFaces();
+    engine.recognizeRegionLineRelations();
+    //engine.reconstructLinesAndFaces();
 
 }
 

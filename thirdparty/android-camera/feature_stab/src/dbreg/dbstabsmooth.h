@@ -21,7 +21,7 @@
 #ifdef DBREG_EXPORTS
 #define DBREG_API __declspec(dllexport)
 #else
-#define DBREG_API __declspec(dllimport)
+#define DBREG_API //__declspec(dllimport)
 #endif
 #else
 #define DBREG_API

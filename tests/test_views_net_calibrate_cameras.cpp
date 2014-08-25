@@ -61,36 +61,7 @@ TEST(ViewsNet, FixedCamera) {
         std::cout << "extracting features ...";
 
         net.computeFeatures(viewHandle);
-        //net.buildRegionNet(viewHandle);
-
-        vis::Visualizer2D(im)
-            << vis::manip2d::SetColor(vis::Color(0, 0, 255))
-            << vis::manip2d::SetThickness(2)
-            << net.views().data(viewHandle).lineSegments
-            << vis::manip2d::SetColor(vis::Color(255, 0, 0))
-            << vis::manip2d::SetThickness(1)
-            << net.views().data(viewHandle).lineSegmentIntersections
-            << vis::manip2d::Show();
-
         net.updateConnections(viewHandle);
-        //net.findMatchesToConnectedViews(viewHandle);
-
-        // show matches
-        auto & thisVD = net.views().data(viewHandle);
-        auto & connections = net.views().topo(viewHandle).uppers;
-        for (auto & con : connections) {
-            auto & conData = net.views().data(con);
-            auto & revConData = net.views().data(net.views().topo(con).opposite);
-            auto & neighborVD = net.views().data(net.views().topo(con).to());
-            cv::Mat im;
-            cv::drawMatches(thisVD.image, thisVD.keypointsForMatching, 
-                neighborVD.image, neighborVD.keypointsForMatching, 
-                conData.matchInfo.matches, im);
-            cv::imshow("matches", im);
-            cv::waitKey();
-        }
-
-        //net.calibrateAllCameras();
 
 
         if (net.isTooCloseToAnyExistingView(viewHandle).isValid()){

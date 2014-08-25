@@ -538,36 +538,6 @@ TEST(Expression, ArrayOp){
             EXPECT_MATRIX_EQ(((xv * yv).exp() * yv + 2 + 2 * xv).cwiseQuotient((xv * yv).exp() + xv * 2 + yv + xv * xv), dfdx.execute());
             EXPECT_MATRIX_EQ(((xv * yv).exp() * xv + 1).cwiseQuotient((xv * yv).exp() + xv * 2 + yv + xv * xv), dfdy.execute());
         }
-
-        auto simple = (x * x).sum();
-
-        // replace x with y+y
-        x.replacedWithWhenUsedAsInputs((y * 2).eval());
-        // log(exp((y+y)*y)+(y+y)*2+(y+y)*(y+y))=
-        // log(exp(2y*y)+4y+4y*y)
-        auto df2 = f.derivative(y);
-        std::cout << "f: " << f << std::endl;
-        std::cout << "df2: " << df2 << std::endl;
-        std::cout << "simple: " << simple << std::endl;
-
-        auto dfsimple = simple.derivative(y);
-
-        //(8*yv + 4*yv*exp(2*yv^2) + 5)/(5*yv + exp(2*yv^2) + 4*yv^2)
-        for (int i = 0; i < 10; i++){
-            int a = std::rand() % 100 + 1;
-            int b = std::rand() % 100 + 1;
-            xv.setRandom(a, b);
-            xv = xv.abs() + 1;
-            yv.setRandom(a, b);
-            yv = yv.abs() + 1;
-
-
-            EXPECT_DOUBLE_EQ((4 * yv * yv).sum(), simple.execute());
-            EXPECT_MATRIX_EQ(8 * yv, dfsimple.execute());
-
-            EXPECT_DOUBLE_EQ(log(exp((yv + yv)*yv) + (yv + yv) * 2 + yv + (yv + yv)*(yv + yv)).sum(), f.execute());            
-            EXPECT_MATRIX_EQ((8 * yv + 4 * yv*exp(2 * yv * yv) + 5).cwiseQuotient(5 * yv + exp(2 * yv * yv) + 4 * yv * yv), df2.execute());
-        }
     }
 
     {

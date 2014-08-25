@@ -29,7 +29,7 @@ namespace panoramix {
             inline bool operator != (Handle h) const { return id != h.id; }
             inline void reset() { id = -1; }
             inline bool isValid() const { return id >= 0; }
-            inline bool isInValid() const { return id < 0; }
+            inline bool isInvalid() const { return id < 0; }
             template <class Archive> inline void serialize(Archive & ar) { ar(id); }
         };
         template <class Tag>
@@ -367,7 +367,7 @@ namespace panoramix {
         
         template <class VertDataT, class HalfDataT, class FaceDataT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(FaceHandle f) {
-            if (f.isInValid() || removed(f))
+            if (f.isInvalid() || removed(f))
                 return;
             _faces[f.id].exists = false;
             for(auto & hh : _faces[f.id].topo.halfedges){
@@ -377,7 +377,7 @@ namespace panoramix {
         
         template <class VertDataT, class HalfDataT, class FaceDataT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(HalfHandle h) {
-            if (h.isInValid() || removed(h))
+            if (h.isInvalid() || removed(h))
                 return;
             HalfHandle hop = _halfs[h.id].topo.opposite;
             _halfs[h.id].exists = false;
@@ -394,7 +394,7 @@ namespace panoramix {
         
         template <class VertDataT, class HalfDataT, class FaceDataT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(VertHandle v) {
-            if (v.isInValid() || removed(v))
+            if (v.isInvalid() || removed(v))
                 return;
             _verts[v.id].exists = false;
             for (HalfHandle hh : _verts[v.id].topo.halfedges)
@@ -595,7 +595,7 @@ namespace panoramix {
         
         template <class ComponentDataT, class ConstraintDataT>
         void ConstraintGraph<ComponentDataT, ConstraintDataT>::remove(ConstraintHandle h) {
-            if (h.isInValid() || removed(h))
+            if (h.isInvalid() || removed(h))
                 return;
             _constraints[h.id].exists = false;
             for (auto & comp : _constraints[h.id].topo.components){
@@ -605,7 +605,7 @@ namespace panoramix {
 
         template <class ComponentDataT, class ConstraintDataT>
         void ConstraintGraph<ComponentDataT, ConstraintDataT>::remove(ComponentHandle h) {
-            if (h.isInValid() || removed(h))
+            if (h.isInvalid() || removed(h))
                 return;
             _components[h.id].exists = false;
             for (ConstraintHandle hh : _components[h.id].topo.constraints)
@@ -841,7 +841,7 @@ namespace panoramix {
             // remove
             template <int Level>
             void remove(HandleAtLevel<Level> h) {
-                if (h.isInValid() || removed(h))
+                if (h.isInvalid() || removed(h))
                     return;
                 cleanLowers<Level>(h, std::integral_constant<bool, (Level > 0)>());
                 internalElements<Level>()[h.id].exists = false; // mark as deleted
@@ -857,7 +857,7 @@ namespace panoramix {
                 auto & clowerTable = internalElements<Level - 1>();
 
                 for (auto & lowh : c.topo.lowers) { // remove this h from all lowers' uppers set
-                    if (lowh.isInValid() || removed(lowh))
+                    if (lowh.isInvalid() || removed(lowh))
                         continue;
                     auto & low = clowerTable[lowh.id];
                     low.topo.uppers.erase(h);
@@ -1171,7 +1171,7 @@ namespace panoramix {
                 // remove
                 template <int Level>
                 void remove(HandleAtLevel<Level> h) {
-                    if (h.isInValid() || removed(h))
+                    if (h.isInvalid() || removed(h))
                         return;
                     cleanLowers<Level>(h, std::integral_constant<bool, (Level > 0)>());
                     internalElements<Level>()[h.id].exists = false; // mark as deleted
@@ -1187,7 +1187,7 @@ namespace panoramix {
                     auto & clowerTable = internalElements<Level - 1>();
 
                     for (auto & lowh : c.topo.lowers) { // remove this h from all lowers' uppers set
-                        if (lowh.isInValid() || removed(lowh))
+                        if (lowh.isInvalid() || removed(lowh))
                             continue;
                         auto & low = clowerTable[lowh.id];
                         low.topo.uppers.erase(h);

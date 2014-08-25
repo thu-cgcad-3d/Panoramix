@@ -457,19 +457,10 @@ namespace panoramix {
             inline explicit Expression(Op * op = nullptr) : _op(op){}
 
             inline bool isValid() const { return _op && _op->graph && _op->self.isValid(); }
-            inline bool isInValid() const { return !isValid(); }
+            inline bool isInvalid() const { return !isValid(); }
 
             inline EHandle handle() const { return _op ? _op->self : EHandle(); }
             inline ExpressionGraph * g() const { return _op ? _op->graph : nullptr; }
-
-            // if this expression is referred in other expressions as inputs,
-            // then after using this method, the new expression e becomes the actual inputs to other expressions
-            //inline void replacedWithWhenUsedAsInputs(const Expression & e) { 
-            //    assert(g() == e.g());
-            //    assert(isValid() && e.isValid());
-            //    g()->exchangeWhenUsedAsInputs(handle(), e.handle());
-            //    //std::swap(_op, e._op);
-            //}
 
             // the current value in expression data
             inline ResultType<T> result() const { assert(isValid()); return TraitsAboutOp<T>::Result(*_op); }
