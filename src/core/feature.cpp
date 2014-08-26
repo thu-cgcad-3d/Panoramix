@@ -634,10 +634,70 @@ namespace panoramix {
         }
 
 
-        
-        double ComputeFoldingDifficultyAlongVanishingPoint(const std::vector<Point2> & points, const HPoint2 & vp) {
+        namespace {
 
-            // locate the 
+            inline Point2 ToPoint2(const PixelLoc & p) {
+                return Point2(p.x, p.y);
+            }
+
+            template <class T>
+            inline Point2 ToPoint2(const Point<T, 2> & p) {
+                return Point2(static_cast<double>(p[0]), static_cast<double>(p[1]));
+            }
+
+            std::pair<double, double> ComputeSpanningArea(const Point2 & a, const Point2 & b, const InfiniteLine2 & line) {
+                auto ad = SignedDistanceFromPointToLine(a, line);
+                auto bd = SignedDistanceFromPointToLine(b, line);
+                auto ap = DistanceFromPointToLine(a, line).second;
+                auto bp = DistanceFromPointToLine(b, line).second;
+                auto len = norm(ap - bp);
+                if (ad * bd >= 0) {
+                    return std::make_pair(len * std::abs(ad + bd) / 2.0, len);
+                }
+                ad = abs(ad);
+                bd = abs(bd);
+                return std::make_pair((ad * ad + bd * bd) * len / (ad + bd) / 2.0, len);
+            }
+        }
+
+
+        std::pair<double, InfiniteLine2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
+            double * interleavedArea, double * interleavedLen) {
+            
+            std::vector<Point<float, 2>> points;
+            for (auto & e : edges) {
+                for (auto & p : e) {
+                    points.push_back(Point<float, 2>(p.x, p.y));
+                }
+            }
+
+            cv::Vec4f line;
+            cv::fitLine(points, line, CV_DIST_L2, 0, 0.01, 0.01);
+            auto fittedLine = InfiniteLine2({ line[2], line[3] }, { line[0], line[1] });
+            double interArea = 0;
+            double interLen = 0;
+            for (auto & e : edges) {
+                for (int i = 0; i < e.size() - 1; i++) {
+                    double area, len;
+                    std::tie(area, len) = ComputeSpanningArea(
+                        ToPoint2(e[i]),
+                        ToPoint2(e[i + 1]),
+                        fittedLine);
+                    interArea += area;
+                    interLen += len;
+                }
+            }
+
+            if (interleavedArea)
+                *interleavedArea = interArea;
+            if (interleavedLen)
+                *interleavedLen = interLen;
+            double straightness = Gaussian(interArea / interLen, 1.0);
+            if (edges.size() == 1 && edges.front().size() == 2) {
+                assert(FuzzyEquals(straightness, 1.0, 0.01) && "simple line should has the best straightness..");
+            }
+
+            return std::make_pair(straightness, fittedLine);
 
         }
 
@@ -860,19 +920,13 @@ namespace panoramix {
 
 
 
-        namespace {
-
-            
-
-        }
-
 
         VanishingPointsExtractor::Feature
             VanishingPointsExtractor::operator()(const LineSegmentExtractor::Feature & lines, const Point2 & projCenter, double focalLength) const {
             
             auto intersections = ComputeLineIntersections(lines, nullptr, true);
 
-
+            NOT_IMPLEMENTED_YET();
         }
 
 
@@ -881,7 +935,7 @@ namespace panoramix {
             Box2 bbox = BoundingBoxOfContainer(lines);
             double scale = norm(bbox.maxCorner - bbox.minCorner);
             double focalCandidates[] = { scale / 10.0, scale / 5.0, scale / 2.0, scale, scale * 2.0, scale * 5.0, scale * 10.0 };
-
+            NOT_IMPLEMENTED_YET();
         }
 
 

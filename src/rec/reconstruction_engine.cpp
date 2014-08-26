@@ -669,7 +669,7 @@ namespace panoramix {
                 regionLineIntersectionSampledPoints = _globalData.regionLineIntersectionSampledPoints;
             regionLineIntersectionSampledPoints.clear();
 
-            static const int extendSize = 3;
+            static const int extendSize = 5;
             std::vector<int> dx, dy;
             dx.reserve(2 * extendSize + 1);
             dy.reserve(2 * extendSize + 1);
@@ -778,7 +778,7 @@ namespace panoramix {
 
             template <class FunctorT>
             struct DataCostFunctorWrapper : GCoptimization::DataCostFunctor{
-                inline DataCostFunctorWrapper(FunctorT && f) : fun(std::forward(f)) {}
+                inline DataCostFunctorWrapper(FunctorT && f) : fun(std::forward<FunctorT>(f)) {}
                 virtual GCoptimization::EnergyTermType compute(GCoptimization::SiteID s, GCoptimization::LabelID l) override {
                     return fun(s, l);
                 }
@@ -786,12 +786,12 @@ namespace panoramix {
             };
             template <class FunctorT>
             inline DataCostFunctorWrapper<FunctorT> * AllocDataCostFunctor(FunctorT && f) {
-                return new DataCostFunctorWrapper<FunctorT>(std::forward(f));
+                return new DataCostFunctorWrapper<FunctorT>(std::forward<FunctorT>(f));
             }
 
             template <class FunctorT>
             struct SmoothCostFunctorWrapper : GCoptimization::SmoothCostFunctor {
-                inline SmoothCostFunctorWrapper(FunctorT && f) : fun(std::forward(f)){}
+                inline SmoothCostFunctorWrapper(FunctorT && f) : fun(std::forward<FunctorT>(f)){}
                 virtual GCoptimization::EnergyTermType compute(
                     GCoptimization::SiteID s1, GCoptimization::SiteID s2,
                     GCoptimization::LabelID l1, GCoptimization::LabelID l2) override {
@@ -801,17 +801,14 @@ namespace panoramix {
             };
             template <class FunctorT>
             inline SmoothCostFunctorWrapper<FunctorT> * AllocSmoothCostFunctor(FunctorT && f) {
-                return new SmoothCostFunctorWrapper<FunctorT>(std::forward(f));
+                return new SmoothCostFunctorWrapper<FunctorT>(std::forward<FunctorT>(f));
             }
 
-            double ComputeDifficultyOfFoldingAlongVanishingPoint(const std::vector<Point2> & sampledPoints, const HPoint2 & vp) {
-
-            }
 
         }
 
 
-        void ReconstructionEngine::estimateRegionOrientations() {
+        void ReconstructionEngine::initializeRegionOrientations() {
 
             std::vector<RegionIndex> regionIndices;
             std::map<RegionIndex, int> regionIndexToGraphSiteId;
@@ -830,8 +827,8 @@ namespace panoramix {
                 VP0 = 0,
                 VP1 = 1,
                 VP2 = 2,
-                Planar = 3,
-                Other = 4,
+                //Planar = 3,
+                //Other = 4,
                 RegionOrientationTypeNum
             };
 
@@ -874,14 +871,21 @@ namespace panoramix {
                 size_t sampledPointsNum = regionLine.second.size();
                 regionOrientationCosts[ri][nearbyLineClass] += sampledPointsNum;
             }
+            for (auto & c : regionOrientationCosts) {
+                for (int i = 0; i < 3; i++) {
+                    c.second[i] = 1.0 - Gaussian(c.second[i], 30.0);                    
+                }
+            }
 
+
+            static const int scaleFactor = 100;
 
             graph.setDataCostFunctor(AllocDataCostFunctor([this, &regionIndices, &regionIndexToGraphSiteId, &regionOrientationCosts](
                 GCoptimization::SiteID s, GCoptimization::LabelID l){
                 // nearby lines
                 auto & ri = regionIndices[s];
                 if (l < 3){
-                    return regionOrientationCosts[ri][l];
+                    return regionOrientationCosts[ri][l] * scaleFactor;
                 }
                 else{
                     NOT_IMPLEMENTED_YET();
@@ -890,9 +894,10 @@ namespace panoramix {
 
 
             // smooth costs for region relations
-            // store region boundary smooth costs correspinding to region type pairs
+
+            // store region folding costs
             IndexHashMap<std::pair<RegionIndex, RegionIndex>, std::array<double, 3>> 
-                regionSmoothCosts;
+                regionFoldingCosts;
             for (auto & vd : _views.elements<0>()){
                 HPoint2 vps[] = {
                     vd.data.camera.screenProjectionInHPoint(_globalData.vanishingPoints[0]),
@@ -901,13 +906,38 @@ namespace panoramix {
                 };
                 auto & regions = vd.data.regionNet->regions();
                 for (auto & bd : regions.elements<1>()){
-                    auto & boundaryData = bd.data;
-                    // TODO
-                    NOT_IMPLEMENTED_YET();
+                    if (bd.data.sampledPoints.empty())
+                        continue;
+
+                    RegionIndex ri1 = { vd.topo.hd, bd.topo.lowers[0] };
+                    RegionIndex ri2 = { vd.topo.hd, bd.topo.lowers[1] };
+                    Point2 sampledPointsCenter(0, 0);
+                    int num = 0;
+                    for (auto & ps : bd.data.sampledPoints) {
+                        for (auto & p : ps) {
+                            sampledPointsCenter = sampledPointsCenter + p;
+                            num++;
+                        }
+                    }
+                    sampledPointsCenter /= num;
+                    
+                    for (int i = 0; i < 3; i++) {
+                        Vec2 midToVP = vps[i] - HPoint2(sampledPointsCenter);
+                        Vec2 edgeDir = bd.data.fittedLine.direction;
+                        double angle = std::min(AngleBetweenDirections(midToVP, edgeDir), AngleBetweenDirections(midToVP, -edgeDir));
+                        double cost = (1.0 - Gaussian(angle, M_PI / 32.0)) * 1 /** (1.0 - Gaussian(bd.data.length, 20.0))*/ * Gaussian(bd.data.straightness, 0.8);
+                        regionFoldingCosts[std::make_pair(ri1, ri2)][i] = cost;
+                        regionFoldingCosts[std::make_pair(ri2, ri1)][i] = cost;
+                    }
+
+                    std::cout << "region folding cost: " 
+                        << regionFoldingCosts[std::make_pair(ri1, ri2)][0] << ", "
+                        << regionFoldingCosts[std::make_pair(ri1, ri2)][1] << ", "
+                        << regionFoldingCosts[std::make_pair(ri1, ri2)][2] << std::endl;
                 }
             }
 
-            graph.setSmoothCostFunctor(AllocSmoothCostFunctor([this, &regionIndices, &regionIndexToGraphSiteId, &regionSmoothCosts](
+            graph.setSmoothCostFunctor(AllocSmoothCostFunctor([this, &regionIndices, &regionIndexToGraphSiteId, &regionFoldingCosts](
                 GCoptimization::SiteID s1, GCoptimization::SiteID s2,
                 GCoptimization::LabelID l1, GCoptimization::LabelID l2){
                 auto & ri1 = regionIndices[s1];
@@ -918,18 +948,55 @@ namespace panoramix {
                             return 0; // TODO 
                         }
                         int foldOrientation = 0 + 1 + 2 - l1 - l2;
-                        return (int)regionSmoothCosts[std::make_pair(ri1, ri2)][foldOrientation];
+                        assert(regionFoldingCosts.find(std::make_pair(ri1, ri2)) != regionFoldingCosts.end());
+                        return (int)regionFoldingCosts[std::make_pair(ri1, ri2)][foldOrientation] * 30 * scaleFactor;
                     }
                     else{
                         NOT_IMPLEMENTED_YET();
                     }
                 }
                 else { // region overlap
-                    return l1 == l2 ? 0 : 100;
+                    return l1 == l2 ? 0 : 10 * scaleFactor;
                 }
             }));
 
-            
+
+            std::cout << "energy before graph-cut: " << graph.compute_energy() << std::endl;
+            graph.expansion(50);
+            graph.swap(50);
+            std::cout << "energy after graph-cut: " << graph.compute_energy() << std::endl;
+
+            IF_DEBUG_USING_VISUALIZERS{
+
+                static const vis::Color colors[] = {
+                    vis::ColorFromTag(vis::ColorTag::Red),
+                    vis::ColorFromTag(vis::ColorTag::Green),
+                    vis::ColorFromTag(vis::ColorTag::Blue)
+                };
+
+                // visualize result region labels
+                for (auto & vd : _views.elements<0>()) {
+                    RegionIndex ri;
+                    ri.viewHandle = vd.topo.hd;
+
+                    auto & regions = *vd.data.regionNet;
+                    int width = regions.segmentedRegions().cols;
+                    int height = regions.segmentedRegions().rows;
+                    ImageWithType<cv::Vec<uint8_t, 3>> coloredOutput = ImageWithType<cv::Vec<uint8_t, 3>>::zeros(height, width);
+                    for (int y = 0; y < height; y++) {
+                        for (int x = 0; x < width; x++) {
+                            auto regionId = regions.segmentedRegions().at<int32_t>(cv::Point(x, y));
+                            ri.handle.id = regionId;
+                            auto & color = colors[graph.whatLabel(regionIndexToGraphSiteId[ri])];
+                            coloredOutput(cv::Point(x, y)) =
+                                Vec<uint8_t, 3>((uint8_t)color[0], (uint8_t)color[1], (uint8_t)color[2]);
+                        }
+                    }
+
+                    vis::Visualizer2D(coloredOutput) << vis::manip2d::Show();
+                }
+
+            }
 
         }
 

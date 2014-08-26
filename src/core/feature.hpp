@@ -171,8 +171,9 @@ namespace panoramix {
             bool suppresscross = true);
 
 
-        // compute folding difficulty along vanishing point
-        double ComputeFoldingDifficultyAlongVanishingPoint(const std::vector<Point2> & points, const HPoint2 & vp);
+        // compute straightness of points
+        std::pair<double, InfiniteLine2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
+            double * interArea = nullptr, double * interLen = nullptr);
 
 
 

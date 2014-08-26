@@ -1,5 +1,7 @@
 #define TEST_VIEWS_NET_INCREMENTED
 
+#include <GCoptimization.h>
+
 #include "../src/core/mesh_maker.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/core/debug.hpp"
@@ -50,18 +52,18 @@ void ShowPanoramaVPs(const rec::ReconstructionEngine & engine) {
         << vis::manip2d::Show();
 }
 
-TEST(ViewsNet, FixedCamera) {
-//void run(){
+//TEST(ViewsNet, FixedCamera) {
+void run(){
 
     cv::Mat panorama = cv::imread(ProjectTestDataDirStr_PanoramaIndoor + "/13.jpg");
     cv::resize(panorama, panorama, cv::Size(2000, 1000));
     core::PanoramicCamera originCam(panorama.cols / M_PI / 2.0);
 
     std::vector<core::PerspectiveCamera> cams = {
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 })//,
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 })//,
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
         //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
-        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 })//,
         //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
         //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
     };
@@ -81,6 +83,11 @@ TEST(ViewsNet, FixedCamera) {
     engine.recognizeRegionLineRelations();
     //engine.reconstructLinesAndFaces();
 
+    try {
+        engine.initializeRegionOrientations();
+    } catch (GCException e) {
+        e.Report();
+    }
 }
 
 
@@ -88,7 +95,8 @@ TEST(ViewsNet, FixedCamera) {
 int main(int argc, char * argv[], char * envp[])
 {
     srand(clock());
-    testing::InitGoogleTest(&argc, argv);
-    //run();
-    return RUN_ALL_TESTS();
+    //testing::InitGoogleTest(&argc, argv);
+    run();
+    return 0;
+    //return RUN_ALL_TESTS();
 }

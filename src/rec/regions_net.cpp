@@ -223,36 +223,8 @@ namespace panoramix {
                 } 
 
                 // compute straightness
-                std::vector<Point<float, 2>> points;
-                for (auto & e : edges) {
-                    for (auto & p : e) {
-                        points.push_back(Point<float, 2>(p.x, p.y));
-                    }
-                }
-
-                cv::Vec4f line;
-                cv::fitLine(points, line, CV_DIST_L2, 0, 0.01, 0.01);
-                bd.fittedLine = InfiniteLine2({ line[2], line[3] }, { line[0], line[1] });
-                double interArea = 0;
-                double interLen = 0;
-                for (auto & e : edges) {
-                    for (int i = 0; i < e.size() - 1; i++) {
-                        double area, len;
-                        std::tie(area, len) = ComputeSpanningArea(
-                            ToPoint2(e[i]),
-                            ToPoint2(e[i + 1]),
-                            bd.fittedLine);
-                        interArea += area;
-                        interLen += len;
-                    }
-                }
-
-                bd.interleavedArea = interArea;
-                bd.interleavedLength = interLen;
-                bd.straightness = Gaussian(interArea / interLen, 1.0);
-                if (edges.size() == 1 && edges.front().size() == 2) {
-                    assert(FuzzyEquals(bd.straightness, 1.0, 0.01) && "simple line should has the best straightness..");
-                }
+                std::tie(bd.straightness, bd.fittedLine) = 
+                    ComputeStraightness(edges, &bd.interleavedArea, &bd.interleavedLength);
 
                 // collect sampled points
                 double stepLen = _params.samplingStepLengthOnBoundary;

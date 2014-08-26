@@ -134,7 +134,7 @@ namespace panoramix {
             void estimateSpatialLineDepths();
 
             // classify regions using classfied line labels
-            void estimateRegionOrientations();
+            void initializeRegionOrientations();
 
                 
         public:

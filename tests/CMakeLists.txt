@@ -19,6 +19,7 @@ set (TESTNAMES
 	test_vis3d
 	test_ogre
 	test_serialization
+	test_gco
 )
 
 
