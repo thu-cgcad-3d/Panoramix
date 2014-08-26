@@ -591,6 +591,59 @@ namespace panoramix {
         }
 
 
+        std::vector<HPoint2> ComputeLineIntersections(const std::vector<Line2> & lines,
+            std::vector<std::pair<int, int>> * lineids,
+            bool suppresscross) {
+
+            std::vector<HPoint2> hinterps;
+            
+            size_t lnum = lines.size();
+            for (int i = 0; i < lnum; i++){
+                auto eqi = cv::Vec3d(lines[i].first[0], lines[i].first[1], 1)
+                    .cross(cv::Vec3d(lines[i].second[0], lines[i].second[1], 1));
+                for (int j = i + 1; j < lnum; j++){
+                    auto eqj = cv::Vec3d(lines[j].first[0], lines[j].first[1], 1)
+                        .cross(cv::Vec3d(lines[j].second[0], lines[j].second[1], 1));
+                    auto interp = eqi.cross(eqj);
+                    if (interp[0] == 0 && interp[1] == 0 && interp[2] == 0){ // lines overlapped
+                        interp[0] = -eqi[1];
+                        interp[1] = eqi[0];
+                    }
+                    interp /= norm(interp);
+
+                    if (suppresscross){
+                        auto& a1 = lines[i].first;
+                        auto& a2 = lines[i].second;
+                        auto& b1 = lines[j].first;
+                        auto& b2 = lines[j].second;
+                        double q = a1[0] * b1[1] - a1[1] * b1[0] - a1[0] * b2[1] + a1[1] * b2[0] -
+                            a2[0] * b1[1] + a2[1] * b1[0] + a2[0] * b2[1] - a2[1] * b2[0];
+                        double t = (a1[0] * b1[1] - a1[1] * b1[0] - a1[0] * b2[1] +
+                            a1[1] * b2[0] + b1[0] * b2[1] - b1[1] * b2[0]) / q;
+                        if (t > 0 && t < 1 && t == t)
+                            continue;
+                    }
+                    hinterps.push_back(HPointFromVector(interp));
+                    if (lineids)
+                        lineids->push_back({ i, j });
+                }
+            }
+
+            return hinterps;
+
+        }
+
+
+        
+        double ComputeFoldingDifficultyAlongVanishingPoint(const std::vector<Point2> & points, const HPoint2 & vp) {
+
+            // locate the 
+
+        }
+
+
+
+
         namespace {
 
             std::string ImageDepth2Str(int depth)
@@ -803,6 +856,40 @@ namespace panoramix {
             return forVisualization ? SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, true).second 
                 : SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
         }
+
+
+
+
+        namespace {
+
+            
+
+        }
+
+
+        VanishingPointsExtractor::Feature
+            VanishingPointsExtractor::operator()(const LineSegmentExtractor::Feature & lines, const Point2 & projCenter, double focalLength) const {
+            
+            auto intersections = ComputeLineIntersections(lines, nullptr, true);
+
+
+        }
+
+
+        std::pair<VanishingPointsExtractor::Feature, double> 
+            VanishingPointsExtractor::operator()(const LineSegmentExtractor::Feature & lines, const Point2 & projCenter) const {
+            Box2 bbox = BoundingBoxOfContainer(lines);
+            double scale = norm(bbox.maxCorner - bbox.minCorner);
+            double focalCandidates[] = { scale / 10.0, scale / 5.0, scale / 2.0, scale, scale * 2.0, scale * 5.0, scale * 10.0 };
+
+        }
+
+
+
+        GeometricContextExtractor::Feature GeometricContextExtractor::operator() (const Image & image) const {
+            NOT_IMPLEMENTED_YET();
+        }
+
 
 
 

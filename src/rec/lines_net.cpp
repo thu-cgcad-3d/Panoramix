@@ -12,49 +12,9 @@ namespace panoramix {
             incidenceDistanceVerticalDirectionThreshold(3) {
         }
 
-        namespace {
-
-            void LineIntersectons(const std::vector<Line2> & lines,
-                std::vector<HPoint2> & hinterps, std::vector<std::pair<int, int>> & lineids,
-                bool suppresscross)
-            {
-                size_t lnum = lines.size();
-                for (int i = 0; i < lnum; i++){
-                    auto eqi = cv::Vec3d(lines[i].first[0], lines[i].first[1], 1)
-                        .cross(cv::Vec3d(lines[i].second[0], lines[i].second[1], 1));
-                    for (int j = i + 1; j < lnum; j++){
-                        auto eqj = cv::Vec3d(lines[j].first[0], lines[j].first[1], 1)
-                            .cross(cv::Vec3d(lines[j].second[0], lines[j].second[1], 1));
-                        auto interp = eqi.cross(eqj);
-                        if (interp[0] == 0 && interp[1] == 0 && interp[2] == 0){ // lines overlapped
-                            interp[0] = -eqi[1];
-                            interp[1] = eqi[0];
-                        }
-                        interp /= norm(interp);
-
-                        if (suppresscross){
-                            auto& a1 = lines[i].first;
-                            auto& a2 = lines[i].second;
-                            auto& b1 = lines[j].first;
-                            auto& b2 = lines[j].second;
-                            double q = a1[0] * b1[1] - a1[1] * b1[0] - a1[0] * b2[1] + a1[1] * b2[0] -
-                                a2[0] * b1[1] + a2[1] * b1[0] + a2[0] * b2[1] - a2[1] * b2[0];
-                            double t = (a1[0] * b1[1] - a1[1] * b1[0] - a1[0] * b2[1] +
-                                a1[1] * b2[0] + b1[0] * b2[1] - b1[1] * b2[0]) / q;
-                            if (t > 0 && t < 1 && t == t)
-                                continue;
-                        }
-                        hinterps.push_back(HPointFromVector(interp));
-                        lineids.push_back({ i, j });
-                    }
-                }
-            }
-
-        }
-
         LinesNet::LinesNet(const Image & image, const Params & params)
             : _image(image), _params(params), _lineSegments(params.lineSegmentExtractor(image)) {
-            LineIntersectons(_lineSegments, _lineSegmentIntersections, _lineSegmentIntersectionIds, true);
+            _lineSegmentIntersections = ComputeLineIntersections(_lineSegments, &_lineSegmentIntersectionIds, true);
         }
 
         namespace {

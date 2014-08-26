@@ -11,6 +11,8 @@ extern "C" {
 #include <dlib/matrix.h>
 #include <dlib/optimization.h>
 
+#include <GCoptimization.h>
+
 #include "../vis/visualize2d.hpp"
 #include "../vis/visualize3d.hpp"
 
@@ -768,14 +770,166 @@ namespace panoramix {
 
         void ReconstructionEngine::estimateSpatialLineDepths() {
 
+            NOT_IMPLEMENTED_YET();
 
+        }
+
+        namespace {
+
+            template <class FunctorT>
+            struct DataCostFunctorWrapper : GCoptimization::DataCostFunctor{
+                inline DataCostFunctorWrapper(FunctorT && f) : fun(std::forward(f)) {}
+                virtual GCoptimization::EnergyTermType compute(GCoptimization::SiteID s, GCoptimization::LabelID l) override {
+                    return fun(s, l);
+                }
+                FunctorT fun;
+            };
+            template <class FunctorT>
+            inline DataCostFunctorWrapper<FunctorT> * AllocDataCostFunctor(FunctorT && f) {
+                return new DataCostFunctorWrapper<FunctorT>(std::forward(f));
+            }
+
+            template <class FunctorT>
+            struct SmoothCostFunctorWrapper : GCoptimization::SmoothCostFunctor {
+                inline SmoothCostFunctorWrapper(FunctorT && f) : fun(std::forward(f)){}
+                virtual GCoptimization::EnergyTermType compute(
+                    GCoptimization::SiteID s1, GCoptimization::SiteID s2,
+                    GCoptimization::LabelID l1, GCoptimization::LabelID l2) override {
+                    return fun(s1, s2, l1, l2);
+                }
+                FunctorT fun;
+            };
+            template <class FunctorT>
+            inline SmoothCostFunctorWrapper<FunctorT> * AllocSmoothCostFunctor(FunctorT && f) {
+                return new SmoothCostFunctorWrapper<FunctorT>(std::forward(f));
+            }
+
+            double ComputeDifficultyOfFoldingAlongVanishingPoint(const std::vector<Point2> & sampledPoints, const HPoint2 & vp) {
+
+            }
 
         }
 
 
         void ReconstructionEngine::estimateRegionOrientations() {
 
+            std::vector<RegionIndex> regionIndices;
+            std::map<RegionIndex, int> regionIndexToGraphSiteId;
 
+            for (auto & vd : _views.elements<0>()){
+                RegionIndex ri;
+                ri.viewHandle = vd.topo.hd;
+                for (auto & rd : vd.data.regionNet->regions().elements<0>()){
+                    ri.handle = rd.topo.hd;
+                    regionIndices.push_back(ri);
+                    regionIndexToGraphSiteId[ri] = regionIndices.size() - 1;
+                }
+            }
+
+            enum RegionOrientationType {
+                VP0 = 0,
+                VP1 = 1,
+                VP2 = 2,
+                Planar = 3,
+                Other = 4,
+                RegionOrientationTypeNum
+            };
+
+            GCoptimizationGeneralGraph graph(regionIndices.size(), RegionOrientationTypeNum);
+
+            // set neighbors
+            // region boundaries
+            for (auto & vd : _views.elements<0>()){
+                for (auto & bd : vd.data.regionNet->regions().elements<1>()){
+                    RegionIndex ri1 = { vd.topo.hd, bd.topo.lowers[0] };
+                    RegionIndex ri2 = { vd.topo.hd, bd.topo.lowers[1] };
+                    auto siteId1 = regionIndexToGraphSiteId[ri1];
+                    auto siteId2 = regionIndexToGraphSiteId[ri2];
+                    graph.setNeighbors(siteId1, siteId2);
+                }
+            }
+            // region overlaps
+            for (auto & rp : _globalData.overlappedRegionIndexPairs){
+                auto overlappingRatio = rp.second;
+                if (overlappingRatio < 0.05)
+                    continue;
+                auto siteId1 = regionIndexToGraphSiteId[rp.first.first];
+                auto siteId2 = regionIndexToGraphSiteId[rp.first.second];
+                graph.setNeighbors(siteId1, siteId2);
+            }
+
+            
+            // data costs for regions
+            // store region costs corresponding to orientations
+            IndexHashMap<RegionIndex, std::array<double, 3>> regionOrientationCosts;
+            for (auto & ri : regionIndices){
+                regionOrientationCosts[ri] = { { 0.0, 0.0, 0.0 } };
+            }            
+            for (auto & regionLine : _globalData.regionLineIntersectionSampledPoints){
+                auto & ri = regionLine.first.first;
+                auto & nearbyLi = regionLine.first.second;
+                int nearbyLineClass = lineData(nearbyLi).line.claz;
+                if (nearbyLineClass == -1)
+                    continue;
+                size_t sampledPointsNum = regionLine.second.size();
+                regionOrientationCosts[ri][nearbyLineClass] += sampledPointsNum;
+            }
+
+
+            graph.setDataCostFunctor(AllocDataCostFunctor([this, &regionIndices, &regionIndexToGraphSiteId, &regionOrientationCosts](
+                GCoptimization::SiteID s, GCoptimization::LabelID l){
+                // nearby lines
+                auto & ri = regionIndices[s];
+                if (l < 3){
+                    return regionOrientationCosts[ri][l];
+                }
+                else{
+                    NOT_IMPLEMENTED_YET();
+                }
+            }));
+
+
+            // smooth costs for region relations
+            // store region boundary smooth costs correspinding to region type pairs
+            IndexHashMap<std::pair<RegionIndex, RegionIndex>, std::array<double, 3>> 
+                regionSmoothCosts;
+            for (auto & vd : _views.elements<0>()){
+                HPoint2 vps[] = {
+                    vd.data.camera.screenProjectionInHPoint(_globalData.vanishingPoints[0]),
+                    vd.data.camera.screenProjectionInHPoint(_globalData.vanishingPoints[1]),
+                    vd.data.camera.screenProjectionInHPoint(_globalData.vanishingPoints[2])
+                };
+                auto & regions = vd.data.regionNet->regions();
+                for (auto & bd : regions.elements<1>()){
+                    auto & boundaryData = bd.data;
+                    // TODO
+                    NOT_IMPLEMENTED_YET();
+                }
+            }
+
+            graph.setSmoothCostFunctor(AllocSmoothCostFunctor([this, &regionIndices, &regionIndexToGraphSiteId, &regionSmoothCosts](
+                GCoptimization::SiteID s1, GCoptimization::SiteID s2,
+                GCoptimization::LabelID l1, GCoptimization::LabelID l2){
+                auto & ri1 = regionIndices[s1];
+                auto & ri2 = regionIndices[s2];
+                if (ri1.viewHandle == ri2.viewHandle) { // region boundary
+                    if (l1 < 3 && l2 < 3){ // folding
+                        if (l1 == l2) { // same orientation cost
+                            return 0; // TODO 
+                        }
+                        int foldOrientation = 0 + 1 + 2 - l1 - l2;
+                        return (int)regionSmoothCosts[std::make_pair(ri1, ri2)][foldOrientation];
+                    }
+                    else{
+                        NOT_IMPLEMENTED_YET();
+                    }
+                }
+                else { // region overlap
+                    return l1 == l2 ? 0 : 100;
+                }
+            }));
+
+            
 
         }
 

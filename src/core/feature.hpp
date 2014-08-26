@@ -164,6 +164,18 @@ namespace panoramix {
         };
 
 
+
+        // compute line intersections
+        std::vector<HPoint2> ComputeLineIntersections(const std::vector<Line2> & lines,
+            std::vector<std::pair<int, int>> * lineids = nullptr,
+            bool suppresscross = true);
+
+
+        // compute folding difficulty along vanishing point
+        double ComputeFoldingDifficultyAlongVanishingPoint(const std::vector<Point2> & points, const HPoint2 & vp);
+
+
+
         // point feature extractor
         template <class CVFeatureExtractorT, class FeatureT = std::vector<cv::KeyPoint>>
         class CVFeatureExtractor {
@@ -206,16 +218,56 @@ namespace panoramix {
 
 
 
+
+        // vanishing point extractor
+        class VanishingPointsExtractor {
+        public:
+            using Feature = std::array < HPoint2, 3 > ;
+            struct Params {
+                inline Params() {}
+
+                template <class Archive> inline void serialize(Archive & ar) {}
+            };
+        public:
+            inline VanishingPointsExtractor(const Params & params = Params()) : _params(params) {}
+            // find vanishing points with known focal length
+            Feature operator() (const LineSegmentExtractor::Feature & lines, const Point2 & projCenter, double focalLength) const;
+            // find vanishing points without known focal length
+            std::pair<Feature, double> operator() (const LineSegmentExtractor::Feature & lines, const Point2 & projCenter) const;
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
+        private:
+            Params _params;
+        };
+
+
+
+
+
+        // geometric context
+        class GeometricContextExtractor {
+        public:
+            using Feature = ImageWithType < int > ;
+            struct Params {
+                inline Params() {}
+
+                template <class Archive> inline void serialize(Archive & ar) {}
+            };
+        public:
+            inline GeometricContextExtractor(const Params & params = Params()) : _params(params) {}
+            Feature operator() (const Image & image) const;
+            template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
+        private:
+            Params _params;
+        };
+
+
+
         /// homography estimation
         std::pair<double, double> ComputeFocalsFromHomography(const Mat3 & H, std::pair<bool, bool> * ok = nullptr);
 
 
 
-
-        /// feature evaluators & matchers
-        class VanishingPoint2DEstimator {
-
-        };
 
 
 
