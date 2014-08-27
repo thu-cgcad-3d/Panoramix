@@ -940,34 +940,6 @@ namespace panoramix {
 
 
 
-            IF_DEBUG_USING_VISUALIZERS{
-
-                // visualize folding costs
-                for (auto & vd : _views.elements<0>()){
-                    vis::Visualizer2D viz(vd.data.image);
-
-                    for (auto & bd : vd.data.regionNet->regions().elements<1>()){
-                        RegionIndex ri1 = { vd.topo.hd, bd.topo.lowers[0] };
-                        RegionIndex ri2 = { vd.topo.hd, bd.topo.lowers[1] };
-                        auto costs = regionFoldingCosts[std::make_pair(ri1, ri2)];
-                        vis::Color color(255 - costs[0] * 255, 255 - costs[1] * 255, 255 - costs[2] * 255);
-                        auto & edges = bd.data.edges;
-                        for (auto & e : edges){
-                            for (int i = 0; i < e.size() - 1; i++){
-                                viz.params.color = color;
-                                viz.params.thickness = 2;
-                                viz = viz << Line<int, 2>(e[i], e[i + 1]);
-                            }
-                        }
-                    }
-
-                    viz << vis::manip2d::Show();
-                }
-
-            }
-
-
-
             graph.setSmoothCostFunctor(AllocSmoothCostFunctor([this, &regionIndices, &regionIndexToGraphSiteId, &regionFoldingCosts](
                 GCoptimization::SiteID s1, GCoptimization::SiteID s2,
                 GCoptimization::LabelID l1, GCoptimization::LabelID l2){
@@ -990,6 +962,45 @@ namespace panoramix {
                     return l1 == l2 ? 0 : 10 * scaleFactor;
                 }
             }));
+
+
+            IF_DEBUG_USING_VISUALIZERS{
+
+                // visualize data costs and folding costs
+                for (auto & vd : _views.elements<0>()){                    
+
+                    ImageWithType<Vec<uint8_t, 3>> orientationImage = ImageWithType<Vec<uint8_t, 3>>::zeros(vd.data.image.size());
+                    for (int y = 0; y < vd.data.image.rows; y++){
+                        for (int x = 0; x < vd.data.image.cols; x++){
+                            auto regionId = vd.data.regionNet->segmentedRegions().at<int32_t>(PixelLoc(x, y));
+                            RegionIndex ri = { vd.topo.hd, RegionsNet::RegionHandle(regionId) };
+                            auto costs = regionOrientationCosts[ri];
+                            Vec<uint8_t, 3> color(costs[0] * 255, costs[1] * 255, costs[2] * 255);
+                            orientationImage(PixelLoc(x, y)) = color;
+                        }
+                    }
+
+                    vis::Visualizer2D viz(orientationImage);
+
+                    for (auto & bd : vd.data.regionNet->regions().elements<1>()){
+                        RegionIndex ri1 = { vd.topo.hd, bd.topo.lowers[0] };
+                        RegionIndex ri2 = { vd.topo.hd, bd.topo.lowers[1] };
+                        auto costs = regionFoldingCosts[std::make_pair(ri1, ri2)];
+                        vis::Color color(255 - costs[0] * 255, 255 - costs[1] * 255, 255 - costs[2] * 255);
+                        auto & edges = bd.data.edges;
+                        for (auto & e : edges){
+                            for (int i = 0; i < e.size() - 1; i++){
+                                viz.params.color = color;
+                                viz.params.thickness = 2;
+                                viz = viz << Line<int, 2>(e[i], e[i + 1]);
+                            }
+                        }
+                    }
+
+                    viz << vis::manip2d::Show();
+                }
+
+            }
 
 
             std::cout << "energy before graph-cut: " << graph.compute_energy() << std::endl;
