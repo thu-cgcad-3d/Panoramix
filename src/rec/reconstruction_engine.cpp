@@ -873,7 +873,7 @@ namespace panoramix {
             }
             for (auto & c : regionOrientationCosts) {
                 for (int i = 0; i < 3; i++) {
-                    c.second[i] = 1.0 - Gaussian(c.second[i], 30.0);                    
+                    c.second[i] = 1.0 - Gaussian(c.second[i], 5.0);                    
                 }
             }
 
@@ -975,7 +975,7 @@ namespace panoramix {
                             auto regionId = vd.data.regionNet->segmentedRegions().at<int32_t>(PixelLoc(x, y));
                             RegionIndex ri = { vd.topo.hd, RegionsNet::RegionHandle(regionId) };
                             auto costs = regionOrientationCosts[ri];
-                            Vec<uint8_t, 3> color(costs[0] * 255, costs[1] * 255, costs[2] * 255);
+                            Vec<uint8_t, 3> color(255 - costs[0] * 255, 255 - costs[1] * 255, 255 - costs[2] * 255);
                             orientationImage(PixelLoc(x, y)) = color;
                         }
                     }

@@ -24,7 +24,7 @@ namespace panoramix {
                 return Manipulator<int>([](Visualizer2D & viz, int d) {
                     static int id = 0;
                     cv::imshow(viz.params.winName, viz.image());
-                    cv::imwrite("./" + std::to_string(id++) + viz.params.winName + ".png", viz.image());
+                    cv::imwrite("./vis_outputs/" + std::to_string(id++) + viz.params.winName + ".png", viz.image());
                     cv::waitKey(d);
                 }, delay);
             }

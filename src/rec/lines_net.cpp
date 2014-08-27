@@ -215,8 +215,8 @@ namespace panoramix {
 
                 //vis::Visualizer2D(distributionImages[0]) << vis::manip2d::Show();
                 //vis::Visualizer2D(distributionImages[1]) << vis::manip2d::Show();
-                cv::imshow("distribution 0", distributionImages[0]);
-                cv::imshow("distribution 1", distributionImages[1]);
+                //cv::imshow("distribution 0", distributionImages[0]);
+                //cv::imshow("distribution 1", distributionImages[1]);
 
                 vis::Visualizer2D viz(_image);
                 viz.params.thickness = 2;
@@ -243,9 +243,9 @@ namespace panoramix {
                     }
                 }
 
-                //viz << vis::manip2d::Show();
-                cv::imshow("lines", viz.image());
-                cv::waitKey();
+                viz << vis::manip2d::Show();
+                /*cv::imshow("lines", viz.image());
+                cv::waitKey();*/
             }
             
 
