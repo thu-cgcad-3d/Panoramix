@@ -925,7 +925,8 @@ namespace panoramix {
                         Vec2 midToVP = vps[i] - HPoint2(sampledPointsCenter);
                         Vec2 edgeDir = bd.data.fittedLine.direction;
                         double angle = std::min(AngleBetweenDirections(midToVP, edgeDir), AngleBetweenDirections(midToVP, -edgeDir));
-                        double cost = (1.0 - Gaussian(angle, M_PI / 32.0)) * 1 /** (1.0 - Gaussian(bd.data.length, 20.0))*/ * Gaussian(bd.data.straightness, 0.8);
+                        double cost = (1.0 - Gaussian(angle, M_PI / 32.0)) * 1 /** (1.0 - Gaussian(bd.data.length, 20.0))*/ 
+                            * Gaussian(bd.data.straightness, 0.8);
                         regionFoldingCosts[std::make_pair(ri1, ri2)][i] = cost;
                         regionFoldingCosts[std::make_pair(ri2, ri1)][i] = cost;
                     }
@@ -936,6 +937,36 @@ namespace panoramix {
                         << regionFoldingCosts[std::make_pair(ri1, ri2)][2] << std::endl;
                 }
             }
+
+
+
+            IF_DEBUG_USING_VISUALIZERS{
+
+                // visualize folding costs
+                for (auto & vd : _views.elements<0>()){
+                    vis::Visualizer2D viz(vd.data.image);
+
+                    for (auto & bd : vd.data.regionNet->regions().elements<1>()){
+                        RegionIndex ri1 = { vd.topo.hd, bd.topo.lowers[0] };
+                        RegionIndex ri2 = { vd.topo.hd, bd.topo.lowers[1] };
+                        auto costs = regionFoldingCosts[std::make_pair(ri1, ri2)];
+                        vis::Color color(255 - costs[0] * 255, 255 - costs[1] * 255, 255 - costs[2] * 255);
+                        auto & edges = bd.data.edges;
+                        for (auto & e : edges){
+                            for (int i = 0; i < e.size() - 1; i++){
+                                viz.params.color = color;
+                                viz.params.thickness = 2;
+                                viz = viz << Line<int, 2>(e[i], e[i + 1]);
+                            }
+                        }
+                    }
+
+                    viz << vis::manip2d::Show();
+                }
+
+            }
+
+
 
             graph.setSmoothCostFunctor(AllocSmoothCostFunctor([this, &regionIndices, &regionIndexToGraphSiteId, &regionFoldingCosts](
                 GCoptimization::SiteID s1, GCoptimization::SiteID s2,
@@ -966,12 +997,18 @@ namespace panoramix {
             graph.swap(50);
             std::cout << "energy after graph-cut: " << graph.compute_energy() << std::endl;
 
+            for (int i = 0; i < regionIndices.size(); i++){
+                _globalData.regionOrientations[regionIndices[i]] = graph.whatLabel(i);
+            }
+
             IF_DEBUG_USING_VISUALIZERS{
 
                 static const vis::Color colors[] = {
                     vis::ColorFromTag(vis::ColorTag::Red),
                     vis::ColorFromTag(vis::ColorTag::Green),
-                    vis::ColorFromTag(vis::ColorTag::Blue)
+                    vis::ColorFromTag(vis::ColorTag::Blue),
+                    vis::ColorFromTag(vis::ColorTag::Yellow),
+                    vis::ColorFromTag(vis::ColorTag::White)
                 };
 
                 // visualize result region labels
@@ -987,7 +1024,7 @@ namespace panoramix {
                         for (int x = 0; x < width; x++) {
                             auto regionId = regions.segmentedRegions().at<int32_t>(cv::Point(x, y));
                             ri.handle.id = regionId;
-                            auto & color = colors[graph.whatLabel(regionIndexToGraphSiteId[ri])];
+                            auto & color = colors[_globalData.regionOrientations[ri]];
                             coloredOutput(cv::Point(x, y)) =
                                 Vec<uint8_t, 3>((uint8_t)color[0], (uint8_t)color[1], (uint8_t)color[2]);
                         }

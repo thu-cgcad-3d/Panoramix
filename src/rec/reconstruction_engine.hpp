@@ -95,8 +95,13 @@ namespace panoramix {
                 const IndexOfSubStructureInView<HandleT> & b);
 
             template <class HandleT>
+            friend bool operator != (const IndexOfSubStructureInView<HandleT> & a,
+                const IndexOfSubStructureInView<HandleT> & b);
+
+            template <class HandleT>
             friend bool operator < (const IndexOfSubStructureInView<HandleT> & a,
                 const IndexOfSubStructureInView<HandleT> & b);
+
 
         public:
             inline explicit ReconstructionEngine(const Params params = Params()) : _params(params) {}
@@ -159,9 +164,11 @@ namespace panoramix {
             struct GlobalData {
                 Image panorama;
                 std::array<Vec3, 3> vanishingPoints;
+
                 IndexHashMap<std::pair<RegionIndex, RegionIndex>, double> overlappedRegionIndexPairs;
                 IndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> lineIncidenceRelationsAcrossViews;
                 IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> regionLineIntersectionSampledPoints;
+                IndexHashMap<RegionIndex, int> regionOrientations;
             };
 
             inline const ViewsGraph & views() const { return _views; }
@@ -180,6 +187,12 @@ namespace panoramix {
         inline bool operator == (const ReconstructionEngine::IndexOfSubStructureInView<HandleT> & a,
             const ReconstructionEngine::IndexOfSubStructureInView<HandleT> & b) {
             return a.viewHandle == b.viewHandle && a.handle == b.handle;
+        }
+
+        template <class HandleT>
+        inline bool operator != (const ReconstructionEngine::IndexOfSubStructureInView<HandleT> & a,
+            const ReconstructionEngine::IndexOfSubStructureInView<HandleT> & b) {
+            return !(a == b);
         }
 
         template <class HandleT>
