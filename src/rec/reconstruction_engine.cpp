@@ -484,13 +484,28 @@ namespace panoramix {
                 return sin(angleFirstP) / sin(angleP);
             }
 
-
         }
 
 
         void ReconstructionEngine::recognizeRegionLineRelations() {
 
-            //// REGIONS ////
+            //template <class IndexT>
+            //class IndicesWithId {
+            //public:
+            //    inline int insert(const IndexT & ind) {
+            //        _indices.push_back(ind);
+            //        _indexToId[ind] = _indices.size() - 1;
+            //        return _indices.size() - 1;
+            //    }
+            //    inline const std::vector<IndexT> & indices() const { return _indices; }
+            //    inline const IndexT & operator[](int i) const { return _indices[i]; }
+            //    inline int id(const IndexT & ind) const { return _indexToId[ind]; }
+            //    inline size_t size() const { return _indices.size(); }
+
+            //private:
+            //    std::vector<IndexT> _indices;
+            //    ReconstructionEngine::IndexHashMap<IndexT, int> _indexToId;
+            //};
 
             // compute spatial positions of each region
             IndexHashMap<RegionIndex, std::vector<Vec3>>
@@ -579,13 +594,13 @@ namespace panoramix {
                 gpc_free_polygon(&riPoly);
             }
 
-            for (auto & riPair : overlappedRegionIndexPairs) {
-                auto revRiPair = std::make_pair(riPair.first.second, riPair.first.first);
-                std::cout << "a-b: " << riPair.second;
-                if (overlappedRegionIndexPairs.find(revRiPair) != overlappedRegionIndexPairs.end())
-                    std::cout << "   b-a: " << overlappedRegionIndexPairs[revRiPair];
-                std::cout << std::endl;
-            }
+            //for (auto & riPair : overlappedRegionIndexPairs) {
+            //    auto revRiPair = std::make_pair(riPair.first.second, riPair.first.first);
+            //    std::cout << "a-b: " << riPair.second;
+            //    if (overlappedRegionIndexPairs.find(revRiPair) != overlappedRegionIndexPairs.end())
+            //        std::cout << "   b-a: " << overlappedRegionIndexPairs[revRiPair];
+            //    std::cout << std::endl;
+            //}
 
 
 
@@ -765,13 +780,378 @@ namespace panoramix {
                     viz.second << vis::manip2d::Show();
                 }
             }
+
+
+
+            // compute connected components based on line-line constraints
+            auto relatedLineIndicesGetter = [this](const LineIndex & li) {
+                std::vector<LineIndex> related;
+                // constraints in same view
+                auto & lines = _views.data(li.viewHandle).lineNet->lines();
+                auto & relationsInSameView = lines.topo(li.handle).uppers;
+                for (auto & rh : relationsInSameView) {
+                    auto anotherLineHandle = lines.topo(rh).lowers[0];
+                    if (anotherLineHandle == li.handle)
+                        anotherLineHandle = lines.topo(rh).lowers[1];
+                    related.push_back(LineIndex{ li.viewHandle, anotherLineHandle });
+                }
+                // incidence constraints across views
+                for (auto & interviewIncidence : _globalData.lineIncidenceRelationsAcrossViews) {
+                    if (interviewIncidence.first.first == li)
+                        related.push_back(interviewIncidence.first.second);
+                    else if (interviewIncidence.first.second == li)
+                        related.push_back(interviewIncidence.first.first);
+                }
+                return related;
+            };
+
+            // collect all lines
+            std::vector<LineIndex> lineIndices;
+            IndexHashMap<LineIndex, int> lineIndexToIds;
+            for (auto & vd : _views.elements<0>()) {
+                LineIndex li;
+                li.viewHandle = vd.topo.hd;
+                for (auto & ld : vd.data.lineNet->lines().elements<0>()) {
+                    li.handle = ld.topo.hd;
+                    lineIndices.push_back(li);
+                    lineIndexToIds[li] = lineIndices.size() - 1;
+                }
+            }
+
+            _globalData.lineConnectedComponentIds.clear();
+            _globalData.lineConnectedComponentsNum = core::ConnectedComponents(lineIndices.begin(), lineIndices.end(),
+                relatedLineIndicesGetter, [this](const LineIndex & li, int ccid) {
+                _globalData.lineConnectedComponentIds[li] = ccid;
+            });
+
+
+            std::cout << "ccnum: " << _globalData.lineConnectedComponentsNum << std::endl;
+
         }
 
 
         void ReconstructionEngine::estimateSpatialLineDepths() {
 
-            
+            using namespace Eigen;
+            SparseMatrix<double> A, W;
+            VectorXd B;
 
+            // try minimizing ||W(AX-B)||^2
+
+            // collect all lines
+            std::vector<LineIndex> lineIndices;
+            IndexHashMap<LineIndex, int> lineIndexToIds;
+            for (auto & vd : _views.elements<0>()) {
+                LineIndex li;
+                li.viewHandle = vd.topo.hd;
+                for (auto & ld : vd.data.lineNet->lines().elements<0>()) {
+                    li.handle = ld.topo.hd;
+                    lineIndices.push_back(li);
+                    lineIndexToIds[li] = lineIndices.size() - 1;
+                }
+            }
+
+            // collect all constraints
+            std::vector<LineRelationIndex> lineRelationIndices; // constraint indices in same views
+            IndexHashMap<LineRelationIndex, int> lineRelationIndexToIds;
+            // interview incidence constriants are stored in _globalData
+
+            for (auto & vd : _views.elements<0>()) {
+                LineRelationIndex lri;
+                lri.viewHandle = vd.topo.hd;
+                for (auto & ld : vd.data.lineNet->lines().elements<1>()) {
+                    lri.handle = ld.topo.hd;
+                    lineRelationIndices.push_back(lri);
+                    lineRelationIndexToIds[lri] = lineRelationIndices.size() - 1;
+                }
+            }
+
+            // pick the first line id in each connected component
+            IndexHashSet<LineIndex> firstLineIndexInConnectedComponents;
+            std::set<int> ccIdsRecorded;
+            for (auto & lineIndexAndItsCCId : _globalData.lineConnectedComponentIds) {
+                int ccid = lineIndexAndItsCCId.second;
+                if (ccIdsRecorded.find(ccid) == ccIdsRecorded.end()) { // not recorded yet
+                    firstLineIndexInConnectedComponents.insert(lineIndexAndItsCCId.first);
+                    ccIdsRecorded.insert(ccid);
+                }
+            }
+            static const double constantEtaForFirstLineInEachConnectedComponent = 10.0;
+            std::cout << "anchor size: " << firstLineIndexInConnectedComponents.size() << std::endl;
+            for (auto & ccId : ccIdsRecorded) {
+                std::cout << "ccid: " << ccId << std::endl;
+            }
+
+
+            // setup matrices
+            int n = lineIndices.size(); // var num
+            int m = lineRelationIndices.size() + _globalData.lineIncidenceRelationsAcrossViews.size();  // cons num
+
+            A.resize(m, n);
+            W.resize(m, m);
+            B.resize(m);
+
+            // write equations
+            int curEquationNum = 0;
+
+            // write intersection/incidence constraint equations in same view
+            for (const LineRelationIndex & lri : lineRelationIndices) {
+                auto & lrd = lineRelationData(lri);
+                auto & relationCenter = lrd.relationCenter;
+                auto & weightDistribution = _views.data(lri.viewHandle).lineNet->lineVotingDistribution();
+                
+                auto & topo = _views.data(lri.viewHandle).lineNet->lines().topo(lri.handle);
+                auto & camera = _views.data(lri.viewHandle).camera;
+                LineIndex li1 = { lri.viewHandle, topo.lowers[0] };
+                LineIndex li2 = { lri.viewHandle, topo.lowers[1] };
+
+                int lineId1 = lineIndexToIds[li1];
+                int lineId2 = lineIndexToIds[li2];
+
+                auto & line1 = lineData(li1).line;
+                auto & line2 = lineData(li2).line;
+
+                auto & vp1 = _globalData.vanishingPoints[line1.claz];
+                auto & vp2 = _globalData.vanishingPoints[line2.claz];
+
+                double ratio1 = ComputeDepthRatioOfPointOnSpatialLine(
+                    camera.spatialDirection(line1.component.first), 
+                    camera.spatialDirection(relationCenter), vp1);
+                double ratio2 = ComputeDepthRatioOfPointOnSpatialLine(
+                    camera.spatialDirection(line2.component.first),
+                    camera.spatialDirection(relationCenter), vp2);
+
+                if (firstLineIndexInConnectedComponents.find(li1) == firstLineIndexInConnectedComponents.end() &&
+                    firstLineIndexInConnectedComponents.find(li2) == firstLineIndexInConnectedComponents.end()) {
+                    // eta1 * ratio1 - eta2 * ratio2 = 0
+                    A.insert(curEquationNum, lineId1) = ratio1;
+                    A.insert(curEquationNum, lineId2) = -ratio2;
+                    B(curEquationNum) = 0;
+                } else if (firstLineIndexInConnectedComponents.find(li1) != firstLineIndexInConnectedComponents.end()) {
+                    // const[eta1] * ratio1 - eta2 * ratio2 = 0 -> 
+                    // eta2 * ratio2 = const[eta1] * ratio1
+                    A.insert(curEquationNum, lineId2) = ratio2;
+                    B(curEquationNum) = constantEtaForFirstLineInEachConnectedComponent * ratio1;
+                } else if (firstLineIndexInConnectedComponents.find(li2) != firstLineIndexInConnectedComponents.end()) {
+                    // eta1 * ratio1 - const[eta2] * ratio2 = 0 -> 
+                    // eta1 * ratio1 = const[eta2] * ratio2
+                    A.insert(curEquationNum, lineId1) = ratio1;
+                    B(curEquationNum) = constantEtaForFirstLineInEachConnectedComponent * ratio2;
+                }
+
+                // compute junction weight
+                auto & v = weightDistribution(PixelLoc(relationCenter[0], relationCenter[1]));
+                double junctionWeight = 0;
+                {
+                    // Y
+                    double Y = 0.0;
+                    for (int s = 0; s < 2; s++) {
+                        Y += v(0, s) * v(1, s) * v(2, s) * DiracDelta(v(0, 1 - s) + v(1, 1 - s) + v(2, 1 - s));
+                    }
+
+                    // W
+                    double W = 0.0;
+                    for (int i = 0; i < 3; i++) {
+                        for (int j = 0; j < 3; j++) {
+                            if (i == j)
+                                continue;
+                            int k = 3 - i - j;
+                            for (int s = 0; s < 2; s++) {
+                                W += v(i, s) * v(j, 1 - s) * v(k, 1 - s) * DiracDelta(v(i, 1 - s) + v(j, s) + v(k, s));
+                            }
+                        }
+                    }
+
+                    // K
+                    double K = 0.0;
+                    for (int i = 0; i < 3; i++) {
+                        for (int j = 0; j < 3; j++) {
+                            if (i == j)
+                                continue;
+                            int k = 3 - i - j;
+                            K += v(i, 0) * v(i, 1) * v(j, 0) * v(k, 1) * DiracDelta(v(j, 1) + v(k, 0));
+                            K += v(i, 0) * v(i, 1) * v(j, 1) * v(k, 0) * DiracDelta(v(j, 0) + v(k, 1));
+                        }
+                    }
+
+                    // compute X junction
+                    double X = 0.0;
+                    for (int i = 0; i < 3; i++) {
+                        for (int j = 0; j < 3; j++) {
+                            if (i == j)
+                                continue;
+                            int k = 3 - i - j;
+                            X += v(i, 0) * v(i, 1) * v(j, 0) * v(j, 1) * DiracDelta(v(k, 0) + v(k, 1));
+                        }
+                    }
+
+                    // compute T junction
+                    double T = 0.0;
+                    for (int i = 0; i < 3; i++) {
+                        for (int j = 0; j < 3; j++) {
+                            if (i == j)
+                                continue;
+                            int k = 3 - i - j;
+                            T += v(i, 0) * v(i, 1) * v(j, 0) * DiracDelta(v(j, 1) + v(k, 0) + v(k, 1));
+                            T += v(i, 0) * v(i, 1) * v(j, 1) * DiracDelta(v(j, 0) + v(k, 0) + v(k, 1));
+                        }
+                    }
+
+                    // compute L junction
+                    double L = 0.0;
+                    for (int i = 0; i < 3; i++) {
+                        for (int j = 0; j < 3; j++) {
+                            if (i == j)
+                                continue;
+                            int k = 3 - i - j;
+                            for (int a = 0; a < 2; a++) {
+                                int nota = 1 - a;
+                                for (int b = 0; b < 2; b++) {
+                                    int notb = 1 - b;
+                                    L += v(i, a) * v(j, b) * DiracDelta(v(i, nota) + v(j, notb) + v(k, 0) + v(k, 1));
+                                }
+                            }
+                        }
+                    }
+
+                    //std::cout << " Y-" << Y << " W-" << W << " K-" << K << 
+                    //    " X-" << X << " T-" << T << " L-" << L << std::endl; 
+                    static const double threshold = 1e-4;
+                    if (Y > threshold) {
+                        junctionWeight += 5.0;
+                    } else if (W > threshold) {
+                        junctionWeight += 5.0;
+                    } else if (L > threshold) {
+                        junctionWeight += 4.0;
+                    } else if (K > threshold) {
+                        junctionWeight += 3.0;
+                    } else if (X > threshold) {
+                        junctionWeight += 5.0;
+                    } else if (T > threshold) {
+                        junctionWeight += 0.1;
+                    }
+                }
+                if (lrd.type == LinesNet::LineRelationData::Type::Incidence)
+                    junctionWeight += 10.0;
+                W.insert(curEquationNum, curEquationNum) = junctionWeight;
+
+                curEquationNum++;
+            }
+
+            // write inter-view incidence constraints
+            for (auto & lineIncidenceAcrossView : _globalData.lineIncidenceRelationsAcrossViews) {
+                auto & li1 = lineIncidenceAcrossView.first.first;
+                auto & li2 = lineIncidenceAcrossView.first.second;
+                auto & relationCenter = lineIncidenceAcrossView.second;
+
+                auto & camera1 = _views.data(li1.viewHandle).camera;
+                auto & camera2 = _views.data(li2.viewHandle).camera;
+
+                int lineId1 = lineIndexToIds[li1];
+                int lineId2 = lineIndexToIds[li2];
+
+                auto & line1 = lineData(li1).line;
+                auto & line2 = lineData(li2).line;
+
+                auto & vp1 = _globalData.vanishingPoints[line1.claz];
+                auto & vp2 = _globalData.vanishingPoints[line2.claz];
+
+                double ratio1 = ComputeDepthRatioOfPointOnSpatialLine(
+                    normalize(camera1.spatialDirection(line1.component.first)),
+                    normalize(relationCenter), vp1);
+                double ratio2 = ComputeDepthRatioOfPointOnSpatialLine(
+                    normalize(camera2.spatialDirection(line2.component.first)),
+                    normalize(relationCenter), vp2);
+
+                if (ratio1 == 0.0 || ratio2 == 0.0) {
+                    std::cout << "!!!!!!!ratio is zero!!!!!!!!" << std::endl;
+                }
+
+                if (firstLineIndexInConnectedComponents.find(li1) == firstLineIndexInConnectedComponents.end() &&
+                    firstLineIndexInConnectedComponents.find(li2) == firstLineIndexInConnectedComponents.end()) {
+                    // eta1 * ratio1 - eta2 * ratio2 = 0
+                    A.insert(curEquationNum, lineId1) = ratio1;
+                    A.insert(curEquationNum, lineId2) = -ratio2;
+                    B(curEquationNum) = 0;
+                } else if (firstLineIndexInConnectedComponents.find(li1) != firstLineIndexInConnectedComponents.end()) {
+                    // const[eta1] * ratio1 - eta2 * ratio2 = 0 -> 
+                    // eta2 * ratio2 = const[eta1] * ratio1
+                    A.insert(curEquationNum, lineId2) = ratio2;
+                    B(curEquationNum) = constantEtaForFirstLineInEachConnectedComponent * ratio1;
+                } else if (firstLineIndexInConnectedComponents.find(li2) != firstLineIndexInConnectedComponents.end()) {
+                    // eta1 * ratio1 - const[eta2] * ratio2 = 0 -> 
+                    // eta1 * ratio1 = const[eta2] * ratio2
+                    A.insert(curEquationNum, lineId1) = ratio1;
+                    B(curEquationNum) = constantEtaForFirstLineInEachConnectedComponent * ratio2;
+                }
+
+                double junctionWeight = 10.0;
+                W.insert(curEquationNum, curEquationNum) = junctionWeight;
+
+                curEquationNum++;
+            }
+
+            // solve the equation system
+            VectorXd X;
+            SparseQR<SparseMatrix<double>, COLAMDOrdering<int>> solver;
+            static_assert(!(SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only support column major");
+            solver.compute(W * A);
+            if (solver.info() != Success) {
+                assert(0);
+                std::cout << "computation error" << std::endl;
+                return;
+            }
+            X = solver.solve(W * B);
+            if (solver.info() != Success) {
+                assert(0);
+                std::cout << "solving error" << std::endl;
+                return;
+            }
+
+            // fill back all etas
+            for (int i = 0; i < lineIndices.size(); i++) {
+                auto & li = lineIndices[i];
+                double eta = X(i);
+                if (firstLineIndexInConnectedComponents.find(li) != firstLineIndexInConnectedComponents.end()) { // is first of a cc
+                    eta = constantEtaForFirstLineInEachConnectedComponent;
+                }
+                auto & line2 = _views.data(li.viewHandle).lineNet->lines().data(li.handle).line;                
+                auto & camera = _views.data(li.viewHandle).camera;
+                Line3 line3 = { 
+                    normalize(camera.spatialDirection(line2.component.first)),
+                    normalize(camera.spatialDirection(line2.component.second))
+                };
+
+                std::cout << "eta: " << eta << " --- " << std::endl;
+                //std::cout << "depth of the " << i << "-th line: "
+                //    << norm(line3.first) << ", "
+                //    << norm(line3.second) << " ---- ";
+                
+                double resizeScale = eta / norm(line3.first);
+                line3.first *= resizeScale;
+                line3.second *= (resizeScale * 
+                    ComputeDepthRatioOfPointOnSpatialLine(line3.first, line3.second, _globalData.vanishingPoints[line2.claz]));
+
+                //std::cout << "depth of the " << i << "-th line: " 
+                //    << norm(line3.first) << ", " 
+                //    << norm(line3.second) << std::endl;
+
+                _globalData.reconstructedLines[li] = line3;
+            }
+
+
+
+            // visualize ccids
+            // display reconstructed lines
+            IF_DEBUG_USING_VISUALIZERS{
+                vis::Visualizer3D viz;
+                std::vector<vis::Color> colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::RGB);
+                for (auto & l : _globalData.reconstructedLines) {
+                    viz.params().defaultColor = colorTable[_globalData.lineConnectedComponentIds[l.first] % colorTable.size()];
+                    viz = viz << l.second;
+                }
+                viz << vis::manip3d::AutoSetCamera << vis::manip3d::Show(true);
+            }
         }
 
         namespace {

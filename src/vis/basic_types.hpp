@@ -35,6 +35,7 @@ namespace panoramix {
         std::ostream & operator << (std::ostream & os, ColorTag ct);
         Color ColorFromRGB(double r, double g, double b, double a = 255.0);
         Color ColorFromTag(ColorTag t);
+        Color RandomColor();
         
 
         // line style

@@ -3,9 +3,6 @@
 
 #include "../core/basic_types.hpp"
 #include "../core/feature.hpp"
-#include "../core/utilities.hpp"
-
-#include "optimization.hpp"
 
 #include "regions_net.hpp"
 #include "lines_net.hpp"
@@ -133,8 +130,6 @@ namespace panoramix {
             // construct region-line net
             void recognizeRegionLineRelations();
 
-
-
             // estimate spatial line depths
             void estimateSpatialLineDepths();
 
@@ -168,6 +163,11 @@ namespace panoramix {
                 IndexHashMap<std::pair<RegionIndex, RegionIndex>, double> overlappedRegionIndexPairs;
                 IndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> lineIncidenceRelationsAcrossViews;
                 IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> regionLineIntersectionSampledPoints;
+
+                int lineConnectedComponentsNum;
+                IndexHashMap<LineIndex, int> lineConnectedComponentIds;
+                IndexHashMap<LineIndex, Line3> reconstructedLines;
+
                 IndexHashMap<RegionIndex, int> regionOrientations;
             };
 

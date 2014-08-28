@@ -61,11 +61,11 @@ void run(){
 
     std::vector<core::PerspectiveCamera> cams = {
         core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 })//,
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
+        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
     };
 
     rec::ReconstructionEngine engine;
@@ -80,8 +80,9 @@ void run(){
 
     // estimate vanishing points and classify lines
     engine.estimateVanishingPointsAndClassifyLines();
+
     engine.recognizeRegionLineRelations();
-    //engine.reconstructLinesAndFaces();
+    engine.estimateSpatialLineDepths();
 
     try {
         engine.initializeRegionOrientations();

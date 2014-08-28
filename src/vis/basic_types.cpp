@@ -86,6 +86,10 @@ namespace panoramix {
             }
         }
 
+        Color RandomColor() {
+            return Color(rand() % 255, rand() % 255, rand() % 255);
+        }
+
         const std::vector<Color> & PredefinedColorTable(ColorTableDescriptor descriptor) {
             static const std::vector<Color> allColorTable = {
                 ColorFromTag(ColorTag::White),
