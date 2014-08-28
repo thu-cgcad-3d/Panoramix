@@ -31,6 +31,15 @@ TEST(Visualizer2D, Visualizer2D) {
     Image lim = v.image();
     cv::imshow("Vis", lim);
     cv::waitKey();
+
+    auto red = vis::ColorFromTag(vis::ColorTag::Red);
+    ImageWithType<Vec3b> im = ImageWithType<Vec3b>::zeros(100, 100);
+    for (auto & p : im) {
+        p = Vec3b(red[0], red[1], red[2]);
+    }
+    cv::line(im, PixelLoc(0, 0), PixelLoc(100, 100), vis::ColorFromTag(vis::ColorTag::Blue), 2);
+    cv::imshow("Red", im);
+    cv::waitKey();
 }
 
 int main(int argc, char * argv[], char * envp[])

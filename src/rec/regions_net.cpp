@@ -386,8 +386,9 @@ namespace panoramix {
                     //auto tjcolor = vis::Color(255, 255, 255, 1) * tjunctionlikelihoods[i];
                     for (auto & polyline : boundaries[i]) {
                         for (int j = 0; j < polyline.size() - 1; j++) {
-                            cv::line(regionVis, polyline[j], polyline[j + 1], 
-                                isConnected ? vis::Color(255, 255, 255, 1) : vis::Color(0, 0, 0, 1));
+                            /*cv::line(regionVis, polyline[j], polyline[j + 1], 
+                                isConnected ? vis::Color(255, 255, 255, 1) : vis::Color(0, 0, 0, 1));*/
+                            cv::line(regionVis, polyline[j], polyline[j + 1], color, 2);
                         }
                     }
                     //for (auto & s : sampledPoints[i]) {

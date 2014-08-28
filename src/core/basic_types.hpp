@@ -41,9 +41,7 @@ namespace panoramix {
         using Point2i = Point<int, 2>;
         using Point3i = Point<int, 3>;
         using Point4i = Point<int, 4>;
-        using Point2b = Point<uint8_t, 2>;
-        using Point3b = Point<uint8_t, 3>;
-        using Point4b = Point<uint8_t, 4>;
+
         template <class T, int M, int N> using Mat = cv::Matx<T, M, N>;
         using Mat3 = Mat<double, 3, 3>;
         using Mat4 = Mat<double, 4, 4>;
@@ -51,6 +49,15 @@ namespace panoramix {
         using cv::norm;
         template <class T>
         inline T normalize(const T & d) { return d / norm(d); }
+
+        template <class To, class From, int N>
+        inline Vec<To, N> ConvertTo(const Vec<To, N> & v) {
+            Vec<To, N> out;
+            for (int i = 0; i < N; i++) {
+                out[i] = static_cast<To>(v[i]);
+            }
+            return out;
+        }
 
 
         // homogeneous point

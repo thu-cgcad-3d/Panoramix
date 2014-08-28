@@ -56,6 +56,10 @@ namespace panoramix {
             }
         }
 
+        Color ColorFromRGB(double r, double g, double b, double a) {
+            return Color(b, g, r, a);
+        }
+
         Color ColorFromTag(ColorTag t) {
             switch (t){
             case ColorTag::Transparent: return rgba(0, 0, 0, 0);

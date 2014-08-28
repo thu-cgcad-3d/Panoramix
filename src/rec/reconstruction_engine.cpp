@@ -669,7 +669,7 @@ namespace panoramix {
                 regionLineIntersectionSampledPoints = _globalData.regionLineIntersectionSampledPoints;
             regionLineIntersectionSampledPoints.clear();
 
-            static const int extendSize = 5;
+            static const int extendSize = 7;
             std::vector<int> dx, dy;
             dx.reserve(2 * extendSize + 1);
             dy.reserve(2 * extendSize + 1);
@@ -770,7 +770,7 @@ namespace panoramix {
 
         void ReconstructionEngine::estimateSpatialLineDepths() {
 
-            NOT_IMPLEMENTED_YET();
+            
 
         }
 
@@ -873,12 +873,15 @@ namespace panoramix {
             }
             for (auto & c : regionOrientationCosts) {
                 for (int i = 0; i < 3; i++) {
-                    c.second[i] = 1.0 - Gaussian(c.second[i], 5.0);                    
+                    for (int j = i + 1; j < 3; j++) {
+                        int k = 0 + 1 + 2 - i - j;
+                        c.second[i] = 1.0 - Gaussian(c.second[i], 7.0);
+                    }
                 }
             }
 
 
-            static const int scaleFactor = 100;
+            static const int scaleFactor = 1000;
 
             graph.setDataCostFunctor(AllocDataCostFunctor([this, &regionIndices, &regionIndexToGraphSiteId, &regionOrientationCosts](
                 GCoptimization::SiteID s, GCoptimization::LabelID l){
@@ -904,6 +907,10 @@ namespace panoramix {
                     vd.data.camera.screenProjectionInHPoint(_globalData.vanishingPoints[1]),
                     vd.data.camera.screenProjectionInHPoint(_globalData.vanishingPoints[2])
                 };
+                for (int i = 0; i < 3; i++) {
+                    auto vpp = vps[i].toPoint();
+                    std::cout << "vp[" << i << "] = (" << vpp[0] << "," << vpp[1] << ")" << std::endl;
+                }
                 auto & regions = vd.data.regionNet->regions();
                 for (auto & bd : regions.elements<1>()){
                     if (bd.data.sampledPoints.empty())
@@ -925,16 +932,16 @@ namespace panoramix {
                         Vec2 midToVP = vps[i] - HPoint2(sampledPointsCenter);
                         Vec2 edgeDir = bd.data.fittedLine.direction;
                         double angle = std::min(AngleBetweenDirections(midToVP, edgeDir), AngleBetweenDirections(midToVP, -edgeDir));
-                        double cost = (1.0 - Gaussian(angle, M_PI / 32.0)) * 1 /** (1.0 - Gaussian(bd.data.length, 20.0))*/ 
-                            * Gaussian(bd.data.straightness, 0.8);
+                        double cost = 1.0 - Gaussian(angle, M_PI / 16.0) * BoundBetween(bd.data.straightness, 0.0, 1.0);
+                        cost = cost < 0.1 ? 0 : cost;
                         regionFoldingCosts[std::make_pair(ri1, ri2)][i] = cost;
                         regionFoldingCosts[std::make_pair(ri2, ri1)][i] = cost;
                     }
 
-                    std::cout << "region folding cost: " 
-                        << regionFoldingCosts[std::make_pair(ri1, ri2)][0] << ", "
-                        << regionFoldingCosts[std::make_pair(ri1, ri2)][1] << ", "
-                        << regionFoldingCosts[std::make_pair(ri1, ri2)][2] << std::endl;
+                   //std::cout << "region folding cost: " 
+                   //     << regionFoldingCosts[std::make_pair(ri1, ri2)][0] << ", "
+                   //     << regionFoldingCosts[std::make_pair(ri1, ri2)][1] << ", "
+                   //     << regionFoldingCosts[std::make_pair(ri1, ri2)][2] << std::endl;
                 }
             }
 
@@ -952,14 +959,14 @@ namespace panoramix {
                         }
                         int foldOrientation = 0 + 1 + 2 - l1 - l2;
                         assert(regionFoldingCosts.find(std::make_pair(ri1, ri2)) != regionFoldingCosts.end());
-                        return (int)regionFoldingCosts[std::make_pair(ri1, ri2)][foldOrientation] * 30 * scaleFactor;
+                        return (int)regionFoldingCosts[std::make_pair(ri1, ri2)][foldOrientation] * 1 * scaleFactor;
                     }
                     else{
                         NOT_IMPLEMENTED_YET();
                     }
                 }
                 else { // region overlap
-                    return l1 == l2 ? 0 : 10 * scaleFactor;
+                    return l1 == l2 ? 0 : 1 * scaleFactor;
                 }
             }));
 
@@ -967,7 +974,7 @@ namespace panoramix {
             IF_DEBUG_USING_VISUALIZERS{
 
                 // visualize data costs and folding costs
-                for (auto & vd : _views.elements<0>()){                    
+                for (auto & vd : _views.elements<0>()){
 
                     ImageWithType<Vec<uint8_t, 3>> orientationImage = ImageWithType<Vec<uint8_t, 3>>::zeros(vd.data.image.size());
                     for (int y = 0; y < vd.data.image.rows; y++){
@@ -975,7 +982,7 @@ namespace panoramix {
                             auto regionId = vd.data.regionNet->segmentedRegions().at<int32_t>(PixelLoc(x, y));
                             RegionIndex ri = { vd.topo.hd, RegionsNet::RegionHandle(regionId) };
                             auto costs = regionOrientationCosts[ri];
-                            Vec<uint8_t, 3> color(255 - costs[0] * 255, 255 - costs[1] * 255, 255 - costs[2] * 255);
+                            Vec<uint8_t, 3> color(255 - costs[2] * 255, 255 - costs[1] * 255, 255 - costs[0] * 255);
                             orientationImage(PixelLoc(x, y)) = color;
                         }
                     }
@@ -986,7 +993,7 @@ namespace panoramix {
                         RegionIndex ri1 = { vd.topo.hd, bd.topo.lowers[0] };
                         RegionIndex ri2 = { vd.topo.hd, bd.topo.lowers[1] };
                         auto costs = regionFoldingCosts[std::make_pair(ri1, ri2)];
-                        vis::Color color(255 - costs[0] * 255, 255 - costs[1] * 255, 255 - costs[2] * 255);
+                        vis::Color color(255 - costs[2] * 255, 255 - costs[1] * 255, 255 - costs[0] * 255);
                         auto & edges = bd.data.edges;
                         for (auto & e : edges){
                             for (int i = 0; i < e.size() - 1; i++){
@@ -1004,8 +1011,8 @@ namespace panoramix {
 
 
             std::cout << "energy before graph-cut: " << graph.compute_energy() << std::endl;
-            graph.expansion(50);
-            graph.swap(50);
+            graph.expansion();
+            graph.swap();
             std::cout << "energy after graph-cut: " << graph.compute_energy() << std::endl;
 
             for (int i = 0; i < regionIndices.size(); i++){
