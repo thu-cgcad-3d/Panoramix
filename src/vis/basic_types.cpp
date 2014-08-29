@@ -93,15 +93,87 @@ namespace panoramix {
         const std::vector<Color> & PredefinedColorTable(ColorTableDescriptor descriptor) {
             static const std::vector<Color> allColorTable = {
                 ColorFromTag(ColorTag::White),
+                ColorFromTag(ColorTag::Black),
+                               
+                ColorFromTag(ColorTag::DimGray),
                 ColorFromTag(ColorTag::Gray),
+                ColorFromTag(ColorTag::DarkGray),
+                ColorFromTag(ColorTag::Silver),
+                ColorFromTag(ColorTag::LightGray),
+
                 ColorFromTag(ColorTag::Red),
                 ColorFromTag(ColorTag::Green),
                 ColorFromTag(ColorTag::Blue),
+
                 ColorFromTag(ColorTag::Yellow),
                 ColorFromTag(ColorTag::Magenta),
                 ColorFromTag(ColorTag::Cyan),
                 ColorFromTag(ColorTag::Orange)
             };
+
+            static const std::vector<Color> allColorExcludingWhiteTable = {
+                //ColorFromTag(ColorTag::White),
+                ColorFromTag(ColorTag::Black),
+
+                ColorFromTag(ColorTag::DimGray),
+                ColorFromTag(ColorTag::Gray),
+                ColorFromTag(ColorTag::DarkGray),
+                ColorFromTag(ColorTag::Silver),
+                ColorFromTag(ColorTag::LightGray),
+
+                ColorFromTag(ColorTag::Red),
+                ColorFromTag(ColorTag::Green),
+                ColorFromTag(ColorTag::Blue),
+
+                ColorFromTag(ColorTag::Yellow),
+                ColorFromTag(ColorTag::Magenta),
+                ColorFromTag(ColorTag::Cyan),
+                ColorFromTag(ColorTag::Orange)
+            };
+
+            static const std::vector<Color> allColorExcludingBlackTable = {
+                ColorFromTag(ColorTag::White),
+                //ColorFromTag(ColorTag::Black),
+
+                ColorFromTag(ColorTag::DimGray),
+                ColorFromTag(ColorTag::Gray),
+                ColorFromTag(ColorTag::DarkGray),
+                ColorFromTag(ColorTag::Silver),
+                ColorFromTag(ColorTag::LightGray),
+
+                ColorFromTag(ColorTag::Red),
+                ColorFromTag(ColorTag::Green),
+                ColorFromTag(ColorTag::Blue),
+
+                ColorFromTag(ColorTag::Yellow),
+                ColorFromTag(ColorTag::Magenta),
+                ColorFromTag(ColorTag::Cyan),
+                ColorFromTag(ColorTag::Orange)
+            };
+
+            static const std::vector<Color> allColorIncludingTransparentTable = {
+                ColorFromTag(ColorTag::Transparent),
+
+                ColorFromTag(ColorTag::White),
+                ColorFromTag(ColorTag::Black),
+
+                ColorFromTag(ColorTag::DimGray),
+                ColorFromTag(ColorTag::Gray),
+                ColorFromTag(ColorTag::DarkGray),
+                ColorFromTag(ColorTag::Silver),
+                ColorFromTag(ColorTag::LightGray),
+
+                ColorFromTag(ColorTag::Red),
+                ColorFromTag(ColorTag::Green),
+                ColorFromTag(ColorTag::Blue),
+
+                ColorFromTag(ColorTag::Yellow),
+                ColorFromTag(ColorTag::Magenta),
+                ColorFromTag(ColorTag::Cyan),
+                ColorFromTag(ColorTag::Orange)
+            };
+
+
             static const std::vector<Color> WRGBColorTable = {
                 ColorFromTag(ColorTag::White),
                 ColorFromTag(ColorTag::Red),
@@ -117,6 +189,10 @@ namespace panoramix {
             switch (descriptor){
             case ColorTableDescriptor::WRGB: return WRGBColorTable;
             case ColorTableDescriptor::RGB: return RGBColorTable;
+            case ColorTableDescriptor::AllColorsExcludingBlack: return allColorExcludingBlackTable;
+            case ColorTableDescriptor::AllColorsExcludingWhite: return allColorExcludingWhiteTable;
+            case ColorTableDescriptor::AllColors: return allColorTable;
+            case ColorTableDescriptor::AllColorsIncludingTransparent: return allColorIncludingTransparentTable;
             default: return allColorTable;
             }
         }

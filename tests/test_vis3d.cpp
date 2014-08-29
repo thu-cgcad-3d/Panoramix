@@ -39,8 +39,8 @@ TEST(Visualizer3D, 3D) {
 
 }
 
-//TEST(Visualizer3D, Texture) {
-void run(){
+TEST(Visualizer3D, Texture) {
+//void run(){
     std::vector<std::vector<std::pair<core::Point3, core::Point2>>> polys = {
             {
                 { { -1.0, -1.0, -1.0 }, { 0.0, 0.0 } },
@@ -82,8 +82,8 @@ int main(int argc, char * argv[], char * envp[])
 {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    testing::FLAGS_gtest_filter = "Texture";
-    //return RUN_ALL_TESTS();
-    run();
-    return 0;
+    //testing::FLAGS_gtest_filter = "Texture";
+    return RUN_ALL_TESTS();
+    //run();
+    //return 0;
 }

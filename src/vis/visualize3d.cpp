@@ -340,9 +340,6 @@ namespace panoramix {
             auto & mesh = viz.data()->mesh;
             core::Point3 ps[] = { p.first, p.second };
             OpenGLMeshData::Vertex vs[2];
-            if (core::FuzzyEquals(viz.params().defaultColor, ColorFromTag(ColorTag::White), 2)){
-                std::cout << "fuck!" << std::endl;
-            }
             for (int i = 0; i < 2; i++){
                 vs[i].position4 = MakeQVec(core::HPoint3(ps[i], 1.0).toVector());
                 vs[i].color4 = MakeQVec(viz.params().defaultColor) / 255.0f;

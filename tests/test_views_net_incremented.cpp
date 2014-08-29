@@ -61,11 +61,11 @@ void run(){
 
     std::vector<core::PerspectiveCamera> cams = {
         core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 })//,
-        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
-        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
-        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
-        //core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
+        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
     };
 
     rec::ReconstructionEngine engine;

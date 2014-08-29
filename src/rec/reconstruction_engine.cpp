@@ -41,9 +41,10 @@ namespace panoramix {
             : camera(250.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
             samplingStepLengthOnRegionBoundaries(16.0),
             samplingStepLengthOnLines(8.0),
-            intersectionDistanceThreshold(30),
-            incidenceDistanceAlongDirectionThreshold(50),
-            incidenceDistanceVerticalDirectionThreshold(8)
+            intersectionDistanceThreshold(15), // 30
+            incidenceDistanceAlongDirectionThreshold(20), // 50
+            incidenceDistanceVerticalDirectionThreshold(8),
+            incidenceDistanceAlongDirectionThresholdInterViewScale(3)
         {}
 
 
@@ -650,7 +651,7 @@ namespace panoramix {
                 auto li = i.first;
                 auto & lineData = i.second;
                 auto & views = _views;
-                linesRTree.search(lookupLineNormal(li), [&li, &lineSpatialAvatars, &views, &lineIncidenceRelations](const LineIndex & relatedLi) -> bool {
+                linesRTree.search(lookupLineNormal(li), [this, &li, &lineSpatialAvatars, &views, &lineIncidenceRelations](const LineIndex & relatedLi) -> bool {
                     if (li.viewHandle == relatedLi.viewHandle)
                         return true;
                     if (relatedLi < li) // make sure one relation is stored only once, avoid storing both a-b and b-a
@@ -659,16 +660,21 @@ namespace panoramix {
                     auto & line2 = lineSpatialAvatars[relatedLi];
                     if (line1.claz != line2.claz)
                         return true;
+
                     auto normal1 = normalize(line1.component.first.cross(line1.component.second));
                     auto normal2 = normalize(line2.component.first.cross(line2.component.second));
                     auto & vd1 = views.data(li.viewHandle);
                     auto & vd2 = views.data(relatedLi.viewHandle);
-                    if (std::min(AngleBetweenDirections(normal1, normal2),
-                        AngleBetweenDirections(normal1, -normal2)) <
+                    if (std::min(AngleBetweenDirections(normal1, normal2), AngleBetweenDirections(normal1, -normal2)) <
                         vd1.lineNet->params().incidenceDistanceVerticalDirectionThreshold / vd1.camera.focal() +
                         vd2.lineNet->params().incidenceDistanceVerticalDirectionThreshold / vd2.camera.focal()) {
 
                         auto nearest = DistanceBetweenTwoLines(line1.component, line2.component);
+                        if (AngleBetweenDirections(nearest.second.first.position, nearest.second.second.position) >
+                            _params.incidenceDistanceAlongDirectionThresholdInterViewScale *
+                            _params.incidenceDistanceAlongDirectionThreshold)
+                            return true;
+
                         auto relationCenter = (nearest.second.first.position + nearest.second.second.position) / 2.0;
                         relationCenter /= norm(relationCenter);
 
@@ -680,8 +686,8 @@ namespace panoramix {
 
 
             // generate sampled points for line-region connections
-            IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> &
-                regionLineIntersectionSampledPoints = _globalData.regionLineIntersectionSampledPoints;
+            IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> & regionLineIntersectionSampledPoints 
+                = _globalData.regionLineIntersectionSampledPoints;
             regionLineIntersectionSampledPoints.clear();
 
             static const int extendSize = 7;
@@ -1028,7 +1034,7 @@ namespace panoramix {
                     } else if (X > threshold) {
                         junctionWeight += 5.0;
                     } else if (T > threshold) {
-                        junctionWeight += 0.1;
+                        junctionWeight += 1.0;
                     }
                 }
                 if (lrd.type == LinesNet::LineRelationData::Type::Incidence)
@@ -1085,7 +1091,7 @@ namespace panoramix {
                     B(curEquationNum) = constantEtaForFirstLineInEachConnectedComponent * ratio2;
                 }
 
-                double junctionWeight = 10.0;
+                double junctionWeight = 1.0;
                 W.insert(curEquationNum, curEquationNum) = junctionWeight;
 
                 curEquationNum++;
@@ -1145,8 +1151,9 @@ namespace panoramix {
             // display reconstructed lines
             IF_DEBUG_USING_VISUALIZERS{
                 vis::Visualizer3D viz;
-                std::vector<vis::Color> colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::RGB);
+                std::vector<vis::Color> colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhite);
                 for (auto & l : _globalData.reconstructedLines) {
+                    viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
                     viz.params().defaultColor = colorTable[_globalData.lineConnectedComponentIds[l.first] % colorTable.size()];
                     viz = viz << l.second;
                 }

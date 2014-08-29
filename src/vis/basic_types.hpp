@@ -53,7 +53,10 @@ namespace panoramix {
         enum class ColorTableDescriptor : int8_t {
             RGB,
             WRGB,
-            AllColors
+            AllColors,
+            AllColorsExcludingWhite,
+            AllColorsExcludingBlack,
+            AllColorsIncludingTransparent
         };
         const std::vector<Color> &
             PredefinedColorTable(ColorTableDescriptor descriptor = ColorTableDescriptor::AllColors);
