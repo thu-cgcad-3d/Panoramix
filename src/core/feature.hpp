@@ -32,6 +32,7 @@ namespace panoramix {
             inline double nearPlane() const { return _near; }
             inline double farPlane() const { return _far; }
             Vec2 screenProjection(const Vec3 & p3d) const;
+            bool isVisibleOnScreen(const Vec3 & p3d) const;
             HPoint2 screenProjectionInHPoint(const Vec3 & p3d) const;
             Vec3 spatialDirection(const Vec2 & p2d) const;
             inline Vec3 spatialDirection(const PixelLoc & p) const { return spatialDirection(Vec2(p.x, p.y)); }

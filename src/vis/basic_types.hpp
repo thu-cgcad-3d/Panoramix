@@ -56,6 +56,7 @@ namespace panoramix {
             AllColors,
             AllColorsExcludingWhite,
             AllColorsExcludingBlack,
+            AllColorsExcludingWhiteAndBlack,
             AllColorsIncludingTransparent
         };
         const std::vector<Color> &

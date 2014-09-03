@@ -151,6 +151,26 @@ namespace panoramix {
                 ColorFromTag(ColorTag::Orange)
             };
 
+            static const std::vector<Color> allColorExcludingWhiteAndBlackTable = {
+                //ColorFromTag(ColorTag::White),
+                //ColorFromTag(ColorTag::Black),
+
+                ColorFromTag(ColorTag::DimGray),
+                ColorFromTag(ColorTag::Gray),
+                ColorFromTag(ColorTag::DarkGray),
+                ColorFromTag(ColorTag::Silver),
+                ColorFromTag(ColorTag::LightGray),
+
+                ColorFromTag(ColorTag::Red),
+                ColorFromTag(ColorTag::Green),
+                ColorFromTag(ColorTag::Blue),
+
+                ColorFromTag(ColorTag::Yellow),
+                ColorFromTag(ColorTag::Magenta),
+                ColorFromTag(ColorTag::Cyan),
+                ColorFromTag(ColorTag::Orange)
+            };
+
             static const std::vector<Color> allColorIncludingTransparentTable = {
                 ColorFromTag(ColorTag::Transparent),
 
@@ -191,6 +211,7 @@ namespace panoramix {
             case ColorTableDescriptor::RGB: return RGBColorTable;
             case ColorTableDescriptor::AllColorsExcludingBlack: return allColorExcludingBlackTable;
             case ColorTableDescriptor::AllColorsExcludingWhite: return allColorExcludingWhiteTable;
+            case ColorTableDescriptor::AllColorsExcludingWhiteAndBlack: return allColorExcludingWhiteAndBlackTable;
             case ColorTableDescriptor::AllColors: return allColorTable;
             case ColorTableDescriptor::AllColorsIncludingTransparent: return allColorIncludingTransparentTable;
             default: return allColorTable;

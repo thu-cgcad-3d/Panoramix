@@ -14,8 +14,6 @@ file (GLOB APP_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 file (GLOB APP_RESOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.qrc)	
 file (GLOB APP_UIS ${CMAKE_CURRENT_SOURCE_DIR}/*.ui)
 
-source_group ("src" FILES ${APP_HEADERS} ${APP_SOURCES})
-
 #message (STATUS "added resources: " ${RESOURCE_ADDED})
 
 qt5_wrap_ui (UI_ADDED ${APP_UIS})

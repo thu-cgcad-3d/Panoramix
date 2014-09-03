@@ -32,7 +32,7 @@ namespace panoramix {
                 double intersectionDistanceThreshold;
                 double incidenceDistanceAlongDirectionThreshold;
                 double incidenceDistanceVerticalDirectionThreshold;
-                double incidenceDistanceAlongDirectionThresholdInterViewScale;
+                double interViewIncidenceAngleAlongDirectionThreshold;
             };
 
             struct ViewData;

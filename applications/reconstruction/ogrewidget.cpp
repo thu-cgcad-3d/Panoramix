@@ -1,6 +1,5 @@
 
 #include "../../src/core/mesh_maker.hpp"
-#include "../../src/rec/reconstruction_engine_visualize.hpp"
 
 #include "ogrewidget.hpp"
 
@@ -489,7 +488,25 @@ void OgreWidget::createScene() {
     //entGround->setMaterialName("Panorama/Test");
     entGround->setCastShadows(false);
 
-    
+
+    Ogre::ManualObject * lines = _sceneMgr->createManualObject("lines");
+    Ogre::SceneNode * linesNode = _sceneMgr->getRootSceneNode()->createChildSceneNode("linesNode");
+    lines->setBoundingBox(Ogre::AxisAlignedBox(30, 10, 0, 40, 20, 10));
+
+    Ogre::MaterialPtr linesMaterial = Ogre::MaterialManager::getSingleton().create("linesMaterial", "General");
+    linesMaterial->setReceiveShadows(false);
+    linesMaterial->getTechnique(0)->setLightingEnabled(true);
+    linesMaterial->getTechnique(0)->getPass(0)->setDiffuse(0, 0, 1, 0);
+    linesMaterial->getTechnique(0)->getPass(0)->setAmbient(0, 0, 1);
+    linesMaterial->getTechnique(0)->getPass(0)->setSelfIllumination(0, 0, 1);
+
+
+    lines->begin("linesMaterial", Ogre::RenderOperation::OT_LINE_LIST);
+    lines->position(30, 20, 10);
+    lines->position(40, 10, 0);
+    // etc 
+    lines->end();
+    linesNode->attachObject(lines);
 
     // custom cube
     //Entity* entCube = _sceneMgr->createEntity("Hero", "Indoor");

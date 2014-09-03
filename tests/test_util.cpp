@@ -223,14 +223,26 @@ TEST(UtilTest, DistanceBetweenTwoLines) {
     ASSERT_DOUBLE_EQ(0, core::DistanceBetweenTwoLines(l7, l9).first);
     ASSERT_DOUBLE_EQ(0, core::DistanceBetweenTwoLines(l8, l10).first);
 
-    core::Line3 a = { { 0.32060601460883287, 0.92543477139591090, -0.20194619899378968 }, { 0.24497237141965944, 0.95024535429166723, -0.19241180807874725 } };
-    core::Line3 b = { { 0.15085395484832950, 0.90385564866472523, -0.40035990144304773 }, { 0.096251150572768340, 0.90140252138592014, -0.42214832754912596 } };
-    auto pab = core::DistanceBetweenTwoLines(a, b);
+    {
+        core::Line3 a = { { 0.32060601460883287, 0.92543477139591090, -0.20194619899378968 }, { 0.24497237141965944, 0.95024535429166723, -0.19241180807874725 } };
+        core::Line3 b = { { 0.15085395484832950, 0.90385564866472523, -0.40035990144304773 }, { 0.096251150572768340, 0.90140252138592014, -0.42214832754912596 } };
+        auto pab = core::DistanceBetweenTwoLines(a, b);
 
-    ASSERT_LE(pab.first, core::Distance(a.first, b.first));
-    ASSERT_LE(pab.first, core::Distance(a.first, b.second));
-    ASSERT_LE(pab.first, core::Distance(a.second, b.first));
-    ASSERT_LE(pab.first, core::Distance(a.second, b.second));
+        ASSERT_LE(pab.first, core::Distance(a.first, b.first));
+        ASSERT_LE(pab.first, core::Distance(a.first, b.second));
+        ASSERT_LE(pab.first, core::Distance(a.second, b.first));
+        ASSERT_LE(pab.first, core::Distance(a.second, b.second));
+    }
+    {
+        core::Line3 a = { { 0.98184, -0.120335, 0.146665 }, { 0.65886, 0.72241, -0.209827 } };
+        core::Line3 b = { { 0.493696, 0.844419, 0.207651 }, { 0.245523, 0.952812, 0.178513 } };
+        auto pab = core::DistanceBetweenTwoLines(a, b);
+
+        ASSERT_LE(pab.first, core::Distance(a.first, b.first));
+        ASSERT_LE(pab.first, core::Distance(a.first, b.second));
+        ASSERT_LE(pab.first, core::Distance(a.second, b.first));
+        ASSERT_LE(pab.first, core::Distance(a.second, b.second));
+    }
 
     for (int i = 0; i < 1000; i++){
         core::Line3 aa = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };

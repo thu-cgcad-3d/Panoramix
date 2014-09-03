@@ -126,9 +126,9 @@ namespace panoramix {
                 auto radius = (box.second - box.first).length() / 2.0;
                 viz.params().camera.setCenter(MakeCoreVec(center), false);
                 auto eyedirection = viz.params().camera.eye() - viz.params().camera.center();
-                eyedirection = eyedirection / core::norm(eyedirection) * radius * 1.5;
+                eyedirection = eyedirection / core::norm(eyedirection) * radius * 0.8;
                 viz.params().camera.setEye(MakeCoreVec(center) + eyedirection, false);
-                viz.params().camera.setNearAndFarPlanes(radius / 2.0, radius * 4.0, true);
+                viz.params().camera.setNearAndFarPlanes(radius / 2.0, radius * 2.0, true);
             }
 
             namespace {

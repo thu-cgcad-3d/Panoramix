@@ -42,9 +42,9 @@ namespace panoramix {
             samplingStepLengthOnRegionBoundaries(16.0),
             samplingStepLengthOnLines(8.0),
             intersectionDistanceThreshold(15), // 30
-            incidenceDistanceAlongDirectionThreshold(20), // 50
-            incidenceDistanceVerticalDirectionThreshold(8),
-            incidenceDistanceAlongDirectionThresholdInterViewScale(3)
+            incidenceDistanceAlongDirectionThreshold(40), // 50
+            incidenceDistanceVerticalDirectionThreshold(5),
+            interViewIncidenceAngleAlongDirectionThreshold(1e-5)
         {}
 
 
@@ -485,6 +485,11 @@ namespace panoramix {
                 return sin(angleFirstP) / sin(angleP);
             }
 
+            template <class T, int N>
+            inline Line<T, N> NormalizeLine(const Line<T, N> & l) {
+                return Line<T, N>(normalize(l.first), normalize(l.second));
+            }
+
         }
 
 
@@ -651,28 +656,29 @@ namespace panoramix {
                 auto li = i.first;
                 auto & lineData = i.second;
                 auto & views = _views;
-                linesRTree.search(lookupLineNormal(li), [this, &li, &lineSpatialAvatars, &views, &lineIncidenceRelations](const LineIndex & relatedLi) -> bool {
+                linesRTree.search(lookupLineNormal(li), 
+                    [this, &li, &lineSpatialAvatars, &views, &lineIncidenceRelations](const LineIndex & relatedLi) -> bool {
                     if (li.viewHandle == relatedLi.viewHandle)
                         return true;
                     if (relatedLi < li) // make sure one relation is stored only once, avoid storing both a-b and b-a
                         return true;
+
                     auto & line1 = lineSpatialAvatars[li];
                     auto & line2 = lineSpatialAvatars[relatedLi];
-                    if (line1.claz != line2.claz)
+                    if (line1.claz != line2.claz) // only incidence relations are recognized here
                         return true;
 
                     auto normal1 = normalize(line1.component.first.cross(line1.component.second));
                     auto normal2 = normalize(line2.component.first.cross(line2.component.second));
                     auto & vd1 = views.data(li.viewHandle);
                     auto & vd2 = views.data(relatedLi.viewHandle);
-                    if (std::min(AngleBetweenDirections(normal1, normal2), AngleBetweenDirections(normal1, -normal2)) <
+                    if (std::min(std::abs(AngleBetweenDirections(normal1, normal2)), std::abs(AngleBetweenDirections(normal1, -normal2))) <
                         vd1.lineNet->params().incidenceDistanceVerticalDirectionThreshold / vd1.camera.focal() +
                         vd2.lineNet->params().incidenceDistanceVerticalDirectionThreshold / vd2.camera.focal()) {
 
                         auto nearest = DistanceBetweenTwoLines(line1.component, line2.component);
                         if (AngleBetweenDirections(nearest.second.first.position, nearest.second.second.position) >
-                            _params.incidenceDistanceAlongDirectionThresholdInterViewScale *
-                            _params.incidenceDistanceAlongDirectionThreshold)
+                            _params.interViewIncidenceAngleAlongDirectionThreshold) // ignore too far-away relations
                             return true;
 
                         auto relationCenter = (nearest.second.first.position + nearest.second.second.position) / 2.0;
@@ -683,6 +689,29 @@ namespace panoramix {
                     return true;
                 });
             }
+
+            // check whether all interview incidences are valid
+            double dist = 0;
+            Line3 farthestLine1, farthestLine2;
+            for (auto & lir : lineIncidenceRelations) {
+                auto & line1 = lineSpatialAvatars[lir.first.first];
+                auto & line2 = lineSpatialAvatars[lir.first.second];
+                if (line1.claz != line2.claz) {
+                    std::cout << "invalid classes!" << std::endl;
+                }
+                auto l1 = NormalizeLine(line1.component);
+                auto l2 = NormalizeLine(line2.component);
+                auto centerDist = Distance(l1.center(), l2.center());
+                if (centerDist > dist) {
+                    farthestLine1 = l1;
+                    farthestLine2 = l2;
+                    dist = centerDist;
+                }
+            }
+            std::cout << "max dist of interview incidence pair: " << dist << std::endl;
+            std::cout << "line1: " << farthestLine1.first << ", " << farthestLine1.second << std::endl;
+            std::cout << "line2: " << farthestLine2.first << ", " << farthestLine2.second << std::endl;
+            std::cout << "nearest dist: " << DistanceBetweenTwoLines(farthestLine1, farthestLine2).first << std::endl;
 
 
             // generate sampled points for line-region connections
@@ -740,6 +769,53 @@ namespace panoramix {
             }
 
 
+
+            // compute connected components based on line-line constraints
+            auto relatedLineIndicesGetter = [this, &lineIncidenceRelations](const LineIndex & li) {
+                std::vector<LineIndex> related;
+                // constraints in same view
+                auto & lines = _views.data(li.viewHandle).lineNet->lines();
+                auto & relationsInSameView = lines.topo(li.handle).uppers;
+                for (auto & rh : relationsInSameView) {
+                    auto anotherLineHandle = lines.topo(rh).lowers[0];
+                    if (anotherLineHandle == li.handle)
+                        anotherLineHandle = lines.topo(rh).lowers[1];
+                    related.push_back(LineIndex{ li.viewHandle, anotherLineHandle });
+                }
+                // incidence constraints across views
+                for (auto & interviewIncidence : lineIncidenceRelations) {
+                    if (interviewIncidence.first.first == li)
+                        related.push_back(interviewIncidence.first.second);
+                    else if (interviewIncidence.first.second == li)
+                        related.push_back(interviewIncidence.first.first);
+                }
+                return related;
+            };
+
+            // collect all lines
+            std::vector<LineIndex> lineIndices;
+            IndexHashMap<LineIndex, int> lineIndexToIds;
+            for (auto & vd : _views.elements<0>()) {
+                LineIndex li;
+                li.viewHandle = vd.topo.hd;
+                for (auto & ld : vd.data.lineNet->lines().elements<0>()) {
+                    li.handle = ld.topo.hd;
+                    lineIndices.push_back(li);
+                    lineIndexToIds[li] = lineIndices.size() - 1;
+                }
+            }
+
+            _globalData.lineConnectedComponentIds.clear();
+            _globalData.lineConnectedComponentsNum = core::ConnectedComponents(lineIndices.begin(), lineIndices.end(),
+                relatedLineIndicesGetter, [this](const LineIndex & li, int ccid) {
+                _globalData.lineConnectedComponentIds[li] = ccid;
+            });
+
+
+            std::cout << "ccnum: " << _globalData.lineConnectedComponentsNum << std::endl;
+
+
+
             IF_DEBUG_USING_VISUALIZERS{
                 // visualize connections between regions and lines
                 std::unordered_map<ViewHandle, vis::Visualizer2D, HandleHasher<AtLevel<0>>> vizs;
@@ -789,49 +865,6 @@ namespace panoramix {
 
 
 
-            // compute connected components based on line-line constraints
-            auto relatedLineIndicesGetter = [this](const LineIndex & li) {
-                std::vector<LineIndex> related;
-                // constraints in same view
-                auto & lines = _views.data(li.viewHandle).lineNet->lines();
-                auto & relationsInSameView = lines.topo(li.handle).uppers;
-                for (auto & rh : relationsInSameView) {
-                    auto anotherLineHandle = lines.topo(rh).lowers[0];
-                    if (anotherLineHandle == li.handle)
-                        anotherLineHandle = lines.topo(rh).lowers[1];
-                    related.push_back(LineIndex{ li.viewHandle, anotherLineHandle });
-                }
-                // incidence constraints across views
-                for (auto & interviewIncidence : _globalData.lineIncidenceRelationsAcrossViews) {
-                    if (interviewIncidence.first.first == li)
-                        related.push_back(interviewIncidence.first.second);
-                    else if (interviewIncidence.first.second == li)
-                        related.push_back(interviewIncidence.first.first);
-                }
-                return related;
-            };
-
-            // collect all lines
-            std::vector<LineIndex> lineIndices;
-            IndexHashMap<LineIndex, int> lineIndexToIds;
-            for (auto & vd : _views.elements<0>()) {
-                LineIndex li;
-                li.viewHandle = vd.topo.hd;
-                for (auto & ld : vd.data.lineNet->lines().elements<0>()) {
-                    li.handle = ld.topo.hd;
-                    lineIndices.push_back(li);
-                    lineIndexToIds[li] = lineIndices.size() - 1;
-                }
-            }
-
-            _globalData.lineConnectedComponentIds.clear();
-            _globalData.lineConnectedComponentsNum = core::ConnectedComponents(lineIndices.begin(), lineIndices.end(),
-                relatedLineIndicesGetter, [this](const LineIndex & li, int ccid) {
-                _globalData.lineConnectedComponentIds[li] = ccid;
-            });
-
-
-            std::cout << "ccnum: " << _globalData.lineConnectedComponentsNum << std::endl;
 
         }
 
@@ -1091,7 +1124,7 @@ namespace panoramix {
                     B(curEquationNum) = constantEtaForFirstLineInEachConnectedComponent * ratio2;
                 }
 
-                double junctionWeight = 1.0;
+                double junctionWeight = 5.0;
                 W.insert(curEquationNum, curEquationNum) = junctionWeight;
 
                 curEquationNum++;
@@ -1100,7 +1133,7 @@ namespace panoramix {
             // solve the equation system
             VectorXd X;
             SparseQR<SparseMatrix<double>, COLAMDOrdering<int>> solver;
-            static_assert(!(SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only support column major");
+            static_assert(!(SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
             solver.compute(W * A);
             if (solver.info() != Success) {
                 assert(0);
@@ -1115,11 +1148,13 @@ namespace panoramix {
             }
 
             // fill back all etas
+            int k = 0;
             for (int i = 0; i < lineIndices.size(); i++) {
                 auto & li = lineIndices[i];
                 double eta = X(i);
                 if (firstLineIndexInConnectedComponents.find(li) != firstLineIndexInConnectedComponents.end()) { // is first of a cc
                     eta = constantEtaForFirstLineInEachConnectedComponent;
+                    std::cout << "is the " << (++k) << "-th anchor!" << std::endl;
                 }
                 auto & line2 = _views.data(li.viewHandle).lineNet->lines().data(li.handle).line;                
                 auto & camera = _views.data(li.viewHandle).camera;
@@ -1128,7 +1163,7 @@ namespace panoramix {
                     normalize(camera.spatialDirection(line2.component.second))
                 };
 
-                std::cout << "eta: " << eta << " --- " << std::endl;
+                std::cout << "eta: " << eta << " --- " << "ccid: " << _globalData.lineConnectedComponentIds[li] << std::endl;
                 //std::cout << "depth of the " << i << "-th line: "
                 //    << norm(line3.first) << ", "
                 //    << norm(line3.second) << " ---- ";
@@ -1151,12 +1186,51 @@ namespace panoramix {
             // display reconstructed lines
             IF_DEBUG_USING_VISUALIZERS{
                 vis::Visualizer3D viz;
-                std::vector<vis::Color> colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhite);
+                std::vector<vis::Color> colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
+                for (auto & l : _globalData.reconstructedLines) {
+                    viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
+                    viz.params().defaultColor = colorTable[_globalData.lineConnectedComponentIds[l.first] % colorTable.size()];
+                    viz = viz << NormalizeLine(l.second);
+                }
+                for (auto & c : _globalData.lineIncidenceRelationsAcrossViews) {
+                    auto & line1 = _globalData.reconstructedLines[c.first.first];
+                    auto & line2 = _globalData.reconstructedLines[c.first.second];
+                    auto nearest = DistanceBetweenTwoLines(NormalizeLine(line1), NormalizeLine(line2));
+                    viz << vis::manip3d::SetDefaultColor(vis::ColorTag::Black);
+                    viz << Line3(nearest.second.first.position, nearest.second.second.position);
+                }
+                viz << vis::manip3d::SetWindowName("not-yet-reconstructed lines with ccids");
+                viz << vis::manip3d::AutoSetCamera << vis::manip3d::Show(false);
+            }
+
+            IF_DEBUG_USING_VISUALIZERS{
+                vis::Visualizer3D viz;
+                std::vector<vis::Color> colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
                     viz.params().defaultColor = colorTable[_globalData.lineConnectedComponentIds[l.first] % colorTable.size()];
                     viz = viz << l.second;
                 }
+                viz << vis::manip3d::SetWindowName("reconstructed lines with ccids");
+                viz << vis::manip3d::AutoSetCamera << vis::manip3d::Show(false);
+            }
+
+            IF_DEBUG_USING_VISUALIZERS{ // show interview constraints
+                vis::Visualizer3D viz;
+                std::vector<vis::Color> colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
+                for (auto & l : _globalData.reconstructedLines) {
+                    viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
+                    viz.params().defaultColor = colorTable[_globalData.lineConnectedComponentIds[l.first] % colorTable.size()];
+                    viz = viz << l.second;
+                }
+                for (auto & c : _globalData.lineIncidenceRelationsAcrossViews) {
+                    auto & line1 = _globalData.reconstructedLines[c.first.first];
+                    auto & line2 = _globalData.reconstructedLines[c.first.second];
+                    auto nearest = DistanceBetweenTwoLines(line1, line2);
+                    viz << vis::manip3d::SetDefaultColor(vis::ColorTag::Black);
+                    viz << Line3(nearest.second.first.position, nearest.second.second.position);
+                }
+                viz << vis::manip3d::SetWindowName("reconstructed lines with interview constraints");
                 viz << vis::manip3d::AutoSetCamera << vis::manip3d::Show(true);
             }
         }

@@ -36,6 +36,12 @@ namespace panoramix {
             return Vec2(x, y);
         }
 
+        bool PerspectiveCamera::isVisibleOnScreen(const Vec3 & p3d) const {
+            Vec4 p4(p3d(0), p3d(1), p3d(2), 1);
+            Vec4 position = _viewProjectionMatrix * p4;
+            return position(3) > 0 && position(2) > 0;
+        }
+
         HPoint2 PerspectiveCamera::screenProjectionInHPoint(const Vec3 & p3) const {
             Vec4 p4(p3(0), p3(1), p3(2), 1);
             Vec4 position = _viewProjectionMatrix * p4;
