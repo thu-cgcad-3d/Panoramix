@@ -1390,7 +1390,7 @@ namespace panoramix {
                     sampledPointsCenter /= num;
                     
                     for (int i = 0; i < 3; i++) {
-                        Vec2 midToVP = vps[i] - HPoint2(sampledPointsCenter);
+                        Vec2 midToVP = (vps[i] - HPoint2(sampledPointsCenter)).coord;
                         Vec2 edgeDir = bd.data.fittedLine.direction;
                         double angle = std::min(AngleBetweenDirections(midToVP, edgeDir), AngleBetweenDirections(midToVP, -edgeDir));
                         double cost = 1.0 - Gaussian(angle, M_PI / 16.0) * BoundBetween(bd.data.straightness, 0.0, 1.0);

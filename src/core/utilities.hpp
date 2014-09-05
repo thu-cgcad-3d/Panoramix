@@ -159,7 +159,7 @@ namespace panoramix {
 
 
 
-        // the standard bounding box functor
+        // the default bounding box functor
         template <class T>
         struct DefaultBoundingBoxFunctor {
             using BoxType = decltype(BoundingBox(std::declval<T>()));
@@ -169,7 +169,7 @@ namespace panoramix {
         };
 
 
-        // the standard influence box functor
+        // the default influence box functor
         template <class T>
         struct DefaultInfluenceBoxFunctor {
             using BoxType = decltype(BoundingBox(std::declval<T>()));

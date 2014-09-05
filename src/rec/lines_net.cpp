@@ -67,8 +67,8 @@ namespace panoramix {
                     for (int j = 0; j < vps.size(); j++){
                         auto & point = vps[j];
                         double angle = std::min(
-                            AngleBetweenDirections(line.direction(), (point - HPoint2(line.center()))),
-                            AngleBetweenDirections(-line.direction(), (point - HPoint2(line.center()))));
+                            AngleBetweenDirections(line.direction(), (point - HPoint2(line.center())).coord),
+                            AngleBetweenDirections(-line.direction(), (point - HPoint2(line.center())).coord));
                         lineangles[j] = angle;
                     }
 
@@ -125,7 +125,7 @@ namespace panoramix {
                         if (Distance(vp.toPoint(), conCenter) < _params.intersectionDistanceThreshold)
                             continue;
 
-                        auto dir = normalize(vp - HPoint2(conCenter));
+                        auto dir = normalize((vp - HPoint2(conCenter)).coord);
                         double dAlong = abs(conDir.dot(dir));
                         double dVert = sqrt(Square(norm(conDir)) - dAlong*dAlong);
 

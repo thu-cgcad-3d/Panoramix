@@ -82,10 +82,16 @@ namespace panoramix {
             hp.scalar = v[N-1];
             return hp;
         }
+
         template <class T, int N>
-        inline Vec<T, N> operator - (const HPoint<T, N> & a, const HPoint<T, N> & b) {
-            return a.coord * b.scalar - b.coord * a.scalar;
+        inline HPoint<T, N> operator + (const HPoint<T, N> & a, const HPoint<T, N> & b) {
+            return HPoint<T, N>(a.coord * b.scalar + b.coord * a.scalar, a.scalar * b.scalar);
         }
+        template <class T, int N>
+        inline HPoint<T, N> operator - (const HPoint<T, N> & a, const HPoint<T, N> & b) {
+            return HPoint<T, N>(a.coord * b.scalar - b.coord * a.scalar, a.scalar * b.scalar);
+        }
+
         template <class T, int N>
         inline bool operator == (const HPoint<T, N> & a, const HPoint<T, N> & b) {
             return a.coord == b.coord && a.scalar == b.scalar;
