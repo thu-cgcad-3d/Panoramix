@@ -28,6 +28,26 @@ TEST(Feature, LineSegmentExtractor) {
         << vis::manip2d::Show();
 }
 
+TEST(Feature, VanishingPointsDetector) {
+    core::LineSegmentExtractor lineseg;
+    core::VanishingPointsDetector vpdetector;
+    core::Image im = cv::imread(ProjectTestDataDirStr_Normal + "/sampled_1.png");
+    auto lines = lineseg(im);
+    std::vector<int> lineClasses;
+    std::array<core::HPoint2, 3> vps;
+    double focalLength;
+    std::tie(vps, focalLength, lineClasses) = vpdetector(lines, core::Point2(im.cols/2, im.rows/2));
+    std::vector<core::Classified<core::Line2>> classifiedLines;
+    for (int i = 0; i < lines.size(); i++) {
+        classifiedLines.push_back({ lineClasses[i], lines[i]});
+    }
+    vis::Visualizer2D(im)
+        << vis::manip2d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
+        << vis::manip2d::SetThickness(2) <<
+        classifiedLines
+        << vis::manip2d::Show();
+}
+
 TEST(Feature, PerspectiveCamera){
     core::PerspectiveCamera cam(1000, 1000, 500, 
         core::Vec3(0, 0, 0), 

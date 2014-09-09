@@ -96,7 +96,7 @@ namespace panoramix {
                         descriptor);
             }
             
-            Manipulator<int> Show(int delay = 1);
+            Manipulator<int> Show(int delay = 0);
         }
 
         inline Visualizer2D operator << (Visualizer2D viz, void (*func)(Visualizer2D&)) {

@@ -221,23 +221,23 @@ namespace panoramix {
 
 
 
-        // vanishing point extractor
-        class VanishingPointsExtractor {
+        // vanishing point detection
+        class VanishingPointsDetector {
         public:
-            using Feature = std::array < HPoint2, 3 > ;
             struct Params {
-                inline Params() {}
-
-                template <class Archive> inline void serialize(Archive & ar) {}
+                inline Params(double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5)
+                : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal) {}
+                double maxPrinciplePointOffset;
+                double minFocalLength, maxFocalLength;
             };
         public:
-            inline VanishingPointsExtractor(const Params & params = Params()) : _params(params) {}
-            // find vanishing points with known focal length
-            Feature operator() (const LineSegmentExtractor::Feature & lines, const Point2 & projCenter, double focalLength) const;
-            // find vanishing points without known focal length
-            std::pair<Feature, double> operator() (const LineSegmentExtractor::Feature & lines, const Point2 & projCenter) const;
-
-            template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
+            inline explicit VanishingPointsDetector(const Params & params = Params()) : _params(params) {}
+            // accepts (lines, projection center)
+            // returns (3 vanishing points, the focal length, line classes)
+            std::tuple<std::array<HPoint2, 3>, double, std::vector<int>>
+                operator() (const std::vector<Line2> & lines, const Point2 & projCenter) const;
+            std::tuple<std::array<HPoint2, 3>, double, std::vector<int>>
+                operator() (const std::vector<Line2> & lines) const;
         private:
             Params _params;
         };

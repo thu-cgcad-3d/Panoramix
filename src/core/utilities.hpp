@@ -56,7 +56,7 @@ namespace panoramix {
 
         template <class T, int N>
         inline T Distance(const HPoint<T, N> & a, const HPoint<T, N> & b) {
-            return norm(a.toPoint() - b.toPoint());
+            return norm(a.value() - b.value());
         }
 
         template <class T, int N>
@@ -106,7 +106,7 @@ namespace panoramix {
 
         template <class T, int N>
         inline Box<T, N> BoundingBox(const HPoint<T, N> & hp) {
-            return BoundingBox(hp.toPoint());
+            return BoundingBox(hp.value());
         }
 
         inline Box2 BoundingBox(const PixelLoc & p) {
@@ -252,6 +252,19 @@ namespace panoramix {
             inline int searchNear(const T & t, CallbackFunctorT callback) const {
                 auto b = _getBoundingBox(t);
                 return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
+            }
+
+            template <class IsEqualT = std::equal_to<T>>
+            bool contains(const T & t, IsEqualT && cmp = IsEqualT()) const {
+                bool exists = false;
+                search(_getBoundingBox(t), [&exists, &t, &cmp](const T & ele) {
+                    if (cmp(ele, t)) {
+                        exists = true;
+                        return false;
+                    }
+                    return true;
+                });
+                return exists;
             }
 
         private:

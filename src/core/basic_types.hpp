@@ -360,6 +360,7 @@ namespace panoramix {
         }
 
 
+
         namespace {
             template <class T, int N>
             Vec<T, N> MakeMin(const Vec<T, N>& v1, const Vec<T, N>& v2) {
