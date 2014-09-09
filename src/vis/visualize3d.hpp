@@ -87,7 +87,7 @@ namespace panoramix {
         // points
         Visualizer3D operator << (Visualizer3D viz, const core::Point3 & p);
         inline Visualizer3D operator << (Visualizer3D viz, const core::HPoint3 & p) {
-            return viz << p.toPoint();
+            return viz << p.value();
         }
 
         // lines

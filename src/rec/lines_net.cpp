@@ -24,8 +24,8 @@ namespace panoramix {
                 return Line < T, N > {line.first - p, line.second - p};
             }
             inline Vec3 ComputeLineCoeffsRelativeToPoint(const Line2 & line, const Point2 & imCenter, double fakeFocal){
-                return normalize(HPoint2(line.first - imCenter, fakeFocal).toVector()
-                    .cross(HPoint2(line.second - imCenter, fakeFocal).toVector()));
+                return normalize(VectorFromHPoint(HPoint2(line.first - imCenter, fakeFocal))
+                    .cross(VectorFromHPoint(HPoint2(line.second - imCenter, fakeFocal))));
             }
 
         }
@@ -67,8 +67,8 @@ namespace panoramix {
                     for (int j = 0; j < vps.size(); j++){
                         auto & point = vps[j];
                         double angle = std::min(
-                            AngleBetweenDirections(line.direction(), (point - HPoint2(line.center())).coord),
-                            AngleBetweenDirections(-line.direction(), (point - HPoint2(line.center())).coord));
+                            AngleBetweenDirections(line.direction(), (point - HPoint2(line.center())).numerator),
+                            AngleBetweenDirections(-line.direction(), (point - HPoint2(line.center())).numerator));
                         lineangles[j] = angle;
                     }
 
@@ -122,10 +122,10 @@ namespace panoramix {
                         auto conDir = (nearest.second.first.position - nearest.second.second.position);
                         auto & vp = vps[clazi];
 
-                        if (Distance(vp.toPoint(), conCenter) < _params.intersectionDistanceThreshold)
+                        if (Distance(vp.value(), conCenter) < _params.intersectionDistanceThreshold)
                             continue;
 
-                        auto dir = normalize((vp - HPoint2(conCenter)).coord);
+                        auto dir = normalize((vp - HPoint2(conCenter)).numerator);
                         double dAlong = abs(conDir.dot(dir));
                         double dVert = sqrt(Square(norm(conDir)) - dAlong*dAlong);
 
@@ -140,7 +140,7 @@ namespace panoramix {
                     else {
                         if (d < _params.intersectionDistanceThreshold){
                             auto conCenter = HPointFromVector(GetLine2Coeffs(linei.infinieLine())
-                                .cross(GetLine2Coeffs(linej.infinieLine()))).toPoint();
+                                .cross(GetLine2Coeffs(linej.infinieLine()))).value();
                             LineRelationData lrd;
                             lrd.type = LineRelationData::Type::Intersection;
                             lrd.relationCenter = conCenter;
@@ -163,7 +163,7 @@ namespace panoramix {
                     auto & vp = vps[claz];
                     Point2 center = line.center();
 
-                    Vec2 center2vp = vp.toPoint() - center;
+                    Vec2 center2vp = vp.value() - center;
                     Vec2 center2pos = pos - center;
 
                     if (norm(center2pos) <= 1)

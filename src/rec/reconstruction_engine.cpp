@@ -389,7 +389,7 @@ namespace panoramix {
                     vIter->data.lineNet->lineSegmentIntersections().end(),
                     intersectionsBegin, 
                     [&vIter](const HPoint2 & p) -> Vec3 {
-                    Vec3 p3 = vIter->data.camera.spatialDirection(p.toPoint());
+                    Vec3 p3 = vIter->data.camera.spatialDirection(p.value());
                     return p3 / norm(p3); // normalized
                 });
             }
@@ -1369,7 +1369,7 @@ namespace panoramix {
                     vd.data.camera.screenProjectionInHPoint(_globalData.vanishingPoints[2])
                 };
                 for (int i = 0; i < 3; i++) {
-                    auto vpp = vps[i].toPoint();
+                    auto vpp = vps[i].value();
                     std::cout << "vp[" << i << "] = (" << vpp[0] << "," << vpp[1] << ")" << std::endl;
                 }
                 auto & regions = vd.data.regionNet->regions();
@@ -1390,7 +1390,7 @@ namespace panoramix {
                     sampledPointsCenter /= num;
                     
                     for (int i = 0; i < 3; i++) {
-                        Vec2 midToVP = (vps[i] - HPoint2(sampledPointsCenter)).coord;
+                        Vec2 midToVP = (vps[i] - HPoint2(sampledPointsCenter)).numerator;
                         Vec2 edgeDir = bd.data.fittedLine.direction;
                         double angle = std::min(AngleBetweenDirections(midToVP, edgeDir), AngleBetweenDirections(midToVP, -edgeDir));
                         double cost = 1.0 - Gaussian(angle, M_PI / 16.0) * BoundBetween(bd.data.straightness, 0.0, 1.0);

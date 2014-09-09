@@ -327,7 +327,7 @@ namespace panoramix {
 
         Visualizer3D operator << (Visualizer3D viz, const core::Point3 & p) {
             OpenGLMeshData::Vertex v;
-            v.position4 = MakeQVec(core::HPoint3(p, 1.0).toVector());
+            v.position4 = MakeQVec(VectorFromHPoint(core::HPoint3(p, 1.0)));
             v.color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
             v.lineWidth1 = viz.params().lineWidth;
             v.pointSize1 = viz.params().pointSize;
@@ -341,7 +341,7 @@ namespace panoramix {
             core::Point3 ps[] = { p.first, p.second };
             OpenGLMeshData::Vertex vs[2];
             for (int i = 0; i < 2; i++){
-                vs[i].position4 = MakeQVec(core::HPoint3(ps[i], 1.0).toVector());
+                vs[i].position4 = MakeQVec(VectorFromHPoint(core::HPoint3(ps[i], 1.0)));
                 vs[i].color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
                 vs[i].lineWidth1 = viz.params().lineWidth;
                 vs[i].pointSize1 = viz.params().pointSize;
@@ -365,7 +365,7 @@ namespace panoramix {
             normal /= norm(normal);
             for (auto & p : polygonWithTexCoords){
                 OpenGLMeshData::Vertex v;
-                v.position4 = MakeQVec(core::HPoint3(p.first, 1.0).toVector());
+                v.position4 = MakeQVec(VectorFromHPoint(core::HPoint3(p.first, 1.0)));
                 v.color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
                 v.lineWidth1 = viz.params().lineWidth;
                 v.pointSize1 = viz.params().pointSize;
