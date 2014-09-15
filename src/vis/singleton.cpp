@@ -3,8 +3,8 @@
 #include "singleton.hpp"
 
 inline void _InitResources() {
-    Q_INIT_RESOURCE(shaders);
-    Q_INIT_RESOURCE(textures);
+    //Q_INIT_RESOURCE(shaders);
+    //Q_INIT_RESOURCE(textures);
 }
 
 namespace panoramix {

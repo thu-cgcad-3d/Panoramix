@@ -31,7 +31,7 @@ TEST(Feature, LineSegmentExtractor) {
 TEST(Feature, VanishingPointsDetector) {
     core::LineSegmentExtractor lineseg;
     core::VanishingPointsDetector vpdetector;
-    core::Image im = cv::imread(ProjectTestDataDirStr_Normal + "/sampled_1.png");
+    core::Image im = cv::imread(ProjectTestDataDirStr_Normal + "/2148.jpg");
     auto lines = lineseg(im);
     std::vector<int> lineClasses;
     std::array<core::HPoint2, 3> vps;

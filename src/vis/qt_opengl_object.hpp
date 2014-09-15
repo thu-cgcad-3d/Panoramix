@@ -3,6 +3,7 @@
 
 #include <QtOpenGL>
 #include "../core/basic_types.hpp"
+#include "../core/feature.hpp"
 
 #include "qt_glue.hpp"
 
@@ -18,9 +19,6 @@ namespace panoramix {
                 QVector3D normal3;
                 QVector4D color4;
                 QVector2D texCoord2;
-                float pointSize1;
-                float lineWidth1;
-                float a, b;
             };
 
             using VertHandle = uint32_t;
@@ -44,15 +42,19 @@ namespace panoramix {
 
             void clear();
 
+            void setToUnitSphere(int m = 32, int n = 64);
+            void setToUnitCube();
+
             // bounding box
             QPair<QVector3D, QVector3D> boundingBox() const;
         };
 
+
+
         // opengl shader source
         struct OpenGLShaderSource {
             QByteArray vertexShaderSource;
-            QByteArray fragmentShaderSource;
-            QByteArray geometryShaderSource;            
+            QByteArray fragmentShaderSource;           
         };
         enum class OpenGLShaderSourceName {
             NormalPoints,
@@ -60,6 +62,7 @@ namespace panoramix {
             NormalTriangles
         };
         OpenGLShaderSource PredefinedShaderSource(OpenGLShaderSourceName name);
+
 
 
         // opengl object class
@@ -75,8 +78,8 @@ namespace panoramix {
             void setUpMesh(const OpenGLMeshData & mesh);
             void setUpTexture(const QImage & tex);
 
-            void render(RenderModeFlags mode, const QMatrix4x4 & projection, 
-                const QMatrix4x4 & view, const QMatrix4x4 & model);
+            void render(RenderModeFlags mode, const QMatrix4x4 & mat) const;
+            void render(RenderModeFlags mode, const core::PerspectiveCamera & cam, const QMatrix4x4 & modelMat = QMatrix4x4()) const;
 
         signals:
             void errorOccored(QString message);
@@ -88,8 +91,6 @@ namespace panoramix {
             OpenGLMeshData _mesh;
             QOpenGLShaderProgram * _program;
             QOpenGLTexture * _texture;
-            GLuint _vertexArrayBuffer;
-            GLuint _pointsIndicesBuffer, _linesIndicesBuffer, _trianglesIndicesBuffer;
         };
 
 

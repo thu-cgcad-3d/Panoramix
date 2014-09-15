@@ -229,6 +229,7 @@ namespace panoramix {
                 : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal) {}
                 double maxPrinciplePointOffset;
                 double minFocalLength, maxFocalLength;
+                template <class Archive> inline void serialize(Archive & ar) { ar(maxPrinciplePointOffset, minFocalLength, maxFocalLength); }
             };
         public:
             inline explicit VanishingPointsDetector(const Params & params = Params()) : _params(params) {}
@@ -238,30 +239,11 @@ namespace panoramix {
                 operator() (const std::vector<Line2> & lines, const Point2 & projCenter) const;
             std::tuple<std::array<HPoint2, 3>, double, std::vector<int>>
                 operator() (const std::vector<Line2> & lines) const;
-        private:
-            Params _params;
-        };
-
-
-
-
-
-        // geometric context
-        class GeometricContextExtractor {
-        public:
-            using Feature = ImageWithType < int > ;
-            struct Params {
-                inline Params() {}
-
-                template <class Archive> inline void serialize(Archive & ar) {}
-            };
-        public:
-            inline GeometricContextExtractor(const Params & params = Params()) : _params(params) {}
-            Feature operator() (const Image & image) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
             Params _params;
         };
+
 
 
 

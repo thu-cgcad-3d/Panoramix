@@ -43,9 +43,15 @@ include (LocateOGRE)
 
 
 # get Qt libs
+# set (Qt_DIR "" CACHE PATH "Qt root directory here")
+# find_package(Qt5Core REQUIRED)
+# find_package(Qt5Gui REQUIRED)
+# find_package(Qt5Widgets REQUIRED)
+# find_package(Qt5OpenGL REQUIRED)
+
+
 set (Qt_DIR "" CACHE PATH "Qt root directory here")
 set (Qt_MODULES_REQUIRED Core Gui Widgets OpenGL)
-set (USE_NATIVE_OPENGL off)
 include (LocateQtLibs)
 
 # set path env

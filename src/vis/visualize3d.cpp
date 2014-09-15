@@ -3,6 +3,9 @@
 #include <QtWidgets>
 #include <QWidget>
 
+#include <glut.h>
+#include <GL/GLU.h>
+
 #include "../core/macros.hpp"
 #include "../core/utilities.hpp"
 
@@ -21,13 +24,13 @@ namespace panoramix {
         Visualizer3D::Params::Params()
             :
             winName("Visualizer 3D"),
-            backgroundColor(10, 10, 10),
+            backgroundColor(255, 255, 255),
             camera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)),
-            defaultColor(255, 255, 255),
+            defaultColor(0, 0, 0),
             pointSize(10.0f),
             lineWidth(2.0f),
             colorTableDescriptor(ColorTableDescriptor::AllColors),
-            renderMode(RenderModeFlag::Triangles | RenderModeFlag::Lines),
+            renderMode(RenderModeFlag::All),
             modelMatrix(core::Mat4::eye())
         {}
 
@@ -133,13 +136,44 @@ namespace panoramix {
 
             namespace {
 
+
+                static const OpenGLShaderSource PanoramaShader = {
+                    "attribute highp vec3 position;\n"
+                    "attribute highp vec3 normal;\n"
+                    "uniform highp mat4 matrix;\n"
+                    "varying highp vec3 pixelPosition;\n"
+                    "varying highp vec3 pixelNormal;\n"
+                    "void main(void)\n"
+                    "{\n"
+                    "    pixelPosition = position.xyz;\n"
+                    "    pixelNormal = normal;\n"
+                    "    gl_Position = matrix * vec4(position, 1.0);\n"
+                    "}\n"
+                    ,
+
+                    // 3.14159265358979323846264338327950288
+                    "uniform sampler2D tex;\n"
+                    "uniform highp vec3 panoramaCenter;\n"
+                    "varying highp vec3 pixelPosition;\n"
+                    "varying highp vec3 pixelNormal;\n"
+                    "void main(void)\n"
+                    "{\n"
+                    "    highp vec3 direction = pixelPosition - panoramaCenter;\n"
+                    "    highp float longi = atan(direction.y, direction.x);\n"
+                    "    highp float lati = asin(direction.z / length(direction));\n"
+                    "    highp vec2 texCoord = vec2(- longi / 3.1415926535897932 / 2.0 + 0.5, lati / 3.1415926535897932 + 0.5);\n"
+                    "    gl_FragColor = texture2D(tex, texCoord);\n"
+                    "}\n"
+                };
+
+
                 // visualizer widget
-                class Visualizer3DWidget : public QGLWidget, protected QGLFunctions {
+                class Visualizer3DWidget : public QGLWidget {
                 public:
-                    Visualizer3DWidget(Visualizer3D & viz, QWidget * parent = 0) 
-                        : QGLWidget(parent), _data(viz.data()){
-                        setAutoFillBackground(false);
+                    Visualizer3DWidget(Visualizer3D & viz, QWidget * parent = 0) : QGLWidget(parent), _data(viz.data()){
                         setMouseTracking(true);
+                        //grabKeyboard();
+                        setAutoBufferSwap(false);
                         _meshBox = viz.data()->mesh.boundingBox();
                     }
                     
@@ -148,12 +182,16 @@ namespace panoramix {
 
                 protected:
                     void initializeGL() {
+                        makeCurrent();
                         qglClearColor(MakeQColor(params().backgroundColor));
                         _trianglesObject = new OpenGLObject(this);
-                        _trianglesObject->setUpShaders(OpenGLShaderSourceName::NormalTriangles);
+                        //_trianglesObject->setUpShaders(OpenGLShaderSourceName::NormalTriangles);
+                        _trianglesObject->setUpShaders(PanoramaShader);
                         _trianglesObject->setUpMesh(data()->mesh);
                         if (!data()->texture.empty()){
-                            _trianglesObject->setUpTexture(MakeQImage(data()->texture));
+                            auto im = MakeQImage(data()->texture);
+                            auto imcopy = im.copy();
+                            _trianglesObject->setUpTexture(imcopy);
                         }
                         _linesObject = new OpenGLObject(this);
                         _linesObject->setUpShaders(OpenGLShaderSourceName::NormalLines);
@@ -164,11 +202,17 @@ namespace panoramix {
                     }
 
                     void paintGL() {
+                        QPainter painter;
+                        painter.begin(this);
+
+                        painter.beginNativePainting();
+                        qglClearColor(MakeQColor(params().backgroundColor));
+
                         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
                         glFrontFace(GL_CW); // face direction set to clockwise
-                        glCullFace(GL_FRONT); // specify whether front- or back-facing facets can be culled
-                        glEnable(GL_CULL_FACE);
+                        //glCullFace(GL_FRONT); // specify whether front- or back-facing facets can be culled
+                        //glEnable(GL_CULL_FACE);
                         glEnable(GL_DEPTH_TEST);
                         glEnable(GL_STENCIL_TEST);
 
@@ -176,31 +220,28 @@ namespace panoramix {
 
                         glEnable(GL_BLEND);
                         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                        //glLineWidth(params.lineWidth);
+
+
+                        glLineWidth(2.0);
                         core::PerspectiveCamera & camera = params().camera;
+                        camera.resizeScreen(core::SizeI(width(), height()));
                         QMatrix4x4 modelMatrix = MakeQMatrix(params().modelMatrix);
 
                         if (params().renderMode & RenderModeFlag::Triangles){
-                            _trianglesObject->render(RenderModeFlag::Triangles,
-                                MakeQMatrix(camera.projectionMatrix()),
-                                MakeQMatrix(camera.viewMatrix()),
-                                modelMatrix);
+                            _trianglesObject->render(RenderModeFlag::Triangles, camera, modelMatrix);
                         }
                         if (params().renderMode & RenderModeFlag::Points){
-                            _pointsObject->render(RenderModeFlag::Points,
-                                MakeQMatrix(camera.projectionMatrix()),
-                                MakeQMatrix(camera.viewMatrix()),
-                                modelMatrix);
+                            _pointsObject->render(RenderModeFlag::Points, camera, modelMatrix);
                         }
                         if (params().renderMode & RenderModeFlag::Lines){
-                            _linesObject->render(RenderModeFlag::Lines,
-                                MakeQMatrix(camera.projectionMatrix()),
-                                MakeQMatrix(camera.viewMatrix()),
-                                modelMatrix);
+                            _linesObject->render(RenderModeFlag::Lines, camera, modelMatrix);
                         }
                         
                         glDisable(GL_DEPTH_TEST);
                         glDisable(GL_CULL_FACE);
+
+                        painter.endNativePainting();
+                        swapBuffers();
                     }
 
                     void resizeGL(int w, int h) {
@@ -329,8 +370,8 @@ namespace panoramix {
             OpenGLMeshData::Vertex v;
             v.position4 = MakeQVec(VectorFromHPoint(core::HPoint3(p, 1.0)));
             v.color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
-            v.lineWidth1 = viz.params().lineWidth;
-            v.pointSize1 = viz.params().pointSize;
+            //v.lineWidth1 = viz.params().lineWidth;
+            //v.pointSize1 = viz.params().pointSize;
             viz.data()->mesh.addVertex(v);
             return viz;
         }
@@ -343,8 +384,8 @@ namespace panoramix {
             for (int i = 0; i < 2; i++){
                 vs[i].position4 = MakeQVec(VectorFromHPoint(core::HPoint3(ps[i], 1.0)));
                 vs[i].color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
-                vs[i].lineWidth1 = viz.params().lineWidth;
-                vs[i].pointSize1 = viz.params().pointSize;
+                //vs[i].lineWidth1 = viz.params().lineWidth;
+                //vs[i].pointSize1 = viz.params().pointSize;
             }
             viz.data()->mesh.addIsolatedLine(vs[0], vs[1]);
             return viz;
@@ -367,8 +408,8 @@ namespace panoramix {
                 OpenGLMeshData::Vertex v;
                 v.position4 = MakeQVec(VectorFromHPoint(core::HPoint3(p.first, 1.0)));
                 v.color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
-                v.lineWidth1 = viz.params().lineWidth;
-                v.pointSize1 = viz.params().pointSize;
+                //v.lineWidth1 = viz.params().lineWidth;
+                //v.pointSize1 = viz.params().pointSize;
                 v.texCoord2 = MakeQVec(p.second);
                 v.normal3 = MakeQVec(normal);
                 vhs.append(viz.data()->mesh.addVertex(v));

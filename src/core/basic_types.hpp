@@ -238,12 +238,13 @@ namespace panoramix {
         using InfiniteLine2 = InfiniteLine<double, 2>;
         using InfiniteLine3 = InfiniteLine<double, 3>;
         template <class T>
-        inline Vec<T, 3> GetLine2Coeffs(const InfiniteLine<T, 2> & line) {
+        inline Vec<T, 3> GetCoeffs(const InfiniteLine<T, 2> & line) {
             return Vec<T, 3>{line.direction[1], 
                 -line.direction[0], 
                 -(line.direction[1] * line.anchor[0] - line.direction[0] * line.anchor[1])
             };
         }
+
 
 
         // plane
@@ -288,6 +289,7 @@ namespace panoramix {
         using Line2 = Line<double, 2>;
         using Line3 = Line<double, 3>;
 
+
         
         // position on line
         template <class T, int N>
@@ -308,6 +310,7 @@ namespace panoramix {
         }
         using PositionOnLine2 = PositionOnLine<double, 2>;
         using PositionOnLine3 = PositionOnLine<double, 3>;
+
 
 
         // homogeneous line
@@ -341,6 +344,8 @@ namespace panoramix {
         using PixelLoc = cv::Point;        
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im);
         std::pair<double, double> MinMaxValOfImage(const Image & im);
+
+
 
 
 

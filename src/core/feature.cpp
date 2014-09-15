@@ -1188,16 +1188,6 @@ namespace panoramix {
 
 
 
-
-        GeometricContextExtractor::Feature GeometricContextExtractor::operator() (const Image & image) const {
-            NOT_IMPLEMENTED_YET();
-        }
-
-
-
-
-
-
         std::pair<double, double> ComputeFocalsFromHomography(const Mat3 & H, std::pair<bool, bool> * ok) {
             /// from OpenCV code
 

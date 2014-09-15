@@ -200,6 +200,70 @@ namespace panoramix {
             iTriangles.clear();
         }
 
+
+        void OpenGLMeshData::setToUnitSphere(int m, int n) {
+            vertices.clear();
+            iPoints.clear();
+            iLines.clear();
+            iTriangles.clear();
+            vertices.reserve(m * n);
+            std::vector<std::vector<VertHandle>> vhs(m, std::vector<VertHandle>(n));
+            for (int i = 0; i < m; i++) {
+                for (int j = 0; j < n; j++) {
+                    float xratio = 1.0f / (n - 1) * j;
+                    float yratio = 1.0f / (m - 1) * i;
+                    float xangle = M_PI * 2 * xratio;
+                    float yangle = M_PI * yratio - M_PI_2;
+                    QVector4D point = { cos(xangle)*cos(yangle), sin(xangle)*cos(yangle), sin(yangle), 1 };
+                    Vertex v;
+                    v.position4 = point;
+                    v.texCoord2 = { xratio, yratio };
+                    vhs[i][j] = addVertex(v);
+                }
+            }
+
+            for (int i = 1; i < m; i++) {
+                for (int j = 1; j < n; j++) {
+                    addTriangle(vhs[i][j], vhs[i][j - 1], vhs[i - 1][j - 1]);
+                    addTriangle(vhs[i][j], vhs[i - 1][j - 1], vhs[i - 1][j]);
+                }
+            }
+        }
+
+        void OpenGLMeshData::setToUnitCube() {
+            vertices.clear();
+            iPoints.clear();
+            iLines.clear();
+            iTriangles.clear();
+            vertices.reserve(8);
+
+            static const QVector4D verts[] = {
+                { -1, -1, -1, 1 },
+                { 1, -1, -1, 1 },
+                { 1, 1, -1, 1 },
+                { -1, 1, -1, 1 },
+                { -1, -1, 1, 1 },
+                { 1, -1, 1, 1 },
+                { 1, 1, 1, 1 },
+                { -1, 1, 1, 1 }
+            };
+
+            static const VertHandle quadfaces[6][4] = {
+                { 0, 1, 5, 4 },
+                { 4, 5, 6, 7 },
+                { 1, 2, 6, 5 },
+                { 0, 4, 7, 3 },
+                { 2, 3, 7, 6 },
+                { 1, 0, 3, 2 }
+            };
+
+            for (int i = 0; i < 6; i++) {
+                addTriangle(quadfaces[i][0], quadfaces[i][1], quadfaces[i][2]);
+                addTriangle(quadfaces[i][0], quadfaces[i][2], quadfaces[i][3]);
+            }
+        }
+
+
         QPair<QVector3D, QVector3D> OpenGLMeshData::boundingBox() const {
             if (vertices.empty())
                 return QPair<QVector3D, QVector3D>();
@@ -321,17 +385,10 @@ namespace panoramix {
         // opengl object implementation
         OpenGLObject::OpenGLObject(QObject *parent) : QObject(parent), _texture(NULL) {
             _program = new QOpenGLShaderProgram(this);
-            _vertexArrayBuffer = _pointsIndicesBuffer = _linesIndicesBuffer = _trianglesIndicesBuffer = 0;
-            glGenBuffers(1, &_vertexArrayBuffer);
-            glGenBuffers(1, &_pointsIndicesBuffer);
-            glGenBuffers(1, &_linesIndicesBuffer);
-            glGenBuffers(1, &_trianglesIndicesBuffer);
         }
 
         OpenGLObject::~OpenGLObject() {
             delete _texture;
-            GLuint buffers[] = { _vertexArrayBuffer, _pointsIndicesBuffer, _linesIndicesBuffer, _trianglesIndicesBuffer };
-            glDeleteBuffers(4, buffers);
         }
 
         void OpenGLObject::setUpShaders(const OpenGLShaderSource & ss){
@@ -339,8 +396,6 @@ namespace panoramix {
                 error(_program->log());
             if (!_program->addShaderFromSourceCode(QOpenGLShader::Fragment, ss.fragmentShaderSource))
                 error(_program->log());
-            /*if (!_program->addShaderFromSourceCode(QOpenGLShader::Geometry, ss.geometryShaderSource))
-                error(_program->log());*/
             if (!_program->link() || !_program->bind()){
                 error(_program->log());
                 return;
@@ -358,13 +413,8 @@ namespace panoramix {
             if (_texture){
                 delete _texture;
             }
-
-            Q_ASSERT(QOpenGLContext::currentContext());
-            auto texMirrored = tex.mirrored();
-            _texture = new QOpenGLTexture(QOpenGLTexture::Target::Target2D);
-            Q_ASSERT(_texture->create());
-            _texture->setData(texMirrored);
-            //_texture = new QOpenGLTexture(texMirrored);
+            //_texture = new QOpenGLTexture(tex.mirrored());
+            _texture = new QOpenGLTexture(QImage("F:\\Project.GitHub\\Panoramix\\tests\\data\\panorama\\outdoor\\panohk2.png").mirrored());
             _texture->bind();
             _texture->setMinificationFilter(QOpenGLTexture::Linear);
             _texture->setMagnificationFilter(QOpenGLTexture::Linear);
@@ -374,23 +424,9 @@ namespace panoramix {
 
         void OpenGLObject::setUpMesh(const OpenGLMeshData & m){
             _mesh = m;
-
-            glBindBuffer(GL_ARRAY_BUFFER, _vertexArrayBuffer);
-            glBufferData(GL_ARRAY_BUFFER, _mesh.vertices.size() * sizeof(OpenGLMeshData::Vertex), _mesh.vertices.data(), GL_STATIC_DRAW);            
-           
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _pointsIndicesBuffer);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, _mesh.iPoints.size() * sizeof(OpenGLMeshData::VertHandle), _mesh.iPoints.data(), GL_STATIC_DRAW);
-            
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _linesIndicesBuffer);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, _mesh.iLines.size() * sizeof(OpenGLMeshData::VertHandle), _mesh.iLines.data(), GL_STATIC_DRAW);
-            
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _trianglesIndicesBuffer);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, _mesh.iTriangles.size() * sizeof(OpenGLMeshData::VertHandle), _mesh.iTriangles.data(), GL_STATIC_DRAW);
-
         }
 
-        void OpenGLObject::render(RenderModeFlags mode, const QMatrix4x4 & projection,
-            const QMatrix4x4 & view, const QMatrix4x4 & model) {            
+        void OpenGLObject::render(RenderModeFlags mode, const QMatrix4x4 & mat) const {            
 
             if (_mesh.vertices.isEmpty())
                 return;
@@ -401,64 +437,41 @@ namespace panoramix {
             if (_texture && _texture->isCreated())
                 _texture->bind(0);
 
-            glLineWidth(_mesh.vertices.first().lineWidth1);
-            glBindBuffer(GL_ARRAY_BUFFER, _vertexArrayBuffer);
-
-            _program->setUniformValue("projectionMatrix", projection);
-            _program->setUniformValue("viewMatrix", view);
-            _program->setUniformValue("modelMatrix", model);
+            _program->setUniformValue("matrix", mat);
             _program->setUniformValue("tex", 0);
             _program->setUniformValue("panoramaCenter", QVector3D(0, 0, 0));
 
-            glVertexAttribPointer(_program->attributeLocation("position"), 4, GL_FLOAT, GL_FALSE,
-                sizeof(OpenGLMeshData::Vertex),
-                (const void*)offsetof(OpenGLMeshData::Vertex, position4));
-            glVertexAttribPointer(_program->attributeLocation("normal"), 3, GL_FLOAT, GL_FALSE,
-                sizeof(OpenGLMeshData::Vertex),
-                (const void*)offsetof(OpenGLMeshData::Vertex, normal3));
-            glVertexAttribPointer(_program->attributeLocation("color"), 4, GL_FLOAT, GL_FALSE,
-                sizeof(OpenGLMeshData::Vertex),
-                (const void*)offsetof(OpenGLMeshData::Vertex, color4));
-            glVertexAttribPointer(_program->attributeLocation("texCoord"), 2, GL_FLOAT, GL_FALSE,
-                sizeof(OpenGLMeshData::Vertex),
-                (const void*)offsetof(OpenGLMeshData::Vertex, texCoord2));
-            glVertexAttribPointer(_program->attributeLocation("pointSize"), 1, GL_FLOAT, GL_FALSE,
-                sizeof(OpenGLMeshData::Vertex),
-                (const void*)offsetof(OpenGLMeshData::Vertex, pointSize1));
-            glVertexAttribPointer(_program->attributeLocation("lineWidth"), 1, GL_FLOAT, GL_FALSE,
-                sizeof(OpenGLMeshData::Vertex),
-                (const void*)offsetof(OpenGLMeshData::Vertex, lineWidth1));
+            _program->setAttributeArray("position", GL_FLOAT, &(_mesh.vertices.first().position4), 3, sizeof(OpenGLMeshData::Vertex));
+            _program->setAttributeArray("normal", GL_FLOAT, &(_mesh.vertices.first().normal3), 3, sizeof(OpenGLMeshData::Vertex));
+            _program->setAttributeArray("color", GL_FLOAT, &(_mesh.vertices.first().color4), 4, sizeof(OpenGLMeshData::Vertex));
+            _program->setAttributeArray("texCoord", GL_FLOAT, &(_mesh.vertices.first().texCoord2), 2, sizeof(OpenGLMeshData::Vertex));
 
             _program->enableAttributeArray("position");
             _program->enableAttributeArray("normal");
             _program->enableAttributeArray("color");
             _program->enableAttributeArray("texCoord");
-            _program->enableAttributeArray("pointSize");
-            _program->enableAttributeArray("lineWidth");
 
-            if (mode & RenderModeFlag::Triangles){
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _trianglesIndicesBuffer);
-                glDrawElements(GL_TRIANGLES, _mesh.iTriangles.size(), GL_UNSIGNED_INT, 0);
-            }
-
+            if (mode & RenderModeFlag::Triangles) {
+                glDrawElements(GL_TRIANGLES, _mesh.iTriangles.size(), GL_UNSIGNED_INT, _mesh.iTriangles.data());
+            } 
             if (mode & RenderModeFlag::Lines) {
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _linesIndicesBuffer);
-                glDrawElements(GL_LINES, _mesh.iLines.size(), GL_UNSIGNED_INT, 0);
+                glDrawElements(GL_LINES, _mesh.iLines.size(), GL_UNSIGNED_INT, _mesh.iLines.data());
             }
-
-            if (mode & RenderModeFlag::Points){
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, _pointsIndicesBuffer);
-                glDrawElements(GL_POINTS, _mesh.iPoints.size(), GL_UNSIGNED_INT, 0);
+            if (mode & RenderModeFlag::Points) {
+                glDrawElements(GL_POINTS, _mesh.iPoints.size(), GL_UNSIGNED_INT, _mesh.iPoints.data());
             }
 
             _program->disableAttributeArray("position");
             _program->disableAttributeArray("normal");
             _program->disableAttributeArray("color");
             _program->disableAttributeArray("texCoord");
-            _program->disableAttributeArray("pointSize");
-            _program->disableAttributeArray("lineWidth");
 
             _program->release();
+
+        }
+
+        void OpenGLObject::render(RenderModeFlags mode, const core::PerspectiveCamera & cam, const QMatrix4x4 & modelMat) const {
+            render(mode, MakeQMatrix(cam.viewProjectionMatrix()) * modelMat);
         }
 
         void OpenGLObject::error(const QString & message) {
