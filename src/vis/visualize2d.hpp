@@ -16,7 +16,7 @@ namespace panoramix {
                     : winName("2D Visualizer"), 
                       color(255, 255, 255), thickness(1), 
                       lineType(8), shift(0), alphaForNewImage(0.5f), 
-                      colorTableDescriptor(ColorTableDescriptor::AllColors) {}
+                      colorTable(ColorTableDescriptor::AllColors) {}
 
                 std::string winName;
                 Color color;
@@ -24,7 +24,7 @@ namespace panoramix {
                 int lineType;
                 int shift;
                 float alphaForNewImage;
-                ColorTableDescriptor colorTableDescriptor;
+                ColorTable colorTable;
             };
 
         public:
@@ -57,7 +57,7 @@ namespace panoramix {
                         name);
             }
 
-            inline Manipulator<Color> SetColor(const Color & color) {
+            inline Manipulator<Color> SetColor(Color color) {
                 return Manipulator<Color>(
                     [](Visualizer2D & viz, Color c){
                     viz.params.color = c; },
@@ -89,11 +89,15 @@ namespace panoramix {
                         a);
             }
 
-            inline Manipulator<ColorTableDescriptor> SetColorTableDescriptor(ColorTableDescriptor descriptor) {
-                return Manipulator<ColorTableDescriptor>(
-                    [](Visualizer2D & viz, ColorTableDescriptor d){
-                    viz.params.colorTableDescriptor = d; },
-                        descriptor);
+            inline Manipulator<const ColorTable &> SetColorTable(const ColorTable & colorTable) {
+                return Manipulator<const ColorTable &>(
+                    [](Visualizer2D & viz, const ColorTable & ct) {
+                    viz.params.colorTable = ct; },
+                        colorTable);
+            }
+
+            inline Manipulator<const ColorTable &> SetColorTable(const ColorTableDescriptor & d) {
+                return SetColorTable(ColorTable(d));
             }
             
             Manipulator<int> Show(int delay = 0);
@@ -155,15 +159,19 @@ namespace panoramix {
         // classified thing
         template <class T>
         inline Visualizer2D operator << (Visualizer2D viz, const Classified<T> & thing) {
-            static const auto WhiteColor = ColorFromTag(ColorTag::White);
-            auto & predefinedColorTable = PredefinedColorTable(viz.params.colorTableDescriptor);
-            viz.params.color = thing.claz < 0 ? WhiteColor : predefinedColorTable[thing.claz % predefinedColorTable.size()];
+            viz.params.color = viz.params.colorTable[thing.claz];
             return viz << thing.component;
         }
 
 
         // image
         Visualizer2D operator << (Visualizer2D viz, const Image & im);
+
+        // integer image
+        template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
+        Visualizer2D operator << (Visualizer2D viz, const ImageWithType<T> & im) {
+            NOT_IMPLEMENTED_YET();
+        }
 
 
         // containers

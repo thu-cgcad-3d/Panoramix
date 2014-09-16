@@ -43,14 +43,3 @@ set (REC_SHARED_LIB ${REC_MODULE_NAME}.Shared CACHE STRING
 
 add_subdirectory("rec")
 set_property(TARGET ${REC_STATIC_LIB} PROPERTY FOLDER "${PROJECT_NAME}.Libs")
-
-
-# sandbox MODULE
-set (SANDBOX_MODULE_NAME SandBox)
-set (SANDBOX_STATIC_LIB ${SANDBOX_MODULE_NAME}.Static CACHE STRING 
-	"static lib name of module ${SANDBOX_MODULE_NAME}")
-set (SANDBOX_SHARED_LIB ${SANDBOX_MODULE_NAME}.Shared CACHE STRING
-	"shared lib name of module ${SANDBOX_MODULE_NAME}")
-
-add_subdirectory("sandbox")
-set_property(TARGET ${SANDBOX_STATIC_LIB} PROPERTY FOLDER "${PROJECT_NAME}.Libs")

@@ -2,11 +2,6 @@
 #include "qt_opengl_object.hpp"
 #include "singleton.hpp"
 
-inline void _InitResources() {
-    //Q_INIT_RESOURCE(shaders);
-    //Q_INIT_RESOURCE(textures);
-}
-
 namespace panoramix {
     namespace vis {
 
@@ -16,7 +11,6 @@ namespace panoramix {
             if (qApp)
                 return qApp;
             QApplication* app = new QApplication(argc, argv);
-            _InitResources();
             app->setQuitOnLastWindowClosed(true);
             return app;
         }

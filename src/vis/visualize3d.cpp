@@ -29,13 +29,13 @@ namespace panoramix {
             defaultColor(0, 0, 0),
             pointSize(10.0f),
             lineWidth(2.0f),
-            colorTableDescriptor(ColorTableDescriptor::AllColors),
+            colorTable(ColorTableDescriptor::AllColors),
             renderMode(RenderModeFlag::All),
             modelMatrix(core::Mat4::eye())
         {}
 
         struct Visualizer3D::VisualData {
-            OpenGLMeshData mesh;
+            OpenGLMesh mesh;
             Image texture;
             Visualizer3D::Params params;
         };
@@ -60,9 +60,9 @@ namespace panoramix {
         // manipulators
         namespace manip3d {
 
-            Manipulator<std::string> SetWindowName(std::string name) {
-                return Manipulator<std::string>(
-                    [](Visualizer3D & viz, std::string name){
+            Manipulator<const std::string &> SetWindowName(const std::string & name) {
+                return Manipulator<const std::string &>(
+                    [](Visualizer3D & viz, const std::string & name) {
                     viz.params().winName = name; },
                         name);
             }
@@ -81,9 +81,9 @@ namespace panoramix {
                         color);
             }
 
-            Manipulator<PerspectiveCamera> SetCamera(PerspectiveCamera camera) {
-                return Manipulator<PerspectiveCamera>(
-                    [](Visualizer3D & viz, PerspectiveCamera c){
+            Manipulator<const PerspectiveCamera &> SetCamera(const PerspectiveCamera & camera) {
+                return Manipulator<const PerspectiveCamera &>(
+                    [](Visualizer3D & viz, const PerspectiveCamera & c) {
                     viz.params().camera = c; },
                         camera);
             }
@@ -102,11 +102,11 @@ namespace panoramix {
                         lineWidth);
             }
 
-            Manipulator<vis::ColorTableDescriptor> SetColorTableDescriptor(vis::ColorTableDescriptor descriptor) {
-                return Manipulator<ColorTableDescriptor>(
-                    [](Visualizer3D & viz, ColorTableDescriptor d){
-                    viz.params().colorTableDescriptor = d; },
-                        descriptor);
+            Manipulator<const vis::ColorTable &> SetColorTable(const vis::ColorTable & colorTable) {
+                return Manipulator<const ColorTable &>(
+                    [](Visualizer3D & viz, const ColorTable & d) {
+                    viz.params().colorTable = d; },
+                        colorTable);
             }
 
             Manipulator<RenderModeFlags> SetRenderMode(RenderModeFlags mode) {
@@ -116,21 +116,21 @@ namespace panoramix {
                         mode);
             }
 
-            Manipulator<core::Mat4> SetModelMatrix(Mat4 mat) {
-                return Manipulator<Mat4>(
-                    [](Visualizer3D & viz, Mat4 m){
+            Manipulator<const Mat4 &> SetModelMatrix(const Mat4 & mat) {
+                return Manipulator<const Mat4 &>(
+                    [](Visualizer3D & viz, const Mat4 & m) {
                     viz.params().modelMatrix = m; },
                         mat);
             }
 
             void AutoSetCamera(Visualizer3D & viz) {
                 auto box = viz.data()->mesh.boundingBox();
-                auto center = (box.first + box.second) / 2.0;
-                auto radius = (box.second - box.first).length() / 2.0;
-                viz.params().camera.setCenter(MakeCoreVec(center), false);
+                auto center = box.center();
+                auto radius = Line3(box.minCorner, box.maxCorner).length() / 2.0;
+                viz.params().camera.setCenter(center, false);
                 auto eyedirection = viz.params().camera.eye() - viz.params().camera.center();
                 eyedirection = eyedirection / core::norm(eyedirection) * radius * 0.8;
-                viz.params().camera.setEye(MakeCoreVec(center) + eyedirection, false);
+                viz.params().camera.setEye(center + eyedirection, false);
                 viz.params().camera.setNearAndFarPlanes(radius / 2.0, radius * 2.0, true);
             }
 
@@ -172,7 +172,6 @@ namespace panoramix {
                 public:
                     Visualizer3DWidget(Visualizer3D & viz, QWidget * parent = 0) : QGLWidget(parent), _data(viz.data()){
                         setMouseTracking(true);
-                        //grabKeyboard();
                         setAutoBufferSwap(false);
                         _meshBox = viz.data()->mesh.boundingBox();
                     }
@@ -194,10 +193,10 @@ namespace panoramix {
                             _trianglesObject->setUpTexture(imcopy);
                         }
                         _linesObject = new OpenGLObject(this);
-                        _linesObject->setUpShaders(OpenGLShaderSourceName::NormalLines);
+                        _linesObject->setUpShaders(OpenGLShaderSourceDescriptor::DefaultLines);
                         _linesObject->setUpMesh(data()->mesh);
                         _pointsObject = new OpenGLObject(this);
-                        _pointsObject->setUpShaders(OpenGLShaderSourceName::NormalPoints);
+                        _pointsObject->setUpShaders(OpenGLShaderSourceDescriptor::DefaultPoints);
                         _pointsObject->setUpMesh(data()->mesh);
                     }
 
@@ -268,8 +267,8 @@ namespace panoramix {
                         params().camera.setEye(MakeCoreVec(eye), false);
                         params().camera.setUp(MakeCoreVec(up), false);
                         
-                        auto meshCenter = (_meshBox.first + _meshBox.second) / 2.0f;
-                        auto meshRadius = (_meshBox.second - _meshBox.first).length() / 2.0f;
+                        auto meshCenter = MakeQVec(_meshBox.center());
+                        auto meshRadius = Line3(_meshBox.minCorner, _meshBox.maxCorner).length() / 2.0f;
                         auto nearPlane = (eye - meshCenter).length() - meshRadius;
                         nearPlane = nearPlane < 1e-3 ? 1e-3 : nearPlane;
                         auto farPlane = (eye - meshCenter).length() + meshRadius;
@@ -292,8 +291,8 @@ namespace panoramix {
                         params().camera.setEye(MakeCoreVec(eye), false);
                         params().camera.setCenter(MakeCoreVec(center), false);
                         
-                        auto meshCenter = (_meshBox.first + _meshBox.second) / 2.0;
-                        auto meshRadius = (_meshBox.second - _meshBox.first).length() / 2.0;
+                        auto meshCenter = MakeQVec(_meshBox.center());
+                        auto meshRadius = Line3(_meshBox.minCorner, _meshBox.maxCorner).length() / 2.0f;
                         auto nearPlane = (eye - meshCenter).length() - meshRadius;
                         nearPlane = nearPlane < 1e-3 ? 1e-3 : nearPlane;
                         auto farPlane = (eye - meshCenter).length() + meshRadius;
@@ -340,7 +339,7 @@ namespace panoramix {
                     OpenGLObject * _linesObject;
                     OpenGLObject * _pointsObject;
                     OpenGLObject * _trianglesObject;
-                    QPair<QVector3D, QVector3D> _meshBox;
+                    core::Box3 _meshBox;
                 };
                 
 
@@ -367,9 +366,9 @@ namespace panoramix {
 
 
         Visualizer3D operator << (Visualizer3D viz, const core::Point3 & p) {
-            OpenGLMeshData::Vertex v;
-            v.position4 = MakeQVec(VectorFromHPoint(core::HPoint3(p, 1.0)));
-            v.color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
+            OpenGLMesh::Vertex v;
+            v.position4 = VectorFromHPoint(core::HPoint3(p, 1.0));
+            v.color4 = viz.params().defaultColor / 255.0f;
             //v.lineWidth1 = viz.params().lineWidth;
             //v.pointSize1 = viz.params().pointSize;
             viz.data()->mesh.addVertex(v);
@@ -380,10 +379,10 @@ namespace panoramix {
         Visualizer3D operator << (Visualizer3D viz, const core::Line3 & p) {
             auto & mesh = viz.data()->mesh;
             core::Point3 ps[] = { p.first, p.second };
-            OpenGLMeshData::Vertex vs[2];
+            OpenGLMesh::Vertex vs[2];
             for (int i = 0; i < 2; i++){
-                vs[i].position4 = MakeQVec(VectorFromHPoint(core::HPoint3(ps[i], 1.0)));
-                vs[i].color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
+                vs[i].position4 = (VectorFromHPoint(core::HPoint3(ps[i], 1.0)));
+                vs[i].color4 = (viz.params().defaultColor) / 255.0f;
                 //vs[i].lineWidth1 = viz.params().lineWidth;
                 //vs[i].pointSize1 = viz.params().pointSize;
             }
@@ -398,21 +397,22 @@ namespace panoramix {
         }
 
         Visualizer3D operator << (Visualizer3D viz, const std::vector<std::pair<Point3, Point2>> & polygonWithTexCoords) {
-            QList<OpenGLMeshData::VertHandle> vhs;
+            std::vector<OpenGLMesh::VertHandle> vhs;
+            vhs.reserve(polygonWithTexCoords.size());
             if (polygonWithTexCoords.size() <= 2)
                 return viz; // TODO
             auto normal = (polygonWithTexCoords[0].first - polygonWithTexCoords[1].first)
                 .cross(polygonWithTexCoords[2].first - polygonWithTexCoords[1].first);
             normal /= norm(normal);
             for (auto & p : polygonWithTexCoords){
-                OpenGLMeshData::Vertex v;
-                v.position4 = MakeQVec(VectorFromHPoint(core::HPoint3(p.first, 1.0)));
-                v.color4 = MakeQVec(viz.params().defaultColor) / 255.0f;
+                OpenGLMesh::Vertex v;
+                v.position4 = (VectorFromHPoint(core::HPoint3(p.first, 1.0)));
+                v.color4 = (viz.params().defaultColor) / 255.0f;
                 //v.lineWidth1 = viz.params().lineWidth;
                 //v.pointSize1 = viz.params().pointSize;
-                v.texCoord2 = MakeQVec(p.second);
-                v.normal3 = MakeQVec(normal);
-                vhs.append(viz.data()->mesh.addVertex(v));
+                v.texCoord2 = (p.second);
+                v.normal3 = (normal);
+                vhs.push_back(viz.data()->mesh.addVertex(v));
             }
             viz.data()->mesh.addPolygon(vhs);
             return viz;
@@ -439,7 +439,7 @@ namespace panoramix {
         {}
 
         struct AdvancedVisualizer3D::VisualData {
-            OpenGLMeshData mesh;
+            OpenGLMesh mesh;
             Image texture;
             AdvancedVisualizer3D::Params params;
         };

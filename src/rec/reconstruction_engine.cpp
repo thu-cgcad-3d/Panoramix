@@ -1186,10 +1186,10 @@ namespace panoramix {
             // display reconstructed lines
             IF_DEBUG_USING_VISUALIZERS{
                 vis::Visualizer3D viz;
-                std::vector<vis::Color> colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
+                auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
-                    viz.params().defaultColor = colorTable[_globalData.lineConnectedComponentIds[l.first] % colorTable.size()];
+                    viz.params().defaultColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
                     viz = viz << NormalizeLine(l.second);
                 }
                 for (auto & c : _globalData.lineIncidenceRelationsAcrossViews) {
@@ -1205,10 +1205,10 @@ namespace panoramix {
 
             IF_DEBUG_USING_VISUALIZERS{
                 vis::Visualizer3D viz;
-                std::vector<vis::Color> colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
+                auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
-                    viz.params().defaultColor = colorTable[_globalData.lineConnectedComponentIds[l.first] % colorTable.size()];
+                    viz.params().defaultColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
                     viz = viz << l.second;
                 }
                 viz << vis::manip3d::SetWindowName("reconstructed lines with ccids");
@@ -1217,10 +1217,10 @@ namespace panoramix {
 
             IF_DEBUG_USING_VISUALIZERS{ // show interview constraints
                 vis::Visualizer3D viz;
-                std::vector<vis::Color> colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
+                auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
-                    viz.params().defaultColor = colorTable[_globalData.lineConnectedComponentIds[l.first] % colorTable.size()];
+                    viz.params().defaultColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
                     viz = viz << l.second;
                 }
                 for (auto & c : _globalData.lineIncidenceRelationsAcrossViews) {

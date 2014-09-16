@@ -220,7 +220,7 @@ namespace panoramix {
 
                 vis::Visualizer2D viz(_image);
                 viz.params.thickness = 2;
-                viz.params.colorTableDescriptor = vis::ColorTableDescriptor::RGB;
+                viz.params.colorTable = vis::ColorTableDescriptor::RGB;
                 for (auto & ld : _lines.elements<0>()){
                     viz = viz << ld.data.line;
                 }
