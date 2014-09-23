@@ -26,6 +26,9 @@ namespace panoramix {
             virtual float distanceTo(const core::InfiniteLine3 & ray) const { return std::numeric_limits<float>::max(); }
             virtual bool intersectsWith(const core::InfiniteLine3 & ray, float thres) const { return distanceTo(ray) <= thres; }
 
+            // set texture
+            virtual void setTexture(const core::Image & im) {}
+
             core::Mat4 & modelMatrix() { return _modelMat; }
             const core::Mat4 & modelMatrix() const { return _modelMat; }
 

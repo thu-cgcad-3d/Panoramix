@@ -30,6 +30,10 @@ namespace panoramix {
             }
             void deactivateLast();
 
+            std::shared_ptr<RenderableObject> root() const { return _root; }
+            RenderableObject * activeObject() const { return _activeObject; }
+            std::shared_ptr<PrivateData> data() const { return _data; }
+
         public:
             Params params;
             DefaultRenderState defaultRenderState;
@@ -54,19 +58,15 @@ namespace panoramix {
             Manipulator<const std::string &> SetWindowName(const std::string & name);
             Manipulator<vis::Color> SetDefaultForegroundColor(vis::Color color);
             inline Manipulator<vis::Color> SetDefaultForegroundColor(vis::ColorTag tag) { return SetDefaultForegroundColor(vis::ColorFromTag(tag)); }
-            //Manipulator<vis::Color> SetBackgroundColor(vis::Color color);
-            //inline Manipulator<vis::Color> SetBackgroundColor(vis::ColorTag tag){ return SetBackgroundColor(vis::ColorFromTag(tag)); }
-            /*Manipulator<const core::PerspectiveCamera &> SetCamera(const core::PerspectiveCamera & camera);
-            Manipulator<float> SetPointSize(float pointSize);
-            Manipulator<float> SetLineWidth(float lineWidth);
-            Manipulator<const vis::ColorTable &> SetColorTable(const vis::ColorTable & colorTable);
-            inline Manipulator<const vis::ColorTable &> SetColorTable(vis::ColorTableDescriptor d) { return SetColorTable(vis::ColorTable(d)); }
+            Manipulator<vis::Color> SetBackgroundColor(vis::Color color);
+            inline Manipulator<vis::Color> SetBackgroundColor(vis::ColorTag tag){ return SetBackgroundColor(vis::ColorFromTag(tag)); }
+            Manipulator<const core::PerspectiveCamera &> SetCamera(const core::PerspectiveCamera & camera);
+            Manipulator<float> SetDefaultPointSize(float pointSize);
+            Manipulator<float> SetDefaultLineWidth(float lineWidth);
+            Manipulator<const vis::ColorTable &> SetDefaultColorTable(const vis::ColorTable & colorTable);
+            inline Manipulator<const vis::ColorTable &> SetDefaultColorTable(vis::ColorTableDescriptor d) { return SetDefaultColorTable(vis::ColorTable(d)); }
             Manipulator<RenderModeFlags> SetRenderMode(RenderModeFlags mode);
-            Manipulator<const core::Mat4 &> SetModelMatrix(const core::Mat4 & mat);*/
-            Manipulator<bool> Show(bool block = true);
-
-            //void AutoSetCamera(Visualizer3D & viz);
-
+            Manipulator<std::pair<bool, bool>> Show(bool doModel = true, bool autoSetCamera = true);
 
             template <class T>
             Manipulator<const T &> Begin(const T & t) {
@@ -78,6 +78,9 @@ namespace panoramix {
             void End(Visualizer3D & viz) {
                 viz.deactivateLast();
             }
+
+            Manipulator<const core::Mat4 &> SetModelMatrix(const core::Mat4 & mat);
+            Manipulator<const core::Image &> SetTexture(const core::Image & tex);
 
         }
 
@@ -106,12 +109,6 @@ namespace panoramix {
         inline Visualizer3D operator << (Visualizer3D viz, const core::HLine3 & l) {
             return viz << l.toLine();
         }
-
-        // image as texture
-        Visualizer3D operator << (Visualizer3D viz, const core::Image & tex);
-
-        // polygons
-        Visualizer3D operator << (Visualizer3D viz, const std::vector<std::pair<core::Point3, core::Point2>> & polygonWithTexCoords);
 
 
         // classified thing
