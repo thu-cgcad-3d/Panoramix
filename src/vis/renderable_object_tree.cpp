@@ -9,11 +9,11 @@ namespace panoramix {
 
         RenderableObjectTree::RenderableObjectTree() : _root(nullptr), _rtree(RenderableObjectBoundingBoxFunctor(this)) {}
 
-        RenderableObjectTree::RenderableObjectTree(RenderableObject * root) : _rtree(RenderableObjectBoundingBoxFunctor(this)) {
+        RenderableObjectTree::RenderableObjectTree(std::shared_ptr<RenderableObject> root) : _rtree(RenderableObjectBoundingBoxFunctor(this)) {
             installFromRoot(root);
         }
 
-        void RenderableObjectTree::installFromRoot(RenderableObject * root) {
+        void RenderableObjectTree::installFromRoot(std::shared_ptr<RenderableObject> root) {
             if (_root) {
                 deleteAll();
             }
@@ -55,12 +55,19 @@ namespace panoramix {
         }
 
         void RenderableObjectTree::deleteAll() {
-            delete _root;
             _root = nullptr;
             _objects.clear();
             _objectIds.clear();
             _calculatedBoundingBoxes.clear();
             _rtree.clear();
+        }
+
+        Box3 RenderableObjectTree::boundingBox() const {
+            Box3 bbox;
+            for (auto & b : _calculatedBoundingBoxes) {
+                bbox |= b.second;
+            }
+            return bbox;
         }
 
         void RenderableObjectTree::renderWithCamera(RenderModeFlags mode, const core::PerspectiveCamera & cam) const {

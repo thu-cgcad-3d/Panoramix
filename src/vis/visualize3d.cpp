@@ -19,6 +19,11 @@ namespace panoramix {
 
         using namespace core;
 
+        // visulizer private data
+        struct Visualizer3D::PrivateData {
+            QList<QWidget*> widgets;
+        };
+
 
         // visualizer parameters
         Visualizer3D::Params::Params()
@@ -27,64 +32,40 @@ namespace panoramix {
             backgroundColor(255, 255, 255),
             camera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)),
             renderMode(RenderModeFlag::All)
-        {}
+        {}        
 
-        Visualizer3D::Status::Status()
-            :
-            defaultColor(0, 0, 0),
-            pointSize(10.0f),
-            lineWidth(2.0f),
-            colorTable(ColorTableDescriptor::AllColors) 
-        {}
+        Visualizer3D::Visualizer3D() : _root(std::make_shared<RenderableObject>()) {
+            _activeObject = _root.get();
+        }
 
-        struct Visualizer3D::Visualizer3DPrivateData {
-            QList<QWidget *> widgets;
-            RenderableObjectTree * renderableObjTree;
-            Params params;
-            Status status;
-            inline Visualizer3DPrivateData(const Params & p, const Status & s) : params(p), status(s) {}
-            ~Visualizer3DPrivateData() {
-                for (QWidget * w : widgets) {
-                    w->deleteLater();
-                }
-                delete renderableObjTree;
+        Visualizer3D::Visualizer3D(const Params & p, const DefaultRenderState & s)
+            : params(p), defaultRenderState(s), _root(std::make_shared<RenderableObject>()) {
+            _activeObject = _root.get();
+        }
+
+        void Visualizer3D::deactivateLast() {
+            if (_activeObject != _root.get()) {
+                _activeObject = _activeObject->parent();
+            } else {
+                qWarning() << "can not deactivate root!";
             }
-        };
-        
-
-        Visualizer3D::Visualizer3D() : _data(std::make_shared<Visualizer3D::Visualizer3DPrivateData>()) {}
-
-        Visualizer3D::Visualizer3D(const Params & p, const Status & s) 
-            : _data(std::make_shared<Visualizer3D::Visualizer3DPrivateData>(p, s)) {
-        }
-
-        Visualizer3D::~Visualizer3D() {}
-
-        Visualizer3D::Params & Visualizer3D::params() const {
-            return _data->params;
-        }
-
-        Visualizer3D::Status & Visualizer3D::status() const {
-            return _data->status;
         }
 
         // manipulators
         namespace manip3d {
 
             Manipulator<const std::string &> SetWindowName(const std::string & name) {
-                return Manipulator<const std::string &>(
-                    [](Visualizer3D & viz, const std::string & name) {
-                    viz.params().winName = name; },
-                        name);
+                return Manipulator<const std::string &>([](Visualizer3D & viz, const std::string & name) {
+                    viz.params.winName = name; 
+                }, name);
             }
 
-            /*Manipulator<Color> SetDefaultColor(Color color) {
-                return Manipulator<Color>(
-                    [](Visualizer3D & viz, Color c){
-                    viz.params().defaultColor = c; },
-                        color);
+            Manipulator<Color> SetDefaultForegroundColor(Color color) {
+                return Manipulator<Color>([](Visualizer3D & viz, Color c){
+                    viz.defaultRenderState.foregroundColor = c; 
+                }, color);
             }
-
+/*
             Manipulator<Color> SetBackgroundColor(Color color) {
                 return Manipulator<Color>(
                     [](Visualizer3D & viz, Color c){
@@ -151,7 +132,7 @@ namespace panoramix {
                 // visualizer widget
                 class Visualizer3DWidget : public QGLWidget {
                 public:
-                    Visualizer3DWidget(Visualizer3D & viz, QWidget * parent = 0) : QGLWidget(parent), _params(viz.params()){
+                    Visualizer3DWidget(Visualizer3D & viz, QWidget * parent = 0) : QGLWidget(parent), _params(viz.params){
                         setMouseTracking(true);
                         setAutoBufferSwap(false);
                         _boundingBox = core::Box3();
@@ -316,9 +297,7 @@ namespace panoramix {
                 private:
                     Visualizer3D::Params _params;
                     QPointF _lastPos;
-                    OpenGLObject * _linesObject;
-                    OpenGLObject * _pointsObject;
-                    OpenGLObject * _trianglesObject;
+                    RenderableObjectTree _renderableObjTree;
                     core::Box3 _boundingBox;
                 };
                 

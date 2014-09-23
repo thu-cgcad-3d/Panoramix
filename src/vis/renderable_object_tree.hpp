@@ -17,12 +17,12 @@ namespace panoramix {
 
         public:
             RenderableObjectTree();
-            explicit RenderableObjectTree(RenderableObject * root);
-            ~RenderableObjectTree();
+            explicit RenderableObjectTree(std::shared_ptr<RenderableObject> root);
 
-            void installFromRoot(RenderableObject * root);
+            void installFromRoot(std::shared_ptr<RenderableObject> root);
             void deleteAll();
 
+            Box3 boundingBox() const;
             void renderWithCamera(RenderModeFlags mode, const core::PerspectiveCamera & cam) const;
 
            /* std::vector<RenderableObject*> pickByRay(const core::InfiniteLine3 & ray, double distance) const;
@@ -30,7 +30,7 @@ namespace panoramix {
                 const core::PerspectiveCamera & camera, double distanceOnScreen) const;*/
 
         private:
-            RenderableObject* _root;
+            std::shared_ptr<RenderableObject> _root;
             std::vector<RenderableObject*> _objects;
             std::map<RenderableObject*, int> _objectIds;
             std::map<RenderableObject*, core::Mat4> _calculatedModelMatrices;
@@ -39,6 +39,13 @@ namespace panoramix {
         };
 
     }
+
+    namespace core {
+        inline Box3 BoundingBox(const vis::RenderableObjectTree & t) {
+            return t.boundingBox();
+        }
+    }
+
 }
  
 #endif

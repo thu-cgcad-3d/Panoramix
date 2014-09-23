@@ -9,7 +9,7 @@ namespace panoramix {
     namespace vis {
             
         class Visualizer3D {
-            struct Visualizer3DPrivateData;
+            struct PrivateData;
         public:
             struct Params { // predefined parameters for widgets
                 Params();
@@ -20,15 +20,25 @@ namespace panoramix {
             };
             
             Visualizer3D();
-            explicit Visualizer3D(const Params & p);
-            ~Visualizer3D();
+            explicit Visualizer3D(const Params & p, const DefaultRenderState & s);
 
         public:
-            Params & params() const;
-            Visualizer3DPrivateData * dataPtr() const { return _data.get(); }
+            template <class T>
+            inline void addAndActivate(const T & data) {
+                RenderableObject * newRo = MakeRenderable(data, _defaultRenderState, _activeObject);
+                _activeObject = newRo;
+            }
+            void deactivateLast();
+
+        public:
+            Params params;
+            DefaultRenderState defaultRenderState;
 
         private:
-            std::shared_ptr<Visualizer3DPrivateData> _data;
+            DefaultRenderState _defaultRenderState;
+            std::shared_ptr<RenderableObject> _root; // never empty
+            RenderableObject * _activeObject; // never empty
+            std::shared_ptr<PrivateData> _data; // GUI data
         };
 
 
@@ -42,8 +52,8 @@ namespace panoramix {
             };
 
             Manipulator<const std::string &> SetWindowName(const std::string & name);
-            //Manipulator<vis::Color> SetDefaultColor(vis::Color color);
-            //inline Manipulator<vis::Color> SetDefaultColor(vis::ColorTag tag){ return SetDefaultColor(vis::ColorFromTag(tag)); }
+            Manipulator<vis::Color> SetDefaultForegroundColor(vis::Color color);
+            inline Manipulator<vis::Color> SetDefaultForegroundColor(vis::ColorTag tag) { return SetDefaultForegroundColor(vis::ColorFromTag(tag)); }
             //Manipulator<vis::Color> SetBackgroundColor(vis::Color color);
             //inline Manipulator<vis::Color> SetBackgroundColor(vis::ColorTag tag){ return SetBackgroundColor(vis::ColorFromTag(tag)); }
             /*Manipulator<const core::PerspectiveCamera &> SetCamera(const core::PerspectiveCamera & camera);
@@ -56,6 +66,19 @@ namespace panoramix {
             Manipulator<bool> Show(bool block = true);
 
             //void AutoSetCamera(Visualizer3D & viz);
+
+
+            template <class T>
+            Manipulator<const T &> Begin(const T & t) {
+                return Manipulator<const T &>([](Visualizer3D & viz, const T & t) {
+                    viz.addAndActivate(t);
+                }, t);
+            }
+
+            void End(Visualizer3D & viz) {
+                viz.deactivateLast();
+            }
+
         }
 
 
