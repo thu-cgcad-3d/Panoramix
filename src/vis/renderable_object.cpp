@@ -1,14 +1,25 @@
-#include "qt_opengl_object.hpp"
+#include "renderable_object.hpp"
 
 namespace panoramix {
     namespace vis {
 
-        void Renderable::render(RenderModeFlags mode, const core::PerspectiveCamera & cam, const QMatrix4x4 & modelMat) const{
-            render(mode, MakeQMatrix(cam.viewProjectionMatrix()) * modelMat);
+        RenderableObject::RenderableObject(QObject * parent) : QObject(parent) {
+            _modelMat.setToIdentity();
         }
 
+        void RenderableObject::renderWithCamera(RenderModeFlags mode, const core::PerspectiveCamera & cam) const {
+            render(mode, MakeQMatrix(cam.viewProjectionMatrix()) * _modelMat);
+        }
+
+
+        void RenderableObject::error(const QString & message) {
+            qWarning() << message;
+            emit errorOccored(message);
+        }
+
+
         // opengl object implementation
-        OpenGLObject::OpenGLObject(QObject *parent) : QObject(parent), _texture(NULL) {
+        OpenGLObject::OpenGLObject(QObject *parent) : RenderableObject(parent), _texture(NULL) {
             _program = new QOpenGLShaderProgram(this);
         }
 
@@ -97,10 +108,6 @@ namespace panoramix {
 
         }
 
-        void OpenGLObject::error(const QString & message) {
-            qWarning() << message;
-            emit errorOccored(message);
-        }
 
 
     }

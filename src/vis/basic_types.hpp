@@ -49,7 +49,7 @@ namespace panoramix {
         };
 
         // color table
-        enum class ColorTableDescriptor : int8_t {
+        enum class ColorTableDescriptor {
             RGB,
             WRGB,
             AllColors,
@@ -62,8 +62,8 @@ namespace panoramix {
         class ColorTable {
         public:
             inline ColorTable() 
-                : _exceptionalColor(ColorFromTag(ColorTag::White)) {}
-            inline ColorTable(const std::vector<Color> & ctable, const Color & exceptColor = ColorFromTag(ColorTag::White)) 
+                : _exceptionalColor(ColorFromTag(ColorTag::Transparent)) {}
+            inline ColorTable(const std::vector<Color> & ctable, const Color & exceptColor = ColorFromTag(ColorTag::Transparent))
                 : _colors(ctable), _exceptionalColor(exceptColor) {}
 
             ColorTable(ColorTableDescriptor descriptor);
@@ -74,7 +74,7 @@ namespace panoramix {
             ColorTable(std::initializer_list<ColorTag> ctags, ColorTag exceptColor);
 
             template <class ColorIteratorT>
-            inline ColorTable(ColorIteratorT begin, ColorIteratorT end, const Color & exceptColor = ColorFromTag(ColorTag::White)) 
+            inline ColorTable(ColorIteratorT begin, ColorIteratorT end, const Color & exceptColor = ColorFromTag(ColorTag::Transparent))
                 : _colors(begin, end), _exceptionalColor(exceptColor) {}
 
         public:
@@ -111,7 +111,7 @@ namespace panoramix {
 
 
         // opengl shader source
-        enum class OpenGLShaderSourceDescriptor : int8_t {
+        enum class OpenGLShaderSourceDescriptor {
             DefaultPoints,
             DefaultLines,
             DefaultTriangles

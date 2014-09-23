@@ -10,7 +10,7 @@
 #include "../core/utilities.hpp"
 
 #include "qt_glue.hpp"
-#include "qt_opengl_object.hpp"
+#include "renderable_object.hpp"
 #include "singleton.hpp"
 #include "visualize3D.hpp"
 
@@ -26,17 +26,19 @@ namespace panoramix {
             winName("Visualizer 3D"),
             backgroundColor(255, 255, 255),
             camera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)),
+            renderMode(RenderModeFlag::All)
+        {}
+
+        Visualizer3D::Status::Status()
+            :
             defaultColor(0, 0, 0),
             pointSize(10.0f),
             lineWidth(2.0f),
-            colorTable(ColorTableDescriptor::AllColors),
-            renderMode(RenderModeFlag::All),
-            modelMatrix(core::Mat4::eye())
+            colorTable(ColorTableDescriptor::AllColors) 
         {}
 
         struct Visualizer3D::VisualData {
-            OpenGLMesh mesh;
-            Image texture;
+            QList<RenderableObject*> renderableObjects;
             Visualizer3D::Params params;
         };
 
@@ -227,13 +229,13 @@ namespace panoramix {
                         QMatrix4x4 modelMatrix = MakeQMatrix(params().modelMatrix);
 
                         if (params().renderMode & RenderModeFlag::Triangles){
-                            _trianglesObject->render(RenderModeFlag::Triangles, camera, modelMatrix);
+                            _trianglesObject->renderWithCamera(RenderModeFlag::Triangles, camera, modelMatrix);
                         }
                         if (params().renderMode & RenderModeFlag::Points){
-                            _pointsObject->render(RenderModeFlag::Points, camera, modelMatrix);
+                            _pointsObject->renderWithCamera(RenderModeFlag::Points, camera, modelMatrix);
                         }
                         if (params().renderMode & RenderModeFlag::Lines){
-                            _linesObject->render(RenderModeFlag::Lines, camera, modelMatrix);
+                            _linesObject->renderWithCamera(RenderModeFlag::Lines, camera, modelMatrix);
                         }
                         
                         glDisable(GL_DEPTH_TEST);

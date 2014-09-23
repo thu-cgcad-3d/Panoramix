@@ -1,5 +1,5 @@
 #include "qt_glue.hpp"
-#include "qt_opengl_object.hpp"
+#include "renderable_object.hpp"
 #include "singleton.hpp"
 
 namespace panoramix {

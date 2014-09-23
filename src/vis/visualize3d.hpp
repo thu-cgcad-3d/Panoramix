@@ -14,13 +14,17 @@ namespace panoramix {
                 std::string winName;
                 vis::Color backgroundColor;
                 core::PerspectiveCamera camera;
+                RenderModeFlags renderMode;
+            };
+
+            struct Status {
+                Status();
                 vis::Color defaultColor;
                 float pointSize;
                 float lineWidth;
                 vis::ColorTable colorTable;
-                RenderModeFlags renderMode;
-                core::Mat4 modelMatrix;
             };
+
             struct VisualData;
             struct Widgets;
             using VisualDataPtr = std::shared_ptr<VisualData>;
