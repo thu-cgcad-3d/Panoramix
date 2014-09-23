@@ -15,6 +15,7 @@ static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataD
 static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
 
 TEST(Visualizer3D, 3D) { 
+
     vis::Visualizer3D()
         << vis::manip3d::SetDefaultColor(vis::ColorTag::Red)
         << core::Line3(core::Vec3(0, 0, 1), core::Vec3(0, 0, -1))
