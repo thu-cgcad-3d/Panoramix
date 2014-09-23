@@ -3,47 +3,32 @@
 
 #include "../core/feature.hpp"
 #include "basic_types.hpp"
+#include "renderable_object_tree.hpp"
 
 namespace panoramix {
     namespace vis {
-
+            
         class Visualizer3D {
+            struct Visualizer3DPrivateData;
         public:
-            struct Params { // global parameters
+            struct Params { // predefined parameters for widgets
                 Params();
                 std::string winName;
                 vis::Color backgroundColor;
                 core::PerspectiveCamera camera;
                 RenderModeFlags renderMode;
             };
-
-            struct Status {
-                Status();
-                vis::Color defaultColor;
-                float pointSize;
-                float lineWidth;
-                vis::ColorTable colorTable;
-            };
-
-            struct VisualData;
-            struct Widgets;
-            using VisualDataPtr = std::shared_ptr<VisualData>;
-            using WidgetsPtr = std::shared_ptr<Widgets>;
             
-            explicit Visualizer3D(const Params & p = Params());
+            Visualizer3D();
+            explicit Visualizer3D(const Params & p);
             ~Visualizer3D();
-
-            inline VisualDataPtr data() { return _data; }
-            inline const VisualDataPtr & data() const { return _data; }
-            inline WidgetsPtr widgets() { return _widgets; }
-            inline const WidgetsPtr & widgets() const{ return _widgets; }
 
         public:
             Params & params() const;
+            Visualizer3DPrivateData * dataPtr() const { return _data.get(); }
 
         private:
-            VisualDataPtr _data;
-            WidgetsPtr _widgets;
+            std::shared_ptr<Visualizer3DPrivateData> _data;
         };
 
 
@@ -57,20 +42,20 @@ namespace panoramix {
             };
 
             Manipulator<const std::string &> SetWindowName(const std::string & name);
-            Manipulator<vis::Color> SetDefaultColor(vis::Color color);
-            inline Manipulator<vis::Color> SetDefaultColor(vis::ColorTag tag){ return SetDefaultColor(vis::ColorFromTag(tag)); }
-            Manipulator<vis::Color> SetBackgroundColor(vis::Color color);
-            inline Manipulator<vis::Color> SetBackgroundColor(vis::ColorTag tag){ return SetBackgroundColor(vis::ColorFromTag(tag)); }
-            Manipulator<const core::PerspectiveCamera &> SetCamera(const core::PerspectiveCamera & camera);
+            //Manipulator<vis::Color> SetDefaultColor(vis::Color color);
+            //inline Manipulator<vis::Color> SetDefaultColor(vis::ColorTag tag){ return SetDefaultColor(vis::ColorFromTag(tag)); }
+            //Manipulator<vis::Color> SetBackgroundColor(vis::Color color);
+            //inline Manipulator<vis::Color> SetBackgroundColor(vis::ColorTag tag){ return SetBackgroundColor(vis::ColorFromTag(tag)); }
+            /*Manipulator<const core::PerspectiveCamera &> SetCamera(const core::PerspectiveCamera & camera);
             Manipulator<float> SetPointSize(float pointSize);
             Manipulator<float> SetLineWidth(float lineWidth);
             Manipulator<const vis::ColorTable &> SetColorTable(const vis::ColorTable & colorTable);
             inline Manipulator<const vis::ColorTable &> SetColorTable(vis::ColorTableDescriptor d) { return SetColorTable(vis::ColorTable(d)); }
             Manipulator<RenderModeFlags> SetRenderMode(RenderModeFlags mode);
-            Manipulator<const core::Mat4 &> SetModelMatrix(const core::Mat4 & mat);
+            Manipulator<const core::Mat4 &> SetModelMatrix(const core::Mat4 & mat);*/
             Manipulator<bool> Show(bool block = true);
 
-            void AutoSetCamera(Visualizer3D & viz);
+            //void AutoSetCamera(Visualizer3D & viz);
         }
 
 

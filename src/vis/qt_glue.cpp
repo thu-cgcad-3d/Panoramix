@@ -25,6 +25,16 @@ namespace panoramix {
             return mat;
         }
 
+        core::Mat<float, 4, 4> MakeCoreMatrix(const QMatrix4x4 & m) {
+            core::Mat<float, 4, 4> mat;
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++) {
+                    mat(i, j) = m(i, j);
+                }
+            }
+            return mat;
+        }
+
 
         namespace {
             inline QVector<QRgb> MakeColorTable() {

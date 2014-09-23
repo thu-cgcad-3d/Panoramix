@@ -39,6 +39,9 @@ namespace panoramix {
         inline core::Vec3 MakeCoreVec(const QVector3D & v) {
             return core::Vec3(v.x(), v.y(), v.z());
         }
+        inline core::Vec4 MakeCoreVec(const QVector4D & v) {
+            return core::Vec4(v.x(), v.y(), v.z(), v.w());
+        }
 
 
         template <class T>
@@ -66,6 +69,18 @@ namespace panoramix {
         }
         QMatrix4x4 MakeQMatrix(const core::Mat<float, 4, 4> & m);
         QMatrix4x4 MakeQMatrix(const core::Mat<double, 4, 4> & m);
+
+        template <class T, int M, int N>
+        core::Mat<T, M, N> MakeCoreMatrix(const QGenericMatrix<N, M, T> & m) {
+            core::Mat<T, M, N> mat;
+            for (int i = 0; i < M; i++) {
+                for (int j = 0; j < N; j++) {
+                    mat(i, j) = m(i, j);
+                }
+            }
+            return mat;
+        }
+        core::Mat<float, 4, 4> MakeCoreMatrix(const QMatrix4x4 & m);
 
 
         // point

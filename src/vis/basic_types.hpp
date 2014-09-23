@@ -114,7 +114,8 @@ namespace panoramix {
         enum class OpenGLShaderSourceDescriptor {
             DefaultPoints,
             DefaultLines,
-            DefaultTriangles
+            DefaultTriangles,
+            Panorama
         };
 
         class OpenGLShaderSource {

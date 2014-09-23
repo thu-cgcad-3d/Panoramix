@@ -10,7 +10,7 @@
 #include "../core/utilities.hpp"
 
 #include "qt_glue.hpp"
-#include "renderable_object.hpp"
+#include "renderable_object_tree.hpp"
 #include "singleton.hpp"
 #include "visualize3D.hpp"
 
@@ -37,26 +37,35 @@ namespace panoramix {
             colorTable(ColorTableDescriptor::AllColors) 
         {}
 
-        struct Visualizer3D::VisualData {
-            QList<RenderableObject*> renderableObjects;
-            Visualizer3D::Params params;
-        };
-
-        struct Visualizer3D::Widgets {
-            QList<QWidget *> ws;
+        struct Visualizer3D::Visualizer3DPrivateData {
+            QList<QWidget *> widgets;
+            RenderableObjectTree * renderableObjTree;
+            Params params;
+            Status status;
+            inline Visualizer3DPrivateData(const Params & p, const Status & s) : params(p), status(s) {}
+            ~Visualizer3DPrivateData() {
+                for (QWidget * w : widgets) {
+                    w->deleteLater();
+                }
+                delete renderableObjTree;
+            }
         };
         
 
-        Visualizer3D::Visualizer3D(const Params & p) 
-            : _data(std::make_shared<VisualData>()), 
-            _widgets(std::make_shared<Widgets>()) {
-            _data->params = p;
+        Visualizer3D::Visualizer3D() : _data(std::make_shared<Visualizer3D::Visualizer3DPrivateData>()) {}
+
+        Visualizer3D::Visualizer3D(const Params & p, const Status & s) 
+            : _data(std::make_shared<Visualizer3D::Visualizer3DPrivateData>(p, s)) {
         }
 
         Visualizer3D::~Visualizer3D() {}
 
         Visualizer3D::Params & Visualizer3D::params() const {
             return _data->params;
+        }
+
+        Visualizer3D::Status & Visualizer3D::status() const {
+            return _data->status;
         }
 
         // manipulators
@@ -69,7 +78,7 @@ namespace panoramix {
                         name);
             }
 
-            Manipulator<Color> SetDefaultColor(Color color) {
+            /*Manipulator<Color> SetDefaultColor(Color color) {
                 return Manipulator<Color>(
                     [](Visualizer3D & viz, Color c){
                     viz.params().defaultColor = c; },
@@ -123,9 +132,9 @@ namespace panoramix {
                     [](Visualizer3D & viz, const Mat4 & m) {
                     viz.params().modelMatrix = m; },
                         mat);
-            }
+            }*/
 
-            void AutoSetCamera(Visualizer3D & viz) {
+           /* void AutoSetCamera(Visualizer3D & viz) {
                 auto box = viz.data()->mesh.boundingBox();
                 auto center = box.center();
                 auto radius = Line3(box.minCorner, box.maxCorner).length() / 2.0;
@@ -134,52 +143,21 @@ namespace panoramix {
                 eyedirection = eyedirection / core::norm(eyedirection) * radius * 0.8;
                 viz.params().camera.setEye(center + eyedirection, false);
                 viz.params().camera.setNearAndFarPlanes(radius / 2.0, radius * 2.0, true);
-            }
+            }*/
 
-            namespace {
-
-
-                static const OpenGLShaderSource PanoramaShader = {
-                    "attribute highp vec3 position;\n"
-                    "attribute highp vec3 normal;\n"
-                    "uniform highp mat4 matrix;\n"
-                    "varying highp vec3 pixelPosition;\n"
-                    "varying highp vec3 pixelNormal;\n"
-                    "void main(void)\n"
-                    "{\n"
-                    "    pixelPosition = position.xyz;\n"
-                    "    pixelNormal = normal;\n"
-                    "    gl_Position = matrix * vec4(position, 1.0);\n"
-                    "}\n"
-                    ,
-
-                    // 3.14159265358979323846264338327950288
-                    "uniform sampler2D tex;\n"
-                    "uniform highp vec3 panoramaCenter;\n"
-                    "varying highp vec3 pixelPosition;\n"
-                    "varying highp vec3 pixelNormal;\n"
-                    "void main(void)\n"
-                    "{\n"
-                    "    highp vec3 direction = pixelPosition - panoramaCenter;\n"
-                    "    highp float longi = atan(direction.y, direction.x);\n"
-                    "    highp float lati = asin(direction.z / length(direction));\n"
-                    "    highp vec2 texCoord = vec2(- longi / 3.1415926535897932 / 2.0 + 0.5, lati / 3.1415926535897932 + 0.5);\n"
-                    "    gl_FragColor = texture2D(tex, texCoord);\n"
-                    "}\n"
-                };
+            namespace {              
 
 
                 // visualizer widget
                 class Visualizer3DWidget : public QGLWidget {
                 public:
-                    Visualizer3DWidget(Visualizer3D & viz, QWidget * parent = 0) : QGLWidget(parent), _data(viz.data()){
+                    Visualizer3DWidget(Visualizer3D & viz, QWidget * parent = 0) : QGLWidget(parent), _params(viz.params()){
                         setMouseTracking(true);
                         setAutoBufferSwap(false);
-                        _meshBox = viz.data()->mesh.boundingBox();
+                        _boundingBox = core::Box3();
+                        // TODO
                     }
-                    
-                    Visualizer3D::VisualDataPtr data() const { return _data; }
-                    Visualizer3D::Params & params() const { return _data->params; }
+
 
                 protected:
                     void initializeGL() {
@@ -336,12 +314,12 @@ namespace panoramix {
                     }                    
 
                 private:
-                    std::shared_ptr<Visualizer3D::VisualData> _data;
+                    Visualizer3D::Params _params;
                     QPointF _lastPos;
                     OpenGLObject * _linesObject;
                     OpenGLObject * _pointsObject;
                     OpenGLObject * _trianglesObject;
-                    core::Box3 _meshBox;
+                    core::Box3 _boundingBox;
                 };
                 
 

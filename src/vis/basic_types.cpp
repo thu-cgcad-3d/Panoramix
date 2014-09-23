@@ -302,11 +302,41 @@ namespace panoramix {
                 "}\n"
             };
 
+            static const OpenGLShaderSource panoramaShaderSource = {
+                "attribute highp vec3 position;\n"
+                "attribute highp vec3 normal;\n"
+                "uniform highp mat4 matrix;\n"
+                "varying highp vec3 pixelPosition;\n"
+                "varying highp vec3 pixelNormal;\n"
+                "void main(void)\n"
+                "{\n"
+                "    pixelPosition = position.xyz;\n"
+                "    pixelNormal = normal;\n"
+                "    gl_Position = matrix * vec4(position, 1.0);\n"
+                "}\n"
+                ,
+
+                // 3.14159265358979323846264338327950288
+                "uniform sampler2D tex;\n"
+                "uniform highp vec3 panoramaCenter;\n"
+                "varying highp vec3 pixelPosition;\n"
+                "varying highp vec3 pixelNormal;\n"
+                "void main(void)\n"
+                "{\n"
+                "    highp vec3 direction = pixelPosition - panoramaCenter;\n"
+                "    highp float longi = atan(direction.y, direction.x);\n"
+                "    highp float lati = asin(direction.z / length(direction));\n"
+                "    highp vec2 texCoord = vec2(- longi / 3.1415926535897932 / 2.0 + 0.5, lati / 3.1415926535897932 + 0.5);\n"
+                "    gl_FragColor = texture2D(tex, texCoord);\n"
+                "}\n"
+            };
+
 
             switch (name) {
             case OpenGLShaderSourceDescriptor::DefaultPoints: return defaultPointsShaderSource;
             case OpenGLShaderSourceDescriptor::DefaultLines: return defaultLinesShaderSource;
             case OpenGLShaderSourceDescriptor::DefaultTriangles: return defaultTrianglesShaderSource;
+            case OpenGLShaderSourceDescriptor::Panorama: return panoramaShaderSource;
             default:
                 return defaultTrianglesShaderSource;
             }

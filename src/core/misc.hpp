@@ -4,10 +4,26 @@
 #include <stack>
 #include <iterator>
 #include <cassert>
+#include <map>
  
 namespace panoramix {
     namespace core {    
 
+
+        template <class ContainerT, class ValueT>
+        inline bool Contains(const ContainerT & c, const ValueT & v) {
+            return std::find(c.cbegin(), c.cend(), v) != c.cend();
+        }
+
+        template <class KeyT, class ValueT, class PredT, class AllocT>
+        inline bool Contains(const std::map<KeyT, ValueT, PredT, AllocT> & m, const KeyT & k) {
+            return m.find(k) != m.end();
+        }
+
+        template <class KeyT, class PredT, class AllocT>
+        inline bool Contains(const std::set<KeyT, PredT, AllocT> & m, const KeyT & k) {
+            return m.find(k) != m.end();
+        }
 
  
         // element of container MUST support PredT(ele) -> bool
