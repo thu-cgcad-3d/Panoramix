@@ -107,6 +107,25 @@ namespace panoramix {
         }
 
 
+
+        namespace {
+            template <class T>
+            struct CanMakeRenderableImpl {
+                template <class TT>  
+                static auto test(int) -> decltype(
+                    MakeRenderable(std::declval<TT>(), std::declval<DefaultRenderState>(), RenderableObject*(nullptr)), 
+                    std::true_type());
+                template <class>  
+                static std::false_type test(...); 
+                static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
+            };
+
+        }
+
+        template <class T>
+        struct CanMakeRenderable : std::integral_constant<bool, CanMakeRenderableImpl<T>::value> {};
+
+
         //// opengl object
         //class OpenGLObject : public RenderableObject {
         //public:

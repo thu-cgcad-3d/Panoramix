@@ -74,6 +74,7 @@ namespace panoramix {
             assert(_root);
             _root->depthFirstTraverse([this, &mode, &cam](RenderableObject * ro) -> bool {
                 ro->render(mode, cam.viewProjectionMatrix() * _calculatedModelMatrices.at(ro));
+                return true;
             });
         }
     }

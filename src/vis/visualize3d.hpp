@@ -96,89 +96,10 @@ namespace panoramix {
             return viz;
         }
 
-
-
-        // points
-        Visualizer3D operator << (Visualizer3D viz, const core::Point3 & p);
-        inline Visualizer3D operator << (Visualizer3D viz, const core::HPoint3 & p) {
-            return viz << p.value();
+        template <class T, class = std::enable_if_t<CanMakeRenderable<T>::value>>
+        inline Visualizer3D operator << (Visualizer3D viz, const T & v) {
+            return viz << manip3d::Begin(v) << manip3d::End;
         }
-
-        // lines
-        Visualizer3D operator << (Visualizer3D viz, const core::Line3 & l);
-        inline Visualizer3D operator << (Visualizer3D viz, const core::HLine3 & l) {
-            return viz << l.toLine();
-        }
-
-
-        // classified thing
-        template <class T>
-        inline Visualizer3D operator << (Visualizer3D viz, const core::Classified<T> & thing) {
-            viz.params().defaultColor = viz.params().colorTable[thing.claz];
-            viz << thing.component;
-            viz.params().defaultColor = oldDefaultColor;
-            return viz;
-        }
-
-
-        // containers
-        template <class T, int N>
-        inline Visualizer3D operator << (Visualizer3D viz, const std::array<T, N> & a) {
-            for (auto & e : a)
-                viz = viz << e;
-            return viz;
-        }
-
-        template <class ContainerT>
-        inline Visualizer3D VisualizeAllInContainer(Visualizer3D viz, const ContainerT & c) {
-            for (auto & e : c)
-                viz = viz << e;
-            return viz;
-        }
-
-
-#define VISUALIZE3D_AS_CONTAINER(claz) \
-    template <class T> \
-    inline Visualizer3D operator << (Visualizer3D viz, const claz<T> & c) { \
-        return VisualizeAllInContainer(viz, c); \
-    }
-
-        VISUALIZE3D_AS_CONTAINER(std::list)
-        VISUALIZE3D_AS_CONTAINER(std::vector)
-        VISUALIZE3D_AS_CONTAINER(std::deque)
-        VISUALIZE3D_AS_CONTAINER(std::set)
-        VISUALIZE3D_AS_CONTAINER(std::unordered_set)
-        VISUALIZE3D_AS_CONTAINER(std::forward_list)
-           
-
-
-
-        class AdvancedVisualizer3D {
-        public:
-            struct Params { // global parameters
-                Params();
-                std::string winName;
-                vis::Color backgroundColor;
-                core::PerspectiveCamera camera;
-                vis::ColorTableDescriptor colorTableDescriptor;
-                core::Mat4 modelMatrix;
-            };
-
-            struct VisualData;
-            struct Widgets;
-            using VisualDataPtr = std::shared_ptr<VisualData>;
-            using WidgetsPtr = std::shared_ptr<Widgets>;
-
-            explicit AdvancedVisualizer3D(const Params & params = Params());
-            ~AdvancedVisualizer3D();
-
-        public:
-            Params & params() const;
-
-        private:
-            VisualDataPtr _data;
-            WidgetsPtr _widgets;
-        };
 
     }
 }

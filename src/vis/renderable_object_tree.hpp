@@ -22,7 +22,7 @@ namespace panoramix {
             void installFromRoot(std::shared_ptr<RenderableObject> root);
             void deleteAll();
 
-            Box3 boundingBox() const;
+            core::Box3 boundingBox() const;
             void renderWithCamera(RenderModeFlags mode, const core::PerspectiveCamera & cam) const;
 
            /* std::vector<RenderableObject*> pickByRay(const core::InfiniteLine3 & ray, double distance) const;

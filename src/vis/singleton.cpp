@@ -7,15 +7,15 @@ namespace panoramix {
 
         static char * appName = "Qt Gui";
 
-        QApplication* Singleton::InitGui(int argc, char ** argv){
+        QGuiApplication* Singleton::InitGui(int argc, char ** argv) {
             if (qApp)
                 return qApp;
-            QApplication* app = new QApplication(argc, argv);
+            QGuiApplication* app = new QGuiApplication(argc, argv);
             app->setQuitOnLastWindowClosed(true);
             return app;
         }
 
-        QApplication* Singleton::InitGui(){
+        QGuiApplication* Singleton::InitGui() {
             return InitGui(1, &appName);
         }
 

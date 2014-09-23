@@ -5,6 +5,7 @@
 #include <iterator>
 #include <cassert>
 #include <map>
+#include <set>
  
 namespace panoramix {
     namespace core {    

@@ -1,5 +1,5 @@
 #include "../src/vis/renderable_object_tree.hpp"
-//#include "../src/vis/visualize3d.hpp"
+#include "../src/vis/visualize3d.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
@@ -20,8 +20,8 @@ TEST(Visualizer3D, RenderableObject) {
         { {-1, 1}, {5, 5} },
         { { -2, -2 }, {8, 6} }
     };
-    auto lines1 = vis::MakeRenderable(lines);
-    vis::RenderableObjectTree renderTree(lines1);
+    
+    std::cout << vis::CanMakeRenderable<core::Line3>::value << std::endl;
 
 
 }
