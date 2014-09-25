@@ -495,24 +495,6 @@ namespace panoramix {
 
         void ReconstructionEngine::recognizeRegionLineRelations() {
 
-            //template <class IndexT>
-            //class IndicesWithId {
-            //public:
-            //    inline int insert(const IndexT & ind) {
-            //        _indices.push_back(ind);
-            //        _indexToId[ind] = _indices.size() - 1;
-            //        return _indices.size() - 1;
-            //    }
-            //    inline const std::vector<IndexT> & indices() const { return _indices; }
-            //    inline const IndexT & operator[](int i) const { return _indices[i]; }
-            //    inline int id(const IndexT & ind) const { return _indexToId[ind]; }
-            //    inline size_t size() const { return _indices.size(); }
-
-            //private:
-            //    std::vector<IndexT> _indices;
-            //    ReconstructionEngine::IndexHashMap<IndexT, int> _indexToId;
-            //};
-
             // compute spatial positions of each region
             IndexHashMap<RegionIndex, std::vector<Vec3>>
                 regionSpatialContours;
@@ -599,16 +581,6 @@ namespace panoramix {
 
                 gpc_free_polygon(&riPoly);
             }
-
-            //for (auto & riPair : overlappedRegionIndexPairs) {
-            //    auto revRiPair = std::make_pair(riPair.first.second, riPair.first.first);
-            //    std::cout << "a-b: " << riPair.second;
-            //    if (overlappedRegionIndexPairs.find(revRiPair) != overlappedRegionIndexPairs.end())
-            //        std::cout << "   b-a: " << overlappedRegionIndexPairs[revRiPair];
-            //    std::cout << std::endl;
-            //}
-
-
 
             //// LINES ////
             // compute spatial normal directions for each line
@@ -960,8 +932,8 @@ namespace panoramix {
                     camera.spatialDirection(line2.component.first),
                     camera.spatialDirection(relationCenter), vp2);
 
-                if (firstLineIndexInConnectedComponents.find(li1) == firstLineIndexInConnectedComponents.end() &&
-                    firstLineIndexInConnectedComponents.find(li2) == firstLineIndexInConnectedComponents.end()) {
+                if (!core::Contains(firstLineIndexInConnectedComponents, li1) &&
+                    !core::Contains(firstLineIndexInConnectedComponents, li2)) {
                     // eta1 * ratio1 - eta2 * ratio2 = 0
                     A.insert(curEquationNum, lineId1) = ratio1;
                     A.insert(curEquationNum, lineId2) = -ratio2;
@@ -1164,18 +1136,11 @@ namespace panoramix {
                 };
 
                 std::cout << "eta: " << eta << " --- " << "ccid: " << _globalData.lineConnectedComponentIds[li] << std::endl;
-                //std::cout << "depth of the " << i << "-th line: "
-                //    << norm(line3.first) << ", "
-                //    << norm(line3.second) << " ---- ";
                 
                 double resizeScale = eta / norm(line3.first);
                 line3.first *= resizeScale;
                 line3.second *= (resizeScale * 
                     ComputeDepthRatioOfPointOnSpatialLine(line3.first, line3.second, _globalData.vanishingPoints[line2.claz]));
-
-                //std::cout << "depth of the " << i << "-th line: " 
-                //    << norm(line3.first) << ", " 
-                //    << norm(line3.second) << std::endl;
 
                 _globalData.reconstructedLines[li] = line3;
             }

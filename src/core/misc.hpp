@@ -6,6 +6,8 @@
 #include <cassert>
 #include <map>
 #include <set>
+#include <unordered_map>
+#include <unordered_set>
  
 namespace panoramix {
     namespace core {    
@@ -23,6 +25,16 @@ namespace panoramix {
 
         template <class KeyT, class PredT, class AllocT>
         inline bool Contains(const std::set<KeyT, PredT, AllocT> & m, const KeyT & k) {
+            return m.find(k) != m.end();
+        }
+
+        template <class KeyT, class ValueT, class HasherT, class KeyeqT, class AllocT>
+        inline bool Contains(const std::unordered_map<KeyT, ValueT, HasherT, KeyeqT, AllocT> & m, const KeyT & k) {
+            return m.find(k) != m.end();
+        }
+
+        template <class KeyT, class HasherT, class KeyeqT, class AllocT>
+        inline bool Contains(const std::unordered_set<KeyT, HasherT, KeyeqT, AllocT> & m, const KeyT & k) {
             return m.find(k) != m.end();
         }
 

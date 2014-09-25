@@ -41,6 +41,9 @@ namespace panoramix {
         using Point2 = Point<double, 2>;
         using Point3 = Point<double, 3>;
         using Point4 = Point<double, 4>;
+        using Point2f = Point<float, 2>;
+        using Point3f = Point<float, 3>;
+        using Point4f = Point<float, 4>;
         using Point2i = Point<int, 2>;
         using Point3i = Point<int, 3>;
         using Point4i = Point<int, 4>;
