@@ -17,17 +17,33 @@ static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestData
 static_assert(vis::CanMakeRenderable<core::Line3>::value, "Line3 is not renderable!");
 static_assert(vis::CanMakeRenderable<core::Point3>::value, "Point3 is not renderable!");
 
-//TEST(Visualizer3D, RenderableObject) { 
-void run() {
+
+TEST(Visualizer3D, RenderPoints) {
+    std::vector<core::Point3> points = {
+        {-1, -1, -1},
+        {-1, 1, 1},
+        {1, -1, 1}
+    };
+    vis::Visualizer3D()
+        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::DimGray)
+        << vis::manip3d::SetDefaultPointSize(20.0)
+        << points
+        << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+        << vis::manip3d::Show();
+}
+
+TEST(Visualizer3D, RenderLines) { 
     std::vector<core::Line3> lines = {
         { {-1, 1}, {5, 5} },
-        { { -2, -2 }, {8, 6} }
+        { { -2, -2 }, {8, 6} },
+        { { 5, -3, -4 }, {-3, 2, 8} }
     };
     
     vis::Visualizer3D()
-        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
+        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Yellow)
+        << vis::manip3d::SetDefaultLineWidth(3.5)
         << lines
-        << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+        << vis::manip3d::SetBackgroundColor(vis::ColorTag::Red)
         << vis::manip3d::Show();
 }
 
@@ -35,8 +51,7 @@ int main(int argc, char * argv[], char * envp[])
 {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    //testing::FLAGS_gtest_filter = "Texture";
-    //return RUN_ALL_TESTS();
-    run();
+    return RUN_ALL_TESTS();
+    //run();
     //return 0;
 }

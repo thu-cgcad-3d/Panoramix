@@ -4,6 +4,11 @@
 namespace panoramix {
     namespace core {
 
+        template <class ...T> 
+        struct DelayStaticAssert {
+            enum { value = false };
+        };
+
         // not implemented error
 #define NOT_IMPLEMENTED_YET() \
     throw std::runtime_error("This feature has not yet been implemented! \n" \
@@ -26,8 +31,8 @@ namespace panoramix {
     "in file: "__FILE__)
 
         // should never be instanciated error
-#define SHOULD_NEVER_BE_INSTANCIATED() \
-    static_assert(false, "This feature should never be instanciated by compiler! \n" \
+#define SHOULD_NEVER_BE_INSTANCIATED(...) \
+    static_assert(panoramix::core::DelayStaticAssert<__VA_ARGS__>::value, "This feature should never be instanciated by compiler! \n" \
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \
     "in file: "__FILE__)

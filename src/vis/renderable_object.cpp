@@ -161,8 +161,9 @@ namespace panoramix {
 
             class GLObject : public RenderableObject {
             public:
-                explicit GLObject(const OpenGLMesh & m, const OpenGLShaderSource & ss, RenderableObject * parent) 
-                    : RenderableObject(parent), _mesh(m), _shaderSource(ss) {
+                explicit GLObject(const OpenGLMesh & m, float pointSize, float lineWidth, 
+                    const OpenGLShaderSource & ss, RenderableObject * parent) 
+                    : RenderableObject(parent), _mesh(m), _pointSize(pointSize), _lineWidth(lineWidth), _shaderSource(ss) {
                     _program = new QOpenGLShaderProgram;
                     _texture = new QOpenGLTexture(QOpenGLTexture::Target2D);
                 }
@@ -172,7 +173,7 @@ namespace panoramix {
                     delete _texture;
                 }
 
-
+            public:
                 virtual void initialize() const override {
                     // setup shaders
                     if (!_program->addShaderFromSourceCode(QOpenGLShader::Vertex,
@@ -202,18 +203,17 @@ namespace panoramix {
                     if (_texture && _texture->isCreated())
                         _texture->bind(0);
 
+                    glLineWidth(_lineWidth);
+
                     _program->setUniformValue("matrix", MakeQMatrix(mat));
                     _program->setUniformValue("tex", 0);
                     _program->setUniformValue("panoramaCenter", QVector3D(0, 0, 0));
+                    _program->setUniformValue("pointSize", _pointSize);
 
                     SetAttributeArrayWithOpenGLMeshVertices(_program, "position", _mesh.vertices().front().position4);
                     SetAttributeArrayWithOpenGLMeshVertices(_program, "normal", _mesh.vertices().front().normal3);
                     SetAttributeArrayWithOpenGLMeshVertices(_program, "color", _mesh.vertices().front().color4);
                     SetAttributeArrayWithOpenGLMeshVertices(_program, "texCoord", _mesh.vertices().front().texCoord2);
-                    /*_program->setAttributeArray("position", GL_DOUBLE, _mesh.vertices().front().position4.val, 3, sizeof(OpenGLMesh::Vertex));
-                    _program->setAttributeArray("normal", GL_DOUBLE, _mesh.vertices().front().normal3.val, 3, sizeof(OpenGLMesh::Vertex));
-                    _program->setAttributeArray("color", GL_DOUBLE, _mesh.vertices().front().color4.val, 4, sizeof(OpenGLMesh::Vertex));
-                    _program->setAttributeArray("texCoord", GL_DOUBLE, _mesh.vertices().front().texCoord2.val, 2, sizeof(OpenGLMesh::Vertex));*/
 
                     _program->enableAttributeArray("position");
                     _program->enableAttributeArray("normal");
@@ -236,6 +236,8 @@ namespace panoramix {
                     _program->disableAttributeArray("texCoord");
 
                     _program->release();
+
+                    
                 }
 
                 virtual core::Box3 primaryBoundingBox() const { return BoundingBox(_mesh); }
@@ -260,6 +262,8 @@ namespace panoramix {
                 OpenGLShaderSource _shaderSource;
                 QOpenGLShaderProgram * _program;
                 QOpenGLTexture * _texture;
+                float _lineWidth;
+                float _pointSize;
             };
         }
 
@@ -273,8 +277,8 @@ namespace panoramix {
                 template <class PointsIteratorT>
                 explicit GLPointsObject(PointsIteratorT && begin, PointsIteratorT && end,
                     float pointSize, const Color & color, RenderableObject * parent)
-                    : GLObject(OpenGLMesh::FromPoints(begin, end), OpenGLShaderSourceDescriptor::DefaultPoints, parent), 
-                    _points(begin, end), _pointSize(pointSize), _color(color) {
+                    : GLObject(OpenGLMesh::FromPoints(begin, end), pointSize, 1.0f, OpenGLShaderSourceDescriptor::DefaultPoints, parent), 
+                    _points(begin, end), _color(color) {
                     // update color
                     for (auto & v : _mesh.vertices()) {
                         QColor c = MakeQColor(color);
@@ -294,44 +298,8 @@ namespace panoramix {
 
             private:
                 std::vector<Point3> _points;
-                float _pointSize;
                 Color _color;
             };
-
-
-            //class PointsObject : public RenderableObject {
-            //public:
-            //    template <class PointsIteratorT>
-            //    explicit PointsObject(PointsIteratorT && begin, PointsIteratorT && end,
-            //        float pointSize, const Color & color, RenderableObject * parent)
-            //        : RenderableObject(parent), _points(begin, end), _pointSize(pointSize), _color(color) {}
-
-            //    virtual void render(RenderModeFlags mode, const Mat4 & mat) const override {
-            //        glPointSize(_pointSize);
-            //        glBegin(GL_POINTS);
-            //        for (const Point3 & p : _points) {
-            //            glColor4dv(_color.val);
-            //            glVertex3dv(p.val);
-            //        }
-            //        glEnd();
-            //    }
-
-            //    virtual core::Box3 primaryBoundingBox() const { return BoundingBoxOfContainer(_points); }
-            //    virtual float distanceTo(const core::InfiniteLine3 & ray) const {
-            //        float distance = std::numeric_limits<float>::max();
-            //        for (auto & p : _points) {
-            //            float d = core::DistanceFromPointToLine(p, ray).first;
-            //            if (d < distance)
-            //                distance = d;
-            //        }
-            //        return distance;
-            //    }
-
-            //private:
-            //    std::vector<Point3> _points;
-            //    float _pointSize;
-            //    Color _color;
-            //};
         }
 
         // point
@@ -356,8 +324,8 @@ namespace panoramix {
                 template <class LinesIteratorT>
                 explicit GLLinesObject(LinesIteratorT && begin, LinesIteratorT && end,
                     float lineWidth, const Color & color, RenderableObject * parent)
-                    : GLObject(OpenGLMesh::FromLines(begin, end), OpenGLShaderSourceDescriptor::DefaultLines, parent),
-                    _lines(begin, end), _lineWidth(lineWidth), _color(color) {
+                    : GLObject(OpenGLMesh::FromLines(begin, end), 1.0f, lineWidth, OpenGLShaderSourceDescriptor::DefaultLines, parent),
+                    _lines(begin, end), _color(color) {
                     // update color
                     for (auto & v : _mesh.vertices()) {
                         QColor c = MakeQColor(color);
@@ -367,46 +335,8 @@ namespace panoramix {
 
             private:
                 std::vector<Line3> _lines;
-                float _lineWidth;
                 Color _color;
             };
-
-            //class LinesObject : public RenderableObject {
-            //public:
-            //    template <class LinesIteratorT>
-            //    explicit LinesObject(LinesIteratorT && begin, LinesIteratorT && end,
-            //        float lineWidth, const Color & color, RenderableObject * parent)
-            //        : RenderableObject(parent), _lines(begin, end), _lineWidth(lineWidth), _color(color) {}
-
-            //    virtual void render(RenderModeFlags mode, const Mat4 & mat) const override {
-            //        glLineWidth(_lineWidth);
-            //        glBegin(GL_LINES);
-            //        for (const Line3 & l : _lines) {
-            //            glColor4dv(_color.val);
-            //            glVertex3dv(l.first.val);
-            //            glColor4dv(_color.val);
-            //            glVertex3dv(l.second.val);
-            //        }
-            //        glEnd();
-            //    }
-
-            //    virtual core::Box3 primaryBoundingBox() const { return BoundingBoxOfContainer(_lines); }
-            //    virtual float distanceTo(const core::InfiniteLine3 & ray) const {
-            //        float distance = std::numeric_limits<float>::max();
-            //        /*for (auto & l : _lines) {
-            //            float d = core::DistanceBetweenTwoLines()
-            //            if (d < distance)
-            //                distance = d;
-            //        }*/
-            //        // TODO
-            //        return distance;
-            //    }
-
-            //private:
-            //    std::vector<Line3> _lines;
-            //    float _lineWidth;
-            //    Color _color;
-            //};
         }
 
 

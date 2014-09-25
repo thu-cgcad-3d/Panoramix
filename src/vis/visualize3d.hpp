@@ -25,7 +25,7 @@ namespace panoramix {
         public:
             template <class T>
             inline void addAndActivate(const T & data) {
-                RenderableObject * newRo = MakeRenderable(data, _defaultRenderState, _activeObject);
+                RenderableObject * newRo = MakeRenderable(data, defaultRenderState, _activeObject);
                 _activeObject = newRo;
             }
             void deactivateLast();
@@ -39,7 +39,6 @@ namespace panoramix {
             DefaultRenderState defaultRenderState;
 
         private:
-            DefaultRenderState _defaultRenderState;
             std::shared_ptr<RenderableObject> _root; // never empty
             RenderableObject * _activeObject; // never empty
             std::shared_ptr<PrivateData> _data; // GUI data
@@ -85,19 +84,19 @@ namespace panoramix {
         }
 
 
-        inline Visualizer3D operator << (Visualizer3D viz, void(*func)(Visualizer3D&)) {
+        inline Visualizer3D & operator << (Visualizer3D & viz, void(*func)(Visualizer3D&)) {
             func(viz);
             return viz;
         }
 
         template <class ArgT>
-        inline Visualizer3D operator << (Visualizer3D viz, manip3d::Manipulator<ArgT> smanip) {
+        inline Visualizer3D & operator << (Visualizer3D & viz, manip3d::Manipulator<ArgT> smanip) {
             smanip.func(viz, smanip.arg);
             return viz;
         }
 
         template <class T, class = std::enable_if_t<CanMakeRenderable<T>::value>>
-        inline Visualizer3D operator << (Visualizer3D viz, const T & v) {
+        inline Visualizer3D & operator << (Visualizer3D & viz, const T & v) {
             return viz << manip3d::Begin(v) << manip3d::End;
         }
 

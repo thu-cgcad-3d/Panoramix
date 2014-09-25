@@ -99,8 +99,6 @@ namespace panoramix {
         RenderableObject * MakeRenderable(const std::vector<core::Line3> & lines,
             const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr);
 
-        //inline int MakeRenderable(int a, const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr) { return 0; }
-
 
         // classified
         template <class T>
@@ -129,33 +127,6 @@ namespace panoramix {
 
         template <class T>
         struct CanMakeRenderable : public std::integral_constant<bool, CanMakeRenderableImpl<T>::value> {};
-
-
-        //// opengl object
-        //class OpenGLObject : public RenderableObject {
-        //public:
-        //    explicit OpenGLObject(RenderableObject * parent = nullptr);
-        //    ~ OpenGLObject();
-
-        //    void setUpShaders(const OpenGLShaderSource & ss);
-        //    void setUpMesh(const OpenGLMesh & mesh);
-        //    void setUpTexture(const QImage & tex);
-
-        //    virtual void render(RenderModeFlags mode, const QMatrix4x4 & mat) const override;
-
-        //protected:
-        //    void error(const QString & message);
-
-        //private:
-        //    OpenGLMesh _mesh;
-        //    QOpenGLShaderProgram * _program;
-        //    QOpenGLTexture * _texture;
-        //};
-
-
-
-
-
 
     }
 

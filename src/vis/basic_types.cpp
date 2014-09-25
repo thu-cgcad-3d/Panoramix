@@ -226,12 +226,13 @@ namespace panoramix {
         const OpenGLShaderSource & PredefinedShaderSource(OpenGLShaderSourceDescriptor name) {
 
             static const OpenGLShaderSource defaultPointsShaderSource = {
+                "#version 120\n"
                 "attribute highp vec4 position;\n"
-                "attribute lowp float pointSize;\n"
                 "attribute highp vec3 normal;\n"
                 "attribute lowp vec4 color;\n"
                 "attribute lowp vec2 texCoord;\n"
                 "uniform highp mat4 matrix;\n"
+                "uniform float pointSize;\n"
                 "varying vec4 pixelColor;\n"
                 "void main(void)\n"
                 "{\n"
@@ -240,6 +241,7 @@ namespace panoramix {
                 "    pixelColor = color;\n"
                 "}\n",
 
+                "#version 120\n"
                 "varying lowp vec4 pixelColor;\n"
                 "void main(void)\n"
                 "{\n"
@@ -253,12 +255,13 @@ namespace panoramix {
             };
 
             static const OpenGLShaderSource defaultLinesShaderSource = {
+                "#version 120\n"
                 "attribute lowp vec4 position;\n"
-                "attribute lowp float pointSize;\n"
                 "attribute lowp vec3 normal;\n"
                 "attribute lowp vec4 color;\n"
                 "attribute lowp vec2 texCoord;\n"
                 "uniform highp mat4 matrix;\n"
+                "uniform float pointSize;\n"
                 "varying vec4 pixelColor;\n"
                 "void main(void)\n"
                 "{\n"
@@ -266,6 +269,7 @@ namespace panoramix {
                 "    pixelColor = color;\n"
                 "}\n",
 
+                "#version 120\n"
                 "varying lowp vec4 pixelColor;\n"
                 "void main(void)\n"
                 "{\n"
@@ -274,12 +278,13 @@ namespace panoramix {
             };
 
             static const OpenGLShaderSource defaultTrianglesShaderSource = {
+                "#version 120\n"
                 "attribute highp vec4 position;\n"
-                "attribute lowp float pointSize;\n"
                 "attribute highp vec3 normal;\n"
                 "attribute lowp vec4 color;\n"
                 "attribute lowp vec2 texCoord;\n"
                 "uniform highp mat4 matrix;\n"
+                "uniform float pointSize;\n"
                 "varying vec4 pixelColor;\n"
                 "void main(void)\n"
                 "{\n"
@@ -289,6 +294,7 @@ namespace panoramix {
                 "    pixelColor = abs(dot(transformedNormal3 / length(transformedNormal), vec3(1.0, 0.0, 0.0))) * vec4(1.0, 1.0, 1.0, 1.0);\n"
                 "}\n",
 
+                "#version 120\n"
                 "varying lowp vec4 pixelColor;\n"
                 "void main(void)\n"
                 "{\n"
@@ -297,6 +303,7 @@ namespace panoramix {
             };
 
             static const OpenGLShaderSource panoramaShaderSource = {
+                "#version 120\n"
                 "attribute highp vec3 position;\n"
                 "attribute highp vec3 normal;\n"
                 "uniform highp mat4 matrix;\n"
@@ -343,7 +350,7 @@ namespace panoramix {
 
         // opengl _mesh data implementation
         OpenGLMesh::Vertex::Vertex() 
-            : position4(0, 0, 0, 1), normal3(0, 0, 0), color4(0, 0, 0, 1), texCoord2(0, 0) {
+            : position4(0, 0, 0, 1), normal3(0, 0, 0), color4(0, 0, 0, 1), texCoord2(0, 0), pointSize(3.0) {
         }
 
 
@@ -353,12 +360,13 @@ namespace panoramix {
             return _iPoints.back();
         }
 
-        OpenGLMesh::VertHandle OpenGLMesh::addVertex(const Vec4f & p, const Vec3f & n, const Vec4f & c, const Vec2f & t) {
+        OpenGLMesh::VertHandle OpenGLMesh::addVertex(const Vec4f & p, const Vec3f & n, const Vec4f & c, const Vec2f & t, float ps) {
             Vertex v;
             v.position4 = p;
             v.normal3 = n;
             v.color4 = c;
             v.texCoord2 = t;
+            v.pointSize = ps;
             return addVertex(v);
         }
 

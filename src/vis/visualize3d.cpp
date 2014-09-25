@@ -240,6 +240,7 @@ namespace panoramix {
                     eyedirection = eyedirection / core::norm(eyedirection) * radius * 0.8;
                     _params.camera.setEye(center + eyedirection, false);
                     _params.camera.setNearAndFarPlanes(radius / 2.0, radius * 2.0, true);
+                    update();
                 }
 
             protected:
