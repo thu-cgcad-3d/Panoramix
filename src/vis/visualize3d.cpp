@@ -24,6 +24,7 @@ namespace panoramix {
             ~PrivateData() {
                 for (QWidget * w : widgets)
                     w->deleteLater();
+                widgets.clear();
             }
             QList<QWidget*> widgets;
         };
@@ -128,6 +129,7 @@ namespace panoramix {
                 void initializeGL() {
                     makeCurrent();
                     qglClearColor(MakeQColor(params().backgroundColor));
+                    _renderableObjTree.initialize();
                 }
 
                 void paintGL() {
@@ -154,6 +156,16 @@ namespace panoramix {
                     camera.resizeScreen(core::SizeI(width(), height()));
 
                     _renderableObjTree.renderWithCamera(_params.renderMode, _params.camera);
+                    
+                    //glMatrixMode(GL_PROJECTION_MATRIX);
+                    //glLineWidth(2.0);
+                    //glBegin(GL_LINES);
+                    //glColor3d(0, 0, 0);
+                    //glVertex2d(0, 0);
+                    //glColor3d(0, 0, 0);
+                    //glVertex2d(1, 1);
+                    //glEnd();
+
 
                     glDisable(GL_DEPTH_TEST);
                     glDisable(GL_CULL_FACE);

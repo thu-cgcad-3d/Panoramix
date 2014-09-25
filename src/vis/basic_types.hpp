@@ -138,10 +138,11 @@ namespace panoramix {
         class OpenGLMesh {
         public:
             struct Vertex {
-                core::Vec4 position4;
-                core::Vec3 normal3;
-                core::Vec4 color4;
-                core::Vec2 texCoord2;
+                Vertex();
+                core::Vec4f position4;
+                core::Vec3f normal3;
+                core::Vec4f color4;
+                core::Vec2f texCoord2;
             };
 
             using VertHandle = uint32_t;
@@ -150,10 +151,10 @@ namespace panoramix {
 
         public:
             VertHandle addVertex(const Vertex & v);
-            VertHandle addVertex(const core::Vec4 & p,
-                const core::Vec3 & n = core::Vec3(0, 0, 0),
-                const core::Vec4 & c = core::Vec4(0, 0, 0, 0),
-                const core::Vec2 & t = core::Vec2(0, 0));
+            VertHandle addVertex(const core::Vec4f & p,
+                const core::Vec3f & n = core::Vec3f(0, 0, 0),
+                const core::Vec4f & c = core::Vec4f(0, 0, 0, 1),
+                const core::Vec2f & t = core::Vec2f(0, 0));
 
             LineHandle addLine(VertHandle v1, VertHandle v2);
             LineHandle addIsolatedLine(const Vertex & v1, const Vertex & v2);
@@ -169,6 +170,8 @@ namespace panoramix {
             core::Box3 boundingBox() const;
 
             inline const std::vector<Vertex> & vertices() const { return _vertices; }
+            inline std::vector<Vertex> & vertices() { return _vertices; }
+
             inline const std::vector<VertHandle> & iPoints() const { return _iPoints; }
             inline const std::vector<VertHandle> & iLines() const { return _iLines; }
             inline const std::vector<VertHandle> & iTriangles() const { return _iTriangles; }
@@ -182,6 +185,36 @@ namespace panoramix {
         public:            
             static OpenGLMesh MakeCube();
             static OpenGLMesh MakeSphere(int m = 32, int n = 64);
+
+            template <class Point3IteratorT>
+            static OpenGLMesh FromPoints(Point3IteratorT && pointsBegin, Point3IteratorT && pointsEnd) {
+                OpenGLMesh m;
+                auto n = std::distance(pointsBegin, pointsEnd);
+                m._vertices.reserve(n);
+                m._iPoints.reserve(n);
+                for (auto i = pointsBegin; i != pointsEnd; ++i) {
+                    auto & p = *i;
+                    m.addVertex(core::Vec4f(p[0], p[1], p[2], 1.0f));
+                }
+                return m;
+            }
+
+            template <class Line3IteratorT>
+            static OpenGLMesh FromLines(Line3IteratorT && linesBegin, Line3IteratorT && linesEnd) {
+                OpenGLMesh m;
+                auto n = std::distance(linesBegin, linesEnd);
+                m._vertices.reserve(n * 2);
+                m._iLines.reserve(n);
+                for (auto i = linesBegin; i != linesEnd; ++i) {
+                    auto & line = *i;
+                    Vertex v1, v2;
+                    v1.position4 = core::Vec4f(line.first[0], line.first[1], line.first[2], 1.0f);
+                    v2.position4 = core::Vec4f(line.second[0], line.second[1], line.second[2], 1.0f);
+                    m.addIsolatedLine(v1, v2);
+                }
+                return m;
+            }
+
         };
 
     }

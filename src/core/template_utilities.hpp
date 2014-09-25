@@ -6,6 +6,9 @@
 namespace panoramix {
     namespace core {
 
+        using yes = std::true_type;
+        using no = std::false_type;
+
         
         // a templated integer sequence
         template<int ...>

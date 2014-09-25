@@ -23,6 +23,8 @@ namespace panoramix {
             void deleteAll();
 
             core::Box3 boundingBox() const;
+
+            void initialize() const;
             void renderWithCamera(RenderModeFlags mode, const core::PerspectiveCamera & cam) const;
 
            /* std::vector<RenderableObject*> pickByRay(const core::InfiniteLine3 & ray, double distance) const;

@@ -70,6 +70,14 @@ namespace panoramix {
             return bbox;
         }
 
+        void RenderableObjectTree::initialize() const {
+            assert(_root);
+            _root->depthFirstTraverse([this](RenderableObject * ro) -> bool {
+                ro->initialize();
+                return true;
+            });
+        }
+
         void RenderableObjectTree::renderWithCamera(RenderModeFlags mode, const core::PerspectiveCamera & cam) const {
             assert(_root);
             _root->depthFirstTraverse([this, &mode, &cam](RenderableObject * ro) -> bool {

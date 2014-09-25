@@ -13,6 +13,9 @@ namespace panoramix {
             RenderableObject(RenderableObject * parent = nullptr);
             ~RenderableObject();
 
+            // initialize rendering
+            virtual void initialize() const {}
+
             // render with a given model+view+projection matrix
             virtual void render(RenderModeFlags mode, const core::Mat4 & mat) const {}
 
@@ -96,6 +99,8 @@ namespace panoramix {
         RenderableObject * MakeRenderable(const std::vector<core::Line3> & lines,
             const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr);
 
+        //inline int MakeRenderable(int a, const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr) { return 0; }
+
 
         // classified
         template <class T>
@@ -113,17 +118,17 @@ namespace panoramix {
             struct CanMakeRenderableImpl {
                 template <class TT>  
                 static auto test(int) -> decltype(
-                    MakeRenderable(std::declval<TT>(), std::declval<DefaultRenderState>(), RenderableObject*(nullptr)), 
-                    std::true_type());
+                    vis::MakeRenderable(std::declval<TT>(), std::declval<DefaultRenderState>(), nullptr),
+                    std::true_type()
+                );
                 template <class>  
                 static std::false_type test(...); 
                 static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
             };
-
         }
 
         template <class T>
-        struct CanMakeRenderable : std::integral_constant<bool, CanMakeRenderableImpl<T>::value> {};
+        struct CanMakeRenderable : public std::integral_constant<bool, CanMakeRenderableImpl<T>::value> {};
 
 
         //// opengl object

@@ -14,16 +14,21 @@ static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + 
 static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
 static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
 
-TEST(Visualizer3D, RenderableObject) { 
+static_assert(vis::CanMakeRenderable<core::Line3>::value, "Line3 is not renderable!");
+static_assert(vis::CanMakeRenderable<core::Point3>::value, "Point3 is not renderable!");
 
+//TEST(Visualizer3D, RenderableObject) { 
+void run() {
     std::vector<core::Line3> lines = {
         { {-1, 1}, {5, 5} },
         { { -2, -2 }, {8, 6} }
     };
     
-    std::cout << vis::CanMakeRenderable<core::Line3>::value << std::endl;
-
-
+    vis::Visualizer3D()
+        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
+        << lines
+        << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+        << vis::manip3d::Show();
 }
 
 int main(int argc, char * argv[], char * envp[])
@@ -31,7 +36,7 @@ int main(int argc, char * argv[], char * envp[])
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
     //testing::FLAGS_gtest_filter = "Texture";
-    return RUN_ALL_TESTS();
-    //run();
+    //return RUN_ALL_TESTS();
+    run();
     //return 0;
 }

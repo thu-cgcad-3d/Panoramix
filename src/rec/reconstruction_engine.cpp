@@ -1189,18 +1189,18 @@ namespace panoramix {
                 auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
-                    viz.params().defaultColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
+                    viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
                     viz = viz << NormalizeLine(l.second);
                 }
                 for (auto & c : _globalData.lineIncidenceRelationsAcrossViews) {
                     auto & line1 = _globalData.reconstructedLines[c.first.first];
                     auto & line2 = _globalData.reconstructedLines[c.first.second];
                     auto nearest = DistanceBetweenTwoLines(NormalizeLine(line1), NormalizeLine(line2));
-                    viz << vis::manip3d::SetDefaultColor(vis::ColorTag::Black);
+                    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black);
                     viz << Line3(nearest.second.first.position, nearest.second.second.position);
                 }
                 viz << vis::manip3d::SetWindowName("not-yet-reconstructed lines with ccids");
-                viz << vis::manip3d::AutoSetCamera << vis::manip3d::Show(false);
+                viz << vis::manip3d::Show(false, true);
             }
 
             IF_DEBUG_USING_VISUALIZERS{
@@ -1208,11 +1208,11 @@ namespace panoramix {
                 auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
-                    viz.params().defaultColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
+                    viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
                     viz = viz << l.second;
                 }
                 viz << vis::manip3d::SetWindowName("reconstructed lines with ccids");
-                viz << vis::manip3d::AutoSetCamera << vis::manip3d::Show(false);
+                viz << vis::manip3d::Show(false, true);
             }
 
             IF_DEBUG_USING_VISUALIZERS{ // show interview constraints
@@ -1220,18 +1220,18 @@ namespace panoramix {
                 auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
-                    viz.params().defaultColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
+                    viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
                     viz = viz << l.second;
                 }
                 for (auto & c : _globalData.lineIncidenceRelationsAcrossViews) {
                     auto & line1 = _globalData.reconstructedLines[c.first.first];
                     auto & line2 = _globalData.reconstructedLines[c.first.second];
                     auto nearest = DistanceBetweenTwoLines(line1, line2);
-                    viz << vis::manip3d::SetDefaultColor(vis::ColorTag::Black);
+                    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black);
                     viz << Line3(nearest.second.first.position, nearest.second.second.position);
                 }
                 viz << vis::manip3d::SetWindowName("reconstructed lines with interview constraints");
-                viz << vis::manip3d::AutoSetCamera << vis::manip3d::Show(true);
+                viz << vis::manip3d::Show(true, true);
             }
         }
 

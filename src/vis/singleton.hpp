@@ -1,14 +1,14 @@
 #ifndef PANORAMIX_VIS_SINGLETON_HPP
 #define PANORAMIX_VIS_SINGLETON_HPP
 
-class QGuiApplication;
+class QApplication;
 
 namespace panoramix {
     namespace vis {
 
         struct Singleton {
-            static QGuiApplication* InitGui(int argc, char ** argv);
-            static QGuiApplication* InitGui();
+            static QApplication* InitGui(int argc, char ** argv);
+            static QApplication* InitGui();
 
             static void ContinueGui();
         };

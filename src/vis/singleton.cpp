@@ -1,3 +1,6 @@
+#include <QtGui>
+#include <QApplication>
+
 #include "qt_glue.hpp"
 #include "renderable_object.hpp"
 #include "singleton.hpp"
@@ -7,15 +10,15 @@ namespace panoramix {
 
         static char * appName = "Qt Gui";
 
-        QGuiApplication* Singleton::InitGui(int argc, char ** argv) {
+        QApplication* Singleton::InitGui(int argc, char ** argv) {
             if (qApp)
                 return qApp;
-            QGuiApplication* app = new QGuiApplication(argc, argv);
+            QApplication* app = new QApplication(argc, argv);
             app->setQuitOnLastWindowClosed(true);
             return app;
         }
 
-        QGuiApplication* Singleton::InitGui() {
+        QApplication* Singleton::InitGui() {
             return InitGui(1, &appName);
         }
 

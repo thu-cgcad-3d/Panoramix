@@ -231,13 +231,11 @@ namespace panoramix {
                 "attribute highp vec3 normal;\n"
                 "attribute lowp vec4 color;\n"
                 "attribute lowp vec2 texCoord;\n"
-                "uniform highp mat4 viewMatrix;\n"
-                "uniform highp mat4 modelMatrix;\n"
-                "uniform highp mat4 projectionMatrix;\n"
+                "uniform highp mat4 matrix;\n"
                 "varying vec4 pixelColor;\n"
                 "void main(void)\n"
                 "{\n"
-                "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
+                "    gl_Position = matrix * position;\n"
                 "    gl_PointSize = pointSize;\n"
                 "    pixelColor = color;\n"
                 "}\n",
@@ -255,18 +253,16 @@ namespace panoramix {
             };
 
             static const OpenGLShaderSource defaultLinesShaderSource = {
-                "attribute highp vec4 position;\n"
+                "attribute lowp vec4 position;\n"
                 "attribute lowp float pointSize;\n"
-                "attribute highp vec3 normal;\n"
+                "attribute lowp vec3 normal;\n"
                 "attribute lowp vec4 color;\n"
                 "attribute lowp vec2 texCoord;\n"
-                "uniform highp mat4 viewMatrix;\n"
-                "uniform highp mat4 modelMatrix;\n"
-                "uniform highp mat4 projectionMatrix;\n"
+                "uniform highp mat4 matrix;\n"
                 "varying vec4 pixelColor;\n"
                 "void main(void)\n"
                 "{\n"
-                "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
+                "    gl_Position = matrix * position;\n"
                 "    pixelColor = color;\n"
                 "}\n",
 
@@ -283,13 +279,11 @@ namespace panoramix {
                 "attribute highp vec3 normal;\n"
                 "attribute lowp vec4 color;\n"
                 "attribute lowp vec2 texCoord;\n"
-                "uniform highp mat4 viewMatrix;\n"
-                "uniform highp mat4 modelMatrix;\n"
-                "uniform highp mat4 projectionMatrix;\n"
+                "uniform highp mat4 matrix;\n"
                 "varying vec4 pixelColor;\n"
                 "void main(void)\n"
                 "{\n"
-                "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
+                "    gl_Position = matrix * position;\n"
                 "    highp vec4 transformedNormal = viewMatrix * modelMatrix * vec4(normal, 1.0);\n"
                 "    highp vec3 transformedNormal3 = transformedNormal.xyz / transformedNormal.w;\n"
                 "    pixelColor = abs(dot(transformedNormal3 / length(transformedNormal), vec3(1.0, 0.0, 0.0))) * vec4(1.0, 1.0, 1.0, 1.0);\n"
@@ -348,13 +342,18 @@ namespace panoramix {
         
 
         // opengl _mesh data implementation
+        OpenGLMesh::Vertex::Vertex() 
+            : position4(0, 0, 0, 1), normal3(0, 0, 0), color4(0, 0, 0, 1), texCoord2(0, 0) {
+        }
+
+
         OpenGLMesh::VertHandle OpenGLMesh::addVertex(const OpenGLMesh::Vertex & v) {
             _vertices.push_back(v);
             _iPoints.push_back(static_cast<OpenGLMesh::VertHandle>(_vertices.size() - 1));
             return _iPoints.back();
         }
 
-        OpenGLMesh::VertHandle OpenGLMesh::addVertex(const Vec4 & p, const Vec3 & n, const Vec4 & c, const Vec2 & t) {
+        OpenGLMesh::VertHandle OpenGLMesh::addVertex(const Vec4f & p, const Vec3f & n, const Vec4f & c, const Vec2f & t) {
             Vertex v;
             v.position4 = p;
             v.normal3 = n;

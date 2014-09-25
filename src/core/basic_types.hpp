@@ -28,6 +28,9 @@ namespace panoramix {
         using Vec2 = Vec<double, 2>;
         using Vec3 = Vec<double, 3>;
         using Vec4 = Vec<double, 4>;
+        using Vec2f = Vec<float, 2>;
+        using Vec3f = Vec<float, 3>;
+        using Vec4f = Vec<float, 4>;
         using Vec2i = Vec<int, 2>;
         using Vec3i = Vec<int, 3>;
         using Vec4i = Vec<int, 4>;
@@ -41,6 +44,7 @@ namespace panoramix {
         using Point2i = Point<int, 2>;
         using Point3i = Point<int, 3>;
         using Point4i = Point<int, 4>;
+
 
         template <class T, int M, int N> using Mat = cv::Matx<T, M, N>;
         using Mat3 = Mat<double, 3, 3>;
@@ -57,6 +61,30 @@ namespace panoramix {
                 out[i] = static_cast<To>(v[i]);
             }
             return out;
+        }
+
+        template <class T, int M, int N>
+        inline Vec<T, M + N> Concat(const Vec<T, M> & a, const Vec<T, N> & b) {
+            Vec<T, M + N> ab;
+            std::copy(a.val, a.val + M, ab.val);
+            std::copy(b.val, b.val + N, ab.val + M);
+            return ab;
+        }
+
+        template <class T, int M>
+        inline Vec<T, M + 1> Concat(const Vec<T, M> & a, const T & b) {
+            Vec<T, M + 1> ab;
+            std::copy(a.val, a.val + M, ab.val);
+            ab[M] = b;
+            return ab;
+        }
+
+        template <class T, int M>
+        inline Vec<T, M + 1> Concat(const T & a, const Vec<T, M> & b) {
+            Vec<T, M + 1> ab;
+            ab.val[0] = a;
+            std::copy(b.val, b.val + M, ab.val + 1);
+            return ab;
         }
 
 

@@ -75,7 +75,7 @@ namespace panoramix {
                 }, t);
             }
 
-            void End(Visualizer3D & viz) {
+            inline void End(Visualizer3D & viz) {
                 viz.deactivateLast();
             }
 
