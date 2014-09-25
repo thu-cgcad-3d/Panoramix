@@ -246,7 +246,7 @@ namespace panoramix {
                 "void main(void)\n"
                 "{\n"
                 "   gl_FragColor = pixelColor;\n"
-                "   lowp float distance = length(gl_PointCoord - vec2(0.5));\n"
+                "   float distance = length(gl_PointCoord - vec2(0.5));\n"
                 "   if(distance > 0.4 && distance <= 0.5)\n"
                 "       gl_FragColor.a = 1.0 - (distance - 0.4) * 0.1;\n"
                 "   else if(distance > 0.5)\n"

@@ -109,8 +109,19 @@ namespace panoramix {
             return MakeRenderable(c.component, paramCopy, parent);
         }
 
+        // vector
+        template <class T>
+        inline RenderableObject * MakeRenderable(const std::vector<T> & v,
+            const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr) {
+            RenderableObject * o = new RenderableObject(parent);
+            for (auto & i : v) {
+                MakeRenderable(i, state, o);
+            }
+            return o;
+        }
 
 
+        // test can make renderable
         namespace {
             template <class T>
             struct CanMakeRenderableImpl {
@@ -126,7 +137,7 @@ namespace panoramix {
         }
 
         template <class T>
-        struct CanMakeRenderable : public std::integral_constant<bool, CanMakeRenderableImpl<T>::value> {};
+        struct CanMakeRenderable : std::integral_constant<bool, CanMakeRenderableImpl<T>::value> {};
 
     }
 

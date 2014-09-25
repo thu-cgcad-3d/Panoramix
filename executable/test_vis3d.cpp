@@ -16,7 +16,7 @@ static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestData
 
 static_assert(vis::CanMakeRenderable<core::Line3>::value, "Line3 is not renderable!");
 static_assert(vis::CanMakeRenderable<core::Point3>::value, "Point3 is not renderable!");
-
+static_assert(vis::CanMakeRenderable<core::Classified<core::Line3>>::value, "Classified<Line3> is not renderable!");
 
 TEST(Visualizer3D, RenderPoints) {
     std::vector<core::Point3> points = {
@@ -37,8 +37,7 @@ TEST(Visualizer3D, RenderLines) {
         { {-1, 1}, {5, 5} },
         { { -2, -2 }, {8, 6} },
         { { 5, -3, -4 }, {-3, 2, 8} }
-    };
-    
+    };    
     vis::Visualizer3D()
         << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Yellow)
         << vis::manip3d::SetDefaultLineWidth(3.5)
@@ -47,11 +46,23 @@ TEST(Visualizer3D, RenderLines) {
         << vis::manip3d::Show();
 }
 
+TEST(Visualizer3D, RenderClassifiedLines) {
+    std::vector<core::Classified<core::Line3>> lines = {
+        { -1, { { -1, 1 }, { 5, 5 } } },
+        { 0, { { -2, -2 }, { 8, 6 } } },
+        { 1, { { 5, -3, -4 }, { -3, 2, 8 } } }
+    };
+    vis::Visualizer3D()
+        << vis::manip3d::SetDefaultColorTable(vis::ColorTable({vis::ColorTag::Blue, vis::ColorTag::Yellow}, vis::ColorTag::Black))
+        << vis::manip3d::SetDefaultLineWidth(4)
+        << lines
+        << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+        << vis::manip3d::Show();
+}
+
+
 int main(int argc, char * argv[], char * envp[])
 {
-    srand(clock());
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
-    //run();
-    //return 0;
 }
