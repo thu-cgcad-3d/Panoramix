@@ -66,7 +66,7 @@ namespace panoramix {
 
             // structure
             inline RenderableObject * parent() const { return _parent; }
-            inline const std::vector<RenderableObject*> children() const { return _children; }
+            inline const std::vector<RenderableObject*> & children() const { return _children; }
 
         protected:
             core::Mat4 _modelMat;
