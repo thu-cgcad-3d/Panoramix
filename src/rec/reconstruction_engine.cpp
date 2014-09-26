@@ -44,7 +44,7 @@ namespace panoramix {
             intersectionDistanceThreshold(15), // 30
             incidenceDistanceAlongDirectionThreshold(40), // 50
             incidenceDistanceVerticalDirectionThreshold(5),
-            interViewIncidenceAngleAlongDirectionThreshold(M_PI_4){
+            interViewIncidenceAngleAlongDirectionThreshold(M_PI_4 / 2){
         }
 
 
@@ -951,95 +951,99 @@ namespace panoramix {
                 }
 
                 // compute junction weight
-                auto & v = weightDistribution(PixelLoc(relationCenter[0], relationCenter[1]));
                 double junctionWeight = 0;
-                {
-                    // Y
-                    double Y = 0.0;
-                    for (int s = 0; s < 2; s++) {
-                        Y += v(0, s) * v(1, s) * v(2, s) * DiracDelta(v(0, 1 - s) + v(1, 1 - s) + v(2, 1 - s));
-                    }
-
-                    // W
-                    double W = 0.0;
-                    for (int i = 0; i < 3; i++) {
-                        for (int j = 0; j < 3; j++) {
-                            if (i == j)
-                                continue;
-                            int k = 3 - i - j;
-                            for (int s = 0; s < 2; s++) {
-                                W += v(i, s) * v(j, 1 - s) * v(k, 1 - s) * DiracDelta(v(i, 1 - s) + v(j, s) + v(k, s));
-                            }
+                // relation center is inside image
+                if (core::IsBetween(relationCenter[0], 0, weightDistribution.cols - 1) &&
+                    core::IsBetween(relationCenter[1], 0, weightDistribution.rows - 1)) {
+                    auto & v = weightDistribution(PixelLoc(relationCenter[0], relationCenter[1]));
+                    {
+                        // Y
+                        double Y = 0.0;
+                        for (int s = 0; s < 2; s++) {
+                            Y += v(0, s) * v(1, s) * v(2, s) * DiracDelta(v(0, 1 - s) + v(1, 1 - s) + v(2, 1 - s));
                         }
-                    }
 
-                    // K
-                    double K = 0.0;
-                    for (int i = 0; i < 3; i++) {
-                        for (int j = 0; j < 3; j++) {
-                            if (i == j)
-                                continue;
-                            int k = 3 - i - j;
-                            K += v(i, 0) * v(i, 1) * v(j, 0) * v(k, 1) * DiracDelta(v(j, 1) + v(k, 0));
-                            K += v(i, 0) * v(i, 1) * v(j, 1) * v(k, 0) * DiracDelta(v(j, 0) + v(k, 1));
-                        }
-                    }
-
-                    // compute X junction
-                    double X = 0.0;
-                    for (int i = 0; i < 3; i++) {
-                        for (int j = 0; j < 3; j++) {
-                            if (i == j)
-                                continue;
-                            int k = 3 - i - j;
-                            X += v(i, 0) * v(i, 1) * v(j, 0) * v(j, 1) * DiracDelta(v(k, 0) + v(k, 1));
-                        }
-                    }
-
-                    // compute T junction
-                    double T = 0.0;
-                    for (int i = 0; i < 3; i++) {
-                        for (int j = 0; j < 3; j++) {
-                            if (i == j)
-                                continue;
-                            int k = 3 - i - j;
-                            T += v(i, 0) * v(i, 1) * v(j, 0) * DiracDelta(v(j, 1) + v(k, 0) + v(k, 1));
-                            T += v(i, 0) * v(i, 1) * v(j, 1) * DiracDelta(v(j, 0) + v(k, 0) + v(k, 1));
-                        }
-                    }
-
-                    // compute L junction
-                    double L = 0.0;
-                    for (int i = 0; i < 3; i++) {
-                        for (int j = 0; j < 3; j++) {
-                            if (i == j)
-                                continue;
-                            int k = 3 - i - j;
-                            for (int a = 0; a < 2; a++) {
-                                int nota = 1 - a;
-                                for (int b = 0; b < 2; b++) {
-                                    int notb = 1 - b;
-                                    L += v(i, a) * v(j, b) * DiracDelta(v(i, nota) + v(j, notb) + v(k, 0) + v(k, 1));
+                        // W
+                        double W = 0.0;
+                        for (int i = 0; i < 3; i++) {
+                            for (int j = 0; j < 3; j++) {
+                                if (i == j)
+                                    continue;
+                                int k = 3 - i - j;
+                                for (int s = 0; s < 2; s++) {
+                                    W += v(i, s) * v(j, 1 - s) * v(k, 1 - s) * DiracDelta(v(i, 1 - s) + v(j, s) + v(k, s));
                                 }
                             }
                         }
-                    }
 
-                    //std::cout << " Y-" << Y << " W-" << W << " K-" << K << 
-                    //    " X-" << X << " T-" << T << " L-" << L << std::endl; 
-                    static const double threshold = 1e-4;
-                    if (Y > threshold) {
-                        junctionWeight += 5.0;
-                    } else if (W > threshold) {
-                        junctionWeight += 5.0;
-                    } else if (L > threshold) {
-                        junctionWeight += 4.0;
-                    } else if (K > threshold) {
-                        junctionWeight += 3.0;
-                    } else if (X > threshold) {
-                        junctionWeight += 5.0;
-                    } else if (T > threshold) {
-                        junctionWeight += 1.0;
+                        // K
+                        double K = 0.0;
+                        for (int i = 0; i < 3; i++) {
+                            for (int j = 0; j < 3; j++) {
+                                if (i == j)
+                                    continue;
+                                int k = 3 - i - j;
+                                K += v(i, 0) * v(i, 1) * v(j, 0) * v(k, 1) * DiracDelta(v(j, 1) + v(k, 0));
+                                K += v(i, 0) * v(i, 1) * v(j, 1) * v(k, 0) * DiracDelta(v(j, 0) + v(k, 1));
+                            }
+                        }
+
+                        // compute X junction
+                        double X = 0.0;
+                        for (int i = 0; i < 3; i++) {
+                            for (int j = 0; j < 3; j++) {
+                                if (i == j)
+                                    continue;
+                                int k = 3 - i - j;
+                                X += v(i, 0) * v(i, 1) * v(j, 0) * v(j, 1) * DiracDelta(v(k, 0) + v(k, 1));
+                            }
+                        }
+
+                        // compute T junction
+                        double T = 0.0;
+                        for (int i = 0; i < 3; i++) {
+                            for (int j = 0; j < 3; j++) {
+                                if (i == j)
+                                    continue;
+                                int k = 3 - i - j;
+                                T += v(i, 0) * v(i, 1) * v(j, 0) * DiracDelta(v(j, 1) + v(k, 0) + v(k, 1));
+                                T += v(i, 0) * v(i, 1) * v(j, 1) * DiracDelta(v(j, 0) + v(k, 0) + v(k, 1));
+                            }
+                        }
+
+                        // compute L junction
+                        double L = 0.0;
+                        for (int i = 0; i < 3; i++) {
+                            for (int j = 0; j < 3; j++) {
+                                if (i == j)
+                                    continue;
+                                int k = 3 - i - j;
+                                for (int a = 0; a < 2; a++) {
+                                    int nota = 1 - a;
+                                    for (int b = 0; b < 2; b++) {
+                                        int notb = 1 - b;
+                                        L += v(i, a) * v(j, b) * DiracDelta(v(i, nota) + v(j, notb) + v(k, 0) + v(k, 1));
+                                    }
+                                }
+                            }
+                        }
+
+                        //std::cout << " Y-" << Y << " W-" << W << " K-" << K << 
+                        //    " X-" << X << " T-" << T << " L-" << L << std::endl; 
+                        static const double threshold = 1e-4;
+                        if (Y > threshold) {
+                            junctionWeight += 5.0;
+                        } else if (W > threshold) {
+                            junctionWeight += 5.0;
+                        } else if (L > threshold) {
+                            junctionWeight += 4.0;
+                        } else if (K > threshold) {
+                            junctionWeight += 3.0;
+                        } else if (X > threshold) {
+                            junctionWeight += 5.0;
+                        } else if (T > threshold) {
+                            junctionWeight += 1.0;
+                        }
                     }
                 }
                 if (lrd.type == LinesNet::LineRelationData::Type::Incidence)
@@ -1152,11 +1156,13 @@ namespace panoramix {
             IF_DEBUG_USING_VISUALIZERS{
                 vis::Visualizer3D viz;
                 auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
+                viz << vis::manip3d::SetDefaultLineWidth(1.0);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
                     viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
                     viz = viz << NormalizeLine(l.second);
                 }
+                viz << vis::manip3d::SetDefaultLineWidth(2.0);
                 for (auto & c : _globalData.lineIncidenceRelationsAcrossViews) {
                     auto & line1 = _globalData.reconstructedLines[c.first.first];
                     auto & line2 = _globalData.reconstructedLines[c.first.second];
@@ -1182,12 +1188,14 @@ namespace panoramix {
 
             IF_DEBUG_USING_VISUALIZERS{ // show interview constraints
                 vis::Visualizer3D viz;
+                viz << vis::manip3d::SetDefaultLineWidth(1.0);
                 auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
                     viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
                     viz = viz << l.second;
                 }
+                viz << vis::manip3d::SetDefaultLineWidth(2.0);
                 for (auto & c : _globalData.lineIncidenceRelationsAcrossViews) {
                     auto & line1 = _globalData.reconstructedLines[c.first.first];
                     auto & line2 = _globalData.reconstructedLines[c.first.second];

@@ -472,24 +472,6 @@ namespace panoramix {
         using Box2 = Box<double, 2>;
         using Box3 = Box<double, 3>;
 
-
-
-
-        // serialization wrapper
-        template <class T, class StringT>
-        inline void SaveToDisk(const T & data, const StringT & filename) {
-            std::ofstream out(filename, std::ios::binary);
-            cereal::PortableBinaryOutputArchive archive(out);
-            archive(data);
-        }
-
-        template <class T, class StringT>
-        inline void LoadFromDisk(T & data, const StringT & filename) {
-            std::ifstream in(filename, std::ios::binary);
-            cereal::PortableBinaryInputArchive archive(in);
-            archive(data);
-        }
-
  
     }
 }

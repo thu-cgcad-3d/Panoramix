@@ -91,6 +91,25 @@ TEST(Serialization, GraphicalModel) {
 
 }
 
+TEST(Serialization, FileTime) {
+    
+    core::Line3 testEntity;
+    {
+        std::ofstream os(ProjectTestDataDirStr_Serialization + "/line.cereal", std::ios::binary);
+        cereal::BinaryOutputArchive archive(os);
+        archive(testEntity);
+    }
+
+    auto t1 = core::LastModifiedTimeOfFile(ProjectTestDataDirStr_Serialization + "/gm.cereal");
+    auto t2 = core::LastModifiedTimeOfFile(ProjectTestDataDirStr_Serialization + "/line.cereal");
+    auto t3 = core::CurrentTime();
+
+    ASSERT_LE(t1, t2);
+    ASSERT_LE(t2, t3);
+
+}
+
+
 
 
 

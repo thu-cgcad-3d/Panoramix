@@ -106,4 +106,61 @@ namespace cv {
 
 }
 
+
+namespace panoramix {
+
+    namespace core {
+
+        // serialization wrapper
+        template <class StringT, class ...T>
+        inline void SaveToDisk(const StringT & filename, const T & ... data) {
+            std::ofstream out(filename, std::ios::binary);
+            cereal::PortableBinaryOutputArchive archive(out);
+            archive(data...);
+            std::cout << "file \"" << filename << "\" saved" << std::endl;
+            out.close();
+        }
+
+        template <class StringT, class ...T>
+        inline void LoadFromDisk(const StringT & filename, T & ... data) {
+            std::ifstream in(filename, std::ios::binary);
+            cereal::PortableBinaryInputArchive archive(in);
+            archive(data...);
+            std::cout << "file \"" << filename << "\" loaded" << std::endl;
+            in.close();
+        }
+
+        using TimeStamp = uint64_t;
+
+        // last modified time
+        TimeStamp LastModifiedTimeOfFile(const char * filename);
+        TimeStamp LastModifiedTimeOfFile(const std::string & filename);
+
+        // get current time
+        TimeStamp CurrentTime();
+
+        // update b if b is older than a (b depends on a)
+        template <class StringT1, class StringT2, class FunT>
+        inline void UpdateIfFileIsTooOld(const StringT1 & a, const StringT2 & bNeedsA, 
+            const FunT & useAToUpdateBAndSaveB, bool forceUpdate = false) {
+            if (forceUpdate) {
+                std::cout << "updating \"" << bNeedsA << "\" (forced) ..." << std::endl;
+                useAToUpdateBAndSaveB(a, bNeedsA);
+                return;
+            }
+            TimeStamp aTime = LastModifiedTimeOfFile(a);
+            TimeStamp bTime = LastModifiedTimeOfFile(bNeedsA);
+            if (aTime > bTime) { // a is newer, then b must be updated
+                std::cout << "updating \"" << bNeedsA << "\" ..." << std::endl;
+                useAToUpdateBAndSaveB(a, bNeedsA);
+            } else {
+                std::cout << "\"" << bNeedsA << "\" doesn't need update" << std::endl;
+            }
+        }
+
+    }
+
+}
+
+
 #endif
