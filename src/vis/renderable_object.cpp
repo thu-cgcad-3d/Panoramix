@@ -92,7 +92,6 @@ namespace panoramix {
                     }
 
                     Q_ASSERT(_program->isLinked());
-                    qDebug() << _program->log();
                     _program->release();
                 }
 
@@ -102,7 +101,6 @@ namespace panoramix {
 
                     Q_ASSERT(_program->isLinked());
                     _program->bind();
-                    //qDebug() << _program->log();
 
                     if (_texture && _texture->isCreated())
                         _texture->bind(0);
@@ -140,7 +138,6 @@ namespace panoramix {
                     _program->disableAttributeArray("texCoord");
 
                     _program->release();
-
                     
                 }
 

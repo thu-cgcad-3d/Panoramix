@@ -20,15 +20,11 @@ namespace panoramix {
         using namespace core;
 
         // visulizer private data
-        struct Visualizer3D::PrivateData {
-            ~PrivateData() {
-                for (QWidget * w : widgets)
-                    w->deleteLater();
-                widgets.clear();
-            }
-            QList<QWidget*> widgets;
+        struct GuiData {
+            QMap<Visualizer3D *, QList<QWidget *>> widgetsTable;
         };
 
+        static GuiData staticGuiData;
 
         // visualizer parameters
         Visualizer3D::Params::Params()
@@ -36,16 +32,20 @@ namespace panoramix {
             winName("Visualizer 3D"),
             backgroundColor(255, 255, 255),
             camera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)),
-            renderMode(RenderModeFlag::All)
-        {}        
+            renderMode(RenderModeFlag::All){
+        }        
 
-        Visualizer3D::Visualizer3D() : _root(std::make_shared<RenderableObject>()), _data(std::make_shared<PrivateData>()) {
+        Visualizer3D::Visualizer3D() : _root(std::make_shared<RenderableObject>())/*, _data(std::make_shared<PrivateData>())*/ {
             _activeObject = _root.get();
         }
 
         Visualizer3D::Visualizer3D(const Params & p, const DefaultRenderState & s)
-            : params(p), defaultRenderState(s), _root(std::make_shared<RenderableObject>()), _data(std::make_shared<PrivateData>()) {
+            : params(p), defaultRenderState(s), _root(std::make_shared<RenderableObject>())/*, _data(std::make_shared<PrivateData>())*/ {
             _activeObject = _root.get();
+        }
+
+        Visualizer3D::~Visualizer3D() {
+            staticGuiData.widgetsTable.remove(this);
         }
 
         void Visualizer3D::deactivateLast() {
@@ -156,15 +156,6 @@ namespace panoramix {
                     camera.resizeScreen(core::SizeI(width(), height()));
 
                     _renderableObjTree.renderWithCamera(_params.renderMode, _params.camera);
-                    
-                    //glMatrixMode(GL_PROJECTION_MATRIX);
-                    //glLineWidth(2.0);
-                    //glBegin(GL_LINES);
-                    //glColor3d(0, 0, 0);
-                    //glVertex2d(0, 0);
-                    //glColor3d(0, 0, 0);
-                    //glVertex2d(1, 1);
-                    //glEnd();
 
 
                     glDisable(GL_DEPTH_TEST);
@@ -290,14 +281,12 @@ namespace panoramix {
                     bool autoSetCamera = doModelAndAutoSetCamera.second;
                     auto app = Singleton::InitGui();
                     Visualizer3DWidget * w = new Visualizer3DWidget(viz);
-                    viz.data()->widgets.append(w);
+                    w->setAttribute(Qt::WA_DeleteOnClose);
+                    staticGuiData.widgetsTable[&viz].append(w);
                     w->resize(MakeQSize(viz.params.camera.screenSize()));
                     w->setWindowTitle(QString::fromStdString(viz.params.winName));
                     if (autoSetCamera) {
-                        for (QWidget * w : viz.data()->widgets) {
-                            auto v3dw = (Visualizer3DWidget*)w;
-                            v3dw->autoSetCamera();
-                        }
+                        w->autoSetCamera();
                     }
                     w->show();
                     if (doModal) {

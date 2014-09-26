@@ -9,7 +9,6 @@ namespace panoramix {
     namespace vis {
             
         class Visualizer3D {
-            struct PrivateData;
         public:
             struct Params { // predefined parameters for widgets
                 Params();
@@ -21,6 +20,7 @@ namespace panoramix {
             
             Visualizer3D();
             explicit Visualizer3D(const Params & p, const DefaultRenderState & s);
+            ~Visualizer3D();
 
         public:
             template <class T>
@@ -32,7 +32,6 @@ namespace panoramix {
 
             std::shared_ptr<RenderableObject> root() const { return _root; }
             RenderableObject * activeObject() const { return _activeObject; }
-            std::shared_ptr<PrivateData> data() const { return _data; }
 
         public:
             Params params;
@@ -41,7 +40,6 @@ namespace panoramix {
         private:
             std::shared_ptr<RenderableObject> _root; // never empty
             RenderableObject * _activeObject; // never empty
-            std::shared_ptr<PrivateData> _data; // GUI data
         };
 
 

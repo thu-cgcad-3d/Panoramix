@@ -17,6 +17,10 @@ namespace panoramix {
                 Params();
                 SegmentationExtractor segmenter;
                 double samplingStepLengthOnBoundary;
+                template <class Archiver>
+                void serialize(Archiver & ar) {
+                    ar(segmenter, samplingStepLengthOnBoundary);
+                }
             };
             struct RegionData {
                 Image regionMask; // 8UC1
@@ -25,6 +29,10 @@ namespace panoramix {
                 std::vector<std::vector<PixelLoc>> contours;
                 std::vector<std::vector<PixelLoc>> dilatedContours;
                 Box2 boundingBox;
+                template <class Archiver>
+                void serialize(Archiver & ar) {
+                    ar(regionMask, center, area, contours, dilatedContours, boundingBox);
+                }
             };
             struct BoundaryData {
                 std::vector<std::vector<PixelLoc>> edges;
@@ -35,12 +43,19 @@ namespace panoramix {
                 double interleavedArea;
                 double interleavedLength;
                 std::vector<std::vector<Point2>> sampledPoints;
+                template <class Archiver>
+                void serialize(Archiver & ar) {
+                    ar(edges, length, fittedLine, 
+                        tjunctionLikelihood, straightness, interleavedArea, 
+                        interleavedLength, sampledPoints);
+                }
             };
             using RegionsGraph = GraphicalModel02<RegionData, BoundaryData>;
             using RegionHandle = HandleAtLevel<0>;
             using BoundaryHandle = HandleAtLevel<1>;
 
         public:
+            inline RegionsNet() {}
             explicit RegionsNet(const Image & image, const Params & params = Params());
             void buildNetAndComputeGeometricFeatures();
             void computeImageFeatures();            
@@ -59,12 +74,11 @@ namespace panoramix {
             RegionsGraph _regions;
             Params _params;
 
-           /* struct RegionDataBoundingBoxFunctor {
-                inline explicit RegionDataBoundingBoxFunctor(const RegionsGraph & r) : regions(r) {}
-                inline Box2 operator()(RegionHandle vh) const { return regions.data(vh).boundingBox; }
-                const RegionsGraph & regions;
-            };
-            RTreeWrapper<RegionHandle, RegionDataBoundingBoxFunctor> _regionsRTree;*/
+            template <class Archiver>
+            void serialize(Archiver & ar) {
+                ar(_image, _segmentedRegions, _regions, _params);
+            }
+            friend class cereal::access;
         };
 
     }

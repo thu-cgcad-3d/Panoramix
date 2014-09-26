@@ -44,8 +44,8 @@ namespace panoramix {
             intersectionDistanceThreshold(15), // 30
             incidenceDistanceAlongDirectionThreshold(40), // 50
             incidenceDistanceVerticalDirectionThreshold(5),
-            interViewIncidenceAngleAlongDirectionThreshold(1e-5)
-        {}
+            interViewIncidenceAngleAlongDirectionThreshold(M_PI_4){
+        }
 
 
         ReconstructionEngine::ViewHandle ReconstructionEngine::insertPhoto(const Image & im, const PerspectiveCamera & cam,
@@ -73,23 +73,22 @@ namespace panoramix {
 
             void LineIntersectons(const std::vector<Classified<Line2>> & lines,
                 std::vector<HPoint2> & hinterps, std::vector<std::pair<int, int>> & lineids,
-                bool suppresscross)
-            {
+                bool suppresscross) {
                 size_t lnum = lines.size();
-                for (int i = 0; i < lnum; i++){
+                for (int i = 0; i < lnum; i++) {
                     auto eqi = cv::Vec3d(lines[i].component.first[0], lines[i].component.first[1], 1)
                         .cross(cv::Vec3d(lines[i].component.second[0], lines[i].component.second[1], 1));
-                    for (int j = i + 1; j < lnum; j++){
+                    for (int j = i + 1; j < lnum; j++) {
                         auto eqj = cv::Vec3d(lines[j].component.first[0], lines[j].component.first[1], 1)
                             .cross(cv::Vec3d(lines[j].component.second[0], lines[j].component.second[1], 1));
                         auto interp = eqi.cross(eqj);
-                        if (interp[0] == 0 && interp[1] == 0 && interp[2] == 0){ // lines overlapped
+                        if (interp[0] == 0 && interp[1] == 0 && interp[2] == 0) { // lines overlapped
                             interp[0] = -eqi[1];
                             interp[1] = eqi[0];
                         }
                         interp /= norm(interp);
 
-                        if (suppresscross){
+                        if (suppresscross) {
                             auto& a1 = lines[i].component.first;
                             auto& a2 = lines[i].component.second;
                             auto& b1 = lines[j].component.first;
@@ -407,7 +406,7 @@ namespace panoramix {
             for (auto & v : _views.elements<0>()){
                 spatialLineSegmentBegin = std::transform(v.data.lineNet->lineSegments().begin(),
                     v.data.lineNet->lineSegments().end(),
-                    spatialLineSegmentBegin, [&v](const Line2 & line) -> Classified<Line3>{
+                    spatialLineSegmentBegin, [&v](const Line2 & line) -> Classified<Line3> {
                     auto & p1 = line.first;
                     auto & p2 = line.second;
                     auto pp1 = v.data.camera.spatialDirection(p1);
@@ -535,6 +534,7 @@ namespace panoramix {
                 auto & riContour2d = regionData(ri).contours.front();
                 auto & riCamera = _views.data(ri.viewHandle).camera;
                 double riArea = regionData(ri).area;
+                //double riArea = cv::contourArea(riContour2d);
 
                 gpc_polygon riPoly;
                 ConvertToGPCPolygon(riContour2d, riPoly);
@@ -567,7 +567,7 @@ namespace panoramix {
                         double intersectedArea = cv::contourArea(intersected);
 
                         double overlapRatio = intersectedArea / riArea;
-                        assert(overlapRatio <= 1.0 && "Invalid overlap ratio!");
+                        //assert(overlapRatio <= 1.5 && "Invalid overlap ratio!");
 
                         if (overlapRatio > 0.2)
                             overlappedRegionIndexPairs[std::make_pair(relatedRi, ri)] = overlapRatio;
@@ -648,7 +648,7 @@ namespace panoramix {
                         vd1.lineNet->params().incidenceDistanceVerticalDirectionThreshold / vd1.camera.focal() +
                         vd2.lineNet->params().incidenceDistanceVerticalDirectionThreshold / vd2.camera.focal()) {
 
-                        auto nearest = DistanceBetweenTwoLines(line1.component, line2.component);
+                        auto nearest = DistanceBetweenTwoLines(NormalizeLine(line1.component), NormalizeLine(line2.component));
                         if (AngleBetweenDirections(nearest.second.first.position, nearest.second.second.position) >
                             _params.interViewIncidenceAngleAlongDirectionThreshold) // ignore too far-away relations
                             return true;
@@ -938,12 +938,12 @@ namespace panoramix {
                     A.insert(curEquationNum, lineId1) = ratio1;
                     A.insert(curEquationNum, lineId2) = -ratio2;
                     B(curEquationNum) = 0;
-                } else if (firstLineIndexInConnectedComponents.find(li1) != firstLineIndexInConnectedComponents.end()) {
+                } else if (core::Contains(firstLineIndexInConnectedComponents, li1)) {
                     // const[eta1] * ratio1 - eta2 * ratio2 = 0 -> 
                     // eta2 * ratio2 = const[eta1] * ratio1
                     A.insert(curEquationNum, lineId2) = ratio2;
                     B(curEquationNum) = constantEtaForFirstLineInEachConnectedComponent * ratio1;
-                } else if (firstLineIndexInConnectedComponents.find(li2) != firstLineIndexInConnectedComponents.end()) {
+                } else if (core::Contains(firstLineIndexInConnectedComponents, li2)) {
                     // eta1 * ratio1 - const[eta2] * ratio2 = 0 -> 
                     // eta1 * ratio1 = const[eta2] * ratio2
                     A.insert(curEquationNum, lineId1) = ratio1;

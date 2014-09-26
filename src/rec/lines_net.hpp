@@ -19,10 +19,19 @@ namespace panoramix {
                 double intersectionDistanceThreshold;
                 double incidenceDistanceAlongDirectionThreshold; // distance along the direction with lines
                 double incidenceDistanceVerticalDirectionThreshold; // distance along the vertical direction
+                template <class Archiver>
+                void serialize(Archiver & ar) {
+                    ar(lineSegmentExtractor, intersectionDistanceThreshold,
+                        incidenceDistanceAlongDirectionThreshold, incidenceDistanceVerticalDirectionThreshold);
+                }
             };
 
             struct LineData {
                 Classified<Line2> line;
+                template <class Archiver>
+                void serialize(Archiver & ar) {
+                    ar(line);
+                }
             };
             struct LineRelationData {
                 Point2 relationCenter;
@@ -30,12 +39,17 @@ namespace panoramix {
                     Incidence,
                     Intersection
                 } type;
+                template <class Archiver>
+                void serialize(Archiver & ar) {
+                    ar(relationCenter, type);
+                }
             };
             using LinesGraph = GraphicalModel02 < LineData, LineRelationData > ;
             using LineHandle = HandleAtLevel < 0 > ;
             using LineRelationHandle = HandleAtLevel < 1 > ;
         
         public:
+            inline LinesNet() {}
             explicit LinesNet(const Image & image, const Params & params = Params());
             void buildNetAndComputeFeaturesUsingVanishingPoints(const std::array<HPoint2, 3> & vps, 
                 const std::vector<int> & lineSegmentClasses = std::vector<int>());
@@ -69,6 +83,14 @@ namespace panoramix {
             std::vector<HPoint2> _lineSegmentIntersections;
             std::vector<std::pair<int, int>> _lineSegmentIntersectionIds;
             Params _params;
+
+            template <class Archiver>
+            void serialize(Archiver & ar) {
+                ar(_image, _lineVotingDistribution, _junctionDistributions, 
+                    _lines, _lineSegments, 
+                    _lineSegmentIntersections, _lineSegmentIntersectionIds, _params);
+            }
+            friend class cereal::access;
         };
     
     }

@@ -125,7 +125,10 @@ namespace panoramix {
                 return outputIm;
             }
 
-            template <class Archive> inline void serialize(Archive & ar) { ar(_outCam, _inCam); }
+            template <class Archive> 
+            inline void serialize(Archive & ar) { 
+                ar(_outCam, _inCam, _mapx, _mapy); 
+            }
 
         private:
             OutCameraT _outCam;
@@ -152,7 +155,8 @@ namespace panoramix {
                 int xBorderWidth, yBorderWidth;
                 int numDirs;
                 bool useExperimentalAlgorithm;
-                template <class Archive> inline void serialize(Archive & ar) { 
+                template <class Archive> 
+                inline void serialize(Archive & ar) { 
                     ar(minLength, xBorderWidth, yBorderWidth, numDirs, useExperimentalAlgorithm); 
                 }
             };
@@ -229,7 +233,9 @@ namespace panoramix {
                 : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal) {}
                 double maxPrinciplePointOffset;
                 double minFocalLength, maxFocalLength;
-                template <class Archive> inline void serialize(Archive & ar) { ar(maxPrinciplePointOffset, minFocalLength, maxFocalLength); }
+                template <class Archive> inline void serialize(Archive & ar) { 
+                    ar(maxPrinciplePointOffset, minFocalLength, maxFocalLength);
+                }
             };
         public:
             inline explicit VanishingPointsDetector(const Params & params = Params()) : _params(params) {}

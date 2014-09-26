@@ -100,7 +100,7 @@ namespace panoramix {
                 return SetColorTable(ColorTable(d));
             }
             
-            Manipulator<int> Show(int delay = 0);
+            Manipulator<int> Show(int delay = 1);
         }
 
         inline Visualizer2D operator << (Visualizer2D viz, void (*func)(Visualizer2D&)) {

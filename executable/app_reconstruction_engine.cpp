@@ -52,33 +52,43 @@ void ShowPanoramaVPs(const rec::ReconstructionEngine & engine) {
 
 int main(int argc, char * argv[], char * envp[]) {
 
-    cv::Mat panorama = cv::imread(ProjectTestDataDirStr_PanoramaIndoor + "/13.jpg");
-    cv::resize(panorama, panorama, cv::Size(2000, 1000));
-    core::PanoramicCamera originCam(panorama.cols / M_PI / 2.0);
-
-    std::vector<core::PerspectiveCamera> cams = {
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
-        core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
-    };
-
     rec::ReconstructionEngine engine;
 
-    for (auto & camera : cams) {
-        auto viewHandle = engine.insertPhoto(
-            core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera>(camera, originCam)(panorama),
-            camera);
-        engine.computeFeatures(viewHandle);
-        engine.updateConnections(viewHandle);
+    bool recaculate = false;
+    if (recaculate) {
+        cv::Mat panorama = cv::imread(ProjectTestDataDirStr_PanoramaIndoor + "/13.jpg");
+        cv::resize(panorama, panorama, cv::Size(2000, 1000));
+        core::PanoramicCamera originCam(panorama.cols / M_PI / 2.0);
+
+        std::vector<core::PerspectiveCamera> cams = {
+            core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
+            core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
+            core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
+            core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
+            core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
+            core::PerspectiveCamera(700, 700, originCam.focal(), { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
+        };
+
+        std::vector<rec::ReconstructionEngine::ViewHandle> viewHandles;
+        viewHandles.reserve(cams.size());
+        for (auto & camera : cams) {
+            auto viewHandle = engine.insertPhoto(
+                core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera>(camera, originCam)(panorama),
+                camera);
+            viewHandles.push_back(viewHandle);
+            engine.updateConnections(viewHandle);
+        }
+        for (auto & viewHandle : viewHandles) {
+            engine.computeFeatures(viewHandle);
+        }
+
+        engine.estimateVanishingPointsAndClassifyLines();
+        engine.recognizeRegionLineRelations();
+
+        core::SaveToDisk(engine, "./reconstruction_engine.state");
     }
 
-    // estimate vanishing points and classify lines
-    engine.estimateVanishingPointsAndClassifyLines();
-
-    engine.recognizeRegionLineRelations();
+    core::LoadFromDisk(engine, "./reconstruction_engine.state");
     engine.estimateSpatialLineDepths();
 
     try {

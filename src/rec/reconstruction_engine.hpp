@@ -33,6 +33,16 @@ namespace panoramix {
                 double incidenceDistanceAlongDirectionThreshold;
                 double incidenceDistanceVerticalDirectionThreshold;
                 double interViewIncidenceAngleAlongDirectionThreshold;
+
+                template <class Archiver>
+                inline void serialize(Archiver & arc) {
+                    arc(camera, cameraAngleScaler, smallCameraAngleScalar,
+                        samplingStepLengthOnRegionBoundaries, samplingStepLengthOnLines,
+                        intersectionDistanceThreshold,
+                        incidenceDistanceAlongDirectionThreshold,
+                        incidenceDistanceVerticalDirectionThreshold,
+                        interViewIncidenceAngleAlongDirectionThreshold);
+                }
             };
 
             struct ViewData;
@@ -46,6 +56,10 @@ namespace panoramix {
             struct IndexOfSubStructureInView {
                 ViewHandle viewHandle;
                 HandleT handle;
+                template <class Archiver> 
+                void serialize(Archiver & arc) {
+                    arc(viewHandle, handle);
+                }
             };
 
             template <class IndexT>
@@ -151,10 +165,18 @@ namespace panoramix {
                 Image image;
                 std::shared_ptr<RegionsNet> regionNet;
                 std::shared_ptr<LinesNet> lineNet;
+
+                template <class Archiver>
+                void serialize(Archiver & arc) {
+                    arc(originalCamera, camera, cameraDirectionErrorScale);
+                    arc(image, regionNet, lineNet);
+                }
             };
 
             // view connection data
-            struct ViewConnectionData { };
+            struct ViewConnectionData { 
+                template <class Archiver> void serialize(Archiver & ar) {}
+            };
 
             // global data
             struct GlobalData {
@@ -170,6 +192,16 @@ namespace panoramix {
                 IndexHashMap<LineIndex, Line3> reconstructedLines;
 
                 IndexHashMap<RegionIndex, int> regionOrientations;
+
+                template <class Archiver>
+                void serialize(Archiver & ar) {
+                    ar(vanishingPoints, 
+                        overlappedRegionIndexPairs, 
+                        lineIncidenceRelationsAcrossViews,
+                        regionLineIntersectionSampledPoints, 
+                        lineConnectedComponentsNum, lineConnectedComponentIds, 
+                        reconstructedLines, regionOrientations);
+                }
             };
 
             inline const ViewsGraph & views() const { return _views; }
@@ -179,6 +211,12 @@ namespace panoramix {
             ViewsGraph _views;
             Params _params;
             GlobalData _globalData;
+
+            template <class Archiver>
+            void serialize(Archiver & ar) {
+                ar(_views, _params, _globalData);
+            }
+            friend class cereal::access;
         };
 
 
