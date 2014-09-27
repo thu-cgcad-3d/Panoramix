@@ -112,7 +112,7 @@ int main(int argc, char * argv[], char * envp[]) {
         core::LoadFromDisk(in, all);
         all.engine.recognizeRegionLineRelations();
         all.engine.estimateSpatialLineDepths();
-        core::SaveToDisk(out, all);
+        //core::SaveToDisk(out, all);
     }, true);
 
     //try {

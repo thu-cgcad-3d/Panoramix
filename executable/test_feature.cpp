@@ -12,7 +12,7 @@ TEST(Feature, SegmentationExtractor) {
     p.minSize = 400;
     p.sigma = 1;
     core::SegmentationExtractor seg(p);
-    core::Image im = cv::imread(ProjectTestDataDirStr_Normal + "/75.jpg");
+    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
     vis::Visualizer2D(im) << vis::manip2d::Show();
     core::Image segim = seg(im, true);
     vis::Visualizer2D(segim) << vis::manip2d::Show();
@@ -20,7 +20,7 @@ TEST(Feature, SegmentationExtractor) {
 
 TEST(Feature, LineSegmentExtractor) {
     core::LineSegmentExtractor lineseg;
-    core::Image im = cv::imread(ProjectTestDataDirStr_Normal + "/2148.jpg");
+    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/2148.jpg");
     vis::Visualizer2D(im) 
         << vis::manip2d::SetColor(vis::ColorTag::Yellow) 
         << vis::manip2d::SetThickness(2) << 
@@ -31,7 +31,7 @@ TEST(Feature, LineSegmentExtractor) {
 TEST(Feature, VanishingPointsDetector) {
     core::LineSegmentExtractor lineseg;
     core::VanishingPointsDetector vpdetector;
-    core::Image im = cv::imread(ProjectTestDataDirStr_Normal + "/sampled_1.png");
+    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/sampled_1.png");
     auto lines = lineseg(im);
     std::vector<int> lineClasses;
     std::array<core::HPoint2, 3> vps;
@@ -42,11 +42,30 @@ TEST(Feature, VanishingPointsDetector) {
         classifiedLines.push_back({ lineClasses[i], lines[i]});
     }
     vis::Visualizer2D(im)
-        << vis::manip2d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
+        << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB)
         << vis::manip2d::SetThickness(2) <<
         classifiedLines
         << vis::manip2d::Show();
 }
+
+
+DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
+    core::LineSegmentExtractor lineseg;
+    core::LocalManhattanVanishingPointsDetector vpdetector;
+	core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/sampled_1.png");
+    auto lines = lineseg(im);
+    auto result = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
+    std::vector<core::Classified<core::Line2>> classifiedLines;
+    for (int i = 0; i < lines.size(); i++) {
+        classifiedLines.push_back({ result.lineClasses[i], lines[i] });
+    }
+    vis::Visualizer2D(im)
+        << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::AllColors)
+        << vis::manip2d::SetThickness(2) <<
+        classifiedLines
+        << vis::manip2d::Show(0);
+}
+
 
 TEST(Feature, PerspectiveCamera){
     core::PerspectiveCamera cam(1000, 1000, 500, 
@@ -87,7 +106,7 @@ TEST(Feature, PerspectiveCameraRandom){
 
 
 TEST(Feature, CameraSampler) {
-    cv::Mat im = cv::imread(ProjectTestDataDirStr_PanoramaOutdoor + "/panofactory.jpg");
+    cv::Mat im = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/panofactory.jpg");
 
     EXPECT_EQ(4000, im.cols);
     EXPECT_EQ(2000, im.rows);
@@ -133,7 +152,7 @@ TEST(Feature, FeatureExtractor) {
     core::CVFeatureExtractor<cv::SIFT> sift;
     core::CVFeatureExtractor<cv::SURF> surf(300.0);
     for (int i = 0; i < 4; i++) {
-        std::string name = ProjectTestDataDirStr_Normal + "/" + "sampled_" + std::to_string(i) + ".png";
+        std::string name = ProjectDataDirStrings::Normal + "/" + "sampled_" + std::to_string(i) + ".png";
         cv::Mat im = cv::imread(name);
         vis::Visualizer2D(im) 
             << [](vis::Visualizer2D & viz) { viz.params.winName = "haha"; }
@@ -148,5 +167,5 @@ TEST(Feature, FeatureExtractor) {
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    return DEBUG_RUN_ALL_TESTS();
 }

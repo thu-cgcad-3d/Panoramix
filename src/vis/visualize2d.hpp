@@ -89,15 +89,15 @@ namespace panoramix {
                         a);
             }
 
-            inline Manipulator<const ColorTable &> SetColorTable(const ColorTable & colorTable) {
-                return Manipulator<const ColorTable &>(
-                    [](Visualizer2D & viz, const ColorTable & ct) {
+            inline Manipulator<ColorTable> SetColorTable(const ColorTable & colorTable) {
+                return Manipulator<ColorTable>(
+                    [](Visualizer2D & viz, ColorTable ct) {
                     viz.params.colorTable = ct; },
                         colorTable);
             }
 
-            inline Manipulator<const ColorTable &> SetColorTable(const ColorTableDescriptor & d) {
-                return SetColorTable(ColorTable(d));
+            inline Manipulator<ColorTable> SetColorTable(const ColorTableDescriptor & d) {
+                return SetColorTable(PredefinedColorTable(d));
             }
             
             Manipulator<int> Show(int delay = 1);

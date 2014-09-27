@@ -663,7 +663,7 @@ namespace panoramix {
             }
 
             // check whether all interview incidences are valid
-            double dist = 0;
+            double maxDist = 0;
             Line3 farthestLine1, farthestLine2;
             for (auto & lir : lineIncidenceRelations) {
                 auto & line1 = lineSpatialAvatars[lir.first.first];
@@ -673,17 +673,21 @@ namespace panoramix {
                 }
                 auto l1 = NormalizeLine(line1.component);
                 auto l2 = NormalizeLine(line2.component);
-                auto centerDist = Distance(l1.center(), l2.center());
-                if (centerDist > dist) {
+                auto dist = DistanceBetweenTwoLines(l1, l2).first;
+                if (dist > maxDist) {
                     farthestLine1 = l1;
                     farthestLine2 = l2;
-                    dist = centerDist;
+                    maxDist = dist;
                 }
             }
-            std::cout << "max dist of interview incidence pair: " << dist << std::endl;
-            std::cout << "line1: " << farthestLine1.first << ", " << farthestLine1.second << std::endl;
-            std::cout << "line2: " << farthestLine2.first << ", " << farthestLine2.second << std::endl;
-            std::cout << "nearest dist: " << DistanceBetweenTwoLines(farthestLine1, farthestLine2).first << std::endl;
+            {
+                std::cout << "max dist of interview incidence pair: " << maxDist << std::endl;
+                std::cout << "line1: " << farthestLine1.first << ", " << farthestLine1.second << std::endl;
+                std::cout << "line2: " << farthestLine2.first << ", " << farthestLine2.second << std::endl;
+                auto d = DistanceBetweenTwoLines(farthestLine1, farthestLine2);
+                double angleDist = AngleBetweenDirections(d.second.first.position, d.second.second.position);
+                std::cout << "angle dist: " << angleDist << std::endl;
+            }
 
 
             // generate sampled points for line-region connections
@@ -1045,6 +1049,8 @@ namespace panoramix {
                             junctionWeight += 1.0;
                         }
                     }
+                } else {
+                    junctionWeight += 1.0;
                 }
                 if (lrd.type == LinesNet::LineRelationData::Type::Incidence)
                     junctionWeight += 10.0;
