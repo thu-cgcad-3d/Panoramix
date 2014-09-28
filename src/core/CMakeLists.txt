@@ -10,3 +10,4 @@ target_link_libraries (${CORE_STATIC_LIB}
 	${Fundamental_LIBS}
 )
 
+

@@ -128,6 +128,14 @@ namespace panoramix {
             protected:
                 void initializeGL() {
                     makeCurrent();
+                    
+                    glEnable(GL_MULTISAMPLE);
+                    GLint bufs;
+                    GLint samples;
+                    glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
+                    glGetIntegerv(GL_SAMPLES, &samples);
+                    qDebug("Have %d buffers and %d samples", bufs, samples);
+
                     qglClearColor(MakeQColor(params().backgroundColor));
                     _renderableObjTree.initialize();
                 }
@@ -144,6 +152,7 @@ namespace panoramix {
                     glFrontFace(GL_CW); // face direction set to clockwise
                     //glCullFace(GL_FRONT); // specify whether front- or back-facing facets can be culled
                     //glEnable(GL_CULL_FACE);
+                    glEnable(GL_MULTISAMPLE);
                     glEnable(GL_DEPTH_TEST);
                     glEnable(GL_STENCIL_TEST);
 

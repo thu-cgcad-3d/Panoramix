@@ -1,4 +1,5 @@
 #include <QtGui>
+#include <QtOpenGL>
 #include <QApplication>
 
 #include "qt_glue.hpp"
@@ -15,6 +16,10 @@ namespace panoramix {
                 return qApp;
             QApplication* app = new QApplication(argc, argv);
             app->setQuitOnLastWindowClosed(true);
+            QGLFormat glf = QGLFormat::defaultFormat();
+            glf.setSampleBuffers(true);
+            glf.setSamples(8);
+            QGLFormat::setDefaultFormat(glf);
             return app;
         }
 

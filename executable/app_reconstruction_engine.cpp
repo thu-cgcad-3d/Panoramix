@@ -58,7 +58,7 @@ struct All {
 
 int main(int argc, char * argv[], char * envp[]) {
 
-    std::string originalFile = test::ProjectTestDataDirStr_PanoramaIndoor + "/13.jpg";
+    std::string originalFile = test::ProjectDataDirStrings::PanoramaIndoor + "/13.jpg";
     std::string cacheFileBeforeComputingFeatures = "./cache/1_before_fea.state";
     std::string cacheFileAfterComputingFeatures = "./cache/2_after_fea.state";
     std::string cacheFileAfterEstimatingVPs = "./cache/3_after_vp.state";
