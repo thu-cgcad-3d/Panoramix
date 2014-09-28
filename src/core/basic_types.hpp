@@ -1,6 +1,7 @@
 #ifndef PANORAMIX_CORE_BASIC_TYPES_HPP
 #define PANORAMIX_CORE_BASIC_TYPES_HPP
 
+#include <iterator>
 #include <vector>
 #include <list>
 #include <deque>
@@ -372,7 +373,8 @@ namespace panoramix {
         using Image = cv::Mat;
         template <class T>
         using ImageWithType = cv::Mat_<T> ;
-        using PixelLoc = cv::Point;        
+        using PixelLoc = cv::Point;
+		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im);
         std::pair<double, double> MinMaxValOfImage(const Image & im);
 

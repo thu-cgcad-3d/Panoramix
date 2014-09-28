@@ -991,6 +991,14 @@ namespace panoramix {
                 return Vec<T, 2>(-d(1), d(0));
             }
 
+			template <class T>
+			inline Vec<T, 3> PerpendicularRootOfLineEquation(const Vec<T, 3> & lineeq) {
+				auto & a = lineeq[0];
+				auto & b = lineeq[1];
+				auto & c = lineeq[2];
+				return Vec3<T, 3>(-a * c, -b * c, a * a + b * b);
+			}
+
             std::pair<Point2, double> ComputeProjectionCenterAndFocalLength(const Point2 & vp1, const Point2 & vp2, const Point2 & vp3) {
                 /* lambda = dot(vp1 - vp3, vp2 - vp3, 2) . / ...
                 ((vp1(:, 1) - vp2(:, 1)).*(vp1(:, 2) - vp3(:, 2)) - ...
@@ -1034,6 +1042,15 @@ namespace panoramix {
                 intersections = std::move(mergedIntersections);
                 intersectionMakerLineIds = std::move(mergedIntersectionMakerLineIds);
             }
+
+			std::pair<Vec3, Point2> ComputeHorizonEquationAndProjectionCenterUsingOrthogonalHorizontalLinePair(
+				const Line2 & line1, const Line2 & line2, 
+				const HPoint2 & vertVP){
+				Vec3 line1eq = normalize(Concat(line1.first, 1.0).cross(Concat(line1.second, 1.0)));
+				Vec3 line2eq = normalize(Concat(line2.first, 1.0).cross(Concat(line2.second, 1.0)));
+
+			}
+
 
         }
 
@@ -1222,7 +1239,8 @@ namespace panoramix {
 			for (auto & idWithVotes : intersectionIdsWithVotes){
 				auto & direction = intersections[idWithVotes.first];
 				double angle = atan2(abs(direction.numerator[0]), abs(direction.numerator[1]));
-				if (angle < _params.verticalVPAngleRange){
+				if (angle < _params.verticalVPAngleRange && 
+					norm(direction.numerator) > abs(direction.denominator) * _params.verticalVPMinDistanceToCenter){
 					verticalIntersectionIdWithMaxVotes = idWithVotes;
 					break;
 				}
@@ -1269,7 +1287,7 @@ namespace panoramix {
 			});
 
 			// max test count
-			int maxTestCount = std::numeric_limits<int>::max();
+			int maxTestCount = 5000;
 
 			//// traverse other vp pairs
 			struct FocalAndPPData {

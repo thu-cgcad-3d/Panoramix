@@ -256,15 +256,20 @@ namespace panoramix {
         class LocalManhattanVanishingPointsDetector {
         public:
             struct Params {
-                inline Params(double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5)
-                : verticalVPAngleRange(M_PI_4 / 3.0), maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal) {}
+				inline Params(double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5) 
+					: verticalVPAngleRange(M_PI_4 / 3.0), 
+					verticalVPMinDistanceToCenter(300), 
+					maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal) {
+				}
 				// the angle between {the line connecting verticalVP and image center} and {the vertical line} 
 				// should be within [-verticalVPAngleRange, +verticalVPAngleRange] 
 				double verticalVPAngleRange; 
+				double verticalVPMinDistanceToCenter;
                 double maxPrinciplePointOffset;
                 double minFocalLength, maxFocalLength;
                 template <class Archive> inline void serialize(Archive & ar) {
-                    ar(verticalVPAngleRange, maxPrinciplePointOffset, minFocalLength, maxFocalLength);
+                    ar(verticalVPAngleRange, verticalVPMinDistanceToCenter, 
+						maxPrinciplePointOffset, minFocalLength, maxFocalLength);
                 }
             };
             struct Result {
@@ -282,6 +287,9 @@ namespace panoramix {
             Result estimateWithProjectionCenterAtOrigin(const std::vector<Line2> & lines) const;
             Params _params;
         };
+
+
+
 
 
 

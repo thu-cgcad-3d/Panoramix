@@ -52,17 +52,23 @@ TEST(Feature, VanishingPointsDetector) {
 DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
     core::LineSegmentExtractor lineseg;
     core::LocalManhattanVanishingPointsDetector vpdetector;
-	core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/sampled_1.png");
-    auto lines = lineseg(im);
+	core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/boxes1.jpg");
+	core::ResizeToMakeWidthUnder(im, 1000);
+
+	std::vector<core::Line2> lines;
+    lines = lineseg(im);
+
     auto result = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
     std::vector<core::Classified<core::Line2>> classifiedLines;
     for (int i = 0; i < lines.size(); i++) {
         classifiedLines.push_back({ result.lineClasses[i], lines[i] });
-    }
+	}
+
+	vis::ColorTable colorTable({ vis::ColorTag::Red, vis::ColorTag::Blue, vis::ColorTag::Green, vis::ColorTag::Yellow }, vis::ColorTag::White);
     vis::Visualizer2D(im)
-        << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::AllColors)
-        << vis::manip2d::SetThickness(2) <<
-        classifiedLines
+		<< vis::manip2d::SetColorTable(colorTable)
+        << vis::manip2d::SetThickness(2) 
+		<< classifiedLines
         << vis::manip2d::Show(0);
 }
 
