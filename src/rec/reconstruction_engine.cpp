@@ -191,18 +191,6 @@ namespace panoramix {
 
         namespace {
 
-            inline PixelLoc PixelIndexFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv) {
-                int longtid = static_cast<int>((p.longitude + M_PI) * longidiv / M_PI / 2);
-                int latid = static_cast<int>((p.latitude + M_PI_2) * latidiv / M_PI);
-                longtid = (longtid % longidiv + longidiv) % longidiv;
-                latid = (latid % latidiv + latidiv) % latidiv;
-                return PixelLoc(longtid, latid);
-            }
-
-            inline GeoCoord GeoCoordFromPixelIndex(const cv::Point & pixel, int longidiv, int latidiv) {
-                return GeoCoord{ pixel .x * M_PI * 2 / longidiv - M_PI, pixel.y * M_PI / latidiv - M_PI_2 };
-            }
-
             inline double LatitudeFromLongitudeAndNormalVector(double longitude, const Vec3 & normal) {
                 // normal(0)*cos(long)*cos(la) + normal(1)*sin(long)*cos(lat) + normal(2)*sin(la) = 0
                 // normal(0)*cos(long) + normal(1)*sin(long) + normal(2)*tan(la) = 0
@@ -239,7 +227,7 @@ namespace panoramix {
                 std::cout << "begin voting ..." << std::endl;
                 size_t pn = intersections.size();
                 for (const Vec3& p : intersections){
-                    PixelLoc pixel = PixelIndexFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
+                    PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
                     votePanel.at<float>(pixel.x, pixel.y) += 1.0;
                 }
                 std::cout << "begin gaussian bluring ..." << std::endl;
@@ -252,7 +240,7 @@ namespace panoramix {
                 cv::minMaxIdx(votePanel, & minVal, & maxVal, 0, maxIndex);
                 cv::Point maxPixel(maxIndex[0], maxIndex[1]);
 
-                vps[0] = GeoCoordFromPixelIndex(maxPixel, longitudeDivideNum, latitudeDivideNum).toVector();
+                vps[0] = GeoCoordFromPixelLoc(maxPixel, longitudeDivideNum, latitudeDivideNum).toVector();
                 const Vec3 & vec0 = vps[0];
 
                 // iterate locations orthogonal to vps[0]
@@ -268,7 +256,7 @@ namespace panoramix {
 
                     double score = 0;
                     for (Vec3 & v : vecs){
-                        PixelLoc pixel = PixelIndexFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                        PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
                         score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum), 
                             WrapBetween(pixel.y, 0, latitudeDivideNum));
                     }
@@ -297,7 +285,7 @@ namespace panoramix {
 
                         double score = 0;
                         for (Vec3 & v : vecs){
-                            PixelLoc pixel = PixelIndexFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                            PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
                             score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum), 
                                 WrapBetween(pixel.y, 0, latitudeDivideNum));
                         }

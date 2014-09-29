@@ -52,19 +52,41 @@ TEST(Feature, VanishingPointsDetector) {
 DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
     core::LineSegmentExtractor lineseg;
     core::LocalManhattanVanishingPointsDetector vpdetector;
-	core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/boxes1.jpg");
+	core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg");
 	core::ResizeToMakeWidthUnder(im, 1000);
 
 	std::vector<core::Line2> lines;
-    lines = lineseg(im);
+    core::LocalManhattanVanishingPointsDetector::Result result;
+    
+    //lines = lineseg(im);
+    core::LoadFromDisk(ProjectDataDirStrings::Serialization + "/temp.state", lines);
+    result = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
+    
+    return;
+    
 
-    auto result = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
     std::vector<core::Classified<core::Line2>> classifiedLines;
     for (int i = 0; i < lines.size(); i++) {
-        classifiedLines.push_back({ result.lineClasses[i], lines[i] });
+        int c = -1;
+        if (result.lineClasses[i] == 0){
+            c = 0;
+        }
+        else{
+            for (int j = 0; j < result.horizontalVanishingPointIds.size(); j++){
+                if (result.lineClasses[i] == result.horizontalVanishingPointIds[j].first ||
+                    result.lineClasses[i] == result.horizontalVanishingPointIds[j].second){
+                    c = j+1;
+                    break;
+                }
+            }
+        }
+        
+        classifiedLines.push_back({ c, lines[i] });
 	}
 
-	vis::ColorTable colorTable({ vis::ColorTag::Red, vis::ColorTag::Blue, vis::ColorTag::Green, vis::ColorTag::Yellow }, vis::ColorTag::White);
+	vis::ColorTable colorTable({ vis::ColorTag::Red, vis::ColorTag::Blue, vis::ColorTag::Green, 
+        vis::ColorTag::Yellow, vis::ColorTag::Magenta, vis::ColorTag::Orange }, 
+        vis::ColorTag::White);
     vis::Visualizer2D(im)
 		<< vis::manip2d::SetColorTable(colorTable)
         << vis::manip2d::SetThickness(2) 

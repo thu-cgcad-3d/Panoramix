@@ -191,10 +191,10 @@ namespace panoramix {
             return v;
         }
         template <class T, int N>
-        HPoint<T, N - 1> HPointFromVector(const Vec<T, N> & v) {
+        HPoint<T, N - 1> HPointFromVector(const Vec<T, N> & v, const T & scale = 1.0) {
             HPoint<T, N - 1> hp;
             std::copy(v.val, v.val + N - 1, hp.numerator.val);
-            hp.denominator = v[N - 1];
+            hp.denominator = v[N - 1] / scale;
             return hp;
         }
         template <class T, int N>
@@ -374,9 +374,15 @@ namespace panoramix {
         template <class T>
         using ImageWithType = cv::Mat_<T> ;
         using PixelLoc = cv::Point;
+
 		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);
+        void ResizeToMakeHeightUnder(Image & im, int heightUpperBound);
+        
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im);
         std::pair<double, double> MinMaxValOfImage(const Image & im);
+
+        PixelLoc PixelLocFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv);
+        GeoCoord GeoCoordFromPixelLoc(const PixelLoc & pixel, int longidiv, int latidiv);
 
 
 

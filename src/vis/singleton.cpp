@@ -18,7 +18,7 @@ namespace panoramix {
             app->setQuitOnLastWindowClosed(true);
             QGLFormat glf = QGLFormat::defaultFormat();
             glf.setSampleBuffers(true);
-            glf.setSamples(8);
+            glf.setSamples(16);
             QGLFormat::setDefaultFormat(glf);
             return app;
         }

@@ -173,7 +173,8 @@ namespace panoramix {
         // compute line intersections
         std::vector<HPoint2> ComputeLineIntersections(const std::vector<Line2> & lines,
             std::vector<std::pair<int, int>> * lineids = nullptr,
-            bool suppresscross = true);
+            bool suppresscross = true, 
+            double minDistanceBetweenLinePairs = std::numeric_limits<double>::max());
 
 
         // compute straightness of points
@@ -251,24 +252,29 @@ namespace panoramix {
         };
 
 
+        // non maxima suppression
+        void NonMaximaSuppression(const Image & src, Image & dst, int sz = 50, 
+            std::vector<PixelLoc> * pixels = nullptr,
+            const ImageWithType<bool> & mask = ImageWithType<bool>());
+
 
         // vanishing point detection for local manhattan scenes
         class LocalManhattanVanishingPointsDetector {
         public:
             struct Params {
-				inline Params(double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5) 
+				inline Params(double maxPPOffset = 150, double minFocal = 40, double maxFocal = 1e5) 
 					: verticalVPAngleRange(M_PI_4 / 3.0), 
-					verticalVPMinDistanceToCenter(300), 
+					verticalVPMinDistanceRatioToCenter(3), 
 					maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal) {
 				}
 				// the angle between {the line connecting verticalVP and image center} and {the vertical line} 
 				// should be within [-verticalVPAngleRange, +verticalVPAngleRange] 
 				double verticalVPAngleRange; 
-				double verticalVPMinDistanceToCenter;
+				double verticalVPMinDistanceRatioToCenter;
                 double maxPrinciplePointOffset;
                 double minFocalLength, maxFocalLength;
                 template <class Archive> inline void serialize(Archive & ar) {
-                    ar(verticalVPAngleRange, verticalVPMinDistanceToCenter, 
+                    ar(verticalVPAngleRange, verticalVPMinDistanceRatioToCenter, 
 						maxPrinciplePointOffset, minFocalLength, maxFocalLength);
                 }
             };
@@ -278,6 +284,10 @@ namespace panoramix {
                 std::vector<std::pair<int, int>> horizontalVanishingPointIds;
                 double focalLength;
                 std::vector<int> lineClasses;
+                template <class Archive> inline void serialize(Archive & ar) {
+                    ar(vanishingPoints, verticalVanishingPointId,
+                        horizontalVanishingPointIds, focalLength, lineClasses);
+                }
             };
         public:
             inline explicit LocalManhattanVanishingPointsDetector(const Params & params = Params()) : _params(params) {}
@@ -285,6 +295,7 @@ namespace panoramix {
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
             Result estimateWithProjectionCenterAtOrigin(const std::vector<Line2> & lines) const;
+            Result estimateWithProjectionCenterAtOriginII(const std::vector<Line2> & lines) const;
             Params _params;
         };
 
