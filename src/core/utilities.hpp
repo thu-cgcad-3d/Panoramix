@@ -28,10 +28,30 @@ namespace panoramix {
         }
 
 
+        // test infinite value
+        template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>>
+        inline bool HasInfiniteValue(const T & v) {
+            return std::isinf(v);
+        }
+
+        template <class T, int N>
+        inline bool HasInfiniteValue(const Vec<T, N> & v){
+            for (int i = 0; i < N; i++){
+                if (std::isinf(v[i]))
+                    return true;
+            }
+            return false;
+        }
+
+
+
+
+
+
         /// distance functions
         // for real numbers
-        template <class T>
-        inline std::enable_if_t<std::is_arithmetic<T>::value, T> Distance(const T & a, const T & b) {
+        template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+        inline T Distance(const T & a, const T & b) {
             return std::abs(a - b);
         }
 
@@ -83,8 +103,8 @@ namespace panoramix {
         /// bounding box functions
 
         // for scalars
-        template <class T>
-        inline std::enable_if_t<std::is_arithmetic<T>::value, Box<T, 1>> BoundingBox(const T & t) {
+        template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+        inline Box<T, 1> BoundingBox(const T & t) {
             return Box<T, 1>(Point<T, 1>(t), Point<T, 1>(t));
         }
 
@@ -380,6 +400,12 @@ namespace panoramix {
         inline T AngleBetweenDirections(const Vec<T, N> & v1, const Vec<T, N> & v2) {
             auto s = v1.dot(v2) / norm(v1) / norm(v2);
             return s >= 1.0 ? 0.0 : (s <= -1.0 ? M_PI : acos(s));
+        }
+
+        template <class T, int N>
+        inline bool IsApproxParallel(const Vec<T, N> & v1, const Vec<T, N> & v2, const T & epsilon = 0.1) {
+            auto s = v1.dot(v2) / norm(v1) / norm(v2);
+            return s >= 1.0 - epsilon || s <= -1.0 + epsilon;
         }
 
         template <class T>

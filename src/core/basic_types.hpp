@@ -276,6 +276,13 @@ namespace panoramix {
                 -(line.direction[1] * line.anchor[0] - line.direction[0] * line.anchor[1])
             };
         }
+        template <class T>
+        inline InfiniteLine<T, 2> InfiniteLine2FromCoeffs(const Vec<T, 3> & c) {
+            T d = Square(c[0]) + Square(c[1]);
+            Point<T, 2> anchor(-c[2] * c[0] / d, -c[2] * c[1] / d);
+            Vec<T, 2> dir(c[1], -c[0]);
+            return InfiniteLine<T, 2>(anchor, dir);
+        }
 
 
 

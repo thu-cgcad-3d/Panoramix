@@ -1239,7 +1239,7 @@ namespace panoramix {
             // iterate over image blocks
             for (int m = 0; m < M; m += sz + 1) {
                 for (int n = 0; n < N; n += sz + 1) {
-                    cv::Point  ijmax;
+                    cv::Point ijmax;
                     double vcmax, vnmax;
 
                     // get the maximal candidate within the block
@@ -1613,9 +1613,9 @@ namespace panoramix {
 
             static const double closeLinePairDistanceThreshold = 10;
             std::set<std::pair<int, int>> remainedCloseLineIdPairs;
-            for (int i = 0; i < lines.size(); i++){
-                for (int j = i + 1; j < lines.size(); j++){
-                    if (DistanceBetweenTwoLines(lines[i], lines[j]).first < closeLinePairDistanceThreshold){
+            for (int i = 0; i < remainedLines.size(); i++){
+                for (int j = i + 1; j < remainedLines.size(); j++){
+                    if (DistanceBetweenTwoLines(remainedLines[i], remainedLines[j]).first < closeLinePairDistanceThreshold){
                         remainedCloseLineIdPairs.emplace(i, j);
                     }
                 }
@@ -1679,17 +1679,106 @@ namespace panoramix {
                 Vec3 interv1 = VectorFromHPoint(interp1);
                 for (int j = i + 1; j < remainedIntersectionVReps.size(); j++){
                     HPoint2 interp2 = HPointFromVector(GeoCoordFromPixelLoc(
-                        remainedIntersectionVReps[i], longitudeDivideNum, latitudeDivideNum).toVector(), fakeFocal);
+                        remainedIntersectionVReps[j], longitudeDivideNum, latitudeDivideNum).toVector(), fakeFocal);
                     Vec3 interv2 = VectorFromHPoint(interp2);
                     Vec3 eq = normalize(interv1.cross(interv2));
-
                     remainedHLineCandEqs.push_back(eq);
                 }
             }
 
             std::cout << "remained hline cand num: " << remainedHLineCandEqs.size() << std::endl;
 
-            // todo
+            // iterator over hline candidates
+            double bestScore = -1;
+            Vec3 bestHLineEq;
+            double bestFocal;
+            Point2 bestPP;
+            
+            for (int i = 0; i < remainedHLineCandEqs.size(); i++){
+                auto & hlineeq = remainedHLineCandEqs[i];
+                auto hline = InfiniteLine2FromCoeffs(hlineeq);
+                auto d = DistanceFromPointToLine(vp1.value(), hline);
+                Point2 root = d.second;
+                
+
+                InfiniteLine2 lineFromRootToVP1(root, vp1.value() - root);
+                auto originToRootVP1Line = DistanceFromPointToLine(Point2(0, 0), lineFromRootToVP1);
+                if (originToRootVP1Line.first >= _params.maxPrinciplePointOffset){
+                    continue;
+                }
+                Point2 ppGuessingCenter = originToRootVP1Line.second;
+                Vec2 hlinedir = normalize(hline.direction);
+                double ppRangeHalfLen = 
+                    sqrt(_params.maxPrinciplePointOffset * _params.maxPrinciplePointOffset - 
+                    originToRootVP1Line.first * originToRootVP1Line.first);
+
+                double vp1Pos = d.first;
+                double ppGuessingCenterPos = Distance(root, ppGuessingCenter);
+
+                double ppLowerPos = std::max(0.0, ppGuessingCenterPos - ppRangeHalfLen);
+                double ppUpperPos = std::min(ppRangeHalfLen + ppGuessingCenterPos, vp1Pos);
+
+                static const int ppPosTestMaxNum = 100;
+                double ppPosTestStep = std::max(2.0, (ppUpperPos - ppLowerPos) / ppPosTestMaxNum);
+
+                /*double focalUsingLowerPos = sqrt(ppLowerPos * (distanceFromHLineToVP1 - ppLowerPos));
+                double focalUsingUpperPos = sqrt(ppUpperPos * (distanceFromHLineToVP1 - ppUpperPos));
+                double minFocal, maxFocal;
+                if (ppLowerPos <= distanceFromHLineToVP1 / 2.0 && ppUpperPos >= distanceFromHLineToVP1 / 2.0){
+                    maxFocal = distanceFromHLineToVP1 / 2.0;
+                    minFocal = std::min(focalUsingLowerPos, focalUsingUpperPos);
+                }
+                else{
+                    maxFocal = std::max(focalUsingLowerPos, focalUsingUpperPos);
+                    minFocal = std::min(focalUsingLowerPos, focalUsingUpperPos);
+                }
+                minFocal = BoundBetween(minFocal, _params.minFocalLength, _params.maxFocalLength);
+                maxFocal = BoundBetween(maxFocal, _params.minFocalLength, _params.maxFocalLength);
+                
+                assert(!std::isinf(minFocal) && !std::isnan(minFocal) && !std::isinf(maxFocal) && !std::isnan(minFocal));
+                assert(minFocal < maxFocal);
+                
+                static const int focalTestMaxNum = 100;
+                const double focalTestStep = std::max(10.0, (maxFocal - minFocal) / focalTestMaxNum);*/
+
+                
+                for (double ppPos = ppLowerPos; ppPos <= ppUpperPos; ppPos += ppPosTestStep){
+                    Point2 pp = root + ppPos * normalize(lineFromRootToVP1.direction);
+
+                    double focal = sqrt(ppPos * (vp1Pos - ppPos));
+                    if (!IsBetween(focal, _params.minFocalLength, _params.maxFocalLength))
+                        continue;
+
+                    //double intersectionPairProduct = focal * focal + ppPos * ppPos;
+                    double orthoScore = 0;
+                    for (auto & closeLineIdPair : remainedCloseLineIdPairs){
+                        auto & line1 = remainedLines[closeLineIdPair.first];
+                        auto & line2 = remainedLines[closeLineIdPair.second];
+
+                        Vec3 lineeq1 = Concat(line1.first, 1.0).cross(Concat(line1.second, 1.0));
+                        Vec3 lineeq2 = Concat(line2.first, 1.0).cross(Concat(line2.second, 1.0));
+
+                        Vec3 inter1 = normalize(lineeq1.cross(hlineeq));
+                        Vec3 inter2 = normalize(lineeq2.cross(hlineeq));
+
+                        // to space
+                        Vec3 inter1v(inter1[0] - pp[0] * inter1[2], inter1[1] - pp[1] * inter1[2], inter1[2] * focal);
+                        Vec3 inter2v(inter2[0] - pp[0] * inter2[2], inter2[1] - pp[1] * inter2[2], inter2[2] * focal);
+
+                        double nonortho = abs(normalize(inter1v).dot(normalize(inter2v)));
+                        if (nonortho < 0.5){
+                            orthoScore += (1.0 - Gaussian(line1.length(), 100)) * (1.0 - Gaussian(line2.length(), 100)) * (1.0 - nonortho);
+                        }
+                    }
+
+                    if (orthoScore > bestScore){
+                        bestScore = orthoScore;
+                        bestHLineEq = hlineeq;
+                        bestFocal = focal;
+                        bestPP = pp;
+                    }
+                }
+            }
 
             
             
