@@ -54,7 +54,7 @@ DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
     core::LineSegmentExtractor lineseg;
     
     core::LocalManhattanVanishingPointsDetector::Params params;
-	core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg");
+	core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/cuboids.png");
     core::ResizeToMakeWidthUnder(im, 1000);
     params.image = im;
 
@@ -63,8 +63,8 @@ DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
 	std::vector<core::Line2> lines;
     core::LocalManhattanVanishingPointsDetector::Result result;
     
-    //lines = lineseg(im);
-    core::LoadFromDisk(ProjectDataDirStrings::Serialization + "/temp.state", lines);
+    lines = lineseg(im);
+    //core::LoadFromDisk(ProjectDataDirStrings::Serialization + "/temp.state", lines);
 
     result = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
 

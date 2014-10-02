@@ -2,10 +2,13 @@
 #include <unordered_map>
 
 #include <Eigen/Dense>
+#include <Eigen/Sparse>
 
 #include "misc.hpp"
 #include "feature.hpp"
 #include "utilities.hpp"
+
+#include "debug.hpp"
 
 namespace panoramix {
     namespace core {
@@ -940,8 +943,8 @@ namespace panoramix {
             struct LineVPScoreFunctor {
                 inline LineVPScoreFunctor(double angleThres = M_PI_4, double s = 0.1) : angleThreshold(angleThres), sigma(s) {}
                 inline double operator()(double angle, double lengthRatio) const {
-                    return exp(-(angle / angleThreshold) * (angle / angleThreshold) / sigma / sigma / 2) +
-                        lengthRatio;
+                    return exp(-(angle / angleThreshold) * (angle / angleThreshold) / sigma / sigma / 2) + 
+                        0.5 * lengthRatio;
                 }
                 double angleThreshold, sigma;
             };
@@ -993,6 +996,12 @@ namespace panoramix {
                 return lineClasses;
             }
 
+            void AdjustVanishingPointsUsingClassifiedLines(const std::vector<Line2> & lines, const std::vector<int> & lineClasses, 
+                std::vector<HPoint2> & vps){
+                // TODO
+            }
+
+
             template <class T>
             inline Vec<T, 2> PerpendicularDirection(const Vec<T, 2> & d) {
                 return Vec<T, 2>(-d(1), d(0));
@@ -1022,6 +1031,51 @@ namespace panoramix {
                 double focalLength = sqrt(-(vp1 - pp).dot(vp2 - pp));
                 return std::make_pair(pp, focalLength);
             }
+
+
+            std::vector<std::pair<Point2, double>> ComputeProjectionCenterAndFocalLength(
+                const std::vector<Point2> & vp1s, const std::vector<Point2> & vp2s, const Point2 & vp3) {
+                assert(vp1s.size() == vp2s.size());
+                std::vector<std::pair<Point2, double>> ppAndFocals(vp1s.size());
+                
+                using namespace Eigen;
+                Array<double, Dynamic, 2> vp1m, vp2m;
+                vp1m.resize(vp1s.size(), 2);
+                vp2m.resize(vp2s.size(), 2);
+
+                for (int i = 0; i < vp1s.size(); i++){
+                    vp1m(i, 0) = vp1s[i][0];
+                    vp1m(i, 1) = vp1s[i][1];
+                    vp2m(i, 0) = vp2s[i][0];
+                    vp2m(i, 1) = vp2s[i][1];
+                }
+
+                Array<double, 1, 2> vp3m;
+                vp3m(0, 0) = vp3[0];
+                vp3m(0, 1) = vp3[1];
+
+                auto lambdaUppers = (vp1m.rowwise() - vp3m).cwiseProduct(vp2m.rowwise() - vp3m).rowwise().sum();
+                auto lambdaLowers = (vp1m.col(0) - vp2m.col(0)).cwiseProduct(vp1m.col(1) - vp3m(1))
+                    - (vp1m.col(0) - vp3m(0)).cwiseProduct(vp1m.col(1) - vp2m.col(1));
+                auto lambdas = lambdaUppers / lambdaLowers;
+
+                Matrix<double, 2, 2> perpendicular;
+                perpendicular.setZero();
+                perpendicular(0, 1) = 1;
+                perpendicular(1, 0) = -1;
+
+                Array<double, Dynamic, 2> pps = (((vp1m - vp2m).matrix() * perpendicular).array().colwise() * lambdas).rowwise() + vp3m;
+                auto vp1_pp = vp1m - pps;
+                auto vp2_pp = vp2m - pps;
+                Array<double, Dynamic, 1> focalLengths = sqrt(-(vp1_pp.col(0) * vp2_pp.col(0) + vp1_pp.col(1) + vp2_pp.col(1)));
+
+                for (int i = 0; i < vp1s.size(); i++){
+                    ppAndFocals[i].first = { pps(i, 0), pps(i, 1) };
+                    ppAndFocals[i].second = focalLengths(i);
+                }
+                return ppAndFocals;
+            }
+
             
             // make infinite points finite
             // merge close points
@@ -1080,7 +1134,7 @@ namespace panoramix {
         std::tuple<std::array<HPoint2, 3>, double, std::vector<int>> VanishingPointsDetector::estimateWithProjectionCenterAtOrigin (
             const std::vector<Line2> & lines) const {
 
-            double scoreThreshold = 0.8;
+            double scoreThreshold = 0.6;
             std::vector<int> lineClasses(lines.size(), -1);
 
             // get all intersections
@@ -1116,6 +1170,8 @@ namespace panoramix {
                 }
             }
             //std::cout << "remained lines num: " << remainedLines.size() << std::endl;
+
+
 
 
             // get remained intersections
@@ -1275,7 +1331,7 @@ namespace panoramix {
 
 
         
-
+        /*
         LocalManhattanVanishingPointsDetector::Result LocalManhattanVanishingPointsDetector::estimateWithProjectionCenterAtOrigin(
             const std::vector<Line2> & lines) const {
 
@@ -1540,12 +1596,15 @@ namespace panoramix {
         LocalManhattanVanishingPointsDetector::Result LocalManhattanVanishingPointsDetector::estimateWithProjectionCenterAtOriginII(
             const std::vector<Line2> & lines) const {
 
+            Point2 offseted(_params.image.cols / 2.0, _params.image.rows / 2.0);
+
             std::cout << "line num: " << lines.size() << std::endl;
 
             Box2 bbox = BoundingBoxOfContainer(lines);
             double scale = norm(bbox.minCorner, bbox.maxCorner);
 
             Result result;
+            result.lineClasses.clear();
             result.lineClasses.resize(lines.size(), -1);
 
 
@@ -1555,7 +1614,7 @@ namespace panoramix {
             std::vector<std::pair<int, int>> intersectionMakerLineIds;
             auto intersections = ComputeLineIntersections(lines, &intersectionMakerLineIds, true);
 
-            std::cout << "intersection num: " << intersections.size() << std::endl;        
+            std::cout << "intersection num: " << intersections.size() << std::endl;
             RefineIntersections(intersections, intersectionMakerLineIds);
             std::cout << "intersection num: " << intersections.size() << std::endl;
 
@@ -1593,23 +1652,59 @@ namespace panoramix {
                 "1) increasing verticalVPAngleRange or "
                 "2) decreasing verticalVPMinDistanceRatioToCenter");
 
-            const HPoint2 & vp1 = intersections[verticalIntersectionIdWithMaxVotes.first];
+            HPoint2 vp1 = intersections[verticalIntersectionIdWithMaxVotes.first];
             std::cout << "vp1: " << vp1.value() << std::endl;
 
             // classify lines for vp1 to be 0, and collect remained lines
-            static const double thresholdVotesForVP1 = 0.8;
-            std::vector<Line2> remainedLines;
-            remainedLines.reserve(lines.size() / 2);
+            static const double thresholdVotesForVP1 = 1.2;
+
             for (int i = 0; i < lines.size(); i++) {
                 if (votesPanel(i, verticalIntersectionIdWithMaxVotes.first) > thresholdVotesForVP1) {
                     result.lineClasses[i] = 0;
                 }
-                else {
+            }
+
+            static const int refineRepTime = 5;
+            for (int k = 0; k < refineRepTime; k++){                
+                // recalculate vp1 using classified vp1 lines
+                Point2 vp1IntersectionsSum(0, 0);
+                double vp1IntersectionsWeightSum = 0;
+                for (int i = 0; i < intersectionMakerLineIds.size(); i++){
+                    auto & p = intersectionMakerLineIds[i];
+                    if (result.lineClasses[p.first] == 0 && result.lineClasses[p.second] == 0){
+                        auto v = intersections[i].value();
+                        double w = lines[p.first].length() * lines[p.second].length();
+                        vp1IntersectionsSum += v;
+                        vp1IntersectionsWeightSum += 1;
+                    }
+                }
+                vp1 = HPoint2(vp1IntersectionsSum / vp1IntersectionsWeightSum);
+
+                std::cout << "refined vp1: " << vp1.value() << std::endl;
+
+                // reclassify lines
+                ImageWithType<double> refinedVotesForVP1 = LinesVotesToPoints(std::array<HPoint2, 1>{{vp1}}, lines);
+                for (int i = 0; i < lines.size(); i++) {
+                    if (refinedVotesForVP1(i) > thresholdVotesForVP1) {
+                        result.lineClasses[i] = 0;
+                    }
+                    else{
+                        result.lineClasses[i] = -1;
+                    }
+                }
+            }
+
+            // collect remained lines
+            std::vector<Line2> remainedLines;
+            remainedLines.reserve(lines.size() / 2);
+            for (int i = 0; i < lines.size(); i++) {
+                if(result.lineClasses[i] == -1) {
                     remainedLines.push_back(lines[i]);
                 }
             }
 
             std::cout << "remained lines num: " << remainedLines.size() << std::endl;
+
 
             static const double closeLinePairDistanceThreshold = 10;
             std::set<std::pair<int, int>> remainedCloseLineIdPairs;
@@ -1627,64 +1722,88 @@ namespace panoramix {
             const double angleThres = M_PI_4 / 10.0;
 
             // get remained intersections
-            auto remainedIntersections = ComputeLineIntersections(remainedLines, nullptr, true, 
+            auto remainedIntersections = ComputeLineIntersections(remainedLines, nullptr, true,
                 closeLinePairDistanceThreshold);
 
             std::cout << "remained intersection num: " << remainedIntersections.size() << std::endl;
-            auto remainedIntersectionVs = RefineIntersectionsAndProjectToSpace(remainedIntersections, 
+            auto remainedIntersectionVs = RefineIntersectionsAndProjectToSpace(remainedIntersections,
                 fakeFocal, angleThres);
-            std::cout << "remained intersection vector num after refinement: " 
-                << remainedIntersectionVs.size() 
+            std::cout << "remained intersection vector num after refinement: "
+                << remainedIntersectionVs.size()
                 << std::endl;
 
             // project onto one panel
-            int longitudeDivideNum = 1000, latitudeDivideNum = 500;
-            ImageWithType<double> remainedVotesPanel = 
-                ImageWithType<double>::zeros(longitudeDivideNum, latitudeDivideNum);
+            int longitudeDivideNum = 2000, latitudeDivideNum = 1000;
+            ImageWithType<double> remainedVotesPanel =
+                ImageWithType<double>::zeros(SizeI(longitudeDivideNum, latitudeDivideNum));
             for (const Vec3& p : remainedIntersectionVs){
                 PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
-                remainedVotesPanel(pixel.x, pixel.y) += 1.0;
+                remainedVotesPanel(pixel) += 1.0;
                 pixel = PixelLocFromGeoCoord(GeoCoord(-p), longitudeDivideNum, latitudeDivideNum);
-                remainedVotesPanel(pixel.x, pixel.y) += 1.0;
+                remainedVotesPanel(pixel) += 1.0;
             }
-            cv::GaussianBlur(remainedVotesPanel, remainedVotesPanel, 
+            cv::GaussianBlur(remainedVotesPanel, remainedVotesPanel,
                 cv::Size(5, 5),
                 4, 4, cv::BORDER_REPLICATE);
             std::cout << "done voting" << std::endl;
 
+            // non maxima suppression
+            // find local maximas
             ImageWithType<double> remainedVotesMaxs;
-            std::vector<PixelLoc> remainedIntersectionVReps;
-            NonMaximaSuppression(remainedVotesPanel, remainedVotesMaxs, 8, &remainedIntersectionVReps, remainedVotesPanel >= 1);
+            std::vector<PixelLoc> remainedIntersectionPLReps;
+            NonMaximaSuppression(remainedVotesPanel, remainedVotesMaxs, 4, &remainedIntersectionPLReps, remainedVotesPanel >= 1);
 
-            std::cout << "remained intersection distribution max num: " << remainedIntersectionVReps.size() << std::endl;
+            std::cout << "remained intersection distribution max num: " << remainedIntersectionPLReps.size() << std::endl;
 
-            //int radioPanelSize = 2000;
-            //ImageWithType<double> radioPanel = ImageWithType<double>::zeros(radioPanelSize, radioPanelSize);
-            //for (int x = 0; x < radioPanelSize; x++){
-            //    for (int y = 0; y < radioPanelSize; y++){
-            //        Vec3 dir(x - radioPanelSize/2, y - radioPanelSize/2, fakeFocal);
-            //        PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(dir), longitudeDivideNum, latitudeDivideNum);
-            //        radioPanel(y, x) = remainedVotesPanel(pixel.x, pixel.y);
-            //    }
-            //}
-            //cv::GaussianBlur(radioPanel, radioPanel,
-            //    cv::Size(7, 7),
-            //    4, 4, cv::BORDER_REPLICATE);
+            // pick local maximas as HPoints
+            std::vector<std::pair<HPoint2, double>> remainedIntersectionVRepWithVotes(remainedIntersectionPLReps.size());
+            for (int i = 0; i < remainedIntersectionPLReps.size(); i++){
+                auto & pixel = remainedIntersectionPLReps[i];
+                remainedIntersectionVRepWithVotes[i].first = HPointFromVector(
+                    GeoCoordFromPixelLoc(pixel, longitudeDivideNum, latitudeDivideNum).toVector(), 
+                    fakeFocal);
+                remainedIntersectionVRepWithVotes[i].second = remainedVotesPanel(pixel);
+            }
 
+
+            if (false){ // visualize
+                int radioPanelSize = 2000;
+                ImageWithType<double> radioPanel = ImageWithType<double>::zeros(radioPanelSize, radioPanelSize);
+                for (int x = 0; x < radioPanelSize; x++){
+                    for (int y = 0; y < radioPanelSize; y++){
+                        Vec3 dir(x - radioPanelSize / 2, y - radioPanelSize / 2, fakeFocal);
+                        PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(dir), longitudeDivideNum, latitudeDivideNum);
+                        radioPanel(y, x) = remainedVotesPanel(pixel.x, pixel.y);
+                    }
+                }
+                cv::GaussianBlur(radioPanel, radioPanel,
+                    cv::Size(7, 7),
+                    4, 4, cv::BORDER_REPLICATE);
+            }
+
+            // construct hline candidates using intersection local maximas
             std::vector<Vec3> remainedHLineCandEqs;
-            remainedHLineCandEqs.reserve(Square(remainedIntersectionVReps.size()) / 2);
-            for (int i = 0; i < remainedIntersectionVReps.size(); i++){
-                HPoint2 interp1 = HPointFromVector(GeoCoordFromPixelLoc(
-                    remainedIntersectionVReps[i], longitudeDivideNum, latitudeDivideNum).toVector(), fakeFocal);
+            remainedHLineCandEqs.reserve(Square(remainedIntersectionPLReps.size()) / 2);
+            for (int i = 0; i < remainedIntersectionPLReps.size(); i++){
+                auto & interp1 = remainedIntersectionVRepWithVotes[i].first;
                 Vec3 interv1 = VectorFromHPoint(interp1);
-                for (int j = i + 1; j < remainedIntersectionVReps.size(); j++){
-                    HPoint2 interp2 = HPointFromVector(GeoCoordFromPixelLoc(
-                        remainedIntersectionVReps[j], longitudeDivideNum, latitudeDivideNum).toVector(), fakeFocal);
+                for (int j = i + 1; j < remainedIntersectionPLReps.size(); j++){
+                    auto & interp2 = remainedIntersectionVRepWithVotes[j].first;
                     Vec3 interv2 = VectorFromHPoint(interp2);
                     Vec3 eq = normalize(interv1.cross(interv2));
                     remainedHLineCandEqs.push_back(eq);
                 }
             }
+
+
+            IF_DEBUG_USING_VISUALIZERS{
+                std::vector<InfiniteLine2> hlineCands(remainedHLineCandEqs.size());
+                for (int i = 0; i < hlineCands.size(); i++){
+                    hlineCands[i] = InfiniteLine2FromCoeffs(remainedHLineCandEqs[i]);
+                }
+                result.hlineCands = hlineCands;
+            }
+
 
             std::cout << "remained hline cand num: " << remainedHLineCandEqs.size() << std::endl;
 
@@ -1698,14 +1817,14 @@ namespace panoramix {
                 auto & hlineeq = remainedHLineCandEqs[i];
                 auto hline = InfiniteLine2FromCoeffs(hlineeq);
                 auto d = DistanceFromPointToLine(vp1.value(), hline);
-                Point2 root = d.second;
-                
+                Point2 root = d.second;                
 
                 InfiniteLine2 lineFromRootToVP1(root, vp1.value() - root);
                 auto originToRootVP1Line = DistanceFromPointToLine(Point2(0, 0), lineFromRootToVP1);
                 if (originToRootVP1Line.first >= _params.maxPrinciplePointOffset){
                     continue;
                 }
+
                 Point2 ppGuessingCenter = originToRootVP1Line.second;
                 Vec2 hlinedir = normalize(hline.direction);
                 double ppRangeHalfLen = 
@@ -1718,29 +1837,8 @@ namespace panoramix {
                 double ppLowerPos = std::max(0.0, ppGuessingCenterPos - ppRangeHalfLen);
                 double ppUpperPos = std::min(ppRangeHalfLen + ppGuessingCenterPos, vp1Pos);
 
-                static const int ppPosTestMaxNum = 100;
+                static const int ppPosTestMaxNum = 1000;
                 double ppPosTestStep = std::max(2.0, (ppUpperPos - ppLowerPos) / ppPosTestMaxNum);
-
-                /*double focalUsingLowerPos = sqrt(ppLowerPos * (distanceFromHLineToVP1 - ppLowerPos));
-                double focalUsingUpperPos = sqrt(ppUpperPos * (distanceFromHLineToVP1 - ppUpperPos));
-                double minFocal, maxFocal;
-                if (ppLowerPos <= distanceFromHLineToVP1 / 2.0 && ppUpperPos >= distanceFromHLineToVP1 / 2.0){
-                    maxFocal = distanceFromHLineToVP1 / 2.0;
-                    minFocal = std::min(focalUsingLowerPos, focalUsingUpperPos);
-                }
-                else{
-                    maxFocal = std::max(focalUsingLowerPos, focalUsingUpperPos);
-                    minFocal = std::min(focalUsingLowerPos, focalUsingUpperPos);
-                }
-                minFocal = BoundBetween(minFocal, _params.minFocalLength, _params.maxFocalLength);
-                maxFocal = BoundBetween(maxFocal, _params.minFocalLength, _params.maxFocalLength);
-                
-                assert(!std::isinf(minFocal) && !std::isnan(minFocal) && !std::isinf(maxFocal) && !std::isnan(minFocal));
-                assert(minFocal < maxFocal);
-                
-                static const int focalTestMaxNum = 100;
-                const double focalTestStep = std::max(10.0, (maxFocal - minFocal) / focalTestMaxNum);*/
-
                 
                 for (double ppPos = ppLowerPos; ppPos <= ppUpperPos; ppPos += ppPosTestStep){
                     Point2 pp = root + ppPos * normalize(lineFromRootToVP1.direction);
@@ -1761,13 +1859,13 @@ namespace panoramix {
                         Vec3 inter1 = normalize(lineeq1.cross(hlineeq));
                         Vec3 inter2 = normalize(lineeq2.cross(hlineeq));
 
-                        // to space
+                        // lift to space
                         Vec3 inter1v(inter1[0] - pp[0] * inter1[2], inter1[1] - pp[1] * inter1[2], inter1[2] * focal);
                         Vec3 inter2v(inter2[0] - pp[0] * inter2[2], inter2[1] - pp[1] * inter2[2], inter2[2] * focal);
 
                         double nonortho = abs(normalize(inter1v).dot(normalize(inter2v)));
                         if (nonortho < 0.5){
-                            orthoScore += (1.0 - Gaussian(line1.length(), 100)) * (1.0 - Gaussian(line2.length(), 100)) * (1.0 - nonortho);
+                            orthoScore += (1.0 - Gaussian(line1.length(), 60)) * (1.0 - Gaussian(line2.length(), 60)) * (1.0 - nonortho);
                         }
                     }
 
@@ -1780,11 +1878,422 @@ namespace panoramix {
                 }
             }
 
-            
-            
+
+            result.vanishingPoints.push_back(vp1);
+            result.verticalVanishingPointId = 0;
+            result.focalLength = bestFocal;
+            result.horizon = InfiniteLine2FromCoeffs(bestHLineEq);
+            result.principlePoint = bestPP;
+
+            // find horizontal vanishing points and classify remained lines
+            std::vector<std::pair<Vec3, int>> recognizedVPDirWithPairIds;
+            for (auto & closeLineIdPair : remainedCloseLineIdPairs){
+                auto & line1 = remainedLines[closeLineIdPair.first];
+                auto & line2 = remainedLines[closeLineIdPair.second];
+
+                Vec3 lineeq1 = Concat(line1.first, 1.0).cross(Concat(line1.second, 1.0));
+                Vec3 lineeq2 = Concat(line2.first, 1.0).cross(Concat(line2.second, 1.0));
+
+                Vec3 inter1 = normalize(lineeq1.cross(bestHLineEq));
+                Vec3 inter2 = normalize(lineeq2.cross(bestHLineEq));
+
+                // lift to space
+                Vec3 inter1v(inter1[0] - bestPP[0] * inter1[2], inter1[1] - bestPP[1] * inter1[2], inter1[2] * bestFocal);
+                Vec3 inter2v(inter2[0] - bestPP[0] * inter2[2], inter2[1] - bestPP[1] * inter2[2], inter2[2] * bestFocal);
+
+                double nonortho = abs(normalize(inter1v).dot(normalize(inter2v)));
+                if (nonortho <= 0.1){
+                    HPoint2 vp2cand = HPointFromVector(inter1);
+                    HPoint2 vp3cand = HPointFromVector(inter2);
+                    
+                    static const double sz = 0.2;
+                    //static const Vec3 vpNeighbourSize(sz, sz, sz);
+
+                    int closestVPPairIdFromInter1 = -1;
+                    double minDistToVPFromInter1 = sz;
+                    int closestVPPairIdFromInter2 = -1;
+                    double minDistToVPFromInter2 = sz;
+                    for (auto & vpwithid : recognizedVPDirWithPairIds){
+                        double d1 = Distance(vpwithid.first, inter1v);
+                        double d2 = Distance(vpwithid.first, inter2v);
+                        if (d1 < minDistToVPFromInter1){
+                            minDistToVPFromInter1 = d1;
+                            closestVPPairIdFromInter1 = vpwithid.second;
+                        }
+                        if (d2 < minDistToVPFromInter2){
+                            minDistToVPFromInter2 = d2;
+                            closestVPPairIdFromInter2 = vpwithid.second;
+                        }
+                    }
+
+                    
+                }
+            }
+
+            std::cout << "done" << std::endl;
+            std::cout << "focal: " << result.focalLength << std::endl;
 
             return result;
         }
+
+        */
+
+
+
+        LocalManhattanVanishingPointsDetector::Result LocalManhattanVanishingPointsDetector::estimateWithProjectionCenterAtOriginIII(
+            const std::vector<Line2> & lines) const {
+
+            Point2 offseted(_params.image.cols / 2.0, _params.image.rows / 2.0);
+
+            std::cout << "line num: " << lines.size() << std::endl;
+
+            Box2 bbox = BoundingBoxOfContainer(lines);
+            double scale = norm(bbox.minCorner, bbox.maxCorner);
+
+            Result result;
+            result.lineClasses.clear();
+            result.lineClasses.resize(lines.size(), -1);
+
+
+            //// find vertical vp (vp1)
+
+            // get all intersections
+            std::vector<std::pair<int, int>> intersectionMakerLineIds;
+            auto intersections = ComputeLineIntersections(lines, &intersectionMakerLineIds, true);
+
+            std::cout << "intersection num: " << intersections.size() << std::endl;
+            RefineIntersections(intersections, intersectionMakerLineIds);
+            std::cout << "intersection num: " << intersections.size() << std::endl;
+
+            // vote all lines for all intersections
+            std::vector<std::pair<int, double>> intersectionIdsWithVotes(intersections.size());
+
+            // nlines x npoints
+            ImageWithType<double> votesPanel = LinesVotesToPoints(intersections, lines); //// TODO: bottleneck!!!
+            for (int i = 0; i < intersections.size(); i++) {
+                intersectionIdsWithVotes[i].first = i;
+                intersectionIdsWithVotes[i].second = cv::sum(votesPanel.col(i)).val[0];
+            }
+
+            // sort all intersectoins in votings descending order
+            std::sort(intersectionIdsWithVotes.begin(), intersectionIdsWithVotes.end(),
+                [](const std::pair<int, double> & a, const std::pair<int, double> & b) -> bool {
+                return a.second > b.second;
+            });
+
+            // get vertical vp with max votes
+            std::pair<int, double> verticalIntersectionIdWithMaxVotes = { -1, 0.0 };
+            for (auto & idWithVotes : intersectionIdsWithVotes){
+                auto & direction = intersections[idWithVotes.first];
+                double angle = atan2(abs(direction.numerator[0]), abs(direction.numerator[1]));
+                if (angle < _params.verticalVPAngleRange &&
+                    norm(direction.numerator) > abs(direction.denominator) * scale * _params.verticalVPMinDistanceRatioToCenter){
+                    verticalIntersectionIdWithMaxVotes = idWithVotes;
+                    break;
+                }
+            }
+
+            assert(verticalIntersectionIdWithMaxVotes.first != -1 &&
+                "failed to find vertical vp! "
+                "try "
+                "1) increasing verticalVPAngleRange or "
+                "2) decreasing verticalVPMinDistanceRatioToCenter");
+
+            HPoint2 vp1 = intersections[verticalIntersectionIdWithMaxVotes.first];
+            std::cout << "vp1: " << vp1.value() << std::endl;
+
+            // refine vp1
+            double thresholdVotesForVP1 = 1.0;
+
+            for (int i = 0; i < lines.size(); i++) {
+                if (votesPanel(i, verticalIntersectionIdWithMaxVotes.first) > thresholdVotesForVP1) {
+                    result.lineClasses[i] = 0;
+                }
+                else{
+                    result.lineClasses[i] = -1;
+                }
+            }
+
+            static const int refineRepTime = 0;
+            for (int k = 0; k < refineRepTime; k++){
+                // recalculate vp1 using classified vp1 lines
+                Point2 vp1IntersectionsSum(0, 0);
+                double vp1IntersectionsWeightSum = 0;
+                for (int i = 0; i < intersectionMakerLineIds.size(); i++){
+                    auto & p = intersectionMakerLineIds[i];
+                    if (result.lineClasses[p.first] == 0 && result.lineClasses[p.second] == 0){
+                        auto v = intersections[i].value();
+                        double w = 1.0 - Gaussian(lines[p.first].length() + lines[p.second].length(), 100.0);
+                        assert(!HasValue(v, IsInfOrNaN<double>) && !HasValue(w, IsInfOrNaN<double>));
+                        vp1IntersectionsSum += v;
+                        vp1IntersectionsWeightSum += 1.0;
+                    }
+                }
+                HPoint2 nvp1 = HPoint2(vp1IntersectionsSum / vp1IntersectionsWeightSum);
+                vp1 = nvp1;
+
+                std::cout << "refined vp1: " << vp1.value() << std::endl;
+
+                // reclassify lines
+                ImageWithType<double> refinedVotesForVP1 = LinesVotesToPoints(std::array<HPoint2, 1>{{ vp1 }}, lines);
+                for (int i = 0; i < lines.size(); i++) {
+                    if (refinedVotesForVP1(i) > thresholdVotesForVP1) {
+                        result.lineClasses[i] = 0;
+                    }
+                    else{
+                        result.lineClasses[i] = -1;
+                    }
+                }
+            }
+
+            // collect remained lines
+            std::vector<Line2> remainedLines;
+            remainedLines.reserve(lines.size() / 2);
+            for (int i = 0; i < lines.size(); i++) {
+                if (result.lineClasses[i] == -1) {
+                    remainedLines.push_back(lines[i]);
+                }
+            }
+
+            std::cout << "remained lines num: " << remainedLines.size() << std::endl;
+
+
+            // get remained intersections
+            std::vector<std::pair<int, int>> remainedIntersectionMakerLineIds;
+            auto remainedIntersections = ComputeLineIntersections(remainedLines, &remainedIntersectionMakerLineIds, true);
+
+            //std::cout << "remained intersection num: " << remainedLines.size() << std::endl;
+            RefineIntersections(remainedIntersections, remainedIntersectionMakerLineIds);
+            //std::cout << "remained intersection num: " << remainedLines.size() << std::endl;
+
+            // vote remained lines for remained intersections
+            std::vector<double> votesForRemainedIntersections(remainedIntersections.size(), 0.0);
+            // nlines x npoints
+            ImageWithType<double> votesRemainedPanel = LinesVotesToPoints(remainedIntersections, lines); // all lines participated!!!!!
+            for (int i = 0; i < remainedIntersections.size(); i++) {
+                votesForRemainedIntersections[i] = cv::sum(votesRemainedPanel.col(i)).val[0];
+            }
+
+
+            // test pps and focals
+            Point2 vp1p = vp1.value();
+            Point2 vp1ccenter = vp1.value() / 2.0;
+            double vp1cdist = norm(vp1).value();
+
+            int maxNum = 30000;
+
+            std::vector<Point2> vp2cands, vp3cands;
+            vp2cands.reserve(maxNum);
+            vp3cands.reserve(maxNum);
+            std::vector<int> vp2candIdInRemainedIntersections, vp3candIdInRemainedIntersections;
+            vp2candIdInRemainedIntersections.reserve(maxNum);
+            vp3candIdInRemainedIntersections.reserve(maxNum);
+
+            std::cout << "collecting all vp2-vp3 combinations ..." << std::endl;
+
+            for (int i = 0; i < remainedIntersections.size(); i++) {
+                if (vp2cands.size() >= maxNum)
+                    break;
+
+                auto & vp2cand = remainedIntersections[i];
+                Point2 vp2candp = vp2cand.value();
+
+                if (Distance(vp2cand, vp1) < _params.minFocalLength)
+                    continue;
+                if (Distance(vp2candp, vp1ccenter) < vp1cdist / 2.0 - _params.minFocalLength)
+                    continue;
+
+                Point2 vp12center = (vp1p + vp2candp) / 2.0;
+                double vp12dist = norm(vp1p - vp2candp);
+
+                for (int j = i + 1; j < remainedIntersections.size(); j++) {
+                    if (vp2cands.size() >= maxNum)
+                        break;
+
+                    auto & vp3cand = remainedIntersections[j];
+                    Point2 vp3candp = vp3cand.value();
+
+                    if (Distance(vp3cand, vp1) < _params.minFocalLength ||
+                        Distance(vp2cand, vp3cand) < _params.minFocalLength)
+                        continue;
+                    if (Distance(vp3candp, vp12center) < vp12dist / 2.0)
+                        continue;
+
+                    vp2cands.push_back(vp2candp);
+                    vp3cands.push_back(vp3candp);
+                    vp2candIdInRemainedIntersections.push_back(i);
+                    vp3candIdInRemainedIntersections.push_back(j);
+                }
+            }
+
+            std::cout << "done collecting all valid vp2-vp3 combinations, total num: " << vp2cands.size() << std::endl;
+
+            std::cout << "computing pp and focals ..." << std::endl;
+            auto ppAndFocals = ComputeProjectionCenterAndFocalLength(vp2cands, vp3cands, vp1p);
+            std::cout << "done computing pp and focals" << std::endl;
+
+            // compute scores
+            std::cout << "computing scores ..." << std::endl;
+            std::vector<double> scores(ppAndFocals.size(), -1.0);
+            for (int i = 0; i < scores.size(); i++){
+                int vp2candId = vp2candIdInRemainedIntersections[i];
+                int vp3candId = vp3candIdInRemainedIntersections[i];
+
+                auto & principlePoint = ppAndFocals[i].first;
+                auto & focalLength = ppAndFocals[i].second;
+                if (std::isnan(focalLength) || std::isinf(focalLength)){
+                    continue;
+                }
+                if (!(norm(principlePoint) < _params.maxPrinciplePointOffset &&
+                    IsBetween(focalLength, _params.minFocalLength, _params.maxFocalLength))){
+                    continue;
+                }
+
+                // get votes from each line
+                double score = 0.0;
+                for (int lineId = 0; lineId < lines.size(); lineId++) {
+                    double voteForVP1 = votesPanel(lineId, verticalIntersectionIdWithMaxVotes.first);
+                    double voteForVP2 = votesRemainedPanel(lineId, vp2candId);
+                    double voteForVP3 = votesRemainedPanel(lineId, vp3candId);
+                    score += std::max({ voteForVP1, voteForVP2, voteForVP3 });
+                }
+
+                scores[i] = score;
+            }
+            std::cout << "done computing scores" << std::endl;
+
+            // sort
+            std::vector<int> sortedPPAndFocalIds(scores.size());
+            for (int i = 0; i < scores.size(); i++)
+                sortedPPAndFocalIds[i] = i;
+
+            std::sort(sortedPPAndFocalIds.begin(), sortedPPAndFocalIds.end(), [&scores](int a, int b){
+                return scores[a] > scores[b];
+            });
+
+            for (int i = 0; i < std::min<size_t>(30, scores.size()); i++){
+                int id = sortedPPAndFocalIds[i];
+                auto & principlePoint = ppAndFocals[id].first;
+                auto & focalLength = ppAndFocals[id].second;
+
+                std::cout << "focal: " << focalLength << "  pp: " << principlePoint << "   score: " << scores[id] << std::endl;
+            }
+
+
+            // collect remained close lines
+            static const double closeLinePairDistanceThreshold = 40;
+            std::map<std::pair<int, int>, double> remainedCloseLineIdPairs;
+            for (int i = 0; i < remainedLines.size(); i++){
+                for (int j = i + 1; j < remainedLines.size(); j++){
+                    double distance = DistanceBetweenTwoLines(remainedLines[i], remainedLines[j]).first;
+                    if (distance < closeLinePairDistanceThreshold){
+                        remainedCloseLineIdPairs[std::make_pair(i, j)] = distance;
+                    }
+                }
+            }
+            std::cout << "close line pair num: " << remainedCloseLineIdPairs.size() << std::endl;
+
+            std::cout << "testing local manhattan consistency ..." << std::endl;
+            // test top scored focals and pps
+            int testNum = std::min<size_t>(10, scores.size());
+            std::vector<double> lmanScores(testNum, 0.0);
+
+            for (int i = 0; i < testNum; i++){
+                int id = sortedPPAndFocalIds[i];
+                auto & principlePoint = ppAndFocals[id].first;
+                auto & focalLength = ppAndFocals[id].second;
+
+                if (std::isnan(focalLength) || std::isinf(focalLength))
+                    continue;
+
+                if (scores[id] <= 0.0)
+                    continue;
+
+                Vec3 vp1v = Concat(vp1p - principlePoint, focalLength);
+                double lmanScore = 0;
+
+                for (auto & p : remainedCloseLineIdPairs) {
+                    auto & line1 = remainedLines[p.first.first];
+                    auto & line2 = remainedLines[p.first.second];
+                    double distance = p.second;
+
+                    Vec3 line1eq = Concat(line1.first - principlePoint, focalLength)
+                        .cross(Concat(line1.second - principlePoint, focalLength));
+                    Vec3 line2eq = Concat(line2.first - principlePoint, focalLength)
+                        .cross(Concat(line2.second - principlePoint, focalLength));
+
+                    Vec3 inter1 = normalize(line1eq.cross(vp1v));
+                    Vec3 inter2 = normalize(line2eq.cross(vp1v));
+
+                    lmanScore += Gaussian(inter1.dot(inter2), 0.1) * Gaussian(distance, 20.0);
+                }
+
+                lmanScores[i] = lmanScore + scores[id];
+            }
+
+            std::sort(sortedPPAndFocalIds.begin(), sortedPPAndFocalIds.begin() + testNum, [&lmanScores](int a, int b){
+                return lmanScores[a] > lmanScores[b];
+            });
+
+            for (int i = 0; i < std::min<size_t>(30, testNum); i++){
+                int id = sortedPPAndFocalIds[i];
+                auto & principlePoint = ppAndFocals[id].first;
+                auto & focalLength = ppAndFocals[id].second;
+
+                std::cout << "focal: " << focalLength << "  pp: " << principlePoint 
+                    << "   score: " << scores[id] << "  lmscore: " << lmanScores[i] << std::endl;
+            }
+            
+            result.principlePoint = ppAndFocals[sortedPPAndFocalIds[0]].first;
+            result.focalLength = ppAndFocals[sortedPPAndFocalIds[0]].second;
+
+            // get horizontal vanishing points
+            result.vanishingPoints.clear();
+            result.vanishingPoints.push_back(vp1);
+            result.verticalVanishingPointId = 0;
+            result.horizontalVanishingPointIds.clear();
+
+            Vec3 vp1v = Concat(vp1p - result.principlePoint, result.focalLength);
+
+            std::vector<Vec3> hvpvs;
+            for (auto & p : remainedCloseLineIdPairs) {
+                auto & line1 = remainedLines[p.first.first];
+                auto & line2 = remainedLines[p.first.second];
+                double distance = p.second;
+
+                Vec3 line1eq = Concat(line1.first - result.principlePoint, result.focalLength)
+                    .cross(Concat(line1.second - result.principlePoint, result.focalLength));
+                Vec3 line2eq = Concat(line2.first - result.principlePoint, result.focalLength)
+                    .cross(Concat(line2.second - result.principlePoint, result.focalLength));
+
+                Vec3 inter1 = normalize(line1eq.cross(vp1v));
+                Vec3 inter2 = normalize(line2eq.cross(vp1v));
+
+                if (inter1.dot(inter2) < 0.05 && distance < 10){
+                    hvpvs.push_back(inter1);
+                    hvpvs.push_back(inter2);
+                }
+            }
+
+            std::cout << "initial horizontal direction num: " << hvpvs.size() << std::endl;
+
+            // merge close horizontal vanishing point directions
+            std::vector<decltype(hvpvs.begin())> mergedHVPVBegins;
+            MergeNearRTree(hvpvs.begin(), hvpvs.end(), std::back_inserter(mergedHVPVBegins), std::false_type(), 0.05);
+            
+            for (auto & b : mergedHVPVBegins){
+                const Vec3 & v = *b;
+                HPoint2 hinter = HPointFromVector(v, result.focalLength) + HPoint2(result.principlePoint);
+                result.vanishingPoints.push_back(hinter);
+            }
+
+            std::cout << "merged horizontal direction num: " << (result.vanishingPoints.size() - 1) << std::endl;
+
+
+            return result;
+        }
+
+
 
 
         LocalManhattanVanishingPointsDetector::Result LocalManhattanVanishingPointsDetector::operator()(
@@ -1794,10 +2303,19 @@ namespace panoramix {
                 line.first -= projCenter;
                 line.second -= projCenter;
             }
-            Result result = estimateWithProjectionCenterAtOriginII(lines);
+            Result result = estimateWithProjectionCenterAtOriginIII(lines);
+            
             for (HPoint2 & vp : result.vanishingPoints) {
                 vp = vp + HPoint2(projCenter);
             }
+            
+            result.horizon.anchor += projCenter;
+            for (auto & hline : result.hlineCands){
+                hline.anchor += projCenter;
+            }
+
+            result.principlePoint += projCenter;
+            
             return result;
         }
 

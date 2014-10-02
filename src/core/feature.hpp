@@ -262,9 +262,9 @@ namespace panoramix {
         class LocalManhattanVanishingPointsDetector {
         public:
             struct Params {
-				inline Params(double maxPPOffset = 150, double minFocal = 40, double maxFocal = 1e5) 
-					: verticalVPAngleRange(M_PI_4 / 3.0), 
-					verticalVPMinDistanceRatioToCenter(3), 
+				inline Params(double maxPPOffset = 200, double minFocal = 40, double maxFocal = 1e5) 
+					: verticalVPAngleRange(M_PI_4 / 4.0), 
+					verticalVPMinDistanceRatioToCenter(1.5), 
 					maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal) {
 				}
 				// the angle between {the line connecting verticalVP and image center} and {the vertical line} 
@@ -277,25 +277,34 @@ namespace panoramix {
                     ar(verticalVPAngleRange, verticalVPMinDistanceRatioToCenter, 
 						maxPrinciplePointOffset, minFocalLength, maxFocalLength);
                 }
+
+                Image image;
             };
             struct Result {
                 std::vector<HPoint2> vanishingPoints;
                 int verticalVanishingPointId;
                 std::vector<std::pair<int, int>> horizontalVanishingPointIds;
                 double focalLength;
+                InfiniteLine2 horizon;
+                Point2 principlePoint;
                 std::vector<int> lineClasses;
                 template <class Archive> inline void serialize(Archive & ar) {
                     ar(vanishingPoints, verticalVanishingPointId,
-                        horizontalVanishingPointIds, focalLength, lineClasses);
+                        horizontalVanishingPointIds, focalLength, horizon, principlePoint,
+                        lineClasses);
                 }
+
+                std::vector<InfiniteLine2> hlineCands;
             };
         public:
             inline explicit LocalManhattanVanishingPointsDetector(const Params & params = Params()) : _params(params) {}
             Result operator() (const std::vector<Line2> & lines, const Point2 & projCenter) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
-            Result estimateWithProjectionCenterAtOrigin(const std::vector<Line2> & lines) const;
-            Result estimateWithProjectionCenterAtOriginII(const std::vector<Line2> & lines) const;
+            //Result estimateWithProjectionCenterAtOrigin(const std::vector<Line2> & lines) const;
+            //Result estimateWithProjectionCenterAtOriginII(const std::vector<Line2> & lines) const;
+            Result estimateWithProjectionCenterAtOriginIII(const std::vector<Line2> & lines) const;
+
             Params _params;
         };
 

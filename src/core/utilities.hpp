@@ -9,25 +9,6 @@
 namespace panoramix {
     namespace core {
 
-        // squared
-        template <class T>
-        inline T Square(const T & v) {
-            return v * v;
-        }
-
-        // gaussian
-        template <class T, class K>
-        inline T Gaussian(const T & x, const K & sigma) {
-            return std::exp(- Square(x / sigma) / 2.0);
-        }
-
-        // pitfall
-        template <class T, class K>
-        inline T Pitfall(const T & x, const K & sigma) {
-            return abs(x) <= sigma ? Square(x / sigma) : 1;
-        }
-
-
         // test value
         // can be used to check whether NaN exists by invoking: HasValue(a, std::isnan)
         template <class T, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
@@ -75,8 +56,23 @@ namespace panoramix {
 
 
 
+        // squared
+        template <class T>
+        inline T Square(const T & v) {
+            return v * v;
+        }
 
+        // gaussian
+        template <class T, class K>
+        inline T Gaussian(const T & x, const K & sigma) {
+            return std::exp(- Square(x / sigma) / 2.0);
+        }
 
+        // pitfall
+        template <class T, class K>
+        inline T Pitfall(const T & x, const K & sigma) {
+            return abs(x) <= sigma ? Square(x / sigma) : 1;
+        }
 
         /// distance functions
         // for real numbers

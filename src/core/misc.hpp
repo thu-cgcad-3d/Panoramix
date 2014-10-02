@@ -12,6 +12,10 @@
 namespace panoramix {
     namespace core {    
 
+        template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>>
+        inline bool IsInfOrNaN(const T & v){
+            return std::isinf(v) || std::isnan(v);
+        }
 
         template <class ContainerT, class ValueT>
         inline bool Contains(const ContainerT & c, const ValueT & v) {
@@ -37,6 +41,7 @@ namespace panoramix {
         inline bool Contains(const std::unordered_set<KeyT, HasherT, KeyeqT, AllocT> & m, const KeyT & k) {
             return m.find(k) != m.end();
         }
+
 
  
         // element of container MUST support PredT(ele) -> bool
