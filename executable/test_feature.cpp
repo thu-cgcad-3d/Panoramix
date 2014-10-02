@@ -31,7 +31,8 @@ TEST(Feature, LineSegmentExtractor) {
 TEST(Feature, VanishingPointsDetector) {
     core::LineSegmentExtractor lineseg;
     core::VanishingPointsDetector vpdetector;
-    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/sampled_1.png");
+    core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg");
+    core::ResizeToMakeWidthUnder(im, 1000);
     auto lines = lineseg(im);
     std::vector<int> lineClasses;
     std::array<core::HPoint2, 3> vps;
@@ -45,27 +46,50 @@ TEST(Feature, VanishingPointsDetector) {
         << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB)
         << vis::manip2d::SetThickness(2) <<
         classifiedLines
-        << vis::manip2d::Show();
+        << vis::manip2d::Show(0);
 }
 
 
 DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
     core::LineSegmentExtractor lineseg;
-    core::LocalManhattanVanishingPointsDetector vpdetector;
+    
+    core::LocalManhattanVanishingPointsDetector::Params params;
 	core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg");
-	core::ResizeToMakeWidthUnder(im, 1000);
+    core::ResizeToMakeWidthUnder(im, 1000);
+    params.image = im;
+
+    core::LocalManhattanVanishingPointsDetector vpdetector(params);	
 
 	std::vector<core::Line2> lines;
     core::LocalManhattanVanishingPointsDetector::Result result;
     
     //lines = lineseg(im);
     core::LoadFromDisk(ProjectDataDirStrings::Serialization + "/temp.state", lines);
+
     result = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
+
+    std::vector<core::Classified<core::Line2>> classifiedLines;
+    for (int i = 0; i < lines.size(); i++) {
+        classifiedLines.push_back({ result.lineClasses[i], lines[i] });
+    }
+
+    vis::ColorTable colorTable({ vis::ColorTag::Red, vis::ColorTag::Blue, vis::ColorTag::Green,
+        vis::ColorTag::Yellow, vis::ColorTag::Magenta, vis::ColorTag::Orange },
+        vis::ColorTag::White);
+    vis::Visualizer2D(im)
+        << vis::manip2d::SetColorTable(colorTable)
+        << vis::manip2d::SetThickness(2)
+        << classifiedLines
+        << vis::manip2d::SetColor(vis::ColorTag::Black)
+        << result.hlineCands
+        << vis::manip2d::SetColor(vis::ColorTag::Red)
+        << result.horizon
+        << vis::manip2d::Show(0);
     
     return;
     
 
-    std::vector<core::Classified<core::Line2>> classifiedLines;
+   /* std::vector<core::Classified<core::Line2>> classifiedLines;
     for (int i = 0; i < lines.size(); i++) {
         int c = -1;
         if (result.lineClasses[i] == 0){
@@ -84,14 +108,12 @@ DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
         classifiedLines.push_back({ c, lines[i] });
 	}
 
-	vis::ColorTable colorTable({ vis::ColorTag::Red, vis::ColorTag::Blue, vis::ColorTag::Green, 
-        vis::ColorTag::Yellow, vis::ColorTag::Magenta, vis::ColorTag::Orange }, 
-        vis::ColorTag::White);
+	
     vis::Visualizer2D(im)
 		<< vis::manip2d::SetColorTable(colorTable)
         << vis::manip2d::SetThickness(2) 
 		<< classifiedLines
-        << vis::manip2d::Show(0);
+        << vis::manip2d::Show(0);*/
 }
 
 

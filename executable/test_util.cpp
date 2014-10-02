@@ -5,11 +5,41 @@
 #include <list>
 
 #include "gtest/gtest.h"
+#include "test_config.hpp"
 
 using namespace panoramix;
 
 double randf(){
     return (std::rand() % 100000) / 100000.0;
+}
+
+TEST(UtilTest, HasValue){
+
+    std::vector<core::Ratio<core::Line2, double>> hlines = {
+        {
+            { {1.0, 2.0}, {4.0, 5.0} },
+            0.0
+        },
+        {
+            { { 1.0, 2.0 }, { NAN, 5.0 } },
+            0.0
+        },
+        {
+            { { 1.0, 2.0 }, { 0.0, 5.0 } },
+            0.0
+        },
+        {
+            { { 1.0, 2.0 }, { 4.0, 5.0 } },
+            0.0
+        },
+        {
+            { { 1.0, 2.0 }, { 4.0, 5.0 } },
+            0.0
+        }
+    };
+
+    ASSERT_TRUE(core::HasValue(hlines, std::isnan<double>));
+    ASSERT_FALSE(core::HasValue(hlines, std::isinf<double>));
 }
 
 TEST(UtilTest, Distance){
@@ -524,7 +554,11 @@ TEST(UtilTest, TopologicalSort){
         std::random_shuffle(verts.begin(), verts.end());
         struct Edge { int from, to; };
         std::vector<Edge> edges(500000);
-        std::generate(edges.begin(), edges.end(), [&verts](){return Edge{ rand() % verts.size(), rand() % verts.size() }; });
+        std::generate(edges.begin(), edges.end(), [&verts](){
+            int v1 = rand() % verts.size();
+            int v2 = rand() % verts.size();
+            return v1 < v2 ? Edge{ v1, v2 } : Edge{ v2, v1 };
+        });
         std::vector<int> sortedVerts;
         core::TopologicalSort(verts.begin(), verts.end(), std::back_inserter(sortedVerts), [&edges](int vert){
             std::vector<int> predecessors;
@@ -538,7 +572,7 @@ TEST(UtilTest, TopologicalSort){
             auto fromPos = std::find(sortedVerts.begin(), sortedVerts.end(), e.from) - sortedVerts.begin();
             auto toPos = std::find(sortedVerts.begin(), sortedVerts.end(), e.to) - sortedVerts.begin();
 
-            EXPECT_TRUE(fromPos <= toPos);
+            ASSERT_TRUE(fromPos <= toPos);
         }
     }
 
@@ -548,6 +582,5 @@ TEST(UtilTest, TopologicalSort){
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
-    //testing::FLAGS_gtest_filter = "UtilTest.DFS";
     return RUN_ALL_TESTS();
 }

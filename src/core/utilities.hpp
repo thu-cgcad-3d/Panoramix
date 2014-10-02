@@ -28,16 +28,46 @@ namespace panoramix {
         }
 
 
-        // test infinite value
-        template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>>
-        inline bool HasInfiniteValue(const T & v) {
-            return std::isinf(v);
+        // test value
+        // can be used to check whether NaN exists by invoking: HasValue(a, std::isnan)
+        template <class T, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
+        inline bool HasValue(const T & v, const TesterT & tester) {
+            return tester(v);
         }
 
-        template <class T, int N>
-        inline bool HasInfiniteValue(const Vec<T, N> & v){
+        template <class T, int N, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
+        inline bool HasValue(const Vec<T, N> & v, const TesterT & tester){
             for (int i = 0; i < N; i++){
-                if (std::isinf(v[i]))
+                if (tester(v[i]))
+                    return true;
+            }
+            return false;
+        }
+
+        template <class T, class S, class TesterT>
+        inline bool HasValue(const Ratio<T, S> & r, const TesterT & tester){
+            return HasValue(r.numerator, tester) || HasValue(r.denominator, tester);
+        }
+
+        template <class T, int N, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
+        inline bool HasValue(const Line<T, N> & v, const TesterT & tester){
+            return HasValue(v.first, tester) || HasValue(v.second, tester);
+        }
+
+        template <class T, int N, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
+        inline bool HasValue(const InfiniteLine<T, N> & v, const TesterT & tester){
+            return HasValue(v.anchor, tester) || HasValue(v.direction, tester);
+        }
+
+        template <class T, int N, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
+        inline bool HasValue(const Box<T, N> & b, const TesterT & tester){
+            return HasValue(b.minCorner, tester) || HasValue(b.maxCorner, tester);
+        }
+
+        template <class T, class AllocT, class TesterT>
+        inline bool HasValue(const std::vector<T, AllocT> & v, const TesterT & tester) {
+            for (auto & e : v){
+                if (HasValue(e, tester))
                     return true;
             }
             return false;
