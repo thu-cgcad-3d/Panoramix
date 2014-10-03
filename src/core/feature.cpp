@@ -1143,6 +1143,49 @@ namespace panoramix {
                 return HPointFromVector(d, focal) + HPoint2(pp);
             }
 
+
+            int AppendPPAndFocalData(
+                const std::vector<Point2> & vp2cands, const std::vector<int> & vp2candIdInRemainedIntersections,
+                const std::vector<Point2> & vp3cands, const std::vector<int> & vp3candIdInRemainedIntersections,
+                const Point2 & vp1p, int vp1id, 
+                const ImageWithType<double> & votesPanel, const ImageWithType<double> & votesRemainedPanel,
+                const std::vector<Line2> & lines,
+                double maxPrinciplePointOffset, double minFocalLength, double maxFocalLength,
+                std::vector<std::pair<Point2, double>> & ppAndFocals, std::vector<float> & scores){
+                auto ppAndFocalsThisTime = ComputeProjectionCenterAndFocalLength(vp2cands, vp3cands, vp1p);
+
+                // compute scores
+                std::cout << ".";
+                std::vector<float> scoresThisTime(ppAndFocalsThisTime.size(), 0);
+
+                for (int i = 0; i < ppAndFocalsThisTime.size(); i++){
+                    int vp2candId = vp2candIdInRemainedIntersections[i];
+                    int vp3candId = vp3candIdInRemainedIntersections[i];
+
+                    auto & principlePoint = ppAndFocalsThisTime[i].first;
+                    auto & focalLength = ppAndFocalsThisTime[i].second;
+                    if (std::isnan(focalLength) || std::isinf(focalLength)){
+                        continue;
+                    }
+                    if (!(norm(principlePoint) < maxPrinciplePointOffset &&
+                        IsBetween(focalLength, minFocalLength, maxFocalLength))){
+                        continue;
+                    }
+                    // get votes from each line
+                    float score = 0.0;
+                    for (int lineId = 0; lineId < lines.size(); lineId++) {
+                        double voteForVP1 = votesPanel(lineId, vp1id);
+                        double voteForVP2 = votesRemainedPanel(lineId, vp2candId);
+                        double voteForVP3 = votesRemainedPanel(lineId, vp3candId);
+                        score += std::max({ voteForVP1, voteForVP2, voteForVP3 });
+                    }
+                    scoresThisTime[i] = score;
+                }
+                scores.insert(scores.end(), scoresThisTime.begin(), scoresThisTime.end());
+                ppAndFocals.insert(ppAndFocals.end(), ppAndFocalsThisTime.begin(), ppAndFocalsThisTime.end());
+                return scoresThisTime.size();
+            }
+
         }
 
 
@@ -2109,20 +2152,25 @@ namespace panoramix {
             Point2 vp1ccenter = vp1.value() / 2.0;
             double vp1cdist = norm(vp1).value();
 
-            int maxNum = 30000;
+            int maxNumPerTime = 5e4;
 
             std::vector<Point2> vp2cands, vp3cands;
-            vp2cands.reserve(maxNum);
-            vp3cands.reserve(maxNum);
+            vp2cands.reserve(maxNumPerTime);
+            vp3cands.reserve(maxNumPerTime);
             std::vector<int> vp2candIdInRemainedIntersections, vp3candIdInRemainedIntersections;
-            vp2candIdInRemainedIntersections.reserve(maxNum);
-            vp3candIdInRemainedIntersections.reserve(maxNum);
+            vp2candIdInRemainedIntersections.reserve(maxNumPerTime);
+            vp3candIdInRemainedIntersections.reserve(maxNumPerTime);
+
+            std::vector<float> scores;
+            std::vector<std::pair<Point2, double>> ppAndFocals;
+            scores.reserve(maxNumPerTime * 4);
+            ppAndFocals.reserve(maxNumPerTime * 4);
 
             std::cout << "collecting all vp2-vp3 combinations ..." << std::endl;
 
             for (int i = 0; i < remainedIntersections.size(); i++) {
-                if (vp2cands.size() >= maxNum)
-                    break;
+                /*if (vp2cands.size() >= maxNum)
+                    break;*/
 
                 auto & vp2cand = remainedIntersections[i];
                 Point2 vp2candp = vp2cand.value();
@@ -2136,8 +2184,8 @@ namespace panoramix {
                 double vp12dist = norm(vp1p - vp2candp);
 
                 for (int j = i + 1; j < remainedIntersections.size(); j++) {
-                    if (vp2cands.size() >= maxNum)
-                        break;
+                    /*if (vp2cands.size() >= maxNum)
+                        break;*/
 
                     auto & vp3cand = remainedIntersections[j];
                     Point2 vp3candp = vp3cand.value();
@@ -2152,60 +2200,71 @@ namespace panoramix {
                     vp3cands.push_back(vp3candp);
                     vp2candIdInRemainedIntersections.push_back(i);
                     vp3candIdInRemainedIntersections.push_back(j);
+
+                    if (vp2cands.size() >= maxNumPerTime){
+                        std::cout << ".";
+                        AppendPPAndFocalData(vp2cands, vp2candIdInRemainedIntersections, vp3cands, vp3candIdInRemainedIntersections,
+                            vp1p, verticalIntersectionIdWithMaxVotes.first, votesPanel, votesRemainedPanel,
+                            lines, _params.maxPrinciplePointOffset, _params.minFocalLength, _params.maxFocalLength, 
+                            ppAndFocals, scores);
+
+                        vp2cands.clear();
+                        vp3cands.clear();
+                        vp2candIdInRemainedIntersections.clear();
+                        vp3candIdInRemainedIntersections.clear();
+                    }
                 }
             }
 
-            std::cout << "done collecting all valid vp2-vp3 combinations, total num: " << vp2cands.size() << std::endl;
+            if(vp2cands.size() > 0) { // finalize
+                std::cout << "." << std::endl;
+                AppendPPAndFocalData(vp2cands, vp2candIdInRemainedIntersections, vp3cands, vp3candIdInRemainedIntersections,
+                    vp1p, verticalIntersectionIdWithMaxVotes.first, votesPanel, votesRemainedPanel,
+                    lines, _params.maxPrinciplePointOffset, _params.minFocalLength, _params.maxFocalLength,
+                    ppAndFocals, scores);
 
-            std::cout << "computing pp and focals ..." << std::endl;
-            auto ppAndFocals = ComputeProjectionCenterAndFocalLength(vp2cands, vp3cands, vp1p);
-            std::cout << "done computing pp and focals" << std::endl;
-
-            // compute scores
-            std::cout << "computing scores ..." << std::endl;
-            std::vector<double> scores(ppAndFocals.size(), -1.0);
-            for (int i = 0; i < scores.size(); i++){
-                int vp2candId = vp2candIdInRemainedIntersections[i];
-                int vp3candId = vp3candIdInRemainedIntersections[i];
-
-                auto & principlePoint = ppAndFocals[i].first;
-                auto & focalLength = ppAndFocals[i].second;
-                if (std::isnan(focalLength) || std::isinf(focalLength)){
-                    continue;
-                }
-                if (!(norm(principlePoint) < _params.maxPrinciplePointOffset &&
-                    IsBetween(focalLength, _params.minFocalLength, _params.maxFocalLength))){
-                    continue;
-                }
-
-                // get votes from each line
-                double score = 0.0;
-                for (int lineId = 0; lineId < lines.size(); lineId++) {
-                    double voteForVP1 = votesPanel(lineId, verticalIntersectionIdWithMaxVotes.first);
-                    double voteForVP2 = votesRemainedPanel(lineId, vp2candId);
-                    double voteForVP3 = votesRemainedPanel(lineId, vp3candId);
-                    score += std::max({ voteForVP1, voteForVP2, voteForVP3 });
-                }
-
-                scores[i] = score;
+                vp2cands.clear();
+                vp3cands.clear();
+                vp2candIdInRemainedIntersections.clear();
+                vp3candIdInRemainedIntersections.clear();
             }
-            std::cout << "done computing scores" << std::endl;
 
-            // sort
-            std::vector<int> sortedPPAndFocalIds(scores.size());
-            for (int i = 0; i < scores.size(); i++)
-                sortedPPAndFocalIds[i] = i;
+            std::cout << "done collecting all valid vp2-vp3 combination scores and configs, total num: " << ppAndFocals.size() << std::endl;
 
-            std::sort(sortedPPAndFocalIds.begin(), sortedPPAndFocalIds.end(), [&scores](int a, int b){
-                return scores[a] > scores[b];
-            });
+            // sort and ...
+            // only keep the best N
+            {
+                // sort
+                std::vector<int> sortedPPAndFocalIds(scores.size());
+                for (int i = 0; i < scores.size(); i++)
+                    sortedPPAndFocalIds[i] = i;
 
-            for (int i = 0; i < std::min<size_t>(30, scores.size()); i++){
-                int id = sortedPPAndFocalIds[i];
-                auto & principlePoint = ppAndFocals[id].first;
-                auto & focalLength = ppAndFocals[id].second;
+                std::sort(sortedPPAndFocalIds.begin(), sortedPPAndFocalIds.end(), [&scores](int a, int b){
+                    return scores[a] > scores[b];
+                });
 
-                std::cout << "focal: " << focalLength << "  pp: " << principlePoint << "   score: " << scores[id] << std::endl;
+                // keep the best N
+                static const int N = 1e4;
+                int keptSize = std::min<size_t>(N, ppAndFocals.size());
+                std::vector<float> keptScores;
+                std::vector<std::pair<Point2, double>> keptPPAndFocals;
+                keptScores.reserve(keptSize);
+                keptPPAndFocals.reserve(keptSize);
+                for (int i = 0; i < keptSize; i++){
+                    keptScores.push_back(scores[sortedPPAndFocalIds[i]]);
+                    keptPPAndFocals.push_back(ppAndFocals[sortedPPAndFocalIds[i]]);
+                }
+                scores = std::move(keptScores);
+                ppAndFocals = std::move(keptPPAndFocals);
+            }
+
+
+            IF_DEBUG_USING_VISUALIZERS{
+                for (int i = 0; i < std::min<size_t>(30, scores.size()); i++){
+                    auto & principlePoint = ppAndFocals[i].first;
+                    auto & focalLength = ppAndFocals[i].second;
+                    std::cout << "focal: " << focalLength << "  pp: " << principlePoint << "   score: " << scores[i] << std::endl;
+                }
             }
 
 
@@ -2220,15 +2279,12 @@ namespace panoramix {
                     }
                 }
             }
-            std::cout << "close line pair num: " << remainedCloseLineIdPairs.size() << std::endl;
 
+            std::cout << "close line pair num: " << remainedCloseLineIdPairs.size() << std::endl;
             std::cout << "testing local manhattan consistency ..." << std::endl;
-            // test top scored focals and pps
-            int testNum = std::min<size_t>(10, scores.size());
             std::map<int, double> lmanScores;
 
-            for (int i = 0; i < testNum; i++){
-                int id = sortedPPAndFocalIds[i];
+            for (int id = 0; id < scores.size(); id++){
                 auto & principlePoint = ppAndFocals[id].first;
                 auto & focalLength = ppAndFocals[id].second;
 
@@ -2257,24 +2313,45 @@ namespace panoramix {
                     lmanScore += Gaussian(inter1.dot(inter2), 0.1) * Gaussian(distance, 20.0);
                 }
 
-                lmanScores[id] = lmanScore + scores[id];
+                static const double lmFactor = 0.5;
+                lmanScores[id] = lmanScore * lmFactor + scores[id] * (1 - lmFactor);
             }
 
-            std::sort(sortedPPAndFocalIds.begin(), sortedPPAndFocalIds.begin() + testNum, [&lmanScores](int a, int b){
-                return lmanScores[a] > lmanScores[b];
-            });
+            {
+                // sort
+                std::vector<int> sortedPPAndFocalIds(scores.size());
+                for (int i = 0; i < scores.size(); i++)
+                    sortedPPAndFocalIds[i] = i;
 
-            for (int i = 0; i < std::min<size_t>(30, testNum); i++){
-                int id = sortedPPAndFocalIds[i];
-                auto & principlePoint = ppAndFocals[id].first;
-                auto & focalLength = ppAndFocals[id].second;
+                std::sort(sortedPPAndFocalIds.begin(), sortedPPAndFocalIds.end(), [&lmanScores](int a, int b){
+                    return lmanScores[a] > lmanScores[b];
+                });
 
-                std::cout << "focal: " << focalLength << "  pp: " << principlePoint 
-                    << "   score: " << scores[id] << "  lmscore: " << lmanScores[i] << std::endl;
+                int keptSize = scores.size();
+                std::vector<float> keptScores;
+                std::vector<std::pair<Point2, double>> keptPPAndFocals;
+                keptScores.reserve(keptSize);
+                keptPPAndFocals.reserve(keptSize);
+                for (int i = 0; i < keptSize; i++){
+                    keptScores.push_back(scores[sortedPPAndFocalIds[i]]);
+                    keptPPAndFocals.push_back(ppAndFocals[sortedPPAndFocalIds[i]]);
+                }
+                scores = std::move(keptScores);
+                ppAndFocals = std::move(keptPPAndFocals);
+            }
+
+
+            IF_DEBUG_USING_VISUALIZERS{
+                for (int i = 0; i < std::min<size_t>(30, scores.size()); i++){
+                    auto & principlePoint = ppAndFocals[i].first;
+                    auto & focalLength = ppAndFocals[i].second;
+                    std::cout << "focal: " << focalLength << "  pp: " << principlePoint
+                        << "   score: " << scores[i] << "  lmscore: " << lmanScores[i] << std::endl;
+                }
             }
             
-            result.principlePoint = ppAndFocals[sortedPPAndFocalIds[0]].first;
-            result.focalLength = ppAndFocals[sortedPPAndFocalIds[0]].second;
+            result.principlePoint = ppAndFocals.front().first;
+            result.focalLength = ppAndFocals.front().second;
 
             // get horizontal vanishing points
             result.vanishingPoints.clear();
@@ -2302,7 +2379,7 @@ namespace panoramix {
                 Vec3 inter1 = normalize(line1eq.cross(vp1v));
                 Vec3 inter2 = normalize(line2eq.cross(vp1v));
 
-                if (inter1.dot(inter2) < 0.05 && distance < 10){
+                if (inter1.dot(inter2) < 0.03 && distance < 30){
                     hvpvs.emplace_back(inter1, inter2);
                 }
             }
@@ -2343,12 +2420,12 @@ namespace panoramix {
                 for (int j = 0; j < mergedHVPVs.size(); j++){
                     auto & hvpvPairRecorded = mergedHVPVs[j];
                     double dist1 = std::min({
-                        Distance(hvpvPair.first, hvpvPairRecorded.first),
-                        Distance(hvpvPair.second, hvpvPairRecorded.second)
+                        AngleBetweenUndirectedVectors(hvpvPair.first, hvpvPairRecorded.first),
+                        AngleBetweenUndirectedVectors(hvpvPair.second, hvpvPairRecorded.second)
                     });
                     double dist2 = std::min({
-                        Distance(hvpvPair.first, hvpvPairRecorded.second),
-                        Distance(hvpvPair.second, hvpvPairRecorded.first)
+                        AngleBetweenUndirectedVectors(hvpvPair.first, hvpvPairRecorded.second),
+                        AngleBetweenUndirectedVectors(hvpvPair.second, hvpvPairRecorded.first)
                     });
                     double dist = std::min(dist1, dist2);
                     if (dist <= minDist){
@@ -2387,6 +2464,9 @@ namespace panoramix {
                 int hvpvId = hvpvIdOfVP[c];
                 if (hvpvId != -1){
                     bool isAtFirst = vpIsAtFirstInHVPV[lineClasses[i]];
+                    if (oldHVPVIdToMergedHVPVIdSwapped[hvpvId]){
+                        isAtFirst = !isAtFirst;
+                    }
                     auto & orthoPair = result.horizontalVanishingPointIds[oldHVPVIdToMergedHVPVId[hvpvId]];
                     lineClasses[i] = isAtFirst ? orthoPair.first : orthoPair.second;
                 }
