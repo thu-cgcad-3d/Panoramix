@@ -29,9 +29,12 @@ TEST(Feature, LineSegmentExtractor) {
 }
 
 TEST(Feature, VanishingPointsDetector) {
-    core::LineSegmentExtractor lineseg;
+    core::LineSegmentExtractor::Params lsParams;
+    lsParams.minLength = 20;
+    lsParams.xBorderWidth = lsParams.yBorderWidth = 20;
+    core::LineSegmentExtractor lineseg(lsParams);
     core::VanishingPointsDetector vpdetector;
-    core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg");
+    core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
     core::ResizeToMakeWidthUnder(im, 1000);
     auto lines = lineseg(im);
     std::vector<int> lineClasses;
@@ -54,7 +57,7 @@ DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
     core::LineSegmentExtractor lineseg;
     
     core::LocalManhattanVanishingPointsDetector::Params params;
-	core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/cuboids.png");
+	core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg");
     core::ResizeToMakeWidthUnder(im, 1000);
     params.image = im;
 
@@ -65,25 +68,29 @@ DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
     
     lines = lineseg(im);
     //core::LoadFromDisk(ProjectDataDirStrings::Serialization + "/temp.state", lines);
-
     result = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
 
-    std::vector<core::Classified<core::Line2>> classifiedLines;
+    
+    auto ctable = vis::CreateGreyColorTableWithSize(result.vanishingPoints.size());
+    ctable.randomize();
+
+    auto viz = vis::Visualizer2D(im)
+        << vis::manip2d::SetColorTable(ctable)
+        << vis::manip2d::SetThickness(4);
+  
     for (int i = 0; i < lines.size(); i++) {
-        classifiedLines.push_back({ result.lineClasses[i], lines[i] });
+        viz //<< vis::manip2d::SetThickness(i + 1)
+            << vis::manip2d::SetColor(ctable[result.lineClasses[i]])
+            << lines[i];
     }
 
-    vis::ColorTable colorTable({ vis::ColorTag::Red, vis::ColorTag::Blue, vis::ColorTag::Green,
-        vis::ColorTag::Yellow, vis::ColorTag::Magenta, vis::ColorTag::Orange },
-        vis::ColorTag::White);
-    vis::Visualizer2D(im)
-        << vis::manip2d::SetColorTable(colorTable)
-        << vis::manip2d::SetThickness(2)
-        << classifiedLines
-        << vis::manip2d::SetColor(vis::ColorTag::Black)
+    viz << vis::manip2d::SetColor(vis::ColorTag::Red)
+        << result.vanishingPoints;
+
+    viz /*<< vis::manip2d::SetColor(vis::ColorTag::Black)
         << result.hlineCands
         << vis::manip2d::SetColor(vis::ColorTag::Red)
-        << result.horizon
+        << result.horizon*/
         << vis::manip2d::Show(0);
     
     return;

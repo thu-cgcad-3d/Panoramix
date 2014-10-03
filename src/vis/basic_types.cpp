@@ -99,6 +99,8 @@ namespace panoramix {
             _exceptionalColor = ColorFromTag(exceptColor);
         }
 
+        void ColorTable::randomize() { std::random_shuffle(_colors.begin(), _colors.end()); }
+
         const ColorTable & PredefinedColorTable(ColorTableDescriptor descriptor) {
            
             static const ColorTable allColorTable = {
@@ -213,6 +215,15 @@ namespace panoramix {
             
         }
 
+        ColorTable CreateGreyColorTableWithSize(int sz) {
+            auto exeptColor = ColorFromTag(ColorTag::Blue);
+            Color full(255, 255, 255);
+            std::vector<Color> colors(sz);
+            for (int i = 0; i < sz; i++){
+                colors[i] = double(i) * full / double(sz);
+            }
+            return ColorTable(colors, exeptColor);
+        }
 
 
         OpenGLShaderSource::OpenGLShaderSource(OpenGLShaderSourceDescriptor d) {

@@ -422,10 +422,19 @@ namespace panoramix {
 
 
         // for vectors
+
+        // returns [0, pi]
         template <class T, int N>
         inline T AngleBetweenDirections(const Vec<T, N> & v1, const Vec<T, N> & v2) {
             auto s = v1.dot(v2) / norm(v1) / norm(v2);
             return s >= 1.0 ? 0.0 : (s <= -1.0 ? M_PI : acos(s));
+        }
+
+        // returns [0, pi/2]
+        template <class T, int N>
+        inline T AngleBetweenUndirectedVectors(const Vec<T, N> & v1, const Vec<T, N> & v2) {
+            auto s = abs(v1.dot(v2) / norm(v1) / norm(v2));
+            return s >= 1.0 ? 0.0 : acos(s);
         }
 
         template <class T, int N>

@@ -87,12 +87,15 @@ namespace panoramix {
 
             const Color & roundedAt(int claz) const { return claz < 0 ? _exceptionalColor : _colors[claz % _colors.size()]; }
 
+            void randomize();
+
         private:
             std::vector<Color> _colors;
             Color _exceptionalColor;
         };
 
         const ColorTable & PredefinedColorTable(ColorTableDescriptor descriptor);
+        ColorTable CreateGreyColorTableWithSize(int sz);
 
 
 

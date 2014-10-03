@@ -941,10 +941,16 @@ namespace panoramix {
         namespace {
 
             struct LineVPScoreFunctor {
-                inline LineVPScoreFunctor(double angleThres = M_PI_4, double s = 0.1) : angleThreshold(angleThres), sigma(s) {}
-                inline double operator()(double angle, double lengthRatio) const {
-                    return exp(-(angle / angleThreshold) * (angle / angleThreshold) / sigma / sigma / 2) + 
-                        0.5 * lengthRatio;
+                inline LineVPScoreFunctor(double angleThres = M_PI / 3.0, double s = 0.1) 
+                : angleThreshold(angleThres), sigma(s) {}
+                inline double operator()(double angle, bool liesOnLine) const {
+                    if (angle >= angleThreshold)
+                        return 0;
+                    if (liesOnLine)
+                        return 0;
+                    double vote = (1 - (1 / angleThreshold) * angle);
+                    vote = exp(-Square(1 - vote) / sigma / sigma / 2);
+                    return vote;
                 }
                 double angleThreshold, sigma;
             };
@@ -955,21 +961,17 @@ namespace panoramix {
                 size_t nlines = lines.size();
                 size_t npoints = points.size();
                 ImageWithType<double> votes = ImageWithType<double>::zeros(nlines, npoints);
-                double maxLineLen = 0;
-                for (auto & line : lines) {
-                    if (line.length() > maxLineLen)
-                        maxLineLen = line.length();
-                }
                 for (size_t i = 0; i < nlines; i++) {
                     auto & line = lines[i];
                     for (int j = 0; j < npoints; j++) {
                         const HPoint2 & point = points[j];
-                        Vec2 mid2vp = (point - HPoint2(line.center())).numerator;
-                        double angle = std::min(AngleBetweenDirections(mid2vp, line.direction()),
-                            AngleBetweenDirections(-mid2vp, line.direction()));
-                        double score = scoreFun(angle, line.length() / maxLineLen);
+                        Vec2 mid2vp = (point - HPoint2(line.center())).value();
+                        // project point on line
+                        double proj = mid2vp.dot(normalize(line.direction()));
+                        bool liesOnLine = abs(proj) <= line.length() / 2.0;
+                        double angle = AngleBetweenUndirectedVectors(mid2vp, line.direction());
+                        double score = scoreFun(angle, liesOnLine);
                         if (std::isinf(score) || std::isnan(score)) {
-                            //std::cout << "!" << std::endl;
                             score = 0.0;
                         }
                         votes(i, j) = score;
@@ -994,11 +996,6 @@ namespace panoramix {
                     }
                 }
                 return lineClasses;
-            }
-
-            void AdjustVanishingPointsUsingClassifiedLines(const std::vector<Line2> & lines, const std::vector<int> & lineClasses, 
-                std::vector<HPoint2> & vps){
-                // TODO
             }
 
 
@@ -1127,6 +1124,19 @@ namespace panoramix {
                 return dirs;
             }
 
+            ImageWithType<double> GetLineLengthRatios(const std::vector<Line2> & lines){
+                // get max line length
+                double maxLineLen = 0;
+                for (auto & line : lines) {
+                    if (line.length() > maxLineLen)
+                        maxLineLen = line.length();
+                }
+                ImageWithType<double> lineLengthRatios(lines.size(), 1);
+                for (int i = 0; i < lines.size(); i++){
+                    lineLengthRatios(i) = lines[i].length() / maxLineLen;
+                }
+                return lineLengthRatios;
+            }
 
         }
 
@@ -1134,7 +1144,9 @@ namespace panoramix {
         std::tuple<std::array<HPoint2, 3>, double, std::vector<int>> VanishingPointsDetector::estimateWithProjectionCenterAtOrigin (
             const std::vector<Line2> & lines) const {
 
-            double scoreThreshold = 0.6;
+            // get max line length
+            auto lineLengthRatios = GetLineLengthRatios(lines);
+
             std::vector<int> lineClasses(lines.size(), -1);
 
             // get all intersections
@@ -1145,25 +1157,28 @@ namespace panoramix {
             RefineIntersections(intersections, intersectionMakerLineIds);
             //std::cout << "intersection num: " << intersections.size() << std::endl;
 
-            // vote all lines for all intersections
-            std::vector<double> votesForIntersections(intersections.size(), 0.0);
-            // nlines x npoints
+            // nlines x npoints (without consideration of line length ratios)
             ImageWithType<double> votesPanel = LinesVotesToPoints(intersections, lines);
+
+            // vote all lines for all intersections (with consideration of line length ratios)
+            std::vector<double> votesForIntersections(intersections.size(), 0.0);            
             for (int i = 0; i < intersections.size(); i++) {
-                votesForIntersections[i] = cv::sum(votesPanel.col(i)).val[0];
+                votesForIntersections[i] = votesPanel.col(i).dot(lineLengthRatios);
             }
 
             // get vp1
             auto intersectionIdWithMaxVotes = std::distance(votesForIntersections.begin(),
                 std::max_element(votesForIntersections.begin(), votesForIntersections.end()));
             const HPoint2 & vp1 = intersections[intersectionIdWithMaxVotes];
-            //std::cout << "vp1: " << vp1.value() << std::endl;
+            std::cout << "vp1: " << vp1.value() << std::endl;
+            std::cout << "score: " << votesForIntersections[intersectionIdWithMaxVotes] << std::endl;
+
 
             // classify lines for vp1 to be 0, and collect remained lines
             std::vector<Line2> remainedLines;
             remainedLines.reserve(lines.size() / 2);
             for (int i = 0; i < lines.size(); i++) {
-                if (votesPanel(i, intersectionIdWithMaxVotes) > 0.5) {
+                if (votesPanel(i, intersectionIdWithMaxVotes) > 0.8) {
                     lineClasses[i] = 0;
                 } else {
                     remainedLines.push_back(lines[i]);
@@ -1261,7 +1276,8 @@ namespace panoramix {
             }
 
             std::array<HPoint2, 3> vps = { { vp1, vp2, vp3 } };
-            lineClasses = ClassifyLines(LinesVotesToPoints(vps, lines), scoreThreshold);
+
+            lineClasses = ClassifyLines(LinesVotesToPoints(vps, lines), 0.5);
             return std::make_tuple(vps, curFocal, lineClasses);
         }
 
@@ -1943,11 +1959,14 @@ namespace panoramix {
         LocalManhattanVanishingPointsDetector::Result LocalManhattanVanishingPointsDetector::estimateWithProjectionCenterAtOriginIII(
             const std::vector<Line2> & lines) const {
 
-            Point2 offseted(_params.image.cols / 2.0, _params.image.rows / 2.0);
+            //Point2 offseted(_params.image.cols / 2.0, _params.image.rows / 2.0);
+
+            auto lineLengthRatios = GetLineLengthRatios(lines);
 
             std::cout << "line num: " << lines.size() << std::endl;
 
             Box2 bbox = BoundingBoxOfContainer(lines);
+            //auto diag = bbox.maxCorner - bbox.minCorner;
             double scale = norm(bbox.minCorner, bbox.maxCorner);
 
             Result result;
@@ -1972,7 +1991,7 @@ namespace panoramix {
             ImageWithType<double> votesPanel = LinesVotesToPoints(intersections, lines); //// TODO: bottleneck!!!
             for (int i = 0; i < intersections.size(); i++) {
                 intersectionIdsWithVotes[i].first = i;
-                intersectionIdsWithVotes[i].second = cv::sum(votesPanel.col(i)).val[0];
+                intersectionIdsWithVotes[i].second = votesPanel.col(i).dot(lineLengthRatios);
             }
 
             // sort all intersectoins in votings descending order
@@ -1985,12 +2004,18 @@ namespace panoramix {
             std::pair<int, double> verticalIntersectionIdWithMaxVotes = { -1, 0.0 };
             for (auto & idWithVotes : intersectionIdsWithVotes){
                 auto & direction = intersections[idWithVotes.first];
-                double angle = atan2(abs(direction.numerator[0]), abs(direction.numerator[1]));
+                double angle = AngleBetweenUndirectedVectors(Vec2(0, 1), direction.numerator);
                 if (angle < _params.verticalVPAngleRange &&
-                    norm(direction.numerator) > abs(direction.denominator) * scale * _params.verticalVPMinDistanceRatioToCenter){
+                    norm(direction.value()) >  scale / 2.0 * _params.verticalVPMinDistanceRatioToCenter){
                     verticalIntersectionIdWithMaxVotes = idWithVotes;
                     break;
                 }
+            }
+
+            {
+                auto & direction = intersections[verticalIntersectionIdWithMaxVotes.first];
+                double angle = AngleBetweenUndirectedVectors(Vec2(0, 1), direction.numerator);
+                std::cout << "angle: " << angle << std::endl;
             }
 
             assert(verticalIntersectionIdWithMaxVotes.first != -1 &&
@@ -2003,7 +2028,7 @@ namespace panoramix {
             std::cout << "vp1: " << vp1.value() << std::endl;
 
             // refine vp1
-            double thresholdVotesForVP1 = 1.0;
+            double thresholdVotesForVP1 = 0.7;
 
             for (int i = 0; i < lines.size(); i++) {
                 if (votesPanel(i, verticalIntersectionIdWithMaxVotes.first) > thresholdVotesForVP1) {
@@ -2014,37 +2039,37 @@ namespace panoramix {
                 }
             }
 
-            static const int refineRepTime = 0;
-            for (int k = 0; k < refineRepTime; k++){
-                // recalculate vp1 using classified vp1 lines
-                Point2 vp1IntersectionsSum(0, 0);
-                double vp1IntersectionsWeightSum = 0;
-                for (int i = 0; i < intersectionMakerLineIds.size(); i++){
-                    auto & p = intersectionMakerLineIds[i];
-                    if (result.lineClasses[p.first] == 0 && result.lineClasses[p.second] == 0){
-                        auto v = intersections[i].value();
-                        double w = 1.0 - Gaussian(lines[p.first].length() + lines[p.second].length(), 100.0);
-                        assert(!HasValue(v, IsInfOrNaN<double>) && !HasValue(w, IsInfOrNaN<double>));
-                        vp1IntersectionsSum += v;
-                        vp1IntersectionsWeightSum += 1.0;
-                    }
-                }
-                HPoint2 nvp1 = HPoint2(vp1IntersectionsSum / vp1IntersectionsWeightSum);
-                vp1 = nvp1;
+            //static const int refineRepTime = 5;
+            //for (int k = 0; k < refineRepTime; k++){
+            //    // recalculate vp1 using classified vp1 lines
+            //    Point2 vp1IntersectionsSum(0, 0);
+            //    double vp1IntersectionsWeightSum = 0;
+            //    for (int i = 0; i < intersectionMakerLineIds.size(); i++){
+            //        auto & p = intersectionMakerLineIds[i];
+            //        if (result.lineClasses[p.first] == 0 && result.lineClasses[p.second] == 0){
+            //            auto v = intersections[i].value();
+            //            double w = 1.0 - Gaussian(lines[p.first].length() + lines[p.second].length(), 20.0);
+            //            assert(!HasValue(v, IsInfOrNaN<double>) && !HasValue(w, IsInfOrNaN<double>));
+            //            vp1IntersectionsSum += v * w;
+            //            vp1IntersectionsWeightSum += w;
+            //        }
+            //    }
+            //    HPoint2 nvp1 = HPoint2(vp1IntersectionsSum / vp1IntersectionsWeightSum);
+            //    vp1 = nvp1;
 
-                std::cout << "refined vp1: " << vp1.value() << std::endl;
+            //    std::cout << "refined vp1: " << vp1.value() << std::endl;
 
-                // reclassify lines
-                ImageWithType<double> refinedVotesForVP1 = LinesVotesToPoints(std::array<HPoint2, 1>{{ vp1 }}, lines);
-                for (int i = 0; i < lines.size(); i++) {
-                    if (refinedVotesForVP1(i) > thresholdVotesForVP1) {
-                        result.lineClasses[i] = 0;
-                    }
-                    else{
-                        result.lineClasses[i] = -1;
-                    }
-                }
-            }
+            //    // reclassify lines
+            //    ImageWithType<double> refinedVotesForVP1 = LinesVotesToPoints(std::array<HPoint2, 1>{{ vp1 }}, lines);
+            //    for (int i = 0; i < lines.size(); i++) {
+            //        if (refinedVotesForVP1(i) > thresholdVotesForVP1) {
+            //            result.lineClasses[i] = 0;
+            //        }
+            //        else{
+            //            result.lineClasses[i] = -1;
+            //        }
+            //    }
+            //}
 
             // collect remained lines
             std::vector<Line2> remainedLines;
@@ -2054,7 +2079,6 @@ namespace panoramix {
                     remainedLines.push_back(lines[i]);
                 }
             }
-
             std::cout << "remained lines num: " << remainedLines.size() << std::endl;
 
 
@@ -2071,7 +2095,7 @@ namespace panoramix {
             // nlines x npoints
             ImageWithType<double> votesRemainedPanel = LinesVotesToPoints(remainedIntersections, lines); // all lines participated!!!!!
             for (int i = 0; i < remainedIntersections.size(); i++) {
-                votesForRemainedIntersections[i] = cv::sum(votesRemainedPanel.col(i)).val[0];
+                votesForRemainedIntersections[i] = votesRemainedPanel.col(i).dot(lineLengthRatios);
             }
 
 
@@ -2196,7 +2220,7 @@ namespace panoramix {
             std::cout << "testing local manhattan consistency ..." << std::endl;
             // test top scored focals and pps
             int testNum = std::min<size_t>(10, scores.size());
-            std::vector<double> lmanScores(testNum, 0.0);
+            std::map<int, double> lmanScores;
 
             for (int i = 0; i < testNum; i++){
                 int id = sortedPPAndFocalIds[i];
@@ -2228,7 +2252,7 @@ namespace panoramix {
                     lmanScore += Gaussian(inter1.dot(inter2), 0.1) * Gaussian(distance, 20.0);
                 }
 
-                lmanScores[i] = lmanScore + scores[id];
+                lmanScores[id] = lmanScore + scores[id];
             }
 
             std::sort(sortedPPAndFocalIds.begin(), sortedPPAndFocalIds.begin() + testNum, [&lmanScores](int a, int b){
@@ -2254,8 +2278,7 @@ namespace panoramix {
             result.horizontalVanishingPointIds.clear();
 
             Vec3 vp1v = Concat(vp1p - result.principlePoint, result.focalLength);
-
-            std::vector<Vec3> hvpvs;
+            std::vector<std::pair<Vec3, Vec3>> hvpvs;
             for (auto & p : remainedCloseLineIdPairs) {
                 auto & line1 = remainedLines[p.first.first];
                 auto & line2 = remainedLines[p.first.second];
@@ -2270,23 +2293,96 @@ namespace panoramix {
                 Vec3 inter2 = normalize(line2eq.cross(vp1v));
 
                 if (inter1.dot(inter2) < 0.05 && distance < 10){
-                    hvpvs.push_back(inter1);
-                    hvpvs.push_back(inter2);
+                    hvpvs.emplace_back(inter1, inter2);
                 }
             }
+            std::cout << "initial horizontal direction num: " << (hvpvs.size() * 2) << std::endl;
 
-            std::cout << "initial horizontal direction num: " << hvpvs.size() << std::endl;
-
-            // merge close horizontal vanishing point directions
-            std::vector<decltype(hvpvs.begin())> mergedHVPVBegins;
-            MergeNearRTree(hvpvs.begin(), hvpvs.end(), std::back_inserter(mergedHVPVBegins), std::false_type(), 0.05);
-            
-            for (auto & b : mergedHVPVBegins){
-                const Vec3 & v = *b;
-                HPoint2 hinter = HPointFromVector(v, result.focalLength) + HPoint2(result.principlePoint);
-                result.vanishingPoints.push_back(hinter);
+            std::vector<HPoint2> horizonVPs;
+            horizonVPs.push_back(vp1);
+            std::vector<std::pair<int, int>> orthoPairs;
+            std::vector<int> hvpvIdOfVP; // hvpvIdOfVP[{id in horizonVPs}] = {id in hvpvs}
+            hvpvIdOfVP.push_back(-1);
+            std::vector<bool> vpIsAtFirstInHVPV;
+            vpIsAtFirstInHVPV.push_back(false);
+            for (int i = 0; i < hvpvs.size(); i++){
+                const Vec3 & v1 = hvpvs[i].first;
+                const Vec3 & v2 = hvpvs[i].second;
+                HPoint2 hinter1 = HPointFromVector(v1, result.focalLength) + HPoint2(result.principlePoint);
+                HPoint2 hinter2 = HPointFromVector(v2, result.focalLength) + HPoint2(result.principlePoint);
+                horizonVPs.push_back(hinter1);
+                hvpvIdOfVP.push_back(i);
+                vpIsAtFirstInHVPV.push_back(true);
+                horizonVPs.push_back(hinter2);
+                hvpvIdOfVP.push_back(i);
+                vpIsAtFirstInHVPV.push_back(false);
+                orthoPairs.emplace_back(horizonVPs.size() - 2, horizonVPs.size() - 1);
             }
 
+            auto lineClasses = ClassifyLines(LinesVotesToPoints(horizonVPs, lines), 0.5);
+
+            // merge close horizontal vanishing point directions
+            std::vector<std::pair<Vec3, Vec3>> mergedHVPVs;
+            std::vector<int> oldHVPVIdToMergedHVPVId(hvpvs.size(), -1);
+            std::vector<bool> oldHVPVIdToMergedHVPVIdSwapped(hvpvs.size(), -1);
+            for (int i = 0; i < hvpvs.size(); i++){
+                auto & hvpvPair = hvpvs[i];
+                int nearestMergedHVPVId = -1;
+                bool swapped = false; // whether old hvpvPair has to be swapped to match the nearestMergedHVPV
+                double minDist = 0.05;
+                for (int j = 0; j < mergedHVPVs.size(); j++){
+                    auto & hvpvPairRecorded = mergedHVPVs[j];
+                    double dist1 = std::min({
+                        Distance(hvpvPair.first, hvpvPairRecorded.first),
+                        Distance(hvpvPair.second, hvpvPairRecorded.second)
+                    });
+                    double dist2 = std::min({
+                        Distance(hvpvPair.first, hvpvPairRecorded.second),
+                        Distance(hvpvPair.second, hvpvPairRecorded.first)
+                    });
+                    double dist = std::min(dist1, dist2);
+                    if (dist <= minDist){
+                        minDist = dist;
+                        nearestMergedHVPVId = j;
+                        swapped = dist1 > dist2;
+                    }                    
+                }
+                if (nearestMergedHVPVId == -1){
+                    mergedHVPVs.push_back(hvpvPair);
+                    nearestMergedHVPVId = mergedHVPVs.size() - 1;
+                }
+                oldHVPVIdToMergedHVPVId[i] = nearestMergedHVPVId;
+                oldHVPVIdToMergedHVPVIdSwapped[i] = swapped;
+            }
+
+            for (int i = 0; i < mergedHVPVs.size(); i++){
+                const Vec3 & v1 = mergedHVPVs[i].first;
+                const Vec3 & v2 = mergedHVPVs[i].second;
+                HPoint2 hinter1 = HPointFromVector(v1, result.focalLength) + HPoint2(result.principlePoint);
+                HPoint2 hinter2 = HPointFromVector(v2, result.focalLength) + HPoint2(result.principlePoint);
+                result.vanishingPoints.push_back(hinter1);
+                result.vanishingPoints.push_back(hinter2);
+                result.horizontalVanishingPointIds.emplace_back(result.vanishingPoints.size() - 2, result.vanishingPoints.size() - 1);
+            }
+
+            // reassign line classes
+            for (int i = 0; i < lineClasses.size(); i++){
+                auto & line = lines[i];
+                int c = lineClasses[i];
+                if (c == 0)
+                    continue;
+                if (c == -1)
+                    continue;
+
+                int hvpvId = hvpvIdOfVP[c];
+                if (hvpvId != -1){
+                    bool isAtFirst = vpIsAtFirstInHVPV[lineClasses[i]];
+                    auto & orthoPair = result.horizontalVanishingPointIds[oldHVPVIdToMergedHVPVId[hvpvId]];
+                    lineClasses[i] = isAtFirst ? orthoPair.first : orthoPair.second;
+                }
+            }
+            result.lineClasses = lineClasses;
+            
             std::cout << "merged horizontal direction num: " << (result.vanishingPoints.size() - 1) << std::endl;
 
 

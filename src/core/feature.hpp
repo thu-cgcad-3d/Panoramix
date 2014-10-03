@@ -263,8 +263,8 @@ namespace panoramix {
         public:
             struct Params {
 				inline Params(double maxPPOffset = 200, double minFocal = 40, double maxFocal = 1e5) 
-					: verticalVPAngleRange(M_PI_4 / 4.0), 
-					verticalVPMinDistanceRatioToCenter(1.5), 
+					: verticalVPAngleRange(M_PI_4 / 6.0), 
+					verticalVPMinDistanceRatioToCenter(2.0), 
 					maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal) {
 				}
 				// the angle between {the line connecting verticalVP and image center} and {the vertical line} 

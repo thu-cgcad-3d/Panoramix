@@ -128,7 +128,7 @@ namespace panoramix {
 
         template <class T>
         inline Visualizer2D operator << (Visualizer2D viz, const HPoint<T, 2> & p) {
-            return viz << p.toPoint();
+            return viz << p.value();
         }
 
         // lines
