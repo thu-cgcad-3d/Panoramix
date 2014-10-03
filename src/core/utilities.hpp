@@ -126,62 +126,7 @@ namespace panoramix {
 
 
 
-        /// bounding box functions
-
-        // for scalars
-        template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
-        inline Box<T, 1> BoundingBox(const T & t) {
-            return Box<T, 1>(Point<T, 1>(t), Point<T, 1>(t));
-        }
-
-        template <class T>
-        inline Box<T, 2> BoundingBox(const std::complex<T> & c) {
-            return Box<T, 2>(Point<T, 2>(c.real(), c.imag()), Point<T, 2>(c.real(), c.imag()));
-        }
-
-
-        template <class T, int N>
-        inline Box<T, N> BoundingBox(const Box<T, N> & b){
-            return b;
-        }
-
-        template <class T, int N>
-        inline Box<T, N> BoundingBox(const Point<T, N> & p){
-            return Box<T, N>(p, p);
-        }
-
-        template <class T, int N>
-        inline Box<T, N> BoundingBox(const HPoint<T, N> & hp) {
-            return BoundingBox(hp.value());
-        }
-
-        inline Box2 BoundingBox(const PixelLoc & p) {
-            return Box2(Point2(p.x, p.y), Point2(p.x, p.y));
-        }
-
-        inline Box2 BoundingBox(const KeyPoint & p) {
-            return Box2(Point2(p.pt.x, p.pt.y), Point2(p.pt.x, p.pt.y));
-        }
-
-        template <class T, int N>
-        inline Box<T, N> BoundingBox(const Line<T, N> & l) {
-            return Box<T, N>(l.first, l.second);
-        }
-
-        template <class T, int N>
-        inline Box<T, N> BoundingBox(const HLine<T, N> & l) {
-            return BoundingBox(l.toLine());
-        }
-
-        template <class T, int N>
-        inline Box<T, N> BoundingBox(const PositionOnLine<T, N> & p) {
-            return BoundingBox(p.position);
-        }
-
-        template <class T>
-        inline auto BoundingBox(const Classified<T> & c) -> decltype(BoundingBox(c.component)) {
-            return BoundingBox(c.component);
-        }
+       
 
         // bounding box of range
         template <class IteratorT>

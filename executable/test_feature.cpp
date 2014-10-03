@@ -57,7 +57,7 @@ DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
     core::LineSegmentExtractor lineseg;
     
     core::LocalManhattanVanishingPointsDetector::Params params;
-	core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg");
+	core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/cuboids.png");
     core::ResizeToMakeWidthUnder(im, 1000);
     params.image = im;
 
@@ -70,6 +70,9 @@ DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
     //core::LoadFromDisk(ProjectDataDirStrings::Serialization + "/temp.state", lines);
     result = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
 
+    for (auto & op : result.horizontalVanishingPointIds){
+        std::cout << "[ " << op.first << ", " << op.second << "]" << std::endl;
+    }
     
     auto ctable = vis::CreateGreyColorTableWithSize(result.vanishingPoints.size());
     ctable.randomize();
@@ -81,7 +84,7 @@ DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
     for (int i = 0; i < lines.size(); i++) {
         viz //<< vis::manip2d::SetThickness(i + 1)
             << vis::manip2d::SetColor(ctable[result.lineClasses[i]])
-            << lines[i];
+            << core::NoteAs(lines[i], std::to_string(result.lineClasses[i]));
     }
 
     viz << vis::manip2d::SetColor(vis::ColorTag::Red)

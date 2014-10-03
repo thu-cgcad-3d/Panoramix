@@ -1138,6 +1138,11 @@ namespace panoramix {
                 return lineLengthRatios;
             }
 
+
+            inline HPoint2 ProjectOnToImagePlane(const Vec3 & d, const Point2 & pp, double focal) {
+                return HPointFromVector(d, focal) + HPoint2(pp);
+            }
+
         }
 
 
@@ -2289,6 +2294,11 @@ namespace panoramix {
                 Vec3 line2eq = Concat(line2.first - result.principlePoint, result.focalLength)
                     .cross(Concat(line2.second - result.principlePoint, result.focalLength));
 
+                assert(Distance(ProjectOnToImagePlane(Concat(line1.first - result.principlePoint, result.focalLength), 
+                    result.principlePoint, result.focalLength).value(), line1.first) < 0.5);
+                assert(Distance(ProjectOnToImagePlane(Concat(line2.first - result.principlePoint, result.focalLength), 
+                    result.principlePoint, result.focalLength).value(), line2.first) < 0.5);
+
                 Vec3 inter1 = normalize(line1eq.cross(vp1v));
                 Vec3 inter2 = normalize(line2eq.cross(vp1v));
 
@@ -2308,8 +2318,8 @@ namespace panoramix {
             for (int i = 0; i < hvpvs.size(); i++){
                 const Vec3 & v1 = hvpvs[i].first;
                 const Vec3 & v2 = hvpvs[i].second;
-                HPoint2 hinter1 = HPointFromVector(v1, result.focalLength) + HPoint2(result.principlePoint);
-                HPoint2 hinter2 = HPointFromVector(v2, result.focalLength) + HPoint2(result.principlePoint);
+                HPoint2 hinter1 = ProjectOnToImagePlane(v1, result.principlePoint, result.focalLength);
+                HPoint2 hinter2 = ProjectOnToImagePlane(v2, result.principlePoint, result.focalLength);
                 horizonVPs.push_back(hinter1);
                 hvpvIdOfVP.push_back(i);
                 vpIsAtFirstInHVPV.push_back(true);
@@ -2329,7 +2339,7 @@ namespace panoramix {
                 auto & hvpvPair = hvpvs[i];
                 int nearestMergedHVPVId = -1;
                 bool swapped = false; // whether old hvpvPair has to be swapped to match the nearestMergedHVPV
-                double minDist = 0.05;
+                double minDist = 0.03;
                 for (int j = 0; j < mergedHVPVs.size(); j++){
                     auto & hvpvPairRecorded = mergedHVPVs[j];
                     double dist1 = std::min({
@@ -2358,8 +2368,8 @@ namespace panoramix {
             for (int i = 0; i < mergedHVPVs.size(); i++){
                 const Vec3 & v1 = mergedHVPVs[i].first;
                 const Vec3 & v2 = mergedHVPVs[i].second;
-                HPoint2 hinter1 = HPointFromVector(v1, result.focalLength) + HPoint2(result.principlePoint);
-                HPoint2 hinter2 = HPointFromVector(v2, result.focalLength) + HPoint2(result.principlePoint);
+                HPoint2 hinter1 = ProjectOnToImagePlane(v1, result.principlePoint, result.focalLength);
+                HPoint2 hinter2 = ProjectOnToImagePlane(v2, result.principlePoint, result.focalLength);
                 result.vanishingPoints.push_back(hinter1);
                 result.vanishingPoints.push_back(hinter2);
                 result.horizontalVanishingPointIds.emplace_back(result.vanishingPoints.size() - 2, result.vanishingPoints.size() - 1);

@@ -170,6 +170,14 @@ namespace panoramix {
             return viz << thing.component;
         }
 
+        // noted thing
+        template <class T>
+        inline Visualizer2D operator << (Visualizer2D viz, const Noted<T> & thing){
+            auto center = core::BoundingBox(thing.component).center();
+            cv::putText(viz.image(), thing.note, cv::Point(static_cast<int>(center[0]), static_cast<int>(center[1])), 1, 2, viz.params.color);
+            return viz << thing.component;
+        }
+
 
         // image
         Visualizer2D operator << (Visualizer2D viz, const Image & im);
