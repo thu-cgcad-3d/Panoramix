@@ -60,7 +60,8 @@ DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
 
     std::vector<core::Image> ims = {
         cv::imread(ProjectDataDirStrings::LocalManhattan + "/cuboids.png"),
-        cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg")
+        cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg"),
+        cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg")
     };
 
     for (auto & im : ims) {
