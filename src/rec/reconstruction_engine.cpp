@@ -943,7 +943,7 @@ namespace panoramix {
                 }
 
                 // compute junction weight
-                double junctionWeight = 0;
+                double junctionWeight = 2.0;
                 // relation center is inside image
                 if (core::IsBetween(relationCenter[0], 0, weightDistribution.cols - 1) &&
                     core::IsBetween(relationCenter[1], 0, weightDistribution.rows - 1)) {
@@ -1034,14 +1034,14 @@ namespace panoramix {
                         } else if (X > threshold) {
                             junctionWeight += 5.0;
                         } else if (T > threshold) {
-                            junctionWeight += 1.0;
+                            junctionWeight += 2.0;
                         }
                     }
                 } else {
-                    junctionWeight += 1.0;
+                    junctionWeight += 2.0;
                 }
                 if (lrd.type == LinesNet::LineRelationData::Type::Incidence)
-                    junctionWeight += 10.0;
+                    junctionWeight += 2.0;
                 W.insert(curEquationNum, curEquationNum) = junctionWeight;
 
                 curEquationNum++;
@@ -1076,18 +1076,18 @@ namespace panoramix {
                     std::cout << "!!!!!!!ratio is zero!!!!!!!!" << std::endl;
                 }
 
-                if (firstLineIndexInConnectedComponents.find(li1) == firstLineIndexInConnectedComponents.end() &&
-                    firstLineIndexInConnectedComponents.find(li2) == firstLineIndexInConnectedComponents.end()) {
+                if (!core::Contains(firstLineIndexInConnectedComponents, li1) &&
+                    !core::Contains(firstLineIndexInConnectedComponents, li2)) {
                     // eta1 * ratio1 - eta2 * ratio2 = 0
                     A.insert(curEquationNum, lineId1) = ratio1;
                     A.insert(curEquationNum, lineId2) = -ratio2;
                     B(curEquationNum) = 0;
-                } else if (firstLineIndexInConnectedComponents.find(li1) != firstLineIndexInConnectedComponents.end()) {
+                } else if (core::Contains(firstLineIndexInConnectedComponents, li1)) {
                     // const[eta1] * ratio1 - eta2 * ratio2 = 0 -> 
                     // eta2 * ratio2 = const[eta1] * ratio1
                     A.insert(curEquationNum, lineId2) = ratio2;
                     B(curEquationNum) = constantEtaForFirstLineInEachConnectedComponent * ratio1;
-                } else if (firstLineIndexInConnectedComponents.find(li2) != firstLineIndexInConnectedComponents.end()) {
+                } else if (core::Contains(firstLineIndexInConnectedComponents, li2)) {
                     // eta1 * ratio1 - const[eta2] * ratio2 = 0 -> 
                     // eta1 * ratio1 = const[eta2] * ratio2
                     A.insert(curEquationNum, lineId1) = ratio1;
@@ -1101,16 +1101,22 @@ namespace panoramix {
             }
 
             // solve the equation system
+            static const bool useWeights = false;
+
             VectorXd X;
             SparseQR<SparseMatrix<double>, COLAMDOrdering<int>> solver;
             static_assert(!(SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
-            solver.compute(W * A);
+            SparseMatrix<double> WA = W * A;
+            A.makeCompressed();
+            WA.makeCompressed();
+            solver.compute(useWeights ? WA : A);
             if (solver.info() != Success) {
                 assert(0);
                 std::cout << "computation error" << std::endl;
                 return;
             }
-            X = solver.solve(W * B);
+            VectorXd WB = W * B;
+            X = solver.solve(useWeights ? WB : B);
             if (solver.info() != Success) {
                 assert(0);
                 std::cout << "solving error" << std::endl;
