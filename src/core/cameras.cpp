@@ -110,6 +110,40 @@ namespace panoramix {
                 updateMatrices();
         }
 
+        void PerspectiveCamera::focusOn(const Sphere3 & target, bool updateMat) {
+            _center = target.center;
+            auto eyedirection = _eye - _center;
+            eyedirection = eyedirection / core::norm(eyedirection) * target.radius * 0.8;
+            _eye = _center + eyedirection;
+            _near = BoundBetween(norm(target.center - _eye) - target.radius - 1.0, 1e-3, 1e3);
+            _far = BoundBetween(norm(target.center - _eye) + target.radius + 1.0, 1e-3, 1e3);
+            if (updateMat)
+                updateMatrices();
+        }
+
+        void PerspectiveCamera::translate(const Vec3 & t, const Sphere3 & target, bool updateMat){
+            _eye += t;
+            _center += t;
+            _near = BoundBetween(norm(target.center - _eye) - target.radius - 1.0, 1e-3, 1e3);
+            _far = BoundBetween(norm(target.center - _eye) + target.radius + 1.0, 1e-3, 1e3);
+            if (updateMat)
+                updateMatrices();
+        }
+
+        void PerspectiveCamera::moveEyeWithCenterFixed(const Vec3 & t, const Sphere3 & target, bool distanceFixed, bool updateMat){
+            double dist = norm(_eye - _center);
+            _eye += t;
+            if (distanceFixed){
+                _eye = normalize(_eye - _center) * dist + _center;
+            }
+            _near = BoundBetween(norm(target.center - _eye) - target.radius - 1.0, 1e-3, 1e3);
+            _far = BoundBetween(norm(target.center - _eye) + target.radius + 1.0, 1e-3, 1e3);
+            if (updateMat)
+                updateMatrices();
+        }
+
+
+
 
 
         PanoramicCamera::PanoramicCamera(double focal, const Vec3 & eye,

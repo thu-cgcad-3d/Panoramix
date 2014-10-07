@@ -47,12 +47,17 @@ namespace panoramix {
             void setUp(const Vec3 & up, bool updateMat = true);
             void setNearAndFarPlanes(double nearPlane, double farPlane, bool updateMat = true);
 
-            template <class Archive> inline void serialize(Archive & ar) {
-                ar(_screenW, _screenH);
-                ar(_focal, _near, _far);
-                ar(_eye, _center, _up);
-                ar(_viewMatrix, _projectionMatrix, _viewProjectionMatrix, _viewProjectionMatrixInv);
-            }
+            // advanced functions
+            inline Vec3 forward() const { return normalize(_center - _eye); }
+            inline Vec3 backward() const { return normalize(_eye - _center); }
+            inline Vec3 upward() const { return normalize(_up); }
+            inline Vec3 downward() const { return -upward(); }
+            inline Vec3 leftward() const { return normalize(_up.cross(forward())); }
+            inline Vec3 rightward() const { return -leftward(); }
+
+            void focusOn(const Sphere3 & target, bool updateMat = true);
+            void translate(const Vec3 & t, const Sphere3 & target, bool updateMat = true);
+            void moveEyeWithCenterFixed(const Vec3 & t, const Sphere3 & target, bool distanceFixed = false, bool updateMat = true);
 
         private:
             void updateMatrices();
@@ -63,6 +68,14 @@ namespace panoramix {
             double _near, _far;
             Vec3 _eye, _center, _up;
             Mat4 _viewMatrix, _projectionMatrix, _viewProjectionMatrix, _viewProjectionMatrixInv;
+
+            template <class Archive> inline void serialize(Archive & ar) {
+                ar(_screenW, _screenH);
+                ar(_focal, _near, _far);
+                ar(_eye, _center, _up);
+                ar(_viewMatrix, _projectionMatrix, _viewProjectionMatrix, _viewProjectionMatrixInv);
+            }
+            friend class cereal::access;
         };
 
         // panoramic camera
@@ -81,16 +94,17 @@ namespace panoramix {
             Vec2 screenProjection(const Vec3 & p3d) const;
             Vec3 spatialDirection(const Vec2 & p2d) const;
 
+        private:
+            double _focal;
+            Vec3 _eye, _center, _up;
+            Vec3 _xaxis, _yaxis, _zaxis;
+
             template <class Archive> inline void serialize(Archive & ar) {
                 ar(_focal);
                 ar(_eye, _center, _up);
                 ar(_xaxis, _yaxis, _zaxis);
             }
-
-        private:
-            double _focal;
-            Vec3 _eye, _center, _up;
-            Vec3 _xaxis, _yaxis, _zaxis;
+            friend class cereal::access;
         };
 
 
@@ -122,15 +136,16 @@ namespace panoramix {
                 return outputIm;
             }
 
-            template <class Archive>
-            inline void serialize(Archive & ar) {
-                ar(_outCam, _inCam, _mapx, _mapy);
-            }
-
         private:
             OutCameraT _outCam;
             InCameraT _inCam;
             cv::Mat _mapx, _mapy;
+
+            template <class Archive>
+            inline void serialize(Archive & ar) {
+                ar(_outCam, _inCam, _mapx, _mapy);
+            }
+            friend class cereal::access;
         };
 
 

@@ -180,66 +180,9 @@ namespace panoramix {
                     glViewport(0, 0, w, h);
                 }
 
-            private:
-                void moveCameraEyeWithCenterFixed(const QVector3D & t) {
-                    core::PerspectiveCamera & camera = _params.camera;
-                    QVector3D eye = MakeQVec(camera.eye());
-                    QVector3D center = MakeQVec(camera.center());
-                    QVector3D up = MakeQVec(camera.up());
-                    QVector3D tt = t * (eye - center).length() * 0.002f;
-
-                    QVector3D xv = QVector3D::crossProduct(center - eye, up).normalized();
-                    QVector3D yv = QVector3D::crossProduct(xv, center - eye).normalized();
-                    QVector3D xyTrans = xv * tt.x() + yv * tt.y();
-                    double r = ((eye - center).length() - tt.z()) /
-                        (eye + xyTrans - center).length();
-                    eye = (eye + xyTrans - center) * r + center;
-                    up = yv.normalized();
-                    _params.camera.setEye(MakeCoreVec(eye), false);
-                    _params.camera.setUp(MakeCoreVec(up), false);
-
-                    auto meshCenter = MakeQVec(_boundingBox.center());
-                    auto meshRadius = Line3(_boundingBox.minCorner, _boundingBox.maxCorner).length() / 2.0f;
-                    auto nearPlane = (eye - meshCenter).length() - meshRadius;
-                    nearPlane = nearPlane < 1e-3 ? 1e-3 : nearPlane;
-                    auto farPlane = (eye - meshCenter).length() + meshRadius;
-                    _params.camera.setNearAndFarPlanes(nearPlane, farPlane, true);
-                }
-
-                void moveCameraCenterAndCenter(const QVector3D & t) {
-                    core::PerspectiveCamera & camera = _params.camera;
-                    QVector3D eye = MakeQVec(camera.eye());
-                    QVector3D center = MakeQVec(camera.center());
-                    QVector3D up = MakeQVec(camera.up());
-                    QVector3D tt = t * (eye - center).length() * 0.002;
-
-                    QVector3D xv = QVector3D::crossProduct((center - eye), up).normalized();
-                    QVector3D yv = QVector3D::crossProduct(xv, (center - eye)).normalized();
-                    QVector3D zv = (center - eye).normalized();
-                    QVector3D trans = xv * tt.x() + yv * tt.y() + zv * tt.z();
-                    eye += trans;
-                    //center += trans;
-                    _params.camera.setEye(MakeCoreVec(eye), false);
-                    _params.camera.setCenter(MakeCoreVec(center), false);
-
-                    auto meshCenter = MakeQVec(_boundingBox.center());
-                    auto meshRadius = Line3(_boundingBox.minCorner, _boundingBox.maxCorner).length() / 2.0f;
-                    auto nearPlane = (eye - meshCenter).length() - meshRadius;
-                    nearPlane = nearPlane < 1e-3 ? 1e-3 : nearPlane;
-                    auto farPlane = (eye - meshCenter).length() + meshRadius;
-                    _params.camera.setNearAndFarPlanes(nearPlane, farPlane, true);
-                }
-
             public:
                 void autoSetCamera() {
-                    auto & box = _boundingBox;
-                    auto center = box.center();
-                    auto radius = Line3(box.minCorner, box.maxCorner).length() / 2.0;
-                    _params.camera.setCenter(center, false);
-                    auto eyedirection = _params.camera.eye() - _params.camera.center();
-                    eyedirection = eyedirection / core::norm(eyedirection) * radius * 0.8;
-                    _params.camera.setEye(center + eyedirection, false);
-                    _params.camera.setNearAndFarPlanes(radius / 2.0, radius * 2.0, true);
+                    _params.camera.focusOn(_boundingBox.outerSphere(), true);
                     update();
                 }
 
@@ -255,19 +198,28 @@ namespace panoramix {
                 virtual void mouseMoveEvent(QMouseEvent * e) override {
                     QVector3D t(e->pos() - _lastPos);
                     t.setX(-t.x());
+                    auto sphere = _boundingBox.outerSphere();
                     if (e->buttons() & Qt::RightButton) {
-                        moveCameraEyeWithCenterFixed(t);
+                        core::Vec3 trans = t.x() * _params.camera.rightward() + t.y() * _params.camera.upward();
+                        trans *= 0.02;
+                        _params.camera.moveEyeWithCenterFixed(trans, sphere, true, true);
                         setCursor(Qt::ClosedHandCursor);
                         update();
                     } else if (e->buttons() & Qt::MidButton) {
-                        moveCameraCenterAndCenter(t);
+                        core::Vec3 trans = t.x() * _params.camera.rightward() + t.y() * _params.camera.upward();
+                        trans *= 0.02;
+                        _params.camera.translate(trans, sphere, true);
                         update();
                     }
                     _lastPos = e->pos();
                 }
 
                 virtual void wheelEvent(QWheelEvent * e) override {
-                    moveCameraCenterAndCenter(QVector3D(0, 0, e->delta() / 10));
+                    auto sphere = _boundingBox.outerSphere();
+                    double d = e->delta() / 10;
+                    double dist = core::Distance(_params.camera.eye(), _params.camera.center());
+                    core::Vec3 trans = d * dist/1000.0 * _params.camera.forward();
+                    _params.camera.translate(trans, sphere, true);
                     update();
                 }
 

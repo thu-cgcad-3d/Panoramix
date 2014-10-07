@@ -452,6 +452,25 @@ namespace panoramix {
             }
         }
 
+
+        // sphere
+        template <class T, int N>
+        struct Sphere {
+            Point<T, N> center;
+            T radius;
+        };
+        template <class T, int N>
+        inline bool operator == (const Sphere<T, N> & a, const Sphere<T, N> & b){
+            return a.center == b.center && a.radius == b.radius;
+        }
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, Sphere<T, N> & s){
+            ar(s.center, s.radius);
+        }
+        using Sphere2 = Sphere<double, 2>;
+        using Sphere3 = Sphere<double, 3>;
+
+
         // box
         template <class T, int N>
         struct Box {
@@ -467,6 +486,7 @@ namespace panoramix {
 
             inline Vec<T, N> size() const { return maxCorner - minCorner; }
             inline Point<T, N> center() const { return (maxCorner + minCorner) * (0.5); }
+            inline Sphere<T, N> outerSphere() const { return Sphere<T, N>{center(), static_cast<T>(norm(maxCorner - minCorner) / 2.0)}; }
 
             inline bool contains(const Point<T, N> & p) const {
                 if (isNull)
@@ -544,7 +564,9 @@ namespace panoramix {
         }
 
         inline Box2 BoundingBox(const PixelLoc & p) {
-            return Box2(Point2(p.x, p.y), Point2(p.x, p.y));
+            return Box2(
+                Point2(static_cast<double>(p.x), static_cast<double>(p.y)), 
+                Point2(static_cast<double>(p.x), static_cast<double>(p.y)));
         }
 
         inline Box2 BoundingBox(const KeyPoint & p) {
@@ -571,6 +593,10 @@ namespace panoramix {
             return BoundingBox(c.component);
         }
 
+        template <class T>
+        inline auto BoundingBox(const Noted<T> & n) -> decltype(BoundingBox(n.component)){
+            return BoundingBox(n.component);
+        }
  
     }
 }

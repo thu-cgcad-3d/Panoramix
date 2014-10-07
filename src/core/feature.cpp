@@ -66,7 +66,7 @@ namespace panoramix {
         }
 
         float ComputeIntersectionJunctionWeightWithLinesVotes(const Mat<float, 3, 2> & v){
-            double junctionWeight = 1.0;
+            double junctionWeight = 0.0;
             // Y
             double Y = 0.0;
             for (int s = 0; s < 2; s++) {
