@@ -20,12 +20,21 @@ TEST(Feature, SegmentationExtractor) {
 
 TEST(Feature, LineSegmentExtractor) {
     core::LineSegmentExtractor lineseg;
-    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/2148.jpg");
-    vis::Visualizer2D(im) 
-        << vis::manip2d::SetColor(vis::ColorTag::Yellow) 
-        << vis::manip2d::SetThickness(2) << 
-        lineseg(im) 
-        << vis::manip2d::Show();
+    core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
+    //vis::Visualizer2D(im) 
+    //    << vis::manip2d::SetColor(vis::ColorTag::Yellow) 
+    //    << vis::manip2d::SetThickness(2) << 
+    //    lineseg(im) 
+    //    << vis::manip2d::Show();
+
+    core::LineSegmentExtractor::Params params;
+    params.useLSD = true;
+    core::LineSegmentExtractor lineseg2(params);
+    vis::Visualizer2D(im)
+        << vis::manip2d::SetColor(vis::ColorTag::Yellow)
+        << vis::manip2d::SetThickness(2) <<
+        lineseg2(im)
+        << vis::manip2d::Show(0);
 }
 
 TEST(Feature, VanishingPointsDetector) {
@@ -55,13 +64,15 @@ TEST(Feature, VanishingPointsDetector) {
 
 
 DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
-    core::LineSegmentExtractor lineseg;    
+    core::LineSegmentExtractor::Params lsparams;
+    lsparams.useLSD = true;
+    core::LineSegmentExtractor lineseg(lsparams);    
     core::LocalManhattanVanishingPointsDetector::Params params;
 
     std::vector<core::Image> ims = {
-        cv::imread(ProjectDataDirStrings::LocalManhattan + "/cuboids.png"),
-        cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg"),
-        cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg")
+        cv::imread(ProjectDataDirStrings::LocalManhattan + "/cuboids.png")//,
+        //cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg"),
+        //cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg")
     };
 
     for (auto & im : ims) {
@@ -83,16 +94,23 @@ DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
                 << result.vanishingPoints[op.second].value() << std::endl;
         }
 
-        auto ctable = vis::CreateGreyColorTableWithSize(result.vanishingPoints.size());
-        ctable.randomize();
+        std::vector<int> vpPairIds(result.vanishingPoints.size(), -1);
+        for (int i = 0; i < result.horizontalVanishingPointIds.size(); i++){
+            vpPairIds[result.horizontalVanishingPointIds[i].first] = i;
+            vpPairIds[result.horizontalVanishingPointIds[i].second] = i;
+        }
+
+        auto ctable = vis::CreateRandomColorTableWithSize(result.vanishingPoints.size());
+        ctable.exceptoinalColor() = vis::ColorFromTag(vis::ColorTag::White);
 
         auto viz = vis::Visualizer2D(im)
             << vis::manip2d::SetColorTable(ctable)
             << vis::manip2d::SetThickness(4);
 
         for (int i = 0; i < lines.size(); i++) {
-            viz //<< vis::manip2d::SetThickness(i + 1)
-                << vis::manip2d::SetColor(ctable[result.lineClasses[i]])
+            int claz = result.lineClasses[i];
+            viz << vis::manip2d::SetThickness(claz == -1 ? 1 : vpPairIds[claz] + 3)
+                << vis::manip2d::SetColor(ctable[claz])
                 << core::NoteAs(lines[i], std::to_string(i) + "." + std::to_string(result.lineClasses[i]));
         }
 
@@ -187,7 +205,7 @@ TEST(Feature, CameraSampler) {
 TEST(Feature, FeatureExtractor) {
     core::SegmentationExtractor segmenter;
     core::LineSegmentExtractor::Params params;
-    params.useExperimentalAlgorithm = false;
+    params.useLSD = true;
     core::LineSegmentExtractor lineSegmentExtractor(params);
     
     core::CVFeatureExtractor<cv::SIFT> sift;

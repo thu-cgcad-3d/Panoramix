@@ -85,6 +85,10 @@ namespace panoramix {
             return Color(rand() % 255, rand() % 255, rand() % 255);
         }
 
+        core::Vec3b ToVec3b(const Color & c) {
+            return core::Vec3b(static_cast<uint8_t>(c[0]), static_cast<uint8_t>(c[1]), static_cast<uint8_t>(c[2]));
+        }
+
 
         ColorTable::ColorTable(ColorTableDescriptor descriptor) {
             const auto & predefined = PredefinedColorTable(descriptor);
@@ -223,6 +227,24 @@ namespace panoramix {
                 colors[i] = double(i) * full / double(sz);
             }
             return ColorTable(colors, exeptColor);
+        }
+
+        ColorTable CreateRandomColorTableWithSize(int sz) {
+            int dimSplit = std::max(int(sqrt(sz)), 3);
+            std::vector<Color> colors;
+            colors.reserve(dimSplit * dimSplit * dimSplit - dimSplit);
+            for (int i = 0; i < dimSplit; i++){
+                for (int j = 0; j < dimSplit; j++){
+                    for (int k = 0; k < dimSplit; k++){
+                        if (i == j && j == k)
+                            continue;
+                        colors.push_back(Color(255.0 * i / dimSplit, 255.0 * j / dimSplit, 255.0 * k / dimSplit));
+                    }
+                }
+            }
+            assert(colors.size() > sz);
+            std::random_shuffle(colors.begin(), colors.end());
+            return ColorTable(colors.begin(), colors.begin() + sz, Color(255, 255, 255));
         }
 
 

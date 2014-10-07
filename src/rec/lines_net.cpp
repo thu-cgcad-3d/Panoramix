@@ -10,6 +10,11 @@ namespace panoramix {
             intersectionDistanceThreshold(8),
             incidenceDistanceAlongDirectionThreshold(15),
             incidenceDistanceVerticalDirectionThreshold(3) {
+
+            LineSegmentExtractor::Params lsparams;
+            lsparams.useLSD = true;
+            lineSegmentExtractor = LineSegmentExtractor(lsparams);
+
         }
 
         LinesNet::LinesNet(const Image & image, const Params & params)
@@ -243,7 +248,7 @@ namespace panoramix {
                     }
                 }
 
-                viz << vis::manip2d::Show();
+                viz << vis::manip2d::Show(0);
                 /*cv::imshow("lines", viz.image());
                 cv::waitKey();*/
             }

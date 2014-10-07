@@ -39,12 +39,12 @@ namespace panoramix {
 
         ReconstructionEngine::Params::Params() 
             : camera(250.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
-            samplingStepLengthOnRegionBoundaries(16.0),
-            samplingStepLengthOnLines(8.0),
-            intersectionDistanceThreshold(15), // 30
+            samplingStepLengthOnRegionBoundaries(40.0),
+            samplingStepLengthOnLines(10.0),
+            intersectionDistanceThreshold(20), // 30
             incidenceDistanceAlongDirectionThreshold(40), // 50
-            incidenceDistanceVerticalDirectionThreshold(5),
-            interViewIncidenceAngleAlongDirectionThreshold(M_PI_4 / 2){
+            incidenceDistanceVerticalDirectionThreshold(4),
+            interViewIncidenceAngleAlongDirectionThreshold(M_PI_4 / 4){
         }
 
 
@@ -492,11 +492,16 @@ namespace panoramix {
                     const ReconstructionEngine::ViewData & vd = view.data;
                     const RegionsNet::RegionData & rd = region.data;
 
-                    assert(!rd.contours.empty() && "Region contour not initialized yet?");
+                    //assert(!rd.contours.empty() && "Region contour not initialized yet?");
                     std::vector<Vec3> spatialContour;
-                    for (auto & p : rd.dilatedContours.back()) {
-                        auto direction = vd.camera.spatialDirection(p);
-                        spatialContour.push_back(direction / norm(direction));
+                    if (!rd.dilatedContours.empty()){
+                        for (auto & p : rd.dilatedContours.back()) {
+                            auto direction = vd.camera.spatialDirection(p);
+                            spatialContour.push_back(direction / norm(direction));
+                        }
+                    }
+                    else{
+                        std::cerr << "this region has no dilatedCountour!" << std::endl;
                     }
                     regionSpatialContours[ri] = spatialContour;
                 }
@@ -519,7 +524,14 @@ namespace panoramix {
 
             for (auto & rip : regionSpatialContours) {
                 auto & ri = rip.first;
-                auto & riContour2d = regionData(ri).contours.front();
+
+                auto & riCountours = regionData(ri).contours;
+                if (riCountours.empty()){
+                    std::cerr << "this region has no countour!" << std::endl;
+                    continue;
+                }
+
+                auto & riContour2d = riCountours.front();
                 auto & riCamera = _views.data(ri.viewHandle).camera;
                 double riArea = regionData(ri).area;
                 //double riArea = cv::contourArea(riContour2d);
@@ -788,22 +800,18 @@ namespace panoramix {
                     int height = vd.data.regionNet->image().rows;
                     int width = vd.data.regionNet->image().cols;
 
-                    Image coloredOutput(vd.data.regionNet->segmentedRegions().size(), CV_8UC3);
-                    std::vector<cv::Vec<uint8_t, 3>> colors(vd.data.regionNet->regions().internalElements<0>().size());
-                    std::generate(colors.begin(), colors.end(), []() {
-                        return cv::Vec<uint8_t, 3>(uint8_t(std::rand() % 256),
-                            uint8_t(std::rand() % 256),
-                            uint8_t(std::rand() % 256));
-                    });
+                    ImageWithType<Vec3b> coloredOutput(vd.data.regionNet->segmentedRegions().size());
+                    vis::ColorTable colors = vis::CreateRandomColorTableWithSize(vd.data.regionNet->regions().internalElements<0>().size());
                     for (int y = 0; y < height; y++) {
                         for (int x = 0; x < width; x++) {
-                            coloredOutput.at<cv::Vec<uint8_t, 3>>(cv::Point(x, y)) =
-                                colors[vd.data.regionNet->segmentedRegions().at<int32_t>(cv::Point(x, y))];
+                            coloredOutput(cv::Point(x, y)) =
+                                vis::ToVec3b(colors[vd.data.regionNet->segmentedRegions().at<int32_t>(cv::Point(x, y))]);
                         }
                     }
                     vizs[vd.topo.hd].setImage(vd.data.regionNet->image());
                     vizs[vd.topo.hd].params.alphaForNewImage = 0.5;
                     vizs[vd.topo.hd] << coloredOutput;
+                    vizs[vd.topo.hd] << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB);
                 }
 
                 for (auto & lineIdRi : regionLineIntersectionSampledPoints) {
@@ -813,6 +821,7 @@ namespace panoramix {
                     auto & cam = _views.data(ri.viewHandle).camera;
                     auto & viz = vizs[ri.viewHandle];
 
+                    viz << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB) << vis::manip2d::SetThickness(3) << cline2;
                     viz << vis::manip2d::SetColor(vis::ColorTag::Black)
                         << vis::manip2d::SetThickness(1);
                     auto & regionCenter = _views.data(ri.viewHandle).regionNet->regions().data(ri.handle).center;
@@ -943,7 +952,7 @@ namespace panoramix {
                 }
 
                 // compute junction weight
-                double junctionWeight = 2.0;
+                double junctionWeight = 1.0;
                 // relation center is inside image
                 if (core::IsBetween(relationCenter[0], 0, weightDistribution.cols - 1) &&
                     core::IsBetween(relationCenter[1], 0, weightDistribution.rows - 1)) {
@@ -1101,7 +1110,7 @@ namespace panoramix {
             }
 
             // solve the equation system
-            static const bool useWeights = false;
+            static const bool useWeights = true;
 
             VectorXd X;
             SparseQR<SparseMatrix<double>, COLAMDOrdering<int>> solver;
@@ -1155,7 +1164,7 @@ namespace panoramix {
             // display reconstructed lines
             IF_DEBUG_USING_VISUALIZERS{
                 vis::Visualizer3D viz;
-                auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
+                auto colorTable = vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum);
                 viz << vis::manip3d::SetDefaultLineWidth(1.0);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
@@ -1176,7 +1185,7 @@ namespace panoramix {
 
             IF_DEBUG_USING_VISUALIZERS{
                 vis::Visualizer3D viz;
-                auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
+                auto colorTable = vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
                     viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
@@ -1189,7 +1198,7 @@ namespace panoramix {
             IF_DEBUG_USING_VISUALIZERS{ // show interview constraints
                 vis::Visualizer3D viz;
                 viz << vis::manip3d::SetDefaultLineWidth(1.0);
-                auto & colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColorsExcludingWhiteAndBlack);
+                auto colorTable = vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
                     viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);

@@ -150,14 +150,14 @@ namespace panoramix {
         public:
             using Feature = std::vector<Line2>;
             struct Params {
-                inline Params() : minLength(15), xBorderWidth(3), yBorderWidth(3), numDirs(8), useExperimentalAlgorithm(false) {}
+                inline Params() : minLength(15), xBorderWidth(3), yBorderWidth(3), numDirs(8), useLSD(false) {}
                 int minLength;
                 int xBorderWidth, yBorderWidth;
                 int numDirs;
-                bool useExperimentalAlgorithm;
+                bool useLSD;
                 template <class Archive> 
                 inline void serialize(Archive & ar) { 
-                    ar(minLength, xBorderWidth, yBorderWidth, numDirs, useExperimentalAlgorithm); 
+                    ar(minLength, xBorderWidth, yBorderWidth, numDirs, useLSD);
                 }
             };
         public:

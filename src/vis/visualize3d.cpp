@@ -31,7 +31,7 @@ namespace panoramix {
             :
             winName("Visualizer 3D"),
             backgroundColor(255, 255, 255),
-            camera(700, 700, 200, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)),
+            camera(700, 700, 700, core::Vec3(1, 1, 1) / 4, core::Vec3(0, 0, 0), core::Vec3(0, 0, -1)),
             renderMode(RenderModeFlag::All){
         }        
 
@@ -218,7 +218,7 @@ namespace panoramix {
                     QVector3D zv = (center - eye).normalized();
                     QVector3D trans = xv * tt.x() + yv * tt.y() + zv * tt.z();
                     eye += trans;
-                    center += trans;
+                    //center += trans;
                     _params.camera.setEye(MakeCoreVec(eye), false);
                     _params.camera.setCenter(MakeCoreVec(center), false);
 
