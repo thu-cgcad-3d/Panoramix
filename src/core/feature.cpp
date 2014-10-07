@@ -8,6 +8,8 @@ extern "C" {
     #include <lsd.h>
 }
 
+#include <SLIC.h>
+
 #include "misc.hpp"
 #include "feature.hpp"
 #include "utilities.hpp"
@@ -17,141 +19,149 @@ extern "C" {
 namespace panoramix {
     namespace core {
 
-        PerspectiveCamera::PerspectiveCamera(int w, int h, double focal, const Vec3 & eye,
-            const Vec3 & center, const Vec3 & up, double near, double far) 
-        : _screenW(w), _screenH(h), _focal(focal), _eye(eye), _center(center), _up(up), _near(near), _far(far) {
-            updateMatrices();
+        void NonMaximaSuppression(const Image & src, Image & dst, int sz, std::vector<PixelLoc> * pixels,
+            const ImageWithType<bool> & mask) {
+
+            const int M = src.rows;
+            const int N = src.cols;
+            const bool masked = !mask.empty();
+
+            cv::Mat block = 255 * cv::Mat_<uint8_t>::ones(Size(2 * sz + 1, 2 * sz + 1));
+            dst = cv::Mat::zeros(src.size(), src.type());
+
+            // iterate over image blocks
+            for (int m = 0; m < M; m += sz + 1) {
+                for (int n = 0; n < N; n += sz + 1) {
+                    cv::Point ijmax;
+                    double vcmax, vnmax;
+
+                    // get the maximal candidate within the block
+                    cv::Range ic(m, std::min(m + sz + 1, M));
+                    cv::Range jc(n, std::min(n + sz + 1, N));
+                    cv::minMaxLoc(src(ic, jc), NULL, &vcmax, NULL, &ijmax, masked ? mask(ic, jc) : cv::noArray());
+                    cv::Point cc = ijmax + cv::Point(jc.start, ic.start);
+
+                    // search the neighbours centered around the candidate for the true maxima
+                    cv::Range in(std::max(cc.y - sz, 0), std::min(cc.y + sz + 1, M));
+                    cv::Range jn(std::max(cc.x - sz, 0), std::min(cc.x + sz + 1, N));
+
+                    // mask out the block whose maxima we already know
+                    cv::Mat_<uint8_t> blockmask;
+                    block(cv::Range(0, in.size()), cv::Range(0, jn.size())).copyTo(blockmask);
+                    cv::Range iis(ic.start - in.start, std::min(ic.start - in.start + sz + 1, in.size()));
+                    cv::Range jis(jc.start - jn.start, std::min(jc.start - jn.start + sz + 1, jn.size()));
+                    blockmask(iis, jis) = cv::Mat_<uint8_t>::zeros(Size(jis.size(), iis.size()));
+                    minMaxLoc(src(in, jn), NULL, &vnmax, NULL, &ijmax, masked ? mask(in, jn).mul(blockmask) : blockmask);
+                    cv::Point cn = ijmax + cv::Point(jn.start, in.start);
+
+                    // if the block centre is also the neighbour centre, then it's a local maxima
+                    if (vcmax > vnmax) {
+                        std::memcpy(dst.ptr(cc.y, cc.x), src.ptr(cc.y, cc.x), src.elemSize());
+                        if (pixels){
+                            pixels->push_back(cc);
+                        }
+                    }
+                }
+            }
         }
 
-        void PerspectiveCamera::updateMatrices() {
-            _viewMatrix = MakeMat4LookAt(_eye, _center, _up);
+        float ComputeIntersectionJunctionWeightWithLinesVotes(const Mat<float, 3, 2> & v){
+            double junctionWeight = 1.0;
+            // Y
+            double Y = 0.0;
+            for (int s = 0; s < 2; s++) {
+                Y += v(0, s) * v(1, s) * v(2, s) * DiracDelta(v(0, 1 - s) + v(1, 1 - s) + v(2, 1 - s));
+            }
 
-            double verticalViewAngle = atan(_screenH / 2.0 / _focal) * 2;
-            double aspect = double(_screenW) / double(_screenH);
-            _projectionMatrix = MakeMat4Perspective(verticalViewAngle, aspect, _near, _far);
+            // W
+            double W = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    for (int s = 0; s < 2; s++) {
+                        W += v(i, s) * v(j, 1 - s) * v(k, 1 - s) * DiracDelta(v(i, 1 - s) + v(j, s) + v(k, s));
+                    }
+                }
+            }
 
-            _viewProjectionMatrix = _projectionMatrix * _viewMatrix;
-            _viewProjectionMatrixInv = _viewProjectionMatrix.inv();
+            // K
+            double K = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    K += v(i, 0) * v(i, 1) * v(j, 0) * v(k, 1) * DiracDelta(v(j, 1) + v(k, 0));
+                    K += v(i, 0) * v(i, 1) * v(j, 1) * v(k, 0) * DiracDelta(v(j, 0) + v(k, 1));
+                }
+            }
+
+            // compute X junction
+            double X = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    X += v(i, 0) * v(i, 1) * v(j, 0) * v(j, 1) * DiracDelta(v(k, 0) + v(k, 1));
+                }
+            }
+
+            // compute T junction
+            double T = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    T += v(i, 0) * v(i, 1) * v(j, 0) * DiracDelta(v(j, 1) + v(k, 0) + v(k, 1));
+                    T += v(i, 0) * v(i, 1) * v(j, 1) * DiracDelta(v(j, 0) + v(k, 0) + v(k, 1));
+                }
+            }
+
+            // compute L junction
+            double L = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    for (int a = 0; a < 2; a++) {
+                        int nota = 1 - a;
+                        for (int b = 0; b < 2; b++) {
+                            int notb = 1 - b;
+                            L += v(i, a) * v(j, b) * DiracDelta(v(i, nota) + v(j, notb) + v(k, 0) + v(k, 1));
+                        }
+                    }
+                }
+            }
+
+            //std::cout << " Y-" << Y << " W-" << W << " K-" << K << 
+            //    " X-" << X << " T-" << T << " L-" << L << std::endl; 
+            static const double threshold = 1e-4;
+            if (Y > threshold) {
+                junctionWeight += 5.0;
+            }
+            else if (W > threshold) {
+                junctionWeight += 5.0;
+            }
+            else if (L > threshold) {
+                junctionWeight += 4.0;
+            }
+            else if (K > threshold) {
+                junctionWeight += 3.0;
+            }
+            else if (X > threshold) {
+                junctionWeight += 5.0;
+            }
+            else if (T > threshold) {
+                junctionWeight += 0.0;
+            }
+
+            return junctionWeight;
         }
-
-        Vec2 PerspectiveCamera::screenProjection(const Vec3 & p3) const {
-            Vec4 p4(p3(0), p3(1), p3(2), 1);
-            Vec4 position = _viewProjectionMatrix * p4;
-            double xratio = position(0) / position(3) / 2;
-            double yratio = position(1) / position(3) / 2;
-            double x = (xratio + 0.5) * _screenW;
-            double y = _screenH - (yratio + 0.5) * _screenH;
-            return Vec2(x, y);
-        }
-
-        bool PerspectiveCamera::isVisibleOnScreen(const Vec3 & p3d) const {
-            Vec4 p4(p3d(0), p3d(1), p3d(2), 1);
-            Vec4 position = _viewProjectionMatrix * p4;
-            return position(3) > 0 && position(2) > 0;
-        }
-
-        HPoint2 PerspectiveCamera::screenProjectionInHPoint(const Vec3 & p3) const {
-            Vec4 p4(p3(0), p3(1), p3(2), 1);
-            Vec4 position = _viewProjectionMatrix * p4;
-            double xratio = position(0) / 2;
-            double yratio = position(1) / 2;
-            double zratio = position(3);
-
-            double x = (xratio + 0.5 * zratio) * _screenW;
-            double y = _screenH * zratio - (yratio + 0.5 * zratio) * _screenH;
-            return HPoint2({x, y}, zratio);
-        }
-
-        Vec3 PerspectiveCamera::spatialDirection(const Vec2 & p2d) const {
-            double xratio = (p2d(0) / _screenW - 0.5) * 2;
-            double yratio = ((_screenH - p2d(1)) / _screenH - 0.5) * 2;
-            Vec4 position(xratio, yratio, 1, 1);
-            Vec4 realPosition = _viewProjectionMatrixInv * position;
-            return Vec3(realPosition(0) / realPosition(3), 
-                realPosition(1) / realPosition(3), 
-                realPosition(2) / realPosition(3));
-        }
-
-        void PerspectiveCamera::resizeScreen(const Size & sz, bool updateMat) {
-            if (_screenH == sz.height && _screenW == sz.width)
-                return;
-            _screenH = sz.height;
-            _screenW = sz.width;
-            if (updateMat)
-                updateMatrices();
-        }
-
-        void PerspectiveCamera::setFocal(double f, bool updateMat) {
-            if (f == _focal)
-                return;
-            _focal = f;
-            if (updateMat)
-                updateMatrices();
-        }
-
-        void PerspectiveCamera::setEye(const Vec3 & e, bool updateMat) {
-            if (_eye == e)
-                return;
-            _eye = e;
-            if (updateMat)
-                updateMatrices();
-        }
-
-        void PerspectiveCamera::setCenter(const Vec3 & c, bool updateMat) {
-            if (_center == c)
-                return;
-            _center = c;
-            if (updateMat)
-                updateMatrices();
-        }
-
-        void PerspectiveCamera::setUp(const Vec3 & up, bool updateMat) {
-            if (_up == up)
-                return;
-            _up = up;
-            if (updateMat)
-                updateMatrices();
-        }
-
-        void PerspectiveCamera::setNearAndFarPlanes(double near, double far, bool updateMat) {
-            if (_near == near && _far == far)
-                return;
-            _near = near;
-            _far = far;
-            if (updateMat)
-                updateMatrices();
-        }
-
-
-
-        PanoramicCamera::PanoramicCamera(double focal, const Vec3 & eye,
-            const Vec3 & center, const Vec3 & up)
-            : _focal(focal), _eye(eye), _center(center), _up(up) {
-            _xaxis = (_center - _eye); _xaxis /= core::norm(_xaxis);
-            _yaxis = _up.cross(_xaxis); _yaxis /= core::norm(_yaxis);
-            _zaxis = _xaxis.cross(_yaxis);
-        }
-
-        Vec2 PanoramicCamera::screenProjection(const Vec3 & p3) const {
-            double xx = p3.dot(_xaxis);
-            double yy = p3.dot(_yaxis);
-            double zz = p3.dot(_zaxis);
-            GeoCoord pg = core::Vec3(xx, yy, zz);
-            auto sz = screenSize();
-            double x = (pg.longitude + M_PI) / 2.0 / M_PI * sz.width;
-            double y = (pg.latitude + M_PI_2) / M_PI * sz.height;
-            return Vec2(x, y);
-        }
-
-        Vec3 PanoramicCamera::spatialDirection(const Vec2 & p2d) const {
-            auto sz = screenSize();
-            double longi = p2d(0) / double(sz.width) * 2 * M_PI - M_PI;
-            double lati = p2d(1) / double(sz.height) * M_PI - M_PI_2;
-            Vec3 dd = (GeoCoord(longi, lati).toVector());
-            return dd(0) * _xaxis + dd(1) * _yaxis + dd(2) * _zaxis;
-        }
-
-
 
 
         namespace {
@@ -504,22 +514,6 @@ namespace panoramix {
 
         namespace {
 
-            std::string ImageDepth2Str(int depth)
-            {
-                switch (depth)
-                {
-                case CV_8U: return "CV_8U";
-                case CV_8S: return "CV_8S";
-                case CV_16U: return "CV_16U";
-                case CV_16S: return "CV_16S";
-                case CV_32S: return "CV_32S";
-                case CV_32F: return "CV_32F";
-                case CV_64F: return "CV_64F";
-                default:
-                    return "unknown depth type";
-                }
-            }
-
             struct Edge {
                 float w;
                 int a, b;
@@ -743,7 +737,7 @@ namespace panoramix {
                 size_t nlines = lines.size();
                 size_t npoints = points.size();
                 ImageWithType<double> votes = ImageWithType<double>::zeros(nlines, npoints);
-                for (size_t i = 0; i < nlines; i++) {
+                for (int i = 0; i < nlines; i++) {
                     auto & line = lines[i];
                     for (int j = 0; j < npoints; j++) {
                         const HPoint2 & point = points[j];
@@ -1143,54 +1137,7 @@ namespace panoramix {
             return results;
         }
 
-
-
-
-        void NonMaximaSuppression(const Image & src, Image & dst, int sz, std::vector<PixelLoc> * pixels,
-            const ImageWithType<bool> & mask) {
-
-            const int M = src.rows;
-            const int N = src.cols;
-            const bool masked = !mask.empty();
-
-            cv::Mat block = 255 * cv::Mat_<uint8_t>::ones(Size(2 * sz + 1, 2 * sz + 1));
-            dst = cv::Mat::zeros(src.size(), src.type());
-
-            // iterate over image blocks
-            for (int m = 0; m < M; m += sz + 1) {
-                for (int n = 0; n < N; n += sz + 1) {
-                    cv::Point ijmax;
-                    double vcmax, vnmax;
-
-                    // get the maximal candidate within the block
-                    cv::Range ic(m, std::min(m + sz + 1, M));
-                    cv::Range jc(n, std::min(n + sz + 1, N));
-                    cv::minMaxLoc(src(ic, jc), NULL, &vcmax, NULL, &ijmax, masked ? mask(ic, jc) : cv::noArray());
-                    cv::Point cc = ijmax + cv::Point(jc.start, ic.start);
-
-                    // search the neighbours centered around the candidate for the true maxima
-                    cv::Range in(std::max(cc.y - sz, 0), std::min(cc.y + sz + 1, M));
-                    cv::Range jn(std::max(cc.x - sz, 0), std::min(cc.x + sz + 1, N));
-
-                    // mask out the block whose maxima we already know
-                    cv::Mat_<uint8_t> blockmask;
-                    block(cv::Range(0, in.size()), cv::Range(0, jn.size())).copyTo(blockmask);
-                    cv::Range iis(ic.start - in.start, std::min(ic.start - in.start + sz + 1, in.size()));
-                    cv::Range jis(jc.start - jn.start, std::min(jc.start - jn.start + sz + 1, jn.size()));
-                    blockmask(iis, jis) = cv::Mat_<uint8_t>::zeros(Size(jis.size(), iis.size()));
-                    minMaxLoc(src(in, jn), NULL, &vnmax, NULL, &ijmax, masked ? mask(in, jn).mul(blockmask) : blockmask);
-                    cv::Point cn = ijmax + cv::Point(jn.start, in.start);
-
-                    // if the block centre is also the neighbour centre, then it's a local maxima
-                    if (vcmax > vnmax) {
-                        std::memcpy(dst.ptr(cc.y, cc.x), src.ptr(cc.y, cc.x), src.elemSize());
-                        if (pixels){
-                            pixels->push_back(cc);
-                        }
-                    }
-                }
-            }
-        }
+       
 
 
 
@@ -1593,7 +1540,7 @@ namespace panoramix {
                 horizonVPs.push_back(hinter2);
                 hvpvIdOfVP.push_back(i);
                 vpIsAtFirstInHVPV.push_back(false);
-                orthoPairs.emplace_back(horizonVPs.size() - 2, horizonVPs.size() - 1);
+                orthoPairs.emplace_back(static_cast<int>(horizonVPs.size() - 2), static_cast<int>(horizonVPs.size() - 1));
             }
 
             auto lineClasses = ClassifyLines(LinesVotesToPoints(horizonVPs, lines), 0.5);
@@ -1639,7 +1586,9 @@ namespace panoramix {
                 HPoint2 hinter2 = ProjectOnToImagePlane(v2, result.principlePoint, result.focalLength);
                 result.vanishingPoints.push_back(hinter1);
                 result.vanishingPoints.push_back(hinter2);
-                result.horizontalVanishingPointIds.emplace_back(result.vanishingPoints.size() - 2, result.vanishingPoints.size() - 1);
+                result.horizontalVanishingPointIds.emplace_back(
+                    static_cast<int>(result.vanishingPoints.size() - 2), 
+                    static_cast<int>(result.vanishingPoints.size() - 1));
             }
 
             // reassign line classes

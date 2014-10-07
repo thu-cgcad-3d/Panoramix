@@ -2,7 +2,8 @@
 #define PANORAMIX_VIS_RENDERABLE_OBJECT_HPP
 
 #include "basic_types.hpp"
-#include "../core/feature.hpp"
+
+#include "../core/cameras.hpp"
 
 namespace panoramix {
     namespace vis {

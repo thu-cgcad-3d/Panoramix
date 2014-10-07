@@ -55,6 +55,14 @@ namespace panoramix {
         }
 
 
+        static const double Epsilon = 1e-8;
+
+        // zero
+        template <class T>
+        inline bool IsFuzzyZero(const T & t){
+            return t < Epsilon && t > -Epsilon;
+        }
+
 
         // squared
         template <class T>

@@ -15,7 +15,6 @@
 #include <functional>
 
 #include <opencv2/opencv.hpp>
-#include <opencv2/stitching/detail/matchers.hpp>
 
 #include "version.hpp"
 #include "macros.hpp"
@@ -373,9 +372,6 @@ namespace panoramix {
 
 
 
-
-
-
         // image
         using Image = cv::Mat;
         template <class T>
@@ -388,10 +384,13 @@ namespace panoramix {
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im);
         std::pair<double, double> MinMaxValOfImage(const Image & im);
 
+        template <class T> 
+        inline PixelLoc ToPixelLoc(const Point<T, 2> & p){
+            return PixelLoc(static_cast<int>(p[0]), static_cast<int>(p[1]));
+        }
+
         PixelLoc PixelLocFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv);
         GeoCoord GeoCoordFromPixelLoc(const PixelLoc & pixel, int longidiv, int latidiv);
-
-
 
 
 
@@ -515,7 +514,7 @@ namespace panoramix {
 
 
 
-        /// bounding box functions
+        /// bounding box functions for basic types
 
         // for scalars
         template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>

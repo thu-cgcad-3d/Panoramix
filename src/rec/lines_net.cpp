@@ -196,6 +196,29 @@ namespace panoramix {
                 }
             }
 
+            // compute junction weights
+            for (auto & lr : _lines.elements<1>()){
+                auto & lrd = lr.data;
+                if (lrd.type == lrd.Incidence){
+                    lrd.junctionWeight = 7.0;
+                }
+                else if (lrd.type == lrd.Intersection){
+                    auto p = ToPixelLoc(lrd.relationCenter);
+                    if (core::IsBetween(lrd.relationCenter[0], 0, _lineVotingDistribution.cols - 1) &&
+                        core::IsBetween(lrd.relationCenter[1], 0, _lineVotingDistribution.rows - 1)){
+                        lrd.junctionWeight = ComputeIntersectionJunctionWeightWithLinesVotes(
+                            _lineVotingDistribution(p));
+                    }
+                    else{
+                        lrd.junctionWeight = 2.0;
+                    }
+                }
+                else{
+                    assert(false && "invalid branch!");
+                }
+            }
+
+
 
             IF_DEBUG_USING_VISUALIZERS {
 

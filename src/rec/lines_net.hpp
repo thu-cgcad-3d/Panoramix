@@ -35,13 +35,14 @@ namespace panoramix {
             };
             struct LineRelationData {
                 Point2 relationCenter;
+                float junctionWeight;
                 enum Type {
                     Incidence,
                     Intersection
                 } type;
                 template <class Archiver>
                 void serialize(Archiver & ar) {
-                    ar(relationCenter, type);
+                    ar(relationCenter, junctionWeight, type);
                 }
             };
             using LinesGraph = GraphicalModel02 < LineData, LineRelationData > ;

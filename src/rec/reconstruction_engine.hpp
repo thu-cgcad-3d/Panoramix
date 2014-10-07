@@ -2,7 +2,7 @@
 #define PANORAMIX_CORE_RECONSTRUCTION_ENGINE_HPP
 
 #include "../core/basic_types.hpp"
-#include "../core/feature.hpp"
+#include "../core/cameras.hpp"
 
 #include "regions_net.hpp"
 #include "lines_net.hpp"
@@ -35,8 +35,8 @@ namespace panoramix {
                 double interViewIncidenceAngleAlongDirectionThreshold;
 
                 template <class Archiver>
-                inline void serialize(Archiver & arc) {
-                    arc(camera, cameraAngleScaler, smallCameraAngleScalar,
+                inline void serialize(Archiver & ar) {
+                    ar(camera, cameraAngleScaler, smallCameraAngleScalar,
                         samplingStepLengthOnRegionBoundaries, samplingStepLengthOnLines,
                         intersectionDistanceThreshold,
                         incidenceDistanceAlongDirectionThreshold,
@@ -57,8 +57,8 @@ namespace panoramix {
                 ViewHandle viewHandle;
                 HandleT handle;
                 template <class Archiver> 
-                void serialize(Archiver & arc) {
-                    arc(viewHandle, handle);
+                void serialize(Archiver & ar) {
+                    ar(viewHandle, handle);
                 }
             };
 
@@ -167,9 +167,9 @@ namespace panoramix {
                 std::shared_ptr<LinesNet> lineNet;
 
                 template <class Archiver>
-                void serialize(Archiver & arc) {
-                    arc(originalCamera, camera, cameraDirectionErrorScale);
-                    arc(image, regionNet, lineNet);
+                void serialize(Archiver & ar) {
+                    ar(originalCamera, camera, cameraDirectionErrorScale);
+                    ar(image, regionNet, lineNet);
                 }
             };
 

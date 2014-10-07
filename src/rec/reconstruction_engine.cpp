@@ -20,6 +20,7 @@ extern "C" {
 #include "reconstruction_engine.hpp"
 
 #include "../core/debug.hpp"
+#include "../core/feature.hpp"
 
 namespace panoramix {
     namespace rec {
@@ -69,43 +70,6 @@ namespace panoramix {
             _globalData.panorama = panorama;
         }
 
-        namespace {
-
-            void LineIntersectons(const std::vector<Classified<Line2>> & lines,
-                std::vector<HPoint2> & hinterps, std::vector<std::pair<int, int>> & lineids,
-                bool suppresscross) {
-                size_t lnum = lines.size();
-                for (int i = 0; i < lnum; i++) {
-                    auto eqi = cv::Vec3d(lines[i].component.first[0], lines[i].component.first[1], 1)
-                        .cross(cv::Vec3d(lines[i].component.second[0], lines[i].component.second[1], 1));
-                    for (int j = i + 1; j < lnum; j++) {
-                        auto eqj = cv::Vec3d(lines[j].component.first[0], lines[j].component.first[1], 1)
-                            .cross(cv::Vec3d(lines[j].component.second[0], lines[j].component.second[1], 1));
-                        auto interp = eqi.cross(eqj);
-                        if (interp[0] == 0 && interp[1] == 0 && interp[2] == 0) { // lines overlapped
-                            interp[0] = -eqi[1];
-                            interp[1] = eqi[0];
-                        }
-                        interp /= norm(interp);
-
-                        if (suppresscross) {
-                            auto& a1 = lines[i].component.first;
-                            auto& a2 = lines[i].component.second;
-                            auto& b1 = lines[j].component.first;
-                            auto& b2 = lines[j].component.second;
-                            double q = a1[0] * b1[1] - a1[1] * b1[0] - a1[0] * b2[1] + a1[1] * b2[0] -
-                                a2[0] * b1[1] + a2[1] * b1[0] + a2[0] * b2[1] - a2[1] * b2[0];
-                            double t = (a1[0] * b1[1] - a1[1] * b1[0] - a1[0] * b2[1] +
-                                a1[1] * b2[0] + b1[0] * b2[1] - b1[1] * b2[0]) / q;
-                            if (t > 0 && t < 1 && t == t)
-                                continue;
-                        }
-                        hinterps.push_back(HPointFromVector(interp));
-                        lineids.push_back({ i, j });
-                    }
-                }
-            }
-        }
 
         void ReconstructionEngine::computeFeatures(ViewHandle h) {
             auto & vd = _views.data(h);
@@ -125,10 +89,6 @@ namespace panoramix {
             linesNetParams.incidenceDistanceAlongDirectionThreshold = _params.incidenceDistanceAlongDirectionThreshold;
             vd.lineNet = std::make_shared<LinesNet>(vd.image, linesNetParams);
         }
-
-
-
-
 
 
         namespace {
@@ -477,6 +437,28 @@ namespace panoramix {
                 return Line<T, N>(normalize(l.first), normalize(l.second));
             }
 
+            std::vector<int> FillInRectangleWithXs(int extendSize){
+                std::vector<int> dx;
+                dx.reserve(2 * extendSize + 1);
+                for (int a = -extendSize; a <= extendSize; a++) {
+                    for (int b = -extendSize; b <= extendSize; b++) {
+                        dx.push_back(a);
+                    }
+                }
+                return dx;
+            }
+
+            std::vector<int> FillInRectangleWithYs(int extendSize){
+                std::vector<int> dy;
+                dy.reserve(2 * extendSize + 1);
+                for (int a = -extendSize; a <= extendSize; a++) {
+                    for (int b = -extendSize; b <= extendSize; b++) {
+                        dy.push_back(b);
+                    }
+                }
+                return dy;
+            }
+
         }
 
 
@@ -663,30 +645,32 @@ namespace panoramix {
             }
 
             // check whether all interview incidences are valid
-            double maxDist = 0;
-            Line3 farthestLine1, farthestLine2;
-            for (auto & lir : lineIncidenceRelations) {
-                auto & line1 = lineSpatialAvatars[lir.first.first];
-                auto & line2 = lineSpatialAvatars[lir.first.second];
-                if (line1.claz != line2.claz) {
-                    std::cout << "invalid classes!" << std::endl;
+            IF_DEBUG_USING_VISUALIZERS{
+                double maxDist = 0;
+                Line3 farthestLine1, farthestLine2;
+                for (auto & lir : lineIncidenceRelations) {
+                    auto & line1 = lineSpatialAvatars[lir.first.first];
+                    auto & line2 = lineSpatialAvatars[lir.first.second];
+                    if (line1.claz != line2.claz) {
+                        std::cout << "invalid classes!" << std::endl;
+                    }
+                    auto l1 = NormalizeLine(line1.component);
+                    auto l2 = NormalizeLine(line2.component);
+                    auto dist = DistanceBetweenTwoLines(l1, l2).first;
+                    if (dist > maxDist) {
+                        farthestLine1 = l1;
+                        farthestLine2 = l2;
+                        maxDist = dist;
+                    }
                 }
-                auto l1 = NormalizeLine(line1.component);
-                auto l2 = NormalizeLine(line2.component);
-                auto dist = DistanceBetweenTwoLines(l1, l2).first;
-                if (dist > maxDist) {
-                    farthestLine1 = l1;
-                    farthestLine2 = l2;
-                    maxDist = dist;
+                {
+                    std::cout << "max dist of interview incidence pair: " << maxDist << std::endl;
+                    std::cout << "line1: " << farthestLine1.first << ", " << farthestLine1.second << std::endl;
+                    std::cout << "line2: " << farthestLine2.first << ", " << farthestLine2.second << std::endl;
+                    auto d = DistanceBetweenTwoLines(farthestLine1, farthestLine2);
+                    double angleDist = AngleBetweenDirections(d.second.first.position, d.second.second.position);
+                    std::cout << "angle dist: " << angleDist << std::endl;
                 }
-            }
-            {
-                std::cout << "max dist of interview incidence pair: " << maxDist << std::endl;
-                std::cout << "line1: " << farthestLine1.first << ", " << farthestLine1.second << std::endl;
-                std::cout << "line2: " << farthestLine2.first << ", " << farthestLine2.second << std::endl;
-                auto d = DistanceBetweenTwoLines(farthestLine1, farthestLine2);
-                double angleDist = AngleBetweenDirections(d.second.first.position, d.second.second.position);
-                std::cout << "angle dist: " << angleDist << std::endl;
             }
 
 
@@ -696,15 +680,18 @@ namespace panoramix {
             regionLineIntersectionSampledPoints.clear();
 
             static const int extendSize = 7;
-            std::vector<int> dx, dy;
-            dx.reserve(2 * extendSize + 1);
-            dy.reserve(2 * extendSize + 1);
-            for (int a = -extendSize; a <= extendSize; a++) {
-                for (int b = -extendSize; b <= extendSize; b++) {
-                    dx.push_back(a);
-                    dy.push_back(b);
-                }
-            }
+            //std::vector<int> dx, dy;
+            //dx.reserve(2 * extendSize + 1);
+            //dy.reserve(2 * extendSize + 1);
+            //for (int a = -extendSize; a <= extendSize; a++) {
+            //    for (int b = -extendSize; b <= extendSize; b++) {
+            //        dx.push_back(a);
+            //        dy.push_back(b);
+            //    }
+            //}
+
+            static std::vector<int> dx = FillInRectangleWithXs(extendSize);
+            static std::vector<int> dy = FillInRectangleWithYs(extendSize);
 
             for (auto & vd : _views.elements<0>()) {
                 RegionIndex ri;
@@ -754,6 +741,9 @@ namespace panoramix {
                 auto & relationsInSameView = lines.topo(li.handle).uppers;
                 for (auto & rh : relationsInSameView) {
                     auto anotherLineHandle = lines.topo(rh).lowers[0];
+                    if (lines.data(rh).junctionWeight < 1e-5){
+                        continue; // ignore zero weight relations
+                    }
                     if (anotherLineHandle == li.handle)
                         anotherLineHandle = lines.topo(rh).lowers[1];
                     related.push_back(LineIndex{ li.viewHandle, anotherLineHandle });
@@ -789,7 +779,6 @@ namespace panoramix {
 
 
             std::cout << "ccnum: " << _globalData.lineConnectedComponentsNum << std::endl;
-
 
 
             IF_DEBUG_USING_VISUALIZERS{
@@ -911,7 +900,7 @@ namespace panoramix {
                 auto & lrd = lineRelationData(lri);
                 auto & relationCenter = lrd.relationCenter;
                 auto & weightDistribution = _views.data(lri.viewHandle).lineNet->lineVotingDistribution();
-                
+
                 auto & topo = _views.data(lri.viewHandle).lineNet->lines().topo(lri.handle);
                 auto & camera = _views.data(lri.viewHandle).camera;
                 LineIndex li1 = { lri.viewHandle, topo.lowers[0] };
@@ -927,7 +916,7 @@ namespace panoramix {
                 auto & vp2 = _globalData.vanishingPoints[line2.claz];
 
                 double ratio1 = ComputeDepthRatioOfPointOnSpatialLine(
-                    camera.spatialDirection(line1.component.first), 
+                    camera.spatialDirection(line1.component.first),
                     camera.spatialDirection(relationCenter), vp1);
                 double ratio2 = ComputeDepthRatioOfPointOnSpatialLine(
                     camera.spatialDirection(line2.component.first),
@@ -939,119 +928,22 @@ namespace panoramix {
                     A.insert(curEquationNum, lineId1) = ratio1;
                     A.insert(curEquationNum, lineId2) = -ratio2;
                     B(curEquationNum) = 0;
-                } else if (core::Contains(firstLineIndexInConnectedComponents, li1)) {
+                }
+                else if (core::Contains(firstLineIndexInConnectedComponents, li1)) {
                     // const[eta1] * ratio1 - eta2 * ratio2 = 0 -> 
                     // eta2 * ratio2 = const[eta1] * ratio1
                     A.insert(curEquationNum, lineId2) = ratio2;
                     B(curEquationNum) = constantEtaForFirstLineInEachConnectedComponent * ratio1;
-                } else if (core::Contains(firstLineIndexInConnectedComponents, li2)) {
+                }
+                else if (core::Contains(firstLineIndexInConnectedComponents, li2)) {
                     // eta1 * ratio1 - const[eta2] * ratio2 = 0 -> 
                     // eta1 * ratio1 = const[eta2] * ratio2
                     A.insert(curEquationNum, lineId1) = ratio1;
                     B(curEquationNum) = constantEtaForFirstLineInEachConnectedComponent * ratio2;
                 }
 
-                // compute junction weight
-                double junctionWeight = 1.0;
-                // relation center is inside image
-                if (core::IsBetween(relationCenter[0], 0, weightDistribution.cols - 1) &&
-                    core::IsBetween(relationCenter[1], 0, weightDistribution.rows - 1)) {
-                    auto & v = weightDistribution(PixelLoc(relationCenter[0], relationCenter[1]));
-                    {
-                        // Y
-                        double Y = 0.0;
-                        for (int s = 0; s < 2; s++) {
-                            Y += v(0, s) * v(1, s) * v(2, s) * DiracDelta(v(0, 1 - s) + v(1, 1 - s) + v(2, 1 - s));
-                        }
-
-                        // W
-                        double W = 0.0;
-                        for (int i = 0; i < 3; i++) {
-                            for (int j = 0; j < 3; j++) {
-                                if (i == j)
-                                    continue;
-                                int k = 3 - i - j;
-                                for (int s = 0; s < 2; s++) {
-                                    W += v(i, s) * v(j, 1 - s) * v(k, 1 - s) * DiracDelta(v(i, 1 - s) + v(j, s) + v(k, s));
-                                }
-                            }
-                        }
-
-                        // K
-                        double K = 0.0;
-                        for (int i = 0; i < 3; i++) {
-                            for (int j = 0; j < 3; j++) {
-                                if (i == j)
-                                    continue;
-                                int k = 3 - i - j;
-                                K += v(i, 0) * v(i, 1) * v(j, 0) * v(k, 1) * DiracDelta(v(j, 1) + v(k, 0));
-                                K += v(i, 0) * v(i, 1) * v(j, 1) * v(k, 0) * DiracDelta(v(j, 0) + v(k, 1));
-                            }
-                        }
-
-                        // compute X junction
-                        double X = 0.0;
-                        for (int i = 0; i < 3; i++) {
-                            for (int j = 0; j < 3; j++) {
-                                if (i == j)
-                                    continue;
-                                int k = 3 - i - j;
-                                X += v(i, 0) * v(i, 1) * v(j, 0) * v(j, 1) * DiracDelta(v(k, 0) + v(k, 1));
-                            }
-                        }
-
-                        // compute T junction
-                        double T = 0.0;
-                        for (int i = 0; i < 3; i++) {
-                            for (int j = 0; j < 3; j++) {
-                                if (i == j)
-                                    continue;
-                                int k = 3 - i - j;
-                                T += v(i, 0) * v(i, 1) * v(j, 0) * DiracDelta(v(j, 1) + v(k, 0) + v(k, 1));
-                                T += v(i, 0) * v(i, 1) * v(j, 1) * DiracDelta(v(j, 0) + v(k, 0) + v(k, 1));
-                            }
-                        }
-
-                        // compute L junction
-                        double L = 0.0;
-                        for (int i = 0; i < 3; i++) {
-                            for (int j = 0; j < 3; j++) {
-                                if (i == j)
-                                    continue;
-                                int k = 3 - i - j;
-                                for (int a = 0; a < 2; a++) {
-                                    int nota = 1 - a;
-                                    for (int b = 0; b < 2; b++) {
-                                        int notb = 1 - b;
-                                        L += v(i, a) * v(j, b) * DiracDelta(v(i, nota) + v(j, notb) + v(k, 0) + v(k, 1));
-                                    }
-                                }
-                            }
-                        }
-
-                        //std::cout << " Y-" << Y << " W-" << W << " K-" << K << 
-                        //    " X-" << X << " T-" << T << " L-" << L << std::endl; 
-                        static const double threshold = 1e-4;
-                        if (Y > threshold) {
-                            junctionWeight += 5.0;
-                        } else if (W > threshold) {
-                            junctionWeight += 5.0;
-                        } else if (L > threshold) {
-                            junctionWeight += 4.0;
-                        } else if (K > threshold) {
-                            junctionWeight += 3.0;
-                        } else if (X > threshold) {
-                            junctionWeight += 5.0;
-                        } else if (T > threshold) {
-                            junctionWeight += 2.0;
-                        }
-                    }
-                } else {
-                    junctionWeight += 2.0;
-                }
-                if (lrd.type == LinesNet::LineRelationData::Type::Incidence)
-                    junctionWeight += 2.0;
-                W.insert(curEquationNum, curEquationNum) = junctionWeight;
+                // set junction weights
+                W.insert(curEquationNum, curEquationNum) = lrd.junctionWeight;
 
                 curEquationNum++;
             }

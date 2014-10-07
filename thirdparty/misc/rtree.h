@@ -33,6 +33,9 @@ LICENSE:
 #include <algorithm>
 #include <utility>
 
+#pragma warning( push )
+#pragma warning( disable:4996 )
+
 namespace third_party
 {
     using std::min;
@@ -1698,3 +1701,5 @@ namespace third_party
   #undef RTREE_TEMPLATE
   #undef RTREE_QUAL
 }
+
+#pragma warning(pop)

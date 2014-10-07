@@ -156,8 +156,8 @@ namespace panoramix {
         class EasyForwardIterator : public std::iterator<std::forward_iterator_tag, 
             decltype(std::declval<GetValueT>()(std::declval<CoreDataT>()))> {
         public:
-            inline explicit EasyForwardIterator(const CoreDataT & cdata, GetValueT getValue, SetToNextT setToNext, 
-                CompareCoreDataT cmpCData = CompareCoreDataT())
+            inline explicit EasyForwardIterator(const CoreDataT & cdata, const GetValueT & getValue, const SetToNextT & setToNext, 
+                const CompareCoreDataT & cmpCData = CompareCoreDataT())
                 : _coreData(cdata), _getValue(getValue), _setToNext(setToNext), _compareCoreData(cmpCData) {}
             inline EasyForwardIterator & operator++() {
                 _setToNext(_coreData);
@@ -193,7 +193,8 @@ namespace panoramix {
         // make easy forward iterator
         template <class CoreDataT, class GetValueT, class SetToNextT, class CompareCoreDataT = std::equal_to<CoreDataT>>
         inline EasyForwardIterator<CoreDataT, GetValueT, SetToNextT, CompareCoreDataT> 
-            MakeEasyForwardIterator(const CoreDataT & cdata, GetValueT getValue, SetToNextT setToNext, CompareCoreDataT cmpCData = CompareCoreDataT()) {
+            MakeEasyForwardIterator(const CoreDataT & cdata, const GetValueT & getValue, const SetToNextT & setToNext, 
+            const CompareCoreDataT & cmpCData = CompareCoreDataT()) {
             return EasyForwardIterator<CoreDataT, GetValueT, SetToNextT, CompareCoreDataT>(cdata, getValue, setToNext, cmpCData);
         }
        
