@@ -669,4 +669,18 @@ namespace panoramix {
         }
 
     }
+
+    namespace core {
+
+        Box3 BoundingBox(const vis::SpatialProjectedPolygon & spp){
+            std::vector<Vec3> cs(spp.corners.size());
+            for (int i = 0; i < spp.corners.size(); i++){
+                cs[i] = IntersectionOfLineAndPlane(InfiniteLine3(spp.projectionCenter, spp.corners[i] - spp.projectionCenter), 
+                    spp.plane).position;
+            }
+            return BoundingBoxOfContainer(cs);
+        }
+
+    }
+
 }

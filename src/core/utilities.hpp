@@ -391,7 +391,7 @@ namespace panoramix {
         }
 
         template <class T, int N>
-        inline bool IsApproxParallel(const Vec<T, N> & v1, const Vec<T, N> & v2, const T & epsilon = 0.1) {
+        inline bool IsFuzzyParallel(const Vec<T, N> & v1, const Vec<T, N> & v2, const T & epsilon = 0.1) {
             auto s = v1.dot(v2) / norm(v1) / norm(v2);
             return s >= 1.0 - epsilon || s <= -1.0 + epsilon;
         }
@@ -542,6 +542,14 @@ namespace panoramix {
             auto dist = norm(pos1.position - pos2.position);
             return std::make_pair(dist, std::make_pair(pos1, pos2));
         }
+
+        // intersecton between line and plane
+        template <class T, int N>
+        PositionOnLine<T, N> IntersectionOfLineAndPlane(const InfiniteLine<T, N> & line, const Plane<T, N> & plane){
+            T lambda = (plane.anchor - line.anchor).dot(plane.normal) / line.direction.dot(plane.normal);
+            return PositionOnLine<T, N>(line, lambda);
+        }
+
 
 
 

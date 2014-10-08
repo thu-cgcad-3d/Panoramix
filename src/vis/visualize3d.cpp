@@ -182,7 +182,13 @@ namespace panoramix {
 
             public:
                 void autoSetCamera() {
-                    _params.camera.focusOn(_boundingBox.outerSphere(), true);
+                    // get bounding box for camera
+                   /* auto minV = std::numeric_limits<double>::lowest();
+                    auto maxV = std::numeric_limits<double>::max();
+                    Point3 minC(maxV, maxV, maxV), maxC(minV, minV, minV);*/
+                    auto sphere = _boundingBox.outerSphere();
+                   /* sphere.center = Vec3(0, 0, 0);*/
+                    _params.camera.focusOn(sphere, true);
                     update();
                 }
 
@@ -199,6 +205,7 @@ namespace panoramix {
                     QVector3D t(e->pos() - _lastPos);
                     t.setX(-t.x());
                     auto sphere = _boundingBox.outerSphere();
+                    //sphere.center = Vec3(0, 0, 0);
                     if (e->buttons() & Qt::RightButton) {
                         core::Vec3 trans = t.x() * _params.camera.rightward() + t.y() * _params.camera.upward();
                         trans *= 0.02;
@@ -216,10 +223,11 @@ namespace panoramix {
 
                 virtual void wheelEvent(QWheelEvent * e) override {
                     auto sphere = _boundingBox.outerSphere();
+                    /*sphere.center = Vec3(0, 0, 0);*/
                     double d = e->delta() / 10;
                     double dist = core::Distance(_params.camera.eye(), _params.camera.center());
                     core::Vec3 trans = d * dist/1000.0 * _params.camera.forward();
-                    _params.camera.translate(trans, sphere, true);
+                    _params.camera.moveEyeWithCenterFixed(trans, sphere, false, true);
                     update();
                 }
 

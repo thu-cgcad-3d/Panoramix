@@ -180,15 +180,12 @@ namespace panoramix {
 
 
 
-
-
-
         /// homography estimation
         std::pair<double, double> ComputeFocalsFromHomography(const Mat3 & H, std::pair<bool, bool> * ok = nullptr);
 
 
 
-
+        // 
 
 
 

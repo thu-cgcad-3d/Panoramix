@@ -224,6 +224,14 @@ namespace panoramix {
 
         };
 
+
+        // spatial projected polygon for panorama reconstruction
+        struct SpatialProjectedPolygon {
+            std::vector<core::Vec3> corners;
+            core::Point3 projectionCenter;
+            core::Plane3 plane;
+        };
+
     }
 
 
@@ -232,6 +240,8 @@ namespace panoramix {
         inline Box3 BoundingBox(const vis::OpenGLMesh & m) {
             return m.boundingBox();
         }
+
+        Box3 BoundingBox(const vis::SpatialProjectedPolygon & spp);
 
     }
 }

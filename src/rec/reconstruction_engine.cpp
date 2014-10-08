@@ -1077,6 +1077,16 @@ namespace panoramix {
 
             IF_DEBUG_USING_VISUALIZERS{
                 vis::Visualizer3D viz;
+                //// get good bounds, ignore bad lines
+                //std::vector<std::pair<double, double>> bounds(_globalData.vanishingPoints.size(), 
+                //    std::make_pair(std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest()));
+                //for (auto & l : _globalData.reconstructedLines){
+                //    int c = lineData(l.first).line.claz;
+                //    if (c == -1)
+                //        continue;
+
+                //}
+
                 auto colorTable = vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);

@@ -6,13 +6,10 @@
 #include <string>
 #include <random>
 
-using namespace panoramix;
+#include "test_config.hpp"
 
-// PROJECT_TEST_DATA_DIR_STR is predefined using CMake
-static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
-static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + "/normal";
-static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
-static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
+using namespace panoramix;
+using namespace test;
 
 static_assert(vis::CanMakeRenderable<core::Line3>::value, "Line3 is not renderable!");
 static_assert(vis::CanMakeRenderable<core::Point3>::value, "Point3 is not renderable!");
@@ -60,9 +57,32 @@ TEST(Visualizer3D, RenderClassifiedLines) {
         << vis::manip3d::Show();
 }
 
+DEBUG_TEST(Visualizer3D, RenderSpatialProjectedPolygon) {
+    vis::SpatialProjectedPolygon p[2];
+    p[0].plane = core::Plane3({ 0, -1, 0 }, { 0, 1, 0 });
+    p[0].projectionCenter = { 0, 0, 0 };
+    for (int i = 0; i < 5; i++){
+        p[0].corners.emplace_back(cos(i / 5.0*M_PI * 2), -1.0, sin(i / 5.0*M_PI * 2));
+    }
+    p[1].plane = core::Plane3({ 0, 1, 0 }, { 0, 1, 0 });
+    p[1].projectionCenter = { 0, 0, 0 };
+    for (int i = 0; i < 5; i++){
+        p[1].corners.emplace_back(cos(i / 5.0*M_PI * 2), -1.0, sin(i / 5.0*M_PI * 2));
+    }
+
+    core::Image im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
+    vis::Visualizer3D()
+        << vis::manip3d::Begin(std::vector<vis::SpatialProjectedPolygon>(p, p + 2))
+        << vis::manip3d::SetTexture(im)
+        << vis::manip3d::End
+        << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+        << vis::manip3d::Show();
+}
+
+
 
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    return DEBUG_RUN_ALL_TESTS();
 }

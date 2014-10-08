@@ -101,6 +101,20 @@ namespace panoramix {
             const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr);
 
 
+        // sphere
+        RenderableObject * MakeRenderable(const core::Sphere3 & sphere,
+            const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr);
+
+
+        // spatial projected polygon
+        RenderableObject * MakeRenderable(const SpatialProjectedPolygon & sp,
+            const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr);
+
+        // spatial projected polygons
+        RenderableObject * MakeRenderable(const std::vector<SpatialProjectedPolygon> & sps,
+            const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr);
+
+
         // classified
         template <class T>
         inline RenderableObject * MakeRenderable(const core::Classified<T> & c,

@@ -288,6 +288,8 @@ namespace panoramix {
         // plane
         template <class T, int N>
         struct Plane {
+            inline Plane() {}
+            inline Plane(const Point<T, N> & a, const Vec<T, N> & n) : anchor(a), normal(n) {}
             Point<T, N> anchor;
             Vec<T, N> normal;
         };
@@ -335,8 +337,12 @@ namespace panoramix {
             inline PositionOnLine(){}
             inline PositionOnLine(const Line<T, N> & line, const T & r)
                 : ratio(r), position(line.first + (line.second - line.first) * ratio) {}
-            T ratio; // [0 ~ 1]: on line
-            Point<T, N> position; // position = line.first + (line.second - line.fist) * ratio
+            inline PositionOnLine(const InfiniteLine<T, N> & line, const T & r)
+                : ratio(r), position(line.anchor + line.direction * ratio) {}
+            T ratio; // [0 ~ 1]: on line, or [-inf, +inf] on infinite line
+            // position = line.first + (line.second - line.fist) * ratio
+            // or       = line.anchor + line.direction * ratio
+            Point<T, N> position; 
         };
         template <class T, int N>
         inline bool operator == (const PositionOnLine<T, N> & a, const PositionOnLine<T, N> & b) {

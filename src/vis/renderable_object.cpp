@@ -65,9 +65,11 @@ namespace panoramix {
 
             class GLObject : public RenderableObject {
             public:
-                explicit GLObject(const OpenGLMesh & m, float pointSize, float lineWidth, 
-                    const OpenGLShaderSource & ss, RenderableObject * parent) 
-                    : RenderableObject(parent), _mesh(m), _pointSize(pointSize), _lineWidth(lineWidth), _shaderSource(ss) {
+                explicit GLObject(const OpenGLMesh & m, float pointSize, float lineWidth,
+                    const OpenGLShaderSource & ss, const core::Vec3 & panoramaCenter, 
+                    RenderableObject * parent)
+                    : RenderableObject(parent), _mesh(m), _pointSize(pointSize), _lineWidth(lineWidth),
+                    _shaderSource(ss), _panoramaCenter(panoramaCenter) {
                     _program = new QOpenGLShaderProgram;
                     _texture = new QOpenGLTexture(QOpenGLTexture::Target2D);
                 }
@@ -92,6 +94,22 @@ namespace panoramix {
                     }
 
                     Q_ASSERT(_program->isLinked());
+
+                    // setup texture
+                    if (!_textureImage.isNull()){
+                        if (!_texture->isCreated()){
+                            _texture->create();
+                        }
+                        if (!_texture->isCreated()){
+                            qDebug() << _program->log();
+                        }
+                        Q_ASSERT(_texture->textureId());
+                        _texture->setData(_textureImage.mirrored());
+                        _texture->setMinificationFilter(QOpenGLTexture::Linear);
+                        _texture->setMagnificationFilter(QOpenGLTexture::Linear);
+                        _texture->release();
+                    }
+
                     _program->release();
                 }
 
@@ -109,7 +127,7 @@ namespace panoramix {
 
                     _program->setUniformValue("matrix", MakeQMatrix(mat));
                     _program->setUniformValue("tex", 0);
-                    _program->setUniformValue("panoramaCenter", QVector3D(0, 0, 0));
+                    _program->setUniformValue("panoramaCenter", MakeQVec(_panoramaCenter));
                     _program->setUniformValue("pointSize", _pointSize);
 
                     SetAttributeArrayWithOpenGLMeshVertices(_program, "position", _mesh.vertices().front().position4);
@@ -148,23 +166,18 @@ namespace panoramix {
                 }
 
                 virtual void setTexture(const core::Image & im) {
-                    _program->bind();
-                    QImage qim = vis::MakeQImage(im);
-                    _texture->bind();
-                    _texture->setData(qim.mirrored());
-                    _texture->setMinificationFilter(QOpenGLTexture::Linear);
-                    _texture->setMagnificationFilter(QOpenGLTexture::Linear);
-                    _texture->release();
-                    _program->release();
+                    _textureImage = vis::MakeQImage(im);
                 }
 
             protected:
                 OpenGLMesh _mesh;
+                QImage _textureImage;
                 OpenGLShaderSource _shaderSource;
                 QOpenGLShaderProgram * _program;
                 QOpenGLTexture * _texture;
                 float _lineWidth;
                 float _pointSize;
+                core::Vec3 _panoramaCenter;
             };
         }
 
@@ -178,7 +191,8 @@ namespace panoramix {
                 template <class PointsIteratorT>
                 explicit GLPointsObject(PointsIteratorT && begin, PointsIteratorT && end,
                     float pointSize, const Color & color, RenderableObject * parent)
-                    : GLObject(OpenGLMesh::FromPoints(begin, end), pointSize, 1.0f, OpenGLShaderSourceDescriptor::DefaultPoints, parent), 
+                    : GLObject(OpenGLMesh::FromPoints(begin, end), pointSize, 1.0f, 
+                    OpenGLShaderSourceDescriptor::DefaultPoints, core::Vec3(0, 0, 0), parent), 
                     _points(begin, end), _color(color) {
                     // update color
                     for (auto & v : _mesh.vertices()) {
@@ -225,7 +239,8 @@ namespace panoramix {
                 template <class LinesIteratorT>
                 explicit GLLinesObject(LinesIteratorT && begin, LinesIteratorT && end,
                     float lineWidth, const Color & color, RenderableObject * parent)
-                    : GLObject(OpenGLMesh::FromLines(begin, end), 1.0f, lineWidth, OpenGLShaderSourceDescriptor::DefaultLines, parent),
+                    : GLObject(OpenGLMesh::FromLines(begin, end), 1.0f, lineWidth, 
+                    OpenGLShaderSourceDescriptor::DefaultLines, core::Vec3(0, 0, 0), parent),
                     _lines(begin, end), _color(color) {
                     // update color
                     for (auto & v : _mesh.vertices()) {
@@ -255,6 +270,75 @@ namespace panoramix {
 
 
 
+        namespace {
+
+            OpenGLMesh MeshFromSPPolygons(const std::vector<SpatialProjectedPolygon> & spps, 
+                const std::vector<int> & ids){
+                OpenGLMesh m;
+                for (int id : ids){
+                    auto & spp = spps[id];
+                    std::vector<Vec3> cs(spp.corners.size());
+                    for (int i = 0; i < spp.corners.size(); i++){
+                        InfiniteLine3 line(spp.projectionCenter, spp.corners[i] - spp.projectionCenter);
+                        cs[i] = IntersectionOfLineAndPlane(line, spp.plane).position;
+                    }
+                    std::vector<OpenGLMesh::VertHandle> vhandles(cs.size());
+                    for (int i = 0; i < cs.size(); i++){
+                        vhandles[i] = m.addVertex(Concat(cs[i], 1.0), spp.plane.normal);
+                    }
+                    m.addPolygon(vhandles);
+                }
+                return m;
+            }
+
+            class GLSpatialProjectedPolygonsObject : public GLObject {
+            public:
+                explicit GLSpatialProjectedPolygonsObject(const std::vector<SpatialProjectedPolygon> & spps,
+                    const std::vector<int> & ids, RenderableObject * parent)
+                    : GLObject(MeshFromSPPolygons(spps, ids), 1.0f, 1.0f,
+                    OpenGLShaderSourceDescriptor::Panorama, spps[ids.front()].projectionCenter, parent) {
+                }
+            };
+
+        }
+
+
+        RenderableObject * MakeRenderable(const std::vector<SpatialProjectedPolygon> & sps,
+            const DefaultRenderState & state, RenderableObject * parent){
+            std::vector<std::vector<int>> idWithSameCenters;
+            for (int i = 0; i < sps.size(); i++){
+                auto & c = sps[i].projectionCenter;
+                int idexisted = -1;
+                for (int j = 0; j < idWithSameCenters.size(); j++){
+                    auto & cexisted = sps[idWithSameCenters[j].front()].projectionCenter;
+                    if (cexisted == c){
+                        idexisted = j;
+                        break;
+                    }
+                }
+                if (idexisted >= 0){
+                    idWithSameCenters[idexisted].push_back(i);
+                }
+                else{
+                    idWithSameCenters.push_back(std::vector<int>(1, i));
+                }
+            }
+            if (idWithSameCenters.size() == 1){
+                return new GLSpatialProjectedPolygonsObject(sps, idWithSameCenters.front(), parent);
+            }
+            else{
+                RenderableObject * o = new RenderableObject(parent);
+                for (auto & ids : idWithSameCenters){
+                    new GLSpatialProjectedPolygonsObject(sps, ids, o);
+                }
+                return o;
+            }
+        }
+
+        RenderableObject * MakeRenderable(const SpatialProjectedPolygon & sp,
+            const DefaultRenderState & state, RenderableObject * parent){
+            return MakeRenderable(std::vector<SpatialProjectedPolygon>(1, sp), state, parent);
+        }
 
     }
 }

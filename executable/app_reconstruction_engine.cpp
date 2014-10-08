@@ -44,6 +44,17 @@ void ShowPanoramaVPs(const rec::ReconstructionEngine & engine) {
         << vis::manip2d::Show();
 }
 
+inline std::string ComposeCacheFileName(const std::string & inputFile, const std::string & tag) {
+    std::string name = inputFile;
+    for (auto & c : name){
+        if (c == '/' || c == '\\')
+            c = '.';
+        if (c == ':')
+            c = '@';
+    }
+    return "./cache/" + name + '.' + tag + ".state";
+}
+
 struct All {
     rec::ReconstructionEngine engine;
     core::Image panorama;
@@ -59,10 +70,10 @@ struct All {
 int main(int argc, char * argv[], char * envp[]) {
 
     std::string originalFile = test::ProjectDataDirStrings::PanoramaIndoor + "/13.jpg";
-    std::string cacheFileBeforeComputingFeatures = "./cache/1_before_fea.state";
-    std::string cacheFileAfterComputingFeatures = "./cache/2_after_fea.state";
-    std::string cacheFileAfterEstimatingVPs = "./cache/3_after_vp.state";
-    std::string cacheFileAfterEstimatingLineDepths = "./cache/4_after_linedepths.state";
+    std::string cacheFileBeforeComputingFeatures = ComposeCacheFileName(originalFile, "1_before_fea");
+    std::string cacheFileAfterComputingFeatures = ComposeCacheFileName(originalFile, "2_after_fea");
+    std::string cacheFileAfterEstimatingVPs = ComposeCacheFileName(originalFile, "3_after_vp");
+    std::string cacheFileAfterEstimatingLineDepths = ComposeCacheFileName(originalFile, "4_after_linedepths");
 
     All all;
 
