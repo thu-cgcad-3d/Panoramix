@@ -101,7 +101,7 @@ int main(int argc, char * argv[], char * envp[]) {
             all.engine.updateConnections(viewHandle);
         }
         core::SaveToDisk(out, all);
-    }, true);
+    });
 
     core::UpdateIfFileIsTooOld(cacheFileBeforeComputingFeatures, cacheFileAfterComputingFeatures, 
         [&](const std::string & in, const std::string & out){
@@ -126,7 +126,6 @@ int main(int argc, char * argv[], char * envp[]) {
         all.engine.estimateSpatialLineDepths();
         core::SaveToDisk(out, all);
     });
-
 
     core::UpdateIfFileIsTooOld(cacheFileAfterEstimatingLineDepths, "xxx",
         [&](const std::string & in, const std::string &) {

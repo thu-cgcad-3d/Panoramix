@@ -25,7 +25,7 @@ namespace panoramix {
         public:
             using Feature = std::vector<Line2>;
             struct Params {
-                inline Params() : minLength(15), xBorderWidth(3), yBorderWidth(3), numDirs(8), useLSD(false) {}
+                inline Params() : minLength(15), xBorderWidth(1), yBorderWidth(1), numDirs(8), useLSD(false) {}
                 int minLength;
                 int xBorderWidth, yBorderWidth;
                 int numDirs;
@@ -80,17 +80,24 @@ namespace panoramix {
         // segmentation
         class SegmentationExtractor {
         public:
-            using Feature = Image; // CV_32SC1, from 0 to numRegion, use at<int32_t> to extract
+            using Feature = ImageWithType<int32_t>; // CV_32SC1, from 0 to numRegion, use at<int32_t> to extract
             struct Params {
-                inline Params() : sigma(0.8f), c(100.0f), minSize(200) {}
+                inline Params() : sigma(0.8f), c(100.0f), minSize(200), useSLIC(false), 
+                    superpixelSizeSuggestion(1000), superpixelNumberSuggestion(100) {
+                }
                 float sigma; // for smoothing
                 float c; // threshold function
                 int minSize; // min component size
-                template <class Archive> inline void serialize(Archive & ar) { ar(sigma, c, minSize); }
+                bool useSLIC;
+                int superpixelSizeSuggestion; // use superpixel size suggestion if [superpixelSizeSuggestion > 0]
+                int superpixelNumberSuggestion; // use superpixel number suggestion if [superpixelSizeSuggestion < 0]
+                template <class Archive> inline void serialize(Archive & ar) { 
+                    ar(sigma, c, minSize, useSLIC, superpixelSizeSuggestion, superpixelNumberSuggestion); 
+                }
             };
         public:
             inline explicit SegmentationExtractor(const Params & params = Params()) : _params(params){}
-            Feature operator() (const Image & im, bool forVisualization = false) const;
+            std::pair<ImageWithType<int32_t>, int> operator() (const Image & im) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
             Params _params;

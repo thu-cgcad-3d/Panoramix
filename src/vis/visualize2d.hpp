@@ -181,6 +181,8 @@ namespace panoramix {
 
         // image
         Visualizer2D operator << (Visualizer2D viz, const Image & im);
+        Visualizer2D operator << (Visualizer2D viz, const ImageWithType<int32_t> & im);
+
 
         // integer image
         template <class T, class = std::enable_if_t<std::is_integral<T>::value>>

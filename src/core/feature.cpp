@@ -318,7 +318,7 @@ namespace panoramix {
             }
 
 
-            void ExtractLinesUsingLSD(const cv::Mat & im, std::vector<Line2> & lines, double minlen,
+            void ExtractLinesUsingLSD(const cv::Mat & im, std::vector<Line2> & lines, double minlen, int xbwidth, int ybwidth,
                 std::vector<double> * lineWidths = nullptr,
                 std::vector<double> * anglePrecisions = nullptr,
                 std::vector<double> * negLog10NFAs = nullptr){
@@ -362,6 +362,12 @@ namespace panoramix {
                     Line2 line = { Point2(linesData[7 * i + 0], linesData[7 * i + 1]), Point2(linesData[7 * i + 2], linesData[7 * i + 3]) };
                     if (line.length() < minlen)
                         continue;
+                    if (line.first[0] <= xbwidth && line.second[0] <= xbwidth || 
+                        line.first[0] >= w - xbwidth && line.second[0] >= w - xbwidth || 
+                        line.first[1] <= ybwidth && line.second[1] <= ybwidth || 
+                        line.first[1] >= h - ybwidth && line.second[1] >= h - ybwidth){
+                        continue;
+                    }
                     lines.emplace_back(line);
                     if (lineWidths){
                         lineWidths->push_back(linesData[7 * i + 4]);
@@ -383,11 +389,10 @@ namespace panoramix {
         LineSegmentExtractor::Feature LineSegmentExtractor::operator() (const Image & im) const {
             LineSegmentExtractor::Feature lines;
             if (_params.useLSD) {
-                ExtractLinesUsingLSD(im, lines, _params.minLength);
+                ExtractLinesUsingLSD(im, lines, _params.minLength, _params.xBorderWidth, _params.yBorderWidth);
             }
             else{
-                ExtractLines(im, lines, _params.minLength,
-                    _params.xBorderWidth, _params.yBorderWidth, _params.numDirs);
+                ExtractLines(im, lines, _params.minLength, _params.xBorderWidth, _params.yBorderWidth, _params.numDirs);
             }
             return lines;
         }
@@ -699,14 +704,57 @@ namespace panoramix {
 
                 return std::make_pair(output, coloredOutput);
             }
+
+
+            std::pair<ImageWithType<int32_t>, int> SegmentImageUsingSLIC(const Image & im, int spsize, int spnum){
+                assert(im.depth() == CV_8U && im.channels() == 3);
+
+                SLIC slic;
+                unsigned int * ubuff = new unsigned int[im.cols * im.rows];
+                // fill buffer
+                for (int x = 0; x < im.cols; x++){
+                    for (int y = 0; y < im.rows; y++){
+                        auto & pixel = ubuff[y * im.cols + x];
+                        auto & color = im.at<Vec3b>(PixelLoc(x, y));
+                        pixel = (color[2] << 16) + (color[1] << 8) + color[0];
+                    }
+                }
+
+                int * klabels = nullptr;
+                int nlabels = 0;
+                if (spsize > 0){
+                    slic.DoSuperpixelSegmentation_ForGivenSuperpixelSize(ubuff, im.cols, im.rows, klabels, nlabels, spsize, 50);
+                }
+                else{
+                    slic.DoSuperpixelSegmentation_ForGivenNumberOfSuperpixels(ubuff, im.cols, im.rows, klabels, nlabels, spnum, 50);
+                }
+
+                // fill labels back
+                Image labels = Image::zeros(im.size(), CV_32SC1);
+                for (int x = 0; x < im.cols; x++){
+                    for (int y = 0; y < im.rows; y++){
+                        labels.at<int32_t>(PixelLoc(x, y)) = klabels[y * im.cols + x];
+                    }
+                }
+
+                delete[] ubuff;
+                delete[] klabels;
+
+                return std::make_pair(labels, nlabels);
+            }
+
         }
 
 
-        SegmentationExtractor::Feature SegmentationExtractor::operator() (const Image & im, 
-            bool forVisualization) const {
-            int numCCs;
-            return forVisualization ? SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, true).second 
-                : SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
+        std::pair<ImageWithType<int32_t>, int> SegmentationExtractor::operator() (const Image & im) const {
+            if (_params.useSLIC){
+                return SegmentImageUsingSLIC(im, _params.superpixelSizeSuggestion, _params.superpixelNumberSuggestion);
+            }
+            else{
+                int numCCs;
+                Image segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
+                return std::make_pair(segim, numCCs);
+            }
         }
 
 

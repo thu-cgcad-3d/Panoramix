@@ -9,9 +9,12 @@ namespace panoramix {
 
         RegionsNet::Params::Params() : samplingStepLengthOnBoundary(15.0) {
             SegmentationExtractor::Params segmenterParams;
-            segmenterParams.c = 120;
-            segmenterParams.minSize = 100;
-            segmenterParams.sigma = 0.6;
+            //segmenterParams.c = 120;
+            //segmenterParams.minSize = 100;
+            //segmenterParams.sigma = 0.6;
+            segmenterParams.useSLIC = true;
+            segmenterParams.superpixelSizeSuggestion = 3000;
+            segmenterParams.superpixelNumberSuggestion = 100;
             segmenter = SegmentationExtractor(segmenterParams);
         }
 
@@ -178,8 +181,8 @@ namespace panoramix {
         }
 
         void RegionsNet::buildNetAndComputeGeometricFeatures() {
-            _segmentedRegions = _params.segmenter(_image);
-            int regionNum = static_cast<int>(MinMaxValOfImage(_segmentedRegions).second) + 1;
+            int regionNum = 0;
+            std::tie(_segmentedRegions, regionNum) = _params.segmenter(_image);
             _regions.internalElements<0>().reserve(regionNum);
             for (int i = 0; i < regionNum; i++){
                 RegionData vd;
@@ -354,57 +357,57 @@ namespace panoramix {
 
             // visualize region contours
             IF_DEBUG_USING_VISUALIZERS {
-                //Image regionVis(_image.rows, _image.cols, CV_8UC3, vis::Color(100, 100, 100));
-                Image regionVis = _params.segmenter(_image, true);
-                std::vector<std::vector<std::vector<PixelLoc>>> boundaries;
-                std::vector<std::vector<std::vector<Point2>>> sampledPoints;
-                std::vector<double> straightnesses, tjunctionlikelihoods, lengths;
-                boundaries.reserve(_regions.internalElements<1>().size());
-                sampledPoints.reserve(_regions.internalElements<1>().size());
-                straightnesses.reserve(_regions.internalElements<1>().size());
-                tjunctionlikelihoods.reserve(_regions.internalElements<1>().size());
-                for (auto & b : _regions.elements<1>()) {
-                    boundaries.push_back(b.data.edges);
-                    sampledPoints.push_back(b.data.sampledPoints);
-                    straightnesses.push_back(b.data.straightness);
-                    tjunctionlikelihoods.push_back(b.data.tjunctionLikelihood);
-                    lengths.push_back(b.data.length);
-                }
-                auto & ctable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
-                //for (auto & r : _regions.elements<0>()) {
-                //    auto color = vis::Color(0, 0, 0, 1);
-                //    for (auto & polyline : r.data.dilatedContours) {
+                ////Image regionVis(_image.rows, _image.cols, CV_8UC3, vis::Color(100, 100, 100));
+                //Image regionVis = _params.segmenter(_image);
+                //std::vector<std::vector<std::vector<PixelLoc>>> boundaries;
+                //std::vector<std::vector<std::vector<Point2>>> sampledPoints;
+                //std::vector<double> straightnesses, tjunctionlikelihoods, lengths;
+                //boundaries.reserve(_regions.internalElements<1>().size());
+                //sampledPoints.reserve(_regions.internalElements<1>().size());
+                //straightnesses.reserve(_regions.internalElements<1>().size());
+                //tjunctionlikelihoods.reserve(_regions.internalElements<1>().size());
+                //for (auto & b : _regions.elements<1>()) {
+                //    boundaries.push_back(b.data.edges);
+                //    sampledPoints.push_back(b.data.sampledPoints);
+                //    straightnesses.push_back(b.data.straightness);
+                //    tjunctionlikelihoods.push_back(b.data.tjunctionLikelihood);
+                //    lengths.push_back(b.data.length);
+                //}
+                //auto & ctable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
+                ////for (auto & r : _regions.elements<0>()) {
+                ////    auto color = vis::Color(0, 0, 0, 1);
+                ////    for (auto & polyline : r.data.dilatedContours) {
+                ////        for (int j = 0; j < polyline.size() - 1; j++) {
+                ////            cv::line(regionVis, polyline[j], polyline[j + 1], color, 1);
+                ////        }
+                ////    }
+                ////}
+                //for (int i = 0; i < boundaries.size(); i++) {
+                //    //auto pcolor = ctable[i % ctable.size()];
+                //    auto color = vis::Color(255, 255, 255, 1) * straightnesses[i];
+                //    auto isConnected = (lengths[i] > 50 && straightnesses[i] < 0.03);
+                //    //auto tjcolor = vis::Color(255, 255, 255, 1) * tjunctionlikelihoods[i];
+                //    for (auto & polyline : boundaries[i]) {
                 //        for (int j = 0; j < polyline.size() - 1; j++) {
-                //            cv::line(regionVis, polyline[j], polyline[j + 1], color, 1);
+                //            /*cv::line(regionVis, polyline[j], polyline[j + 1], 
+                //                isConnected ? vis::Color(255, 255, 255, 1) : vis::Color(0, 0, 0, 1));*/
+                //            cv::line(regionVis, polyline[j], polyline[j + 1], color, 2);
                 //        }
                 //    }
+                //    //for (auto & s : sampledPoints[i]) {
+                //    //    for (auto & p : s) {
+                //    //        cv::circle(regionVis, ToPixelLoc(p), 1, pcolor);
+                //    //    }
+                //    //}
                 //}
-                for (int i = 0; i < boundaries.size(); i++) {
-                    //auto pcolor = ctable[i % ctable.size()];
-                    auto color = vis::Color(255, 255, 255, 1) * straightnesses[i];
-                    auto isConnected = (lengths[i] > 50 && straightnesses[i] < 0.03);
-                    //auto tjcolor = vis::Color(255, 255, 255, 1) * tjunctionlikelihoods[i];
-                    for (auto & polyline : boundaries[i]) {
-                        for (int j = 0; j < polyline.size() - 1; j++) {
-                            /*cv::line(regionVis, polyline[j], polyline[j + 1], 
-                                isConnected ? vis::Color(255, 255, 255, 1) : vis::Color(0, 0, 0, 1));*/
-                            cv::line(regionVis, polyline[j], polyline[j + 1], color, 2);
-                        }
-                    }
-                    //for (auto & s : sampledPoints[i]) {
-                    //    for (auto & p : s) {
-                    //        cv::circle(regionVis, ToPixelLoc(p), 1, pcolor);
-                    //    }
-                    //}
-                }
-                //for (auto & bep : mergedBepsTable) {
-                //    auto color = vis::ColorFromTag(vis::ColorTag::White);
-                //    for (auto & p : bep.second) {
-                //        //regionVis.at<Vec<uint8_t, 3>>(p.position) = Vec<uint8_t, 3>(255, 255, 255);
-                //        cv::circle(regionVis, p.position, 1, color);
-                //    }
-                //}
-                vis::Visualizer2D(regionVis) << vis::manip2d::Show();
+                ////for (auto & bep : mergedBepsTable) {
+                ////    auto color = vis::ColorFromTag(vis::ColorTag::White);
+                ////    for (auto & p : bep.second) {
+                ////        //regionVis.at<Vec<uint8_t, 3>>(p.position) = Vec<uint8_t, 3>(255, 255, 255);
+                ////        cv::circle(regionVis, p.position, 1, color);
+                ////    }
+                ////}
+                //vis::Visualizer2D(regionVis) << vis::manip2d::Show();
             }
         }
 

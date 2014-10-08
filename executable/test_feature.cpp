@@ -6,16 +6,32 @@
 using namespace panoramix;
 using namespace test;
 
-TEST(Feature, SegmentationExtractor) {
-    core::SegmentationExtractor::Params p;
-    p.c = 5;
-    p.minSize = 400;
-    p.sigma = 1;
-    core::SegmentationExtractor seg(p);
-    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
-    vis::Visualizer2D(im) << vis::manip2d::Show();
-    core::Image segim = seg(im, true);
-    vis::Visualizer2D(segim) << vis::manip2d::Show();
+DEBUG_TEST(Feature, SegmentationExtractor) {
+    {
+        core::SegmentationExtractor::Params p;
+        p.c = 5;
+        p.minSize = 400;
+        p.sigma = 1;
+        core::SegmentationExtractor seg(p);
+        core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        vis::Visualizer2D(im) << vis::manip2d::Show();
+        auto segs = seg(im);
+        vis::Visualizer2D(segs.first) 
+            << vis::manip2d::SetColorTable(vis::CreateRandomColorTableWithSize(segs.second))
+            << vis::manip2d::Show();
+    }
+    {
+        core::SegmentationExtractor::Params p;
+        p.useSLIC = true;
+        p.superpixelSizeSuggestion = 3000;
+        core::SegmentationExtractor seg(p);
+        core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        vis::Visualizer2D(im) << vis::manip2d::Show();
+        auto segs = seg(im);
+        vis::Visualizer2D(segs.first)
+            << vis::manip2d::SetColorTable(vis::CreateRandomColorTableWithSize(segs.second))
+            << vis::manip2d::Show();
+    }
 }
 
 TEST(Feature, LineSegmentExtractor) {
@@ -63,7 +79,7 @@ TEST(Feature, VanishingPointsDetector) {
 }
 
 
-DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
+TEST(Feature, LocalManhattanVanishingPointDetector) {
     core::LineSegmentExtractor::Params lsparams;
     lsparams.useLSD = true;
     core::LineSegmentExtractor lineseg(lsparams);    
@@ -138,9 +154,11 @@ TEST(Feature, FeatureExtractor) {
     for (int i = 0; i < 4; i++) {
         std::string name = ProjectDataDirStrings::Normal + "/" + "sampled_" + std::to_string(i) + ".png";
         cv::Mat im = cv::imread(name);
+        auto segs = segmenter(im);
         vis::Visualizer2D(im) 
             << [](vis::Visualizer2D & viz) { viz.params.winName = "haha"; }
-            << segmenter(im, true)    
+        << vis::manip2d::SetColorTable(vis::CreateRandomColorTableWithSize(segs.second))
+            << segs.first
             << lineSegmentExtractor(im) 
             << sift(im) << surf(im)
             << vis::manip2d::Show();

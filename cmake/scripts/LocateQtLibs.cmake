@@ -3,9 +3,6 @@
 message (STATUS "Qt directory: ${Qt_DIR}")
 list (APPEND CMAKE_PREFIX_PATH ${Qt_DIR})
 
-set(CMAKE_AUTOMOC on)
-set(CMAKE_AUTOUIC on)
-set(CMAKE_AUTORCC on)
 set(CMAKE_INCLUDE_CURRENT_DIR on)
 
 set (Qt_PATH ${Qt_DIR}/bin)

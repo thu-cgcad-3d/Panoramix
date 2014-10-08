@@ -10,7 +10,19 @@ namespace panoramix {
         }
 
         void Visualizer2D::setImage(const Image & im) {
-            _image = im.clone();
+            if (im.type() == CV_32SC1){
+                ImageWithType<Vec3b> imv;
+                imv.create(im.size());
+                for (int x = 0; x < im.cols; x++){
+                    for (int y = 0; y < im.rows; y++){
+                        imv(y, x) = ToVec3b(params.colorTable.roundedAt(im.at<int32_t>(y, x)));
+                    }
+                }
+                _image = imv;
+            }
+            else{
+                _image = im.clone();
+            }
         }
 
 
@@ -18,6 +30,17 @@ namespace panoramix {
             assert(!im.empty());
             cv::addWeighted(viz.image(), (1.0f - viz.params.alphaForNewImage), im, viz.params.alphaForNewImage, 0.0, viz.image());
             return viz;
+        }
+
+        Visualizer2D operator << (Visualizer2D viz, const ImageWithType<int32_t> & im) {
+            ImageWithType<Vec3b> imv;
+            imv.create(im.size());
+            for (int x = 0; x < im.cols; x++){
+                for (int y = 0; y < im.rows; y++){
+                    imv(y, x) = ToVec3b(viz.params.colorTable[im(y, x)]);
+                }
+            }
+            return viz << (const Image&)imv;
         }
 
         namespace manip2d {
