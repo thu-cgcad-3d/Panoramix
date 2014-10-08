@@ -148,6 +148,9 @@ namespace panoramix {
             // estimate spatial line depths
             void estimateSpatialLineDepths();
 
+            // estimate region planes
+            void estimateRegionPlanes();
+
             // classify regions using classfied line labels
             void initializeRegionOrientations();    
 
@@ -192,6 +195,7 @@ namespace panoramix {
                 IndexHashMap<LineIndex, Line3> reconstructedLines;
 
                 IndexHashMap<RegionIndex, int> regionOrientations;
+                IndexHashMap<RegionIndex, Plane3> regionPlanes;
 
                 template <class Archiver>
                 void serialize(Archiver & ar) {
@@ -200,12 +204,14 @@ namespace panoramix {
                         lineIncidenceRelationsAcrossViews,
                         regionLineIntersectionSampledPoints, 
                         lineConnectedComponentsNum, lineConnectedComponentIds, 
-                        reconstructedLines, regionOrientations);
+                        reconstructedLines, regionOrientations, regionPlanes);
                 }
             };
 
             inline const ViewsGraph & views() const { return _views; }
             inline const GlobalData & globalData() const { return _globalData; }
+            // temp
+            inline void setPanorama(const Image & p) { _globalData.panorama = p; }
 
         private:
             ViewsGraph _views;

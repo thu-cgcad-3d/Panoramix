@@ -1,5 +1,6 @@
 #include <QtOpenGL>
 
+#include "../core/misc.hpp"
 #include "../core/utilities.hpp"
 #include "qt_glue.hpp"
 
@@ -300,36 +301,34 @@ namespace panoramix {
                 }
             };
 
+            template <class T, int N>
+            struct VecHasher {
+                inline size_t operator()(const Vec<T, N> & v) const {
+                    size_t h = 0;
+                    for (int i = 0; i < N; i++)
+                        h = h ^ hasher(v[i]);
+                    return h;
+                }
+                std::hash<T> hasher;
+            };
+
         }
 
 
         RenderableObject * MakeRenderable(const std::vector<SpatialProjectedPolygon> & sps,
             const DefaultRenderState & state, RenderableObject * parent){
-            std::vector<std::vector<int>> idWithSameCenters;
+            std::unordered_map<Vec3, std::vector<int>, VecHasher<double, 3>> idWithSameCenters;
             for (int i = 0; i < sps.size(); i++){
                 auto & c = sps[i].projectionCenter;
-                int idexisted = -1;
-                for (int j = 0; j < idWithSameCenters.size(); j++){
-                    auto & cexisted = sps[idWithSameCenters[j].front()].projectionCenter;
-                    if (cexisted == c){
-                        idexisted = j;
-                        break;
-                    }
-                }
-                if (idexisted >= 0){
-                    idWithSameCenters[idexisted].push_back(i);
-                }
-                else{
-                    idWithSameCenters.push_back(std::vector<int>(1, i));
-                }
+                idWithSameCenters[c].push_back(i);
             }
             if (idWithSameCenters.size() == 1){
-                return new GLSpatialProjectedPolygonsObject(sps, idWithSameCenters.front(), parent);
+                return new GLSpatialProjectedPolygonsObject(sps, idWithSameCenters.begin()->second, parent);
             }
             else{
                 RenderableObject * o = new RenderableObject(parent);
                 for (auto & ids : idWithSameCenters){
-                    new GLSpatialProjectedPolygonsObject(sps, ids, o);
+                    new GLSpatialProjectedPolygonsObject(sps, ids.second, o);
                 }
                 return o;
             }

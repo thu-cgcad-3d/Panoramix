@@ -81,6 +81,7 @@ int main(int argc, char * argv[], char * envp[]) {
         [&](const std::string & in, const std::string & out) {
         all.panorama = cv::imread(in);
         cv::resize(all.panorama, all.panorama, cv::Size(2000, 1000));
+        all.engine.setPanorama(all.panorama);
         all.originCam = core::PanoramicCamera(all.panorama.cols / M_PI / 2.0);
         all.cams = {
             core::PerspectiveCamera(700, 700, all.originCam.focal(), { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
@@ -100,7 +101,7 @@ int main(int argc, char * argv[], char * envp[]) {
             all.engine.updateConnections(viewHandle);
         }
         core::SaveToDisk(out, all);
-    });
+    }, true);
 
     core::UpdateIfFileIsTooOld(cacheFileBeforeComputingFeatures, cacheFileAfterComputingFeatures, 
         [&](const std::string & in, const std::string & out){
@@ -123,11 +124,19 @@ int main(int argc, char * argv[], char * envp[]) {
         core::LoadFromDisk(in, all);
         all.engine.recognizeRegionLineRelations();
         all.engine.estimateSpatialLineDepths();
-        //core::SaveToDisk(out, all);
-    }, true);
+        core::SaveToDisk(out, all);
+    });
+
+
+    core::UpdateIfFileIsTooOld(cacheFileAfterEstimatingLineDepths, "xxx",
+        [&](const std::string & in, const std::string &) {
+        core::LoadFromDisk(in, all);
+        all.engine.estimateRegionPlanes();
+    });
+
 
     //try {
-    //    engine.initializeRegionOrientations();
+    //    all.engine.initializeRegionOrientations();
     //} catch (GCException e) {
     //    e.Report();
     //}

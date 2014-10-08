@@ -156,45 +156,45 @@ namespace panoramix {
             }
 
             // compute voting distributions
-            _lineVotingDistribution = ImageWithType<Mat<float, 3, 2>>::zeros(_image.size());
+            //_lineVotingDistribution = ImageWithType<Mat<float, 3, 2>>::zeros(_image.size());
             
-            for (auto it = _lineVotingDistribution.begin();
-                it != _lineVotingDistribution.end(); 
-                ++it){
-                Point2 pos(it.pos().x, it.pos().y);
-                for (auto & ld : _lines.elements<0>()){
-                    auto & line = ld.data.line.component;
-                    int claz = ld.data.line.claz;
-                    auto & vp = vps[claz];
-                    Point2 center = line.center();
+            //for (auto it = _lineVotingDistribution.begin();
+            //    it != _lineVotingDistribution.end(); 
+            //    ++it){
+            //    Point2 pos(it.pos().x, it.pos().y);
+            //    for (auto & ld : _lines.elements<0>()){
+            //        auto & line = ld.data.line.component;
+            //        int claz = ld.data.line.claz;
+            //        auto & vp = vps[claz];
+            //        Point2 center = line.center();
 
-                    Vec2 center2vp = vp.value() - center;
-                    Vec2 center2pos = pos - center;
+            //        Vec2 center2vp = vp.value() - center;
+            //        Vec2 center2pos = pos - center;
 
-                    if (norm(center2pos) <= 1)
-                        continue;
-                    
-                    double angle = AngleBetweenDirections(center2pos, center2vp);
-                    double angleSmall = angle > M_PI_2 ? (M_PI - angle) : angle;
-                    assert(angleSmall >= 0 && angleSmall <= M_PI_2);
+            //        if (norm(center2pos) <= 1)
+            //            continue;
+            //        
+            //        double angle = AngleBetweenDirections(center2pos, center2vp);
+            //        double angleSmall = angle > M_PI_2 ? (M_PI - angle) : angle;
+            //        assert(angleSmall >= 0 && angleSmall <= M_PI_2);
 
-                    double angleScore = 
-                        exp(-(angleSmall / angleThreshold) * (angleSmall / angleThreshold) / sigma / sigma / 2);
-                    
-                    auto proj = ProjectionOfPointOnLine(pos, line);
-                    double projRatio = BoundBetween(proj.ratio, 0.0, 1.0);
+            //        double angleScore = 
+            //            exp(-(angleSmall / angleThreshold) * (angleSmall / angleThreshold) / sigma / sigma / 2);
+            //        
+            //        auto proj = ProjectionOfPointOnLine(pos, line);
+            //        double projRatio = BoundBetween(proj.ratio, 0.0, 1.0);
 
-                    auto & votingData = *it;
-                    if (AngleBetweenDirections(center2vp, line.direction()) < M_PI_2){ // first-second-vp
-                        votingData(claz, TowardsVanishingPoint) += angleScore * line.length() * (1 - projRatio);
-                        votingData(claz, TowardsOppositeOfVanishingPoint) += angleScore * line.length() * projRatio;
-                    }
-                    else{ // vp-first-second
-                        votingData(claz, TowardsOppositeOfVanishingPoint) += angleScore * line.length() * (1 - projRatio);
-                        votingData(claz, TowardsVanishingPoint) += angleScore * line.length() * projRatio;
-                    }
-                }
-            }
+            //        auto & votingData = *it;
+            //        if (AngleBetweenDirections(center2vp, line.direction()) < M_PI_2){ // first-second-vp
+            //            votingData(claz, TowardsVanishingPoint) += angleScore * line.length() * (1 - projRatio);
+            //            votingData(claz, TowardsOppositeOfVanishingPoint) += angleScore * line.length() * projRatio;
+            //        }
+            //        else{ // vp-first-second
+            //            votingData(claz, TowardsOppositeOfVanishingPoint) += angleScore * line.length() * (1 - projRatio);
+            //            votingData(claz, TowardsVanishingPoint) += angleScore * line.length() * projRatio;
+            //        }
+            //    }
+            //}
 
             // compute junction weights
             for (auto & lr : _lines.elements<1>()){
@@ -203,11 +203,47 @@ namespace panoramix {
                     lrd.junctionWeight = 7.0;
                 }
                 else if (lrd.type == lrd.Intersection){
+                    Mat<float, 3, 2> votingData;
+                    std::fill(std::begin(votingData.val), std::end(votingData.val), 0);
+
+                    for (auto & ld : _lines.elements<0>()){
+                        auto & line = ld.data.line.component;
+                        int claz = ld.data.line.claz;
+                        auto & vp = vps[claz];
+                        Point2 center = line.center();
+
+                        Vec2 center2vp = vp.value() - center;
+                        Vec2 center2pos = lrd.relationCenter - center;
+
+                        if (norm(center2pos) <= 1)
+                            continue;
+
+                        double angle = AngleBetweenDirections(center2pos, center2vp);
+                        double angleSmall = angle > M_PI_2 ? (M_PI - angle) : angle;
+                        assert(angleSmall >= 0 && angleSmall <= M_PI_2);
+
+                        double angleScore =
+                            exp(-(angleSmall / angleThreshold) * (angleSmall / angleThreshold) / sigma / sigma / 2);
+
+                        auto proj = ProjectionOfPointOnLine(lrd.relationCenter, line);
+                        double projRatio = BoundBetween(proj.ratio, 0.0, 1.0);
+
+                        if (AngleBetweenDirections(center2vp, line.direction()) < M_PI_2){ // first-second-vp
+                            votingData(claz, TowardsVanishingPoint) += angleScore * line.length() * (1 - projRatio);
+                            votingData(claz, TowardsOppositeOfVanishingPoint) += angleScore * line.length() * projRatio;
+                        }
+                        else{ // vp-first-second
+                            votingData(claz, TowardsOppositeOfVanishingPoint) += angleScore * line.length() * (1 - projRatio);
+                            votingData(claz, TowardsVanishingPoint) += angleScore * line.length() * projRatio;
+                        }
+                    }
+
+
                     auto p = ToPixelLoc(lrd.relationCenter);
-                    if (core::IsBetween(lrd.relationCenter[0], 0, _lineVotingDistribution.cols - 1) &&
-                        core::IsBetween(lrd.relationCenter[1], 0, _lineVotingDistribution.rows - 1)){
+                    if (core::IsBetween(lrd.relationCenter[0], 0, _image.cols - 1) &&
+                        core::IsBetween(lrd.relationCenter[1], 0, _image.rows - 1)){
                         lrd.junctionWeight = ComputeIntersectionJunctionWeightWithLinesVotes(
-                            _lineVotingDistribution(p));
+                            votingData);
                     }
                     else{
                         lrd.junctionWeight = 2.0;
@@ -222,24 +258,24 @@ namespace panoramix {
 
             IF_DEBUG_USING_VISUALIZERS {
 
-                float distributionMaxVal = std::numeric_limits<float>::lowest();
-                cv::Mat_<Vec<float, 3>> distributionImages[2];
-                for (int i = 0; i < 2; i++){
-                    auto & dim = distributionImages[i];
-                    dim.create(_image.size());
-                    for (int x = 0; x < _image.cols; x++){
-                        for (int y = 0; y < _image.rows; y++){
-                            auto & pixel = _lineVotingDistribution(y, x);
-                            dim(y, x) = Vec<float, 3>(pixel(0, i), pixel(1, i), pixel(2, i));
-                            distributionMaxVal = 
-                                std::max({ distributionMaxVal, pixel(0, i), pixel(1, i), pixel(2, i) });
-                        }
-                    }
-                }
+                //float distributionMaxVal = std::numeric_limits<float>::lowest();
+                //cv::Mat_<Vec<float, 3>> distributionImages[2];
+                //for (int i = 0; i < 2; i++){
+                //    auto & dim = distributionImages[i];
+                //    dim.create(_image.size());
+                //    for (int x = 0; x < _image.cols; x++){
+                //        for (int y = 0; y < _image.rows; y++){
+                //            auto & pixel = _lineVotingDistribution(y, x);
+                //            dim(y, x) = Vec<float, 3>(pixel(0, i), pixel(1, i), pixel(2, i));
+                //            distributionMaxVal = 
+                //                std::max({ distributionMaxVal, pixel(0, i), pixel(1, i), pixel(2, i) });
+                //        }
+                //    }
+                //}
 
-                for (auto & dim : distributionImages){
-                    dim /= distributionMaxVal;
-                }
+                //for (auto & dim : distributionImages){
+                //    dim /= distributionMaxVal;
+                //}
 
                 //vis::Visualizer2D(distributionImages[0]) << vis::manip2d::Show();
                 //vis::Visualizer2D(distributionImages[1]) << vis::manip2d::Show();

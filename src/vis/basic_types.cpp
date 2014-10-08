@@ -360,7 +360,7 @@ namespace panoramix {
                 "    highp vec3 direction = pixelPosition - panoramaCenter;\n"
                 "    highp float longi = atan(direction.y, direction.x);\n"
                 "    highp float lati = asin(direction.z / length(direction));\n"
-                "    highp vec2 texCoord = vec2(- longi / 3.1415926535897932 / 2.0 + 0.5, lati / 3.1415926535897932 + 0.5);\n"
+                "    highp vec2 texCoord = vec2(longi / 3.1415926535897932 / 2.0 + 0.5, - lati / 3.1415926535897932 + 0.5);\n"
                 "    gl_FragColor = texture2D(tex, texCoord);\n"
                 "}\n"
             };

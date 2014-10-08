@@ -61,9 +61,9 @@ namespace panoramix {
             inline const Image & image() const { return _image; }
 
             // 32FC(3x2)
-            inline const ImageWithType<Mat<float, 3, 2>> & lineVotingDistribution() const { 
+            /*inline const ImageWithType<Mat<float, 3, 2>> & lineVotingDistribution() const { 
                 return _lineVotingDistribution; 
-            }
+            }*/
 
             inline const Params & params() const { return _params; }
 
@@ -77,8 +77,8 @@ namespace panoramix {
 
         private:
             Image _image;
-            ImageWithType<Mat<float, 3, 2>> _lineVotingDistribution; // 32FC(3x2)
-            std::map<JunctionType, ImageWithType<float>> _junctionDistributions;
+            //ImageWithType<Mat<float, 3, 2>> _lineVotingDistribution; // 32FC(3x2)
+            //std::map<JunctionType, ImageWithType<float>> _junctionDistributions;
             LinesGraph _lines;
             LineSegmentExtractor::Feature _lineSegments;
             std::vector<HPoint2> _lineSegmentIntersections;
@@ -87,7 +87,7 @@ namespace panoramix {
 
             template <class Archiver>
             void serialize(Archiver & ar) {
-                ar(_image, _lineVotingDistribution, _junctionDistributions, 
+                ar(_image, /*_lineVotingDistribution, _junctionDistributions, */
                     _lines, _lineSegments, 
                     _lineSegmentIntersections, _lineSegmentIntersectionIds, _params);
             }

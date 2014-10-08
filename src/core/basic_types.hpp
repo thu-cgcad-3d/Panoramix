@@ -493,6 +493,13 @@ namespace panoramix {
             inline Vec<T, N> size() const { return maxCorner - minCorner; }
             inline Point<T, N> center() const { return (maxCorner + minCorner) * (0.5); }
             inline Sphere<T, N> outerSphere() const { return Sphere<T, N>{center(), static_cast<T>(norm(maxCorner - minCorner) / 2.0)}; }
+            inline const Box & expand(const T & s) const {
+                for (int i = 0; i < N; i++){
+                    minCorner[i] -= s;
+                    maxCorner[i] += s;
+                }
+                return *this;
+            }
 
             inline bool contains(const Point<T, N> & p) const {
                 if (isNull)

@@ -899,7 +899,7 @@ namespace panoramix {
             for (const LineRelationIndex & lri : lineRelationIndices) {
                 auto & lrd = lineRelationData(lri);
                 auto & relationCenter = lrd.relationCenter;
-                auto & weightDistribution = _views.data(lri.viewHandle).lineNet->lineVotingDistribution();
+                //auto & weightDistribution = _views.data(lri.viewHandle).lineNet->lineVotingDistribution();
 
                 auto & topo = _views.data(lri.viewHandle).lineNet->lines().topo(lri.handle);
                 auto & camera = _views.data(lri.viewHandle).camera;
@@ -1086,7 +1086,6 @@ namespace panoramix {
                 //        continue;
 
                 //}
-
                 auto colorTable = vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum);
                 for (auto & l : _globalData.reconstructedLines) {
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
@@ -1149,24 +1148,96 @@ namespace panoramix {
                 return new SmoothCostFunctorWrapper<FunctorT>(std::forward<FunctorT>(f));
             }
 
+            inline Point2 ToPoint2(const PixelLoc & p) {
+                return Point2(p.x, p.y);
+            }
+        }
+
+
+
+        void ReconstructionEngine::estimateRegionPlanes() {
+
+            // collect all region indices
+            std::vector<RegionIndex> regionIndices;
+            for (auto & vd : _views.elements<0>()){
+                RegionIndex ri;
+                ri.viewHandle = vd.topo.hd;
+                auto & cam = vd.data.camera;
+                for (auto & rd : vd.data.regionNet->regions().elements<0>()){
+                    ri.handle = rd.topo.hd;
+                    regionIndices.push_back(ri);
+                }
+            }
+
+            // initialize region planes
+            _globalData.regionPlanes.clear();
+            for (auto & ri : regionIndices){
+                auto & rd = regionData(ri);
+                Vec3 centerDir = _views.data(ri.viewHandle).camera.spatialDirection(rd.center);
+                _globalData.regionPlanes[ri].anchor = normalize(centerDir) * 15;
+                _globalData.regionPlanes[ri].normal = normalize(centerDir);
+            }
+
+            IF_DEBUG_USING_VISUALIZERS{
+
+                std::vector<vis::SpatialProjectedPolygon> spps;
+                spps.reserve(regionIndices.size());
+
+                for (auto & ri : regionIndices){
+                    vis::SpatialProjectedPolygon spp;
+                    spp.plane = _globalData.regionPlanes[ri];
+                    auto & rd = regionData(ri);
+                    spp.corners.resize(rd.contours.back().size());
+                    auto & cam = _views.data(ri.viewHandle).camera;
+                    for (int i = 0; i < rd.contours.back().size(); i++){
+                        spp.corners[i] = cam.spatialDirection(ToPoint2(rd.contours.back()[i]));
+                    }
+                    spp.projectionCenter = cam.eye();
+                    if (spp.corners.size() > 3){
+                        spps.push_back(spp);
+                    }
+                }
+
+                vis::Visualizer3D viz;
+                viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+                    << vis::manip3d::SetDefaultLineWidth(3.0);
+
+                auto colorTable = vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum);
+                for (auto & l : _globalData.reconstructedLines) {
+                    viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
+                    viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
+                    viz = viz << l.second;
+                }
+
+                viz << vis::manip3d::Begin(spps)
+                    << vis::manip3d::SetTexture(_globalData.panorama)
+                    << vis::manip3d::End
+                    << vis::manip3d::SetWindowName("initial region planes and reconstructed lines")
+                    << vis::manip3d::Show();
+
+            }
 
         }
 
 
+
         void ReconstructionEngine::initializeRegionOrientations() {
 
+            // initialize region data
             std::vector<RegionIndex> regionIndices;
             std::map<RegionIndex, int> regionIndexToGraphSiteId;
 
             for (auto & vd : _views.elements<0>()){
                 RegionIndex ri;
                 ri.viewHandle = vd.topo.hd;
+                auto & cam = vd.data.camera;
                 for (auto & rd : vd.data.regionNet->regions().elements<0>()){
                     ri.handle = rd.topo.hd;
                     regionIndices.push_back(ri);
                     regionIndexToGraphSiteId[ri] = regionIndices.size() - 1;
                 }
             }
+
 
             enum RegionOrientationType {
                 VP0 = 0,
@@ -1320,7 +1391,6 @@ namespace panoramix {
 
                 // visualize data costs and folding costs
                 for (auto & vd : _views.elements<0>()){
-
                     ImageWithType<Vec<uint8_t, 3>> orientationImage = ImageWithType<Vec<uint8_t, 3>>::zeros(vd.data.image.size());
                     for (int y = 0; y < vd.data.image.rows; y++){
                         for (int x = 0; x < vd.data.image.cols; x++){
@@ -1395,6 +1465,9 @@ namespace panoramix {
 
                     vis::Visualizer2D(coloredOutput) << vis::manip2d::Show();
                 }
+
+
+
 
             }
 
