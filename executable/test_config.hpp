@@ -10,6 +10,8 @@
 #define DEBUG_TEST(...) void run()
 #define DEBUG_RUN_ALL_TESTS() (run(),0)
 
+#define DEBUG_ASSERT_EQ(a, b) assert((a) == (b))
+
 namespace test {
 
     namespace ProjectDataDirStrings {

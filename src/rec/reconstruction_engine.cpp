@@ -48,8 +48,8 @@ namespace panoramix {
             : camera(250.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
             samplingStepLengthOnRegionBoundaries(40.0),
             samplingStepLengthOnLines(10.0),
-            intersectionDistanceThreshold(20), // 30
-            incidenceDistanceAlongDirectionThreshold(40), // 50
+            intersectionDistanceThreshold(30), // 30
+            incidenceDistanceAlongDirectionThreshold(50), // 50
             incidenceDistanceVerticalDirectionThreshold(4),
             interViewIncidenceAngleAlongDirectionThreshold(M_PI_4 / 4){
         }
@@ -93,6 +93,9 @@ namespace panoramix {
             linesNetParams.intersectionDistanceThreshold = _params.intersectionDistanceThreshold;
             linesNetParams.incidenceDistanceVerticalDirectionThreshold = _params.incidenceDistanceVerticalDirectionThreshold;
             linesNetParams.incidenceDistanceAlongDirectionThreshold = _params.incidenceDistanceAlongDirectionThreshold;
+            LineSegmentExtractor::Params lsparams;
+            lsparams.useLSD = true;
+            linesNetParams.lineSegmentExtractor = LineSegmentExtractor(lsparams);
             vd.lineNet = std::make_shared<LinesNet>(vd.image, linesNetParams);
         }
 
@@ -1427,15 +1430,31 @@ namespace panoramix {
             for (auto & ri : regionIndices){
                 auto & rd = regionData(ri);
                 Vec3 centerDir = _views.data(ri.viewHandle).camera.spatialDirection(rd.center);
-                _globalData.regionPlanes[ri].anchor = normalize(centerDir) * 15;
+                _globalData.regionPlanes[ri].anchor = normalize(centerDir) * 5;
                 _globalData.regionPlanes[ri].normal = normalize(centerDir);
             }
 
             IF_DEBUG_USING_VISUALIZERS{
+                std::vector<Line3> linesRepresentingSampledPoints;
+
+                // line-region connections
+                for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                    RegionIndex ri = pp.first.first;
+                    LineIndex li = pp.first.second;
+                    auto & line = _globalData.reconstructedLines[li];
+
+                    std::vector<Vec3> selectedSampledPoints = 
+                        pp.second.size() <= 2 ? pp.second : std::vector<Vec3>{ pp.second.front(), pp.second.back() };
+
+                    for (const Vec3 & sampleRay : selectedSampledPoints){
+                        Point3 pointOnLine = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampleRay), line.infinieLine()).second.second;
+                        Point3 pointOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), sampleRay), _globalData.regionPlanes[ri]).position;
+                        linesRepresentingSampledPoints.emplace_back(pointOnLine, pointOnRegion);
+                    }
+                }
 
                 std::vector<vis::SpatialProjectedPolygon> spps;
                 spps.reserve(regionIndices.size());
-
                 static const int stepSize = 10;
 
                 for (auto & ri : regionIndices){
@@ -1477,6 +1496,10 @@ namespace panoramix {
                     viz << core::ClassifyAs(l.second, _globalData.lineConnectedComponentIds[l.first]);
                 }
 
+                /*viz << vis::manip3d::SetDefaultLineWidth(2.0)
+                    << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
+                    << linesRepresentingSampledPoints;*/
+
                 viz << vis::manip3d::Begin(spps)
                     << vis::manip3d::SetTexture(_globalData.panorama)
                     << vis::manip3d::End
@@ -1490,16 +1513,33 @@ namespace panoramix {
                 lineIndicesInCCs[ccid.second].insert(ccid.first);
             }
 
-            // checked status recorders
-            std::unordered_set<int> lineCCIdsChecked, lineCCIdsNotCheckedYet;
-            IndexHashSet<RegionIndex> regionIndicesChecked, regionIndicesNotCheckedYet;
+            // count sample point for each region
+            IndexHashMap<RegionIndex, std::pair<int, int>> regionSamplePointNums; // [boundary sample points, line sample points]
+            // collect region boundary sample point num
+            for (auto & v : _views.elements<0>()){
+                for (auto & b : v.data.regionNet->regions().elements<1>()){
+                    int n = b.data.sampledPoints.size();
+                    auto ri1 = RegionIndex{ v.topo.hd, b.topo.lowers[0] };
+                    auto ri2 = RegionIndex{ v.topo.hd, b.topo.lowers[1] };
+                    regionSamplePointNums[ri1].first += n;
+                    regionSamplePointNums[ri2].first += n;
+                }
+            }
+            // collect region line sample point num
+            for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                regionSamplePointNums[pp.first.first].second += pp.second.size();
+            }
 
-            for (int i = 0; i < _globalData.lineConnectedComponentsNum; i++)
-                lineCCIdsNotCheckedYet.insert(i);
-            for (auto & ri : regionIndices)
-                regionIndicesNotCheckedYet.insert(ri);
 
-            // queues with scores for checking            
+            // count sample point for each line CC
+            std::vector<int> lineCCSamplePointNums(_globalData.lineConnectedComponentsNum);
+            for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                lineCCSamplePointNums[_globalData.lineConnectedComponentIds[pp.first.second]] += pp.second.size();
+            }
+
+
+
+            // maximum heap for checking            
             std::vector<int> lineCCIds(_globalData.lineConnectedComponentsNum);
             std::iota(lineCCIds.begin(), lineCCIds.end(), 0);
             core::MaxHeap<int> lineCCIdsForChecking(lineCCIds.begin(), lineCCIds.end(), 
@@ -1509,48 +1549,34 @@ namespace panoramix {
             core::MaxHeap<RegionIndex, double, IndexHashMap<RegionIndex, int>> 
                 regionIndicesForChecking(regionIndices.begin(), regionIndices.end(),
                 [this](const RegionIndex & ri) -> double{
-                return regionData(ri).area;
+                return 0.0;
             });
 
             // set anchor
             int lineCCIdAsAnchor = lineCCIdsForChecking.top();
             lineCCIdsForChecking.pop();
-            lineCCIdsChecked.insert(lineCCIdAsAnchor);
-            lineCCIdsNotCheckedYet.erase(lineCCIdAsAnchor);
 
-            // update related regions
-
-
+            // update related region scores
+            for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                LineIndex li = pp.first.second;
+                RegionIndex ri = pp.first.first;
+                if (!core::Contains(regionIndicesForChecking, ri)){ // checked already
+                    continue;
+                }
+                int ccid = _globalData.lineConnectedComponentIds[li];
+                if (ccid == lineCCIdAsAnchor){ // related // increase the checked sampled points ratio
+                    double moreRatio = double(pp.second.size()) / 
+                        (regionSamplePointNums[ri].first + regionSamplePointNums[ri].second);
+                    regionIndicesForChecking.increaseScoreBy(ri, moreRatio);
+                }
+            }
 
             // begin iteration            
-            while (true) {
-                if (!regionIndicesForChecking.empty()){
-                    RegionIndex nextRI = regionIndicesForChecking.top();
-                    regionIndicesForChecking.pop();
+            while (!(regionIndicesForChecking.empty() && lineCCIdsForChecking.empty())) {
+                double regionTopScore = regionIndicesForChecking.empty() ? 0.0 : regionIndicesForChecking.topScore();
+                double lineCCTopScore = lineCCIdsForChecking.empty() ? 0.0 : lineCCIdsForChecking.topScore();
+                if (regionTopScore < lineCCTopScore){
 
-
-                }
-                else if(!lineCCIdsForChecking.empty()){
-                    int nextLineCCId = lineCCIdsForChecking.top();
-                    lineCCIdsForChecking.pop();
-
-
-                }
-                else{
-                    break;
-                }
-
-                // append unchecked regions related with checked line ccs
-                for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
-                    LineIndex li = pp.first.second;
-                    RegionIndex ri = pp.first.first;
-                    if (core::Contains(regionIndicesChecked, ri)){ // checked already
-                        continue;
-                    }
-                    int ccid = _globalData.lineConnectedComponentIds[li];
-                    if (core::Contains(lineCCIdsChecked, ccid)){ // related with checked ccid
-                        //regionsToCheckWithPriorityScores[ri] += pp.second.size();
-                    }
                 }
             }
 

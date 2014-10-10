@@ -319,29 +319,34 @@ TEST(UtilTest, RTreeWrapperLargeData) {
 
 
 TEST(UtilTest, MaxHeap){
-
-    std::vector<double> data(5000);
+    std::vector<double> data(50000);
     std::generate(data.begin(), data.end(), randf);
+    std::vector<int> ids(data.size());
+    std::iota(ids.begin(), ids.end(), 0);
 
-    std::priority_queue<double> Q(data.begin(), data.end());
-    core::MaxHeap<double, double> H(data.begin(), data.end(), [](double d){return d; });
+    std::vector<core::Scored<int>> qd(data.size());
+    for (int i = 0; i < data.size(); i++)
+        qd[i] = core::ScoreAs(i, data[i]);
+    std::priority_queue<core::Scored<int>> Q(qd.begin(), qd.end());
+    core::MaxHeap<int> H(ids.begin(), ids.end(), [&data](int id){return data[id]; });
 
     ASSERT_EQ(Q.size(), H.size());
 
     int count = 0;
     while (!Q.empty()){
-        EXPECT_EQ(Q.top(), H.top());
+        ASSERT_EQ(Q.size(), H.size());
+        ASSERT_EQ(Q.top().score, H.topScore());
         Q.pop();
         H.pop();
 
         if (count % 2 == 0){
             double v = randf();
-            Q.push(v);
-            H.push(v, v);
+            Q.push(core::ScoreAs(count, v));
+            H.push(count, v);
         }
+
         count++;
     }
-
 }
 
 
@@ -576,11 +581,11 @@ TEST(UtilTest, TopologicalSort){
     }
 
     {
-        std::vector<int> verts(500000);
-        core::CreateLinearSequence(verts.begin(), verts.end(), 0, verts.size() - 1);
+        std::vector<int> verts(50000);
+        std::iota(verts.begin(), verts.end(), 0);
         std::random_shuffle(verts.begin(), verts.end());
         struct Edge { int from, to; };
-        std::vector<Edge> edges(500000);
+        std::vector<Edge> edges(50000);
         std::generate(edges.begin(), edges.end(), [&verts](){
             int v1 = rand() % verts.size();
             int v2 = rand() % verts.size();

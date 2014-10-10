@@ -319,6 +319,7 @@ namespace panoramix {
             }
 
             inline const KeyT & top() const { return _data.front().component; }
+            inline const ScoreT & topScore() const { return _data.front().score; }
             inline const ScoreT & operator[](const KeyT & key) const { return _data[_keyToId[key]].score; }
             inline const ScoreT & at(const KeyT & key) const { return _data[_keyToId[key]].score; }
             inline size_t size() const { return _data.size(); }
@@ -332,25 +333,29 @@ namespace panoramix {
                 _data.erase(_data.end() - 1, _data.end());
                 maxHeapify(0);
             }
-            inline void increaseScoreTo(const KeyT & key, const ScoreT & newScore){
+            void increaseScoreBy(const KeyT & key, const ScoreT & moreScore){
                 int id = _keyToId[key];
-                assert(newScore > _data[id].score);
-                _data[id].score = newScore;
+                assert(moreScore > 0);
+                _data[id].score += moreScore;
                 while (id > 0 && _data[parentId(id)].score < _data[id].score){
                     swapKeys(id, parentId(id));
                     id = parentId(id);
                 }
             }
+            inline void increaseScoreTo(const KeyT & key, const ScoreT & newScore){
+                increaseScoreBy(key, newScore - _data[_keyToId[key]].score);
+            }
             inline void push(const Scored<KeyT, ScoreT> & e) {
                 _data.push_back(e);
                 _keyToId[e.component] = _data.size() - 1;
-                _data.back().score = std::numeric_limits<ScoreT>::lowest();
-                increaseScoreTo(e.component, e.score);
+                int id = _data.size() - 1;
+                while (id > 0 && _data[parentId(id)].score < _data[id].score){
+                    swapKeys(id, parentId(id));
+                    id = parentId(id);
+                }
             }
             inline void push(const KeyT & t, const ScoreT & s){
-                _data.push_back(core::ScoreAs(t, std::numeric_limits<ScoreT>::lowest()));
-                _keyToId[t] = _data.size() - 1;
-                increaseScoreTo(t, s);
+                push(core::ScoreAs(t, s));
             }
             inline void clear(){ _data.clear(); _keyToId.clear(); }
             inline void swap(MaxHeap<KeyT, ScoreT> & h){ 
@@ -361,9 +366,9 @@ namespace panoramix {
             inline bool contains(const KeyT & k) const { return _keyToId.find(k) != _keyToId.end(); }
 
         private:
-            static inline int parentId(int id) { return id / 2; }
-            static inline int leftId(int id) { return id * 2; }
-            static inline int rightId(int id) { return id * 2 + 1; }
+            static inline int parentId(int id) { return (id - 1) / 2; }
+            static inline int leftId(int id) { return id * 2 + 1; }
+            static inline int rightId(int id) { return id * 2 + 2; }
 
             inline void swapKeys(int id1, int id2){
                 std::swap(_keyToId[_data[id1].component], _keyToId[_data[id2].component]);
@@ -374,10 +379,10 @@ namespace panoramix {
                 auto l = leftId(id);
                 auto r = rightId(id);
                 int largest = id;
-                if (l < _data.size() && _data[l].score > _data[id].score){
+                if (l < _data.size() && _data[id].score < _data[l].score){
                     largest = l;
                 }
-                if (r < _data.size() && _data[r].score > _data[largest].score){
+                if (r < _data.size() && _data[largest].score < _data[r].score){
                     largest = r;
                 }
                 if (largest != id){
@@ -509,7 +514,7 @@ namespace panoramix {
         template <class T, int N>
         inline T AngleBetweenDirections(const Vec<T, N> & v1, const Vec<T, N> & v2) {
             auto s = v1.dot(v2) / norm(v1) / norm(v2);
-            return s >= 1.0 ? 0.0 : (s <= -1.0 ? M_PI : acos(s));
+            return s >= 1.0 - 1e-9 ? 0.0 : (s <= -1.0 + 1e-9 ? M_PI : acos(s));
         }
 
         // returns [0, pi/2]

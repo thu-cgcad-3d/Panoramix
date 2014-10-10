@@ -220,6 +220,9 @@ namespace panoramix {
 
                         double angle = AngleBetweenDirections(center2pos, center2vp);
                         double angleSmall = angle > M_PI_2 ? (M_PI - angle) : angle;
+                        if (IsInfOrNaN(angleSmall))
+                            continue;
+
                         assert(angleSmall >= 0 && angleSmall <= M_PI_2);
 
                         double angleScore =

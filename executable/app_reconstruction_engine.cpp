@@ -52,7 +52,8 @@ inline std::string ComposeCacheFileName(const std::string & inputFile, const std
         if (c == ':')
             c = '@';
     }
-    return "./cache/" + name + '.' + tag + ".state";
+    std::string d = "demo10.10";
+    return "./cache/" + name + '.' + tag + d + ".state";
 }
 
 struct All {
@@ -110,7 +111,7 @@ int main(int argc, char * argv[], char * envp[]) {
             all.engine.computeFeatures(viewHandle);
         }        
         core::SaveToDisk(out, all);
-    });
+    }, true);
     
     core::UpdateIfFileIsTooOld(cacheFileAfterComputingFeatures, cacheFileAfterEstimatingVPs, 
         [&](const std::string & in, const std::string & out) {
@@ -134,11 +135,11 @@ int main(int argc, char * argv[], char * envp[]) {
     });
 
 
-    try {
-        all.engine.initializeRegionOrientations();
-    } catch (GCException e) {
-        e.Report();
-    }
+    //try {
+    //    all.engine.initializeRegionOrientations();
+    //} catch (GCException e) {
+    //    e.Report();
+    //}
 
 
     return 0;
