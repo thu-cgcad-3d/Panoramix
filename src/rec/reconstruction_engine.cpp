@@ -1,4 +1,3 @@
-#include <filesystem>
 
 extern "C" {
     #include <gpc.h>
@@ -7,20 +6,27 @@ extern "C" {
 #include <glpk.h>
 #include <setjmp.h>
 
+#include <Eigen/Core>
+#include <Eigen/Dense>
+#include <Eigen/Sparse>
 #include <Eigen/StdVector>
+
+#include <unsupported/Eigen/NonLinearOptimization>
+#include <eiquadprog.hpp>
+
 #include <dlib/matrix.h>
 #include <dlib/optimization.h>
 
 #include <GCoptimization.h>
 
+#include "../core/feature.hpp"
+
 #include "../vis/visualize2d.hpp"
 #include "../vis/visualize3d.hpp"
 
-#include "optimization.hpp"
 #include "reconstruction_engine.hpp"
 
 #include "../core/debug.hpp"
-#include "../core/feature.hpp"
 
 namespace panoramix {
     namespace rec {
@@ -1056,20 +1062,19 @@ namespace panoramix {
             // display reconstructed lines
             IF_DEBUG_USING_VISUALIZERS{
                 vis::Visualizer3D viz;
-                auto colorTable = vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum);
-                viz << vis::manip3d::SetDefaultLineWidth(1.0);
+                viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+                    << vis::manip3d::SetDefaultColorTable(vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum))
+                    << vis::manip3d::SetDefaultLineWidth(2.0);
                 for (auto & l : _globalData.reconstructedLines) {
-                    viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
-                    viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
-                    viz = viz << NormalizeLine(l.second);
+                    viz << core::ClassifyAs(NormalizeLine(l.second), _globalData.lineConnectedComponentIds[l.first]);
                 }
-                viz << vis::manip3d::SetDefaultLineWidth(2.0);
+                viz << vis::manip3d::SetDefaultLineWidth(4.0);
                 for (auto & c : _globalData.lineIncidenceRelationsAcrossViews) {
                     auto & line1 = _globalData.reconstructedLines[c.first.first];
                     auto & line2 = _globalData.reconstructedLines[c.first.second];
                     auto nearest = DistanceBetweenTwoLines(NormalizeLine(line1), NormalizeLine(line2));
-                    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black);
-                    viz << Line3(nearest.second.first.position, nearest.second.second.position);
+                    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
+                        << Line3(nearest.second.first.position, nearest.second.second.position);
                 }
                 viz << vis::manip3d::SetWindowName("not-yet-reconstructed lines with ccids");
                 viz << vis::manip3d::Show(false, true);
@@ -1077,20 +1082,11 @@ namespace panoramix {
 
             IF_DEBUG_USING_VISUALIZERS{
                 vis::Visualizer3D viz;
-                //// get good bounds, ignore bad lines
-                //std::vector<std::pair<double, double>> bounds(_globalData.vanishingPoints.size(), 
-                //    std::make_pair(std::numeric_limits<double>::max(), std::numeric_limits<double>::lowest()));
-                //for (auto & l : _globalData.reconstructedLines){
-                //    int c = lineData(l.first).line.claz;
-                //    if (c == -1)
-                //        continue;
-
-                //}
-                auto colorTable = vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum);
+                viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+                    << vis::manip3d::SetDefaultColorTable(vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum))
+                    << vis::manip3d::SetDefaultLineWidth(4.0);
                 for (auto & l : _globalData.reconstructedLines) {
-                    viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
-                    viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
-                    viz = viz << l.second;
+                    viz << core::ClassifyAs(l.second, _globalData.lineConnectedComponentIds[l.first]);
                 }
                 viz << vis::manip3d::SetWindowName("reconstructed lines with ccids");
                 viz << vis::manip3d::Show(false, true);
@@ -1098,24 +1094,26 @@ namespace panoramix {
 
             IF_DEBUG_USING_VISUALIZERS{ // show interview constraints
                 vis::Visualizer3D viz;
-                viz << vis::manip3d::SetDefaultLineWidth(1.0);
-                auto colorTable = vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum);
+                viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+                    << vis::manip3d::SetDefaultColorTable(vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum))
+                    << vis::manip3d::SetDefaultLineWidth(2.0);
                 for (auto & l : _globalData.reconstructedLines) {
-                    viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
-                    viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
-                    viz = viz << l.second;
+                    viz << core::ClassifyAs(l.second, _globalData.lineConnectedComponentIds[l.first]);
                 }
-                viz << vis::manip3d::SetDefaultLineWidth(2.0);
+                viz << vis::manip3d::SetDefaultLineWidth(4.0);
                 for (auto & c : _globalData.lineIncidenceRelationsAcrossViews) {
                     auto & line1 = _globalData.reconstructedLines[c.first.first];
                     auto & line2 = _globalData.reconstructedLines[c.first.second];
                     auto nearest = DistanceBetweenTwoLines(line1, line2);
-                    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black);
-                    viz << Line3(nearest.second.first.position, nearest.second.second.position);
+                    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
+                        << Line3(nearest.second.first.position, nearest.second.second.position);
                 }
                 viz << vis::manip3d::SetWindowName("reconstructed lines with interview constraints");
                 viz << vis::manip3d::Show(true, true);
             }
+
+
+
         }
 
         namespace {
@@ -1151,75 +1149,8 @@ namespace panoramix {
             inline Point2 ToPoint2(const PixelLoc & p) {
                 return Point2(p.x, p.y);
             }
-        }
-
-
-
-        void ReconstructionEngine::estimateRegionPlanes() {
-
-            // collect all region indices
-            std::vector<RegionIndex> regionIndices;
-            for (auto & vd : _views.elements<0>()){
-                RegionIndex ri;
-                ri.viewHandle = vd.topo.hd;
-                auto & cam = vd.data.camera;
-                for (auto & rd : vd.data.regionNet->regions().elements<0>()){
-                    ri.handle = rd.topo.hd;
-                    regionIndices.push_back(ri);
-                }
-            }
-
-            // initialize region planes
-            _globalData.regionPlanes.clear();
-            for (auto & ri : regionIndices){
-                auto & rd = regionData(ri);
-                Vec3 centerDir = _views.data(ri.viewHandle).camera.spatialDirection(rd.center);
-                _globalData.regionPlanes[ri].anchor = normalize(centerDir) * 15;
-                _globalData.regionPlanes[ri].normal = normalize(centerDir);
-            }
-
-            IF_DEBUG_USING_VISUALIZERS{
-
-                std::vector<vis::SpatialProjectedPolygon> spps;
-                spps.reserve(regionIndices.size());
-
-                for (auto & ri : regionIndices){
-                    vis::SpatialProjectedPolygon spp;
-                    spp.plane = _globalData.regionPlanes[ri];
-                    auto & rd = regionData(ri);
-                    spp.corners.resize(rd.contours.back().size());
-                    auto & cam = _views.data(ri.viewHandle).camera;
-                    for (int i = 0; i < rd.contours.back().size(); i++){
-                        spp.corners[i] = cam.spatialDirection(ToPoint2(rd.contours.back()[i]));
-                    }
-                    spp.projectionCenter = cam.eye();
-                    if (spp.corners.size() > 3){
-                        spps.push_back(spp);
-                    }
-                }
-
-                vis::Visualizer3D viz;
-                viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
-                    << vis::manip3d::SetDefaultLineWidth(3.0);
-
-                auto colorTable = vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum);
-                for (auto & l : _globalData.reconstructedLines) {
-                    viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White);
-                    viz.defaultRenderState.foregroundColor = colorTable.roundedAt(_globalData.lineConnectedComponentIds[l.first]);
-                    viz = viz << l.second;
-                }
-
-                viz << vis::manip3d::Begin(spps)
-                    << vis::manip3d::SetTexture(_globalData.panorama)
-                    << vis::manip3d::End
-                    << vis::manip3d::SetWindowName("initial region planes and reconstructed lines")
-                    << vis::manip3d::Show();
-
-            }
 
         }
-
-
 
         void ReconstructionEngine::initializeRegionOrientations() {
 
@@ -1347,7 +1278,7 @@ namespace panoramix {
                     for (int i = 0; i < 3; i++) {
                         Vec2 midToVP = (vps[i] - HPoint2(sampledPointsCenter)).numerator;
                         Vec2 edgeDir = bd.data.fittedLine.direction;
-                        double angle = std::min(AngleBetweenDirections(midToVP, edgeDir), AngleBetweenDirections(midToVP, -edgeDir));
+                        double angle = AngleBetweenUndirectedVectors(midToVP, edgeDir);
                         double cost = 1.0 - Gaussian(angle, M_PI / 16.0) * BoundBetween(bd.data.straightness, 0.0, 1.0);
                         cost = cost < 0.1 ? 0 : cost;
                         regionFoldingCosts[std::make_pair(ri1, ri2)][i] = cost;
@@ -1475,6 +1406,157 @@ namespace panoramix {
 
 
 
+        void ReconstructionEngine::estimateRegionPlanes() {
+
+            // collect all region indices
+            std::vector<RegionIndex> regionIndices;
+            IndexHashMap<RegionIndex, int> regionIndexToId;
+            for (auto & vd : _views.elements<0>()){
+                RegionIndex ri;
+                ri.viewHandle = vd.topo.hd;
+                auto & cam = vd.data.camera;
+                for (auto & rd : vd.data.regionNet->regions().elements<0>()){
+                    ri.handle = rd.topo.hd;
+                    regionIndices.push_back(ri);
+                    regionIndexToId[ri] = regionIndices.size() - 1;
+                }
+            }
+
+            // initialize region planes
+            _globalData.regionPlanes.clear();
+            for (auto & ri : regionIndices){
+                auto & rd = regionData(ri);
+                Vec3 centerDir = _views.data(ri.viewHandle).camera.spatialDirection(rd.center);
+                _globalData.regionPlanes[ri].anchor = normalize(centerDir) * 15;
+                _globalData.regionPlanes[ri].normal = normalize(centerDir);
+            }
+
+            IF_DEBUG_USING_VISUALIZERS{
+
+                std::vector<vis::SpatialProjectedPolygon> spps;
+                spps.reserve(regionIndices.size());
+
+                static const int stepSize = 10;
+
+                for (auto & ri : regionIndices){
+                    vis::SpatialProjectedPolygon spp;
+                    spp.plane = _globalData.regionPlanes[ri];
+                    auto & rd = regionData(ri);
+                    if (rd.contours.back().size() < 3)
+                        continue;
+
+                    spp.corners.reserve(rd.contours.back().size() / double(stepSize));
+                    auto & cam = _views.data(ri.viewHandle).camera;
+
+                    PixelLoc lastPixel;
+                    for (int i = 0; i < rd.contours.back().size(); i++){
+                        if (spp.corners.empty()){
+                            spp.corners.push_back(cam.spatialDirection(ToPoint2(rd.contours.back()[i])));
+                            lastPixel = rd.contours.back()[i];
+                        }
+                        else {
+                            if (Distance(lastPixel, rd.contours.back()[i]) >= stepSize){
+                                spp.corners.push_back(cam.spatialDirection(ToPoint2(rd.contours.back()[i])));
+                                lastPixel = rd.contours.back()[i];
+                            }
+                        }
+                    }
+
+                    spp.projectionCenter = cam.eye();
+                    if (spp.corners.size() > 3){
+                        spps.push_back(spp);
+                    }
+                }
+
+                vis::Visualizer3D viz;
+                viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+                    << vis::manip3d::SetDefaultLineWidth(5.0);
+
+                viz << vis::manip3d::SetDefaultColorTable(vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum));
+                for (auto & l : _globalData.reconstructedLines) {
+                    viz << core::ClassifyAs(l.second, _globalData.lineConnectedComponentIds[l.first]);
+                }
+
+                viz << vis::manip3d::Begin(spps)
+                    << vis::manip3d::SetTexture(_globalData.panorama)
+                    << vis::manip3d::End
+                    << vis::manip3d::SetWindowName("initial region planes and reconstructed lines")
+                    << vis::manip3d::Show();
+            }
+
+            // collect line indices in same ccs
+            std::vector<IndexHashSet<LineIndex>> lineIndicesInCCs(_globalData.lineConnectedComponentsNum);
+            for (auto & ccid : _globalData.lineConnectedComponentIds){
+                lineIndicesInCCs[ccid.second].insert(ccid.first);
+            }
+
+            // checked status recorders
+            std::unordered_set<int> lineCCIdsChecked, lineCCIdsNotCheckedYet;
+            IndexHashSet<RegionIndex> regionIndicesChecked, regionIndicesNotCheckedYet;
+
+            for (int i = 0; i < _globalData.lineConnectedComponentsNum; i++)
+                lineCCIdsNotCheckedYet.insert(i);
+            for (auto & ri : regionIndices)
+                regionIndicesNotCheckedYet.insert(ri);
+
+            // queues with scores for checking            
+            std::vector<int> lineCCIds(_globalData.lineConnectedComponentsNum);
+            std::iota(lineCCIds.begin(), lineCCIds.end(), 0);
+            core::MaxHeap<int> lineCCIdsForChecking(lineCCIds.begin(), lineCCIds.end(), 
+                [&lineIndicesInCCs](int ccId) -> double {
+                return lineIndicesInCCs[ccId].size();
+            });
+            core::MaxHeap<RegionIndex, double, IndexHashMap<RegionIndex, int>> 
+                regionIndicesForChecking(regionIndices.begin(), regionIndices.end(),
+                [this](const RegionIndex & ri) -> double{
+                return regionData(ri).area;
+            });
+
+            // set anchor
+            int lineCCIdAsAnchor = lineCCIdsForChecking.top();
+            lineCCIdsForChecking.pop();
+            lineCCIdsChecked.insert(lineCCIdAsAnchor);
+            lineCCIdsNotCheckedYet.erase(lineCCIdAsAnchor);
+
+            // update related regions
+
+
+
+            // begin iteration            
+            while (true) {
+                if (!regionIndicesForChecking.empty()){
+                    RegionIndex nextRI = regionIndicesForChecking.top();
+                    regionIndicesForChecking.pop();
+
+
+                }
+                else if(!lineCCIdsForChecking.empty()){
+                    int nextLineCCId = lineCCIdsForChecking.top();
+                    lineCCIdsForChecking.pop();
+
+
+                }
+                else{
+                    break;
+                }
+
+                // append unchecked regions related with checked line ccs
+                for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                    LineIndex li = pp.first.second;
+                    RegionIndex ri = pp.first.first;
+                    if (core::Contains(regionIndicesChecked, ri)){ // checked already
+                        continue;
+                    }
+                    int ccid = _globalData.lineConnectedComponentIds[li];
+                    if (core::Contains(lineCCIdsChecked, ccid)){ // related with checked ccid
+                        //regionsToCheckWithPriorityScores[ri] += pp.second.size();
+                    }
+                }
+            }
+
+
+
+        }
 
 
 

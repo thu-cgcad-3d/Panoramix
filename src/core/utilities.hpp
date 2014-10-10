@@ -272,6 +272,135 @@ namespace panoramix {
         };
 
 
+        // max heap
+        template <class KeyT, class ScoreT = double, class KeyToIdT = std::unordered_map<KeyT, int>>
+        class MaxHeap {
+        public:
+            inline MaxHeap() {}
+            
+            template <class IteratorT, 
+            class = std::enable_if_t<
+                std::is_same<std::iterator_traits<IteratorT>::value_type, core::Scored<KeyT, ScoreT>>::value>>
+            inline MaxHeap(IteratorT begin, IteratorT end) {
+                _data.reserve(std::distance(begin, end));
+                while (begin != end){
+                    _data.push_back(*begin);
+                    _keyToId[_data.back().component] = _data.size() - 1;
+                    *begin++;
+                }
+                makeMaxHeap();
+            }
+
+            template <class IteratorT,
+            class = std::enable_if_t<
+                std::is_same<std::iterator_traits<IteratorT>::value_type, KeyT>::value>>
+            inline MaxHeap(IteratorT vbegin, IteratorT vend, const ScoreT & defaultScore = ScoreT()) {
+                _data.reserve(std::distance(vbegin, vend));
+                while (vbegin != vend){
+                    _data.push_back(core::ScoreAs(*vbegin, defaultScore));
+                    _keyToId[_data.back().component] = _data.size() - 1;
+                    ++vbegin;
+                }
+                //makeMaxHeap(); no need to make heap since all scores are same
+            }
+
+            template <class IteratorT, class FuncT,
+            class = std::enable_if_t<
+                std::is_same<std::iterator_traits<IteratorT>::value_type, KeyT>::value &&
+                std::is_same<decltype(std::declval<FuncT>()(*std::declval<IteratorT>())), ScoreT>::value>>
+            inline MaxHeap(IteratorT vbegin, IteratorT vend, FuncT && fun) {
+                _data.reserve(std::distance(vbegin, vend));
+                while (vbegin != vend){
+                    _data.push_back(core::ScoreAs(*vbegin, fun(*vbegin)));
+                    _keyToId[_data.back().component] = _data.size() - 1;
+                    ++vbegin;
+                }
+                makeMaxHeap(); //need to make heap
+            }
+
+            inline const KeyT & top() const { return _data.front().component; }
+            inline const ScoreT & operator[](const KeyT & key) const { return _data[_keyToId[key]].score; }
+            inline const ScoreT & at(const KeyT & key) const { return _data[_keyToId[key]].score; }
+            inline size_t size() const { return _data.size(); }
+            inline bool empty() const { return _data.empty(); }
+            inline size_t height() const { return static_cast<size_t>(log2(_data.size())); }
+            inline void pop(){
+                if (_data.empty())
+                    return;
+                swapKeys(0, _data.size() - 1);
+                _keyToId.erase(_data.back().component);
+                _data.erase(_data.end() - 1, _data.end());
+                maxHeapify(0);
+            }
+            inline void increaseScoreTo(const KeyT & key, const ScoreT & newScore){
+                int id = _keyToId[key];
+                assert(newScore > _data[id].score);
+                _data[id].score = newScore;
+                while (id > 0 && _data[parentId(id)].score < _data[id].score){
+                    swapKeys(id, parentId(id));
+                    id = parentId(id);
+                }
+            }
+            inline void push(const Scored<KeyT, ScoreT> & e) {
+                _data.push_back(e);
+                _keyToId[e.component] = _data.size() - 1;
+                _data.back().score = std::numeric_limits<ScoreT>::lowest();
+                increaseScoreTo(e.component, e.score);
+            }
+            inline void push(const KeyT & t, const ScoreT & s){
+                _data.push_back(core::ScoreAs(t, std::numeric_limits<ScoreT>::lowest()));
+                _keyToId[t] = _data.size() - 1;
+                increaseScoreTo(t, s);
+            }
+            inline void clear(){ _data.clear(); _keyToId.clear(); }
+            inline void swap(MaxHeap<KeyT, ScoreT> & h){ 
+                _data.swap(h._data); 
+                _keyToId.swap(h._keyToId);
+            }
+
+            inline bool contains(const KeyT & k) const { return _keyToId.find(k) != _keyToId.end(); }
+
+        private:
+            static inline int parentId(int id) { return id / 2; }
+            static inline int leftId(int id) { return id * 2; }
+            static inline int rightId(int id) { return id * 2 + 1; }
+
+            inline void swapKeys(int id1, int id2){
+                std::swap(_keyToId[_data[id1].component], _keyToId[_data[id2].component]);
+                std::swap(_data[id1], _data[id2]);
+            }
+
+            void maxHeapify(int id) {
+                auto l = leftId(id);
+                auto r = rightId(id);
+                int largest = id;
+                if (l < _data.size() && _data[l].score > _data[id].score){
+                    largest = l;
+                }
+                if (r < _data.size() && _data[r].score > _data[largest].score){
+                    largest = r;
+                }
+                if (largest != id){
+                    swapKeys(id, largest);
+                    maxHeapify(largest);
+                }
+            }
+
+            inline void makeMaxHeap() {
+                for (int i = _data.size() / 2 - 1; i >= 0; --i){
+                    maxHeapify(i);
+                }
+            }
+
+        private:
+            std::vector<Scored<KeyT, ScoreT>> _data;
+            KeyToIdT _keyToId;
+        };
+
+        template <class KeyT, class ScoreT, class KeyToIdT>
+        inline bool Contains(const MaxHeap<KeyT, ScoreT, KeyToIdT> & h, const KeyT & k){
+            return h.contains(k);
+        }
 
 
 
@@ -931,7 +1060,7 @@ namespace panoramix {
         }
 
 
-        // graph cut
+        
 
 
 

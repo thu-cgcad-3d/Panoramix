@@ -148,11 +148,11 @@ namespace panoramix {
             // estimate spatial line depths
             void estimateSpatialLineDepths();
 
+            // classify regions using classfied line labels
+            void initializeRegionOrientations();
+
             // estimate region planes
             void estimateRegionPlanes();
-
-            // classify regions using classfied line labels
-            void initializeRegionOrientations();    
 
                 
         public:
@@ -199,7 +199,8 @@ namespace panoramix {
 
                 template <class Archiver>
                 void serialize(Archiver & ar) {
-                    ar(vanishingPoints, 
+                    ar( panorama, 
+                        vanishingPoints, 
                         overlappedRegionIndexPairs, 
                         lineIncidenceRelationsAcrossViews,
                         regionLineIntersectionSampledPoints, 

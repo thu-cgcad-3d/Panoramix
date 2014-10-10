@@ -6,6 +6,7 @@
 #include <Eigen/Sparse>
 
 #include <unsupported/Eigen/NonLinearOptimization>
+#include <eiquadprog.hpp>
 
 #include "../deriv/derivative.hpp"
 

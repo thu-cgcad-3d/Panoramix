@@ -9,14 +9,23 @@
 namespace panoramix {
     namespace vis {
 
+        static QIcon defaultIcon;
+        const QIcon & Singleton::DefaultIcon(){
+            return defaultIcon;
+        }
+
         static char * appName = "Qt Gui";
 
         QApplication* Singleton::InitGui(int argc, char ** argv) {
             if (qApp)
                 return qApp;
             QApplication* app = new QApplication(argc, argv);
+            defaultIcon = QIcon(":/icons/icon_octopus.png");
+            Q_ASSERT(!defaultIcon.isNull());
+            QApplication::setWindowIcon(defaultIcon);
             app->setQuitOnLastWindowClosed(true);
             QGLFormat glf = QGLFormat::defaultFormat();
+            qDebug("OpenGL version: %d.%d", glf.majorVersion(), glf.minorVersion());
             glf.setSampleBuffers(true);
             glf.setSamples(16);
             QGLFormat::setDefaultFormat(glf);

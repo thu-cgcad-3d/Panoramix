@@ -97,7 +97,7 @@ namespace panoramix {
             };
         public:
             inline explicit SegmentationExtractor(const Params & params = Params()) : _params(params){}
-            std::pair<ImageWithType<int32_t>, int> operator() (const Image & im) const;
+            std::pair<Feature, int> operator() (const Image & im) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
             Params _params;

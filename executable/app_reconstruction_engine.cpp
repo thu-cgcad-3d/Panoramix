@@ -134,11 +134,11 @@ int main(int argc, char * argv[], char * envp[]) {
     });
 
 
-    //try {
-    //    all.engine.initializeRegionOrientations();
-    //} catch (GCException e) {
-    //    e.Report();
-    //}
+    try {
+        all.engine.initializeRegionOrientations();
+    } catch (GCException e) {
+        e.Report();
+    }
 
 
     return 0;

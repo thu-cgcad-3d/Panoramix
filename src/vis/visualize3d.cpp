@@ -118,7 +118,7 @@ namespace panoramix {
             public:
                 using Params = Visualizer3D::Params;
 
-                Visualizer3DWidget(Visualizer3D & viz, QWidget * parent = 0)
+                Visualizer3DWidget(Visualizer3D & viz, QWidget * parent = nullptr)
                     : QGLWidget(parent), _params(viz.params), _renderableObjTree(viz.root()) {
                     setMouseTracking(true);
                     setAutoBufferSwap(false);
@@ -254,6 +254,8 @@ namespace panoramix {
                     staticGuiData.widgetsTable[&viz].append(w);
                     w->resize(MakeQSize(viz.params.camera.screenSize()));
                     w->setWindowTitle(QString::fromStdString(viz.params.winName));
+                    w->setWindowIcon(QIcon(":/icons/icon_octopus.png"));
+                    w->topLevelWidget()->setWindowIcon(Singleton::DefaultIcon());
                     if (autoSetCamera) {
                         w->autoSetCamera();
                     }

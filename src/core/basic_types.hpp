@@ -10,6 +10,7 @@
 #include <forward_list>
 #include <array>
 #include <memory>
+#include <numeric>
 #include <cstdint>
 #include <complex>
 #include <functional>
@@ -302,6 +303,10 @@ namespace panoramix {
             ar(p.anchor, p.normal);
         }
         using Plane3 = Plane<double, 3>;
+        template <class T>
+        inline Plane<T, 3> Plane3From3Points(const Point<T, 3> & a, const Point<T, 3> & b, const Point<T, 3> & c){
+            return Plane<T, 3>(a, (b - a).cross(c - a));
+        }
 
 
 
@@ -331,7 +336,7 @@ namespace panoramix {
 
 
         
-        // position on line
+        // position on line/infline
         template <class T, int N>
         struct PositionOnLine {
             inline PositionOnLine(){}
@@ -439,6 +444,42 @@ namespace panoramix {
             ar(c.note, c.component);
         }
 
+
+        // something scored for sorting
+        template <class T, class S = double>
+        struct Scored {
+            S score;
+            T component;
+        };
+        template <class T, class S>
+        inline Scored<T, S> ScoreAs(const T & comp, const S & score){
+            return Scored<T, S>{score, comp};
+        }
+        // note this!!!
+        template <class T, class S>
+        inline bool operator == (const Scored<T, S> & a, const Scored<T, S> & b) {
+            return a.score == b.score && a.component == b.component;
+        }
+        template <class T, class S>
+        inline bool operator < (const Scored<T, S> & a, const Scored<T, S> & b){
+            return a.score < b.score;
+        }
+        template <class T, class S>
+        inline bool operator >(const Scored<T, S> & a, const Scored<T, S> & b){
+            return a.score > b.score;
+        }
+        template <class T, class S>
+        inline bool operator <= (const Scored<T, S> & a, const Scored<T, S> & b){
+            return a.score <= b.score;
+        }
+        template <class T, class S>
+        inline bool operator >= (const Scored<T, S> & a, const Scored<T, S> & b){
+            return a.score >= b.score;
+        }
+        template <class Archive, class T, class S>
+        inline void serialize(Archive & ar, Scored<T, S> & c) {
+            ar(c.score, c.component);
+        }
 
 
         namespace {

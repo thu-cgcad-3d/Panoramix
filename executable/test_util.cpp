@@ -318,6 +318,33 @@ TEST(UtilTest, RTreeWrapperLargeData) {
 }
 
 
+TEST(UtilTest, MaxHeap){
+
+    std::vector<double> data(5000);
+    std::generate(data.begin(), data.end(), randf);
+
+    std::priority_queue<double> Q(data.begin(), data.end());
+    core::MaxHeap<double, double> H(data.begin(), data.end(), [](double d){return d; });
+
+    ASSERT_EQ(Q.size(), H.size());
+
+    int count = 0;
+    while (!Q.empty()){
+        EXPECT_EQ(Q.top(), H.top());
+        Q.pop();
+        H.pop();
+
+        if (count % 2 == 0){
+            double v = randf();
+            Q.push(v);
+            H.push(v, v);
+        }
+        count++;
+    }
+
+}
+
+
 TEST(UtilTest, MergeNearNaiveCorrectness) {
     std::list<double> arr1;
     arr1.resize(1000);
