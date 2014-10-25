@@ -1479,7 +1479,7 @@ namespace panoramix {
             _globalData.lineConnectedComponentDepthFactors = std::vector<double>(_globalData.lineConnectedComponentsNum, 1.0);
 
 
-            auto displayAll = [&](int highlightedRegionCCId, 
+            auto displayAll = [&](int highlightedLineCCId, int highlightedRegionCCId,
                 const core::MaxHeap<int> & lineCCIdsNotCheckedYet, 
                 const core::MaxHeap<int> & regionCCIdsNotCheckedYet){
                 
@@ -1495,18 +1495,22 @@ namespace panoramix {
                         if (regionCCIdsNotCheckedYet.contains(regionCCId) || lineCCIdsNotCheckedYet.contains(lineCCId))
                             continue;
 
-                        auto & line = _globalData.reconstructedLines[li];
+                        auto line = _globalData.reconstructedLines[li];
+                        double depthFactor = _globalData.lineConnectedComponentDepthFactors[lineCCId];
+                        line.first *= depthFactor;
+                        line.second *= depthFactor;
 
                         const std::vector<Vec3> & selectedSampledPoints = pp.second;
 
                         for (const Vec3 & sampleRay : selectedSampledPoints){
                             Point3 pointOnLine = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampleRay), line.infinieLine()).second.second;
                             Point3 pointOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), sampleRay),
-                                _globalData.regionConnectedComponentPlanes[_globalData.regionConnectedComponentIds[ri]]).position;
+                                _globalData.regionConnectedComponentPlanes[regionCCId]).position;
                             linesRepresentingSampledPoints.emplace_back(pointOnLine, pointOnRegion);
                         }
                     }
 
+                    // paint regions
                     std::vector<vis::SpatialProjectedPolygon> spps, highlightedSpps;
                     spps.reserve(regionIndices.size());
                     static const int stepSize = 10;
@@ -1556,11 +1560,20 @@ namespace panoramix {
                         << vis::manip3d::SetDefaultLineWidth(5.0);
 
                     viz << vis::manip3d::SetDefaultColorTable(vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum));
+
+                    // paint lines
+                    std::vector<Line3> highlightedLines;
                     for (auto & l : _globalData.reconstructedLines) {
                         int lineCCId = _globalData.lineConnectedComponentIds[l.first];
                         if (lineCCIdsNotCheckedYet.contains(lineCCId))
                             continue;
-                        viz << core::ClassifyAs(l.second, lineCCId);
+                        auto line = l.second;
+                        double depthFactor = _globalData.lineConnectedComponentDepthFactors[lineCCId];
+                        line.first *= depthFactor;
+                        line.second *= depthFactor;
+                        if (lineCCId == highlightedLineCCId)
+                            highlightedLines.push_back(line);
+                        viz << core::ClassifyAs(line, lineCCId);
                     }
 
                     viz << vis::manip3d::Begin(spps)
@@ -1569,6 +1582,7 @@ namespace panoramix {
                         << vis::manip3d::SetDefaultLineWidth(6.0)
                         << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
                         << BoundingBoxOfContainer(highlightedSpps)
+                        << BoundingBoxOfContainer(highlightedLines)
                         << vis::manip3d::SetWindowName("initial region planes and reconstructed lines")
                         << vis::manip3d::Show();
                 }
@@ -1707,12 +1721,13 @@ namespace panoramix {
                     // collect sample points with related checked regions
                     std::vector<double> candidateDepthFactors;
                     for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
-                        LineIndex li = pp.first.second;
                         RegionIndex ri = pp.first.first;
-                        if (_globalData.lineConnectedComponentIds[li] != lineCCId){
+                        LineIndex li = pp.first.second;
+                        int thisRegionCCId = _globalData.regionConnectedComponentIds[ri];
+                        int thisLineCCId = _globalData.lineConnectedComponentIds[li];
+                        if (thisLineCCId != lineCCId){
                             continue;
                         }
-                        int thisRegionCCId = _globalData.regionConnectedComponentIds[ri];
                         if (!core::Contains(regionCCIdsForChecking, thisRegionCCId)){ // checked already, use as anchors
                             auto & samplePoints = pp.second;
                             auto & line = _globalData.reconstructedLines[li];
@@ -1763,6 +1778,10 @@ namespace panoramix {
                             regionCCIdsForChecking.increaseScoreTo(thisRegionCCId, regionCCRecInfos[thisRegionCCId].priority());
                         }
                     }
+
+
+                    displayAll(lineCCId, -1, lineCCIdsForChecking, regionCCIdsForChecking);
+
                 }
                 else if(lineCCTopScore < regionTopScore){
                     // region index to check
@@ -1779,7 +1798,7 @@ namespace panoramix {
 
                     // collect roots of candidate planes
                     std::vector<Point3> candidatePlaneRoots;
-                    static const double planeRootDistThres = 0.1;
+                    static const double planeRootDistThres = 0.01;
                     DefaultInfluenceBoxFunctor<Point3> influenceBoxFun(planeRootDistThres);
                     RTreeWrapper<Point3, decltype(influenceBoxFun)> candidatePlaneRootsRTree(influenceBoxFun); // rtree for detecting duplicates
 
@@ -1888,6 +1907,23 @@ namespace panoramix {
                             for (int k = j + 1; k < allAnchors.size(); k++){
                                 auto plane = Plane3From3Points(allAnchors[i], allAnchors[j], allAnchors[k]);
                                 auto root = plane.root();
+                                if (norm(root) < 3)
+                                    continue;
+                                //double vpFactors[] = { 
+                                //    root.dot(normalize(_globalData.vanishingPoints[0])), 
+                                //    root.dot(normalize(_globalData.vanishingPoints[1])), 
+                                //    root.dot(normalize(_globalData.vanishingPoints[2])) 
+                                //};
+                                //double vpFactorsMax = std::max({ abs(vpFactors[0]), abs(vpFactors[1]), abs(vpFactors[2]) });
+                                //for (auto & vpFactor : vpFactors){
+                                //    if (abs(vpFactor) < 0.2 * vpFactorsMax)
+                                //        vpFactor = 0.0;
+                                //}
+                                ////std::cout << "raw root: " << root;
+                                //root = vpFactors[0] * normalize(_globalData.vanishingPoints[0])
+                                //    + vpFactors[1] * normalize(_globalData.vanishingPoints[1])
+                                //    + vpFactors[2] * normalize(_globalData.vanishingPoints[2]);
+                                //std::cout << "refined root: " << root << std::endl;
                                 if (!HasValue(root, IsInfOrNaN<double>) &&
                                     !candidatePlaneRootsRTree.contains(root, [](const Point3 & a, const Point3 & b){return Distance(a, b) < planeRootDistThres; })){
                                     candidatePlaneRoots.push_back(root);
@@ -1904,7 +1940,7 @@ namespace panoramix {
 
 
                     // vote for planes
-                    static const double distFromPointToPlaneThres = 0.1;
+                    static const double distFromPointToPlaneThres = 0.5;
                     int bestPlaneId = -1;
                     double bestVote = -1;
                     for (int i = 0; i < candidatePlaneRoots.size(); i++){
@@ -1918,7 +1954,7 @@ namespace panoramix {
                                 vote += Gaussian(distanceToPlane, distFromPointToPlaneThres);
                             }
                         }
-                        for (auto & as : anchorsOnRelatedRegions){
+                        for (auto & as : anchorsOnRelatedLines){
                             for (auto & a : as.second){
                                 double distanceToPlane = abs((a - root).dot(normalize(root)));
                                 if (distanceToPlane > distFromPointToPlaneThres)
@@ -1927,7 +1963,7 @@ namespace panoramix {
                             }
                         }
                         if (vote > bestVote){
-                            vote = bestVote;
+                            bestVote = vote;
                             bestPlaneId = i;
                         }
                     }
@@ -1937,7 +1973,7 @@ namespace panoramix {
                         Plane3(candidatePlaneRoots[bestPlaneId], candidatePlaneRoots[bestPlaneId]);
 
 
-                    displayAll(regionCCId, lineCCIdsForChecking, regionCCIdsForChecking);
+                    //displayAll(regionCCId, lineCCIdsForChecking, regionCCIdsForChecking);
 
 
 
@@ -1977,12 +2013,17 @@ namespace panoramix {
                             }
                         }
                     }
+
+                    //if (iterCount % 50 == 0)
+                    //    displayAll(-1, regionCCId, lineCCIdsForChecking, regionCCIdsForChecking);
                 }
+                
+
                 
             }
 
 
-            
+            //displayAll(-1, lineCCIdsForChecking, regionCCIdsForChecking);
            
 
 
