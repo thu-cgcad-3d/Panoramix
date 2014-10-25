@@ -41,6 +41,11 @@ namespace panoramix {
         }
 
         template <class T, int N, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
+        inline bool HasValue(const Plane<T, N> & p, const TesterT & tester){
+            return HasValue(p.anchor, tester) || HasValue(p.normal, tester);
+        }
+
+        template <class T, int N, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
         inline bool HasValue(const Box<T, N> & b, const TesterT & tester){
             return HasValue(b.minCorner, tester) || HasValue(b.maxCorner, tester);
         }
@@ -334,6 +339,8 @@ namespace panoramix {
                 maxHeapify(0);
             }
             void increaseScoreBy(const KeyT & key, const ScoreT & moreScore){
+                if (moreScore == 0)
+                    return;
                 int id = _keyToId[key];
                 assert(moreScore > 0);
                 _data[id].score += moreScore;
@@ -962,6 +969,8 @@ namespace panoramix {
 
 
 
+
+
         // Topological Sort (using Depth First Search)
         template <class VertIteratorT, class VertOutIteratorT, class PredecessorVertsContainerGetterT,
         class VertCompareT = std::less<typename std::iterator_traits<VertIteratorT>::value_type>
@@ -974,10 +983,10 @@ namespace panoramix {
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
             static_assert(std::is_same<Vert,
                 std::decay_t<decltype(*std::begin(predecessorVertsContainerGetter(std::declval<Vert>())))>> ::value,
-                "PrecidentVertsContainerGetterT should returns a container of Vert");
+                "PredecessorVertsContainerGetterT should returns a container of Vert");
             static_assert(std::is_same<Vert,
                 std::decay_t<decltype(*std::end(predecessorVertsContainerGetter(std::declval<Vert>())))>> ::value,
-                "PrecidentVertsContainerGetterT should returns a container of Vert");
+                "PredecessorVertsContainerGetterT should returns a container of Vert");
 
             struct {
                 void operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited,

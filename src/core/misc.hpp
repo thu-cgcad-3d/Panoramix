@@ -151,6 +151,43 @@ namespace panoramix {
         }
 
 
+
+
+
+        // yield
+        template <class T, class ProcessorT>
+        class YieldIterator : public std::iterator<std::output_iterator_tag, T> {
+        public:
+            struct Wrapper {
+                inline explicit Wrapper(const ProcessorT & p) : processor(p) {}
+                inline Wrapper & operator = (const T & data){
+                    processor(data);
+                    return *this;
+                }
+                ProcessorT processor;
+            };
+        public:
+            inline explicit YieldIterator(const ProcessorT & p) : _w(p) {}
+            inline YieldIterator & operator ++() {
+                return *this;
+            }
+            inline Wrapper & operator * () {
+                return _w;
+            }
+        private:
+            Wrapper _w;            
+        };
+
+        template <class T, class ProcessorT>
+        inline YieldIterator<T, ProcessorT> MakeYield(const ProcessorT & p) {
+            return YieldIterator<T, ProcessorT>(p);
+        }
+
+
+
+
+
+
         // make an iterator
         template <class CoreDataT, class GetValueT, class SetToNextT, class CompareCoreDataT = std::equal_to<CoreDataT>>
         class EasyForwardIterator : public std::iterator<std::forward_iterator_tag, 

@@ -14,7 +14,7 @@ namespace panoramix {
             segmenterParams.sigma = 0.6;
 
             segmenterParams.useSLIC = false;
-            segmenterParams.superpixelSizeSuggestion = 3000;
+            segmenterParams.superpixelSizeSuggestion = 800;
             segmenterParams.superpixelNumberSuggestion = 100;
             segmenter = SegmentationExtractor(segmenterParams);
         }

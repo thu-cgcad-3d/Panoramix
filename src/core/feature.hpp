@@ -37,6 +37,8 @@ namespace panoramix {
             };
         public:
             inline explicit LineSegmentExtractor(const Params & params = Params()) : _params(params){}
+            const Params & params() const { return _params; }
+            Params & params() { return _params; }
             Feature operator() (const Image & im) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
@@ -97,6 +99,8 @@ namespace panoramix {
             };
         public:
             inline explicit SegmentationExtractor(const Params & params = Params()) : _params(params){}
+            const Params & params() const { return _params; }
+            Params & params() { return _params; }
             std::pair<Feature, int> operator() (const Image & im) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
@@ -120,6 +124,8 @@ namespace panoramix {
             };
         public:
             inline explicit VanishingPointsDetector(const Params & params = Params()) : _params(params) {}
+            const Params & params() const { return _params; }
+            Params & params() { return _params; }
             // accepts (lines, projection center)
             // returns (3 vanishing points, the focal length, line classes)
             std::tuple<std::array<HPoint2, 3>, double, std::vector<int>>
@@ -174,6 +180,8 @@ namespace panoramix {
             };
         public:
             inline explicit LocalManhattanVanishingPointsDetector(const Params & params = Params()) : _params(params) {}
+            const Params & params() const { return _params; }
+            Params & params() { return _params; }
             Result operator() (const std::vector<Line2> & lines, const Point2 & projCenter) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:

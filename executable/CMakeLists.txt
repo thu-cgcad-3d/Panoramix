@@ -5,7 +5,7 @@ file (GLOB TESTCPPS "." test_*.cpp)
 
 
 # apps
-file (GLOB APPCPPS "." app_*.cpp)
+file (GLOB APPS "." app_*)
 
 
 # google test
@@ -45,11 +45,23 @@ foreach (TCPP ${TESTCPPS})
 endforeach()
 
 # build app projects
-foreach (TCPP ${APPCPPS})
-	get_filename_component (T ${TCPP} NAME_WE)
+foreach (TFILE ${APPS})
+	get_filename_component (T ${TFILE} NAME_WE)
 	message (STATUS ${T})
 	include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES})
-	add_executable (${T} ${T}.cpp)
+	if (IS_DIRECTORY "${TFILE}")
+		file (GLOB TSOURCES 
+			"${TFILE}/*.cpp" 
+			"${TFILE}/*.hpp" 
+			"${TFILE}/*.cc" 
+			"${TFILE}/*.c" 
+			"${TFILE}/*.hh" 
+			"${TFILE}/*.h")
+		message (STATUS "sources: ${TSOURCES}")
+		add_executable (${T} ${TSOURCES})
+	else ()
+		add_executable (${T} ${T}.cpp)
+	endif ()
 	target_link_libraries (${T} ${CORE_STATIC_LIB} ${DERIV_STATIC_LIB} ${VIS_STATIC_LIB} ${REC_STATIC_LIB} ${Qt_LIBS})
 	set_property(TARGET ${T} PROPERTY FOLDER "${PROJECT_NAME}.Apps")
 endforeach()

@@ -74,7 +74,7 @@ namespace panoramix {
 
             ColorTable(std::initializer_list<ColorTag> ctags, ColorTag exceptColor);
 
-            template <class ColorIteratorT>
+            template <class ColorIteratorT, class = std::enable_if_t<std::is_same<std::iterator_traits<ColorIteratorT>::value_type, Color>::value>>
             inline ColorTable(ColorIteratorT begin, ColorIteratorT end, const Color & exceptColor = ColorFromTag(ColorTag::Transparent))
                 : _colors(begin, end), _exceptionalColor(exceptColor) {}
 
@@ -98,7 +98,7 @@ namespace panoramix {
 
         const ColorTable & PredefinedColorTable(ColorTableDescriptor descriptor);
         ColorTable CreateGreyColorTableWithSize(int sz);
-        ColorTable CreateRandomColorTableWithSize(int sz);
+        ColorTable CreateRandomColorTableWithSize(int sz, const Color & exceptColor = ColorFromTag(ColorTag::Transparent));
 
 
         // render mode

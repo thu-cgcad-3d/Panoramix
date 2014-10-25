@@ -291,6 +291,7 @@ namespace panoramix {
         struct Plane {
             inline Plane() {}
             inline Plane(const Point<T, N> & a, const Vec<T, N> & n) : anchor(a), normal(n) {}
+            inline Point<T, N> root() const { return normal * (anchor.dot(normal)) / norm(normal) / norm(normal); }
             Point<T, N> anchor;
             Vec<T, N> normal;
         };
@@ -305,7 +306,7 @@ namespace panoramix {
         using Plane3 = Plane<double, 3>;
         template <class T>
         inline Plane<T, 3> Plane3From3Points(const Point<T, 3> & a, const Point<T, 3> & b, const Point<T, 3> & c){
-            return Plane<T, 3>(a, (b - a).cross(c - a));
+            return Plane<T, 3>(a, normalize((b - a).cross(c - a)));
         }
 
 
@@ -465,7 +466,7 @@ namespace panoramix {
             return a.score < b.score;
         }
         template <class T, class S>
-        inline bool operator >(const Scored<T, S> & a, const Scored<T, S> & b){
+        inline bool operator > (const Scored<T, S> & a, const Scored<T, S> & b){
             return a.score > b.score;
         }
         template <class T, class S>
@@ -650,6 +651,11 @@ namespace panoramix {
         template <class T>
         inline auto BoundingBox(const Noted<T> & n) -> decltype(BoundingBox(n.component)){
             return BoundingBox(n.component);
+        }
+
+        template <class T>
+        inline auto BoundingBox(const Scored<T> & s) -> decltype(BoundingBox(s.component)){
+            return BoundingBox(s.component);
         }
  
     }

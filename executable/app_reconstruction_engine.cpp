@@ -111,7 +111,7 @@ int main(int argc, char * argv[], char * envp[]) {
             all.engine.computeFeatures(viewHandle);
         }        
         core::SaveToDisk(out, all);
-    }, true);
+    });
     
     core::UpdateIfFileIsTooOld(cacheFileAfterComputingFeatures, cacheFileAfterEstimatingVPs, 
         [&](const std::string & in, const std::string & out) {

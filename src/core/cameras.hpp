@@ -149,6 +149,10 @@ namespace panoramix {
         };
 
 
+        template <class OutCameraT, class InCameraT>
+        inline CameraSampler<OutCameraT, InCameraT> MakeCameraSampler(const OutCameraT & outCam, const InCameraT & inCam){
+            return CameraSampler<OutCameraT, InCameraT>(outCam, inCam);
+        }
 
 
 

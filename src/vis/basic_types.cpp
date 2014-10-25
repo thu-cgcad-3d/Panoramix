@@ -229,7 +229,7 @@ namespace panoramix {
             return ColorTable(colors, exeptColor);
         }
 
-        ColorTable CreateRandomColorTableWithSize(int sz) {
+        ColorTable CreateRandomColorTableWithSize(int sz, const Color & exceptColor) {
             int dimSplit = std::max(int(sqrt(sz)), 3);
             std::vector<Color> colors;
             colors.reserve(dimSplit * dimSplit * dimSplit - dimSplit);
@@ -244,7 +244,7 @@ namespace panoramix {
             }
             assert(colors.size() > sz);
             std::random_shuffle(colors.begin(), colors.end());
-            return ColorTable(colors.begin(), colors.begin() + sz, Color(255, 255, 255));
+            return ColorTable(colors.begin(), colors.begin() + sz, exceptColor);
         }
 
 

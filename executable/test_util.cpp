@@ -13,6 +13,18 @@ double randf(){
     return (std::rand() % 100000) / 100000.0;
 }
 
+
+TEST(MistTest, YieldIterator) {
+
+    std::vector<int> data(10);
+    std::iota(data.begin(), data.end(), 0);
+    std::copy(data.begin(), data.end(), core::MakeYield<int>([](int d){
+        std::cout << d << std::endl;
+    }));
+
+}
+
+
 TEST(UtilTest, HasValue){
 
     std::vector<core::Ratio<core::Line2, double>> hlines = {

@@ -56,6 +56,8 @@ namespace panoramix {
             struct IndexOfSubStructureInView {
                 ViewHandle viewHandle;
                 HandleT handle;
+                inline IndexOfSubStructureInView(){}
+                inline IndexOfSubStructureInView(const ViewHandle & vh, const HandleT & h) : viewHandle(vh), handle(h) {}
                 template <class Archiver> 
                 void serialize(Archiver & ar) {
                     ar(viewHandle, handle);
@@ -186,26 +188,46 @@ namespace panoramix {
                 Image panorama;
                 std::array<Vec3, 3> vanishingPoints;
 
+                /// about regions
                 IndexHashMap<std::pair<RegionIndex, RegionIndex>, double> overlappedRegionIndexPairs;
+
+                int regionConnectedComponentsNum; // connected by overlapping constraints
+                IndexHashMap<RegionIndex, int> regionConnectedComponentIds;
+                std::vector<Plane3> regionConnectedComponentPlanes;
+
+                /// about lines
                 IndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> lineIncidenceRelationsAcrossViews;
                 IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> regionLineIntersectionSampledPoints;
 
                 int lineConnectedComponentsNum;
                 IndexHashMap<LineIndex, int> lineConnectedComponentIds;
                 IndexHashMap<LineIndex, Line3> reconstructedLines;
+                std::vector<double> lineConnectedComponentDepthFactors; // depth muliplier for current reconstructedLines
 
+                /// ...
                 IndexHashMap<RegionIndex, int> regionOrientations;
-                IndexHashMap<RegionIndex, Plane3> regionPlanes;
+                //IndexHashMap<RegionIndex, Plane3> regionPlanes;
 
                 template <class Archiver>
                 void serialize(Archiver & ar) {
                     ar( panorama, 
-                        vanishingPoints, 
+                        vanishingPoints,
+
                         overlappedRegionIndexPairs, 
+
+                        regionConnectedComponentsNum,
+                        regionConnectedComponentIds,
+                        regionConnectedComponentPlanes,
+                        
                         lineIncidenceRelationsAcrossViews,
                         regionLineIntersectionSampledPoints, 
-                        lineConnectedComponentsNum, lineConnectedComponentIds, 
-                        reconstructedLines, regionOrientations, regionPlanes);
+
+                        lineConnectedComponentsNum, 
+                        lineConnectedComponentIds, 
+                        reconstructedLines, 
+                        lineConnectedComponentDepthFactors,
+                        
+                        regionOrientations);
                 }
             };
 

@@ -742,6 +742,47 @@ namespace panoramix {
 
 
 
+            // compute connected components based on region-region overlaps
+            // as merged region indices
+            auto overlappedRegionIndicesGetter = [this](const RegionIndex & ri) {
+                std::vector<RegionIndex> neighbors;
+                for (auto & overlappedRegionPair : _globalData.overlappedRegionIndexPairs){
+                    auto overlappingRatio = overlappedRegionPair.second;
+                    if (overlappingRatio < 0.2)
+                        continue;
+                    if (overlappedRegionPair.first.first == ri)
+                        neighbors.push_back(overlappedRegionPair.first.second);
+                    if (overlappedRegionPair.first.second == ri)
+                        neighbors.push_back(overlappedRegionPair.first.first);
+                }
+                return neighbors;
+            };
+
+            // collect all region indices
+            std::vector<RegionIndex> regionIndices;
+            IndexHashMap<RegionIndex, int> regionIndexToId;
+            for (auto & vd : _views.elements<0>()){
+                RegionIndex ri;
+                ri.viewHandle = vd.topo.hd;
+                auto & cam = vd.data.camera;
+                for (auto & rd : vd.data.regionNet->regions().elements<0>()){
+                    ri.handle = rd.topo.hd;
+                    regionIndices.push_back(ri);
+                    regionIndexToId[ri] = regionIndices.size() - 1;
+                }
+            }
+
+            _globalData.regionConnectedComponentIds.clear();
+            _globalData.regionConnectedComponentsNum = core::ConnectedComponents(regionIndices.begin(), regionIndices.end(),
+                overlappedRegionIndicesGetter, [this](const RegionIndex & ri, int ccid) {
+                _globalData.regionConnectedComponentIds[ri] = ccid;
+            });
+
+            std::cout << "region ccnum: " << _globalData.regionConnectedComponentsNum << std::endl;
+
+
+
+
             // compute connected components based on line-line constraints
             auto relatedLineIndicesGetter = [this, &lineIncidenceRelations](const LineIndex & li) {
                 std::vector<LineIndex> related;
@@ -787,7 +828,7 @@ namespace panoramix {
             });
 
 
-            std::cout << "ccnum: " << _globalData.lineConnectedComponentsNum << std::endl;
+            std::cout << "line ccnum: " << _globalData.lineConnectedComponentsNum << std::endl;
 
 
             IF_DEBUG_USING_VISUALIZERS{
@@ -1426,86 +1467,112 @@ namespace panoramix {
             }
 
             // initialize region planes
-            _globalData.regionPlanes.clear();
+            _globalData.regionConnectedComponentPlanes = std::vector<Plane3>(_globalData.regionConnectedComponentsNum);
             for (auto & ri : regionIndices){
                 auto & rd = regionData(ri);
                 Vec3 centerDir = _views.data(ri.viewHandle).camera.spatialDirection(rd.center);
-                _globalData.regionPlanes[ri].anchor = normalize(centerDir) * 5;
-                _globalData.regionPlanes[ri].normal = normalize(centerDir);
+                int regionCCId = _globalData.regionConnectedComponentIds[ri];
+                _globalData.regionConnectedComponentPlanes[regionCCId].anchor = normalize(centerDir) * 10;
+                _globalData.regionConnectedComponentPlanes[regionCCId].normal = normalize(centerDir);
             }
+            // initialize line depth factors
+            _globalData.lineConnectedComponentDepthFactors = std::vector<double>(_globalData.lineConnectedComponentsNum, 1.0);
 
-            IF_DEBUG_USING_VISUALIZERS{
-                std::vector<Line3> linesRepresentingSampledPoints;
 
-                // line-region connections
-                for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
-                    RegionIndex ri = pp.first.first;
-                    LineIndex li = pp.first.second;
-                    auto & line = _globalData.reconstructedLines[li];
+            auto displayAll = [&](int highlightedRegionCCId, 
+                const core::MaxHeap<int> & lineCCIdsNotCheckedYet, 
+                const core::MaxHeap<int> & regionCCIdsNotCheckedYet){
+                
+                IF_DEBUG_USING_VISUALIZERS{
+                    std::vector<Line3> linesRepresentingSampledPoints;
 
-                    std::vector<Vec3> selectedSampledPoints = 
-                        pp.second.size() <= 2 ? pp.second : std::vector<Vec3>{ pp.second.front(), pp.second.back() };
+                    // line-region connections
+                    for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                        RegionIndex ri = pp.first.first;
+                        LineIndex li = pp.first.second;
+                        int regionCCId = _globalData.regionConnectedComponentIds[ri];
+                        int lineCCId = _globalData.lineConnectedComponentIds[li];
+                        if (regionCCIdsNotCheckedYet.contains(regionCCId) || lineCCIdsNotCheckedYet.contains(lineCCId))
+                            continue;
 
-                    for (const Vec3 & sampleRay : selectedSampledPoints){
-                        Point3 pointOnLine = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampleRay), line.infinieLine()).second.second;
-                        Point3 pointOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), sampleRay), _globalData.regionPlanes[ri]).position;
-                        linesRepresentingSampledPoints.emplace_back(pointOnLine, pointOnRegion);
-                    }
-                }
+                        auto & line = _globalData.reconstructedLines[li];
 
-                std::vector<vis::SpatialProjectedPolygon> spps;
-                spps.reserve(regionIndices.size());
-                static const int stepSize = 10;
+                        const std::vector<Vec3> & selectedSampledPoints = pp.second;
 
-                for (auto & ri : regionIndices){
-                    vis::SpatialProjectedPolygon spp;
-                    spp.plane = _globalData.regionPlanes[ri];
-                    auto & rd = regionData(ri);
-                    if (rd.contours.back().size() < 3)
-                        continue;
-
-                    spp.corners.reserve(rd.contours.back().size() / double(stepSize));
-                    auto & cam = _views.data(ri.viewHandle).camera;
-
-                    PixelLoc lastPixel;
-                    for (int i = 0; i < rd.contours.back().size(); i++){
-                        if (spp.corners.empty()){
-                            spp.corners.push_back(cam.spatialDirection(ToPoint2(rd.contours.back()[i])));
-                            lastPixel = rd.contours.back()[i];
+                        for (const Vec3 & sampleRay : selectedSampledPoints){
+                            Point3 pointOnLine = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampleRay), line.infinieLine()).second.second;
+                            Point3 pointOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), sampleRay),
+                                _globalData.regionConnectedComponentPlanes[_globalData.regionConnectedComponentIds[ri]]).position;
+                            linesRepresentingSampledPoints.emplace_back(pointOnLine, pointOnRegion);
                         }
-                        else {
-                            if (Distance(lastPixel, rd.contours.back()[i]) >= stepSize){
+                    }
+
+                    std::vector<vis::SpatialProjectedPolygon> spps, highlightedSpps;
+                    spps.reserve(regionIndices.size());
+                    static const int stepSize = 10;
+
+                    for (auto & ri : regionIndices){
+                        vis::SpatialProjectedPolygon spp;
+                        int regionCCId = _globalData.regionConnectedComponentIds[ri];
+                        if (regionCCIdsNotCheckedYet.contains(regionCCId)) // igore not reconstructed regions 
+                            continue;
+
+                        spp.plane = _globalData.regionConnectedComponentPlanes[regionCCId];
+                        auto & rd = regionData(ri);
+                        if (rd.contours.back().size() < 3)
+                            continue;
+
+                        spp.corners.reserve(rd.contours.back().size() / double(stepSize));
+                        auto & cam = _views.data(ri.viewHandle).camera;
+
+                        PixelLoc lastPixel;
+                        for (int i = 0; i < rd.contours.back().size(); i++){
+                            if (spp.corners.empty()){
                                 spp.corners.push_back(cam.spatialDirection(ToPoint2(rd.contours.back()[i])));
                                 lastPixel = rd.contours.back()[i];
+                            }
+                            else {
+                                if (Distance(lastPixel, rd.contours.back()[i]) >= stepSize){
+                                    spp.corners.push_back(cam.spatialDirection(ToPoint2(rd.contours.back()[i])));
+                                    lastPixel = rd.contours.back()[i];
+                                }
+                            }
+                        }
+
+                        spp.projectionCenter = cam.eye();
+                        if (spp.corners.size() > 3){
+                            spps.push_back(spp);
+                            if (_globalData.regionConnectedComponentIds[ri] == highlightedRegionCCId){
+                                highlightedSpps.push_back(spp);
                             }
                         }
                     }
 
-                    spp.projectionCenter = cam.eye();
-                    if (spp.corners.size() > 3){
-                        spps.push_back(spp);
+                    vis::Visualizer3D viz;
+                    viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+                        << vis::manip3d::SetDefaultLineWidth(1.0)
+                        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::DimGray)
+                        << linesRepresentingSampledPoints
+                        << vis::manip3d::SetDefaultLineWidth(5.0);
+
+                    viz << vis::manip3d::SetDefaultColorTable(vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum));
+                    for (auto & l : _globalData.reconstructedLines) {
+                        int lineCCId = _globalData.lineConnectedComponentIds[l.first];
+                        if (lineCCIdsNotCheckedYet.contains(lineCCId))
+                            continue;
+                        viz << core::ClassifyAs(l.second, lineCCId);
                     }
+
+                    viz << vis::manip3d::Begin(spps)
+                        << vis::manip3d::SetTexture(_globalData.panorama)
+                        << vis::manip3d::End
+                        << vis::manip3d::SetDefaultLineWidth(6.0)
+                        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
+                        << BoundingBoxOfContainer(highlightedSpps)
+                        << vis::manip3d::SetWindowName("initial region planes and reconstructed lines")
+                        << vis::manip3d::Show();
                 }
-
-                vis::Visualizer3D viz;
-                viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
-                    << vis::manip3d::SetDefaultLineWidth(5.0);
-
-                viz << vis::manip3d::SetDefaultColorTable(vis::CreateRandomColorTableWithSize(_globalData.lineConnectedComponentsNum));
-                for (auto & l : _globalData.reconstructedLines) {
-                    viz << core::ClassifyAs(l.second, _globalData.lineConnectedComponentIds[l.first]);
-                }
-
-                /*viz << vis::manip3d::SetDefaultLineWidth(2.0)
-                    << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
-                    << linesRepresentingSampledPoints;*/
-
-                viz << vis::manip3d::Begin(spps)
-                    << vis::manip3d::SetTexture(_globalData.panorama)
-                    << vis::manip3d::End
-                    << vis::manip3d::SetWindowName("initial region planes and reconstructed lines")
-                    << vis::manip3d::Show();
-            }
+            };
 
             // collect line indices in same ccs
             std::vector<IndexHashSet<LineIndex>> lineIndicesInCCs(_globalData.lineConnectedComponentsNum);
@@ -1513,73 +1580,410 @@ namespace panoramix {
                 lineIndicesInCCs[ccid.second].insert(ccid.first);
             }
 
-            // count sample point for each region
-            IndexHashMap<RegionIndex, std::pair<int, int>> regionSamplePointNums; // [boundary sample points, line sample points]
+            // collect region indices in same merge regions
+            std::vector<IndexHashSet<RegionIndex>> regionIndicesInCCs(_globalData.regionConnectedComponentsNum);
+            for (auto & ccid : _globalData.regionConnectedComponentIds){
+                regionIndicesInCCs[ccid.second].insert(ccid.first);
+            }
+
+            
+            struct RegionCCRecInfo { // information for reconstruction of regions
+                double areaRatio;
+                Rational samplePointsNumWithOtherRegionsAnchoredRatio;
+                Rational samplePointsNumWithLinesAnchoredRatio;
+                inline RegionCCRecInfo() 
+                    : samplePointsNumWithOtherRegionsAnchoredRatio(0, 0),
+                    samplePointsNumWithLinesAnchoredRatio(0, 0),
+                    areaRatio(0) {
+                }
+                inline bool reconstructible() const {
+                    return samplePointsNumWithLinesAnchoredRatio.denominator > 0 || 
+                        samplePointsNumWithOtherRegionsAnchoredRatio.denominator > 0;
+                }
+                inline double priority() const { 
+                    double samplePointsCompleteRatioWithOtherRegions =
+                        (samplePointsNumWithOtherRegionsAnchoredRatio.denominator == 0 ? 0 :
+                        samplePointsNumWithOtherRegionsAnchoredRatio.value());
+                    double samplePointsCompleteRatioWithLines =
+                        (samplePointsNumWithLinesAnchoredRatio.denominator == 0 ? 0 :
+                        samplePointsNumWithLinesAnchoredRatio.value());
+                    return samplePointsCompleteRatioWithOtherRegions * 0.7
+                        + samplePointsCompleteRatioWithLines * 0.29
+                        + areaRatio * 0.01;
+                }
+            };
+            struct LineCCRecInfo { // information for reconstruction of line ccs
+                double linesNumRatio;
+                Rational samplePointsNumWithRegionsAnchoredRatio;
+                inline LineCCRecInfo() : samplePointsNumWithRegionsAnchoredRatio(0, 0), linesNumRatio(0) {}
+                inline bool reconstructible() const { return true; }
+                inline double priority() const {
+                    double samplePointsCompleteRatio = 
+                        samplePointsNumWithRegionsAnchoredRatio.denominator == 0 ?
+                        0 : samplePointsNumWithRegionsAnchoredRatio.value();
+                    return samplePointsCompleteRatio * 0.9 + linesNumRatio * 0.1; // the advantage over regions
+                }
+            };
+
+
+
+            /// count sample point for each region
+            std::vector<RegionCCRecInfo> regionCCRecInfos(_globalData.regionConnectedComponentsNum); // [boundary sample points, line sample points]
             // collect region boundary sample point num
             for (auto & v : _views.elements<0>()){
                 for (auto & b : v.data.regionNet->regions().elements<1>()){
-                    int n = b.data.sampledPoints.size();
+                    int n = 0;
+                    for (auto & pts : b.data.sampledPoints){
+                        n += pts.size();
+                    }
                     auto ri1 = RegionIndex{ v.topo.hd, b.topo.lowers[0] };
-                    auto ri2 = RegionIndex{ v.topo.hd, b.topo.lowers[1] };
-                    regionSamplePointNums[ri1].first += n;
-                    regionSamplePointNums[ri2].first += n;
+                    auto ri2 = RegionIndex{ v.topo.hd, b.topo.lowers[1] };                    
+                    regionCCRecInfos[_globalData.regionConnectedComponentIds[ri1]]
+                        .samplePointsNumWithOtherRegionsAnchoredRatio.denominator += n;
+                    regionCCRecInfos[_globalData.regionConnectedComponentIds[ri2]]
+                        .samplePointsNumWithOtherRegionsAnchoredRatio.denominator += n;
+                }
+                for (auto & r : v.data.regionNet->regions().elements<0>()){
+                    auto ri = RegionIndex{ v.topo.hd, r.topo.hd };
+                    regionCCRecInfos[_globalData.regionConnectedComponentIds[ri]].areaRatio += 
+                        r.data.area / double(v.data.image.cols * v.data.image.rows);
                 }
             }
             // collect region line sample point num
             for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
-                regionSamplePointNums[pp.first.first].second += pp.second.size();
+                regionCCRecInfos[_globalData.regionConnectedComponentIds[pp.first.first]]
+                    .samplePointsNumWithLinesAnchoredRatio.denominator += pp.second.size();
             }
 
 
-            // count sample point for each line CC
-            std::vector<int> lineCCSamplePointNums(_globalData.lineConnectedComponentsNum);
+            /// count sample point for each line CC
+            std::vector<LineCCRecInfo> lineCCRecInfos(_globalData.lineConnectedComponentsNum);
             for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
-                lineCCSamplePointNums[_globalData.lineConnectedComponentIds[pp.first.second]] += pp.second.size();
+                auto & lineCCRecInfo = lineCCRecInfos[_globalData.lineConnectedComponentIds[pp.first.second]];
+                lineCCRecInfo.samplePointsNumWithRegionsAnchoredRatio.denominator += pp.second.size();
             }
-
+            for (int i = 0; i < _globalData.lineConnectedComponentsNum; i++){
+                lineCCRecInfos[i].linesNumRatio = lineIndicesInCCs[i].size() / double(_globalData.reconstructedLines.size());
+            }
 
 
             // maximum heap for checking            
             std::vector<int> lineCCIds(_globalData.lineConnectedComponentsNum);
             std::iota(lineCCIds.begin(), lineCCIds.end(), 0);
             core::MaxHeap<int> lineCCIdsForChecking(lineCCIds.begin(), lineCCIds.end(), 
-                [&lineIndicesInCCs](int ccId) -> double {
-                return lineIndicesInCCs[ccId].size();
+                [&lineCCRecInfos](int ccId) -> double {
+                return lineCCRecInfos[ccId].priority();
             });
-            core::MaxHeap<RegionIndex, double, IndexHashMap<RegionIndex, int>> 
-                regionIndicesForChecking(regionIndices.begin(), regionIndices.end(),
-                [this](const RegionIndex & ri) -> double{
-                return 0.0;
+            std::vector<int> regionCCIds(_globalData.regionConnectedComponentsNum);
+            std::iota(regionCCIds.begin(), regionCCIds.end(), 0);
+            core::MaxHeap<int> regionCCIdsForChecking(regionCCIds.begin(), regionCCIds.end(),
+                [&regionCCRecInfos](int ccId) -> double{
+                return regionCCRecInfos[ccId].priority();
             });
 
-            // set anchor
-            int lineCCIdAsAnchor = lineCCIdsForChecking.top();
-            lineCCIdsForChecking.pop();
 
-            // update related region scores
-            for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
-                LineIndex li = pp.first.second;
-                RegionIndex ri = pp.first.first;
-                if (!core::Contains(regionIndicesForChecking, ri)){ // checked already
-                    continue;
-                }
-                int ccid = _globalData.lineConnectedComponentIds[li];
-                if (ccid == lineCCIdAsAnchor){ // related // increase the checked sampled points ratio
-                    double moreRatio = double(pp.second.size()) / 
-                        (regionSamplePointNums[ri].first + regionSamplePointNums[ri].second);
-                    regionIndicesForChecking.increaseScoreBy(ri, moreRatio);
-                }
-            }
+            // data for reserving consistency in reconstruction
+            // TODO
+            std::vector<double> pointAnchors[3];
 
-            // begin iteration            
-            while (!(regionIndicesForChecking.empty() && lineCCIdsForChecking.empty())) {
-                double regionTopScore = regionIndicesForChecking.empty() ? 0.0 : regionIndicesForChecking.topScore();
+            int iterCount = 0;
+
+            //// begin iteration            
+            while (!(regionCCIdsForChecking.empty() && lineCCIdsForChecking.empty())) {
+                iterCount++;
+
+                double regionTopScore = regionCCIdsForChecking.empty() ? 0.0 : regionCCIdsForChecking.topScore();
                 double lineCCTopScore = lineCCIdsForChecking.empty() ? 0.0 : lineCCIdsForChecking.topScore();
                 if (regionTopScore < lineCCTopScore){
+                    // line ccid to check
+                    int lineCCId = lineCCIdsForChecking.top();
+                    lineCCIdsForChecking.pop();
+                    if (!lineCCRecInfos[lineCCId].reconstructible()){
+                        continue;
+                    }
 
+                    // compute depth of this line cc
+                    std::cout << "processing line cc: " << lineCCId << " - " << lineCCTopScore << std::endl;
+                    // collect sample points with related checked regions
+                    std::vector<double> candidateDepthFactors;
+                    for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                        LineIndex li = pp.first.second;
+                        RegionIndex ri = pp.first.first;
+                        if (_globalData.lineConnectedComponentIds[li] != lineCCId){
+                            continue;
+                        }
+                        int thisRegionCCId = _globalData.regionConnectedComponentIds[ri];
+                        if (!core::Contains(regionCCIdsForChecking, thisRegionCCId)){ // checked already, use as anchors
+                            auto & samplePoints = pp.second;
+                            auto & line = _globalData.reconstructedLines[li];
+                            for (auto & p : samplePoints){
+                                double depthVarOnLine = norm(DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), p))
+                                    .second.second);
+                                double depthValueOnRegion = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), p),
+                                    _globalData.regionConnectedComponentPlanes[thisRegionCCId]).position);
+                                if (IsInfOrNaN(depthVarOnLine) || IsInfOrNaN(depthValueOnRegion))
+                                    continue;
+                                candidateDepthFactors.push_back((depthValueOnRegion / depthVarOnLine));
+                            }
+                        }
+                    }
+                    if (candidateDepthFactors.empty()){ // isolated or first
+                        // TODO
+                        _globalData.lineConnectedComponentDepthFactors[lineCCId] = 1;
+                    }
+                    else {
+                        double bestVotes = -1;
+                        double bestDepthFactor = -1;
+                        for (const double & df : candidateDepthFactors){
+                            double vote = 0;
+                            for (const double & df2 : candidateDepthFactors){
+                                vote += Gaussian(df - df2, 0.01);
+                            }
+                            if (!IsInfOrNaN(vote) && vote > bestVotes){
+                                bestDepthFactor = df;
+                                bestVotes = vote;
+                            }
+                        }
+                        assert(bestDepthFactor > 0);
+                        _globalData.lineConnectedComponentDepthFactors[lineCCId] = bestDepthFactor;
+                    }
+
+
+                    // update related region scores
+                    for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                        LineIndex li = pp.first.second;
+                        RegionIndex ri = pp.first.first;
+                        int thisLineCCId = _globalData.lineConnectedComponentIds[li];
+                        int thisRegionCCId = _globalData.regionConnectedComponentIds[ri];
+                        if (!core::Contains(regionCCIdsForChecking, thisRegionCCId)){ // checked already
+                            continue;
+                        }
+                        if (thisLineCCId == lineCCId){ // related 
+                            regionCCRecInfos[thisRegionCCId].samplePointsNumWithLinesAnchoredRatio.numerator += pp.second.size();
+                            regionCCIdsForChecking.increaseScoreTo(thisRegionCCId, regionCCRecInfos[thisRegionCCId].priority());
+                        }
+                    }
                 }
+                else if(lineCCTopScore < regionTopScore){
+                    // region index to check
+                    int regionCCId = regionCCIdsForChecking.top();
+                    regionCCIdsForChecking.pop();
+                    if (!regionCCRecInfos[regionCCId].reconstructible()){
+                        continue;
+                    }
+
+                    // compute equation of this region
+                    std::cout << "processing region cc: " << regionCCId  << " - " << regionTopScore << std::endl;
+                    IndexHashMap<RegionIndex, std::vector<Point3>> anchorsOnRelatedRegions;
+                    IndexHashMap<LineIndex, std::vector<Point3>> anchorsOnRelatedLines;
+
+                    // collect roots of candidate planes
+                    std::vector<Point3> candidatePlaneRoots;
+                    static const double planeRootDistThres = 0.1;
+                    DefaultInfluenceBoxFunctor<Point3> influenceBoxFun(planeRootDistThres);
+                    RTreeWrapper<Point3, decltype(influenceBoxFun)> candidatePlaneRootsRTree(influenceBoxFun); // rtree for detecting duplicates
+
+                    // collect anchors on related regions
+                    for (auto & ri : regionIndicesInCCs[regionCCId]){
+                        auto & cam = _views.data(ri.viewHandle).camera;
+                        auto & regions = _views.data(ri.viewHandle).regionNet->regions();
+                        auto & bdis = regions.topo(ri.handle).uppers;
+                        for (auto & bdi : bdis){
+                            auto r1 = regions.topo(bdi).lowers.front();
+                            auto r2 = regions.topo(bdi).lowers.back();
+                            assert(r1 != r2);
+                            RegionIndex relatedRi;
+                            relatedRi.viewHandle = ri.viewHandle;
+                            
+                            if (r1 == ri.handle)
+                                relatedRi.handle = r2;
+                            else if (r2 == ri.handle)
+                                relatedRi.handle = r1;
+                            else{
+                                assert(0 && "impossible!");
+                            }
+                            int relatedRegionCCId = _globalData.regionConnectedComponentIds[relatedRi];
+                            if (relatedRegionCCId == regionCCId)
+                                continue;
+                            if (core::Contains(regionCCIdsForChecking, relatedRegionCCId)){
+                                continue;
+                            }
+
+                            const Plane3 & relatedRegionCCPlane = _globalData.regionConnectedComponentPlanes[relatedRegionCCId];
+                            if (regions.data(bdi).straightness < 0.8){ // collect the plane of neighbor regions with rough boundaries
+                                auto root = relatedRegionCCPlane.root();
+                                if (!HasValue(root, IsInfOrNaN<double>) &&
+                                    !candidatePlaneRootsRTree.contains(root, [](const Point3 & a, const Point3 & b){return Distance(a, b) < planeRootDistThres; })){
+                                    candidatePlaneRoots.push_back(root);
+                                    candidatePlaneRootsRTree.insert(root);
+                                }
+                            }
+
+                            for (auto & pts : regions.data(bdi).sampledPoints){
+                                for (auto & p : pts){
+                                    Vec3 pdir = cam.spatialDirection(p);
+                                    auto pOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), pdir), relatedRegionCCPlane).position;
+                                    anchorsOnRelatedRegions[relatedRi].push_back(pOnPlane);
+                                }
+                            }
+                        }
+                    }
+
+                    // collect anchors on related lines
+                    for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                        LineIndex li = pp.first.second;
+                        RegionIndex ri = pp.first.first;
+                        int thisLineCCId = _globalData.lineConnectedComponentIds[li];
+                        int thisRegionCCId = _globalData.regionConnectedComponentIds[ri];
+                        if (core::Contains(lineCCIdsForChecking, thisLineCCId)){ // ignore unchecked lines
+                            continue;
+                        }
+                        if (thisRegionCCId == regionCCId){ // related
+                            auto & samplePoints = pp.second;
+                            auto & line = _globalData.reconstructedLines[li];
+                            for (auto & p : samplePoints){
+                                auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), p))
+                                    .second.second;
+                                anchorsOnRelatedLines[li].push_back(pOnLine * _globalData.lineConnectedComponentDepthFactors[thisLineCCId]);
+                            }
+                        }
+                    }
+
+                    int anchorsOnRelatedRegionsNum = 0;
+                    for (auto & as : anchorsOnRelatedRegions)
+                        anchorsOnRelatedRegionsNum += as.second.size();
+                    int anchorsOnRelatedLinesNum = 0;
+                    for (auto & as : anchorsOnRelatedLines)
+                        anchorsOnRelatedLinesNum += as.second.size();
+                    assert(anchorsOnRelatedRegionsNum == regionCCRecInfos[regionCCId].samplePointsNumWithOtherRegionsAnchoredRatio.numerator);
+                    assert(anchorsOnRelatedLinesNum == regionCCRecInfos[regionCCId].samplePointsNumWithLinesAnchoredRatio.numerator);
+                    std::cout << "anchors num for this region: " << anchorsOnRelatedRegionsNum << "  -  " << anchorsOnRelatedLinesNum << std::endl;
+                    
+                    assert(!anchorsOnRelatedRegions.empty() || !anchorsOnRelatedLines.empty());
+
+                    // collect roots of planes formed by multiple related instances
+                    std::vector<Point3> allAnchors;
+                    allAnchors.reserve(anchorsOnRelatedRegions.size() * 2 + anchorsOnRelatedLines.size() * 2);
+                    for (auto & as : anchorsOnRelatedRegions){
+                        assert(!as.second.empty());
+                        if (as.second.size() == 1)
+                            allAnchors.push_back(as.second.front());
+                        else{
+                            allAnchors.push_back(as.second.front());
+                            allAnchors.push_back(as.second.back());
+                        }
+                    }
+                    for (auto & as : anchorsOnRelatedLines){
+                        assert(!as.second.empty());
+                        if (as.second.size() == 1)
+                            allAnchors.push_back(as.second.front());
+                        else{
+                            allAnchors.push_back(as.second.front());
+                            allAnchors.push_back(as.second.back());
+                        }
+                    }
+
+                    for (int i = 0; i < allAnchors.size(); i++){
+                        for (int j = i + 1; j < allAnchors.size(); j++){
+                            for (int k = j + 1; k < allAnchors.size(); k++){
+                                auto plane = Plane3From3Points(allAnchors[i], allAnchors[j], allAnchors[k]);
+                                auto root = plane.root();
+                                if (!HasValue(root, IsInfOrNaN<double>) &&
+                                    !candidatePlaneRootsRTree.contains(root, [](const Point3 & a, const Point3 & b){return Distance(a, b) < planeRootDistThres; })){
+                                    candidatePlaneRoots.push_back(root);
+                                    candidatePlaneRootsRTree.insert(root);
+                                }
+                            }
+                        }
+                    }
+
+                    if (candidatePlaneRoots.empty()){
+                        std::cerr << "can not determine the plane of this region" << std::endl;
+                        continue;
+                    }
+
+
+                    // vote for planes
+                    static const double distFromPointToPlaneThres = 0.1;
+                    int bestPlaneId = -1;
+                    double bestVote = -1;
+                    for (int i = 0; i < candidatePlaneRoots.size(); i++){
+                        auto & root = candidatePlaneRoots[i];
+                        double vote = 0;
+                        for (auto & as : anchorsOnRelatedRegions){
+                            for (auto & a : as.second){
+                                double distanceToPlane = abs((a - root).dot(normalize(root)));
+                                if (distanceToPlane > distFromPointToPlaneThres)
+                                    continue;
+                                vote += Gaussian(distanceToPlane, distFromPointToPlaneThres);
+                            }
+                        }
+                        for (auto & as : anchorsOnRelatedRegions){
+                            for (auto & a : as.second){
+                                double distanceToPlane = abs((a - root).dot(normalize(root)));
+                                if (distanceToPlane > distFromPointToPlaneThres)
+                                    continue;
+                                vote += Gaussian(distanceToPlane, distFromPointToPlaneThres);
+                            }
+                        }
+                        if (vote > bestVote){
+                            vote = bestVote;
+                            bestPlaneId = i;
+                        }
+                    }
+                    assert(bestPlaneId != -1);
+                    // get best plane
+                    _globalData.regionConnectedComponentPlanes[regionCCId] = 
+                        Plane3(candidatePlaneRoots[bestPlaneId], candidatePlaneRoots[bestPlaneId]);
+
+
+                    displayAll(regionCCId, lineCCIdsForChecking, regionCCIdsForChecking);
+
+
+
+                    // update scores of related line ccs
+                    for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                        LineIndex li = pp.first.second;
+                        RegionIndex ri = pp.first.first;
+                        int thisLineCCId = _globalData.lineConnectedComponentIds[li];
+                        int thisRegionCCId = _globalData.regionConnectedComponentIds[ri];
+                        if (!core::Contains(lineCCIdsForChecking, thisLineCCId)){ // checked already
+                            continue;
+                        }
+                        if (thisRegionCCId == regionCCId){ // related
+                            lineCCRecInfos[thisLineCCId].samplePointsNumWithRegionsAnchoredRatio.numerator += pp.second.size();
+                            lineCCIdsForChecking.increaseScoreTo(thisLineCCId, lineCCRecInfos[thisLineCCId].priority());
+                        }
+                    }
+                    // update scores of related region ccs 
+                    // (via boundray! since overlapping constraints are already used to construct CCs)
+                    for (auto & v : _views.elements<0>()){
+                        for (auto & b : v.data.regionNet->regions().elements<1>()){
+                            auto ri1 = RegionIndex{ v.topo.hd, b.topo.lowers[0] };
+                            auto ri2 = RegionIndex{ v.topo.hd, b.topo.lowers[1] };
+                            int thisRegionCCId1 = _globalData.regionConnectedComponentIds[ri1];
+                            int thisRegionCCId2 = _globalData.regionConnectedComponentIds[ri2];
+                            if (thisRegionCCId1 == regionCCId && core::Contains(regionCCIdsForChecking, thisRegionCCId2)){ // related
+                                for (auto & pts : b.data.sampledPoints){
+                                    regionCCRecInfos[thisRegionCCId2].samplePointsNumWithOtherRegionsAnchoredRatio.numerator += pts.size();
+                                }
+                                regionCCIdsForChecking.increaseScoreTo(thisRegionCCId2, regionCCRecInfos[thisRegionCCId2].priority());
+                            }
+                            else if (thisRegionCCId2 == regionCCId && core::Contains(regionCCIdsForChecking, thisRegionCCId1)){ // related
+                                for (auto & pts : b.data.sampledPoints){
+                                    regionCCRecInfos[thisRegionCCId1].samplePointsNumWithOtherRegionsAnchoredRatio.numerator += pts.size();
+                                }
+                                regionCCIdsForChecking.increaseScoreTo(thisRegionCCId1, regionCCRecInfos[thisRegionCCId1].priority());
+                            }
+                        }
+                    }
+                }
+                
             }
 
+
+            
+           
 
 
         }

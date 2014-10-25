@@ -98,6 +98,26 @@ namespace panoramix {
             return viz << manip3d::Begin(v) << manip3d::End;
         }
 
+        inline Visualizer3D & operator << (Visualizer3D & viz, const core::Box3 & b) {
+            for (int i = 0; i < 2; i++){
+                for (int j = 0; j < 2; j++){
+                    viz << core::Line3{
+                        core::Point3(i == 0 ? b.minCorner[0] : b.maxCorner[0], j == 0 ? b.minCorner[1] : b.maxCorner[1], b.minCorner[2]),
+                        core::Point3(i == 0 ? b.minCorner[0] : b.maxCorner[0], j == 0 ? b.minCorner[1] : b.maxCorner[1], b.maxCorner[2])
+                    };
+                    viz << core::Line3{
+                        core::Point3(i == 0 ? b.minCorner[0] : b.maxCorner[0], b.minCorner[1], j == 0 ? b.minCorner[2] : b.maxCorner[2]),
+                        core::Point3(i == 0 ? b.minCorner[0] : b.maxCorner[0], b.maxCorner[1], j == 0 ? b.minCorner[2] : b.maxCorner[2])
+                    };
+                    viz << core::Line3{
+                        core::Point3(b.minCorner[0], i == 0 ? b.minCorner[1] : b.maxCorner[1], j == 0 ? b.minCorner[2] : b.maxCorner[2]),
+                        core::Point3(b.maxCorner[0], i == 0 ? b.minCorner[1] : b.maxCorner[1], j == 0 ? b.minCorner[2] : b.maxCorner[2])
+                    };
+                }
+            }
+            return viz;
+        }
+
     }
 }
  
