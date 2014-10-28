@@ -12,7 +12,6 @@ extern "C" {
 #include <Eigen/StdVector>
 
 #include <unsupported/Eigen/NonLinearOptimization>
-#include <eiquadprog.hpp>
 
 #include <dlib/matrix.h>
 #include <dlib/optimization.h>
@@ -48,10 +47,10 @@ namespace panoramix {
             : camera(250.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
             samplingStepLengthOnRegionBoundaries(40.0),
             samplingStepLengthOnLines(10.0),
-            intersectionDistanceThreshold(30), // 30
-            incidenceDistanceAlongDirectionThreshold(50), // 50
-            incidenceDistanceVerticalDirectionThreshold(4),
-            interViewIncidenceAngleAlongDirectionThreshold(M_PI_4 / 4){
+            intersectionDistanceThreshold(10), // 30
+            incidenceDistanceAlongDirectionThreshold(30), // 50
+            incidenceDistanceVerticalDirectionThreshold(8),
+            interViewIncidenceAngleAlongDirectionThreshold(M_PI_4 / 8){
         }
 
 
@@ -1449,8 +1448,15 @@ namespace panoramix {
         }
 
 
-
         void ReconstructionEngine::estimateRegionPlanes() {
+
+            // display options
+            static const bool OPT_DisplayOnEachLineCCRegonstruction = true;
+            static const bool OPT_DisplayOnEachRegionRegioncstruction = false;
+
+            // algorithm options
+            static const bool OPT_FirstexpandRegionsOnEachLinesCCThenMerge = false;
+
 
             // collect all region indices
             std::vector<RegionIndex> regionIndices;
@@ -1600,6 +1606,23 @@ namespace panoramix {
                 regionIndicesInCCs[ccid.second].insert(ccid.first);
             }
 
+
+
+
+            struct RegionCCRecInfoWithConsistency {
+                int regionCCId;
+                Rational anchorsNumOnRelatedRegionsdRatio;
+                Rational anchorsNumOnRelatedLinesRatio;
+                IndexHashMap<RegionIndex, std::vector<Point3>> anchorsOnRelatedRegions;
+                IndexHashMap<LineIndex, std::vector<Point3>> anchorsOnRelatedLines;
+            };
+            struct LineCCRecInfoWithConsistency {
+                int lineCCId;
+                Rational anchorsNumBetweenRelatedRegionsAndLinesRatio;
+                IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Point3>> anchorsBetweenRelatedRegionsAndLines;
+            };
+
+
             
             struct RegionCCRecInfo { // information for reconstruction of regions
                 double areaRatio;
@@ -1638,7 +1661,6 @@ namespace panoramix {
                     return samplePointsCompleteRatio * 0.9 + linesNumRatio * 0.1; // the advantage over regions
                 }
             };
-
 
 
             /// count sample point for each region
@@ -1699,6 +1721,7 @@ namespace panoramix {
             // data for reserving consistency in reconstruction
             // TODO
             std::vector<double> pointAnchors[3];
+
 
             int iterCount = 0;
 
@@ -1775,12 +1798,14 @@ namespace panoramix {
                         }
                         if (thisLineCCId == lineCCId){ // related 
                             regionCCRecInfos[thisRegionCCId].samplePointsNumWithLinesAnchoredRatio.numerator += pp.second.size();
-                            regionCCIdsForChecking.increaseScoreTo(thisRegionCCId, regionCCRecInfos[thisRegionCCId].priority());
+                            double priority = regionCCRecInfos[thisRegionCCId].priority();
+                            regionCCIdsForChecking.setScore(thisRegionCCId, priority);
                         }
                     }
 
-
-                    displayAll(lineCCId, -1, lineCCIdsForChecking, regionCCIdsForChecking);
+                    if (OPT_DisplayOnEachLineCCRegonstruction){
+                        displayAll(lineCCId, -1, lineCCIdsForChecking, regionCCIdsForChecking);
+                    }
 
                 }
                 else if(lineCCTopScore < regionTopScore){
@@ -1972,9 +1997,9 @@ namespace panoramix {
                     _globalData.regionConnectedComponentPlanes[regionCCId] = 
                         Plane3(candidatePlaneRoots[bestPlaneId], candidatePlaneRoots[bestPlaneId]);
 
-
-                    //displayAll(regionCCId, lineCCIdsForChecking, regionCCIdsForChecking);
-
+                    if (OPT_DisplayOnEachRegionRegioncstruction){
+                        displayAll(-1, regionCCId, lineCCIdsForChecking, regionCCIdsForChecking);
+                    }
 
 
                     // update scores of related line ccs
@@ -1988,7 +2013,7 @@ namespace panoramix {
                         }
                         if (thisRegionCCId == regionCCId){ // related
                             lineCCRecInfos[thisLineCCId].samplePointsNumWithRegionsAnchoredRatio.numerator += pp.second.size();
-                            lineCCIdsForChecking.increaseScoreTo(thisLineCCId, lineCCRecInfos[thisLineCCId].priority());
+                            lineCCIdsForChecking.setScore(thisLineCCId, lineCCRecInfos[thisLineCCId].priority());
                         }
                     }
                     // update scores of related region ccs 
@@ -2003,13 +2028,13 @@ namespace panoramix {
                                 for (auto & pts : b.data.sampledPoints){
                                     regionCCRecInfos[thisRegionCCId2].samplePointsNumWithOtherRegionsAnchoredRatio.numerator += pts.size();
                                 }
-                                regionCCIdsForChecking.increaseScoreTo(thisRegionCCId2, regionCCRecInfos[thisRegionCCId2].priority());
+                                regionCCIdsForChecking.setScore(thisRegionCCId2, regionCCRecInfos[thisRegionCCId2].priority());
                             }
                             else if (thisRegionCCId2 == regionCCId && core::Contains(regionCCIdsForChecking, thisRegionCCId1)){ // related
                                 for (auto & pts : b.data.sampledPoints){
                                     regionCCRecInfos[thisRegionCCId1].samplePointsNumWithOtherRegionsAnchoredRatio.numerator += pts.size();
                                 }
-                                regionCCIdsForChecking.increaseScoreTo(thisRegionCCId1, regionCCRecInfos[thisRegionCCId1].priority());
+                                regionCCIdsForChecking.setScore(thisRegionCCId1, regionCCRecInfos[thisRegionCCId1].priority());
                             }
                         }
                     }

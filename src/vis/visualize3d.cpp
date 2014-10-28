@@ -243,6 +243,22 @@ namespace panoramix {
             };
 
 
+            class Visualizer3DMainWindow : public QMainWindow {
+            public:
+                explicit Visualizer3DMainWindow(QWidget * parent = nullptr) : QMainWindow(parent) {
+                    setupGui();
+                }
+
+                void setupGui() {
+                    Q_INIT_RESOURCE(vis);
+                    this->menuBar()->addMenu(tr("View"));
+                    this->menuBar()->addMenu(tr("About"));
+                    this->statusBar()->show();
+                    setStyleSheet(tr(":/css/vis_win.css"));
+                }
+            };
+
+
             Manipulator<std::pair<bool, bool>> Show(bool doModel, bool autoSetCamera) {
                 return Manipulator<std::pair<bool, bool>>(
                     [](Visualizer3D & viz, std::pair<bool, bool> doModelAndAutoSetCamera) {
@@ -250,16 +266,17 @@ namespace panoramix {
                     bool autoSetCamera = doModelAndAutoSetCamera.second;
                     auto app = Singleton::InitGui();
                     Visualizer3DWidget * w = new Visualizer3DWidget(viz);
-                    w->setAttribute(Qt::WA_DeleteOnClose);
-                    staticGuiData.widgetsTable[&viz].append(w);
-                    w->resize(MakeQSize(viz.params.camera.screenSize()));
-                    w->setWindowTitle(QString::fromStdString(viz.params.winName));
-                    w->setWindowIcon(QIcon(":/icons/icon_octopus.png"));
-                    w->topLevelWidget()->setWindowIcon(Singleton::DefaultIcon());
+                    Visualizer3DMainWindow * mwin = new Visualizer3DMainWindow();
+                    mwin->setCentralWidget(w);
+                    mwin->setAttribute(Qt::WA_DeleteOnClose);
+                    staticGuiData.widgetsTable[&viz].append(mwin);
+                    mwin->resize(MakeQSize(viz.params.camera.screenSize()));
+                    mwin->setWindowTitle(QString::fromStdString(viz.params.winName));
+                    mwin->setWindowIcon(Singleton::DefaultIcon());
                     if (autoSetCamera) {
                         w->autoSetCamera();
                     }
-                    w->show();
+                    mwin->show();
                     if (doModal) {
                         Singleton::ContinueGui(); // qApp->exec()
                     }

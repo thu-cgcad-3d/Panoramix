@@ -279,7 +279,7 @@ namespace panoramix {
 
         // max heap
         template <class KeyT, class ScoreT = double, class KeyToIdT = std::unordered_map<KeyT, int>>
-        class MaxHeap {
+        class MaxHeap {            
         public:
             inline MaxHeap() {}
             
@@ -325,12 +325,13 @@ namespace panoramix {
 
             inline const KeyT & top() const { return _data.front().component; }
             inline const ScoreT & topScore() const { return _data.front().score; }
-            inline const ScoreT & operator[](const KeyT & key) const { return _data[_keyToId[key]].score; }
-            inline const ScoreT & at(const KeyT & key) const { return _data[_keyToId[key]].score; }
+            inline const ScoreT & operator[](const KeyT & key) const { return _data[_keyToId.at(key)].score; }
+            inline const ScoreT & at(const KeyT & key) const { return _data[_keyToId.at(key)].score; }
             inline size_t size() const { return _data.size(); }
             inline bool empty() const { return _data.empty(); }
             inline size_t height() const { return static_cast<size_t>(log2(_data.size())); }
-            inline void pop(){
+            
+            void pop(){
                 if (_data.empty())
                     return;
                 swapKeys(0, _data.size() - 1);
@@ -338,21 +339,27 @@ namespace panoramix {
                 _data.erase(_data.end() - 1, _data.end());
                 maxHeapify(0);
             }
-            void increaseScoreBy(const KeyT & key, const ScoreT & moreScore){
-                if (moreScore == 0)
+            
+            void setScore(const KeyT & key, const ScoreT & newScore){
+                auto & oldScore = at(key);
+                if (oldScore == newScore)
                     return;
-                int id = _keyToId[key];
-                assert(moreScore > 0);
-                _data[id].score += moreScore;
-                while (id > 0 && _data[parentId(id)].score < _data[id].score){
-                    swapKeys(id, parentId(id));
-                    id = parentId(id);
+                else if (newScore > oldScore){ // increase key
+                    int id = _keyToId[key];
+                    _data[id].score = newScore;
+                    while (id > 0 && _data[parentId(id)].score < _data[id].score){
+                        swapKeys(id, parentId(id));
+                        id = parentId(id);
+                    }
+                }
+                else{ // decrease key
+                    int id = _keyToId[key];
+                    _data[id].score = newScore;
+                    maxHeapify(id);
                 }
             }
-            inline void increaseScoreTo(const KeyT & key, const ScoreT & newScore){
-                increaseScoreBy(key, newScore - _data[_keyToId[key]].score);
-            }
-            inline void push(const Scored<KeyT, ScoreT> & e) {
+            
+            void push(const Scored<KeyT, ScoreT> & e) {
                 _data.push_back(e);
                 _keyToId[e.component] = _data.size() - 1;
                 int id = _data.size() - 1;
@@ -361,6 +368,7 @@ namespace panoramix {
                     id = parentId(id);
                 }
             }
+            
             inline void push(const KeyT & t, const ScoreT & s){
                 push(core::ScoreAs(t, s));
             }

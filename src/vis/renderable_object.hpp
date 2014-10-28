@@ -12,7 +12,7 @@ namespace panoramix {
         class RenderableObject {
         public:
             RenderableObject(RenderableObject * parent = nullptr);
-            ~RenderableObject();
+            virtual ~RenderableObject();
 
             // initialize rendering
             virtual void initialize() const {}

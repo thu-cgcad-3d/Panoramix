@@ -359,6 +359,21 @@ TEST(UtilTest, MaxHeap){
 
         count++;
     }
+
+    core::MaxHeap<int> HH;
+    int N = 5000;
+    for (int i = 0; i < N; i++){
+        HH.push(i, randf());
+    }
+    for (int i = 0; i < N * 3; i++){
+        int key = i % N;
+        HH.setScore(key, randf());
+        int topKey = HH.top();
+        // assert topKey has the highest score
+        for (int j = 0; j < N; j++){
+            ASSERT_LE(HH.at(j), HH.at(topKey));
+        }
+    }
 }
 
 

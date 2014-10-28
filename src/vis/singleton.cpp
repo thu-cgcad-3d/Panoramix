@@ -19,8 +19,9 @@ namespace panoramix {
         QApplication* Singleton::InitGui(int argc, char ** argv) {
             if (qApp)
                 return qApp;
+            Q_INIT_RESOURCE(vis);
             QApplication* app = new QApplication(argc, argv);
-            defaultIcon = QIcon(":/icons/icon_octopus.png");
+            defaultIcon = QIcon(":/icons/icon.png");
             Q_ASSERT(!defaultIcon.isNull());
             QApplication::setWindowIcon(defaultIcon);
             app->setQuitOnLastWindowClosed(true);

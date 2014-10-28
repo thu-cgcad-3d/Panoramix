@@ -9,9 +9,9 @@ namespace panoramix {
 
         RegionsNet::Params::Params() : samplingStepLengthOnBoundary(15.0) {
             SegmentationExtractor::Params segmenterParams;
-            segmenterParams.c = 120;
-            segmenterParams.minSize = 100;
-            segmenterParams.sigma = 0.6;
+            segmenterParams.c = 200;
+            segmenterParams.minSize = 60;
+            segmenterParams.sigma = 1.0;
 
             segmenterParams.useSLIC = false;
             segmenterParams.superpixelSizeSuggestion = 800;

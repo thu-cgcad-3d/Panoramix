@@ -1,0 +1,49 @@
+QMainWindow {
+	background-color: gray;
+	color: #DDDDDD
+} 
+QMenuBar {
+	background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,stop:0 transparent, stop:1 rgba(0, 0, 0, 100));
+}
+QMenuBar::item {
+	padding: 1px 7px;
+	background: transparent;
+}
+QMenuBar::item:selected { /* when selected using mouse or keyboard */
+    color: white;
+	background: rgba(100, 100, 255, 255);
+    border-radius: 3px;
+}
+QMenuBar::item:pressed {
+    color: white;
+	background: rgba(100, 100, 255, 255);
+	border-radius: 3px, 3px, 0, 0;
+}
+QMenu {
+	background-color: #323232; /* sets background of the menu */
+	color: white;
+	border: 1px solid black;
+} 
+QMenu::item {
+	background-color: transparent;
+} 
+QMenu::item:selected { /* when user selects item using mouse or keyboard */
+	background-color: #777777;
+}
+QMenu::item:checked {
+	background-color: #456789
+}
+QStatusBar {
+	background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,stop:0 black, stop:1 rgba(0, 0, 0, 100));
+	color: #DDDDDD
+}
+QDialog {
+	background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,stop:0 #000000, stop:1 #767676);
+	color: #dddddd; 
+}
+QScrollBar:horizontal {
+	height: 20px; 
+}
+QScrollBar:vertical {
+	width: 20px; 
+}

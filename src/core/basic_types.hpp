@@ -5,10 +5,12 @@
 #include <vector>
 #include <list>
 #include <deque>
-#include <set>
-#include <unordered_set>
 #include <forward_list>
 #include <array>
+#include <set>
+#include <map>
+#include <unordered_set>
+#include <unordered_map>
 #include <memory>
 #include <numeric>
 #include <cstdint>
