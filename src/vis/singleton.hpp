@@ -8,7 +8,13 @@ namespace panoramix {
     namespace vis {
 
         struct Singleton {
-            static const QIcon & DefaultIcon();
+
+            struct Configuration {
+                QIcon icon;
+                QString css;
+            };
+
+            static const Configuration & DefaultConfiguration();
 
             static QApplication* InitGui(int argc, char ** argv);
             static QApplication* InitGui();

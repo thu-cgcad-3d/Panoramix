@@ -75,7 +75,7 @@ namespace panoramix {
                     _texture = new QOpenGLTexture(QOpenGLTexture::Target2D);
                 }
 
-                ~GLObject() {
+                virtual ~GLObject() {
                     delete _program;
                     delete _texture;
                 }

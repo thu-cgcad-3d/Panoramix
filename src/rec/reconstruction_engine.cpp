@@ -687,7 +687,7 @@ namespace panoramix {
                 = _globalData.regionLineIntersectionSampledPoints;
             regionLineIntersectionSampledPoints.clear();
 
-            static const int extendSize = 7;
+            static const int OPT_ExtendSize = 2;
             //std::vector<int> dx, dy;
             //dx.reserve(2 * extendSize + 1);
             //dy.reserve(2 * extendSize + 1);
@@ -698,8 +698,8 @@ namespace panoramix {
             //    }
             //}
 
-            static std::vector<int> dx = FillInRectangleWithXs(extendSize);
-            static std::vector<int> dy = FillInRectangleWithYs(extendSize);
+            static std::vector<int> dx = FillInRectangleWithXs(OPT_ExtendSize);
+            static std::vector<int> dy = FillInRectangleWithYs(OPT_ExtendSize);
 
             for (auto & vd : _views.elements<0>()) {
                 RegionIndex ri;
@@ -1451,11 +1451,15 @@ namespace panoramix {
         void ReconstructionEngine::estimateRegionPlanes() {
 
             // display options
-            static const bool OPT_DisplayOnEachLineCCRegonstruction = true;
+            static const bool OPT_DisplayOnEachLineCCRegonstruction = false;
             static const bool OPT_DisplayOnEachRegionRegioncstruction = false;
+            static const bool OPT_DisplayOnEachIteration = true;
+            static const int OPT_DisplayOnEachIterationInterval = 200;
 
             // algorithm options
-            static const bool OPT_FirstexpandRegionsOnEachLinesCCThenMerge = false;
+            static const bool OPT_OnlyConsiderManhattanPlanes = true;
+            static const bool OPT_IgnoreTooSkewedPlanes = true;
+            static const bool OPT_IgnoreTooFarAwayPlanes = true;
 
 
             // collect all region indices
@@ -1606,23 +1610,18 @@ namespace panoramix {
                 regionIndicesInCCs[ccid.second].insert(ccid.first);
             }
 
-
-
-
-            struct RegionCCRecInfoWithConsistency {
-                int regionCCId;
-                Rational anchorsNumOnRelatedRegionsdRatio;
-                Rational anchorsNumOnRelatedLinesRatio;
-                IndexHashMap<RegionIndex, std::vector<Point3>> anchorsOnRelatedRegions;
-                IndexHashMap<LineIndex, std::vector<Point3>> anchorsOnRelatedLines;
-            };
-            struct LineCCRecInfoWithConsistency {
-                int lineCCId;
-                Rational anchorsNumBetweenRelatedRegionsAndLinesRatio;
-                IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Point3>> anchorsBetweenRelatedRegionsAndLines;
-            };
-
-
+            //struct RegionCCRecInfoWithConsistency {
+            //    int regionCCId;
+            //    Rational anchorsNumOnRelatedRegionsdRatio;
+            //    Rational anchorsNumOnRelatedLinesRatio;
+            //    IndexHashMap<RegionIndex, std::vector<Point3>> anchorsOnRelatedRegions;
+            //    IndexHashMap<LineIndex, std::vector<Point3>> anchorsOnRelatedLines;
+            //};
+            //struct LineCCRecInfoWithConsistency {
+            //    int lineCCId;
+            //    Rational anchorsNumBetweenRelatedRegionsAndLinesRatio;
+            //    IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Point3>> anchorsBetweenRelatedRegionsAndLines;
+            //};
             
             struct RegionCCRecInfo { // information for reconstruction of regions
                 double areaRatio;
@@ -1927,28 +1926,10 @@ namespace panoramix {
                         }
                     }
 
-                    for (int i = 0; i < allAnchors.size(); i++){
-                        for (int j = i + 1; j < allAnchors.size(); j++){
-                            for (int k = j + 1; k < allAnchors.size(); k++){
-                                auto plane = Plane3From3Points(allAnchors[i], allAnchors[j], allAnchors[k]);
-                                auto root = plane.root();
-                                if (norm(root) < 3)
-                                    continue;
-                                //double vpFactors[] = { 
-                                //    root.dot(normalize(_globalData.vanishingPoints[0])), 
-                                //    root.dot(normalize(_globalData.vanishingPoints[1])), 
-                                //    root.dot(normalize(_globalData.vanishingPoints[2])) 
-                                //};
-                                //double vpFactorsMax = std::max({ abs(vpFactors[0]), abs(vpFactors[1]), abs(vpFactors[2]) });
-                                //for (auto & vpFactor : vpFactors){
-                                //    if (abs(vpFactor) < 0.2 * vpFactorsMax)
-                                //        vpFactor = 0.0;
-                                //}
-                                ////std::cout << "raw root: " << root;
-                                //root = vpFactors[0] * normalize(_globalData.vanishingPoints[0])
-                                //    + vpFactors[1] * normalize(_globalData.vanishingPoints[1])
-                                //    + vpFactors[2] * normalize(_globalData.vanishingPoints[2]);
-                                //std::cout << "refined root: " << root << std::endl;
+                    if (OPT_OnlyConsiderManhattanPlanes) { // only consider manhattan planes
+                        for (auto & anchor : allAnchors){
+                            for (auto & vp : _globalData.vanishingPoints){
+                                auto root = Plane3(anchor, vp).root();
                                 if (!HasValue(root, IsInfOrNaN<double>) &&
                                     !candidatePlaneRootsRTree.contains(root, [](const Point3 & a, const Point3 & b){return Distance(a, b) < planeRootDistThres; })){
                                     candidatePlaneRoots.push_back(root);
@@ -1956,6 +1937,51 @@ namespace panoramix {
                                 }
                             }
                         }
+                    }
+                    else{
+                        for (int i = 0; i < allAnchors.size(); i++){
+                            for (int j = i + 1; j < allAnchors.size(); j++){
+                                for (int k = j + 1; k < allAnchors.size(); k++){
+                                    auto plane = Plane3From3Points(allAnchors[i], allAnchors[j], allAnchors[k]);
+                                    auto root = plane.root();
+                                    if (norm(root) < 3)
+                                        continue;
+                                    if (!HasValue(root, IsInfOrNaN<double>) &&
+                                        !candidatePlaneRootsRTree.contains(root, [](const Point3 & a, const Point3 & b){return Distance(a, b) < planeRootDistThres; })){
+                                        candidatePlaneRoots.push_back(root);
+                                        candidatePlaneRootsRTree.insert(root);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (OPT_IgnoreTooSkewedPlanes){
+                        auto newEnd = std::remove_if(candidatePlaneRoots.begin(), candidatePlaneRoots.end(),
+                            [](const Point3 & root){return norm(root) <= 1; });
+                        candidatePlaneRoots.erase(newEnd, candidatePlaneRoots.end());
+                    }
+
+                    if (OPT_IgnoreTooFarAwayPlanes){
+                        auto newEnd = std::remove_if(candidatePlaneRoots.begin(), candidatePlaneRoots.end(),
+                            [this, &regionIndicesInCCs, regionCCId](const Point3 & root){
+                            Plane3 plane(root, root);
+                            for (auto & ri : regionIndicesInCCs[regionCCId]){
+                                auto & rd = regionData(ri);
+                                if (rd.contours.back().size() < 3)
+                                    continue;
+                                auto & cam = _views.data(ri.viewHandle).camera;
+
+                                for (int i = 0; i < rd.contours.back().size(); i++){
+                                    auto dir = cam.spatialDirection(ToPoint2(rd.contours.back()[i]));
+                                    auto intersectionOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
+                                    if (norm(intersectionOnPlane) > 60)
+                                        return true;
+                                }
+                            }
+                            return false;
+                        });
+                        candidatePlaneRoots.erase(newEnd, candidatePlaneRoots.end());
                     }
 
                     if (candidatePlaneRoots.empty()){
@@ -2039,16 +2065,16 @@ namespace panoramix {
                         }
                     }
 
-                    //if (iterCount % 50 == 0)
-                    //    displayAll(-1, regionCCId, lineCCIdsForChecking, regionCCIdsForChecking);
                 }
                 
 
-                
+
+                if (OPT_DisplayOnEachIteration && iterCount % OPT_DisplayOnEachIterationInterval == 0)
+                    displayAll(-1, -1, lineCCIdsForChecking, regionCCIdsForChecking);
             }
 
 
-            //displayAll(-1, lineCCIdsForChecking, regionCCIdsForChecking);
+            displayAll(-1, -1, lineCCIdsForChecking, regionCCIdsForChecking);
            
 
 

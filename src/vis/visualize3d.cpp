@@ -250,11 +250,9 @@ namespace panoramix {
                 }
 
                 void setupGui() {
-                    Q_INIT_RESOURCE(vis);
                     this->menuBar()->addMenu(tr("View"));
                     this->menuBar()->addMenu(tr("About"));
                     this->statusBar()->show();
-                    setStyleSheet(tr(":/css/vis_win.css"));
                 }
             };
 
@@ -272,7 +270,9 @@ namespace panoramix {
                     staticGuiData.widgetsTable[&viz].append(mwin);
                     mwin->resize(MakeQSize(viz.params.camera.screenSize()));
                     mwin->setWindowTitle(QString::fromStdString(viz.params.winName));
-                    mwin->setWindowIcon(Singleton::DefaultIcon());
+                    mwin->setWindowIcon(Singleton::DefaultConfiguration().icon);
+                    mwin->setStyleSheet(Singleton::DefaultConfiguration().css);
+                    qDebug() << mwin->styleSheet();
                     if (autoSetCamera) {
                         w->autoSetCamera();
                     }
