@@ -20,7 +20,9 @@ TEST(Tuples, Invoke){
         std::cout << a << b << c << d << e << std::endl;
     };
 
-    core::InvokeWithoutReturn(fun, args);
+    core::Invoke(fun2, args);
+
+    core::Invoke([](int a, double b){std::cout << a << b << std::endl; }, std::make_pair(5, 5.0));
 
 }
 

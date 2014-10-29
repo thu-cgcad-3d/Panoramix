@@ -60,11 +60,6 @@ namespace panoramix {
             inline const LinesGraph & lines() const { return _lines; }
             inline const Image & image() const { return _image; }
 
-            // 32FC(3x2)
-            /*inline const ImageWithType<Mat<float, 3, 2>> & lineVotingDistribution() const { 
-                return _lineVotingDistribution; 
-            }*/
-
             inline const Params & params() const { return _params; }
 
             enum LineVotingDirection : int {
@@ -77,8 +72,6 @@ namespace panoramix {
 
         private:
             Image _image;
-            //ImageWithType<Mat<float, 3, 2>> _lineVotingDistribution; // 32FC(3x2)
-            //std::map<JunctionType, ImageWithType<float>> _junctionDistributions;
             LinesGraph _lines;
             LineSegmentExtractor::Feature _lineSegments;
             std::vector<HPoint2> _lineSegmentIntersections;

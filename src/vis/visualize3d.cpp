@@ -250,9 +250,15 @@ namespace panoramix {
                 }
 
                 void setupGui() {
-                    this->menuBar()->addMenu(tr("View"));
-                    this->menuBar()->addMenu(tr("About"));
+                    auto menuView = this->menuBar()->addMenu(tr("View"));
+                    auto menuAbout = this->menuBar()->addMenu(tr("About"));
                     this->statusBar()->show();
+
+                    auto actionAbout = menuAbout->addAction(tr("About"));
+                    connect(actionAbout, &QAction::triggered, [this](){
+                        QMessageBox::about(this, tr("About this program"), 
+                            tr("Panoramix.Vis is the visulization module of project Panoramix developped by Yang Hao."));
+                    });
                 }
             };
 
@@ -272,7 +278,7 @@ namespace panoramix {
                     mwin->setWindowTitle(QString::fromStdString(viz.params.winName));
                     mwin->setWindowIcon(Singleton::DefaultConfiguration().icon);
                     mwin->setStyleSheet(Singleton::DefaultConfiguration().css);
-                    qDebug() << mwin->styleSheet();
+                    //qDebug() << mwin->styleSheet();
                     if (autoSetCamera) {
                         w->autoSetCamera();
                     }

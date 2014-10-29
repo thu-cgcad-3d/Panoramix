@@ -64,8 +64,8 @@ namespace panoramix {
 
         // zero
         template <class T>
-        inline bool IsFuzzyZero(const T & t){
-            return t < Epsilon && t > -Epsilon;
+        inline bool IsFuzzyZero(const T & t, const T & epsilon = Epsilon){
+            return t < epsilon && t > -epsilon;
         }
 
 
@@ -281,6 +281,10 @@ namespace panoramix {
         template <class KeyT, class ScoreT = double, class KeyToIdT = std::unordered_map<KeyT, int>>
         class MaxHeap {            
         public:
+            using iterator = typename std::vector<Scored<KeyT, ScoreT>>::iterator;
+            using const_iterator = typename std::vector<Scored<KeyT, ScoreT>>::const_iterator;
+            using value_type = Scored<KeyT, ScoreT>;
+
             inline MaxHeap() {}
             
             template <class IteratorT, 
@@ -322,6 +326,12 @@ namespace panoramix {
                 }
                 makeMaxHeap(); //need to make heap
             }
+
+
+            inline const_iterator begin() const { return _data.begin(); }
+            inline const_iterator end() const { return _data.end(); }
+            inline const_iterator cbegin() const { return _data.cbegin(); }
+            inline const_iterator cend() const { return _data.cend(); }
 
             inline const KeyT & top() const { return _data.front().component; }
             inline const ScoreT & topScore() const { return _data.front().score; }

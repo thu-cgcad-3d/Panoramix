@@ -102,7 +102,7 @@ int main(int argc, char * argv[], char * envp[]) {
             all.engine.updateConnections(viewHandle);
         }
         core::SaveToDisk(out, all);
-    });
+    }, true);
 
     core::UpdateIfFileIsTooOld(cacheFileBeforeComputingFeatures, cacheFileAfterComputingFeatures, 
         [&](const std::string & in, const std::string & out){

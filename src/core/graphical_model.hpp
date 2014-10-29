@@ -106,58 +106,60 @@ namespace panoramix {
         template <class TopoT, class DataT>
         using TripletArray = std::vector<Triplet<TopoT, DataT>>;
         
-        
-        /**
-         * @brief Helper functions for the Mesh class
-         */
-        template <class ComponentTableT, class UpdateHandleTableT>
-        int RemoveAndMap(ComponentTableT & v, UpdateHandleTableT & newlocations) {
-            // ComponentTableT : std::vector<Triplet<TopoT, DataT>>
-            // UpdateHandleTableT: std::vector<Handle<TopoT>>
-            newlocations.resize(v.size());
-            int64_t index = 0;
-            for (size_t i = 0; i < v.size(); i++){
-                newlocations[i] = { v[i].exists == false ? -1 : (index++) };
-            }
-            for (int i = int(v.size() - 1); i >= 0; --i){
-                if (!v[i].exists){
-                    v.erase(v.begin() + i);
+        namespace {
+            /**
+             * @brief Helper functions for the Mesh class
+             */
+            template <class ComponentTableT, class UpdateHandleTableT>
+            int RemoveAndMap(ComponentTableT & v, UpdateHandleTableT & newlocations) {
+                // ComponentTableT : std::vector<Triplet<TopoT, DataT>>
+                // UpdateHandleTableT: std::vector<Handle<TopoT>>
+                newlocations.resize(v.size());
+                int64_t index = 0;
+                for (size_t i = 0; i < v.size(); i++){
+                    newlocations[i] = { v[i].exists == false ? -1 : (index++) };
                 }
+                for (int i = int(v.size() - 1); i >= 0; --i){
+                    if (!v[i].exists){
+                        v.erase(v.begin() + i);
+                    }
+                }
+                return 0;
             }
-            return 0;
-        }
-        template <class UpdateHandleTableT, class TopoT>
-        inline void UpdateOldHandle(const UpdateHandleTableT & newlocationTable, Handle<TopoT> & h) {
-            // UpdateHandleTableT: std::vector<Handle<TopoT>>
-            h = newlocationTable[h.id];
-        }
-        template <class UpdateHandleTableT, class ContainerT>
-        inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, ContainerT & hs) {
-            // UpdateHandleTableT: std::vector<Handle<TopoT>>
-            for (auto & h : hs){
+            template <class UpdateHandleTableT, class TopoT>
+            inline void UpdateOldHandle(const UpdateHandleTableT & newlocationTable, Handle<TopoT> & h) {
+                // UpdateHandleTableT: std::vector<Handle<TopoT>>
                 h = newlocationTable[h.id];
             }
-        }
-        template <class UpdateHandleTableT, class K, class CompareK, class AllocK>
-        inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, std::set<K, CompareK, AllocK> & hs) {
-            // UpdateHandleTableT: std::vector<Handle<TopoT>>
-            std::set<K, CompareK, AllocK> oldhs = hs;
-            hs.clear();
-            for (const auto & oldh : oldhs) {
-                hs.insert(newlocationTable[oldh.id]);
+            template <class UpdateHandleTableT, class ContainerT>
+            inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, ContainerT & hs) {
+                // UpdateHandleTableT: std::vector<Handle<TopoT>>
+                for (auto & h : hs){
+                    h = newlocationTable[h.id];
+                }
             }
-        }
-        template <class ContainerT>
-        inline void RemoveInValidHandleFromContainer(ContainerT & hs) {
-            auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
-            invalid.reset();
-            hs.erase(std::remove(std::begin(hs), std::end(hs), invalid), std::end(hs));
-        }
-        template <class K, class CompareK, class AllocK>
-        inline void RemoveInValidHandleFromContainer(std::set<K, CompareK, AllocK> & hs) {
-            auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
-            invalid.reset();
-            hs.erase(invalid);
+            template <class UpdateHandleTableT, class K, class CompareK, class AllocK>
+            inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, std::set<K, CompareK, AllocK> & hs) {
+                // UpdateHandleTableT: std::vector<Handle<TopoT>>
+                std::set<K, CompareK, AllocK> oldhs = hs;
+                hs.clear();
+                for (const auto & oldh : oldhs) {
+                    hs.insert(newlocationTable[oldh.id]);
+                }
+            }
+            template <class ContainerT>
+            inline void RemoveInValidHandleFromContainer(ContainerT & hs) {
+                auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
+                invalid.reset();
+                hs.erase(std::remove(std::begin(hs), std::end(hs), invalid), std::end(hs));
+            }
+            template <class K, class CompareK, class AllocK>
+            inline void RemoveInValidHandleFromContainer(std::set<K, CompareK, AllocK> & hs) {
+                auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
+                invalid.reset();
+                hs.erase(invalid);
+            }
+
         }
 
         

@@ -3,9 +3,6 @@ extern "C" {
     #include <gpc.h>
 }
 
-#include <glpk.h>
-#include <setjmp.h>
-
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
@@ -29,19 +26,6 @@ extern "C" {
 
 namespace panoramix {
     namespace rec {
-
-        // for glpk
-        struct sinfo {
-            char * text;
-            jmp_buf * env;
-        };
-
-        void glpErrorHook(void * in){
-            sinfo * info = (sinfo*)in;
-            glp_free_env();
-            longjmp(*(info->env), 1);
-        }
-
 
         ReconstructionEngine::Params::Params() 
             : camera(250.0), cameraAngleScaler(1.8), smallCameraAngleScalar(0.05),
@@ -1451,10 +1435,13 @@ namespace panoramix {
         void ReconstructionEngine::estimateRegionPlanes() {
 
             // display options
+            static const bool OPT_DisplayMessages = true;
             static const bool OPT_DisplayOnEachLineCCRegonstruction = false;
             static const bool OPT_DisplayOnEachRegionRegioncstruction = false;
             static const bool OPT_DisplayOnEachIteration = true;
-            static const int OPT_DisplayOnEachIterationInterval = 200;
+            static const int OPT_DisplayOnEachIterationInterval = 300;
+            static const bool OPT_DisplayAtLast = true;
+
 
             // algorithm options
             static const bool OPT_OnlyConsiderManhattanPlanes = true;
@@ -1739,7 +1726,8 @@ namespace panoramix {
                     }
 
                     // compute depth of this line cc
-                    std::cout << "processing line cc: " << lineCCId << " - " << lineCCTopScore << std::endl;
+                    if (OPT_DisplayMessages)
+                        std::cout << "processing line cc: " << lineCCId << " - " << lineCCTopScore << std::endl;
                     // collect sample points with related checked regions
                     std::vector<double> candidateDepthFactors;
                     for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
@@ -1816,7 +1804,8 @@ namespace panoramix {
                     }
 
                     // compute equation of this region
-                    std::cout << "processing region cc: " << regionCCId  << " - " << regionTopScore << std::endl;
+                    if (OPT_DisplayMessages)
+                        std::cout << "processing region cc: " << regionCCId  << " - " << regionTopScore << std::endl;
                     IndexHashMap<RegionIndex, std::vector<Point3>> anchorsOnRelatedRegions;
                     IndexHashMap<LineIndex, std::vector<Point3>> anchorsOnRelatedLines;
 
@@ -1900,7 +1889,8 @@ namespace panoramix {
                         anchorsOnRelatedLinesNum += as.second.size();
                     assert(anchorsOnRelatedRegionsNum == regionCCRecInfos[regionCCId].samplePointsNumWithOtherRegionsAnchoredRatio.numerator);
                     assert(anchorsOnRelatedLinesNum == regionCCRecInfos[regionCCId].samplePointsNumWithLinesAnchoredRatio.numerator);
-                    std::cout << "anchors num for this region: " << anchorsOnRelatedRegionsNum << "  -  " << anchorsOnRelatedLinesNum << std::endl;
+                    if (OPT_DisplayMessages)
+                        std::cout << "anchors num for this region: " << anchorsOnRelatedRegionsNum << "  -  " << anchorsOnRelatedLinesNum << std::endl;
                     
                     assert(!anchorsOnRelatedRegions.empty() || !anchorsOnRelatedLines.empty());
 
@@ -2073,8 +2063,8 @@ namespace panoramix {
                     displayAll(-1, -1, lineCCIdsForChecking, regionCCIdsForChecking);
             }
 
-
-            displayAll(-1, -1, lineCCIdsForChecking, regionCCIdsForChecking);
+            if (OPT_DisplayAtLast)
+                displayAll(-1, -1, lineCCIdsForChecking, regionCCIdsForChecking);
            
 
 
