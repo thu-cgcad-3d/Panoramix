@@ -245,6 +245,7 @@ namespace panoramix {
             void serialize(Archiver & ar) {
                 ar(_views, _params, _globalData);
             }
+
             friend class cereal::access;
         };
 
