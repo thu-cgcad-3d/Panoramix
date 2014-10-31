@@ -13,6 +13,7 @@ extern "C" {
 #include "misc.hpp"
 #include "feature.hpp"
 #include "utilities.hpp"
+#include "containers.hpp"
 
 #include "debug.hpp"
 
@@ -1731,9 +1732,6 @@ namespace panoramix {
 
             return std::make_pair(f0, f1);
         }
-
-
-
 
     }
 }

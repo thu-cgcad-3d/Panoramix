@@ -294,6 +294,8 @@ namespace panoramix {
             inline Plane() {}
             inline Plane(const Point<T, N> & a, const Vec<T, N> & n) : anchor(a), normal(n) {}
             inline Point<T, N> root() const { return normal * (anchor.dot(normal)) / norm(normal) / norm(normal); }
+            inline T signedDistanceTo(const Point<T, N> & p) const { return (p - anchor).dot(normalize(normal)); }
+            inline T distanceTo(const Point<T, N> & p) const { return abs((p - anchor).dot(normalize(normal))); }
             Point<T, N> anchor;
             Vec<T, N> normal;
         };
@@ -392,6 +394,7 @@ namespace panoramix {
         using ImageWithType = cv::Mat_<T> ;
         using PixelLoc = cv::Point;
 
+        inline int AreaOfImage(const Image & im) { return im.cols * im.rows; }
 		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);
         void ResizeToMakeHeightUnder(Image & im, int heightUpperBound);
         

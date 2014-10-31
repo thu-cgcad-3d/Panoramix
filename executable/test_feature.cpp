@@ -1,7 +1,7 @@
 #include "../src/core/cameras.hpp"
+#include "../src/core/utilities.hpp"
 #include "../src/core/feature.hpp"
 #include "../src/vis/visualize2d.hpp"
-#include "../src/vis/visualize3d.hpp"
 
 #include "test_config.hpp"
 
@@ -81,7 +81,7 @@ TEST(Feature, VanishingPointsDetector) {
 }
 
 
-DEBUG_TEST(Feature, LocalManhattanVanishingPointDetector) {
+TEST(Feature, LocalManhattanVanishingPointDetector) {
 
     using namespace core;
 
@@ -271,5 +271,5 @@ TEST(Feature, FeatureExtractor) {
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
-    return DEBUG_RUN_ALL_TESTS();
+    return RUN_ALL_TESTS();
 }

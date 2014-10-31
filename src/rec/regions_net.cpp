@@ -1,5 +1,6 @@
 #include "regions_net.hpp"
 
+#include "../core/containers.hpp"
 #include "../vis/visualize2d.hpp"
 
 #include "../core/debug.hpp"

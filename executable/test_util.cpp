@@ -1,5 +1,6 @@
 #include "../src/core/misc.hpp"
 #include "../src/core/utilities.hpp"
+#include "../src/core/containers.hpp"
 
 #include <random>
 #include <list>
@@ -304,6 +305,32 @@ TEST(UtilTest, DistanceBetweenTwoLines) {
 }
 
 
+DEBUG_TEST(UtilTest, EigenVectorsAndValues) {
+    {
+        std::vector<core::Point3> pts;
+        std::generate_n(std::back_inserter(pts), 10000, [](){
+            auto a = randf();
+            auto b = randf();
+            auto c = randf();
+            return core::Point3(a, b / 1000.0, c / 1000.0);
+        });
+        std::generate_n(std::back_inserter(pts), 1, [](){
+            auto a = randf();
+            auto b = randf();
+            auto c = randf();
+            return core::Point3(a, b / 1000.0 + 1.0, c / 1000.0);
+        });
+        auto result = core::EigenVectorAndValuesFromPoints(pts);
+        for (auto & r : result){
+            std::cout << "eigen vector: " << r.component << "  value: " << r.score << std::endl;
+        }
+
+        std::sort(result.begin(), result.end());
+        std::cout << "planarity = " << (result[1].score / result[2].score * result[1].score / result[0].score) << std::endl;
+    }
+}
+
+
 TEST(UtilTest, CreateLinearSequence) {
     size_t n = 500;
     size_t low = -150, high = 100;
@@ -326,6 +353,37 @@ TEST(UtilTest, RTreeWrapperLargeData) {
     });
     core::RTreeWrapper<core::Line2> rtree(lines.begin(), lines.end());
     EXPECT_EQ(lines.size(), rtree.size());
+
+}
+
+
+TEST(UtilTest, VecSetAndVecMap){
+
+    core::VecMultiSet<double, 3> s(0.1);
+    int N = 5000;
+    for (int i = 0; i < N; i++){
+        s.insert(core::Vec3(randf(), randf(), randf()));
+    }
+    
+    EXPECT_EQ(s.fullSize(), N);
+    for (auto & vs : s){
+        for (auto & v : vs){
+            ASSERT_LE(core::Distance(v, vs.front()), s.influenceRange());
+        }
+    }
+
+    core::VecMap<double, 3, std::vector<int>> m(0.1);
+    std::vector<core::Vec3> vecs(N);
+    std::generate(vecs.begin(), vecs.end(), [](){return core::Vec3(randf(), randf(), randf()); });
+    for (int i = 0; i < N; i++){
+        m[vecs[i]].push_back(i);
+    }
+
+    for (auto & g : m){
+        for (int i : g.second){
+            ASSERT_LE(core::Distance(vecs[i], vecs[g.second.front()]), m.influenceRange());
+        }
+    }
 
 }
 
@@ -641,5 +699,5 @@ TEST(UtilTest, TopologicalSort){
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    return DEBUG_RUN_ALL_TESTS();
 }

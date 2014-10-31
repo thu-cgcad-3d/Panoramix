@@ -2,6 +2,7 @@
 #define PANORAMIX_VIS_RENDERABLE_OBJECT_TREE_HPP
 
 #include "../core/utilities.hpp"
+#include "../core/containers.hpp"
 #include "renderable_object.hpp"
  
 namespace panoramix {

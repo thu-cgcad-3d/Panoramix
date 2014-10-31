@@ -200,10 +200,6 @@ namespace panoramix {
 
 
 
-        // 
-
-
-
 
 
     }

@@ -16,6 +16,7 @@ extern "C" {
 #include <GCoptimization.h>
 
 #include "../core/feature.hpp"
+#include "../core/containers.hpp"
 
 #include "../vis/visualize2d.hpp"
 #include "../vis/visualize3d.hpp"
@@ -1433,12 +1434,11 @@ namespace panoramix {
         }
 
 
-
         void ReconstructionEngine::estimateRegionPlanes() {
 
             // display options
-            static const bool OPT_DisplayMessages = true;
-            static const bool OPT_DisplayOnEachLineCCRegonstruction = true;
+            static const bool OPT_DisplayMessages = false;
+            static const bool OPT_DisplayOnEachLineCCRegonstruction = false;
             static const bool OPT_DisplayOnEachRegionRegioncstruction = false;
             static const bool OPT_DisplayOnEachIteration = false;
             static const int OPT_DisplayOnEachIterationInterval = 500;
@@ -1458,11 +1458,16 @@ namespace panoramix {
                 inline RegionCCRecInfo()
                     : _areaRatio(0),
                     _samplePointsNumWithOtherRegions(0, 0),
-                    _samplePointsNumWithOtherLines(0, 0) {
+                    _samplePointsNumWithOtherLines(0, 0),
+                    _candidatePlanesByRoot(0.05),
+                    _fullVisualArea(0) {
                 }
                 inline RegionCCRecInfo(int regionCCId, const ReconstructionEngine & engine) 
-                    : _regionCCId(regionCCId), _areaRatio(0), 
-                    _samplePointsNumWithOtherRegions(0, 0), _samplePointsNumWithOtherLines(0, 0) {
+                    : _regionCCId(regionCCId), _areaRatio(0),
+                    _samplePointsNumWithOtherRegions(0, 0),
+                    _samplePointsNumWithOtherLines(0, 0),
+                    _candidatePlanesByRoot(0.05),
+                    _fullVisualArea(0) {
                     
                     // calc area ratio and collect all ris
                     for (auto & r : engine.globalData().regionConnectedComponentIds){
@@ -1473,9 +1478,28 @@ namespace panoramix {
                         }
                     }
 
+                    // collect all outer contour directions
+                    std::vector<Vec3> outerContourDirections;
+                    Vec3 regionsCenterDirection(0, 0, 0);
+                    for (auto & ri : _regionIndices){
+                        auto & cam = engine.views().data(ri.viewHandle).camera;
+                        regionsCenterDirection += normalize(cam.spatialDirection(engine.regionData(ri).center));
+                        auto & regionOuterContourPixels = engine.regionData(ri).contours.back();
+                        for (auto & pixel : regionOuterContourPixels){
+                            outerContourDirections.push_back(cam.spatialDirection(pixel));
+                        }
+                    }
+                    // compute the center direction of all regions in this CC
+                    regionsCenterDirection /= double(_regionIndices.size());
+                    _tangentialPlaneOnRegionCCCenter = Plane3(regionsCenterDirection, regionsCenterDirection);
+                    std::tie(_localX, _localY) = ProposeXYDirectionsFromZDirection(_tangentialPlaneOnRegionCCCenter.normal);
+
+                    // compute outer contour visual area;
+                    _fullVisualArea = computeConvexVisualAreaOfDirections(outerContourDirections);
+
                     // calc sample points num with other regions
                     for (auto & ri : _regionIndices){
-                        auto & regions = engine._views.data(ri.viewHandle).regionNet->regions();
+                        auto & regions = engine.views().data(ri.viewHandle).regionNet->regions();                     
                         auto & bdHandles = regions.topo(ri.handle).uppers;
                         for (auto bh : bdHandles){
                             for (auto & pts : regions.data(bh).sampledPoints){
@@ -1493,25 +1517,33 @@ namespace panoramix {
                     }
                 }
 
+                double computeConvexVisualAreaOfDirections(const std::vector<Vec3> & dirs) const {
+                    std::vector<Point2f> pointsOnPlane(dirs.size());
+                    for (int i = 0; i < dirs.size(); i++){
+                        auto pOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dirs[i]), _tangentialPlaneOnRegionCCCenter).position;
+                        auto pOnPlaneOffsetted = pOnPlane - _tangentialPlaneOnRegionCCCenter.anchor;
+                        pointsOnPlane[i] = Point2f(pOnPlane.dot(_localX), pOnPlane.dot(_localY));
+                    }
+                    // compute convex hull and contour area
+                    cv::convexHull(pointsOnPlane, pointsOnPlane, false, true);
+                    return cv::contourArea(pointsOnPlane);
+                }
+
                 inline double samplePointsBaseNumWithOtherRegions() const { return _samplePointsNumWithOtherRegions.denominator; }
                 inline double samplePointsBaseNumWithOtherLines() const { return _samplePointsNumWithOtherLines.denominator; }
                 inline double areaRatio() const { return _areaRatio; }
 
-                inline void insertAnchorWithLine(const ReconstructionEngine & engine, const LineIndex & li, const Point3 & anchor){
-                    _anchorsOnRelatedLines[li].push_back(anchor);
-                    _samplePointsNumWithOtherLines.numerator++;
-
-                    static const double planeRootDistThres = 0.01;
+                void makePlaneCandidate(const ReconstructionEngine & engine, const Point3 & anchor){
+                    _allAnchors.push_back(anchor);
 
                     // add new candidate plane root
                     for (auto & vp : engine._globalData.vanishingPoints){
-                        Point3 root = Plane3(anchor, vp).root();
+                        Plane3 plane(anchor, vp);
                         if (OPT_IgnoreTooSkewedPlanes){
-                            if (norm(root) <= 2)
+                            if (norm(plane.root()) <= 2)
                                 continue;
                         }
                         if (OPT_IgnoreTooFarAwayPlanes){
-                            Plane3 plane(root, root);
                             bool valid = true;
                             for (auto & ri : _regionIndices){
                                 if (!valid)
@@ -1519,46 +1551,7 @@ namespace panoramix {
                                 auto & rd = engine.regionData(ri);
                                 if (rd.contours.back().size() < 3)
                                     continue;
-                                auto & cam = engine._views.data(ri.viewHandle).camera;
-
-                                for (int i = 0; i < rd.contours.back().size(); i++){
-                                    auto dir = cam.spatialDirection(ToPoint2(rd.contours.back()[i]));
-                                    auto intersectionOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
-                                    if (norm(intersectionOnPlane) > 60){
-                                        valid = false;
-                                        break;
-                                    }                                        
-                                }
-                            }
-                            if (!valid)
-                                continue;
-                        }
-                        _candidatePlaneRoots.push_back(root);
-                    }
-                }
-                inline void insertAnchorWithRegion(const ReconstructionEngine & engine, const RegionIndex & ri, const Point3 & anchor){
-                    _anchorsOnRelatedRegions[ri].push_back(anchor);
-                    _samplePointsNumWithOtherRegions.numerator++;
-                    static const double planeRootDistThres = 0.01;
-
-                    // add new candidate plane root
-                    for (auto & vp : engine._globalData.vanishingPoints){
-                        Point3 root = Plane3(anchor, vp).root();
-                        if (OPT_IgnoreTooSkewedPlanes){
-                            if (norm(root) <= 2)
-                                continue;
-                        }
-                        if (OPT_IgnoreTooFarAwayPlanes){
-                            Plane3 plane(root, root);
-                            bool valid = true;
-                            for (auto & ri : _regionIndices){
-                                if (!valid)
-                                    break;
-                                auto & rd = engine.regionData(ri);
-                                if (rd.contours.back().size() < 3)
-                                    continue;
-                                auto & cam = engine._views.data(ri.viewHandle).camera;
-
+                                auto & cam = engine.views().data(ri.viewHandle).camera;
                                 for (int i = 0; i < rd.contours.back().size(); i++){
                                     auto dir = cam.spatialDirection(ToPoint2(rd.contours.back()[i]));
                                     auto intersectionOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
@@ -1571,52 +1564,71 @@ namespace panoramix {
                             if (!valid)
                                 continue;
                         }
-                        _candidatePlaneRoots.push_back(root);
+
+                        static const double distFromPointToPlaneThres = 0.8;
+
+                        // insert new root data
+                        auto & pcd = _candidatePlanesByRoot[plane.root()];
+                        pcd.plane = plane;
+
+                        // collect distance votes
+                        double distVotes = 0.0;
+                        std::vector<Vec3> nearbyAnchors;
+                        for (int i = 0; i < _allAnchors.size(); i++){
+                            double distanceToPlane = plane.distanceTo(_allAnchors[i]);
+                            if (distanceToPlane > distFromPointToPlaneThres)
+                                continue;
+                            distVotes += Gaussian(distanceToPlane, distFromPointToPlaneThres);
+                            pcd.inlierAnchors.push_back(i);
+                            nearbyAnchors.push_back(_allAnchors[i]);
+                        }
+                        pcd.distanceVoteSumOfInlierAnchors = distVotes;
+                        pcd.visualAreaRatioOfInlierAnchors = computeConvexVisualAreaOfDirections(nearbyAnchors) / _fullVisualArea;
                     }
                 }
 
+                inline void insertAnchorWithLine(const ReconstructionEngine & engine, const LineIndex & li, const Point3 & anchor){
+                    _anchorsOnRelatedLines[li].push_back(anchor);
+                    _samplePointsNumWithOtherLines.numerator++;
+                    makePlaneCandidate(engine, anchor);
+                }
+
+
+                inline void insertAnchorWithRegion(const ReconstructionEngine & engine, const RegionIndex & ri, const Point3 & anchor){
+                    _anchorsOnRelatedRegions[ri].push_back(anchor);
+                    _samplePointsNumWithOtherRegions.numerator++;
+                    makePlaneCandidate(engine, anchor);
+                }
+
                 double calcPriority(const ReconstructionEngine & engine) { // returns priority
+                    if (_candidatePlanesByRoot.size() == 0)
+                        return 0.0;
+
+                    // completeness
                     double samplePointsCompleteRatioWithOtherRegions =
                         (_samplePointsNumWithOtherRegions.denominator == 0 ? 0 :
                         _samplePointsNumWithOtherRegions.value());
                     double samplePointsCompleteRatioWithLines =
                         (_samplePointsNumWithOtherLines.denominator == 0 ? 0 :
                         _samplePointsNumWithOtherLines.value());
-                    return samplePointsCompleteRatioWithOtherRegions * 0.7
+                    double completeness = samplePointsCompleteRatioWithOtherRegions * 0.7
                         + samplePointsCompleteRatioWithLines * 0.29
                         + _areaRatio * 0.01;
+
+                    auto pcd = std::max_element(_candidatePlanesByRoot.begin(), _candidatePlanesByRoot.end(),
+                        [](const std::pair<const Point3, PlaneConfidenceData> & a, const std::pair<const Point3, PlaneConfidenceData> & b){
+                        return a.second.distanceVoteSumOfInlierAnchors * a.second.visualAreaRatioOfInlierAnchors
+                            < b.second.distanceVoteSumOfInlierAnchors * b.second.visualAreaRatioOfInlierAnchors;
+                    })->second;
+                    return completeness * (pcd.visualAreaRatioOfInlierAnchors > 0.3 ? 1.0 : 0.1);
                 }
 
                 Plane3 predictPlane(const ReconstructionEngine & engine){
-                    static const double distFromPointToPlaneThres = 0.5;
-                    int bestPlaneId = -1;
-                    double bestVote = -1;
-                    for (int i = 0; i < _candidatePlaneRoots.size(); i++){
-                        auto & root = _candidatePlaneRoots[i];
-                        double vote = 0;
-                        for (auto & as : _anchorsOnRelatedRegions){
-                            for (auto & a : as.second){
-                                double distanceToPlane = abs((a - root).dot(normalize(root)));
-                                if (distanceToPlane > distFromPointToPlaneThres)
-                                    continue;
-                                vote += Gaussian(distanceToPlane, distFromPointToPlaneThres);
-                            }
-                        }
-                        for (auto & as : _anchorsOnRelatedLines){
-                            for (auto & a : as.second){
-                                double distanceToPlane = abs((a - root).dot(normalize(root)));
-                                if (distanceToPlane > distFromPointToPlaneThres)
-                                    continue;
-                                vote += Gaussian(distanceToPlane, distFromPointToPlaneThres);
-                            }
-                        }
-                        if (vote > bestVote){
-                            bestVote = vote;
-                            bestPlaneId = i;
-                        }
-                    }
-                    assert(bestPlaneId != -1);
-                    return Plane3(_candidatePlaneRoots[bestPlaneId], _candidatePlaneRoots[bestPlaneId]);
+                    return std::max_element(_candidatePlanesByRoot.begin(), _candidatePlanesByRoot.end(),
+                        [](const std::pair<const Point3, PlaneConfidenceData> & a, const std::pair<const Point3, PlaneConfidenceData> & b){
+                        return a.second.distanceVoteSumOfInlierAnchors * a.second.visualAreaRatioOfInlierAnchors
+                            < b.second.distanceVoteSumOfInlierAnchors * b.second.visualAreaRatioOfInlierAnchors;
+                    })->second.plane;
                 }
 
                 inline bool shouldIgnore() const {
@@ -1625,14 +1637,24 @@ namespace panoramix {
 
             private:
                 int _regionCCId;
+                Plane3 _tangentialPlaneOnRegionCCCenter;
+                Vec3 _localX, _localY;
                 double _areaRatio;
+                double _fullVisualArea;
                 Rational _samplePointsNumWithOtherRegions;
                 Rational _samplePointsNumWithOtherLines;
                 IndexHashSet<RegionIndex> _regionIndices;
                 IndexHashMap<RegionIndex, std::vector<Point3>> _anchorsOnRelatedRegions;
                 IndexHashMap<LineIndex, std::vector<Point3>> _anchorsOnRelatedLines;
 
-                std::vector<Point3> _candidatePlaneRoots;
+                struct PlaneConfidenceData {
+                    Plane3 plane;
+                    std::vector<int> inlierAnchors;
+                    double distanceVoteSumOfInlierAnchors;
+                    double visualAreaRatioOfInlierAnchors;                    
+                };
+                std::vector<Point3> _allAnchors;
+                VecMap<double, 3, PlaneConfidenceData> _candidatePlanesByRoot;
             };
 
             // information for reconstruction of line ccs
@@ -1707,7 +1729,6 @@ namespace panoramix {
                 Rational _samplePointsNumWithRegions;
                 IndexHashSet<LineIndex> _lineIndices;
                 IndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Point3>> _anchorsBetweenRelatedRegionsAndLines;
-
                 std::vector<double> _candidateDepthFactors;
             };
 
