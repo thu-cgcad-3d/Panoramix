@@ -39,6 +39,12 @@ namespace panoramix {
             static const bool Any = (Sum != 0);
         };
 
+        template <class T>
+        struct IsSequence : std::false_type {};
+
+        template <int ... S>
+        struct IsSequence<Sequence<S...>> : std::true_type {};
+
 
         // use SequenceGenerator<N>::type to deduct Sequence<0, 1, 2, 3, ..., N-1>
         template<int N, int ...S>

@@ -1437,10 +1437,10 @@ namespace panoramix {
         void ReconstructionEngine::estimateRegionPlanes() {
 
             // display options
-            static const bool OPT_DisplayMessages = false;
+            static const bool OPT_DisplayMessages = true;
             static const bool OPT_DisplayOnEachLineCCRegonstruction = false;
             static const bool OPT_DisplayOnEachRegionRegioncstruction = false;
-            static const bool OPT_DisplayOnEachIteration = false;
+            static const bool OPT_DisplayOnEachIteration = true;
             static const int OPT_DisplayOnEachIterationInterval = 500;
             static const bool OPT_DisplayAtLast = true;
 
@@ -1455,7 +1455,7 @@ namespace panoramix {
             // information for reconstruction of regions
             class RegionCCRecInfo {
             public:
-                inline RegionCCRecInfo()
+                inline RegionCCRecInfo() 
                     : _areaRatio(0),
                     _samplePointsNumWithOtherRegions(0, 0),
                     _samplePointsNumWithOtherLines(0, 0),
@@ -1565,7 +1565,7 @@ namespace panoramix {
                                 continue;
                         }
 
-                        static const double distFromPointToPlaneThres = 0.8;
+                        static const double distFromPointToPlaneThres = 0.6;
 
                         // insert new root data
                         auto & pcd = _candidatePlanesByRoot[plane.root()];
@@ -1620,7 +1620,7 @@ namespace panoramix {
                         return a.second.distanceVoteSumOfInlierAnchors * a.second.visualAreaRatioOfInlierAnchors
                             < b.second.distanceVoteSumOfInlierAnchors * b.second.visualAreaRatioOfInlierAnchors;
                     })->second;
-                    return completeness * (pcd.visualAreaRatioOfInlierAnchors > 0.3 ? 1.0 : 0.1);
+                    return completeness * (pcd.visualAreaRatioOfInlierAnchors > 0.3 ? 1.0 : 0.01);
                 }
 
                 Plane3 predictPlane(const ReconstructionEngine & engine){
@@ -1897,7 +1897,10 @@ namespace panoramix {
 
                 double regionTopScore = regionCCIdsForChecking.empty() ? 0.0 : regionCCIdsForChecking.topScore();
                 double lineCCTopScore = lineCCIdsForChecking.empty() ? 0.0 : lineCCIdsForChecking.topScore();
-                if (regionTopScore < lineCCTopScore){
+
+                bool useRegion = regionTopScore > lineCCTopScore && regionTopScore > 0.3;
+
+                if (!useRegion){
                     // line ccid to check
                     int lineCCId = lineCCIdsForChecking.top();
                     lineCCIdsForChecking.pop();
@@ -1939,7 +1942,7 @@ namespace panoramix {
                     }
 
                 }
-                else if(lineCCTopScore < regionTopScore){
+                else {
                     // region index to check
                     int regionCCId = regionCCIdsForChecking.top();
                     regionCCIdsForChecking.pop();
