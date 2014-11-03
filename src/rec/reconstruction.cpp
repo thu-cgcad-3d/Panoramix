@@ -828,7 +828,8 @@ namespace panoramix {
                 const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & interViewLineIncidences,
                 int lineConnectedComponentsNum, const ComponentIndexHashMap<LineIndex, int> & lineConnectedComponentIds,
                 ComponentIndexHashMap<LineIndex, Line3> & reconstructedLines,
-                double constantEtaForFirstLineInEachConnectedComponent){
+                double constantEtaForFirstLineInEachConnectedComponent, 
+                bool useWeights){
 
                 ComponentIndexHashMap<LineIndex, int> lineIndexToIds;
                 for (int i = 0; i < lineIndices.size(); i++)
@@ -977,8 +978,6 @@ namespace panoramix {
                 }
 
                 // solve the equation system
-                static const bool useWeights = true;
-
                 VectorXd X;
                 SparseQR<SparseMatrix<double>, COLAMDOrdering<int>> solver;
                 static_assert(!(SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
@@ -1062,7 +1061,7 @@ namespace panoramix {
             ComponentIndexHashMap<LineIndex, Line3> reconstructedLinesOriginal;
             EstimateSpatialLineDepthsOnce(views, linesNets, vanishingPoints, lineIndices, lineRelationIndices, 
                 interViewLineIncidences, lineConnectedComponentsNum, lineConnectedComponentIds, 
-                reconstructedLinesOriginal, constantEtaForFirstLineInEachConnectedComponent);
+                reconstructedLinesOriginal, constantEtaForFirstLineInEachConnectedComponent, true);
 
             // store all line constraints homogeneously
             struct ConstraintBetweenLines{
@@ -1143,14 +1142,14 @@ namespace panoramix {
                     trimmedLineRelationIndices.push_back(c.lineRelationIndex);
                 }
                 else if (c.type == ConstraintBetweenLines::InterView){
-                    trimmedInterViewLineIncidences.emplace(c.linePairIndex, Vec3());
+                    trimmedInterViewLineIncidences.emplace(c.linePairIndex, interViewLineIncidences.at(c.linePairIndex));
                 }
             }
 
             // reconstruct again
             EstimateSpatialLineDepthsOnce(views, linesNets, vanishingPoints, lineIndices, trimmedLineRelationIndices,
                 trimmedInterViewLineIncidences, lineConnectedComponentsNum, lineConnectedComponentIds,
-                reconstructedLines, constantEtaForFirstLineInEachConnectedComponent);
+                reconstructedLines, constantEtaForFirstLineInEachConnectedComponent, false);
 
 
             // visualize ccids
