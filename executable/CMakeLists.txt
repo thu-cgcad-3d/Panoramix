@@ -66,3 +66,4 @@ foreach (TFILE ${APPS})
 	set_property(TARGET ${T} PROPERTY FOLDER "${PROJECT_NAME}.Apps")
 endforeach()
 
+

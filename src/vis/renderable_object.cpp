@@ -121,8 +121,13 @@ namespace panoramix {
                     Q_ASSERT(_program->isLinked());
                     _program->bind();
 
-                    if (_texture && _texture->isCreated())
-                        _texture->bind(0);
+                    QList<const RenderableObject *> ancestersWithUsableTextures;
+                    for (const RenderableObject * node = this; node != nullptr; node = node->parent()){
+                        if (node->hasTexture())
+                            ancestersWithUsableTextures << node;
+                    }
+                    if (!ancestersWithUsableTextures.empty())
+                        ancestersWithUsableTextures.front()->bindTexture(0);
 
                     glLineWidth(_lineWidth);
 
@@ -169,6 +174,8 @@ namespace panoramix {
                 virtual void setTexture(const core::Image & im) {
                     _textureImage = vis::MakeQImage(im);
                 }
+                virtual bool hasTexture() const { return _texture && _texture->isCreated(); }
+                virtual void bindTexture(int id) const { _texture->bind(id); }
 
             protected:
                 OpenGLMesh _mesh;
@@ -295,10 +302,19 @@ namespace panoramix {
             class GLSpatialProjectedPolygonsObject : public GLObject {
             public:
                 explicit GLSpatialProjectedPolygonsObject(const std::vector<SpatialProjectedPolygon> & spps,
-                    const std::vector<int> & ids, RenderableObject * parent)
+                    const std::vector<int> & ids, const Color & additionalColor, RenderableObject * parent)
                     : GLObject(MeshFromSPPolygons(spps, ids), 1.0f, 1.0f,
-                    OpenGLShaderSourceDescriptor::Panorama, spps[ids.front()].projectionCenter, parent) {
+                    OpenGLShaderSourceDescriptor::Panorama, spps[ids.front()].projectionCenter, parent),
+                    _additionalColor(additionalColor){
+                    // update color
+                    for (auto & v : _mesh.vertices()) {
+                        QColor c = MakeQColor(_additionalColor);
+                        v.color4 = core::Vec4f(c.redF(), c.greenF(), c.blueF(), 1.0);
+                    }
                 }
+
+            private:
+                Color _additionalColor;
             };
 
             template <class T, int N>
@@ -323,12 +339,12 @@ namespace panoramix {
                 idWithSameCenters[c].push_back(i);
             }
             if (idWithSameCenters.size() == 1){
-                return new GLSpatialProjectedPolygonsObject(sps, idWithSameCenters.begin()->second, parent);
+                return new GLSpatialProjectedPolygonsObject(sps, idWithSameCenters.begin()->second, state.foregroundColor, parent);
             }
             else{
                 RenderableObject * o = new RenderableObject(parent);
                 for (auto & ids : idWithSameCenters){
-                    new GLSpatialProjectedPolygonsObject(sps, ids.second, o);
+                    new GLSpatialProjectedPolygonsObject(sps, ids.second, state.foregroundColor, o);
                 }
                 return o;
             }

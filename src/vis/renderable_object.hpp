@@ -32,6 +32,8 @@ namespace panoramix {
 
             // set texture
             virtual void setTexture(const core::Image & im) {}
+            virtual bool hasTexture() const { return false; }
+            virtual void bindTexture(int id) const {}
 
             core::Mat4 & modelMatrix() { return _modelMat; }
             const core::Mat4 & modelMatrix() const { return _modelMat; }

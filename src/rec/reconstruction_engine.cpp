@@ -866,6 +866,9 @@ namespace panoramix {
         }
 
 
+
+        static const double ReconstructionScale = 10.0;
+
         void ReconstructionEngine::estimateSpatialLineDepths() {
 
             using namespace Eigen;
@@ -912,7 +915,7 @@ namespace panoramix {
                     ccIdsRecorded.insert(ccid);
                 }
             }
-            static const double constantEtaForFirstLineInEachConnectedComponent = 10.0;
+            static const double constantEtaForFirstLineInEachConnectedComponent = ReconstructionScale;
             std::cout << "anchor size: " << firstLineIndexInConnectedComponents.size() << std::endl;
             for (auto & ccId : ccIdsRecorded) {
                 std::cout << "ccid: " << ccId << std::endl;
@@ -1440,7 +1443,7 @@ namespace panoramix {
             static const bool OPT_DisplayMessages = true;
             static const bool OPT_DisplayOnEachLineCCRegonstruction = false;
             static const bool OPT_DisplayOnEachRegionRegioncstruction = false;
-            static const bool OPT_DisplayOnEachIteration = true;
+            static const bool OPT_DisplayOnEachIteration = false;
             static const int OPT_DisplayOnEachIterationInterval = 500;
             static const bool OPT_DisplayAtLast = true;
 
@@ -1540,7 +1543,7 @@ namespace panoramix {
                     for (auto & vp : engine._globalData.vanishingPoints){
                         Plane3 plane(anchor, vp);
                         if (OPT_IgnoreTooSkewedPlanes){
-                            if (norm(plane.root()) <= 2)
+                            if (norm(plane.root()) <= ReconstructionScale / 2.0)
                                 continue;
                         }
                         if (OPT_IgnoreTooFarAwayPlanes){
@@ -1555,7 +1558,7 @@ namespace panoramix {
                                 for (int i = 0; i < rd.contours.back().size(); i++){
                                     auto dir = cam.spatialDirection(ToPoint2(rd.contours.back()[i]));
                                     auto intersectionOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
-                                    if (norm(intersectionOnPlane) > 60){
+                                    if (norm(intersectionOnPlane) > ReconstructionScale * 5.0){
                                         valid = false;
                                         break;
                                     }
@@ -1565,7 +1568,7 @@ namespace panoramix {
                                 continue;
                         }
 
-                        static const double distFromPointToPlaneThres = 0.6;
+                        static const double distFromPointToPlaneThres = ReconstructionScale / 12.0;
 
                         // insert new root data
                         auto & pcd = _candidatePlanesByRoot[plane.root()];
@@ -1744,11 +1747,24 @@ namespace panoramix {
                 auto & rd = regionData(ri);
                 Vec3 centerDir = _views.data(ri.viewHandle).camera.spatialDirection(rd.center);
                 int regionCCId = _globalData.regionConnectedComponentIds[ri];
-                _globalData.regionConnectedComponentPlanes[regionCCId].anchor = normalize(centerDir) * 10;
+                _globalData.regionConnectedComponentPlanes[regionCCId].anchor = normalize(centerDir) * ReconstructionScale;
                 _globalData.regionConnectedComponentPlanes[regionCCId].normal = normalize(centerDir);
             }
             // initialize line depth factors
             _globalData.lineConnectedComponentDepthFactors = std::vector<double>(_globalData.lineConnectedComponentsNum, 1.0);
+
+
+
+            // build reconstruction info data table
+            std::vector<RegionCCRecInfo> regionCCRecInfos;
+            regionCCRecInfos.reserve(_globalData.regionConnectedComponentsNum);
+            for (int i = 0; i < _globalData.regionConnectedComponentsNum; i++)
+                regionCCRecInfos.emplace_back(i, *this);
+
+            std::vector<LineCCRecInfo> lineCCRecInfos;
+            lineCCRecInfos.reserve(_globalData.lineConnectedComponentsNum);
+            for (int i = 0; i < _globalData.lineConnectedComponentsNum; i++)
+                lineCCRecInfos.emplace_back(i, *this);
 
 
             auto displayAll = [&](int highlightedLineCCId, int highlightedRegionCCId,
@@ -1782,8 +1798,11 @@ namespace panoramix {
                         }
                     }
 
+
+                    static const int degreesNum = 1000;
+
                     // paint regions
-                    std::vector<vis::SpatialProjectedPolygon> spps, highlightedSpps;
+                    std::vector<Classified<vis::SpatialProjectedPolygon>> spps, highlightedSpps;
                     spps.reserve(_globalData.regionConnectedComponentIds.size());
                     static const int stepSize = 10;
 
@@ -1818,12 +1837,22 @@ namespace panoramix {
 
                         spp.projectionCenter = cam.eye();
                         if (spp.corners.size() > 3){
-                            spps.push_back(spp);
+                            int priorityDegree = static_cast<int>(regionCCRecInfos[regionCCId].calcPriority(*this) * degreesNum);
+                            spps.push_back(ClassifyAs(spp, priorityDegree));
                             if (_globalData.regionConnectedComponentIds[ri] == highlightedRegionCCId){
-                                highlightedSpps.push_back(spp);
+                                highlightedSpps.push_back(ClassifyAs(spp, priorityDegree));
                             }
                         }
                     }
+
+                    int maxPriorityDegree = 0;
+                    for (auto & p : spps){
+                        maxPriorityDegree = std::max(maxPriorityDegree, p.claz);
+                    }
+                    for (auto & p : spps){
+                        p.claz = double(p.claz) / double(maxPriorityDegree) * (degreesNum-1);
+                    }
+
 
                     vis::Visualizer3D viz;
                     viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
@@ -1849,7 +1878,11 @@ namespace panoramix {
                         viz << core::ClassifyAs(line, lineCCId);
                     }
 
-                    viz << vis::manip3d::Begin(spps)
+                    auto colorTable = vis::CreateGreyColorTableWithSize(degreesNum);
+
+                    viz << vis::manip3d::SetBackgroundColor(vis::ColorTag::Yellow)
+                        << vis::manip3d::SetDefaultColorTable(colorTable)
+                        << vis::manip3d::Begin(spps)
                         << vis::manip3d::SetTexture(_globalData.panorama)
                         << vis::manip3d::End
                         << vis::manip3d::SetDefaultLineWidth(6.0)
@@ -1861,16 +1894,6 @@ namespace panoramix {
                 }
             };
 
-            // build reconstruction info data table
-            std::vector<RegionCCRecInfo> regionCCRecInfos;
-            regionCCRecInfos.reserve(_globalData.regionConnectedComponentsNum);
-            for (int i = 0; i < _globalData.regionConnectedComponentsNum; i++)
-                regionCCRecInfos.emplace_back(i, *this);
-                
-            std::vector<LineCCRecInfo> lineCCRecInfos;
-            lineCCRecInfos.reserve(_globalData.lineConnectedComponentsNum);
-            for (int i = 0; i < _globalData.lineConnectedComponentsNum; i++)
-                lineCCRecInfos.emplace_back(i, *this);
 
 
             // build maximum heap for checking            
@@ -1898,9 +1921,10 @@ namespace panoramix {
                 double regionTopScore = regionCCIdsForChecking.empty() ? 0.0 : regionCCIdsForChecking.topScore();
                 double lineCCTopScore = lineCCIdsForChecking.empty() ? 0.0 : lineCCIdsForChecking.topScore();
 
-                bool useRegion = regionTopScore > lineCCTopScore && regionTopScore > 0.3;
+                /*if (std::max(regionTopScore, lineCCTopScore) < 0.1 && regionTopScore > lineCCTopScore)
+                    break;*/
 
-                if (!useRegion){
+                if (regionTopScore < lineCCTopScore){
                     // line ccid to check
                     int lineCCId = lineCCIdsForChecking.top();
                     lineCCIdsForChecking.pop();
