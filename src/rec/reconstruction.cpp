@@ -3,6 +3,7 @@ extern "C" {
 }
 
 #include <random>
+#include <thread>
 
 #include <Eigen/Core>
 #include <Eigen/Dense>
@@ -1241,6 +1242,7 @@ namespace panoramix {
         static const bool OPT_IgnoreTooFarAwayPlanes = true;
         static const int OPT_RandomRepeatNum = 100;
         static const int OPT_MaxSolutionNumForEachCC = 1;
+        static const int OPT_NumThreads = 3;
 
 
         namespace {
@@ -1456,7 +1458,7 @@ namespace panoramix {
 
             void RegisterCurrentChoicesAndProbabilities(const RegionCCRecInfo & rci, 
                 std::vector<Choice> & choices, std::vector<double> & probabilities, 
-                const RecContext & context, double baseProb){
+                const RecContext & context, double baseProb, int maxChoiceNum){
 
                 std::vector<Scored<Choice>> newChoices;
 
@@ -1482,8 +1484,8 @@ namespace panoramix {
                     newChoices.push_back(ScoreAs(choice, probability + baseProb));
                 }
 
-                std::sort(newChoices.begin(), newChoices.end(), std::greater<Scored<Choice>>());
-                for (int i = 0; i < std::min<int>(OPT_MaxSolutionNumForEachCC, newChoices.size()); i++){
+                std::sort(newChoices.begin(), newChoices.end(), std::greater<void>());
+                for (int i = 0; i < std::min<int>(maxChoiceNum, newChoices.size()); i++){
                     choices.push_back(newChoices[i].component);
                     probabilities.push_back(newChoices[i].score);
                 }
@@ -1554,10 +1556,8 @@ namespace panoramix {
 
             void RegisterCurrentChoicesAndProbabilities(const LineCCRecInfo & lci,
                 std::vector<Choice> & choices, std::vector<double> & probabilities,
-                const RecContext & context, double baseProb){
-
+                const RecContext & context, double baseProb, int maxChoiceNum){
                 std::vector<Scored<Choice>> newChoices;
-
                 int depthId = 0;
                 double maxVote = 0.0;
                 for (auto & c : lci.candidateDepthFactors)
@@ -1569,12 +1569,11 @@ namespace panoramix {
                     double probability = (completenessWithOtherRegions * 0.9
                         + double(lci.lineIndices.size()) / context.reconstructedLines.size() * 0.1)
                         * candidateDepthVote / maxVote;
-
                     newChoices.push_back(ScoreAs(choice, probability + baseProb));
                 }
 
-                std::sort(newChoices.begin(), newChoices.end(), std::greater<Scored<Choice>>());
-                for (int i = 0; i < std::min<int>(OPT_MaxSolutionNumForEachCC, newChoices.size()); i++){
+                std::sort(newChoices.begin(), newChoices.end(), std::greater<void>());
+                for (int i = 0; i < std::min<int>(maxChoiceNum, newChoices.size()); i++){
                     choices.push_back(newChoices[i].component);
                     probabilities.push_back(newChoices[i].score);
                 }
@@ -1740,7 +1739,7 @@ namespace panoramix {
             std::iota(lineCCIds.begin(), lineCCIds.end(), 0);
             std::set<int> initialLineCCIdsNotDeterminedYet(lineCCIds.begin(), lineCCIds.end());
 
-            
+
             // initialize region planes
             std::vector<Plane3> initialRegionConnectedComponentPlanes(regionConnectedComponentsNum);
             for (auto & r : regionConnectedComponentIds){
@@ -1759,243 +1758,253 @@ namespace panoramix {
             int trialNum = OPT_RandomRepeatNum;
 
             // start MC reasoning
-            int t;
-            #pragma omp parallel shared(candidates, initialRegionCCIdsNotDeterminedYet, initialLineCCIdsNotDeterminedYet, context) private(i)
-            {
-                std::vector<Scored<std::pair<std::vector<Plane3>, std::vector<double>>>>
-                    candidates(trialNum,
-                    ScoreAs(std::make_pair(initialRegionConnectedComponentPlanes, initialLineConnectedComponentDepthFactors),
-                    0.0));
+            std::vector<Scored<std::pair<std::vector<Plane3>, std::vector<double>>>>
+                candidates(trialNum,
+                ScoreAs(std::make_pair(initialRegionConnectedComponentPlanes, initialLineConnectedComponentDepthFactors),
+                0.0));
 
-                for (t = 0; t < trialNum; t++){
-                    std::cout << "task: " << t << std::endl;
-                    auto & candidate = candidates[t];
+            auto task = [&candidates, &context, &initialRegionCCIdsNotDeterminedYet, &initialLineCCIdsNotDeterminedYet](int t){
+                std::cout << "task: " << t << std::endl;
+                auto & candidate = candidates[t];
 
-                    // random engine initialized
-                    std::random_device rd;
-                    std::default_random_engine gen(rd());
+                // random engine initialized
+                std::random_device rd;
+                std::default_random_engine gen(rd());
 
-                    // build initial reconstruction info data table
-                    std::vector<RegionCCRecInfo> regionCCRecInfos;
-                    regionCCRecInfos.reserve(context.regionConnectedComponentsNum);
-                    for (int i = 0; i < context.regionConnectedComponentsNum; i++)
-                        regionCCRecInfos.push_back(CreateRegionCCRecInfo(i, context));
+                // build initial reconstruction info data table
+                std::vector<RegionCCRecInfo> regionCCRecInfos;
+                regionCCRecInfos.reserve(context.regionConnectedComponentsNum);
+                for (int i = 0; i < context.regionConnectedComponentsNum; i++)
+                    regionCCRecInfos.push_back(CreateRegionCCRecInfo(i, context));
 
-                    std::vector<LineCCRecInfo> lineCCRecInfos;
-                    lineCCRecInfos.reserve(context.lineConnectedComponentsNum);
-                    for (int i = 0; i < context.lineConnectedComponentsNum; i++)
-                        lineCCRecInfos.push_back(CreateLineCCRecInfo(i, context));
+                std::vector<LineCCRecInfo> lineCCRecInfos;
+                lineCCRecInfos.reserve(context.lineConnectedComponentsNum);
+                for (int i = 0; i < context.lineConnectedComponentsNum; i++)
+                    lineCCRecInfos.push_back(CreateLineCCRecInfo(i, context));
 
 
-                    // undetermined checkers
-                    std::set<int> regionCCIdsNotDeterminedYet = initialRegionCCIdsNotDeterminedYet;
-                    std::set<int> lineCCIdsNotDeterminedYet = initialLineCCIdsNotDeterminedYet;
+                // undetermined checkers
+                std::set<int> regionCCIdsNotDeterminedYet = initialRegionCCIdsNotDeterminedYet;
+                std::set<int> lineCCIdsNotDeterminedYet = initialLineCCIdsNotDeterminedYet;
 
-                    // choices and probabilities
-                    std::vector<Choice> choices;
-                    std::vector<double> choiceProbabilities;
-                    choices.reserve(regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size());
-                    choiceProbabilities.reserve(regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size());
+                // choices and probabilities
+                std::vector<Choice> choices;
+                std::vector<double> choiceProbabilities;
+                choices.reserve(regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size());
+                choiceProbabilities.reserve(regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size());
 
-                    // start expansion
-                    std::cout << "start expansion" << std::endl;
-                    while ((regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size()) > 0){
+                // start expansion
+                std::cout << "start expansion" << std::endl;
+                while ((regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size()) > 0){
 
-                        // collect choices and probabilities
-                        choices.clear();
-                        choiceProbabilities.clear();
-                        for (int rid : regionCCIdsNotDeterminedYet){
-                            RegisterCurrentChoicesAndProbabilities(regionCCRecInfos[rid], choices, choiceProbabilities, context, 1e-5);
+                    // collect choices and probabilities
+                    choices.clear();
+                    choiceProbabilities.clear();
+                    for (int rid : regionCCIdsNotDeterminedYet){
+                        RegisterCurrentChoicesAndProbabilities(regionCCRecInfos[rid], choices, choiceProbabilities, context, 
+                            1e-5, 1);
+                    }
+                    for (int lid : lineCCIdsNotDeterminedYet){
+                        RegisterCurrentChoicesAndProbabilities(lineCCRecInfos[lid], choices, choiceProbabilities, context, 
+                            1e-5, 1);
+                    }
+
+                    assert(choices.size() == choiceProbabilities.size());
+
+                    if (std::accumulate(choiceProbabilities.begin(), choiceProbabilities.end(), 0.0) == 0.0){
+                        std::cerr << "all zero probabilities!" << std::endl;
+                        break;
+                    }
+
+                    // a workaround constructor since VS2013 lacks the range iterator constructor for std::discrete_distribution
+                    int ord = 0;
+                    std::discrete_distribution<int> distribution(choiceProbabilities.size(),
+                        0.0, 1000.0,
+                        [&choiceProbabilities, &ord](double){
+                        return choiceProbabilities[ord++];
+                    });
+
+                    // made choice
+                    const Choice & choice = choices[distribution(gen)];
+                    if (choice.isRegionCC){ // a region cc is chosen
+                        if (OPT_DisplayMessages)
+                            std::cout << "chosen unit - region cc: " << choice.ccId << "  plane chosen: " << choice.choiceId << std::endl;
+                        candidate.component.first[choice.ccId] = ChoosePrediction(regionCCRecInfos, choice);
+                        regionCCIdsNotDeterminedYet.erase(choice.ccId);
+
+                        // update related line ccs
+                        for (auto & pp : context.regionLineConnections){
+                            LineIndex li = pp.first.second;
+                            RegionIndex ri = pp.first.first;
+                            int thisLineCCId = context.lineConnectedComponentIds.at(li);
+                            int thisRegionCCId = context.regionConnectedComponentIds.at(ri);
+                            if (!core::Contains(lineCCIdsNotDeterminedYet, thisLineCCId)){ // checked already
+                                continue;
+                            }
+                            if (thisRegionCCId == choice.ccId){ // related
+                                auto & plane = candidate.component.first[thisRegionCCId];
+                                auto & samplePoints = pp.second;
+                                for (auto & p : samplePoints){
+                                    auto anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), p), plane).position;
+                                    InsertRegionAnchorToLineCC(lineCCRecInfos[thisLineCCId], ri, li, anchor, context);
+                                }
+                            }
                         }
-                        for (int lid : lineCCIdsNotDeterminedYet){
-                            RegisterCurrentChoicesAndProbabilities(lineCCRecInfos[lid], choices, choiceProbabilities, context, 1e-5);
-                        }
 
-                        assert(choices.size() == choiceProbabilities.size());
-
-                        if (std::accumulate(choiceProbabilities.begin(), choiceProbabilities.end(), 0.0) == 0.0){
-                            std::cerr << "all zero probabilities!" << std::endl;
-                            break;
-                        }
-
-                        // VS2013 lacks the range iterator constructor for std::discrete_distribution...
-                        int ord = 0;
-                        std::discrete_distribution<int> distribution(choiceProbabilities.size(),
-                            0.0, 1.0,
-                            [&choiceProbabilities, &ord](double){
-                            return choiceProbabilities[ord++];
-                        });
-
-                        // made choice
-                        const Choice & choice = choices[distribution(gen)];
-                        if (choice.isRegionCC){ // a region cc is chosen
-                            if (OPT_DisplayMessages)
-                                std::cout << "chosen unit - region cc: " << choice.ccId << "  plane chosen: " << choice.choiceId << std::endl;
-                            candidate.component.first[choice.ccId] = ChoosePrediction(regionCCRecInfos, choice);
-                            regionCCIdsNotDeterminedYet.erase(choice.ccId);
-
-                            // update related line ccs
-                            for (auto & pp : context.regionLineConnections){
-                                LineIndex li = pp.first.second;
-                                RegionIndex ri = pp.first.first;
-                                int thisLineCCId = context.lineConnectedComponentIds.at(li);
-                                int thisRegionCCId = context.regionConnectedComponentIds.at(ri);
-                                if (!core::Contains(lineCCIdsNotDeterminedYet, thisLineCCId)){ // checked already
+                        // update related region ccs 
+                        for (int i = 0; i < context.views.size(); i++){
+                            for (auto & b : context.regionsNets[i].regions().elements<1>()){
+                                auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
+                                auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
+                                int thisRegionCCId1 = context.regionConnectedComponentIds.at(ri1);
+                                int thisRegionCCId2 = context.regionConnectedComponentIds.at(ri2);
+                                int determinedRegionCCId = choice.ccId, notDeterminedRegionCCId;
+                                RegionIndex determinedRi;
+                                if (thisRegionCCId1 == choice.ccId && core::Contains(regionCCIdsNotDeterminedYet, thisRegionCCId2)){
+                                    determinedRi = ri1;
+                                    notDeterminedRegionCCId = thisRegionCCId2;
+                                }
+                                else if (thisRegionCCId2 == choice.ccId && core::Contains(regionCCIdsNotDeterminedYet, thisRegionCCId1)){
+                                    determinedRi = ri2;
+                                    notDeterminedRegionCCId = thisRegionCCId1;
+                                }
+                                else{
                                     continue;
                                 }
-                                if (thisRegionCCId == choice.ccId){ // related
-                                    auto & plane = candidate.component.first[thisRegionCCId];
-                                    auto & samplePoints = pp.second;
-                                    for (auto & p : samplePoints){
-                                        auto anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), p), plane).position;
-                                        InsertRegionAnchorToLineCC(lineCCRecInfos[thisLineCCId], ri, li, anchor, context);
-                                    }
-                                }
-                            }
-
-                            // update related region ccs 
-                            for (int i = 0; i < context.views.size(); i++){
-                                for (auto & b : context.regionsNets[i].regions().elements<1>()){
-                                    auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
-                                    auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
-                                    int thisRegionCCId1 = context.regionConnectedComponentIds.at(ri1);
-                                    int thisRegionCCId2 = context.regionConnectedComponentIds.at(ri2);
-                                    int determinedRegionCCId = choice.ccId, notDeterminedRegionCCId;
-                                    RegionIndex determinedRi;
-                                    if (thisRegionCCId1 == choice.ccId && core::Contains(regionCCIdsNotDeterminedYet, thisRegionCCId2)){
-                                        determinedRi = ri1;
-                                        notDeterminedRegionCCId = thisRegionCCId2;
-                                    }
-                                    else if (thisRegionCCId2 == choice.ccId && core::Contains(regionCCIdsNotDeterminedYet, thisRegionCCId1)){
-                                        determinedRi = ri2;
-                                        notDeterminedRegionCCId = thisRegionCCId1;
-                                    }
-                                    else{
-                                        continue;
-                                    }
-                                    auto & plane = candidate.component.first[determinedRegionCCId];
-                                    auto & cam = context.views[i].camera;
-                                    for (auto & pts : b.data.sampledPoints){
-                                        for (auto & p : pts){
-                                            auto dir = cam.spatialDirection(p);
-                                            auto anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
-                                            InsertRegionAnchorToRegionCC(regionCCRecInfos[notDeterminedRegionCCId], determinedRi, anchor, context);
-                                        }
-                                    }
-                                }
-                            }
-
-                        }
-                        else{ // a line cc is chosen
-                            if (OPT_DisplayMessages)
-                                std::cout << "chosen unit - line cc: " << choice.ccId << "  depthfactor chosen: " << choice.choiceId << std::endl;
-                            candidate.component.second[choice.ccId] = ChoosePrediction(lineCCRecInfos, choice);
-                            lineCCIdsNotDeterminedYet.erase(choice.ccId);
-
-                            // update related unchecked region anchors
-                            for (auto & pp : context.regionLineConnections){
-                                LineIndex li = pp.first.second;
-                                RegionIndex ri = pp.first.first;
-                                int thisLineCCId = context.lineConnectedComponentIds.at(li);
-                                int thisRegionCCId = context.regionConnectedComponentIds.at(ri);
-                                if (!core::Contains(regionCCIdsNotDeterminedYet, thisRegionCCId)){ // checked already, ignore
-                                    continue;
-                                }
-                                if (thisLineCCId == choice.ccId){ // related 
-                                    auto & samplePoints = pp.second;
-                                    const auto & line = context.reconstructedLines.at(li);
-                                    for (auto & p : samplePoints){ // insert anchors into the rec info of the related region
-                                        auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), p))
-                                            .second.second;
-                                        InsertLineAnchorToRegionCC(regionCCRecInfos[thisRegionCCId], li,
-                                            pOnLine * candidate.component.second[thisLineCCId], context);
+                                auto & plane = candidate.component.first[determinedRegionCCId];
+                                auto & cam = context.views[i].camera;
+                                for (auto & pts : b.data.sampledPoints){
+                                    for (auto & p : pts){
+                                        auto dir = cam.spatialDirection(p);
+                                        auto anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
+                                        InsertRegionAnchorToRegionCC(regionCCRecInfos[notDeterminedRegionCCId], determinedRi, anchor, context);
                                     }
                                 }
                             }
                         }
 
-                    } // while
-                    std::cout << "expansion done" << std::endl;
+                    }
+                    else{ // a line cc is chosen
+                        if (OPT_DisplayMessages)
+                            std::cout << "chosen unit - line cc: " << choice.ccId << "  depthfactor chosen: " << choice.choiceId << std::endl;
+                        candidate.component.second[choice.ccId] = ChoosePrediction(lineCCRecInfos, choice);
+                        lineCCIdsNotDeterminedYet.erase(choice.ccId);
 
-
-                    // score this candidate
-                    double distanceSumOfRegionRegionConnections = 0.0;
-                    double distanceSumOfRegionLineConnections = 0.0;
-
-                    auto & regionConnectedComponentPlanes = candidate.component.first;
-                    auto & lineConnectedComponentDepthFactors = candidate.component.second;
-
-                    // region region
-                    for (int i = 0; i < context.views.size(); i++){
-                        auto & cam = context.views[i].camera;
-                        for (auto & b : context.regionsNets[i].regions().elements<1>()){
-                            auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
-                            auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
-                            int regionCCId1 = context.regionConnectedComponentIds.at(ri1);
-                            int regionCCId2 = context.regionConnectedComponentIds.at(ri2);
-                            for (auto & pts : b.data.sampledPoints){
-                                for (auto & p : pts){
-                                    auto dir = cam.spatialDirection(p);
-                                    auto anchor1 = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir),
-                                        regionConnectedComponentPlanes[regionCCId1]).position;
-                                    auto anchor2 = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir),
-                                        regionConnectedComponentPlanes[regionCCId2]).position;
-                                    double distance = Distance(anchor1, anchor2);
-                                    distanceSumOfRegionRegionConnections += distance;
+                        // update related unchecked region anchors
+                        for (auto & pp : context.regionLineConnections){
+                            LineIndex li = pp.first.second;
+                            RegionIndex ri = pp.first.first;
+                            int thisLineCCId = context.lineConnectedComponentIds.at(li);
+                            int thisRegionCCId = context.regionConnectedComponentIds.at(ri);
+                            if (!core::Contains(regionCCIdsNotDeterminedYet, thisRegionCCId)){ // checked already, ignore
+                                continue;
+                            }
+                            if (thisLineCCId == choice.ccId){ // related 
+                                auto & samplePoints = pp.second;
+                                const auto & line = context.reconstructedLines.at(li);
+                                for (auto & p : samplePoints){ // insert anchors into the rec info of the related region
+                                    auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), p))
+                                        .second.second;
+                                    InsertLineAnchorToRegionCC(regionCCRecInfos[thisRegionCCId], li,
+                                        pOnLine * candidate.component.second[thisLineCCId], context);
                                 }
                             }
                         }
                     }
-                    // region line
-                    for (auto & pp : context.regionLineConnections){
-                        LineIndex li = pp.first.second;
-                        RegionIndex ri = pp.first.first;
-                        int lineCCId = context.lineConnectedComponentIds.at(li);
-                        int regionCCId = context.regionConnectedComponentIds.at(ri);
-                        auto & samplePoints = pp.second;
-                        auto line = context.reconstructedLines.at(li);
-                        line.first *= lineConnectedComponentDepthFactors[lineCCId];
-                        line.second *= lineConnectedComponentDepthFactors[lineCCId];
-                        for (auto & p : samplePoints){ // insert anchors into the rec info of the related region
-                            auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), p))
-                                .second.second;
-                            auto pOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), p),
-                                regionConnectedComponentPlanes[regionCCId]).position;
-                            double distance = Distance(pOnLine, pOnRegion);
-                            distanceSumOfRegionLineConnections += distance;
+
+                } // while
+                std::cout << "expansion done" << std::endl;
+
+
+                // score this candidate
+                double distanceSumOfRegionRegionConnections = 0.0;
+                double distanceSumOfRegionLineConnections = 0.0;
+
+                auto & regionConnectedComponentPlanes = candidate.component.first;
+                auto & lineConnectedComponentDepthFactors = candidate.component.second;
+
+                // region region
+                for (int i = 0; i < context.views.size(); i++){
+                    auto & cam = context.views[i].camera;
+                    for (auto & b : context.regionsNets[i].regions().elements<1>()){
+                        auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
+                        auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
+                        int regionCCId1 = context.regionConnectedComponentIds.at(ri1);
+                        int regionCCId2 = context.regionConnectedComponentIds.at(ri2);
+                        for (auto & pts : b.data.sampledPoints){
+                            for (auto & p : pts){
+                                auto dir = cam.spatialDirection(p);
+                                auto anchor1 = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir),
+                                    regionConnectedComponentPlanes[regionCCId1]).position;
+                                auto anchor2 = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir),
+                                    regionConnectedComponentPlanes[regionCCId2]).position;
+                                double distance = Distance(anchor1, anchor2);
+                                distanceSumOfRegionRegionConnections += distance;
+                            }
                         }
                     }
-
-                    std::cout << "distance sum of region-region connections: " << distanceSumOfRegionRegionConnections << std::endl;
-                    std::cout << "distance sum of region-line connections: " << distanceSumOfRegionLineConnections << std::endl;
-
-                    candidate.score = -(distanceSumOfRegionRegionConnections + distanceSumOfRegionLineConnections);
-
-                    /* if (OPT_DisplayOnEachTrial){
-                         IF_DEBUG_USING_VISUALIZERS{
-                         DisplayReconstruction(-1, -1, {}, {},
-                         candidate.component.first, candidate.component.second, context);
-                         }
-                         }*/
-
-                } // for
-
-
-                // select best candidate
-
-                auto result = std::max_element(candidates.begin(), candidates.end())->component;
-
-                // visualize result of this task
-                if (OPT_DisplayAtLast){
-                    IF_DEBUG_USING_VISUALIZERS{
-                    DisplayReconstruction(-1, -1, {}, {},
-                    result.first, result.second, context);
                 }
+                // region line
+                for (auto & pp : context.regionLineConnections){
+                    LineIndex li = pp.first.second;
+                    RegionIndex ri = pp.first.first;
+                    int lineCCId = context.lineConnectedComponentIds.at(li);
+                    int regionCCId = context.regionConnectedComponentIds.at(ri);
+                    auto & samplePoints = pp.second;
+                    auto line = context.reconstructedLines.at(li);
+                    line.first *= lineConnectedComponentDepthFactors[lineCCId];
+                    line.second *= lineConnectedComponentDepthFactors[lineCCId];
+                    for (auto & p : samplePoints){ // insert anchors into the rec info of the related region
+                        auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), p))
+                            .second.second;
+                        auto pOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), p),
+                            regionConnectedComponentPlanes[regionCCId]).position;
+                        double distance = Distance(pOnLine, pOnRegion);
+                        distanceSumOfRegionLineConnections += distance;
+                    }
+                }
+
+                std::cout << "distance sum of region-region connections: " << distanceSumOfRegionRegionConnections << std::endl;
+                std::cout << "distance sum of region-line connections: " << distanceSumOfRegionLineConnections << std::endl;
+
+                candidate.score = -(distanceSumOfRegionRegionConnections + distanceSumOfRegionLineConnections);
+
+                if (OPT_DisplayOnEachTrial){
+                    IF_DEBUG_USING_VISUALIZERS{
+                        DisplayReconstruction(-1, -1, {}, {},
+                        candidate.component.first, candidate.component.second, context);
+                    }
+                }
+
+            }; // task
+
+            // run tasks
+            int parallelNum = OPT_NumThreads;
+            for (int i = 0; i < trialNum; i += parallelNum){
+                std::vector<std::thread> parallelThreads(parallelNum);
+                for (int t = i; t < std::min(trialNum, i + parallelNum); t++){
+                    parallelThreads[t-i] = std::thread(task, t);
+                }
+                for (int t = i; t < std::min(trialNum, i + parallelNum); t++){
+                    parallelThreads[t-i].join();
                 }
             }
 
 
-            
+            // select best candidate
+
+            auto result = std::max_element(candidates.begin(), candidates.end())->component;
+
+            // visualize result of this task
+            if (OPT_DisplayAtLast){
+                IF_DEBUG_USING_VISUALIZERS{
+                    DisplayReconstruction(-1, -1, {}, {},
+                    result.first, result.second, context);
+                }
+            }
+
+
+
         }
 
     }
