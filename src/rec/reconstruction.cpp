@@ -2003,7 +2003,19 @@ namespace panoramix {
                 }
             }
 
+            // update reconstructed lines
+            for (auto & l : reconstructedLines){
+                int lineCCId = lineConnectedComponentIds.at(l.first);
+                double lineDepthFactor = result.second[lineCCId];
+                l.second.first *= lineDepthFactor;
+                l.second.second *= lineDepthFactor;
+            }
 
+            // install reoconstructed region planes
+            for (auto & r : regionConnectedComponentIds){
+                int regionCCId = r.second;
+                reconstructedPlanes[r.first] = result.first[regionCCId];
+            }
 
         }
 
