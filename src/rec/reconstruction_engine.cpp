@@ -17,6 +17,7 @@ extern "C" {
 
 #include "../core/feature.hpp"
 #include "../core/containers.hpp"
+#include "../core/algorithms.hpp"
 
 #include "../vis/visualize2d.hpp"
 #include "../vis/visualize3d.hpp"
@@ -1452,6 +1453,9 @@ namespace panoramix {
             static const bool OPT_OnlyConsiderManhattanPlanes = true;
             static const bool OPT_IgnoreTooSkewedPlanes = true;
             static const bool OPT_IgnoreTooFarAwayPlanes = true;
+            static const bool OPT_RandomSelection = true;
+            static const bool OPT_RandomSelectionRepeatTimes = 10;
+
 
             // internal class definitions
 
@@ -1899,17 +1903,23 @@ namespace panoramix {
             // build maximum heap for checking            
             std::vector<int> lineCCIds(_globalData.lineConnectedComponentsNum);
             std::iota(lineCCIds.begin(), lineCCIds.end(), 0);
+            std::set<int> lineCCIdsNotCheckedYet(lineCCIds.begin(), lineCCIds.end());
             core::MaxHeap<int> lineCCIdsForChecking(lineCCIds.begin(), lineCCIds.end(), 
                 [&lineCCRecInfos, this](int ccId) -> double {
                 return lineCCRecInfos[ccId].calcPriority(*this);
             });
+            
             std::vector<int> regionCCIds(_globalData.regionConnectedComponentsNum);
             std::iota(regionCCIds.begin(), regionCCIds.end(), 0);
+            std::set<int> regionCCIdsNotCheckedYet(regionCCIds.begin(), regionCCIds.end());
             core::MaxHeap<int> regionCCIdsForChecking(regionCCIds.begin(), regionCCIds.end(),
                 [&regionCCRecInfos, this](int ccId) -> double{
                 return regionCCRecInfos[ccId].calcPriority(*this);
             });
 
+
+            
+            int repeatNum = OPT_RandomSelection ? OPT_RandomSelectionRepeatTimes : 1;
 
 
             int iterCount = 0;
@@ -2051,6 +2061,32 @@ namespace panoramix {
             if (OPT_DisplayAtLast)
                 displayAll(-1, -1, lineCCIdsForChecking, regionCCIdsForChecking);
            
+            
+            // collect violations
+            struct Constraint {
+                enum {RegionLine, RegionRegion} type;
+
+            };
+            std::vector<Constraint> constraints;
+            for (auto & pp : _globalData.regionLineIntersectionSampledPoints){
+                LineIndex li = pp.first.second;
+                RegionIndex ri = pp.first.first;
+                int thisLineCCId = _globalData.lineConnectedComponentIds[li];
+                int thisRegionCCId = _globalData.regionConnectedComponentIds[ri];
+
+                // todo
+            }
+            for (auto & v : _views.elements<0>()){
+                auto & regions = v.data.regionNet->regions();
+                for (auto & b : regions.elements<1>()){
+                    RegionIndex ri1 = { v.topo.hd, b.topo.lowers[0] };
+                    RegionIndex ri2 = { v.topo.hd, b.topo.lowers[1] };
+                    int regionCCId1 = _globalData.regionConnectedComponentIds[ri1];
+                    int regionCCId2 = _globalData.regionConnectedComponentIds[ri2];
+
+                    // todo
+                }
+            }
 
 
         }

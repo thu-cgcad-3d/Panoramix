@@ -10,39 +10,7 @@
 #include <unordered_set>
  
 namespace panoramix {
-    namespace core {    
-
-        template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>>
-        inline bool IsInfOrNaN(const T & v){
-            return std::isinf(v) || std::isnan(v);
-        }
-
-        template <class ContainerT, class ValueT>
-        inline bool Contains(const ContainerT & c, const ValueT & v) {
-            return std::find(c.cbegin(), c.cend(), v) != c.cend();
-        }
-
-        template <class KeyT, class ValueT, class PredT, class AllocT>
-        inline bool Contains(const std::map<KeyT, ValueT, PredT, AllocT> & m, const KeyT & k) {
-            return m.find(k) != m.end();
-        }
-
-        template <class KeyT, class PredT, class AllocT>
-        inline bool Contains(const std::set<KeyT, PredT, AllocT> & m, const KeyT & k) {
-            return m.find(k) != m.end();
-        }
-
-        template <class KeyT, class ValueT, class HasherT, class KeyeqT, class AllocT>
-        inline bool Contains(const std::unordered_map<KeyT, ValueT, HasherT, KeyeqT, AllocT> & m, const KeyT & k) {
-            return m.find(k) != m.end();
-        }
-
-        template <class KeyT, class HasherT, class KeyeqT, class AllocT>
-        inline bool Contains(const std::unordered_set<KeyT, HasherT, KeyeqT, AllocT> & m, const KeyT & k) {
-            return m.find(k) != m.end();
-        }
-
-
+    namespace core {         
  
         // element of container MUST support PredT(ele) -> bool
         // ConditionalIterator will automatically skip elements which DO NOT satisfy PredT in iteration
@@ -160,6 +128,7 @@ namespace panoramix {
         public:
             struct Wrapper {
                 inline explicit Wrapper(const ProcessorT & p) : processor(p) {}
+                inline explicit Wrapper(ProcessorT && p) : processor(std::move(p)) {}
                 inline Wrapper & operator = (const T & data){
                     processor(data);
                     return *this;
@@ -168,6 +137,7 @@ namespace panoramix {
             };
         public:
             inline explicit YieldIterator(const ProcessorT & p) : _w(p) {}
+            inline explicit YieldIterator(ProcessorT && p) : _w(std::move(p)) {}
             inline YieldIterator & operator ++() {
                 return *this;
             }
@@ -179,8 +149,8 @@ namespace panoramix {
         };
 
         template <class T, class ProcessorT>
-        inline YieldIterator<T, ProcessorT> MakeYield(const ProcessorT & p) {
-            return YieldIterator<T, ProcessorT>(p);
+        inline YieldIterator<T, std::decay_t<ProcessorT>> MakeYield(ProcessorT && p) {
+            return YieldIterator<T, std::decay_t<ProcessorT>>(std::forward<ProcessorT>(p));
         }
 
 

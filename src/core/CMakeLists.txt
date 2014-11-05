@@ -9,5 +9,3 @@ add_library (${CORE_STATIC_LIB} STATIC ${CORE_SOURCES} ${CORE_HEADERS})
 target_link_libraries (${CORE_STATIC_LIB}
 	${Fundamental_LIBS}
 )
-
-

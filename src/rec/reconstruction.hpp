@@ -46,6 +46,7 @@ namespace panoramix {
         // component indices classes
         template <class HandleT>
         struct ComponentIndexInView {
+            static_assert(IsHandle<HandleT>::value, "HandleT must be core::Handle<T>!");
             int viewId;
             HandleT handle;
             template <class Archiver>
@@ -122,9 +123,21 @@ namespace panoramix {
             const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & interViewLineIncidences, 
             int lineConnectedComponentsNum, const ComponentIndexHashMap<LineIndex, int> & lineConnectedComponentIds,
             ComponentIndexHashMap<LineIndex, Line3> & reconstructedLines,
-            double constantEtaForFirstLineInEachConnectedComponent);
+            double constantEtaForFirstLineInEachConnectedComponent,
+            bool twiceEstimation);
 
 
+        void EstimateSpatialRegionPlanes(const std::vector<View<PerspectiveCamera>> & views,
+            const std::vector<RegionsNet> & regionsNets, const std::vector<LinesNet> & linesNets,
+            const std::array<Vec3, 3> & vanishingPoints,
+            const ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappings,
+            const ComponentIndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> & regionLineConnections,
+            const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & interViewLineIncidences,
+            int regionConnectedComponentsNum, const ComponentIndexHashMap<RegionIndex, int> & regionConnectedComponentIds,
+            int lineConnectedComponentsNum, const ComponentIndexHashMap<LineIndex, int> & lineConnectedComponentIds,
+            ComponentIndexHashMap<LineIndex, Line3> & reconstructedLines,
+            ComponentIndexHashMap<RegionIndex, Plane3> & reconstructedPlanes,
+            const Image & globalTexture);
         
 
 

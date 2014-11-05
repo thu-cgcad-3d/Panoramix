@@ -61,7 +61,7 @@ namespace panoramix {
         inline T normalize(const T & d) { return d / norm(d); }
 
         template <class To, class From, int N>
-        inline Vec<To, N> ConvertTo(const Vec<To, N> & v) {
+        inline Vec<To, N> ConvertTo(const Vec<From, N> & v) {
             Vec<To, N> out;
             for (int i = 0; i < N; i++) {
                 out[i] = static_cast<To>(v[i]);
@@ -101,6 +101,7 @@ namespace panoramix {
             inline Ratio(const T & c) : numerator(c), denominator(1) {}
             inline Ratio(const T & c, const S & s) : numerator(c), denominator(s) {}
             inline T value() const { return numerator / denominator; }
+            inline T value(const T & retIfDenomIsZero) const { return denominator == 0 ? retIfDenomIsZero : (numerator / denominator); }
             T numerator;
             S denominator;
         };

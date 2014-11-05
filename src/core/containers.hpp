@@ -166,13 +166,13 @@ namespace panoramix {
             inline int size() const { return _vecData.size(); }
             inline void clear() { _vecData.clear(); _rtree->RemoveAll(); }
 
-            using const_iterator = typename std::vector<std::pair<const Vec<T, N>, ValueT>>::const_iterator;
+            using const_iterator = typename std::vector<std::pair<Vec<T, N>, ValueT>>::const_iterator;
             inline const_iterator begin() const { return _vecData.begin(); }
             inline const_iterator end() const { return _vecData.end(); }
             inline const_iterator cbegin() const { return _vecData.cbegin(); }
             inline const_iterator cend() const { return _vecData.cend(); }
 
-            using iterator = typename std::vector<std::pair<const Vec<T, N>, ValueT>>::iterator;
+            using iterator = typename std::vector<std::pair<Vec<T, N>, ValueT>>::iterator;
             inline iterator begin() { return _vecData.begin(); }
             inline iterator end() { return _vecData.end(); }
 
@@ -225,7 +225,7 @@ namespace panoramix {
 
         private:
             T _influenceRange;
-            std::vector<std::pair<const Vec<T, N>, ValueT>> _vecData;
+            std::vector<std::pair<Vec<T, N>, ValueT>> _vecData;
             std::shared_ptr<third_party::RTree<int, T, N>> _rtree;
         };
 

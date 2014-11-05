@@ -55,6 +55,13 @@ namespace panoramix {
         using HandleAtLevel = Handle<AtLevel<L>>;
 
 
+        template <class T>
+        struct IsHandle : std::false_type {};
+
+        template <class Tag>
+        struct IsHandle<Handle<Tag>> : std::true_type {};
+
+
         
         /**
          * @brief Topology structs

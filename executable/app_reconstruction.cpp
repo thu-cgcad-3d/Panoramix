@@ -39,6 +39,7 @@ struct All {
     rec::ComponentIndexHashMap<rec::LineIndex, int> lineConnectedComponentIds;
 
     rec::ComponentIndexHashMap<rec::LineIndex, core::Line3> reconstructedLines;
+    rec::ComponentIndexHashMap<rec::RegionIndex, core::Plane3> reconstructedPlanes;
 
     template <class Archiver>
     inline void serialize(Archiver & ar) {
@@ -47,7 +48,7 @@ struct All {
             regionOverlappings, regionLineConnections, interViewLineIncidences, 
             regionConnectedComponentsNum, regionConnectedComponentIds,
             lineConnectedComponentsNum, lineConnectedComponentIds,
-            reconstructedLines);
+            reconstructedLines, reconstructedPlanes);
     }
 
 };
@@ -68,15 +69,14 @@ int main(int argc, char * argv[], char * envp[]) {
         core::Image im = cv::imread(in);
         core::ResizeToMakeWidthUnder(im, 2000);
         all.originalView = rec::CreatePanoramicView(im);
-        std::vector<core::PerspectiveCamera> cams = {
+        all.perspectiveViews = rec::PerspectiveSampling(all.originalView, {
             core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
             core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
             core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
             core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
             core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
             core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
-        };
-        all.perspectiveViews = rec::PerspectiveSampling(all.originalView, cams);
+        });
         core::SaveToDisk(out, all);
     });
 
@@ -98,24 +98,35 @@ int main(int argc, char * argv[], char * envp[]) {
         core::LoadFromDisk(in, all);
         all.vanishingPoints = 
             rec::EstimateVanishingPointsAndClassifyLines(all.perspectiveViews, all.linesNets);
+        rec::RecognizeRegionLineConstraints(all.perspectiveViews, all.regionsNets, all.linesNets,
+            all.regionOverlappings, all.regionLineConnections, all.interViewLineIncidences,
+            M_PI_4 / 8.0, 15.0);
+        rec::ComputeConnectedComponentsUsingRegionLineConstraints(all.perspectiveViews, all.regionsNets, all.linesNets,
+            all.regionOverlappings, all.regionLineConnections, all.interViewLineIncidences,
+            all.regionConnectedComponentsNum, all.regionConnectedComponentIds,
+            all.lineConnectedComponentsNum, all.lineConnectedComponentIds);
         core::SaveToDisk(out, all);
     });
 
     core::UpdateIfFileIsTooOld(cacheFileAfterEstimatingVPs, cacheFileAfterEstimatingLineDepths,
         [&](const std::string & in, const std::string & out) {
         core::LoadFromDisk(in, all);
-        rec::RecognizeRegionLineConstraints(all.perspectiveViews, all.regionsNets, all.linesNets,
-            all.regionOverlappings, all.regionLineConnections, all.interViewLineIncidences, 
-            M_PI_4 / 8.0, 15.0);
-        rec::ComputeConnectedComponentsUsingRegionLineConstraints(all.perspectiveViews, all.regionsNets, all.linesNets,
-            all.regionOverlappings, all.regionLineConnections, all.interViewLineIncidences, 
-            all.regionConnectedComponentsNum, all.regionConnectedComponentIds, 
-            all.lineConnectedComponentsNum, all.lineConnectedComponentIds);
         rec::EstimateSpatialLineDepths(all.perspectiveViews, all.linesNets, all.vanishingPoints, all.interViewLineIncidences, 
             all.lineConnectedComponentsNum, all.lineConnectedComponentIds, 
-            all.reconstructedLines, 10.0);
+            all.reconstructedLines, 10.0, false);
         core::SaveToDisk(out, all);
-    }, true);
+    });
+
+    core::UpdateIfFileIsTooOld(cacheFileAfterEstimatingLineDepths, "xxx",
+        [&](const std::string & in, const std::string & out) {
+        core::LoadFromDisk(in, all);
+        rec::EstimateSpatialRegionPlanes(all.perspectiveViews, all.regionsNets, all.linesNets, all.vanishingPoints,
+            all.regionOverlappings, all.regionLineConnections, all.interViewLineIncidences,
+            all.regionConnectedComponentsNum, all.regionConnectedComponentIds,
+            all.lineConnectedComponentsNum, all.lineConnectedComponentIds,
+            all.reconstructedLines, all.reconstructedPlanes, all.originalView.image);
+        //core::SaveToDisk(out, all);
+    });
 
    
     return 0;

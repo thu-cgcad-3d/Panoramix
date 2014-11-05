@@ -1,5 +1,6 @@
 #include "../src/core/misc.hpp"
 #include "../src/core/utilities.hpp"
+#include "../src/core/algorithms.hpp"
 #include "../src/core/containers.hpp"
 
 #include <random>
@@ -327,17 +328,6 @@ DEBUG_TEST(UtilTest, EigenVectorsAndValues) {
 
         std::sort(result.begin(), result.end());
         std::cout << "planarity = " << (result[1].score / result[2].score * result[1].score / result[0].score) << std::endl;
-    }
-}
-
-
-TEST(UtilTest, CreateLinearSequence) {
-    size_t n = 500;
-    size_t low = -150, high = 100;
-    std::vector<size_t> vs(n);
-    core::CreateLinearSequence(vs.begin(), vs.end(), low, high);
-    for (size_t i = 0; i < n; i++){
-        EXPECT_EQ(low + i * (high - low) / n, vs[i]);
     }
 }
 

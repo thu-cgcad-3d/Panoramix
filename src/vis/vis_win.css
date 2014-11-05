@@ -1,5 +1,5 @@
 QMenuBar {
-	background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,stop:0 lightgrey, stop:1 white);
+	background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,stop:0 lightgrey, stop:1 transparent);
 }
 QMenuBar::item {
 	padding: 1px 7px;
@@ -30,7 +30,7 @@ QMenu::item:checked {
 	background-color: #456789
 }
 QStatusBar {
-	background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,stop:0 white, stop:1 lightgrey);
+	background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,stop:0 transparent, stop:1 lightgrey);
 	color: #DDDDDD
 }
 QDialog {

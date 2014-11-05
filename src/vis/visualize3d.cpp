@@ -278,6 +278,9 @@ namespace panoramix {
                     mwin->setWindowTitle(QString::fromStdString(viz.params.winName));
                     mwin->setWindowIcon(Singleton::DefaultConfiguration().icon);
                     mwin->setStyleSheet(Singleton::DefaultConfiguration().css);
+                    auto palette = mwin->palette();
+                    palette.setColor(QPalette::Window, MakeQColor(viz.params.backgroundColor));
+                    mwin->setPalette(palette);
                     //qDebug() << mwin->styleSheet();
                     if (autoSetCamera) {
                         w->autoSetCamera();
