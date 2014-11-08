@@ -7,6 +7,8 @@
 using namespace panoramix;
 
 TEST(Tuples, Invoke){
+
+    static_assert(core::SequenceElement<2, core::Sequence<1, 2, 3, 4>>::value == 3, "");
     
     auto args = std::make_tuple(1, 2, 3, 4, 5.0);
     auto fun = [](int a, int b, int c, int d, double e) {

@@ -22,14 +22,7 @@ namespace panoramix {
             static const bool All = (Product != 0);
             static const bool Any = (Sum != 0);
         };
-        template <int N>
-        struct Sequence<N> {
-            static const int Count = 1;
-            static const int Sum = N;
-            static const int Product = N;
-            static const bool All = (Product != 0);
-            static const bool Any = (Sum != 0);
-        };
+
         template <int N, int ...S>
         struct Sequence<N, S...> {
             static const int Count = 1 + Sequence<S...>::Count;
@@ -39,11 +32,26 @@ namespace panoramix {
             static const bool Any = (Sum != 0);
         };
 
+        // sequence type judger
         template <class T>
         struct IsSequence : std::false_type {};
 
         template <int ... S>
         struct IsSequence<Sequence<S...>> : std::true_type {};
+
+        // sequence element getter
+        template <int Id, class SequenceT>
+        struct SequenceElement {};
+
+        template <int N, int ...S>
+        struct SequenceElement<0, Sequence<N, S...>> {
+            static const int value = N;
+        };
+
+        template <int Id, int N, int ...S>
+        struct SequenceElement<Id, Sequence<N, S...>>{
+            static const int value = SequenceElement<Id - 1, Sequence<S...>>::value;
+        };
 
 
         // use SequenceGenerator<N>::type to deduct Sequence<0, 1, 2, 3, ..., N-1>
