@@ -197,6 +197,18 @@ namespace panoramix {
             return BoundingBoxOfRange(std::begin(cont), std::end(cont));
         }
 
+        // bounding box of pair-range
+        template <class PairIteratorT>
+        auto BoundingBoxOfPairRange(PairIteratorT begin, PairIteratorT end) -> decltype(BoundingBox((*begin).second)) {
+            using BoxType = decltype(BoundingBox((*begin).second));
+            BoxType box;
+            while (begin != end){
+                auto b = BoundingBox((*begin).second);
+                box |= b;
+                ++begin;
+            }
+            return box;
+        }
 
 
         // the default bounding box functor
