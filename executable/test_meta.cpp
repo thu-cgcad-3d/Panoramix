@@ -1,4 +1,4 @@
-#include "../src/core/template_utilities.hpp"
+#include "../src/core/meta.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
@@ -9,6 +9,9 @@ using namespace panoramix;
 TEST(Tuples, Invoke){
 
     static_assert(core::SequenceElement<2, core::Sequence<1, 2, 3, 4>>::value == 3, "");
+    static_assert(core::SequenceContainsElement<4, core::Sequence<4, 3, 2>>::value, "");
+    static_assert(core::TupleContainsType<float, std::tuple<bool, float, int>>::value, "");
+    static_assert(core::TypeFirstLocationInTuple<float, std::tuple<int, float, double>>::value == 1, "");
     
     auto args = std::make_tuple(1, 2, 3, 4, 5.0);
     auto fun = [](int a, int b, int c, int d, double e) {

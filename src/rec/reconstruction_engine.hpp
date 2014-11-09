@@ -47,7 +47,7 @@ namespace panoramix {
 
             struct ViewData;
             struct ViewConnectionData;
-            using ViewsGraph = GraphicalModel02<ViewData, ViewConnectionData>;
+            using ViewsGraph = HomogeneousGraph02<ViewData, ViewConnectionData>;
             using ViewHandle = HandleAtLevel<0>;
             using ViewConnectionHandle = HandleAtLevel<1>;
 

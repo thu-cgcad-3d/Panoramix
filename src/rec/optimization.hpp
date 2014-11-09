@@ -11,7 +11,7 @@
 #include "../deriv/derivative.hpp"
 
 #include "../core/basic_types.hpp"
-#include "../core/graphical_model.hpp"
+#include "../core/graph.hpp"
 #include "../core/utilities.hpp"
 
 

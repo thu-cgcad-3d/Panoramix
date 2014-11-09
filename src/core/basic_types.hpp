@@ -541,7 +541,7 @@ namespace panoramix {
             inline Vec<T, N> size() const { return maxCorner - minCorner; }
             inline Point<T, N> center() const { return (maxCorner + minCorner) * (0.5); }
             inline Sphere<T, N> outerSphere() const { return Sphere<T, N>{center(), static_cast<T>(norm(maxCorner - minCorner) / 2.0)}; }
-            inline const Box & expand(const T & s) const {
+            inline const Box & expand(const T & s) {
                 for (int i = 0; i < N; i++){
                     minCorner[i] -= s;
                     maxCorner[i] += s;
@@ -647,6 +647,13 @@ namespace panoramix {
         template <class T, int N>
         inline Box<T, N> BoundingBox(const PositionOnLine<T, N> & p) {
             return BoundingBox(p.position);
+        }
+
+        Box2 BoundingBox(const Image & im);
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const Sphere<T, N> & s){
+            return Box<T, N>(s.center).expand(s.radius);
         }
 
         template <class T>

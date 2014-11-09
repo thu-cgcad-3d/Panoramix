@@ -1,7 +1,7 @@
 #ifndef PANORAMIX_CORE_REGIONS_NET_HPP
 #define PANORAMIX_CORE_REGIONS_NET_HPP
 
-#include "../core/graphical_model.hpp"
+#include "../core/graph.hpp"
 #include "../core/utilities.hpp"
 #include "../core/feature.hpp"
 
@@ -50,7 +50,7 @@ namespace panoramix {
                         interleavedLength, sampledPoints);
                 }
             };
-            using RegionsGraph = GraphicalModel02<RegionData, BoundaryData>;
+            using RegionsGraph = HomogeneousGraph02<RegionData, BoundaryData>;
             using RegionHandle = HandleAtLevel<0>;
             using BoundaryHandle = HandleAtLevel<1>;
 

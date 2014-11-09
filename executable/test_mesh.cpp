@@ -1,4 +1,4 @@
-#include "../src/core/graphical_model.hpp"
+#include "../src/core/graph.hpp"
 #include "../src/core/mesh_maker.hpp"
 #include "../src/vis/visualize3d.hpp"
 
@@ -49,17 +49,16 @@ TEST(MeshTest, Conversion) {
     }
 
     vis::Visualizer3D()
-        << vis::manip3d::SetColorTableDescriptor(vis::ColorTableDescriptor::RGB)
-        << vis::manip3d::SetDefaultColor(vis::ColorTag::Black)
+        << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB)
+        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
         << lines
-        << vis::manip3d::SetDefaultColor(vis::ColorTag::Red)
-        << vis::manip3d::SetPointSize(20)
+        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Red)
+        << vis::manip3d::SetDefaultPointSize(20)
         << points
         << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500, 
             core::Vec3(-3, 0, 0), 
             core::Vec3(0.5, 0.5, 0.5)))
         << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
-        << vis::manip3d::AutoSetCamera
         << vis::manip3d::Show();
 }
 
@@ -192,7 +191,7 @@ TEST(ConstraintGraphTest, Basic) {
 
 TEST(GraphicalModelTest, Basic) {
 
-    using CGraph = core::GraphicalModel<core::Dummy, core::LayerConfig<core::Dummy, core::Dynamic>>;
+    using CGraph = core::HomogeneousGraph<core::Dummy, core::LayerConfig<core::Dummy, core::Dynamic>>;
 
     CGraph cgraph;
     auto c0 = cgraph.add();

@@ -57,7 +57,7 @@ TEST(Visualizer3D, RenderClassifiedLines) {
         << vis::manip3d::Show();
 }
 
-DEBUG_TEST(Visualizer3D, RenderSpatialProjectedPolygon) {
+TEST(Visualizer3D, RenderSpatialProjectedPolygon) {
     vis::SpatialProjectedPolygon p[2];
     p[0].plane = core::Plane3({ 0, -1, 0 }, { 0, 1, 0 });
     p[0].projectionCenter = { 0, 0, 0 };
@@ -84,5 +84,5 @@ DEBUG_TEST(Visualizer3D, RenderSpatialProjectedPolygon) {
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
-    return DEBUG_RUN_ALL_TESTS();
+    return RUN_ALL_TESTS();
 }

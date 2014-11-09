@@ -11,9 +11,9 @@
 #include <set>
 #include <initializer_list>
 
-#include "../core/template_utilities.hpp"
+#include "../core/meta.hpp"
 #include "../core/misc.hpp"
-#include "../core/graphical_model.hpp"
+#include "../core/graph.hpp"
 
 #include "data_traits_definitions.hpp"
 

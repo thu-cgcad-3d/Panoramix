@@ -1,7 +1,7 @@
 #ifndef PANORAMIX_REC_LINES_NET_HPP
 #define PANORAMIX_REC_LINES_NET_HPP
 
-#include "../core/graphical_model.hpp"
+#include "../core/graph.hpp"
 #include "../core/utilities.hpp"
 #include "../core/feature.hpp"
  
@@ -45,7 +45,7 @@ namespace panoramix {
                     ar(relationCenter, junctionWeight, type);
                 }
             };
-            using LinesGraph = GraphicalModel02 < LineData, LineRelationData > ;
+            using LinesGraph = HomogeneousGraph02 < LineData, LineRelationData > ;
             using LineHandle = HandleAtLevel < 0 > ;
             using LineRelationHandle = HandleAtLevel < 1 > ;
         

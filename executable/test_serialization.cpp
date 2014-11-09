@@ -1,10 +1,9 @@
 #include "../src/core/basic_types.hpp"
-#include "../src/core/graphical_model.hpp"
+#include "../src/core/graph.hpp"
 
 #include <random>
 
 #include "gtest/gtest.h"
-
 #include "test_config.hpp"
 
 using namespace panoramix;
@@ -32,12 +31,12 @@ TEST(Serialization, BasicTypes) {
     }
 
     {
-        std::ofstream os(ProjectTestDataDirStr_Serialization + "/data1data2.cereal", std::ios::binary);
+        std::ofstream os(ProjectDataDirStrings::Serialization + "/data1data2.cereal", std::ios::binary);
         cereal::BinaryOutputArchive archive(os);
         archive(data1, data2);
     }
     {
-        std::ifstream is(ProjectTestDataDirStr_Serialization + "/data1data2.cereal", std::ios::binary);
+        std::ifstream is(ProjectDataDirStrings::Serialization + "/data1data2.cereal", std::ios::binary);
         cereal::BinaryInputArchive archive(is);
         archive(data1c, data2c);
     } 
@@ -55,9 +54,9 @@ TEST(Serialization, BasicTypes) {
 
 }
 
-TEST(Serialization, GraphicalModel) {
+TEST(Serialization, HomogeneousGraph) {
 
-    using CGraph = core::GraphicalModel<core::Dummy, core::LayerConfig<core::Dummy, core::Dynamic>, core::LayerConfig<core::Point3, 4>>;
+    using CGraph = core::HomogeneousGraph<core::Dummy, core::LayerConfig<core::Dummy, core::Dynamic>, core::LayerConfig<core::Point3, 4>>;
 
     CGraph cgraph, cgraph2;
     auto c0 = cgraph.add();
@@ -73,12 +72,12 @@ TEST(Serialization, GraphicalModel) {
     auto ccc = cgraph.add<2>({ cc012, cc123, cc230, cc301 }, core::Point3(1, 2, 3));
 
     {
-        std::ofstream os(ProjectTestDataDirStr_Serialization + "/gm.cereal", std::ios::binary);
+        std::ofstream os(ProjectDataDirStrings::Serialization + "/gm.cereal", std::ios::binary);
         cereal::BinaryOutputArchive archive(os);
         archive(cgraph);
     }
     {
-        std::ifstream is(ProjectTestDataDirStr_Serialization + "/gm.cereal", std::ios::binary);
+        std::ifstream is(ProjectDataDirStrings::Serialization + "/gm.cereal", std::ios::binary);
         cereal::BinaryInputArchive archive(is);
         archive(cgraph2);
     }
@@ -95,13 +94,13 @@ TEST(Serialization, FileTime) {
     
     core::Line3 testEntity;
     {
-        std::ofstream os(ProjectTestDataDirStr_Serialization + "/line.cereal", std::ios::binary);
+        std::ofstream os(ProjectDataDirStrings::Serialization + "/line.cereal", std::ios::binary);
         cereal::BinaryOutputArchive archive(os);
         archive(testEntity);
     }
 
-    auto t1 = core::LastModifiedTimeOfFile(ProjectTestDataDirStr_Serialization + "/gm.cereal");
-    auto t2 = core::LastModifiedTimeOfFile(ProjectTestDataDirStr_Serialization + "/line.cereal");
+    auto t1 = core::LastModifiedTimeOfFile(ProjectDataDirStrings::Serialization + "/gm.cereal");
+    auto t2 = core::LastModifiedTimeOfFile(ProjectDataDirStrings::Serialization + "/line.cereal");
     auto t3 = core::CurrentTime();
 
     ASSERT_LE(t1, t2);

@@ -43,5 +43,11 @@ namespace panoramix {
             return GeoCoord{ pixel.x * M_PI * 2 / longidiv - M_PI, pixel.y * M_PI / latidiv - M_PI_2 };
         }
 
+
+
+        Box2 BoundingBox(const Image & im){
+            return Box2(Point2(0, 0), Point2(im.cols, im.rows));
+        }
+
     }
 }
