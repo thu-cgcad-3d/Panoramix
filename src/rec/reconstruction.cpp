@@ -1299,20 +1299,34 @@ namespace panoramix {
 
 
             // mixed graph 
+            struct MixedGraphVertex;
+            struct MixedGraphEdge;
+
+            using MixedGraph = HomogeneousGraph02<std::shared_ptr<MixedGraphVertex>, MixedGraphEdge>;
+            using MixedGraphVertHandle = HandleAtLevel<0>;
+            using MixedGraphEdgeHandle = HandleAtLevel<1>;
+
             struct MixedGraphVertex {
                 int ccId;
                 virtual bool isRegionCC() const = 0;
-                virtual void update(const RecContext & context) = 0;
-                virtual void registerChoices(const RecContext & context,
+                
+                virtual void update(const RecContext & context, const MixedGraph & g,
+                    const MixedGraphEdgeHandle & modifiedEdge) = 0;
+                
+                virtual void registerChoices(const RecContext & context, const MixedGraph & g,
                     std::vector<Choice> & choices, std::vector<double> & probabilities,
-                    double baseProb, int maxChoiceNum);
-                virtual void predict(const RecContext & context, Plane3 & plane) const {}
-                virtual void predict(const RecContext & context, double & depthFactor) const {}
+                    double baseProb, int maxChoiceNum) const = 0;
+
+                virtual void predict(const RecContext & context, const MixedGraph & g,
+                    Plane3 & plane) const {}
+                virtual void predict(const RecContext & context, const MixedGraph & g,
+                    double & depthFactor) const {}
             };
             struct MixedGraphEdge {
                 std::vector<Enabled<Point3>> anchors;
             };
-            using MixedGraph = HomogeneousGraph02<std::shared_ptr<MixedGraphVertex>, MixedGraphEdge>;
+            
+
 
             struct RegionCCVertex : MixedGraphVertex {
                 ComponentIndexHashSet<RegionIndex> regionIndices;
@@ -1331,10 +1345,19 @@ namespace panoramix {
                 PlaneConfidenceMap candidatePlanesByRoot;
 
                 virtual bool isRegionCC() const { return true; }
-                virtual void update(const RecContext & context) {
+                virtual void update(const RecContext & context,
+                    const MixedGraph & g, const MixedGraphEdgeHandle & modifiedEdge) {
 
                 }
-                virtual void predict(const RecContext & context, Plane3 & plane) const {
+
+                virtual void registerChoices(const RecContext & context, const MixedGraph & g,
+                    std::vector<Choice> & choices, std::vector<double> & probabilities,
+                    double baseProb, int maxChoiceNum) const {
+
+                }
+
+                virtual void predict(const RecContext & context, const MixedGraph & g,
+                    Plane3 & plane) const {
 
                 }
             };
@@ -1385,10 +1408,19 @@ namespace panoramix {
                 using DepthConfidenceMap = VecMap<double, 1, double>;
                 DepthConfidenceMap candidateDepthFactors;
                 virtual bool isRegionCC() const { return false; }
-                virtual void update(const RecContext & context) {
+                virtual void update(const RecContext & context,
+                    const MixedGraph & g, const MixedGraphEdgeHandle & modifiedEdge) {
 
                 }
-                virtual void predict(const RecContext & context, double & depthFactor) const {
+
+                virtual void registerChoices(const RecContext & context, const MixedGraph & g,
+                    std::vector<Choice> & choices, std::vector<double> & probabilities,
+                    double baseProb, int maxChoiceNum) const {
+
+                }
+
+                virtual void predict(const RecContext & context, const MixedGraph & g,
+                    double & depthFactor) const {
 
                 }
             };

@@ -391,8 +391,7 @@ namespace panoramix {
 
         // image
         using Image = cv::Mat;
-        template <class T>
-        using ImageWithType = cv::Mat_<T> ;
+        template <class T> using ImageWithType = cv::Mat_<T> ;
         using PixelLoc = cv::Point;
 
         inline int AreaOfImage(const Image & im) { return im.cols * im.rows; }
