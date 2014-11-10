@@ -150,7 +150,7 @@ namespace panoramix {
         template <class T, int N, class ValueT>
         class VecMap {
         public:
-            inline explicit VecMap(const T & ir = Epsilon)
+            inline explicit VecMap(const T & ir = 1e-5)
                 : _influenceRange(ir), _rtree(std::make_shared<third_party::RTree<int, T, N>>()) {
             }
             template <class IteratorT,
@@ -234,7 +234,7 @@ namespace panoramix {
         template <class T, int N>
         class VecMultiSet {
         public:
-            inline explicit VecMultiSet(const T & ir = Epsilon)
+            inline explicit VecMultiSet(const T & ir = 1e-5)
                 : _influenceRange(ir), _fullSize(0), _rtree(std::make_shared<third_party::RTree<int, T, N>>()) {
             }
             template <class IteratorT, 
