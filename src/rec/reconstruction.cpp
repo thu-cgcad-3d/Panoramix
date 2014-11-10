@@ -1394,7 +1394,7 @@ namespace panoramix {
                 auto lcvPtr = new LineCCVertex;
                 auto & lci = *lcvPtr;
                 lci.ccId = lineCCId;
-                lci.candidateDepthFactors = LineCCRecInfo::DepthConfidenceMap(1e-4);
+                lci.candidateDepthFactors = LineCCVertex::DepthConfidenceMap(1e-4);
                 lci.candidateDepthFactors[1.0] = 0.1; // initialize with a 1.0 depth for start
                 // collect lis
                 for (auto & p : context.lineConnectedComponentIds){

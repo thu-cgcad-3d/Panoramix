@@ -232,7 +232,9 @@ namespace panoramix {
             return BoundingBox(p.position);
         }
 
-        Box2 BoundingBox(const Image & im);
+        inline Box2 BoundingBox(const Image & im){
+            return Box2(Point2(0, 0), Point2(im.cols, im.rows));
+        }
 
         template <class T, int N>
         inline Box<T, N> BoundingBox(const Sphere<T, N> & s){
@@ -252,6 +254,13 @@ namespace panoramix {
         template <class T>
         inline auto BoundingBox(const Scored<T> & s) -> decltype(BoundingBox(s.component)){
             return BoundingBox(s.component);
+        }
+
+        // return null box if s.enabled == false
+        template <class T>
+        inline auto BoundingBox(const Enabled<T> & s) -> decltype(BoundingBox(s.component)){
+            using BoxType = decltype(BoundingBox(s.component));
+            return s.enabled ? BoundingBox(s.component) : BoxType();
         }
        
 

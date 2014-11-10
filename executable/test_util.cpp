@@ -82,6 +82,9 @@ TEST(UtilTest, BoundingBox) {
     ASSERT_EQ(0.5, box.minCorner[2]);
     ASSERT_EQ(1, box.maxCorner[2]);
 
+    Enabled<Line3> lines2[] = { EnableAs(l1, true), EnableAs(l2, false) };
+    ASSERT_TRUE(BoundingBoxOfContainer(lines2) == BoundingBox(l1));
+
 }
 
 

@@ -20,8 +20,3 @@ target_link_libraries (
 	${Fundamental_LIBS} 
 	${Qt_LIBS}
 )
-
-
-
-
-

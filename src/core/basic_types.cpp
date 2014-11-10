@@ -44,10 +44,5 @@ namespace panoramix {
         }
 
 
-
-        Box2 BoundingBox(const Image & im){
-            return Box2(Point2(0, 0), Point2(im.cols, im.rows));
-        }
-
     }
 }
