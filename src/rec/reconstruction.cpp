@@ -1332,33 +1332,44 @@ namespace panoramix {
                 }
 
                 Rational computeDeterminedAnchorsRatio(const MixedGraph & g,
-                    const MixedGraphVertHandle & selfHandle) const{
-                    Rational r(0.0, 0.0);
-                    for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
-                        const auto & ed = g.data(eh);
-                        r.denominator += ed.anchors.size();
-                        r.numerator += ed.determined ? ed.anchors.size() : 0.0;
-                    }
-                    return r;
-                }
-
+                    const MixedGraphVertHandle & selfHandle) const;
                 std::vector<Point3> collectDeterminedAnchors(const MixedGraph & g,
-                    const MixedGraphVertHandle & selfHandle) const {
-                    std::vector<Point3> ps;
-                    for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
-                        const auto & ed = g.data(eh);
-                        if (ed.determined)
-                            ps.insert(ps.end(), ed.anchors.begin(), ed.anchors.end());
-                    }
-                    return ps;
-                }
+                    const MixedGraphVertHandle & selfHandle) const;
             };
+
             struct MixedGraphEdge {
+                enum { RegionRegion, RegionLine } type;
+                std::pair<RegionIndex, RegionIndex> riri; // valid when type == RegionRegion
+                std::pair<RegionIndex, LineIndex> rili; // valid when type == RegionLine                
                 bool determined; // whether the anchors are determined
                 // represent anchor locations if determined, reprensent anchor directions if not determined
                 std::vector<Point3> anchors; 
             };
-            
+
+            // implementation
+            Rational MixedGraphVertex::computeDeterminedAnchorsRatio(const MixedGraph & g,
+                const MixedGraphVertHandle & selfHandle) const{
+                Rational r(0.0, 0.0);
+                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
+                    const auto & ed = g.data(eh);
+                    r.denominator += ed.anchors.size();
+                    r.numerator += ed.determined ? ed.anchors.size() : 0.0;
+                }
+                return r;
+            }
+
+            std::vector<Point3> MixedGraphVertex::collectDeterminedAnchors(const MixedGraph & g,
+                const MixedGraphVertHandle & selfHandle) const {
+                std::vector<Point3> ps;
+                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
+                    const auto & ed = g.data(eh);
+                    if (ed.determined)
+                        ps.insert(ps.end(), ed.anchors.begin(), ed.anchors.end());
+                }
+                return ps;
+            }
+
+            // subclassing
             // vertex representing a region cc
             struct RegionCCVertex : MixedGraphVertex {
                 ComponentIndexHashSet<RegionIndex> regionIndices;
@@ -1547,9 +1558,6 @@ namespace panoramix {
                 plane = (candidatePlanesByRoot.begin() + choice.choiceId)->second.plane;
             }
 
-
-
-
             // vertex representing a line cc
             struct LineCCVertex : MixedGraphVertex {
                 ComponentIndexHashSet<LineIndex> lineIndices;
@@ -1589,22 +1597,61 @@ namespace panoramix {
                 const MixedGraph & g, const MixedGraphVertHandle & selfHandle) {
 
                 candidateDepthFactors.clear();
-                auto determinedAnchors = collectDeterminedAnchors(g, selfHandle);
+                candidateDepthFactors[1.0] = 0.1;
+                std::vector<double> depthFactors;
+                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
+                    auto & ed = g.data(eh);
+                    if (ed.determined){
+                        assert(ed.type == MixedGraphEdge::RegionLine);
+                        assert(context.lineConnectedComponentIds.at(ed.rili.second) == ccId);
+                        auto & li = ed.rili.second;
+                        auto & line = context.reconstructedLines.at(li);
+                        for (auto & anchor : ed.anchors){
+                            double depthVarOnLine = norm(DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
+                                .second.second);
+                            double depthValueOnRegion = norm(anchor);
+                            if (!IsInfOrNaN(depthVarOnLine) && !IsInfOrNaN(depthValueOnRegion))
+                                candidateDepthFactors[depthValueOnRegion / depthVarOnLine] += 1.0;
+                        }
+                    }
+                }
 
-                // todo
             }
 
             void LineCCVertex::registerChoices(const RecContext & context,
                 const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                 std::vector<Choice> & choices, std::vector<double> & probabilities,
                 double baseProb, int maxChoiceNum) const {
-                // todo
+               
+                std::vector<Scored<Choice>> newChoices;
+                int depthId = 0;
+                double maxVote = 0.0;
+                for (auto & c : candidateDepthFactors)
+                    maxVote = maxVote < c.second ? c.second : maxVote;
+
+                double fullCompleteness = computeDeterminedAnchorsRatio(g, selfHandle).value(0.0);
+                
+                for (auto & c : candidateDepthFactors){
+                    auto & candidateDepthVote = c.second;
+                    Choice choice = { false, ccId, depthId++ };
+                    double probability = (fullCompleteness * 0.9
+                        + double(lineIndices.size()) / context.reconstructedLines.size() * 0.1)
+                        * candidateDepthVote / maxVote;
+                    newChoices.push_back(ScoreAs(choice, probability + baseProb));
+                }
+
+                std::sort(newChoices.begin(), newChoices.end(), std::greater<void>());
+                for (int i = 0; i < std::min<int>(maxChoiceNum, newChoices.size()); i++){
+                    choices.push_back(newChoices[i].component);
+                    probabilities.push_back(newChoices[i].score);
+                }
             }
 
             void LineCCVertex::pickChoice(const RecContext & context,
                 const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                 const Choice & choice, double & depthFactor) const{
-                // todo
+                assert(!choice.isRegionCC);
+                depthFactor = (candidateDepthFactors.begin() + choice.choiceId)->first[0];
             }
 
 
