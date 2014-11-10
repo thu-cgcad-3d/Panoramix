@@ -1,6 +1,5 @@
 *.sublime-workspace
 build
-executable/gtest*
 unused
 .tags*
 doc/paperscript/*/*.aux
