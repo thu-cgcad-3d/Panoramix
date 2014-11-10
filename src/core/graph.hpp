@@ -49,10 +49,10 @@ namespace panoramix {
 
         // is handle ?
         template <class T>
-        struct IsHandle : std::false_type {};
+        struct IsHandle : no {};
 
         template <class Tag>
-        struct IsHandle<Handle<Tag>> : std::true_type{};
+        struct IsHandle<Handle<Tag>> : yes {};
 
         // decorated handle types
 

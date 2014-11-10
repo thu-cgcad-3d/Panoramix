@@ -1303,6 +1303,9 @@ namespace panoramix {
                 int ccId;
                 virtual bool isRegionCC() const = 0;
                 virtual void update(const RecContext & context) = 0;
+                virtual void registerChoices(const RecContext & context,
+                    std::vector<Choice> & choices, std::vector<double> & probabilities,
+                    double baseProb, int maxChoiceNum);
                 virtual void predict(const RecContext & context, Plane3 & plane) const {}
                 virtual void predict(const RecContext & context, double & depthFactor) const {}
             };
