@@ -306,7 +306,7 @@ TEST(UtilTest, DistanceBetweenTwoLines) {
 }
 
 
-DEBUG_TEST(UtilTest, EigenVectorsAndValues) {
+TEST(UtilTest, EigenVectorsAndValues) {
     {
         std::vector<core::Point3> pts;
         std::generate_n(std::back_inserter(pts), 10000, [](){
@@ -332,7 +332,7 @@ DEBUG_TEST(UtilTest, EigenVectorsAndValues) {
 }
 
 TEST(UtilTest, RTreeWrapperLargeData) {
-//void run(){
+
     std::list<core::Line2> lines;
     std::generate_n(std::back_inserter(lines), 100000,
         [](){
@@ -656,11 +656,11 @@ TEST(UtilTest, TopologicalSort){
     }
 
     {
-        std::vector<int> verts(50000);
+        std::vector<int> verts(1000);
         std::iota(verts.begin(), verts.end(), 0);
         std::random_shuffle(verts.begin(), verts.end());
         struct Edge { int from, to; };
-        std::vector<Edge> edges(50000);
+        std::vector<Edge> edges(1000);
         std::generate(edges.begin(), edges.end(), [&verts](){
             int v1 = rand() % verts.size();
             int v2 = rand() % verts.size();
@@ -689,5 +689,5 @@ TEST(UtilTest, TopologicalSort){
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
-    return DEBUG_RUN_ALL_TESTS();
+    return RUN_ALL_TESTS();
 }

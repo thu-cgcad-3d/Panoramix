@@ -37,7 +37,7 @@ TEST(Optimization, Quadratic) {
 }
 
 
-TEST(Optimization, DISABLED_InverseMatrix){
+TEST(Optimization, InverseMatrix){
 
     ExpressionGraph graph;
     MatrixXd xv;
@@ -61,8 +61,7 @@ TEST(Optimization, DISABLED_InverseMatrix){
 
 
 
-TEST(Optimization, DISABLED_ANNLite) {
-//void run(){
+TEST(Optimization, ANNLite) {
 
     double deltas[] = { 0.01 };
 
@@ -122,7 +121,7 @@ TEST(Optimization, DISABLED_ANNLite) {
         MatrixXd lastchangeb1 = MatrixXd::Zero(1, hidn);
         MatrixXd lastchangeb2 = MatrixXd::Zero(1, outputn);
 
-        for (int i = 0; i < 10000; i++) {
+        for (int i = 0; i < 500; i++) {
             activeIndex = i % samplesn;
             std::cout << "energy: " << energy.execute(weights1, weights2) << std::endl;
             MatrixXd g1 = grad1.execute(weights1, weights2, energy);
@@ -147,23 +146,10 @@ TEST(Optimization, DISABLED_ANNLite) {
 
 }
 
-
-TEST(Optimization, ANN) {
-
-    
-
-}
-
-
-
-
-
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
-    //run();
-    return 1;
 }
 
 

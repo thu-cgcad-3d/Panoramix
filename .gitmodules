@@ -7,3 +7,6 @@
 [submodule "thirdparty/eigen"]
 	path = thirdparty/eigen
 	url = https://github.com/RLovelett/eigen.git
+[submodule "thirdparty/googletest"]
+	path = thirdparty/googletest
+	url = https://github.com/tomgr/googletest-mirror.git

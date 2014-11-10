@@ -9,7 +9,7 @@ file (GLOB APPS "." app_*)
 
 
 # google test
-set (GTEST_DIR "gtest-1.7.0")
+set (GTEST_DIR "../thirdparty/googletest")
 include_directories (${GTEST_DIR}/include)
 
 # define test data location
@@ -65,5 +65,6 @@ foreach (TFILE ${APPS})
 	target_link_libraries (${T} ${CORE_STATIC_LIB} ${DERIV_STATIC_LIB} ${VIS_STATIC_LIB} ${REC_STATIC_LIB} ${Qt_LIBS})
 	set_property(TARGET ${T} PROPERTY FOLDER "${PROJECT_NAME}.Apps")
 endforeach()
+
 
 

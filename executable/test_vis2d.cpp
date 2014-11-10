@@ -5,13 +5,10 @@
 #include <string>
 #include <random>
 
-using namespace panoramix;
+#include "test_config.hpp"
 
-// PROJECT_TEST_DATA_DIR_STR is predefined using CMake
-static const std::string ProjectTestDataDirStr = PROJECT_TEST_DATA_DIR_STR;
-static const std::string ProjectTestDataDirStr_Normal = ProjectTestDataDirStr + "/normal";
-static const std::string ProjectTestDataDirStr_PanoramaIndoor = ProjectTestDataDirStr + "/panorama/indoor";
-static const std::string ProjectTestDataDirStr_PanoramaOutdoor = ProjectTestDataDirStr + "/panorama/outdoor";
+using namespace panoramix;
+using namespace test;
 
 TEST(Visualizer2D, Visualizer2D) {
 
@@ -21,7 +18,7 @@ TEST(Visualizer2D, Visualizer2D) {
     std::vector<Visualizer2D> vis(1);
 
     {
-        Image im = cv::imread(ProjectTestDataDirStr_PanoramaOutdoor + "/panohk.png");
+        Image im = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/panohk.png");
         vis[0].setImage(im);
         vis[0] << Line2({ 0, 10 }, { 100, 500 });
     }

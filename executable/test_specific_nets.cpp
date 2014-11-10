@@ -11,7 +11,7 @@ using namespace test;
 TEST(RegionsNet, RegionsNet) {
 
     for (int i = 0; i < 4; i++) {
-        std::string name = ProjectTestDataDirStr_Normal + "/" + "sampled_" + std::to_string(i) + ".png";
+        std::string name = ProjectDataDirStrings::Normal + "/" + "sampled_" + std::to_string(i) + ".png";
         cv::Mat im = cv::imread(name);
         rec::RegionsNet regNet(im);
         regNet.buildNetAndComputeGeometricFeatures();
@@ -26,7 +26,7 @@ TEST(RegionsNet, RegionsNet) {
 TEST(LinesNet, LinesNet){
 
     for (int i = 0; i < 4; i++) {
-        std::string name = ProjectTestDataDirStr_Normal + "/" + "sampled_" + std::to_string(i) + ".png";
+        std::string name = ProjectDataDirStrings::Normal + "/" + "sampled_" + std::to_string(i) + ".png";
         cv::Mat im = cv::imread(name);
         rec::RegionsNet regNet(im);
         regNet.buildNetAndComputeGeometricFeatures();
