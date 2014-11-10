@@ -1296,8 +1296,6 @@ namespace panoramix {
             };
 
 
-
-
             // mixed graph 
             struct MixedGraphVertex;
             struct MixedGraphEdge;
@@ -1306,35 +1304,70 @@ namespace panoramix {
             using MixedGraphVertHandle = HandleAtLevel<0>;
             using MixedGraphEdgeHandle = HandleAtLevel<1>;
 
+            // mixed graph vertex base
             struct MixedGraphVertex {
                 int ccId;
                 virtual bool isRegionCC() const = 0;
-                
-                virtual void update(const RecContext & context, const MixedGraph & g,
-                    const MixedGraphEdgeHandle & modifiedEdge) = 0;
-                
-                virtual void registerChoices(const RecContext & context, const MixedGraph & g,
+
+                // build candidates
+                virtual void buildCandidates(const RecContext & context,
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle) = 0;
+
+                // register current avaible choices using candidates
+                virtual void registerChoices(const RecContext & context, 
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                     std::vector<Choice> & choices, std::vector<double> & probabilities,
                     double baseProb, int maxChoiceNum) const = 0;
 
-                virtual void predict(const RecContext & context, const MixedGraph & g,
-                    Plane3 & plane) const {}
-                virtual void predict(const RecContext & context, const MixedGraph & g,
-                    double & depthFactor) const {}
+                // pick choice
+                virtual void pickChoice(const RecContext & context, 
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
+                    const Choice & choice, Plane3 & plane) const {
+                    SHOULD_NEVER_BE_CALLED();
+                }
+                virtual void pickChoice(const RecContext & context, 
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
+                    const Choice & choice, double & depthFactor) const {
+                    SHOULD_NEVER_BE_CALLED();
+                }
+
+                Rational computeDeterminedAnchorsRatio(const MixedGraph & g,
+                    const MixedGraphVertHandle & selfHandle) const{
+                    Rational r(0.0, 0.0);
+                    for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
+                        const auto & ed = g.data(eh);
+                        r.denominator += ed.anchors.size();
+                        r.numerator += ed.determined ? ed.anchors.size() : 0.0;
+                    }
+                    return r;
+                }
+
+                std::vector<Point3> collectDeterminedAnchors(const MixedGraph & g,
+                    const MixedGraphVertHandle & selfHandle) const {
+                    std::vector<Point3> ps;
+                    for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
+                        const auto & ed = g.data(eh);
+                        if (ed.determined)
+                            ps.insert(ps.end(), ed.anchors.begin(), ed.anchors.end());
+                    }
+                    return ps;
+                }
             };
             struct MixedGraphEdge {
-                std::vector<Enabled<Point3>> anchors;
+                bool determined; // whether the anchors are determined
+                // represent anchor locations if determined, reprensent anchor directions if not determined
+                std::vector<Point3> anchors; 
             };
             
-
-
+            // vertex representing a region cc
             struct RegionCCVertex : MixedGraphVertex {
                 ComponentIndexHashSet<RegionIndex> regionIndices;
                 Plane3 tangentialPlane;
                 Vec3 xOnTangentialPlane, yOnTangentialPlane;
                 double regionVisualArea;
                 double regionConvexContourVisualArea;
-
+                
+                // volitile data
                 struct PlaneConfidenceData {
                     Plane3 plane;
                     std::vector<int> inlierAnchors;
@@ -1345,23 +1378,18 @@ namespace panoramix {
                 PlaneConfidenceMap candidatePlanesByRoot;
 
                 virtual bool isRegionCC() const { return true; }
-                virtual void update(const RecContext & context,
-                    const MixedGraph & g, const MixedGraphEdgeHandle & modifiedEdge) {
-
-                }
-
-                virtual void registerChoices(const RecContext & context, const MixedGraph & g,
+                virtual void buildCandidates(const RecContext & context,
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle);
+                virtual void registerChoices(const RecContext & context,
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                     std::vector<Choice> & choices, std::vector<double> & probabilities,
-                    double baseProb, int maxChoiceNum) const {
-
-                }
-
-                virtual void predict(const RecContext & context, const MixedGraph & g,
-                    Plane3 & plane) const {
-
-                }
+                    double baseProb, int maxChoiceNum) const;
+                virtual void pickChoice(const RecContext & context,
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
+                    const Choice & choice, Plane3 & plane) const;
             };
 
+            // create a new region cc vertex
             std::shared_ptr<MixedGraphVertex> CreateRegionCCVertex(int regionCCId, const RecContext & context){
                 auto rcvPtr = new RegionCCVertex;
                 auto & rci = *rcvPtr;
@@ -1401,30 +1429,146 @@ namespace panoramix {
                 return std::shared_ptr<MixedGraphVertex>(rcvPtr);
             }
 
+            // region cc vertex method implementations
+            void RegionCCVertex::buildCandidates(const RecContext & context,
+                const MixedGraph & g, const MixedGraphVertHandle & selfHandle) {
+
+                // make candidate planes
+                candidatePlanesByRoot.clear();
+
+                double scale = context.initialBoundingBox.outerSphere().radius;
+                auto determinedAnchors = collectDeterminedAnchors(g, selfHandle);
+
+                // merge near anchors
+                std::vector<decltype(determinedAnchors.begin())> mergedAnchorIters;
+                core::MergeNearRTree(determinedAnchors.begin(), determinedAnchors.end(), std::back_inserter(mergedAnchorIters), 
+                    core::no(), scale / 100.0);
+
+                // iterate over merged anchors to collect plane candidates
+                for (auto & i : mergedAnchorIters){
+                    const Point3 & anchor = *i;
+                    for (auto & vp : context.vanishingPoints){
+                        Plane3 plane(anchor, vp);
+                        if (OPT_IgnoreTooSkewedPlanes){
+                            if (norm(plane.root()) <= scale / 5.0)
+                                continue;
+                        }
+                        if (OPT_IgnoreTooFarAwayPlanes){
+                            bool valid = true;
+                            for (auto & ri : regionIndices){
+                                if (!valid)
+                                    break;
+                                auto & rd = GetData(ri, context.regionsNets);
+                                if (rd.contours.back().size() < 3)
+                                    continue;
+                                auto & cam = context.views[ri.viewId].camera;
+                                for (int i = 0; i < rd.contours.back().size(); i++){
+                                    auto dir = cam.spatialDirection(ToPoint2(rd.contours.back()[i]));
+                                    auto intersectionOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
+                                    if (norm(intersectionOnPlane) > scale * 5.0){
+                                        valid = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!valid)
+                                continue;
+                        }
+
+                        static const double distFromPointToPlaneThres = scale / 12.0;
+
+                        // insert new root data
+                        auto & pcd = candidatePlanesByRoot[plane.root()];
+                        pcd.plane = plane;
+
+                        // collect distance votes
+                        double distVotes = 0.0;
+                        std::vector<Vec3> nearbyAnchors;
+                        for (int i = 0; i < mergedAnchorIters.size(); i++){
+                            double distanceToPlane = plane.distanceTo(*mergedAnchorIters[i]);
+                            if (distanceToPlane > distFromPointToPlaneThres)
+                                continue;
+                            distVotes += Gaussian(distanceToPlane, distFromPointToPlaneThres);
+                            pcd.inlierAnchors.push_back(i);
+                            nearbyAnchors.push_back(*mergedAnchorIters[i]);
+                        }
+                        pcd.regionInlierAnchorsDistanceVotesSum = distVotes;
+                        pcd.regionInlierAnchorsConvexContourVisualArea =
+                            ComputeVisualAreaOfDirections(tangentialPlane,
+                                xOnTangentialPlane, yOnTangentialPlane, nearbyAnchors, true);
+                    }
+                }
+               
+            }
+
+            void RegionCCVertex::registerChoices(const RecContext & context,
+                const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
+                std::vector<Choice> & choices, std::vector<double> & probabilities,
+                double baseProb, int maxChoiceNum) const{
+
+                std::vector<Scored<Choice>> newChoices;
+
+                int planeId = 0;
+                double maxMeanVote = 0.0;
+                for (auto & c : candidatePlanesByRoot){
+                    maxMeanVote = std::max(maxMeanVote, c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size());
+                }
+
+                double fullCompleteness = computeDeterminedAnchorsRatio(g, selfHandle).value(0.0);
+
+                // collect all choices and probabilities
+                for (auto & c : candidatePlanesByRoot){
+                    auto & candidatePlaneData = c.second;
+                    Choice choice = { true, ccId, planeId++ };
+                    auto inlierOccupationRatio =
+                        candidatePlaneData.regionInlierAnchorsConvexContourVisualArea / regionConvexContourVisualArea;
+                    double probability =
+                        (fullCompleteness *
+                        (inlierOccupationRatio > 0.4 ? 1.0 : 1e-4)) *
+                        c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size();
+
+                    assert(c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size() <= 1.0);
+                    newChoices.push_back(ScoreAs(choice, probability + baseProb));
+                }
+
+                // select best [maxChoiceNum] choices
+                std::sort(newChoices.begin(), newChoices.end(), std::greater<void>());
+                for (int i = 0; i < std::min<int>(maxChoiceNum, newChoices.size()); i++){
+                    choices.push_back(newChoices[i].component);
+                    probabilities.push_back(newChoices[i].score);
+                }
+            }
+
+            void RegionCCVertex::pickChoice(const RecContext & context,
+                const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
+                const Choice & choice, Plane3 & plane) const {
+                assert(choice.isRegionCC);
+                assert(choice.ccId == ccId);
+                plane = (candidatePlanesByRoot.begin() + choice.choiceId)->second.plane;
+            }
 
 
+
+
+            // vertex representing a line cc
             struct LineCCVertex : MixedGraphVertex {
                 ComponentIndexHashSet<LineIndex> lineIndices;
                 using DepthConfidenceMap = VecMap<double, 1, double>;
                 DepthConfidenceMap candidateDepthFactors;
+
                 virtual bool isRegionCC() const { return false; }
-                virtual void update(const RecContext & context,
-                    const MixedGraph & g, const MixedGraphEdgeHandle & modifiedEdge) {
-
-                }
-
-                virtual void registerChoices(const RecContext & context, const MixedGraph & g,
+                virtual void buildCandidates(const RecContext & context,
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle);
+                virtual void registerChoices(const RecContext & context,
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                     std::vector<Choice> & choices, std::vector<double> & probabilities,
-                    double baseProb, int maxChoiceNum) const {
-
-                }
-
-                virtual void predict(const RecContext & context, const MixedGraph & g,
-                    double & depthFactor) const {
-
-                }
+                    double baseProb, int maxChoiceNum) const;
+                virtual void pickChoice(const RecContext & context,
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
+                    const Choice & choice, double & depthFactor) const;
             };
 
+            // create a new line cc vertex
             std::shared_ptr<MixedGraphVertex> CreateLineCCVertex(int lineCCId, const RecContext & context){
                 auto lcvPtr = new LineCCVertex;
                 auto & lci = *lcvPtr;
@@ -1439,6 +1583,36 @@ namespace panoramix {
                 }                
                 return std::shared_ptr<MixedGraphVertex>(lcvPtr);
             }
+
+            // line cc vertex method implementations
+            void LineCCVertex::buildCandidates(const RecContext & context,
+                const MixedGraph & g, const MixedGraphVertHandle & selfHandle) {
+
+                candidateDepthFactors.clear();
+                auto determinedAnchors = collectDeterminedAnchors(g, selfHandle);
+
+                // todo
+            }
+
+            void LineCCVertex::registerChoices(const RecContext & context,
+                const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
+                std::vector<Choice> & choices, std::vector<double> & probabilities,
+                double baseProb, int maxChoiceNum) const {
+                // todo
+            }
+
+            void LineCCVertex::pickChoice(const RecContext & context,
+                const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
+                const Choice & choice, double & depthFactor) const{
+                // todo
+            }
+
+
+
+
+
+
+
 
 
 
