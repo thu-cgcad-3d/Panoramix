@@ -88,6 +88,15 @@ namespace panoramix {
             using type = Sequence<S...>;
         };
 
+
+        // is tuple judger
+        template <class T>
+        struct IsTuple : no {};
+
+        template <class ...T>
+        struct IsTuple<std::tuple<T...>> : yes {};
+
+
         // tuple contains element type judger
         template <class E, class TupleT>
         struct TupleContainsType {};

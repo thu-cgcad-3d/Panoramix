@@ -245,6 +245,21 @@ TEST(ConstraintGraphTest, Basic) {
 }
 
 
+
+
+TEST(HeterogeneousBinaryGraph, HeterogeneousVector){
+
+    core::HeterogeneousVector<double, int, bool> v;
+    v.pushBack(1);
+    v.pushBack(2.5);
+    v.pushBack(true);
+
+    ASSERT_EQ(3, v.size());
+    ASSERT_EQ(1, v.size<int>());
+}
+
+
+
 TEST(GraphicalModelTest, Basic) {
 
     using CGraph = core::HomogeneousGraph<core::Dummy, core::LayerConfig<core::Dummy, core::Dynamic>>;

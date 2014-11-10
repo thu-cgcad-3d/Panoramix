@@ -687,14 +687,60 @@ namespace panoramix {
         }
 
 
+        // heterogeneous vector
+        template <class ...T>
+        class HeterogeneousVector {
+            using ElementTypesTuple = std::tuple<T...>;
+        public:
+            inline HeterogeneousVector() {}
 
+            template <class E>
+            inline const E & at(size_t i) const {
+                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
+                return std::get<Id>(_vectors).at(i);
+            }
 
+            template <class E>
+            inline E & at(size_t i) {
+                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
+                return std::get<Id>(_vectors).at(i);
+            }
 
+            template <class E>
+            inline void pushBack(const E & e) {
+                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
+                std::get<Id>(_vectors).push_back(e);
+            }
 
+            template <class E>
+            inline size_t size() const {
+                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
+                return std::get<Id>(_vectors).size();
+            }
 
+            template <class E>
+            inline const std::vector<E> & getVector() const {
+                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
+                return std::get<Id>(_vectors);
+            }
 
+            template <class E>
+            inline std::vector<E> & getVector() {
+                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
+                return std::get<Id>(_vectors);
+            }
 
+            inline size_t size() const {
+                size_t s = 0;
+                for (size_t i : { getVector<T>().size()... }){
+                    s += i;
+                }
+                return s;
+            }
 
+        private:
+            std::tuple<std::vector<T>...> _vectors;
+        };
 
 
         using Eigen::Dynamic;

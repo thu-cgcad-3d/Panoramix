@@ -51,7 +51,7 @@ namespace panoramix {
         using Point3i = Point<int, 3>;
         using Point4i = Point<int, 4>;
 
-
+        // matrix
         template <class T, int M, int N> using Mat = cv::Matx<T, M, N>;
         using Mat3 = Mat<double, 3, 3>;
         using Mat4 = Mat<double, 4, 4>;
