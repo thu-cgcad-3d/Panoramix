@@ -52,6 +52,7 @@ namespace panoramix {
                 ArgT arg;   // the argument value
             };
 
+
             Manipulator<const std::string &> SetWindowName(const std::string & name);
             Manipulator<vis::Color> SetDefaultForegroundColor(vis::Color color);
             inline Manipulator<vis::Color> SetDefaultForegroundColor(vis::ColorTag tag) { return SetDefaultForegroundColor(vis::ColorFromTag(tag)); }
@@ -60,8 +61,8 @@ namespace panoramix {
             Manipulator<const core::PerspectiveCamera &> SetCamera(const core::PerspectiveCamera & camera);
             Manipulator<float> SetDefaultPointSize(float pointSize);
             Manipulator<float> SetDefaultLineWidth(float lineWidth);
-            Manipulator<const vis::ColorTable &> SetDefaultColorTable(const vis::ColorTable & colorTable);
-            inline Manipulator<const vis::ColorTable &> SetDefaultColorTable(vis::ColorTableDescriptor d) { return SetDefaultColorTable(vis::ColorTable(d)); }
+            Manipulator<vis::ColorTable> SetDefaultColorTable(const vis::ColorTable & colorTable);
+            inline Manipulator<vis::ColorTable> SetDefaultColorTable(vis::ColorTableDescriptor d) { return SetDefaultColorTable(vis::ColorTable(d)); }
             Manipulator<RenderModeFlags> SetRenderMode(RenderModeFlags mode);
             Manipulator<std::pair<bool, bool>> Show(bool doModel = true, bool autoSetCamera = true);
 

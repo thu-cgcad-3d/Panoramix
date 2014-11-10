@@ -175,6 +175,84 @@ namespace panoramix {
 
 
 
+
+
+
+        /// bounding box functions for basic types
+
+        // for scalars
+        template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+        inline Box<T, 1> BoundingBox(const T & t) {
+            return Box<T, 1>(Point<T, 1>(t), Point<T, 1>(t));
+        }
+
+        template <class T>
+        inline Box<T, 2> BoundingBox(const std::complex<T> & c) {
+            return Box<T, 2>(Point<T, 2>(c.real(), c.imag()), Point<T, 2>(c.real(), c.imag()));
+        }
+
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const Box<T, N> & b){
+            return b;
+        }
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const Point<T, N> & p){
+            return Box<T, N>(p, p);
+        }
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const HPoint<T, N> & hp) {
+            return BoundingBox(hp.value());
+        }
+
+        inline Box2 BoundingBox(const PixelLoc & p) {
+            return Box2(
+                Point2(static_cast<double>(p.x), static_cast<double>(p.y)),
+                Point2(static_cast<double>(p.x), static_cast<double>(p.y)));
+        }
+
+        inline Box2 BoundingBox(const KeyPoint & p) {
+            return Box2(Point2(p.pt.x, p.pt.y), Point2(p.pt.x, p.pt.y));
+        }
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const Line<T, N> & l) {
+            return Box<T, N>(l.first, l.second);
+        }
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const HLine<T, N> & l) {
+            return BoundingBox(l.toLine());
+        }
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const PositionOnLine<T, N> & p) {
+            return BoundingBox(p.position);
+        }
+
+        Box2 BoundingBox(const Image & im);
+
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const Sphere<T, N> & s){
+            return Box<T, N>(s.center).expand(s.radius);
+        }
+
+        template <class T>
+        inline auto BoundingBox(const Classified<T> & c) -> decltype(BoundingBox(c.component)) {
+            return BoundingBox(c.component);
+        }
+
+        template <class T>
+        inline auto BoundingBox(const Noted<T> & n) -> decltype(BoundingBox(n.component)){
+            return BoundingBox(n.component);
+        }
+
+        template <class T>
+        inline auto BoundingBox(const Scored<T> & s) -> decltype(BoundingBox(s.component)){
+            return BoundingBox(s.component);
+        }
        
 
         // bounding box of range
@@ -594,6 +672,136 @@ namespace panoramix {
                 0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0);
             return m.t();
         }
+
+
+
+
+        // mesh makers
+        // make tetrahedron
+        template <class AddVertex3FunT, class AddTriFaceFunT>
+        void MakeTetrahedron(AddVertex3FunT addVertex, AddTriFaceFunT addFace) {
+            auto v1 = addVertex(0.0f, 0.0f, 0.0f);
+            auto v2 = addVertex(0.0f, 0.0f, 1.0f);
+            auto v3 = addVertex(0.0f, 1.0f, 0.0f);
+            auto v4 = addVertex(1.0f, 0.0f, 0.0f);
+
+            addFace(v1, v2, v3);
+            addFace(v1, v4, v2);
+            addFace(v1, v3, v4);
+            addFace(v2, v4, v3);
+        }
+
+        // make quad faced cube
+        template <class AddVertex3FunT, class AddQuadFaceFunT>
+        void MakeQuadFacedCube(AddVertex3FunT addVertex, AddQuadFaceFunT addFace) {
+            /*
+                4 ----- 5
+               /       /|
+              0 ----- 1 |
+              |	      | |
+              | 7	  | 6  -- x
+              |	      |/
+              3 ----- 2
+             /
+            y
+
+            */
+            auto v1 = addVertex(0.0f, 1.0f, 1.0f);
+            auto v2 = addVertex(1.0f, 1.0f, 1.0f);
+            auto v3 = addVertex(1.0f, 1.0f, 0.0f);
+            auto v4 = addVertex(0.0f, 1.0f, 0.0f);
+
+            auto v5 = addVertex(0.0f, 0.0f, 1.0f);
+            auto v6 = addVertex(1.0f, 0.0f, 1.0f);
+            auto v7 = addVertex(1.0f, 0.0f, 0.0f);
+            auto v8 = addVertex(0.0f, 0.0f, 0.0f);
+
+            addFace(v1, v2, v3, v4);
+            addFace(v2, v6, v7, v3);
+            addFace(v6, v5, v8, v7);
+            addFace(v5, v1, v4, v8);
+            addFace(v5, v6, v2, v1);
+            addFace(v4, v3, v7, v8);
+        }
+
+        // make tri faced cube
+        template <class AddVertex3FunT, class AddTriFaceFunT>
+        void MakeTriFacedCube(AddVertex3FunT addVertex, AddTriFaceFunT addFace) {
+            auto v1 = addVertex(0.0f, 1.0f, 1.0f);
+            auto v2 = addVertex(1.0f, 1.0f, 1.0f);
+            auto v3 = addVertex(1.0f, 1.0f, 0.0f);
+            auto v4 = addVertex(0.0f, 1.0f, 0.0f);
+
+            auto v5 = addVertex(0.0f, 0.0f, 1.0f);
+            auto v6 = addVertex(1.0f, 0.0f, 1.0f);
+            auto v7 = addVertex(1.0f, 0.0f, 0.0f);
+            auto v8 = addVertex(0.0f, 0.0f, 0.0f);
+
+            addFace(v1, v2, v3);
+            addFace(v1, v3, v4);
+
+            addFace(v2, v6, v7);
+            addFace(v2, v7, v3);
+            
+            addFace(v6, v5, v8);
+            addFace(v6, v8, v7);
+            
+            addFace(v5, v1, v4);
+            addFace(v5, v4, v8);
+            
+            addFace(v5, v6, v2);
+            addFace(v5, v2, v1);
+
+            addFace(v4, v3, v7);
+            addFace(v4, v7, v8);
+        }
+
+        // make quad faced sphere
+        template <class AddVertex3FunT, class AddQuadFaceFunT>
+        void MakeQuadFacedSphere(AddVertex3FunT addVertex, AddQuadFaceFunT addFace, int m, int n) {
+            using ThisVertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
+            std::vector<std::vector<ThisVertHandle>> vhs(m, std::vector<ThisVertHandle>(n - 1));
+            for (int i = 0; i < m; i++){
+                for (int j = 0; j < n - 1; j++){
+                    double xratio = 1.0f - 1.0f / (n - 1) * j;
+                    double yratio = 1.0f / (m - 1) * i;
+                    double xangle = M_PI * 2 * xratio;
+                    double yangle = M_PI * yratio - M_PI_2;
+                    vhs[i][j] = addVertex(sin(xangle - M_PI_2)*cos(yangle), cos(xangle - M_PI_2)*cos(yangle), sin(yangle));
+                }
+            }
+            for (int i = 1; i < m; i++){
+                for (int j = 1; j < n - 1; j++){
+                    addFace(vhs[i][j], vhs[i][j - 1], vhs[i - 1][j - 1], vhs[i - 1][j]);
+                }
+                addFace(vhs[i][0], vhs[i][n - 2], vhs[i - 1][n - 2], vhs[i - 1][0]);
+            }
+        }
+
+        // make tri faced sphere
+        template <class AddVertex3FunT, class AddTriFaceFunT>
+        void MakeTriFacedSphere(AddVertex3FunT addVertex, AddTriFaceFunT addFace, int m, int n) {
+            using ThisVertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
+            std::vector<std::vector<ThisVertHandle>> vhs(m, std::vector<ThisVertHandle>(n - 1));
+            for (int i = 0; i < m; i++){
+                for (int j = 0; j < n - 1; j++){
+                    double xratio = 1.0f - 1.0f / (n - 1) * j;
+                    double yratio = 1.0f / (m - 1) * i;
+                    double xangle = M_PI * 2 * xratio;
+                    double yangle = M_PI * yratio - M_PI_2;
+                    vhs[i][j] = addVertex(sin(xangle - M_PI_2)*cos(yangle), cos(xangle - M_PI_2)*cos(yangle), sin(yangle));
+                }
+            }
+            for (int i = 1; i < m; i++){
+                for (int j = 1; j < n - 1; j++){
+                    addFace(vhs[i][j], vhs[i][j - 1], vhs[i - 1][j - 1]);
+                    addFace(vhs[i][j], vhs[i - 1][j - 1], vhs[i - 1][j]);
+                }
+                addFace(vhs[i][0], vhs[i][n - 2], vhs[i - 1][n - 2]);
+                addFace(vhs[i][j], vhs[i - 1][j - 1], vhs[i - 1][j]);
+            }
+        }
+
 
     }
 }

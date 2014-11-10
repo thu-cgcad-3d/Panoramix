@@ -98,9 +98,9 @@ namespace panoramix {
                         lineWidth);
             }
 
-            Manipulator<const vis::ColorTable &> SetDefaultColorTable(const vis::ColorTable & colorTable) {
-                return Manipulator<const ColorTable &>(
-                    [](Visualizer3D & viz, const ColorTable & d) {
+            Manipulator<vis::ColorTable> SetDefaultColorTable(const vis::ColorTable & colorTable) {
+                return Manipulator<ColorTable>(
+                    [](Visualizer3D & viz, ColorTable d) {
                     viz.defaultRenderState.colorTable = d; },
                         colorTable);
             }

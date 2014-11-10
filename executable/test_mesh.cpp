@@ -1,8 +1,9 @@
 #include "../src/core/graph.hpp"
-#include "../src/core/mesh_maker.hpp"
+#include "../src/core/utilities.hpp"
 #include "../src/vis/visualize3d.hpp"
 
 #include "gtest/gtest.h"
+#include "test_config.hpp"
 
 using namespace panoramix;
 using TestMesh = core::Mesh<core::Vec3>;
@@ -26,46 +27,94 @@ TEST(MiscToolsTest, ConditionalIterator) {
 
 }
 
-TEST(MeshTest, Conversion) {
-    using CVMesh = core::Mesh<core::Point3>;
-    CVMesh mesh;
-    core::MakeQuadFacedCube(mesh);
+TEST(MeshTest, Visualize) {
+
+    TestMesh mesh;
+    auto vertexAdder = [&mesh](double x, double y, double z){
+        return mesh.addVertex(core::Point3(x, y, z));
+    };
+    auto quadFaceAdder = [&mesh](const TestMesh::VertHandle a, const TestMesh::VertHandle b,
+        const TestMesh::VertHandle c, const TestMesh::VertHandle d){
+        return mesh.addFace({ a, b, c, d });
+    };
+
+    core::MakeQuadFacedCube(vertexAdder, quadFaceAdder);
     EXPECT_EQ(8, mesh.internalVertices().size());
     EXPECT_EQ(24, mesh.internalHalfEdges().size());
     EXPECT_EQ(6, mesh.internalFaces().size());
 
-    std::vector<core::Line3> lines;
-    std::vector<core::Point3> points;
-    
-    mesh.remove(CVMesh::VertHandle(0));
+    mesh.remove(TestMesh::VertHandle(0));
 
-    for (auto h : mesh.halfedges()){
-        auto p1 = mesh.data(h.topo.from());
-        auto p2 = mesh.data(h.topo.to());
-        lines.push_back({ p1, p2 });
-    }
-    for (auto v : mesh.vertices()){
-        points.push_back(v.data);
-    }
+    {
+        std::vector<core::Line3> lines;
+        std::vector<core::Point3> points;
 
-    vis::Visualizer3D()
-        << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB)
-        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
-        << lines
-        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Red)
-        << vis::manip3d::SetDefaultPointSize(20)
-        << points
-        << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500, 
-            core::Vec3(-3, 0, 0), 
+        for (auto h : mesh.halfedges()){
+            auto p1 = mesh.data(h.topo.from());
+            auto p2 = mesh.data(h.topo.to());
+            lines.push_back({ p1, p2 });
+        }
+        for (auto v : mesh.vertices()){
+            points.push_back(v.data);
+        }
+
+        vis::Visualizer3D()
+            << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB)
+            << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
+            << lines
+            << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Red)
+            << vis::manip3d::SetDefaultPointSize(20)
+            << points
+            << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500,
+            core::Vec3(-3, 0, 0),
             core::Vec3(0.5, 0.5, 0.5)))
-        << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
-        << vis::manip3d::Show();
+            << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+            << vis::manip3d::Show();
+    }
+
+    mesh.clear();
+    core::MakeQuadFacedSphere(vertexAdder, quadFaceAdder, 10, 20);
+
+    {
+        std::vector<core::Line3> lines;
+        std::vector<core::Point3> points;
+
+        for (auto h : mesh.halfedges()){
+            auto p1 = mesh.data(h.topo.from());
+            auto p2 = mesh.data(h.topo.to());
+            lines.push_back({ p1, p2 });
+        }
+        for (auto v : mesh.vertices()){
+            points.push_back(v.data);
+        }
+
+        vis::Visualizer3D()
+            << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB)
+            << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
+            << lines
+            << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Red)
+            << vis::manip3d::SetDefaultPointSize(20)
+            << points
+            << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500,
+            core::Vec3(-3, 0, 0),
+            core::Vec3(0.5, 0.5, 0.5)))
+            << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+            << vis::manip3d::Show();
+    }
+
 }
 
 TEST(MeshTest, Tetrahedron) {
 
     TestMesh mesh;
-    core::MakeTetrahedron(mesh);
+    auto vertexAdder = [&mesh](double x, double y, double z){
+        return mesh.addVertex(core::Point3(x, y, z));
+    };
+    auto triFaceAdder = [&mesh](const TestMesh::VertHandle a,
+        const TestMesh::VertHandle b, const TestMesh::VertHandle c){
+        return mesh.addFace({ a, b, c });
+    };
+    core::MakeTetrahedron(vertexAdder, triFaceAdder);
     EXPECT_EQ(4, mesh.internalVertices().size());
     EXPECT_EQ(12, mesh.internalHalfEdges().size());
     EXPECT_EQ(4, mesh.internalFaces().size());
@@ -105,7 +154,14 @@ TEST(MeshTest, Tetrahedron) {
 TEST(MeshTest, Cube) {
     
     TestMesh mesh;
-    core::MakeQuadFacedCube(mesh);
+    auto vertexAdder = [&mesh](double x, double y, double z){
+        return mesh.addVertex(core::Point3(x, y, z));
+    };
+    auto quadFaceAdder = [&mesh](const TestMesh::VertHandle a, const TestMesh::VertHandle b,
+        const TestMesh::VertHandle c, const TestMesh::VertHandle d){
+        return mesh.addFace({ a, b, c, d });
+    };
+    core::MakeQuadFacedCube(vertexAdder, quadFaceAdder);
     EXPECT_EQ(8, mesh.internalVertices().size());
     EXPECT_EQ(24, mesh.internalHalfEdges().size());
     EXPECT_EQ(6, mesh.internalFaces().size());
