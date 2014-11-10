@@ -99,6 +99,14 @@ namespace panoramix {
             return viz << manip3d::Begin(v) << manip3d::End;
         }
 
+        template <class T>
+        inline Visualizer3D & operator << (Visualizer3D & viz, const core::Enabled<T> & v){
+            if (v.enabled){
+                return viz << v.component;
+            }
+            return viz;
+        }
+
         inline Visualizer3D & operator << (Visualizer3D & viz, const core::Box3 & b) {
             for (int i = 0; i < 2; i++){
                 for (int j = 0; j < 2; j++){

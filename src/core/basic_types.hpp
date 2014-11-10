@@ -489,6 +489,26 @@ namespace panoramix {
         }
 
 
+        // something enabled
+        template <class T>
+        struct Enabled {
+            bool enabled;
+            T component;
+        };
+        template <class T>
+        inline Enabled<T> EnableAs(const T & comp, bool e){
+            return Enabled<T>{e, comp};
+        }
+        template <class T>
+        inline bool operator == (const Enabled<T> & a, const Enabled<T> & b) {
+            return a.enabled == b.enabled && a.component == b.component;
+        }
+        template <class Archive, class T>
+        inline void serialize(Archive & ar, Enabled<T> & c) {
+            ar(c.enabled, c.component);
+        }
+
+
         namespace {
             template <class T, int N>
             Vec<T, N> MakeMin(const Vec<T, N>& v1, const Vec<T, N>& v2) {

@@ -178,6 +178,15 @@ namespace panoramix {
             return viz << thing.component;
         }
 
+        // enabled thing
+        template <class T>
+        inline Visualizer2D operator << (Visualizer2D viz, const Enabled<T> & thing){
+            if (thing.enabled){
+                return viz << thing.component;
+            }
+            return viz;
+        }
+
 
         // image
         Visualizer2D operator << (Visualizer2D viz, const Image & im);

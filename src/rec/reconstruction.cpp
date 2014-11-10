@@ -1298,6 +1298,114 @@ namespace panoramix {
 
 
 
+            // mixed graph 
+            struct MixedGraphVertex {
+                int ccId;
+                virtual bool isRegionCC() const = 0;
+                virtual void update(const RecContext & context) = 0;
+                virtual void predict(const RecContext & context, Plane3 & plane) const {}
+                virtual void predict(const RecContext & context, double & depthFactor) const {}
+            };
+            struct MixedGraphEdge {
+                std::vector<Enabled<Point3>> anchors;
+            };
+            using MixedGraph = HomogeneousGraph02<std::shared_ptr<MixedGraphVertex>, MixedGraphEdge>;
+
+            struct RegionCCVertex : MixedGraphVertex {
+                ComponentIndexHashSet<RegionIndex> regionIndices;
+                Plane3 tangentialPlane;
+                Vec3 xOnTangentialPlane, yOnTangentialPlane;
+                double regionVisualArea;
+                double regionConvexContourVisualArea;
+
+                struct PlaneConfidenceData {
+                    Plane3 plane;
+                    std::vector<int> inlierAnchors;
+                    double regionInlierAnchorsConvexContourVisualArea;
+                    double regionInlierAnchorsDistanceVotesSum;
+                };
+                using PlaneConfidenceMap = VecMap<double, 3, PlaneConfidenceData>;
+                PlaneConfidenceMap candidatePlanesByRoot;
+
+                virtual bool isRegionCC() const { return true; }
+                virtual void update(const RecContext & context) {
+
+                }
+                virtual void predict(const RecContext & context, Plane3 & plane) const {
+
+                }
+            };
+
+            std::shared_ptr<MixedGraphVertex> CreateRegionCCVertex(int regionCCId, const RecContext & context){
+                auto rcvPtr = new RegionCCVertex;
+                auto & rci = *rcvPtr;
+                rci.ccId = regionCCId;
+                rci.candidatePlanesByRoot = RegionCCVertex::PlaneConfidenceMap(0.05);
+
+                // collect region indices
+                for (auto & rcc : context.regionConnectedComponentIds){
+                    if (rcc.second == regionCCId)
+                        rci.regionIndices.insert(rcc.first);
+                }
+
+                // locate tangential coordinates
+                std::vector<Vec3> outerContourDirections;
+                Vec3 regionsCenterDirection(0, 0, 0);
+                for (auto & ri : rci.regionIndices){
+                    auto & cam = context.views[ri.viewId].camera;
+                    regionsCenterDirection += normalize(cam.spatialDirection(GetData(ri, context.regionsNets).center));
+                    auto & regionOuterContourPixels = GetData(ri, context.regionsNets).contours.back();
+                    for (auto & pixel : regionOuterContourPixels){
+                        outerContourDirections.push_back(cam.spatialDirection(pixel));
+                    }
+                }
+                regionsCenterDirection /= norm(regionsCenterDirection);
+                rci.tangentialPlane = Plane3(regionsCenterDirection, regionsCenterDirection);
+                std::tie(rci.xOnTangentialPlane, rci.yOnTangentialPlane) =
+                    ProposeXYDirectionsFromZDirection(rci.tangentialPlane.normal);
+
+                // compute visual areas
+                rci.regionVisualArea = ComputeVisualAreaOfDirections(rci.tangentialPlane,
+                    rci.xOnTangentialPlane, rci.yOnTangentialPlane,
+                    outerContourDirections, false);
+                rci.regionConvexContourVisualArea = ComputeVisualAreaOfDirections(rci.tangentialPlane,
+                    rci.xOnTangentialPlane, rci.yOnTangentialPlane,
+                    outerContourDirections, true);
+
+                return std::shared_ptr<MixedGraphVertex>(rcvPtr);
+            }
+
+
+
+            struct LineCCVertex : MixedGraphVertex {
+                ComponentIndexHashSet<LineIndex> lineIndices;
+                using DepthConfidenceMap = VecMap<double, 1, double>;
+                DepthConfidenceMap candidateDepthFactors;
+                virtual bool isRegionCC() const { return false; }
+                virtual void update(const RecContext & context) {
+
+                }
+                virtual void predict(const RecContext & context, double & depthFactor) const {
+
+                }
+            };
+
+            std::shared_ptr<MixedGraphVertex> CreateLineCCVertex(int lineCCId, const RecContext & context){
+                auto lcvPtr = new LineCCVertex;
+                auto & lci = *lcvPtr;
+                lci.ccId = lineCCId;
+                lci.candidateDepthFactors = LineCCRecInfo::DepthConfidenceMap(1e-4);
+                lci.candidateDepthFactors[1.0] = 0.1; // initialize with a 1.0 depth for start
+                // collect lis
+                for (auto & p : context.lineConnectedComponentIds){
+                    if (p.second == lineCCId){
+                        lci.lineIndices.insert(p.first);
+                    }
+                }                
+                return std::shared_ptr<MixedGraphVertex>(lcvPtr);
+            }
+
+
 
             // region cc reconstruction information
             struct RegionCCRecInfo {
