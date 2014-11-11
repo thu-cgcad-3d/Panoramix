@@ -1579,9 +1579,11 @@ namespace panoramix {
                 // update related edge anchors
                 for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
                     auto & ed = g.data(eh);
-                    assert(context.regionConnectedComponentIds.at(ed.rili.first) == ccId ||
-                        context.regionConnectedComponentIds.at(ed.riri.first) == ccId ||
-                        context.regionConnectedComponentIds.at(ed.riri.second) == ccId);
+                    assert(
+                        (ed.type == MixedGraphEdge::RegionLine && context.regionConnectedComponentIds.at(ed.rili.first) == ccId) ||
+                        (ed.type == MixedGraphEdge::RegionRegion && 
+                            (context.regionConnectedComponentIds.at(ed.riri.first) == ccId || context.regionConnectedComponentIds.at(ed.riri.second) == ccId)
+                        ));
                     for (auto & anchor : ed.anchors){
                         anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane).position;
                     }
@@ -1825,7 +1827,9 @@ namespace panoramix {
 
             
             void InitializSpatialRegionPlanes(const RecContext & context,
-                MixedGraph & graph,
+                MixedGraph & graph, 
+                const std::vector<MixedGraphVertHandle> & regionCCIdToVHandles,
+                const std::vector<MixedGraphVertHandle> & lineCCidToVHandles,
                 std::vector<Plane3> & resultRegionConnectedComponentPlanes,
                 std::vector<double> & resultLineConnectedComponentDepthFactors,
                 int trialNum,
@@ -1863,7 +1867,10 @@ namespace panoramix {
                     ScoreAs(std::make_pair(initialRegionConnectedComponentPlanes, initialLineConnectedComponentDepthFactors),
                     0.0));
 
-                auto task = [&candidates, &context, &initialRegionCCIdsNotDeterminedYet, &initialLineCCIdsNotDeterminedYet, &useWeightedRandomSelection, &graph](int t){
+                const auto & constGraph = graph;
+                auto task = [&candidates, &context, 
+                    &initialRegionCCIdsNotDeterminedYet, &initialLineCCIdsNotDeterminedYet, 
+                    &useWeightedRandomSelection, &constGraph, &regionCCIdToVHandles, &lineCCidToVHandles](int t){
                     std::cout << "task: " << t << std::endl;
                     auto & candidate = candidates[t];
 
@@ -1872,7 +1879,7 @@ namespace panoramix {
                     std::default_random_engine gen(rd());
 
                     // copy graph
-                    MixedGraph g = graph;
+                    MixedGraph g = constGraph;
 
                     // undetermined checkers
                     std::set<int> regionCCIdsNotDeterminedYet = initialRegionCCIdsNotDeterminedYet;
@@ -1891,12 +1898,21 @@ namespace panoramix {
                         // collect choices and probabilities
                         choices.clear();
                         choiceProbabilities.clear();
-                        for (auto & v : g.elements<0>()){
-                            auto & vd = *v.data.data;
+                        for (int regionCCId : regionCCIdsNotDeterminedYet){
+                            auto & vh = regionCCIdToVHandles[regionCCId];
+                            auto & vd = *g.data(vh).data;
                             if (vd.determined)
                                 continue;
-                            vd.buildCandidates(context, g, v.topo.hd);
-                            vd.registerChoices(context, g, v.topo.hd, choices, choiceProbabilities, 1e-5, 1);
+                            vd.buildCandidates(context, g, vh);
+                            vd.registerChoices(context, g, vh, choices, choiceProbabilities, 1e-5, 1);
+                        }
+                        for (int lineCCId : lineCCIdsNotDeterminedYet){
+                            auto & vh = lineCCidToVHandles[lineCCId];
+                            auto & vd = *g.data(vh).data;
+                            if (vd.determined)
+                                continue;
+                            vd.buildCandidates(context, g, vh);
+                            vd.registerChoices(context, g, vh, choices, choiceProbabilities, 1e-5, 1);
                         }
 
                         assert(choices.size() == choiceProbabilities.size());
@@ -2010,15 +2026,19 @@ namespace panoramix {
                 }; // task
 
                 // run tasks
-                int threadsNum = std::max(1u, std::thread::hardware_concurrency() - 1);
+                int threadsNum = std::min<int>(std::max(1u, std::thread::hardware_concurrency() - 1), trialNum);
                 std::cout << "threads num: " << threadsNum << std::endl;
-                for (int i = 0; i < trialNum; i += threadsNum){
-                    std::vector<std::thread> parallelThreads(threadsNum);
-                    for (int t = i; t < std::min(trialNum, i + threadsNum); t++){
-                        parallelThreads[t - i] = std::thread(task, t);
-                    }
-                    for (int t = i; t < std::min(trialNum, i + threadsNum); t++){
-                        parallelThreads[t - i].join();
+                if (threadsNum == 1){
+                    task(0);
+                }else{
+                    for (int i = 0; i < trialNum; i += threadsNum){
+                        std::vector<std::thread> parallelThreads(threadsNum);
+                        for (int t = i; t < std::min(trialNum, i + threadsNum); t++){
+                            parallelThreads[t - i] = std::thread(task, t);
+                        }
+                        for (int t = i; t < std::min(trialNum, i + threadsNum); t++){
+                            parallelThreads[t - i].join();
+                        }
                     }
                 }
 
@@ -2147,7 +2167,9 @@ namespace panoramix {
             // initialize variables
             std::vector<Plane3> regionConnectedComponentPlanes;
             std::vector<double> lineConnectedComponentDepthFactors;
-            InitializSpatialRegionPlanes(context, mGraph, regionConnectedComponentPlanes, lineConnectedComponentDepthFactors, 1, false);
+            InitializSpatialRegionPlanes(context, mGraph, 
+                regionCCIdToVHandles, lineCCIdToVHandles,
+                regionConnectedComponentPlanes, lineConnectedComponentDepthFactors, 1, false);
 
             // update reconstructed lines
             for (auto & l : reconstructedLines){
