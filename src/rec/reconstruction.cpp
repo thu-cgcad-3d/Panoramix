@@ -1579,8 +1579,6 @@ namespace panoramix {
                 // update related edge anchors
                 for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
                     auto & ed = g.data(eh);
-                    if (!ed.determined)
-                        continue;
                     assert(context.regionConnectedComponentIds.at(ed.rili.first) == ccId ||
                         context.regionConnectedComponentIds.at(ed.riri.first) == ccId ||
                         context.regionConnectedComponentIds.at(ed.riri.second) == ccId);
@@ -1690,10 +1688,8 @@ namespace panoramix {
                 // update related edge anchors
                 for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
                     auto & ed = g.data(eh);
-                    if (!ed.determined)
-                        continue;
                     assert(ed.type == MixedGraphEdge::RegionLine &&
-                        context.regionConnectedComponentIds.at(ed.rili.second) == ccId);
+                        context.lineConnectedComponentIds.at(ed.rili.second) == ccId);
                     const auto & line = context.reconstructedLines.at(ed.rili.second);
                     for (auto & anchor : ed.anchors){
                         auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
@@ -1899,9 +1895,6 @@ namespace panoramix {
                             auto & vd = *v.data.data;
                             if (vd.determined)
                                 continue;
-                            if (vd.ccId == 0 && !vd.isRegionCC()){
-                                std::cout << "!" << std::endl;
-                            }
                             vd.buildCandidates(context, g, v.topo.hd);
                             vd.registerChoices(context, g, v.topo.hd, choices, choiceProbabilities, 1e-5, 1);
                         }
