@@ -562,6 +562,11 @@ namespace panoramix {
             inline Sphere<T, N> outerSphere() const { 
                 return Sphere<T, N>{center(), static_cast<T>(norm(maxCorner - minCorner) / 2.0)}; 
             }
+            inline const Box & expand(const Vec<T, N> & s) {
+                minCorner -= s;
+                maxCorner += s;
+                return *this;
+            }
             inline const Box & expand(const T & s) {
                 for (int i = 0; i < N; i++){
                     minCorner[i] -= s;

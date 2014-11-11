@@ -1287,27 +1287,29 @@ namespace panoramix {
             };
 
 
-            // choice
-            struct Choice {
-                bool isRegionCC;
-                inline bool isLineCC() const { return !isRegionCC; }
-                int ccId; // regionCCId or lineCCId
-                int choiceId;
-            };
 
 
             // mixed graph 
             struct MixedGraphVertex;
             struct MixedGraphEdge;
 
-            using MixedGraph = HomogeneousGraph02<std::shared_ptr<MixedGraphVertex>, MixedGraphEdge>;
+            using MixedGraph = HomogeneousGraph02<MixedGraphVertex, MixedGraphEdge>;
             using MixedGraphVertHandle = HandleAtLevel<0>;
             using MixedGraphEdgeHandle = HandleAtLevel<1>;
 
+            // choice
+            struct Choice {
+                MixedGraphVertHandle vertHandle;
+                int choiceId;
+            };
+
             // mixed graph vertex base
-            struct MixedGraphVertex {
+            struct MixedGraphVertexDataBase {
                 int ccId;
                 virtual bool isRegionCC() const = 0;
+
+                // deep copy
+                virtual MixedGraphVertexDataBase * clone() const = 0;
 
                 // build candidates
                 virtual void buildCandidates(const RecContext & context,
@@ -1337,6 +1339,22 @@ namespace panoramix {
                     const MixedGraphVertHandle & selfHandle) const;
             };
 
+            // mixed graph vertex
+            struct MixedGraphVertex {
+                inline MixedGraphVertex() : data(nullptr) {}
+                inline explicit MixedGraphVertex(MixedGraphVertexDataBase * d) : data(d) {}
+                inline MixedGraphVertex(const MixedGraphVertex & v) : data(v.data->clone()) {}
+                inline MixedGraphVertex(MixedGraphVertex && v) { std::swap(data, v.data); }
+                inline MixedGraphVertex & operator = (MixedGraphVertex && v) { 
+                    std::swap(data, v.data); 
+                    return *this; 
+                }
+                inline void swap(MixedGraphVertex & v) { std::swap(data, v.data); }
+                inline ~MixedGraphVertex() { delete data; }
+                MixedGraphVertexDataBase * data;
+            };
+
+            // mixed graph edge
             struct MixedGraphEdge {
                 enum { RegionRegion, RegionLine } type;
                 std::pair<RegionIndex, RegionIndex> riri; // valid when type == RegionRegion
@@ -1346,8 +1364,8 @@ namespace panoramix {
                 std::vector<Point3> anchors; 
             };
 
-            // implementation
-            Rational MixedGraphVertex::computeDeterminedAnchorsRatio(const MixedGraph & g,
+            // implementations
+            Rational MixedGraphVertexDataBase::computeDeterminedAnchorsRatio(const MixedGraph & g,
                 const MixedGraphVertHandle & selfHandle) const{
                 Rational r(0.0, 0.0);
                 for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
@@ -1358,7 +1376,7 @@ namespace panoramix {
                 return r;
             }
 
-            std::vector<Point3> MixedGraphVertex::collectDeterminedAnchors(const MixedGraph & g,
+            std::vector<Point3> MixedGraphVertexDataBase::collectDeterminedAnchors(const MixedGraph & g,
                 const MixedGraphVertHandle & selfHandle) const {
                 std::vector<Point3> ps;
                 for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
@@ -1371,7 +1389,7 @@ namespace panoramix {
 
             // subclassing
             // vertex representing a region cc
-            struct RegionCCVertex : MixedGraphVertex {
+            struct RegionCCVertexData : MixedGraphVertexDataBase {
                 ComponentIndexHashSet<RegionIndex> regionIndices;
                 Plane3 tangentialPlane;
                 Vec3 xOnTangentialPlane, yOnTangentialPlane;
@@ -1388,24 +1406,25 @@ namespace panoramix {
                 using PlaneConfidenceMap = VecMap<double, 3, PlaneConfidenceData>;
                 PlaneConfidenceMap candidatePlanesByRoot;
 
-                virtual bool isRegionCC() const { return true; }
+                virtual bool isRegionCC() const override { return true; }
+                virtual MixedGraphVertexDataBase * clone() const override { return new RegionCCVertexData(*this); }
                 virtual void buildCandidates(const RecContext & context,
-                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle);
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle) override;
                 virtual void registerChoices(const RecContext & context,
                     const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                     std::vector<Choice> & choices, std::vector<double> & probabilities,
-                    double baseProb, int maxChoiceNum) const;
+                    double baseProb, int maxChoiceNum) const override;
                 virtual void pickChoice(const RecContext & context,
                     const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
-                    const Choice & choice, Plane3 & plane) const;
+                    const Choice & choice, Plane3 & plane) const override;
             };
 
             // create a new region cc vertex
-            std::shared_ptr<MixedGraphVertex> CreateRegionCCVertex(int regionCCId, const RecContext & context){
-                auto rcvPtr = new RegionCCVertex;
+            MixedGraphVertex CreateRegionCCVertex(int regionCCId, const RecContext & context){
+                auto rcvPtr = new RegionCCVertexData;
                 auto & rci = *rcvPtr;
                 rci.ccId = regionCCId;
-                rci.candidatePlanesByRoot = RegionCCVertex::PlaneConfidenceMap(0.05);
+                rci.candidatePlanesByRoot = RegionCCVertexData::PlaneConfidenceMap(0.05);
 
                 // collect region indices
                 for (auto & rcc : context.regionConnectedComponentIds){
@@ -1437,11 +1456,11 @@ namespace panoramix {
                     rci.xOnTangentialPlane, rci.yOnTangentialPlane,
                     outerContourDirections, true);
 
-                return std::shared_ptr<MixedGraphVertex>(rcvPtr);
+                return MixedGraphVertex(rcvPtr);
             }
 
             // region cc vertex method implementations
-            void RegionCCVertex::buildCandidates(const RecContext & context,
+            void RegionCCVertexData::buildCandidates(const RecContext & context,
                 const MixedGraph & g, const MixedGraphVertHandle & selfHandle) {
 
                 // make candidate planes
@@ -1512,7 +1531,7 @@ namespace panoramix {
                
             }
 
-            void RegionCCVertex::registerChoices(const RecContext & context,
+            void RegionCCVertexData::registerChoices(const RecContext & context,
                 const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                 std::vector<Choice> & choices, std::vector<double> & probabilities,
                 double baseProb, int maxChoiceNum) const{
@@ -1530,7 +1549,7 @@ namespace panoramix {
                 // collect all choices and probabilities
                 for (auto & c : candidatePlanesByRoot){
                     auto & candidatePlaneData = c.second;
-                    Choice choice = { true, ccId, planeId++ };
+                    Choice choice = { selfHandle, planeId++ };
                     auto inlierOccupationRatio =
                         candidatePlaneData.regionInlierAnchorsConvexContourVisualArea / regionConvexContourVisualArea;
                     double probability =
@@ -1550,7 +1569,7 @@ namespace panoramix {
                 }
             }
 
-            void RegionCCVertex::pickChoice(const RecContext & context,
+            void RegionCCVertexData::pickChoice(const RecContext & context,
                 const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                 const Choice & choice, Plane3 & plane) const {
                 assert(choice.isRegionCC);
@@ -1559,29 +1578,30 @@ namespace panoramix {
             }
 
             // vertex representing a line cc
-            struct LineCCVertex : MixedGraphVertex {
+            struct LineCCVertexData : MixedGraphVertexDataBase {
                 ComponentIndexHashSet<LineIndex> lineIndices;
                 using DepthConfidenceMap = VecMap<double, 1, double>;
                 DepthConfidenceMap candidateDepthFactors;
 
-                virtual bool isRegionCC() const { return false; }
+                virtual bool isRegionCC() const override { return false; }
+                virtual MixedGraphVertexDataBase * clone() const override { return new LineCCVertexData(*this); }
                 virtual void buildCandidates(const RecContext & context,
-                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle);
+                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle) override;
                 virtual void registerChoices(const RecContext & context,
                     const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                     std::vector<Choice> & choices, std::vector<double> & probabilities,
-                    double baseProb, int maxChoiceNum) const;
+                    double baseProb, int maxChoiceNum) const override;
                 virtual void pickChoice(const RecContext & context,
                     const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
-                    const Choice & choice, double & depthFactor) const;
+                    const Choice & choice, double & depthFactor) const override;
             };
 
             // create a new line cc vertex
-            std::shared_ptr<MixedGraphVertex> CreateLineCCVertex(int lineCCId, const RecContext & context){
-                auto lcvPtr = new LineCCVertex;
+            MixedGraphVertex CreateLineCCVertex(int lineCCId, const RecContext & context){
+                auto lcvPtr = new LineCCVertexData;
                 auto & lci = *lcvPtr;
                 lci.ccId = lineCCId;
-                lci.candidateDepthFactors = LineCCVertex::DepthConfidenceMap(1e-4);
+                lci.candidateDepthFactors = LineCCVertexData::DepthConfidenceMap(1e-4);
                 lci.candidateDepthFactors[1.0] = 0.1; // initialize with a 1.0 depth for start
                 // collect lis
                 for (auto & p : context.lineConnectedComponentIds){
@@ -1589,11 +1609,11 @@ namespace panoramix {
                         lci.lineIndices.insert(p.first);
                     }
                 }                
-                return std::shared_ptr<MixedGraphVertex>(lcvPtr);
+                return MixedGraphVertex(lcvPtr);
             }
 
             // line cc vertex method implementations
-            void LineCCVertex::buildCandidates(const RecContext & context,
+            void LineCCVertexData::buildCandidates(const RecContext & context,
                 const MixedGraph & g, const MixedGraphVertHandle & selfHandle) {
 
                 candidateDepthFactors.clear();
@@ -1618,7 +1638,7 @@ namespace panoramix {
 
             }
 
-            void LineCCVertex::registerChoices(const RecContext & context,
+            void LineCCVertexData::registerChoices(const RecContext & context,
                 const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                 std::vector<Choice> & choices, std::vector<double> & probabilities,
                 double baseProb, int maxChoiceNum) const {
@@ -1633,7 +1653,7 @@ namespace panoramix {
                 
                 for (auto & c : candidateDepthFactors){
                     auto & candidateDepthVote = c.second;
-                    Choice choice = { false, ccId, depthId++ };
+                    Choice choice = { selfHandle, depthId++ };
                     double probability = (fullCompleteness * 0.9
                         + double(lineIndices.size()) / context.reconstructedLines.size() * 0.1)
                         * candidateDepthVote / maxVote;
@@ -1647,7 +1667,7 @@ namespace panoramix {
                 }
             }
 
-            void LineCCVertex::pickChoice(const RecContext & context,
+            void LineCCVertexData::pickChoice(const RecContext & context,
                 const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                 const Choice & choice, double & depthFactor) const{
                 assert(!choice.isRegionCC);
@@ -1660,296 +1680,297 @@ namespace panoramix {
 
 
 
+            /*
+            namespace {
 
+                // region cc reconstruction information
+                struct RegionCCRecInfo {
+                    int regionCCId;
+                    ComponentIndexHashSet<RegionIndex> regionIndices;
+                    Plane3 tangentialPlane;
+                    Vec3 xOnTangentialPlane, yOnTangentialPlane;
+                    double regionVisualArea;
+                    double regionConvexContourVisualArea;
+                    Rational anchoredConnectionsWithOtherRegions;
+                    Rational anchoredConnectionsWithLines;
+                    std::vector<Point3> anchoredConnections;
 
-
-            // region cc reconstruction information
-            struct RegionCCRecInfo {
-                int regionCCId;
-                ComponentIndexHashSet<RegionIndex> regionIndices;
-                Plane3 tangentialPlane;
-                Vec3 xOnTangentialPlane, yOnTangentialPlane;
-                double regionVisualArea;
-                double regionConvexContourVisualArea;
-                Rational anchoredConnectionsWithOtherRegions;
-                Rational anchoredConnectionsWithLines;
-                std::vector<Point3> anchoredConnections;
-
-                struct PlaneConfidenceData {
-                    Plane3 plane;
-                    std::vector<int> inlierAnchors;
-                    double regionInlierAnchorsConvexContourVisualArea;
-                    double regionInlierAnchorsDistanceVotesSum;
+                    struct PlaneConfidenceData {
+                        Plane3 plane;
+                        std::vector<int> inlierAnchors;
+                        double regionInlierAnchorsConvexContourVisualArea;
+                        double regionInlierAnchorsDistanceVotesSum;
+                    };
+                    using PlaneConfidenceMap = VecMap<double, 3, PlaneConfidenceData>;
+                    PlaneConfidenceMap candidatePlanesByRoot;
                 };
-                using PlaneConfidenceMap = VecMap<double, 3, PlaneConfidenceData>;
-                PlaneConfidenceMap candidatePlanesByRoot;
-            };
 
-            // initialize region cc reconstruction information
-            RegionCCRecInfo CreateRegionCCRecInfo(int regionCCId, const RecContext & context){
-                assert(context.views.size() == context.regionsNets.size());
+                // initialize region cc reconstruction information
+                RegionCCRecInfo CreateRegionCCRecInfo(int regionCCId, const RecContext & context){
+                    assert(context.views.size() == context.regionsNets.size());
 
-                RegionCCRecInfo rci;
-                rci.regionCCId = regionCCId;
-                rci.candidatePlanesByRoot = RegionCCRecInfo::PlaneConfidenceMap(0.05);
+                    RegionCCRecInfo rci;
+                    rci.regionCCId = regionCCId;
+                    rci.candidatePlanesByRoot = RegionCCRecInfo::PlaneConfidenceMap(0.05);
 
-                // collect region indices
-                for (auto & rcc : context.regionConnectedComponentIds){
-                    if (rcc.second == regionCCId)
-                        rci.regionIndices.insert(rcc.first);
-                }
-
-                // locate tangential coordinates
-                std::vector<Vec3> outerContourDirections;
-                Vec3 regionsCenterDirection(0, 0, 0);
-                for (auto & ri : rci.regionIndices){
-                    auto & cam = context.views[ri.viewId].camera;
-                    regionsCenterDirection += normalize(cam.spatialDirection(GetData(ri, context.regionsNets).center));
-                    auto & regionOuterContourPixels = GetData(ri, context.regionsNets).contours.back();
-                    for (auto & pixel : regionOuterContourPixels){
-                        outerContourDirections.push_back(cam.spatialDirection(pixel));
+                    // collect region indices
+                    for (auto & rcc : context.regionConnectedComponentIds){
+                        if (rcc.second == regionCCId)
+                            rci.regionIndices.insert(rcc.first);
                     }
-                }
-                regionsCenterDirection /= norm(regionsCenterDirection);
-                rci.tangentialPlane = Plane3(regionsCenterDirection, regionsCenterDirection);
-                std::tie(rci.xOnTangentialPlane, rci.yOnTangentialPlane) = 
-                    ProposeXYDirectionsFromZDirection(rci.tangentialPlane.normal);
 
-                // compute visual areas
-                rci.regionVisualArea = ComputeVisualAreaOfDirections(rci.tangentialPlane, 
-                    rci.xOnTangentialPlane, rci.yOnTangentialPlane,
-                    outerContourDirections, false);
-                rci.regionConvexContourVisualArea = ComputeVisualAreaOfDirections(rci.tangentialPlane,
-                    rci.xOnTangentialPlane, rci.yOnTangentialPlane,
-                    outerContourDirections, true);
-                
-                // calc sample points num with other regions
-                rci.anchoredConnectionsWithOtherRegions = Rational(0.0, 0.0);
-                for (auto & ri : rci.regionIndices){
-                    auto & regions = context.regionsNets[ri.viewId].regions();
-                    auto & bdHandles = regions.topo(ri.handle).uppers;
-                    for (auto bh : bdHandles){
-                        for (auto & pts : regions.data(bh).sampledPoints){
-                            rci.anchoredConnectionsWithOtherRegions.denominator += pts.size();
+                    // locate tangential coordinates
+                    std::vector<Vec3> outerContourDirections;
+                    Vec3 regionsCenterDirection(0, 0, 0);
+                    for (auto & ri : rci.regionIndices){
+                        auto & cam = context.views[ri.viewId].camera;
+                        regionsCenterDirection += normalize(cam.spatialDirection(GetData(ri, context.regionsNets).center));
+                        auto & regionOuterContourPixels = GetData(ri, context.regionsNets).contours.back();
+                        for (auto & pixel : regionOuterContourPixels){
+                            outerContourDirections.push_back(cam.spatialDirection(pixel));
                         }
                     }
-                }
+                    regionsCenterDirection /= norm(regionsCenterDirection);
+                    rci.tangentialPlane = Plane3(regionsCenterDirection, regionsCenterDirection);
+                    std::tie(rci.xOnTangentialPlane, rci.yOnTangentialPlane) =
+                        ProposeXYDirectionsFromZDirection(rci.tangentialPlane.normal);
 
-                // calc sample points num with other lines
-                rci.anchoredConnectionsWithLines = Rational(0.0, 0.0);
-                for (auto & p : context.regionLineConnections){
-                    auto & ri = p.first.first;
-                    if (context.regionConnectedComponentIds.at(ri) == rci.regionCCId){
-                        rci.anchoredConnectionsWithLines.denominator += p.second.size();
-                    }
-                }
+                    // compute visual areas
+                    rci.regionVisualArea = ComputeVisualAreaOfDirections(rci.tangentialPlane,
+                        rci.xOnTangentialPlane, rci.yOnTangentialPlane,
+                        outerContourDirections, false);
+                    rci.regionConvexContourVisualArea = ComputeVisualAreaOfDirections(rci.tangentialPlane,
+                        rci.xOnTangentialPlane, rci.yOnTangentialPlane,
+                        outerContourDirections, true);
 
-                return rci;
-            }
-            
-            void UpdateRegionCCUsingLastInsertedAnchor(RegionCCRecInfo & rci, const RecContext & context){
-                // add new candidate plane root
-                double scale = context.initialBoundingBox.outerSphere().radius;
-                for (auto & vp : context.vanishingPoints){
-                    Plane3 plane(rci.anchoredConnections.back(), vp);
-                    if (OPT_IgnoreTooSkewedPlanes){
-                        if (norm(plane.root()) <= scale / 5.0)
-                            continue;
-                    }
-                    if (OPT_IgnoreTooFarAwayPlanes){
-                        bool valid = true;
-                        for (auto & ri : rci.regionIndices){
-                            if (!valid)
-                                break;
-                            auto & rd = GetData(ri, context.regionsNets);
-                            if (rd.contours.back().size() < 3)
-                                continue;
-                            auto & cam = context.views[ri.viewId].camera;
-                            for (int i = 0; i < rd.contours.back().size(); i++){
-                                auto dir = cam.spatialDirection(ToPoint2(rd.contours.back()[i]));
-                                auto intersectionOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
-                                if (norm(intersectionOnPlane) > scale * 5.0){
-                                    valid = false;
-                                    break;
-                                }
+                    // calc sample points num with other regions
+                    rci.anchoredConnectionsWithOtherRegions = Rational(0.0, 0.0);
+                    for (auto & ri : rci.regionIndices){
+                        auto & regions = context.regionsNets[ri.viewId].regions();
+                        auto & bdHandles = regions.topo(ri.handle).uppers;
+                        for (auto bh : bdHandles){
+                            for (auto & pts : regions.data(bh).sampledPoints){
+                                rci.anchoredConnectionsWithOtherRegions.denominator += pts.size();
                             }
                         }
-                        if (!valid)
-                            continue;
                     }
 
-                    static const double distFromPointToPlaneThres = scale / 12.0;
-
-                    // insert new root data
-                    auto & pcd = rci.candidatePlanesByRoot[plane.root()];
-                    pcd.plane = plane;
-
-                    // collect distance votes
-                    double distVotes = 0.0;
-                    std::vector<Vec3> nearbyAnchors;
-                    for (int i = 0; i < rci.anchoredConnections.size(); i++){
-                        double distanceToPlane = plane.distanceTo(rci.anchoredConnections[i]);
-                        if (distanceToPlane > distFromPointToPlaneThres)
-                            continue;
-                        distVotes += Gaussian(distanceToPlane, distFromPointToPlaneThres);
-                        pcd.inlierAnchors.push_back(i);
-                        nearbyAnchors.push_back(rci.anchoredConnections[i]);
+                    // calc sample points num with other lines
+                    rci.anchoredConnectionsWithLines = Rational(0.0, 0.0);
+                    for (auto & p : context.regionLineConnections){
+                        auto & ri = p.first.first;
+                        if (context.regionConnectedComponentIds.at(ri) == rci.regionCCId){
+                            rci.anchoredConnectionsWithLines.denominator += p.second.size();
+                        }
                     }
-                    pcd.regionInlierAnchorsDistanceVotesSum = distVotes;
-                    pcd.regionInlierAnchorsConvexContourVisualArea = 
-                        ComputeVisualAreaOfDirections(rci.tangentialPlane, 
-                        rci.xOnTangentialPlane, rci.yOnTangentialPlane, nearbyAnchors, true);
-                }
-            }
 
-            inline void InsertLineAnchorToRegionCC(RegionCCRecInfo & rci, 
-                const LineIndex & li, const Point3 & anchor,
-                const RecContext & context){                
-                rci.anchoredConnections.push_back(anchor);
-                rci.anchoredConnectionsWithLines.numerator++;
-                UpdateRegionCCUsingLastInsertedAnchor(rci, context);
-            }
-
-            inline void InsertRegionAnchorToRegionCC(RegionCCRecInfo & rci, 
-                const RegionIndex & ri, const Point3 & anchor,
-                const RecContext & context){
-                rci.anchoredConnections.push_back(anchor);
-                rci.anchoredConnectionsWithOtherRegions.numerator++;
-                UpdateRegionCCUsingLastInsertedAnchor(rci, context);
-            }
-
-            void RegisterCurrentChoicesAndProbabilities(const RegionCCRecInfo & rci, 
-                std::vector<Choice> & choices, std::vector<double> & probabilities, 
-                const RecContext & context, double baseProb, int maxChoiceNum){
-
-                std::vector<Scored<Choice>> newChoices;
-
-                int planeId = 0;
-                double maxMeanVote = 0.0;
-                for (auto & c : rci.candidatePlanesByRoot){
-                    maxMeanVote = std::max(maxMeanVote, c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size());
-                }
-                for (auto & c : rci.candidatePlanesByRoot){
-                    auto & candidatePlaneData = c.second;
-                    Choice choice = { true, rci.regionCCId, planeId++ };
-                    auto completenessWithOtherRegions = rci.anchoredConnectionsWithOtherRegions.value(0.0);
-                    auto completenessWithOtherLines = rci.anchoredConnectionsWithLines.value(0.0);
-                    auto fullCompleteness = Rational(
-                        rci.anchoredConnectionsWithOtherRegions.numerator + rci.anchoredConnectionsWithLines.numerator,
-                        rci.anchoredConnectionsWithOtherRegions.denominator + rci.anchoredConnectionsWithLines.denominator)
-                        .value(0.0);
-                    auto inlierOccupationRatio =
-                        candidatePlaneData.regionInlierAnchorsConvexContourVisualArea / rci.regionConvexContourVisualArea;
-                    //assert(candidatePlaneData.regionInlierAnchorsConvexContourVisualArea <= rci.regionConvexContourVisualArea);
-                    double probability =
-                        (fullCompleteness *
-                        (inlierOccupationRatio > 0.4 ? 1.0 : 1e-4)) *
-                        c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size();
-
-                    assert(c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size() <= 1.0);
-                    newChoices.push_back(ScoreAs(choice, probability + baseProb));
+                    return rci;
                 }
 
-                std::sort(newChoices.begin(), newChoices.end(), std::greater<void>());
-                for (int i = 0; i < std::min<int>(maxChoiceNum, newChoices.size()); i++){
-                    choices.push_back(newChoices[i].component);
-                    probabilities.push_back(newChoices[i].score);
-                }
-            }
+                void UpdateRegionCCUsingLastInsertedAnchor(RegionCCRecInfo & rci, const RecContext & context){
+                    // add new candidate plane root
+                    double scale = context.initialBoundingBox.outerSphere().radius;
+                    for (auto & vp : context.vanishingPoints){
+                        Plane3 plane(rci.anchoredConnections.back(), vp);
+                        if (OPT_IgnoreTooSkewedPlanes){
+                            if (norm(plane.root()) <= scale / 5.0)
+                                continue;
+                        }
+                        if (OPT_IgnoreTooFarAwayPlanes){
+                            bool valid = true;
+                            for (auto & ri : rci.regionIndices){
+                                if (!valid)
+                                    break;
+                                auto & rd = GetData(ri, context.regionsNets);
+                                if (rd.contours.back().size() < 3)
+                                    continue;
+                                auto & cam = context.views[ri.viewId].camera;
+                                for (int i = 0; i < rd.contours.back().size(); i++){
+                                    auto dir = cam.spatialDirection(ToPoint2(rd.contours.back()[i]));
+                                    auto intersectionOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
+                                    if (norm(intersectionOnPlane) > scale * 5.0){
+                                        valid = false;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!valid)
+                                continue;
+                        }
 
-            Plane3 ChoosePrediction(const std::vector<RegionCCRecInfo> & regionCCRecInfos, const Choice & choice){
-                assert(choice.isRegionCC);
-                return (regionCCRecInfos[choice.ccId].candidatePlanesByRoot.begin() + choice.choiceId)->second.plane;
-            }
+                        static const double distFromPointToPlaneThres = scale / 12.0;
 
-            
+                        // insert new root data
+                        auto & pcd = rci.candidatePlanesByRoot[plane.root()];
+                        pcd.plane = plane;
 
-
-
-            // line cc reconstruction information
-            struct LineCCRecInfo {
-                int lineCCId;
-                ComponentIndexHashSet<LineIndex> lineIndices;
-                Rational anchoredConnectionsWithOtherRegions;
-                std::vector<Point3> anchoredConnections;
-                using DepthConfidenceMap = VecMap<double, 1, double>;
-                DepthConfidenceMap candidateDepthFactors;
-            };
-
-            // initialize line cc reconstruction information
-            LineCCRecInfo CreateLineCCRecInfo(int lineCCid, const RecContext & context){
-                assert(context.views.size() == context.linesNets.size());
-                LineCCRecInfo lci;
-                lci.lineCCId = lineCCid;
-                lci.candidateDepthFactors = LineCCRecInfo::DepthConfidenceMap(1e-4);
-                lci.candidateDepthFactors[1.0] = 0.1; // initialize with a 1.0 depth for start
-                // collect lis
-                for (auto & p : context.lineConnectedComponentIds){
-                    if (p.second == lineCCid){
-                        lci.lineIndices.insert(p.first);
+                        // collect distance votes
+                        double distVotes = 0.0;
+                        std::vector<Vec3> nearbyAnchors;
+                        for (int i = 0; i < rci.anchoredConnections.size(); i++){
+                            double distanceToPlane = plane.distanceTo(rci.anchoredConnections[i]);
+                            if (distanceToPlane > distFromPointToPlaneThres)
+                                continue;
+                            distVotes += Gaussian(distanceToPlane, distFromPointToPlaneThres);
+                            pcd.inlierAnchors.push_back(i);
+                            nearbyAnchors.push_back(rci.anchoredConnections[i]);
+                        }
+                        pcd.regionInlierAnchorsDistanceVotesSum = distVotes;
+                        pcd.regionInlierAnchorsConvexContourVisualArea =
+                            ComputeVisualAreaOfDirections(rci.tangentialPlane,
+                            rci.xOnTangentialPlane, rci.yOnTangentialPlane, nearbyAnchors, true);
                     }
                 }
-                // calc sample points num with regions
-                lci.anchoredConnectionsWithOtherRegions = Rational(0, 0);
-                for (auto & p : context.regionLineConnections){
-                    auto & li = p.first.second;
-                    if (context.lineConnectedComponentIds.at(li) == lineCCid){
-                        lci.anchoredConnectionsWithOtherRegions.denominator += p.second.size();
+
+                inline void InsertLineAnchorToRegionCC(RegionCCRecInfo & rci,
+                    const LineIndex & li, const Point3 & anchor,
+                    const RecContext & context){
+                    rci.anchoredConnections.push_back(anchor);
+                    rci.anchoredConnectionsWithLines.numerator++;
+                    UpdateRegionCCUsingLastInsertedAnchor(rci, context);
+                }
+
+                inline void InsertRegionAnchorToRegionCC(RegionCCRecInfo & rci,
+                    const RegionIndex & ri, const Point3 & anchor,
+                    const RecContext & context){
+                    rci.anchoredConnections.push_back(anchor);
+                    rci.anchoredConnectionsWithOtherRegions.numerator++;
+                    UpdateRegionCCUsingLastInsertedAnchor(rci, context);
+                }
+
+                void RegisterCurrentChoicesAndProbabilities(const RegionCCRecInfo & rci,
+                    std::vector<Choice> & choices, std::vector<double> & probabilities,
+                    const RecContext & context, double baseProb, int maxChoiceNum){
+
+                    std::vector<Scored<Choice>> newChoices;
+
+                    int planeId = 0;
+                    double maxMeanVote = 0.0;
+                    for (auto & c : rci.candidatePlanesByRoot){
+                        maxMeanVote = std::max(maxMeanVote, c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size());
+                    }
+                    for (auto & c : rci.candidatePlanesByRoot){
+                        auto & candidatePlaneData = c.second;
+                        Choice choice = { true, rci.regionCCId, planeId++ };
+                        auto completenessWithOtherRegions = rci.anchoredConnectionsWithOtherRegions.value(0.0);
+                        auto completenessWithOtherLines = rci.anchoredConnectionsWithLines.value(0.0);
+                        auto fullCompleteness = Rational(
+                            rci.anchoredConnectionsWithOtherRegions.numerator + rci.anchoredConnectionsWithLines.numerator,
+                            rci.anchoredConnectionsWithOtherRegions.denominator + rci.anchoredConnectionsWithLines.denominator)
+                            .value(0.0);
+                        auto inlierOccupationRatio =
+                            candidatePlaneData.regionInlierAnchorsConvexContourVisualArea / rci.regionConvexContourVisualArea;
+                        //assert(candidatePlaneData.regionInlierAnchorsConvexContourVisualArea <= rci.regionConvexContourVisualArea);
+                        double probability =
+                            (fullCompleteness *
+                            (inlierOccupationRatio > 0.4 ? 1.0 : 1e-4)) *
+                            c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size();
+
+                        assert(c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size() <= 1.0);
+                        newChoices.push_back(ScoreAs(choice, probability + baseProb));
+                    }
+
+                    std::sort(newChoices.begin(), newChoices.end(), std::greater<void>());
+                    for (int i = 0; i < std::min<int>(maxChoiceNum, newChoices.size()); i++){
+                        choices.push_back(newChoices[i].component);
+                        probabilities.push_back(newChoices[i].score);
                     }
                 }
-                return lci;
-            }
 
-            void UpdateLineCCUsingLastInsertedAnchor(LineCCRecInfo & lci, 
-                const RegionIndex & ri, const LineIndex & li, 
-                const RecContext & context){
-                auto & line = context.reconstructedLines.at(li);
-                auto & anchor = lci.anchoredConnections.back();
-                double depthVarOnLine = norm(DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
-                    .second.second);
-                double depthValueOnRegion = norm(anchor);
-                if (!IsInfOrNaN(depthVarOnLine) && !IsInfOrNaN(depthValueOnRegion))
-                    lci.candidateDepthFactors[depthValueOnRegion / depthVarOnLine] += 1.0;
-            }
-
-            inline void InsertRegionAnchorToLineCC(LineCCRecInfo & lci,
-                const RegionIndex & ri, const LineIndex & li, const Point3 & anchor,
-                const RecContext & context){
-                lci.anchoredConnections.push_back(anchor);
-                lci.anchoredConnectionsWithOtherRegions.numerator++; 
-                UpdateLineCCUsingLastInsertedAnchor(lci, ri, li, context);
-            }
-
-            void RegisterCurrentChoicesAndProbabilities(const LineCCRecInfo & lci,
-                std::vector<Choice> & choices, std::vector<double> & probabilities,
-                const RecContext & context, double baseProb, int maxChoiceNum){
-                std::vector<Scored<Choice>> newChoices;
-                int depthId = 0;
-                double maxVote = 0.0;
-                for (auto & c : lci.candidateDepthFactors)
-                    maxVote = maxVote < c.second ? c.second : maxVote;
-                for (auto & c : lci.candidateDepthFactors){
-                    auto & candidateDepthVote = c.second;
-                    Choice choice = { false, lci.lineCCId, depthId++ };
-                    auto completenessWithOtherRegions = lci.anchoredConnectionsWithOtherRegions.value(0.0);
-                    double probability = (completenessWithOtherRegions * 0.9
-                        + double(lci.lineIndices.size()) / context.reconstructedLines.size() * 0.1)
-                        * candidateDepthVote / maxVote;
-                    newChoices.push_back(ScoreAs(choice, probability + baseProb));
+                Plane3 ChoosePrediction(const std::vector<RegionCCRecInfo> & regionCCRecInfos, const Choice & choice){
+                    assert(choice.isRegionCC);
+                    return (regionCCRecInfos[choice.ccId].candidatePlanesByRoot.begin() + choice.choiceId)->second.plane;
                 }
 
-                std::sort(newChoices.begin(), newChoices.end(), std::greater<void>());
-                for (int i = 0; i < std::min<int>(maxChoiceNum, newChoices.size()); i++){
-                    choices.push_back(newChoices[i].component);
-                    probabilities.push_back(newChoices[i].score);
+
+
+
+
+                // line cc reconstruction information
+                struct LineCCRecInfo {
+                    int lineCCId;
+                    ComponentIndexHashSet<LineIndex> lineIndices;
+                    Rational anchoredConnectionsWithOtherRegions;
+                    std::vector<Point3> anchoredConnections;
+                    using DepthConfidenceMap = VecMap<double, 1, double>;
+                    DepthConfidenceMap candidateDepthFactors;
+                };
+
+                // initialize line cc reconstruction information
+                LineCCRecInfo CreateLineCCRecInfo(int lineCCid, const RecContext & context){
+                    assert(context.views.size() == context.linesNets.size());
+                    LineCCRecInfo lci;
+                    lci.lineCCId = lineCCid;
+                    lci.candidateDepthFactors = LineCCRecInfo::DepthConfidenceMap(1e-4);
+                    lci.candidateDepthFactors[1.0] = 0.1; // initialize with a 1.0 depth for start
+                    // collect lis
+                    for (auto & p : context.lineConnectedComponentIds){
+                        if (p.second == lineCCid){
+                            lci.lineIndices.insert(p.first);
+                        }
+                    }
+                    // calc sample points num with regions
+                    lci.anchoredConnectionsWithOtherRegions = Rational(0, 0);
+                    for (auto & p : context.regionLineConnections){
+                        auto & li = p.first.second;
+                        if (context.lineConnectedComponentIds.at(li) == lineCCid){
+                            lci.anchoredConnectionsWithOtherRegions.denominator += p.second.size();
+                        }
+                    }
+                    return lci;
                 }
-            }
 
-            double ChoosePrediction(const std::vector<LineCCRecInfo> & lineCCRecInfos, const Choice & choice){
-                assert(!choice.isRegionCC);
-                return (lineCCRecInfos[choice.ccId].candidateDepthFactors.begin() + choice.choiceId)->first[0];
-            }
+                void UpdateLineCCUsingLastInsertedAnchor(LineCCRecInfo & lci,
+                    const RegionIndex & ri, const LineIndex & li,
+                    const RecContext & context){
+                    auto & line = context.reconstructedLines.at(li);
+                    auto & anchor = lci.anchoredConnections.back();
+                    double depthVarOnLine = norm(DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
+                        .second.second);
+                    double depthValueOnRegion = norm(anchor);
+                    if (!IsInfOrNaN(depthVarOnLine) && !IsInfOrNaN(depthValueOnRegion))
+                        lci.candidateDepthFactors[depthValueOnRegion / depthVarOnLine] += 1.0;
+                }
 
+                inline void InsertRegionAnchorToLineCC(LineCCRecInfo & lci,
+                    const RegionIndex & ri, const LineIndex & li, const Point3 & anchor,
+                    const RecContext & context){
+                    lci.anchoredConnections.push_back(anchor);
+                    lci.anchoredConnectionsWithOtherRegions.numerator++;
+                    UpdateLineCCUsingLastInsertedAnchor(lci, ri, li, context);
+                }
+
+                void RegisterCurrentChoicesAndProbabilities(const LineCCRecInfo & lci,
+                    std::vector<Choice> & choices, std::vector<double> & probabilities,
+                    const RecContext & context, double baseProb, int maxChoiceNum){
+                    std::vector<Scored<Choice>> newChoices;
+                    int depthId = 0;
+                    double maxVote = 0.0;
+                    for (auto & c : lci.candidateDepthFactors)
+                        maxVote = maxVote < c.second ? c.second : maxVote;
+                    for (auto & c : lci.candidateDepthFactors){
+                        auto & candidateDepthVote = c.second;
+                        Choice choice = { false, lci.lineCCId, depthId++ };
+                        auto completenessWithOtherRegions = lci.anchoredConnectionsWithOtherRegions.value(0.0);
+                        double probability = (completenessWithOtherRegions * 0.9
+                            + double(lci.lineIndices.size()) / context.reconstructedLines.size() * 0.1)
+                            * candidateDepthVote / maxVote;
+                        newChoices.push_back(ScoreAs(choice, probability + baseProb));
+                    }
+
+                    std::sort(newChoices.begin(), newChoices.end(), std::greater<void>());
+                    for (int i = 0; i < std::min<int>(maxChoiceNum, newChoices.size()); i++){
+                        choices.push_back(newChoices[i].component);
+                        probabilities.push_back(newChoices[i].score);
+                    }
+                }
+
+                double ChoosePrediction(const std::vector<LineCCRecInfo> & lineCCRecInfos, const Choice & choice){
+                    assert(!choice.isRegionCC);
+                    return (lineCCRecInfos[choice.ccId].candidateDepthFactors.begin() + choice.choiceId)->first[0];
+                }
+
+            } */
 
             void DisplayReconstruction(int highlightedRegionCCId, int highlightedLineCCId,
                 const std::set<int> & regionCCIdsNotDeterminedYet, const std::set<int> & lineCCIdsNotDeterminedYet,
@@ -2066,7 +2087,7 @@ namespace panoramix {
             }
 
 
-            void InitializeSpatialRegionPlanes(const RecContext & context,
+            /*void InitializeSpatialRegionPlanes(const RecContext & context,
                 std::vector<Plane3> & resultRegionConnectedComponentPlanes,
                 std::vector<double> & resultLineConnectedComponentDepthFactors,
                 int trialNum,
@@ -2356,7 +2377,298 @@ namespace panoramix {
                 }
 
             }
-        
+        */
+
+            
+            void InitializSpatialRegionPlanes(const RecContext & context,
+                MixedGraph & graph,
+                std::vector<Plane3> & resultRegionConnectedComponentPlanes,
+                std::vector<double> & resultLineConnectedComponentDepthFactors,
+                int trialNum,
+                bool useWeightedRandomSelection) {
+
+                double scale = context.initialBoundingBox.outerSphere().radius;
+
+                // initial cc ids status
+                std::vector<int> regionCCIds(context.regionConnectedComponentsNum);
+                std::iota(regionCCIds.begin(), regionCCIds.end(), 0);
+                const std::set<int> initialRegionCCIdsNotDeterminedYet(regionCCIds.begin(), regionCCIds.end());
+
+                std::vector<int> lineCCIds(context.lineConnectedComponentsNum);
+                std::iota(lineCCIds.begin(), lineCCIds.end(), 0);
+                const std::set<int> initialLineCCIdsNotDeterminedYet(lineCCIds.begin(), lineCCIds.end());
+
+
+                // initialize region planes
+                std::vector<Plane3> initialRegionConnectedComponentPlanes(context.regionConnectedComponentsNum);
+                for (auto & r : context.regionConnectedComponentIds){
+                    auto & ri = r.first;
+                    auto & rd = GetData(ri, context.regionsNets);
+                    Vec3 centerDir = context.views[ri.viewId].camera.spatialDirection(rd.center);
+                    int regionCCId = context.regionConnectedComponentIds.at(ri);
+                    initialRegionConnectedComponentPlanes[regionCCId].anchor = normalize(centerDir) * scale;
+                    initialRegionConnectedComponentPlanes[regionCCId].normal = normalize(centerDir);
+                }
+                // initialize line depth factors
+                std::vector<double> initialLineConnectedComponentDepthFactors(context.lineConnectedComponentsNum, 1.0);
+
+
+                // start MC reasoning
+                std::vector<Scored<std::pair<std::vector<Plane3>, std::vector<double>>>>
+                    candidates(trialNum,
+                    ScoreAs(std::make_pair(initialRegionConnectedComponentPlanes, initialLineConnectedComponentDepthFactors),
+                    0.0));
+
+                auto task = [&candidates, &context, &initialRegionCCIdsNotDeterminedYet, &initialLineCCIdsNotDeterminedYet, &useWeightedRandomSelection, &graph](int t){
+                    std::cout << "task: " << t << std::endl;
+                    auto & candidate = candidates[t];
+
+                    // random engine initialized
+                    std::random_device rd;
+                    std::default_random_engine gen(rd());
+
+                    // copy graph
+                    MixedGraph g = graph;
+
+                    // undetermined checkers
+                    std::set<int> regionCCIdsNotDeterminedYet = initialRegionCCIdsNotDeterminedYet;
+                    std::set<int> lineCCIdsNotDeterminedYet = initialLineCCIdsNotDeterminedYet;
+
+                    // choices and probabilities
+                    std::vector<Choice> choices;
+                    std::vector<double> choiceProbabilities;
+                    choices.reserve(regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size());
+                    choiceProbabilities.reserve(regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size());
+
+                    // start expansion
+                    std::cout << "start expansion" << std::endl;
+                    while ((regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size()) > 0){
+
+                        // collect choices and probabilities
+                        choices.clear();
+                        choiceProbabilities.clear();
+                        for (auto & v : graph.elements<0>()){
+                            v.data.data->registerChoices(context, g, v.topo.hd, 
+                                choices, choiceProbabilities, 1e-5, 1);
+                        }
+
+                        assert(choices.size() == choiceProbabilities.size());
+
+                        if (std::accumulate(choiceProbabilities.begin(), choiceProbabilities.end(), 0.0) == 0.0){
+                            std::cerr << "all zero probabilities!" << std::endl;
+                            break;
+                        }
+
+                        int selected = -1;
+
+                        if (useWeightedRandomSelection){
+                            // a workaround constructor since VS2013 lacks the range iterator constructor for std::discrete_distribution
+                            int ord = 0;
+                            std::discrete_distribution<int> distribution(choiceProbabilities.size(),
+                                0.0, 1000.0,
+                                [&choiceProbabilities, &ord](double){
+                                return choiceProbabilities[ord++];
+                            });
+                            selected = distribution(gen);
+                        }
+                        else{
+                            selected = std::distance(choiceProbabilities.begin(),
+                                std::max_element(choiceProbabilities.begin(), choiceProbabilities.end()));
+                        }
+
+                        // made choice
+                        const Choice & choice = choices[selected];
+                        auto & exeVD = *g.data(choice.vertHandle).data;
+                        if (exeVD.isRegionCC()){
+                            exeVD.pickChoice(context, g, choice.vertHandle, choice, 
+                                candidate.component.first[exeVD.ccId]);
+                        }
+                        else{
+                            exeVD.pickChoice(context, g, choice.vertHandle, choice,
+                                candidate.component.second[exeVD.ccId]);
+                        }
+
+                        if (choice.isRegionCC){ // a region cc is chosen
+                            if (OPT_DisplayMessages)
+                                std::cout << "chosen unit - region cc: " << choice.ccId << "  plane chosen: " << choice.choiceId << std::endl;
+                            candidate.component.first[choice.ccId] = ChoosePrediction(regionCCRecInfos, choice);
+                            regionCCIdsNotDeterminedYet.erase(choice.ccId);
+
+                            // update related line ccs
+                            for (auto & pp : context.regionLineConnections){
+                                LineIndex li = pp.first.second;
+                                RegionIndex ri = pp.first.first;
+                                int thisLineCCId = context.lineConnectedComponentIds.at(li);
+                                int thisRegionCCId = context.regionConnectedComponentIds.at(ri);
+                                if (!core::Contains(lineCCIdsNotDeterminedYet, thisLineCCId)){ // checked already
+                                    continue;
+                                }
+                                if (thisRegionCCId == choice.ccId){ // related
+                                    auto & plane = candidate.component.first[thisRegionCCId];
+                                    auto & samplePoints = pp.second;
+                                    for (auto & p : samplePoints){
+                                        auto anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), p), plane).position;
+                                        InsertRegionAnchorToLineCC(lineCCRecInfos[thisLineCCId], ri, li, anchor, context);
+                                    }
+                                }
+                            }
+
+                            // update related region ccs 
+                            for (int i = 0; i < context.views.size(); i++){
+                                for (auto & b : context.regionsNets[i].regions().elements<1>()){
+                                    auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
+                                    auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
+                                    int thisRegionCCId1 = context.regionConnectedComponentIds.at(ri1);
+                                    int thisRegionCCId2 = context.regionConnectedComponentIds.at(ri2);
+                                    int determinedRegionCCId = choice.ccId, notDeterminedRegionCCId;
+                                    RegionIndex determinedRi;
+                                    if (thisRegionCCId1 == choice.ccId && core::Contains(regionCCIdsNotDeterminedYet, thisRegionCCId2)){
+                                        determinedRi = ri1;
+                                        notDeterminedRegionCCId = thisRegionCCId2;
+                                    }
+                                    else if (thisRegionCCId2 == choice.ccId && core::Contains(regionCCIdsNotDeterminedYet, thisRegionCCId1)){
+                                        determinedRi = ri2;
+                                        notDeterminedRegionCCId = thisRegionCCId1;
+                                    }
+                                    else{
+                                        continue;
+                                    }
+                                    auto & plane = candidate.component.first[determinedRegionCCId];
+                                    auto & cam = context.views[i].camera;
+                                    for (auto & pts : b.data.sampledPoints){
+                                        for (auto & p : pts){
+                                            auto dir = cam.spatialDirection(p);
+                                            auto anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
+                                            InsertRegionAnchorToRegionCC(regionCCRecInfos[notDeterminedRegionCCId], determinedRi, anchor, context);
+                                        }
+                                    }
+                                }
+                            }
+
+                        }
+                        else{ // a line cc is chosen
+                            if (OPT_DisplayMessages)
+                                std::cout << "chosen unit - line cc: " << choice.ccId << "  depthfactor chosen: " << choice.choiceId << std::endl;
+                            candidate.component.second[choice.ccId] = ChoosePrediction(lineCCRecInfos, choice);
+                            lineCCIdsNotDeterminedYet.erase(choice.ccId);
+
+                            // update related unchecked region anchors
+                            for (auto & pp : context.regionLineConnections){
+                                LineIndex li = pp.first.second;
+                                RegionIndex ri = pp.first.first;
+                                int thisLineCCId = context.lineConnectedComponentIds.at(li);
+                                int thisRegionCCId = context.regionConnectedComponentIds.at(ri);
+                                if (!core::Contains(regionCCIdsNotDeterminedYet, thisRegionCCId)){ // checked already, ignore
+                                    continue;
+                                }
+                                if (thisLineCCId == choice.ccId){ // related 
+                                    auto & samplePoints = pp.second;
+                                    const auto & line = context.reconstructedLines.at(li);
+                                    for (auto & p : samplePoints){ // insert anchors into the rec info of the related region
+                                        auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), p))
+                                            .second.second;
+                                        InsertLineAnchorToRegionCC(regionCCRecInfos[thisRegionCCId], li,
+                                            pOnLine * candidate.component.second[thisLineCCId], context);
+                                    }
+                                }
+                            }
+                        }
+
+                    } // while
+                    std::cout << "expansion done" << std::endl;
+
+
+                    // score this candidate
+                    double distanceSumOfRegionRegionConnections = 0.0;
+                    double distanceSumOfRegionLineConnections = 0.0;
+
+                    auto & regionConnectedComponentPlanes = candidate.component.first;
+                    auto & lineConnectedComponentDepthFactors = candidate.component.second;
+
+                    // region region
+                    for (int i = 0; i < context.views.size(); i++){
+                        auto & cam = context.views[i].camera;
+                        for (auto & b : context.regionsNets[i].regions().elements<1>()){
+                            auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
+                            auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
+                            int regionCCId1 = context.regionConnectedComponentIds.at(ri1);
+                            int regionCCId2 = context.regionConnectedComponentIds.at(ri2);
+                            for (auto & pts : b.data.sampledPoints){
+                                for (auto & p : pts){
+                                    auto dir = cam.spatialDirection(p);
+                                    auto anchor1 = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir),
+                                        regionConnectedComponentPlanes[regionCCId1]).position;
+                                    auto anchor2 = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir),
+                                        regionConnectedComponentPlanes[regionCCId2]).position;
+                                    double distance = Distance(anchor1, anchor2);
+                                    distanceSumOfRegionRegionConnections += distance;
+                                }
+                            }
+                        }
+                    }
+                    // region line
+                    for (auto & pp : context.regionLineConnections){
+                        LineIndex li = pp.first.second;
+                        RegionIndex ri = pp.first.first;
+                        int lineCCId = context.lineConnectedComponentIds.at(li);
+                        int regionCCId = context.regionConnectedComponentIds.at(ri);
+                        auto & samplePoints = pp.second;
+                        auto line = context.reconstructedLines.at(li);
+                        line.first *= lineConnectedComponentDepthFactors[lineCCId];
+                        line.second *= lineConnectedComponentDepthFactors[lineCCId];
+                        for (auto & p : samplePoints){ // insert anchors into the rec info of the related region
+                            auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), p))
+                                .second.second;
+                            auto pOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), p),
+                                regionConnectedComponentPlanes[regionCCId]).position;
+                            double distance = Distance(pOnLine, pOnRegion);
+                            distanceSumOfRegionLineConnections += distance;
+                        }
+                    }
+
+                    std::cout << "distance sum of region-region connections: " << distanceSumOfRegionRegionConnections << std::endl;
+                    std::cout << "distance sum of region-line connections: " << distanceSumOfRegionLineConnections << std::endl;
+
+                    candidate.score = -(distanceSumOfRegionRegionConnections + distanceSumOfRegionLineConnections);
+
+                    if (OPT_DisplayOnEachTrial){
+                        IF_DEBUG_USING_VISUALIZERS{
+                        DisplayReconstruction(-1, -1, {}, {},
+                        candidate.component.first, candidate.component.second, context);
+                    }
+                    }
+
+                }; // task
+
+                // run tasks
+                int threadsNum = std::max(1u, std::thread::hardware_concurrency() - 1);
+                std::cout << "threads num: " << threadsNum << std::endl;
+                for (int i = 0; i < trialNum; i += threadsNum){
+                    std::vector<std::thread> parallelThreads(threadsNum);
+                    for (int t = i; t < std::min(trialNum, i + threadsNum); t++){
+                        parallelThreads[t - i] = std::thread(task, t);
+                    }
+                    for (int t = i; t < std::min(trialNum, i + threadsNum); t++){
+                        parallelThreads[t - i].join();
+                    }
+                }
+
+
+                // select best candidate
+                const auto & result = std::max_element(candidates.begin(), candidates.end())->component;
+                resultRegionConnectedComponentPlanes = result.first;
+                resultLineConnectedComponentDepthFactors = result.second;
+
+                // visualize result of this task
+                if (OPT_DisplayAtLast){
+                    IF_DEBUG_USING_VISUALIZERS{
+                    DisplayReconstruction(-1, -1, {}, {},
+                    resultRegionConnectedComponentPlanes, resultLineConnectedComponentDepthFactors, context);
+                }
+                }
+
+            }
+
 
             void OptimizeSpatialRegionPlanes(const RecContext & context,
                 std::vector<Plane3> & resultRegionConnectedComponentPlanes,
@@ -2367,6 +2679,107 @@ namespace panoramix {
 
 
             }
+        }
+
+
+        void EstimateSpatialRegionPlanesII(const std::vector<View<PerspectiveCamera>> & views,
+            const std::vector<RegionsNet> & regionsNets, const std::vector<LinesNet> & linesNets,
+            const std::array<Vec3, 3> & vanishingPoints,
+            const ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappings,
+            const ComponentIndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> & regionLineConnections,
+            const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & interViewLineIncidences,
+            int regionConnectedComponentsNum, const ComponentIndexHashMap<RegionIndex, int> & regionConnectedComponentIds,
+            int lineConnectedComponentsNum, const ComponentIndexHashMap<LineIndex, int> & lineConnectedComponentIds,
+            ComponentIndexHashMap<LineIndex, Line3> & reconstructedLines,
+            ComponentIndexHashMap<RegionIndex, Plane3> & reconstructedPlanes,
+            const Image & globalTexture){
+
+            std::cout << "invoking " << __FUNCTION__ << std::endl;
+
+            Box3 bbox = BoundingBoxOfPairRange(reconstructedLines.begin(), reconstructedLines.end());
+            double scale = bbox.outerSphere().radius;
+
+            const RecContext context = {
+                views, regionsNets, linesNets, vanishingPoints,
+                regionOverlappings, regionLineConnections, interViewLineIncidences,
+                regionConnectedComponentsNum, regionConnectedComponentIds,
+                lineConnectedComponentsNum, lineConnectedComponentIds,
+                reconstructedLines, reconstructedPlanes, globalTexture,
+                bbox
+            };
+
+            std::vector<Plane3> regionConnectedComponentPlanes;
+            std::vector<double> lineConnectedComponentDepthFactors;
+
+            //////////////////////////////
+            // build mixed graph
+
+            MixedGraph mGraph;
+            std::vector<MixedGraphVertHandle> regionCCIdToVHandles(regionConnectedComponentsNum);
+            std::vector<MixedGraphVertHandle> lineCCIdToVHandles(lineConnectedComponentsNum);
+
+            // add vertices
+            for (int i = 0; i < regionConnectedComponentsNum; i++){
+                regionCCIdToVHandles[i] = mGraph.add(CreateRegionCCVertex(i, context));
+            }
+            for (int i = 0; i < lineConnectedComponentsNum; i++){
+                lineCCIdToVHandles[i] = mGraph.add(CreateLineCCVertex(i, context));
+            }
+
+            // add edges
+            // region-region
+            for (int i = 0; i < views.size(); i++){
+                auto & cam = views[i].camera;
+                auto & regions = regionsNets[i].regions();
+                for (auto & b : regions.elements<1>()){
+                    auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
+                    auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
+                    int thisRegionCCId1 = regionConnectedComponentIds.at(ri1);
+                    int thisRegionCCId2 = regionConnectedComponentIds.at(ri2);
+                    auto vh1 = regionCCIdToVHandles[thisRegionCCId1];
+                    auto vh2 = regionCCIdToVHandles[thisRegionCCId2];
+                    // add edge
+                    MixedGraphEdge e;
+                    e.determined = false;
+                    e.type = MixedGraphEdge::RegionRegion;
+                    e.riri = std::make_pair(ri1, ri2);
+                    // add anchors
+                    auto & samplePoints = b.data.sampledPoints;
+                    e.anchors.reserve(samplePoints.size());
+                    for (auto & ps : samplePoints){
+                        for (auto & p : ps){
+                            e.anchors.push_back(cam.spatialDirection(p));
+                        }
+                    }
+                    // insert edge
+                    mGraph.add<1>({ vh1, vh2 }, e);
+                }
+            }
+            // region-line
+            for (auto & pp : regionLineConnections){
+                LineIndex li = pp.first.second;
+                RegionIndex ri = pp.first.first;
+                int lineCCId = lineConnectedComponentIds.at(li);
+                int regionCCId = regionConnectedComponentIds.at(ri);
+                auto vh1 = regionCCIdToVHandles[regionCCId];
+                auto vh2 = lineCCIdToVHandles[lineCCId];               
+                // add edge
+                MixedGraphEdge e;
+                e.determined = false;
+                e.type = MixedGraphEdge::RegionLine;
+                e.rili = std::make_pair(ri, li);
+                e.anchors = pp.second;
+                // insert edge
+                mGraph.add<1>({ vh1, vh2 }, e);
+            }
+
+            std::cout << "vertices num: " << mGraph.internalElements<0>().size() << std::endl;
+            std::cout << "edges num: " << mGraph.internalElements<1>().size() << std::endl;
+
+
+            //////////////////////////////
+            // build mixed graph
+
         }
 
 

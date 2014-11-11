@@ -130,12 +130,12 @@ TEST(UtilTest, WrapBetween) {
         if (a == b)
             continue;
 
-        if (core::WrapBetween(x, a, b) == b){
-            std::cout << a << b << std::endl;
-        }
+        int xx = core::WrapBetween(x, a, b);
+        int rem = (xx - x) % (b - a);
 
-        EXPECT_LE(a, core::WrapBetween(x, a, b));
-        EXPECT_LT(core::WrapBetween(x, a, b), b);
+        EXPECT_EQ(0, rem);
+        EXPECT_LE(a, xx);
+        EXPECT_LT(xx, b);        
     }
 }
 
@@ -334,7 +334,7 @@ TEST(UtilTest, EigenVectorsAndValues) {
     }
 }
 
-TEST(UtilTest, RTreeWrapperLargeData) {
+TEST(ContainerTest, RTreeWrapperLargeData) {
 
     std::list<core::Line2> lines;
     std::generate_n(std::back_inserter(lines), 100000,
@@ -350,7 +350,7 @@ TEST(UtilTest, RTreeWrapperLargeData) {
 }
 
 
-TEST(UtilTest, VecSetAndVecMap){
+TEST(ContainerTest, VecSetAndVecMap){
 
     core::VecMultiSet<double, 3> s(0.1);
     int N = 5000;
@@ -381,7 +381,7 @@ TEST(UtilTest, VecSetAndVecMap){
 }
 
 
-TEST(UtilTest, MaxHeap){
+TEST(ContainerTest, MaxHeap){
     std::vector<double> data(50000);
     std::generate(data.begin(), data.end(), randf);
     std::vector<int> ids(data.size());
@@ -428,7 +428,7 @@ TEST(UtilTest, MaxHeap){
 }
 
 
-TEST(UtilTest, MergeNearNaiveCorrectness) {
+TEST(AlgorithmsTest, MergeNearNaiveCorrectness) {
     std::list<double> arr1;
     arr1.resize(1000);
     std::generate(arr1.begin(), arr1.end(), std::rand);
@@ -456,7 +456,7 @@ TEST(UtilTest, MergeNearNaiveCorrectness) {
     }
 }
 
-TEST(UtilTest, MergeNearRTreeCorrectness) {
+TEST(AlgorithmsTest, MergeNearRTreeCorrectness) {
 
     std::list<double> arr1;
     arr1.resize(1000);
@@ -484,7 +484,7 @@ TEST(UtilTest, MergeNearRTreeCorrectness) {
 }
 
 
-TEST(UtilTest, MergeNearRTreeEfficiency) {
+TEST(AlgorithmsTest, MergeNearRTreeEfficiency) {
     std::list<core::Vec4> arr1;
     std::srand(0);
     arr1.resize(5000);
@@ -496,7 +496,7 @@ TEST(UtilTest, MergeNearRTreeEfficiency) {
     std::cout << gBegins.size() << std::endl;
 }
 
-TEST(UtilTest, MergeNearNaiveEfficiency) {
+TEST(AlgorithmsTest, MergeNearNaiveEfficiency) {
     std::list<core::Vec4> arr1;
     std::srand(0);
     arr1.resize(5000);
@@ -513,7 +513,7 @@ TEST(UtilTest, MergeNearNaiveEfficiency) {
 
 
 
-TEST(UtilTest, MinimumSpanningTree) {   
+TEST(AlgorithmsTest, MinimumSpanningTree) {
     std::vector<int> verts = { 0, 1, 2, 3, 4, 5};
     std::vector<int> edges = { 0, 1, 2, 3, 4, 5, 6, 7 };
     struct EdgeProperty { int fromv, tov; double w; };
@@ -545,7 +545,7 @@ TEST(UtilTest, MinimumSpanningTree) {
     EXPECT_TRUE(std::is_permutation(MST.begin(), MST.end(), correctMST.begin()));
 }
 
-TEST(UtilTest, MinimumSpanningTree2) {
+TEST(AlgorithmsTest, MinimumSpanningTree2) {
     std::vector<int> verts = { 0, 1, 2, 3, 4, 5, 6 };
     std::vector<int> edges = { 0, 1, 2, 3, 4, 5, 6, 7 };
     struct EdgeProperty { int fromv, tov; double w; };
@@ -579,7 +579,7 @@ TEST(UtilTest, MinimumSpanningTree2) {
 }
 
 
-TEST(UtilTest, DFS_CC) {
+TEST(AlgorithmsTest, DFS_CC) {
     std::vector<int> verts = { 0, 1, 2, 3, 4, 5, 6 };
     struct EdgeProperty { int fromv, tov; double w; };
     std::vector<EdgeProperty> edgeProperties = {
@@ -628,7 +628,7 @@ TEST(UtilTest, DFS_CC) {
 }
 
 
-TEST(UtilTest, TopologicalSort){
+TEST(AlgorithmsTest, TopologicalSort){
 
     {
         std::vector<int> verts = { 0, 1, 2, 3, 4, 5, 6 };
