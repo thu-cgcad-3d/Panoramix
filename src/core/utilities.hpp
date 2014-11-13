@@ -788,8 +788,8 @@ namespace panoramix {
         // make tri faced sphere
         template <class AddVertex3FunT, class AddTriFaceFunT>
         void MakeTriFacedSphere(AddVertex3FunT addVertex, AddTriFaceFunT addFace, int m, int n) {
-            using ThisVertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
-            std::vector<std::vector<ThisVertHandle>> vhs(m, std::vector<ThisVertHandle>(n - 1));
+            using VertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
+            std::vector<std::vector<VertHandle>> vhs(m, std::vector<VertHandle>(n - 1));
             for (int i = 0; i < m; i++){
                 for (int j = 0; j < n - 1; j++){
                     double xratio = 1.0f - 1.0f / (n - 1) * j;
@@ -806,6 +806,37 @@ namespace panoramix {
                 }
                 addFace(vhs[i][0], vhs[i][n - 2], vhs[i - 1][n - 2]);
                 addFace(vhs[i][j], vhs[i - 1][j - 1], vhs[i - 1][j]);
+            }
+        }
+
+        // make mesh from simple mesh file
+        template <class AddVertex3FunT, class AddTriFaceFunT>
+        void MakeTriMeshFromSMFFile(AddVertex3FunT addVertex, AddTriFaceFunT addFace, const std::string & fileName) {
+            using VertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
+            std::vector<VertHandle> vhs;
+            std::vector<std::array<int, 3>> fvids;
+            int minFvid = std::numeric_limits<int>::max();
+            std::ifstream ifs(fileName);
+            std::string line;
+            while (std::getline(ifs, line)){
+                std::istringstream iss(line);
+                char tag;
+                iss >> tag;
+                if (tag == 'v'){
+                    float x, y, z;
+                    iss >> x >> y >> z;
+                    vhs.push_back(addVertex(x, y, z));
+                }
+                else if (tag == 'f'){
+                    int a, b, c;
+                    iss >> a >> b >> c;
+                    fvids.push_back({ { a, b, c } });
+                    minFvid = std::min({ minFvid, a, b, c });
+                }
+            }
+            // install faces
+            for (auto & fvs : fvids){
+                addFace(vhs[fvs[0] - minFvid], vhs[fvs[1] - minFvid], vhs[fvs[2] - minFvid]);
             }
         }
 

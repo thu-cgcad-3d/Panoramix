@@ -6,6 +6,7 @@
 #include "test_config.hpp"
 
 using namespace panoramix;
+using namespace test;
 using TestMesh = core::Mesh<core::Vec3>;
 
 
@@ -27,15 +28,47 @@ TEST(MiscToolsTest, ConditionalIterator) {
 
 }
 
-TEST(MeshTest, Visualize) {
+void VisualizeMesh(const TestMesh & mesh){
+    std::vector<core::Line3> lines;
+    std::vector<core::Point3> points;
 
+    for (auto h : mesh.halfedges()){
+        auto p1 = mesh.data(h.topo.from());
+        auto p2 = mesh.data(h.topo.to());
+        lines.push_back({ p1, p2 });
+    }
+    for (auto v : mesh.vertices()){
+        points.push_back(v.data);
+    }
+
+    vis::Visualizer3D()
+        << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB)
+        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
+        << lines
+        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Red)
+        << vis::manip3d::SetDefaultPointSize(20)
+        << points
+        << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500,
+        core::Vec3(-3, 0, 0),
+        core::Vec3(0.5, 0.5, 0.5)))
+        << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
+        << vis::manip3d::Show();
+}
+
+
+TEST(MeshTest, Visualize) {
+    using namespace std::placeholders;
     TestMesh mesh;
     auto vertexAdder = [&mesh](double x, double y, double z){
         return mesh.addVertex(core::Point3(x, y, z));
     };
+    auto triFaceAdder = [&mesh](const TestMesh::VertHandle a, const TestMesh::VertHandle b,
+        const TestMesh::VertHandle c){
+        return mesh.addFace(a, b, c);
+    };
     auto quadFaceAdder = [&mesh](const TestMesh::VertHandle a, const TestMesh::VertHandle b,
         const TestMesh::VertHandle c, const TestMesh::VertHandle d){
-        return mesh.addFace({ a, b, c, d });
+        return mesh.addFace(a, b, c, d);
     };
 
     core::MakeQuadFacedCube(vertexAdder, quadFaceAdder);
@@ -44,64 +77,17 @@ TEST(MeshTest, Visualize) {
     EXPECT_EQ(6, mesh.internalFaces().size());
 
     mesh.remove(TestMesh::VertHandle(0));
-
-    {
-        std::vector<core::Line3> lines;
-        std::vector<core::Point3> points;
-
-        for (auto h : mesh.halfedges()){
-            auto p1 = mesh.data(h.topo.from());
-            auto p2 = mesh.data(h.topo.to());
-            lines.push_back({ p1, p2 });
-        }
-        for (auto v : mesh.vertices()){
-            points.push_back(v.data);
-        }
-
-        vis::Visualizer3D()
-            << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB)
-            << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
-            << lines
-            << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Red)
-            << vis::manip3d::SetDefaultPointSize(20)
-            << points
-            << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500,
-            core::Vec3(-3, 0, 0),
-            core::Vec3(0.5, 0.5, 0.5)))
-            << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
-            << vis::manip3d::Show();
-    }
+    VisualizeMesh(mesh);
 
     mesh.clear();
     core::MakeQuadFacedSphere(vertexAdder, quadFaceAdder, 10, 20);
+    VisualizeMesh(mesh);
 
-    {
-        std::vector<core::Line3> lines;
-        std::vector<core::Point3> points;
+    mesh.clear();
+    core::MakeTriMeshFromSMFFile(vertexAdder, triFaceAdder, ProjectDataDirStrings::MeshSMF + "/bones-clean.smf");
+    VisualizeMesh(mesh);
 
-        for (auto h : mesh.halfedges()){
-            auto p1 = mesh.data(h.topo.from());
-            auto p2 = mesh.data(h.topo.to());
-            lines.push_back({ p1, p2 });
-        }
-        for (auto v : mesh.vertices()){
-            points.push_back(v.data);
-        }
-
-        vis::Visualizer3D()
-            << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB)
-            << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
-            << lines
-            << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Red)
-            << vis::manip3d::SetDefaultPointSize(20)
-            << points
-            << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500,
-            core::Vec3(-3, 0, 0),
-            core::Vec3(0.5, 0.5, 0.5)))
-            << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
-            << vis::manip3d::Show();
-    }
-
+    
 }
 
 TEST(MeshTest, Tetrahedron) {

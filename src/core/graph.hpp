@@ -206,6 +206,10 @@ namespace panoramix {
         class Mesh {            
         public:
             static const int LayerNum = 2;
+
+            using VertData = VertDataT;
+            using HalfData = HalfDataT;
+            using FaceData = FaceDataT;
             
             using VertHandle = Handle<VertTopo>;
             using HalfHandle = Handle<HalfTopo>;
@@ -269,6 +273,13 @@ namespace panoramix {
             FaceHandle addFace(const HandleArray<HalfTopo> & halfedges,
                                const FaceDataT & fd = FaceDataT());
             FaceHandle addFace(const HandleArray<VertTopo> & vertices, bool autoflip = true,
+                               const FaceDataT & fd = FaceDataT());
+            template <class VertHandleIteratorT, 
+                      class = std::enable_if_t<std::is_same<std::iterator_traits<VertHandleIteratorT>::value_type, VertHandle>::value>>
+            FaceHandle addFace(VertHandleIteratorT vhBegin, VertHandleIteratorT vhEnd, bool autoflip = true, const FaceDataT & fd = FaceDataT());
+            FaceHandle addFace(VertHandle v1, VertHandle v2, VertHandle v3, bool autoflip = true, 
+                               const FaceDataT & fd = FaceDataT());
+            FaceHandle addFace(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4, bool autoflip = true,
                                const FaceDataT & fd = FaceDataT());
             
             HalfHandle findEdge(VertHandle from, VertHandle to) const;
@@ -390,6 +401,56 @@ namespace panoramix {
             }
             return addFace(halfs, fd);
         }
+
+        template <class VertDataT, class HalfDataT, class FaceDataT>
+        template <class VertHandleIteratorT, class>
+        typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
+        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(
+        VertHandleIteratorT vhBegin, VertHandleIteratorT vhEnd, bool autoflip, const FaceDataT & fd) {
+            HandleArray<HalfTopo> halfs;
+            HalfHandle hh = findEdge(vertices.back(), vertices.front());
+            HandleArray<VertTopo> verts(vhBegin, vhEnd);
+            assert(verts.size() >= 3);
+            if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                std::reverse(verts.begin(), verts.end());
+            }
+
+            for (size_t i = 0; i < verts.size(); i++){
+                size_t inext = (i + 1) % verts.size();
+                halfs.push_back(addEdge(verts[i], verts[inext]));
+            }
+            return addFace(halfs, fd);
+        }
+
+        template <class VertDataT, class HalfDataT, class FaceDataT>
+        typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
+        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(VertHandle v1, VertHandle v2, VertHandle v3, bool autoflip, const FaceDataT & fd) {            
+            HalfHandle hh = findEdge(v3, v1);
+            if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                std::swap(v1, v3);
+            }
+            return addFace({
+                addEdge(v1, v2),
+                addEdge(v2, v3),
+                addEdge(v3, v1)
+            }, fd);
+        }
+
+        template <class VertDataT, class HalfDataT, class FaceDataT>
+        typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
+        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4, bool autoflip, const FaceDataT & fd) {
+            HalfHandle hh = findEdge(v4, v1);
+            if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                std::swap(v1, v4);
+            }
+            return addFace({
+                addEdge(v1, v2),
+                addEdge(v2, v3),
+                addEdge(v3, v4),
+                addEdge(v4, v1)
+            }, fd);
+        }
+
         
         template <class VertDataT, class HalfDataT, class FaceDataT>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle
