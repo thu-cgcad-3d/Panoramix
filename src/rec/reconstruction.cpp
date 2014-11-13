@@ -1289,8 +1289,9 @@ namespace panoramix {
 
 
 
-            // mixed graph 
-            struct MixedGraphVertex;
+            // mixed graph
+            struct Choice;
+            class MixedGraphVertex;
             struct MixedGraphEdge;
 
             using MixedGraph = HomogeneousGraph02<MixedGraphVertex, MixedGraphEdge>;
@@ -1303,8 +1304,8 @@ namespace panoramix {
                 int choiceId;
             };
 
-            // mixed graph vertex
-            // subclassing
+            
+            // vertex data
             // vertex representing a region cc
             struct RegionCCVertexData {
                 int ccId;
@@ -1324,6 +1325,8 @@ namespace panoramix {
                 using PlaneConfidenceMap = VecMap<double, 3, PlaneConfidenceData>;
                 PlaneConfidenceMap candidatePlanesByRoot;
 
+                Plane3 chosenPlane;
+
                 void buildCandidates(const RecContext & context,
                     const MixedGraph & g, const MixedGraphVertHandle & selfHandle);
                 void registerChoices(const RecContext & context,
@@ -1331,10 +1334,9 @@ namespace panoramix {
                     std::vector<Choice> & choices, std::vector<double> & probabilities,
                     double baseProb, int maxChoiceNum) const;
                 void pickChoice(const RecContext & context,
-                    MixedGraph & g, const MixedGraphVertHandle & selfHandle,
-                    const Choice & choice, Plane3 & plane) const;
+                    MixedGraph & g,
+                    const Choice & choice);
             };
-
 
             // vertex representing a line cc
             struct LineCCVertexData {
@@ -1343,6 +1345,8 @@ namespace panoramix {
                 using DepthConfidenceMap = VecMap<double, 1, double>;
                 DepthConfidenceMap candidateDepthFactors;
 
+                double chosenDepthFactor;
+
                 void buildCandidates(const RecContext & context,
                     const MixedGraph & g, const MixedGraphVertHandle & selfHandle);
                 void registerChoices(const RecContext & context,
@@ -1350,98 +1354,134 @@ namespace panoramix {
                     std::vector<Choice> & choices, std::vector<double> & probabilities,
                     double baseProb, int maxChoiceNum) const;
                 void pickChoice(const RecContext & context,
-                    MixedGraph & g, const MixedGraphVertHandle & selfHandle,
-                    const Choice & choice, double & depthFactor) const;
+                    MixedGraph & g,
+                    const Choice & choice);
             };
 
-
-            struct MixedGraphVertex {
-                inline MixedGraphVertex() : dataPtr(nullptr), type(None), determined(false) {}
-                inline explicit MixedGraphVertex(RegionCCVertexData * d) : regionCCVDPtr(d), type(RegionCC), determined(false) {}
-                inline explicit MixedGraphVertex(LineCCVertexData * d) : lineCCVDPtr(d), type(LineCC), determined(false) {}
-                inline MixedGraphVertex(const MixedGraphVertex & v) : type(v.type), determined(false) {
-                    if (type == RegionCC)
-                        regionCCVDPtr = new RegionCCVertexData(*v.regionCCVDPtr);
-                    else if(type == LineCC)
-                        lineCCVDPtr = new LineCCVertexData(*v.lineCCVDPtr);
+            // mixed graph vertex
+            class MixedGraphVertex {
+            public:
+                inline MixedGraphVertex() : _dataPtr(nullptr), _type(None), _determined(false) {}
+                inline explicit MixedGraphVertex(RegionCCVertexData * d) : _regionCCVDPtr(d), _type(RegionCC), _determined(false) {}
+                inline explicit MixedGraphVertex(LineCCVertexData * d) : _lineCCVDPtr(d), _type(LineCC), _determined(false) {}
+                inline MixedGraphVertex(const MixedGraphVertex & v) : _type(v._type), _determined(false) {
+                    if (_type == RegionCC)
+                        _regionCCVDPtr = new RegionCCVertexData(*v._regionCCVDPtr);
+                    else if (_type == LineCC)
+                        _lineCCVDPtr = new LineCCVertexData(*v._lineCCVDPtr);
                     else{
-                        dataPtr = nullptr;
+                        _dataPtr = nullptr;
                     }
                 }
                 inline MixedGraphVertex(MixedGraphVertex && v) { 
-                    std::swap(type, v.type);
-                    std::swap(dataPtr, v.dataPtr);
-                    std::swap(determined, v.determined);
+                    std::swap(_type, v._type);
+                    std::swap(_dataPtr, v._dataPtr);
+                    std::swap(_determined, v._determined);
                 }
                 inline MixedGraphVertex & operator = (MixedGraphVertex && v) { 
-                    std::swap(type, v.type);
-                    std::swap(dataPtr, v.dataPtr);
-                    std::swap(determined, v.determined);
+                    std::swap(_type, v._type);
+                    std::swap(_dataPtr, v._dataPtr);
+                    std::swap(_determined, v._determined);
                     return *this; 
                 }
                 inline void swap(MixedGraphVertex & v) { 
-                    std::swap(type, v.type);
-                    std::swap(dataPtr, v.dataPtr);
-                    std::swap(determined, v.determined);
+                    std::swap(_type, v._type);
+                    std::swap(_dataPtr, v._dataPtr);
+                    std::swap(_determined, v._determined);
                 }
                 inline ~MixedGraphVertex() { 
-                    if (type == RegionCC)
-                        delete regionCCVDPtr;
-                    else if (type == LineCC)
-                        delete lineCCVDPtr;
+                    if (_type == RegionCC)
+                        delete _regionCCVDPtr;
+                    else if (_type == LineCC)
+                        delete _lineCCVDPtr;
                 }
 
-                inline bool isRegionCC() const { return type == RegionCC; }
-                inline bool isLineCC() const { return type == LineCC; }
+                inline bool isRegionCC() const { return _type == RegionCC; }
+                inline bool isLineCC() const { return _type == LineCC; }
 
-                inline RegionCCVertexData & regionCCVD() { assert(type == RegionCC); return *regionCCVDPtr; }
-                inline LineCCVertexData & lineCCVD() { assert(type == LineCC); return *lineCCVDPtr; }
-                inline const RegionCCVertexData & regionCCVD() const { assert(type == RegionCC); return *regionCCVDPtr; }
-                inline const LineCCVertexData & lineCCVD() const { assert(type == LineCC); return *lineCCVDPtr; }
+                inline RegionCCVertexData & regionCCVD() { assert(_type == RegionCC); return *_regionCCVDPtr; }
+                inline LineCCVertexData & lineCCVD() { assert(_type == LineCC); return *_lineCCVDPtr; }
+                inline const RegionCCVertexData & regionCCVD() const { assert(_type == RegionCC); return *_regionCCVDPtr; }
+                inline const LineCCVertexData & lineCCVD() const { assert(_type == LineCC); return *_lineCCVDPtr; }
 
-                enum {RegionCC, LineCC, None} type;
+                inline bool determined() const { return _determined; }
+
+            private:
+                enum {RegionCC, LineCC, None} _type;
                 union {
-                    RegionCCVertexData * regionCCVDPtr;
-                    LineCCVertexData * lineCCVDPtr;
-                    void * dataPtr;
+                    RegionCCVertexData * _regionCCVDPtr;
+                    LineCCVertexData * _lineCCVDPtr;
+                    void * _dataPtr;
                 };
-                bool determined;
+                bool _determined;
+
+                friend MixedGraphVertex CreateRegionCCVertex(int regionCCId, const RecContext & context);
+                friend MixedGraphVertex CreateLineCCVertex(int lineCCId, const RecContext & context);
+                friend void UpdateNeighbors(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh);
             };
 
             // mixed graph edge
-            struct MixedGraphEdge {
-                enum { RegionRegion, RegionLine } type;
-                std::pair<RegionIndex, RegionIndex> riri; // valid when type == RegionRegion
-                std::pair<RegionIndex, LineIndex> rili; // valid when type == RegionLine                
-                bool determined; // whether the anchors are determined
+            class MixedGraphEdge {
+            public:
+                inline MixedGraphEdge() : _type(None), _determined(false), _distanceSumOnAnchorsBetweenVertices(0.0) {}
+                inline bool connectsRegionAndRegion() const { return _type == RegionRegion; }
+                inline bool connectsRegionAndLine() const { return _type == RegionLine; }
+                inline const std::pair<RegionIndex, LineIndex> & rili() const { assert(connectsRegionAndLine()); return _rili; }
+                inline const std::pair<RegionIndex, RegionIndex> & riri() const { assert(connectsRegionAndRegion()); return _riri; }
+                inline bool determined() const { return _determined; }
+                inline const std::vector<Point3> & anchors() const { return _anchors; }
+                inline std::vector<Point3> & anchors() { return _anchors; }
+
+            private:
+                enum { RegionRegion, RegionLine, None } _type;
+                std::pair<RegionIndex, RegionIndex> _riri; // valid when type == RegionRegion
+                std::pair<RegionIndex, LineIndex> _rili; // valid when type == RegionLine                
+                bool _determined; // whether the anchors are determined
                 // represent anchor locations if determined, reprensent anchor directions if not determined
-                std::vector<Point3> anchors; 
+                std::vector<Point3> _anchors;
+                double _distanceSumOnAnchorsBetweenVertices;
+
+                friend MixedGraphEdge CreateRegionRegionEdge(const RegionIndex & ri1, const RegionIndex & ri2, 
+                    const std::vector<Point3> & anchors);
+                friend MixedGraphEdge CreateRegionLineEdge(const RegionIndex & ri, const LineIndex & li, 
+                    const std::vector<Point3> & anchors);
+                friend void UpdateNeighbors(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh);
             };
 
-            // implementations
+            #pragma region function_declarations
+
+            // vertex functions
+            inline MixedGraphVertex CreateRegionCCVertex(int regionCCId, const RecContext & context);
+            inline MixedGraphVertex CreateLineCCVertex(int lineCCId, const RecContext & context);
             inline Rational ComputeDeterminedAnchorsRatio(const MixedGraph & g,
-                const MixedGraphVertHandle & selfHandle) {
-                Rational r(0.0, 0.0);
-                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
-                    const auto & ed = g.data(eh);
-                    r.denominator += ed.anchors.size();
-                    r.numerator += ed.determined ? ed.anchors.size() : 0.0;
-                }
-                return r;
-            }
-
+                const MixedGraphVertHandle & vh);
             inline std::vector<Point3> CollectDeterminedAnchors(const MixedGraph & g,
-                const MixedGraphVertHandle & selfHandle)  {
-                std::vector<Point3> ps;
-                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
-                    const auto & ed = g.data(eh);
-                    if (ed.determined)
-                        ps.insert(ps.end(), ed.anchors.begin(), ed.anchors.end());
-                }
-                return ps;
-            }
+                const MixedGraphVertHandle & vh);
+
+            inline void BuildCandidates(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh);
+            inline void RegisterChoices(const RecContext & context,
+                MixedGraph & g, const MixedGraphVertHandle & vh,
+                std::vector<Choice> & choices, std::vector<double> & probabilities,
+                double baseProb, int maxChoiceNum);
+            inline void PickChoice(const RecContext & context,
+                MixedGraph & g, const MixedGraphVertHandle & vh,
+                const Choice & choice);
 
 
+            // edge functions
+            inline MixedGraphEdge CreateRegionRegionEdge(const RegionIndex & ri1, const RegionIndex & ri2, const std::vector<Point3> & anchors);
+            inline MixedGraphEdge CreateRegionLineEdge(const RegionIndex & ri, const LineIndex & li, const std::vector<Point3> & anchors);
+            
+
+            // holistic functions
+            inline void UpdateNeighbors(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh);
+
+            #pragma endregion function_declarations
+
+
+            #pragma region function_implementations
+            // implementations
+            // vertex functions
 
             // create a new region cc vertex
             MixedGraphVertex CreateRegionCCVertex(int regionCCId, const RecContext & context){
@@ -1455,6 +1495,15 @@ namespace panoramix {
                     if (rcc.second == regionCCId)
                         rci.regionIndices.insert(rcc.first);
                 }
+
+                // initialize chosen plane
+                assert(!rci.regionIndices.empty());
+                auto & ri = *rci.regionIndices.begin();
+                auto & rd = GetData(ri, context.regionsNets);
+                Vec3 centerDir = context.views[ri.viewId].camera.spatialDirection(rd.center);
+                double scale = context.initialBoundingBox.outerSphere().radius;
+                rci.chosenPlane.anchor = normalize(centerDir) * scale;
+                rci.chosenPlane.normal = normalize(centerDir);
 
                 // locate tangential coordinates
                 std::vector<Vec3> outerContourDirections;
@@ -1493,14 +1542,14 @@ namespace panoramix {
                 double scale = context.initialBoundingBox.outerSphere().radius;
                 auto determinedAnchors = CollectDeterminedAnchors(g, selfHandle);
 
-                // merge near anchors
-                std::vector<decltype(determinedAnchors.begin())> mergedAnchorIters;
-                core::MergeNearRTree(determinedAnchors.begin(), determinedAnchors.end(), std::back_inserter(mergedAnchorIters), 
-                    core::no(), scale / 100.0);
+                //// merge near anchors
+                //std::vector<decltype(determinedAnchors.begin())> mergedAnchorIters;
+                //core::MergeNearRTree(determinedAnchors.begin(), determinedAnchors.end(), std::back_inserter(mergedAnchorIters), 
+                //    core::no(), scale / 100.0);
 
                 // iterate over merged anchors to collect plane candidates
-                for (auto & i : mergedAnchorIters){
-                    const Point3 & anchor = *i;
+                for (auto & anchor : determinedAnchors/*mergedAnchorIters*/){
+                    //const Point3 & anchor = *i;
                     for (auto & vp : context.vanishingPoints){
                         Plane3 plane(anchor, vp);
                         if (OPT_IgnoreTooSkewedPlanes){
@@ -1538,13 +1587,13 @@ namespace panoramix {
                         // collect distance votes
                         double distVotes = 0.0;
                         std::vector<Vec3> nearbyAnchors;
-                        for (int i = 0; i < mergedAnchorIters.size(); i++){
-                            double distanceToPlane = plane.distanceTo(*mergedAnchorIters[i]);
+                        for (int i = 0; i < /*mergedAnchorIters*/determinedAnchors.size(); i++){
+                            double distanceToPlane = plane.distanceTo(/**mergedAnchorIters[i]*/determinedAnchors[i]);
                             if (distanceToPlane > distFromPointToPlaneThres)
                                 continue;
                             distVotes += Gaussian(distanceToPlane, distFromPointToPlaneThres);
                             pcd.inlierAnchors.push_back(i);
-                            nearbyAnchors.push_back(*mergedAnchorIters[i]);
+                            nearbyAnchors.push_back(/**mergedAnchorIters[i]*/determinedAnchors[i]);
                         }
                         pcd.regionInlierAnchorsDistanceVotesSum = distVotes;
                         pcd.regionInlierAnchorsConvexContourVisualArea =
@@ -1594,31 +1643,30 @@ namespace panoramix {
             }
 
             void RegionCCVertexData::pickChoice(const RecContext & context,
-                MixedGraph & g, const MixedGraphVertHandle & selfHandle,
-                const Choice & choice, Plane3 & plane) const {
-                assert(choice.vertHandle == selfHandle);
-                plane = (candidatePlanesByRoot.begin() + choice.choiceId)->second.plane;
-                // update related edge anchors
-                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
-                    auto & ed = g.data(eh);
-                    assert(
-                        (ed.type == MixedGraphEdge::RegionLine && context.regionConnectedComponentIds.at(ed.rili.first) == ccId) ||
-                        (ed.type == MixedGraphEdge::RegionRegion && 
-                            (context.regionConnectedComponentIds.at(ed.riri.first) == ccId || context.regionConnectedComponentIds.at(ed.riri.second) == ccId)
-                        ));
-                    for (auto & anchor : ed.anchors){
-                        anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane).position;
-                    }
-                    ed.determined = true;
-                }
+                MixedGraph & g,
+                const Choice & choice) {
+                assert(&(g.data(choice.vertHandle).regionCCVD()) == this);
+                chosenPlane = (candidatePlanesByRoot.begin() + choice.choiceId)->second.plane;
+                //// update related edge anchors and notify the vertex on the other side
+                //for (const MixedGraphEdgeHandle & eh : g.topo(choice.vertHandle).uppers){
+                //    auto & ed = g.data(eh);
+                //    assert(
+                //        (ed.connectsRegionAndLine() && context.regionConnectedComponentIds.at(ed.rili().first) == ccId) ||
+                //        (ed.connectsRegionAndRegion() && 
+                //            (context.regionConnectedComponentIds.at(ed.riri().first) == ccId || context.regionConnectedComponentIds.at(ed.riri().second) == ccId)
+                //        ));
+                //    for (auto & anchor : ed.anchors()){
+                //        anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), chosenPlane).position;
+                //    }
+                //    ed.determined = true;
+                //}
             }
-
-           
 
             // create a new line cc vertex
             MixedGraphVertex CreateLineCCVertex(int lineCCId, const RecContext & context){
                 auto lcvPtr = new LineCCVertexData;
                 auto & lci = *lcvPtr;
+                lci.chosenDepthFactor = 1.0;
                 lci.ccId = lineCCId;
                 lci.candidateDepthFactors = LineCCVertexData::DepthConfidenceMap(1e-4);
                 lci.candidateDepthFactors[1.0] = 0.1; // initialize with a 1.0 depth for start
@@ -1627,7 +1675,7 @@ namespace panoramix {
                     if (p.second == lineCCId){
                         lci.lineIndices.insert(p.first);
                     }
-                }                
+                }
                 return MixedGraphVertex(lcvPtr);
             }
 
@@ -1641,8 +1689,8 @@ namespace panoramix {
                 for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
                     auto & ed = g.data(eh);
                     if (ed.determined){
-                        assert(ed.type == MixedGraphEdge::RegionLine);
-                        assert(context.lineConnectedComponentIds.at(ed.rili.second) == ccId);
+                        assert(ed.connectsRegionAndLine());
+                        assert(context.lineConnectedComponentIds.at(ed.rili().second) == ccId);
                         auto & li = ed.rili.second;
                         auto & line = context.reconstructedLines.at(li);
                         for (auto & anchor : ed.anchors){
@@ -1661,7 +1709,7 @@ namespace panoramix {
                 const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
                 std::vector<Choice> & choices, std::vector<double> & probabilities,
                 double baseProb, int maxChoiceNum) const {
-               
+
                 std::vector<Scored<Choice>> newChoices;
                 int depthId = 0;
                 double maxVote = 0.0;
@@ -1669,7 +1717,7 @@ namespace panoramix {
                     maxVote = maxVote < c.second ? c.second : maxVote;
 
                 double fullCompleteness = ComputeDeterminedAnchorsRatio(g, selfHandle).value(0.0);
-                
+
                 for (auto & c : candidateDepthFactors){
                     auto & candidateDepthVote = c.second;
                     Choice choice = { selfHandle, depthId++ };
@@ -1687,23 +1735,77 @@ namespace panoramix {
             }
 
             void LineCCVertexData::pickChoice(const RecContext & context,
-                MixedGraph & g, const MixedGraphVertHandle & selfHandle,
-                const Choice & choice, double & depthFactor) const{
-                assert(choice.vertHandle == selfHandle);
-                depthFactor = (candidateDepthFactors.begin() + choice.choiceId)->first[0];
+                MixedGraph & g,
+                const Choice & choice) {
+                assert(&(g.data(choice.vertHandle).lineCCVD()) == this);
+                chosenDepthFactor = (candidateDepthFactors.begin() + choice.choiceId)->first[0];
                 // update related edge anchors
-                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
-                    auto & ed = g.data(eh);
-                    assert(ed.type == MixedGraphEdge::RegionLine &&
-                        context.lineConnectedComponentIds.at(ed.rili.second) == ccId);
-                    const auto & line = context.reconstructedLines.at(ed.rili.second);
-                    for (auto & anchor : ed.anchors){
-                        auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
-                            .second.second;
-                        anchor = pOnLine * depthFactor;
-                    }
-                    ed.determined = true;
+                /* for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
+                auto & ed = g.data(eh);
+                assert(ed.connectsRegionAndLine() &&
+                context.lineConnectedComponentIds.at(ed.rili.second) == ccId);
+                const auto & line = context.reconstructedLines.at(ed.rili.second);
+                for (auto & anchor : ed.anchors){
+                auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
+                .second.second;
+                anchor = pOnLine * depthFactor;
                 }
+                ed.determined = true;
+                }*/
+            }
+
+
+
+            // unified methods for vertex
+            inline Rational ComputeDeterminedAnchorsRatio(const MixedGraph & g,
+                const MixedGraphVertHandle & selfHandle) {
+                Rational r(0.0, 0.0);
+                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
+                    const auto & ed = g.data(eh);
+                    r.denominator += ed.anchors.size();
+                    r.numerator += ed.determined() ? ed.anchors.size() : 0.0;
+                }
+                return r;
+            }
+
+            inline std::vector<Point3> CollectDeterminedAnchors(const MixedGraph & g,
+                const MixedGraphVertHandle & selfHandle)  {
+                std::vector<Point3> ps;
+                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
+                    const auto & ed = g.data(eh);
+                    if (ed.determined())
+                        ps.insert(ps.end(), ed.anchors.begin(), ed.anchors.end());
+                }
+                return ps;
+            }
+
+            inline void BuildCandidates(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh){
+                auto & vd = g.data(vh);
+                if (vd.isRegionCC())
+                    vd.regionCCVD().buildCandidates(context, g, vh);
+                else if (vd.isLineCC())
+                    vd.lineCCVD().buildCandidates(context, g, vh);
+            }
+
+            inline void RegisterChoices(const RecContext & context,
+                MixedGraph & g, const MixedGraphVertHandle & vh,
+                std::vector<Choice> & choices, std::vector<double> & probabilities,
+                double baseProb, int maxChoiceNum){
+                auto & vd = g.data(vh);
+                if (vd.isRegionCC())
+                    vd.regionCCVD().registerChoices(context, g, vh, choices, probabilities, baseProb, maxChoiceNum);
+                else if (vd.isLineCC())
+                    vd.lineCCVD().registerChoices(context, g, vh, choices, probabilities, baseProb, maxChoiceNum);
+            }
+
+            inline void PickChoice(const RecContext & context,
+                MixedGraph & g, const MixedGraphVertHandle & vh,
+                const Choice & choice){
+                auto & vd = g.data(vh);
+                if (vd.isRegionCC())
+                    vd.regionCCVD().pickChoice(context, g, choice);
+                else if (vd.isLineCC())
+                    vd.lineCCVD().pickChoice(context, g, choice);
             }
 
 
@@ -1712,7 +1814,51 @@ namespace panoramix {
 
 
 
+            // edge functions
+            MixedGraphEdge CreateRegionRegionEdge(const RegionIndex & ri1, const RegionIndex & ri2, const std::vector<Point3> & anchors){
+                MixedGraphEdge ed;
+                ed._riri.first = ri1;
+                ed._riri.second = ri2;
+                ed._type = MixedGraphEdge::RegionRegion;
+                ed._anchors = anchors;
+                return ed;
+            }
+
+            MixedGraphEdge CreateRegionLineEdge(const RegionIndex & ri, const LineIndex & li, const std::vector<Point3> & anchors){
+                MixedGraphEdge ed;
+                ed._rili.first = ri;
+                ed._rili.second = li;
+                ed._type = MixedGraphEdge::RegionLine;
+                ed._anchors = anchors;
+                return ed;
+            }
+
+
+
+            // holistic functions
+            inline void UpdateNeighbors(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh){
+                auto & vd = g.data(vh);
+                auto & ehs = g.topo(vh).uppers;
+                for (auto & eh : ehs){
+                    auto anotherVh = g.topo(eh).lowers[0];
+                    if (anotherVh == vh)
+                        anotherVh = g.topo(eh).lowers[1];
+                    auto & ed = g.data(eh);
+                    if (vd.isRegionCC()){
+                        auto & plane = vd.regionCCVD().chosenPlane;
+
+                    }
+                    else if (vd.isLineCC()){
+                        auto depthFactor = vd.lineCCVD().chosenDepthFactor;
+                        
+                    }
+                    ed._determined = true;
+                }
+            }
+            
           
+            #pragma endregion function_implementations
+
 
             void DisplayReconstruction(int highlightedRegionCCId, int highlightedLineCCId,
                 const std::set<int> & regionCCIdsNotDeterminedYet, const std::set<int> & lineCCIdsNotDeterminedYet,
@@ -2128,21 +2274,18 @@ namespace panoramix {
                     int thisRegionCCId2 = regionConnectedComponentIds.at(ri2);
                     auto vh1 = regionCCIdToVHandles[thisRegionCCId1];
                     auto vh2 = regionCCIdToVHandles[thisRegionCCId2];
-                    // add edge
-                    MixedGraphEdge e;
-                    e.determined = false;
-                    e.type = MixedGraphEdge::RegionRegion;
-                    e.riri = std::make_pair(ri1, ri2);
+
                     // add anchors
                     auto & samplePoints = b.data.sampledPoints;
-                    e.anchors.reserve(samplePoints.size());
+                    std::vector<Point3> anchors;
+                    anchors.reserve(samplePoints.size());
                     for (auto & ps : samplePoints){
                         for (auto & p : ps){
-                            e.anchors.push_back(cam.spatialDirection(p));
+                            anchors.push_back(cam.spatialDirection(p));
                         }
                     }
                     // insert edge
-                    mGraph.add<1>({ vh1, vh2 }, e);
+                    mGraph.add<1>({ vh1, vh2 }, CreateRegionRegionEdge(ri1, ri2, anchors));
                 }
             }
             // region-line
@@ -2153,14 +2296,9 @@ namespace panoramix {
                 int regionCCId = regionConnectedComponentIds.at(ri);
                 auto vh1 = regionCCIdToVHandles[regionCCId];
                 auto vh2 = lineCCIdToVHandles[lineCCId];               
-                // add edge
-                MixedGraphEdge e;
-                e.determined = false;
-                e.type = MixedGraphEdge::RegionLine;
-                e.rili = std::make_pair(ri, li);
-                e.anchors = pp.second;
+
                 // insert edge
-                mGraph.add<1>({ vh1, vh2 }, e);
+                mGraph.add<1>({ vh1, vh2 }, CreateRegionLineEdge(ri, li, pp.second));
             }
 
             std::cout << "vertices num: " << mGraph.internalElements<0>().size() << std::endl;
