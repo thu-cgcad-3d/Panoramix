@@ -106,6 +106,8 @@ namespace panoramix {
             inline Triplet(){}
             inline Triplet(const TopoT & t, const DataT & d, uint8_t e = true) 
                 : topo(t), exists(e), data(d){}
+            inline Triplet(const TopoT & t, DataT && d, uint8_t e = true)
+                : topo(t), exists(e), data(std::forward<DataT>(d)) {}
             template <class Archive> inline void serialize(Archive & ar) { ar(topo, exists, data); }
         };
         template <class TopoT, class DataT>
@@ -130,11 +132,14 @@ namespace panoramix {
                 for (size_t i = 0; i < v.size(); i++){
                     newlocations[i] = { v[i].exists == false ? -1 : (index++) };
                 }
-                for (int i = int(v.size() - 1); i >= 0; --i){
-                    if (!v[i].exists){
-                        v.erase(v.begin() + i);
-                    }
-                }
+                //for (int i = int(v.size() - 1); i >= 0; --i){
+                //    if (!v[i].exists){
+                //        v.erase(v.begin() + i);
+                //    }
+                //}
+                v.erase(std::remove_if(v.begin(), v.end(), [](const typename ComponentTableT::value_type & t){
+                    return !t.exists;
+                }), v.end());
                 return 0;
             }
             template <class UpdateHandleTableT, class TopoT>
@@ -976,10 +981,29 @@ namespace panoramix {
                 return HandleAtLevel<Level>(id);
             }
 
+            template <int Level>
+            HandleAtLevel<Level> add(std::initializer_list<HandleAtLevel<Level - 1>> depends,
+                typename LayerContentTypeStruct<Level>::type::DataType && d) {
+                int id = static_cast<int>(internalElements<Level>().size());
+                internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, depends), 
+                    std::forward<typename LayerContentTypeStruct<Level>::type::DataType>(d), true);
+                for (const HandleAtLevel<Level - 1> & lowh : depends) {
+                    topo(lowh).uppers.insert(HandleAtLevel<Level>(id));
+                }
+                return HandleAtLevel<Level>(id);
+            }
+
             // add element of the lowest level
             HandleAtLevel<0> add(const typename LayerContentTypeStruct<0>::type::DataType & d = LayerContentTypeStruct<0>::type::DataType()) {
                 int id = static_cast<int>(internalElements<0>().size());
                 internalElements<0>().emplace_back(typename LayerContentTypeStruct<0>::type::TopoType(id), d, true);
+                return HandleAtLevel<0>(id);
+            }
+
+            HandleAtLevel<0> add(typename LayerContentTypeStruct<0>::type::DataType && d){
+                int id = static_cast<int>(internalElements<0>().size());
+                internalElements<0>().emplace_back(typename LayerContentTypeStruct<0>::type::TopoType(id), 
+                    std::forward<typename LayerContentTypeStruct<0>::type::DataType>(d), true);
                 return HandleAtLevel<0>(id);
             }
 
@@ -998,6 +1022,8 @@ namespace panoramix {
                 internalElements<Level>()[h.id].exists = false; // mark as deleted
                 cleanUppers<Level>(h, std::integral_constant<bool, (Level < LayerNum - 1)>());
             }
+
+
 
         private:
             template <int Level>
@@ -1029,11 +1055,16 @@ namespace panoramix {
         public:
             // garbage collection
             inline void gc() {
-                gcUsingSequence(typename SequenceGenerator<LayerNum>::type());
+                if (hasGarbage())
+                    gcUsingSequence(typename SequenceGenerator<LayerNum>::type());
             }
 
             inline void clear() {
                 clearUsingSequence(typename SequenceGenerator<LayerNum>::type());
+            }
+
+            inline bool hasGarbage() const {
+                return hasGarbageUsingSequence(typename SequenceGenerator<LayerNum>::type());
             }
 
         private:
@@ -1086,6 +1117,24 @@ namespace panoramix {
             inline int clearAtLevel() {
                 internalElements<Level>().clear();
                 return 0;
+            }
+
+            template <int ...S>
+            inline bool hasGarbageUsingSequence(Sequence<S...>) const {
+                for (bool r : { hasGarbageAtLevel<S>() ... }){
+                    if (r)
+                        return true;
+                }
+                return false;
+            }
+
+            template <int Level>
+            inline bool hasGarbageAtLevel() const {
+                for (const auto & t : internalElements<Level>()){
+                    if (!t.exists)
+                        return true;
+                }
+                return false;
             }
 
         public:

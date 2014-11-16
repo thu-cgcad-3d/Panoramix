@@ -47,6 +47,11 @@ namespace panoramix {
         }
 
         template <class T, int N, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
+        inline bool HasValue(const Sphere<T, N> & s, const TesterT & tester){
+            return HasValue(s.center) || tester(s.radius);
+        }
+
+        template <class T, int N, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
         inline bool HasValue(const Box<T, N> & b, const TesterT & tester){
             return HasValue(b.minCorner, tester) || HasValue(b.maxCorner, tester);
         }
@@ -68,6 +73,9 @@ namespace panoramix {
             return std::isinf(v) || std::isnan(v);
         }
 
+
+
+        // contains
         template <class ContainerT, class ValueT>
         inline bool Contains(const ContainerT & c, const ValueT & v) {
             return std::find(c.cbegin(), c.cend(), v) != c.cend();
@@ -120,6 +128,9 @@ namespace panoramix {
         inline T Pitfall(const T & x, const K & sigma) {
             return abs(x) <= sigma ? Square(x / sigma) : 1;
         }
+
+
+
 
         /// distance functions
         // for real numbers
@@ -808,6 +819,60 @@ namespace panoramix {
                 addFace(vhs[i][j], vhs[i - 1][j - 1], vhs[i - 1][j]);
             }
         }
+
+        // make an icosahedron sphere
+        template <class AddVertex3FunT, class AddTriFaceFunT>
+        void MakeIcosahedron(AddVertex3FunT addVertex, AddTriFaceFunT addFace, int subdivisionTimes = 0) {
+            using VertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
+            // create a basic icosahedron
+            float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
+            std::vector<Point3f> positions = {
+                Point3f(-1, t, 0.0f),
+                Point3f(1, t, 0.0f),
+                Point3f(-1, -t, 0.0f),
+                Point3f(1, -t, 0.0f),
+                Point3f(0.0f, -1, t),
+                Point3f(0.0f, 1, t),
+                Point3f(0.0f, -1, -t),
+                Point3f(0.0f, 1, -t),
+                Point3f(t, 0.0f, -1),
+                Point3f(t, 0.0f, 1),
+                Point3f(-t, 0.0f, -1),
+                Point3f(-t, 0.0f, 1)
+            };
+            positions.reserve(12 * std::pow(2, subdivisionTimes));
+            std::vector<std::array<int, 3>> faceVertIds = {
+                { { 0, 11, 5 } },
+                { { 0, 5, 1 } },
+                { { 0, 1, 7 } },
+                { { 0, 7, 10 } },
+                { { 0, 10, 11 } },
+                { { 1, 5, 9 } },
+                { { 5, 11, 4 } },
+                { { 11, 10, 2 } },
+                { { 10, 7, 6 } },
+                { { 7, 1, 8 } },
+                { { 3, 9, 4 } },
+                { { 3, 4, 2 } },
+                { { 3, 2, 6 } },
+                { { 3, 6, 8 } },
+                { { 3, 8, 9 } },
+                { { 4, 9, 5 } },
+                { { 2, 4, 11 } },
+                { { 6, 2, 10 } },
+                { { 8, 6, 7 } },
+                { { 9, 8, 1 } }
+            };
+            faceVertIds.reserve(20 * std::pow(2, 2 * subdivisionTimes));
+            // todo // subdivisions
+            std::vector<VertHandle> vhs;
+            vhs.reserve(positions.size());
+            for (auto & p : positions)
+                vhs.push_back(addVertex(p[0], p[1], p[2]));
+            for (auto & f : faceVertIds)
+                addFace(vhs[f[0]], vhs[f[1]], vhs[f[2]]);
+        }
+
 
         // make mesh from simple mesh file
         template <class AddVertex3FunT, class AddTriFaceFunT>

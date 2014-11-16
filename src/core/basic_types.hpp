@@ -337,6 +337,14 @@ namespace panoramix {
         inline void serialize(Archive & ar, Line<T, N> & l) {
             ar(l.first, l.second);
         }
+        template <class T, int N>
+        inline Line<T, N> operator * (const Line<T, N> & line, const T & factor){
+            return Line<T, N>(line.first * factor, line.second * factor);
+        }
+        template <class T, int N>
+        inline Line<T, N> operator * (const T & factor, const Line<T, N> & line){
+            return Line<T, N>(line.first * factor, line.second * factor);
+        }
         using Line2 = Line<double, 2>;
         using Line3 = Line<double, 3>;
 

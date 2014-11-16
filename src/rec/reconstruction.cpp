@@ -22,6 +22,8 @@ extern "C" {
 
 #include "reconstruction.hpp"
 
+#define semantic_union(...) struct
+
 namespace panoramix {
     namespace rec {
 
@@ -838,7 +840,7 @@ namespace panoramix {
                     lineIndexToIds[lineIndices[i]] = i;
 
                 using namespace Eigen;
-                SparseMatrix<double> A, W;
+                Eigen::SparseMatrix<double> A, W;
                 VectorXd B;
 
                 // try minimizing ||W(AX-B)||^2
@@ -982,8 +984,8 @@ namespace panoramix {
                 // solve the equation system
                 VectorXd X;
                 SparseQR<SparseMatrix<double>, COLAMDOrdering<int>> solver;
-                static_assert(!(SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
-                SparseMatrix<double> WA = W * A;
+                static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
+                Eigen::SparseMatrix<double> WA = W * A;
                 A.makeCompressed();
                 WA.makeCompressed();
                 solver.compute(useWeights ? WA : A);
@@ -1301,70 +1303,123 @@ namespace panoramix {
             // choice
             struct Choice {
                 MixedGraphVertHandle vertHandle;
+                MixedGraphEdgeHandle edgeHandle;
                 int choiceId;
+                inline Choice() : choiceId(-1) {}
+                inline bool isValid() const {
+                    return vertHandle.isValid() && edgeHandle.isValid() && choiceId >= 0;
+                }
+                inline bool isInvalid() const {
+                    return !isValid();
+                }
             };
 
             
             // vertex data
-            // vertex representing a region cc
-            struct RegionCCVertexData {
-                int ccId;
-                ComponentIndexHashSet<RegionIndex> regionIndices;
+            template <class IndexT, class ValueT, class PropertyT>
+            struct VertexData {
+                using IndexType = IndexT;
+                using ValueType = ValueT;
+                int ccId; // cc Id
+                ComponentIndexHashSet<IndexType> indices; // indices for this cc
+                std::map<MixedGraphEdgeHandle, std::vector<ValueT>> candidates;
+                ValueT currentValue; // current value
+                PropertyT properties;
+
+                inline Scored<const ValueT &> bestCandidate() const {
+                    double curScore = std::numeric_limits<double>::lowest();
+                    Choice choice;
+                    for (auto & cand : candidates){
+                        for (int i = 0; i < cand.second.size(); i++){
+                            auto s = GetScore(cand.second[i], properties);
+                            if (s > curScore){
+                                curScore = s;
+                                choice.edgeHandle = cand.first;
+                                choice.choiceId = i;
+                            }
+                        }
+                    }
+                    return Scored<const ValueT &>{curScore, candidates.at(choice.edgeHandle)[choice.choiceId]};
+                }
+
+                inline bool setValueToBest() { 
+                    auto best = bestCandidate().component; 
+                    //bool changed = !(best == currentValue);
+                    currentValue = best;
+                    return changed;
+                }
+            };
+
+            // for region cc vertex data
+            struct RegionCCPlaneInformation {
+                bool isOrthogonal;
+                semantic_union(isOrthogonal, !isOrthogonal) {
+                    struct {
+                        int orientationClaz;
+                        double depth; // distance from origin
+                    } orthoPlane;
+                    Plane3 skewedPlane;
+                };
+                template <class Vec3ArrayT>
+                inline Plane3 plane(const Vec3ArrayT & vps) const {
+                    return isOrthogonal ?
+                        Plane3(normalize(vps[orthoPlane.orientationClaz] * orthoPlane.depth), vps[orthoPlane.orientationClaz]) :
+                        skewedPlane;
+                }
+                double regionInlierAnchorsConvexContourVisualArea;
+                double regionInlierAnchorsDistanceVotesSum;
+            };
+
+            struct RegionCCPropeties {
                 Plane3 tangentialPlane;
                 Vec3 xOnTangentialPlane, yOnTangentialPlane;
                 double regionVisualArea;
                 double regionConvexContourVisualArea;
-
-                // volitile data
-                struct PlaneConfidenceData {
-                    Plane3 plane;
-                    std::vector<int> inlierAnchors;
-                    double regionInlierAnchorsConvexContourVisualArea;
-                    double regionInlierAnchorsDistanceVotesSum;
-                };
-                using PlaneConfidenceMap = VecMap<double, 3, PlaneConfidenceData>;
-                PlaneConfidenceMap candidatePlanesByRoot;
-
-                Plane3 chosenPlane;
-
-                void buildCandidates(const RecContext & context,
-                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle);
-                void registerChoices(const RecContext & context,
-                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
-                    std::vector<Choice> & choices, std::vector<double> & probabilities,
-                    double baseProb, int maxChoiceNum) const;
-                void pickChoice(const RecContext & context,
-                    MixedGraph & g,
-                    const Choice & choice);
             };
 
-            // vertex representing a line cc
-            struct LineCCVertexData {
-                int ccId;
-                ComponentIndexHashSet<LineIndex> lineIndices;
-                using DepthConfidenceMap = VecMap<double, 1, double>;
-                DepthConfidenceMap candidateDepthFactors;
+            inline double GetScore(const RegionCCPlaneInformation & info, const RegionCCPropeties & prop){
+                return info.regionInlierAnchorsDistanceVotesSum * info.regionInlierAnchorsConvexContourVisualArea / 
+                    prop.regionConvexContourVisualArea;
+            }
 
-                double chosenDepthFactor;
+            using RegionCCVertexData = VertexData<RegionIndex, RegionCCPlaneInformation, RegionCCPropeties>;
 
-                void buildCandidates(const RecContext & context,
-                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle);
-                void registerChoices(const RecContext & context,
-                    const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
-                    std::vector<Choice> & choices, std::vector<double> & probabilities,
-                    double baseProb, int maxChoiceNum) const;
-                void pickChoice(const RecContext & context,
-                    MixedGraph & g,
-                    const Choice & choice);
+            // for line cc vertex data
+            struct LineCCDepthFactorInformation {
+                double depthFactor;
+                double votes;
             };
+            struct LineCCProperties {
+                int linesNum;
+            };
+
+            inline double GetScore(const LineCCDepthFactorInformation & info, const LineCCProperties & prop){
+                return info.votes / prop.linesNum;
+            }
+
+            using LineCCVertexData = VertexData<LineIndex, LineCCDepthFactorInformation, LineCCProperties>;
+            
+
+
 
             // mixed graph vertex
             class MixedGraphVertex {
             public:
-                inline MixedGraphVertex() : _dataPtr(nullptr), _type(None), _determined(false) {}
-                inline explicit MixedGraphVertex(RegionCCVertexData * d) : _regionCCVDPtr(d), _type(RegionCC), _determined(false) {}
-                inline explicit MixedGraphVertex(LineCCVertexData * d) : _lineCCVDPtr(d), _type(LineCC), _determined(false) {}
-                inline MixedGraphVertex(const MixedGraphVertex & v) : _type(v._type), _determined(false) {
+                enum Type { RegionCC, LineCC, None };
+                inline MixedGraphVertex() : _dataPtr(nullptr), _type(None) {}
+                inline explicit MixedGraphVertex(RegionCCVertexData * d) : _regionCCVDPtr(d), _type(RegionCC) {}
+                inline explicit MixedGraphVertex(LineCCVertexData * d) : _lineCCVDPtr(d), _type(LineCC) {}
+                inline explicit MixedGraphVertex(Type t, int ccId, const RecContext & context)
+                    :  _type(t) {
+                    switch (t){
+                    case RegionCC: initializeWithRegionCCId(ccId, context); break;
+                    case LineCC: initializeWithLineCCId(ccId, context); break;
+                    default:
+                        break;
+                    }
+                }
+
+                inline MixedGraphVertex(const MixedGraphVertex & v) : _type(v._type) {
                     if (_type == RegionCC)
                         _regionCCVDPtr = new RegionCCVertexData(*v._regionCCVDPtr);
                     else if (_type == LineCC)
@@ -1373,21 +1428,11 @@ namespace panoramix {
                         _dataPtr = nullptr;
                     }
                 }
-                inline MixedGraphVertex(MixedGraphVertex && v) { 
-                    std::swap(_type, v._type);
-                    std::swap(_dataPtr, v._dataPtr);
-                    std::swap(_determined, v._determined);
-                }
-                inline MixedGraphVertex & operator = (MixedGraphVertex && v) { 
-                    std::swap(_type, v._type);
-                    std::swap(_dataPtr, v._dataPtr);
-                    std::swap(_determined, v._determined);
-                    return *this; 
-                }
+                inline MixedGraphVertex(MixedGraphVertex && v) { swap(v); }
+                inline MixedGraphVertex & operator = (MixedGraphVertex && v) { swap(v); return *this; }
                 inline void swap(MixedGraphVertex & v) { 
                     std::swap(_type, v._type);
                     std::swap(_dataPtr, v._dataPtr);
-                    std::swap(_determined, v._determined);
                 }
                 inline ~MixedGraphVertex() { 
                     if (_type == RegionCC)
@@ -1404,469 +1449,475 @@ namespace panoramix {
                 inline const RegionCCVertexData & regionCCVD() const { assert(_type == RegionCC); return *_regionCCVDPtr; }
                 inline const LineCCVertexData & lineCCVD() const { assert(_type == LineCC); return *_lineCCVDPtr; }
 
-                inline bool determined() const { return _determined; }
+            private:
+                void initializeWithRegionCCId(int ccId, const RecContext & context){
+                    _regionCCVDPtr = new RegionCCVertexData;
+                    auto & rci = *_regionCCVDPtr;
+                    rci.ccId = ccId;
+                    // collect region indices
+                    for (auto & rcc : context.regionConnectedComponentIds){
+                        if (rcc.second == ccId)
+                            rci.indices.insert(rcc.first);
+                    }
+                    // locate tangential coordinates
+                    std::vector<Vec3> outerContourDirections;
+                    Vec3 regionsCenterDirection(0, 0, 0);
+                    for (auto & ri : rci.indices){
+                        auto & cam = context.views[ri.viewId].camera;
+                        regionsCenterDirection += normalize(cam.spatialDirection(GetData(ri, context.regionsNets).center));
+                        auto & regionOuterContourPixels = GetData(ri, context.regionsNets).contours.back();
+                        for (auto & pixel : regionOuterContourPixels){
+                            outerContourDirections.push_back(cam.spatialDirection(pixel));
+                        }
+                    }
+                    regionsCenterDirection /= norm(regionsCenterDirection);
+                    rci.properties.tangentialPlane = Plane3(regionsCenterDirection, regionsCenterDirection);
+                    std::tie(rci.properties.xOnTangentialPlane, rci.properties.yOnTangentialPlane) =
+                        ProposeXYDirectionsFromZDirection(rci.properties.tangentialPlane.normal);
+                    // compute visual areas
+                    rci.properties.regionVisualArea = ComputeVisualAreaOfDirections(rci.properties.tangentialPlane,
+                        rci.properties.xOnTangentialPlane, rci.properties.yOnTangentialPlane,
+                        outerContourDirections, false);
+                    rci.properties.regionConvexContourVisualArea = ComputeVisualAreaOfDirections(rci.properties.tangentialPlane,
+                        rci.properties.xOnTangentialPlane, rci.properties.yOnTangentialPlane,
+                        outerContourDirections, true);
+                }
+                void initializeWithLineCCId(int ccId, const RecContext & context){
+                    _lineCCVDPtr = new LineCCVertexData;
+                    auto & lci = *_lineCCVDPtr;
+                    lci.ccId = ccId;
+                    lci.candidates[MixedGraphEdgeHandle()].push_back({ 1.0, 0.01 });
+                    // collect line indices
+                    for (auto & p : context.lineConnectedComponentIds){
+                        if (p.second == ccId){
+                            lci.indices.insert(p.first);
+                        }
+                    }
+                    lci.properties.linesNum = lci.indices.size();
+                }
 
             private:
-                enum {RegionCC, LineCC, None} _type;
+                Type _type;
                 union {
                     RegionCCVertexData * _regionCCVDPtr;
                     LineCCVertexData * _lineCCVDPtr;
                     void * _dataPtr;
                 };
-                bool _determined;
-
-                friend MixedGraphVertex CreateRegionCCVertex(int regionCCId, const RecContext & context);
-                friend MixedGraphVertex CreateLineCCVertex(int lineCCId, const RecContext & context);
-                friend void UpdateNeighbors(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh);
             };
+
 
             // mixed graph edge
             class MixedGraphEdge {
             public:
-                inline MixedGraphEdge() : _type(None), _determined(false), _distanceSumOnAnchorsBetweenVertices(0.0) {}
+                enum Type { RegionRegion, RegionLine, None };
+
+                inline MixedGraphEdge() : _type(None) {}
+                inline static MixedGraphEdge FromRegionRegion(const RegionBoundaryIndex & rbi, const RecContext & context){
+                    MixedGraphEdge ed;
+                    auto & regions = context.regionsNets[rbi.viewId].regions();
+                    ed._riri.first = { rbi.viewId, regions.topo(rbi.handle).lowers[0] };
+                    ed._riri.second = { rbi.viewId, regions.topo(rbi.handle).lowers[1] };
+                    ed._type = RegionRegion;
+                    auto & rd = regions.data(rbi.handle);
+                    auto & cam = context.views[rbi.viewId].camera;
+                    ed._anchors.reserve(rd.sampledPoints.front().size());
+                    for (auto & ps : rd.sampledPoints){
+                        for (auto & p : ps)
+                            ed._anchors.push_back(cam.spatialDirection(p));
+                    }
+                    return ed;
+                }
+                inline static MixedGraphEdge FromRegionLine(const std::pair<std::pair<RegionIndex, LineIndex>, std::vector<Point3>> & riliWithAnchors){
+                    MixedGraphEdge ed;
+                    ed._rili = riliWithAnchors.first;
+                    ed._type = RegionLine;
+                    ed._anchors = riliWithAnchors.second;
+                    return ed;
+                }
                 inline bool connectsRegionAndRegion() const { return _type == RegionRegion; }
                 inline bool connectsRegionAndLine() const { return _type == RegionLine; }
                 inline const std::pair<RegionIndex, LineIndex> & rili() const { assert(connectsRegionAndLine()); return _rili; }
                 inline const std::pair<RegionIndex, RegionIndex> & riri() const { assert(connectsRegionAndRegion()); return _riri; }
-                inline bool determined() const { return _determined; }
                 inline const std::vector<Point3> & anchors() const { return _anchors; }
                 inline std::vector<Point3> & anchors() { return _anchors; }
 
             private:
-                enum { RegionRegion, RegionLine, None } _type;
-                std::pair<RegionIndex, RegionIndex> _riri; // valid when type == RegionRegion
-                std::pair<RegionIndex, LineIndex> _rili; // valid when type == RegionLine                
-                bool _determined; // whether the anchors are determined
-                // represent anchor locations if determined, reprensent anchor directions if not determined
+                Type _type;
+                semantic_union(_type == RegionRegion, _type == RegionLine){
+                    std::pair<RegionIndex, RegionIndex> _riri; // valid when type == RegionRegion
+                    std::pair<RegionIndex, LineIndex> _rili; // valid when type == RegionLine
+                };
                 std::vector<Point3> _anchors;
-                double _distanceSumOnAnchorsBetweenVertices;
-
-                friend MixedGraphEdge CreateRegionRegionEdge(const RegionIndex & ri1, const RegionIndex & ri2, 
-                    const std::vector<Point3> & anchors);
-                friend MixedGraphEdge CreateRegionLineEdge(const RegionIndex & ri, const LineIndex & li, 
-                    const std::vector<Point3> & anchors);
-                friend void UpdateNeighbors(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh);
             };
 
-            #pragma region function_declarations
-
-            // vertex functions
-            inline MixedGraphVertex CreateRegionCCVertex(int regionCCId, const RecContext & context);
-            inline MixedGraphVertex CreateLineCCVertex(int lineCCId, const RecContext & context);
-            inline Rational ComputeDeterminedAnchorsRatio(const MixedGraph & g,
-                const MixedGraphVertHandle & vh);
-            inline std::vector<Point3> CollectDeterminedAnchors(const MixedGraph & g,
-                const MixedGraphVertHandle & vh);
-
-            inline void BuildCandidates(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh);
-            inline void RegisterChoices(const RecContext & context,
-                MixedGraph & g, const MixedGraphVertHandle & vh,
-                std::vector<Choice> & choices, std::vector<double> & probabilities,
-                double baseProb, int maxChoiceNum);
-            inline void PickChoice(const RecContext & context,
-                MixedGraph & g, const MixedGraphVertHandle & vh,
-                const Choice & choice);
 
 
-            // edge functions
-            inline MixedGraphEdge CreateRegionRegionEdge(const RegionIndex & ri1, const RegionIndex & ri2, const std::vector<Point3> & anchors);
-            inline MixedGraphEdge CreateRegionLineEdge(const RegionIndex & ri, const LineIndex & li, const std::vector<Point3> & anchors);
-            
+            // mixed graph functions
+            template <class EdgeDeterminedCheckerT>
+            void UpdateVertexFromEdge(const RecContext & context, MixedGraph & graph, MixedGraphVertHandle vh, MixedGraphEdgeHandle eh,
+                EdgeDeterminedCheckerT edgeDetermined){
 
-            // holistic functions
-            inline void UpdateNeighbors(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh);
-
-            #pragma endregion function_declarations
-
-
-            #pragma region function_implementations
-            // implementations
-            // vertex functions
-
-            // create a new region cc vertex
-            MixedGraphVertex CreateRegionCCVertex(int regionCCId, const RecContext & context){
-                auto rcvPtr = new RegionCCVertexData;
-                auto & rci = *rcvPtr;
-                rci.ccId = regionCCId;
-                rci.candidatePlanesByRoot = RegionCCVertexData::PlaneConfidenceMap(0.05);
-
-                // collect region indices
-                for (auto & rcc : context.regionConnectedComponentIds){
-                    if (rcc.second == regionCCId)
-                        rci.regionIndices.insert(rcc.first);
-                }
-
-                // initialize chosen plane
-                assert(!rci.regionIndices.empty());
-                auto & ri = *rci.regionIndices.begin();
-                auto & rd = GetData(ri, context.regionsNets);
-                Vec3 centerDir = context.views[ri.viewId].camera.spatialDirection(rd.center);
                 double scale = context.initialBoundingBox.outerSphere().radius;
-                rci.chosenPlane.anchor = normalize(centerDir) * scale;
-                rci.chosenPlane.normal = normalize(centerDir);
 
-                // locate tangential coordinates
-                std::vector<Vec3> outerContourDirections;
-                Vec3 regionsCenterDirection(0, 0, 0);
-                for (auto & ri : rci.regionIndices){
-                    auto & cam = context.views[ri.viewId].camera;
-                    regionsCenterDirection += normalize(cam.spatialDirection(GetData(ri, context.regionsNets).center));
-                    auto & regionOuterContourPixels = GetData(ri, context.regionsNets).contours.back();
-                    for (auto & pixel : regionOuterContourPixels){
-                        outerContourDirections.push_back(cam.spatialDirection(pixel));
+                auto & vhs = graph.topo(eh).lowers;
+                assert(vhs.front() == vh || vhs.back() == vh);
+                const auto & ed = graph.data(eh);
+                auto & vd = graph.data(vh);
+                if (vd.isRegionCC()){
+                    // collect all surrounded anchors
+                    auto & ehs = graph.topo(vh).uppers;
+                    std::vector<Vec3> surroundedAnchors;
+                    int n = 0;
+                    for (auto & eh : ehs){
+                        if (!edgeDetermined(eh))
+                            continue;
+                        n += graph.data(eh).anchors().size();                       
                     }
-                }
-                regionsCenterDirection /= norm(regionsCenterDirection);
-                rci.tangentialPlane = Plane3(regionsCenterDirection, regionsCenterDirection);
-                std::tie(rci.xOnTangentialPlane, rci.yOnTangentialPlane) =
-                    ProposeXYDirectionsFromZDirection(rci.tangentialPlane.normal);
+                    surroundedAnchors.reserve(n);
+                    for (auto & eh : ehs){
+                        if (!edgeDetermined(eh))
+                            continue;
+                        auto & anchors = graph.data(eh).anchors();
+                        surroundedAnchors.insert(surroundedAnchors.end(), anchors.begin(), anchors.end());
+                    }              
+                    // insert all candidates
+                    auto & regionCCVD = vd.regionCCVD();
+                    auto & cands = regionCCVD.candidates[eh];
+                    cands.clear();
+                    cands.reserve(ed.anchors().size());
 
-                // compute visual areas
-                rci.regionVisualArea = ComputeVisualAreaOfDirections(rci.tangentialPlane,
-                    rci.xOnTangentialPlane, rci.yOnTangentialPlane,
-                    outerContourDirections, false);
-                rci.regionConvexContourVisualArea = ComputeVisualAreaOfDirections(rci.tangentialPlane,
-                    rci.xOnTangentialPlane, rci.yOnTangentialPlane,
-                    outerContourDirections, true);
+                    VecMap<double, 3, Vec3> planeRoots(0.001 * scale);
 
-                return MixedGraphVertex(rcvPtr);
-            }
-
-            // region cc vertex method implementations
-            void RegionCCVertexData::buildCandidates(const RecContext & context,
-                const MixedGraph & g, const MixedGraphVertHandle & selfHandle) {
-
-                // make candidate planes
-                candidatePlanesByRoot.clear();
-
-                double scale = context.initialBoundingBox.outerSphere().radius;
-                auto determinedAnchors = CollectDeterminedAnchors(g, selfHandle);
-
-                //// merge near anchors
-                //std::vector<decltype(determinedAnchors.begin())> mergedAnchorIters;
-                //core::MergeNearRTree(determinedAnchors.begin(), determinedAnchors.end(), std::back_inserter(mergedAnchorIters), 
-                //    core::no(), scale / 100.0);
-
-                // iterate over merged anchors to collect plane candidates
-                for (auto & anchor : determinedAnchors/*mergedAnchorIters*/){
-                    //const Point3 & anchor = *i;
-                    for (auto & vp : context.vanishingPoints){
-                        Plane3 plane(anchor, vp);
-                        if (OPT_IgnoreTooSkewedPlanes){
-                            if (norm(plane.root()) <= scale / 5.0)
+                    for (const auto & anchor : ed.anchors()){
+                        for (int vpid = 0; vpid < context.vanishingPoints.size(); vpid++){
+                            RegionCCPlaneInformation planeInfo;
+                            planeInfo.isOrthogonal = true;
+                            planeInfo.orthoPlane.orientationClaz = vpid;
+                            Plane3 plane(anchor, context.vanishingPoints[vpid]).signedDistanceTo(Point3(0, 0, 0));
+                            // check validity of this plane
+                            // check for duplications
+                            if (planeRoots.contains(plane.root()))
                                 continue;
-                        }
-                        if (OPT_IgnoreTooFarAwayPlanes){
-                            bool valid = true;
-                            for (auto & ri : regionIndices){
-                                if (!valid)
-                                    break;
-                                auto & rd = GetData(ri, context.regionsNets);
-                                if (rd.contours.back().size() < 3)
+                            planeRoots[plane.root()] = plane.root();
+                            if (OPT_IgnoreTooSkewedPlanes){
+                                if (norm(plane.root()) <= scale / 2.0)
                                     continue;
-                                auto & cam = context.views[ri.viewId].camera;
-                                for (int i = 0; i < rd.contours.back().size(); i++){
-                                    auto dir = cam.spatialDirection(ToPoint2(rd.contours.back()[i]));
-                                    auto intersectionOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir), plane).position;
-                                    if (norm(intersectionOnPlane) > scale * 5.0){
+                            }
+                            if (OPT_IgnoreTooFarAwayPlanes){
+                                bool valid = true;
+                                for (const auto & a : surroundedAnchors){
+                                    auto aOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), a), plane).position;
+                                    if (norm(aOnPlane) > scale * 5.0){
                                         valid = false;
                                         break;
                                     }
                                 }
+                                if (!valid)
+                                    continue;
                             }
-                            if (!valid)
-                                continue;
+                            planeInfo.orthoPlane.depth = plane.signedDistanceTo(Point3(0, 0, 0));
+                            // compute properties of this plane
+                            std::vector<Vec3> inliners;
+                            planeInfo.regionInlierAnchorsDistanceVotesSum = 0.0;
+                            double distThres = scale * 0.1;
+                            for (const auto & a : surroundedAnchors){
+                                double dist = plane.distanceTo(a);
+                                if (dist > distThres)
+                                    continue;
+                                inliners.push_back(a);
+                                planeInfo.regionInlierAnchorsDistanceVotesSum += Gaussian(dist, distThres);
+                            }
+                            planeInfo.regionInlierAnchorsConvexContourVisualArea = 
+                                ComputeVisualAreaOfDirections(regionCCVD.properties.tangentialPlane,
+                                regionCCVD.properties.xOnTangentialPlane, regionCCVD.properties.yOnTangentialPlane, inliners, true);
+                            cands.push_back(planeInfo);
                         }
-
-                        static const double distFromPointToPlaneThres = scale / 12.0;
-
-                        // insert new root data
-                        auto & pcd = candidatePlanesByRoot[plane.root()];
-                        pcd.plane = plane;
-
-                        // collect distance votes
-                        double distVotes = 0.0;
-                        std::vector<Vec3> nearbyAnchors;
-                        for (int i = 0; i < /*mergedAnchorIters*/determinedAnchors.size(); i++){
-                            double distanceToPlane = plane.distanceTo(/**mergedAnchorIters[i]*/determinedAnchors[i]);
-                            if (distanceToPlane > distFromPointToPlaneThres)
-                                continue;
-                            distVotes += Gaussian(distanceToPlane, distFromPointToPlaneThres);
-                            pcd.inlierAnchors.push_back(i);
-                            nearbyAnchors.push_back(/**mergedAnchorIters[i]*/determinedAnchors[i]);
-                        }
-                        pcd.regionInlierAnchorsDistanceVotesSum = distVotes;
-                        pcd.regionInlierAnchorsConvexContourVisualArea =
-                            ComputeVisualAreaOfDirections(tangentialPlane,
-                                xOnTangentialPlane, yOnTangentialPlane, nearbyAnchors, true);
+                    }                   
+                }
+                else if (vd.isLineCC()){
+                    assert(ed.connectsRegionAndLine());
+                    auto & line = context.reconstructedLines.at(ed.rili().second);
+                    auto & cands = vd.lineCCVD().candidates[eh];
+                    cands.clear();
+                    cands.reserve(ed.anchors().size());
+                    for (const auto & anchor : ed.anchors()){
+                        double depthVar = norm(DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
+                            .second.second);
+                        double depthAnchored = norm(anchor);
+                        double depthFactorCand = depthAnchored / depthVar;
+                        if (!IsInfOrNaN(depthFactorCand))
+                            cands.push_back({depthFactorCand, 0.0});
                     }
-                }
-               
-            }
-
-            void RegionCCVertexData::registerChoices(const RecContext & context,
-                const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
-                std::vector<Choice> & choices, std::vector<double> & probabilities,
-                double baseProb, int maxChoiceNum) const{
-
-                std::vector<Scored<Choice>> newChoices;
-
-                int planeId = 0;
-                double maxMeanVote = 0.0;
-                for (auto & c : candidatePlanesByRoot){
-                    maxMeanVote = std::max(maxMeanVote, c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size());
-                }
-
-                double fullCompleteness = ComputeDeterminedAnchorsRatio(g, selfHandle).value(0.0);
-
-                // collect all choices and probabilities
-                for (auto & c : candidatePlanesByRoot){
-                    auto & candidatePlaneData = c.second;
-                    Choice choice = { selfHandle, planeId++ };
-                    auto inlierOccupationRatio =
-                        candidatePlaneData.regionInlierAnchorsConvexContourVisualArea / regionConvexContourVisualArea;
-                    double probability =
-                        (fullCompleteness *
-                        (inlierOccupationRatio > 0.4 ? 1.0 : 1e-4)) *
-                        c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size();
-
-                    assert(c.second.regionInlierAnchorsDistanceVotesSum / c.second.inlierAnchors.size() <= 1.0);
-                    newChoices.push_back(ScoreAs(choice, probability + baseProb));
-                }
-
-                // select best [maxChoiceNum] choices
-                std::sort(newChoices.begin(), newChoices.end(), std::greater<void>());
-                for (int i = 0; i < std::min<int>(maxChoiceNum, newChoices.size()); i++){
-                    choices.push_back(newChoices[i].component);
-                    probabilities.push_back(newChoices[i].score);
-                }
-            }
-
-            void RegionCCVertexData::pickChoice(const RecContext & context,
-                MixedGraph & g,
-                const Choice & choice) {
-                assert(&(g.data(choice.vertHandle).regionCCVD()) == this);
-                chosenPlane = (candidatePlanesByRoot.begin() + choice.choiceId)->second.plane;
-                //// update related edge anchors and notify the vertex on the other side
-                //for (const MixedGraphEdgeHandle & eh : g.topo(choice.vertHandle).uppers){
-                //    auto & ed = g.data(eh);
-                //    assert(
-                //        (ed.connectsRegionAndLine() && context.regionConnectedComponentIds.at(ed.rili().first) == ccId) ||
-                //        (ed.connectsRegionAndRegion() && 
-                //            (context.regionConnectedComponentIds.at(ed.riri().first) == ccId || context.regionConnectedComponentIds.at(ed.riri().second) == ccId)
-                //        ));
-                //    for (auto & anchor : ed.anchors()){
-                //        anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), chosenPlane).position;
-                //    }
-                //    ed.determined = true;
-                //}
-            }
-
-            // create a new line cc vertex
-            MixedGraphVertex CreateLineCCVertex(int lineCCId, const RecContext & context){
-                auto lcvPtr = new LineCCVertexData;
-                auto & lci = *lcvPtr;
-                lci.chosenDepthFactor = 1.0;
-                lci.ccId = lineCCId;
-                lci.candidateDepthFactors = LineCCVertexData::DepthConfidenceMap(1e-4);
-                lci.candidateDepthFactors[1.0] = 0.1; // initialize with a 1.0 depth for start
-                // collect lis
-                for (auto & p : context.lineConnectedComponentIds){
-                    if (p.second == lineCCId){
-                        lci.lineIndices.insert(p.first);
-                    }
-                }
-                return MixedGraphVertex(lcvPtr);
-            }
-
-            // line cc vertex method implementations
-            void LineCCVertexData::buildCandidates(const RecContext & context,
-                const MixedGraph & g, const MixedGraphVertHandle & selfHandle) {
-
-                candidateDepthFactors.clear();
-                candidateDepthFactors[1.0] = 0.1;
-                std::vector<double> depthFactors;
-                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
-                    auto & ed = g.data(eh);
-                    if (ed.determined){
-                        assert(ed.connectsRegionAndLine());
-                        assert(context.lineConnectedComponentIds.at(ed.rili().second) == ccId);
-                        auto & li = ed.rili.second;
-                        auto & line = context.reconstructedLines.at(li);
-                        for (auto & anchor : ed.anchors){
-                            double depthVarOnLine = norm(DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
-                                .second.second);
-                            double depthValueOnRegion = norm(anchor);
-                            if (!IsInfOrNaN(depthVarOnLine) && !IsInfOrNaN(depthValueOnRegion))
-                                candidateDepthFactors[depthValueOnRegion / depthVarOnLine] += 1.0;
+                    // update all votes
+                    for (auto & cands1 : vd.lineCCVD().candidates){
+                        for (auto & df1 : cands1.second){
+                            for (auto & cands2 : vd.lineCCVD().candidates){
+                                for (auto & df2 : cands2.second){
+                                    double vote = Gaussian(df1.depthFactor - df2.depthFactor, 0.01);
+                                    df1.votes += vote;
+                                    df2.votes += vote;
+                                }
+                            }
                         }
                     }
                 }
-
             }
 
-            void LineCCVertexData::registerChoices(const RecContext & context,
-                const MixedGraph & g, const MixedGraphVertHandle & selfHandle,
-                std::vector<Choice> & choices, std::vector<double> & probabilities,
-                double baseProb, int maxChoiceNum) const {
 
-                std::vector<Scored<Choice>> newChoices;
-                int depthId = 0;
-                double maxVote = 0.0;
-                for (auto & c : candidateDepthFactors)
-                    maxVote = maxVote < c.second ? c.second : maxVote;
+            void SpreadOver(const RecContext & context, MixedGraph & graph){
+                
+                graph.gc();
 
-                double fullCompleteness = ComputeDeterminedAnchorsRatio(g, selfHandle).value(0.0);
+                std::vector<bool> vertsDetermined(graph.internalElements<0>().size(), false);
+                std::vector<bool> edgesDetermined(graph.internalElements<1>().size(), false);
 
-                for (auto & c : candidateDepthFactors){
-                    auto & candidateDepthVote = c.second;
-                    Choice choice = { selfHandle, depthId++ };
-                    double probability = (fullCompleteness * 0.9
-                        + double(lineIndices.size()) / context.reconstructedLines.size() * 0.1)
-                        * candidateDepthVote / maxVote;
-                    newChoices.push_back(ScoreAs(choice, probability + baseProb));
+                // init anchored ratios
+                std::vector<Rational> vertsAnchoredRatio(graph.internalElements<0>().size(), { 0.0, 0.0 });
+                for (auto & e : graph.elements<1>()){
+                    vertsAnchoredRatio[e.topo.lowers[0].id].denominator += e.data.anchors().size();
+                    vertsAnchoredRatio[e.topo.lowers[1].id].denominator += e.data.anchors().size();
                 }
 
-                std::sort(newChoices.begin(), newChoices.end(), std::greater<void>());
-                for (int i = 0; i < std::min<int>(maxChoiceNum, newChoices.size()); i++){
-                    choices.push_back(newChoices[i].component);
-                    probabilities.push_back(newChoices[i].score);
-                }
-            }
-
-            void LineCCVertexData::pickChoice(const RecContext & context,
-                MixedGraph & g,
-                const Choice & choice) {
-                assert(&(g.data(choice.vertHandle).lineCCVD()) == this);
-                chosenDepthFactor = (candidateDepthFactors.begin() + choice.choiceId)->first[0];
-                // update related edge anchors
-                /* for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
-                auto & ed = g.data(eh);
-                assert(ed.connectsRegionAndLine() &&
-                context.lineConnectedComponentIds.at(ed.rili.second) == ccId);
-                const auto & line = context.reconstructedLines.at(ed.rili.second);
-                for (auto & anchor : ed.anchors){
-                auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
-                .second.second;
-                anchor = pOnLine * depthFactor;
-                }
-                ed.determined = true;
-                }*/
-            }
-
-
-
-            // unified methods for vertex
-            inline Rational ComputeDeterminedAnchorsRatio(const MixedGraph & g,
-                const MixedGraphVertHandle & selfHandle) {
-                Rational r(0.0, 0.0);
-                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
-                    const auto & ed = g.data(eh);
-                    r.denominator += ed.anchors.size();
-                    r.numerator += ed.determined() ? ed.anchors.size() : 0.0;
-                }
-                return r;
-            }
-
-            inline std::vector<Point3> CollectDeterminedAnchors(const MixedGraph & g,
-                const MixedGraphVertHandle & selfHandle)  {
-                std::vector<Point3> ps;
-                for (const MixedGraphEdgeHandle & eh : g.topo(selfHandle).uppers){
-                    const auto & ed = g.data(eh);
-                    if (ed.determined())
-                        ps.insert(ps.end(), ed.anchors.begin(), ed.anchors.end());
-                }
-                return ps;
-            }
-
-            inline void BuildCandidates(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh){
-                auto & vd = g.data(vh);
-                if (vd.isRegionCC())
-                    vd.regionCCVD().buildCandidates(context, g, vh);
-                else if (vd.isLineCC())
-                    vd.lineCCVD().buildCandidates(context, g, vh);
-            }
-
-            inline void RegisterChoices(const RecContext & context,
-                MixedGraph & g, const MixedGraphVertHandle & vh,
-                std::vector<Choice> & choices, std::vector<double> & probabilities,
-                double baseProb, int maxChoiceNum){
-                auto & vd = g.data(vh);
-                if (vd.isRegionCC())
-                    vd.regionCCVD().registerChoices(context, g, vh, choices, probabilities, baseProb, maxChoiceNum);
-                else if (vd.isLineCC())
-                    vd.lineCCVD().registerChoices(context, g, vh, choices, probabilities, baseProb, maxChoiceNum);
-            }
-
-            inline void PickChoice(const RecContext & context,
-                MixedGraph & g, const MixedGraphVertHandle & vh,
-                const Choice & choice){
-                auto & vd = g.data(vh);
-                if (vd.isRegionCC())
-                    vd.regionCCVD().pickChoice(context, g, choice);
-                else if (vd.isLineCC())
-                    vd.lineCCVD().pickChoice(context, g, choice);
-            }
-
-
-
-
-
-
-
-            // edge functions
-            MixedGraphEdge CreateRegionRegionEdge(const RegionIndex & ri1, const RegionIndex & ri2, const std::vector<Point3> & anchors){
-                MixedGraphEdge ed;
-                ed._riri.first = ri1;
-                ed._riri.second = ri2;
-                ed._type = MixedGraphEdge::RegionRegion;
-                ed._anchors = anchors;
-                return ed;
-            }
-
-            MixedGraphEdge CreateRegionLineEdge(const RegionIndex & ri, const LineIndex & li, const std::vector<Point3> & anchors){
-                MixedGraphEdge ed;
-                ed._rili.first = ri;
-                ed._rili.second = li;
-                ed._type = MixedGraphEdge::RegionLine;
-                ed._anchors = anchors;
-                return ed;
-            }
-
-
-
-            // holistic functions
-            inline void UpdateNeighbors(const RecContext & context, MixedGraph & g, const MixedGraphVertHandle & vh){
-                auto & vd = g.data(vh);
-                auto & ehs = g.topo(vh).uppers;
-                for (auto & eh : ehs){
-                    auto anotherVh = g.topo(eh).lowers[0];
-                    if (anotherVh == vh)
-                        anotherVh = g.topo(eh).lowers[1];
-                    auto & ed = g.data(eh);
+                // priority calculator
+                auto computePriority = [&](int vid) -> double {
+                    auto & vd = graph.data(MixedGraphVertHandle(vid));
                     if (vd.isRegionCC()){
-                        auto & plane = vd.regionCCVD().chosenPlane;
-
+                        if (vd.regionCCVD().candidates.empty())
+                            return 0.0;
+                        MixedGraphEdgeHandle choiceEh;
+                        int choiceId = -1;
+                        double score = -1;
+                        for (auto & cand : vd.regionCCVD().candidates){
+                            for (int i = 0; i < cand.second.size(); i++){
+                                auto & p = cand.second[i];
+                                double nscore = p.regionInlierAnchorsDistanceVotesSum * p.regionInlierAnchorsConvexContourVisualArea;
+                                if (nscore > score){
+                                    choiceEh = cand.first;
+                                    choiceId = i;
+                                }
+                            }
+                        }
+                        return vertsAnchoredRatio[vid].value(0.0) 
+                            * ((vd.regionCCVD().bestCandidate().component.regionInlierAnchorsConvexContourVisualArea 
+                            / vd.regionCCVD().properties.regionConvexContourVisualArea) > 0.3 
+                            ? 1.0 : 1e-2);
                     }
                     else if (vd.isLineCC()){
-                        auto depthFactor = vd.lineCCVD().chosenDepthFactor;
-                        
+                        return vertsAnchoredRatio[vid].value(0.0) * 0.9 +
+                            vd.lineCCVD().indices.size() / double(context.reconstructedLines.size()) * 0.1;
                     }
-                    ed._determined = true;
+                    return 0.0;
+                };
+
+                std::vector<MixedGraphVertHandle> vhs;
+                vhs.reserve(graph.internalElements<0>().size());
+                for (auto & vt : graph.elements<0>())
+                    vhs.push_back(vt.topo.hd);               
+                
+                // init priority heap
+                MaxHeap<MixedGraphVertHandle> waitingVertices(vhs.begin(), vhs.end(), 
+                    [&computePriority](const MixedGraphVertHandle & vh) -> double {
+                    return computePriority(vh.id);
+                });
+
+                // spread
+                while (!waitingVertices.empty()){
+                    auto curVh = waitingVertices.top();                    
+                    auto & curVD = graph.data(curVh);
+                    
+                    // determine current vertex
+                    if (curVD.isRegionCC()){
+                        assert(curVD.regionCCVD().candidates.size() > 0);
+                        curVD.regionCCVD().setValueToBest();
+                    }
+                    else if(curVD.isLineCC()){
+                        assert(curVD.lineCCVD().candidates.size() > 0);
+                        curVD.lineCCVD().setValueToBest();
+                    }
+
+                    vertsDetermined[curVh.id] = true;
+                    waitingVertices.pop();
+                    
+                    // determine related edges
+                    for (auto & eh : graph.topo(curVh).uppers){
+                        auto & ed = graph.data(eh);
+                        // determin edge
+                        bool changed = false;
+                        if (curVD.isRegionCC()){
+                            auto plane = curVD.regionCCVD().currentValue.plane(context.vanishingPoints);
+                            for (auto & anchor : ed.anchors()){
+                                anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane).position;
+                            }
+                        }
+                        else if (curVD.isLineCC()){
+                            assert(ed.connectsRegionAndLine());
+                            auto line = curVD.lineCCVD().currentValue.depthFactor * context.reconstructedLines.at(ed.rili().second);
+                            for (auto & anchor : ed.anchors()){
+                                anchor = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), anchor), line.infinieLine()).second.first;
+                            }
+                        }
+
+                        edgesDetermined[eh.id] = true;
+
+                        auto & vhs = graph.topo(eh).lowers;
+                        auto anotherVh = vhs.front() == curVh ? vhs.back() : vhs.front();
+                        // update another vertex
+                        UpdateVertexFromEdge(context, graph, anotherVh, eh, 
+                            [&edgesDetermined](const MixedGraphEdgeHandle & e){
+                            return edgesDetermined[e.id]; 
+                        });
+
+                        vertsAnchoredRatio[anotherVh.id].numerator += ed.anchors().size();
+
+                        // udpate score of related vertices
+                        waitingVertices.setScore(anotherVh, computePriority(anotherVh.id));
+                    }
                 }
+
             }
-            
-          
-            #pragma endregion function_implementations
 
 
+            void OptimizeDepths(const RecContext & context, MixedGraph & graph) {
+
+                using namespace Eigen;
+                SparseMatrix<double> A, W;
+                VectorXd B;
+
+                // try minimizing ||W(AX-B)||^2
+
+                // setup matrices
+                graph.gc(); // make graph compressed
+                int n = graph.internalElements<0>().size(); // var num
+                int m = 0;  // get cons num
+                for (auto & e : graph.internalElements<1>()){
+                    m += e.data.anchors.size();
+                }
+                m++; // add the depth assignment for the first var
+
+                A.resize(m, n);
+                W.resize(m, m);
+                B.resize(m);
+
+                // write equations
+                int curEquationNum = 0;
+
+                // add the depth assignment for the first var
+                // df = 1.0
+                A.insert(curEquationNum, 0) = 1.0;
+                B(curEquationNum) = 1.0;
+                W.insert(curEquationNum, curEquationNum) = 1.0;
+                curEquationNum++;
+
+                for (auto & e : graph.elements<1>()){
+                    auto vh1 = e.topo.lowers[0];
+                    auto vh2 = e.topo.lowers[1];
+                    assert(vh1 != vh2);
+                    auto & vd1 = graph.data(vh1);
+                    auto & vd2 = graph.data(vh2);
+
+                    if (e.data.connectsRegionAndRegion()){
+                        assert(vd1.isRegionCC() && vd2.isRegionCC());
+                        auto plane1 = vd1.regionCCVD().currentValue.plane(context.vanishingPoints);
+                        auto plane2 = vd2.regionCCVD().currentValue.plane(context.vanishingPoints);
+                        // setup equation for each anchor
+                        for (auto & anchor : e.data.anchors){
+                            double depthOnPlane1 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane1).position);
+                            double depthOnPlane2 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane2).position);
+                            // df1 * depthOnPlane1 - df2 * depthOnPlane2 = 0
+                            A.insert(curEquationNum, vh1.id) = depthOnPlane1;
+                            A.insert(curEquationNum, vh2.id) = -depthOnPlane2;
+                            B(curEquationNum) = 0;
+                            W.insert(curEquationNum, curEquationNum) = 1.0;
+                            curEquationNum++;
+                        }
+                    }
+                    else if (e.data.connectsRegionAndLine()){
+                        assert(vd1.isRegionCC() && vd2.isLineCC());
+                        auto plane1 = vd1.regionCCVD().currentValue.plane(context.vanishingPoints);
+                        auto line2 = vd2.lineCCVD().currentValue.depthFactor * context.reconstructedLines.at(e.data.rili().second);
+                        // setup equation for each anchor
+                        for (auto & anchor : e.data.anchors){
+                            double depthOnPlane1 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane1).position);
+                            double depthOnLine2 = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), anchor), line2.infinieLine()).second.first);
+                            // df1 * depthOnPlane1 - df2 * depthOnLine2 = 0
+                            A.insert(curEquationNum, vh1.id) = depthOnPlane1;
+                            A.insert(curEquationNum, vh2.id) = -depthOnLine2;
+                            B(curEquationNum) = 0;
+                            W.insert(curEquationNum, curEquationNum) = 1.0;
+                            curEquationNum++;
+                        }
+                    }
+                }
+                                
+
+                // solve the equation system
+                bool useWeights = true;
+                VectorXd X;
+                SparseQR<Eigen::SparseMatrix<double>, COLAMDOrdering<int>> solver;
+                static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
+                Eigen::SparseMatrix<double> WA = W * A;
+                A.makeCompressed();
+                WA.makeCompressed();
+                solver.compute(useWeights ? WA : A);
+                if (solver.info() != Success) {
+                    assert(0);
+                    std::cout << "computation error" << std::endl;
+                    return;
+                }
+                VectorXd WB = W * B;
+                X = solver.solve(useWeights ? WB : B);
+                if (solver.info() != Success) {
+                    assert(0);
+                    std::cout << "solving error" << std::endl;
+                    return;
+                }
+
+
+                // scale all vertex using computed depth factors
+                for (auto & v : graph.elements<0>()){
+                    double depthFactor = X(v.topo.hd.id);
+                    if (v.data.isRegionCC()){
+                        auto & planeInfo = v.data.regionCCVD().currentValue;
+                        if (planeInfo.isOrthogonal)
+                            planeInfo.orthoPlane.depth *= depthFactor;
+                        else
+                            planeInfo.skewedPlane.anchor *= depthFactor;
+                    }
+                    else if (v.data.isLineCC()){
+                        v.data.lineCCVD().currentValue.depthFactor *= depthFactor;
+                    }
+                }
+
+            }
+
+
+            void RandomJump(const RecContext & context, MixedGraph & graph){
+
+
+
+            }
+
+
+            // visualize
             void DisplayReconstruction(int highlightedRegionCCId, int highlightedLineCCId,
                 const std::set<int> & regionCCIdsNotDeterminedYet, const std::set<int> & lineCCIdsNotDeterminedYet,
-                const std::vector<Plane3> & regionConnectedComponentPlanes,
-                const std::vector<double> & lineConnectedComponentDepthFactors,
+                const MixedGraph & graph,
                 const RecContext & context){
 
                 std::vector<Line3> linesRepresentingSampledPoints;
+
+                // fill planes and depth factors for each cc
+                std::vector<Plane3> regionConnectedComponentPlanes(context.regionConnectedComponentsNum);
+                std::vector<double> lineConnectedComponentDepthFactors(context.lineConnectedComponentsNum);
+                for (auto & v : graph.elements<0>()){
+                    if (v.data.isRegionCC()){
+                        regionConnectedComponentPlanes[v.data.regionCCVD().ccId] = v.data.regionCCVD().currentValue.plane(context.vanishingPoints);
+                    }
+                    else if (v.data.isLineCC()){
+                        lineConnectedComponentDepthFactors[v.data.lineCCVD().ccId] = v.data.lineCCVD().currentValue.depthFactor;
+                    }
+                }
+
 
                 // line-region connections
                 for (auto & pp : context.regionLineConnections){
@@ -1874,17 +1925,13 @@ namespace panoramix {
                     LineIndex li = pp.first.second;
                     int regionCCId = context.regionConnectedComponentIds.at(ri);
                     int lineCCId = context.lineConnectedComponentIds.at(li);
-                    if (core::Contains(regionCCIdsNotDeterminedYet, regionCCId) || 
+                    if (core::Contains(regionCCIdsNotDeterminedYet, regionCCId) ||
                         core::Contains(lineCCIdsNotDeterminedYet, lineCCId))
                         continue;
 
-                    auto line = context.reconstructedLines.at(li);
-                    double depthFactor = lineConnectedComponentDepthFactors[lineCCId];
-                    line.first *= depthFactor;
-                    line.second *= depthFactor;
+                    auto line = context.reconstructedLines.at(li) * lineConnectedComponentDepthFactors[lineCCId];
 
                     const std::vector<Vec3> & selectedSampledPoints = pp.second;
-
                     for (const Vec3 & sampleRay : selectedSampledPoints){
                         Point3 pointOnLine = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampleRay), line.infinieLine()).second.second;
                         Point3 pointOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), sampleRay),
@@ -1973,251 +2020,6 @@ namespace panoramix {
                     << vis::manip3d::Show();
 
             }
-
-
-            
-            void InitializSpatialRegionPlanes(const RecContext & context,
-                MixedGraph & graph, 
-                const std::vector<MixedGraphVertHandle> & regionCCIdToVHandles,
-                const std::vector<MixedGraphVertHandle> & lineCCidToVHandles,
-                std::vector<Plane3> & resultRegionConnectedComponentPlanes,
-                std::vector<double> & resultLineConnectedComponentDepthFactors,
-                int trialNum,
-                bool useWeightedRandomSelection) {
-
-                double scale = context.initialBoundingBox.outerSphere().radius;
-
-                // initial cc ids status
-                std::vector<int> regionCCIds(context.regionConnectedComponentsNum);
-                std::iota(regionCCIds.begin(), regionCCIds.end(), 0);
-                const std::set<int> initialRegionCCIdsNotDeterminedYet(regionCCIds.begin(), regionCCIds.end());
-
-                std::vector<int> lineCCIds(context.lineConnectedComponentsNum);
-                std::iota(lineCCIds.begin(), lineCCIds.end(), 0);
-                const std::set<int> initialLineCCIdsNotDeterminedYet(lineCCIds.begin(), lineCCIds.end());
-
-
-                // initialize region planes
-                std::vector<Plane3> initialRegionConnectedComponentPlanes(context.regionConnectedComponentsNum);
-                for (auto & r : context.regionConnectedComponentIds){
-                    auto & ri = r.first;
-                    auto & rd = GetData(ri, context.regionsNets);
-                    Vec3 centerDir = context.views[ri.viewId].camera.spatialDirection(rd.center);
-                    int regionCCId = context.regionConnectedComponentIds.at(ri);
-                    initialRegionConnectedComponentPlanes[regionCCId].anchor = normalize(centerDir) * scale;
-                    initialRegionConnectedComponentPlanes[regionCCId].normal = normalize(centerDir);
-                }
-                // initialize line depth factors
-                std::vector<double> initialLineConnectedComponentDepthFactors(context.lineConnectedComponentsNum, 1.0);
-
-
-                // start MC reasoning
-                std::vector<Scored<std::pair<std::vector<Plane3>, std::vector<double>>>>
-                    candidates(trialNum,
-                    ScoreAs(std::make_pair(initialRegionConnectedComponentPlanes, initialLineConnectedComponentDepthFactors),
-                    0.0));
-
-                const auto & constGraph = graph;
-                auto task = [&candidates, &context, 
-                    &initialRegionCCIdsNotDeterminedYet, &initialLineCCIdsNotDeterminedYet, 
-                    &useWeightedRandomSelection, &constGraph, &regionCCIdToVHandles, &lineCCidToVHandles](int t){
-                    std::cout << "task: " << t << std::endl;
-                    auto & candidate = candidates[t];
-
-                    // random engine initialized
-                    std::random_device rd;
-                    std::default_random_engine gen(rd());
-
-                    // copy graph
-                    MixedGraph g = constGraph;
-
-                    // undetermined checkers
-                    std::set<int> regionCCIdsNotDeterminedYet = initialRegionCCIdsNotDeterminedYet;
-                    std::set<int> lineCCIdsNotDeterminedYet = initialLineCCIdsNotDeterminedYet;
-
-                    // choices and probabilities
-                    std::vector<Choice> choices;
-                    std::vector<double> choiceProbabilities;
-                    choices.reserve(regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size());
-                    choiceProbabilities.reserve(regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size());
-
-                    // start expansion
-                    std::cout << "start expansion" << std::endl;
-                    while ((regionCCIdsNotDeterminedYet.size() + lineCCIdsNotDeterminedYet.size()) > 0){
-
-                        // collect choices and probabilities
-                        choices.clear();
-                        choiceProbabilities.clear();
-                        for (int regionCCId : regionCCIdsNotDeterminedYet){
-                            auto & vh = regionCCIdToVHandles[regionCCId];
-                            auto & vd = g.data(vh);
-                            if (vd.determined)
-                                continue;
-                            vd.regionCCVD().buildCandidates(context, g, vh);
-                            vd.regionCCVD().registerChoices(context, g, vh, choices, choiceProbabilities, 1e-5, 1);
-                        }
-                        for (int lineCCId : lineCCIdsNotDeterminedYet){
-                            auto & vh = lineCCidToVHandles[lineCCId];
-                            auto & vd = g.data(vh);
-                            if (vd.determined)
-                                continue;
-                            vd.lineCCVD().buildCandidates(context, g, vh);
-                            vd.lineCCVD().registerChoices(context, g, vh, choices, choiceProbabilities, 1e-5, 1);
-                        }
-
-                        assert(choices.size() == choiceProbabilities.size());
-
-                        if (std::accumulate(choiceProbabilities.begin(), choiceProbabilities.end(), 0.0) == 0.0){
-                            std::cerr << "all zero probabilities!" << std::endl;
-                            break;
-                        }
-
-                        int selected = -1;
-
-                        if (useWeightedRandomSelection){
-                            // a workaround constructor since VS2013 lacks the range iterator constructor for std::discrete_distribution
-                            int ord = 0;
-                            std::discrete_distribution<int> distribution(choiceProbabilities.size(),
-                                0.0, 1000.0,
-                                [&choiceProbabilities, &ord](double){
-                                return choiceProbabilities[ord++];
-                            });
-                            selected = distribution(gen);
-                        }
-                        else{
-                            selected = std::distance(choiceProbabilities.begin(),
-                                std::max_element(choiceProbabilities.begin(), choiceProbabilities.end()));
-                        }
-
-                        // made choice
-                        const Choice & choice = choices[selected];
-                        auto & exeVD = g.data(choice.vertHandle);
-                        if (exeVD.isRegionCC()){
-                            if (OPT_DisplayMessages)
-                                std::cout << "chosen unit - region cc: " << exeVD.regionCCVD().ccId << std::endl;
-                            exeVD.regionCCVD().pickChoice(context, g, choice.vertHandle, choice, 
-                                candidate.component.first[exeVD.regionCCVD().ccId]);
-                            regionCCIdsNotDeterminedYet.erase(exeVD.regionCCVD().ccId);
-                        }
-                        else if(exeVD.isLineCC()){
-                            if (OPT_DisplayMessages)
-                                std::cout << "chosen unit - line cc: " << exeVD.lineCCVD().ccId << std::endl;
-                            exeVD.lineCCVD().pickChoice(context, g, choice.vertHandle, choice,
-                                candidate.component.second[exeVD.lineCCVD().ccId]);
-                            lineCCIdsNotDeterminedYet.erase(exeVD.lineCCVD().ccId);
-                        }
-                        exeVD.determined = true;
-
-
-                    } // while
-                    std::cout << "expansion done" << std::endl;
-
-
-                    // score this candidate
-                    double distanceSumOfRegionRegionConnections = 0.0;
-                    double distanceSumOfRegionLineConnections = 0.0;
-
-                    auto & regionConnectedComponentPlanes = candidate.component.first;
-                    auto & lineConnectedComponentDepthFactors = candidate.component.second;
-
-                    // region region
-                    for (int i = 0; i < context.views.size(); i++){
-                        auto & cam = context.views[i].camera;
-                        for (auto & b : context.regionsNets[i].regions().elements<1>()){
-                            auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
-                            auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
-                            int regionCCId1 = context.regionConnectedComponentIds.at(ri1);
-                            int regionCCId2 = context.regionConnectedComponentIds.at(ri2);
-                            for (auto & pts : b.data.sampledPoints){
-                                for (auto & p : pts){
-                                    auto dir = cam.spatialDirection(p);
-                                    auto anchor1 = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir),
-                                        regionConnectedComponentPlanes[regionCCId1]).position;
-                                    auto anchor2 = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), dir),
-                                        regionConnectedComponentPlanes[regionCCId2]).position;
-                                    double distance = Distance(anchor1, anchor2);
-                                    distanceSumOfRegionRegionConnections += distance;
-                                }
-                            }
-                        }
-                    }
-                    // region line
-                    for (auto & pp : context.regionLineConnections){
-                        LineIndex li = pp.first.second;
-                        RegionIndex ri = pp.first.first;
-                        int lineCCId = context.lineConnectedComponentIds.at(li);
-                        int regionCCId = context.regionConnectedComponentIds.at(ri);
-                        auto & samplePoints = pp.second;
-                        auto line = context.reconstructedLines.at(li);
-                        line.first *= lineConnectedComponentDepthFactors[lineCCId];
-                        line.second *= lineConnectedComponentDepthFactors[lineCCId];
-                        for (auto & p : samplePoints){ // insert anchors into the rec info of the related region
-                            auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), p))
-                                .second.second;
-                            auto pOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), p),
-                                regionConnectedComponentPlanes[regionCCId]).position;
-                            double distance = Distance(pOnLine, pOnRegion);
-                            distanceSumOfRegionLineConnections += distance;
-                        }
-                    }
-
-                    std::cout << "distance sum of region-region connections: " << distanceSumOfRegionRegionConnections << std::endl;
-                    std::cout << "distance sum of region-line connections: " << distanceSumOfRegionLineConnections << std::endl;
-
-                    candidate.score = -(distanceSumOfRegionRegionConnections + distanceSumOfRegionLineConnections);
-
-                    if (OPT_DisplayOnEachTrial){
-                        IF_DEBUG_USING_VISUALIZERS{
-                        DisplayReconstruction(-1, -1, {}, {},
-                        candidate.component.first, candidate.component.second, context);
-                    }
-                    }
-
-                }; // task
-
-                // run tasks
-                int threadsNum = std::min<int>(std::max(1u, std::thread::hardware_concurrency() - 1), trialNum);
-                std::cout << "threads num: " << threadsNum << std::endl;
-                if (threadsNum == 1){
-                    task(0);
-                }else{
-                    for (int i = 0; i < trialNum; i += threadsNum){
-                        std::vector<std::thread> parallelThreads(threadsNum);
-                        for (int t = i; t < std::min(trialNum, i + threadsNum); t++){
-                            parallelThreads[t - i] = std::thread(task, t);
-                        }
-                        for (int t = i; t < std::min(trialNum, i + threadsNum); t++){
-                            parallelThreads[t - i].join();
-                        }
-                    }
-                }
-
-
-                // select best candidate
-                const auto & result = std::max_element(candidates.begin(), candidates.end())->component;
-                resultRegionConnectedComponentPlanes = result.first;
-                resultLineConnectedComponentDepthFactors = result.second;
-
-                // visualize result of this task
-                if (OPT_DisplayAtLast){
-                    IF_DEBUG_USING_VISUALIZERS{
-                    DisplayReconstruction(-1, -1, {}, {},
-                    resultRegionConnectedComponentPlanes, resultLineConnectedComponentDepthFactors, context);
-                }
-                }
-
-            }
-
-
-            void OptimizeSpatialRegionPlanes(const RecContext & context,
-                std::vector<Plane3> & resultRegionConnectedComponentPlanes,
-                std::vector<double> & resultLineConnectedComponentDepthFactors) {
-
-                // Simulated Annealing
-
-
-
-            }
         }
 
 
@@ -2250,24 +2052,26 @@ namespace panoramix {
             //////////////////////////////
             // build mixed graph
 
-            MixedGraph mGraph;
+            MixedGraph graph;
+            graph.internalElements<0>().reserve(regionConnectedComponentsNum + lineConnectedComponentsNum);
+            graph.internalElements<1>().reserve(regionConnectedComponentsNum + lineConnectedComponentsNum);
+
             std::vector<MixedGraphVertHandle> regionCCIdToVHandles(regionConnectedComponentsNum);
             std::vector<MixedGraphVertHandle> lineCCIdToVHandles(lineConnectedComponentsNum);
 
             // add vertices
             for (int i = 0; i < regionConnectedComponentsNum; i++){
-                regionCCIdToVHandles[i] = mGraph.add(CreateRegionCCVertex(i, context));
+                regionCCIdToVHandles[i] = graph.add(MixedGraphVertex(MixedGraphVertex::RegionCC, i, context));
             }
             for (int i = 0; i < lineConnectedComponentsNum; i++){
-                lineCCIdToVHandles[i] = mGraph.add(CreateLineCCVertex(i, context));
+                lineCCIdToVHandles[i] = graph.add(MixedGraphVertex(MixedGraphVertex::LineCC, i, context));
             }
 
             // add edges
             // region-region
             for (int i = 0; i < views.size(); i++){
-                auto & cam = views[i].camera;
-                auto & regions = regionsNets[i].regions();
-                for (auto & b : regions.elements<1>()){
+                for (auto & b : regionsNets[i].regions().elements<1>()){
+                    RegionBoundaryIndex rbi = { i, b.topo.hd };
                     auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
                     auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
                     int thisRegionCCId1 = regionConnectedComponentIds.at(ri1);
@@ -2275,17 +2079,8 @@ namespace panoramix {
                     auto vh1 = regionCCIdToVHandles[thisRegionCCId1];
                     auto vh2 = regionCCIdToVHandles[thisRegionCCId2];
 
-                    // add anchors
-                    auto & samplePoints = b.data.sampledPoints;
-                    std::vector<Point3> anchors;
-                    anchors.reserve(samplePoints.size());
-                    for (auto & ps : samplePoints){
-                        for (auto & p : ps){
-                            anchors.push_back(cam.spatialDirection(p));
-                        }
-                    }
                     // insert edge
-                    mGraph.add<1>({ vh1, vh2 }, CreateRegionRegionEdge(ri1, ri2, anchors));
+                    graph.add<1>({ vh1, vh2 }, MixedGraphEdge::FromRegionRegion(rbi, context));
                 }
             }
             // region-line
@@ -2298,93 +2093,17 @@ namespace panoramix {
                 auto vh2 = lineCCIdToVHandles[lineCCId];               
 
                 // insert edge
-                mGraph.add<1>({ vh1, vh2 }, CreateRegionLineEdge(ri, li, pp.second));
+                graph.add<1>({ vh1, vh2 }, MixedGraphEdge::FromRegionLine(pp));
             }
 
-            std::cout << "vertices num: " << mGraph.internalElements<0>().size() << std::endl;
-            std::cout << "edges num: " << mGraph.internalElements<1>().size() << std::endl;
+            std::cout << "vertices num: " << graph.internalElements<0>().size() << std::endl;
+            std::cout << "edges num: " << graph.internalElements<1>().size() << std::endl;
 
+            
 
-            //////////////////////////////
-            // initialize variables
-            std::vector<Plane3> regionConnectedComponentPlanes;
-            std::vector<double> lineConnectedComponentDepthFactors;
-            InitializSpatialRegionPlanes(context, mGraph, 
-                regionCCIdToVHandles, lineCCIdToVHandles,
-                regionConnectedComponentPlanes, lineConnectedComponentDepthFactors, 1, false);
-
-            // update reconstructed lines
-            for (auto & l : reconstructedLines){
-                int lineCCId = lineConnectedComponentIds.at(l.first);
-                double lineDepthFactor = lineConnectedComponentDepthFactors[lineCCId];
-                l.second.first *= lineDepthFactor;
-                l.second.second *= lineDepthFactor;
-            }
-
-            // install reoconstructed region planes
-            for (auto & r : regionConnectedComponentIds){
-                int regionCCId = r.second;
-                reconstructedPlanes[r.first] = regionConnectedComponentPlanes[regionCCId];
-            }
+            
 
         }
-
-
-        //void EstimateSpatialRegionPlanes(const std::vector<View<PerspectiveCamera>> & views,
-        //    const std::vector<RegionsNet> & regionsNets, const std::vector<LinesNet> & linesNets,
-        //    const std::array<Vec3, 3> & vanishingPoints,
-        //    const ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappings,
-        //    const ComponentIndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> & regionLineConnections,
-        //    const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & interViewLineIncidences,
-        //    int regionConnectedComponentsNum, const ComponentIndexHashMap<RegionIndex, int> & regionConnectedComponentIds,
-        //    int lineConnectedComponentsNum, const ComponentIndexHashMap<LineIndex, int> & lineConnectedComponentIds,
-        //    ComponentIndexHashMap<LineIndex, Line3> & reconstructedLines,
-        //    ComponentIndexHashMap<RegionIndex, Plane3> & reconstructedPlanes,
-        //    const Image & globalTexture){
-
-        //    std::cout << "invoking " << __FUNCTION__ << std::endl;
-
-        //    Box3 bbox = BoundingBoxOfPairRange(reconstructedLines.begin(), reconstructedLines.end());
-        //    double scale = bbox.outerSphere().radius;
-
-        //    const RecContext context = {
-        //        views, regionsNets, linesNets, vanishingPoints,
-        //        regionOverlappings, regionLineConnections, interViewLineIncidences,
-        //        regionConnectedComponentsNum, regionConnectedComponentIds,
-        //        lineConnectedComponentsNum, lineConnectedComponentIds,
-        //        reconstructedLines, reconstructedPlanes, globalTexture,
-        //        bbox
-        //    };
-
-
-        //    // initialize
-        //    std::vector<Plane3> regionConnectedComponentPlanes;
-        //    std::vector<double> lineConnectedComponentDepthFactors;
-        //    InitializeSpatialRegionPlanes(context, 
-        //        regionConnectedComponentPlanes, lineConnectedComponentDepthFactors,
-        //        std::thread::hardware_concurrency()-1, true);
-
-        //    
-        //    // optimize this solution
-        //    OptimizeSpatialRegionPlanes(context,
-        //        regionConnectedComponentPlanes, lineConnectedComponentDepthFactors);
-
-
-        //    // update reconstructed lines
-        //    for (auto & l : reconstructedLines){
-        //        int lineCCId = lineConnectedComponentIds.at(l.first);
-        //        double lineDepthFactor = lineConnectedComponentDepthFactors[lineCCId];
-        //        l.second.first *= lineDepthFactor;
-        //        l.second.second *= lineDepthFactor;
-        //    }
-
-        //    // install reoconstructed region planes
-        //    for (auto & r : regionConnectedComponentIds){
-        //        int regionCCId = r.second;
-        //        reconstructedPlanes[r.first] = regionConnectedComponentPlanes[regionCCId];
-        //    }
-
-        //}
 
     }
 }
