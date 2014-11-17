@@ -1906,7 +1906,7 @@ namespace panoramix {
             }
 
 
-            void SpreadOver(const RecContext & context, MixedGraph & graph, int repeatNum){
+            void SpreadOver(const RecContext & context, MixedGraph & graph, int repeatNum = 1){
                 
                 graph.gc();
 
@@ -2138,7 +2138,7 @@ namespace panoramix {
                             A.insert(curEquationNum, vh1.id) = depthOnPlane1;
                             A.insert(curEquationNum, vh2.id) = -depthOnPlane2;
                             B(curEquationNum) = 0;
-                            W.insert(curEquationNum, curEquationNum) = e.data.anchors().size() / double(filtered.size());
+                            W.insert(curEquationNum, curEquationNum) = BoundBetween(e.data.anchors().size() / double(filtered.size()), 1.0, 5.0);
                             curEquationNum++;
                         }
                     }
@@ -2158,7 +2158,7 @@ namespace panoramix {
                             A.insert(curEquationNum, vh1.id) = depthOnPlane1;
                             A.insert(curEquationNum, vh2.id) = -depthOnLine2;
                             B(curEquationNum) = 0;
-                            W.insert(curEquationNum, curEquationNum) = e.data.anchors().size() / double(filtered.size());
+                            W.insert(curEquationNum, curEquationNum) = BoundBetween(e.data.anchors().size() / double(filtered.size()), 1.0, 5.0);
                             curEquationNum++;
                         }
                     }
@@ -2214,9 +2214,7 @@ namespace panoramix {
 
 
             void RandomJump(const RecContext & context, MixedGraph & graph){
-
-
-
+                
             }
 
 
@@ -2252,7 +2250,7 @@ namespace panoramix {
 
             auto graphs = BuildConnectedMixedGraphs(context);
             for (auto & g : graphs){
-                SpreadOver(context, g, 1);
+                SpreadOver(context, g);
                 OptimizeDepths(context, g, 2);
             }
 
