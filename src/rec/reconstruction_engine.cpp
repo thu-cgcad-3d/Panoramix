@@ -1698,7 +1698,7 @@ namespace panoramix {
 
                     // add a new depth factor candidate
                     auto & line = engine.globalData().reconstructedLines.at(li);
-                    double depthVarOnLine = norm(DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
+                    double depthVarOnLine = norm(DistanceBetweenTwoLines(line.infiniteLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
                         .second.second);
                     double depthValueOnRegion = norm(anchor);
                     if (!IsInfOrNaN(depthVarOnLine) && !IsInfOrNaN(depthValueOnRegion))
@@ -1795,7 +1795,7 @@ namespace panoramix {
                         const std::vector<Vec3> & selectedSampledPoints = pp.second;
 
                         for (const Vec3 & sampleRay : selectedSampledPoints){
-                            Point3 pointOnLine = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampleRay), line.infinieLine()).second.second;
+                            Point3 pointOnLine = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampleRay), line.infiniteLine()).second.second;
                             Point3 pointOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), sampleRay),
                                 _globalData.regionConnectedComponentPlanes[regionCCId]).position;
                             linesRepresentingSampledPoints.emplace_back(pointOnLine, pointOnRegion);
@@ -1962,7 +1962,7 @@ namespace panoramix {
                             auto & samplePoints = pp.second;
                             auto & line = _globalData.reconstructedLines[li];
                             for (auto & p : samplePoints){ // insert anchors into the rec info of the related region
-                                auto pOnLine = DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), p))
+                                auto pOnLine = DistanceBetweenTwoLines(line.infiniteLine(), InfiniteLine3(Point3(0, 0, 0), p))
                                     .second.second;
                                 regionCCRecInfos[thisRegionCCId].insertAnchorWithLine(*this, li, pOnLine * _globalData.lineConnectedComponentDepthFactors[thisLineCCId]);
                             }

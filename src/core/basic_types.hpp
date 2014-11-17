@@ -326,7 +326,7 @@ namespace panoramix {
             inline T length() const { return norm(first - second); }
             inline Vec<T, N> direction() const { return second - first; }
             inline Line reversed() const { return Line(second, first); }
-            inline InfiniteLine<T, N> infinieLine() const { return InfiniteLine<T, N>{ first, second - first }; }
+            inline InfiniteLine<T, N> infiniteLine() const { return InfiniteLine<T, N>{ first, second - first }; }
             Point<T, N> first, second;
         };
         template <class T, int N>

@@ -1088,7 +1088,7 @@ namespace panoramix {
                 auto lineHandles = linesNets.at(viewId).lines().topo(lri.handle).lowers;
                 auto & line1 = reconstructedLinesOriginal[LineIndex{ viewId, lineHandles[0] }];
                 auto & line2 = reconstructedLinesOriginal[LineIndex{ viewId, lineHandles[1] }];
-                auto nearestPoints = DistanceBetweenTwoLines(line1.infinieLine(), line2.infinieLine()).second;
+                auto nearestPoints = DistanceBetweenTwoLines(line1.infiniteLine(), line2.infiniteLine()).second;
                 auto c = (nearestPoints.first + nearestPoints.second) / 2.0;
                 double distance = abs((nearestPoints.first - nearestPoints.second).dot(normalize(c))) 
                     / constantEtaForFirstLineInEachConnectedComponent;
@@ -1099,7 +1099,7 @@ namespace panoramix {
             for (auto & ivl : interViewLineIncidences){
                 auto & line1 = reconstructedLinesOriginal[ivl.first.first];
                 auto & line2 = reconstructedLinesOriginal[ivl.first.second];
-                auto nearestPoints = DistanceBetweenTwoLines(line1.infinieLine(), line2.infinieLine()).second;
+                auto nearestPoints = DistanceBetweenTwoLines(line1.infiniteLine(), line2.infiniteLine()).second;
                 auto c = (nearestPoints.first + nearestPoints.second) / 2.0;
                 double distance = abs((nearestPoints.first - nearestPoints.second).dot(normalize(c)))
                     / constantEtaForFirstLineInEachConnectedComponent;
@@ -1326,27 +1326,31 @@ namespace panoramix {
                 ValueT currentValue; // current value
                 PropertyT properties;
 
-                inline Scored<const ValueT &> bestCandidate() const {
+                inline Scored<const ValueT*> bestCandidate() const {
                     double curScore = std::numeric_limits<double>::lowest();
                     Choice choice;
+                    bool hasCandidate = false;
                     for (auto & cand : candidates){
                         for (int i = 0; i < cand.second.size(); i++){
                             auto s = GetScore(cand.second[i], properties);
                             if (s > curScore){
+                                hasCandidate = true;
                                 curScore = s;
                                 choice.edgeHandle = cand.first;
                                 choice.choiceId = i;
                             }
                         }
                     }
-                    return Scored<const ValueT &>{curScore, candidates.at(choice.edgeHandle)[choice.choiceId]};
+                    if (!hasCandidate)
+                        return Scored<const ValueT*>{0.0, nullptr};
+                    return Scored<const ValueT*>{curScore, &(candidates.at(choice.edgeHandle)[choice.choiceId])};
                 }
 
-                inline bool setValueToBest() { 
-                    auto best = bestCandidate().component; 
-                    //bool changed = !(best == currentValue);
-                    currentValue = best;
-                    return changed;
+                inline void setValueToBest() { 
+                    auto best = bestCandidate().component;
+                    if (best){
+                        currentValue = *best;
+                    }
                 }
             };
 
@@ -1378,7 +1382,8 @@ namespace panoramix {
             };
 
             inline double GetScore(const RegionCCPlaneInformation & info, const RegionCCPropeties & prop){
-                return info.regionInlierAnchorsDistanceVotesSum * info.regionInlierAnchorsConvexContourVisualArea / 
+                return prop.regionConvexContourVisualArea == 0.0 ? 0.0 : 
+                    info.regionInlierAnchorsDistanceVotesSum * info.regionInlierAnchorsConvexContourVisualArea / 
                     prop.regionConvexContourVisualArea;
             }
 
@@ -1394,7 +1399,7 @@ namespace panoramix {
             };
 
             inline double GetScore(const LineCCDepthFactorInformation & info, const LineCCProperties & prop){
-                return info.votes / prop.linesNum;
+                return info.votes;
             }
 
             using LineCCVertexData = VertexData<LineIndex, LineCCDepthFactorInformation, LineCCProperties>;
@@ -1428,8 +1433,8 @@ namespace panoramix {
                         _dataPtr = nullptr;
                     }
                 }
-                inline MixedGraphVertex(MixedGraphVertex && v) { swap(v); }
-                inline MixedGraphVertex & operator = (MixedGraphVertex && v) { swap(v); return *this; }
+                //inline MixedGraphVertex(MixedGraphVertex && v) { swap(v); }
+                //inline MixedGraphVertex & operator = (MixedGraphVertex && v) { swap(v); return *this; }
                 inline void swap(MixedGraphVertex & v) { 
                     std::swap(_type, v._type);
                     std::swap(_dataPtr, v._dataPtr);
@@ -1481,12 +1486,16 @@ namespace panoramix {
                     rci.properties.regionConvexContourVisualArea = ComputeVisualAreaOfDirections(rci.properties.tangentialPlane,
                         rci.properties.xOnTangentialPlane, rci.properties.yOnTangentialPlane,
                         outerContourDirections, true);
+                    // set initial value
+                    rci.currentValue.isOrthogonal = false;
+                    rci.currentValue.skewedPlane = rci.properties.tangentialPlane;
+                    rci.currentValue.skewedPlane.anchor *= context.initialBoundingBox.outerSphere().radius;
                 }
                 void initializeWithLineCCId(int ccId, const RecContext & context){
                     _lineCCVDPtr = new LineCCVertexData;
                     auto & lci = *_lineCCVDPtr;
                     lci.ccId = ccId;
-                    lci.candidates[MixedGraphEdgeHandle()].push_back({ 1.0, 0.01 });
+                    lci.candidates[MixedGraphEdgeHandle()].push_back({ 1.0, 1e-8 });
                     // collect line indices
                     for (auto & p : context.lineConnectedComponentIds){
                         if (p.second == ccId){
@@ -1494,6 +1503,8 @@ namespace panoramix {
                         }
                     }
                     lci.properties.linesNum = lci.indices.size();
+                    // set initial value
+                    lci.currentValue = { 1.0, 0.0 };
                 }
 
             private:
@@ -1553,351 +1564,6 @@ namespace panoramix {
 
 
             // mixed graph functions
-            template <class EdgeDeterminedCheckerT>
-            void UpdateVertexFromEdge(const RecContext & context, MixedGraph & graph, MixedGraphVertHandle vh, MixedGraphEdgeHandle eh,
-                EdgeDeterminedCheckerT edgeDetermined){
-
-                double scale = context.initialBoundingBox.outerSphere().radius;
-
-                auto & vhs = graph.topo(eh).lowers;
-                assert(vhs.front() == vh || vhs.back() == vh);
-                const auto & ed = graph.data(eh);
-                auto & vd = graph.data(vh);
-                if (vd.isRegionCC()){
-                    // collect all surrounded anchors
-                    auto & ehs = graph.topo(vh).uppers;
-                    std::vector<Vec3> surroundedAnchors;
-                    int n = 0;
-                    for (auto & eh : ehs){
-                        if (!edgeDetermined(eh))
-                            continue;
-                        n += graph.data(eh).anchors().size();                       
-                    }
-                    surroundedAnchors.reserve(n);
-                    for (auto & eh : ehs){
-                        if (!edgeDetermined(eh))
-                            continue;
-                        auto & anchors = graph.data(eh).anchors();
-                        surroundedAnchors.insert(surroundedAnchors.end(), anchors.begin(), anchors.end());
-                    }              
-                    // insert all candidates
-                    auto & regionCCVD = vd.regionCCVD();
-                    auto & cands = regionCCVD.candidates[eh];
-                    cands.clear();
-                    cands.reserve(ed.anchors().size());
-
-                    VecMap<double, 3, Vec3> planeRoots(0.001 * scale);
-
-                    for (const auto & anchor : ed.anchors()){
-                        for (int vpid = 0; vpid < context.vanishingPoints.size(); vpid++){
-                            RegionCCPlaneInformation planeInfo;
-                            planeInfo.isOrthogonal = true;
-                            planeInfo.orthoPlane.orientationClaz = vpid;
-                            Plane3 plane(anchor, context.vanishingPoints[vpid]).signedDistanceTo(Point3(0, 0, 0));
-                            // check validity of this plane
-                            // check for duplications
-                            if (planeRoots.contains(plane.root()))
-                                continue;
-                            planeRoots[plane.root()] = plane.root();
-                            if (OPT_IgnoreTooSkewedPlanes){
-                                if (norm(plane.root()) <= scale / 2.0)
-                                    continue;
-                            }
-                            if (OPT_IgnoreTooFarAwayPlanes){
-                                bool valid = true;
-                                for (const auto & a : surroundedAnchors){
-                                    auto aOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), a), plane).position;
-                                    if (norm(aOnPlane) > scale * 5.0){
-                                        valid = false;
-                                        break;
-                                    }
-                                }
-                                if (!valid)
-                                    continue;
-                            }
-                            planeInfo.orthoPlane.depth = plane.signedDistanceTo(Point3(0, 0, 0));
-                            // compute properties of this plane
-                            std::vector<Vec3> inliners;
-                            planeInfo.regionInlierAnchorsDistanceVotesSum = 0.0;
-                            double distThres = scale * 0.1;
-                            for (const auto & a : surroundedAnchors){
-                                double dist = plane.distanceTo(a);
-                                if (dist > distThres)
-                                    continue;
-                                inliners.push_back(a);
-                                planeInfo.regionInlierAnchorsDistanceVotesSum += Gaussian(dist, distThres);
-                            }
-                            planeInfo.regionInlierAnchorsConvexContourVisualArea = 
-                                ComputeVisualAreaOfDirections(regionCCVD.properties.tangentialPlane,
-                                regionCCVD.properties.xOnTangentialPlane, regionCCVD.properties.yOnTangentialPlane, inliners, true);
-                            cands.push_back(planeInfo);
-                        }
-                    }                   
-                }
-                else if (vd.isLineCC()){
-                    assert(ed.connectsRegionAndLine());
-                    auto & line = context.reconstructedLines.at(ed.rili().second);
-                    auto & cands = vd.lineCCVD().candidates[eh];
-                    cands.clear();
-                    cands.reserve(ed.anchors().size());
-                    for (const auto & anchor : ed.anchors()){
-                        double depthVar = norm(DistanceBetweenTwoLines(line.infinieLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
-                            .second.second);
-                        double depthAnchored = norm(anchor);
-                        double depthFactorCand = depthAnchored / depthVar;
-                        if (!IsInfOrNaN(depthFactorCand))
-                            cands.push_back({depthFactorCand, 0.0});
-                    }
-                    // update all votes
-                    for (auto & cands1 : vd.lineCCVD().candidates){
-                        for (auto & df1 : cands1.second){
-                            for (auto & cands2 : vd.lineCCVD().candidates){
-                                for (auto & df2 : cands2.second){
-                                    double vote = Gaussian(df1.depthFactor - df2.depthFactor, 0.01);
-                                    df1.votes += vote;
-                                    df2.votes += vote;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-
-            void SpreadOver(const RecContext & context, MixedGraph & graph){
-                
-                graph.gc();
-
-                std::vector<bool> vertsDetermined(graph.internalElements<0>().size(), false);
-                std::vector<bool> edgesDetermined(graph.internalElements<1>().size(), false);
-
-                // init anchored ratios
-                std::vector<Rational> vertsAnchoredRatio(graph.internalElements<0>().size(), { 0.0, 0.0 });
-                for (auto & e : graph.elements<1>()){
-                    vertsAnchoredRatio[e.topo.lowers[0].id].denominator += e.data.anchors().size();
-                    vertsAnchoredRatio[e.topo.lowers[1].id].denominator += e.data.anchors().size();
-                }
-
-                // priority calculator
-                auto computePriority = [&](int vid) -> double {
-                    auto & vd = graph.data(MixedGraphVertHandle(vid));
-                    if (vd.isRegionCC()){
-                        if (vd.regionCCVD().candidates.empty())
-                            return 0.0;
-                        MixedGraphEdgeHandle choiceEh;
-                        int choiceId = -1;
-                        double score = -1;
-                        for (auto & cand : vd.regionCCVD().candidates){
-                            for (int i = 0; i < cand.second.size(); i++){
-                                auto & p = cand.second[i];
-                                double nscore = p.regionInlierAnchorsDistanceVotesSum * p.regionInlierAnchorsConvexContourVisualArea;
-                                if (nscore > score){
-                                    choiceEh = cand.first;
-                                    choiceId = i;
-                                }
-                            }
-                        }
-                        return vertsAnchoredRatio[vid].value(0.0) 
-                            * ((vd.regionCCVD().bestCandidate().component.regionInlierAnchorsConvexContourVisualArea 
-                            / vd.regionCCVD().properties.regionConvexContourVisualArea) > 0.3 
-                            ? 1.0 : 1e-2);
-                    }
-                    else if (vd.isLineCC()){
-                        return vertsAnchoredRatio[vid].value(0.0) * 0.9 +
-                            vd.lineCCVD().indices.size() / double(context.reconstructedLines.size()) * 0.1;
-                    }
-                    return 0.0;
-                };
-
-                std::vector<MixedGraphVertHandle> vhs;
-                vhs.reserve(graph.internalElements<0>().size());
-                for (auto & vt : graph.elements<0>())
-                    vhs.push_back(vt.topo.hd);               
-                
-                // init priority heap
-                MaxHeap<MixedGraphVertHandle> waitingVertices(vhs.begin(), vhs.end(), 
-                    [&computePriority](const MixedGraphVertHandle & vh) -> double {
-                    return computePriority(vh.id);
-                });
-
-                // spread
-                while (!waitingVertices.empty()){
-                    auto curVh = waitingVertices.top();                    
-                    auto & curVD = graph.data(curVh);
-                    
-                    // determine current vertex
-                    if (curVD.isRegionCC()){
-                        assert(curVD.regionCCVD().candidates.size() > 0);
-                        curVD.regionCCVD().setValueToBest();
-                    }
-                    else if(curVD.isLineCC()){
-                        assert(curVD.lineCCVD().candidates.size() > 0);
-                        curVD.lineCCVD().setValueToBest();
-                    }
-
-                    vertsDetermined[curVh.id] = true;
-                    waitingVertices.pop();
-                    
-                    // determine related edges
-                    for (auto & eh : graph.topo(curVh).uppers){
-                        auto & ed = graph.data(eh);
-                        // determin edge
-                        bool changed = false;
-                        if (curVD.isRegionCC()){
-                            auto plane = curVD.regionCCVD().currentValue.plane(context.vanishingPoints);
-                            for (auto & anchor : ed.anchors()){
-                                anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane).position;
-                            }
-                        }
-                        else if (curVD.isLineCC()){
-                            assert(ed.connectsRegionAndLine());
-                            auto line = curVD.lineCCVD().currentValue.depthFactor * context.reconstructedLines.at(ed.rili().second);
-                            for (auto & anchor : ed.anchors()){
-                                anchor = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), anchor), line.infinieLine()).second.first;
-                            }
-                        }
-
-                        edgesDetermined[eh.id] = true;
-
-                        auto & vhs = graph.topo(eh).lowers;
-                        auto anotherVh = vhs.front() == curVh ? vhs.back() : vhs.front();
-                        // update another vertex
-                        UpdateVertexFromEdge(context, graph, anotherVh, eh, 
-                            [&edgesDetermined](const MixedGraphEdgeHandle & e){
-                            return edgesDetermined[e.id]; 
-                        });
-
-                        vertsAnchoredRatio[anotherVh.id].numerator += ed.anchors().size();
-
-                        // udpate score of related vertices
-                        waitingVertices.setScore(anotherVh, computePriority(anotherVh.id));
-                    }
-                }
-
-            }
-
-
-            void OptimizeDepths(const RecContext & context, MixedGraph & graph) {
-
-                using namespace Eigen;
-                SparseMatrix<double> A, W;
-                VectorXd B;
-
-                // try minimizing ||W(AX-B)||^2
-
-                // setup matrices
-                graph.gc(); // make graph compressed
-                int n = graph.internalElements<0>().size(); // var num
-                int m = 0;  // get cons num
-                for (auto & e : graph.internalElements<1>()){
-                    m += e.data.anchors.size();
-                }
-                m++; // add the depth assignment for the first var
-
-                A.resize(m, n);
-                W.resize(m, m);
-                B.resize(m);
-
-                // write equations
-                int curEquationNum = 0;
-
-                // add the depth assignment for the first var
-                // df = 1.0
-                A.insert(curEquationNum, 0) = 1.0;
-                B(curEquationNum) = 1.0;
-                W.insert(curEquationNum, curEquationNum) = 1.0;
-                curEquationNum++;
-
-                for (auto & e : graph.elements<1>()){
-                    auto vh1 = e.topo.lowers[0];
-                    auto vh2 = e.topo.lowers[1];
-                    assert(vh1 != vh2);
-                    auto & vd1 = graph.data(vh1);
-                    auto & vd2 = graph.data(vh2);
-
-                    if (e.data.connectsRegionAndRegion()){
-                        assert(vd1.isRegionCC() && vd2.isRegionCC());
-                        auto plane1 = vd1.regionCCVD().currentValue.plane(context.vanishingPoints);
-                        auto plane2 = vd2.regionCCVD().currentValue.plane(context.vanishingPoints);
-                        // setup equation for each anchor
-                        for (auto & anchor : e.data.anchors){
-                            double depthOnPlane1 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane1).position);
-                            double depthOnPlane2 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane2).position);
-                            // df1 * depthOnPlane1 - df2 * depthOnPlane2 = 0
-                            A.insert(curEquationNum, vh1.id) = depthOnPlane1;
-                            A.insert(curEquationNum, vh2.id) = -depthOnPlane2;
-                            B(curEquationNum) = 0;
-                            W.insert(curEquationNum, curEquationNum) = 1.0;
-                            curEquationNum++;
-                        }
-                    }
-                    else if (e.data.connectsRegionAndLine()){
-                        assert(vd1.isRegionCC() && vd2.isLineCC());
-                        auto plane1 = vd1.regionCCVD().currentValue.plane(context.vanishingPoints);
-                        auto line2 = vd2.lineCCVD().currentValue.depthFactor * context.reconstructedLines.at(e.data.rili().second);
-                        // setup equation for each anchor
-                        for (auto & anchor : e.data.anchors){
-                            double depthOnPlane1 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane1).position);
-                            double depthOnLine2 = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), anchor), line2.infinieLine()).second.first);
-                            // df1 * depthOnPlane1 - df2 * depthOnLine2 = 0
-                            A.insert(curEquationNum, vh1.id) = depthOnPlane1;
-                            A.insert(curEquationNum, vh2.id) = -depthOnLine2;
-                            B(curEquationNum) = 0;
-                            W.insert(curEquationNum, curEquationNum) = 1.0;
-                            curEquationNum++;
-                        }
-                    }
-                }
-                                
-
-                // solve the equation system
-                bool useWeights = true;
-                VectorXd X;
-                SparseQR<Eigen::SparseMatrix<double>, COLAMDOrdering<int>> solver;
-                static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
-                Eigen::SparseMatrix<double> WA = W * A;
-                A.makeCompressed();
-                WA.makeCompressed();
-                solver.compute(useWeights ? WA : A);
-                if (solver.info() != Success) {
-                    assert(0);
-                    std::cout << "computation error" << std::endl;
-                    return;
-                }
-                VectorXd WB = W * B;
-                X = solver.solve(useWeights ? WB : B);
-                if (solver.info() != Success) {
-                    assert(0);
-                    std::cout << "solving error" << std::endl;
-                    return;
-                }
-
-
-                // scale all vertex using computed depth factors
-                for (auto & v : graph.elements<0>()){
-                    double depthFactor = X(v.topo.hd.id);
-                    if (v.data.isRegionCC()){
-                        auto & planeInfo = v.data.regionCCVD().currentValue;
-                        if (planeInfo.isOrthogonal)
-                            planeInfo.orthoPlane.depth *= depthFactor;
-                        else
-                            planeInfo.skewedPlane.anchor *= depthFactor;
-                    }
-                    else if (v.data.isLineCC()){
-                        v.data.lineCCVD().currentValue.depthFactor *= depthFactor;
-                    }
-                }
-
-            }
-
-
-            void RandomJump(const RecContext & context, MixedGraph & graph){
-
-
-
-            }
-
-
             // visualize
             void DisplayReconstruction(int highlightedRegionCCId, int highlightedLineCCId,
                 const std::set<int> & regionCCIdsNotDeterminedYet, const std::set<int> & lineCCIdsNotDeterminedYet,
@@ -1911,10 +1577,12 @@ namespace panoramix {
                 std::vector<double> lineConnectedComponentDepthFactors(context.lineConnectedComponentsNum);
                 for (auto & v : graph.elements<0>()){
                     if (v.data.isRegionCC()){
-                        regionConnectedComponentPlanes[v.data.regionCCVD().ccId] = v.data.regionCCVD().currentValue.plane(context.vanishingPoints);
+                        regionConnectedComponentPlanes[v.data.regionCCVD().ccId] = 
+                            v.data.regionCCVD().currentValue.plane(context.vanishingPoints);
                     }
                     else if (v.data.isLineCC()){
-                        lineConnectedComponentDepthFactors[v.data.lineCCVD().ccId] = v.data.lineCCVD().currentValue.depthFactor;
+                        lineConnectedComponentDepthFactors[v.data.lineCCVD().ccId] = 
+                            v.data.lineCCVD().currentValue.depthFactor;
                     }
                 }
 
@@ -1933,7 +1601,7 @@ namespace panoramix {
 
                     const std::vector<Vec3> & selectedSampledPoints = pp.second;
                     for (const Vec3 & sampleRay : selectedSampledPoints){
-                        Point3 pointOnLine = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampleRay), line.infinieLine()).second.second;
+                        Point3 pointOnLine = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), sampleRay), line.infiniteLine()).second.second;
                         Point3 pointOnRegion = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), sampleRay),
                             regionConnectedComponentPlanes[regionCCId]).position;
                         linesRepresentingSampledPoints.emplace_back(pointOnLine, pointOnRegion);
@@ -2020,6 +1688,389 @@ namespace panoramix {
                     << vis::manip3d::Show();
 
             }
+
+
+            template <class EdgeDeterminedCheckerT>
+            void UpdateVertexFromEdge(const RecContext & context, MixedGraph & graph, MixedGraphVertHandle vh, MixedGraphEdgeHandle eh,
+                EdgeDeterminedCheckerT edgeDetermined){
+
+                double scale = context.initialBoundingBox.outerSphere().radius;
+
+                auto & vhs = graph.topo(eh).lowers;
+                assert(vhs.front() == vh || vhs.back() == vh);
+                const auto & ed = graph.data(eh);
+                auto & vd = graph.data(vh);
+                if (vd.isRegionCC()){
+                    // collect all surrounded anchors
+                    auto & ehs = graph.topo(vh).uppers;
+                    std::vector<Vec3> surroundedAnchors;
+                    // precount
+                    int n = 0;
+                    for (auto & eh : ehs){
+                        if (!edgeDetermined(eh))
+                            continue;
+                        n += graph.data(eh).anchors().size();                       
+                    }
+                    surroundedAnchors.reserve(n);
+                    for (auto & eh : ehs){
+                        if (!edgeDetermined(eh))
+                            continue;
+                        auto & anchors = graph.data(eh).anchors();
+                        surroundedAnchors.insert(surroundedAnchors.end(), anchors.begin(), anchors.end());
+                    }              
+                    // insert all candidates
+                    auto & regionCCVD = vd.regionCCVD();
+                    auto & cands = regionCCVD.candidates[eh];
+                    cands.clear();
+                    cands.reserve(ed.anchors().size());
+
+                    VecMap<double, 3, Vec3> planeRoots(0.001 * scale);
+
+                    for (const auto & anchor : ed.anchors()){
+                        for (int vpid = 0; vpid < context.vanishingPoints.size(); vpid++){
+                            RegionCCPlaneInformation planeInfo;
+                            planeInfo.isOrthogonal = true;
+                            planeInfo.orthoPlane.orientationClaz = vpid;
+                            Plane3 plane(anchor, context.vanishingPoints[vpid]);
+                            // check validity of this plane
+                            // check for duplications
+                            if (planeRoots.contains(plane.root()))
+                                continue;
+                            planeRoots[plane.root()] = plane.root();
+                            if (OPT_IgnoreTooSkewedPlanes){
+                                if (norm(plane.root()) <= scale / 2.0)
+                                    continue;
+                            }
+                            if (OPT_IgnoreTooFarAwayPlanes){
+                                bool valid = true;
+                                for (const auto & a : surroundedAnchors){
+                                    auto aOnPlane = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), a), plane).position;
+                                    if (norm(aOnPlane) > scale * 5.0){
+                                        valid = false;
+                                        break;
+                                    }
+                                }
+                                if (!valid)
+                                    continue;
+                            }
+                            planeInfo.orthoPlane.depth = plane.signedDistanceTo(Point3(0, 0, 0));
+                            // compute properties of this plane
+                            std::vector<Vec3> inliners;
+                            planeInfo.regionInlierAnchorsDistanceVotesSum = 0.0;
+                            double distThres = scale * 0.1;
+                            for (const auto & a : surroundedAnchors){
+                                double dist = plane.distanceTo(a);
+                                if (dist > distThres)
+                                    continue;
+                                inliners.push_back(a);
+                                planeInfo.regionInlierAnchorsDistanceVotesSum += Gaussian(dist, distThres);
+                            }
+                            planeInfo.regionInlierAnchorsConvexContourVisualArea = 
+                                ComputeVisualAreaOfDirections(regionCCVD.properties.tangentialPlane,
+                                regionCCVD.properties.xOnTangentialPlane, regionCCVD.properties.yOnTangentialPlane, inliners, true);
+                            cands.push_back(planeInfo);
+                        }
+                    }                   
+                }
+                else if (vd.isLineCC()){
+                    assert(ed.connectsRegionAndLine());
+                    auto & line = context.reconstructedLines.at(ed.rili().second);
+                    auto & cands = vd.lineCCVD().candidates[eh];
+                    cands.clear();
+                    cands.reserve(ed.anchors().size());
+                    for (const auto & anchor : ed.anchors()){
+                        double depthVar = norm(DistanceBetweenTwoLines(line.infiniteLine(), InfiniteLine3(Point3(0, 0, 0), anchor))
+                            .second.second);
+                        double depthAnchored = norm(anchor);
+                        double depthFactorCand = depthAnchored / depthVar;
+                        if (!IsInfOrNaN(depthFactorCand))
+                            cands.push_back({depthFactorCand, 0.0});
+                    }
+                    // update all votes
+                    for (auto & cand : vd.lineCCVD().candidates){
+                        for (auto & df : cand.second)
+                            df.votes = 0.0;
+                    }
+                    for (auto & cands1 : vd.lineCCVD().candidates){
+                        for (auto & df1 : cands1.second){
+                            for (auto & cands2 : vd.lineCCVD().candidates){
+                                for (auto & df2 : cands2.second){
+                                    double vote = Gaussian(df1.depthFactor - df2.depthFactor, 0.01);
+                                    df1.votes += vote;
+                                    df2.votes += vote;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+
+            void SpreadOver(const RecContext & context, MixedGraph & graph, int repeatNum){
+                
+                graph.gc();
+
+                std::vector<bool> vertsDetermined(graph.internalElements<0>().size(), false);
+                std::vector<bool> edgesDetermined(graph.internalElements<1>().size(), false);
+
+                // init anchored ratios
+                std::vector<Rational> regionCCAnchoredRatioWithRegions(context.regionConnectedComponentsNum, { 0.0, 0.0 });
+                std::vector<Rational> regionCCAnchoredRatioWithLines(context.regionConnectedComponentsNum, { 0.0, 0.0 });
+                std::vector<Rational> lineCCAnchoredRatio(context.lineConnectedComponentsNum, { 0.0, 0.0 });
+                for (auto & e : graph.elements<1>()){
+                    if (e.data.connectsRegionAndLine()){
+                        regionCCAnchoredRatioWithLines[graph.data(e.topo.lowers.front()).regionCCVD().ccId].denominator += e.data.anchors().size();
+                        lineCCAnchoredRatio[graph.data(e.topo.lowers.back()).lineCCVD().ccId].denominator += e.data.anchors().size();
+                    }
+                    else if (e.data.connectsRegionAndRegion()){
+                        regionCCAnchoredRatioWithRegions[graph.data(e.topo.lowers.front()).regionCCVD().ccId].denominator += e.data.anchors().size();
+                        regionCCAnchoredRatioWithRegions[graph.data(e.topo.lowers.back()).regionCCVD().ccId].denominator += e.data.anchors().size();
+                    }
+                }
+
+                // priority calculator
+                auto computePriority = [&](const MixedGraphVertHandle & vh) -> double {
+                    auto & vd = graph.data(vh);
+                    if (vd.isRegionCC()){
+                        auto & regionCCVD = vd.regionCCVD();
+                        if (regionCCVD.candidates.empty())
+                            return 0.0;
+                        auto best = regionCCVD.bestCandidate().component;
+                        if (!best)
+                            return 0.0;
+                        if (regionCCVD.properties.regionConvexContourVisualArea == 0.0)
+                            return 0.0;
+                        double anchoredRatioWithRegions = regionCCAnchoredRatioWithRegions[regionCCVD.ccId].value(0.0);
+                        double anchoredRatioWithLines = regionCCAnchoredRatioWithLines[regionCCVD.ccId].value(0.0);
+                        return (anchoredRatioWithRegions * 0.7 + anchoredRatioWithLines * 0.3)
+                            * ((best->regionInlierAnchorsConvexContourVisualArea 
+                            / regionCCVD.properties.regionConvexContourVisualArea) > 0.3
+                            ? 1.0 : 1e-2);
+                    }
+                    else if (vd.isLineCC()){
+                        return lineCCAnchoredRatio[vd.lineCCVD().ccId].value(0.0) * 0.9 +
+                            vd.lineCCVD().indices.size() / double(context.reconstructedLines.size()) * 0.1;
+                    }
+                    return 0.0;
+                };
+
+                std::vector<MixedGraphVertHandle> vhs;
+                vhs.reserve(graph.internalElements<0>().size());
+                for (auto & vt : graph.elements<0>())
+                    vhs.push_back(vt.topo.hd);               
+                
+
+                for (int t = 0; t < repeatNum; t++){
+                    std::cout << "epoch: " << t << std::endl;
+                    
+                    // init priority heap
+                    MaxHeap<MixedGraphVertHandle, double, std::map<MixedGraphVertHandle, int>> waitingVertices(vhs.begin(), vhs.end(),
+                        [&computePriority](const MixedGraphVertHandle & vh) -> double {
+                        return computePriority(vh);
+                    });
+
+                    // spread
+                    while (!waitingVertices.empty()){
+                        auto curVh = waitingVertices.top();
+                        auto & curVD = graph.data(curVh);
+
+                        // determine current vertex
+                        if (curVD.isRegionCC()){
+                            std::cout << "region " << curVD.regionCCVD().ccId << std::endl;
+                            //assert(curVD.regionCCVD().candidates.size() > 0);
+                            curVD.regionCCVD().setValueToBest();
+                        }
+                        else if (curVD.isLineCC()){
+                            std::cout << "line " << curVD.lineCCVD().ccId << std::endl;
+                            //assert(curVD.lineCCVD().candidates.size() > 0);
+                            curVD.lineCCVD().setValueToBest();
+                        }
+
+                        vertsDetermined[curVh.id] = true;
+                        waitingVertices.pop();
+
+                        // determine related edges
+                        for (auto & eh : graph.topo(curVh).uppers){
+                            if (edgesDetermined[eh.id])
+                                continue;
+
+                            auto & ed = graph.data(eh);
+                            // determin edge anchors
+                            if (curVD.isRegionCC()){
+                                auto plane = curVD.regionCCVD().currentValue.plane(context.vanishingPoints);
+                                for (auto & anchor : ed.anchors()){
+                                    anchor = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane).position;
+                                }
+                            }
+                            else if (curVD.isLineCC()){
+                                assert(ed.connectsRegionAndLine());
+                                auto line = curVD.lineCCVD().currentValue.depthFactor * context.reconstructedLines.at(ed.rili().second);
+                                for (auto & anchor : ed.anchors()){
+                                    anchor = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), anchor), line.infiniteLine()).second.first;
+                                }
+                            }
+
+                            edgesDetermined[eh.id] = true;
+
+                            // update another vertex
+                            auto & vhs = graph.topo(eh).lowers;
+                            auto anotherVh = vhs.front() == curVh ? vhs.back() : vhs.front();
+                            if (vertsDetermined[anotherVh.id])
+                                continue;
+
+                            UpdateVertexFromEdge(context, graph, anotherVh, eh,
+                                [&edgesDetermined](const MixedGraphEdgeHandle & e){
+                                return edgesDetermined[e.id];
+                            });
+
+                            auto & anotherVD = graph.data(anotherVh);
+                            if (anotherVD.isRegionCC() && curVD.isRegionCC()){
+                                regionCCAnchoredRatioWithRegions[anotherVD.regionCCVD().ccId].denominator += ed.anchors().size();
+                            }
+                            else if (anotherVD.isRegionCC() && curVD.isLineCC()){
+                                regionCCAnchoredRatioWithLines[anotherVD.regionCCVD().ccId].denominator += ed.anchors().size();
+                            }
+                            else if (anotherVD.isLineCC()){
+                                lineCCAnchoredRatio[anotherVD.lineCCVD().ccId].denominator += ed.anchors().size();
+                            }
+
+                            // udpate score of related vertices
+                            if (waitingVertices.contains(anotherVh))
+                                waitingVertices.setScore(anotherVh, computePriority(anotherVh.id));
+                        }
+
+                        
+                    }
+                }
+
+                DisplayReconstruction(-1, -1, {}, {}, graph, context);
+
+            }
+
+
+            void OptimizeDepths(const RecContext & context, MixedGraph & graph) {
+
+                using namespace Eigen;
+                SparseMatrix<double> A, W;
+                VectorXd B;
+
+                // try minimizing ||W(AX-B)||^2
+
+                // setup matrices
+                graph.gc(); // make graph compressed
+                int n = graph.internalElements<0>().size(); // var num
+                int m = 0;  // get cons num
+                for (auto & e : graph.internalElements<1>()){
+                    m += e.data.anchors().size();
+                }
+                m++; // add the depth assignment for the first var
+
+                A.resize(m, n);
+                W.resize(m, m);
+                B.resize(m);
+
+                // write equations
+                int curEquationNum = 0;
+
+                // add the depth assignment for the first var
+                // df = 1.0
+                A.insert(curEquationNum, 0) = 1.0;
+                B(curEquationNum) = 1.0;
+                W.insert(curEquationNum, curEquationNum) = 1.0;
+                curEquationNum++;
+
+                for (auto & e : graph.elements<1>()){
+                    auto vh1 = e.topo.lowers[0];
+                    auto vh2 = e.topo.lowers[1];
+                    assert(vh1 != vh2);
+                    auto & vd1 = graph.data(vh1);
+                    auto & vd2 = graph.data(vh2);
+
+                    if (e.data.connectsRegionAndRegion()){
+                        assert(vd1.isRegionCC() && vd2.isRegionCC());
+                        auto plane1 = vd1.regionCCVD().currentValue.plane(context.vanishingPoints);
+                        auto plane2 = vd2.regionCCVD().currentValue.plane(context.vanishingPoints);
+                        // setup equation for each anchor
+                        for (auto & anchor : e.data.anchors()){
+                            double depthOnPlane1 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane1).position);
+                            double depthOnPlane2 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane2).position);
+                            // df1 * depthOnPlane1 - df2 * depthOnPlane2 = 0
+                            A.insert(curEquationNum, vh1.id) = depthOnPlane1;
+                            A.insert(curEquationNum, vh2.id) = -depthOnPlane2;
+                            B(curEquationNum) = 0;
+                            W.insert(curEquationNum, curEquationNum) = 1.0;
+                            curEquationNum++;
+                        }
+                    }
+                    else if (e.data.connectsRegionAndLine()){
+                        assert(vd1.isRegionCC() && vd2.isLineCC());
+                        auto plane1 = vd1.regionCCVD().currentValue.plane(context.vanishingPoints);
+                        auto line2 = vd2.lineCCVD().currentValue.depthFactor * context.reconstructedLines.at(e.data.rili().second);
+                        // setup equation for each anchor
+                        for (auto & anchor : e.data.anchors()){
+                            double depthOnPlane1 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane1).position);
+                            double depthOnLine2 = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), anchor), line2.infiniteLine()).second.first);
+                            // df1 * depthOnPlane1 - df2 * depthOnLine2 = 0
+                            A.insert(curEquationNum, vh1.id) = depthOnPlane1;
+                            A.insert(curEquationNum, vh2.id) = -depthOnLine2;
+                            B(curEquationNum) = 0;
+                            W.insert(curEquationNum, curEquationNum) = 1.0;
+                            curEquationNum++;
+                        }
+                    }
+                }
+                                
+
+                // solve the equation system
+                const bool useWeights = false;
+                VectorXd X;
+                SparseQR<Eigen::SparseMatrix<double>, COLAMDOrdering<int>> solver;
+                static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
+                Eigen::SparseMatrix<double> WA = W * A;
+                A.makeCompressed();
+                WA.makeCompressed();
+                solver.compute(useWeights ? WA : A);
+                if (solver.info() != Success) {
+                    assert(0);
+                    std::cout << "computation error" << std::endl;
+                    return;
+                }
+                VectorXd WB = W * B;
+                X = solver.solve(useWeights ? WB : B);
+                if (solver.info() != Success) {
+                    assert(0);
+                    std::cout << "solving error" << std::endl;
+                    return;
+                }
+
+
+                // scale all vertex using computed depth factors
+                for (auto & v : graph.elements<0>()){
+                    double depthFactor = X(v.topo.hd.id);
+                    if (v.data.isRegionCC()){
+                        auto & planeInfo = v.data.regionCCVD().currentValue;
+                        if (planeInfo.isOrthogonal)
+                            planeInfo.orthoPlane.depth *= depthFactor;
+                        else
+                            planeInfo.skewedPlane.anchor *= depthFactor;
+                    }
+                    else if (v.data.isLineCC()){
+                        v.data.lineCCVD().currentValue.depthFactor *= depthFactor;
+                    }
+                }
+
+                DisplayReconstruction(-1, -1, {}, {}, graph, context);
+            }
+
+
+            void RandomJump(const RecContext & context, MixedGraph & graph){
+
+
+
+            }
+
+
+          
         }
 
 
@@ -2100,8 +2151,8 @@ namespace panoramix {
             std::cout << "edges num: " << graph.internalElements<1>().size() << std::endl;
 
             
-
-            
+            SpreadOver(context, graph, 1);
+            OptimizeDepths(context, graph);
 
         }
 

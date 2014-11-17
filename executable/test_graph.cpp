@@ -77,6 +77,7 @@ TEST(MeshTest, Visualize) {
     EXPECT_EQ(6, mesh.internalFaces().size());
 
     mesh.remove(TestMesh::VertHandle(0));
+    mesh.gc();
     VisualizeMesh(mesh);
 
     mesh.clear();

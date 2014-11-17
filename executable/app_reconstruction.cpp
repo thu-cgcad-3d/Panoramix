@@ -88,7 +88,7 @@ int main(int argc, char * argv[], char * envp[]) {
         #pragma omp for
         for (int i = 0; i < all.perspectiveViews.size(); i++){
             std::tie(all.regionsNets[i], all.linesNets[i]) = 
-                rec::InitializeFeatureNets(all.perspectiveViews[i], 40.0, 20.0, 15.0, 40.0);
+                rec::InitializeFeatureNets(all.perspectiveViews[i], 10.0, 20.0, 15.0, 40.0);
         }
         core::SaveToDisk(out, all);
     });
@@ -100,7 +100,7 @@ int main(int argc, char * argv[], char * envp[]) {
             rec::EstimateVanishingPointsAndClassifyLines(all.perspectiveViews, all.linesNets);
         rec::RecognizeRegionLineConstraints(all.perspectiveViews, all.regionsNets, all.linesNets,
             all.regionOverlappings, all.regionLineConnections, all.interViewLineIncidences,
-            M_PI_4 / 8.0, 15.0);
+            M_PI_4 / 8.0, 10.0);
         rec::ComputeConnectedComponentsUsingRegionLineConstraints(all.perspectiveViews, all.regionsNets, all.linesNets,
             all.regionOverlappings, all.regionLineConnections, all.interViewLineIncidences,
             all.regionConnectedComponentsNum, all.regionConnectedComponentIds,

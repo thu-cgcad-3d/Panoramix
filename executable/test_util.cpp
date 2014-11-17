@@ -203,7 +203,7 @@ TEST(UtilTest, DistanceFromPointToLine) {
     core::Line3 l;
     l.first = { 1, 0, 0 };
     l.second = { -1, 0, 0 };
-    auto infLine = l.infinieLine();
+    auto infLine = l.infiniteLine();
     for (double x = -3; x <= 3; x += 0.5) {
         core::Point3 p(x, 1, 0);
         if (x < -1){
@@ -216,7 +216,7 @@ TEST(UtilTest, DistanceFromPointToLine) {
             ASSERT_DOUBLE_EQ(1, core::DistanceFromPointToLine(p, l).first);
         }
         ASSERT_DOUBLE_EQ(1, core::norm(core::ProjectionOfPointOnLine(p, l).position - p));
-        ASSERT_DOUBLE_EQ(1, core::norm(core::DistanceFromPointToLine(p, l.infinieLine()).second - p));
+        ASSERT_DOUBLE_EQ(1, core::norm(core::DistanceFromPointToLine(p, l.infiniteLine()).second - p));
     }
 }
 

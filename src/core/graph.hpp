@@ -169,8 +169,16 @@ namespace panoramix {
                 invalid.reset();
                 hs.erase(std::remove(std::begin(hs), std::end(hs), invalid), std::end(hs));
             }
+            template <class T, int N>
+            inline void RemoveInValidHandleFromContainer(std::array<T, N> & hs){}
             template <class K, class CompareK, class AllocK>
             inline void RemoveInValidHandleFromContainer(std::set<K, CompareK, AllocK> & hs) {
+                auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
+                invalid.reset();
+                hs.erase(invalid);
+            }
+            template <class K, class HasherK, class EqualK, class AllocK>
+            inline void RemoveInValidHandleFromContainer(std::unordered_set<K, HasherK, EqualK, AllocK> & hs){
                 auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
                 invalid.reset();
                 hs.erase(invalid);

@@ -144,8 +144,8 @@ namespace panoramix {
                     }
                     else {
                         if (d < _params.intersectionDistanceThreshold){
-                            auto conCenter = HPointFromVector(GetCoeffs(linei.infinieLine())
-                                .cross(GetCoeffs(linej.infinieLine()))).value();
+                            auto conCenter = HPointFromVector(GetCoeffs(linei.infiniteLine())
+                                .cross(GetCoeffs(linej.infiniteLine()))).value();
                             LineRelationData lrd;
                             lrd.type = LineRelationData::Type::Intersection;
                             lrd.relationCenter = conCenter;
