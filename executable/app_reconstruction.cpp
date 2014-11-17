@@ -88,7 +88,7 @@ int main(int argc, char * argv[], char * envp[]) {
         #pragma omp for
         for (int i = 0; i < all.perspectiveViews.size(); i++){
             std::tie(all.regionsNets[i], all.linesNets[i]) = 
-                rec::InitializeFeatureNets(all.perspectiveViews[i], 10.0, 20.0, 15.0, 40.0);
+                rec::InitializeFeatureNets(all.perspectiveViews[i], 5.0, 20.0, 15.0, 40.0);
         }
         core::SaveToDisk(out, all);
     });

@@ -1360,14 +1360,25 @@ namespace panoramix {
                 semantic_union(isOrthogonal, !isOrthogonal) {
                     struct {
                         int orientationClaz;
-                        double depth; // distance from origin
+                        double depth; // distance from origin: positive -> toward vp direction; negative -> opposite
                     } orthoPlane;
                     Plane3 skewedPlane;
                 };
                 template <class Vec3ArrayT>
+                inline void setPlane(const Vec3ArrayT & vps, int oclaz, const Point3 & anchor) {
+                    isOrthogonal = true;
+                    orthoPlane.orientationClaz = oclaz;
+                    Plane3 p(anchor, vps[oclaz]);
+                    orthoPlane.depth = -p.signedDistanceTo(Point3(0, 0, 0));
+                }
+                inline void setPlane(const Plane3 p) {
+                    isOrthogonal = false;
+                    skewedPlane = p;
+                }
+                template <class Vec3ArrayT>
                 inline Plane3 plane(const Vec3ArrayT & vps) const {
                     return isOrthogonal ?
-                        Plane3(normalize(vps[orthoPlane.orientationClaz] * orthoPlane.depth), vps[orthoPlane.orientationClaz]) :
+                        Plane3(normalize(vps[orthoPlane.orientationClaz]) * orthoPlane.depth, vps[orthoPlane.orientationClaz]) :
                         skewedPlane;
                 }
                 double regionInlierAnchorsConvexContourVisualArea;
@@ -1487,9 +1498,7 @@ namespace panoramix {
                         rci.properties.xOnTangentialPlane, rci.properties.yOnTangentialPlane,
                         outerContourDirections, true);
                     // set initial value
-                    rci.currentValue.isOrthogonal = false;
-                    rci.currentValue.skewedPlane = rci.properties.tangentialPlane;
-                    rci.currentValue.skewedPlane.anchor *= context.initialBoundingBox.outerSphere().radius;
+                    rci.currentValue.setPlane(rci.properties.tangentialPlane);
                 }
                 void initializeWithLineCCId(int ccId, const RecContext & context){
                     _lineCCVDPtr = new LineCCVertexData;
@@ -1667,10 +1676,7 @@ namespace panoramix {
                     int lineCCId = context.lineConnectedComponentIds.at(l.first);
                     if (core::Contains(lineCCIdsNotDeterminedYet, lineCCId))
                         continue;
-                    auto line = l.second;
-                    double depthFactor = lineConnectedComponentDepthFactors[lineCCId];
-                    line.first *= depthFactor;
-                    line.second *= depthFactor;
+                    auto line = l.second * lineConnectedComponentDepthFactors[lineCCId];
                     if (lineCCId == highlightedLineCCId)
                         highlightedLines.push_back(line);
                     viz << core::ClassifyAs(line, lineCCId);
@@ -1729,16 +1735,16 @@ namespace panoramix {
                     for (const auto & anchor : ed.anchors()){
                         for (int vpid = 0; vpid < context.vanishingPoints.size(); vpid++){
                             RegionCCPlaneInformation planeInfo;
-                            planeInfo.isOrthogonal = true;
-                            planeInfo.orthoPlane.orientationClaz = vpid;
-                            Plane3 plane(anchor, context.vanishingPoints[vpid]);
+                            planeInfo.setPlane(context.vanishingPoints, vpid, anchor);
+                            auto plane = planeInfo.plane(context.vanishingPoints);
+                            assert(plane.distanceTo(anchor) < 1e-3);
                             // check validity of this plane
                             // check for duplications
                             if (planeRoots.contains(plane.root()))
                                 continue;
                             planeRoots[plane.root()] = plane.root();
                             if (OPT_IgnoreTooSkewedPlanes){
-                                if (norm(plane.root()) <= scale / 2.0)
+                                if (norm(plane.root()) <= scale / 4.0)
                                     continue;
                             }
                             if (OPT_IgnoreTooFarAwayPlanes){
@@ -1753,7 +1759,7 @@ namespace panoramix {
                                 if (!valid)
                                     continue;
                             }
-                            planeInfo.orthoPlane.depth = plane.signedDistanceTo(Point3(0, 0, 0));
+                            planeInfo.orthoPlane.depth = - plane.signedDistanceTo(Point3(0, 0, 0));
                             // compute properties of this plane
                             std::vector<Vec3> inliners;
                             planeInfo.regionInlierAnchorsDistanceVotesSum = 0.0;
@@ -1842,14 +1848,16 @@ namespace panoramix {
                             return 0.0;
                         double anchoredRatioWithRegions = regionCCAnchoredRatioWithRegions[regionCCVD.ccId].value(0.0);
                         double anchoredRatioWithLines = regionCCAnchoredRatioWithLines[regionCCVD.ccId].value(0.0);
-                        return (anchoredRatioWithRegions * 0.7 + anchoredRatioWithLines * 0.3)
-                            * ((best->regionInlierAnchorsConvexContourVisualArea 
-                            / regionCCVD.properties.regionConvexContourVisualArea) > 0.3
+                        double areaRatio = regionCCVD.properties.regionVisualArea / 
+                            (4.0 * M_PI * Square(norm(regionCCVD.properties.tangentialPlane.root())));
+                        assert(!IsInfOrNaN(areaRatio));
+                        return (anchoredRatioWithRegions * 0.7 + anchoredRatioWithLines * 0.29 + areaRatio * 0.01)
+                            * ((best->regionInlierAnchorsConvexContourVisualArea / regionCCVD.properties.regionConvexContourVisualArea) > 0.3
                             ? 1.0 : 1e-2);
                     }
                     else if (vd.isLineCC()){
-                        return lineCCAnchoredRatio[vd.lineCCVD().ccId].value(0.0) * 0.9 +
-                            vd.lineCCVD().indices.size() / double(context.reconstructedLines.size()) * 0.1;
+                        return lineCCAnchoredRatio[vd.lineCCVD().ccId].value(0.0)/* * 0.99 +
+                            vd.lineCCVD().indices.size() / double(context.reconstructedLines.size()) * 0.01*/;
                     }
                     return 0.0;
                 };
@@ -1869,6 +1877,17 @@ namespace panoramix {
                         return computePriority(vh);
                     });
 
+                    // manually raise the score of the largest linecc
+                    MixedGraphVertHandle largestLineCCVh;
+                    int largestLineCCSize = 0;
+                    for (auto & v : graph.elements<0>()){
+                        if (v.data.isLineCC() && v.data.lineCCVD().indices.size() > largestLineCCSize){
+                            largestLineCCVh = v.topo.hd;
+                            largestLineCCSize = v.data.lineCCVD().indices.size();
+                        }
+                    }
+                    waitingVertices.setScore(largestLineCCVh, std::numeric_limits<double>::max());
+
                     // spread
                     while (!waitingVertices.empty()){
                         auto curVh = waitingVertices.top();
@@ -1877,12 +1896,10 @@ namespace panoramix {
                         // determine current vertex
                         if (curVD.isRegionCC()){
                             std::cout << "region " << curVD.regionCCVD().ccId << std::endl;
-                            //assert(curVD.regionCCVD().candidates.size() > 0);
                             curVD.regionCCVD().setValueToBest();
                         }
                         else if (curVD.isLineCC()){
                             std::cout << "line " << curVD.lineCCVD().ccId << std::endl;
-                            //assert(curVD.lineCCVD().candidates.size() > 0);
                             curVD.lineCCVD().setValueToBest();
                         }
 
@@ -1925,18 +1942,18 @@ namespace panoramix {
 
                             auto & anotherVD = graph.data(anotherVh);
                             if (anotherVD.isRegionCC() && curVD.isRegionCC()){
-                                regionCCAnchoredRatioWithRegions[anotherVD.regionCCVD().ccId].denominator += ed.anchors().size();
+                                regionCCAnchoredRatioWithRegions[anotherVD.regionCCVD().ccId].numerator += ed.anchors().size();
                             }
                             else if (anotherVD.isRegionCC() && curVD.isLineCC()){
-                                regionCCAnchoredRatioWithLines[anotherVD.regionCCVD().ccId].denominator += ed.anchors().size();
+                                regionCCAnchoredRatioWithLines[anotherVD.regionCCVD().ccId].numerator += ed.anchors().size();
                             }
                             else if (anotherVD.isLineCC()){
-                                lineCCAnchoredRatio[anotherVD.lineCCVD().ccId].denominator += ed.anchors().size();
+                                lineCCAnchoredRatio[anotherVD.lineCCVD().ccId].numerator += ed.anchors().size();
                             }
 
                             // udpate score of related vertices
                             if (waitingVertices.contains(anotherVh))
-                                waitingVertices.setScore(anotherVh, computePriority(anotherVh.id));
+                                waitingVertices.setScore(anotherVh, computePriority(anotherVh));
                         }
 
                         

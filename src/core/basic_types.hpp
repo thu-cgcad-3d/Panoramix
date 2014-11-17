@@ -223,8 +223,8 @@ namespace panoramix {
                 : longitude(longi), latitude(lati) {}
             template <class T>
             inline GeoCoord(const Vec<T, 3> & d)
-                : longitude(atan2(d(1), d(0))),
-                latitude(atan(d(2) / sqrt((d(1)*d(1)) + (d(0)*d(0)))))
+                : longitude(std::atan2(d(1), d(0))),
+                latitude(std::atan(d(2) / std::sqrt((d(1)*d(1)) + (d(0)*d(0)))))
             {}
             template <class T = double>
             inline Vec<T, 3> toVector() const {
@@ -344,6 +344,14 @@ namespace panoramix {
         template <class T, int N>
         inline Line<T, N> operator * (const T & factor, const Line<T, N> & line){
             return Line<T, N>(line.first * factor, line.second * factor);
+        }
+        template <class T, int N>
+        inline Line<T, N> operator + (const Line<T, N> & line, const Vec<T, N> & trans){
+            return Line<T, N>(line.first + trans, line.second + trans);
+        }
+        template <class T, int N>
+        inline Line<T, N> operator - (const Line<T, N> & line, const Vec<T, N> & trans){
+            return Line<T, N>(line.first - trans, line.second - trans);
         }
         using Line2 = Line<double, 2>;
         using Line3 = Line<double, 3>;
