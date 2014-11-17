@@ -1691,8 +1691,102 @@ namespace panoramix {
                     << BoundingBoxOfContainer(highlightedSpps)
                     << BoundingBoxOfContainer(highlightedLines)
                     << vis::manip3d::SetWindowName("initial region planes and reconstructed lines")
-                    << vis::manip3d::Show();
+                    << vis::manip3d::SetCamera(PerspectiveCamera(500, 500, 300, Point3(20, 20, 20), Point3(0, 0, 0), Point3(0, 0, -1)))
+                    << vis::manip3d::Show(true, false);
 
+            }
+
+
+            std::vector<MixedGraph> BuildConnectedMixedGraphs(const RecContext & context){
+                // build mixed graph
+
+                MixedGraph graph;
+                graph.internalElements<0>().reserve(context.regionConnectedComponentsNum + context.lineConnectedComponentsNum);
+                graph.internalElements<1>().reserve(context.regionConnectedComponentsNum + context.lineConnectedComponentsNum);
+
+                std::vector<MixedGraphVertHandle> regionCCIdToVHandles(context.regionConnectedComponentsNum);
+                std::vector<MixedGraphVertHandle> lineCCIdToVHandles(context.lineConnectedComponentsNum);
+
+                // add vertices
+                for (int i = 0; i < context.regionConnectedComponentsNum; i++){
+                    regionCCIdToVHandles[i] = graph.add(MixedGraphVertex(MixedGraphVertex::RegionCC, i, context));
+                }
+                for (int i = 0; i < context.lineConnectedComponentsNum; i++){
+                    lineCCIdToVHandles[i] = graph.add(MixedGraphVertex(MixedGraphVertex::LineCC, i, context));
+                }
+
+                // add edges
+                // region-region
+                for (int i = 0; i < context.views.size(); i++){
+                    for (auto & b : context.regionsNets[i].regions().elements<1>()){
+                        RegionBoundaryIndex rbi = { i, b.topo.hd };
+                        auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
+                        auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
+                        int thisRegionCCId1 = context.regionConnectedComponentIds.at(ri1);
+                        int thisRegionCCId2 = context.regionConnectedComponentIds.at(ri2);
+                        auto vh1 = regionCCIdToVHandles[thisRegionCCId1];
+                        auto vh2 = regionCCIdToVHandles[thisRegionCCId2];
+
+                        // insert edge
+                        graph.add<1>({ vh1, vh2 }, MixedGraphEdge::FromRegionRegion(rbi, context));
+                    }
+                }
+                // region-line
+                for (auto & pp : context.regionLineConnections){
+                    LineIndex li = pp.first.second;
+                    RegionIndex ri = pp.first.first;
+                    int lineCCId = context.lineConnectedComponentIds.at(li);
+                    int regionCCId = context.regionConnectedComponentIds.at(ri);
+                    auto vh1 = regionCCIdToVHandles[regionCCId];
+                    auto vh2 = lineCCIdToVHandles[lineCCId];
+
+                    // insert edge
+                    graph.add<1>({ vh1, vh2 }, MixedGraphEdge::FromRegionLine(pp));
+                }
+
+                // split graph into ccs
+                std::vector<MixedGraphVertHandle> allVHandles = regionCCIdToVHandles;
+                allVHandles.insert(allVHandles.end(), lineCCIdToVHandles.begin(), lineCCIdToVHandles.end());
+                std::map<MixedGraphVertHandle, int> vhCCIds;
+                std::map<int, std::vector<MixedGraphVertHandle>> vhCCs;
+                int ccNum = ConnectedComponents(allVHandles.begin(), allVHandles.end(),
+                    [&graph](MixedGraphVertHandle vh){
+                    std::vector<MixedGraphVertHandle> relatedVhs;
+                    relatedVhs.reserve(graph.topo(vh).uppers.size());
+                    for (auto & eh : graph.topo(vh).uppers){
+                        auto & vhs = graph.topo(eh).lowers;
+                        relatedVhs.push_back(vhs.front() == vh ? vhs.back() : vhs.front());
+                    }
+                    return relatedVhs;
+                },
+                    [&vhCCIds, &vhCCs](MixedGraphVertHandle vh, int ccid){
+                    vhCCIds[vh] = ccid;
+                    vhCCs[ccid].push_back(vh);
+                });
+
+                std::cout << "vertices num: " << graph.internalElements<0>().size() << std::endl;
+                std::cout << "edges num: " << graph.internalElements<1>().size() << std::endl;
+                std::cout << "cc num: " << ccNum << std::endl;
+                for (auto & vhCC : vhCCs){
+                    std::cout << "# of cc-" << vhCC.first << " is " << vhCC.second.size() << std::endl;
+                }
+
+                // build separated graphs
+                std::vector<MixedGraph> subgraphs(ccNum);
+                std::vector<std::map<MixedGraphVertHandle, MixedGraphVertHandle>> oldVh2NewVh(ccNum);
+                for (auto & cc : vhCCs){
+                    subgraphs[cc.first].internalElements<0>().reserve(cc.second.size());
+                    for (int vid = 0; vid < cc.second.size(); vid++)
+                        oldVh2NewVh[cc.first][cc.second[vid]] = subgraphs[cc.first].add(std::move(graph.data(cc.second[vid])));
+                }
+                for (auto & e : graph.elements<1>()){
+                    int ccid = vhCCIds[e.topo.lowers.front()];
+                    assert(ccid == vhCCIds[e.topo.lowers.back()]);
+                    subgraphs[ccid].add<1>({ oldVh2NewVh[ccid][e.topo.lowers.front()], oldVh2NewVh[ccid][e.topo.lowers.back()] },
+                        std::move(e.data));
+                }
+
+                return subgraphs;
             }
 
 
@@ -1886,7 +1980,8 @@ namespace panoramix {
                             largestLineCCSize = v.data.lineCCVD().indices.size();
                         }
                     }
-                    waitingVertices.setScore(largestLineCCVh, std::numeric_limits<double>::max());
+                    if (largestLineCCVh.isValid())
+                        waitingVertices.setScore(largestLineCCVh, std::numeric_limits<double>::max());
 
                     // spread
                     while (!waitingVertices.empty()){
@@ -1965,7 +2060,31 @@ namespace panoramix {
             }
 
 
-            void OptimizeDepths(const RecContext & context, MixedGraph & graph) {
+            template <class T>
+            inline std::vector<T> NumFilter(const std::vector<T> & data, int numLimit){
+                assert(numLimit > 0);
+                if (data.size() <= numLimit)
+                    return data;
+                if (numLimit == 1)
+                    return std::vector<T>{data[data.size() / 2]};
+                if (numLimit == 2)
+                    return std::vector<T>{data.front(), data.back()};
+                int step = (data.size() + numLimit - 1) / numLimit;
+                std::vector<T> filtered;
+                filtered.reserve(numLimit);
+                for (int i = 0; i < data.size(); i+= step){
+                    filtered.push_back(data[i]);
+                }
+                if (filtered.size() == numLimit-1)
+                    filtered.push_back(data.back());
+                return filtered;
+            }
+
+
+            void OptimizeDepths(const RecContext & context, MixedGraph & graph, 
+                int maxAnchorsNumUsedPerEdge = std::numeric_limits<int>::max()) {
+
+                std::cout << "setting up matrices" << std::endl;
 
                 using namespace Eigen;
                 SparseMatrix<double> A, W;
@@ -1978,7 +2097,7 @@ namespace panoramix {
                 int n = graph.internalElements<0>().size(); // var num
                 int m = 0;  // get cons num
                 for (auto & e : graph.internalElements<1>()){
-                    m += e.data.anchors().size();
+                    m += std::min<int>(maxAnchorsNumUsedPerEdge, e.data.anchors().size());
                 }
                 m++; // add the depth assignment for the first var
 
@@ -2007,15 +2126,19 @@ namespace panoramix {
                         assert(vd1.isRegionCC() && vd2.isRegionCC());
                         auto plane1 = vd1.regionCCVD().currentValue.plane(context.vanishingPoints);
                         auto plane2 = vd2.regionCCVD().currentValue.plane(context.vanishingPoints);
+
+                        auto filtered = NumFilter(e.data.anchors(), maxAnchorsNumUsedPerEdge);
+                        assert(filtered.size() == std::min<int>(maxAnchorsNumUsedPerEdge, e.data.anchors().size()));
+
                         // setup equation for each anchor
-                        for (auto & anchor : e.data.anchors()){
+                        for (auto & anchor : filtered){
                             double depthOnPlane1 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane1).position);
                             double depthOnPlane2 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane2).position);
                             // df1 * depthOnPlane1 - df2 * depthOnPlane2 = 0
                             A.insert(curEquationNum, vh1.id) = depthOnPlane1;
                             A.insert(curEquationNum, vh2.id) = -depthOnPlane2;
                             B(curEquationNum) = 0;
-                            W.insert(curEquationNum, curEquationNum) = 1.0;
+                            W.insert(curEquationNum, curEquationNum) = e.data.anchors().size() / double(filtered.size());
                             curEquationNum++;
                         }
                     }
@@ -2023,23 +2146,29 @@ namespace panoramix {
                         assert(vd1.isRegionCC() && vd2.isLineCC());
                         auto plane1 = vd1.regionCCVD().currentValue.plane(context.vanishingPoints);
                         auto line2 = vd2.lineCCVD().currentValue.depthFactor * context.reconstructedLines.at(e.data.rili().second);
+
+                        auto filtered = NumFilter(e.data.anchors(), maxAnchorsNumUsedPerEdge);
+                        assert(filtered.size() == std::min<int>(maxAnchorsNumUsedPerEdge, e.data.anchors().size()));
+
                         // setup equation for each anchor
-                        for (auto & anchor : e.data.anchors()){
+                        for (auto & anchor : filtered){
                             double depthOnPlane1 = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane1).position);
                             double depthOnLine2 = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), anchor), line2.infiniteLine()).second.first);
                             // df1 * depthOnPlane1 - df2 * depthOnLine2 = 0
                             A.insert(curEquationNum, vh1.id) = depthOnPlane1;
                             A.insert(curEquationNum, vh2.id) = -depthOnLine2;
                             B(curEquationNum) = 0;
-                            W.insert(curEquationNum, curEquationNum) = 1.0;
+                            W.insert(curEquationNum, curEquationNum) = e.data.anchors().size() / double(filtered.size());
                             curEquationNum++;
                         }
                     }
                 }
-                                
+                assert(curEquationNum == m);
+                
+                std::cout << "solving equations" << std::endl;
 
                 // solve the equation system
-                const bool useWeights = false;
+                const bool useWeights = true;
                 VectorXd X;
                 SparseQR<Eigen::SparseMatrix<double>, COLAMDOrdering<int>> solver;
                 static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
@@ -2060,10 +2189,14 @@ namespace panoramix {
                     return;
                 }
 
+                std::cout << "filling back solutions" << std::endl;
+
+                double Xmean = X.mean();
+                std::cout << "mean(X) = " << X.mean() << std::endl;
 
                 // scale all vertex using computed depth factors
                 for (auto & v : graph.elements<0>()){
-                    double depthFactor = X(v.topo.hd.id);
+                    double depthFactor = X(v.topo.hd.id) / Xmean;
                     if (v.data.isRegionCC()){
                         auto & planeInfo = v.data.regionCCVD().currentValue;
                         if (planeInfo.isOrthogonal)
@@ -2117,59 +2250,11 @@ namespace panoramix {
                 bbox
             };
 
-            //////////////////////////////
-            // build mixed graph
-
-            MixedGraph graph;
-            graph.internalElements<0>().reserve(regionConnectedComponentsNum + lineConnectedComponentsNum);
-            graph.internalElements<1>().reserve(regionConnectedComponentsNum + lineConnectedComponentsNum);
-
-            std::vector<MixedGraphVertHandle> regionCCIdToVHandles(regionConnectedComponentsNum);
-            std::vector<MixedGraphVertHandle> lineCCIdToVHandles(lineConnectedComponentsNum);
-
-            // add vertices
-            for (int i = 0; i < regionConnectedComponentsNum; i++){
-                regionCCIdToVHandles[i] = graph.add(MixedGraphVertex(MixedGraphVertex::RegionCC, i, context));
+            auto graphs = BuildConnectedMixedGraphs(context);
+            for (auto & g : graphs){
+                SpreadOver(context, g, 1);
+                OptimizeDepths(context, g, 2);
             }
-            for (int i = 0; i < lineConnectedComponentsNum; i++){
-                lineCCIdToVHandles[i] = graph.add(MixedGraphVertex(MixedGraphVertex::LineCC, i, context));
-            }
-
-            // add edges
-            // region-region
-            for (int i = 0; i < views.size(); i++){
-                for (auto & b : regionsNets[i].regions().elements<1>()){
-                    RegionBoundaryIndex rbi = { i, b.topo.hd };
-                    auto ri1 = RegionIndex{ i, b.topo.lowers[0] };
-                    auto ri2 = RegionIndex{ i, b.topo.lowers[1] };
-                    int thisRegionCCId1 = regionConnectedComponentIds.at(ri1);
-                    int thisRegionCCId2 = regionConnectedComponentIds.at(ri2);
-                    auto vh1 = regionCCIdToVHandles[thisRegionCCId1];
-                    auto vh2 = regionCCIdToVHandles[thisRegionCCId2];
-
-                    // insert edge
-                    graph.add<1>({ vh1, vh2 }, MixedGraphEdge::FromRegionRegion(rbi, context));
-                }
-            }
-            // region-line
-            for (auto & pp : regionLineConnections){
-                LineIndex li = pp.first.second;
-                RegionIndex ri = pp.first.first;
-                int lineCCId = lineConnectedComponentIds.at(li);
-                int regionCCId = regionConnectedComponentIds.at(ri);
-                auto vh1 = regionCCIdToVHandles[regionCCId];
-                auto vh2 = lineCCIdToVHandles[lineCCId];               
-
-                // insert edge
-                graph.add<1>({ vh1, vh2 }, MixedGraphEdge::FromRegionLine(pp));
-            }
-
-            std::cout << "vertices num: " << graph.internalElements<0>().size() << std::endl;
-            std::cout << "edges num: " << graph.internalElements<1>().size() << std::endl;
-
-            
-            SpreadOver(context, graph, 1);
-            OptimizeDepths(context, graph);
 
         }
 
