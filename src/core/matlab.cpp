@@ -80,7 +80,9 @@ namespace panoramix {
                 _engine = engOpen(cmd);
                 engSetVisible(_engine, false);
             }
-            inline ~MatlabEngine() { engClose(_engine); }
+            inline ~MatlabEngine() { 
+                engClose(_engine); 
+            }
             inline engine * eng() const { return _engine; }
         private:
             engine * _engine;
@@ -100,12 +102,20 @@ namespace panoramix {
 
         bool Matlab::PutVariable(const char * name, const Image & im){
             int channelNum = im.channels();
-            mwSize dims[] = { im.rows, im.cols, channelNum };
-            mxArray* ma = mxCreateNumericArray(3, dims, CVDepthToMxClassID(im.depth()), mxREAL);
+            // collect all dimensions of im
+            std::vector<mwSize> dims(im.dims + 1);
+            for (int i = 0; i < im.dims; i++)
+                dims[i] = im.size[i];
+            dims.back() = channelNum;
+            // create mxArray
+            mxArray* ma = mxCreateNumericArray(dims.size(), dims.data(), CVDepthToMxClassID(im.depth()), mxREAL);
             if (!ma)
                 return false;
             uint8_t * mad = (uint8_t*)mxGetData(ma);
             const size_t szForEachElem = im.elemSize1();
+
+            //for (auto i = im.begin())
+
             for (mwIndex i = 0; i < im.rows; i++){
                 for (mwIndex j = 0; j < im.cols; j++){
                     for (mwIndex k = 0; k < channelNum; k++) {
@@ -134,8 +144,10 @@ namespace panoramix {
             const size_t szForEachElem = mxGetElementSize(ma);
             
             int depth = MxClassIDToCVDepth(mxGetClassID(ma));
-            if (depth == -1)
+            if (depth == -1){
+                mxDestroyArray(ma);
                 return false;
+            }
 
             const uint8_t * mad = (const uint8_t*)mxGetData(ma);
             im.create(rows, cols, CV_MAKETYPE(depth, channels));

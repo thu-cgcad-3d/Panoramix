@@ -13,10 +13,6 @@ TEST(Matlab, Basic){
 
 #ifdef USE_MATLAB
     EXPECT_TRUE(core::Matlab::IsBuilt());
-#else
-    EXPECT_FALSE(core::Matlab::IsBuilt());
-#endif
-
     ASSERT_TRUE(core::Matlab::IsUsable());
     ASSERT_TRUE(core::Matlab::RunScript("x = 1;"));
 
@@ -40,6 +36,9 @@ TEST(Matlab, Basic){
     for (auto & i : all246s){
         ASSERT_TRUE(i == (core::Vec<int, 3>(2, 4, 6)));
     }
+#else
+    EXPECT_FALSE(core::Matlab::IsBuilt());
+#endif   
 
 }
 

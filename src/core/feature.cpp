@@ -14,6 +14,7 @@ extern "C" {
 #include "feature.hpp"
 #include "utilities.hpp"
 #include "containers.hpp"
+#include "matlab.hpp"
 
 #include "debug.hpp"
 
@@ -1734,10 +1735,18 @@ namespace panoramix {
         }
 
 
-
-
-        ImageWithType<int> GeometricContextEstimator::operator() (const Image & im) const{
+        std::pair<ImageWithType<int>, ImageWithType<float>> GeometricContextEstimator::operator() (const Image & im) const{
             NOT_IMPLEMENTED_YET();
+
+            if (Matlab::IsUsable()){
+                Matlab::RunScript("clear;");
+                Matlab::RunScript("cd " + _params.matlabCodeFolder + ";");
+                Matlab::RunScript("addpath(genpath('.'));");
+                Matlab::PutVariable("inputIm", im);
+                Matlab::RunScript("[imSegs, segIm, slabelConfMap, slabelConfMapIm] = gc(inputIm);");
+
+            }
+
         }
 
     }
