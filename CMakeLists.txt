@@ -29,10 +29,6 @@ if (NOT DEFINED MSVC)
 endif ()
 
 
-# global definitions
-include (DefineCompilerMacros)
-
-
 ### 3rd party libs setting ###
 # get fundamental libs
 include (LocateFundamentalLibs)
@@ -44,10 +40,19 @@ set (Qt_MODULES_REQUIRED Core Gui Widgets OpenGL)
 include (LocateQtLibs)
 
 
+# get MATLAB libs [optional]
+set (USE_MATLAB true CACHE BOOL "Whether using MATLAB")
+include (LocateMATLABLibs)
+
+
 # set path env
 include (DefineAddToEnvPath)
 ADDTO_ENVPATH (Fundamental_PATH)
 ADDTO_ENVPATH (Qt_PATH)
+
+
+# global definitions
+include (DefineCompilerMacros)
 
 
 # include third party codes

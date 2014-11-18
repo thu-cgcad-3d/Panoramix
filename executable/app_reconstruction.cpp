@@ -70,15 +70,15 @@ int main(int argc, char * argv[], char * envp[]) {
         core::ResizeToMakeWidthUnder(im, 2000);
         all.originalView = rec::CreatePanoramicView(im);
         all.perspectiveViews = rec::PerspectiveSampling(all.originalView, {
-            core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
-            core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
-            core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
-            core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
-            core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
-            core::PerspectiveCamera(700, 700, 350, { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
+            core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
+            core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
+            core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
+            core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
+            core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
+            core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
         });
         core::SaveToDisk(out, all);
-    });
+    }, true);
 
     core::UpdateIfFileIsTooOld(cacheFileBeforeComputingFeatures, cacheFileAfterComputingFeatures,
         [&](const std::string & in, const std::string & out){

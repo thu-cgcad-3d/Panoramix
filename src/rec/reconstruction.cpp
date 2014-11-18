@@ -1691,7 +1691,7 @@ namespace panoramix {
                     << BoundingBoxOfContainer(highlightedSpps)
                     << BoundingBoxOfContainer(highlightedLines)
                     << vis::manip3d::SetWindowName("initial region planes and reconstructed lines")
-                    << vis::manip3d::SetCamera(PerspectiveCamera(500, 500, 300, Point3(20, 20, 20), Point3(0, 0, 0), Point3(0, 0, -1)))
+                    << vis::manip3d::SetCamera(PerspectiveCamera(1000, 1000, 500, Point3(20, 20, 20), Point3(0, 0, 0), Point3(0, 0, -1)))
                     << vis::manip3d::Show(true, false);
 
             }
@@ -2213,6 +2213,9 @@ namespace panoramix {
             }
 
 
+
+
+
             void RandomJump(const RecContext & context, MixedGraph & graph){
                 
             }
@@ -2253,6 +2256,8 @@ namespace panoramix {
                 SpreadOver(context, g);
                 OptimizeDepths(context, g, 2);
             }
+
+
 
         }
 

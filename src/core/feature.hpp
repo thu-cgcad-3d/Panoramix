@@ -199,7 +199,22 @@ namespace panoramix {
         std::pair<double, double> ComputeFocalsFromHomography(const Mat3 & H, std::pair<bool, bool> * ok = nullptr);
 
 
+        /// geometric context estimator
+        class GeometricContextEstimator {
+        public:
+            struct Params {
 
+            };
+
+        public:
+            inline explicit GeometricContextEstimator(const Params & params = Params()) : _params(params) {}
+            const Params & params() const { return _params; }
+            Params & params() { return _params; }
+            ImageWithType<int> operator() (const Image & im) const;
+
+        private:
+            Params _params;
+        };
 
 
     }

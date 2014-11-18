@@ -1704,7 +1704,7 @@ namespace panoramix {
 
             double d1, d2; // Denominators
             double v1, v2; // Focal squares value candidates
-            double f0, f1;
+            double f0 = 0.0, f1 = 0.0;
 
             if (ok)
                 ok->second = true;
@@ -1731,6 +1731,13 @@ namespace panoramix {
                 ok->first = false;
 
             return std::make_pair(f0, f1);
+        }
+
+
+
+
+        ImageWithType<int> GeometricContextEstimator::operator() (const Image & im) const{
+            NOT_IMPLEMENTED_YET();
         }
 
     }
