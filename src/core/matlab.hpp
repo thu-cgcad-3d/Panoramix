@@ -6,6 +6,9 @@
 namespace panoramix {
     namespace core {
 
+        using CVInputArray = cv::InputArray;
+        using CVOutputArray = cv::OutputArray;
+
         class Matlab {
         public:
             static bool IsBuilt();
@@ -14,10 +17,15 @@ namespace panoramix {
             static bool RunScript(const char * cmd);
             static bool RunScript(const std::string & cmd) { return RunScript(cmd.data()); }
 
-            static bool PutVariable(const char * name, const Image & im);
-            static bool GetVariable(const char * name, Image & im);
-            static bool PutVariable(const std::string & name, const Image & im){ PutVariable(name.data(), im); }
-            static bool GetVariable(const std::string & name, Image & im) { GetVariable(name.data(), im); }
+            static bool PutVariable(const char * name, CVInputArray a);
+            static bool GetVariable(const char * name, CVOutputArray a, bool lastDimIsChannel = true);
+            
+            static inline bool PutVariable(const std::string & name, CVInputArray a){
+                PutVariable(name.data(), a); 
+            }
+            static inline bool GetVariable(const std::string & name, CVOutputArray a, bool lastDimIsChannel = true) {
+                GetVariable(name.data(), a, lastDimIsChannel); 
+            }
 
         public:
             inline Matlab & operator << (const std::string & cmd) { 
