@@ -16,6 +16,9 @@ namespace panoramix {
             static bool IsUsable();
             static bool RunScript(const char * cmd);
             static bool RunScript(const std::string & cmd) { return RunScript(cmd.data()); }
+            static const char * LastMessage();
+
+            static bool CDAndAddAllSubfolders(const std::string & dir);
 
             static bool PutVariable(const char * name, CVInputArray a);
             static bool GetVariable(const char * name, CVOutputArray a, bool lastDimIsChannel = true);
@@ -25,7 +28,7 @@ namespace panoramix {
             }
             static inline bool GetVariable(const std::string & name, CVOutputArray a, bool lastDimIsChannel = true) {
                 GetVariable(name.data(), a, lastDimIsChannel); 
-            }
+            }           
 
         public:
             inline Matlab & operator << (const std::string & cmd) { 

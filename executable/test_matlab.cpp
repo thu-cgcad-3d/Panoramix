@@ -9,7 +9,23 @@
 using namespace panoramix;
 using namespace test;
 
-TEST(Matlab, Basic){
+TEST(Matlab, CDAndAddPath){
+
+#ifdef USE_MATLAB
+    EXPECT_TRUE(core::Matlab::IsBuilt());
+    ASSERT_TRUE(core::Matlab::IsUsable());
+    core::Matlab::RunScript("clear;");
+    core::Matlab::RunScript("clear functions;");
+    core::Matlab::RunScript("cd " + ProjectDataDirStrings::Scripts + "/GC");
+    
+
+#else
+    EXPECT_FALSE(core::Matlab::IsBuilt());
+#endif   
+
+}
+
+TEST(Matlab, ImageConversion){
 
 #ifdef USE_MATLAB
     EXPECT_TRUE(core::Matlab::IsBuilt());

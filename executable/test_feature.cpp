@@ -267,6 +267,17 @@ TEST(Feature, FeatureExtractor) {
     }
 }
 
+TEST(Feature, GeometricContextMatlab) {
+    core::GeometricContextEstimator gcEstimator;
+    gcEstimator.params().matlabCodeFolder = ProjectDataDirStrings::Scripts + "/GC";
+    gcEstimator.params().useMatlab = true;
+
+    core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
+    core::Image gc = gcEstimator(im);
+    cv::extractChannel(gc, gc, 0);
+    vis::Visualizer2D(gc) << vis::manip2d::Show();
+}
+
 
 int main(int argc, char * argv[], char * envp[])
 {

@@ -203,6 +203,7 @@ namespace panoramix {
         class GeometricContextEstimator {
         public:
             struct Params {
+                Params();
                 bool useMatlab;
                 std::string matlabCodeFolder;
             };
@@ -211,7 +212,7 @@ namespace panoramix {
             inline explicit GeometricContextEstimator(const Params & params = Params()) : _params(params) {}
             const Params & params() const { return _params; }
             Params & params() { return _params; }
-            std::pair<ImageWithType<int>, ImageWithType<float>> operator() (const Image & im) const;
+            Image operator() (const Image & im) const; // CV_64FCX
 
         private:
             Params _params;

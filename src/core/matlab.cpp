@@ -76,18 +76,26 @@ namespace panoramix {
 
         class MatlabEngine {
         public:
-            inline explicit MatlabEngine(const char * cmd = nullptr) { 
+            inline explicit MatlabEngine(const char * cmd = nullptr, int bufferSize = 1024) 
+                : _engine(nullptr), _buffer(nullptr) { 
                 _engine = engOpen(cmd);
-                if (_engine)
+                if (_engine){
                     engSetVisible(_engine, false);
+                    _buffer = new char[bufferSize];
+                    std::memset(_buffer, 0, bufferSize);
+                    engOutputBuffer(_engine, _buffer, bufferSize);
+                }
             }
             inline ~MatlabEngine() { 
                 if (_engine)
                     engClose(_engine); 
+                delete[] _buffer;
             }
             inline engine * eng() const { return _engine; }
+            inline char * buffer() const { return _buffer; }
         private:
             engine * _engine;
+            char * _buffer;
         };
         
         static MatlabEngine _Engine;
@@ -101,7 +109,20 @@ namespace panoramix {
         bool Matlab::RunScript(const char * cmd) {
             if (!_Engine.eng())
                 return false;
-            return engEvalString(_Engine.eng(), cmd) == 0;
+            bool ret = engEvalString(_Engine.eng(), cmd) == 0;
+            if (strlen(_Engine.buffer()) > 0){
+                std::cout << "[Message when executing '" << cmd << "']:\n" << _Engine.buffer() << std::endl;
+            }
+            return ret;
+        }
+
+        const char * Matlab::LastMessage(){
+            return _Engine.buffer();
+        }
+
+        bool Matlab::CDAndAddAllSubfolders(const std::string & dir){
+            
+            return RunScript("cd " + dir) && RunScript("addpath(genpath('.'));");
         }
 
         bool Matlab::PutVariable(const char * name, CVInputArray mat){

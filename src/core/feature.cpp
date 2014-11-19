@@ -1,5 +1,6 @@
 #include <iostream>
 #include <unordered_map>
+#include <thread>
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
@@ -1735,18 +1736,25 @@ namespace panoramix {
         }
 
 
-        std::pair<ImageWithType<int>, ImageWithType<float>> GeometricContextEstimator::operator() (const Image & im) const{
-            NOT_IMPLEMENTED_YET();
 
-            if (Matlab::IsUsable()){
+        GeometricContextEstimator::Params::Params() 
+            : useMatlab(false) {
+        }
+
+
+        Image GeometricContextEstimator::operator() (const Image & im) const{
+            if (_params.useMatlab && Matlab::IsUsable()){
                 Matlab::RunScript("clear;");
-                Matlab::RunScript("cd " + _params.matlabCodeFolder + ";");
-                Matlab::RunScript("addpath(genpath('.'));");
+                Matlab::CDAndAddAllSubfolders(_params.matlabCodeFolder);
                 Matlab::PutVariable("inputIm", im);
-                Matlab::RunScript("[imSegs, segIm, slabelConfMap, slabelConfMapIm] = gc(inputIm);");
-
+                Matlab::RunScript("[~, ~, slabelConfMap] = gc(inputIm);");
+                Image slabelConfMap;
+                Matlab::GetVariable("slabelConfMap", slabelConfMap, true);
+                return slabelConfMap;
             }
-
+            else{
+                NOT_IMPLEMENTED_YET();
+            }
         }
 
     }

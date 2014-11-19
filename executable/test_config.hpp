@@ -22,6 +22,7 @@ namespace test {
         static const std::string Serialization = PROJECT_TEST_DATA_DIR_STR"/serialization";
         static const std::string LocalManhattan = PROJECT_TEST_DATA_DIR_STR"/localmanh";
         static const std::string MeshSMF = PROJECT_TEST_DATA_DIR_STR"/mesh/smf";
+        static const std::string Scripts = PROJECT_TEST_DATA_DIR_STR"/scripts";
     }
  
 }
