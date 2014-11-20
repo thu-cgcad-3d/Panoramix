@@ -450,6 +450,88 @@ namespace panoramix {
         }
 
 
+
+
+        void ClassifyLines2D(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
+            double angleThreshold, double sigma, double scoreThreshold){
+
+            for (auto & line : lines){
+                // classify lines
+                line.claz = -1;
+
+                // classify
+                std::vector<double> lineangles(vps.size());
+                std::vector<double> linescores(vps.size());
+
+                for (int j = 0; j < vps.size(); j++){
+                    auto & point = vps[j];
+                    double angle = std::min(
+                        AngleBetweenDirections(line.component.direction(), (point - HPoint2(line.component.center())).numerator),
+                        AngleBetweenDirections(-line.component.direction(), (point - HPoint2(line.component.center())).numerator));
+                    lineangles[j] = angle;
+                }
+
+                // get score based on angle
+                for (int j = 0; j < vps.size(); j++){
+                    double angle = lineangles[j];
+                    double score = exp(-(angle / angleThreshold) * (angle / angleThreshold) / sigma / sigma / 2);
+                    linescores[j] = (angle > angleThreshold) ? 0 : score;
+                }
+
+                double curscore = scoreThreshold;
+                for (int j = 0; j < vps.size(); j++){
+                    if (linescores[j] > curscore){
+                        line.claz = j;
+                        curscore = linescores[j];
+                    }
+                }
+            }
+        }
+
+
+        void ClassifyLines3D(std::vector<Classified<Line3>> & lines, const std::vector<Vec3> & vps,
+            double angleThreshold, double sigma, double scoreThreshold) {
+
+            size_t nlines = lines.size();
+            size_t npoints = vps.size();
+
+            for (size_t i = 0; i < nlines; i++){
+                const Vec3 & a = lines[i].component.first;
+                const Vec3 & b = lines[i].component.second;
+                Vec3 normab = a.cross(b);
+                normab /= norm(normab);
+
+                std::vector<double> lineangles(npoints);
+                std::vector<double> linescores(npoints);
+
+                for (int j = 0; j < npoints; j++){
+                    const Vec3 & point = vps[j];
+                    double angle = abs(asin(normab.dot(point)));
+                    lineangles[j] = angle;
+                }
+
+                // get score based on angle
+                for (int j = 0; j < npoints; j++){
+                    double angle = lineangles[j];
+                    double score = exp(-(angle / angleThreshold) * (angle / angleThreshold) / sigma / sigma / 2);
+                    linescores[j] = (angle > angleThreshold) ? 0 : score;
+                }
+
+                // classify lines
+                lines[i].claz = -1;
+                double curscore = scoreThreshold;
+                for (int j = 0; j < npoints; j++){
+                    if (linescores[j] > curscore){
+                        lines[i].claz = j;
+                        curscore = linescores[j];
+                    }
+                }
+            }
+        }
+
+
+
+
         namespace {
 
             inline Point2 ToPoint2(const PixelLoc & p) {

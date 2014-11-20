@@ -18,7 +18,9 @@ namespace panoramix {
             static bool RunScript(const std::string & cmd) { return RunScript(cmd.data()); }
             static const char * LastMessage();
 
-            static bool CDAndAddAllSubfolders(const std::string & dir);
+            static inline bool CDAndAddAllSubfolders(const std::string & dir){
+                return RunScript("cd " + dir) && RunScript("addpath(genpath('.'));");
+            }
 
             static bool PutVariable(const char * name, CVInputArray a);
             static bool GetVariable(const char * name, CVOutputArray a, bool lastDimIsChannel = true);

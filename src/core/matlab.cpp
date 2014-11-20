@@ -84,11 +84,14 @@ namespace panoramix {
                     _buffer = new char[bufferSize];
                     std::memset(_buffer, 0, bufferSize);
                     engOutputBuffer(_engine, _buffer, bufferSize);
+                    std::cout << "Matlab Engine Launched" << std::endl;
                 }
             }
             inline ~MatlabEngine() { 
-                if (_engine)
-                    engClose(_engine); 
+                if (_engine){
+                    engClose(_engine);
+                    std::cout << "Matlab Engine Closed" << std::endl;
+                }
                 delete[] _buffer;
             }
             inline engine * eng() const { return _engine; }
@@ -118,11 +121,6 @@ namespace panoramix {
 
         const char * Matlab::LastMessage(){
             return _Engine.buffer();
-        }
-
-        bool Matlab::CDAndAddAllSubfolders(const std::string & dir){
-            
-            return RunScript("cd " + dir) && RunScript("addpath(genpath('.'));");
         }
 
         bool Matlab::PutVariable(const char * name, CVInputArray mat){
@@ -251,6 +249,7 @@ namespace panoramix {
         bool Matlab::IsBuilt() { return false; }
         bool Matlab::IsUsable() {return false;}
         bool Matlab::RunScript(const char *) {return false;}
+        const char * Matlab::LastMessage() {return nullptr;}
         bool Matlab::PutVariable(const char * name, CVInputArray a) {return false;}
         bool Matlab::GetVariable(const char * name, CVOutputArray a, bool lastDimIsChannel) {return false;}
 #endif

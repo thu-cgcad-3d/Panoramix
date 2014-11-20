@@ -92,7 +92,9 @@ namespace panoramix {
             inline const Vec3 & center() const { return _center; }
             inline const Vec3 & up() const { return _up; }
             Vec2 screenProjection(const Vec3 & p3d) const;
+            inline HPoint2 screenProjectionInHPoint(const Vec3 & p3d) const { return HPoint2(screenProjection(p3d), 1.0); }
             Vec3 spatialDirection(const Vec2 & p2d) const;
+            inline Vec3 spatialDirection(const PixelLoc & p) const { return spatialDirection(Vec2(p.x, p.y)); }
 
         private:
             double _focal;
@@ -154,6 +156,33 @@ namespace panoramix {
             return CameraSampler<OutCameraT, InCameraT>(outCam, inCam);
         }
 
+
+
+
+      
+        namespace {
+            template <class T>
+            struct IsCameraImpl {
+                template <class TT>
+                static auto test(int) -> decltype(
+                    std::declval<TT>().eye(),
+                    std::declval<TT>().screenProjection(std::declval<core::Vec3>()),
+                    std::declval<TT>().screenProjectionInHPoint(std::declval<core::Vec3>()),
+                    std::declval<TT>().spatialDirection(std::declval<core::Vec2>()),
+                    std::declval<TT>().spatialDirection(std::declval<core::PixelLoc>()),
+                    std::true_type()
+                    );
+                template <class>
+                static std::false_type test(...);
+                static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
+            };
+        }
+
+        // judge whether T is a camera type
+        // camera c should support:
+        //      c.eye(), c.screenProjection(Vec3), c.spatialDirection(Vec2)
+        template <class T>
+        struct IsCamera : std::integral_constant<bool, IsCameraImpl<T>::value> {};
 
 
     }

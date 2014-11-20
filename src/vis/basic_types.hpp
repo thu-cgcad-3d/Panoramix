@@ -52,12 +52,10 @@ namespace panoramix {
         // color table
         enum class ColorTableDescriptor {
             RGB,
-            WRGB,
             AllColors,
             AllColorsExcludingWhite,
             AllColorsExcludingBlack,
-            AllColorsExcludingWhiteAndBlack,
-            AllColorsIncludingTransparent
+            AllColorsExcludingWhiteAndBlack
         };
 
         class ColorTable {

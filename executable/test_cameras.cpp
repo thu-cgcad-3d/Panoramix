@@ -6,7 +6,13 @@
 using namespace panoramix;
 using namespace test;
 
-TEST(Feature, PerspectiveCamera){
+TEST(Camera, IsCamera) {
+    static_assert(core::IsCamera<core::PerspectiveCamera>::value, "");
+    static_assert(core::IsCamera<core::PanoramicCamera>::value, "");
+    static_assert(!core::IsCamera<core::Line3>::value, "");
+}
+
+TEST(Camera, PerspectiveCamera){
     core::PerspectiveCamera cam(1000, 1000, 500, 
         core::Vec3(0, 0, 0), 
         core::Vec3(1, 0, 0));
@@ -23,7 +29,7 @@ TEST(Feature, PerspectiveCamera){
     ASSERT_LT(dist, 2);
 }
 
-TEST(Feature, PerspectiveCameraRandom){
+TEST(Camera, PerspectiveCameraRandom){
     for (int k = 0; k < 100; k++) {
         core::PerspectiveCamera cam(abs(rand()) % 500, abs(rand()) % 400, abs(rand()) % 600,
             core::Vec3(rand(), rand(), rand()),
@@ -44,7 +50,7 @@ TEST(Feature, PerspectiveCameraRandom){
 }
 
 
-TEST(Feature, CameraSampler) {
+TEST(Camera, CameraSampler) {
     cv::Mat im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
 
     EXPECT_EQ(2000, im.cols);

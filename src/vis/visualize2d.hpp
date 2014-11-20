@@ -103,13 +103,13 @@ namespace panoramix {
             Manipulator<int> Show(int delay = 0);
         }
 
-        inline Visualizer2D operator << (Visualizer2D viz, void (*func)(Visualizer2D&)) {
+        inline Visualizer2D & operator << (Visualizer2D & viz, void (*func)(Visualizer2D&)) {
             func(viz);
             return viz;
         }
 
         template <class ArgT>
-        inline Visualizer2D operator << (Visualizer2D viz, manip2d::Manipulator<ArgT> smanip) {
+        inline Visualizer2D & operator << (Visualizer2D & viz, manip2d::Manipulator<ArgT> smanip) {
             smanip.func(viz, smanip.arg);
             return viz;
         }

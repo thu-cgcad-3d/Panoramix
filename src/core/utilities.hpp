@@ -102,6 +102,21 @@ namespace panoramix {
         }
 
 
+        // all same
+        template <class IteratorT, class EqualT = std::equal_to<void>>
+        inline bool AllTheSameInRange(IteratorT begin, IteratorT end, EqualT eq = EqualT()){
+            for (auto i = begin; i != end; ++i){
+                if (!eq(*i, *begin))
+                    return false;
+            }
+            return true;
+        }
+
+        template <class ContainerT, class EqualT = std::equal_to<void>>
+        inline bool AllTheSameInContainer(const ContainerT & c, EqualT eq = EqualT()){
+            return AllTheSameInRange(std::begin(c), std::end(c), eq);
+        }
+
 
 
         // zero
@@ -637,6 +652,7 @@ namespace panoramix {
         std::array<Scored<Vec<T, N>, T>, N> EigenVectorAndValuesFromPoints(const Point<T, N> * ptsData, size_t n) {
             using namespace Eigen;
             Map<const Matrix<T, Dynamic, N, RowMajor>> mat((const T*)ptsData, n, N);
+            std::cout << "points data mat: " << std::endl << mat << std::endl;
             auto centered = (mat.rowwise() - mat.colwise().mean()).eval();
             auto cov = ((centered.adjoint() * centered) / double(mat.rows() - 1)).eval();
             EigenSolver<decltype(cov)> es(cov);

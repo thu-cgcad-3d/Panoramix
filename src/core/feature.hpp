@@ -25,7 +25,7 @@ namespace panoramix {
         public:
             using Feature = std::vector<Line2>;
             struct Params {
-                inline Params() : minLength(15), xBorderWidth(1), yBorderWidth(1), numDirs(8), useLSD(false) {}
+                inline Params() : minLength(15), xBorderWidth(1), yBorderWidth(1), numDirs(8), useLSD(true) {}
                 int minLength;
                 int xBorderWidth, yBorderWidth;
                 int numDirs;
@@ -53,6 +53,14 @@ namespace panoramix {
             bool suppresscross = true, 
             double minDistanceBetweenLinePairs = std::numeric_limits<double>::max());
 
+
+        // classify lines in 2d
+        void ClassifyLines2D(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
+            double angleThreshold, double sigma, double scoreThreshold = 0.8);
+
+        // classify lines in 3d
+        void ClassifyLines3D(std::vector<Classified<Line3>> &lines, const std::vector<Vec3> & vps,
+            double angleThreshold, double sigma, double scoreThreshold = 0.8);
 
         // compute straightness of points
         std::pair<double, InfiniteLine2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
