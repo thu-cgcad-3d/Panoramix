@@ -71,14 +71,14 @@ TEST(Views, RegionsGraph) {
     core::SaveToDisk("./cache/test_view.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
 }
 
-DEBUG_TEST(Views, LinesGraph) {
+TEST(Views, LinesGraph) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
     core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
 
     std::vector<core::Vec3> vanishingPoints;
     std::vector<core::LinesGraph> linesGraphs;
-    core::EstimateVanishingPointsAndBuildLinesGraphs(views, vanishingPoints, linesGraphs);
+    core::EstimateVanishingPointsAndBuildLinesGraphs(views, vanishingPoints, linesGraphs, 10, 50, 4);
 
     for (int i = 0; i < views.size(); i++){
         vis::Visualizer2D viz(views[i].image);
@@ -122,7 +122,7 @@ TEST(Views, RegionLineConnections){
     std::vector<core::Vec3> vanishingPoints;
     std::vector<core::LinesGraph> linesGraphs;
 
-    core::LoadFromDisk("./cache/test_view.SampleViews", views);
+    core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
     core::LoadFromDisk("./cache/test_view.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
     core::LoadFromDisk("./cache/test_view.RegionsGraph.regionsGraphs", regionsGraphs);
     core::LoadFromDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
@@ -177,7 +177,27 @@ TEST(Views, RegionLineConnections){
 }
 
 
+DEBUG_TEST(Views, ConstraintsAcrossViews){
 
+    std::vector<core::View<core::PerspectiveCamera>> views;
+    std::vector<core::ImageWithType<int32_t>> segmentedRegionsArray;
+    std::vector<core::RegionsGraph> regionsGraphs;
+    std::vector<core::Vec3> vanishingPoints;
+    std::vector<core::LinesGraph> linesGraphs;
+
+    core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
+    core::LoadFromDisk("./cache/test_view.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
+    core::LoadFromDisk("./cache/test_view.RegionsGraph.regionsGraphs", regionsGraphs);
+    core::LoadFromDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
+    core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
+
+    auto regionOverlappingsAcrossViews =
+        core::RecognizeRegionOverlappingsAcrossViews(views, regionsGraphs);
+    auto lineIncidencesAcrossViews = 
+        core::RecognizeLineIncidencesAcrossViews(views, linesGraphs, M_PI / 4, 1e-3);
+
+
+}
 
 
 

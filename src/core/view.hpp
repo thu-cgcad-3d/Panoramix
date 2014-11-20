@@ -190,23 +190,26 @@ namespace panoramix {
 
         void EstimateVanishingPointsAndBuildLinesGraphs(const std::vector<View<PerspectiveCamera>> & views,
             std::vector<Vec3> & vanishingPoints,
-            std::vector<LinesGraph> & linesGraphs);
+            std::vector<LinesGraph> & linesGraphs,
+            double intersectionDistanceThreshold,
+            double incidenceDistanceAlongDirectionThreshold,
+            double incidenceDistanceVerticalDirectionThreshold);
 
 
-        void RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
-            const std::vector<RegionsGraph> & regionsGraphs,
-            ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappings);
+        ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> 
+            RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
+            const std::vector<RegionsGraph> & regionsGraphs);
 
-        void RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PanoramicCamera>> & views,
-            const std::vector<RegionsGraph> & regionsGraphs,
-            ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappings);
+        ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> 
+            RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PanoramicCamera>> & views,
+            const std::vector<RegionsGraph> & regionsGraphs);
 
-
-        void RecognizeLineIncidencesAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
+        ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3>
+            RecognizeLineIncidencesAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
             const std::vector<LinesGraph> & linesGraphs,
-            ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & interViewLineIncidences,
             double interViewIncidenceAngleAlongDirectionThreshold,
             double interViewIncidenceAngleVerticalDirectionThreshold);
+
 
     }
 }

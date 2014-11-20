@@ -735,7 +735,10 @@ namespace panoramix {
 
         void EstimateVanishingPointsAndBuildLinesGraphs(const std::vector<View<PerspectiveCamera>> & views,
             std::vector<Vec3> & vanishingPoints,
-            std::vector<LinesGraph> & linesGraphs){
+            std::vector<LinesGraph> & linesGraphs,
+            double intersectionDistanceThreshold,
+            double incidenceDistanceAlongDirectionThreshold,
+            double incidenceDistanceVerticalDirectionThreshold){
 
             // collect lines and intersections
             std::vector<std::vector<Line2>> linesInViews;
@@ -794,7 +797,9 @@ namespace panoramix {
                 for (int k = 0; k < vanishingPoints.size(); k++){
                     vanishingPointsInThisView[k] = views[i].camera.screenProjectionInHPoint(vanishingPoints[k]);
                 }
-                linesGraphs.push_back(CreateLinesGraph(clines, vanishingPointsInThisView, 8.0, 15.0, 3.0));
+                linesGraphs.push_back(CreateLinesGraph(clines, vanishingPointsInThisView,
+                    intersectionDistanceThreshold, 
+                    incidenceDistanceAlongDirectionThreshold, incidenceDistanceVerticalDirectionThreshold));
             }
         }
 
@@ -855,14 +860,16 @@ namespace panoramix {
 
 
         template <class CameraT>
-        void RecognizeRegionOverlappingsAcrossViewsTemplated(const std::vector<View<CameraT>> & views,
-            const std::vector<RegionsGraph> & regionsGraphs,
-            ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappings){
+        ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> 
+            RecognizeRegionOverlappingsAcrossViewsTemplated(const std::vector<View<CameraT>> & views,
+            const std::vector<RegionsGraph> & regionsGraphs){
 
             assert(views.size() == regionsGraphs.size());
             assert(AllTheSameInContainer(views, [](const View<CameraT> & v1, const View<CameraT> & v2){
                 return v1.camera.eye() == v2.camera.eye(); 
             }));
+
+            ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> regionOverlappings;
 
             // compute spatial positions of each region
             ComponentIndexHashMap<RegionIndex, std::vector<Vec3>>
@@ -897,8 +904,6 @@ namespace panoramix {
             }
 
             // store overlapping ratios between overlapped regions
-            regionOverlappings.clear();
-
             for (auto & rip : regionSpatialContours) {
                 auto & ri = rip.first;
 
@@ -959,30 +964,34 @@ namespace panoramix {
                 gpc_free_polygon(&riPoly);
             }
 
+            return regionOverlappings;
+
         }
 
 
 
-        void RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
-            const std::vector<RegionsGraph> & regionsGraphs,
-            ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappings){
-            RecognizeRegionOverlappingsAcrossViewsTemplated(views, regionsGraphs, regionOverlappings);
+        ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double>
+            RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
+            const std::vector<RegionsGraph> & regionsGraphs){
+            return RecognizeRegionOverlappingsAcrossViewsTemplated(views, regionsGraphs);
         }
 
-        void RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PanoramicCamera>> & views,
-            const std::vector<RegionsGraph> & regionsGraphs,
-            ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappings){
-            RecognizeRegionOverlappingsAcrossViewsTemplated(views, regionsGraphs, regionOverlappings);
+        ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double>
+            RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PanoramicCamera>> & views,
+            const std::vector<RegionsGraph> & regionsGraphs){
+            return RecognizeRegionOverlappingsAcrossViewsTemplated(views, regionsGraphs);
         }
 
 
 
 
-        void RecognizeLineIncidencesAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
+        ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3>
+            RecognizeLineIncidencesAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
             const std::vector<LinesGraph> & linesGraphs,
-            ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & interViewLineIncidences,
             double interViewIncidenceAngleAlongDirectionThreshold,
             double interViewIncidenceAngleVerticalDirectionThreshold){
+
+            ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> interViewLineIncidences;
 
             //// LINES ////
             // compute spatial normal directions for each line
@@ -1022,8 +1031,6 @@ namespace panoramix {
             }
 
             // recognize incidence constraints between lines of different views
-            interViewLineIncidences.clear();
-
             for (auto & i : lineSpatialAvatars) {
                 auto li = i.first;
                 auto & lineData = i.second;
@@ -1090,6 +1097,8 @@ namespace panoramix {
                     std::cout << "angle dist: " << angleDist << std::endl;
                 }
             }
+
+            return interViewLineIncidences;
 
         }
 
