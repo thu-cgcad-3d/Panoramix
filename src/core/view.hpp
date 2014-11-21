@@ -188,6 +188,8 @@ namespace panoramix {
 
 
 
+
+        // estimate vanishing points and build lines graphs
         void EstimateVanishingPointsAndBuildLinesGraphs(const std::vector<View<PerspectiveCamera>> & views,
             std::vector<Vec3> & vanishingPoints,
             std::vector<LinesGraph> & linesGraphs,
@@ -196,14 +198,19 @@ namespace panoramix {
             double incidenceDistanceVerticalDirectionThreshold);
 
 
+        // recognize region overlappings across views
         ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> 
             RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
             const std::vector<RegionsGraph> & regionsGraphs);
 
+
+        // recognize region overlappings across views
         ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> 
             RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PanoramicCamera>> & views,
             const std::vector<RegionsGraph> & regionsGraphs);
 
+
+        // recognize line incidences across views
         ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3>
             RecognizeLineIncidencesAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
             const std::vector<LinesGraph> & linesGraphs,

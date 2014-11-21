@@ -33,17 +33,9 @@ namespace panoramix {
             bool twiceEstimation);
 
 
-        void EstimateSpatialRegionPlanes(const std::vector<View<PerspectiveCamera>> & views,
-            const std::vector<RegionsGraph> & regionsNets, const std::vector<LinesGraph> & linesNets,
-            const std::array<Vec3, 3> & vanishingPoints,
-            const ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappings,
-            const ComponentIndexHashMap<std::pair<RegionIndex, LineIndex>, std::vector<Vec3>> & regionLineConnections,
-            const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & interViewLineIncidences,
-            int regionConnectedComponentsNum, const ComponentIndexHashMap<RegionIndex, int> & regionConnectedComponentIds,
-            int lineConnectedComponentsNum, const ComponentIndexHashMap<LineIndex, int> & lineConnectedComponentIds,
+        void EstimateSpatialRegionPlanes(const Context & context,
             ComponentIndexHashMap<LineIndex, Line3> & reconstructedLines,
-            ComponentIndexHashMap<RegionIndex, Plane3> & reconstructedPlanes,
-            const Image & globalTexture);
+            ComponentIndexHashMap<RegionIndex, Plane3> & reconstructedPlanes);
 
 
     }

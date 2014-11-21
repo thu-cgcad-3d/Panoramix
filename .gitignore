@@ -8,3 +8,5 @@ doc/paperscript/*/*.log
 doc/paperscript/*/*.pdf
 doc/paperscript/*/*.synctex.gz
 *.state
+backup
+scripts
