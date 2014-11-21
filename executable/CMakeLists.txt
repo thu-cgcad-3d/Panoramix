@@ -45,6 +45,10 @@ foreach (TCPP ${TESTCPPS})
 endforeach()
 
 # build app projects
+set(CMAKE_AUTOMOC on)
+set(CMAKE_AUTOUIC on)
+set(CMAKE_AUTORCC on)
+
 foreach (TFILE ${APPS})
 	get_filename_component (T ${TFILE} NAME_WE)
 	message (STATUS ${T})
@@ -56,7 +60,9 @@ foreach (TFILE ${APPS})
 			"${TFILE}/*.cc" 
 			"${TFILE}/*.c" 
 			"${TFILE}/*.hh" 
-			"${TFILE}/*.h")
+			"${TFILE}/*.h"
+			"${TFILE}/*.qrc"
+			"${TFILE}/*.ui")
 		message (STATUS "sources: ${TSOURCES}")
 		add_executable (${T} ${TSOURCES})
 	else ()

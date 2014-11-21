@@ -3,7 +3,6 @@
 #include <QtWidgets>
 #include <QWidget>
 
-#include <glut.h>
 #include <GL/GLU.h>
 
 #include "../core/macros.hpp"

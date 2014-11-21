@@ -210,8 +210,7 @@ TEST(View, ConstraintsAcrossViews){
 
 
 
-int main(int argc, char * argv[], char * envp[])
-{
+int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
     //testing::GTEST_FLAG(filter) = "View.ConstraintsAcrossViews";
