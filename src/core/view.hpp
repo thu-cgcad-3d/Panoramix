@@ -66,7 +66,7 @@ namespace panoramix {
 
         // create a compressed regions graph from segmented regions
         // ensurance: RegionHandle(i) always represents the region data for region mask: segmentedRegions == i
-        RegionsGraph CreateRegionsGraph(const ImageWithType<int32_t> & segmentedRegions,
+        RegionsGraph CreateRegionsGraph(const Imagei & segmentedRegions,
             double samplingStepLengthOnBoundary = 15.0, int dilationSize = 3);
 
 
@@ -109,7 +109,7 @@ namespace panoramix {
         // recognize region-line connections
         // ensurance: RegionHandle(i) always represents the region data for region mask: segmentedRegions == i
         std::map<std::pair<RegionHandle, LineHandle>, std::vector<Point2>>
-            RecognizeRegionLineConnections(const ImageWithType<int32_t> & segmentedRegions,
+            RecognizeRegionLineConnections(const Imagei & segmentedRegions,
             const LinesGraph & lines, double samplingStepLengthOnLines);
 
 

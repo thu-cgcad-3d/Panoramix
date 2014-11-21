@@ -104,7 +104,7 @@ namespace panoramix {
 
         // all same
         template <class IteratorT, class EqualT = std::equal_to<void>>
-        inline bool AllTheSameInRange(IteratorT begin, IteratorT end, EqualT eq = EqualT()){
+        inline bool AllSameInRange(IteratorT begin, IteratorT end, EqualT eq = EqualT()){
             for (auto i = begin; i != end; ++i){
                 if (!eq(*i, *begin))
                     return false;
@@ -113,8 +113,8 @@ namespace panoramix {
         }
 
         template <class ContainerT, class EqualT = std::equal_to<void>>
-        inline bool AllTheSameInContainer(const ContainerT & c, EqualT eq = EqualT()){
-            return AllTheSameInRange(std::begin(c), std::end(c), eq);
+        inline bool AllSameInContainer(const ContainerT & c, EqualT eq = EqualT()){
+            return AllSameInRange(std::begin(c), std::end(c), eq);
         }
 
 

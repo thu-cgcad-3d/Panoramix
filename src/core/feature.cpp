@@ -23,7 +23,7 @@ namespace panoramix {
     namespace core {
 
         void NonMaximaSuppression(const Image & src, Image & dst, int sz, std::vector<PixelLoc> * pixels,
-            const ImageWithType<bool> & mask) {
+            const Imageb & mask) {
 
             const int M = src.rows;
             const int N = src.cols;
@@ -691,7 +691,7 @@ namespace panoramix {
             }
 
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
-            std::pair<Image, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, 
+            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, 
                 int & numCCs, bool returnColoredResult = false) {
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
@@ -754,14 +754,14 @@ namespace panoramix {
 
                 numCCs = u.numSets();
                 std::unordered_map<int, int> compIntSet;
-                Image output(im.size(), CV_32SC1);
+                Imagei output(im.size());
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
                         int comp = u.find(y * width + x);
                         if (compIntSet.find(comp) == compIntSet.end()){
                             compIntSet.insert(std::make_pair(comp, (int)compIntSet.size()));
                         }
-                        output.at<int32_t>(cv::Point(x, y)) = compIntSet[comp];
+                        output(cv::Point(x, y)) = compIntSet[comp];
                     }
                 }
                 assert(compIntSet.size() == numCCs);
@@ -780,7 +780,7 @@ namespace panoramix {
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
                         coloredOutput.at<cv::Vec<uint8_t, 3>>(cv::Point(x, y)) = 
-                            colors[output.at<int32_t>(cv::Point(x, y))];
+                            colors[output(cv::Point(x, y))];
                     }
                 }
 
@@ -791,7 +791,7 @@ namespace panoramix {
             }
 
 
-            std::pair<ImageWithType<int32_t>, int> SegmentImageUsingSLIC(const Image & im, int spsize, int spnum){
+            std::pair<Imagei, int> SegmentImageUsingSLIC(const Image & im, int spsize, int spnum){
                 assert(im.depth() == CV_8U && im.channels() == 3);
 
                 SLIC slic;
@@ -815,10 +815,10 @@ namespace panoramix {
                 }
 
                 // fill labels back
-                Image labels = Image::zeros(im.size(), CV_32SC1);
+                Imagei labels = Imagei::zeros(im.size());
                 for (int x = 0; x < im.cols; x++){
                     for (int y = 0; y < im.rows; y++){
-                        labels.at<int32_t>(PixelLoc(x, y)) = klabels[y * im.cols + x];
+                        labels(PixelLoc(x, y)) = klabels[y * im.cols + x];
                     }
                 }
 
@@ -831,13 +831,13 @@ namespace panoramix {
         }
 
 
-        std::pair<ImageWithType<int32_t>, int> SegmentationExtractor::operator() (const Image & im) const {
+        std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im) const {
             if (_params.useSLIC){
                 return SegmentImageUsingSLIC(im, _params.superpixelSizeSuggestion, _params.superpixelNumberSuggestion);
             }
             else{
                 int numCCs;
-                Image segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
                 return std::make_pair(segim, numCCs);
             }
         }
@@ -865,11 +865,11 @@ namespace panoramix {
             };
 
             template <class HPoint2ContainerT, class LineVPScoreFunctorT = LineVPScoreFunctor>
-            ImageWithType<double> LinesVotesToPoints(const HPoint2ContainerT & points, const std::vector<Line2> & lines,
+            Imaged LinesVotesToPoints(const HPoint2ContainerT & points, const std::vector<Line2> & lines,
                 LineVPScoreFunctorT && scoreFun = LineVPScoreFunctorT()) {
                 size_t nlines = lines.size();
                 size_t npoints = points.size();
-                ImageWithType<double> votes = ImageWithType<double>::zeros(nlines, npoints);
+                Imaged votes = Imaged::zeros(nlines, npoints);
                 for (int i = 0; i < nlines; i++) {
                     auto & line = lines[i];
                     for (int j = 0; j < npoints; j++) {
@@ -889,7 +889,7 @@ namespace panoramix {
                 return votes;
             }
 
-            std::vector<int> ClassifyLines(const ImageWithType<double> & votes, double scoreThreshold = 0.5) {
+            std::vector<int> ClassifyLines(const Imaged & votes, double scoreThreshold = 0.5) {
                 std::vector<int> lineClasses(votes.rows, -1);
                 int nlines = votes.rows;
                 int npoints = votes.cols;
@@ -1033,14 +1033,14 @@ namespace panoramix {
                 return dirs;
             }
 
-            ImageWithType<double> GetLineLengthRatios(const std::vector<Line2> & lines){
+            Imaged GetLineLengthRatios(const std::vector<Line2> & lines){
                 // get max line length
                 double maxLineLen = 0;
                 for (auto & line : lines) {
                     if (line.length() > maxLineLen)
                         maxLineLen = line.length();
                 }
-                ImageWithType<double> lineLengthRatios(lines.size(), 1);
+                Imaged lineLengthRatios(lines.size(), 1);
                 for (int i = 0; i < lines.size(); i++){
                     lineLengthRatios(i) = lines[i].length() / maxLineLen;
                 }
@@ -1057,7 +1057,7 @@ namespace panoramix {
                 const std::vector<Point2> & vp2cands, const std::vector<int> & vp2candIdInRemainedIntersections,
                 const std::vector<Point2> & vp3cands, const std::vector<int> & vp3candIdInRemainedIntersections,
                 const Point2 & vp1p, int vp1id,
-                const ImageWithType<double> & votesPanel, const ImageWithType<double> & votesRemainedPanel,
+                const Imaged & votesPanel, const Imaged & votesRemainedPanel,
                 const std::vector<Line2> & lines,
                 double maxPrinciplePointOffset, double minFocalLength, double maxFocalLength,
                 std::vector<std::pair<Point2, double>> & ppAndFocals, std::vector<float> & scores,
@@ -1133,7 +1133,7 @@ namespace panoramix {
             //std::cout << "intersection num: " << intersections.size() << std::endl;
 
             // nlines x npoints (without consideration of line length ratios)
-            ImageWithType<double> votesPanel = LinesVotesToPoints(intersections, lines);
+            Imaged votesPanel = LinesVotesToPoints(intersections, lines);
 
             // vote all lines for all intersections (with consideration of line length ratios)
             std::vector<double> votesForIntersections(intersections.size(), 0.0);            
@@ -1175,7 +1175,7 @@ namespace panoramix {
             // vote remained lines for remained intersections
             std::vector<double> votesForRemainedIntersections(remainedIntersections.size(), 0.0);
             // nlines x npoints
-            ImageWithType<double> votesRemainedPanel = LinesVotesToPoints(remainedIntersections, lines); // all lines participated!!!!!
+            Imaged votesRemainedPanel = LinesVotesToPoints(remainedIntersections, lines); // all lines participated!!!!!
             for (int i = 0; i < remainedIntersections.size(); i++) {
                 votesForRemainedIntersections[i] = cv::sum(votesRemainedPanel.col(i)).val[0];
             }

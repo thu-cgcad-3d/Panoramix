@@ -13,7 +13,7 @@ namespace panoramix {
         // non maxima suppression
         void NonMaximaSuppression(const Image & src, Image & dst, int sz = 50,
             std::vector<PixelLoc> * pixels = nullptr,
-            const ImageWithType<bool> & mask = ImageWithType<bool>());
+            const Imageb & mask = Imageb());
 
 
         // interesection junction weight 
@@ -90,7 +90,7 @@ namespace panoramix {
         // segmentation
         class SegmentationExtractor {
         public:
-            using Feature = ImageWithType<int32_t>; // CV_32SC1, from 0 to numRegion, use at<int32_t> to extract
+            using Feature = Imagei; // CV_32SC1
             struct Params {
                 inline Params() : sigma(0.8f), c(100.0f), minSize(200), useSLIC(false), 
                     superpixelSizeSuggestion(1000), superpixelNumberSuggestion(100) {

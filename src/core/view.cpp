@@ -14,6 +14,7 @@ namespace panoramix {
     namespace core {
 
         View<PanoramicCamera> CreatePanoramicView(const Image & panorama) {
+            assert(abs(panorama.cols - panorama.rows * 2) < panorama.rows / 10.0f);
             return View<PanoramicCamera>{panorama, PanoramicCamera(panorama.cols / M_PI / 2.0)};
         }
 
@@ -33,7 +34,7 @@ namespace panoramix {
                 return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
             }
 
-            void FindContoursOfRegionsAndBoundaries(const SegmentationExtractor::Feature & segRegions, int regionNum,
+            void FindContoursOfRegionsAndBoundaries(const Imagei & segRegions, int regionNum,
                 std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryEdges) {
 
                 std::map<std::pair<int, int>, std::set<PixelLoc, ComparePixelLoc>> boundaryPixels;
@@ -44,10 +45,10 @@ namespace panoramix {
                     for (int x = 0; x < width - 1; x++) {
                         PixelLoc p1(x, y), p2(x + 1, y), p3(x, y + 1), p4(x + 1, y + 1);
                         int rs[] = {
-                            segRegions.at<int32_t>(p1),
-                            segRegions.at<int32_t>(p2),
-                            segRegions.at<int32_t>(p3),
-                            segRegions.at<int32_t>(p4)
+                            segRegions(p1),
+                            segRegions(p2),
+                            segRegions(p3),
+                            segRegions(p4)
                         };
 
                         if (rs[0] != rs[1]) {
@@ -165,10 +166,8 @@ namespace panoramix {
         }
 
 
-        RegionsGraph CreateRegionsGraph(const ImageWithType<int32_t> & segmentedRegions,
+        RegionsGraph CreateRegionsGraph(const Imagei & segmentedRegions,
             double samplingStepLengthOnBoundary, int dilationSize) {
-
-            assert(segmentedRegions.type() == CV_32SC1);
 
             RegionsGraph regions;
 
@@ -188,7 +187,7 @@ namespace panoramix {
 
             // fill basic properties for all region data
             for (auto i = segmentedRegions.begin(); i != segmentedRegions.end(); ++i){
-                int32_t id = *i;
+                auto id = *i;
                 auto & rd = regions.data(RegionHandle(id));
                 rd.area += 1.0;
                 PixelLoc p = i.pos();
@@ -198,13 +197,11 @@ namespace panoramix {
             for (auto & r : regions.elements<0>()){
                 r.data.center /= r.data.area;
             }
-
-
             
+            // calculate contours for each region data
             for (int i = 0; i < regionNum; i++){
-                RegionData vd;
+                RegionData & vd = regions.data(RegionHandle(i));
                 Image regionMask = (segmentedRegions == i);
-                //ComputeRegionProperties(regionMask, vd.center, vd.area, vd.boundingBox);
 
                 // find contour of the region
                 cv::Mat regionMaskCopy;
@@ -219,9 +216,9 @@ namespace panoramix {
                 cv::dilate(regionMaskCopy, regionMaskCopy, dilationElement);
                 cv::findContours(regionMaskCopy, vd.dilatedContours, CV_RETR_LIST, CV_CHAIN_APPROX_NONE);
                 assert(!vd.dilatedContours.empty() && "no contour? impossible~");
-
-                regions.add(vd);
             }
+
+
 
             std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges;
             FindContoursOfRegionsAndBoundaries(segmentedRegions, regionNum, boundaryEdges);
@@ -570,7 +567,7 @@ namespace panoramix {
 
 
         std::map<std::pair<RegionHandle, LineHandle>, std::vector<Point2>> 
-            RecognizeRegionLineConnections(const ImageWithType<int32_t> & segmentedRegions,
+            RecognizeRegionLineConnections(const Imagei & segmentedRegions,
             const LinesGraph & linesGraph, double samplingStepLengthOnLines){
 
             // generate sampled points for line-region connections
@@ -593,7 +590,7 @@ namespace panoramix {
                         int x = BoundBetween(static_cast<int>(std::round(sampledPoint[0] + dx[k])), 0, segmentedRegions.cols - 1);
                         int y = BoundBetween(static_cast<int>(std::round(sampledPoint[1] + dy[k])), 0, segmentedRegions.rows - 1);
                         PixelLoc p(x, y);
-                        rhids.insert(segmentedRegions.at<int32_t>(p));
+                        rhids.insert(segmentedRegions(p));
                     }
                     for (int32_t rhid : rhids) {
                         regionLineConnections[std::make_pair(RegionHandle(rhid), ld.topo.hd)]
@@ -643,13 +640,13 @@ namespace panoramix {
 
                 std::vector<Vec3> vps(3);
 
-                cv::Mat votePanel = cv::Mat::zeros(longitudeDivideNum, latitudeDivideNum, CV_32FC1);
+                Imagef votePanel = Imagef::zeros(longitudeDivideNum, latitudeDivideNum);
 
                 std::cout << "begin voting ..." << std::endl;
                 size_t pn = intersections.size();
                 for (const Vec3& p : intersections){
                     PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
-                    votePanel.at<float>(pixel.x, pixel.y) += 1.0;
+                    votePanel(pixel.x, pixel.y) += 1.0;
                 }
                 std::cout << "begin gaussian bluring ..." << std::endl;
                 cv::GaussianBlur(votePanel, votePanel, cv::Size((longitudeDivideNum / 50) * 2 + 1, (latitudeDivideNum / 50) * 2 + 1),
@@ -678,7 +675,7 @@ namespace panoramix {
                     double score = 0;
                     for (Vec3 & v : vecs){
                         PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
-                        score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum),
+                        score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
                             WrapBetween(pixel.y, 0, latitudeDivideNum));
                     }
                     if (score > maxScore){
@@ -707,7 +704,7 @@ namespace panoramix {
                         double score = 0;
                         for (Vec3 & v : vecs){
                             PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
-                            score += votePanel.at<float>(WrapBetween(pixel.x, 0, longitudeDivideNum),
+                            score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
                                 WrapBetween(pixel.y, 0, latitudeDivideNum));
                         }
                         if (score > maxScore){
@@ -865,7 +862,7 @@ namespace panoramix {
             const std::vector<RegionsGraph> & regionsGraphs){
 
             assert(views.size() == regionsGraphs.size());
-            assert(AllTheSameInContainer(views, [](const View<CameraT> & v1, const View<CameraT> & v2){
+            assert(AllSameInContainer(views, [](const View<CameraT> & v1, const View<CameraT> & v2){
                 return v1.camera.eye() == v2.camera.eye(); 
             }));
 

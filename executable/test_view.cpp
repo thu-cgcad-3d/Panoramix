@@ -36,14 +36,14 @@ TEST(View, SampleViews) {
 
 }
 
-TEST(Views, RegionsGraph) {
+TEST(View, RegionsGraph) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
     core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
 
     core::SegmentationExtractor seg;
 
-    std::vector<core::ImageWithType<int32_t>> segmentedRegionsArray;
+    std::vector<core::Imagei> segmentedRegionsArray;
     std::vector<core::RegionsGraph> regionsGraphs;
 
     for (auto & v : views){
@@ -71,7 +71,7 @@ TEST(Views, RegionsGraph) {
     core::SaveToDisk("./cache/test_view.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
 }
 
-TEST(Views, LinesGraph) {
+TEST(View, LinesGraph) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
     core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
@@ -114,10 +114,10 @@ TEST(Views, LinesGraph) {
 }
 
 
-TEST(Views, RegionLineConnections){
+TEST(View, RegionLineConnections){
 
     std::vector<core::View<core::PerspectiveCamera>> views;
-    std::vector<core::ImageWithType<int32_t>> segmentedRegionsArray;
+    std::vector<core::Imagei> segmentedRegionsArray;
     std::vector<core::RegionsGraph> regionsGraphs;
     std::vector<core::Vec3> vanishingPoints;
     std::vector<core::LinesGraph> linesGraphs;
@@ -128,6 +128,8 @@ TEST(Views, RegionLineConnections){
     core::LoadFromDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
     core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
 
+    std::vector<std::map<std::pair<core::RegionHandle, core::LineHandle>, std::vector<core::Point2>>> 
+        regionLineConnectionsArray(views.size());
     for (int i = 0; i < views.size(); i++){
         
         vis::Visualizer2D vis(views[i].image);
@@ -144,7 +146,7 @@ TEST(Views, RegionLineConnections){
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 coloredOutput(cv::Point(x, y)) =
-                    vis::ToVec3b(colors[segmentedRegionsArray[i].at<int32_t>(cv::Point(x, y))]);
+                    vis::ToVec3b(colors[segmentedRegionsArray[i](cv::Point(x, y))]);
             }
         }
         vizs[i].setImage(views[i].image);
@@ -152,8 +154,8 @@ TEST(Views, RegionLineConnections){
         vizs[i] << coloredOutput;
         vizs[i] << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB);
 
-        auto regionLineConnections = core::RecognizeRegionLineConnections(segmentedRegionsArray[i], linesGraphs[i], 5);
-        for (auto & l : regionLineConnections) {
+        regionLineConnectionsArray[i] = core::RecognizeRegionLineConnections(segmentedRegionsArray[i], linesGraphs[i], 5);
+        for (auto & l : regionLineConnectionsArray[i]) {
             auto & rh = l.first.first;
             auto & lh = l.first.second;
             auto & cline2 = linesGraphs[i].data(lh).line;
@@ -174,13 +176,14 @@ TEST(Views, RegionLineConnections){
         }
     }
 
+    core::SaveToDisk("./cache/test_view.RegionLineConnections.regionLineConnectionsArray", regionLineConnectionsArray);
 }
 
 
-DEBUG_TEST(Views, ConstraintsAcrossViews){
+TEST(View, ConstraintsAcrossViews){
 
     std::vector<core::View<core::PerspectiveCamera>> views;
-    std::vector<core::ImageWithType<int32_t>> segmentedRegionsArray;
+    std::vector<core::Imagei> segmentedRegionsArray;
     std::vector<core::RegionsGraph> regionsGraphs;
     std::vector<core::Vec3> vanishingPoints;
     std::vector<core::LinesGraph> linesGraphs;
@@ -196,6 +199,8 @@ DEBUG_TEST(Views, ConstraintsAcrossViews){
     auto lineIncidencesAcrossViews = 
         core::RecognizeLineIncidencesAcrossViews(views, linesGraphs, M_PI / 4, 1e-3);
 
+    core::SaveToDisk("./cache/test_view.ConstraintsAcrossViews.regionOverlappingsAcrossViews", regionOverlappingsAcrossViews);
+    core::SaveToDisk("./cache/test_view.ConstraintsAcrossViews.lineIncidencesAcrossViews", lineIncidencesAcrossViews);
 
 }
 
@@ -209,5 +214,6 @@ int main(int argc, char * argv[], char * envp[])
 {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    return DEBUG_RUN_ALL_TESTS();
+    //testing::GTEST_FLAG(filter) = "View.ConstraintsAcrossViews";
+    return RUN_ALL_TESTS();
 }

@@ -408,6 +408,17 @@ namespace panoramix {
         // image
         using Image = cv::Mat;
         template <class T> using ImageWithType = cv::Mat_<T> ;
+        using Imageb = ImageWithType<bool>;
+        using Imageb3 = ImageWithType<Vec<bool, 3>>;
+        using Imageub = ImageWithType<uint8_t>;
+        using Imageub3 = ImageWithType<Vec<uint8_t, 3>>;
+        using Imagei = ImageWithType<int>;
+        using Imagei3 = ImageWithType<Vec<int, 3>>;
+        using Imagef = ImageWithType<float>;
+        using Imagef3 = ImageWithType<Vec<float, 3>>;
+        using Imaged = ImageWithType<double>;
+        using Imaged3 = ImageWithType<Vec<double, 3>>;
+
         using PixelLoc = cv::Point;
 
         inline int AreaOfImage(const Image & im) { return im.cols * im.rows; }
