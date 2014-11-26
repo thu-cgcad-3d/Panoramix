@@ -730,6 +730,17 @@ namespace panoramix {
 
 
 
+        // generate Fibonacci Directions
+        template <class AddVec3FunT>
+        inline void GenerateFibonacciDirections(int n, AddVec3FunT addVec3){
+            static const float ga = M_PI * (- 1.0f + std::sqrt(5.0f)) / 2.0f;
+            for (int i = 0; i < n; i++){
+                auto d = GeoCoord(ga * (float)i, asin(-1.0f + 2.0f * float(i) / n)).toVector();
+                addVec3(d[0], d[1], d[2]);
+            }
+        }
+
+
 
         // mesh makers
         // make tetrahedron
@@ -862,7 +873,7 @@ namespace panoramix {
         void MakeIcosahedron(AddVertex3FunT addVertex, AddTriFaceFunT addFace) {
             using VertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
             // create a basic icosahedron
-            float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
+            static const float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
             VertHandle vhs[] = {
                 addVertex(-1, t, 0.0f),
                 addVertex(1, t, 0.0f),
@@ -931,6 +942,8 @@ namespace panoramix {
             }
         }
 
+
+       
 
     }
 }
