@@ -85,6 +85,10 @@ TEST(MeshTest, Visualize) {
     VisualizeMesh(mesh);
 
     mesh.clear();
+    core::MakeIcosahedron(vertexAdder, triFaceAdder);
+    VisualizeMesh(mesh);
+
+    mesh.clear();
     core::MakeTriMeshFromSMFFile(vertexAdder, triFaceAdder, ProjectDataDirStrings::MeshSMF + "/bones-clean.smf");
     VisualizeMesh(mesh);
 

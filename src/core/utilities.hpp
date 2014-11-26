@@ -857,57 +857,46 @@ namespace panoramix {
             }
         }
 
-        // make an icosahedron sphere
+        // make an icosahedron
         template <class AddVertex3FunT, class AddTriFaceFunT>
-        void MakeIcosahedron(AddVertex3FunT addVertex, AddTriFaceFunT addFace, int subdivisionTimes = 0) {
+        void MakeIcosahedron(AddVertex3FunT addVertex, AddTriFaceFunT addFace) {
             using VertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
             // create a basic icosahedron
             float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
-            std::vector<Point3f> positions = {
-                Point3f(-1, t, 0.0f),
-                Point3f(1, t, 0.0f),
-                Point3f(-1, -t, 0.0f),
-                Point3f(1, -t, 0.0f),
-                Point3f(0.0f, -1, t),
-                Point3f(0.0f, 1, t),
-                Point3f(0.0f, -1, -t),
-                Point3f(0.0f, 1, -t),
-                Point3f(t, 0.0f, -1),
-                Point3f(t, 0.0f, 1),
-                Point3f(-t, 0.0f, -1),
-                Point3f(-t, 0.0f, 1)
+            VertHandle vhs[] = {
+                addVertex(-1, t, 0.0f),
+                addVertex(1, t, 0.0f),
+                addVertex(-1, -t, 0.0f),
+                addVertex(1, -t, 0.0f),
+                addVertex(0.0f, -1, t),
+                addVertex(0.0f, 1, t),
+                addVertex(0.0f, -1, -t),
+                addVertex(0.0f, 1, -t),
+                addVertex(t, 0.0f, -1),
+                addVertex(t, 0.0f, 1),
+                addVertex(-t, 0.0f, -1),
+                addVertex(-t, 0.0f, 1)
             };
-            positions.reserve(12 * std::pow(2, subdivisionTimes));
-            std::vector<std::array<int, 3>> faceVertIds = {
-                { { 0, 11, 5 } },
-                { { 0, 5, 1 } },
-                { { 0, 1, 7 } },
-                { { 0, 7, 10 } },
-                { { 0, 10, 11 } },
-                { { 1, 5, 9 } },
-                { { 5, 11, 4 } },
-                { { 11, 10, 2 } },
-                { { 10, 7, 6 } },
-                { { 7, 1, 8 } },
-                { { 3, 9, 4 } },
-                { { 3, 4, 2 } },
-                { { 3, 2, 6 } },
-                { { 3, 6, 8 } },
-                { { 3, 8, 9 } },
-                { { 4, 9, 5 } },
-                { { 2, 4, 11 } },
-                { { 6, 2, 10 } },
-                { { 8, 6, 7 } },
-                { { 9, 8, 1 } }
-            };
-            faceVertIds.reserve(20 * std::pow(2, 2 * subdivisionTimes));
-            // todo // subdivisions
-            std::vector<VertHandle> vhs;
-            vhs.reserve(positions.size());
-            for (auto & p : positions)
-                vhs.push_back(addVertex(p[0], p[1], p[2]));
-            for (auto & f : faceVertIds)
-                addFace(vhs[f[0]], vhs[f[1]], vhs[f[2]]);
+            addFace(vhs[0], vhs[11], vhs[5]);
+            addFace(vhs[0], vhs[5], vhs[1]);
+            addFace(vhs[0], vhs[1], vhs[7]);
+            addFace(vhs[0], vhs[7], vhs[10]);
+            addFace(vhs[0], vhs[10], vhs[11]);
+            addFace(vhs[1], vhs[5], vhs[9]);
+            addFace(vhs[5], vhs[11], vhs[4]);
+            addFace(vhs[11], vhs[10], vhs[2]);
+            addFace(vhs[10], vhs[7], vhs[6]);
+            addFace(vhs[7], vhs[1], vhs[8]);
+            addFace(vhs[3], vhs[9], vhs[4]);
+            addFace(vhs[3], vhs[4], vhs[2]);
+            addFace(vhs[3], vhs[2], vhs[6]);
+            addFace(vhs[3], vhs[6], vhs[8]);
+            addFace(vhs[3], vhs[8], vhs[9]);
+            addFace(vhs[4], vhs[9], vhs[5]);
+            addFace(vhs[2], vhs[4], vhs[11]);
+            addFace(vhs[6], vhs[2], vhs[10]);
+            addFace(vhs[8], vhs[6], vhs[7]);
+            addFace(vhs[9], vhs[8], vhs[1]);
         }
 
 

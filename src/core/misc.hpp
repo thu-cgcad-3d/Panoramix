@@ -79,6 +79,8 @@ namespace panoramix {
             }
 
             inline bool null() const { return _data == nullptr; }
+            inline bool operator == (nullptr_t) const { return _data == nullptr; }
+            inline bool operator != (nullptr_t) const { return _data != nullptr; }
 
             template <class T>
             inline T & ref() const {
