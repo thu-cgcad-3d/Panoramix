@@ -405,6 +405,7 @@ namespace panoramix {
 
         }
 
+        // returns [low, high)
         template <class T>
         inline T WrapBetween(const T & input, const T & low, const T & high) {
             return WrapBetweenPrivate(input, low, high, std::is_integral<T>());
@@ -652,7 +653,7 @@ namespace panoramix {
         std::array<Scored<Vec<T, N>, T>, N> EigenVectorAndValuesFromPoints(const Point<T, N> * ptsData, size_t n) {
             using namespace Eigen;
             Map<const Matrix<T, Dynamic, N, RowMajor>> mat((const T*)ptsData, n, N);
-            std::cout << "points data mat: " << std::endl << mat << std::endl;
+            //std::cout << "points data mat: " << std::endl << mat << std::endl;
             auto centered = (mat.rowwise() - mat.colwise().mean()).eval();
             auto cov = ((centered.adjoint() * centered) / double(mat.rows() - 1)).eval();
             EigenSolver<decltype(cov)> es(cov);
@@ -674,6 +675,26 @@ namespace panoramix {
         template <class T, int N>
         inline std::array<Scored<Vec<T, N>, T>, N> EigenVectorAndValuesFromPoints(const std::vector<Point<T, N>> & pts) {
             return EigenVectorAndValuesFromPoints((const Point<T, N>*)pts.data(), pts.size());
+        }
+
+
+        // on left
+        template <class T>
+        inline bool IsOnLeftSide(const Point<T, 2> & p, const Point<T, 2> & a, const Point<T, 2> & b){
+            T data[9] = { a[0], a[1], 1, b[0], b[1], 1, p[0], p[1], 1 };
+            T tmp1 = data[0 * 3 + 0] * (data[1 * 3 + 1] * data[2 * 3 + 2] - data[1 * 3 + 2] * data[2 * 3 + 1]);
+            T tmp2 = data[0 * 3 + 1] * (data[1 * 3 + 0] * data[2 * 3 + 2] - data[1 * 3 + 2] * data[2 * 3 + 0]);
+            T tmp3 = data[0 * 3 + 2] * (data[1 * 3 + 0] * data[2 * 3 + 1] - data[1 * 3 + 1] * data[2 * 3 + 0]);
+            return tmp1 - tmp2 + tmp3 > 0;
+        }
+
+        // in triangle
+        template <class T>
+        inline bool IsInTriangle(const Point<T, 2> & p, const Point<T, 2> & a, const Point<T, 2> & b, const Point<T, 2> & c){
+            bool lab = IsOnLeftSide(p, a, b);
+            bool lbc = IsOnLeftSide(p, b, c);
+            bool lca = IsOnLeftSide(p, c, a);
+            return lab == lbc && lbc == lca;
         }
 
 

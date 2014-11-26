@@ -57,6 +57,31 @@ TEST(Visualizer3D, RenderClassifiedLines) {
         << vis::manip3d::Show();
 }
 
+TEST(Visualizer3D, RenderBox) {
+    core::Box3 b = { { -1.0, -1.0, -1.0 }, {1.0, 1.0, 1.0} };
+    core::Image im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
+    //cv::flip(im, im, 1);
+    vis::Visualizer3D()
+        << vis::manip3d::Begin(b)
+        << vis::manip3d::SetTexture(im)
+        << vis::manip3d::End
+        << vis::manip3d::SetBackgroundColor(vis::ColorTag::Black)
+        << vis::manip3d::Show();
+}
+
+
+TEST(Visualizer3D, RenderSphere){
+    core::Sphere3 s = { { 0.0, 0.0, 0.0 }, 1.0 };
+    core::Image im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
+    cv::flip(im, im, 1);
+    vis::Visualizer3D()
+        << vis::manip3d::Begin(s)
+        << vis::manip3d::SetTexture(im)
+        << vis::manip3d::End
+        << vis::manip3d::SetBackgroundColor(vis::ColorTag::Black)
+        << vis::manip3d::Show();
+}
+
 TEST(Visualizer3D, RenderSpatialProjectedPolygon) {
     vis::SpatialProjectedPolygon p[2];
     p[0].plane = core::Plane3({ 0, -1, 0 }, { 0, 1, 0 });
@@ -84,5 +109,6 @@ TEST(Visualizer3D, RenderSpatialProjectedPolygon) {
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
+    //testing::GTEST_FLAG(filter) = "Visualizer3D.RenderSphere";
     return RUN_ALL_TESTS();
 }

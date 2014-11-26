@@ -12,7 +12,7 @@ TEST(View, SampleViews) {
 
     std::cout << "cuda enabled device count: " << cv::gpu::getCudaEnabledDeviceCount() << std::endl;
 
-    auto panorama = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
+    auto panorama = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
     auto panoView = core::CreatePanoramicView(panorama);
 
     std::vector<core::PerspectiveCamera> cams = {
@@ -213,6 +213,6 @@ TEST(View, ConstraintsAcrossViews){
 int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    //testing::GTEST_FLAG(filter) = "View.ConstraintsAcrossViews";
+    testing::GTEST_FLAG(filter) = "View.LinesGraph";
     return RUN_ALL_TESTS();
 }

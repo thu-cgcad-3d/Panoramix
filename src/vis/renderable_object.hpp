@@ -107,6 +107,10 @@ namespace panoramix {
         RenderableObject * MakeRenderable(const core::Sphere3 & sphere,
             const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr);
 
+        // box
+        RenderableObject * MakeRenderable(const core::Box3 & box,
+            const DefaultRenderState & state = DefaultRenderState(), RenderableObject * parent = nullptr);
+
 
         // spatial projected polygon
         RenderableObject * MakeRenderable(const SpatialProjectedPolygon & sp,

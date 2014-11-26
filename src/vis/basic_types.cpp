@@ -1,6 +1,7 @@
 #include "basic_types.hpp"
 
 #include "../core/utilities.hpp"
+#include "../core/algorithms.hpp"
 
 namespace panoramix {
     namespace vis {
@@ -366,6 +367,7 @@ namespace panoramix {
                 "    highp float lati = asin(direction.z / length(direction));\n"
                 "    highp vec2 texCoord = vec2(longi / 3.1415926535897932 / 2.0 + 0.5, - lati / 3.1415926535897932 + 0.5);\n"
                 "    gl_FragColor = texture2D(tex, texCoord) * 1.0 + pixelColor * 0.0;\n"
+                "    gl_FragColor.a = 0.7;\n"
                 "}\n"
             };
 
@@ -585,15 +587,22 @@ namespace panoramix {
             );
 
             // triangulate
-            std::vector<VertHandle> triangles = tTriangulate(vhs, [this, & normal](VertHandle vh) {
+            //std::vector<VertHandle> triangles = tTriangulate(vhs, [this, & normal](VertHandle vh) {
+            //    Vec3 v = ToVec3Affine(_vertices[vh].position4);
+            //    return ToVec2(v - v.dot(normal) * normal);
+            //});
+
+            //// install triangles
+            //for (int i = 0; i < triangles.size(); i += 3) {
+            //    addTriangle(triangles[i], triangles[i + 1], triangles[i + 2]);
+            //}
+
+            TriangulatePolygon(vhs.begin(), vhs.end(), [this, &normal](VertHandle vh) {
                 Vec3 v = ToVec3Affine(_vertices[vh].position4);
                 return ToVec2(v - v.dot(normal) * normal);
+            }, [this](VertHandle a, VertHandle b, VertHandle c){
+                addTriangle(a, b, c);
             });
-
-            // install triangles
-            for (int i = 0; i < triangles.size(); i += 3) {
-                addTriangle(triangles[i], triangles[i + 1], triangles[i + 2]);
-            }
         }
 
         void OpenGLMesh::clear() {
@@ -628,6 +637,10 @@ namespace panoramix {
                 { 1, 1, 1, 1 },
                 { -1, 1, 1, 1 }
             };
+
+            for (auto & v : verts){
+                mesh.addVertex(v);
+            }
 
             static const VertHandle quadfaces[6][4] = {
                 { 0, 1, 5, 4 },

@@ -192,7 +192,7 @@ namespace panoramix {
             static OpenGLMesh MakeSphere(int m = 32, int n = 64);
 
             template <class Point3IteratorT>
-            static OpenGLMesh FromPoints(Point3IteratorT && pointsBegin, Point3IteratorT && pointsEnd) {
+            static OpenGLMesh FromPoints(Point3IteratorT pointsBegin, Point3IteratorT pointsEnd) {
                 OpenGLMesh m;
                 auto n = std::distance(pointsBegin, pointsEnd);
                 m._vertices.reserve(n);
@@ -205,7 +205,7 @@ namespace panoramix {
             }
 
             template <class Line3IteratorT>
-            static OpenGLMesh FromLines(Line3IteratorT && linesBegin, Line3IteratorT && linesEnd) {
+            static OpenGLMesh FromLines(Line3IteratorT linesBegin, Line3IteratorT linesEnd) {
                 OpenGLMesh m;
                 auto n = std::distance(linesBegin, linesEnd);
                 m._vertices.reserve(n * 2);

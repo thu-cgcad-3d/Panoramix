@@ -130,6 +130,8 @@ namespace panoramix {
                         ancestersWithUsableTextures.front()->bindTexture(0);
 
                     glLineWidth(_lineWidth);
+                    /*glEnable(GL_ALPHA_TEST);
+                    glCullFace(GL_FRONT_AND_BACK);*/
 
                     _program->setUniformValue("matrix", MakeQMatrix(mat));
                     _program->setUniformValue("tex", 0);
@@ -276,6 +278,54 @@ namespace panoramix {
             return new GLLinesObject(lines.begin(), lines.end(), state.lineWidth, state.foregroundColor, parent);
         }
 
+
+
+        namespace {
+
+            class GLSphereObject : public GLObject {
+            public:
+                explicit GLSphereObject(const Sphere3 & s, int m, int n, RenderableObject * parent)
+                    : GLObject(OpenGLMesh::MakeSphere(m, n), 1.0f, 1.0f,
+                    OpenGLShaderSourceDescriptor::Panorama, s.center, parent) {
+                    for (auto & v : _mesh.vertices()){
+                        v.position4 = Vec4(
+                            v.position4[0] * s.radius + s.center[0] * v.position4[3], 
+                            v.position4[1] * s.radius + s.center[1] * v.position4[3], 
+                            v.position4[2] * s.radius + s.center[2] * v.position4[3], 
+                            v.position4[3]);
+                    }
+                }
+            };
+
+        }
+
+        RenderableObject * MakeRenderable(const Sphere3 & s, const DefaultRenderState & state, RenderableObject * parent){
+            return new GLSphereObject(s, 128, 256, parent);
+        }
+
+        namespace {
+
+            class GLBoxObject : public GLObject {
+            public:
+                explicit GLBoxObject(const Box3 & b, RenderableObject * parent)
+                    : GLObject(OpenGLMesh::MakeCube(), 1.0f, 1.0f,
+                    OpenGLShaderSourceDescriptor::Panorama, b.center(), parent) {
+                    _mesh.vertices()[0].position4 = Vec4f(b.minCorner[0], b.minCorner[1], b.minCorner[2], 1.0);
+                    _mesh.vertices()[1].position4 = Vec4f(b.maxCorner[0], b.minCorner[1], b.minCorner[2], 1.0);
+                    _mesh.vertices()[2].position4 = Vec4f(b.maxCorner[0], b.maxCorner[1], b.minCorner[2], 1.0);
+                    _mesh.vertices()[3].position4 = Vec4f(b.minCorner[0], b.maxCorner[1], b.minCorner[2], 1.0);
+                    _mesh.vertices()[4].position4 = Vec4f(b.minCorner[0], b.minCorner[1], b.maxCorner[2], 1.0);
+                    _mesh.vertices()[5].position4 = Vec4f(b.maxCorner[0], b.minCorner[1], b.maxCorner[2], 1.0);
+                    _mesh.vertices()[6].position4 = Vec4f(b.maxCorner[0], b.maxCorner[1], b.maxCorner[2], 1.0);
+                    _mesh.vertices()[7].position4 = Vec4f(b.minCorner[0], b.maxCorner[1], b.maxCorner[2], 1.0);
+                }
+            };
+
+        }
+
+        RenderableObject * MakeRenderable(const core::Box3 & box, const DefaultRenderState & state, RenderableObject * parent) {
+            return new GLBoxObject(box, parent);
+        }
 
 
         namespace {
