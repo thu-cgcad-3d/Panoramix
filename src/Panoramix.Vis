@@ -1,6 +1,4 @@
 #include "./vis/visualize2d.hpp"
 #include "./vis/visualize3d.hpp"
 
-namespace x {
-	using namespace panoramix::vis;
-}
+namespace xv = panoramix::vis;

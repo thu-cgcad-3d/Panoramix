@@ -110,11 +110,11 @@ namespace panoramix {
             const Params & params() const { return _params; }
             Params & params() { return _params; }
             std::pair<Feature, int> operator() (const Image & im) const;
+            std::pair<Feature, int> operator() (const Image & im, const std::vector<Line2> & lines) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
             Params _params;
         };
-
 
 
 

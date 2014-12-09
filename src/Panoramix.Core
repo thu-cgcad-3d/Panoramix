@@ -4,6 +4,4 @@
 #include "./core/version.hpp"
 #include "./core/view.hpp"
 
-namespace x {
-	using namespace panoramix::core;
-}
+namespace xc = panoramix::core;

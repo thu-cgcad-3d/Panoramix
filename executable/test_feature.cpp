@@ -18,7 +18,19 @@ TEST(Feature, SegmentationExtractor) {
         core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
         vis::Visualizer2D(im) << vis::manip2d::Show();
         auto segs = seg(im);
-        vis::Visualizer2D(segs.first) 
+        vis::Visualizer2D(segs.first)
+            << vis::manip2d::SetColorTable(vis::CreateRandomColorTableWithSize(segs.second))
+            << vis::manip2d::Show();
+    }
+    {
+        core::SegmentationExtractor::Params p;
+        p.c = 5;
+        p.minSize = 400;
+        p.sigma = 1;
+        core::SegmentationExtractor seg(p);
+        core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        auto segs = seg(im, { core::Line2({ 0.0, 0.0 }, core::Point2(im.cols, im.rows)), core::Line2(core::Point2(im.cols, 0), core::Point2(0, im.rows)) });
+        vis::Visualizer2D(segs.first)
             << vis::manip2d::SetColorTable(vis::CreateRandomColorTableWithSize(segs.second))
             << vis::manip2d::Show();
     }

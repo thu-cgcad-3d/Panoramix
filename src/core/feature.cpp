@@ -690,6 +690,15 @@ namespace panoramix {
                 return static_cast<float>(norm(c1 - c2));
             }
 
+            inline float PixelDiff(const Image & im, const Imageb & occupiedByLines, const cv::Point & p1, const cv::Point & p2){
+                assert(im.depth() == CV_8U && im.channels() == 3);
+                if (occupiedByLines(p1) && (p1.x < p2.x || (p1.x == p2.x && p1.y < p2.y)))
+                    return 1e5f;
+                Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
+                Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
+                return static_cast<float>(norm(c1 - c2));
+            }
+
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
             std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, 
                 int & numCCs, bool returnColoredResult = false) {
@@ -790,6 +799,108 @@ namespace panoramix {
                 return std::make_pair(output, coloredOutput);
             }
 
+            // first return is CV_32SC1, the second is CV_8UC3 (for display)
+            std::pair<Imagei, Image> SegmentImageWithLinesSplits(const Image & im, float sigma, float c, int minSize,
+                const std::vector<Line2> & lines,
+                int & numCCs, bool returnColoredResult = false){
+
+                assert(im.depth() == CV_8U && im.channels() == 3);
+                //std::cout << "depth: " << ImageDepth2Str(im.depth()) << std::endl;
+                //std::cout << "channels: " << im.channels() << std::endl;
+
+                int width = im.cols;
+                int height = im.rows;
+                Image smoothed;
+                cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
+
+                Imageb occupiedByLines = Imageb::zeros(im.size());
+                for (auto & l : lines){
+                    cv::line(occupiedByLines, ToPixelLoc(l.first), ToPixelLoc(l.second), true, 2);
+                }
+
+                // build pixel graph
+                std::vector<Edge> edges;
+                edges.reserve(width * height * 4);
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        if (x < width - 1) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = y * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, occupiedByLines, { x, y }, { x + 1, y });
+                            edges.push_back(edge);
+                        }
+                        if (y < height - 1) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y + 1) * width + x;
+                            edge.w = PixelDiff(smoothed, occupiedByLines, { x, y }, { x, y + 1 });
+                            edges.push_back(edge);
+                        }
+                        if ((x < width - 1) && (y < height - 1)) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y + 1) * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, occupiedByLines, { x, y }, { x + 1, y + 1 });
+                            edges.push_back(edge);
+                        }
+                        if ((x < width - 1) && (y > 0)) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y - 1) * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, occupiedByLines, { x, y }, { x + 1, y - 1 });
+                            edges.push_back(edge);
+                        }
+                    }
+                }
+
+                int num = (int)edges.size();
+                Universe u = SegmentGraph(width * height, edges, c);
+
+                for (int i = 0; i < num; i++) {
+                    int a = u.find(edges[i].a);
+                    int b = u.find(edges[i].b);
+                    if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize)))
+                        u.join(a, b);
+                }
+
+                numCCs = u.numSets();
+                std::unordered_map<int, int> compIntSet;
+                Imagei output(im.size());
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        int comp = u.find(y * width + x);
+                        if (compIntSet.find(comp) == compIntSet.end()){
+                            compIntSet.insert(std::make_pair(comp, (int)compIntSet.size()));
+                        }
+                        output(cv::Point(x, y)) = compIntSet[comp];
+                    }
+                }
+                assert(compIntSet.size() == numCCs);
+
+                if (!returnColoredResult){
+                    return std::make_pair(output, Image());
+                }
+
+                Image coloredOutput(im.size(), CV_8UC3);
+                std::vector<cv::Vec<uint8_t, 3>> colors(numCCs);
+                std::generate(colors.begin(), colors.end(), [](){
+                    return cv::Vec<uint8_t, 3>(uint8_t(std::rand() % 256),
+                        uint8_t(std::rand() % 256),
+                        uint8_t(std::rand() % 256));
+                });
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        coloredOutput.at<cv::Vec<uint8_t, 3>>(cv::Point(x, y)) =
+                            colors[output(cv::Point(x, y))];
+                    }
+                }
+
+                //cv::imshow("result", coloredOutput);
+                //cv::waitKey();
+
+                return std::make_pair(output, coloredOutput);
+            }
 
             std::pair<Imagei, int> SegmentImageUsingSLIC(const Image & im, int spsize, int spnum){
                 assert(im.depth() == CV_8U && im.channels() == 3);
@@ -842,8 +953,12 @@ namespace panoramix {
             }
         }
 
-
-
+        std::pair<Imagei, int>  SegmentationExtractor::operator() (const Image & im, const std::vector<Line2> & lines) const {
+            assert(!_params.useSLIC);
+            int numCCs;
+            Imagei segim = SegmentImageWithLinesSplits(im, _params.sigma, _params.c, _params.minSize, lines, numCCs, false).first;
+            return std::make_pair(segim, numCCs);
+        }
 
 
 

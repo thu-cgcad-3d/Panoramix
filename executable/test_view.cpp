@@ -36,41 +36,6 @@ TEST(View, SampleViews) {
 
 }
 
-TEST(View, RegionsGraph) {
-
-    std::vector<core::View<core::PerspectiveCamera>> views;
-    core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
-
-    core::SegmentationExtractor seg;
-
-    std::vector<core::Imagei> segmentedRegionsArray;
-    std::vector<core::RegionsGraph> regionsGraphs;
-
-    for (auto & v : views){
-        auto segmentedRegions = seg(v.image).first;
-        int samplePointsOnBoundariesSum = 0;
-        auto regions = core::CreateRegionsGraph(segmentedRegions, 15, 3);
-        for (auto & r : regions.elements<1>()){
-            for (auto & ps : r.data.sampledPoints){
-                samplePointsOnBoundariesSum += ps.size();
-            }
-        }
-        int samplePointsOnBoundariesSum2 = 0;
-        auto regions2 = core::CreateRegionsGraph(segmentedRegions, 20, 3);
-        for (auto & r : regions2.elements<1>()){
-            for (auto & ps : r.data.sampledPoints){
-                samplePointsOnBoundariesSum2 += ps.size();
-            }
-        }
-        EXPECT_LE(samplePointsOnBoundariesSum2, samplePointsOnBoundariesSum);
-        regionsGraphs.push_back(std::move(regions));
-        segmentedRegionsArray.push_back(segmentedRegions);
-    }
-
-    core::SaveToDisk("./cache/test_view.RegionsGraph.regionsGraphs", regionsGraphs);
-    core::SaveToDisk("./cache/test_view.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
-}
-
 TEST(View, LinesGraph) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
@@ -111,6 +76,51 @@ TEST(View, LinesGraph) {
     core::SaveToDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
     core::SaveToDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
 
+}
+
+TEST(View, RegionsGraph) {
+
+    std::vector<core::View<core::PerspectiveCamera>> views;
+    std::vector<core::LinesGraph> linesGraphs;
+    core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
+    core::LoadFromDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
+
+    core::SegmentationExtractor seg;
+
+    std::vector<core::Imagei> segmentedRegionsArray;
+    std::vector<core::RegionsGraph> regionsGraphs;
+
+    for (int i = 0; i < views.size(); i++){
+        auto & v = views[i];
+        std::vector<core::Line2> lines;
+        for (auto & ld : linesGraphs[i].elements<0>()){
+            auto line = ld.data.line.component;
+            line.first -= core::normalize(line.direction()) * 10.0;
+            line.second += core::normalize(line.direction()) * 10.0;
+            lines.push_back(line);
+        }
+        auto segmentedRegions = seg(v.image, lines).first;
+        int samplePointsOnBoundariesSum = 0;
+        auto regions = core::CreateRegionsGraph(segmentedRegions, 15, 3);
+        for (auto & r : regions.elements<1>()){
+            for (auto & ps : r.data.sampledPoints){
+                samplePointsOnBoundariesSum += ps.size();
+            }
+        }
+        int samplePointsOnBoundariesSum2 = 0;
+        auto regions2 = core::CreateRegionsGraph(segmentedRegions, 20, 3);
+        for (auto & r : regions2.elements<1>()){
+            for (auto & ps : r.data.sampledPoints){
+                samplePointsOnBoundariesSum2 += ps.size();
+            }
+        }
+        EXPECT_LE(samplePointsOnBoundariesSum2, samplePointsOnBoundariesSum);
+        regionsGraphs.push_back(std::move(regions));
+        segmentedRegionsArray.push_back(segmentedRegions);
+    }
+
+    core::SaveToDisk("./cache/test_view.RegionsGraph.regionsGraphs", regionsGraphs);
+    core::SaveToDisk("./cache/test_view.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
 }
 
 
@@ -213,6 +223,6 @@ TEST(View, ConstraintsAcrossViews){
 int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    testing::GTEST_FLAG(filter) = "View.LinesGraph";
+    //testing::GTEST_FLAG(filter) = "View.LinesGraph";
     return RUN_ALL_TESTS();
 }
