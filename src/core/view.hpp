@@ -218,6 +218,47 @@ namespace panoramix {
             double interViewIncidenceAngleVerticalDirectionThreshold);
 
 
+
+
+        // the mixed graph
+        struct MGUnaryRegion {
+            RegionIndex index;
+        };
+        struct MGUnaryLine {
+            LineIndex index;
+        };
+
+        struct MGBinaryRegionRegionBoundary {
+            RegionBoundaryIndex boundaryIndex;
+            std::vector<Vec3> samples;
+        };
+        struct MGBinaryRegionRegionOverlapping {
+            double overlappingRatio;
+        };
+        struct MGBinaryLineLineConnection {
+            LineRelationIndex relationIndex;
+            Vec3 relationCenter;
+        };
+        struct MGBinaryLineLineIncidenceAcrossView {
+            Vec3 relationCenter;
+        };
+        struct MGBinaryRegionLineConnection {
+            std::vector<Vec3> samples;
+        };
+
+        using MixedGraph = HomogeneousGraph02<
+            AnyOfTypes<MGUnaryRegion, MGUnaryLine>, 
+            AnyOfTypes<MGBinaryRegionRegionBoundary, MGBinaryRegionRegionOverlapping, MGBinaryRegionLineConnection, MGBinaryLineLineConnection>
+        >;
+        using MixedGraphUnaryHandle = HandleAtLevel<0>;
+        using MixedGraphBinaryHandle = HandleAtLevel<1>;
+
+        MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views,
+            const std::vector<RegionsGraph> & regionsGraphs, const std::vector<LinesGraph> & linesGraphs,
+            const ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappingsAcrossViews,
+            const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & lineIncidencesAcrossViews,
+            const std::vector<std::map<std::pair<RegionHandle, LineHandle>, std::vector<Point2>>> & regionLineConnections);
+
     }
 }
  

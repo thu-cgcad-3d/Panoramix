@@ -41,28 +41,30 @@ namespace panoramix {
                 : std::exception(message) {}
         };
 
+#define ASSERTVALID assert(this->_data->type().raw_name())
 
         class Any {
         public:
             inline Any() : _data(nullptr) {}
 
             // from class Any
-            inline Any(const Any & a) : _data(a._data->clone()) {}
+            inline Any(const Any & a) : _data(a._data->clone()) { ASSERTVALID; }
             inline Any & operator = (const Any & a) {
                 if (this == &a) return *this;
                 delete _data;
                 _data = a._data->clone();
+                ASSERTVALID;
                 return *this;
             }
-            inline Any(Any && a) { swap(a); }
-            inline Any & operator = (Any && a) { swap(a); return *this; }
-            inline void swap(Any & a){ std::swap(_data, a._data); }
+            //inline Any(Any && a) { swap(a);  ASSERTVALID; }
+            inline Any & operator = (Any && a) { swap(a);  ASSERTVALID; return *this; }
+            inline void swap(Any & a){ std::swap(_data, a._data);  ASSERTVALID; }
 
             // from other types
             template <class T, class = std::enable_if_t<!std::is_same<T, Any>::value>> // accepts const T(&)
-            inline Any(const T & v) : _data(new Data<T>(v)) {}
+            inline Any(const T & v) : _data(new Data<T>(v)) { ASSERTVALID; }
             template <class T, class = std::enable_if_t<!std::is_same<std::decay_t<T>, Any>::value>> // accepts T&& and T&
-            inline Any(T && v) : _data(new Data<std::decay_t<T>>(std::forward<T>(v))) {}
+            inline Any(T && v) : _data(new Data<std::decay_t<T>>(std::forward<T>(v))) { ASSERTVALID; }
 
             // set to nullptr
             inline Any(nullptr_t) : _data(nullptr) {}
@@ -75,6 +77,7 @@ namespace panoramix {
 
             ~Any() {
                 delete _data;
+                //ASSERTVALID;
                 _data = nullptr;
             }
 
@@ -107,6 +110,9 @@ namespace panoramix {
         private:
             DataBase * _data;
         };
+
+        template <class ...T>
+        using AnyOfTypes = Any;
 
 
 

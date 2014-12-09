@@ -172,7 +172,9 @@ TEST(View, RegionLineConnections){
             auto & cam = views[i].camera;
             auto & viz = vizs[i];
 
-            viz << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB) << vis::manip2d::SetThickness(3) << cline2;
+            viz << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB) 
+                << vis::manip2d::SetThickness(1) 
+                << cline2;
             viz << vis::manip2d::SetColor(vis::ColorTag::Black)
                 << vis::manip2d::SetThickness(1);
             auto & regionCenter = regionsGraphs[i].data(rh).center;
@@ -214,6 +216,32 @@ TEST(View, ConstraintsAcrossViews){
 
 }
 
+TEST(View, MixedGraph) {
+
+    std::vector<core::View<core::PerspectiveCamera>> views;
+    std::vector<core::RegionsGraph> regionsGraphs;
+    std::vector<core::LinesGraph> linesGraphs;
+
+    core::ComponentIndexHashMap<std::pair<core::RegionIndex, core::RegionIndex>, double> regionOverlappingsAcrossViews;
+    core::ComponentIndexHashMap<std::pair<core::LineIndex, core::LineIndex>, core::Vec3> lineIncidencesAcrossViews;
+    std::vector<std::map<std::pair<core::RegionHandle, core::LineHandle>, std::vector<core::Point2>>>
+        regionLineConnectionsArray;
+
+    core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
+    core::LoadFromDisk("./cache/test_view.RegionsGraph.regionsGraphs", regionsGraphs);
+    core::LoadFromDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
+
+    core::LoadFromDisk("./cache/test_view.ConstraintsAcrossViews.regionOverlappingsAcrossViews", regionOverlappingsAcrossViews);
+    core::LoadFromDisk("./cache/test_view.ConstraintsAcrossViews.lineIncidencesAcrossViews", lineIncidencesAcrossViews);
+    core::LoadFromDisk("./cache/test_view.RegionLineConnections.regionLineConnectionsArray", regionLineConnectionsArray);
+
+    auto mg = core::BuildMixedGraph(views, regionsGraphs, linesGraphs, 
+        regionOverlappingsAcrossViews, lineIncidencesAcrossViews, regionLineConnectionsArray);
+
+
+
+}
+
 
 
 
@@ -223,6 +251,6 @@ TEST(View, ConstraintsAcrossViews){
 int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    //testing::GTEST_FLAG(filter) = "View.LinesGraph";
+    testing::GTEST_FLAG(filter) = "View.RegionLineConnections";
     return RUN_ALL_TESTS();
 }

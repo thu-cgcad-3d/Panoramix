@@ -1101,6 +1101,88 @@ namespace panoramix {
 
 
 
+        MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views,
+            const std::vector<RegionsGraph> & regionsGraphs, const std::vector<LinesGraph> & linesGraphs,
+            const ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappingsAcrossViews,
+            const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & lineIncidencesAcrossViews,
+            const std::vector<std::map<std::pair<RegionHandle, LineHandle>, std::vector<Point2>>> & regionLineConnections){
+
+            MixedGraph mg;
+            ComponentIndexHashMap<RegionIndex, MixedGraphUnaryHandle> ri2mgh;
+            ComponentIndexHashMap<LineIndex, MixedGraphUnaryHandle> li2mgh;
+
+            // add components in each view
+            for (int i = 0; i < views.size(); i++){
+                auto & cam = views[i].camera;
+                // regions
+                for (auto & rd : regionsGraphs[i].elements<0>()){
+                    auto ri = RegionIndex{ i, rd.topo.hd };
+                    MGUnaryRegion r = { ri };
+                    ri2mgh[ri] = mg.add(std::move(r));
+                }
+                // lines
+                for (auto & ld : linesGraphs[i].elements<0>()){
+                    auto li = LineIndex{ i, ld.topo.hd };
+                    li2mgh[li] = mg.add(MGUnaryLine{li});
+                }
+                // region-region in each view
+                for (auto & bd : regionsGraphs[i].elements<1>()){
+                    MGBinaryRegionRegionBoundary rr;
+                    rr.boundaryIndex = { i, bd.topo.hd };
+                    rr.samples.reserve(bd.data.sampledPoints.size());
+                    for (auto & ps : bd.data.sampledPoints){
+                        for (auto & p : ps){
+                            rr.samples.push_back(cam.spatialDirection(p));
+                        }
+                    }
+                    auto r1 = RegionIndex{ i, bd.topo.lowers.front() };
+                    auto r2 = RegionIndex{ i, bd.topo.lowers.back() };
+                    mg.add<1>({ ri2mgh[r1], ri2mgh[r2] }, std::move(rr));
+                }
+                // region-line
+                for (auto & regionLine : regionLineConnections[i]){
+                    MGBinaryRegionLineConnection rl;
+                    rl.samples.reserve(regionLine.second.size());
+                    for (auto & p : regionLine.second){
+                        rl.samples.push_back(cam.spatialDirection(p));
+                    }
+                    auto ri = RegionIndex{ i, regionLine.first.first };
+                    auto li = RegionIndex{ i, regionLine.first.second };
+                    mg.add<1>({ ri2mgh[ri], li2mgh[li] }, std::move(rl));
+                }
+                // line-line
+                for (auto & rd : linesGraphs[i].elements<1>()){
+                    MGBinaryLineLineConnection ll;
+                    ll.relationIndex = { i, rd.topo.hd };
+                    ll.relationCenter = cam.spatialDirection(rd.data.relationCenter);
+                    auto l1 = LineIndex{ i, rd.topo.lowers.front() };
+                    auto l2 = LineIndex{ i, rd.topo.lowers.back() };
+                    mg.add<1>({ li2mgh[l1], li2mgh[l2] }, std::move(ll));
+                }
+            }
+            // add cross view constraints
+            // region-region overlappings
+            for (auto & regionOverlapping : regionOverlappingsAcrossViews){
+                MGBinaryRegionRegionOverlapping rro;
+                rro.overlappingRatio = regionOverlapping.second;
+                auto & r1 = regionOverlapping.first.first;
+                auto & r2 = regionOverlapping.first.second;
+                mg.add<1>({ ri2mgh[r1], ri2mgh[r2] }, std::move(rro));
+            }
+            // line-line incidencs
+            for (auto & lineIncidence : lineIncidencesAcrossViews){
+                MGBinaryLineLineIncidenceAcrossView lli;
+                lli.relationCenter = lineIncidence.second;
+                auto & l1 = lineIncidence.first.first;
+                auto & l2 = lineIncidence.first.second;
+                mg.add<1>({ li2mgh[l1], li2mgh[l2] }, std::move(lli));
+            }
+
+            return mg;
+        }
+
+       
+
 
     }
 }
