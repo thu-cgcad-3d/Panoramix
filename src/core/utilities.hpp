@@ -56,6 +56,11 @@ namespace panoramix {
             return HasValue(b.minCorner, tester) || HasValue(b.maxCorner, tester);
         }
 
+        template <class T1, class T2, class TesterT>
+        inline bool HasValue(const std::pair<T1, T2> & p, const TesterT & tester){
+            return HasValue(p.first) || HasValue(p.second);
+        }
+
         template <class T, class AllocT, class TesterT>
         inline bool HasValue(const std::vector<T, AllocT> & v, const TesterT & tester) {
             for (auto & e : v){

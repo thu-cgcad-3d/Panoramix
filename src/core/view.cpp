@@ -1100,6 +1100,27 @@ namespace panoramix {
         }
 
 
+        Plane3 PlaneOfMGUnary(const MGUnaryRegion & region, const std::vector<Vec3> & vps) {
+            return Plane3(region.normalizedCorners.front() * region.depthOfFirstCorner, vps[region.claz]);
+        }
+
+        Line3 LineOfMGUnary(const MGUnaryLine & line, const std::vector<Vec3> & vps) {
+            InfiniteLine3 infLine(line.normalizedCorners.first * line.depthOfFirstCorner, vps[line.claz]);
+            return Line3(line.normalizedCorners.first * line.depthOfFirstCorner,
+                DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.second), infLine).second.second);
+        }
+
+        Point3 LocationOnMGUnary(const Vec3 & direction, const MGUnaryRegion & region, const std::vector<Vec3> & vps){
+            assert(!region.normalizedCorners.empty());
+            Plane3 plane(region.normalizedCorners.front() * region.depthOfFirstCorner, vps[region.claz]);
+            return IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position;
+        }
+
+        Point3 LocationOnMGUnary(const Vec3 & direction, const MGUnaryLine & line, const std::vector<Vec3> & vps){
+            InfiniteLine3 infLine(line.normalizedCorners.first * line.depthOfFirstCorner, vps[line.claz]);
+            return DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.second;
+        }
+
 
         MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views,
             const std::vector<RegionsGraph> & regionsGraphs, const std::vector<LinesGraph> & linesGraphs,
@@ -1117,13 +1138,20 @@ namespace panoramix {
                 // regions
                 for (auto & rd : regionsGraphs[i].elements<0>()){
                     auto ri = RegionIndex{ i, rd.topo.hd };
-                    MGUnaryRegion r = { ri };
+                    std::vector<Vec3> normalizedContour;
+                    for (auto & p : rd.data.contours.back()){ // only get outer contour
+                        normalizedContour.push_back(normalize(cam.spatialDirection(p)));
+                    }
+                    MGUnaryRegion r = { ri, std::move(normalizedContour), cam.spatialDirection(rd.data.center), -1, 1.0 };
                     ri2mgh[ri] = mg.add(std::move(r));
                 }
                 // lines
                 for (auto & ld : linesGraphs[i].elements<0>()){
                     auto li = LineIndex{ i, ld.topo.hd };
-                    li2mgh[li] = mg.add(MGUnaryLine{li});
+                    li2mgh[li] = mg.add(MGUnaryLine{ li, { 
+                        normalize(cam.spatialDirection(ld.data.line.component.first)), 
+                        normalize(cam.spatialDirection(ld.data.line.component.second)) 
+                    }, ld.data.line.claz, 1.0 });
                 }
                 // region-region in each view
                 for (auto & bd : regionsGraphs[i].elements<1>()){
@@ -1181,8 +1209,28 @@ namespace panoramix {
             return mg;
         }
 
+        void InitializeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps) {
+            for (auto & v : mg.elements<0>()){
+                if (v.data.is<MGUnaryRegion>()){
+                    auto & region = v.data.uncheckedRef<MGUnaryRegion>();
+                    region.depthOfFirstCorner = 1.0;
+                    region.claz = std::distance(vps.begin(), std::min_element(vps.begin(), vps.end(), 
+                        [&region](const Vec3 & vp1, const Vec3 & vp2) -> bool {
+                        return AngleBetweenUndirectedVectors(region.center, vp1) < 
+                            AngleBetweenUndirectedVectors(region.center, vp2);
+                    }));
+                }
+                else{
+                    auto & line = v.data.uncheckedRef<MGUnaryLine>();
+                    line.depthOfFirstCorner = 1.0;
+                }
+            }
+        }
        
+        void SolveDepthsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps){
+            
 
+        }
 
     }
 }

@@ -12,7 +12,7 @@ namespace panoramix {
         void ResizeToMakeHeightUnder(Image & im, int heightUpperBound) {
             if (im.rows <= heightUpperBound)
                 return;
-            cv::resize(im, im, cv::Size(static_cast<int>(im.cols * heightUpperBound / im.cols), heightUpperBound));
+            cv::resize(im, im, cv::Size(static_cast<int>(im.cols * heightUpperBound / im.rows), heightUpperBound));
         }
 
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im) {

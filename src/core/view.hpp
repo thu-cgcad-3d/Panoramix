@@ -23,17 +23,17 @@ namespace panoramix {
         View<PanoramicCamera> CreatePanoramicView(const Image & panorama);
 
         // view sampling
-        template <class OriginalCameraT, class TargetCameraIteratorT, class ViewOutIteratorT, 
-            class = std::enable_if_t<IsCamera<OriginalCameraT>::value && 
-                IsCamera<typename std::iterator_traits<TargetCameraIteratorT>::value_type>::value>>
-        inline void SampleViews(const View<OriginalCameraT> & originalView, 
+        template < class OriginalCameraT, class TargetCameraIteratorT, class ViewOutIteratorT,
+        class = std::enable_if_t < IsCamera<OriginalCameraT>::value &&
+            IsCamera<typename std::iterator_traits<TargetCameraIteratorT>::value_type>::value >>
+            inline void SampleViews(const View<OriginalCameraT> & originalView,
             TargetCameraIteratorT camBegin, TargetCameraIteratorT camEnd, ViewOutIteratorT outputViewIter){
-            using TargetCameraType = typename std::iterator_traits<TargetCameraIteratorT>::value_type;
-            for (; camBegin != camEnd; ++camBegin, ++outputViewIter){
-                CameraSampler<TargetCameraType, OriginalCameraT> camSampler(*camBegin, originalView.camera);
-                *outputViewIter = View<TargetCameraType>{camSampler(originalView.image), *camBegin};
+                using TargetCameraType = typename std::iterator_traits<TargetCameraIteratorT>::value_type;
+                for (; camBegin != camEnd; ++camBegin, ++outputViewIter){
+                    CameraSampler<TargetCameraType, OriginalCameraT> camSampler(*camBegin, originalView.camera);
+                    *outputViewIter = View<TargetCameraType>{camSampler(originalView.image), *camBegin};
+                }
             }
-        }
 
 
         // regions graph
@@ -199,13 +199,13 @@ namespace panoramix {
 
 
         // recognize region overlappings across views
-        ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> 
+        ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double>
             RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PerspectiveCamera>> & views,
             const std::vector<RegionsGraph> & regionsGraphs);
 
 
         // recognize region overlappings across views
-        ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> 
+        ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double>
             RecognizeRegionOverlappingsAcrossViews(const std::vector<View<PanoramicCamera>> & views,
             const std::vector<RegionsGraph> & regionsGraphs);
 
@@ -222,11 +222,24 @@ namespace panoramix {
 
         // the mixed graph
         struct MGUnaryRegion {
-            RegionIndex index;
+            const RegionIndex index;
+            const std::vector<Vec3> normalizedCorners;
+            const Vec3 center;
+            int claz;
+            double depthOfFirstCorner;
         };
         struct MGUnaryLine {
-            LineIndex index;
+            const LineIndex index;
+            const Line3 normalizedCorners;
+            int claz;
+            double depthOfFirstCorner;
         };
+
+        Plane3 PlaneOfMGUnary(const MGUnaryRegion & region, const std::vector<Vec3> & vps);
+        Line3 LineOfMGUnary(const MGUnaryLine & line, const std::vector<Vec3> & vps);
+
+        Point3 LocationOnMGUnary(const Vec3 & direction, const MGUnaryRegion & region, const std::vector<Vec3> & vps);
+        Point3 LocationOnMGUnary(const Vec3 & direction, const MGUnaryLine & line, const std::vector<Vec3> & vps);
 
         struct MGBinaryRegionRegionBoundary {
             RegionBoundaryIndex boundaryIndex;
@@ -253,11 +266,19 @@ namespace panoramix {
         using MixedGraphUnaryHandle = HandleAtLevel<0>;
         using MixedGraphBinaryHandle = HandleAtLevel<1>;
 
+        // build mixed graph
         MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views,
             const std::vector<RegionsGraph> & regionsGraphs, const std::vector<LinesGraph> & linesGraphs,
             const ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappingsAcrossViews,
             const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & lineIncidencesAcrossViews,
             const std::vector<std::map<std::pair<RegionHandle, LineHandle>, std::vector<Point2>>> & regionLineConnections);
+
+        // initialize
+        void InitializeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps);
+
+        // fix claz, solve depth
+        void SolveDepthsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps);
+
 
     }
 }

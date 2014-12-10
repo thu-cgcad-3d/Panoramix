@@ -485,6 +485,19 @@ TEST(ContainerTest, MaxHeap){
 }
 
 
+
+TEST(AlgorithmsTest, ForeachCompatible){
+    std::list<double> data = { 1.0, 2.0, 3.0, 5.0, 6.0, 7.0 };
+    std::list<double> selected;
+    core::ForeachCompatibleWithLastElement(data.begin(), data.end(), std::back_inserter(selected), 
+        [](double a, double b){
+        return abs(a - b) >= 1.5; 
+    });
+    std::list<double> groundTruth = { 1.0, 3.0, 5.0, 7.0 };
+    ASSERT_TRUE(selected == groundTruth);
+}
+
+
 TEST(AlgorithmsTest, MergeNearNaiveCorrectness) {
     std::list<double> arr1;
     arr1.resize(1000);

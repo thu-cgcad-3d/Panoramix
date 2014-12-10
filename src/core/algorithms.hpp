@@ -8,6 +8,24 @@ namespace panoramix {
     namespace core {
 
         // generic algorithms
+        template <class IteratorT, class OutIteratorT, class IsCompatibleFunT>
+        inline void ForeachCompatibleWithLastElement(IteratorT begin, IteratorT end, OutIteratorT out, 
+            IsCompatibleFunT isCompWithLast){
+            if (begin == end)
+                return;
+            *out = *begin;
+            ++out;
+            IteratorT lastIter = begin;
+            ++begin;
+            while (begin != end){
+                if (isCompWithLast(*lastIter, *begin)){
+                    *out = *begin;
+                    ++out;
+                    lastIter = begin;
+                }
+                ++begin;
+            }
+        }
 
         // triangulate polygon
         template <class VertIteratorT, class VertPoint2GetterT, class AddTriFaceFunT>
