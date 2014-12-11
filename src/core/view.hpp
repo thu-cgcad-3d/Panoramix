@@ -71,6 +71,11 @@ namespace panoramix {
 
 
 
+        // junction weight 
+        float IncidenceJunctionWeight(bool acrossViews);
+        float OutsiderIntersectionJunctionWeight();
+        float ComputeIntersectionJunctionWeightWithLinesVotes(const Mat<float, 3, 2> & votes);
+
 
         // lines graph
         struct LineData {
@@ -222,46 +227,72 @@ namespace panoramix {
 
         // the mixed graph
         struct MGUnaryRegion {
-            const RegionIndex index;
-            const std::vector<Vec3> normalizedCorners;
-            const Vec3 center;
+            RegionIndex index;
+            std::vector<Vec3> normalizedCorners;
+            Vec3 center;
             int claz;
             double depthOfFirstCorner;
+            template <class Archive> void serialize(Archive & ar) {
+                ar(index, normalizedCorners, center, claz, depthOfFirstCorner); 
+            }
         };
         struct MGUnaryLine {
-            const LineIndex index;
-            const Line3 normalizedCorners;
+            LineIndex index;
+            std::array<Vec3, 2> normalizedCorners;
             int claz;
             double depthOfFirstCorner;
+            template <class Archive> void serialize(Archive & ar) {
+                ar(index, normalizedCorners, claz, depthOfFirstCorner);
+            }
         };
 
         Plane3 PlaneOfMGUnary(const MGUnaryRegion & region, const std::vector<Vec3> & vps);
         Line3 LineOfMGUnary(const MGUnaryLine & line, const std::vector<Vec3> & vps);
-
-        Point3 LocationOnMGUnary(const Vec3 & direction, const MGUnaryRegion & region, const std::vector<Vec3> & vps);
-        Point3 LocationOnMGUnary(const Vec3 & direction, const MGUnaryLine & line, const std::vector<Vec3> & vps);
+        double DepthRatioOnMGUnary(const Vec3 & direction, const Any & unary, const std::vector<Vec3> & vps);
+        Point3 LocationOnMGUnary(const Vec3 & direction, const Any & unary, const std::vector<Vec3> & vps);
+        double FirstCornerDepthOfMGUnary(const Any & unary);
+        double & FirstCornerDepthOfMGUnary(Any & unary);
 
         struct MGBinaryRegionRegionBoundary {
             RegionBoundaryIndex boundaryIndex;
             std::vector<Vec3> samples;
+            template <class Archive> void serialize(Archive & ar) {
+                ar(boundaryIndex, samples);
+            }
         };
         struct MGBinaryRegionRegionOverlapping {
             double overlappingRatio;
+            template <class Archive> void serialize(Archive & ar){
+                ar(overlappingRatio);
+            }
         };
-        struct MGBinaryLineLineConnection {
-            LineRelationIndex relationIndex;
+        struct MGBinaryLineLineIntersection {
+            double weight;
             Vec3 relationCenter;
+            template <class Archive> void serialize(Archive & ar){
+                ar(weight, relationCenter);
+            }
         };
-        struct MGBinaryLineLineIncidenceAcrossView {
+        struct MGBinaryLineLineIncidence {
+            bool isAcrossViews;
+            double weight;
             Vec3 relationCenter;
+            template <class Archive> void serialize(Archive & ar){
+                ar(isAcrossViews, weight, relationCenter);
+            }
         };
         struct MGBinaryRegionLineConnection {
             std::vector<Vec3> samples;
+            template <class Archive> void serialize(Archive & ar){
+                ar(samples);
+            }
         };
 
         using MixedGraph = HomogeneousGraph02<
             AnyOfTypes<MGUnaryRegion, MGUnaryLine>, 
-            AnyOfTypes<MGBinaryRegionRegionBoundary, MGBinaryRegionRegionOverlapping, MGBinaryRegionLineConnection, MGBinaryLineLineConnection>
+            AnyOfTypes<MGBinaryRegionRegionBoundary, MGBinaryRegionRegionOverlapping, MGBinaryRegionLineConnection, 
+                MGBinaryLineLineIntersection, MGBinaryLineLineIncidence
+            >
         >;
         using MixedGraphUnaryHandle = HandleAtLevel<0>;
         using MixedGraphBinaryHandle = HandleAtLevel<1>;
@@ -273,14 +304,30 @@ namespace panoramix {
             const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & lineIncidencesAcrossViews,
             const std::vector<std::map<std::pair<RegionHandle, LineHandle>, std::vector<Point2>>> & regionLineConnections);
 
+        // split mixed graph into connected components
+        int MarkConnectedComponentIds(const MixedGraph & mg, std::unordered_map<MixedGraphUnaryHandle, int> & ccids);
+
         // initialize
         void InitializeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps);
 
         // fix claz, solve depth
-        void SolveDepthsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps);
+        void SolveDepthsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, 
+            const std::unordered_map<MixedGraphUnaryHandle, int> & ccids);
 
+        // adjust claz
+        void AdjustRegionOrientationsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps);
 
     }
 }
+
+// register types to store in panoramix::core::Any
+//CEREAL_REGISTER_TYPE(panoramix::core::MGUnaryRegion);
+//CEREAL_REGISTER_TYPE(panoramix::core::MGUnaryLine);
+//CEREAL_REGISTER_TYPE(panoramix::core::MGBinaryRegionRegionBoundary);
+//CEREAL_REGISTER_TYPE(panoramix::core::MGBinaryRegionRegionOverlapping);
+//CEREAL_REGISTER_TYPE(panoramix::core::MGBinaryLineLineIntersection);
+//CEREAL_REGISTER_TYPE(panoramix::core::MGBinaryLineLineIncidence);
+//CEREAL_REGISTER_TYPE(panoramix::core::MGBinaryRegionLineConnection);
+
  
 #endif

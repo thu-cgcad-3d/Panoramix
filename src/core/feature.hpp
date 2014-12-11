@@ -16,10 +16,6 @@ namespace panoramix {
             const Imageb & mask = Imageb());
 
 
-        // interesection junction weight 
-        float ComputeIntersectionJunctionWeightWithLinesVotes(const Mat<float, 3, 2> & votes);
-
-
         // line extractor
         class LineSegmentExtractor {
         public:

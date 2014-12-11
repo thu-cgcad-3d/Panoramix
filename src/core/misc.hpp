@@ -8,29 +8,35 @@
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
+#include <chrono>
+#include <iostream>
+#include <string>
+
+#include "meta.hpp"
  
 namespace panoramix {
     namespace core {
 
 
         // class Any
-        namespace {
-            struct DataBase {
-                virtual DataBase * clone() const = 0;
-                virtual const std::type_info & type() const = 0;
-            };
+        struct DataBase {
+            virtual DataBase * clone() const = 0;
+            virtual const std::type_info & type() const = 0;
+        };
 
-            template <class T>
-            struct Data : DataBase {
-                inline Data() {}
-                inline Data(const T & d) : value(d) {}
-                inline Data(T && d) : value(std::move(d)) {}
+        template <class T>
+        struct Data : DataBase {
+            inline Data() {}
+            inline Data(const T & d) : value(d) {}
+            inline Data(T && d) : value(std::move(d)) {}
 
-                virtual DataBase * clone() const override { return new Data(value); }
-                virtual const std::type_info & type() const override { return typeid(T); }
-                T value;
-            };
-        }
+            virtual DataBase * clone() const override { return new Data(value); }
+            virtual const std::type_info & type() const override { return typeid(T); }
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(value); }
+
+            T value;
+        };
 
 
         class CastError : public std::exception {
@@ -41,30 +47,28 @@ namespace panoramix {
                 : std::exception(message) {}
         };
 
-#define ASSERTVALID assert(this->_data->type().raw_name())
 
         class Any {
         public:
             inline Any() : _data(nullptr) {}
 
             // from class Any
-            inline Any(const Any & a) : _data(a._data->clone()) { ASSERTVALID; }
+            inline Any(const Any & a) : _data(a._data->clone()) {}
             inline Any & operator = (const Any & a) {
                 if (this == &a) return *this;
                 delete _data;
                 _data = a._data->clone();
-                ASSERTVALID;
                 return *this;
             }
             //inline Any(Any && a) { swap(a);  ASSERTVALID; }
-            inline Any & operator = (Any && a) { swap(a);  ASSERTVALID; return *this; }
-            inline void swap(Any & a){ std::swap(_data, a._data);  ASSERTVALID; }
+            inline Any & operator = (Any && a) { swap(a); return *this; }
+            inline void swap(Any & a){ std::swap(_data, a._data); }
 
             // from other types
             template <class T, class = std::enable_if_t<!std::is_same<T, Any>::value>> // accepts const T(&)
-            inline Any(const T & v) : _data(new Data<T>(v)) { ASSERTVALID; }
+            inline Any(const T & v) : _data(new Data<T>(v)) {}
             template <class T, class = std::enable_if_t<!std::is_same<std::decay_t<T>, Any>::value>> // accepts T&& and T&
-            inline Any(T && v) : _data(new Data<std::decay_t<T>>(std::forward<T>(v))) { ASSERTVALID; }
+            inline Any(T && v) : _data(new Data<std::decay_t<T>>(std::forward<T>(v))) {}
 
             // set to nullptr
             inline Any(nullptr_t) : _data(nullptr) {}
@@ -77,7 +81,6 @@ namespace panoramix {
 
             ~Any() {
                 delete _data;
-                //ASSERTVALID;
                 _data = nullptr;
             }
 
@@ -113,6 +116,36 @@ namespace panoramix {
 
         template <class ...T>
         using AnyOfTypes = Any;
+
+
+        //struct UnionDataBase {
+        //    virtual UnionDataBase * clone() const = 0;
+        //    virtual ~UnionDataBase() {}
+        //};
+
+        //template <class ... Ts>
+        //class Union {
+        //    template <int I>
+        //    struct UnionData : UnionDataBase {
+        //        using Type = std::tuple_element<I, std::tuple<Ts...>>::type;
+        //        inline UnionData(const Type & d) : value(d) {}
+        //        inline UnionData(Type && d) : value(std::move(d)) {}
+        //        virtual ~UnionData() {}
+        //        virtual UnionDataBase * clone() const override { return new UnionData(value); }
+        //        Type value;
+        //    };
+
+        //public:
+        //    inline Union() : _data(nullptr), _type(-1) {}
+        //    template <class T, class = std::enable_if_t<TypeFirstLocationInTuple<T, std::tuple<Ts...>>::value != -1>>
+        //    inline Union(const T & d) : _data(new UnionData<TypeFirstLocationInTuple<T, std::tuple<Ts...>>::value>(d)), 
+        //        _type(TypeFirstLocationInTuple<T, std::tuple<Ts...>>::value) {}
+        //    
+
+        //private:
+        //    int _type;
+        //    UnionDataBase * _data;
+        //};
 
 
 
@@ -315,7 +348,25 @@ namespace panoramix {
             const CompareCoreDataT & cmpCData = CompareCoreDataT()) {
             return EasyForwardIterator<CoreDataT, GetValueT, SetToNextT, CompareCoreDataT>(cdata, getValue, setToNext, cmpCData);
         }
-       
+
+
+
+
+        // tick tock
+        inline std::pair<std::chrono::system_clock::time_point, std::string> 
+            Tick(const std::string & taskName){
+            return std::make_pair(std::chrono::system_clock::now(), taskName);
+        }
+
+        inline std::chrono::system_clock::duration 
+            Tock(std::pair<std::chrono::system_clock::time_point, std::string> startInfo) {
+            auto duration = std::chrono::system_clock::now() - startInfo.first;
+            std::cout << "[" << startInfo.second << "] Time Elapsed: "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(duration).count() 
+                << " ms" << std::endl;
+            return duration;
+        }
+        
     }
 }
 

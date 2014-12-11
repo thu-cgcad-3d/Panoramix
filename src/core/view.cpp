@@ -1,9 +1,14 @@
 
 extern "C" {
     #include <gpc.h>
+    #include <mosek.h>
 }
 
+#include <Eigen/Dense>
+#include <Eigen/Sparse>
+
 #include "utilities.hpp"
+#include "algorithms.hpp"
 #include "feature.hpp"
 #include "containers.hpp"
 #include "view.hpp"
@@ -373,6 +378,112 @@ namespace panoramix {
 
 
 
+        float IncidenceJunctionWeight(bool acrossViews){
+            return acrossViews ? 10.0f : 7.0f;
+        }
+        float OutsiderIntersectionJunctionWeight(){
+            return 2.0f;
+        }
+        float ComputeIntersectionJunctionWeightWithLinesVotes(const Mat<float, 3, 2> & v){
+            double junctionWeight = 0.0;
+            // Y
+            double Y = 0.0;
+            for (int s = 0; s < 2; s++) {
+                Y += v(0, s) * v(1, s) * v(2, s) * DiracDelta(v(0, 1 - s) + v(1, 1 - s) + v(2, 1 - s));
+            }
+
+            // W
+            double W = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    for (int s = 0; s < 2; s++) {
+                        W += v(i, s) * v(j, 1 - s) * v(k, 1 - s) * DiracDelta(v(i, 1 - s) + v(j, s) + v(k, s));
+                    }
+                }
+            }
+
+            // K
+            double K = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    K += v(i, 0) * v(i, 1) * v(j, 0) * v(k, 1) * DiracDelta(v(j, 1) + v(k, 0));
+                    K += v(i, 0) * v(i, 1) * v(j, 1) * v(k, 0) * DiracDelta(v(j, 0) + v(k, 1));
+                }
+            }
+
+            // compute X junction
+            double X = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    X += v(i, 0) * v(i, 1) * v(j, 0) * v(j, 1) * DiracDelta(v(k, 0) + v(k, 1));
+                }
+            }
+
+            // compute T junction
+            double T = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    T += v(i, 0) * v(i, 1) * v(j, 0) * DiracDelta(v(j, 1) + v(k, 0) + v(k, 1));
+                    T += v(i, 0) * v(i, 1) * v(j, 1) * DiracDelta(v(j, 0) + v(k, 0) + v(k, 1));
+                }
+            }
+
+            // compute L junction
+            double L = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    for (int a = 0; a < 2; a++) {
+                        int nota = 1 - a;
+                        for (int b = 0; b < 2; b++) {
+                            int notb = 1 - b;
+                            L += v(i, a) * v(j, b) * DiracDelta(v(i, nota) + v(j, notb) + v(k, 0) + v(k, 1));
+                        }
+                    }
+                }
+            }
+
+            //std::cout << " Y-" << Y << " W-" << W << " K-" << K << 
+            //    " X-" << X << " T-" << T << " L-" << L << std::endl; 
+            static const double threshold = 1e-4;
+            if (Y > threshold) {
+                junctionWeight += 5.0;
+            }
+            else if (W > threshold) {
+                junctionWeight += 5.0;
+            }
+            else if (L > threshold) {
+                junctionWeight += 4.0;
+            }
+            else if (K > threshold) {
+                junctionWeight += 3.0;
+            }
+            else if (X > threshold) {
+                junctionWeight += 5.0;
+            }
+            else if (T > threshold) {
+                junctionWeight += 0.0;
+            }
+
+            return junctionWeight;
+        }
+
+
+
         LinesGraph CreateLinesGraph(const std::vector<Classified<Line2>> & lines,
             const std::vector<HPoint2> & vps,
             double intersectionDistanceThreshold,
@@ -475,7 +586,7 @@ namespace panoramix {
             for (auto & lr : graph.elements<1>()){
                 auto & lrd = lr.data;
                 if (lrd.type == lrd.Incidence){
-                    lrd.junctionWeight = 7.0;
+                    lrd.junctionWeight = IncidenceJunctionWeight(false);
                 }
                 else if (lrd.type == lrd.Intersection){
                     Mat<float, 3, 2> votingData;
@@ -524,7 +635,7 @@ namespace panoramix {
                             votingData);
                     }
                     else{
-                        lrd.junctionWeight = 2.0;
+                        lrd.junctionWeight = OutsiderIntersectionJunctionWeight();
                     }
                 }
                 else{
@@ -1105,20 +1216,56 @@ namespace panoramix {
         }
 
         Line3 LineOfMGUnary(const MGUnaryLine & line, const std::vector<Vec3> & vps) {
-            InfiniteLine3 infLine(line.normalizedCorners.first * line.depthOfFirstCorner, vps[line.claz]);
-            return Line3(line.normalizedCorners.first * line.depthOfFirstCorner,
-                DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.second), infLine).second.second);
+            InfiniteLine3 infLine(line.normalizedCorners.front() * line.depthOfFirstCorner, vps[line.claz]);
+            return Line3(line.normalizedCorners.front() * line.depthOfFirstCorner,
+                DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.back()), infLine).second.second);
         }
 
-        Point3 LocationOnMGUnary(const Vec3 & direction, const MGUnaryRegion & region, const std::vector<Vec3> & vps){
-            assert(!region.normalizedCorners.empty());
-            Plane3 plane(region.normalizedCorners.front() * region.depthOfFirstCorner, vps[region.claz]);
-            return IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position;
+        double DepthRatioOnMGUnary(const Vec3 & direction, const Any & unary, const std::vector<Vec3> & vps) {
+            if (unary.is<MGUnaryRegion>()){
+                const auto & region = unary.uncheckedRef<MGUnaryRegion>();
+                assert(!region.normalizedCorners.empty());
+                Plane3 plane(region.normalizedCorners.front(), vps[region.claz]);
+                return norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
+            }
+            else if (unary.is<MGUnaryLine>()){
+                const auto & line = unary.uncheckedRef<MGUnaryLine>();
+                InfiniteLine3 infLine(line.normalizedCorners.front(), vps[line.claz]);
+                return norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
+            }
         }
 
-        Point3 LocationOnMGUnary(const Vec3 & direction, const MGUnaryLine & line, const std::vector<Vec3> & vps){
-            InfiniteLine3 infLine(line.normalizedCorners.first * line.depthOfFirstCorner, vps[line.claz]);
-            return DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.second;
+        Point3 LocationOnMGUnary(const Vec3 & direction, const Any & unary, const std::vector<Vec3> & vps){
+            if (unary.is<MGUnaryRegion>()){
+                const auto & region = unary.uncheckedRef<MGUnaryRegion>();
+                assert(!region.normalizedCorners.empty());
+                Plane3 plane(region.normalizedCorners.front() * region.depthOfFirstCorner, vps[region.claz]);
+                return IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position;
+            }
+            else if (unary.is<MGUnaryLine>()){
+                const auto & line = unary.uncheckedRef<MGUnaryLine>();
+                InfiniteLine3 infLine(line.normalizedCorners.front() * line.depthOfFirstCorner, vps[line.claz]);
+                return DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first;
+            }
+        }
+
+        double FirstCornerDepthOfMGUnary(const Any & unary){
+            if (unary.is<MGUnaryRegion>()){
+                return unary.uncheckedRef<MGUnaryRegion>().depthOfFirstCorner;
+            }
+            else if (unary.is<MGUnaryLine>()){
+                return unary.uncheckedRef<MGUnaryLine>().depthOfFirstCorner;
+            }
+            return 0.0;
+        }
+
+        double & FirstCornerDepthOfMGUnary(Any & unary) {
+            if (unary.is<MGUnaryRegion>()){
+                return unary.uncheckedRef<MGUnaryRegion>().depthOfFirstCorner;
+            }
+            else if (unary.is<MGUnaryLine>()){
+                return unary.uncheckedRef<MGUnaryLine>().depthOfFirstCorner;
+            }
         }
 
 
@@ -1148,10 +1295,10 @@ namespace panoramix {
                 // lines
                 for (auto & ld : linesGraphs[i].elements<0>()){
                     auto li = LineIndex{ i, ld.topo.hd };
-                    li2mgh[li] = mg.add(MGUnaryLine{ li, { 
-                        normalize(cam.spatialDirection(ld.data.line.component.first)), 
-                        normalize(cam.spatialDirection(ld.data.line.component.second)) 
-                    }, ld.data.line.claz, 1.0 });
+                    li2mgh[li] = mg.add(MGUnaryLine{ li, { {
+                        normalize(cam.spatialDirection(ld.data.line.component.first)),
+                        normalize(cam.spatialDirection(ld.data.line.component.second))
+                    } }, ld.data.line.claz, 1.0 });
                 }
                 // region-region in each view
                 for (auto & bd : regionsGraphs[i].elements<1>()){
@@ -1180,12 +1327,21 @@ namespace panoramix {
                 }
                 // line-line
                 for (auto & rd : linesGraphs[i].elements<1>()){
-                    MGBinaryLineLineConnection ll;
-                    ll.relationIndex = { i, rd.topo.hd };
-                    ll.relationCenter = cam.spatialDirection(rd.data.relationCenter);
                     auto l1 = LineIndex{ i, rd.topo.lowers.front() };
                     auto l2 = LineIndex{ i, rd.topo.lowers.back() };
-                    mg.add<1>({ li2mgh[l1], li2mgh[l2] }, std::move(ll));
+                    if (rd.data.type == LineRelationData::Intersection){
+                        MGBinaryLineLineIntersection llinter;
+                        llinter.weight = rd.data.junctionWeight;
+                        llinter.relationCenter = normalize(cam.spatialDirection(rd.data.relationCenter));
+                        mg.add<1>({ li2mgh[l1], li2mgh[l2] }, std::move(llinter));
+                    }
+                    else if (rd.data.type == LineRelationData::Incidence){
+                        MGBinaryLineLineIncidence llincid;
+                        llincid.isAcrossViews = false;
+                        llincid.weight = rd.data.junctionWeight;
+                        llincid.relationCenter = normalize(cam.spatialDirection(rd.data.relationCenter));
+                        mg.add<1>({ li2mgh[l1], li2mgh[l2] }, std::move(llincid));
+                    }
                 }
             }
             // add cross view constraints
@@ -1199,15 +1355,40 @@ namespace panoramix {
             }
             // line-line incidencs
             for (auto & lineIncidence : lineIncidencesAcrossViews){
-                MGBinaryLineLineIncidenceAcrossView lli;
-                lli.relationCenter = lineIncidence.second;
+                MGBinaryLineLineIncidence llincid;
+                llincid.isAcrossViews = true;
+                llincid.weight = IncidenceJunctionWeight(true);
+                llincid.relationCenter = lineIncidence.second;
                 auto & l1 = lineIncidence.first.first;
                 auto & l2 = lineIncidence.first.second;
-                mg.add<1>({ li2mgh[l1], li2mgh[l2] }, std::move(lli));
+                mg.add<1>({ li2mgh[l1], li2mgh[l2] }, std::move(llincid));
             }
 
             return mg;
         }
+
+
+        int MarkConnectedComponentIds(const MixedGraph & mg, std::unordered_map<MixedGraphUnaryHandle, int> & ccids) {
+            std::vector<MixedGraphUnaryHandle> uhs;
+            uhs.reserve(mg.internalElements<0>().size());
+            for (auto & v : mg.elements<0>()){
+                uhs.push_back(v.topo.hd);
+            }
+            return core::ConnectedComponents(uhs.begin(), uhs.end(), 
+                [&mg](const MixedGraphUnaryHandle & uh){
+                std::vector<MixedGraphUnaryHandle> neighborUhs;
+                for (auto & bh : mg.topo(uh).uppers){
+                    auto anotherUh = mg.topo(bh).lowers.front();
+                    if (anotherUh == uh)
+                        anotherUh = mg.topo(bh).lowers.back();
+                    neighborUhs.push_back(anotherUh);
+                }
+                return neighborUhs;
+            }, [&ccids](const MixedGraphUnaryHandle & uh, int ccid){
+                ccids[uh] = ccid; 
+            });
+        }
+
 
         void InitializeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps) {
             for (auto & v : mg.elements<0>()){
@@ -1226,9 +1407,236 @@ namespace panoramix {
                 }
             }
         }
-       
-        void SolveDepthsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps){
+
+
+        template <class T>
+        inline std::vector<T> NumFilter(const std::vector<T> & data, int numLimit){
+            assert(numLimit > 0);
+            if (data.size() <= numLimit)
+                return data;
+            if (numLimit == 1)
+                return std::vector<T>{data[data.size() / 2]};
+            if (numLimit == 2)
+                return std::vector<T>{data.front(), data.back()};
+            int step = (data.size() + numLimit - 1) / numLimit;
+            std::vector<T> filtered;
+            filtered.reserve(numLimit);
+            for (int i = 0; i < data.size(); i += step){
+                filtered.push_back(data[i]);
+            }
+            if (filtered.size() == numLimit - 1)
+                filtered.push_back(data.back());
+            return filtered;
+        }
+
+
+        struct BinaryAnchors {
+            double weight;
+            std::vector<Vec3> anchors;
+        };
+
+        BinaryAnchors GetBinaryAnchors(const MixedGraph & mg, const MixedGraphBinaryHandle & bh){
+            static const int maxSampleNum = 1;
             
+            if (mg.data(bh).is<MGBinaryRegionRegionBoundary>()){
+                BinaryAnchors bc;
+                bc.anchors = NumFilter(mg.data(bh).uncheckedRef<MGBinaryRegionRegionBoundary>().samples, maxSampleNum);
+                bc.weight = 0.1;
+                return bc;
+            }
+            else if (mg.data(bh).is<MGBinaryRegionRegionOverlapping>()){
+                BinaryAnchors bc;
+                bc.weight = 1e2 * mg.data(bh).uncheckedRef<MGBinaryRegionRegionOverlapping>().overlappingRatio;
+                auto & u1 = mg.data(mg.topo(bh).lowers.front());
+                auto & u2 = mg.data(mg.topo(bh).lowers.back());
+                Vec3 z = normalize(u1.uncheckedRef<MGUnaryRegion>().center + u2.uncheckedRef<MGUnaryRegion>().center);
+                Vec3 x, y;
+                std::tie(x, y) = ProposeXYDirectionsFromZDirection(z);
+                double minx = std::numeric_limits<double>::max(), 
+                    miny = std::numeric_limits<double>::max();
+                double maxx = std::numeric_limits<double>::lowest(), 
+                    maxy = std::numeric_limits<double>::lowest();
+                //bc.anchors = { u1.uncheckedRef<MGUnaryRegion>().normalizedCorners.front() };
+                //return bc;
+                bc.anchors.resize(4, z);
+                for (auto & a : u1.uncheckedRef<MGUnaryRegion>().normalizedCorners){
+                    double dx = a.dot(x), dy = a.dot(y);
+                    if (dx < minx){
+                        bc.anchors[0] = a;
+                        minx = dx;
+                    }
+                    else if (dx > maxx){
+                        bc.anchors[1] = a;
+                        maxx = dx;
+                    }
+                    if (dy < miny){
+                        bc.anchors[2] = a;
+                        miny = dy;
+                    }
+                    else if (dy > maxy){
+                        bc.anchors[3] = a;
+                        maxy = dy;
+                    }
+                }
+                for (auto & a : u2.uncheckedRef<MGUnaryRegion>().normalizedCorners){
+                    double dx = a.dot(x), dy = a.dot(y);
+                    if (dx < minx){
+                        bc.anchors[0] = a;
+                        minx = dx;
+                    }
+                    else if (dx > maxx){
+                        bc.anchors[1] = a;
+                        maxx = dx;
+                    }
+                    if (dy < miny){
+                        bc.anchors[2] = a;
+                        miny = dy;
+                    }
+                    else if (dy > maxy){
+                        bc.anchors[3] = a;
+                        maxy = dy;
+                    }
+                }
+                return bc;
+            }
+            else if (mg.data(bh).is<MGBinaryRegionLineConnection>()){
+                BinaryAnchors bc;
+                bc.anchors = NumFilter(mg.data(bh).uncheckedRef<MGBinaryRegionLineConnection>().samples, maxSampleNum);
+                bc.weight = 0.1f;
+                return bc;
+            }
+            else if (mg.data(bh).is<MGBinaryLineLineIntersection>()){
+                BinaryAnchors bc;
+                auto & llInter = mg.data(bh).uncheckedRef<MGBinaryLineLineIntersection>();
+                bc.weight = llInter.weight;
+                bc.anchors = { llInter.relationCenter };
+                return bc;
+            }
+            else if (mg.data(bh).is<MGBinaryLineLineIncidence>()){
+                BinaryAnchors bc;
+                auto & llIncid = mg.data(bh).uncheckedRef<MGBinaryLineLineIncidence>();
+                bc.weight = llIncid.weight;
+                bc.anchors = { llIncid.relationCenter };
+                return bc;
+            }
+
+            return BinaryAnchors();
+        }
+
+        //double EnergyOfBinaryAnchors(const MixedGraph & mg, )
+
+
+        void SolveDepthsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, 
+            const std::unordered_map<MixedGraphUnaryHandle, int> & ccids){
+            
+            auto tick = Tick("Setup Equations");
+
+            
+            using namespace Eigen;
+            SparseMatrix<double> A, W;
+            VectorXd B;
+
+            mg.gc();
+            assert(mg.isDense());
+
+            int varNum = mg.internalElements<0>().size();
+            int consNum = 0;
+
+            std::vector<BinaryAnchors> binaryAnchors(mg.internalElements<1>().size());
+            for (int i = 0; i < mg.internalElements<1>().size(); i++){
+                binaryAnchors[i] = GetBinaryAnchors(mg, MixedGraphBinaryHandle(i));
+                consNum += binaryAnchors[i].anchors.size();
+            }
+
+            // get first uh in each cc
+            std::map<int, MixedGraphUnaryHandle> firstUhsInEachCC;
+            for (auto & uhCC : ccids){
+                if (!Contains(firstUhsInEachCC, uhCC.second)){
+                    firstUhsInEachCC[uhCC.second] = uhCC.first;
+                }
+            }
+            // additional consNum for anchors
+            consNum += firstUhsInEachCC.size();
+
+            A.resize(consNum, varNum);
+            W.resize(consNum, consNum);
+            B.resize(consNum);
+            
+            // write equations
+            int eid = 0;
+            for (int i = 0; i < binaryAnchors.size(); i++){
+                for (auto & a : binaryAnchors[i].anchors){
+                    auto uh1 = mg.topo(MixedGraphBinaryHandle(i)).lowers.front();
+                    auto uh2 = mg.topo(MixedGraphBinaryHandle(i)).lowers.back();
+                    auto & u1 = mg.data(uh1);
+                    auto & u2 = mg.data(uh2);
+                    double ratio1 = DepthRatioOnMGUnary(a, u1, vps);
+                    double ratio2 = DepthRatioOnMGUnary(a, u2, vps);
+                    A.insert(eid, uh1.id) = ratio1;
+                    A.insert(eid, uh2.id) = - ratio2;
+                    B(eid) = 0.0;
+                    W.insert(eid, eid) = binaryAnchors[i].weight;
+                    ++eid;
+                }
+            }
+
+            // the anchor equations
+            for (auto & uhCCId : firstUhsInEachCC){
+                A.insert(eid, 0) = 1.0;
+                B(eid) = FirstCornerDepthOfMGUnary(mg.data(uhCCId.second));
+                W.insert(eid, eid) = 1.0;
+                eid++;
+            }            
+            assert(eid == consNum);
+
+            // solve the equation system
+            const bool useWeights = true;
+            VectorXd X;
+            SparseQR<Eigen::SparseMatrix<double>, COLAMDOrdering<int>> solver;
+            static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
+            Eigen::SparseMatrix<double> WA = W * A;
+            A.makeCompressed();
+            WA.makeCompressed();
+
+            Tock(tick);
+            tick = Tick("Solve Equations");
+            solver.compute(useWeights ? WA : A);
+            Tock(tick);
+            
+            if (solver.info() != Success) {
+                assert(0);
+                std::cout << "computation error" << std::endl;
+                return;
+            }
+            VectorXd WB = W * B;
+            X = solver.solve(useWeights ? WB : B);
+            if (solver.info() != Success) {
+                assert(0);
+                std::cout << "solving error" << std::endl;
+                return;
+            }
+
+            std::cout << "filling back solutions" << std::endl;
+
+            double Xmean = X.mean();
+            std::cout << "mean(X) = " << X.mean() << std::endl;
+
+            for (int i = 0; i < varNum; i++){
+                FirstCornerDepthOfMGUnary(mg.data(MixedGraphUnaryHandle(i))) = X(i);
+            }
+        }
+
+
+        void AdjustRegionOrientationsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps) {
+
+            mg.gc();
+
+            std::vector<double> unaryEnergies(mg.internalElements<0>().size());
+            std::vector<double> binaryEnergies(mg.internalElements<1>().size());
+
+            for (auto & b : mg.internalElements<1>()){
+                
+            }
 
         }
 

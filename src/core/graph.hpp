@@ -1075,6 +1075,8 @@ namespace panoramix {
                 return hasGarbageUsingSequence(typename SequenceGenerator<LayerNum>::type());
             }
 
+            inline bool isDense() const { return !hasGarbage(); }
+
         private:
             template <int ...S>
             void gcUsingSequence(Sequence<S...>) {
@@ -1160,6 +1162,18 @@ namespace panoramix {
 
 
     }
+
+}
+
+namespace std {
+
+   template <class Tag>
+   struct hash<panoramix::core::Handle<Tag>> {
+       inline uint64_t operator()(panoramix::core::Handle<Tag> a) const {
+           return static_cast<uint64_t>(a.id);
+       }
+   };
+
 }
 
 #endif

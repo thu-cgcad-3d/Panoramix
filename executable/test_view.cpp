@@ -263,8 +263,8 @@ void VisualizeMixedGraph(const core::Image & panorama, core::MixedGraph & mg, co
             });
             for (auto & dir : filteredSamples){
                 core::Line3 connection = {
-                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.front()).ref<core::MGUnaryRegion>(), vps),
-                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.back()).ref<core::MGUnaryRegion>(), vps)
+                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.front()), vps),
+                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.back()), vps)
                 };
                 connectionsRR.push_back(connection);
             }
@@ -282,16 +282,16 @@ void VisualizeMixedGraph(const core::Image & panorama, core::MixedGraph & mg, co
             });
             for (auto & dir : filteredSamples){
                 core::Line3 connection = {
-                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.front()).ref<core::MGUnaryRegion>(), vps),
-                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.back()).ref<core::MGUnaryLine>(), vps)
+                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.front()), vps),
+                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.back()), vps)
                 };
                 connectionsRL.push_back(connection);
             }
         }
-        else if (c.data.is<core::MGBinaryLineLineConnection>()){
+        else if (c.data.is<core::MGBinaryLineLineIntersection>()){
 
         }
-        else if (c.data.is<core::MGBinaryLineLineIncidenceAcrossView>()){
+        else if (c.data.is<core::MGBinaryLineLineIncidence>()){
 
         }
     }
@@ -304,7 +304,7 @@ void VisualizeMixedGraph(const core::Image & panorama, core::MixedGraph & mg, co
 }
 
 
-DEBUG_TEST(View, MixedGraph) {
+TEST(View, MixedGraph) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
     std::vector<core::RegionsGraph> regionsGraphs;
@@ -332,9 +332,13 @@ DEBUG_TEST(View, MixedGraph) {
 
     core::InitializeMixedGraph(mg, vanishingPoints);
     VisualizeMixedGraph(panorama, mg, vanishingPoints);
-    
-    core::SolveDepthsInMixedGraph(mg, vanishingPoints);
 
+    std::unordered_map<core::MixedGraphUnaryHandle, int> ccids;
+    int ccNum = core::MarkConnectedComponentIds(mg, ccids);
+    std::cout << "ccNum = " << ccNum << std::endl;
+    
+    core::SolveDepthsInMixedGraph(mg, vanishingPoints, ccids);
+    VisualizeMixedGraph(panorama, mg, vanishingPoints);
 
 }
 
@@ -348,5 +352,5 @@ int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
     testing::GTEST_FLAG(filter) = "View.MixedGraph";
-    return DEBUG_RUN_ALL_TESTS();
+    return RUN_ALL_TESTS();
 }
