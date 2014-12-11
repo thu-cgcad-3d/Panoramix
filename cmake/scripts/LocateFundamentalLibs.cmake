@@ -5,6 +5,7 @@ find_package (OpenCV REQUIRED)
 #find_package (GLPK REQUIRED)
 #find_package (GLEW REQUIRED)
 # find_package (Armadillo REQUIRED CONFIG)
+find_package (MOSEK REQUIRED)
 
 set (Fundamental_INCLUDES 
 	#${EIGEN3_INCLUDE_DIR} 
@@ -12,6 +13,7 @@ set (Fundamental_INCLUDES
 	#${GLPK_INCLUDE_DIR} 
 	#${GLEW_INCLUDE_DIRS} 
 #	${ARMADILLO_INCLUDE_DIRS}
+	${MOSEK_INCLUDE_DIR}
 )
 
 foreach (i ${Fundamental_INCLUDES})
@@ -23,6 +25,7 @@ set (Fundamental_LIBS
 	#${GLPK_LIBRARY} 
 	#${GLEW_LIBRARIES} 
 	#${ARMADILLO_LIBRARIES}
+	${MOSEK_LIBRARY}
 )
 
 foreach (i ${Fundamental_LIBS})
@@ -31,7 +34,7 @@ endforeach ()
 
 # add path to opencv dlls on win
 if (DEFINED _OpenCV_LIB_PATH)
-	set (Fundamental_PATH ${_OpenCV_LIB_PATH})
+	list (APPEND Fundamental_PATH ${_OpenCV_LIB_PATH} ${MOSEK_BIN_DIR})
 endif ()
 
 # if (WIN32)

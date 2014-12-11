@@ -30,6 +30,14 @@ endif ()
 
 
 ### 3rd party libs setting ###
+# get MATLAB libs [optional]
+set (USE_MATLAB true CACHE BOOL "Whether using MATLAB")
+include (LocateMATLABLibs)
+if (MATLAB_ROOT)
+	set(MATLAB_RELEASE ${MATLAB_ROOT})
+endif ()
+
+
 # get fundamental libs
 include (LocateFundamentalLibs)
 
@@ -38,11 +46,6 @@ include (LocateFundamentalLibs)
 set (Qt_DIR "" CACHE PATH "Qt root directory here")
 set (Qt_MODULES_REQUIRED Core Gui Widgets OpenGL)
 include (LocateQtLibs)
-
-
-# get MATLAB libs [optional]
-set (USE_MATLAB true CACHE BOOL "Whether using MATLAB")
-include (LocateMATLABLibs)
 
 
 # set path env
