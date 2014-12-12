@@ -227,6 +227,7 @@ namespace panoramix {
 
         // the mixed graph
         struct MGUnaryRegion {
+            //std::vector<RegionIndex> indices;
             RegionIndex index;
             std::vector<Vec3> normalizedCorners;
             Vec3 center;
@@ -313,6 +314,9 @@ namespace panoramix {
         // fix claz, solve depth
         void SolveDepthsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, 
             const std::unordered_map<MixedGraphUnaryHandle, int> & ccids);
+        void SolveDepthsInMixedGraphMOSEK(MixedGraph & mg, const std::vector<Vec3> & vps,
+            const std::unordered_map<MixedGraphUnaryHandle, int> & ccids,
+            double depthLb = 0.2, double depthUb = 5.0);
 
         // adjust claz
         void AdjustRegionOrientationsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps);

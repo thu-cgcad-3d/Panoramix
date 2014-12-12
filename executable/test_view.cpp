@@ -337,7 +337,7 @@ TEST(View, MixedGraph) {
     int ccNum = core::MarkConnectedComponentIds(mg, ccids);
     std::cout << "ccNum = " << ccNum << std::endl;
     
-    core::SolveDepthsInMixedGraph(mg, vanishingPoints, ccids);
+    core::SolveDepthsInMixedGraphMOSEK(mg, vanishingPoints, ccids);
     VisualizeMixedGraph(panorama, mg, vanishingPoints);
 
 }
