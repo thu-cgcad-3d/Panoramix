@@ -311,6 +311,11 @@ namespace panoramix {
         // initialize
         void InitializeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, double initialDepth = 1.0);
 
+        // optimize
+        void OptimizeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, 
+            const std::unordered_map<MixedGraphUnaryHandle, int> & ccids);
+
+
         // fix claz, solve depth
         void SolveDepthsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, 
             const std::unordered_map<MixedGraphUnaryHandle, int> & ccids);
@@ -318,8 +323,8 @@ namespace panoramix {
             const std::unordered_map<MixedGraphUnaryHandle, int> & ccids,
             double depthLb = 0.2, double depthUb = 5.0);
 
-        // adjust claz
-        void AdjustRegionOrientationsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps);
+
+        
 
     }
 }

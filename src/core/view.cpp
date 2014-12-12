@@ -1466,10 +1466,13 @@ namespace panoramix {
         struct BinaryAnchors {
             double weight;
             std::vector<Vec3> anchors;
+
+            int positionOfFirstAnchor;
+            std::vector<double> slackValues;
         };
 
         BinaryAnchors GetBinaryAnchors(const MixedGraph & mg, const MixedGraphBinaryHandle & bh){
-            static const int maxSampleNum = 2;
+            static const int maxSampleNum = 3;
             
             if (mg.data(bh).is<MGBinaryRegionRegionBoundary>()){
                 BinaryAnchors bc;
@@ -1555,8 +1558,17 @@ namespace panoramix {
 
             return BinaryAnchors();
         }
-
-        //double EnergyOfBinaryAnchors(const MixedGraph & mg, )
+        std::vector<BinaryAnchors> GetAllBinaryAnchors(const MixedGraph & mg){
+            std::vector<BinaryAnchors> binaryAnchors(mg.internalElements<1>().size());
+            int connectionConsNum = 0;
+            for (int i = 0; i < mg.internalElements<1>().size(); i++){
+                binaryAnchors[i] = GetBinaryAnchors(mg, MixedGraphBinaryHandle(i));
+                binaryAnchors[i].positionOfFirstAnchor = connectionConsNum;
+                connectionConsNum += binaryAnchors[i].anchors.size();
+                binaryAnchors[i].slackValues.resize(binaryAnchors[i].anchors.size());
+            }
+            return binaryAnchors;
+        }
 
 
         static void MSKAPI printstr(void *handle, MSKCONST char str[]) {
@@ -1671,6 +1683,282 @@ namespace panoramix {
         }
 
 
+        void SolveDepthsInMixedGraphMOSEKOnce(MixedGraph & mg, const std::vector<Vec3> & vps,
+            const std::set<MixedGraphUnaryHandle> & firstCCUhs,
+            int connectionConsNum,
+            std::vector<BinaryAnchors> & binaryAnchors,
+            double depthLb, double depthUb){
+
+            assert(mg.isDense());
+            int depthNum = mg.internalElements<0>().size();
+
+            // additional consNum for anchors
+            int ccConsNum = firstCCUhs.size();
+
+            int slackVarNum = connectionConsNum;
+
+            int varNum = depthNum + slackVarNum; // depths, slackVars
+            int consNum = connectionConsNum * 2; // depth1 * ratio1 - depth2 * ratio2 < slackVar;  
+            // depth2 * ratio2 - depth1 * ratio1 < slackVar
+            //ccConsNum +  // depth = defaultValue
+            //depthNum; // depth \in [depthLb, depthUb]
+
+            MSKenv_t env = nullptr;
+            MSKtask_t task = nullptr;
+
+            MSK_makeenv(&env, nullptr);
+            MSK_maketask(env, consNum, varNum, &task);
+            //MSK_linkfunctotaskstream(task, MSK_STREAM_LOG, NULL, printstr);
+            MSK_appendcons(task, consNum);
+            MSK_appendvars(task, varNum);
+
+            int slackVarId = 0;
+            for (int i = 0; i < binaryAnchors.size(); i++){
+                for (auto & a : binaryAnchors[i].anchors){
+                    MSK_putcj(task, slackVarId, binaryAnchors[i].weight);
+                    slackVarId++;
+                }
+            }
+
+            // bounds for vars
+            int varId = 0;
+            for (; varId < depthNum; varId++){
+                // depth \in  [depthLb, depthUb]
+                if (!Contains(firstCCUhs, MixedGraphUnaryHandle(varId))){
+                    MSK_putvarbound(task, varId, MSK_BK_RA, depthLb, depthUb);
+                }
+                else{ // depth = defaultValue
+                    double defaultDepth = FirstCornerDepthOfMGUnary(mg.data(MixedGraphUnaryHandle(varId)));
+                    MSK_putvarbound(task, varId, MSK_BK_FX, defaultDepth, defaultDepth);
+                }
+            }
+            for (; varId < depthNum + slackVarNum; varId++){
+                // slack >= 0
+                MSK_putvarbound(task, varId, MSK_BK_LO, 0.0, +MSK_INFINITY);
+            }
+
+            // parameters for each var in constraints
+            varId = 0;
+            for (; varId < depthNum; varId++){ // depths
+                auto & relatedBhs = mg.topo(MixedGraphUnaryHandle(varId)).uppers;
+                int relatedAnchorsNum = 0;
+                for (auto & bh : relatedBhs){
+                    relatedAnchorsNum += binaryAnchors[bh.id].anchors.size();
+                }
+                int relatedConsNum = relatedAnchorsNum * 2;
+
+                std::vector<MSKint32t> consIds;
+                std::vector<MSKrealt> consValues;
+
+                consIds.reserve(relatedConsNum);
+                consValues.reserve(relatedConsNum);
+
+                for (auto & bh : relatedBhs){
+                    int firstAnchorPosition = binaryAnchors[bh.id].positionOfFirstAnchor;
+                    for (int k = 0; k < binaryAnchors[bh.id].anchors.size(); k++){
+                        consIds.push_back((firstAnchorPosition + k) * 2); // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
+                        consIds.push_back((firstAnchorPosition + k) * 2 + 1); // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
+
+                        auto & a = binaryAnchors[bh.id].anchors[k];
+                        double ratio = DepthRatioOnMGUnary(a, mg.data(MixedGraphUnaryHandle(varId)), vps);
+                        bool isOnLeftSide = varId == mg.topo(bh).lowers.front().id;
+                        if (isOnLeftSide){ // as depth1
+                            consValues.push_back(ratio);
+                            consValues.push_back(-ratio);
+                        }
+                        else{
+                            consValues.push_back(-ratio);
+                            consValues.push_back(ratio);
+                        }
+                    }
+                }
+
+                MSK_putacol(task, varId, relatedConsNum, consIds.data(), consValues.data());
+            }
+            for (; varId < depthNum + slackVarNum; varId++){ // slack vars
+                MSKint32t consIds[] = {
+                    (varId - depthNum) * 2, // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
+                    (varId - depthNum) * 2 + 1  // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
+                };
+                MSKrealt consValues[] = { -1.0, -1.0 };
+
+                MSK_putacol(task, varId, 2, consIds, consValues);
+            }
+
+            // bounds for constraints
+            for (int consId = 0; consId < consNum; consId++){
+                // all [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0];
+                MSK_putconbound(task, consId, MSK_BK_UP, -MSK_INFINITY, 0.0);
+            }
+
+            MSK_putobjsense(task, MSK_OBJECTIVE_SENSE_MINIMIZE);
+            MSKrescodee trmcode;
+            MSK_optimizetrm(task, &trmcode);
+            MSK_solutionsummary(task, MSK_STREAM_LOG);
+
+            MSKsolstae solsta;
+            MSK_getsolsta(task, MSK_SOL_BAS, &solsta);
+
+            switch (solsta){
+            case MSK_SOL_STA_OPTIMAL:
+            case MSK_SOL_STA_NEAR_OPTIMAL:
+            {
+                                             double *xx = new double[varNum];
+                                             MSK_getxx(task,
+                                                 MSK_SOL_BAS,    /* Request the basic solution. */
+                                                 xx);
+                                             printf("Optimal primal solution\n");
+                                             for (int i = 0; i < depthNum; i++){ // get resulted depths
+                                                 FirstCornerDepthOfMGUnary(mg.data(MixedGraphUnaryHandle(i))) = xx[i];
+                                             }
+                                             int slackVarId = depthNum;
+                                             for (auto & ba : binaryAnchors){ // get slack values
+                                                 for (double & slack : ba.slackValues){
+                                                     slack = xx[slackVarId];
+                                                     slackVarId++;
+                                                 }
+                                             }
+                                             assert(slackVarId == varNum);
+                                             delete[] xx;
+                                             break;
+            }
+            case MSK_SOL_STA_DUAL_INFEAS_CER:
+            case MSK_SOL_STA_PRIM_INFEAS_CER:
+            case MSK_SOL_STA_NEAR_DUAL_INFEAS_CER:
+            case MSK_SOL_STA_NEAR_PRIM_INFEAS_CER:
+                printf("Primal or dual infeasibility certificate found.\n");
+                break;
+            case MSK_SOL_STA_UNKNOWN:
+            {
+                                        char symname[MSK_MAX_STR_LEN];
+                                        char desc[MSK_MAX_STR_LEN];
+
+                                        /* If the solutions status is unknown, print the termination code
+                                        indicating why the optimizer terminated prematurely. */
+
+                                        MSK_getcodedesc(trmcode,
+                                            symname,
+                                            desc);
+
+                                        printf("The solution status is unknown.\n");
+                                        printf("The optimizer terminitated with code: %s\n", symname);
+                                        break;
+            }
+            default:
+                printf("Other solution status.\n");
+                break;
+            }
+
+
+            // finalize
+            MSK_deletetask(&task);
+            MSK_deleteenv(&env);
+
+        }
+
+
+
+        void AdjustRegionOrientationsOnce(MixedGraph & mg, const std::vector<Vec3> & vps,
+            const std::set<MixedGraphUnaryHandle> & firstCCUhs,
+            int connectionConsNum,
+            std::vector<BinaryAnchors> & binaryAnchors){
+
+            assert(mg.isDense());
+
+            // sort uhs using slack value sums
+            std::vector<Scored<MixedGraphUnaryHandle>> 
+                uhsWithSlackSums(mg.internalElements<0>().size(), ScoreAs(MixedGraphUnaryHandle(), 0.0));
+            for (int i = 0; i < binaryAnchors.size(); i++){
+                double slackSum = 0.0;
+                for (auto slack : binaryAnchors[i].slackValues)
+                    slackSum += slack;
+                auto & uhs = mg.topo(MixedGraphBinaryHandle(i)).lowers;
+                uhsWithSlackSums[uhs.front().id].score += slackSum;
+                uhsWithSlackSums[uhs.back().id].score += slackSum;
+            }
+
+            std::sort(uhsWithSlackSums.begin(), uhsWithSlackSums.end());
+            std::reverse(uhsWithSlackSums.begin(), uhsWithSlackSums.end());
+
+            for (auto & uhWithSlackSum : uhsWithSlackSums){
+                auto & uh = uhWithSlackSum.component;
+                if (!mg.data(uh).is<MGUnaryRegion>())
+                    continue; // consider region only
+                auto & region = mg.data(uh).uncheckedRef<MGUnaryRegion>();
+                double lowestSlackSum = std::numeric_limits<double>::max();
+                int bestVPId = -1;
+                for (int k = 0; k < vps.size(); k++){
+                    region.claz = k;
+                    // compute new slack sum
+                    std::vector<double> theseDepths, thoseDepths;
+                    for (auto relatedBh : mg.topo(uh).uppers){
+                        auto & ba = binaryAnchors[relatedBh.id];
+                        auto anotherUh = mg.topo(relatedBh).lowers.front();
+                        if (anotherUh == uh){
+                            anotherUh = mg.topo(relatedBh).lowers.back();
+                        }
+                        for (auto & a : ba.anchors){
+                            theseDepths.push_back(DepthRatioOnMGUnary(a, mg.data(uh), vps));
+                            thoseDepths.push_back(DepthRatioOnMGUnary(a, mg.data(anotherUh), vps));
+                        }
+                    }
+                    std::vector<double> ratios(theseDepths.size());
+                    for (int s = 0; s < theseDepths.size(); s++){
+                        ratios[s] = thoseDepths[s] / theseDepths[s];
+                    }
+                    std::nth_element(ratios.begin(), ratios.begin() + ratios.size() / 2, ratios.end());
+                    double bestRatio = ratios[ratios.size() / 2];
+                    double newSlackSum = 0.0;
+                    for (int s = 0; s < theseDepths.size(); s++){
+                        newSlackSum += abs(theseDepths[s] * bestRatio - thoseDepths[s]);
+                    }
+                    if (newSlackSum < lowestSlackSum){
+                        bestVPId = k;
+                        lowestSlackSum = newSlackSum;
+                    }
+                }
+                region.claz = bestVPId;
+            }
+
+        }
+        
+
+
+        void OptimizeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, 
+            const std::unordered_map<MixedGraphUnaryHandle, int> & ccids) {
+            mg.gc();
+
+            //// PREPARE
+            auto tick = Tick("SetUp Equations");
+            assert(mg.isDense());
+
+            int depthNum = mg.internalElements<0>().size();
+            int connectionConsNum = 0;
+
+            std::vector<BinaryAnchors> binaryAnchors = GetAllBinaryAnchors(mg);
+            for (int i = 0; i < binaryAnchors.size(); i++){
+                connectionConsNum += binaryAnchors[i].anchors.size();
+            }
+
+            // get first uh in each cc
+            std::map<int, MixedGraphUnaryHandle> firstUhsInEachCC;
+            std::set<MixedGraphUnaryHandle> firstCCUhs;
+            for (auto & uhCC : ccids){
+                if (!Contains(firstUhsInEachCC, uhCC.second)){
+                    firstUhsInEachCC[uhCC.second] = uhCC.first;
+                    firstCCUhs.insert(uhCC.first);
+                }
+            }
+
+            for (int i = 0; i < 10; i++){
+                SolveDepthsInMixedGraphMOSEKOnce(mg, vps, firstCCUhs, connectionConsNum, binaryAnchors, 0.2, 5.0);
+                AdjustRegionOrientationsOnce(mg, vps, firstCCUhs, connectionConsNum, binaryAnchors);
+            }
+
+        }
+
+
+
         void SolveDepthsInMixedGraphMOSEK(MixedGraph & mg, const std::vector<Vec3> & vps,
             const std::unordered_map<MixedGraphUnaryHandle, int> & ccids,
             double depthLb, double depthUb) {
@@ -1760,7 +2048,6 @@ namespace panoramix {
                 
                 std::vector<MSKint32t> consIds;
                 std::vector<MSKrealt> consValues;
-
                 consIds.reserve(relatedConsNum);
                 consValues.reserve(relatedConsNum);
 
@@ -1864,19 +2151,6 @@ namespace panoramix {
 
         }
 
-
-        void AdjustRegionOrientationsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps) {
-
-            mg.gc();
-
-            std::vector<double> unaryEnergies(mg.internalElements<0>().size());
-            std::vector<double> binaryEnergies(mg.internalElements<1>().size());
-
-            for (auto & b : mg.internalElements<1>()){
-                
-            }
-
-        }
 
     }
 }
