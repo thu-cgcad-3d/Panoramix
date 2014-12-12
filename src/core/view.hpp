@@ -309,7 +309,7 @@ namespace panoramix {
         int MarkConnectedComponentIds(const MixedGraph & mg, std::unordered_map<MixedGraphUnaryHandle, int> & ccids);
 
         // initialize
-        void InitializeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps);
+        void InitializeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, double initialDepth = 1.0);
 
         // fix claz, solve depth
         void SolveDepthsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, 

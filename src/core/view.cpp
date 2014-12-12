@@ -1395,11 +1395,11 @@ namespace panoramix {
         }
 
 
-        void InitializeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps) {
+        void InitializeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, double initialDepth) {
             for (auto & v : mg.elements<0>()){
                 if (v.data.is<MGUnaryRegion>()){
                     auto & region = v.data.uncheckedRef<MGUnaryRegion>();
-                    region.depthOfFirstCorner = 1.0;
+                    region.depthOfFirstCorner = initialDepth;
                     region.claz = std::distance(vps.begin(), std::min_element(vps.begin(), vps.end(), 
                         [&region](const Vec3 & vp1, const Vec3 & vp2) -> bool {
                         return AngleBetweenUndirectedVectors(region.center, vp1) < 
@@ -1408,7 +1408,7 @@ namespace panoramix {
                 }
                 else{
                     auto & line = v.data.uncheckedRef<MGUnaryLine>();
-                    line.depthOfFirstCorner = 1.0;
+                    line.depthOfFirstCorner = initialDepth;
                 }
             }
 
@@ -1719,7 +1719,7 @@ namespace panoramix {
 
             MSK_makeenv(&env, nullptr);
             MSK_maketask(env, consNum, varNum, &task);
-            MSK_linkfunctotaskstream(task, MSK_STREAM_LOG, NULL, printstr);
+            //MSK_linkfunctotaskstream(task, MSK_STREAM_LOG, NULL, printstr);
             MSK_appendcons(task, consNum);
             MSK_appendvars(task, varNum);
 
