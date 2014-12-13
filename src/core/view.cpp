@@ -1237,6 +1237,38 @@ namespace panoramix {
             }
         }
 
+        double DepthRatioOnMGUnaryWithAssignedClass(const Vec3 & direction, const Any & unary, const std::vector<Vec3> & vps, int claz) {
+            if (unary.is<MGUnaryRegion>()){
+                const auto & region = unary.uncheckedRef<MGUnaryRegion>();
+                assert(!region.normalizedCorners.empty());
+                Plane3 plane(region.normalizedCorners.front(), vps[claz]);
+                return norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
+            }
+            else if (unary.is<MGUnaryLine>()){
+                const auto & line = unary.uncheckedRef<MGUnaryLine>();
+                InfiniteLine3 infLine(line.normalizedCorners.front(), vps[claz]);
+                return norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
+            }
+        }
+
+        int OrientationClassOfMGUnary(const Any & unary) {
+            if (unary.is<MGUnaryRegion>()){
+                return unary.uncheckedRef<MGUnaryRegion>().claz;
+            }
+            else if (unary.is<MGUnaryLine>()){
+                return unary.uncheckedRef<MGUnaryLine>().claz;
+            }
+        }
+
+        int & OrientationClassOfMGUnary(Any & unary) {
+            if (unary.is<MGUnaryRegion>()){
+                return unary.uncheckedRef<MGUnaryRegion>().claz;
+            }
+            else if (unary.is<MGUnaryLine>()){
+                return unary.uncheckedRef<MGUnaryLine>().claz;
+            }
+        }
+
         Point3 LocationOnMGUnary(const Vec3 & direction, const Any & unary, const std::vector<Vec3> & vps){
             if (unary.is<MGUnaryRegion>()){
                 const auto & region = unary.uncheckedRef<MGUnaryRegion>();
@@ -1466,7 +1498,6 @@ namespace panoramix {
         struct BinaryAnchors {
             double weight;
             std::vector<Vec3> anchors;
-
             int positionOfFirstAnchor;
             std::vector<double> slackValues;
         };
@@ -1558,6 +1589,7 @@ namespace panoramix {
 
             return BinaryAnchors();
         }
+        
         std::vector<BinaryAnchors> GetAllBinaryAnchors(const MixedGraph & mg){
             std::vector<BinaryAnchors> binaryAnchors(mg.internalElements<1>().size());
             int connectionConsNum = 0;
@@ -1593,7 +1625,6 @@ namespace panoramix {
         public:
             void optimizeDepths() {
                 auto tick = Tick("Solve Equations");
-                MSK_putobjsense(task, MSK_OBJECTIVE_SENSE_MINIMIZE);
                 MSKrescodee trmcode;
                 MSK_optimizetrm(task, &trmcode);
                 MSK_solutionsummary(task, MSK_STREAM_LOG);
@@ -1653,7 +1684,42 @@ namespace panoramix {
                     break;
                 }
             }
-            
+            void changeUnaryOrientationClass(const MixedGraphUnaryHandle & uh, int claz){
+                OrientationClassOfMGUnary(mg.data(uh)) = claz;
+                auto & consIds = unaryAnchorIdsTable[uh.id];
+                auto & consValues = unaryDepthsTable[uh.id][claz];
+                MSK_putacol(task, uh.id, consValues.size(), consIds.data(), consValues.data());
+            }
+            void adjustRegionOrientations() {
+                std::vector<double> binarySlackMeans(binaryAnchors.size());
+                for (int i = 0; i < binaryAnchors.size(); i++){
+                    binarySlackMeans[i] = std::accumulate(binaryAnchors[i].slackValues.begin(),
+                        binaryAnchors[i].slackValues.end(), 0.0) / binaryAnchors[i].slackValues.size();
+                }
+                std::vector<double> unaryErrorScores(mg.internalElements<0>().size(), 0.0);
+                for (int i = 0; i < unaryErrorScores.size(); i++){
+                    if (mg.data(MixedGraphUnaryHandle(i)).is<MGUnaryLine>())
+                        continue;
+                    auto & relatedBhs = mg.topo(MixedGraphUnaryHandle(i)).uppers;
+                    std::vector<double> relatedBinarySlackMeans;
+                    relatedBinarySlackMeans.reserve(relatedBhs.size());
+                    for (auto & bh : relatedBhs){
+                        relatedBinarySlackMeans.push_back(binarySlackMeans[bh.id]);
+                    }
+                    std::sort(relatedBinarySlackMeans.begin(), relatedBinarySlackMeans.end());
+                    double errorScore = std::accumulate(relatedBinarySlackMeans.begin(),
+                        relatedBinarySlackMeans.begin() + (relatedBinarySlackMeans.size() + 1) * 3 / 4, 0.0)
+                        / ((relatedBinarySlackMeans.size() + 1) * 3 / 4);
+                    unaryErrorScores[i] = errorScore;
+                }
+                auto worstUh = MixedGraphUnaryHandle(std::max_element(unaryErrorScores.begin(), unaryErrorScores.end()) -
+                    unaryErrorScores.begin());
+                if (mg.data(worstUh).is<MGUnaryLine>())
+                    return;
+                int newClaz = (OrientationClassOfMGUnary(mg.data(worstUh)) + 1) % vps.size();
+                std::cout << "set orientation class of region " << worstUh.id << " to " << newClaz << std::endl;
+                changeUnaryOrientationClass(worstUh, newClaz);
+            }
 
         private:
             void initialize() {
@@ -1721,6 +1787,9 @@ namespace panoramix {
                 }
 
                 // parameters for each var in constraints
+                unaryDepthsTable = std::vector<std::vector<std::vector<MSKrealt>>>(depthNum);
+                unaryAnchorIdsTable = std::vector<std::vector<MSKint32t>>(depthNum);
+
                 varId = 0;
                 for (; varId < depthNum; varId++){ // depths
                     auto & relatedBhs = mg.topo(MixedGraphUnaryHandle(varId)).uppers;
@@ -1730,33 +1799,46 @@ namespace panoramix {
                     }
                     int relatedConsNum = relatedAnchorsNum * 2;
 
-                    std::vector<MSKint32t> consIds;
-                    std::vector<MSKrealt> consValues;
-
+                    // collect consIds
+                    std::vector<MSKint32t> & consIds = unaryAnchorIdsTable[varId];
                     consIds.reserve(relatedConsNum);
-                    consValues.reserve(relatedConsNum);
-
                     for (auto & bh : relatedBhs){
                         int firstAnchorPosition = binaryAnchors[bh.id].positionOfFirstAnchor;
                         for (int k = 0; k < binaryAnchors[bh.id].anchors.size(); k++){
                             consIds.push_back((firstAnchorPosition + k) * 2); // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
                             consIds.push_back((firstAnchorPosition + k) * 2 + 1); // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
-
-                            auto & a = binaryAnchors[bh.id].anchors[k];
-                            double ratio = DepthRatioOnMGUnary(a, mg.data(MixedGraphUnaryHandle(varId)), vps);
-                            bool isOnLeftSide = varId == mg.topo(bh).lowers.front().id;
-                            if (isOnLeftSide){ // as depth1
-                                consValues.push_back(ratio);
-                                consValues.push_back(-ratio);
-                            }
-                            else{
-                                consValues.push_back(-ratio);
-                                consValues.push_back(ratio);
-                            }
                         }
                     }
 
-                    MSK_putacol(task, varId, relatedConsNum, consIds.data(), consValues.data());
+                    auto & consValueTable = unaryDepthsTable[varId];
+                    consValueTable.resize(vps.size());
+                    for (int vpid = 0; vpid < vps.size(); vpid++){
+                        auto & consValues = consValueTable[vpid];
+                        consValues.reserve(relatedConsNum);
+
+                        for (auto & bh : relatedBhs){
+                            int firstAnchorPosition = binaryAnchors[bh.id].positionOfFirstAnchor;
+                            for (int k = 0; k < binaryAnchors[bh.id].anchors.size(); k++){
+                                consIds.push_back((firstAnchorPosition + k) * 2); // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
+                                consIds.push_back((firstAnchorPosition + k) * 2 + 1); // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
+
+                                auto & a = binaryAnchors[bh.id].anchors[k];
+                                double ratio = DepthRatioOnMGUnaryWithAssignedClass(a, mg.data(MixedGraphUnaryHandle(varId)), vps, vpid);
+                                bool isOnLeftSide = varId == mg.topo(bh).lowers.front().id;
+                                if (isOnLeftSide){ // as depth1
+                                    consValues.push_back(ratio);
+                                    consValues.push_back(-ratio);
+                                }
+                                else{
+                                    consValues.push_back(-ratio);
+                                    consValues.push_back(ratio);
+                                }
+                            }
+                        }
+                    }                 
+
+                    MSK_putacol(task, varId, relatedConsNum, consIds.data(), 
+                        consValueTable[OrientationClassOfMGUnary(mg.data(MixedGraphUnaryHandle(varId)))].data());
                 }
                 for (; varId < depthNum + slackVarNum; varId++){ // slack vars
                     MSKint32t consIds[] = {
@@ -1764,7 +1846,6 @@ namespace panoramix {
                         (varId - depthNum) * 2 + 1  // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
                     };
                     MSKrealt consValues[] = { -1.0, -1.0 };
-
                     MSK_putacol(task, varId, 2, consIds, consValues);
                 }
 
@@ -1790,6 +1871,8 @@ namespace panoramix {
 
             int connectionConsNum;
             std::vector<BinaryAnchors> binaryAnchors;
+            std::vector<std::vector<std::vector<MSKrealt>>> unaryDepthsTable; // table[unaryId][vpId] -> depths
+            std::vector<std::vector<MSKint32t>> unaryAnchorIdsTable;
             std::set<MixedGraphUnaryHandle> firstCCUhs;
             
             int consNum, varNum;
@@ -2152,7 +2235,11 @@ namespace panoramix {
             const std::unordered_map<MixedGraphUnaryHandle, int> & ccids) {
             
             MOSEKTaskForMixedGraph task(mg, vps, ccids);
-            task.optimizeDepths();
+            for (int i = 0; i < 100; i++){   
+                std::cout << "iter " << i << std::endl;
+                task.optimizeDepths();
+                task.adjustRegionOrientations();
+            }
             
         }
 

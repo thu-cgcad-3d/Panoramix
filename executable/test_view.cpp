@@ -304,7 +304,7 @@ void VisualizeMixedGraph(const core::Image & panorama, core::MixedGraph & mg, co
 }
 
 
-TEST(View, MixedGraph) {
+DEBUG_TEST(View, MixedGraph) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
     std::vector<core::RegionsGraph> regionsGraphs;
@@ -355,5 +355,5 @@ int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
     testing::GTEST_FLAG(filter) = "View.MixedGraph";
-    return RUN_ALL_TESTS();
+    return DEBUG_RUN_ALL_TESTS();
 }

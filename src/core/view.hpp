@@ -250,6 +250,9 @@ namespace panoramix {
         Plane3 PlaneOfMGUnary(const MGUnaryRegion & region, const std::vector<Vec3> & vps);
         Line3 LineOfMGUnary(const MGUnaryLine & line, const std::vector<Vec3> & vps);
         double DepthRatioOnMGUnary(const Vec3 & direction, const Any & unary, const std::vector<Vec3> & vps);
+        double DepthRatioOnMGUnaryWithAssignedClass(const Vec3 & direction, const Any & unary, const std::vector<Vec3> & vps, int claz);
+        int OrientationClassOfMGUnary(const Any & unary);
+        int & OrientationClassOfMGUnary(Any & unary);
         Point3 LocationOnMGUnary(const Vec3 & direction, const Any & unary, const std::vector<Vec3> & vps);
         double FirstCornerDepthOfMGUnary(const Any & unary);
         double & FirstCornerDepthOfMGUnary(Any & unary);
