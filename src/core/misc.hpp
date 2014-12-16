@@ -118,36 +118,6 @@ namespace panoramix {
         using AnyOfTypes = Any;
 
 
-        //struct UnionDataBase {
-        //    virtual UnionDataBase * clone() const = 0;
-        //    virtual ~UnionDataBase() {}
-        //};
-
-        //template <class ... Ts>
-        //class Union {
-        //    template <int I>
-        //    struct UnionData : UnionDataBase {
-        //        using Type = std::tuple_element<I, std::tuple<Ts...>>::type;
-        //        inline UnionData(const Type & d) : value(d) {}
-        //        inline UnionData(Type && d) : value(std::move(d)) {}
-        //        virtual ~UnionData() {}
-        //        virtual UnionDataBase * clone() const override { return new UnionData(value); }
-        //        Type value;
-        //    };
-
-        //public:
-        //    inline Union() : _data(nullptr), _type(-1) {}
-        //    template <class T, class = std::enable_if_t<TypeFirstLocationInTuple<T, std::tuple<Ts...>>::value != -1>>
-        //    inline Union(const T & d) : _data(new UnionData<TypeFirstLocationInTuple<T, std::tuple<Ts...>>::value>(d)), 
-        //        _type(TypeFirstLocationInTuple<T, std::tuple<Ts...>>::value) {}
-        //    
-
-        //private:
-        //    int _type;
-        //    UnionDataBase * _data;
-        //};
-
-
 
         //// ITERATORS
         template <class IteratorT, class T>

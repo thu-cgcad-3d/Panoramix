@@ -30,11 +30,6 @@ TEST(View, SampleViews) {
     std::vector<core::View<core::PerspectiveCamera>> views;
     core::SampleViews(panoView, cams.begin(), cams.end(), std::back_inserter(views));
 
-    for (auto & v : views){
-        cv::imshow("perspective", v.image);
-        cv::waitKey();
-    }
-
     core::SaveToDisk("./cache/test_view.SampleViews.panorama", panorama);
     core::SaveToDisk("./cache/test_view.SampleViews.views", views);
 
@@ -47,7 +42,7 @@ TEST(View, LinesGraph) {
 
     std::vector<core::Vec3> vanishingPoints;
     std::vector<core::LinesGraph> linesGraphs;
-    core::EstimateVanishingPointsAndBuildLinesGraphs(views, vanishingPoints, linesGraphs, 10, 50, 4);
+    core::EstimateVanishingPointsAndBuildLinesGraphs(views, vanishingPoints, linesGraphs, 20, 100, 10);
 
     for (int i = 0; i < views.size(); i++){
         vis::Visualizer2D viz(views[i].image);
@@ -105,20 +100,12 @@ TEST(View, RegionsGraph) {
         }
         auto segmentedRegions = seg(v.image, lines).first;
         int samplePointsOnBoundariesSum = 0;
-        auto regions = core::CreateRegionsGraph(segmentedRegions, 15, 3);
+        auto regions = core::CreateRegionsGraph(segmentedRegions, 10, 3);
         for (auto & r : regions.elements<1>()){
             for (auto & ps : r.data.sampledPoints){
                 samplePointsOnBoundariesSum += ps.size();
             }
         }
-        int samplePointsOnBoundariesSum2 = 0;
-        auto regions2 = core::CreateRegionsGraph(segmentedRegions, 20, 3);
-        for (auto & r : regions2.elements<1>()){
-            for (auto & ps : r.data.sampledPoints){
-                samplePointsOnBoundariesSum2 += ps.size();
-            }
-        }
-        EXPECT_LE(samplePointsOnBoundariesSum2, samplePointsOnBoundariesSum);
         regionsGraphs.push_back(std::move(regions));
         segmentedRegionsArray.push_back(segmentedRegions);
     }
@@ -168,7 +155,8 @@ TEST(View, RegionLineConnections){
         vizs[i] << coloredOutput;
         vizs[i] << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB);
 
-        regionLineConnectionsArray[i] = core::RecognizeRegionLineConnections(segmentedRegionsArray[i], linesGraphs[i], 5);
+        regionLineConnectionsArray[i] = core::RecognizeRegionLineConnections(segmentedRegionsArray[i], linesGraphs[i], 10);
+
         for (auto & l : regionLineConnectionsArray[i]) {
             auto & rh = l.first.first;
             auto & lh = l.first.second;
@@ -213,98 +201,81 @@ TEST(View, ConstraintsAcrossViews){
     auto regionOverlappingsAcrossViews =
         core::RecognizeRegionOverlappingsAcrossViews(views, regionsGraphs);
     auto lineIncidencesAcrossViews = 
-        core::RecognizeLineIncidencesAcrossViews(views, linesGraphs, M_PI / 4, 1e-3);
+        core::RecognizeLineIncidencesAcrossViews(views, linesGraphs, M_PI / 4, 20.0 / 300.0);
 
     core::SaveToDisk("./cache/test_view.ConstraintsAcrossViews.regionOverlappingsAcrossViews", regionOverlappingsAcrossViews);
     core::SaveToDisk("./cache/test_view.ConstraintsAcrossViews.lineIncidencesAcrossViews", lineIncidencesAcrossViews);
 
 }
 
-
-void VisualizeMixedGraph(const core::Image & panorama, core::MixedGraph & mg, const std::vector<core::Vec3> & vps) {
-
+void VisualizeMixedGraph(const core::Image & panorama, 
+    const core::MixedGraph & mg,
+    const std::vector<core::MGPatch> & patches, 
+    const std::vector<core::Vec3> & vps){
+    
     vis::Visualizer3D viz;
     viz << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB);
+    
     std::vector<vis::SpatialProjectedPolygon> spps;
     std::vector<core::Classified<core::Line3>> lines;
-    for (auto & v : mg.elements<0>()){
-        if (v.data.is<core::MGUnaryRegion>()){
-            auto & region = v.data.ref<core::MGUnaryRegion>();
-            vis::SpatialProjectedPolygon spp;
-            // filter corners
-            core::ForeachCompatibleWithLastElement(region.normalizedCorners.begin(), region.normalizedCorners.end(), std::back_inserter(spp.corners), 
-                [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
-                return core::AngleBetweenDirections(a, b) > M_PI / 100.0;
-            });
-            if (spp.corners.size() < 3)
-                continue;
-            spp.projectionCenter = core::Point3(0, 0, 0);
-            spp.plane = core::PlaneOfMGUnary(region, vps);
-            spps.push_back(std::move(spp));
-        }
-        else {
-            auto & line = v.data.ref<core::MGUnaryLine>();
-            lines.push_back(core::ClassifyAs(core::LineOfMGUnary(line, vps), line.claz));
+
+    for (auto & patch : patches){
+        for (auto & uhv : patch.uhs){
+            auto uh = uhv.first;
+            auto & v = mg.data(uh);
+            if (v.type == core::MGUnary::Region){
+                auto & region = v;
+                vis::SpatialProjectedPolygon spp;
+                // filter corners
+                core::ForeachCompatibleWithLastElement(region.normalizedCorners.begin(), region.normalizedCorners.end(), 
+                    std::back_inserter(spp.corners),
+                    [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
+                    return core::AngleBetweenDirections(a, b) > M_PI / 100.0;
+                });
+                if (spp.corners.size() < 3)
+                    continue;
+                spp.projectionCenter = core::Point3(0, 0, 0);
+                spp.plane = core::PlaneOfMGUnary(region, vps, uhv.second);
+                if (uhv.second.depthOfFirstCorner > 2){
+                    continue;
+                }
+                spps.push_back(std::move(spp));
+            }
+            else if (v.type == core::MGUnary::Line){
+                auto & line = v;
+                lines.push_back(core::ClassifyAs(core::LineOfMGUnary(line, vps, uhv.second), uhv.second.claz));
+            }
         }
     }
+
+    auto sppbbox = core::BoundingBoxOfContainer(spps);
+    auto linebbox = core::BoundingBoxOfContainer(lines);
+
     viz << vis::manip3d::Begin(spps) << vis::manip3d::SetTexture(panorama) << vis::manip3d::End;
-    viz << lines;
+    viz << vis::manip3d::SetDefaultLineWidth(5.0) << lines;
     viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black);
 
-    std::vector<core::Line3> connectionsRR, connectionsRL;
-    for (auto & c : mg.elements<1>()){
-        if (c.data.is<core::MGBinaryRegionRegionBoundary>()){
-            std::vector<core::Vec3> filteredSamples;
-            auto & samples = c.data.ref<core::MGBinaryRegionRegionBoundary>().samples;
-            core::ForeachCompatibleWithLastElement(samples.begin(), samples.end(), std::back_inserter(filteredSamples),
-                [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
-                //return core::AngleBetweenDirections(a, b) > M_PI / 80.0;
-                return true;
-            });
-            for (auto & dir : filteredSamples){
-                core::Line3 connection = {
-                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.front()), vps),
-                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.back()), vps)
-                };
-                connectionsRR.push_back(connection);
+    std::vector<core::Line3> connectionLines;
+    for (auto & patch : patches){
+        for (auto & bhv : patch.bhs){
+            auto bh = bhv.first;
+            auto & v = bhv.second;
+            auto & samples = mg.data(bh).samples;
+            for (int i = 0; i < samples.size(); i++){
+                connectionLines.emplace_back(samples[i] * v.sampleDepthsOnRelatedUnaries.front()[i],
+                    samples[i] * v.sampleDepthsOnRelatedUnaries.back()[i]);
             }
-        }
-        else if (c.data.is<core::MGBinaryRegionRegionOverlapping>()){
-
-        }
-        else if (c.data.is<core::MGBinaryRegionLineConnection>()){
-            std::vector<core::Vec3> filteredSamples;
-            auto & samples = c.data.ref<core::MGBinaryRegionLineConnection>().samples;
-            core::ForeachCompatibleWithLastElement(samples.begin(), samples.end(), std::back_inserter(filteredSamples),
-                [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
-                //return core::AngleBetweenDirections(a, b) > M_PI / 80.0;
-                return true;
-            });
-            for (auto & dir : filteredSamples){
-                core::Line3 connection = {
-                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.front()), vps),
-                    core::LocationOnMGUnary(dir, mg.data(c.topo.lowers.back()), vps)
-                };
-                connectionsRL.push_back(connection);
-            }
-        }
-        else if (c.data.is<core::MGBinaryLineLineIntersection>()){
-
-        }
-        else if (c.data.is<core::MGBinaryLineLineIncidence>()){
-
         }
     }
-    viz << vis::manip3d::SetDefaultLineWidth(1.0);
-    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::DarkGray) << connectionsRR;
-    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black) << connectionsRL;
-    auto bb = core::BoundingBoxOfContainer(lines);
+
+    //viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::DarkGray) << connectionLines;
+    //viz << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 300, core::Point3(5.0, 5.0, 5.0), ))
     viz << vis::manip3d::Show();
 
 }
 
 
-DEBUG_TEST(View, MixedGraph) {
+TEST(View, BuildMixedGraph) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
     std::vector<core::RegionsGraph> regionsGraphs;
@@ -327,25 +298,50 @@ DEBUG_TEST(View, MixedGraph) {
     core::LoadFromDisk("./cache/test_view.ConstraintsAcrossViews.lineIncidencesAcrossViews", lineIncidencesAcrossViews);
     core::LoadFromDisk("./cache/test_view.RegionLineConnections.regionLineConnectionsArray", regionLineConnectionsArray);
 
-    auto mg = core::BuildMixedGraph(views, regionsGraphs, linesGraphs, 
-        regionOverlappingsAcrossViews, lineIncidencesAcrossViews, regionLineConnectionsArray);
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
 
-    core::InitializeMixedGraph(mg, vanishingPoints);
-    VisualizeMixedGraph(panorama, mg, vanishingPoints);
+    core::MixedGraph mg = core::BuildMixedGraph(views, regionsGraphs, linesGraphs, 
+        regionOverlappingsAcrossViews, lineIncidencesAcrossViews, regionLineConnectionsArray, vanishingPoints, 
+        unaryVars, binaryVars, 1.0);
 
-    std::unordered_map<core::MixedGraphUnaryHandle, int> ccids;
-    int ccNum = core::MarkConnectedComponentIds(mg, ccids);
-    std::cout << "ccNum = " << ccNum << std::endl;
-    
-    core::SolveDepthsInMixedGraphMOSEK(mg, vanishingPoints, ccids);
-    VisualizeMixedGraph(panorama, mg, vanishingPoints);
-
-    core::OptimizeMixedGraph(mg, vanishingPoints, ccids);
-    VisualizeMixedGraph(panorama, mg, vanishingPoints);
+    core::SaveToDisk("./cache/test_view.BuildMixedGraph.mg", mg);
+    core::SaveToDisk("./cache/test_view.BuildMixedGraph.unaryVars", unaryVars);
+    core::SaveToDisk("./cache/test_view.BuildMixedGraph.binaryVars", binaryVars);  
 
 }
 
+DEBUG_TEST(View, MixedGraphUtils){
 
+    core::Image panorama;
+    std::vector<core::Vec3> vanishingPoints;
+
+    core::MixedGraph mg;
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
+
+    core::LoadFromDisk("./cache/test_view.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
+    
+    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.mg", mg);
+    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.binaryVars", binaryVars);
+
+    std::vector<core::MGPatch> naivePatches = 
+        core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
+
+    for (auto & patch : naivePatches){       
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints);
+        VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints);
+        pdo.setDepthBounds(0.2, 5.0);
+        double scoreBefore = core::ScoreOfMGPatch(mg, patch);
+        pdo.optimize();
+        double scoreAfter = core::ScoreOfMGPatch(mg, patch);
+        ASSERT_LE(scoreBefore, scoreAfter);
+        VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints);
+    }
+
+}
 
 
 
@@ -354,6 +350,6 @@ DEBUG_TEST(View, MixedGraph) {
 int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    testing::GTEST_FLAG(filter) = "View.MixedGraph";
+    testing::GTEST_FLAG(filter) = "View.MixedGraphUtils";
     return DEBUG_RUN_ALL_TESTS();
 }
