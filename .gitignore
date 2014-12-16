@@ -9,4 +9,5 @@ doc/paperscript/*/*.pdf
 doc/paperscript/*/*.synctex.gz
 *.state
 backup
+_backup
 scripts

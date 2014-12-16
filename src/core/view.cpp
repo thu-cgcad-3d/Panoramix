@@ -999,7 +999,7 @@ namespace panoramix {
                     const RegionData & rd = region.data;
                     std::vector<Vec3> spatialContour;
                     if (!rd.dilatedContours.empty()){
-                        for (auto & p : rd.dilatedContours.back()) {
+                        for (auto & p : rd.dilatedContours.front()) {
                             auto direction = views[i].camera.spatialDirection(p);
                             spatialContour.push_back(direction / norm(direction));
                         }
@@ -1007,7 +1007,7 @@ namespace panoramix {
                     else{
                         std::cerr << "this region has no dilatedCountour!" << std::endl;
                     }
-                    regionSpatialContours[ri] = spatialContour;
+                    regionSpatialContours[ri] = std::move(spatialContour);
                 }
             }
 
@@ -1223,13 +1223,13 @@ namespace panoramix {
 
         Plane3 PlaneOfMGUnary(const MGUnary & region, const std::vector<Vec3> & vps, const MGUnaryVariable & var) {
             assert(region.type == MGUnary::Region);
-            return Plane3(region.normalizedCorners.front() * var.depthOfFirstCorner, vps[var.claz]);
+            return Plane3(region.normalizedCenter * var.depthOfCenter, vps[var.claz]);
         }
 
         Line3 LineOfMGUnary(const MGUnary & line, const std::vector<Vec3> & vps, const MGUnaryVariable & var) {
             assert(line.type == MGUnary::Line);
-            InfiniteLine3 infLine(line.normalizedCorners.front() * var.depthOfFirstCorner, vps[var.claz]);
-            return Line3(line.normalizedCorners.front() * var.depthOfFirstCorner,
+            InfiniteLine3 infLine(line.normalizedCenter * var.depthOfCenter, vps[var.claz]);
+            return Line3(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.front()), infLine).second.second,
                 DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.back()), infLine).second.second);
         }
 
@@ -1237,12 +1237,12 @@ namespace panoramix {
             if (unary.type == MGUnary::Region){
                 const auto & region = unary;
                 assert(!region.normalizedCorners.empty());
-                Plane3 plane(region.normalizedCorners.front(), vps[claz]);
+                Plane3 plane(region.normalizedCenter, vps[claz]);
                 return norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
             }
             else if (unary.type == MGUnary::Line){
                 const auto & line = unary;
-                InfiniteLine3 infLine(line.normalizedCorners.front(), vps[claz]);
+                InfiniteLine3 infLine(line.normalizedCenter, vps[claz]);
                 return norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
             }
         }
@@ -1252,12 +1252,12 @@ namespace panoramix {
             if (unary.type == MGUnary::Region){
                 const auto & region = unary;
                 assert(!region.normalizedCorners.empty());
-                Plane3 plane(region.normalizedCorners.front() * var.depthOfFirstCorner, vps[var.claz]);
+                Plane3 plane(region.normalizedCenter * var.depthOfCenter, vps[var.claz]);
                 return IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position;
             }
             else if (unary.type == MGUnary::Line){
                 const auto & line = unary;
-                InfiniteLine3 infLine(line.normalizedCorners.front() * var.depthOfFirstCorner, vps[var.claz]);
+                InfiniteLine3 infLine(line.normalizedCenter * var.depthOfCenter, vps[var.claz]);
                 return DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first;
             }
         }
@@ -1290,9 +1290,9 @@ namespace panoramix {
                 auto & uhs = mg.topo(bv.first).lowers;
                 auto & samples = mg.data(bv.first).samples;
                 for (int i = 0; i < samples.size(); i++){
-                    bv.second.sampleDepthsOnRelatedUnaries.front()[i] = unaryVars.at(uhs.front()).depthOfFirstCorner *
+                    bv.second.sampleDepthsOnRelatedUnaries.front()[i] = unaryVars.at(uhs.front()).depthOfCenter *
                         DepthRatioOnMGUnary(samples[i], mg.data(uhs.front()), vps, unaryVars.at(uhs.front()).claz);
-                    bv.second.sampleDepthsOnRelatedUnaries.back()[i] = unaryVars.at(uhs.back()).depthOfFirstCorner *
+                    bv.second.sampleDepthsOnRelatedUnaries.back()[i] = unaryVars.at(uhs.back()).depthOfCenter *
                         DepthRatioOnMGUnary(samples[i], mg.data(uhs.back()), vps, unaryVars.at(uhs.back()).claz);
                 }
             }
@@ -1311,6 +1311,8 @@ namespace panoramix {
             MixedGraph mg;
             ComponentIndexHashMap<RegionIndex, MGUnaryHandle> ri2mgh;
             ComponentIndexHashMap<LineIndex, MGUnaryHandle> li2mgh;
+            std::unordered_map<MGUnaryHandle, RegionIndex> mgh2ri;
+            std::unordered_map<MGUnaryHandle, LineIndex> mgh2li;
 
             // add components in each view
             for (int i = 0; i < views.size(); i++){
@@ -1325,7 +1327,7 @@ namespace panoramix {
                         }
                     }
                     assert(normalizedContour.size() > 2);
-                    auto center = cam.spatialDirection(rd.data.center);
+                    auto center = normalize(cam.spatialDirection(rd.data.center));
                     int initialClaz = std::distance(vps.begin(), std::min_element(vps.begin(), vps.end(),
                         [&center](const Vec3 & vp1, const Vec3 & vp2) -> bool {
                         return AngleBetweenUndirectedVectors(center, vp1) <
@@ -1336,8 +1338,12 @@ namespace panoramix {
                         std::move(normalizedContour),
                         center
                     });
+                    mgh2ri[ri2mgh[ri]] = ri;
+                   /* if (ri2mgh[ri].id == 1307){
+                        GetVersion();
+                    }*/
                     unaryVars[ri2mgh[ri]].claz = initialClaz;
-                    unaryVars[ri2mgh[ri]].depthOfFirstCorner = initialDepth;
+                    unaryVars[ri2mgh[ri]].depthOfCenter = initialDepth;
                 }
                 // lines
                 for (auto & ld : linesGraphs[i].elements<0>()){
@@ -1348,10 +1354,11 @@ namespace panoramix {
                             normalize(cam.spatialDirection(ld.data.line.component.first)),
                             normalize(cam.spatialDirection(ld.data.line.component.second))
                         },
-                        cam.spatialDirection(ld.data.line.component.center())
+                        normalize(cam.spatialDirection(ld.data.line.component.center()))
                     });
+                    mgh2li[li2mgh[li]] = li;
                     unaryVars[li2mgh[li]].claz = ld.data.line.claz;
-                    unaryVars[li2mgh[li]].depthOfFirstCorner = initialDepth;
+                    unaryVars[li2mgh[li]].depthOfCenter = initialDepth;
                 }
                 // region-region in each view
                 for (auto & bd : regionsGraphs[i].elements<1>()){
@@ -1404,7 +1411,7 @@ namespace panoramix {
             // add cross view constraints
             // region-region overlappings
             for (auto & regionOverlapping : regionOverlappingsAcrossViews){
-                if (regionOverlapping.second < 0.05)
+                if (regionOverlapping.second < 0.2)
                     continue;
                 MGBinary rro;
                 rro.type = MGBinary::RegionRegionOverlapping;
@@ -1413,7 +1420,7 @@ namespace panoramix {
                 auto & r2 = regionOverlapping.first.second;
 
                 // get samples
-                Vec3 z = mg.data(ri2mgh[r1]).center + mg.data(ri2mgh[r2]).center;
+                Vec3 z = mg.data(ri2mgh[r1]).normalizedCenter + mg.data(ri2mgh[r2]).normalizedCenter;
                 Vec3 x, y;
                 std::tie(x, y) = ProposeXYDirectionsFromZDirection(z);
                 double minx = std::numeric_limits<double>::max(),
@@ -1497,32 +1504,49 @@ namespace panoramix {
 #endif
 
             // make overlapped region claz consistent
-            std::map<int, int> clazForCCUsingRegionOverlapping;
-            std::vector<MGUnaryHandle> uhs;
-            for (auto & v : mg.elements<0>()){
-                if (v.data.type == MGUnary::Region){
-                    uhs.push_back(v.topo.hd);
-                }
-            }
-            core::ConnectedComponents(uhs.begin(), uhs.end(), [&mg](const MGUnaryHandle & uh) {
-                std::vector<MGUnaryHandle> neighbors;
-                for (auto & bh : mg.topo(uh).uppers){
-                    if (mg.data(bh).type == MGBinary::RegionRegionOverlapping){
-                        auto anotherUh = mg.topo(bh).lowers.front();
-                        if (anotherUh == uh)
-                            anotherUh = mg.topo(bh).lowers.back();
-                        neighbors.push_back(anotherUh);
+            static const bool makeOverlappedRegionClassConsistent = false;
+            if (makeOverlappedRegionClassConsistent){
+                std::vector<MGUnaryHandle> uhs;
+                for (auto & v : mg.elements<0>()){
+                    if (v.data.type == MGUnary::Region){
+                        uhs.push_back(v.topo.hd);
                     }
                 }
-                return neighbors;
-            }, [&clazForCCUsingRegionOverlapping, &mg, &unaryVars](const MGUnaryHandle & uh, int ccid){
-                if (Contains(clazForCCUsingRegionOverlapping, ccid)){
-                    unaryVars[uh].claz = clazForCCUsingRegionOverlapping[ccid];
+                std::map<int, std::vector<MGUnaryHandle>> ccUhs;
+                core::ConnectedComponents(uhs.begin(), uhs.end(), [&mg](const MGUnaryHandle & uh) {
+                    std::vector<MGUnaryHandle> neighbors;
+                    for (auto & bh : mg.topo(uh).uppers){
+                        if (mg.data(bh).type == MGBinary::RegionRegionOverlapping){
+                            auto anotherUh = mg.topo(bh).lowers.front();
+                            if (anotherUh == uh)
+                                anotherUh = mg.topo(bh).lowers.back();
+                            neighbors.push_back(anotherUh);
+                        }
+                    }
+                    return neighbors;
+                }, [&ccUhs](const MGUnaryHandle & uh, int ccid){
+                    ccUhs[ccid].push_back(uh);
+                });
+                for (auto & ccUh : ccUhs){
+                    auto & uhs = ccUh.second;
+                    Vec3 center(0, 0, 0);
+                    for (auto uh : uhs){
+                        if (uh.id == 1307){
+                            GetVersion();
+                        }
+                        center += (mg.data(uh).normalizedCenter * GetData(mgh2ri[uh], regionsGraphs).area);
+                    }
+                    center /= norm(center);
+                    int initialClaz = std::distance(vps.begin(), std::min_element(vps.begin(), vps.end(),
+                        [&center](const Vec3 & vp1, const Vec3 & vp2) -> bool {
+                        return AngleBetweenUndirectedVectors(center, vp1) <
+                            AngleBetweenUndirectedVectors(center, vp2);
+                    }));
+                    for (auto uh : uhs){
+                        unaryVars[uh].claz = initialClaz;
+                    }
                 }
-                else{
-                    clazForCCUsingRegionOverlapping[ccid] = unaryVars[uh].claz;
-                }
-            });
+            }
 
             binaryVars.clear();
             for (auto & b : mg.elements<1>()){
@@ -1602,6 +1626,40 @@ namespace panoramix {
             return true;
         }
 
+
+        double BinaryDistanceOfPatch(const MGBinaryHandle & bh, const MGPatch & patch){
+            auto & sampleDepths = patch.bhs.at(bh).sampleDepthsOnRelatedUnaries;
+            double distanceSum = 0.0;
+            for (int i = 0; i < sampleDepths[0].size(); i++){
+                distanceSum += abs(sampleDepths[0][i] - sampleDepths[1][i]);
+            }
+            return distanceSum / sampleDepths[0].size();
+        }
+
+        double AverageBinaryDistanceOfPatch(const MGPatch & patch){
+            double distanceSum = 0.0;
+            int distanceCount = 0;
+            for (auto & bhv : patch.bhs){
+                for (int i = 0; i < bhv.second.sampleDepthsOnRelatedUnaries.front().size(); i++){
+                    distanceSum +=
+                        abs(bhv.second.sampleDepthsOnRelatedUnaries.front()[i] -
+                        bhv.second.sampleDepthsOnRelatedUnaries.back()[i]);
+                }
+                distanceCount += bhv.second.sampleDepthsOnRelatedUnaries.front().size();
+            }
+            return distanceSum / distanceCount;
+        }
+
+        double AverageDepthOfPatch(const MGPatch & patch){
+            double depthSum = 0.0;
+            for (auto & uhv : patch.uhs){
+                depthSum += uhv.second.depthOfCenter;
+            }
+            return depthSum / patch.uhs.size();
+        }
+
+
+
         std::vector<MGPatch> SplitMixedGraphIntoPatches(const MixedGraph & mg,
             const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars){
            
@@ -1635,8 +1693,46 @@ namespace panoramix {
                 assert(ccids[uhs.front()] == ccids[uhs.back()]);
                 patches[ccids[uhs.front()]].bhs[b.topo.hd] = binaryVars.at(b.topo.hd);
             }
+
+            for (auto & p : patches){
+                assert(UnariesAreConnectedInPatch(mg, p));
+                assert(BinaryHandlesAreValidInPatch(mg, p));
+            }
+
             return patches;
         }
+
+
+        MGPatch MakePatchOnBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
+            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars){
+            MGPatch patch;
+            patch.bhs[bh] = binaryVars.at(bh);
+            auto uhs = mg.topo(bh).lowers;
+            patch.uhs[uhs[0]] = unaryVars.at(uhs[0]);
+            patch.uhs[uhs[1]] = unaryVars.at(uhs[1]);
+            assert(BinaryHandlesAreValidInPatch(mg, patch));
+            assert(UnariesAreConnectedInPatch(mg, patch));
+            return patch;
+        }
+
+
+        MGPatch MakeStarPatchAroundUnary(const MixedGraph & mg, const MGUnaryHandle & uh,
+            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars){
+            MGPatch patch;
+            patch.uhs[uh] = unaryVars.at(uh);
+            for (auto & bh : mg.topo(uh).uppers){
+                auto anotherUh = mg.topo(bh).lowers.front();
+                if (anotherUh == uh)
+                    anotherUh = mg.topo(bh).lowers.back();
+                patch.bhs[bh] = binaryVars.at(bh);
+                patch.uhs[anotherUh] = unaryVars.at(uh);
+            }
+            assert(BinaryHandlesAreValidInPatch(mg, patch));
+            assert(UnariesAreConnectedInPatch(mg, patch));
+            return patch;
+        }
+
+
 
         std::vector<MGPatch> SplitPatch(const MixedGraph & mg, const MGPatch & patch,
             std::function<bool(MGBinaryHandle bh)> useBh){
@@ -1673,237 +1769,73 @@ namespace panoramix {
             }
             for (auto & b : mg.elements<1>()){
                 auto & uhs = mg.topo(b.topo.hd).lowers;
-                assert(ccids[uhs.front()] == ccids[uhs.back()]);
-                patches[ccids[uhs.front()]].bhs[b.topo.hd] = patch.bhs.at(b.topo.hd);
+                if (ccids[uhs.front()] == ccids[uhs.back()]){
+                    patches[ccids[uhs.front()]].bhs[b.topo.hd] = patch.bhs.at(b.topo.hd);
+                }
             }
+            
+            for (auto & p : patches){
+                assert(UnariesAreConnectedInPatch(mg, p));
+                assert(BinaryHandlesAreValidInPatch(mg, p));
+            }
+
             return patches;
         }
 
 
-        double ScoreOfMGPatch(const MixedGraph & mg, const MGPatch & patch) {
-            double distanceSum = 0.0;
-            int distanceCount = 0;
-            for (auto & bhv : patch.bhs){
-                for (int i = 0; i < bhv.second.sampleDepthsOnRelatedUnaries.front().size(); i++){
-                    distanceSum += 
-                        abs(bhv.second.sampleDepthsOnRelatedUnaries.front()[i] - 
-                        bhv.second.sampleDepthsOnRelatedUnaries.back()[i]);
-                }
-                distanceCount += bhv.second.sampleDepthsOnRelatedUnaries.front().size();
-            }
-            double depthSum = 0.0;
-            for (auto & uhv : patch.uhs){
-                depthSum += uhv.second.depthOfFirstCorner;
-            }
-            double violation = (distanceSum / distanceCount) / (depthSum / patch.uhs.size());
-            return 1.0 - violation;
-        }
+        MGPatch MinimumSpanningTreePatch(const MixedGraph & mg, const MGPatch & patch,
+            std::function<bool(MGBinaryHandle, MGBinaryHandle)> compareBh){
 
-        void OptimizeDepthsOfMGPatch(const MixedGraph & mg, MGPatch & patch, 
-            const std::vector<Vec3> & vps, double depthLb, double depthUb){
-
-            auto tick = Tick("preparing optimization");
-
-            assert(BinaryHandlesAreValidInPatch(mg, patch));
-            int depthNum = patch.uhs.size();
-            
             assert(UnariesAreConnectedInPatch(mg, patch));
-            int ccConsNum = 1;           
-   
+            assert(BinaryHandlesAreValidInPatch(mg, patch));
 
-            // temp data
-            struct UnaryTempData {
-                int position;
-            };
-            std::unordered_map<MGUnaryHandle, UnaryTempData> unaryTemp;
-            unaryTemp.reserve(patch.uhs.size());
-            int unaryNum = 0;
+            MGPatch mst;
+            mst.uhs = patch.uhs;
+
+            std::vector<MGUnaryHandle> uhs;
+            uhs.reserve(patch.uhs.size());
             for (auto & uhv : patch.uhs){
-                unaryTemp[uhv.first].position = unaryNum;
-                unaryNum++;
+                uhs.push_back(uhv.first);
             }
-
-            struct BinaryTempData {
-                int firstSamplePosition;
-            };
-            std::unordered_map<MGBinaryHandle, BinaryTempData> binaryTemp;
-            binaryTemp.reserve(patch.bhs.size());
-
-            // count sample connections
-            int samplesNum = 0;
+            std::vector<MGBinaryHandle> bhs;
+            bhs.reserve(patch.bhs.size());
             for (auto & bhv : patch.bhs){
-                binaryTemp[bhv.first].firstSamplePosition = samplesNum;
-                samplesNum += mg.data(bhv.first).samples.size();
+                bhs.push_back(bhv.first);
             }
 
-            int slackVarNum = samplesNum;
-            int varNum = depthNum + slackVarNum; // depths, slackVars
-            int consNum = samplesNum * 2;   // depth1 * ratio1 - depth2 * ratio2 < slackVar;  
-                                            // depth2 * ratio2 - depth1 * ratio1 < slackVar
+            std::vector<MGBinaryHandle> bhsReserved;
 
-            //make as bounds:   depth = defaultValue
-            //                  depth \in [depthLb, depthUb]
+            core::MinimumSpanningTree(uhs.begin(), uhs.end(), bhs.begin(), bhs.end(),
+                std::back_inserter(bhsReserved),
+                [&mg](const MGBinaryHandle & bh){
+                return mg.topo(bh).lowers;
+            }, compareBh);
 
-            MSKenv_t env = nullptr;
-            MSKtask_t task = nullptr;
-
-            MSK_makeenv(&env, nullptr);
-            MSK_maketask(env, consNum, varNum, &task);
-
-            MSK_appendcons(task, consNum);
-            MSK_appendvars(task, varNum);
-
-            // set weights
-            int slackVarId = 0;
-            for (auto & bhv : patch.bhs){
-                auto & bd = mg.data(bhv.first);
-                for (int k = 0; k < bd.samples.size(); k++){
-                    MSK_putcj(task, slackVarId, bd.weight);
-                    slackVarId++;
-                }
+            for (auto & bh : bhsReserved){
+                mst.bhs[bh] = patch.bhs.at(bh);
             }
 
-            // bounds for vars
-            {
-                int varId = 0;
-                MSK_putvarbound(task, varId, MSK_BK_FX,
-                    patch.uhs.begin()->second.depthOfFirstCorner,
-                    patch.uhs.begin()->second.depthOfFirstCorner);
-                varId++;
-                for (; varId < depthNum; varId++){ // for depths
-                    MSK_putvarbound(task, varId, MSK_BK_RA, depthLb, depthUb);
-                }
-                for (; varId < depthNum + slackVarNum; varId++){ // for slack vars
-                    MSK_putvarbound(task, varId, MSK_BK_LO, 0.0, +MSK_INFINITY);
-                }
-            }
+            assert(UnariesAreConnectedInPatch(mg, mst));
+            assert(BinaryHandlesAreValidInPatch(mg, mst));
 
-            // fill constraints related to each vars
-            {
-                int varId = 0;
-                for (auto & uhv : patch.uhs){ // depths
-                    auto & uh = uhv.first;
-
-                    auto & relatedBhs = mg.topo(uh).uppers;
-                    int relatedAnchorsNum = 0;
-                    for (auto & bh : relatedBhs){
-                        if (!Contains(patch.bhs, bh))
-                            continue;
-                        relatedAnchorsNum += mg.data(bh).samples.size();
-                    }
-                    int relatedConsNum = relatedAnchorsNum * 2;
-
-                    std::vector<MSKint32t> consIds;
-                    std::vector<MSKrealt> consValues;
-
-                    consIds.reserve(relatedConsNum);
-                    consValues.reserve(relatedConsNum);
-
-                    for (auto & bh : relatedBhs){
-                        if (!Contains(patch.bhs, bh))
-                            continue;
-                        int firstAnchorPosition = binaryTemp[bh].firstSamplePosition;
-                        auto & samples = mg.data(bh).samples;
-                        for (int k = 0; k < samples.size(); k++){
-                            consIds.push_back((firstAnchorPosition + k) * 2); // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
-                            consIds.push_back((firstAnchorPosition + k) * 2 + 1); // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
-
-                            auto & a = samples[k];
-                            double ratio = DepthRatioOnMGUnary(a, mg.data(uh), vps, patch.uhs.at(uh).claz);
-                            bool isOnLeftSide = uh == mg.topo(bh).lowers.front();
-                            if (isOnLeftSide){ // as depth1
-                                consValues.push_back(ratio);
-                                consValues.push_back(-ratio);
-                            }
-                            else{
-                                consValues.push_back(-ratio);
-                                consValues.push_back(ratio);
-                            }
-                        }
-                    }
-
-                    MSK_putacol(task, varId, relatedConsNum, consIds.data(), consValues.data());
-                    varId++;
-                }
-
-                for (; varId < depthNum + slackVarNum; varId++){ // slack vars
-                    MSKint32t consIds[] = {
-                        (varId - depthNum) * 2, // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
-                        (varId - depthNum) * 2 + 1  // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
-                    };
-                    MSKrealt consValues[] = { -1.0, -1.0 };
-                    MSK_putacol(task, varId, 2, consIds, consValues);
-                }
-            }
-
-            // bounds for constraints
-            for (int consId = 0; consId < consNum; consId++){
-                // all [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0];
-                MSK_putconbound(task, consId, MSK_BK_UP, -MSK_INFINITY, 0.0);
-            }
-
-            // solve
-
-            Tock(tick);
-
-            tick = Tick("do optimization");
-
-            MSK_putobjsense(task, MSK_OBJECTIVE_SENSE_MINIMIZE);
-            MSKrescodee trmcode;
-            MSK_optimizetrm(task, &trmcode);
-            MSK_solutionsummary(task, MSK_STREAM_LOG);
-
-            MSKsolstae solsta;
-            MSK_getsolsta(task, MSK_SOL_BAS, &solsta);
-
-            Tock(tick);
-
-            switch (solsta){
-            case MSK_SOL_STA_OPTIMAL:
-            case MSK_SOL_STA_NEAR_OPTIMAL:
-            {
-                                             double *xx = new double[varNum];
-                                             MSK_getxx(task, MSK_SOL_BAS, xx);
-                                             printf("Optimal primal solution\n");
-                                             for (auto & uhv : patch.uhs){ // get resulted depths
-                                                 uhv.second.depthOfFirstCorner = xx[unaryTemp[uhv.first].position];
-                                             }
-                                             delete[] xx;
-                                             UpdateBinaryVars(mg, vps, patch.uhs, patch.bhs);
-                                             break;
-            }
-            case MSK_SOL_STA_DUAL_INFEAS_CER:
-            case MSK_SOL_STA_PRIM_INFEAS_CER:
-            case MSK_SOL_STA_NEAR_DUAL_INFEAS_CER:
-            case MSK_SOL_STA_NEAR_PRIM_INFEAS_CER:
-                printf("Primal or dual infeasibility certificate found.\n");
-                break;
-            case MSK_SOL_STA_UNKNOWN:
-            {
-                                        char symname[MSK_MAX_STR_LEN];
-                                        char desc[MSK_MAX_STR_LEN];
-
-
-
-                                        MSK_getcodedesc(trmcode,
-                                            symname,
-                                            desc);
-
-                                        printf("The solution status is unknown.\n");
-                                        printf("The optimizer terminitated with code: %s\n", symname);
-                                        break;
-            }
-            default:
-                printf("Other solution status.\n");
-                break;
-            }
-
-
-            // finalize
-            MSK_deletetask(&task);
-            MSK_deleteenv(&env);
-
+            return mst;
         }
+
+
+      
+
+        void CommitPatchToVariableTable(const MGPatch & patch,
+            MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars){
+            for (auto & uhv : patch.uhs){
+                unaryVars[uhv.first] = uhv.second;
+            }
+            for (auto & bhv : patch.bhs){
+                binaryVars[bhv.first] = bhv.second;
+            }
+        }
+
+
+    
 
         struct MosekData {
             MSKenv_t env;
@@ -1923,7 +1855,7 @@ namespace panoramix {
 
 
         MGPatchDepthsOptimizer::MGPatchDepthsOptimizer(const MixedGraph & mg, MGPatch & patch,
-            const std::vector<Vec3> & vanishingPoints) 
+            const std::vector<Vec3> & vanishingPoints, bool useWeights, AlgorithmType at)
             : _mg(mg), _patch(patch), _vanishingPoints(vanishingPoints){
 
             MosekData * mosekData = new MosekData;
@@ -1931,7 +1863,7 @@ namespace panoramix {
             auto & env = mosekData->env;
             auto & task = mosekData->task;
 
-            auto tick = Tick("preparing optimization");
+            //auto tick = Tick("preparing optimization");
 
             assert(BinaryHandlesAreValidInPatch(mg, patch));
             int depthNum = patch.uhs.size();
@@ -1983,7 +1915,7 @@ namespace panoramix {
             for (auto & bhv : patch.bhs){
                 auto & bd = mg.data(bhv.first);
                 for (int k = 0; k < bd.samples.size(); k++){
-                    MSK_putcj(task, slackVarId, bd.weight);
+                    MSK_putcj(task, slackVarId, useWeights ? bd.weight : 1.0);
                     slackVarId++;
                 }
             }
@@ -1991,16 +1923,12 @@ namespace panoramix {
             // bounds for vars
             {
                 int varId = 0;
-                MSK_putvarbound(task, varId, MSK_BK_FX,
-                    patch.uhs.begin()->second.depthOfFirstCorner,
-                    patch.uhs.begin()->second.depthOfFirstCorner);
-                varId++;
                 for (; varId < depthNum; varId++){ // for depths
-                    MSK_putvarbound(task, varId, MSK_BK_RA, 0.1, 10.0);
+                    MSK_putvarbound(task, varId, MSK_BK_LO, 0.5, +MSK_INFINITY);
                 }
-                for (; varId < depthNum + slackVarNum; varId++){ // for slack vars
-                    MSK_putvarbound(task, varId, MSK_BK_LO, 0.0, +MSK_INFINITY);
-                }
+                //for (; varId < depthNum + slackVarNum; varId++){ // for slack vars
+                //    MSK_putvarbound(task, varId, MSK_BK_LO, 0.0, +MSK_INFINITY);
+                //}
             }
 
             // fill constraints related to each vars
@@ -2067,7 +1995,7 @@ namespace panoramix {
                 MSK_putconbound(task, consId, MSK_BK_UP, -MSK_INFINITY, 0.0);
             }
 
-            Tock(tick);
+            //Tock(tick);
 
         }
 
@@ -2079,8 +2007,14 @@ namespace panoramix {
         }
 
         void MGPatchDepthsOptimizer::setDepthBounds(double depthLb, double depthUb){
-            for (int varId = 1; varId < _patch.uhs.size(); varId++){ // for depths
+            for (int varId = 0; varId < _patch.uhs.size(); varId++){ // for depths
                 MSK_putvarbound(static_cast<MosekData*>(_internal)->task, varId, MSK_BK_RA, depthLb, depthUb);
+            }
+        }
+
+        void MGPatchDepthsOptimizer::setDepthsAllGreaterThan(double lob){
+            for (int varId = 0; varId < _patch.uhs.size(); varId++){ // for depths
+                MSK_putvarbound(static_cast<MosekData*>(_internal)->task, varId, MSK_BK_LO, lob, +MSK_INFINITY);
             }
         }
 
@@ -2135,7 +2069,7 @@ namespace panoramix {
         }
 
         void MGPatchDepthsOptimizer::optimize() {
-            auto tick = Tick("do optimization");
+            //auto tick = Tick("do optimization");
 
             auto mosekData = static_cast<MosekData*>(_internal);
             auto & task = mosekData->task;
@@ -2150,7 +2084,7 @@ namespace panoramix {
             MSKsolstae solsta;
             MSK_getsolsta(task, MSK_SOL_BAS, &solsta);
 
-            Tock(tick);
+            //Tock(tick);
 
             switch (solsta){
             case MSK_SOL_STA_OPTIMAL:
@@ -2158,9 +2092,9 @@ namespace panoramix {
             {
                                              double *xx = new double[varNum];
                                              MSK_getxx(task, MSK_SOL_BAS, xx);
-                                             printf("Optimal primal solution\n");
+                                             //printf("Optimal primal solution\n");
                                              for (auto & uhv : _patch.uhs){ // get resulted depths
-                                                 uhv.second.depthOfFirstCorner = xx[unaryTemp[uhv.first].position];
+                                                 uhv.second.depthOfCenter = xx[unaryTemp[uhv.first].position];
                                              }
                                              delete[] xx;
                                              UpdateBinaryVars(_mg, _vanishingPoints, _patch.uhs, _patch.bhs);
@@ -2190,1023 +2124,7 @@ namespace panoramix {
             }
         }
 
-        //struct BinaryAnchors {
-        //    double weight;
-        //    std::vector<Vec3> anchors;
-        //    int positionOfFirstAnchor;
-        //    std::vector<double> slackValues;
-        //    std::array<std::vector<double>, 2> currentAnchorDepthsOnUnaries;
-        //};
-
-
-
-
-
-        //BinaryAnchors GetBinaryAnchors(const MixedGraph & mg, const MGBinaryHandle & bh){
-        //    static const int maxSampleNum = 3;
-        //    
-        //    if (mg.data(bh).is<MGBinaryRegionRegionBoundary>()){
-        //        BinaryAnchors bc;
-        //        bc.anchors = NumFilter(mg.data(bh).uncheckedRef<MGBinaryRegionRegionBoundary>().samples, maxSampleNum);
-        //        bc.weight = 0.1;
-        //        return bc;
-        //    }
-        //    else if (mg.data(bh).is<MGBinaryRegionRegionOverlapping>()){
-        //        BinaryAnchors bc;
-        //        bc.weight = 1e2 * mg.data(bh).uncheckedRef<MGBinaryRegionRegionOverlapping>().overlappingRatio;
-        //        auto & u1 = mg.data(mg.topo(bh).lowers.front());
-        //        auto & u2 = mg.data(mg.topo(bh).lowers.back());
-        //        Vec3 z = normalize(u1.uncheckedRef<MGUnaryRegion>().center + u2.uncheckedRef<MGUnaryRegion>().center);
-        //        Vec3 x, y;
-        //        std::tie(x, y) = ProposeXYDirectionsFromZDirection(z);
-        //        double minx = std::numeric_limits<double>::max(), 
-        //            miny = std::numeric_limits<double>::max();
-        //        double maxx = std::numeric_limits<double>::lowest(), 
-        //            maxy = std::numeric_limits<double>::lowest();
-        //        //bc.anchors = { u1.uncheckedRef<MGUnaryRegion>().normalizedCorners.front() };
-        //        //return bc;
-        //        bc.anchors.resize(4, z);
-        //        for (auto & a : u1.uncheckedRef<MGUnaryRegion>().normalizedCorners){
-        //            double dx = a.dot(x), dy = a.dot(y);
-        //            if (dx < minx){
-        //                bc.anchors[0] = a;
-        //                minx = dx;
-        //            }
-        //            else if (dx > maxx){
-        //                bc.anchors[1] = a;
-        //                maxx = dx;
-        //            }
-        //            if (dy < miny){
-        //                bc.anchors[2] = a;
-        //                miny = dy;
-        //            }
-        //            else if (dy > maxy){
-        //                bc.anchors[3] = a;
-        //                maxy = dy;
-        //            }
-        //        }
-        //        for (auto & a : u2.uncheckedRef<MGUnaryRegion>().normalizedCorners){
-        //            double dx = a.dot(x), dy = a.dot(y);
-        //            if (dx < minx){
-        //                bc.anchors[0] = a;
-        //                minx = dx;
-        //            }
-        //            else if (dx > maxx){
-        //                bc.anchors[1] = a;
-        //                maxx = dx;
-        //            }
-        //            if (dy < miny){
-        //                bc.anchors[2] = a;
-        //                miny = dy;
-        //            }
-        //            else if (dy > maxy){
-        //                bc.anchors[3] = a;
-        //                maxy = dy;
-        //            }
-        //        }
-        //        return bc;
-        //    }
-        //    else if (mg.data(bh).is<MGBinaryRegionLineConnection>()){
-        //        BinaryAnchors bc;
-        //        bc.anchors = NumFilter(mg.data(bh).uncheckedRef<MGBinaryRegionLineConnection>().samples, maxSampleNum);
-        //        bc.weight = 1;
-        //        return bc;
-        //    }
-        //    else if (mg.data(bh).is<MGBinaryLineLineIntersection>()){
-        //        BinaryAnchors bc;
-        //        auto & llInter = mg.data(bh).uncheckedRef<MGBinaryLineLineIntersection>();
-        //        bc.weight = 80;
-        //        bc.anchors = { llInter.relationCenter };
-        //        return bc;
-        //    }
-        //    else if (mg.data(bh).is<MGBinaryLineLineIncidence>()){
-        //        BinaryAnchors bc;
-        //        auto & llIncid = mg.data(bh).uncheckedRef<MGBinaryLineLineIncidence>();
-        //        bc.weight = 80;
-        //        bc.anchors = { llIncid.relationCenter };
-        //        return bc;
-        //    }
-
-        //    return BinaryAnchors();
-        //}
-        //
-        //std::vector<BinaryAnchors> GetAllBinaryAnchors(const MixedGraph & mg){
-        //    std::vector<BinaryAnchors> binaryAnchors(mg.internalElements<1>().size());
-        //    int connectionConsNum = 0;
-        //    for (int i = 0; i < mg.internalElements<1>().size(); i++){
-        //        binaryAnchors[i] = GetBinaryAnchors(mg, MGBinaryHandle(i));
-        //        binaryAnchors[i].positionOfFirstAnchor = connectionConsNum;
-        //        connectionConsNum += binaryAnchors[i].anchors.size();
-        //        binaryAnchors[i].slackValues.resize(binaryAnchors[i].anchors.size());
-        //        binaryAnchors[i].currentAnchorDepthsOnUnaries.front().resize(binaryAnchors[i].anchors.size());
-        //        binaryAnchors[i].currentAnchorDepthsOnUnaries.back().resize(binaryAnchors[i].anchors.size());
-        //    }
-        //    return binaryAnchors;
-        //}
-
-        //struct UnaryAnchors{
-        //    std::vector<Vec3> anchors;
-        //    std::vector<std::vector<double>> anchorDepthRatiosForVPs;
-        //    std::vector<double> currentAnchorDepths;
-        //};
-
-        //std::vector<UnaryAnchors> GetAllUnaryAnchors(const MixedGraph & mg, const std::vector<Vec3> & vps, 
-        //    const std::vector<BinaryAnchors> & binaryAnchors){
-        //    std::vector<UnaryAnchors> unaryAnchors(mg.internalElements<0>().size());
-        //    for (int i = 0; i < mg.internalElements<0>().size(); i++){
-        //        unaryAnchors[i].anchorDepthRatiosForVPs.resize(vps.size());
-        //        // collect all anchors
-        //        for (auto & bh : mg.topo(MGUnaryHandle(i)).uppers){
-        //            unaryAnchors[i].anchors.insert(unaryAnchors[i].anchors.end(),
-        //                binaryAnchors[bh.id].anchors.begin(), binaryAnchors[bh.id].anchors.end());
-        //        }
-        //        // compute anchor depth ratios for each vpid
-        //        for (int vpid = 0; vpid < vps.size(); vpid++){
-        //            auto & anchorDepthRatios = unaryAnchors[i].anchorDepthRatiosForVPs[vpid];
-        //            anchorDepthRatios.reserve(unaryAnchors[i].anchors.size());
-        //            for (auto & a : unaryAnchors[i].anchors){
-        //                anchorDepthRatios.push_back(DepthRatioOnMGUnaryWithAssignedClass(a, mg.data(MGUnaryHandle(i)), vps, vpid));
-        //            }
-        //        }
-        //        unaryAnchors[i].currentAnchorDepths.resize(unaryAnchors[i].anchors.size());
-        //        for (int k = 0; k < unaryAnchors[i].anchors.size(); k++){
-        //            unaryAnchors[i].currentAnchorDepths[k] = FirstCornerDepthOfMGUnary(mg.data(MGUnaryHandle(i))) *
-        //                DepthRatioOnMGUnary(unaryAnchors[i].anchors[k], mg.data(MGUnaryHandle(i)), vps);
-        //        }
-        //    }
-        //    return unaryAnchors;
-        //}
-
-
-        //static void MSKAPI printstr(void *handle, MSKCONST char str[]) {
-        //    printf("%s", str);
-        //}
-
-        //class MOSEKTaskForMixedGraph {
-        //public:
-        //    explicit MOSEKTaskForMixedGraph(MixedGraph & g,
-        //        const std::vector<Vec3> & v, 
-        //        const std::unordered_map<MGUnaryHandle, int> & c,
-        //        double dlb = 0.2, double dub = 0.5)
-        //        : mg(g), vps(v), ccids(c), depthLb(dlb), depthUb(dub) {
-        //        mg.gc();
-        //        initialize();
-        //    }
-
-        //    ~MOSEKTaskForMixedGraph() {
-        //        finalize();
-        //    }
-
-        //public:
-        //    double optimizeDepths() {
-        //        auto tick = Tick("Solve Equations");
-        //        MSKrescodee trmcode;
-        //        MSK_optimizetrm(task, &trmcode);
-        //        MSK_solutionsummary(task, MSK_STREAM_LOG);
-
-        //        MSKsolstae solsta;
-        //        MSK_getsolsta(task, MSK_SOL_BAS, &solsta);
-
-        //        Tock(tick);
-
-        //        switch (solsta){
-        //        case MSK_SOL_STA_OPTIMAL:
-        //        case MSK_SOL_STA_NEAR_OPTIMAL:
-        //        {
-        //                                         double *xx = new double[varNum];
-        //                                         MSK_getxx(task,
-        //                                             MSK_SOL_BAS,    /* Request the basic solution. */
-        //                                             xx);
-        //                                         printf("Optimal primal solution\n");
-        //                                         for (int i = 0; i < mg.internalElements<0>().size(); i++){
-        //                                             FirstCornerDepthOfMGUnary(mg.data(MGUnaryHandle(i))) = xx[i];
-        //                                         }
-        //                                         int slackVarId = mg.internalElements<0>().size();
-        //                                         for (auto & ba : binaryAnchors){ // get slack values
-        //                                             for (double & slack : ba.slackValues){
-        //                                                 slack = xx[slackVarId];
-        //                                                 slackVarId++;
-        //                                             }
-        //                                         }
-        //                                         for (int i = 0; i < mg.internalElements<1>().size(); i++){
-        //                                             auto & uhs = mg.topo(MGBinaryHandle(i)).lowers;
-        //                                             auto & ba = binaryAnchors[i];
-        //                                             for (int k = 0; k < ba.anchors.size(); k++){
-        //                                                 ba.currentAnchorDepthsOnUnaries.front()[k] =
-        //                                                     FirstCornerDepthOfMGUnary(mg.data(uhs.front())) *
-        //                                                     DepthRatioOnMGUnary(ba.anchors[k], mg.data(uhs.front()), vps);
-        //                                                 ba.currentAnchorDepthsOnUnaries.back()[k] =
-        //                                                     FirstCornerDepthOfMGUnary(mg.data(uhs.back())) *
-        //                                                     DepthRatioOnMGUnary(ba.anchors[k], mg.data(uhs.back()), vps);
-        //                                                 assert(FuzzyEquals(abs(
-        //                                                     ba.currentAnchorDepthsOnUnaries.front()[k] - 
-        //                                                     ba.currentAnchorDepthsOnUnaries.back()[k]),
-        //                                                     ba.slackValues[k], 0.1));
-        //                                             }
-        //                                         }
-        //                                         for (int i = 0; i < mg.internalElements<0>().size(); i++){
-        //                                             for (int k = 0; k < unaryAnchors[i].anchors.size(); k++){
-        //                                                 unaryAnchors[i].currentAnchorDepths[k] = FirstCornerDepthOfMGUnary(mg.data(MGUnaryHandle(i))) *
-        //                                                     unaryAnchors[i].anchorDepthRatiosForVPs[OrientationClassOfMGUnary(mg.data(MGUnaryHandle(i)))][k];
-        //                                                 assert(unaryAnchors[i].anchorDepthRatiosForVPs[OrientationClassOfMGUnary(mg.data(MGUnaryHandle(i)))][k]
-        //                                                     == DepthRatioOnMGUnary(unaryAnchors[i].anchors[k], mg.data(MGUnaryHandle(i)), vps));
-        //                                             }
-        //                                         }
-        //                                         assert(slackVarId == varNum);
-        //                                         delete[] xx;
-        //                                         double slackSum = 0.0;
-        //                                         for (auto & ba : binaryAnchors){
-        //                                             slackSum += std::accumulate(ba.slackValues.begin(), ba.slackValues.end(), 0.0);
-        //                                         }
-        //                                         return slackSum;
-        //                                         //break;
-        //        }
-        //        case MSK_SOL_STA_DUAL_INFEAS_CER:
-        //        case MSK_SOL_STA_PRIM_INFEAS_CER:
-        //        case MSK_SOL_STA_NEAR_DUAL_INFEAS_CER:
-        //        case MSK_SOL_STA_NEAR_PRIM_INFEAS_CER:
-        //            printf("Primal or dual infeasibility certificate found.\n");
-        //            break;
-        //        case MSK_SOL_STA_UNKNOWN:
-        //        {
-        //                                    char symname[MSK_MAX_STR_LEN];
-        //                                    char desc[MSK_MAX_STR_LEN];
-
-        //                                    /* If the solutions status is unknown, print the termination code
-        //                                    indicating why the optimizer terminated prematurely. */
-
-        //                                    MSK_getcodedesc(trmcode,
-        //                                        symname,
-        //                                        desc);
-
-        //                                    printf("The solution status is unknown.\n");
-        //                                    printf("The optimizer terminitated with code: %s\n", symname);
-        //                                    break;
-        //        }
-        //        default:
-        //            printf("Other solution status.\n");
-        //            break;
-        //        }
-
-        //        return std::numeric_limits<double>::max();
-        //    }
-
-        //    void adjustRegionOrientations() {
-        //        std::vector<double> binarySlackSums(binaryAnchors.size());
-        //        for (int i = 0; i < binaryAnchors.size(); i++){
-        //            binarySlackSums[i] = std::accumulate(binaryAnchors[i].slackValues.begin(),
-        //                binaryAnchors[i].slackValues.end(), 0.0);
-        //        }
-        //        std::vector<int> unaryRegionIds;
-        //        unaryRegionIds.reserve(mg.internalElements<0>().size());
-        //        for (int i = 0; i < mg.internalElements<0>().size(); i++){
-        //            if (mg.data(MGUnaryHandle(i)).is<MGUnaryLine>())
-        //                continue;
-        //            unaryRegionIds.push_back(i);
-        //        }
-
-        //        std::vector<double> unaryErrorScores(mg.internalElements<0>().size(), 0.0);
-        //        //static const double ignoredRatio = 0.25;
-        //        for (int i : unaryRegionIds){
-        //            auto & relatedBhs = mg.topo(MGUnaryHandle(i)).uppers;
-        //            double allSlackSum = 0.0;
-        //            double allSlackNum = 0;
-        //            for (auto & bh : relatedBhs){
-        //                allSlackSum += binarySlackSums[bh.id];
-        //                allSlackNum += binaryAnchors[bh.id].anchors.size();
-        //            }
-        //            //std::vector<double> relatedBinarySlackSumaries;
-        //            //relatedBinarySlackSumaries.reserve(relatedBhs.size());
-        //            //for (auto & bh : relatedBhs){
-        //            //    relatedBinarySlackSumaries.push_back(binarySlackSums[bh.id]/*/binaryAnchors[bh.id].anchors.size()*/);
-        //            //}
-        //            //std::sort(relatedBinarySlackSumaries.begin(), relatedBinarySlackSumaries.end());
-        //            //double errorScore = std::accumulate(relatedBinarySlackSumaries.begin(),
-        //            //    relatedBinarySlackSumaries.begin() + (relatedBinarySlackSumaries.size() + 1) * (1.0 - ignoredRatio), 0.0)
-        //            //    / ((relatedBinarySlackSumaries.size() + 1) * (1.0 - ignoredRatio));
-        //            //unaryErrorScores[i] = errorScore;
-        //            unaryErrorScores[i] = allSlackSum / allSlackNum;
-        //        }
-        //        
-        //        std::sort(unaryRegionIds.begin(), unaryRegionIds.end(), [&unaryErrorScores](int uhid1, int uhid2){
-        //            return unaryErrorScores[uhid1] > unaryErrorScores[uhid2];
-        //        });
-
-        //        // adjust orientations now
-        //        int count = 0;
-
-        //        for (int uhid : unaryRegionIds){
-        //            if (count++ > unaryRegionIds.size() / 2)
-        //                break;
-
-        //            // get neighbor anchor depths
-        //            std::vector<double> neighborAnchorDepths;
-        //            std::vector<double> neighborAnchorDepthWeights;
-
-        //            neighborAnchorDepths.reserve(unaryAnchorIdsTable[uhid].size() / 2);
-        //            neighborAnchorDepthWeights.reserve(unaryAnchorIdsTable[uhid].size() / 2);
-
-        //            auto & relatedBhs = mg.topo(MGUnaryHandle(uhid)).uppers;
-        //            for (auto & bh : relatedBhs){
-        //                bool isAtFront = uhid == mg.topo(bh).lowers.front().id;
-        //                auto & neighborAnchorDepthsOnThisBh = isAtFront ? 
-        //                    binaryAnchors[bh.id].currentAnchorDepthsOnUnaries.back() :
-        //                    binaryAnchors[bh.id].currentAnchorDepthsOnUnaries.front();
-        //                neighborAnchorDepths.insert(neighborAnchorDepths.end(), 
-        //                    neighborAnchorDepthsOnThisBh.begin(), neighborAnchorDepthsOnThisBh.end());
-        //                neighborAnchorDepthWeights.insert(neighborAnchorDepthWeights.end(),
-        //                    neighborAnchorDepthsOnThisBh.size(), binaryAnchors[bh.id].weight);
-        //            }
-
-        //            int bestVPId = -1;
-        //            double minError = std::numeric_limits<double>::max();
-
-        //            for (int vpid = 0; vpid < vps.size(); vpid++){
-        //                const std::vector<double> & thisAnchorDepths = unaryAnchors[uhid].anchorDepthRatiosForVPs[vpid];
-        //                assert(thisAnchorDepths.size() == neighborAnchorDepths.size());
-
-        //                // find the min distance between |thisAnchorDepths * x - neighborAnchorDepths|
-        //                Eigen::Map<const Eigen::VectorXd> neighborAnchorDepthsVector(neighborAnchorDepths.data(), neighborAnchorDepths.size());
-        //                Eigen::Map<const Eigen::VectorXd> neighborAnchorDepthsWeightsVector(neighborAnchorDepthWeights.data(), neighborAnchorDepthWeights.size());
-        //                Eigen::Map<const Eigen::VectorXd> thisAnchorDepthsVector(thisAnchorDepths.data(), thisAnchorDepths.size());
-        //                double errorWithThisVPId = -Square(neighborAnchorDepthsVector.cwiseProduct(neighborAnchorDepthsWeightsVector)
-        //                    .dot(thisAnchorDepthsVector.cwiseProduct(neighborAnchorDepthsWeightsVector).normalized()));
-
-        //                if (errorWithThisVPId < minError){
-        //                    bestVPId = vpid;
-        //                    minError = errorWithThisVPId;
-        //                }
-        //            }
-
-        //            setUnaryOrientationClass(MGUnaryHandle(uhid), bestVPId);
-        //        }                
-        //    }
-
-        //private:
-        //    void initialize() {
-        //        int depthNum = mg.internalElements<0>().size();
-        //        connectionConsNum = 0;
-
-        //        binaryAnchors = GetAllBinaryAnchors(mg);
-        //        for (int i = 0; i < binaryAnchors.size(); i++){
-        //            connectionConsNum += binaryAnchors[i].anchors.size();
-        //        }
-        //        unaryAnchors = GetAllUnaryAnchors(mg, vps, binaryAnchors);
-
-        //        // get first uh in each cc
-        //        std::map<int, MGUnaryHandle> firstUhsInEachCC;
-        //        firstCCUhs.clear();
-        //        for (auto & uhCC : ccids){
-        //            if (!Contains(firstUhsInEachCC, uhCC.second)){
-        //                firstUhsInEachCC[uhCC.second] = uhCC.first;
-        //                firstCCUhs.insert(uhCC.first);
-        //            }
-        //        }
-
-        //        // additional consNum for anchors
-        //        int ccConsNum = firstCCUhs.size();
-
-        //        int slackVarNum = connectionConsNum;
-
-        //        varNum = depthNum + slackVarNum; // depths, slackVars
-        //        consNum = connectionConsNum * 2; // depth1 * ratio1 - depth2 * ratio2 < slackVar;  
-        //        // depth2 * ratio2 - depth1 * ratio1 < slackVar
-        //        //ccConsNum +  // depth = defaultValue
-        //        //depthNum; // depth \in [depthLb, depthUb]
-
-        //        env = nullptr;
-        //        task = nullptr;
-
-        //        MSK_makeenv(&env, nullptr);
-        //        MSK_maketask(env, consNum, varNum, &task);
-        //        //MSK_linkfunctotaskstream(task, MSK_STREAM_LOG, NULL, printstr);
-        //        MSK_appendcons(task, consNum);
-        //        MSK_appendvars(task, varNum);
-
-        //        int slackVarId = 0;
-        //        for (int i = 0; i < binaryAnchors.size(); i++){
-        //            for (auto & a : binaryAnchors[i].anchors){
-        //                MSK_putcj(task, slackVarId, binaryAnchors[i].weight);
-        //                slackVarId++;
-        //            }
-        //        }
-
-        //        // bounds for vars
-        //        int varId = 0;
-        //        for (; varId < depthNum; varId++){
-        //            // depth \in  [depthLb, depthUb]
-        //            if (!Contains(firstCCUhs, MGUnaryHandle(varId))){
-        //                MSK_putvarbound(task, varId, MSK_BK_RA, depthLb, depthUb);
-        //            }
-        //            else{ // depth = defaultValue
-        //                double defaultDepth = FirstCornerDepthOfMGUnary(mg.data(MGUnaryHandle(varId)));
-        //                MSK_putvarbound(task, varId, MSK_BK_FX, defaultDepth, defaultDepth);
-        //            }
-        //        }
-        //        for (; varId < depthNum + slackVarNum; varId++){
-        //            // slack >= 0
-        //            MSK_putvarbound(task, varId, MSK_BK_LO, 0.0, +MSK_INFINITY);
-        //        }
-
-        //        // parameters for each var in constraints
-        //        unaryDepthsTable = std::vector<std::vector<std::vector<MSKrealt>>>(depthNum);
-        //        unaryAnchorIdsTable = std::vector<std::vector<MSKint32t>>(depthNum);
-
-        //        varId = 0;
-        //        for (; varId < depthNum; varId++){ // depths
-        //            auto & relatedBhs = mg.topo(MGUnaryHandle(varId)).uppers;
-        //            int relatedAnchorsNum = 0;
-        //            for (auto & bh : relatedBhs){
-        //                relatedAnchorsNum += binaryAnchors[bh.id].anchors.size();
-        //            }
-        //            int relatedConsNum = relatedAnchorsNum * 2;
-
-        //            // collect consIds
-        //            std::vector<MSKint32t> & consIds = unaryAnchorIdsTable[varId];
-        //            consIds.reserve(relatedConsNum);
-        //            for (auto & bh : relatedBhs){
-        //                int firstAnchorPosition = binaryAnchors[bh.id].positionOfFirstAnchor;
-        //                for (int k = 0; k < binaryAnchors[bh.id].anchors.size(); k++){
-        //                    consIds.push_back((firstAnchorPosition + k) * 2); // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
-        //                    consIds.push_back((firstAnchorPosition + k) * 2 + 1); // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
-        //                }
-        //            }
-
-        //            auto & consValueTable = unaryDepthsTable[varId];
-
-        //            consValueTable.resize(vps.size());
-
-        //            for (int vpid = 0; vpid < vps.size(); vpid++){
-        //                auto & consValues = consValueTable[vpid];
-        //                consValues.reserve(relatedConsNum);
-
-        //                for (auto & bh : relatedBhs){
-        //                    int firstAnchorPosition = binaryAnchors[bh.id].positionOfFirstAnchor;
-        //                    for (int k = 0; k < binaryAnchors[bh.id].anchors.size(); k++){
-        //                        consIds.push_back((firstAnchorPosition + k) * 2); // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
-        //                        consIds.push_back((firstAnchorPosition + k) * 2 + 1); // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
-
-        //                        auto & a = binaryAnchors[bh.id].anchors[k];
-        //                        double ratio = DepthRatioOnMGUnaryWithAssignedClass(a, mg.data(MGUnaryHandle(varId)), vps, vpid);
-        //                        bool isOnLeftSide = varId == mg.topo(bh).lowers.front().id;
-        //                        if (isOnLeftSide){ // as depth1
-        //                            consValues.push_back(ratio);
-        //                            consValues.push_back(-ratio);
-        //                        }
-        //                        else{
-        //                            consValues.push_back(-ratio);
-        //                            consValues.push_back(ratio);
-        //                        }
-        //                    }
-        //                }
-        //            }                 
-
-        //            MSK_putacol(task, varId, relatedConsNum, consIds.data(), 
-        //                consValueTable[OrientationClassOfMGUnary(mg.data(MGUnaryHandle(varId)))].data());
-        //        }
-        //        for (; varId < depthNum + slackVarNum; varId++){ // slack vars
-        //            MSKint32t consIds[] = {
-        //                (varId - depthNum) * 2, // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
-        //                (varId - depthNum) * 2 + 1  // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
-        //            };
-        //            MSKrealt consValues[] = { -1.0, -1.0 };
-        //            MSK_putacol(task, varId, 2, consIds, consValues);
-        //        }
-
-        //        // bounds for constraints
-        //        for (int consId = 0; consId < consNum; consId++){
-        //            // all [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0];
-        //            MSK_putconbound(task, consId, MSK_BK_UP, -MSK_INFINITY, 0.0);
-        //        }
-
-        //        MSK_putobjsense(task, MSK_OBJECTIVE_SENSE_MINIMIZE);
-        //    }
-        //    void finalize(){
-        //        // finalize
-        //        MSK_deletetask(&task);
-        //        MSK_deleteenv(&env);
-        //    }
-        //    void setUnaryOrientationClass(const MGUnaryHandle & uh, int claz){
-        //        if (OrientationClassOfMGUnary(mg.data(uh)) == claz)
-        //            return;
-        //        OrientationClassOfMGUnary(mg.data(uh)) = claz;
-        //        auto & consIds = unaryAnchorIdsTable[uh.id];
-        //        auto & consValues = unaryDepthsTable[uh.id][claz];
-        //        MSK_putacol(task, uh.id, consValues.size(), consIds.data(), consValues.data());
-        //    }
-
-        //private:
-        //    MixedGraph & mg;
-        //    const std::vector<Vec3> & vps;
-        //    const std::unordered_map<MGUnaryHandle, int> & ccids;
-        //    double depthLb, depthUb;
-
-        //    std::vector<BinaryAnchors> binaryAnchors;
-        //    std::vector<UnaryAnchors> unaryAnchors;
-
-        //    int connectionConsNum;
-
-        //    std::vector<std::vector<std::vector<MSKrealt>>> unaryDepthsTable; // table[unaryId][vpId] -> depths
-        //    std::vector<std::vector<MSKint32t>> unaryAnchorIdsTable;
-
-        //    std::set<MGUnaryHandle> firstCCUhs;
-        //    
-        //    int consNum, varNum;
-
-        //    MSKenv_t env;
-        //    MSKtask_t task;
-        //};
-
-
-        //void OptimizeMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps,
-        //    const std::unordered_map<MGUnaryHandle, int> & ccids,
-        //    int iterNum,
-        //    const std::function<void(const MixedGraph &)> & callbackEachIteration) {
-
-        //    MOSEKTaskForMixedGraph task(mg, vps, ccids);
-        //    for (int i = 0; i < iterNum; i++){
-        //        std::cout << "iter " << i << std::endl;
-        //        double slackSum = task.optimizeDepths();
-        //        std::cout << "slack sum is " << slackSum << std::endl;
-        //        task.adjustRegionOrientations();
-        //        callbackEachIteration(mg);
-        //    }
-
-        //}
-
-        /*
-        void SolveDepthsInMixedGraph(MixedGraph & mg, const std::vector<Vec3> & vps, 
-            const std::unordered_map<MGUnaryHandle, int> & ccids){
-            
-            using namespace Eigen;
-            SparseMatrix<double> A, W;
-            VectorXd B;
-            VectorXd X;
-
-            mg.gc();
-            using namespace Eigen;
-
-            //// PREPARE
-            auto tick = Tick("SetUp Equations");
-            assert(mg.isDense());
-
-            int varNum = mg.internalElements<0>().size();
-            int consNum = 0;
-
-            std::vector<BinaryAnchors> binaryAnchors(mg.internalElements<1>().size());
-            for (int i = 0; i < mg.internalElements<1>().size(); i++){
-                binaryAnchors[i] = GetBinaryAnchors(mg, MGBinaryHandle(i));
-                consNum += binaryAnchors[i].anchors.size();
-            }
-
-            // get first uh in each cc
-            std::map<int, MGUnaryHandle> firstUhsInEachCC;
-            for (auto & uhCC : ccids){
-                if (!Contains(firstUhsInEachCC, uhCC.second)){
-                    firstUhsInEachCC[uhCC.second] = uhCC.first;
-                }
-            }
-            // additional consNum for anchors
-            consNum += firstUhsInEachCC.size();
-
-            A.resize(consNum, varNum);
-            W.resize(consNum, consNum);
-            B.resize(consNum);
-
-            // write equations
-            int eid = 0;
-            for (int i = 0; i < binaryAnchors.size(); i++){
-                for (auto & a : binaryAnchors[i].anchors){
-                    auto uh1 = mg.topo(MGBinaryHandle(i)).lowers.front();
-                    auto uh2 = mg.topo(MGBinaryHandle(i)).lowers.back();
-                    auto & u1 = mg.data(uh1);
-                    auto & u2 = mg.data(uh2);
-                    double ratio1 = DepthRatioOnMGUnary(a, u1, vps);
-                    double ratio2 = DepthRatioOnMGUnary(a, u2, vps);
-                    A.insert(eid, uh1.id) = ratio1;
-                    A.insert(eid, uh2.id) = -ratio2;
-                    B(eid) = 0.0;
-                    W.insert(eid, eid) = binaryAnchors[i].weight;
-                    eid++;
-                }
-            }
-
-            // the anchor equations
-            for (auto & uhCCId : firstUhsInEachCC){
-                A.insert(eid, 0) = 1.0;
-                B(eid) = FirstCornerDepthOfMGUnary(mg.data(uhCCId.second));
-                W.insert(eid, eid) = 1.0;
-                eid++;
-            }
-            assert(eid == consNum);
-            Tock(tick);
-
-
-            ///// SOLVE
-            X.resize(A.cols());
-            for (int i = 0; i < X.size(); i++){
-                X(i) = FirstCornerDepthOfMGUnary(mg.data(MGUnaryHandle(i)));
-            }
-            // solve the equation system
-            const bool useWeights = true;
-            SparseQR<Eigen::SparseMatrix<double>, COLAMDOrdering<int>> solver;
-            static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
-            Eigen::SparseMatrix<double> WA = W * A;
-            A.makeCompressed();
-            WA.makeCompressed();
-
-            tick = Tick("Solve Equations");
-            solver.compute(useWeights ? WA : A);
-            Tock(tick);
-
-            if (solver.info() != Success) {
-                assert(0);
-                std::cout << "computation error" << std::endl;
-                return;
-            }
-            VectorXd WB = W * B;
-            X = solver.solve(useWeights ? WB : B);
-            if (solver.info() != Success) {
-                assert(0);
-                std::cout << "solving error" << std::endl;
-                return;
-            }
-
-            std::cout << "filling back solutions" << std::endl;
-
-            double Xmean = X.mean();
-            std::cout << "mean(X) = " << X.mean() << std::endl;
-            for (int i = 0; i < X.size(); i++){
-                FirstCornerDepthOfMGUnary(mg.data(MGUnaryHandle(i))) = X(i);
-            }
-
-        }
-        */
-
-        /*
-        void SolveDepthsInMixedGraphMOSEKOnce(MixedGraph & mg, const std::vector<Vec3> & vps,
-            const std::set<MGUnaryHandle> & firstCCUhs,
-            int connectionConsNum,
-            std::vector<BinaryAnchors> & binaryAnchors,
-            double depthLb, double depthUb){
-
-            assert(mg.isDense());
-            int depthNum = mg.internalElements<0>().size();
-
-            // additional consNum for anchors
-            int ccConsNum = firstCCUhs.size();
-
-            int slackVarNum = connectionConsNum;
-
-            int varNum = depthNum + slackVarNum; // depths, slackVars
-            int consNum = connectionConsNum * 2; // depth1 * ratio1 - depth2 * ratio2 < slackVar;  
-            // depth2 * ratio2 - depth1 * ratio1 < slackVar
-            //ccConsNum +  // depth = defaultValue
-            //depthNum; // depth \in [depthLb, depthUb]
-
-            MSKenv_t env = nullptr;
-            MSKtask_t task = nullptr;
-
-            MSK_makeenv(&env, nullptr);
-            MSK_maketask(env, consNum, varNum, &task);
-            //MSK_linkfunctotaskstream(task, MSK_STREAM_LOG, NULL, printstr);
-            MSK_appendcons(task, consNum);
-            MSK_appendvars(task, varNum);
-
-            int slackVarId = 0;
-            for (int i = 0; i < binaryAnchors.size(); i++){
-                for (auto & a : binaryAnchors[i].anchors){
-                    MSK_putcj(task, slackVarId, binaryAnchors[i].weight);
-                    slackVarId++;
-                }
-            }
-
-            // bounds for vars
-            int varId = 0;
-            for (; varId < depthNum; varId++){
-                // depth \in  [depthLb, depthUb]
-                if (!Contains(firstCCUhs, MGUnaryHandle(varId))){
-                    MSK_putvarbound(task, varId, MSK_BK_RA, depthLb, depthUb);
-                }
-                else{ // depth = defaultValue
-                    double defaultDepth = FirstCornerDepthOfMGUnary(mg.data(MGUnaryHandle(varId)));
-                    MSK_putvarbound(task, varId, MSK_BK_FX, defaultDepth, defaultDepth);
-                }
-            }
-            for (; varId < depthNum + slackVarNum; varId++){
-                // slack >= 0
-                MSK_putvarbound(task, varId, MSK_BK_LO, 0.0, +MSK_INFINITY);
-            }
-
-            // parameters for each var in constraints
-            varId = 0;
-            for (; varId < depthNum; varId++){ // depths
-                auto & relatedBhs = mg.topo(MGUnaryHandle(varId)).uppers;
-                int relatedAnchorsNum = 0;
-                for (auto & bh : relatedBhs){
-                    relatedAnchorsNum += binaryAnchors[bh.id].anchors.size();
-                }
-                int relatedConsNum = relatedAnchorsNum * 2;
-
-                std::vector<MSKint32t> consIds;
-                std::vector<MSKrealt> consValues;
-
-                consIds.reserve(relatedConsNum);
-                consValues.reserve(relatedConsNum);
-
-                for (auto & bh : relatedBhs){
-                    int firstAnchorPosition = binaryAnchors[bh.id].positionOfFirstAnchor;
-                    for (int k = 0; k < binaryAnchors[bh.id].anchors.size(); k++){
-                        consIds.push_back((firstAnchorPosition + k) * 2); // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
-                        consIds.push_back((firstAnchorPosition + k) * 2 + 1); // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
-
-                        auto & a = binaryAnchors[bh.id].anchors[k];
-                        double ratio = DepthRatioOnMGUnary(a, mg.data(MGUnaryHandle(varId)), vps);
-                        bool isOnLeftSide = varId == mg.topo(bh).lowers.front().id;
-                        if (isOnLeftSide){ // as depth1
-                            consValues.push_back(ratio);
-                            consValues.push_back(-ratio);
-                        }
-                        else{
-                            consValues.push_back(-ratio);
-                            consValues.push_back(ratio);
-                        }
-                    }
-                }
-
-                MSK_putacol(task, varId, relatedConsNum, consIds.data(), consValues.data());
-            }
-            for (; varId < depthNum + slackVarNum; varId++){ // slack vars
-                MSKint32t consIds[] = {
-                    (varId - depthNum) * 2, // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
-                    (varId - depthNum) * 2 + 1  // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
-                };
-                MSKrealt consValues[] = { -1.0, -1.0 };
-
-                MSK_putacol(task, varId, 2, consIds, consValues);
-            }
-
-            // bounds for constraints
-            for (int consId = 0; consId < consNum; consId++){
-                // all [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0];
-                MSK_putconbound(task, consId, MSK_BK_UP, -MSK_INFINITY, 0.0);
-            }
-
-            MSK_putobjsense(task, MSK_OBJECTIVE_SENSE_MINIMIZE);
-            MSKrescodee trmcode;
-            MSK_optimizetrm(task, &trmcode);
-            MSK_solutionsummary(task, MSK_STREAM_LOG);
-
-            MSKsolstae solsta;
-            MSK_getsolsta(task, MSK_SOL_BAS, &solsta);
-
-            switch (solsta){
-            case MSK_SOL_STA_OPTIMAL:
-            case MSK_SOL_STA_NEAR_OPTIMAL:
-            {
-                                             double *xx = new double[varNum];
-                                             MSK_getxx(task,
-                                                 MSK_SOL_BAS,    
-                                                 xx);
-                                             printf("Optimal primal solution\n");
-                                             for (int i = 0; i < depthNum; i++){ // get resulted depths
-                                                 FirstCornerDepthOfMGUnary(mg.data(MGUnaryHandle(i))) = xx[i];
-                                             }
-                                             int slackVarId = depthNum;
-                                             for (auto & ba : binaryAnchors){ // get slack values
-                                                 for (double & slack : ba.slackValues){
-                                                     slack = xx[slackVarId];
-                                                     slackVarId++;
-                                                 }
-                                             }
-                                             assert(slackVarId == varNum);
-                                             delete[] xx;
-                                             break;
-            }
-            case MSK_SOL_STA_DUAL_INFEAS_CER:
-            case MSK_SOL_STA_PRIM_INFEAS_CER:
-            case MSK_SOL_STA_NEAR_DUAL_INFEAS_CER:
-            case MSK_SOL_STA_NEAR_PRIM_INFEAS_CER:
-                printf("Primal or dual infeasibility certificate found.\n");
-                break;
-            case MSK_SOL_STA_UNKNOWN:
-            {
-                                        char symname[MSK_MAX_STR_LEN];
-                                        char desc[MSK_MAX_STR_LEN];
-
-                                     
-
-                                        MSK_getcodedesc(trmcode,
-                                            symname,
-                                            desc);
-
-                                        printf("The solution status is unknown.\n");
-                                        printf("The optimizer terminitated with code: %s\n", symname);
-                                        break;
-            }
-            default:
-                printf("Other solution status.\n");
-                break;
-            }
-
-
-            // finalize
-            MSK_deletetask(&task);
-            MSK_deleteenv(&env);
-
-        }
-        */
-        
-        /*void SolveDepthsInMixedGraphMOSEK(MixedGraph & mg, const std::vector<Vec3> & vps,
-            const std::unordered_map<MGUnaryHandle, int> & ccids,
-            double depthLb, double depthUb) {
-
-            using namespace Eigen;
-            mg.gc();
-
-            //// PREPARE
-            auto tick = Tick("SetUp Equations");
-            assert(mg.isDense());
-
-            int depthNum = mg.internalElements<0>().size();
-            int connectionConsNum = 0;
-
-            std::vector<BinaryAnchors> binaryAnchors(mg.internalElements<1>().size());
-            std::vector<int> positionOfFirstAnchorInEachBinaryAnchors(mg.internalElements<1>().size());
-            for (int i = 0; i < mg.internalElements<1>().size(); i++){
-                binaryAnchors[i] = GetBinaryAnchors(mg, MGBinaryHandle(i));
-                positionOfFirstAnchorInEachBinaryAnchors[i] = connectionConsNum;
-                connectionConsNum += binaryAnchors[i].anchors.size();
-            }
-
-            // get first uh in each cc
-            std::map<int, MGUnaryHandle> firstUhsInEachCC;
-            std::set<MGUnaryHandle> firstCCUhs;
-            for (auto & uhCC : ccids){
-                if (!Contains(firstUhsInEachCC, uhCC.second)){
-                    firstUhsInEachCC[uhCC.second] = uhCC.first;
-                    firstCCUhs.insert(uhCC.first);
-                }
-            }
-
-            // additional consNum for anchors
-            int ccConsNum = firstUhsInEachCC.size();            
-            
-            int slackVarNum = connectionConsNum;
-
-            int varNum = depthNum + slackVarNum; // depths, slackVars
-            int consNum = connectionConsNum * 2; // depth1 * ratio1 - depth2 * ratio2 < slackVar;  
-                // depth2 * ratio2 - depth1 * ratio1 < slackVar
-                //ccConsNum +  // depth = defaultValue
-                //depthNum; // depth \in [depthLb, depthUb]
-
-            MSKenv_t env = nullptr;
-            MSKtask_t task = nullptr;
-
-            MSK_makeenv(&env, nullptr);
-            MSK_maketask(env, consNum, varNum, &task);
-            //MSK_linkfunctotaskstream(task, MSK_STREAM_LOG, NULL, printstr);
-            MSK_appendcons(task, consNum);
-            MSK_appendvars(task, varNum);
-
-            int slackVarId = 0;
-            for (int i = 0; i < binaryAnchors.size(); i++){
-                for (auto & a : binaryAnchors[i].anchors){
-                    MSK_putcj(task, slackVarId, binaryAnchors[i].weight);
-                    slackVarId++;
-                }
-            }
-
-            // bounds for vars
-            int varId = 0;
-            for (; varId < depthNum; varId++){
-                // depth \in  [depthLb, depthUb]
-                if (!Contains(firstCCUhs, MGUnaryHandle(varId))){
-                    MSK_putvarbound(task, varId, MSK_BK_RA, depthLb, depthUb);
-                }
-                else{ // depth = defaultValue
-                    double defaultDepth = FirstCornerDepthOfMGUnary(mg.data(MGUnaryHandle(varId)));
-                    MSK_putvarbound(task, varId, MSK_BK_FX, defaultDepth, defaultDepth);
-                }
-            }
-            for (; varId < depthNum + slackVarNum; varId++){
-                // slack >= 0
-                MSK_putvarbound(task, varId, MSK_BK_LO, 0.0, +MSK_INFINITY);
-            }
-
-            // parameters for each var in constraints
-            varId = 0;
-            for (; varId < depthNum; varId++){ // depths
-                auto & relatedBhs = mg.topo(MGUnaryHandle(varId)).uppers;
-                int relatedAnchorsNum = 0;
-                for (auto & bh : relatedBhs){
-                    relatedAnchorsNum += binaryAnchors[bh.id].anchors.size();
-                }
-                int relatedConsNum = relatedAnchorsNum * 2;
-                
-                std::vector<MSKint32t> consIds;
-                std::vector<MSKrealt> consValues;
-                consIds.reserve(relatedConsNum);
-                consValues.reserve(relatedConsNum);
-
-                for (auto & bh : relatedBhs){
-                    int firstAnchorPosition = positionOfFirstAnchorInEachBinaryAnchors[bh.id];
-                    for (int k = 0; k < binaryAnchors[bh.id].anchors.size(); k++){
-                        consIds.push_back((firstAnchorPosition + k) * 2); // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
-                        consIds.push_back((firstAnchorPosition + k) * 2 + 1); // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
-
-                        auto & a = binaryAnchors[bh.id].anchors[k];
-                        double ratio = DepthRatioOnMGUnary(a, mg.data(MGUnaryHandle(varId)), vps);
-                        bool isOnLeftSide = varId == mg.topo(bh).lowers.front().id;
-                        if (isOnLeftSide){ // as depth1
-                            consValues.push_back(ratio);
-                            consValues.push_back(-ratio);
-                        }
-                        else{
-                            consValues.push_back(-ratio);
-                            consValues.push_back(ratio);
-                        }
-                    }
-                }
-
-                MSK_putacol(task, varId, relatedConsNum, consIds.data(), consValues.data());
-            }
-            for (; varId < depthNum + slackVarNum; varId++){ // slack vars
-                MSKint32t consIds[] = { 
-                    (varId - depthNum) * 2, // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
-                    (varId - depthNum) * 2 + 1  // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
-                };
-                MSKrealt consValues[] = { -1.0, -1.0 };
-
-                MSK_putacol(task, varId, 2, consIds, consValues);
-            }
-
-            // bounds for constraints
-            for (int consId = 0; consId < consNum; consId++){
-                // all [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0];
-                MSK_putconbound(task, consId, MSK_BK_UP, -MSK_INFINITY, 0.0);
-            }
-
-            Tock(tick);
-
-            tick = Tick("Solve Equations");
-            MSK_putobjsense(task, MSK_OBJECTIVE_SENSE_MINIMIZE);
-            MSKrescodee trmcode;
-            MSK_optimizetrm(task, &trmcode);
-            MSK_solutionsummary(task, MSK_STREAM_LOG);
-            
-            MSKsolstae solsta;
-            MSK_getsolsta(task, MSK_SOL_BAS, &solsta);
-
-            Tock(tick);
-
-            switch (solsta){
-            case MSK_SOL_STA_OPTIMAL:
-            case MSK_SOL_STA_NEAR_OPTIMAL:
-            {
-                                             double *xx = new double[varNum];
-                                             MSK_getxx(task,
-                                                 MSK_SOL_BAS,    
-                                                 xx);
-                                             printf("Optimal primal solution\n");
-                                             for (int i = 0; i < depthNum; i++){
-                                                 FirstCornerDepthOfMGUnary(mg.data(MGUnaryHandle(i))) = xx[i];
-                                             }
-                                             delete[] xx;
-                                             break;
-            }
-            case MSK_SOL_STA_DUAL_INFEAS_CER:
-            case MSK_SOL_STA_PRIM_INFEAS_CER:
-            case MSK_SOL_STA_NEAR_DUAL_INFEAS_CER:
-            case MSK_SOL_STA_NEAR_PRIM_INFEAS_CER:
-                printf("Primal or dual infeasibility certificate found.\n");
-                break;
-            case MSK_SOL_STA_UNKNOWN:
-            {
-                                        char symname[MSK_MAX_STR_LEN];
-                                        char desc[MSK_MAX_STR_LEN];
-
-                                        MSK_getcodedesc(trmcode,
-                                            symname,
-                                            desc);
-
-                                        printf("The solution status is unknown.\n");
-                                        printf("The optimizer terminitated with code: %s\n", symname);
-                                        break;
-            }
-            default:
-                printf("Other solution status.\n");
-                break;
-            }
-
-
-            // finalize
-            MSK_deletetask(&task);
-            MSK_deleteenv(&env);
-
-        }
-        */
-
+  
 
     }
 }

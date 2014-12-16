@@ -42,7 +42,7 @@ TEST(View, LinesGraph) {
 
     std::vector<core::Vec3> vanishingPoints;
     std::vector<core::LinesGraph> linesGraphs;
-    core::EstimateVanishingPointsAndBuildLinesGraphs(views, vanishingPoints, linesGraphs, 20, 100, 10);
+    core::EstimateVanishingPointsAndBuildLinesGraphs(views, vanishingPoints, linesGraphs, 10, 100, 5);
 
     for (int i = 0; i < views.size(); i++){
         vis::Visualizer2D viz(views[i].image);
@@ -211,7 +211,8 @@ TEST(View, ConstraintsAcrossViews){
 void VisualizeMixedGraph(const core::Image & panorama, 
     const core::MixedGraph & mg,
     const std::vector<core::MGPatch> & patches, 
-    const std::vector<core::Vec3> & vps){
+    const std::vector<core::Vec3> & vps,
+    bool doModal){
     
     vis::Visualizer3D viz;
     viz << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB);
@@ -234,11 +235,9 @@ void VisualizeMixedGraph(const core::Image & panorama,
                 });
                 if (spp.corners.size() < 3)
                     continue;
+
                 spp.projectionCenter = core::Point3(0, 0, 0);
                 spp.plane = core::PlaneOfMGUnary(region, vps, uhv.second);
-                if (uhv.second.depthOfFirstCorner > 2){
-                    continue;
-                }
                 spps.push_back(std::move(spp));
             }
             else if (v.type == core::MGUnary::Line){
@@ -247,9 +246,6 @@ void VisualizeMixedGraph(const core::Image & panorama,
             }
         }
     }
-
-    auto sppbbox = core::BoundingBoxOfContainer(spps);
-    auto linebbox = core::BoundingBoxOfContainer(lines);
 
     viz << vis::manip3d::Begin(spps) << vis::manip3d::SetTexture(panorama) << vis::manip3d::End;
     viz << vis::manip3d::SetDefaultLineWidth(5.0) << lines;
@@ -262,20 +258,21 @@ void VisualizeMixedGraph(const core::Image & panorama,
             auto & v = bhv.second;
             auto & samples = mg.data(bh).samples;
             for (int i = 0; i < samples.size(); i++){
-                connectionLines.emplace_back(samples[i] * v.sampleDepthsOnRelatedUnaries.front()[i],
-                    samples[i] * v.sampleDepthsOnRelatedUnaries.back()[i]);
+                connectionLines.emplace_back(normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.front()[i],
+                    normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.back()[i]);
             }
         }
     }
 
-    //viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::DarkGray) << connectionLines;
-    //viz << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 300, core::Point3(5.0, 5.0, 5.0), ))
-    viz << vis::manip3d::Show();
+    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::DarkGray) 
+        << vis::manip3d::SetDefaultLineWidth(1.0)
+        << connectionLines;
+    viz << vis::manip3d::Show(doModal);
 
 }
 
 
-TEST(View, BuildMixedGraph) {
+TEST(MixedGraph, Build) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
     std::vector<core::RegionsGraph> regionsGraphs;
@@ -311,7 +308,83 @@ TEST(View, BuildMixedGraph) {
 
 }
 
-DEBUG_TEST(View, MixedGraphUtils){
+
+TEST(MixedGraph, OptimizateBinaryPatch) {
+
+    core::Image panorama;
+    std::vector<core::Vec3> vanishingPoints;
+
+    core::MixedGraph mg;
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
+
+    core::LoadFromDisk("./cache/test_view.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
+
+    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.mg", mg);
+    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.binaryVars", binaryVars);
+
+    for (auto & uhv : unaryVars){
+        uhv.second.depthOfCenter = 1.0;
+    }
+
+    // test small patches
+    for (auto & b : mg.elements<1>()){
+        core::MGPatch patch = core::MakePatchOnBinary(mg, b.topo.hd, unaryVars, binaryVars);
+        auto oldPatch = patch;        
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false);
+
+        auto & ud1 = mg.data(patch.uhs.begin()->first);
+        auto & ud2 = mg.data(std::next(patch.uhs.begin())->first);
+        auto & bd = mg.data(patch.bhs.begin()->first);
+
+        double errBefore = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
+        pdo.optimize();
+        double errAfter = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
+
+        if (errBefore < errAfter){
+            core::GetVersion();
+        }
+        EXPECT_GE(errBefore, errAfter);
+    }
+
+}
+
+TEST(MixedGraph, OptimizateStarPatch){
+
+    core::Image panorama;
+    std::vector<core::Vec3> vanishingPoints;
+
+    core::MixedGraph mg;
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
+
+    core::LoadFromDisk("./cache/test_view.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
+
+    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.mg", mg);
+    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.binaryVars", binaryVars);
+
+    for (auto & uhv : unaryVars){
+        uhv.second.depthOfCenter = 1.0;
+    }
+
+    for (auto & u : mg.elements<0>()){
+        core::MGPatch starPatch = core::MakeStarPatchAroundUnary(mg, u.topo.hd, unaryVars, binaryVars);
+        core::MGPatchDepthsOptimizer pdo(mg, starPatch, vanishingPoints, false);
+
+        double errBefore = core::AverageBinaryDistanceOfPatch(starPatch);// / core::AverageDepthOfPatch(starPatch);
+        pdo.optimize();
+        double errAfter = core::AverageBinaryDistanceOfPatch(starPatch);// / core::AverageDepthOfPatch(starPatch);
+
+        EXPECT_GE(errBefore, errAfter);
+    }
+
+}
+
+TEST(MixedGraph, Patches){
 
     core::Image panorama;
     std::vector<core::Vec3> vanishingPoints;
@@ -330,16 +403,70 @@ DEBUG_TEST(View, MixedGraphUtils){
     std::vector<core::MGPatch> naivePatches = 
         core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
 
-    for (auto & patch : naivePatches){       
-        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints);
-        VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints);
-        pdo.setDepthBounds(0.2, 5.0);
-        double scoreBefore = core::ScoreOfMGPatch(mg, patch);
-        pdo.optimize();
-        double scoreAfter = core::ScoreOfMGPatch(mg, patch);
-        ASSERT_LE(scoreBefore, scoreAfter);
-        VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints);
+    for (auto & patch : naivePatches){
+        
+        {
+            VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, false);
+
+            core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints);
+
+            double distBefore = core::AverageBinaryDistanceOfPatch(patch);
+            pdo.optimize();
+            double distAfter = core::AverageBinaryDistanceOfPatch(patch);
+
+            EXPECT_GE(distBefore, distAfter);
+
+            VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
+        }
+
+        std::vector<core::MGPatch> subPatches = core::SplitPatch(mg, patch, [&mg](core::MGBinaryHandle bh){
+            return mg.data(bh).type == core::MGBinary::LineLineIncidence ||
+                mg.data(bh).type == core::MGBinary::LineLineIntersection;
+        });
+        auto & largestSubPatch = *std::max_element(subPatches.begin(), subPatches.end(),
+            [](const core::MGPatch & p1, const core::MGPatch & p2){
+            return p1.uhs.size() < p2.uhs.size();
+        });
+
+        {
+            VisualizeMixedGraph(panorama, mg, { largestSubPatch }, vanishingPoints, false);
+
+            core::MGPatchDepthsOptimizer pdo(mg, largestSubPatch, vanishingPoints, false);
+
+            double distBefore = core::AverageBinaryDistanceOfPatch(largestSubPatch);
+            pdo.optimize();
+            double distAfter = core::AverageBinaryDistanceOfPatch(largestSubPatch);
+
+            EXPECT_GE(distBefore, distAfter);
+
+            VisualizeMixedGraph(panorama, mg, { largestSubPatch }, vanishingPoints, true);
+        }
+
+        auto mstSubPatch = core::MinimumSpanningTreePatch(mg, largestSubPatch);
+
+        {
+            VisualizeMixedGraph(panorama, mg, { mstSubPatch }, vanishingPoints, false);
+
+            core::MGPatchDepthsOptimizer pdo(mg, mstSubPatch, vanishingPoints, false);
+
+            double errorBefore = core::AverageBinaryDistanceOfPatch(mstSubPatch) /
+                core::AverageDepthOfPatch(mstSubPatch);
+            pdo.optimize();
+            double errorAfter = core::AverageBinaryDistanceOfPatch(mstSubPatch) /
+                core::AverageDepthOfPatch(mstSubPatch);
+
+            EXPECT_GE(errorBefore, errorAfter);
+
+            VisualizeMixedGraph(panorama, mg, { mstSubPatch }, vanishingPoints, true);
+        }
+
+        {
+
+        }
+
     }
+
+
 
 }
 
@@ -350,6 +477,6 @@ DEBUG_TEST(View, MixedGraphUtils){
 int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    testing::GTEST_FLAG(filter) = "View.MixedGraphUtils";
-    return DEBUG_RUN_ALL_TESTS();
+    testing::GTEST_FLAG(filter) = "MixedGraph.*";
+    return RUN_ALL_TESTS();
 }

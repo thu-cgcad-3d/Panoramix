@@ -264,8 +264,10 @@ namespace panoramix {
 
             using Edge = typename std::iterator_traits<typename EdgeIteratorT>::value_type;
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
-            static_assert(typename std::is_same<std::pair<Vert, Vert>, decltype(vertsGetter(*edgesBegin))>::value,
-                "result of EdgeVertsGetterT must be std::pair<Vert, Vert>!");
+            static_assert(
+                std::is_same<std::decay_t<decltype(std::get<0>(vertsGetter(*edgesBegin)))>, Vert>::value &&
+                std::is_same<std::decay_t<decltype(std::get<1>(vertsGetter(*edgesBegin)))>, Vert>::value,
+                "result of EdgeVertsGetterT must be convertiable to std::tuple<Vert, Vert>!");
 
             std::vector<Edge> edges(edgesBegin, edgesEnd);
             std::sort(edges.begin(), edges.end(), edgeCompareOnWeight);
@@ -279,8 +281,8 @@ namespace panoramix {
             while (remainedEdgesBegin != edges.end()){
                 Edge e = *remainedEdgesBegin;
                 auto verts = vertsGetter(e);
-                int fromid = vertSetIds[verts.first];
-                int toid = vertSetIds[verts.second];
+                int fromid = vertSetIds[std::get<0>(verts)];
+                int toid = vertSetIds[std::get<1>(verts)];
                 if (fromid != toid){
                     *MSTedges++ = e;
                     for (auto & vtoid : vertSetIds){

@@ -229,9 +229,9 @@ namespace panoramix {
         // unary variable
         struct MGUnaryVariable {
             int claz;
-            double depthOfFirstCorner;
+            double depthOfCenter;
             template <class Archive> void serialize(Archive & ar) {
-                ar(claz, depthOfFirstCorner);
+                ar(claz, depthOfCenter);
             }
         };
 
@@ -239,9 +239,9 @@ namespace panoramix {
         struct MGUnary {
             enum Type {Region, Line} type;
             std::vector<Vec3> normalizedCorners;
-            Vec3 center;
+            Vec3 normalizedCenter;
             template <class Archive> void serialize(Archive & ar) {
-                ar(type, normalizedCorners, center); 
+                ar(type, normalizedCorners, normalizedCenter);
             }
         };
 
@@ -315,26 +315,61 @@ namespace panoramix {
         bool BinaryHandlesAreValidInPatch(const MixedGraph & mg, const MGPatch & patch);
         bool UnariesAreConnectedInPatch(const MixedGraph & mg, const MGPatch & patch);
 
+
+
+        double BinaryDistanceOfPatch(const MGBinaryHandle & bh, const MGPatch & patch);
+        double AverageBinaryDistanceOfPatch(const MGPatch & patch);
+        double AverageDepthOfPatch(const MGPatch & patch);
+
+
         std::vector<MGPatch> SplitMixedGraphIntoPatches(const MixedGraph & mg, 
             const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars);
+
+        MGPatch MakePatchOnBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
+            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars);
+        MGPatch MakeStarPatchAroundUnary(const MixedGraph & mg, const MGUnaryHandle & uh,
+            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars);
+        
+        void CommitPatchToVariableTable(const MGPatch & patch,
+            MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars);
+
+
         std::vector<MGPatch> SplitPatch(const MixedGraph & mg, const MGPatch & patch, 
             std::function<bool(MGBinaryHandle bh)> useBh);
 
-        double ScoreOfMGPatch(const MixedGraph & mg, const MGPatch & patch);
-        
+        MGPatch MinimumSpanningTreePatch(const MixedGraph & mg, const MGPatch & patch,
+            std::function<bool(MGBinaryHandle, MGBinaryHandle)> compareBh);
+        inline MGPatch MinimumSpanningTreePatch(const MixedGraph & mg, const MGPatch & patch){
+            return core::MinimumSpanningTreePatch(mg, patch,
+                [&patch](core::MGBinaryHandle a, core::MGBinaryHandle b){
+                return core::BinaryDistanceOfPatch(a, patch) <
+                    core::BinaryDistanceOfPatch(b, patch);
+            });
+        }        
+
+
         
         class MGPatchDepthsOptimizer {
         public:
+            enum AlgorithmType {
+                MosekLinearProgramming,
+                Eigen
+            };
+
             MGPatchDepthsOptimizer(const MixedGraph & mg, MGPatch & patch,
-                const std::vector<Vec3> & vanishingPoints);
+                const std::vector<Vec3> & vanishingPoints,
+                bool useWeights = true,
+                AlgorithmType at = MosekLinearProgramming);
             ~MGPatchDepthsOptimizer();
             
         public:
             void setDepthBounds(double depthLb, double depthUb);
+            void setDepthsAllGreaterThan(double lob);
             void setUnaryClass(const MGUnaryHandle & uh, int claz);
             void optimize();
 
         private:
+            AlgorithmType _at;
             const MixedGraph & _mg;
             MGPatch & _patch;
             const std::vector<Vec3> & _vanishingPoints;
