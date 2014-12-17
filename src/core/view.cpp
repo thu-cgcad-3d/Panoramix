@@ -6,6 +6,7 @@ extern "C" {
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+//#include <Eigen/SPQRSupport>
 
 //#include <ICP.h>
 
@@ -1641,14 +1642,13 @@ namespace panoramix {
             return distanceSum / sampleDepths[0].size();
         }
 
-        double AverageBinaryDistanceOfPatch(const MGPatch & patch){
+        double AverageBinaryDistanceOfPatch(const MGPatch & patch, int pow){
             double distanceSum = 0.0;
             int distanceCount = 0;
             for (auto & bhv : patch.bhs){
                 for (int i = 0; i < bhv.second.sampleDepthsOnRelatedUnaries.front().size(); i++){
-                    distanceSum +=
-                        abs(bhv.second.sampleDepthsOnRelatedUnaries.front()[i] -
-                        bhv.second.sampleDepthsOnRelatedUnaries.back()[i]);
+                    distanceSum += std::pow(abs(bhv.second.sampleDepthsOnRelatedUnaries.front()[i] -
+                        bhv.second.sampleDepthsOnRelatedUnaries.back()[i]), pow);
                 }
                 distanceCount += bhv.second.sampleDepthsOnRelatedUnaries.front().size();
             }
@@ -1827,6 +1827,21 @@ namespace panoramix {
         }
 
 
+        void ScalePatch(MGPatch & patch, double scale){
+            for (auto & uhv : patch.uhs)
+                uhv.second.depthOfCenter *= scale;
+            for (auto & bhv : patch.bhs){
+                for (auto & arr : bhv.second.sampleDepthsOnRelatedUnaries){
+                    for (double & d : arr){
+                        d *= scale;
+                    }
+                }
+            }
+        }
+
+
+        
+
       
 
         void CommitPatchToVariableTable(const MGPatch & patch,
@@ -1843,7 +1858,7 @@ namespace panoramix {
 
 
 
-        struct MGPatchDepthOptimizerInternalBase {
+        struct MGPatchDepthsOptimizerInternalBase {
             virtual void initialize(const MixedGraph & mg, MGPatch & patch, 
                 const std::vector<Vec3> & vanishingPoints, bool useWeights) = 0;
             virtual void setDepthBounds(MGPatch & patch, double depthLb, double depthUb) = 0;
@@ -1872,7 +1887,8 @@ namespace panoramix {
             printf("%s", str);
         }
 
-        struct MGPatchDepthsOptimizerInternalMosek : MGPatchDepthOptimizerInternalBase {
+
+        struct MGPatchDepthsOptimizerInternalMosek : MGPatchDepthsOptimizerInternalBase {
             MSKtask_t task;
 
             struct UnaryTempData {
@@ -1911,7 +1927,6 @@ namespace panoramix {
             int depthNum = patch.uhs.size();
 
             assert(UnariesAreConnectedInPatch(mg, patch));
-            int ccConsNum = 1;
 
             // temp data  
             auto & unaryTemp = internalData->unaryTemp;
@@ -2199,18 +2214,13 @@ namespace panoramix {
 
 
 
-        struct MGPatchDepthsOptimizerInternalEigen : MGPatchDepthOptimizerInternalBase {
-            struct UnaryTempData {
-                int position;
-            };
-            std::unordered_map<MGUnaryHandle, UnaryTempData> unaryTemp;
-            struct BinaryTempData {
-                int firstSamplePosition;
-            };
-            std::unordered_map<MGBinaryHandle, BinaryTempData> binaryTemp;
+        struct MGPatchDepthsOptimizerInternalEigen : MGPatchDepthsOptimizerInternalBase {
+            Eigen::SparseMatrix<double> A, W;
+            Eigen::VectorXd B;
+            bool useWeights;
+            std::unordered_map<MGUnaryHandle, int> uhPositions;
 
-            int varNum;
-            int consNum;
+            std::unordered_map<MGBinaryHandle, std::vector<Vec3>> bhAnchors;
 
             virtual void initialize(const MixedGraph & mg, MGPatch & patch,
                 const std::vector<Vec3> & vanishingPoints, bool useWeights) override;
@@ -2224,7 +2234,129 @@ namespace panoramix {
             virtual void finalize() override;
         };
 
-        // TODO
+        int filterNum = 1;
+        void MGPatchDepthsOptimizerInternalEigen::initialize(const MixedGraph & mg, MGPatch & patch,
+            const std::vector<Vec3> & vanishingPoints, bool useWeights) {
+
+            this->useWeights = useWeights;
+
+            assert(BinaryHandlesAreValidInPatch(mg, patch));
+            assert(UnariesAreConnectedInPatch(mg, patch));
+
+            int uhid = 0;
+            for (auto & uhv : patch.uhs){
+                uhPositions[uhv.first] = uhid++;
+            }
+
+            int varNum = patch.uhs.size();
+            int consNum = 0;
+            
+            consNum++;
+            for (auto & bhv : patch.bhs){
+                bhAnchors[bhv.first] = NumFilter(mg.data(bhv.first).normalizedAnchors, filterNum);
+                consNum += bhAnchors.at(bhv.first).size();
+            }
+            
+            A.resize(consNum, varNum);
+            W.resize(consNum, consNum);
+            B.resize(consNum);
+            
+            // write equations
+            int eid = 0;
+            A.insert(eid, 0) = 1.0;
+            B(eid) = 1.0;
+            W.insert(eid, eid) = 1.0;
+            eid++;
+
+            for (auto & bhv : patch.bhs){
+                auto & bh = bhv.first;
+                for (auto & a : bhAnchors.at(bh)){
+                    auto uh1 = mg.topo(bh).lowers.front();
+                    auto uh2 = mg.topo(bh).lowers.back();
+                    auto & u1 = mg.data(uh1);
+                    auto & u2 = mg.data(uh2);
+                    double ratio1 = DepthRatioOnMGUnary(a, u1, vanishingPoints, patch.uhs.at(uh1).claz);
+                    double ratio2 = DepthRatioOnMGUnary(a, u2, vanishingPoints, patch.uhs.at(uh2).claz);
+                    A.insert(eid, uhPositions.at(uh1)) = ratio1;
+                    A.insert(eid, uhPositions.at(uh2)) = -ratio2;
+                    B(eid) = 0.0;
+                    W.insert(eid, eid) = mg.data(bh).weight;
+                    eid++;
+                }
+            }
+
+            assert(eid == consNum);
+        }
+
+        void MGPatchDepthsOptimizerInternalEigen::setDepthBounds(MGPatch & patch, double depthLb, double depthUb) {
+            NOT_IMPLEMENTED_YET();
+        }
+
+        void MGPatchDepthsOptimizerInternalEigen::setDepthsAllGreaterThan(MGPatch & patch, double lob) {
+            NOT_IMPLEMENTED_YET();
+        }
+
+        void MGPatchDepthsOptimizerInternalEigen::setUnaryClass(const MixedGraph & mg, MGPatch & patch,
+            const std::vector<Vec3> & vanishingPoints,
+            const MGUnaryHandle & uh, int claz) {
+            int eid = 1;
+            for (auto & bhv : patch.bhs){
+                auto & bh = bhv.first;
+                auto uh1 = mg.topo(bh).lowers.front();
+                auto uh2 = mg.topo(bh).lowers.back();
+                if (uh1 == uh || uh2 == uh){
+                    for (auto & a : bhAnchors.at(bh)){
+                        auto & u1 = mg.data(uh1);
+                        auto & u2 = mg.data(uh2);
+                        double ratio1 = DepthRatioOnMGUnary(a, u1, vanishingPoints, claz);
+                        double ratio2 = DepthRatioOnMGUnary(a, u2, vanishingPoints, claz);
+                        A.insert(eid, uhPositions.at(uh1)) = ratio1;
+                        A.insert(eid, uhPositions.at(uh2)) = -ratio2;
+                        B(eid) = 0.0;
+                        W.insert(eid, eid) = mg.data(bh).weight;
+                    }
+                }
+                eid += bhAnchors.at(bh).size();
+            }
+        }
+
+        bool MGPatchDepthsOptimizerInternalEigen::optimize(const MixedGraph & mg, MGPatch & patch,
+            const std::vector<Vec3> & vanishingPoints) {
+            
+            using namespace Eigen;
+            
+            SparseQR<Eigen::SparseMatrix<double>, COLAMDOrdering<int>> solver;
+            static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
+            Eigen::SparseMatrix<double> WA = W * A;
+            A.makeCompressed();
+            WA.makeCompressed();
+
+            solver.compute(useWeights ? WA : A);
+
+            if (solver.info() != Success) {
+                assert(0);
+                std::cout << "computation error" << std::endl;
+                return false;
+            }
+            VectorXd WB = W * B;
+            VectorXd X = solver.solve(useWeights ? WB : B);
+            if (solver.info() != Success) {
+                assert(0);
+                std::cout << "solving error" << std::endl;
+                return false;
+            }
+
+            for (auto & uhv : patch.uhs){
+                uhv.second.depthOfCenter = X(uhPositions.at(uhv.first));
+            }
+
+            UpdateBinaryVars(mg, vanishingPoints, patch.uhs, patch.bhs);
+
+            return true;
+
+        }
+
+        void MGPatchDepthsOptimizerInternalEigen::finalize() {}
 
 
         
@@ -2242,33 +2374,33 @@ namespace panoramix {
                 _internal = new MGPatchDepthsOptimizerInternalEigen;
             }
 
-            auto internalData = static_cast<MGPatchDepthOptimizerInternalBase*>(_internal);
+            auto internalData = static_cast<MGPatchDepthsOptimizerInternalBase*>(_internal);
             internalData->initialize(mg, patch, vanishingPoints, useWeights);
         }
 
 
         MGPatchDepthsOptimizer::~MGPatchDepthsOptimizer(){
             if (_internal){
-                auto internalData = static_cast<MGPatchDepthOptimizerInternalBase*>(_internal);
+                auto internalData = static_cast<MGPatchDepthsOptimizerInternalBase*>(_internal);
                 internalData->finalize();
                 delete internalData;
             }
         }
 
         void MGPatchDepthsOptimizer::setDepthBounds(double depthLb, double depthUb){
-            static_cast<MGPatchDepthOptimizerInternalBase*>(_internal)->setDepthBounds(_patch, depthLb, depthUb);
+            static_cast<MGPatchDepthsOptimizerInternalBase*>(_internal)->setDepthBounds(_patch, depthLb, depthUb);
         }
 
         void MGPatchDepthsOptimizer::setDepthsAllGreaterThan(double lob){
-            static_cast<MGPatchDepthOptimizerInternalBase*>(_internal)->setDepthsAllGreaterThan(_patch, lob);
+            static_cast<MGPatchDepthsOptimizerInternalBase*>(_internal)->setDepthsAllGreaterThan(_patch, lob);
         }
 
         void MGPatchDepthsOptimizer::setUnaryClass(const MGUnaryHandle & uh, int claz){
-            static_cast<MGPatchDepthOptimizerInternalBase*>(_internal)->setUnaryClass(_mg, _patch, _vanishingPoints, uh, claz);
+            static_cast<MGPatchDepthsOptimizerInternalBase*>(_internal)->setUnaryClass(_mg, _patch, _vanishingPoints, uh, claz);
         }
 
         bool MGPatchDepthsOptimizer::optimize() {
-            return static_cast<MGPatchDepthOptimizerInternalBase*>(_internal)->optimize(_mg, _patch, _vanishingPoints);
+            return static_cast<MGPatchDepthsOptimizerInternalBase*>(_internal)->optimize(_mg, _patch, _vanishingPoints);
         }
 
   

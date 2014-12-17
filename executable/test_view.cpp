@@ -326,27 +326,6 @@ TEST(MixedGraph, BasicOptimization) {
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
-    //core::InitializeUnaryVarDepths(unaryVars, 1.0);
-    //{
-    //    core::MGBinaryHandle bh(12);
-    //    core::MGPatch patch = core::MakePatchOnBinary(mg, bh, unaryVars, binaryVars);
-
-    //    core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false);
-
-    //    double errBefore = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
-    //    bool feasible = pdo.optimize();
-    //    double errAfter = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
-
-    //    EXPECT_TRUE(feasible);
-    //    EXPECT_GE(errBefore, errAfter);
-    //    if (errBefore < errAfter){
-    //        auto t = mg.data(bh).type;
-    //    }
-    //    if (!feasible){
-    //        auto t = mg.data(bh).type;
-    //    }
-    //}
-
     core::InitializeUnaryVarDepths(unaryVars, 1.0);
     {
         core::MGBinaryHandle bh(74);
@@ -389,6 +368,7 @@ TEST(MixedGraph, OptimizateBinaryPatch) {
 
     
     // test small patches
+    // mosek
     for (auto & b : mg.elements<1>()){
         core::InitializeUnaryVarDepths(unaryVars, 1.0);
         core::MGPatch patch = core::MakePatchOnBinary(mg, b.topo.hd, unaryVars, binaryVars);
@@ -428,6 +408,51 @@ TEST(MixedGraph, OptimizateBinaryPatch) {
 
 }
 
+
+TEST(MixedGraph, OptimizateBinaryPatchEigen) {
+
+    core::Image panorama;
+    std::vector<core::Vec3> vanishingPoints;
+
+    core::MixedGraph mg;
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
+
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
+
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
+
+    // eigen
+    for (auto & b : mg.elements<1>()){
+        core::InitializeUnaryVarDepths(unaryVars, 1.0);
+        core::MGPatch patch = core::MakePatchOnBinary(mg, b.topo.hd, unaryVars, binaryVars);
+        auto oldPatch = patch;
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, core::MGPatchDepthsOptimizer::Eigen);
+
+        auto & uh1 = patch.uhs.begin()->first;
+        auto & uh2 = std::next(patch.uhs.begin())->first;
+        auto & ud1 = mg.data(uh1);
+        auto & ud2 = mg.data(uh2);
+        auto & uvar1 = unaryVars[uh1];
+        auto & uvar2 = unaryVars[uh2];
+
+        auto & bd = mg.data(patch.bhs.begin()->first);
+
+        double errBefore = core::AverageBinaryDistanceOfPatch(patch, 2) / core::AverageDepthOfPatch(patch);
+        bool feasible = pdo.optimize();
+        double errAfter = core::AverageBinaryDistanceOfPatch(patch, 2) / core::AverageDepthOfPatch(patch);
+
+        ASSERT_TRUE(feasible);
+        EXPECT_GE(errBefore, errAfter);
+    }
+
+}
+
+
+
 TEST(MixedGraph, OptimizateStarPatch){
 
     core::Image panorama;
@@ -444,24 +469,22 @@ TEST(MixedGraph, OptimizateStarPatch){
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
-    for (auto & uhv : unaryVars){
-        uhv.second.depthOfCenter = 1.0;
-    }
-
     for (auto & u : mg.elements<0>()){
+        core::InitializeUnaryVarDepths(unaryVars, 1.0);
         core::MGPatch starPatch = core::MakeStarPatchAroundUnary(mg, u.topo.hd, unaryVars, binaryVars);
-        core::MGPatchDepthsOptimizer pdo(mg, starPatch, vanishingPoints, false);
+        core::MGPatchDepthsOptimizer pdo(mg, starPatch, vanishingPoints, false, core::MGPatchDepthsOptimizer::Eigen);
 
-        double errBefore = core::AverageBinaryDistanceOfPatch(starPatch);// / core::AverageDepthOfPatch(starPatch);
+        double errBefore = core::AverageBinaryDistanceOfPatch(starPatch) / core::AverageDepthOfPatch(starPatch);
         pdo.optimize();
-        double errAfter = core::AverageBinaryDistanceOfPatch(starPatch);// / core::AverageDepthOfPatch(starPatch);
+        double errAfter = core::AverageBinaryDistanceOfPatch(starPatch) / core::AverageDepthOfPatch(starPatch);
 
         EXPECT_GE(errBefore, errAfter);
     }
 
 }
 
-TEST(MixedGraph, Patches){
+
+TEST(MixedGraph, NaiveHolisticOptimization) {
 
     core::Image panorama;
     std::vector<core::Vec3> vanishingPoints;
@@ -477,91 +500,87 @@ TEST(MixedGraph, Patches){
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
-    std::vector<core::MGPatch> naivePatches = 
+    core::InitializeUnaryVarDepths(unaryVars, 1.0);
+
+    std::vector<core::MGPatch> naivePatches =
         core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
 
     for (auto & patch : naivePatches){
+        VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, false);
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, 
+            core::MGPatchDepthsOptimizer::Eigen);
 
-        {
-            VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, false);
+        double distBefore = core::AverageBinaryDistanceOfPatch(patch) / core::AverageDepthOfPatch(patch);
+        pdo.optimize();
+        double distAfter = core::AverageBinaryDistanceOfPatch(patch) / core::AverageDepthOfPatch(patch);
 
-            core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints);
+        EXPECT_GE(distBefore, distAfter);
+        VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
+    }
 
-            double distBefore = core::AverageBinaryDistanceOfPatch(patch);
-            pdo.optimize();
-            double distAfter = core::AverageBinaryDistanceOfPatch(patch);
+    core::SaveToDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization", naivePatches);
 
-            EXPECT_GE(distBefore, distAfter);
+}
 
-            VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
-        }
 
-        auto mstPatch = core::MinimumSpanningTreePatch(mg, patch);
+TEST(MixedGraph, LinesOptimization) {
 
-        {
-            VisualizeMixedGraph(panorama, mg, { mstPatch }, vanishingPoints, false);
+    core::Image panorama;
+    std::vector<core::Vec3> vanishingPoints;
 
-            core::MGPatchDepthsOptimizer pdo(mg, mstPatch, vanishingPoints);
+    core::MixedGraph mg;
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
 
-            double distBefore = core::AverageBinaryDistanceOfPatch(mstPatch);
-            pdo.optimize();
-            double distAfter = core::AverageBinaryDistanceOfPatch(mstPatch);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
 
-            EXPECT_GE(distBefore, distAfter);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
-            VisualizeMixedGraph(panorama, mg, { mstPatch }, vanishingPoints, true);
-        }
+    std::vector<core::MGPatch> naivePatches;
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization", naivePatches);
 
+    std::vector<core::MGPatch> linePatches;
+    std::vector<core::MGPatch> lineMSTPatches;
+
+    for (auto & patch : naivePatches){
         std::vector<core::MGPatch> subPatches = core::SplitPatch(mg, patch, [&mg](core::MGBinaryHandle bh){
             return mg.data(bh).type == core::MGBinary::LineLineIncidence ||
                 mg.data(bh).type == core::MGBinary::LineLineIntersection;
         });
-        auto & largestSubPatch = *std::max_element(subPatches.begin(), subPatches.end(),
-            [](const core::MGPatch & p1, const core::MGPatch & p2){
-            return p1.uhs.size() < p2.uhs.size();
-        });
-
-        {
-            VisualizeMixedGraph(panorama, mg, { largestSubPatch }, vanishingPoints, false);
-
-            core::MGPatchDepthsOptimizer pdo(mg, largestSubPatch, vanishingPoints, true);
-
-            double distBefore = core::AverageBinaryDistanceOfPatch(largestSubPatch);
-            pdo.optimize();
-            double distAfter = core::AverageBinaryDistanceOfPatch(largestSubPatch);
-
-            EXPECT_GE(distBefore, distAfter);
-
-            VisualizeMixedGraph(panorama, mg, { largestSubPatch }, vanishingPoints, true);
+        for (auto & subp : subPatches){
+            if (mg.data(subp.uhs.begin()->first).type == core::MGUnary::Line){
+                linePatches.push_back(std::move(subp));
+            }
         }
-
-        auto mstSubPatch = core::MinimumSpanningTreePatch(mg, largestSubPatch);
-
-        {
-            VisualizeMixedGraph(panorama, mg, { mstSubPatch }, vanishingPoints, false);
-
-            core::MGPatchDepthsOptimizer pdo(mg, mstSubPatch, vanishingPoints, true);
-
-            double errorBefore = core::AverageBinaryDistanceOfPatch(mstSubPatch) /
-                core::AverageDepthOfPatch(mstSubPatch);
-            pdo.optimize();
-            double errorAfter = core::AverageBinaryDistanceOfPatch(mstSubPatch) /
-                core::AverageDepthOfPatch(mstSubPatch);
-
-            EXPECT_GE(errorBefore, errorAfter);
-
-            VisualizeMixedGraph(panorama, mg, { mstSubPatch }, vanishingPoints, true);
-        }
-
-        {
-
-        }
-
     }
 
+    for (auto & patch : linePatches){
+        lineMSTPatches.push_back(core::MinimumSpanningTreePatch(mg, patch));
+    }
+    
+    for (auto & patch : linePatches){
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, core::MGPatchDepthsOptimizer::Eigen);
+        pdo.optimize();
+    }
 
+    for (auto & patch : lineMSTPatches){
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, core::MGPatchDepthsOptimizer::Eigen);
+        pdo.optimize();
+    }
+
+    VisualizeMixedGraph(panorama, mg, linePatches, vanishingPoints, false);
+    VisualizeMixedGraph(panorama, mg, lineMSTPatches, vanishingPoints, true);
+
+    core::SaveToDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.linePatches", linePatches);
+    core::SaveToDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.lineMSTPatches", lineMSTPatches);
 
 }
+
+
+
 
 
 
@@ -570,6 +589,6 @@ TEST(MixedGraph, Patches){
 int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    testing::GTEST_FLAG(filter) = "MixedGraph.OptimizateBinaryPatch";
+    testing::GTEST_FLAG(filter) = "MixedGraph.LinesOptimization";
     return RUN_ALL_TESTS();
 }

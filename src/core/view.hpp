@@ -322,7 +322,7 @@ namespace panoramix {
 
 
         double BinaryDistanceOfPatch(const MGBinaryHandle & bh, const MGPatch & patch);
-        double AverageBinaryDistanceOfPatch(const MGPatch & patch);
+        double AverageBinaryDistanceOfPatch(const MGPatch & patch, int power = 1);
         double AverageDepthOfPatch(const MGPatch & patch);
 
 
@@ -349,7 +349,20 @@ namespace panoramix {
                 return core::BinaryDistanceOfPatch(a, patch) <
                     core::BinaryDistanceOfPatch(b, patch);
             });
-        }     
+        }
+
+        
+        void ScalePatch(MGPatch & patch, double scale);
+        inline MGPatch & operator *= (MGPatch & patch, double scale){
+            ScalePatch(patch, scale);
+            return patch;
+        }
+        inline MGPatch operator * (const MGPatch & patch, double scale) {
+            MGPatch result = patch;
+            ScalePatch(result, scale);
+            return result;
+        }
+
 
 
         // patch depth optimizer
@@ -383,7 +396,7 @@ namespace panoramix {
 
 
 
-        
+        // 
 
 
     }
