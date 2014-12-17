@@ -12,8 +12,6 @@ using namespace test;
 
 TEST(View, SampleViews) {
 
-    std::cout << "cuda enabled device count: " << cv::gpu::getCudaEnabledDeviceCount() << std::endl;
-
     auto panorama = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
     core::ResizeToMakeHeightUnder(panorama, 800);
     auto panoView = core::CreatePanoramicView(panorama);
@@ -30,15 +28,15 @@ TEST(View, SampleViews) {
     std::vector<core::View<core::PerspectiveCamera>> views;
     core::SampleViews(panoView, cams.begin(), cams.end(), std::back_inserter(views));
 
-    core::SaveToDisk("./cache/test_view.SampleViews.panorama", panorama);
-    core::SaveToDisk("./cache/test_view.SampleViews.views", views);
+    core::SaveToDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::SaveToDisk("./cache/test_view.View.SampleViews.views", views);
 
 }
 
 TEST(View, LinesGraph) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
-    core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.views", views);
 
     std::vector<core::Vec3> vanishingPoints;
     std::vector<core::LinesGraph> linesGraphs;
@@ -72,8 +70,11 @@ TEST(View, LinesGraph) {
         viz << vis::manip2d::Show();
     }
 
-    core::SaveToDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
-    core::SaveToDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
+    core::SaveToDisk("./cache/test_view.View.LinesGraph.linesGraphs", linesGraphs);
+    core::SaveToDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
+
+   
+
 
 }
 
@@ -81,8 +82,8 @@ TEST(View, RegionsGraph) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
     std::vector<core::LinesGraph> linesGraphs;
-    core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
-    core::LoadFromDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.views", views);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.linesGraphs", linesGraphs);
 
     core::SegmentationExtractor seg;
 
@@ -110,8 +111,8 @@ TEST(View, RegionsGraph) {
         segmentedRegionsArray.push_back(segmentedRegions);
     }
 
-    core::SaveToDisk("./cache/test_view.RegionsGraph.regionsGraphs", regionsGraphs);
-    core::SaveToDisk("./cache/test_view.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
+    core::SaveToDisk("./cache/test_view.View.RegionsGraph.regionsGraphs", regionsGraphs);
+    core::SaveToDisk("./cache/test_view.View.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
 }
 
 
@@ -123,11 +124,11 @@ TEST(View, RegionLineConnections){
     std::vector<core::Vec3> vanishingPoints;
     std::vector<core::LinesGraph> linesGraphs;
 
-    core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
-    core::LoadFromDisk("./cache/test_view.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
-    core::LoadFromDisk("./cache/test_view.RegionsGraph.regionsGraphs", regionsGraphs);
-    core::LoadFromDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
-    core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.views", views);
+    core::LoadFromDisk("./cache/test_view.View.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
+    core::LoadFromDisk("./cache/test_view.View.RegionsGraph.regionsGraphs", regionsGraphs);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.linesGraphs", linesGraphs);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
 
     std::vector<std::map<std::pair<core::RegionHandle, core::LineHandle>, std::vector<core::Point2>>> 
         regionLineConnectionsArray(views.size());
@@ -180,7 +181,7 @@ TEST(View, RegionLineConnections){
         }
     }
 
-    core::SaveToDisk("./cache/test_view.RegionLineConnections.regionLineConnectionsArray", regionLineConnectionsArray);
+    core::SaveToDisk("./cache/test_view.View.RegionLineConnections.regionLineConnectionsArray", regionLineConnectionsArray);
 }
 
 
@@ -192,19 +193,19 @@ TEST(View, ConstraintsAcrossViews){
     std::vector<core::Vec3> vanishingPoints;
     std::vector<core::LinesGraph> linesGraphs;
 
-    core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
-    core::LoadFromDisk("./cache/test_view.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
-    core::LoadFromDisk("./cache/test_view.RegionsGraph.regionsGraphs", regionsGraphs);
-    core::LoadFromDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
-    core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.views", views);
+    core::LoadFromDisk("./cache/test_view.View.RegionsGraph.segmentedRegionsArray", segmentedRegionsArray);
+    core::LoadFromDisk("./cache/test_view.View.RegionsGraph.regionsGraphs", regionsGraphs);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.linesGraphs", linesGraphs);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
 
     auto regionOverlappingsAcrossViews =
         core::RecognizeRegionOverlappingsAcrossViews(views, regionsGraphs);
     auto lineIncidencesAcrossViews = 
         core::RecognizeLineIncidencesAcrossViews(views, linesGraphs, M_PI / 4, 20.0 / 300.0);
 
-    core::SaveToDisk("./cache/test_view.ConstraintsAcrossViews.regionOverlappingsAcrossViews", regionOverlappingsAcrossViews);
-    core::SaveToDisk("./cache/test_view.ConstraintsAcrossViews.lineIncidencesAcrossViews", lineIncidencesAcrossViews);
+    core::SaveToDisk("./cache/test_view.View.ConstraintsAcrossViews.regionOverlappingsAcrossViews", regionOverlappingsAcrossViews);
+    core::SaveToDisk("./cache/test_view.View.ConstraintsAcrossViews.lineIncidencesAcrossViews", lineIncidencesAcrossViews);
 
 }
 
@@ -256,7 +257,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
         for (auto & bhv : patch.bhs){
             auto bh = bhv.first;
             auto & v = bhv.second;
-            auto & samples = mg.data(bh).samples;
+            auto & samples = mg.data(bh).normalizedAnchors;
             for (int i = 0; i < samples.size(); i++){
                 connectionLines.emplace_back(normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.front()[i],
                     normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.back()[i]);
@@ -285,15 +286,15 @@ TEST(MixedGraph, Build) {
     std::vector<std::map<std::pair<core::RegionHandle, core::LineHandle>, std::vector<core::Point2>>>
         regionLineConnectionsArray;
 
-    core::LoadFromDisk("./cache/test_view.SampleViews.panorama", panorama);
-    core::LoadFromDisk("./cache/test_view.SampleViews.views", views);
-    core::LoadFromDisk("./cache/test_view.RegionsGraph.regionsGraphs", regionsGraphs);
-    core::LoadFromDisk("./cache/test_view.LinesGraph.linesGraphs", linesGraphs);
-    core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.views", views);
+    core::LoadFromDisk("./cache/test_view.View.RegionsGraph.regionsGraphs", regionsGraphs);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.linesGraphs", linesGraphs);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
 
-    core::LoadFromDisk("./cache/test_view.ConstraintsAcrossViews.regionOverlappingsAcrossViews", regionOverlappingsAcrossViews);
-    core::LoadFromDisk("./cache/test_view.ConstraintsAcrossViews.lineIncidencesAcrossViews", lineIncidencesAcrossViews);
-    core::LoadFromDisk("./cache/test_view.RegionLineConnections.regionLineConnectionsArray", regionLineConnectionsArray);
+    core::LoadFromDisk("./cache/test_view.View.ConstraintsAcrossViews.regionOverlappingsAcrossViews", regionOverlappingsAcrossViews);
+    core::LoadFromDisk("./cache/test_view.View.ConstraintsAcrossViews.lineIncidencesAcrossViews", lineIncidencesAcrossViews);
+    core::LoadFromDisk("./cache/test_view.View.RegionLineConnections.regionLineConnectionsArray", regionLineConnectionsArray);
 
     core::MGUnaryVarTable unaryVars;
     core::MGBinaryVarTable binaryVars;
@@ -302,9 +303,70 @@ TEST(MixedGraph, Build) {
         regionOverlappingsAcrossViews, lineIncidencesAcrossViews, regionLineConnectionsArray, vanishingPoints, 
         unaryVars, binaryVars, 1.0);
 
-    core::SaveToDisk("./cache/test_view.BuildMixedGraph.mg", mg);
-    core::SaveToDisk("./cache/test_view.BuildMixedGraph.unaryVars", unaryVars);
-    core::SaveToDisk("./cache/test_view.BuildMixedGraph.binaryVars", binaryVars);  
+    core::SaveToDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::SaveToDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+    core::SaveToDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);  
+
+}
+
+
+TEST(MixedGraph, BasicOptimization) {
+
+    core::Image panorama;
+    std::vector<core::Vec3> vanishingPoints;
+
+    core::MixedGraph mg;
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
+
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
+
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
+
+    //core::InitializeUnaryVarDepths(unaryVars, 1.0);
+    //{
+    //    core::MGBinaryHandle bh(12);
+    //    core::MGPatch patch = core::MakePatchOnBinary(mg, bh, unaryVars, binaryVars);
+
+    //    core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false);
+
+    //    double errBefore = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
+    //    bool feasible = pdo.optimize();
+    //    double errAfter = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
+
+    //    EXPECT_TRUE(feasible);
+    //    EXPECT_GE(errBefore, errAfter);
+    //    if (errBefore < errAfter){
+    //        auto t = mg.data(bh).type;
+    //    }
+    //    if (!feasible){
+    //        auto t = mg.data(bh).type;
+    //    }
+    //}
+
+    core::InitializeUnaryVarDepths(unaryVars, 1.0);
+    {
+        core::MGBinaryHandle bh(74);
+        core::MGPatch patch = core::MakePatchOnBinary(mg, bh, unaryVars, binaryVars);
+
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false);
+
+        double errBefore = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
+        bool feasible = pdo.optimize();
+        double errAfter = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
+
+        EXPECT_TRUE(feasible);
+        EXPECT_GE(errBefore, errAfter);
+        if (errBefore < errAfter){
+            auto t = mg.data(bh).type;
+        }
+        if (!feasible){
+            auto t = mg.data(bh).type;
+        }
+    }
 
 }
 
@@ -318,35 +380,50 @@ TEST(MixedGraph, OptimizateBinaryPatch) {
     core::MGUnaryVarTable unaryVars;
     core::MGBinaryVarTable binaryVars;
 
-    core::LoadFromDisk("./cache/test_view.SampleViews.panorama", panorama);
-    core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
 
-    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.mg", mg);
-    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.unaryVars", unaryVars);
-    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.binaryVars", binaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
-    for (auto & uhv : unaryVars){
-        uhv.second.depthOfCenter = 1.0;
-    }
-
+    
     // test small patches
     for (auto & b : mg.elements<1>()){
+        core::InitializeUnaryVarDepths(unaryVars, 1.0);
         core::MGPatch patch = core::MakePatchOnBinary(mg, b.topo.hd, unaryVars, binaryVars);
         auto oldPatch = patch;        
         core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false);
 
-        auto & ud1 = mg.data(patch.uhs.begin()->first);
-        auto & ud2 = mg.data(std::next(patch.uhs.begin())->first);
+        auto & uh1 = patch.uhs.begin()->first;
+        auto & uh2 = std::next(patch.uhs.begin())->first;
+        auto & ud1 = mg.data(uh1);
+        auto & ud2 = mg.data(uh2);
+        auto & uvar1 = unaryVars[uh1];
+        auto & uvar2 = unaryVars[uh2];
+
         auto & bd = mg.data(patch.bhs.begin()->first);
 
         double errBefore = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
-        pdo.optimize();
+        bool feasible = pdo.optimize();
         double errAfter = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
 
-        if (errBefore < errAfter){
-            core::GetVersion();
+        if (!feasible){
+            EXPECT_GT(bd.normalizedAnchors.size(), 1);
+            if (bd.type == core::MGBinary::RegionRegionConnection || 
+                bd.type == core::MGBinary::RegionRegionOverlapping){
+                ASSERT_NE(uvar1.claz, uvar2.claz);
+            }
         }
-        EXPECT_GE(errBefore, errAfter);
+        else{
+            if (bd.normalizedAnchors.size() > 1){
+                if (bd.type == core::MGBinary::RegionRegionConnection || core::MGBinary::RegionRegionOverlapping)
+                    ASSERT_EQ(uvar1.claz, uvar2.claz);
+                else if (bd.type == core::MGBinary::RegionLineConnection)
+                    ASSERT_NE(uvar1.claz, uvar2.claz);
+            }
+            EXPECT_GE(errBefore, errAfter);
+        }
     }
 
 }
@@ -360,12 +437,12 @@ TEST(MixedGraph, OptimizateStarPatch){
     core::MGUnaryVarTable unaryVars;
     core::MGBinaryVarTable binaryVars;
 
-    core::LoadFromDisk("./cache/test_view.SampleViews.panorama", panorama);
-    core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
 
-    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.mg", mg);
-    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.unaryVars", unaryVars);
-    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.binaryVars", binaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
     for (auto & uhv : unaryVars){
         uhv.second.depthOfCenter = 1.0;
@@ -393,18 +470,18 @@ TEST(MixedGraph, Patches){
     core::MGUnaryVarTable unaryVars;
     core::MGBinaryVarTable binaryVars;
 
-    core::LoadFromDisk("./cache/test_view.SampleViews.panorama", panorama);
-    core::LoadFromDisk("./cache/test_view.LinesGraph.vanishingPoints", vanishingPoints);
-    
-    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.mg", mg);
-    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.unaryVars", unaryVars);
-    core::LoadFromDisk("./cache/test_view.BuildMixedGraph.binaryVars", binaryVars);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
+
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
     std::vector<core::MGPatch> naivePatches = 
         core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
 
     for (auto & patch : naivePatches){
-        
+
         {
             VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, false);
 
@@ -419,6 +496,22 @@ TEST(MixedGraph, Patches){
             VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
         }
 
+        auto mstPatch = core::MinimumSpanningTreePatch(mg, patch);
+
+        {
+            VisualizeMixedGraph(panorama, mg, { mstPatch }, vanishingPoints, false);
+
+            core::MGPatchDepthsOptimizer pdo(mg, mstPatch, vanishingPoints);
+
+            double distBefore = core::AverageBinaryDistanceOfPatch(mstPatch);
+            pdo.optimize();
+            double distAfter = core::AverageBinaryDistanceOfPatch(mstPatch);
+
+            EXPECT_GE(distBefore, distAfter);
+
+            VisualizeMixedGraph(panorama, mg, { mstPatch }, vanishingPoints, true);
+        }
+
         std::vector<core::MGPatch> subPatches = core::SplitPatch(mg, patch, [&mg](core::MGBinaryHandle bh){
             return mg.data(bh).type == core::MGBinary::LineLineIncidence ||
                 mg.data(bh).type == core::MGBinary::LineLineIntersection;
@@ -431,7 +524,7 @@ TEST(MixedGraph, Patches){
         {
             VisualizeMixedGraph(panorama, mg, { largestSubPatch }, vanishingPoints, false);
 
-            core::MGPatchDepthsOptimizer pdo(mg, largestSubPatch, vanishingPoints, false);
+            core::MGPatchDepthsOptimizer pdo(mg, largestSubPatch, vanishingPoints, true);
 
             double distBefore = core::AverageBinaryDistanceOfPatch(largestSubPatch);
             pdo.optimize();
@@ -447,7 +540,7 @@ TEST(MixedGraph, Patches){
         {
             VisualizeMixedGraph(panorama, mg, { mstSubPatch }, vanishingPoints, false);
 
-            core::MGPatchDepthsOptimizer pdo(mg, mstSubPatch, vanishingPoints, false);
+            core::MGPatchDepthsOptimizer pdo(mg, mstSubPatch, vanishingPoints, true);
 
             double errorBefore = core::AverageBinaryDistanceOfPatch(mstSubPatch) /
                 core::AverageDepthOfPatch(mstSubPatch);
@@ -477,6 +570,6 @@ TEST(MixedGraph, Patches){
 int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    testing::GTEST_FLAG(filter) = "MixedGraph.*";
+    testing::GTEST_FLAG(filter) = "MixedGraph.OptimizateBinaryPatch";
     return RUN_ALL_TESTS();
 }

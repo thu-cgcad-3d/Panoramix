@@ -1283,17 +1283,22 @@ namespace panoramix {
             return filtered;
         }
 
+        void InitializeUnaryVarDepths(MGUnaryVarTable & unaryVars, double depth){
+            for (auto & uhv : unaryVars){
+                uhv.second.depthOfCenter = depth;
+            }
+        }
 
         void UpdateBinaryVars(const MixedGraph & mg, const std::vector<Vec3> & vps, 
             const MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars){
             for (auto & bv : binaryVars){
                 auto & uhs = mg.topo(bv.first).lowers;
-                auto & samples = mg.data(bv.first).samples;
-                for (int i = 0; i < samples.size(); i++){
+                auto & normalizedAnchors = mg.data(bv.first).normalizedAnchors;
+                for (int i = 0; i < normalizedAnchors.size(); i++){
                     bv.second.sampleDepthsOnRelatedUnaries.front()[i] = unaryVars.at(uhs.front()).depthOfCenter *
-                        DepthRatioOnMGUnary(samples[i], mg.data(uhs.front()), vps, unaryVars.at(uhs.front()).claz);
+                        DepthRatioOnMGUnary(normalizedAnchors[i], mg.data(uhs.front()), vps, unaryVars.at(uhs.front()).claz);
                     bv.second.sampleDepthsOnRelatedUnaries.back()[i] = unaryVars.at(uhs.back()).depthOfCenter *
-                        DepthRatioOnMGUnary(samples[i], mg.data(uhs.back()), vps, unaryVars.at(uhs.back()).claz);
+                        DepthRatioOnMGUnary(normalizedAnchors[i], mg.data(uhs.back()), vps, unaryVars.at(uhs.back()).claz);
                 }
             }
         }
@@ -1365,10 +1370,10 @@ namespace panoramix {
                     MGBinary rr;
                     rr.type = MGBinary::RegionRegionConnection;
                     rr.weight = 1.0;
-                    rr.samples.reserve(bd.data.sampledPoints.size());
+                    rr.normalizedAnchors.reserve(bd.data.sampledPoints.size());
                     for (auto & ps : bd.data.sampledPoints){
                         for (auto & p : ps){
-                            rr.samples.push_back(cam.spatialDirection(p));
+                            rr.normalizedAnchors.push_back(normalize(cam.spatialDirection(p)));
                         }
                     }
                     auto r1 = RegionIndex{ i, bd.topo.lowers.front() };
@@ -1380,9 +1385,9 @@ namespace panoramix {
                     MGBinary rl;
                     rl.type = MGBinary::RegionLineConnection;
                     rl.weight = 1.0;
-                    rl.samples.reserve(regionLine.second.size());
+                    rl.normalizedAnchors.reserve(regionLine.second.size());
                     for (auto & p : regionLine.second){
-                        rl.samples.push_back(cam.spatialDirection(p));
+                        rl.normalizedAnchors.push_back(normalize(cam.spatialDirection(p)));
                     }
                     auto ri = RegionIndex{ i, regionLine.first.first };
                     auto li = RegionIndex{ i, regionLine.first.second };
@@ -1396,14 +1401,14 @@ namespace panoramix {
                         MGBinary llinter;
                         llinter.type = MGBinary::LineLineIntersection;
                         llinter.weight = rd.data.junctionWeight * 10;
-                        llinter.samples = { normalize(cam.spatialDirection(rd.data.relationCenter)) };
+                        llinter.normalizedAnchors = { normalize(cam.spatialDirection(rd.data.relationCenter)) };
                         mg.add<1>({ li2mgh[l1], li2mgh[l2] }, std::move(llinter));
                     }
                     else if (rd.data.type == LineRelationData::Incidence){
                         MGBinary llincid;
                         llincid.type = MGBinary::LineLineIncidence;
                         llincid.weight = rd.data.junctionWeight * 10;
-                        llincid.samples = { normalize(cam.spatialDirection(rd.data.relationCenter)) };
+                        llincid.normalizedAnchors = { normalize(cam.spatialDirection(rd.data.relationCenter)) };
                         mg.add<1>({ li2mgh[l1], li2mgh[l2] }, std::move(llincid));
                     }
                 }
@@ -1427,42 +1432,42 @@ namespace panoramix {
                     miny = std::numeric_limits<double>::max();
                 double maxx = std::numeric_limits<double>::lowest(),
                     maxy = std::numeric_limits<double>::lowest();
-                rro.samples.resize(4, z);
+                rro.normalizedAnchors.resize(4, z);
                 for (auto & a : mg.data(ri2mgh[r1]).normalizedCorners){
                     double dx = a.dot(x), dy = a.dot(y);
                     if (dx < minx){
-                        rro.samples[0] = a;
+                        rro.normalizedAnchors[0] = a;
                         minx = dx;
                     }
                     else if (dx > maxx){
-                        rro.samples[1] = a;
+                        rro.normalizedAnchors[1] = a;
                         maxx = dx;
                     }
                     if (dy < miny){
-                        rro.samples[2] = a;
+                        rro.normalizedAnchors[2] = a;
                         miny = dy;
                     }
                     else if (dy > maxy){
-                        rro.samples[3] = a;
+                        rro.normalizedAnchors[3] = a;
                         maxy = dy;
                     }
                 }
                 for (auto & a : mg.data(ri2mgh[r2]).normalizedCorners){
                     double dx = a.dot(x), dy = a.dot(y);
                     if (dx < minx){
-                        rro.samples[0] = a;
+                        rro.normalizedAnchors[0] = a;
                         minx = dx;
                     }
                     else if (dx > maxx){
-                        rro.samples[1] = a;
+                        rro.normalizedAnchors[1] = a;
                         maxx = dx;
                     }
                     if (dy < miny){
-                        rro.samples[2] = a;
+                        rro.normalizedAnchors[2] = a;
                         miny = dy;
                     }
                     else if (dy > maxy){
-                        rro.samples[3] = a;
+                        rro.normalizedAnchors[3] = a;
                         maxy = dy;
                     }
                 }
@@ -1473,7 +1478,7 @@ namespace panoramix {
                 MGBinary llincid;
                 llincid.type = MGBinary::LineLineIncidence;
                 llincid.weight = IncidenceJunctionWeight(true) * 10;
-                llincid.samples = { lineIncidence.second };
+                llincid.normalizedAnchors = { normalize(lineIncidence.second) };
                 auto & l1 = lineIncidence.first.first;
                 auto & l2 = lineIncidence.first.second;
                 mg.add<1>({ li2mgh[l1], li2mgh[l2] }, std::move(llincid));
@@ -1482,13 +1487,13 @@ namespace panoramix {
             // compute importance ratios
             std::vector<double> unaryWeightSums(mg.internalElements<0>().size(), 0.0);
             for (auto & b : mg.internalElements<1>()){
-                unaryWeightSums[b.topo.lowers.front().id] += b.data.weight * b.data.samples.size();
-                unaryWeightSums[b.topo.lowers.back().id] += b.data.weight * b.data.samples.size();
+                unaryWeightSums[b.topo.lowers.front().id] += b.data.weight * b.data.normalizedAnchors.size();
+                unaryWeightSums[b.topo.lowers.back().id] += b.data.weight * b.data.normalizedAnchors.size();
             }
             for (auto & b : mg.internalElements<1>()){
-                b.data.importanceRatioInRelatedUnaries.front() = b.data.weight * b.data.samples.size() / 
+                b.data.importanceRatioInRelatedUnaries.front() = b.data.weight * b.data.normalizedAnchors.size() /
                     unaryWeightSums[b.topo.lowers.front().id];
-                b.data.importanceRatioInRelatedUnaries.back() = b.data.weight * b.data.samples.size() /
+                b.data.importanceRatioInRelatedUnaries.back() = b.data.weight * b.data.normalizedAnchors.size() /
                     unaryWeightSums[b.topo.lowers.back().id];
             }
 
@@ -1550,8 +1555,8 @@ namespace panoramix {
 
             binaryVars.clear();
             for (auto & b : mg.elements<1>()){
-                binaryVars[b.topo.hd].sampleDepthsOnRelatedUnaries.front().resize(b.data.samples.size());
-                binaryVars[b.topo.hd].sampleDepthsOnRelatedUnaries.back().resize(b.data.samples.size());
+                binaryVars[b.topo.hd].sampleDepthsOnRelatedUnaries.front().resize(b.data.normalizedAnchors.size());
+                binaryVars[b.topo.hd].sampleDepthsOnRelatedUnaries.back().resize(b.data.normalizedAnchors.size());
             }
             UpdateBinaryVars(mg, vps, unaryVars, binaryVars);
 
@@ -1835,10 +1840,39 @@ namespace panoramix {
         }
 
 
+
+
+
+        struct MGPatchDepthOptimizerInternalBase {
+            virtual void initialize(const MixedGraph & mg, MGPatch & patch, 
+                const std::vector<Vec3> & vanishingPoints, bool useWeights) = 0;
+            virtual void setDepthBounds(MGPatch & patch, double depthLb, double depthUb) = 0;
+            virtual void setDepthsAllGreaterThan(MGPatch & patch, double lob) = 0;
+            virtual void setUnaryClass(const MixedGraph & mg, MGPatch & patch,
+                const std::vector<Vec3> & vanishingPoints,
+                const MGUnaryHandle & uh, int claz) = 0;
+            virtual bool optimize(const MixedGraph & mg, MGPatch & patch,
+                const std::vector<Vec3> & vanishingPoints) = 0;
+            virtual void finalize() = 0;
+        };
+
     
 
-        struct MosekData {
+        static struct MosekGlobal {
             MSKenv_t env;
+            inline MosekGlobal() { MSK_makeenv(&env, nullptr); }
+            inline ~MosekGlobal() { MSK_deleteenv(&env); }
+        } mosekGlobal;
+
+        static const bool DepthBoundAsConstraint = false;
+        static const bool BoundSlackPositive = false;
+
+        static void MSKAPI printstr(void *handle,
+            MSKCONST char str[]){
+            printf("%s", str);
+        }
+
+        struct MGPatchDepthsOptimizerInternalMosek : MGPatchDepthOptimizerInternalBase {
             MSKtask_t task;
 
             struct UnaryTempData {
@@ -1851,17 +1885,25 @@ namespace panoramix {
             std::unordered_map<MGBinaryHandle, BinaryTempData> binaryTemp;
 
             int varNum;
+            int consNum;
+
+            virtual void initialize(const MixedGraph & mg, MGPatch & patch,
+                const std::vector<Vec3> & vanishingPoints, bool useWeights) override;
+            virtual void setDepthBounds(MGPatch & patch, double depthLb, double depthUb) override;
+            virtual void setDepthsAllGreaterThan(MGPatch & patch, double lob) override;
+            virtual void setUnaryClass(const MixedGraph & mg, MGPatch & patch,
+                const std::vector<Vec3> & vanishingPoints,
+                const MGUnaryHandle & uh, int claz) override;
+            virtual bool optimize(const MixedGraph & mg, MGPatch & patch,
+                const std::vector<Vec3> & vanishingPoints) override;
+            virtual void finalize() override;
         };
 
+        void MGPatchDepthsOptimizerInternalMosek::initialize(const MixedGraph & mg, MGPatch & patch,
+            const std::vector<Vec3> & vanishingPoints, bool useWeights){
+            auto internalData = this;
 
-        MGPatchDepthsOptimizer::MGPatchDepthsOptimizer(const MixedGraph & mg, MGPatch & patch,
-            const std::vector<Vec3> & vanishingPoints, bool useWeights, AlgorithmType at)
-            : _mg(mg), _patch(patch), _vanishingPoints(vanishingPoints){
-
-            MosekData * mosekData = new MosekData;
-            _internal = mosekData;
-            auto & env = mosekData->env;
-            auto & task = mosekData->task;
+            auto & task = internalData->task;
 
             //auto tick = Tick("preparing optimization");
 
@@ -1872,8 +1914,8 @@ namespace panoramix {
             int ccConsNum = 1;
 
             // temp data  
-            auto & unaryTemp = mosekData->unaryTemp;
-            auto & binaryTemp = mosekData->binaryTemp;
+            auto & unaryTemp = internalData->unaryTemp;
+            auto & binaryTemp = internalData->binaryTemp;
 
             unaryTemp.reserve(patch.uhs.size());
             int unaryNum = 0;
@@ -1882,30 +1924,34 @@ namespace panoramix {
                 unaryNum++;
             }
 
-           
             binaryTemp.reserve(patch.bhs.size());
 
             // count sample connections
             int samplesNum = 0;
             for (auto & bhv : patch.bhs){
                 binaryTemp[bhv.first].firstSamplePosition = samplesNum;
-                samplesNum += mg.data(bhv.first).samples.size();
+                samplesNum += mg.data(bhv.first).normalizedAnchors.size();
             }
 
             int slackVarNum = samplesNum;
-            auto & varNum = mosekData->varNum;
+            auto & varNum = internalData->varNum;
             varNum = depthNum + slackVarNum; // depths, slackVars
-            int consNum = samplesNum * 2;   // depth1 * ratio1 - depth2 * ratio2 < slackVar;  
+            auto & consNum = internalData->consNum;
+            consNum = samplesNum * 2;   // depth1 * ratio1 - depth2 * ratio2 < slackVar;  
             // depth2 * ratio2 - depth1 * ratio1 < slackVar
 
             //make as bounds:   depth = defaultValue
             //                  depth \in [depthLb, depthUb]
+            if (DepthBoundAsConstraint){
+                consNum += depthNum;
+            }
 
-            env = nullptr;
+            //env = nullptr;
             task = nullptr;
+            auto & env = mosekGlobal.env;
 
-            MSK_makeenv(&env, nullptr);
             MSK_maketask(env, consNum, varNum, &task);
+            //MSK_linkfunctotaskstream(task, MSK_STREAM_LOG, NULL, printstr);
 
             MSK_appendcons(task, consNum);
             MSK_appendvars(task, varNum);
@@ -1914,7 +1960,7 @@ namespace panoramix {
             int slackVarId = 0;
             for (auto & bhv : patch.bhs){
                 auto & bd = mg.data(bhv.first);
-                for (int k = 0; k < bd.samples.size(); k++){
+                for (int k = 0; k < bd.normalizedAnchors.size(); k++){
                     MSK_putcj(task, slackVarId, useWeights ? bd.weight : 1.0);
                     slackVarId++;
                 }
@@ -1923,12 +1969,16 @@ namespace panoramix {
             // bounds for vars
             {
                 int varId = 0;
-                for (; varId < depthNum; varId++){ // for depths
-                    MSK_putvarbound(task, varId, MSK_BK_LO, 0.5, +MSK_INFINITY);
+                if (!DepthBoundAsConstraint){
+                    for (; varId < depthNum; varId++){ // for depths
+                        MSK_putvarbound(task, varId, MSK_BK_LO, 1.0, +MSK_INFINITY);
+                    }
                 }
-                //for (; varId < depthNum + slackVarNum; varId++){ // for slack vars
-                //    MSK_putvarbound(task, varId, MSK_BK_LO, 0.0, +MSK_INFINITY);
-                //}
+                if (BoundSlackPositive){
+                    for (; varId < depthNum + slackVarNum; varId++){ // for slack vars 
+                        MSK_putvarbound(task, varId, MSK_BK_LO, 0.0, +MSK_INFINITY);
+                    }
+                }
             }
 
             // fill constraints related to each vars
@@ -1942,9 +1992,12 @@ namespace panoramix {
                     for (auto & bh : relatedBhs){
                         if (!Contains(patch.bhs, bh))
                             continue;
-                        relatedAnchorsNum += mg.data(bh).samples.size();
+                        relatedAnchorsNum += mg.data(bh).normalizedAnchors.size();
                     }
                     int relatedConsNum = relatedAnchorsNum * 2;
+                    if (DepthBoundAsConstraint){
+                        relatedConsNum += 1;
+                    }
 
                     std::vector<MSKint32t> consIds;
                     std::vector<MSKrealt> consValues;
@@ -1956,7 +2009,7 @@ namespace panoramix {
                         if (!Contains(patch.bhs, bh))
                             continue;
                         int firstAnchorPosition = binaryTemp[bh].firstSamplePosition;
-                        auto & samples = mg.data(bh).samples;
+                        auto & samples = mg.data(bh).normalizedAnchors;
                         for (int k = 0; k < samples.size(); k++){
                             consIds.push_back((firstAnchorPosition + k) * 2); // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
                             consIds.push_back((firstAnchorPosition + k) * 2 + 1); // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
@@ -1975,6 +2028,11 @@ namespace panoramix {
                         }
                     }
 
+                    if (DepthBoundAsConstraint){ // add depth bound
+                        consIds.push_back(samplesNum * 2 + varId);
+                        consValues.push_back(1.0); // (1.0) * depth > 1.0;
+                    }
+
                     MSK_putacol(task, varId, relatedConsNum, consIds.data(), consValues.data());
                     varId++;
                 }
@@ -1990,49 +2048,54 @@ namespace panoramix {
             }
 
             // bounds for constraints
-            for (int consId = 0; consId < consNum; consId++){
+            int consId = 0;
+            for (; consId < samplesNum * 2; consId++){
                 // all [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0];
                 MSK_putconbound(task, consId, MSK_BK_UP, -MSK_INFINITY, 0.0);
             }
+            if (DepthBoundAsConstraint){
+                for (; consId < consNum; consId++){
+                    // depth > 1.0
+                    MSK_putconbound(task, consId, MSK_BK_LO, 1.0, +MSK_INFINITY);
+                }
+            }
+            else{
+                assert(consId == consNum);
+            }
 
-            //Tock(tick);
 
         }
 
-        MGPatchDepthsOptimizer::~MGPatchDepthsOptimizer(){
-            auto mosekData = static_cast<MosekData*>(_internal);
-            MSK_deletetask(&mosekData->task);
-            MSK_deleteenv(&mosekData->env);
-            delete mosekData;
-        }
-
-        void MGPatchDepthsOptimizer::setDepthBounds(double depthLb, double depthUb){
-            for (int varId = 0; varId < _patch.uhs.size(); varId++){ // for depths
-                MSK_putvarbound(static_cast<MosekData*>(_internal)->task, varId, MSK_BK_RA, depthLb, depthUb);
+        void MGPatchDepthsOptimizerInternalMosek::setDepthBounds(MGPatch & patch, double depthLb, double depthUb) {
+            for (int varId = 0; varId < patch.uhs.size(); varId++){ // for depths
+                MSK_putvarbound(task,
+                    varId, MSK_BK_RA, depthLb, depthUb);
             }
         }
 
-        void MGPatchDepthsOptimizer::setDepthsAllGreaterThan(double lob){
-            for (int varId = 0; varId < _patch.uhs.size(); varId++){ // for depths
-                MSK_putvarbound(static_cast<MosekData*>(_internal)->task, varId, MSK_BK_LO, lob, +MSK_INFINITY);
+        void MGPatchDepthsOptimizerInternalMosek::setDepthsAllGreaterThan(MGPatch & patch, double lob) {
+            for (int varId = 0; varId < patch.uhs.size(); varId++){ // for depths
+                MSK_putvarbound(task,
+                    varId, MSK_BK_LO, lob, +MSK_INFINITY);
             }
         }
 
-        void MGPatchDepthsOptimizer::setUnaryClass(const MGUnaryHandle & uh, int claz){
-            _patch.uhs[uh].claz = claz;
+        void MGPatchDepthsOptimizerInternalMosek::setUnaryClass(const MixedGraph & mg, MGPatch & patch,
+            const std::vector<Vec3> & vanishingPoints,
+            const MGUnaryHandle & uh, int claz) {
 
-            auto & mg = _mg;
-            auto & patch = _patch;
-            auto & task = static_cast<MosekData*>(_internal)->task;
-            auto & binaryTemp = static_cast<MosekData*>(_internal)->binaryTemp;
-            auto & unaryTemp = static_cast<MosekData*>(_internal)->unaryTemp;
+            auto internalData = this;
+
+            const auto & task = internalData->task;
+            const auto & binaryTemp = internalData->binaryTemp;
+            const auto & unaryTemp = internalData->unaryTemp;
 
             auto & relatedBhs = mg.topo(uh).uppers;
             int relatedAnchorsNum = 0;
             for (auto & bh : relatedBhs){
                 if (!Contains(patch.bhs, bh))
                     continue;
-                relatedAnchorsNum += mg.data(bh).samples.size();
+                relatedAnchorsNum += mg.data(bh).normalizedAnchors.size();
             }
             int relatedConsNum = relatedAnchorsNum * 2;
 
@@ -2045,14 +2108,14 @@ namespace panoramix {
             for (auto & bh : relatedBhs){
                 if (!Contains(patch.bhs, bh))
                     continue;
-                int firstAnchorPosition = binaryTemp[bh].firstSamplePosition;
-                auto & samples = mg.data(bh).samples;
+                int firstAnchorPosition = binaryTemp.at(bh).firstSamplePosition;
+                auto & samples = mg.data(bh).normalizedAnchors;
                 for (int k = 0; k < samples.size(); k++){
                     consIds.push_back((firstAnchorPosition + k) * 2); // one for [depth1 * ratio1 - depth2 * ratio2 - slackVar < 0]; 
                     consIds.push_back((firstAnchorPosition + k) * 2 + 1); // another for [- depth1 * ratio1 + depth2 * ratio2 - slackVar < 0];
 
                     auto & a = samples[k];
-                    double ratio = DepthRatioOnMGUnary(a, mg.data(uh), _vanishingPoints, patch.uhs.at(uh).claz);
+                    double ratio = DepthRatioOnMGUnary(a, mg.data(uh), vanishingPoints, patch.uhs.at(uh).claz);
                     bool isOnLeftSide = uh == mg.topo(bh).lowers.front();
                     if (isOnLeftSide){ // as depth1
                         consValues.push_back(ratio);
@@ -2065,16 +2128,17 @@ namespace panoramix {
                 }
             }
 
-            MSK_putacol(task, unaryTemp[uh].position, relatedConsNum, consIds.data(), consValues.data());
+            MSK_putacol(task, unaryTemp.at(uh).position, relatedConsNum, consIds.data(), consValues.data());
         }
 
-        void MGPatchDepthsOptimizer::optimize() {
-            //auto tick = Tick("do optimization");
+        bool MGPatchDepthsOptimizerInternalMosek::optimize(const MixedGraph & mg, MGPatch & patch,
+            const std::vector<Vec3> & vanishingPoints){
 
-            auto mosekData = static_cast<MosekData*>(_internal);
-            auto & task = mosekData->task;
-            auto & varNum = mosekData->varNum;
-            auto & unaryTemp = mosekData->unaryTemp;
+            auto internalData = this;
+            const auto & task = internalData->task;
+            const auto & binaryTemp = internalData->binaryTemp;
+            const auto & unaryTemp = internalData->unaryTemp;
+            const auto & varNum = internalData->varNum;
 
             MSK_putobjsense(task, MSK_OBJECTIVE_SENSE_MINIMIZE);
             MSKrescodee trmcode;
@@ -2092,20 +2156,24 @@ namespace panoramix {
             {
                                              double *xx = new double[varNum];
                                              MSK_getxx(task, MSK_SOL_BAS, xx);
+                                             /*std::cout << "results: ";
+                                             for (int i = 0; i < varNum; i++)
+                                             std::cout << xx[i] << ' ';
+                                             std::cout << std::endl;*/
                                              //printf("Optimal primal solution\n");
-                                             for (auto & uhv : _patch.uhs){ // get resulted depths
-                                                 uhv.second.depthOfCenter = xx[unaryTemp[uhv.first].position];
+                                             for (auto & uhv : patch.uhs){ // get resulted depths
+                                                 uhv.second.depthOfCenter = xx[unaryTemp.at(uhv.first).position];
                                              }
                                              delete[] xx;
-                                             UpdateBinaryVars(_mg, _vanishingPoints, _patch.uhs, _patch.bhs);
-                                             break;
+                                             UpdateBinaryVars(mg, vanishingPoints, patch.uhs, patch.bhs);
+                                             return true;
             }
             case MSK_SOL_STA_DUAL_INFEAS_CER:
             case MSK_SOL_STA_PRIM_INFEAS_CER:
             case MSK_SOL_STA_NEAR_DUAL_INFEAS_CER:
             case MSK_SOL_STA_NEAR_PRIM_INFEAS_CER:
                 printf("Primal or dual infeasibility certificate found.\n");
-                break;
+                return false;
             case MSK_SOL_STA_UNKNOWN:
             {
                                         char symname[MSK_MAX_STR_LEN];
@@ -2116,12 +2184,91 @@ namespace panoramix {
 
                                         printf("The solution status is unknown.\n");
                                         printf("The optimizer terminitated with code: %s\n", symname);
-                                        break;
+                                        return false;
             }
             default:
                 printf("Other solution status.\n");
-                break;
+                return false;
             }
+        }
+
+        void MGPatchDepthsOptimizerInternalMosek::finalize(){
+            MSK_deletetask(&task);
+        }
+
+
+
+
+        struct MGPatchDepthsOptimizerInternalEigen : MGPatchDepthOptimizerInternalBase {
+            struct UnaryTempData {
+                int position;
+            };
+            std::unordered_map<MGUnaryHandle, UnaryTempData> unaryTemp;
+            struct BinaryTempData {
+                int firstSamplePosition;
+            };
+            std::unordered_map<MGBinaryHandle, BinaryTempData> binaryTemp;
+
+            int varNum;
+            int consNum;
+
+            virtual void initialize(const MixedGraph & mg, MGPatch & patch,
+                const std::vector<Vec3> & vanishingPoints, bool useWeights) override;
+            virtual void setDepthBounds(MGPatch & patch, double depthLb, double depthUb) override;
+            virtual void setDepthsAllGreaterThan(MGPatch & patch, double lob) override;
+            virtual void setUnaryClass(const MixedGraph & mg, MGPatch & patch,
+                const std::vector<Vec3> & vanishingPoints,
+                const MGUnaryHandle & uh, int claz) override;
+            virtual bool optimize(const MixedGraph & mg, MGPatch & patch,
+                const std::vector<Vec3> & vanishingPoints) override;
+            virtual void finalize() override;
+        };
+
+        // TODO
+
+
+        
+
+
+
+        MGPatchDepthsOptimizer::MGPatchDepthsOptimizer(const MixedGraph & mg, MGPatch & patch,
+            const std::vector<Vec3> & vanishingPoints, bool useWeights, AlgorithmType at)
+            : _mg(mg), _patch(patch), _vanishingPoints(vanishingPoints), _at(at){
+
+            if (_at == AlgorithmType::MosekLinearProgramming){
+                _internal = new MGPatchDepthsOptimizerInternalMosek;
+            }
+            else if (_at == AlgorithmType::Eigen){
+                _internal = new MGPatchDepthsOptimizerInternalEigen;
+            }
+
+            auto internalData = static_cast<MGPatchDepthOptimizerInternalBase*>(_internal);
+            internalData->initialize(mg, patch, vanishingPoints, useWeights);
+        }
+
+
+        MGPatchDepthsOptimizer::~MGPatchDepthsOptimizer(){
+            if (_internal){
+                auto internalData = static_cast<MGPatchDepthOptimizerInternalBase*>(_internal);
+                internalData->finalize();
+                delete internalData;
+            }
+        }
+
+        void MGPatchDepthsOptimizer::setDepthBounds(double depthLb, double depthUb){
+            static_cast<MGPatchDepthOptimizerInternalBase*>(_internal)->setDepthBounds(_patch, depthLb, depthUb);
+        }
+
+        void MGPatchDepthsOptimizer::setDepthsAllGreaterThan(double lob){
+            static_cast<MGPatchDepthOptimizerInternalBase*>(_internal)->setDepthsAllGreaterThan(_patch, lob);
+        }
+
+        void MGPatchDepthsOptimizer::setUnaryClass(const MGUnaryHandle & uh, int claz){
+            static_cast<MGPatchDepthOptimizerInternalBase*>(_internal)->setUnaryClass(_mg, _patch, _vanishingPoints, uh, claz);
+        }
+
+        bool MGPatchDepthsOptimizer::optimize() {
+            return static_cast<MGPatchDepthOptimizerInternalBase*>(_internal)->optimize(_mg, _patch, _vanishingPoints);
         }
 
   

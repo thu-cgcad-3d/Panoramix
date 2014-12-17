@@ -273,10 +273,10 @@ namespace panoramix {
                 LineLineIncidence
             } type;
             double weight;
-            std::vector<Vec3> samples;
+            std::vector<Vec3> normalizedAnchors;
             std::array<double, 2> importanceRatioInRelatedUnaries;
             template <class Archive> void serialize(Archive & ar) {
-                ar(type, weight, samples, importanceRatioInRelatedUnaries);
+                ar(type, weight, normalizedAnchors, importanceRatioInRelatedUnaries);
             }
         };
 
@@ -287,6 +287,7 @@ namespace panoramix {
         using MGUnaryVarTable = std::unordered_map<MGUnaryHandle, MGUnaryVariable>;
         using MGBinaryVarTable = std::unordered_map<MGBinaryHandle, MGBinaryVariable>;
 
+        void InitializeUnaryVarDepths(MGUnaryVarTable & unaryVars, double depth);
         void UpdateBinaryVars(const MixedGraph & mg, const std::vector<Vec3> & vps,
             const MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars);
 
@@ -307,6 +308,9 @@ namespace panoramix {
         struct MGPatch {
             MGUnaryVarTable uhs;
             MGBinaryVarTable bhs;
+            inline void updateBinaryVars(const MixedGraph & mg, const std::vector<Vec3> & vps) {
+                UpdateBinaryVars(mg, vps, uhs, bhs);
+            }
             template <class Archive> void serialize(Archive & ar) {
                 ar(uhs, bhs);
             }
@@ -335,7 +339,7 @@ namespace panoramix {
 
 
         std::vector<MGPatch> SplitPatch(const MixedGraph & mg, const MGPatch & patch, 
-            std::function<bool(MGBinaryHandle bh)> useBh);
+            std::function<bool(MGBinaryHandle)> useBh);
 
         MGPatch MinimumSpanningTreePatch(const MixedGraph & mg, const MGPatch & patch,
             std::function<bool(MGBinaryHandle, MGBinaryHandle)> compareBh);
@@ -345,10 +349,10 @@ namespace panoramix {
                 return core::BinaryDistanceOfPatch(a, patch) <
                     core::BinaryDistanceOfPatch(b, patch);
             });
-        }        
+        }     
 
 
-        
+        // patch depth optimizer
         class MGPatchDepthsOptimizer {
         public:
             enum AlgorithmType {
@@ -360,13 +364,14 @@ namespace panoramix {
                 const std::vector<Vec3> & vanishingPoints,
                 bool useWeights = true,
                 AlgorithmType at = MosekLinearProgramming);
+            MGPatchDepthsOptimizer(const MGPatchDepthsOptimizer &) = delete;
             ~MGPatchDepthsOptimizer();
             
         public:
             void setDepthBounds(double depthLb, double depthUb);
             void setDepthsAllGreaterThan(double lob);
             void setUnaryClass(const MGUnaryHandle & uh, int claz);
-            void optimize();
+            bool optimize();
 
         private:
             AlgorithmType _at;
@@ -375,6 +380,9 @@ namespace panoramix {
             const std::vector<Vec3> & _vanishingPoints;
             void * _internal;
         };
+
+
+
         
 
 
