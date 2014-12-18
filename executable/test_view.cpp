@@ -366,7 +366,6 @@ TEST(MixedGraph, OptimizateBinaryPatch) {
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
-    
     // test small patches
     // mosek
     for (auto & b : mg.elements<1>()){
@@ -384,53 +383,22 @@ TEST(MixedGraph, OptimizateBinaryPatch) {
 
         auto & bd = mg.data(patch.bhs.begin()->first);
 
-        double errBefore = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
+        double errBefore = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(patch);
         bool feasible = pdo.optimize();
-        double errAfter = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(starPatch);
+        double errAfter = core::AverageBinaryDistanceOfPatch(patch);// / core::AverageDepthOfPatch(patch);
 
-        if (!feasible){
-            EXPECT_GT(bd.normalizedAnchors.size(), 1);
-            if (bd.type == core::MGBinary::RegionRegionConnection || 
-                bd.type == core::MGBinary::RegionRegionOverlapping){
-                ASSERT_NE(uvar1.claz, uvar2.claz);
-            }
-        }
-        else{
-            if (bd.normalizedAnchors.size() > 1){
-                if (bd.type == core::MGBinary::RegionRegionConnection || core::MGBinary::RegionRegionOverlapping)
-                    ASSERT_EQ(uvar1.claz, uvar2.claz);
-                else if (bd.type == core::MGBinary::RegionLineConnection)
-                    ASSERT_NE(uvar1.claz, uvar2.claz);
-            }
-            EXPECT_GE(errBefore, errAfter);
+        ASSERT_TRUE(feasible);
+        if (core::IsGoodBinary(mg, b.topo.hd, unaryVars, vanishingPoints)){
+            EXPECT_TRUE(errAfter - errBefore < 1e-2);
         }
     }
-
-}
-
-
-TEST(MixedGraph, OptimizateBinaryPatchEigen) {
-
-    core::Image panorama;
-    std::vector<core::Vec3> vanishingPoints;
-
-    core::MixedGraph mg;
-    core::MGUnaryVarTable unaryVars;
-    core::MGBinaryVarTable binaryVars;
-
-    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
-    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
-
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
     // eigen
     for (auto & b : mg.elements<1>()){
         core::InitializeUnaryVarDepths(unaryVars, 1.0);
         core::MGPatch patch = core::MakePatchOnBinary(mg, b.topo.hd, unaryVars, binaryVars);
         auto oldPatch = patch;
-        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, core::MGPatchDepthsOptimizer::Eigen);
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, core::MGPatchDepthsOptimizer::EigenSparseQR);
 
         auto & uh1 = patch.uhs.begin()->first;
         auto & uh2 = std::next(patch.uhs.begin())->first;
@@ -441,13 +409,16 @@ TEST(MixedGraph, OptimizateBinaryPatchEigen) {
 
         auto & bd = mg.data(patch.bhs.begin()->first);
 
-        double errBefore = core::AverageBinaryDistanceOfPatch(patch, 2) / core::AverageDepthOfPatch(patch);
+        double errBefore = core::AverageBinaryDistanceOfPatch(patch, 2);
         bool feasible = pdo.optimize();
-        double errAfter = core::AverageBinaryDistanceOfPatch(patch, 2) / core::AverageDepthOfPatch(patch);
+        double errAfter = core::AverageBinaryDistanceOfPatch(patch, 2);
 
         ASSERT_TRUE(feasible);
-        EXPECT_GE(errBefore, errAfter);
+        if (core::IsGoodBinary(mg, b.topo.hd, unaryVars, vanishingPoints)){
+            EXPECT_TRUE(errAfter - errBefore < 1e-2);
+        }
     }
+
 
 }
 
@@ -472,13 +443,16 @@ TEST(MixedGraph, OptimizateStarPatch){
     for (auto & u : mg.elements<0>()){
         core::InitializeUnaryVarDepths(unaryVars, 1.0);
         core::MGPatch starPatch = core::MakeStarPatchAroundUnary(mg, u.topo.hd, unaryVars, binaryVars);
-        core::MGPatchDepthsOptimizer pdo(mg, starPatch, vanishingPoints, false, core::MGPatchDepthsOptimizer::Eigen);
+        core::MGPatchDepthsOptimizer pdo(mg, starPatch, vanishingPoints, false, core::MGPatchDepthsOptimizer::MosekLinearProgramming);
 
-        double errBefore = core::AverageBinaryDistanceOfPatch(starPatch) / core::AverageDepthOfPatch(starPatch);
-        pdo.optimize();
-        double errAfter = core::AverageBinaryDistanceOfPatch(starPatch) / core::AverageDepthOfPatch(starPatch);
+        double errBefore = core::AverageBinaryDistanceOfPatch(starPatch);
+        bool feasible = pdo.optimize();
+        double errAfter = core::AverageBinaryDistanceOfPatch(starPatch);
 
-        EXPECT_GE(errBefore, errAfter);
+        ASSERT_TRUE(feasible);
+        if (core::IsGoodPatch(mg, starPatch, vanishingPoints)){
+            EXPECT_TRUE(errAfter - errBefore < 1e-2);
+        }
     }
 
 }
@@ -508,7 +482,7 @@ TEST(MixedGraph, NaiveHolisticOptimization) {
     for (auto & patch : naivePatches){
         VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, false);
         core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, 
-            core::MGPatchDepthsOptimizer::Eigen);
+            core::MGPatchDepthsOptimizer::EigenSparseQR);
 
         double distBefore = core::AverageBinaryDistanceOfPatch(patch) / core::AverageDepthOfPatch(patch);
         pdo.optimize();
@@ -521,6 +495,7 @@ TEST(MixedGraph, NaiveHolisticOptimization) {
     core::SaveToDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization", naivePatches);
 
 }
+
 
 
 TEST(MixedGraph, LinesOptimization) {
@@ -562,12 +537,12 @@ TEST(MixedGraph, LinesOptimization) {
     }
     
     for (auto & patch : linePatches){
-        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, core::MGPatchDepthsOptimizer::Eigen);
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, core::MGPatchDepthsOptimizer::MosekLinearProgramming);
         pdo.optimize();
     }
 
     for (auto & patch : lineMSTPatches){
-        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, core::MGPatchDepthsOptimizer::Eigen);
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, core::MGPatchDepthsOptimizer::MosekLinearProgramming);
         pdo.optimize();
     }
 
@@ -589,6 +564,8 @@ TEST(MixedGraph, LinesOptimization) {
 int main(int argc, char * argv[], char * envp[]) {
     srand(clock());
     testing::InitGoogleTest(&argc, argv);
-    testing::GTEST_FLAG(filter) = "MixedGraph.LinesOptimization";
+    testing::GTEST_FLAG(catch_exceptions) = false;
+    testing::GTEST_FLAG(throw_on_failure) = true;
+    testing::GTEST_FLAG(filter) = "MixedGraph.OptimizateStarPatch";
     return RUN_ALL_TESTS();
 }

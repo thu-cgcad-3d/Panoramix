@@ -491,6 +491,12 @@ namespace panoramix {
             return s >= 1.0 - epsilon || s <= -1.0 + epsilon;
         }
 
+        template <class T, int N>
+        inline bool IsFuzzyPerpenducular(const Vec<T, N> & v1, const Vec<T, N> & v2, const T & epsilon = 0.1) {
+            auto s = v1.dot(v2) / norm(v1) / norm(v2);
+            return abs(s) <= epsilon;
+        }
+
         template <class T>
         inline T SignedAngleBetweenDirections(const Vec<T, 2> & from, const Vec<T, 2> & to,
             bool clockwiseAsPositive = true) {
