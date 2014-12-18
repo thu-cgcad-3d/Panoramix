@@ -291,15 +291,18 @@ namespace panoramix {
         void UpdateBinaryVars(const MixedGraph & mg, const std::vector<Vec3> & vps,
             const MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars);
 
-        bool IsBadBinary(const MixedGraph & mg, const MGBinaryHandle & bh, 
+        // 0.999995
+        double FeasibilityOfBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
             const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps);
+        inline bool IsBadBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
+            const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps){
+            return FeasibilityOfBinary(mg, bh, unaryVars, vps) < 0.999;
+        }
         inline bool IsGoodBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
             const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps){
-            return !IsBadBinary(mg, bh, unaryVars, vps);
+            return FeasibilityOfBinary(mg, bh, unaryVars, vps) >= 0.999;
         }
-        // 0.999995
-        double ConsistencyOfBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
-            const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps);
+       
 
 
         // build mixed graph
@@ -328,7 +331,10 @@ namespace panoramix {
 
         bool BinaryHandlesAreValidInPatch(const MixedGraph & mg, const MGPatch & patch);
         bool UnariesAreConnectedInPatch(const MixedGraph & mg, const MGPatch & patch);
-        bool IsGoodPatch(const MixedGraph & mg, const MGPatch & patch, const std::vector<Vec3> & vps);
+        double FeasibilityOfPatch(const MixedGraph & mg, const MGPatch & patch, const std::vector<Vec3> & vps);
+        inline bool IsGoodPatch(const MixedGraph & mg, const MGPatch & patch, const std::vector<Vec3> & vps){
+            return FeasibilityOfPatch(mg, patch, vps) < 0.999;
+        }
 
         double BinaryDistanceOfPatch(const MGBinaryHandle & bh, const MGPatch & patch);
         double AverageBinaryDistanceOfPatch(const MGPatch & patch, int power = 1);
@@ -350,9 +356,9 @@ namespace panoramix {
         std::vector<MGPatch> SplitPatch(const MixedGraph & mg, const MGPatch & patch, 
             std::function<bool(MGBinaryHandle)> useBh);
         inline std::vector<MGPatch> SplitIntoGoodPatches(const MixedGraph & mg, const MGPatch & patch, 
-            const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps){
-            return SplitPatch(mg, patch, [&mg, &unaryVars, &vps](MGBinaryHandle bh){
-                return IsGoodBinary(mg, bh, unaryVars, vps);
+            const std::vector<Vec3> & vps){
+            return SplitPatch(mg, patch, [&mg, &patch, &vps](MGBinaryHandle bh){
+                return IsGoodBinary(mg, bh, patch.uhs, vps);
             });
         }
 
@@ -365,6 +371,9 @@ namespace panoramix {
                     core::BinaryDistanceOfPatch(b, patch);
             });
         }
+
+        bool IsTreePatch(const MixedGraph & mg, const MGPatch & patch);
+
 
         
         void ScalePatch(MGPatch & patch, double scale);

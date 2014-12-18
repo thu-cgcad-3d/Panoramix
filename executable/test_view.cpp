@@ -492,7 +492,56 @@ TEST(MixedGraph, NaiveHolisticOptimization) {
         VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
     }
 
-    core::SaveToDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization", naivePatches);
+    core::SaveToDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization.naivePatches", naivePatches);
+
+}
+
+
+
+TEST(MixedGraph, GoodPatchOptimization){
+
+    core::Image panorama;
+    std::vector<core::Vec3> vanishingPoints;
+
+    core::MixedGraph mg;
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
+
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
+
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
+
+    std::vector<core::MGPatch> naivePatches;
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization.naivePatches", naivePatches);
+
+    std::vector<core::MGPatch> goodPatches;
+    for (auto & p : naivePatches){
+        auto gps = core::SplitIntoGoodPatches(mg, p, vanishingPoints);
+        for (auto & gp : gps){
+            goodPatches.push_back(core::MinimumSpanningTreePatch(mg, gp));
+        }
+    }
+
+    for (int i = 0; i < goodPatches.size(); i++){
+        ASSERT_TRUE(core::IsTreePatch(mg, goodPatches[i]));
+        VisualizeMixedGraph(panorama, mg, { goodPatches[i] }, vanishingPoints, i == goodPatches.size()-1);
+    }
+
+
+    for (auto & patch : goodPatches){
+        core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false, core::MGPatchDepthsOptimizer::MosekLinearProgramming);
+        double distBefore = core::AverageBinaryDistanceOfPatch(patch) / core::AverageDepthOfPatch(patch);
+        pdo.optimize();
+        double distAfter = core::AverageBinaryDistanceOfPatch(patch) / core::AverageDepthOfPatch(patch);
+    }
+
+    VisualizeMixedGraph(panorama, mg, naivePatches, vanishingPoints, false);
+    VisualizeMixedGraph(panorama, mg, goodPatches, vanishingPoints, true);
+
+    core::SaveToDisk("./cache/test_view.MixedGraph.Build.GoodPatchOptimization.goodPatches", goodPatches);
 
 }
 
@@ -515,7 +564,7 @@ TEST(MixedGraph, LinesOptimization) {
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
     std::vector<core::MGPatch> naivePatches;
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization", naivePatches);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization.naivePatches", naivePatches);
 
     std::vector<core::MGPatch> linePatches;
     std::vector<core::MGPatch> lineMSTPatches;
@@ -555,6 +604,13 @@ TEST(MixedGraph, LinesOptimization) {
 }
 
 
+TEST(MixedGraph, AdjustRegionClasses){
+
+
+
+}
+
+
 
 
 
@@ -566,6 +622,6 @@ int main(int argc, char * argv[], char * envp[]) {
     testing::InitGoogleTest(&argc, argv);
     testing::GTEST_FLAG(catch_exceptions) = false;
     testing::GTEST_FLAG(throw_on_failure) = true;
-    testing::GTEST_FLAG(filter) = "MixedGraph.OptimizateStarPatch";
+    testing::GTEST_FLAG(filter) = "MixedGraph.GoodPatchOptimization";
     return RUN_ALL_TESTS();
 }

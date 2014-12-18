@@ -1286,33 +1286,8 @@ namespace panoramix {
             }
         }
 
-        bool IsBadBinary(const MixedGraph & mg, const MGBinaryHandle & bh, 
-            const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps){
-            if (mg.data(bh).normalizedAnchors.size() == 1)
-                return false;
-            auto & uhs = mg.topo(bh).lowers;
-            if (mg.data(bh).type == MGBinary::RegionLineConnection){
-                return !IsFuzzyPerpenducular(vps[unaryVars.at(uhs.front()).claz], 
-                    vps[unaryVars.at(uhs.back()).claz], 1e-6);
-            }
-            if (mg.data(bh).type == MGBinary::RegionRegionOverlapping)
-                return unaryVars.at(uhs.front()).claz != unaryVars.at(uhs.back()).claz;
-            assert(mg.data(bh).type == MGBinary::RegionRegionConnection);
-            if (unaryVars.at(uhs.front()).claz == unaryVars.at(uhs.back()).claz)
-                return false;
-            // is good only if all anchors are aligned
-            Vec3 alignDir = /*mg.data(bh).type == MGBinary::RegionLineConnection ? vps[unaryVars.at(uhs.back()).claz] :*/
-                vps[unaryVars.at(uhs.front()).claz].cross(vps[unaryVars.at(uhs.back()).claz]);
-            for (int k = 1; k < mg.data(bh).normalizedAnchors.size(); k++){
-                Vec3 rotateNorm = mg.data(bh).normalizedAnchors.front().cross(mg.data(bh).normalizedAnchors[k]);
-                if (!IsFuzzyPerpenducular(rotateNorm, alignDir, 1e-6))
-                    return true;
-            }
-            return false;
-        }
 
-
-        double ConsistencyOfBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
+        double FeasibilityOfBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
             const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps){
             if (mg.data(bh).normalizedAnchors.size() == 1)
                 return 1.0;
@@ -1668,14 +1643,16 @@ namespace panoramix {
             return true;
         }
 
-        bool IsGoodPatch(const MixedGraph & mg, const MGPatch & patch, const std::vector<Vec3> & vps){
+        double FeasibilityOfPatch(const MixedGraph & mg, const MGPatch & patch, const std::vector<Vec3> & vps){
             if (!BinaryHandlesAreValidInPatch(mg, patch) || !UnariesAreConnectedInPatch(mg, patch))
-                return false;
+                return 0.0;
+            double minConsistency = 1.0;
             for (auto & bhv : patch.bhs){
-                if (!IsGoodBinary(mg, bhv.first, patch.uhs, vps))
-                    return false;
+                double c = FeasibilityOfBinary(mg, bhv.first, patch.uhs, vps);
+                if (c < minConsistency)
+                    c = minConsistency;
             }
-            return true;
+            return minConsistency;
         }
 
 
@@ -1873,6 +1850,13 @@ namespace panoramix {
         }
 
 
+        bool IsTreePatch(const MixedGraph & mg, const MGPatch & patch){
+            if (!(BinaryHandlesAreValidInPatch(mg, patch) && UnariesAreConnectedInPatch(mg, patch)))
+                return false;
+            return patch.uhs.size() == patch.bhs.size() + 1;
+        }
+
+
         void ScalePatch(MGPatch & patch, double scale){
             for (auto & uhv : patch.uhs)
                 uhv.second.depthOfCenter *= scale;
@@ -2038,6 +2022,7 @@ namespace panoramix {
             int slackVarId = 0;
             for (auto & bhv : patch.bhs){
                 auto & bd = mg.data(bhv.first);
+                assert(bd.weight >= 0.0);
                 for (int k = 0; k < bhAnchors[bhv.first].first.size(); k++){
                     MSK_putcj(task, slackVarId, useWeights ? bd.weight : 1.0);
                     slackVarId++;
@@ -2332,6 +2317,7 @@ namespace panoramix {
                     A.insert(eid, uhPositions.at(uh1)) = ratio1;
                     A.insert(eid, uhPositions.at(uh2)) = -ratio2;
                     B(eid) = 0.0;
+                    assert(mg.data(bh).weight >= 0.0);
                     W.insert(eid, eid) = mg.data(bh).weight;
                     eid++;
                 }
