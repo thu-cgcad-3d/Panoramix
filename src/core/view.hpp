@@ -292,8 +292,14 @@ namespace panoramix {
             const MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars);
 
         // 0.999995
-        double FeasibilityOfBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
-            const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps);
+        double FeasibilityOfBinary(const MGBinary & b, int uv1Claz, int uv2Claz,
+            const std::vector<Vec3> & vps);
+        inline double FeasibilityOfBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
+            const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps){
+            return FeasibilityOfBinary(mg.data(bh), 
+                unaryVars.at(mg.topo(bh).lowers[0]).claz, 
+                unaryVars.at(mg.topo(bh).lowers[1]).claz, vps);
+        }
         inline bool IsBadBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
             const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps){
             return FeasibilityOfBinary(mg, bh, unaryVars, vps) < 0.999;
@@ -328,6 +334,9 @@ namespace panoramix {
                 ar(uhs, bhs);
             }
         };
+
+        inline bool Contains(const MGPatch & p, const MGUnaryHandle & uh) { return Contains(p.uhs, uh); }
+        inline bool Contains(const MGPatch & p, const MGBinaryHandle & bh) { return Contains(p.bhs, bh); }
 
         bool BinaryHandlesAreValidInPatch(const MixedGraph & mg, const MGPatch & patch);
         bool UnariesAreConnectedInPatch(const MixedGraph & mg, const MGPatch & patch);
@@ -374,6 +383,8 @@ namespace panoramix {
 
         bool IsTreePatch(const MixedGraph & mg, const MGPatch & patch);
 
+        void CompletePatch(const MixedGraph & mg, MGPatch & patch, const MGBinaryVarTable & binaryVars);
+
 
         
         void ScalePatch(MGPatch & patch, double scale);
@@ -411,7 +422,7 @@ namespace panoramix {
             bool optimize();
 
         private:
-            AlgorithmType _at;
+            const AlgorithmType _at;
             const MixedGraph & _mg;
             MGPatch & _patch;
             const std::vector<Vec3> & _vanishingPoints;
@@ -419,9 +430,19 @@ namespace panoramix {
         };
 
 
-        // grow patch
-        void GrowPatch(const MixedGraph & mg, MGPatch & root,
-            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars);
+
+
+        void AddUnaryAndRelatedBinariesToPatch(const MixedGraph & mg, MGPatch & patch, const MGUnaryHandle & uh,
+            MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars);
+
+        // grow a reasonable patch from one root uh
+        std::unordered_map<MGUnaryHandle, double>
+            GrowAPatch(const MixedGraph & mg, MGPatch & patch,
+            MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars,
+            const std::vector<Vec3> & vps,
+            double scoreThreshold = 0.3,
+            int uhMaxNum = 500);
+
 
     }
 }

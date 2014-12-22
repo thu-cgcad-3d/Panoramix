@@ -1287,33 +1287,64 @@ namespace panoramix {
         }
 
 
-        double FeasibilityOfBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
-            const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps){
-            if (mg.data(bh).normalizedAnchors.size() == 1)
+        double FeasibilityOfBinary(const MGBinary & b, int uv1Claz, int uv2Claz,
+            const std::vector<Vec3> & vps){
+
+            if (b.normalizedAnchors.size() == 1)
                 return 1.0;
-            auto & uhs = mg.topo(bh).lowers;
-            if (mg.data(bh).type == MGBinary::RegionLineConnection){
-                return 1.0 - abs(normalize(vps[unaryVars.at(uhs.front()).claz])
-                    .dot(normalize(vps[unaryVars.at(uhs.back()).claz])));
+
+            if (b.type == MGBinary::RegionLineConnection){
+                return 1.0 - abs(normalize(vps[uv1Claz])
+                    .dot(normalize(vps[uv2Claz])));
             }
-            if (mg.data(bh).type == MGBinary::RegionRegionOverlapping){
-                return abs(normalize(vps[unaryVars.at(uhs.front()).claz])
-                    .dot(normalize(vps[unaryVars.at(uhs.back()).claz])));
+            if (b.type == MGBinary::RegionRegionOverlapping){
+                return abs(normalize(vps[uv1Claz])
+                    .dot(normalize(vps[uv2Claz])));
             }
-            assert(mg.data(bh).type == MGBinary::RegionRegionConnection);
-            if (unaryVars.at(uhs.front()).claz == unaryVars.at(uhs.back()).claz)
+            assert(b.type == MGBinary::RegionRegionConnection);
+            if (uv1Claz == uv2Claz)
                 return 1.0;
-            
-            Vec3 alignDir = normalize(vps[unaryVars.at(uhs.front()).claz].cross(vps[unaryVars.at(uhs.back()).claz]));
+
+            Vec3 alignDir = normalize(vps[uv1Claz].cross(vps[uv2Claz]));
             double maxDotProd = 0.0;
-            for (int k = 1; k < mg.data(bh).normalizedAnchors.size(); k++){
-                Vec3 rotateNorm = mg.data(bh).normalizedAnchors[k-1].cross(mg.data(bh).normalizedAnchors[k]);
+            for (int k = 1; k < b.normalizedAnchors.size(); k++){
+                Vec3 rotateNorm = b.normalizedAnchors[k - 1].cross(b.normalizedAnchors[k]);
                 double dotProd = abs(alignDir.dot(rotateNorm));
                 if (dotProd > maxDotProd)
                     maxDotProd = dotProd;
             }
             return 1.0 - maxDotProd;
+
         }
+
+
+        //double FeasibilityOfBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
+        //    const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps){
+        //    if (mg.data(bh).normalizedAnchors.size() == 1)
+        //        return 1.0;
+        //    auto & uhs = mg.topo(bh).lowers;
+        //    if (mg.data(bh).type == MGBinary::RegionLineConnection){
+        //        return 1.0 - abs(normalize(vps[unaryVars.at(uhs.front()).claz])
+        //            .dot(normalize(vps[unaryVars.at(uhs.back()).claz])));
+        //    }
+        //    if (mg.data(bh).type == MGBinary::RegionRegionOverlapping){
+        //        return abs(normalize(vps[unaryVars.at(uhs.front()).claz])
+        //            .dot(normalize(vps[unaryVars.at(uhs.back()).claz])));
+        //    }
+        //    assert(mg.data(bh).type == MGBinary::RegionRegionConnection);
+        //    if (unaryVars.at(uhs.front()).claz == unaryVars.at(uhs.back()).claz)
+        //        return 1.0;
+        //    
+        //    Vec3 alignDir = normalize(vps[unaryVars.at(uhs.front()).claz].cross(vps[unaryVars.at(uhs.back()).claz]));
+        //    double maxDotProd = 0.0;
+        //    for (int k = 1; k < mg.data(bh).normalizedAnchors.size(); k++){
+        //        Vec3 rotateNorm = mg.data(bh).normalizedAnchors[k-1].cross(mg.data(bh).normalizedAnchors[k]);
+        //        double dotProd = abs(alignDir.dot(rotateNorm));
+        //        if (dotProd > maxDotProd)
+        //            maxDotProd = dotProd;
+        //    }
+        //    return 1.0 - maxDotProd;
+        //}
 
 
         MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views,
@@ -1856,6 +1887,19 @@ namespace panoramix {
             return patch.uhs.size() == patch.bhs.size() + 1;
         }
 
+        void CompletePatch(const MixedGraph & mg, MGPatch & patch, const MGBinaryVarTable & binaryVars){
+            for (auto & uhv : patch.uhs){
+                auto & uh = uhv.first;
+                for (auto & bh : mg.topo(uh).uppers){
+                    if (Contains(patch.uhs, mg.topo(bh).lowers.front()) &&
+                        Contains(patch.uhs, mg.topo(bh).lowers.back()) &&
+                        !Contains(patch.bhs, bh)){
+                        patch.bhs[bh] = binaryVars.at(bh);
+                    }
+                }
+            }
+        }
+
 
         void ScalePatch(MGPatch & patch, double scale){
             for (auto & uhv : patch.uhs)
@@ -2376,6 +2420,7 @@ namespace panoramix {
                 std::cout << "computation error" << std::endl;
                 return false;
             }
+
             VectorXd WB = W * B;
             VectorXd X = solver.solve(useWeights ? WB : B);
             if (solver.info() != Success) {
@@ -2441,26 +2486,211 @@ namespace panoramix {
             return static_cast<MGPatchDepthsOptimizerInternalBase*>(_internal)->optimize(_mg, _patch, _vanishingPoints);
         }
 
-  
 
-        void GrowPatch(const MixedGraph & mg, MGPatch & root, 
-            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars){
 
-            MaxHeap<MGUnaryHandle> Q;
-            for (auto & uhv : root.uhs){
-                Q.push(uhv.first, 0.0);
+
+
+
+
+
+        void AddUnaryAndRelatedBinariesToPatch(const MixedGraph & mg, MGPatch & patch, const MGUnaryHandle & uh,
+            MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars){
+            if (Contains(patch, uh))
+                return;
+            patch.uhs[uh] = unaryVars.at(uh);
+            int relatedBhCount = 0;
+            for (auto & bh : mg.topo(uh).uppers){
+                auto anotherUh = mg.topo(bh).lowers.front();
+                if (anotherUh == uh)
+                    anotherUh = mg.topo(bh).lowers.back();
+                if (Contains(patch, anotherUh)){
+                    relatedBhCount++;
+                    patch.bhs[bh] = binaryVars.at(bh);
+                }
             }
-            for (auto & bhv : root.bhs){
-                auto & uhs = mg.topo(bhv.first).lowers;
-                Q.setScore(uhs[0], Q.at(uhs[0]) + mg.data(bhv.first).importanceRatioInRelatedUnaries[0]);
-                Q.setScore(uhs[1], Q.at(uhs[1]) + mg.data(bhv.first).importanceRatioInRelatedUnaries[1]);
-            }
-
-            while (!Q.empty()){
-                // todo
-            }
-
+            assert(relatedBhCount > 0);
         }
 
+        // returns a confidence for each newly added unary
+        // the confidence should consider: 
+        //  //1. the type of the unary : region/line [this can be expressed in 4.]
+        //  2. the center direction of this unary in space (consistent with vps)
+        //  3. the consistency(as feasibility of binaries) with current patch unaries
+        //  4. the importance ratio of feasible binaries
+
+        namespace  {
+
+            struct UOption {
+                MGUnaryHandle uh;
+                int claz;
+            };
+
+            inline bool operator == (const UOption & a, const UOption & b){
+                return a.uh == b.uh && a.claz == b.claz;
+            }
+            struct UOptionHasher {
+                inline uint64_t operator()(const UOption & o) const {
+                    return (o.uh.id << 2) + o.claz;
+                }
+            };
+            using UOptionQueue = MaxHeap<UOption, double, std::unordered_map<UOption, int, UOptionHasher>>;
+
+            struct UDependency{
+                std::unordered_set<MGBinaryHandle> bhs;
+                double precomputedDepth;
+            };
+
+            std::vector<Scored<UDependency>> DependenciesOfOption(const MixedGraph & mg,
+                const MGPatch & patch, const UOption & option, const std::vector<Vec3> & vps,
+                double depthThreshold = 0.02){
+                assert(!Contains(patch, option.uh));
+                
+                std::vector<Scored<UDependency>> dependencies;
+                for (auto & bh : mg.topo(option.uh).uppers){
+                    auto insider = mg.topo(bh).lowers[0];
+                    if (insider == option.uh)
+                        insider = mg.topo(bh).lowers[1];
+                    if (!Contains(patch, insider))
+                        continue;
+
+                    auto & anchor = mg.data(bh).normalizedAnchors.front();
+                    double depth = DepthRatioOnMGUnary(anchor, mg.data(insider), vps, patch.uhs.at(insider).claz)
+                        * patch.uhs.at(insider).depthOfCenter
+                        / DepthRatioOnMGUnary(anchor, mg.data(option.uh), vps, option.claz);
+                    
+                    bool hasDuplicates = false;
+                    double feas = FeasibilityOfBinary(mg.data(bh), patch.uhs.at(insider).claz, option.claz, vps);
+                    feas = 1.0 - Pitfall(1.0 - feas, 0.1);
+
+                    double scoreOnThisBh = mg.data(bh).importanceRatioInRelatedUnaries[option.uh == mg.topo(bh).lowers[0] ? 0 : 1]
+                        * feas;
+                    for (auto & ds : dependencies){
+                        if (abs(ds.component.precomputedDepth - depth) < depthThreshold){
+                            ds.score += scoreOnThisBh;
+                            ds.component.bhs.insert(bh);
+                            hasDuplicates = true;
+                        }
+                    }
+                    if (!hasDuplicates){
+                        dependencies.push_back(ScoreAs(UDependency{ {}, depth }, scoreOnThisBh));
+                    }
+                }
+
+                return dependencies;
+            }
+        
+            void UpdateOptionsOfAnOutsiderUnary(const MixedGraph & mg, const MGUnaryHandle & outsider,
+                UOptionQueue & Q, 
+                std::unordered_map<UOption, UDependency, UOptionHasher> & optionDependencies,
+                const MGPatch & patch, const MGUnaryVarTable & unaryVars, const std::vector<Vec3> & vps){
+
+                if (Contains(patch, outsider))
+                    return;
+
+                // candidate options for this uh
+                std::vector<Scored<UOption>> outOptionsWithVPScores;
+                if (mg.data(outsider).type == MGUnary::Region){
+                    outOptionsWithVPScores.resize(vps.size());
+                    const Vec3 & ncenter = mg.data(outsider).normalizedCenter;
+                    for (int i = 0; i < vps.size(); i++){
+                        double angle = AngleBetweenUndirectedVectors(ncenter, vps[i]);
+                        outOptionsWithVPScores[i] = ScoreAs(UOption{ outsider, i }, Pitfall(M_PI_2 - angle, M_PI_4));
+                    }
+                }
+                else if (mg.data(outsider).type == MGUnary::Line){
+                    outOptionsWithVPScores = { ScoreAs(UOption{ outsider, unaryVars.at(outsider).claz }, 2.0) };
+                }
+
+                // find best dependencies with current patch
+                for (Scored<UOption> & outOptionWithVPScore : outOptionsWithVPScores){
+                    auto & outOption = outOptionWithVPScore.component;
+                    // get the depth with the highest score
+                    auto dependencies = DependenciesOfOption(mg, patch, outOption, vps, 0.02);
+                    auto maxDSIter = std::max_element(dependencies.begin(), dependencies.end());
+                    // register the depth
+                    optionDependencies[outOption] = std::move(maxDSIter->component);
+                    // update the score
+                    double outOptionScore = maxDSIter->score * outOptionWithVPScore.score;
+
+                    if (!Contains(Q, outOption)){
+                        Q.push(outOption, outOptionScore);
+                    }
+                    else{
+                        Q.setScore(outOption, outOptionScore);
+                    }
+                }
+
+            }
+        }
+        
+        std::unordered_map<MGUnaryHandle, double> GrowAPatch(const MixedGraph & mg, MGPatch & patch,
+            MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars,
+            const std::vector<Vec3> & vps,
+            double scoreThreshold,
+            int uhMaxNum){
+
+            std::unordered_map<MGUnaryHandle, double> uhScores;
+            std::unordered_map<UOption, UDependency, UOptionHasher> optionDependencies;
+
+            int originalUhNum = patch.uhs.size();
+
+            UOptionQueue Q; // all adjacent uh options
+            for (auto & uhv : patch.uhs){
+                auto uh = uhv.first;
+                for (auto & bh : mg.topo(uh).uppers){
+                    auto outsider = mg.topo(bh).lowers[0];
+                    if (outsider == uh)
+                        outsider = mg.topo(bh).lowers[1];
+                    if (Contains(patch, outsider))
+                        continue;
+                    UpdateOptionsOfAnOutsiderUnary(mg, outsider, Q, optionDependencies, patch, unaryVars, vps);
+                }
+            }
+
+            std::unordered_set<UOption, UOptionHasher> blockedOptions;
+
+            while (!Q.empty() && Q.topScore() > scoreThreshold){
+
+                if (patch.uhs.size() > uhMaxNum + originalUhNum)
+                    break;
+
+                // pop best option
+                UOption o = Q.top();
+                double score = Q.topScore();
+                Q.pop();
+
+                if (Contains(patch, o.uh))
+                    continue;
+
+                // install option to patch
+                patch.uhs[o.uh] = MGUnaryVariable{ o.claz, optionDependencies.at(o).precomputedDepth };
+                for (auto & bh : optionDependencies.at(o).bhs){
+                    patch.bhs[bh] = binaryVars.at(bh);
+                }
+                uhScores[o.uh] = score;
+
+                // update neighbor uhs
+                for (auto & bh : mg.topo(o.uh).uppers){
+                    auto outsider = mg.topo(bh).lowers[0];
+                    if (outsider == o.uh)
+                        outsider = mg.topo(bh).lowers[1];
+                    if (Contains(patch, outsider))
+                        continue;
+                    UpdateOptionsOfAnOutsiderUnary(mg, outsider, Q, optionDependencies, patch, unaryVars, vps);
+                }
+
+            }
+
+            patch.updateBinaryVars(mg, vps);
+            MGPatchDepthsOptimizer pdo(mg, patch, vps, false, MGPatchDepthsOptimizer::EigenSparseQR);   
+            pdo.optimize();
+            if (!IsTreePatch(mg, patch)){
+                patch = MinimumSpanningTreePatch(mg, patch);
+                MGPatchDepthsOptimizer(mg, patch, vps, false, MGPatchDepthsOptimizer::MosekLinearProgramming)
+                    .optimize();
+            }
+            return uhScores;
+
+        }
     }
 }
