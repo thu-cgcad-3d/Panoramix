@@ -126,27 +126,44 @@ namespace panoramix {
 
         // zero
         template <class T>
-        inline bool IsFuzzyZero(const T & t, const T & epsilon = 1e-8){
+        INLINE bool IsFuzzyZero(const T & t, const T & epsilon = 1e-8){
             return t < epsilon && t > -epsilon;
         }
 
 
         // squared
         template <class T>
-        inline T Square(const T & v) {
+        INLINE T Square(const T & v) {
             return v * v;
         }
 
         // gaussian
         template <class T, class K>
-        inline T Gaussian(const T & x, const K & sigma) {
+        INLINE T Gaussian(const T & x, const K & sigma) {
             return std::exp(- Square(x / sigma) / 2.0);
         }
 
         // pitfall
         template <class T, class K>
-        inline T Pitfall(const T & x, const K & sigma) {
+        INLINE T Pitfall(const T & x, const K & sigma) {
             return abs(x) <= sigma ? Square(x / sigma) : 1;
+        }
+
+        // entropy [-factor, 0]
+        template <class IteratorT, class T = double>
+        inline T EntropyOfRange(IteratorT begin, IteratorT end, const T & factor = 1.0){
+            T e = 0;
+            while (begin != end){
+                auto & v = *begin;
+                e -= v * log2(v);
+                ++begin;
+            }
+            return e * factor;
+        }
+
+        template <class ContainerT, class T = double>
+        inline T EntropyOfContainer(const ContainerT & cont, const T & factor = 1.0){
+            return EntropyOfRange(std::begin(cont), std::end(cont), factor);
         }
 
 

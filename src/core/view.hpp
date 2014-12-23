@@ -436,12 +436,12 @@ namespace panoramix {
             MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars);
 
         // grow a reasonable patch from one root uh
-        std::unordered_map<MGUnaryHandle, double>
-            GrowAPatch(const MixedGraph & mg, MGPatch & patch,
+        std::unordered_map<MGUnaryHandle, double> GrowAPatch(const MixedGraph & mg, MGPatch & patch,
             MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars,
             const std::vector<Vec3> & vps,
             double scoreThreshold = 0.3,
             int uhMaxNum = 500);
+
 
 
     }

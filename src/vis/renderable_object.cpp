@@ -76,8 +76,8 @@ namespace panoramix {
                 }
 
                 virtual ~GLObject() {
-                    delete _program;
                     delete _texture;
+                    delete _program;
                 }
 
             public:
@@ -129,6 +129,8 @@ namespace panoramix {
                     if (!ancestersWithUsableTextures.empty())
                         ancestersWithUsableTextures.front()->bindTexture(0);
 
+                    glEnable(GL_PROGRAM_POINT_SIZE);
+                    glEnable(GL_POINT_SPRITE);
                     glLineWidth(_lineWidth);
                     /*glEnable(GL_ALPHA_TEST);
                     glCullFace(GL_FRONT_AND_BACK);*/

@@ -1374,7 +1374,9 @@ namespace panoramix {
                             normalizedContour.push_back(normalize(cam.spatialDirection(p)));
                         }
                     }
-                    assert(normalizedContour.size() > 2);
+                    if (normalizedContour.size() <= 2){
+                        continue;
+                    }
                     auto center = normalize(cam.spatialDirection(rd.data.center));
                     int initialClaz = std::distance(vps.begin(), std::min_element(vps.begin(), vps.end(),
                         [&center](const Vec3 & vp1, const Vec3 & vp2) -> bool {
@@ -1421,6 +1423,8 @@ namespace panoramix {
                     }
                     auto r1 = RegionIndex{ i, bd.topo.lowers.front() };
                     auto r2 = RegionIndex{ i, bd.topo.lowers.back() };
+                    if (!Contains(ri2mgh, r1) || !Contains(ri2mgh, r2))
+                        continue;
                     mg.add<1>({ ri2mgh[r1], ri2mgh[r2] }, std::move(rr));
                 }
                 // region-line
@@ -1434,6 +1438,8 @@ namespace panoramix {
                     }
                     auto ri = RegionIndex{ i, regionLine.first.first };
                     auto li = RegionIndex{ i, regionLine.first.second };
+                    if (!Contains(ri2mgh, ri))
+                        continue;
                     mg.add<1>({ ri2mgh[ri], li2mgh[li] }, std::move(rl));
                 }
                 // line-line
@@ -1466,6 +1472,9 @@ namespace panoramix {
                 rro.weight = 100;
                 auto & r1 = regionOverlapping.first.first;
                 auto & r2 = regionOverlapping.first.second;
+
+                if (!Contains(ri2mgh, r1) || !Contains(ri2mgh, r2))
+                    continue;
 
                 // get samples
                 Vec3 z = mg.data(ri2mgh[r1]).normalizedCenter + mg.data(ri2mgh[r2]).normalizedCenter;
@@ -1543,9 +1552,9 @@ namespace panoramix {
 #ifdef _DEBUG
             for (auto & u : mg.elements<0>()){
                 double importanceRatioSum = 0.0;
-                for (auto & bh : u.topo.uppers){
-                    auto & imp = mg.data(bh).importanceRatioInRelatedUnaries;
-                    importanceRatioSum += mg.topo(bh).lowers.front() == u.topo.hd ? imp.front() : imp.back();
+                for (auto & bh : u.topo.uppers){                   
+                    importanceRatioSum += 
+                        mg.data(bh).importanceRatioInRelatedUnaries[u.topo.hd == mg.topo(bh).lowers[0] ? 0 : 1];
                 }
                 assert(FuzzyEquals(importanceRatioSum, 1.0, 0.01));
             }
@@ -2560,10 +2569,11 @@ namespace panoramix {
                     
                     bool hasDuplicates = false;
                     double feas = FeasibilityOfBinary(mg.data(bh), patch.uhs.at(insider).claz, option.claz, vps);
-                    feas = 1.0 - Pitfall(1.0 - feas, 0.1);
+                    feas = 0.5 - Pitfall(1.0 - feas, 0.1); // -0.5 ~ +0.5
 
                     double scoreOnThisBh = mg.data(bh).importanceRatioInRelatedUnaries[option.uh == mg.topo(bh).lowers[0] ? 0 : 1]
                         * feas;
+                    assert(IsBetween(scoreOnThisBh, -0.6, +0.6));
                     for (auto & ds : dependencies){
                         if (abs(ds.component.precomputedDepth - depth) < depthThreshold){
                             ds.score += scoreOnThisBh;
@@ -2606,11 +2616,19 @@ namespace panoramix {
                     auto & outOption = outOptionWithVPScore.component;
                     // get the depth with the highest score
                     auto dependencies = DependenciesOfOption(mg, patch, outOption, vps, 0.02);
+                    
+                    // get entropy of all choice scores
+                    std::vector<double> scores(dependencies.size());
+                    for (int i = 0; i < scores.size(); i++){
+                        scores[i] = dependencies[i].score;
+                    }
+                    double scoreEntropy = 1.0 + EntropyOfContainer(scores, 1.0);
                     auto maxDSIter = std::max_element(dependencies.begin(), dependencies.end());
+
                     // register the depth
                     optionDependencies[outOption] = std::move(maxDSIter->component);
                     // update the score
-                    double outOptionScore = maxDSIter->score * outOptionWithVPScore.score;
+                    double outOptionScore = (maxDSIter->score - scoreEntropy) * outOptionWithVPScore.score;
 
                     if (!Contains(Q, outOption)){
                         Q.push(outOption, outOptionScore);
@@ -2668,6 +2686,13 @@ namespace panoramix {
                     patch.bhs[bh] = binaryVars.at(bh);
                 }
                 uhScores[o.uh] = score;
+
+                std::cout << patch.uhs.size() << "-th uh installed" << std::endl;
+
+                patch.updateBinaryVars(mg, vps);
+                MGPatchDepthsOptimizer(mg, patch, vps, false, MGPatchDepthsOptimizer::EigenSparseQR).optimize();
+
+                
 
                 // update neighbor uhs
                 for (auto & bh : mg.topo(o.uh).uppers){

@@ -232,7 +232,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
                 core::ForeachCompatibleWithLastElement(region.normalizedCorners.begin(), region.normalizedCorners.end(), 
                     std::back_inserter(spp.corners),
                     [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
-                    return core::AngleBetweenDirections(a, b) > M_PI / 100.0;
+                    return core::AngleBetweenDirections(a, b) > M_PI / 500.0;
                 });
                 if (spp.corners.size() < 3)
                     continue;

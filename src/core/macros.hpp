@@ -9,6 +9,10 @@ namespace panoramix {
             enum { value = false };
         };
 
+
+#define INLINE __forceinline
+
+
         // not implemented error
 #define NOT_IMPLEMENTED_YET() \
     throw std::runtime_error("This feature has not yet been implemented! \n" \

@@ -516,24 +516,24 @@ namespace panoramix {
             public:
                 struct Element {
                     int rank;
-                    int p;
+                    int p; // parent
                     int size;
                 };
-                inline Universe(int eleNum) : elements(eleNum), num(eleNum) {
+                INLINE Universe(int eleNum) : elements(eleNum), num(eleNum) {
                     for (int i = 0; i < eleNum; i++){
                         elements[i].rank = 0;
                         elements[i].size = 1;
                         elements[i].p = i;
                     }
                 }
-                int find(int x) {
+                INLINE int find(int x) {
                     int y = x;
                     while (y != elements[y].p)
                         y = elements[y].p;
                     elements[x].p = y;
                     return y;
                 }
-                void join(int x, int y) {
+                INLINE void join(int x, int y) {
                     if (elements[x].rank > elements[y].rank) {
                         elements[y].p = x;
                         elements[x].size += elements[y].size;
@@ -545,8 +545,8 @@ namespace panoramix {
                     }
                     num--;
                 }
-                inline int size(int x) const { return elements[x].size; }
-                inline int numSets() const { return num; }
+                INLINE int size(int x) const { return elements[x].size; }
+                INLINE int numSets() const { return num; }
             private:
                 int num;
                 std::vector<Element> elements;
@@ -556,7 +556,7 @@ namespace panoramix {
                 return c / size;
             }
 
-            Universe SegmentGraph(int numVertices, std::vector<Edge> & edges, float c) {
+            INLINE Universe SegmentGraph(int numVertices, std::vector<Edge> & edges, float c) {
                 std::sort(edges.begin(), edges.end(), [](const Edge & e1, const Edge & e2){
                     return e1.w < e2.w;
                 });
@@ -593,10 +593,20 @@ namespace panoramix {
                 return static_cast<float>(norm(c1 - c2));
             }
 
-            inline float PixelDiff(const Image & im, const Imageb & occupiedByLines, const cv::Point & p1, const cv::Point & p2){
+            inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
+                const PixelLoc & p1, const PixelLoc & p2,
+                const std::vector<Line2> & lines){
                 assert(im.depth() == CV_8U && im.channels() == 3);
-                if (occupiedByLines(p1) && (p1.x < p2.x || (p1.x == p2.x && p1.y < p2.y)))
-                    return 1e5f;
+                for (int lineId : { linesOccupation(p1), linesOccupation(p2) }){
+                    if (lineId >= 0){
+                        auto & line = lines[lineId];
+                        double p1OnLeftFlag = (p1 - ToPixelLoc(line.first)).cross(ToPixelLoc(line.direction()));
+                        double p2OnLeftFlag = (p2 - ToPixelLoc(line.first)).cross(ToPixelLoc(line.direction()));
+                        if (p1OnLeftFlag * p2OnLeftFlag < 0){
+                            return 1e5;
+                        }
+                    }
+                }
                 Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
                 Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
                 return static_cast<float>(norm(c1 - c2));
@@ -716,9 +726,10 @@ namespace panoramix {
                 Image smoothed;
                 cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
 
-                Imageb occupiedByLines = Imageb::zeros(im.size());
-                for (auto & l : lines){
-                    cv::line(occupiedByLines, ToPixelLoc(l.first), ToPixelLoc(l.second), true, 2);
+                Imagei linesOccupation(im.size(), -1);
+                for (int i = 0; i < lines.size(); i++){
+                    auto & l = lines[i];
+                    cv::line(linesOccupation, ToPixelLoc(l.first), ToPixelLoc(l.second), i, 2);
                 }
 
                 // build pixel graph
@@ -730,28 +741,28 @@ namespace panoramix {
                             Edge edge;
                             edge.a = y * width + x;
                             edge.b = y * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, occupiedByLines, { x, y }, { x + 1, y });
+                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y }, lines);
                             edges.push_back(edge);
                         }
                         if (y < height - 1) {
                             Edge edge;
                             edge.a = y * width + x;
                             edge.b = (y + 1) * width + x;
-                            edge.w = PixelDiff(smoothed, occupiedByLines, { x, y }, { x, y + 1 });
+                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x, y + 1 }, lines);
                             edges.push_back(edge);
                         }
                         if ((x < width - 1) && (y < height - 1)) {
                             Edge edge;
                             edge.a = y * width + x;
                             edge.b = (y + 1) * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, occupiedByLines, { x, y }, { x + 1, y + 1 });
+                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y + 1 }, lines);
                             edges.push_back(edge);
                         }
                         if ((x < width - 1) && (y > 0)) {
                             Edge edge;
                             edge.a = y * width + x;
                             edge.b = (y - 1) * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, occupiedByLines, { x, y }, { x + 1, y - 1 });
+                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y - 1 }, lines);
                             edges.push_back(edge);
                         }
                     }
