@@ -240,7 +240,7 @@ namespace panoramix {
                 core::Vec3f normal3;
                 core::Vec4f color4;
                 core::Vec2f texCoord2;
-                float pointSize;
+                core::Vec<float, 1> pointSize1;
             };
 
             using VertHandle = uint32_t;
@@ -256,7 +256,7 @@ namespace panoramix {
             VertHandle addVertex(const Vertex & v);
             VertHandle addVertex(const core::Vec4f & p,
                 const core::Vec3f & n = core::Vec3f(0, 0, 0),
-                const core::Vec4f & c = core::Vec4f(0, 0, 0, 1),
+                const core::Vec4f & c = core::Vec4f(0, 0, 0, 0),
                 const core::Vec2f & t = core::Vec2f(0, 0),
                 float ps = 1.0);
 

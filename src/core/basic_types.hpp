@@ -522,7 +522,7 @@ namespace panoramix {
             T component;
         };
         template <class T>
-        inline Enabled<T> EnableAs(const T & comp, bool e){
+        inline Enabled<T> EnableAs(const T & comp, bool e = true){
             return Enabled<T>{e, comp};
         }
         template <class T>

@@ -563,7 +563,7 @@ namespace panoramix {
 
         // tri mesh implementation
         TriMesh::Vertex::Vertex()
-            : position4(0, 0, 0, 1), normal3(0, 0, 0), color4(0, 0, 0, 1), texCoord2(0, 0), pointSize(3.0) {
+            : position4(0, 0, 0, 1), normal3(0, 0, 0), color4(0, 0, 0, 1), texCoord2(0, 0), pointSize1(3.0) {
         }
 
 
@@ -579,7 +579,7 @@ namespace panoramix {
             v.normal3 = n;
             v.color4 = c;
             v.texCoord2 = t;
-            v.pointSize = ps;
+            v.pointSize1 = Vec<float, 1>(ps);
             return addVertex(v);
         }
 
