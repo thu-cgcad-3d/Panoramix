@@ -447,127 +447,6 @@ namespace panoramix {
 
         namespace {
 
-            // algorithms
-            inline double tDet(double* data) {
-                double tmp1 = data[0 * 3 + 0] * (data[1 * 3 + 1] * data[2 * 3 + 2] - data[1 * 3 + 2] * data[2 * 3 + 1]);
-                double tmp2 = data[0 * 3 + 1] * (data[1 * 3 + 0] * data[2 * 3 + 2] - data[1 * 3 + 2] * data[2 * 3 + 0]);
-                double tmp3 = data[0 * 3 + 2] * (data[1 * 3 + 0] * data[2 * 3 + 1] - data[1 * 3 + 1] * data[2 * 3 + 0]);
-                return tmp1 - tmp2 + tmp3;
-            }
-
-            template <typename PointT>
-            inline bool tLeft(const PointT& p, const PointT& a, const PointT& b) {
-                double data[9] = { a[0], a[1], 1, b[0], b[1], 1, p[0], p[1], 1 };
-                return tDet(data) > 0;
-            }
-
-            template <typename PointT>
-            inline bool tInTriangle(const PointT& p, const PointT& a, const PointT& b, const PointT& c) {
-                bool lab = tLeft(p, a, b);
-                bool lbc = tLeft(p, b, c);
-                bool lca = tLeft(p, c, a);
-                return lab == lbc && lbc == lca;
-            }
-
-            template <typename PointT>
-            inline double tSqDist(const PointT& p1, const PointT& p2) {
-                auto sub = p1 - p2;
-                return sub[0] * sub[0] + sub[1] * sub[1] + sub[2] * sub[2];
-            }
-
-            inline bool tRoundNear(int a, int b, int size) {
-                return (abs(a - b) <= 1 || a == 0 && b == (size)-1 || a == (size)-1 && b == 0);
-            }
-
-            template <typename VHandleT, typename VHandleGetPointFunctorT>
-            std::vector<VHandleT> tTriangulate(const std::vector<VHandleT>& vhs, VHandleGetPointFunctorT && mesh) {
-                std::vector<VHandleT> triangles;
-                triangles.reserve(vhs.size());
-
-                std::deque<std::vector<int> > vhIndexGroupQ;
-
-                std::vector<int> indexG;
-                indexG.reserve(vhs.size());
-
-                for (int i = 0; i < vhs.size(); i++)
-                    indexG.push_back(i);
-                vhIndexGroupQ.push_back(indexG);
-
-                while (!vhIndexGroupQ.empty()) {
-                    std::vector<int> is = vhIndexGroupQ.front();
-                    vhIndexGroupQ.pop_front();
-
-                    assert(is.size() >= 3);
-                    if (is.size() <= 2)
-                        continue;
-
-                    if (is.size() == 3)
-                        triangles.insert(triangles.end(), { vhs[is[0]], vhs[is[1]], vhs[is[2]] });
-                    else {
-                        // leftmost
-                        int leftmostII = 0;
-                        auto leftmostP = mesh(vhs[is[leftmostII]]);
-                        for (int i = 0; i < is.size(); i++) {
-                            auto p = mesh(vhs[is[i]]);
-                            if (p[0] < leftmostP[0]) {
-                                leftmostII = i;
-                                leftmostP = p;
-                            }
-                        }
-
-                        int leftmostPrevII = (leftmostII + is.size() - 1) % is.size();
-                        int leftmostNextII = (leftmostII + 1) % is.size();
-                        auto a = mesh(vhs[is[leftmostPrevII]]);
-                        auto b = mesh(vhs[is[leftmostNextII]]);
-
-                        int innerLeftmostII = -1;
-                        decltype(a) innerLeftmostP;
-                        for (int i = 0; i < is.size(); i++) {
-                            if (tRoundNear(i, leftmostII, is.size()))
-                                continue;
-                            auto p = mesh(vhs[is[i]]);
-                            if (tInTriangle(p, a, leftmostP, b)) {
-                                if (innerLeftmostII == -1) {
-                                    innerLeftmostII = i;
-                                    innerLeftmostP = p;
-                                } else if (p[0] < innerLeftmostP[0]) {
-                                    innerLeftmostII = i;
-                                    innerLeftmostP = p;
-                                }
-                            }
-                        }
-
-                        int split1 = leftmostII;
-                        int split2 = innerLeftmostII;
-                        if (innerLeftmostII < 0) {
-                            split1 = leftmostPrevII;
-                            split2 = leftmostNextII;
-                        }
-
-                        assert(split1 != split2);
-
-                        std::vector<int> part1, part2;
-
-                        for (int i = split1; i != split2; i = (i + 1) % is.size())
-                            part1.push_back(is[i]);
-                        part1.push_back(is[split2]);
-                        for (int i = split2; i != split1; i = (i + 1) % is.size())
-                            part2.push_back(is[i]);
-                        part2.push_back(is[split1]);
-
-                        assert(part1.size() >= 3);
-                        assert(part2.size() >= 3);
-
-                        is.clear();
-
-                        vhIndexGroupQ.push_back(part1);
-                        vhIndexGroupQ.push_back(part2);
-                    }
-                }
-
-                return triangles;
-            }
-
             inline Vec3 ToVec3Affine(const Vec4 & v4) {
                 return Vec3(v4[0], v4[1], v4[2]) / v4[3];
             }
@@ -585,17 +464,6 @@ namespace panoramix {
                 (ToVec3Affine(_vertices[vhs[1]].position4) - ToVec3Affine(_vertices[vhs[0]].position4)).cross(
                 (ToVec3Affine(_vertices[vhs[2]].position4) - ToVec3Affine(_vertices[vhs[1]].position4)))
             );
-
-            // triangulate
-            //std::vector<VertHandle> triangles = tTriangulate(vhs, [this, & normal](VertHandle vh) {
-            //    Vec3 v = ToVec3Affine(_vertices[vh].position4);
-            //    return ToVec2(v - v.dot(normal) * normal);
-            //});
-
-            //// install triangles
-            //for (int i = 0; i < triangles.size(); i += 3) {
-            //    addTriangle(triangles[i], triangles[i + 1], triangles[i + 2]);
-            //}
 
             TriangulatePolygon(vhs.begin(), vhs.end(), [this, &normal](VertHandle vh) {
                 Vec3 v = ToVec3Affine(_vertices[vh].position4);
@@ -684,6 +552,122 @@ namespace panoramix {
             }
             return mesh;
         }
+
+
+
+
+
+
+
+
+
+        // tri mesh implementation
+        TriMesh::Vertex::Vertex()
+            : position4(0, 0, 0, 1), normal3(0, 0, 0), color4(0, 0, 0, 1), texCoord2(0, 0), pointSize(3.0) {
+        }
+
+
+        TriMesh::VertHandle TriMesh::addVertex(const TriMesh::Vertex & v) {
+            vertices.push_back(v);
+            iPoints.push_back(static_cast<TriMesh::VertHandle>(vertices.size() - 1));
+            return iPoints.back();
+        }
+
+        TriMesh::VertHandle TriMesh::addVertex(const Vec4f & p, const Vec3f & n, const Vec4f & c, const Vec2f & t, float ps) {
+            Vertex v;
+            v.position4 = p;
+            v.normal3 = n;
+            v.color4 = c;
+            v.texCoord2 = t;
+            v.pointSize = ps;
+            return addVertex(v);
+        }
+
+        TriMesh::LineHandle TriMesh::addLine(TriMesh::VertHandle v1, TriMesh::VertHandle v2) {
+            iLines.push_back(v1);
+            iLines.push_back(v2);
+            return iLines.size() / 2;
+        }
+
+        TriMesh::LineHandle TriMesh::addIsolatedLine(const Vertex & v1, const Vertex & v2) {
+            vertices.push_back(v1);
+            iLines.push_back(vertices.size() - 1);
+            vertices.push_back(v2);
+            iLines.push_back(vertices.size() - 1);
+            return iLines.size() / 2;
+        }
+
+        TriMesh::TriangleHandle TriMesh::addTriangle(TriMesh::VertHandle v1, TriMesh::VertHandle v2, TriMesh::VertHandle v3) {
+            iTriangles.push_back(v1);
+            iTriangles.push_back(v2);
+            iTriangles.push_back(v3);
+            return iTriangles.size() / 3;
+        }
+
+        TriMesh::TriangleHandle TriMesh::addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3) {
+            vertices.push_back(v1);
+            iTriangles.push_back(vertices.size() - 1);
+            vertices.push_back(v2);
+            iTriangles.push_back(vertices.size() - 1);
+            vertices.push_back(v3);
+            iTriangles.push_back(vertices.size() - 1);
+            return iTriangles.size() / 3;
+        }
+
+        void TriMesh::addQuad(TriMesh::VertHandle v1, TriMesh::VertHandle v2, TriMesh::VertHandle v3, TriMesh::VertHandle v4) {
+            addTriangle(v1, v2, v3);
+            addTriangle(v1, v3, v4);
+        }
+
+        void TriMesh::addPolygon(const std::vector<TriMesh::VertHandle> & vhs) {
+            assert(vhs.size() >= 3);
+            // get normal direction
+            Vec3 normal = normalize(
+                (ToVec3Affine(vertices[vhs[1]].position4) - ToVec3Affine(vertices[vhs[0]].position4)).cross(
+                (ToVec3Affine(vertices[vhs[2]].position4) - ToVec3Affine(vertices[vhs[1]].position4)))
+                );
+
+            TriangulatePolygon(vhs.begin(), vhs.end(), [this, &normal](VertHandle vh) {
+                Vec3 v = ToVec3Affine(vertices[vh].position4);
+                return ToVec2(v - v.dot(normal) * normal);
+            }, [this](VertHandle a, VertHandle b, VertHandle c){
+                addTriangle(a, b, c);
+            });
+        }
+
+        void TriMesh::clear() {
+            vertices.clear();
+            iPoints.clear();
+            iLines.clear();
+            iTriangles.clear();
+        }
+
+        Box3 TriMesh::boundingBox() const {
+            if (vertices.empty())
+                return Box3();
+            Box3 box(ToVec3Affine(vertices.front().position4), ToVec3Affine(vertices.front().position4));
+            for (auto & v : vertices) {
+                auto p = ToVec3Affine(v.position4);
+                box = box | BoundingBox(p);
+            }
+            return box;
+        }
+
+
+        TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp){
+            std::vector<Vec3> cs(spp.corners.size());
+            for (int i = 0; i < spp.corners.size(); i++){
+                InfiniteLine3 line(spp.projectionCenter, spp.corners[i] - spp.projectionCenter);
+                cs[i] = IntersectionOfLineAndPlane(line, spp.plane).position;
+            }
+            std::vector<TriMesh::VertHandle> vhandles(cs.size());
+            for (int i = 0; i < cs.size(); i++){
+                vhandles[i] = mesh.addVertex(Concat(cs[i], 1.0), spp.plane.normal);
+            }
+            mesh.addPolygon(vhandles);
+            return mesh;
+        }
+
 
     }
 

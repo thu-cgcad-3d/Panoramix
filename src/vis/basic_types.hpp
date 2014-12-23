@@ -230,6 +230,76 @@ namespace panoramix {
             core::Plane3 plane;
         };
 
+
+        // triangular mesh
+        struct TriMesh {
+
+            struct Vertex {
+                Vertex();
+                core::Vec4f position4;
+                core::Vec3f normal3;
+                core::Vec4f color4;
+                core::Vec2f texCoord2;
+                float pointSize;
+            };
+
+            using VertHandle = uint32_t;
+            using LineHandle = uint32_t;
+            using TriangleHandle = uint32_t;
+
+            std::vector<Vertex> vertices;
+            std::vector<VertHandle> iPoints;
+            std::vector<LineHandle> iLines;
+            std::vector<TriangleHandle> iTriangles;
+
+
+            VertHandle addVertex(const Vertex & v);
+            VertHandle addVertex(const core::Vec4f & p,
+                const core::Vec3f & n = core::Vec3f(0, 0, 0),
+                const core::Vec4f & c = core::Vec4f(0, 0, 0, 1),
+                const core::Vec2f & t = core::Vec2f(0, 0),
+                float ps = 1.0);
+
+            LineHandle addLine(VertHandle v1, VertHandle v2);
+            LineHandle addIsolatedLine(const Vertex & v1, const Vertex & v2);
+
+            TriangleHandle addTriangle(VertHandle v1, VertHandle v2, VertHandle v3);
+            TriangleHandle addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3);
+
+            void addQuad(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4);
+            void addPolygon(const std::vector<VertHandle> & vhs);
+
+            void clear();
+
+            core::Box3 boundingBox() const;     
+
+        };
+
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Point<T, 3> & p){
+            mesh.addVertex(core::Vec4f(p[0], p[1], p[2], 1.0f));
+            return mesh;
+        }
+
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Line<T, 3> & l){
+            mesh.addIsolatedLine(core::Concat(core::ConvertTo<float>(l.first), 1.0f), 
+                core::Concat(core::ConvertTo<float>(l.second), 1.0f));
+            return mesh;
+        }        
+
+        TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp);
+
+        template <class T, class AllocT>
+        inline TriMesh & Discretize(TriMesh & mesh, const std::vector<T, AllocT> & v){
+            for (auto & e : v){
+                Discretize(mesh, e);
+            }
+            return mesh;
+        }
+
+
+
     }
 
 
@@ -240,6 +310,10 @@ namespace panoramix {
         }
 
         Box3 BoundingBox(const vis::SpatialProjectedPolygon & spp);
+
+        inline Box3 BoundingBox(const vis::TriMesh & m) {
+            return m.boundingBox();
+        }
 
     }
 }
