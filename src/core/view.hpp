@@ -439,6 +439,7 @@ namespace panoramix {
         std::unordered_map<MGUnaryHandle, double> GrowAPatch(const MixedGraph & mg, MGPatch & patch,
             MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars,
             const std::vector<Vec3> & vps,
+            double visualRadiusAngle,
             double scoreThreshold = 0.3,
             int uhMaxNum = 500);
 

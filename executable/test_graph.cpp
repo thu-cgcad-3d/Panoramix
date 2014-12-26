@@ -190,65 +190,36 @@ TEST(MeshTest, Cube) {
 }
 
 
-TEST(ConstraintGraphTest, Basic) {
-    
-    using CGraph = core::ConstraintGraph<core::Dummy, core::Dummy>;
+TEST(ForestTest, Basic){
 
-    CGraph cgraph;
-    auto c0 = cgraph.addComponent();
-    auto c1 = cgraph.addComponent();
-    auto c2 = cgraph.addComponent();
-    auto c3 = cgraph.addComponent();
+    core::Forest<int> f;
+    auto r = f.addRoot(0);
+    auto n1 = f.add(r, 1);
+    auto n2 = f.add(n1, 2);
+    auto n3 = f.add(n2, 3);
 
-    auto cc012 = cgraph.addConstraint({ c0, c1, c2 });
-    auto cc123 = cgraph.addConstraint({ c1, c2, c3 });
-    auto cc230 = cgraph.addConstraint({ c2, c3, c0 });
-    auto cc301 = cgraph.addConstraint({ c3, c0, c1 });
+    auto n12 = f.add(r, 4);
 
-    EXPECT_EQ(4, cgraph.internalComponents().size());
-    EXPECT_EQ(4, cgraph.internalConstraints().size());
-    
-    for (size_t i = 0; i < cgraph.internalComponents().size(); i++){
-        CGraph ncgraph = cgraph;
-        ncgraph.remove(CGraph::ComponentHandle(i));
-        ncgraph.gc();
+    std::vector<int> dfsResults;
+    f.depthFirstSearch(r, [&dfsResults, &f](core::Forest<int>::NodeHandle nh){
+        dfsResults.push_back(f.data(nh)); 
+        return true;
+    });
+    EXPECT_TRUE((dfsResults == std::vector<int>{0, 1, 2, 3, 4}));
 
-        EXPECT_EQ(3, ncgraph.internalComponents().size());
-        EXPECT_EQ(1, ncgraph.internalConstraints().size());
-    }
+    std::vector<int> bfsResults;
+    f.breadthFirstSearch(r, [&bfsResults, &f](core::Forest<int>::NodeHandle nh){
+        bfsResults.push_back(f.data(nh));
+        return true;
+    });
+    EXPECT_TRUE((bfsResults == std::vector<int>{0, 1, 4, 2, 3}));
 
-    for (size_t i = 0; i < cgraph.internalConstraints().size(); i++){
-        CGraph ncgraph = cgraph;
-        ncgraph.remove(CGraph::ConstraintHandle(i));
-        ncgraph.gc();
+    f.remove(n1);
+    f.gc();
 
-        EXPECT_EQ(4, ncgraph.internalComponents().size());
-        EXPECT_EQ(3, ncgraph.internalConstraints().size());
-    }
-
-    cgraph.remove(c0);
-    cgraph.remove(c1);
-    cgraph.gc();
-
-    EXPECT_EQ(2, cgraph.internalComponents().size());
-    EXPECT_EQ(0, cgraph.internalConstraints().size());
+    EXPECT_EQ(f.internalNodes().size(), 1);
 
 }
-
-
-
-
-TEST(HeterogeneousBinaryGraph, HeterogeneousVector){
-
-    core::HeterogeneousVector<double, int, bool> v;
-    v.pushBack(1);
-    v.pushBack(2.5);
-    v.pushBack(true);
-
-    ASSERT_EQ(3, v.size());
-    ASSERT_EQ(1, v.size<int>());
-}
-
 
 
 TEST(GraphicalModelTest, Basic) {
@@ -346,5 +317,8 @@ TEST(GraphicalModelTest, Basic) {
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
+    testing::GTEST_FLAG(catch_exceptions) = false;
+    testing::GTEST_FLAG(throw_on_failure) = true;
+    testing::GTEST_FLAG(filter) = "MixedGraph.Forest.Basic";
     return RUN_ALL_TESTS();
 }

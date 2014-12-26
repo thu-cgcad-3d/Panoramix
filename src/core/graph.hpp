@@ -64,40 +64,12 @@ namespace panoramix {
         using HandleAtLevel = Handle<AtLevel<L>>;
 
 
-        template <int ...Ids>
-        struct WithIds {
-            using IdSequence = Sequence<Ids...>;
-        };
-        template <int ...Ids>
-        using HandleWithIds = Handle<WithIds<Ids...>>;
-        
-        template <class T>
-        struct HandleFromIdSequence {};
-        template <int ...Ids>
-        struct HandleFromIdSequence<Sequence<Ids...>> {
-            using type = HandleWithIds<Ids...>;
-        };
-
-
-
-        template <class TagT, class TagsTupleT, class DataT>
-        struct ComponentConfig {
-            using Tag = TagT;
-            using DependentTagsTuple = TagsTupleT;
-            enum { IsBottomComponent = (std::tuple_size<DependentTagsTuple>::value == 0) };
-            using DataType = DataT;
-        };        
-
-        //template <class ...ComponentConfigTs>
-        //struct 
 
 
 
 
         
-        /**
-         * @brief Triplet struct
-         */
+        // triplet 
         template <class TopoT, class DataT>
         struct Triplet {
             TopoT topo;
@@ -118,11 +90,17 @@ namespace panoramix {
         };
         template <class TopoT, class DataT>
         using TripletArray = std::vector<Triplet<TopoT, DataT>>;
+
+
+        template <class TopoT, class DataT>
+        inline auto BoundingBox(const Triplet<TopoT, DataT> & t) -> decltype(BoundingBox(t.data)) {
+            return BoundingBox(t.data);
+        }
+
+
         
         namespace {
-            /**
-             * @brief Helper functions for graph classes
-             */
+            // helper functions
             template <class ComponentTableT, class UpdateHandleTableT>
             int RemoveAndMap(ComponentTableT & v, UpdateHandleTableT & newlocations) {
                 // ComponentTableT : std::vector<Triplet<TopoT, DataT>>
@@ -186,10 +164,14 @@ namespace panoramix {
 
         }
 
+
+
+
+
+
+
         
-        /**
-         * @brief The Mesh class, halfedge structure
-         */
+        // the mesh class
         struct VertTopo;
         struct HalfTopo;
         struct FaceTopo;
@@ -307,9 +289,7 @@ namespace panoramix {
             
             Mesh & unite(const Mesh & m);
             
-            /**
-             * @brief garbage collection
-             */
+            // garbage collection
             template <class VertHandlePtrContainerT = HandlePtrArray<VertTopo>,
             class HalfHandlePtrContainerT = HandlePtrArray<HalfTopo>,
             class FaceHandlePtrContainerT = HandlePtrArray<FaceTopo>
@@ -594,232 +574,158 @@ namespace panoramix {
 
 
 
-        /**
-         * @brief The ConstraintGraph class
-         */
-        struct ConstraintTopo;
-        struct ComponentTopo {
-            Handle<ComponentTopo> hd;
-            HandleArray<ConstraintTopo> constraints;
-            template <class Archive> inline void serialize(Archive & ar) { ar(hd, constraints); }
-        };
-        struct ConstraintTopo {
-            Handle<ConstraintTopo> hd;
-            HandleArray<ComponentTopo> components;
-            template <class Archive> inline void serialize(Archive & ar) { ar(hd, components); }
-        };
-
-        template <class ComponentDataT, class ConstraintDataT>
-        class ConstraintGraph {
-        public:
-            inline ConstraintGraph(){}
-
-            using ComponentHandle = Handle<ComponentTopo>;
-            using ConstraintHandle = Handle<ConstraintTopo>;
-
-            using ComponentsTable = TripletArray<ComponentTopo, ComponentDataT>;
-            using ConstraintsTable = TripletArray<ConstraintTopo, ConstraintDataT>;
-
-            using ComponentExistsPred = TripletExistsPred<ComponentTopo, ComponentDataT>;
-            using ConstraintExistsPred = TripletExistsPred<ConstraintTopo, ConstraintDataT>;
-
-            using Component = typename ComponentsTable::value_type;
-            using Constraint = typename ConstraintsTable::value_type;
-
-            inline ComponentsTable & internalComponents() { return _components; }
-            inline ConstraintsTable & internalConstraints() { return _constraints; }
-            inline const ComponentsTable & internalComponents() const { return _components; }
-            inline const ConstraintsTable & internalConstraints() const { return _constraints; }
-
-            inline ConditionalContainerWrapper<ComponentsTable, ComponentExistsPred> components() {
-                return ConditionalContainerWrapper<ComponentsTable, ComponentExistsPred>(&_components);
-            }
-            inline ConditionalContainerWrapper<ConstraintsTable, ConstraintExistsPred> constraints() {
-                return ConditionalContainerWrapper<ConstraintsTable, ComponentExistsPred>(&_constraints);
-            }
-            inline ConstConditionalContainerWrapper<ComponentsTable, ComponentExistsPred> components() const {
-                return ConstConditionalContainerWrapper<ComponentsTable, ComponentExistsPred>(&_components);
-            }
-            inline ConstConditionalContainerWrapper<ConstraintsTable, ConstraintExistsPred> constraints() const {
-                return ConstConditionalContainerWrapper<ConstraintsTable, ComponentExistsPred>(&_constraints);
-            }
-
-
-            inline ComponentTopo & topo(ComponentHandle h) { return _components[h.id].topo; }
-            inline ConstraintTopo & topo(ConstraintHandle h) { return _constraints[h.id].topo; }
-            inline const ComponentTopo & topo(ComponentHandle h) const { return _components[h.id].topo; }
-            inline const ConstraintTopo & topo(ConstraintHandle h) const { return _constraints[h.id].topo; }
-
-            inline ComponentDataT & data(ComponentHandle h) { return _components[h.id].data; }
-            inline ConstraintDataT & data(ConstraintHandle h) { return _constraints[h.id].data; }
-            inline const ComponentDataT & data(ComponentHandle h) const { return _components[h.id].data; }
-            inline const ConstraintDataT & data(ConstraintHandle h) const { return _constraints[h.id].data; }
-
-            ComponentHandle addComponent(const ComponentDataT & compData = ComponentDataT());
-            ConstraintHandle addConstraint(const HandleArray<ComponentTopo> & components, const ConstraintDataT & consData = ConstraintDataT());
-
-            inline bool removed(ComponentHandle f) const { return !_components[f.id].exists; }
-            inline bool removed(ConstraintHandle e) const { return !_constraints[e.id].exists; }
-
-            inline void remove(ComponentHandle f);
-            inline void remove(ConstraintHandle e);
-
-            /**
-            * @brief garbage collection
-            */
-            template <class ComponentHandlePtrContainerT = HandlePtrArray<ComponentTopo>,
-                class ConstraintHandlePtrContainerT = HandlePtrArray<ConstraintTopo>>
-            void gc(const ComponentHandlePtrContainerT & compps = ComponentHandlePtrContainerT(),
-            const ConstraintHandlePtrContainerT & consps = ConstraintHandlePtrContainerT());
-
-            void clear();
-
-            template <class Archive> inline void serialize(Archive & ar) { ar(_components, _constraints); }
-
-        private:
-            ComponentsTable _components;
-            ConstraintsTable _constraints;
-        };
-
-
-        // implementation of ConstraintGraph
-        template <class ComponentDataT, class ConstraintDataT>
-        typename ConstraintGraph<ComponentDataT, ConstraintDataT>::ComponentHandle 
-            ConstraintGraph<ComponentDataT, ConstraintDataT>::addComponent(const ComponentDataT & compData) {
-            ComponentTopo topo;
-            topo.hd.id = _components.size();
-            _components.emplace_back(std::move(topo), compData, true);
-            return _components.back().topo.hd;
-        }
-
-        template <class ComponentDataT, class ConstraintDataT>
-        typename ConstraintGraph<ComponentDataT, ConstraintDataT>::ConstraintHandle
-            ConstraintGraph<ComponentDataT, ConstraintDataT>::addConstraint(const HandleArray<ComponentTopo> & components, const ConstraintDataT & consData) {
-            ConstraintTopo topo;
-            topo.hd.id = _constraints.size();
-            topo.components = components;
-            for (auto & component : components) {
-                _components[component.id].topo.constraints.push_back(topo.hd);
-            }
-            _constraints.emplace_back(std::move(topo), consData, true);
-            return _constraints.back().topo.hd;
-        }
-        
-        template <class ComponentDataT, class ConstraintDataT>
-        void ConstraintGraph<ComponentDataT, ConstraintDataT>::remove(ConstraintHandle h) {
-            if (h.isInvalid() || removed(h))
-                return;
-            _constraints[h.id].exists = false;
-            for (auto & comp : _constraints[h.id].topo.components){
-                comp.reset();
-            }
-        }
-
-        template <class ComponentDataT, class ConstraintDataT>
-        void ConstraintGraph<ComponentDataT, ConstraintDataT>::remove(ComponentHandle h) {
-            if (h.isInvalid() || removed(h))
-                return;
-            _components[h.id].exists = false;
-            for (ConstraintHandle hh : _components[h.id].topo.constraints)
-                remove(hh);
-            _components[h.id].topo.constraints.clear();
-        }
-
-
-        template <class ComponentDataT, class ConstraintDataT>
-        template <class ComponentHandlePtrContainerT, class ConstraintHandlePtrContainerT>
-        void ConstraintGraph<ComponentDataT, ConstraintDataT>::gc(const ComponentHandlePtrContainerT & compps,
-            const ConstraintHandlePtrContainerT & consps){
-            std::vector<ComponentHandle> vnlocs;
-            std::vector<ConstraintHandle> hnlocs;
-            RemoveAndMap(_components, vnlocs);
-            RemoveAndMap(_constraints, hnlocs);
-
-            for (size_t i = 0; i < _components.size(); i++){
-                UpdateOldHandle(vnlocs, _components[i].topo.hd);
-                UpdateOldHandleContainer(hnlocs, _components[i].topo.constraints);
-                RemoveInValidHandleFromContainer(_components[i].topo.constraints);
-            }
-            for (size_t i = 0; i < _constraints.size(); i++){
-                UpdateOldHandle(hnlocs, _constraints[i].topo.hd);
-                UpdateOldHandleContainer(vnlocs, _constraints[i].topo.components);
-                RemoveInValidHandleFromContainer(_constraints[i].topo.components);
-            }
-
-            for (auto compp : compps){
-                UpdateOldHandle(vnlocs, *compp);
-            }
-            for (auto consp : consps){
-                UpdateOldHandle(hnlocs, *consp);
-            }
-        }
-
-        template <class ComponentDataT, class ConstraintDataT>
-        void ConstraintGraph<ComponentDataT, ConstraintDataT>::clear() {
-            _constraints.clear();
-            _components.clear();
-        }
-
-
-        // heterogeneous vector
-        template <class ...T>
-        class HeterogeneousVector {
-            using ElementTypesTuple = std::tuple<T...>;
-        public:
-            inline HeterogeneousVector() {}
-
-            template <class E>
-            inline const E & at(size_t i) const {
-                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
-                return std::get<Id>(_vectors).at(i);
-            }
-
-            template <class E>
-            inline E & at(size_t i) {
-                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
-                return std::get<Id>(_vectors).at(i);
-            }
-
-            template <class E>
-            inline void pushBack(const E & e) {
-                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
-                std::get<Id>(_vectors).push_back(e);
-            }
-
-            template <class E>
-            inline size_t size() const {
-                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
-                return std::get<Id>(_vectors).size();
-            }
-
-            template <class E>
-            inline const std::vector<E> & getVector() const {
-                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
-                return std::get<Id>(_vectors);
-            }
-
-            template <class E>
-            inline std::vector<E> & getVector() {
-                enum { Id = TypeFirstLocationInTuple<E, ElementTypesTuple>::value };
-                return std::get<Id>(_vectors);
-            }
-
-            inline size_t size() const {
-                size_t s = 0;
-                for (size_t i : { getVector<T>().size()... }){
-                    s += i;
-                }
-                return s;
-            }
-
-        private:
-            std::tuple<std::vector<T>...> _vectors;
-        };
-
-
         using Eigen::Dynamic;
 
-        // fix sized
+
+        // Forest 
+        struct ForestTopo {
+            Handle<ForestTopo> hd;
+            std::set<Handle<ForestTopo>> children;
+            Handle<ForestTopo> parent;
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(hd, children, parent); }
+        };
+
+        template <class T>
+        class Forest {
+        public:
+            using NodeHandle = Handle<ForestTopo>;
+            using NodeExistsPred = TripletExistsPred<ForestTopo, T>;
+
+            inline const T & data(NodeHandle h) const { return _nodes[h.id].data; }
+            inline T & data(NodeHandle h) { return _nodes[h.id].data; }
+            inline const ForestTopo & topo(NodeHandle h) const { return _nodes[h.id].topo; }
+            inline NodeHandle parent(NodeHandle h) const { return _nodes[h.id].topo.parent; }
+
+            inline ConstConditionalContainerWrapper<TripletArray<ForestTopo, T>, NodeExistsPred> nodes() const {
+                return ConstConditionalContainerWrapper<TripletArray<ForestTopo, T>, NodeExistsPred>(&_nodes);
+            }
+            inline ConditionalContainerWrapper<TripletArray<ForestTopo, T>, NodeExistsPred> nodes() {
+                return ConditionalContainerWrapper<TripletArray<ForestTopo, T>, NodeExistsPred>(&_nodes);
+            }
+            inline const TripletArray<ForestTopo, T> & internalNodes() const { return _nodes; }
+
+            inline NodeHandle add(NodeHandle parent, const T & data) {
+                ForestTopo topo;
+                topo.hd = NodeHandle(_nodes.size());
+                topo.parent = parent;
+                _nodes.emplace_back(std::move(topo), data);
+                if (parent.isValid()){
+                    _nodes[parent.id].topo.children.insert(topo.hd);
+                }
+                return topo.hd;
+            }
+
+            inline NodeHandle add(NodeHandle parent, T && data) {
+                ForestTopo topo;
+                topo.hd = NodeHandle(_nodes.size());
+                topo.parent = parent;
+                _nodes.emplace_back(std::move(topo), std::move(data));
+                if (parent.isValid()){
+                    _nodes[parent.id].topo.children.insert(topo.hd);
+                }
+                return topo.hd;
+            }
+
+            inline NodeHandle addRoot(const T & data){ return add(NodeHandle(), data); }
+            inline NodeHandle addRoot(T && data) { return add(NodeHandle(), std::move(data)); }
+            inline bool isRoot(NodeHandle nh) const { return _nodes[nh.id].topo.parent.isInvalid(); }
+            inline bool isLeaf(NodeHandle nh) const { 
+                auto & children = _nodes[nh.id].topo.children; 
+                for (auto & ch : children){
+                    if (ch.isValid())
+                        return false;
+                }
+                return true;
+            }
+
+            inline void remove(NodeHandle h) {
+                _nodes[h.id].exists = false;
+                for (auto & ch : _nodes[h.id].topo.children){
+                    remove(ch);
+                }
+            }
+
+            template <class NodeHandlePtrContainerT = HandlePtrArray<ForestTopo>>
+            void gc(const NodeHandlePtrContainerT & nhPtrs = NodeHandlePtrContainerT()) {
+                std::vector<NodeHandle> nnlocs;
+                RemoveAndMap(_nodes, nnlocs);
+                for (auto & node : _nodes){
+                    UpdateOldHandle(nnlocs, node.topo.hd);
+                    UpdateOldHandle(nnlocs, node.topo.parent);
+                    UpdateOldHandleContainer(nnlocs, node.topo.children);
+                    RemoveInValidHandleFromContainer(node.topo.children);
+                }
+                for (auto & nhPtr : nhPtrs){
+                    UpdateOldHandle(nnlocs, *nhPtr);
+                }
+            }
+
+            template <class NodeHandleCallbackFunT>
+            bool depthFirstSearch(NodeHandle asRoot, const NodeHandleCallbackFunT & callback) const {
+                assert(_nodes[asRoot.id].exists);
+                if (!callback(asRoot))
+                    return false;
+                for (auto & ch : _nodes[asRoot.id].topo.children){
+                    if (_nodes[ch.id].exists){
+                        if (!depthFirstSearch(ch, callback))
+                            return false;
+                    }
+                }
+                return true;
+            }
+
+            //template <class NodeHandleCallbackFunT>
+            //bool depthFirstTraverse(const NodeHandleCallbackFunT & callback) const {
+            //    std::unordered_map<NodeHandle, bool, HandleHasher<ForestTopo>> visited;
+            //    visited.reserve(_nodes.size());
+            //    while (true){
+            //        NodeHandle notVisited;
+            //        for (auto & v : visited){
+            //            if (!v.second){
+            //                notVisited = v.first;
+            //            }
+            //        }
+            //        if (notVisited.isInvalid()){
+            //            return true;
+            //        }
+            //        if (!depthFirstSearch(notVisited, [&callback, &visited](NodeHandle nh) -> bool {
+            //            if (visited)
+            //        }))
+            //    }
+            //}
+
+            template <class NodeHandleCallbackFunT>
+            bool breadthFirstSearch(NodeHandle asRoot, const NodeHandleCallbackFunT & callback) const {
+                assert(_nodes[asRoot.id].exists);
+                std::queue<NodeHandle> nhs;
+                nhs.push(asRoot);
+                while (!nhs.empty()){
+                    NodeHandle nh = nhs.front();
+                    nhs.pop();
+                    if (!callback(nh))
+                        return false;
+                    for (auto & ch : _nodes[nh.id].topo.children){
+                        if (_nodes[ch.id].exists)
+                            nhs.push(ch);
+                    }
+                }
+                return true;
+            }
+
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(_nodes); }
+
+        private:
+            TripletArray<ForestTopo, T> _nodes;
+        };
+
+
+
+
+
+
+        // helper classes for HomogeneousGraph
         template <int L, int ChildN>
         struct Topo {
             static const int Level = L;

@@ -366,6 +366,42 @@ TEST(UtilTest, DistanceBetweenTwoLines) {
 }
 
 
+TEST(UtilTest, BarycentricCoordinatesOfLineAndPlaneUnitIntersection) {
+
+    core::Point3 pts[] = {
+        core::Point3(1, 0, 0),
+        core::Point3(0, 1, 0),
+        core::Point3(0, 0, 1)
+    };
+
+    auto bc1 = core::BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
+        core::InfiniteLine3(core::Point3(0, 0, 0), core::Point3(1, 1, 1)), pts);
+
+    EXPECT_FLOAT_EQ(bc1[0], 1.0/3.0);
+    EXPECT_FLOAT_EQ(bc1[1], 1.0/3.0);
+    EXPECT_FLOAT_EQ(bc1[2], 1.0/3.0);
+
+    for (int i = 0; i < 3; i++){
+        auto bc2 = core::BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
+            core::InfiniteLine3(core::Point3(0, 0, 0), pts[i]), pts);
+        for (int k = 0; k < 3; k++){
+            EXPECT_FLOAT_EQ(bc2[k], i == k ? 1.0 : 0.0);
+        }
+    }
+
+    for (int i = 0; i < 3; i++){
+        core::Vec3 dir(1, 1, 1);
+        dir(i) = -.5;
+        auto bc3 = core::BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
+            core::InfiniteLine3(core::Point3(0, 0, 0), dir), pts);
+        for (int k = 0; k < 3; k++){
+            EXPECT_FLOAT_EQ(bc3[k], k == i ? -1.0 / 3.0 : 2.0 / 3.0);
+        }
+    }
+
+}
+
+
 TEST(UtilTest, EigenVectorsAndValues) {
     {
         std::vector<core::Point3> pts;
@@ -762,5 +798,8 @@ TEST(AlgorithmsTest, TopologicalSort){
 int main(int argc, char * argv[], char * envp[])
 {
     testing::InitGoogleTest(&argc, argv);
+    testing::GTEST_FLAG(catch_exceptions) = false;
+    testing::GTEST_FLAG(throw_on_failure) = true;
+    testing::GTEST_FLAG(filter) = "UtilTest.BarycentricCoordinatesOfLineAndPlaneUnitIntersection";
     return RUN_ALL_TESTS();
 }

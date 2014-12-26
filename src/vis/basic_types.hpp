@@ -118,7 +118,12 @@ namespace panoramix {
             DefaultPoints,
             DefaultLines,
             DefaultTriangles,
-            Panorama
+            Panorama,
+
+            XPoints,
+            XLines,
+            XTriangles,
+            XPanorama
         };
 
         class OpenGLShaderSource {
@@ -134,7 +139,6 @@ namespace panoramix {
         };
 
         const OpenGLShaderSource & PredefinedShaderSource(OpenGLShaderSourceDescriptor descriptor);
-
 
 
         // opengl mesh
@@ -236,11 +240,11 @@ namespace panoramix {
 
             struct Vertex {
                 Vertex();
-                core::Vec4f position4;
-                core::Vec3f normal3;
-                core::Vec4f color4;
-                core::Vec2f texCoord2;
-                core::Vec<float, 1> pointSize1;
+                core::Vec4f position;
+                core::Vec3f normal;
+                core::Vec4f color; // the intrinsic color
+                core::Vec2f texCoord;
+                int32_t claz;
             };
 
             using VertHandle = uint32_t;
@@ -258,13 +262,17 @@ namespace panoramix {
                 const core::Vec3f & n = core::Vec3f(0, 0, 0),
                 const core::Vec4f & c = core::Vec4f(0, 0, 0, 0),
                 const core::Vec2f & t = core::Vec2f(0, 0),
-                float ps = 1.0);
+                int32_t claz = -1);
 
             LineHandle addLine(VertHandle v1, VertHandle v2);
             LineHandle addIsolatedLine(const Vertex & v1, const Vertex & v2);
+            size_t numberOfLines();
+            void fetchLineVerts(LineHandle l, VertHandle & v1, VertHandle & v2);
 
             TriangleHandle addTriangle(VertHandle v1, VertHandle v2, VertHandle v3);
             TriangleHandle addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3);
+            size_t numberOfTriangles();
+            void fetchTriangleVerts(TriangleHandle t, VertHandle & v1, VertHandle & v2, VertHandle & v3);
 
             void addQuad(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4);
             void addPolygon(const std::vector<VertHandle> & vhs);
@@ -275,29 +283,74 @@ namespace panoramix {
 
         };
 
+
+        struct DiscretizeOptions {
+            Color color;
+            ColorTable colorTable;
+            bool isolatedTriangles;
+            int subdivisionNums[2];
+            OpenGLShaderSource defaultShaderSource;
+        };
+
         template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Point<T, 3> & p){
-            mesh.addVertex(core::Vec4f(p[0], p[1], p[2], 1.0f));
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Point<T, 3> & p, const DiscretizeOptions & o){
+            auto vh = mesh.addVertex(core::Vec4f(p[0], p[1], p[2], 1.0f));
+            mesh.vertices[vh].color = o.color;
             return mesh;
         }
 
         template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Line<T, 3> & l){
-            mesh.addIsolatedLine(core::Concat(core::ConvertTo<float>(l.first), 1.0f), 
-                core::Concat(core::ConvertTo<float>(l.second), 1.0f));
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Line<T, 3> & l, const DiscretizeOptions & o){
+            TriMesh::Vertex v1, v2;
+            v1.position = core::Concat(core::ConvertTo<float>(l.first), 1.0f);
+            v1.color = o.color;
+            v2.position = core::Concat(core::ConvertTo<float>(l.second), 1.0f);
+            v2.color = o.color;
+            mesh.addIsolatedLine(v1, v2);
             return mesh;
-        }        
+        }
 
-        TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp);
+        TriMesh & Discretize(TriMesh & mesh, const core::Sphere3 & s, const DiscretizeOptions & o);
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Sphere<T, 3> & s, const DiscretizeOptions & o){
+            return Discretize(mesh, core::Sphere3{ ConvertTo<double>(s.center), static_cast<double>(s.radius) });
+        }
+
+        TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o);
 
         template <class T, class AllocT>
-        inline TriMesh & Discretize(TriMesh & mesh, const std::vector<T, AllocT> & v){
+        inline TriMesh & Discretize(TriMesh & mesh, const std::vector<T, AllocT> & v, const DiscretizeOptions & o){
             for (auto & e : v){
-                Discretize(mesh, e);
+                Discretize(mesh, e, o);
             }
             return mesh;
         }
 
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Classified<T> & c, const DiscretizeOptions & o){
+            auto oo = o;
+            oo.color = o.colorTable[c.claz];
+            return Discretize(mesh, c.component, oo);
+        }
+
+
+        // Is discretizable ?
+        namespace {
+            template <class T>
+            struct IsDiscretizableImp {
+                template <class TT>
+                static auto test(int) -> decltype(
+                    vis::Discretize(std::declval<TriMesh &>(), std::declval<TT>(), std::declval<DiscretizeOptions>()),
+                    std::true_type()
+                    );
+                template <class>
+                static std::false_type test(...);
+                static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
+            };
+        }
+
+        template <class T>
+        struct IsDiscretizable : std::integral_constant<bool, IsDiscretizableImp<T>::value> {};
 
 
     }

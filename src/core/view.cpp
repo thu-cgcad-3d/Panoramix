@@ -2644,7 +2644,7 @@ namespace panoramix {
         std::unordered_map<MGUnaryHandle, double> GrowAPatch(const MixedGraph & mg, MGPatch & patch,
             MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars,
             const std::vector<Vec3> & vps,
-            double scoreThreshold,
+            double visualRadiusAngle, double scoreThreshold,
             int uhMaxNum){
 
             std::unordered_map<MGUnaryHandle, double> uhScores;
@@ -2690,9 +2690,7 @@ namespace panoramix {
                 std::cout << patch.uhs.size() << "-th uh installed" << std::endl;
 
                 patch.updateBinaryVars(mg, vps);
-                MGPatchDepthsOptimizer(mg, patch, vps, false, MGPatchDepthsOptimizer::EigenSparseQR).optimize();
-
-                
+                MGPatchDepthsOptimizer(mg, patch, vps, false, MGPatchDepthsOptimizer::EigenSparseQR).optimize();                
 
                 // update neighbor uhs
                 for (auto & bh : mg.topo(o.uh).uppers){

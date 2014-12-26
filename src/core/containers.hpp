@@ -1,11 +1,52 @@
 #ifndef PANORAMIX_CORE_CONTAINERS_HPP
 #define PANORAMIX_CORE_CONTAINERS_HPP
 
+#include <nanoflann.hpp>
+
 #include "basic_types.hpp"
 #include "utilities.hpp"
  
 namespace panoramix {
     namespace core {
+
+
+
+        template <class IteratorT>
+        class PointCloudWrapper {
+            using PointType = typename std::iterator_traits<IteratorT>::value_type;
+            static_assert(IsVecOrPoint<PointType>::value, "value of ContainerT must be core::Point/core::Vec");
+            using ValueType = typename PointType::value_type;
+            static const int Dimension = PointType::channels;
+
+        public:
+            inline explicit PointCloudWrapper(IteratorT b, IteratorT e) : begin(b), end(e) {}
+
+            inline size_t kdtree_get_point_count() const { return std::distance(begin, end); }
+            inline ValueType kdtree_distance(const ValueType * p1, const size_t idx_p2, size_t size) const {
+                auto iter = begin;
+                std::advance(iter, idx_p2);
+                ValueType dist = 0.0;
+                for (int i = 0; i < size; i++){
+                    dist += Square((*iter)(i) - p1[i]);
+                }
+                return dist;
+            }
+            inline ValueType kdtree_get_pt(const size_t idx, int dim) const {
+                auto iter = begin;
+                std::advance(iter, idx);
+                return (*iter)(dim);
+            }
+            template <class BBOX>
+            bool kdtree_get_bbox(BBOX &bb) const { return false; }
+        private:
+            IteratorT begin, end;
+        };
+
+        
+
+
+
+
 
         
         // RTree Wrapper

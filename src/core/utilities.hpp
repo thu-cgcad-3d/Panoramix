@@ -676,6 +676,37 @@ namespace panoramix {
         }
 
 
+        template <class T, int N>
+        Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
+            const InfiniteLine<T, N> & line, const Point<T, N> * cornersData){
+            using namespace Eigen;
+            Map<const Matrix<T, N, N, Eigen::ColMajor>> corners((const T*)cornersData, N, N);
+            Map<const Matrix<T, N, 1>> D(line.direction.val, N, 1);
+            Map<const Matrix<T, N, 1>> A(line.anchor.val, N, 1);
+            
+            Matrix<T, N, N> M = - (corners.colwise() - corners.col(0)); // 0 : p1-p2 : p1-p3
+            M.col(0) = D; // d : p1-p2 : p1-p3
+            
+            Vec<T, N> coord;
+            Map<Matrix<T, N, 1>> X(coord.val, N, 1);
+            X = M.fullPivLu().solve(corners.col(0) - A);
+            T depthOfLineIntersection = X(0);
+            X(0) = 1.0f;
+            for (int i = 1; i < N; i++){
+                X(0) -= X(i);
+            }
+            return coord;
+        }
+
+        template <class T, int N>
+        inline Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
+            const InfiniteLine<T, N> & line, const std::array<Point<T, N>, N> & corners){
+            return BarycentricCoordinatesOfLineAndPlaneUnitIntersection(line, corners.data());
+        }
+
+
+
+
         // eigen vectors and eigen values from points
         template <class T, int N>
         std::array<Scored<Vec<T, N>, T>, N> EigenVectorAndValuesFromPoints(const Point<T, N> * ptsData, size_t n) {
