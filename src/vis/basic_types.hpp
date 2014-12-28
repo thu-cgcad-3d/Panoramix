@@ -227,6 +227,7 @@ namespace panoramix {
         };
 
 
+
         // spatial projected polygon for panorama reconstruction
         struct SpatialProjectedPolygon {
             std::vector<core::Vec3> corners;
@@ -315,6 +316,18 @@ namespace panoramix {
         inline TriMesh & Discretize(TriMesh & mesh, const core::Sphere<T, 3> & s, const DiscretizeOptions & o){
             return Discretize(mesh, core::Sphere3{ ConvertTo<double>(s.center), static_cast<double>(s.radius) });
         }
+
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Polygon<T, 3> & p, const DiscretizeOptions & o) {
+            std::vector<TriMesh::VertHandle> vhandles(p.corners.size());
+            for (int i = 0; i < p.corners.size(); i++){
+                vhandles[i] = mesh.addVertex(core::Vec4f(p.corners[i][0], p.corners[i][1], p.corners[i][2], 1.0), 
+                    core::ConvertTo<float>(p.normal), o.color);
+            }
+            mesh.addPolygon(vhandles);
+            return mesh;
+        }
+
 
         TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o);
 

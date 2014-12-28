@@ -121,11 +121,13 @@ namespace panoramix {
             : _shaderSource(PredefinedShaderSource(OpenGLShaderSourceDescriptor::XLines)),
             _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
             _internal = new VisualObjectInternal;
+            flags.isSelected = false;
         }
 
         VisualObject::VisualObject(const OpenGLShaderSource & shaderSource)
             : _shaderSource(shaderSource), _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
             _internal = new VisualObjectInternal;
+            flags.isSelected = false;
         }
 
         VisualObject::~VisualObject(){
@@ -356,93 +358,133 @@ namespace panoramix {
             }
         }
 
-        inline Point3 ToAffinePoint(const Vec4f & p){
-            return Point3(p[0] / p[3], p[1] / p[3], p[2] / p[3]);
+        inline Point3f ToAffinePoint(const Vec4f & p){
+            return Point3f(p[0] / p[3], p[1] / p[3], p[2] / p[3]);
         }
+
+        template <class TT>
+        bool TriangleIntersection(const Vec<TT, 3> &  V1,  // Triangle vertices
+            const Vec<TT, 3> &  V2,
+            const Vec<TT, 3> &  V3,
+            const Vec<TT, 3> &   O,  //Ray origin
+            const Vec<TT, 3> &   D,  //Ray direction
+
+            TT* out,
+            TT epsilon) {
+
+            Vec<TT, 3> e1, e2;  //Edge1, Edge2
+            Vec<TT, 3> P, Q, T;
+            TT det, inv_det, u, v;
+            TT t;
+
+            //Find vectors for two edges sharing V1
+            e1 = V2 - V1;
+            e2 = V3 - V1;
+            //Begin calculating determinant - also used to calculate u parameter
+            P = D.cross(e2);
+            //if determinant is near zero, ray lies in plane of triangle
+            det = e1.dot(P);
+            //NOT CULLING
+            if (det > -epsilon && det < epsilon) return false;
+            inv_det = 1.f / det;
+
+            //calculate distance from V1 to ray origin
+            T = O - V1;
+
+            //Calculate u parameter and test bound
+            u = T.dot(P) * inv_det;
+            //The intersection lies outside of the triangle
+            if (u < 0.f || u > 1.f) return false;
+
+            //Prepare to test v parameter
+            Q = T.cross(e1);
+
+            //Calculate V parameter and test bound
+            v = D.dot(Q) * inv_det;
+            //The intersection lies outside of the triangle
+            if (v < 0.f || u + v  > 1.f) return false;
+
+            t = e2.dot(Q) * inv_det;
+
+            if (t > epsilon) { //ray intersection
+                *out = t;
+                return true;
+            }
+
+            // No hit, no win
+            return false;
+        }
+
+        static const bool g_UseBruteForce = true;
 
         VisualObjectMeshTriangle VisualObjectScene::pickOnScreen(const Options & options,
             const core::Point2 & pOnScreen, double distThresOnScreen) const {
 
             InfiniteLine3 centerRay(options.camera.eye(), normalize(options.camera.spatialDirection(pOnScreen)));
-            Vec3 borderRayDirections[] = {
-                options.camera.spatialDirection(pOnScreen + Point2(-distThresOnScreen, -distThresOnScreen)),
-                options.camera.spatialDirection(pOnScreen + Point2(+distThresOnScreen, -distThresOnScreen)),
-                options.camera.spatialDirection(pOnScreen + Point2(-distThresOnScreen, +distThresOnScreen)),
-                options.camera.spatialDirection(pOnScreen + Point2(+distThresOnScreen, +distThresOnScreen))
-            };
-            for (auto & borderRayDirection : borderRayDirections){
-                borderRayDirection = normalize(borderRayDirection) * 
-                    tan(AngleBetweenDirections(centerRay.direction, borderRayDirection));
-            }
             Box3 bboxAll = boundingBox();
             auto bballAll = bboxAll.outerSphere();
             
             // discretize the ray
             double startLen = std::max(0.0, Distance(bballAll.center, options.camera.eye()) - bballAll.radius);
             double stopLen = std::max(0.0, Distance(bballAll.center, options.camera.eye()) + bballAll.radius);
-            double stepNum = 10000.0;
+            double stepNum = 1000.0;
             double stepLen = (stopLen - startLen) / stepNum;
 
-            std::map<VisualObjectMeshTriangle, std::pair<Point3, double>> results;
+            std::map<VisualObjectMeshTriangle, double> resultsWithDepths;
 
-            for (int i = 0; i < stepNum; i++){
-                double centerLen = startLen + stepLen * i;
-                double nextCenterLen = centerLen + stepLen;
-
-                Point3 centerP = centerRay.anchor + centerLen * centerRay.direction;
-                Point3 nextCenterP = centerRay.anchor + nextCenterLen * centerRay.direction;
-                
-                Box3 detectionBox = BoundingBox(centerP) | BoundingBox(nextCenterP);
-                for (auto & borderRayDirection : borderRayDirections){
-                    detectionBox |= BoundingBox(centerRay.anchor + centerLen * borderRayDirection);
-                    detectionBox |= BoundingBox(centerRay.anchor + nextCenterLen * borderRayDirection);
-                }
-
-                _internal->rtree.search(detectionBox, 
-                    [&results, this, &centerRay, &options, &pOnScreen, &distThresOnScreen](const VisualObjectMeshTriangle & mti){
+            if (g_UseBruteForce){
+                for (auto & mtiBB : _internal->calculatedBoundingBoxesOfMeshTriangles){
+                    auto & mti = mtiBB.first;
                     auto & vo = _tree.data(mti.first);
                     TriMesh::VertHandle v1, v2, v3;
                     vo->mesh().fetchTriangleVerts(mti.second, v1, v2, v3);
-                    Point3 triangle[] = {
-                        ToAffinePoint(vo->mesh().vertices[v1].position),
+                    float out = 0.0;
+                    bool intersected = TriangleIntersection(ToAffinePoint(vo->mesh().vertices[v1].position),
                         ToAffinePoint(vo->mesh().vertices[v2].position),
-                        ToAffinePoint(vo->mesh().vertices[v3].position)
-                    };
-                    Vec3 bc = BarycentricCoordinatesOfLineAndPlaneUnitIntersection(centerRay, triangle);
-                    int posComps[3];
-                    int posCount = 0;
-                    for (int i = 0; i < 3; i++){
-                        if (bc[i] >= -1e-10){
-                            posComps[posCount++] = i;
+                        ToAffinePoint(vo->mesh().vertices[v3].position),
+                        ConvertTo<float>(centerRay.anchor), ConvertTo<float>(centerRay.direction),
+                        &out, static_cast<float>(stepLen) / 100.0f);
+                    if (intersected){
+                        resultsWithDepths[mti] = out;
+                    }
+                }
+            }
+            else{
+                for (int i = 0; i < stepNum; i++){
+                    double centerLen = startLen + stepLen * i;
+                    double nextCenterLen = centerLen + stepLen;
+
+                    Point3 centerP = centerRay.anchor + centerLen * centerRay.direction;
+                    Point3 nextCenterP = centerRay.anchor + nextCenterLen * centerRay.direction;
+
+                    Box3 detectionBox = BoundingBox(centerP) | BoundingBox(nextCenterP);
+                    detectionBox.expand(stepLen);
+
+                    _internal->rtree.search(detectionBox,
+                        [&resultsWithDepths, this, &centerRay, &options, &pOnScreen, &distThresOnScreen, &stepLen](const VisualObjectMeshTriangle & mti){
+                        auto & vo = _tree.data(mti.first);
+                        TriMesh::VertHandle v1, v2, v3;
+                        vo->mesh().fetchTriangleVerts(mti.second, v1, v2, v3);
+                        float out = 0.0;
+                        bool intersected = TriangleIntersection(ToAffinePoint(vo->mesh().vertices[v1].position),
+                            ToAffinePoint(vo->mesh().vertices[v2].position),
+                            ToAffinePoint(vo->mesh().vertices[v3].position),
+                            ConvertTo<float>(centerRay.anchor), ConvertTo<float>(centerRay.direction),
+                            &out, static_cast<float>(stepLen) / 100.0f);
+                        if (intersected){
+                            resultsWithDepths[mti] = out;
                         }
-                    }
-                    assert(posCount > 0);
-                    Point3 intersection;
-                    if (posCount == 3){
-                        intersection = IntersectionOfLineAndPlane(centerRay,
-                            Plane3From3Points(triangle[0], triangle[1], triangle[2])).position;
-                    }
-                    else if (posCount == 2){
-                        intersection = DistanceBetweenTwoLines(centerRay,
-                            Line3(triangle[posComps[0]], triangle[posComps[1]]).infiniteLine()).first;
-                    }
-                    else if (posCount == 1){
-                        intersection = DistanceFromPointToLine(triangle[posComps[0]], centerRay).second;
-                    }
-                    double dOnScreen = Distance(options.camera.screenProjection(intersection), pOnScreen);
-                    if (dOnScreen <= distThresOnScreen){
-                        results[mti] = std::make_pair(intersection, dOnScreen);
-                    }
-                    return true;
-                });
+                        return true;
+                    });
+                }
             }
 
             double minDist = std::numeric_limits<double>::max();
             
             VisualObjectMeshTriangle nearest;
 
-            for (auto & r : results){
-                double d = r.second.second;
+            for (auto & r : resultsWithDepths){
+                double d = r.second;
                 if (d < minDist){
                     minDist = d;
                     nearest = r.first;
@@ -559,6 +601,9 @@ namespace panoramix {
                         }
                         scene.tree().data(omt.first)
                             ->invokeCallbackFunction(InteractionID::ClickLeftButton, scene.tree(), omt);
+                    }
+                    else{
+                        scene.clearSelection();
                     }
                     update();
                 }

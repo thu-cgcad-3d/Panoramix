@@ -13,7 +13,8 @@ namespace panoramix {
 
         enum InteractionID {
             ClickLeftButton,
-            PressSpace
+            PressSpace,
+            Unknown
         };
 
         struct Options {
@@ -59,10 +60,58 @@ namespace panoramix {
         using VisualObjectHandle = VisualObjectTree::NodeHandle;
         using VisualObjectMeshTriangle = std::pair<VisualObjectHandle, TriMesh::TriangleHandle>;
 
-        typedef bool VisualObjectCallbackFunction(InteractionID, const VisualObjectTree &, const VisualObjectMeshTriangle &);
-        
-        template <class T>
-        using VisualObjectCallbackFunctionSimple = void(InteractionID, T & data);
+        typedef bool VisualObjectCallbackFunction(InteractionID, const VisualObjectTree &, const VisualObjectMeshTriangle &);        
+        template <class T> using VisualObjectCallbackFunctionSimple = void(InteractionID, T & data);
+
+        namespace {
+
+            template <class FunAndArgT>
+            struct IsComplexCallbackFunctionImp {
+                template <class FunAndArgTT>
+                static auto test(int) -> decltype(
+                    std::declval<FunAndArgTT>().first(Unknown,
+                    std::declval<VisualObjectTree>(), std::declval<VisualObjectMeshTriangle>()),
+                    std::true_type()
+                    );
+
+                template <class>
+                static std::false_type
+                    test(...);
+
+                enum { value = std::is_same<decltype(test<FunAndArgT>(0)), std::true_type>::value };
+            };
+
+            template <class FunAndArgT>
+            struct IsSimpleCallbackFunctionImp {
+                template <class FunAndArgTT>
+                static auto test(int) -> decltype(
+                    std::declval<FunAndArgTT &>().first(Unknown, std::declval<FunAndArgTT &>().second),
+                    std::true_type()
+                    );
+
+                template <class>
+                static std::false_type
+                    test(...);
+
+                enum { value = std::is_same<decltype(test<FunAndArgT>(0)), std::true_type>::value };
+            };          
+
+        }
+
+
+        enum class CallbackFunctionType {
+            Complex, Simple, None
+        };
+        using ComplexTag = std::integral_constant<CallbackFunctionType, CallbackFunctionType::Complex>;
+        using SimpleTag = std::integral_constant<CallbackFunctionType, CallbackFunctionType::Simple>;
+        using NoneTag = std::integral_constant<CallbackFunctionType, CallbackFunctionType::None>;
+
+        template <class FunT, class T>
+        struct CallbackFunctionTraits
+            : std::integral_constant<CallbackFunctionType, 
+            (IsComplexCallbackFunctionImp<std::pair<FunT, T>>::value ? CallbackFunctionType::Complex :
+            (IsSimpleCallbackFunctionImp<std::pair<FunT, T>>::value ? CallbackFunctionType::Simple : 
+            CallbackFunctionType::None))> {};
 
         
 
@@ -128,8 +177,8 @@ namespace panoramix {
 
 
         template <class T>
-        inline std::shared_ptr<VisualObject> Visualize(const T & data,
-            const DiscretizeOptions & dopt = DiscretizeOptions()){
+        std::shared_ptr<VisualObject> Visualize(const T & data,
+            const DiscretizeOptions & dopt){
             std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>();
             Discretize(vo->mesh(), data, dopt);
             vo->setShaderSource(dopt.defaultShaderSource);
@@ -137,9 +186,10 @@ namespace panoramix {
         }
 
         template <class T, class FunT>
-        inline std::shared_ptr<VisualObject> VisualizeWithBindingDetail(T & data, const FunT & fun,
-            const DiscretizeOptions & dopt = DiscretizeOptions()){
-            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>();
+        std::shared_ptr<VisualObject> VisualizeWithBinding(T & data, const FunT & fun, 
+            const DiscretizeOptions & dopt, 
+            ComplexTag){
+            std::shared_ptr<VisualObject> vo;
             Discretize(vo->mesh(), data, dopt);
             vo->setShaderSource(dopt.defaultShaderSource);
             vo->bindCallbackFunction(fun);
@@ -147,8 +197,9 @@ namespace panoramix {
         }
 
         template <class T, class FunT>
-        inline std::shared_ptr<VisualObject> VisualizeWithBinding(T & data, const FunT & fun,
-            const DiscretizeOptions & dopt = DiscretizeOptions()){
+        std::shared_ptr<VisualObject> VisualizeWithBinding(T & data, const FunT & fun, 
+            const DiscretizeOptions & dopt,
+            SimpleTag){
             std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>();
             Discretize(vo->mesh(), data, dopt);
             vo->setShaderSource(dopt.defaultShaderSource);
@@ -260,13 +311,9 @@ namespace panoramix {
                 return *this;
             }
             template <class T, class FunT>
-            inline Visualizer & addWithBindingDetail(T & data, const FunT & fun) {
-                _tree.add(_activeOH, VisualizeWithBindingDetail<T, FunT>(data, fun, doptions));
-                return *this;
-            }
-            template <class T, class FunT>
             inline Visualizer & addWithBinding(T & data, const FunT & fun) {
-                _tree.add(_activeOH, VisualizeWithBinding<T, FunT>(data, fun, doptions));
+                _tree.add(_activeOH, VisualizeWithBinding<T, FunT>(data, fun, doptions, 
+                    std::integral_constant<CallbackFunctionType, CallbackFunctionTraits<FunT, T>::value>()));
                 return *this;
             }
 
@@ -277,13 +324,9 @@ namespace panoramix {
                 return *this;
             }
             template <class T, class FunT>
-            inline Visualizer & beginWithBindingDetail(T & data, const FunT &fun) {
-                _activeOH = _tree.add(_activeOH, VisualizeWithBindingDetail<T, FunT>(data, fun, doptions));
-                return *this;
-            }
-            template <class T, class FunT>
             inline Visualizer & beginWithBinding(T & data, const FunT & fun) { 
-                _activeOH = _tree.add(_activeOH, VisualizeWithBinding<T, FunT>(data, fun, doptions));
+                _activeOH = _tree.add(_activeOH, VisualizeWithBinding<T, FunT>(data, fun, doptions,
+                    std::integral_constant<CallbackFunctionType, CallbackFunctionTraits<FunT, T>::value>()));
                 return *this;
             }
 

@@ -592,12 +592,12 @@ namespace panoramix {
             inline Sphere<T, N> outerSphere() const { 
                 return Sphere<T, N>{center(), static_cast<T>(norm(maxCorner - minCorner) / 2.0)}; 
             }
-            inline const Box & expand(const Vec<T, N> & s) {
+            inline Box & expand(const Vec<T, N> & s) {
                 minCorner -= s;
                 maxCorner += s;
                 return *this;
             }
-            inline const Box & expand(const T & s) {
+            inline Box & expand(const T & s) {
                 for (int i = 0; i < N; i++){
                     minCorner[i] -= s;
                     maxCorner[i] += s;
@@ -648,6 +648,21 @@ namespace panoramix {
         using Box3 = Box<double, 3>;
 
  
+        // polygon
+        template <class T, int N>
+        struct Polygon {
+            std::vector<core::Point<T, N>> corners;
+            core::Vec<T, N> normal;
+        };
+
+        using Polygon3 = Polygon<double, 3>;
+        using Polygon3f = Polygon<float, 3>;
+
+        template <class T>
+        inline Polygon<T, 3> MakeTriangle(const Point<T, 3> & p1, const Point<T, 3> & p2, const Point<T, 3> & p3){
+            return Polygon<T, 3>{{ p1, p2, p3 }, (p2 - p1).cross(p3 - p1)};
+        }
+
     }
 }
 

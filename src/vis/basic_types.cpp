@@ -480,6 +480,7 @@ namespace panoramix {
                 "uniform highp mat4 viewMatrix;\n"
                 "uniform highp mat4 modelMatrix;\n"
                 "uniform highp mat4 projectionMatrix;\n"
+                "uniform bool isSelected;\n"
 
                 "varying lowp vec4 pixelColor;\n"
                 "varying lowp vec2 pixelTexCoord;\n"
@@ -501,20 +502,27 @@ namespace panoramix {
                 "uniform lowp float bwColor;\n"
                 "uniform lowp float bwTexColor;\n"
 
+                "uniform bool isSelected;\n"
+
                 "varying lowp vec4 pixelColor;\n"
                 "varying lowp vec2 pixelTexCoord;\n"
 
                 "void main(void)\n"
                 "{\n"
-                "   lowp vec4 texColor = texture2D(tex, pixelTexCoord);\n"
-                "   gl_FragColor = (pixelColor * bwColor + texColor * bwTexColor)"
+                "    lowp vec4 texColor = texture2D(tex, pixelTexCoord);\n"
+                "    gl_FragColor = (pixelColor * bwColor + texColor * bwTexColor)"
                 "       / (bwColor + bwTexColor);\n"
+                "    if (isSelected){"
+                "        gl_FragColor.a = 0.7;\n"
+                "    }else{\n"
+                "        gl_FragColor.a = 1.0;\n"
+                "    }"
                 "}\n"
             };
 
             static const OpenGLShaderSource xPanoramaShaderSource = {
                 "#version 120\n"
-                
+
                 "attribute highp vec3 position;\n"
                 "attribute highp vec3 normal;\n"
                 "attribute highp vec4 color;\n"
@@ -523,6 +531,8 @@ namespace panoramix {
                 "uniform highp mat4 viewMatrix;\n"
                 "uniform highp mat4 modelMatrix;\n"
                 "uniform highp mat4 projectionMatrix;\n"
+
+                "uniform bool isSelected;\n"
 
                 "varying highp vec3 pixelPosition;\n"
                 "varying highp vec3 pixelNormal;\n"
@@ -546,6 +556,8 @@ namespace panoramix {
                 "uniform lowp float bwTexColor;\n"
                 "uniform highp vec3 panoramaCenter;\n"
 
+                "uniform bool isSelected;\n"
+
                 "varying highp vec3 pixelPosition;\n"
                 "varying highp vec3 pixelNormal;\n"
                 "varying highp vec4 pixelColor;\n"
@@ -559,7 +571,11 @@ namespace panoramix {
                 "    lowp vec4 texColor = texture2D(tex, texCoord);\n"
                 "    gl_FragColor = (pixelColor * bwColor + texColor * bwTexColor)"
                 "       / (bwColor + bwTexColor);\n"
-                "    gl_FragColor.a = 0.7;\n"
+                "    if (isSelected){"
+                "        gl_FragColor.a = 0.7;\n"
+                "    }else{\n"
+                "        gl_FragColor.a = 1.0;\n"
+                "    }"
                 "}\n"
             };
 
@@ -927,6 +943,7 @@ namespace panoramix {
             }
             return mesh;
         }
+
 
 
         TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o){
