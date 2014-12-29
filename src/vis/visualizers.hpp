@@ -27,9 +27,6 @@ namespace panoramix {
 
             float bwColor;
             float bwTexColor;
-
-            float pointSize;
-            float lineWidth;
         };
 
 
@@ -158,6 +155,9 @@ namespace panoramix {
                 return false;
             }
 
+            inline void setLineWidth(float lw){ _lineWidth = lw; }
+            inline void setPointSize(float ps){ _pointSize = ps; }
+
         public:
             struct Flags {
                 bool isSelected;
@@ -169,6 +169,9 @@ namespace panoramix {
             core::Point3 _projectionCenter;
             std::vector<ResourcePtr> _resources;
             OpenGLShaderSource _shaderSource;
+
+            float _lineWidth;
+            float _pointSize;
 
             VisualObjectInternal * _internal;
             
@@ -182,6 +185,8 @@ namespace panoramix {
             std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>();
             Discretize(vo->mesh(), data, dopt);
             vo->setShaderSource(dopt.defaultShaderSource);
+            vo->setLineWidth(dopt.lineWidth);
+            vo->setPointSize(dopt.pointSize);
             return vo;
         }
 
@@ -193,6 +198,8 @@ namespace panoramix {
             Discretize(vo->mesh(), data, dopt);
             vo->setShaderSource(dopt.defaultShaderSource);
             vo->bindCallbackFunction(fun);
+            vo->setLineWidth(dopt.lineWidth);
+            vo->setPointSize(dopt.pointSize);
             return vo;
         }
 
@@ -203,6 +210,8 @@ namespace panoramix {
             std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>();
             Discretize(vo->mesh(), data, dopt);
             vo->setShaderSource(dopt.defaultShaderSource);
+            vo->setLineWidth(dopt.lineWidth);
+            vo->setPointSize(dopt.pointSize);
 
             struct CallbackFunction {
                 inline CallbackFunction(T & d, const FunT & f)
@@ -278,8 +287,6 @@ namespace panoramix {
                 options.camera = core::PerspectiveCamera(500, 500, 250, { 1.0, 1.0, 1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 });
                 options.bwColor = 0.3;
                 options.bwTexColor = 0.7;
-                options.pointSize = 10.0;
-                options.lineWidth = 5.0;
 
                 doptions.color = vis::ColorFromTag(vis::ColorTag::Black);
                 doptions.colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
@@ -287,6 +294,8 @@ namespace panoramix {
                 doptions.subdivisionNums[0] = 32;
                 doptions.subdivisionNums[1] = 64;
                 doptions.defaultShaderSource = vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XTriangles);
+                doptions.pointSize = 10.0;
+                doptions.lineWidth = 5.0;
             }
 
             Options options;

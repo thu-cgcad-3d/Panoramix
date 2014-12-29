@@ -250,7 +250,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
 
     vis::ResourceStore::set("texture", panorama);
     viz.begin(spps).resource("texture").end();
-    viz.options.lineWidth = 5.0;
+    viz.doptions.lineWidth = 4.0;
     viz.doptions.color = vis::ColorFromTag(vis::ColorTag::Black);
     viz.add(lines);    
 
@@ -268,7 +268,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
     }
 
     viz.doptions.color = vis::ColorFromTag(vis::ColorTag::DarkGray);
-    viz.options.lineWidth = 1.0;
+    viz.doptions.lineWidth = 2.0;
     viz.add(connectionLines);
     viz.show(doModal);
 

@@ -291,6 +291,8 @@ namespace panoramix {
             bool isolatedTriangles;
             int subdivisionNums[2];
             OpenGLShaderSource defaultShaderSource;
+            float lineWidth;
+            float pointSize;
         };
 
         template <class T>

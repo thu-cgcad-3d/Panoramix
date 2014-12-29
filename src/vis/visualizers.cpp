@@ -123,6 +123,8 @@ namespace panoramix {
             _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
             _internal = new VisualObjectInternal;
             flags.isSelected = false;
+            _lineWidth = 2.0;
+            _pointSize = 5.0;
         }
 
         VisualObject::VisualObject(const OpenGLShaderSource & shaderSource)
@@ -130,6 +132,8 @@ namespace panoramix {
             _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
             _internal = new VisualObjectInternal;
             flags.isSelected = false;
+            _lineWidth = 2.0;
+            _pointSize = 5.0;
         }
 
         VisualObject::~VisualObject(){
@@ -190,6 +194,9 @@ namespace panoramix {
                 if (!res->bind())
                     qDebug() << (program->log());
             }
+
+            glLineWidth(_lineWidth);
+            glPointSize(_pointSize);
 
             assert(thisModelMatrix == core::Mat4f::eye());
 
@@ -575,9 +582,6 @@ namespace panoramix {
 
                 core::PerspectiveCamera & camera = options.camera;
                 camera.resizeScreen(core::Size(width(), height()));
-
-                glPointSize(options.pointSize);
-                glLineWidth(options.lineWidth);
 
                 scene.render(options);
 

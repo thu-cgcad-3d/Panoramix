@@ -13,7 +13,7 @@ namespace panoramix {
             explicit PerspectiveCamera(int w = 500, int h = 500, double focal = 250,
                 const Vec3 & eye = Vec3(0, 0, 0),
                 const Vec3 & center = Vec3(1, 0, 0),
-                const Vec3 & up = Vec3(0, 0, 1),
+                const Vec3 & up = Vec3(0, 0, -1),
                 double nearPlane = 0.01, double farPlane = 1e4);
 
             inline Size screenSize() const { return Size(static_cast<float>(_screenW), static_cast<float>(_screenH)); }
