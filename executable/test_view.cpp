@@ -216,7 +216,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
     bool doModal){
     
     vis::Visualizer viz("mixed graph");
-    viz.doptions.colorTable = vis::ColorTableDescriptor::RGB;
+    viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
     
     std::vector<vis::SpatialProjectedPolygon> spps;
     std::vector<core::Classified<core::Line3>> lines;
@@ -249,9 +249,10 @@ void VisualizeMixedGraph(const core::Image & panorama,
     }
 
     vis::ResourceStore::set("texture", panorama);
+
     viz.begin(spps).resource("texture").end();
-    viz.doptions.lineWidth = 4.0;
-    viz.doptions.color = vis::ColorFromTag(vis::ColorTag::Black);
+    viz.installingOptions.lineWidth = 4.0;
+    viz.installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::Black);
     viz.add(lines);    
 
     std::vector<core::Line3> connectionLines;
@@ -267,9 +268,10 @@ void VisualizeMixedGraph(const core::Image & panorama,
         }
     }
 
-    viz.doptions.color = vis::ColorFromTag(vis::ColorTag::DarkGray);
-    viz.doptions.lineWidth = 2.0;
+    viz.installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::DarkGray);
+    viz.installingOptions.lineWidth = 2.0;
     viz.add(connectionLines);
+    viz.camera(core::PerspectiveCamera(800, 800, 500, { 1.0, 1.0, -1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, -1.0 }));
     viz.show(doModal);
 
 }
@@ -637,12 +639,35 @@ TEST(MixedGraph, GrowAPatch){
 
         VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
     }
-    //core::SaveToDisk("./cache/test_view.MixedGraph.GrowAPatch.patch")
 
 }
 
 
+TEST(MixedGraph, PlanePotentialsOfLinesPatches){
 
+    core::Image panorama;
+    std::vector<core::Vec3> vanishingPoints;
+
+    core::MixedGraph mg;
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
+
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
+
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
+
+    std::vector<core::MGPatch> linePatches;
+    std::vector<core::MGPatch> lineMSTPatches;
+
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.linePatches", linePatches);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.lineMSTPatches", lineMSTPatches);
+
+
+
+}
 
 
 

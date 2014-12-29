@@ -15,6 +15,100 @@ namespace panoramix {
 
 
 
+        TriMesh & Discretize(TriMesh & mesh, const core::Sphere3 & s, const DiscretizeOptions & o) {
+            int m = o.subdivisionNums[0];
+            int n = o.subdivisionNums[1];
+            if (!o.isolatedTriangles){
+                mesh.vertices.reserve(mesh.vertices.size() + m * n);
+                std::vector<std::vector<TriMesh::VertHandle>> vhs(m, std::vector<TriMesh::VertHandle>(n));
+                for (int i = 0; i < m; i++) {
+                    for (int j = 0; j < n; j++) {
+                        float xratio = 1.0f / n * j;
+                        float yratio = 1.0f / (m - 1) * i;
+                        float xangle = M_PI * 2 * xratio;
+                        float yangle = M_PI * yratio - M_PI_2;
+                        Vec4 point = {
+                            cos(xangle)*cos(yangle) * s.radius + s.center[0],
+                            sin(xangle)*cos(yangle) * s.radius + s.center[1],
+                            sin(yangle) * s.radius + s.center[2],
+                            1
+                        };
+                        TriMesh::Vertex v;
+                        v.position = point;
+                        v.texCoord = { xratio, yratio };
+                        v.color = Vec4f(o.color[0], o.color[1], o.color[2], 1.0f);
+                        v.entityIndex = o.index;
+                        vhs[i][j] = mesh.addVertex(v);
+                    }
+                }
+                for (int i = 1; i < m; i++) {
+                    int previ = i == 0 ? m - 1 : i - 1;
+                    for (int j = 0; j < n; j++) {
+                        int prevj = j == 0 ? n - 1 : j - 1;
+                        mesh.addTriangle(vhs[i][j], vhs[i][prevj], vhs[previ][prevj]);
+                        mesh.addTriangle(vhs[i][j], vhs[previ][prevj], vhs[previ][j]);
+                    }
+                }
+            }
+            else {
+                std::vector<std::vector<TriMesh::Vertex>> vs(m, std::vector<TriMesh::Vertex>(n));
+                for (int i = 0; i < m; i++) {
+                    for (int j = 0; j < n; j++) {
+                        float xratio = 1.0f / n * j;
+                        float yratio = 1.0f / (m - 1) * i;
+                        float xangle = M_PI * 2 * xratio;
+                        float yangle = M_PI * yratio - M_PI_2;
+                        Vec4 point = {
+                            cos(xangle)*cos(yangle) * s.radius + s.center[0],
+                            sin(xangle)*cos(yangle) * s.radius + s.center[1],
+                            sin(yangle) * s.radius + s.center[2],
+                            1
+                        };
+                        TriMesh::Vertex v;
+                        v.position = point;
+                        v.texCoord = { xratio, yratio };
+                        v.color = Vec4f(o.color[0], o.color[1], o.color[2], 1.0f);
+                        v.entityIndex = o.index;
+                        vs[i][j] = v;
+                    }
+                }
+                for (int i = 1; i < m; i++) {
+                    int previ = i == 0 ? m - 1 : i - 1;
+                    for (int j = 0; j < n; j++) {
+                        int prevj = j == 0 ? n - 1 : j - 1;
+                        mesh.addIsolatedTriangle(vs[i][j], vs[i][prevj], vs[previ][prevj]);
+                        mesh.addIsolatedTriangle(vs[i][j], vs[previ][prevj], vs[previ][j]);
+                    }
+                }
+            }
+            return mesh;
+        }
+
+
+
+        TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o){
+            std::vector<Vec3> cs(spp.corners.size());
+            for (int i = 0; i < spp.corners.size(); i++){
+                InfiniteLine3 line(spp.projectionCenter, spp.corners[i] - spp.projectionCenter);
+                cs[i] = IntersectionOfLineAndPlane(line, spp.plane).position;
+            }
+            std::vector<TriMesh::VertHandle> vhandles(cs.size());
+            for (int i = 0; i < cs.size(); i++){
+                TriMesh::Vertex v;
+                v.position = Concat(cs[i], 1.0);
+                v.normal = spp.plane.normal;
+                v.color = o.color;
+                v.entityIndex = o.index;
+                vhandles[i] = mesh.addVertex(v);
+            }
+            mesh.addPolygon(vhandles);
+            return mesh;
+        }
+
+
+
+
+
         ResourcePtr MakeResource(const core::Image & image){
             
             struct TextureResource : Resource {
@@ -118,8 +212,9 @@ namespace panoramix {
             }
         };
 
-        VisualObject::VisualObject()
-            : _shaderSource(PredefinedShaderSource(OpenGLShaderSourceDescriptor::XLines)),
+        VisualObject::VisualObject(int eleNum)
+            : _eleNum(eleNum),
+            _shaderSource(PredefinedShaderSource(OpenGLShaderSourceDescriptor::XLines)),
             _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
             _internal = new VisualObjectInternal;
             flags.isSelected = false;
@@ -127,8 +222,9 @@ namespace panoramix {
             _pointSize = 5.0;
         }
 
-        VisualObject::VisualObject(const OpenGLShaderSource & shaderSource)
-            : _shaderSource(shaderSource),
+        VisualObject::VisualObject(int eleNum, const OpenGLShaderSource & shaderSource)
+            : _eleNum(eleNum),
+            _shaderSource(shaderSource),
             _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
             _internal = new VisualObjectInternal;
             flags.isSelected = false;
@@ -179,7 +275,7 @@ namespace panoramix {
             program->release();
         }
 
-        void VisualObject::render(const Options & options, const core::Mat4f & thisModelMatrix) const {
+        void VisualObject::render(const RenderOptions & options, const core::Mat4f & thisModelMatrix) const {
             if (_mesh.vertices.empty())
                 return;
 
@@ -215,13 +311,13 @@ namespace panoramix {
             SetAttributeArrayWithTriMeshVertices(program, "normal", _mesh.vertices.front().normal);
             SetAttributeArrayWithTriMeshVertices(program, "color", _mesh.vertices.front().color);
             SetAttributeArrayWithTriMeshVertices(program, "texCoord", _mesh.vertices.front().texCoord);
-            SetAttributeArrayWithTriMeshVertices(program, "claz", _mesh.vertices.front().claz);
+            SetAttributeArrayWithTriMeshVertices(program, "entityIndex", _mesh.vertices.front().entityIndex);
 
             program->enableAttributeArray("position");
             program->enableAttributeArray("normal");
             program->enableAttributeArray("color");
             program->enableAttributeArray("texCoord");
-            program->enableAttributeArray("claz");
+            program->enableAttributeArray("entityIndex");
 
             if (options.renderMode & RenderModeFlag::Triangles) {
                 DrawElements(GL_TRIANGLES, _mesh.iTriangles);
@@ -237,7 +333,7 @@ namespace panoramix {
             program->disableAttributeArray("normal");
             program->disableAttributeArray("color");
             program->disableAttributeArray("texCoord");
-            program->disableAttributeArray("claz");
+            program->disableAttributeArray("entityIndex");
             
             program->release();
 
@@ -366,7 +462,7 @@ namespace panoramix {
             }
         }
 
-        void VisualObjectScene::render(const Options & options) const {
+        void VisualObjectScene::render(const RenderOptions & options) const {
             for (auto & n : _tree.nodes()){
                 if (n.exists){
                     _tree.data(n.topo.hd)->render(options, _internal->calculatedModelMatrices.at(n.topo.hd));
@@ -433,7 +529,7 @@ namespace panoramix {
 
         static const bool g_UseBruteForce = false;
 
-        VisualObjectMeshTriangle VisualObjectScene::pickOnScreen(const Options & options,
+        VisualObjectMeshTriangle VisualObjectScene::pickOnScreen(const RenderOptions & options,
             const core::Point2 & pOnScreen) const {
 
             InfiniteLine3 centerRay(options.camera.eye(), normalize(options.camera.spatialDirection(pOnScreen)));
@@ -536,11 +632,11 @@ namespace panoramix {
 
         class VisualizerWidget : public QGLWidget {
         public:
-            Options options;
+            RenderOptions options;
             VisualObjectScene scene;
 
             VisualizerWidget(const Visualizer & v, QWidget * parent = nullptr) 
-                : QGLWidget(parent), options(v.options), scene(v.tree()) {
+                : QGLWidget(parent), options(v.renderOptions), scene(v.tree()) {
                 setMouseTracking(true);
                 setAutoBufferSwap(false);
             }
@@ -714,12 +810,12 @@ namespace panoramix {
             VisualizerMainWindow * mwin = new VisualizerMainWindow();
             mwin->setCentralWidget(w);
             mwin->setAttribute(Qt::WA_DeleteOnClose);
-            mwin->resize(MakeQSize(options.camera.screenSize()));
-            mwin->setWindowTitle(QString::fromStdString(options.winName));
+            mwin->resize(MakeQSize(renderOptions.camera.screenSize()));
+            mwin->setWindowTitle(QString::fromStdString(renderOptions.winName));
             mwin->setWindowIcon(Singleton::DefaultConfiguration().icon);
             mwin->setStyleSheet(Singleton::DefaultConfiguration().css);
             auto palette = mwin->palette();
-            palette.setColor(QPalette::Window, MakeQColor(options.backgroundColor));
+            palette.setColor(QPalette::Window, MakeQColor(renderOptions.backgroundColor));
             mwin->setPalette(palette);
             //qDebug() << mwin->styleSheet();
             if (autoSetCamera) {

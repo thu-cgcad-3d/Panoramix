@@ -141,91 +141,6 @@ namespace panoramix {
         const OpenGLShaderSource & PredefinedShaderSource(OpenGLShaderSourceDescriptor descriptor);
 
 
-        // opengl mesh
-        class OpenGLMesh {
-        public:
-            struct Vertex {
-                Vertex();
-                core::Vec4f position4;
-                core::Vec3f normal3;
-                core::Vec4f color4;
-                core::Vec2f texCoord2;
-                float pointSize;
-            };
-
-            using VertHandle = uint32_t;
-            using LineHandle = uint32_t;
-            using TriangleHandle = uint32_t;
-
-        public:
-            VertHandle addVertex(const Vertex & v);
-            VertHandle addVertex(const core::Vec4f & p,
-                const core::Vec3f & n = core::Vec3f(0, 0, 0),
-                const core::Vec4f & c = core::Vec4f(0, 0, 0, 1),
-                const core::Vec2f & t = core::Vec2f(0, 0),
-                float ps = 1.0);
-
-            LineHandle addLine(VertHandle v1, VertHandle v2);
-            LineHandle addIsolatedLine(const Vertex & v1, const Vertex & v2);
-
-            TriangleHandle addTriangle(VertHandle v1, VertHandle v2, VertHandle v3);
-            TriangleHandle addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3);
-
-            void addQuad(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4);
-            void addPolygon(const std::vector<VertHandle> & vhs);
-
-            void clear();
-
-            core::Box3 boundingBox() const;
-
-            inline const std::vector<Vertex> & vertices() const { return _vertices; }
-            inline std::vector<Vertex> & vertices() { return _vertices; }
-
-            inline const std::vector<VertHandle> & iPoints() const { return _iPoints; }
-            inline const std::vector<VertHandle> & iLines() const { return _iLines; }
-            inline const std::vector<VertHandle> & iTriangles() const { return _iTriangles; }
-
-        private:
-            std::vector<Vertex> _vertices;
-            std::vector<VertHandle> _iPoints;
-            std::vector<LineHandle> _iLines;
-            std::vector<TriangleHandle> _iTriangles;
-
-        public:            
-            static OpenGLMesh MakeCube();
-            static OpenGLMesh MakeSphere(int m = 32, int n = 64);
-
-            template <class Point3IteratorT>
-            static OpenGLMesh FromPoints(Point3IteratorT pointsBegin, Point3IteratorT pointsEnd) {
-                OpenGLMesh m;
-                auto n = std::distance(pointsBegin, pointsEnd);
-                m._vertices.reserve(n);
-                m._iPoints.reserve(n);
-                for (auto i = pointsBegin; i != pointsEnd; ++i) {
-                    auto & p = *i;
-                    m.addVertex(core::Vec4f(p[0], p[1], p[2], 1.0f));
-                }
-                return m;
-            }
-
-            template <class Line3IteratorT>
-            static OpenGLMesh FromLines(Line3IteratorT linesBegin, Line3IteratorT linesEnd) {
-                OpenGLMesh m;
-                auto n = std::distance(linesBegin, linesEnd);
-                m._vertices.reserve(n * 2);
-                m._iLines.reserve(n);
-                for (auto i = linesBegin; i != linesEnd; ++i) {
-                    auto & line = *i;
-                    Vertex v1, v2;
-                    v1.position4 = core::Vec4f(line.first[0], line.first[1], line.first[2], 1.0f);
-                    v2.position4 = core::Vec4f(line.second[0], line.second[1], line.second[2], 1.0f);
-                    m.addIsolatedLine(v1, v2);
-                }
-                return m;
-            }
-
-        };
-
 
 
         // spatial projected polygon for panorama reconstruction
@@ -245,7 +160,7 @@ namespace panoramix {
                 core::Vec3f normal;
                 core::Vec4f color; // the intrinsic color
                 core::Vec2f texCoord;
-                int32_t claz;
+                int entityIndex; // index in container
             };
 
             using VertHandle = uint32_t;
@@ -259,11 +174,6 @@ namespace panoramix {
 
 
             VertHandle addVertex(const Vertex & v);
-            VertHandle addVertex(const core::Vec4f & p,
-                const core::Vec3f & n = core::Vec3f(0, 0, 0),
-                const core::Vec4f & c = core::Vec4f(0, 0, 0, 0),
-                const core::Vec2f & t = core::Vec2f(0, 0),
-                int32_t claz = -1);
 
             LineHandle addLine(VertHandle v1, VertHandle v2);
             LineHandle addIsolatedLine(const Vertex & v1, const Vertex & v2);
@@ -285,97 +195,15 @@ namespace panoramix {
         };
 
 
-        struct DiscretizeOptions {
-            Color color;
-            ColorTable colorTable;
-            bool isolatedTriangles;
-            int subdivisionNums[2];
-            OpenGLShaderSource defaultShaderSource;
-            float lineWidth;
-            float pointSize;
-        };
-
-        template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Point<T, 3> & p, const DiscretizeOptions & o){
-            auto vh = mesh.addVertex(core::Vec4f(p[0], p[1], p[2], 1.0f));
-            mesh.vertices[vh].color = o.color;
-            return mesh;
-        }
-
-        template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Line<T, 3> & l, const DiscretizeOptions & o){
-            TriMesh::Vertex v1, v2;
-            v1.position = core::Concat(core::ConvertTo<float>(l.first), 1.0f);
-            v1.color = o.color;
-            v2.position = core::Concat(core::ConvertTo<float>(l.second), 1.0f);
-            v2.color = o.color;
-            mesh.addIsolatedLine(v1, v2);
-            return mesh;
-        }
-
-        TriMesh & Discretize(TriMesh & mesh, const core::Sphere3 & s, const DiscretizeOptions & o);
-        template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Sphere<T, 3> & s, const DiscretizeOptions & o){
-            return Discretize(mesh, core::Sphere3{ ConvertTo<double>(s.center), static_cast<double>(s.radius) });
-        }
-
-        template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Polygon<T, 3> & p, const DiscretizeOptions & o) {
-            std::vector<TriMesh::VertHandle> vhandles(p.corners.size());
-            for (int i = 0; i < p.corners.size(); i++){
-                vhandles[i] = mesh.addVertex(core::Vec4f(p.corners[i][0], p.corners[i][1], p.corners[i][2], 1.0), 
-                    core::ConvertTo<float>(p.normal), o.color);
-            }
-            mesh.addPolygon(vhandles);
-            return mesh;
-        }
+      
 
 
-        TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o);
-
-        template <class T, class AllocT>
-        inline TriMesh & Discretize(TriMesh & mesh, const std::vector<T, AllocT> & v, const DiscretizeOptions & o){
-            for (auto & e : v){
-                Discretize(mesh, e, o);
-            }
-            return mesh;
-        }
-
-        template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Classified<T> & c, const DiscretizeOptions & o){
-            auto oo = o;
-            oo.color = o.colorTable[c.claz];
-            return Discretize(mesh, c.component, oo);
-        }
-
-
-        // Is discretizable ?
-        namespace {
-            template <class T>
-            struct IsDiscretizableImp {
-                template <class TT>
-                static auto test(int) -> decltype(
-                    vis::Discretize(std::declval<TriMesh &>(), std::declval<TT>(), std::declval<DiscretizeOptions>()),
-                    std::true_type()
-                    );
-                template <class>
-                static std::false_type test(...);
-                static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
-            };
-        }
-
-        template <class T>
-        struct IsDiscretizable : std::integral_constant<bool, IsDiscretizableImp<T>::value> {};
 
 
     }
 
 
     namespace core {
-
-        inline Box3 BoundingBox(const vis::OpenGLMesh & m) {
-            return m.boundingBox();
-        }
 
         Box3 BoundingBox(const vis::SpatialProjectedPolygon & spp);
 

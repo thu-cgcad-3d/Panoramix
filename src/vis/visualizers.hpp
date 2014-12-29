@@ -17,19 +17,104 @@ namespace panoramix {
             Unknown
         };
 
-        struct Options {
-            std::string winName;
 
-            Color backgroundColor;
-            RenderModeFlags renderMode;
-            
-            core::PerspectiveCamera camera;
-
-            float bwColor;
-            float bwTexColor;
+        // discretization
+        struct DiscretizeOptions {
+            inline DiscretizeOptions() 
+                : color(0, 0, 0, 1), index(0), isolatedTriangles(false) {
+                subdivisionNums[0] = 32;
+                subdivisionNums[1] = 64;
+            }
+            Color color;
+            vis::ColorTable colorTable;
+            int index;
+            bool isolatedTriangles;
+            int subdivisionNums[2];
         };
 
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Point<T, 3> & p, const DiscretizeOptions & o){
+            auto vh = mesh.addVertex(core::Vec4f(p[0], p[1], p[2], 1.0f));
+            mesh.vertices[vh].color = o.color;
+            mesh.vertices[vh].entityIndex = o.index;
+            return mesh;
+        }
 
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Line<T, 3> & l, const DiscretizeOptions & o){
+            TriMesh::Vertex v1, v2;
+            v1.position = core::Concat(core::ConvertTo<float>(l.first), 1.0f);
+            v1.color = o.color;
+            v1.entityIndex = o.index;
+            v2.position = core::Concat(core::ConvertTo<float>(l.second), 1.0f);
+            v2.color = o.color;
+            v2.entityIndex = o.index;
+            mesh.addIsolatedLine(v1, v2);
+            return mesh;
+        }
+
+        TriMesh & Discretize(TriMesh & mesh, const core::Sphere3 & s, const DiscretizeOptions & o);
+
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Sphere<T, 3> & s, const DiscretizeOptions & o){
+            return Discretize(mesh, core::Sphere3{ ConvertTo<double>(s.center), static_cast<double>(s.radius) });
+        }
+
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Polygon<T, 3> & p, const DiscretizeOptions & o) {
+            std::vector<TriMesh::VertHandle> vhandles(p.corners.size());
+            for (int i = 0; i < p.corners.size(); i++){
+                TriMesh::Vertex v;
+                v.position = core::Vec4f(p.corners[i][0], p.corners[i][1], p.corners[i][2], 1.0);
+                v.normal = core::ConvertTo<float>(p.normal);
+                v.color = o.color;
+                v.entityIndex = o.index;
+                vhandles[i] = mesh.addVertex(v);
+            }
+            mesh.addPolygon(vhandles);
+            return mesh;
+        }
+
+        TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o);
+        
+        template <class T, class AllocT>
+        inline TriMesh & Discretize(TriMesh & mesh, const std::vector<T, AllocT> & v, const DiscretizeOptions & o){
+            auto oo = o;
+            for (auto & e : v){
+                Discretize(mesh, e, oo);
+                oo.index++;
+            }
+            return mesh;
+        }
+
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const core::Classified<T> & c, const DiscretizeOptions & o){
+            auto oo = o;
+            oo.color = o.colorTable[c.claz];
+            return Discretize(mesh, c.component, oo);
+        }
+
+
+        // Is discretizable ?
+        namespace {
+            template <class T>
+            struct IsDiscretizableImp {
+                template <class TT>
+                static auto test(int) -> decltype(
+                    vis::Discretize(std::declval<TriMesh &>(), std::declval<TT>(), std::declval<DiscretizeOptions>()),
+                    std::true_type()
+                    );
+                template <class>
+                static std::false_type test(...);
+                static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
+            };
+        }
+
+        template <class T>
+        struct IsDiscretizable : std::integral_constant<bool, IsDiscretizableImp<T>::value> {};
+
+
+        // resource making
         struct Resource {
             virtual bool isNull() const = 0;
             virtual bool initialize() { return true; }
@@ -50,6 +135,8 @@ namespace panoramix {
 
        
 
+
+        // building visual objects
         class VisualObject;
         using VisualObjectPtr = std::shared_ptr<VisualObject>;
         using VisualObjectTree = core::Forest<VisualObjectPtr>;
@@ -57,7 +144,8 @@ namespace panoramix {
         using VisualObjectHandle = VisualObjectTree::NodeHandle;
         using VisualObjectMeshTriangle = std::pair<VisualObjectHandle, TriMesh::TriangleHandle>;
 
-        typedef bool VisualObjectCallbackFunction(InteractionID, const VisualObjectTree &, const VisualObjectMeshTriangle &);        
+        typedef bool VisualObjectCallbackFunction(InteractionID, 
+            const VisualObjectTree &, const VisualObjectMeshTriangle &);        
         template <class T> using VisualObjectCallbackFunctionSimple = void(InteractionID, T & data);
 
         namespace {
@@ -67,7 +155,8 @@ namespace panoramix {
                 template <class FunAndArgTT>
                 static auto test(int) -> decltype(
                     std::declval<FunAndArgTT>().first(Unknown,
-                    std::declval<VisualObjectTree>(), std::declval<VisualObjectMeshTriangle>()),
+                        std::declval<VisualObjectTree>(), 
+                        std::declval<VisualObjectMeshTriangle>()),
                     std::true_type()
                     );
 
@@ -111,12 +200,22 @@ namespace panoramix {
             CallbackFunctionType::None))> {};
 
         
+        
+
+        struct RenderOptions {
+            std::string winName;
+            Color backgroundColor;
+            RenderModeFlags renderMode;
+            core::PerspectiveCamera camera;
+            float bwColor;
+            float bwTexColor;
+        };
 
         class VisualObjectInternal;
         class VisualObject {
         public:
-            explicit VisualObject();
-            explicit VisualObject(const OpenGLShaderSource & shaderSource);
+            explicit VisualObject(int eleNum = 1);
+            explicit VisualObject(int eleNum, const OpenGLShaderSource & shaderSource);
             virtual ~VisualObject();
 
             // install shaders
@@ -127,7 +226,7 @@ namespace panoramix {
             void initialize() const;
 
             // render with given camera 
-            void render(const Options & options, const core::Mat4f & thisModelMatrix) const;
+            void render(const RenderOptions & options, const core::Mat4f & thisModelMatrix) const;
 
             // model matrix
             core::Mat4f & modelMatrix() { return _modelMat; }
@@ -176,42 +275,99 @@ namespace panoramix {
             VisualObjectInternal * _internal;
             
             std::function<VisualObjectCallbackFunction> _callback;
+            int _eleNum;
+        };
+
+
+        struct VisualObjectInstallingOptions {
+            OpenGLShaderSource defaultShaderSource;
+            float lineWidth;
+            float pointSize;
+            DiscretizeOptions discretizeOptions;
         };
 
 
         template <class T>
         std::shared_ptr<VisualObject> Visualize(const T & data,
-            const DiscretizeOptions & dopt){
-            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>();
+            const VisualObjectInstallingOptions & o){
+            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(1);
+           
+            auto dopt = o.discretizeOptions;
+            dopt.index = 0;
             Discretize(vo->mesh(), data, dopt);
-            vo->setShaderSource(dopt.defaultShaderSource);
-            vo->setLineWidth(dopt.lineWidth);
-            vo->setPointSize(dopt.pointSize);
+            
+            vo->setShaderSource(o.defaultShaderSource);
+            vo->setLineWidth(o.lineWidth);
+            vo->setPointSize(o.pointSize);
+            return vo;
+        }
+
+        template <class T>
+        std::shared_ptr<VisualObject> VisualizeCollection(const std::vector<T> & data,
+            const VisualObjectInstallingOptions & o){
+            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(data.size());
+
+            auto dopt = o.discretizeOptions;
+            dopt.index = 0;
+            Discretize(vo->mesh(), data, dopt);
+
+            vo->setShaderSource(o.defaultShaderSource);
+            vo->setLineWidth(o.lineWidth);
+            vo->setPointSize(o.pointSize);
             return vo;
         }
 
         template <class T, class FunT>
-        std::shared_ptr<VisualObject> VisualizeWithBinding(T & data, const FunT & fun, 
-            const DiscretizeOptions & dopt, 
-            ComplexTag){
-            std::shared_ptr<VisualObject> vo;
+        std::shared_ptr<VisualObject> Visualize(T & data, const FunT & fun,
+            const VisualObjectInstallingOptions & o,
+            ComplexTag ){
+            
+            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(1);
+            
+            auto dopt = o.discretizeOptions;
+            dopt.index = 0;
             Discretize(vo->mesh(), data, dopt);
-            vo->setShaderSource(dopt.defaultShaderSource);
+            
+            vo->setShaderSource(o.defaultShaderSource);
             vo->bindCallbackFunction(fun);
-            vo->setLineWidth(dopt.lineWidth);
-            vo->setPointSize(dopt.pointSize);
+            vo->setLineWidth(o.lineWidth);
+            vo->setPointSize(o.pointSize);
             return vo;
         }
 
         template <class T, class FunT>
-        std::shared_ptr<VisualObject> VisualizeWithBinding(T & data, const FunT & fun, 
-            const DiscretizeOptions & dopt,
-            SimpleTag){
-            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>();
+        std::shared_ptr<VisualObject> VisualizeCollection(std::vector<T> & data, const FunT & fun,
+            const VisualObjectInstallingOptions & o,
+            ComplexTag ){
+
+            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(data.size());
+
+            auto dopt = o.discretizeOptions;
+            dopt.index = 0;
             Discretize(vo->mesh(), data, dopt);
-            vo->setShaderSource(dopt.defaultShaderSource);
-            vo->setLineWidth(dopt.lineWidth);
-            vo->setPointSize(dopt.pointSize);
+
+            vo->setShaderSource(o.defaultShaderSource);
+            vo->bindCallbackFunction(fun);
+            vo->setLineWidth(o.lineWidth);
+            vo->setPointSize(o.pointSize);
+            return vo;
+        }
+
+
+        template <class T, class FunT>
+        std::shared_ptr<VisualObject> Visualize(T & data, const FunT & fun,
+            const VisualObjectInstallingOptions & o,
+            SimpleTag){
+            
+            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(1);
+            
+            auto dopt = o.discretizeOptions;
+            dopt.index = 0;
+            Discretize(vo->mesh(), data, dopt);
+
+            vo->setShaderSource(o.defaultShaderSource);
+            vo->setLineWidth(o.lineWidth);
+            vo->setPointSize(o.pointSize);
 
             struct CallbackFunction {
                 inline CallbackFunction(T & d, const FunT & f)
@@ -228,6 +384,47 @@ namespace panoramix {
             vo->bindCallbackFunction(CallbackFunction(data, fun));
             return vo;
         }
+
+        template <class T, class FunT>
+        std::shared_ptr<VisualObject> VisualizeCollection(std::vector<T> & data, const FunT & fun,
+            const VisualObjectInstallingOptions & o,
+            SimpleTag){
+
+            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(data.size());
+
+            auto dopt = o.discretizeOptions;
+            dopt.index = 0;
+            Discretize(vo->mesh(), data, dopt);
+
+            vo->setShaderSource(o.defaultShaderSource);
+            vo->setLineWidth(o.lineWidth);
+            vo->setPointSize(o.pointSize);
+
+            struct CallbackFunction {
+                inline CallbackFunction(std::vector<T> & d, const FunT & f)
+                : originalData(d), originalFun(f){}
+                inline bool operator() (InteractionID iid,
+                    const VisualObjectTree & tree, const VisualObjectMeshTriangle & omt) const {
+                    auto & mesh = tree.data(omt.first)->mesh();
+                    TriMesh::TriangleHandle v1, v2, v3;
+                    mesh.fetchTriangleVerts(omt.second, v1, v2, v3);
+                    int indices[] = { 
+                        mesh.vertices[v1].entityIndex, 
+                        mesh.vertices[v2].entityIndex, 
+                        mesh.vertices[v3].entityIndex 
+                    };
+                    originalFun(iid, originalData[indices[0]]);
+                    return true;
+                }
+                std::vector<T> & originalData;
+                const FunT & originalFun;
+            };
+
+            vo->bindCallbackFunction(CallbackFunction(data, fun));
+            return vo;
+        }
+
+        
 
 
       
@@ -265,9 +462,9 @@ namespace panoramix {
             core::Box3 boundingBoxOfTriangleInObjectMesh(const VisualObjectMeshTriangle & omt) const;
 
             void initialize() const;
-            void render(const Options & options) const;
+            void render(const RenderOptions & options) const;
 
-            VisualObjectMeshTriangle pickOnScreen(const Options & options,
+            VisualObjectMeshTriangle pickOnScreen(const RenderOptions & options,
                 const core::Point2 & pOnScreen) const;
 
         private:
@@ -281,25 +478,25 @@ namespace panoramix {
             explicit Visualizer(const std::string & winName = "panoramix::vis::Visualizer") {
                 _activeOH = _tree.addRoot(std::make_shared<VisualObject>());
 
-                options.winName = winName;
-                options.backgroundColor = ColorFromTag(vis::ColorTag::White);
-                options.renderMode = vis::RenderModeFlag::All;
-                options.camera = core::PerspectiveCamera(500, 500, 250, { 1.0, 1.0, 1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 });
-                options.bwColor = 0.3;
-                options.bwTexColor = 0.7;
+                renderOptions.winName = winName;
+                renderOptions.backgroundColor = ColorFromTag(vis::ColorTag::White);
+                renderOptions.renderMode = vis::RenderModeFlag::All;
+                renderOptions.camera = core::PerspectiveCamera(500, 500, 250, { 1.0, 1.0, 1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 });
+                renderOptions.bwColor = 0.3;
+                renderOptions.bwTexColor = 0.7;
 
-                doptions.color = vis::ColorFromTag(vis::ColorTag::Black);
-                doptions.colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
-                doptions.isolatedTriangles = true;
-                doptions.subdivisionNums[0] = 32;
-                doptions.subdivisionNums[1] = 64;
-                doptions.defaultShaderSource = vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XTriangles);
-                doptions.pointSize = 10.0;
-                doptions.lineWidth = 5.0;
+                installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::Black);
+                installingOptions.discretizeOptions.colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
+                installingOptions.discretizeOptions.isolatedTriangles = true;
+                installingOptions.discretizeOptions.subdivisionNums[0] = 32;
+                installingOptions.discretizeOptions.subdivisionNums[1] = 64;
+                installingOptions.defaultShaderSource = vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XTriangles);
+                installingOptions.pointSize = 10.0;
+                installingOptions.lineWidth = 5.0;
             }
-
-            Options options;
-            DiscretizeOptions doptions;
+                        
+            VisualObjectInstallingOptions installingOptions;
+            RenderOptions renderOptions;
 
         public:
             const VisualObjectTree & tree() const { return _tree; }
@@ -314,12 +511,12 @@ namespace panoramix {
 
             template <class T>
             inline Visualizer & add(const T & data) {
-                _tree.add(_activeOH, Visualize<T>(data, doptions));
+                _tree.add(_activeOH, Visualize(data, installingOptions));
                 return *this;
             }
             template <class T, class FunT>
             inline Visualizer & add(T & data, const FunT & fun) {
-                _tree.add(_activeOH, VisualizeWithBinding<T, FunT>(data, fun, doptions, 
+                _tree.add(_activeOH, Visualize(data, fun, doptions,
                     std::integral_constant<CallbackFunctionType, CallbackFunctionTraits<FunT, T>::value>()));
                 return *this;
             }
@@ -327,12 +524,26 @@ namespace panoramix {
 
             template <class T>
             inline Visualizer & begin(const T & data) {
-                _activeOH = _tree.add(_activeOH, Visualize<T>(data, doptions));
+                _activeOH = _tree.add(_activeOH, Visualize<T>(data, installingOptions));
                 return *this;
             }
+
+            template <class T>
+            inline Visualizer & begin(const std::vector<T> & data) {
+                _activeOH = _tree.add(_activeOH, VisualizeCollection<T>(data, installingOptions));
+                return *this;
+            }
+
             template <class T, class FunT>
             inline Visualizer & begin(T & data, const FunT & fun) { 
-                _activeOH = _tree.add(_activeOH, VisualizeWithBinding<T, FunT>(data, fun, doptions,
+                _activeOH = _tree.add(_activeOH, Visualize<T, FunT>(data, fun, installingOptions,
+                    std::integral_constant<CallbackFunctionType, CallbackFunctionTraits<FunT, T>::value>()));
+                return *this;
+            }
+
+            template <class T, class FunT>
+            inline Visualizer & begin(std::vector<T> & data, const FunT & fun) {
+                _activeOH = _tree.add(_activeOH, VisualizeCollection<T, FunT>(data, fun, installingOptions,
                     std::integral_constant<CallbackFunctionType, CallbackFunctionTraits<FunT, T>::value>()));
                 return *this;
             }
@@ -355,7 +566,7 @@ namespace panoramix {
                 return *this; 
             }
 
-            inline Visualizer & camera(const core::PerspectiveCamera & cam) { options.camera = cam; return *this; }
+            inline Visualizer & camera(const core::PerspectiveCamera & cam) { renderOptions.camera = cam; return *this; }
 
             void show(bool doModal = true, bool autoSetCamera = true);
 

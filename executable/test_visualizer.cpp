@@ -53,27 +53,22 @@ TEST(Visualizer, _1){
 
     using namespace vis;
     
-    std::vector<core::Point3> pts(10);
-    for (int i = 0; i < pts.size(); i++)
-        pts[i] = core::Point3(i / 10.0, i / 10.0, i / 10.0);
-    core::Sphere3 s = { core::Point3(0, 0, 0), 0.3f };
+   
+    std::vector<core::Sphere3> ss = { { core::Point3(1, 1, 1), 2.0 }, { core::Point3(-1, -1, -1), 2.0 } };
+
     auto t = core::MakeTriangle(core::Point3(0, 0, 1), core::Point3(1, 0, 0), core::Point3(0, 1, 0));
     
     vis::ResourceStore::set("texture", cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
 
     int clickedCount = 0;
     Visualizer("_1")
-        .begin(core::Line3(core::Point3(1, 0, 1), core::Point3(0, 1, 0)))
-            .shaderSource(vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XLines))
-        .end()
-        .begin(s, [&clickedCount](vis::InteractionID iid, decltype(s) &){
+        .begin(ss, [&clickedCount](vis::InteractionID iid, core::Sphere3 & s){
             if (iid == vis::ClickLeftButton)
-                std::cout << "clicked on the sphere, count: " << (++clickedCount) << std::endl;
+                std::cout << "clicked on the spheres, its center is at " << s.center << std::endl;
             })
             .resource("texture")
             .shaderSource(vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama))
         .end()
-        .add(pts)
         .show();
 
 }

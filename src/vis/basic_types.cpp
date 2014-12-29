@@ -599,65 +599,7 @@ namespace panoramix {
 
 
 
-        
-
-        // opengl _mesh data implementation
-        OpenGLMesh::Vertex::Vertex() 
-            : position4(0, 0, 0, 1), normal3(0, 0, 0), color4(0, 0, 0, 1), texCoord2(0, 0), pointSize(3.0) {
-        }
-
-
-        OpenGLMesh::VertHandle OpenGLMesh::addVertex(const OpenGLMesh::Vertex & v) {
-            _vertices.push_back(v);
-            _iPoints.push_back(static_cast<OpenGLMesh::VertHandle>(_vertices.size() - 1));
-            return _iPoints.back();
-        }
-
-        OpenGLMesh::VertHandle OpenGLMesh::addVertex(const Vec4f & p, const Vec3f & n, const Vec4f & c, const Vec2f & t, float ps) {
-            Vertex v;
-            v.position4 = p;
-            v.normal3 = n;
-            v.color4 = c;
-            v.texCoord2 = t;
-            v.pointSize = ps;
-            return addVertex(v);
-        }
-
-        OpenGLMesh::LineHandle OpenGLMesh::addLine(OpenGLMesh::VertHandle v1, OpenGLMesh::VertHandle v2) {
-            _iLines.push_back(v1);
-            _iLines.push_back(v2);
-            return _iLines.size() / 2;
-        }
-
-        OpenGLMesh::LineHandle OpenGLMesh::addIsolatedLine(const Vertex & v1, const Vertex & v2) {
-            _vertices.push_back(v1);
-            _iLines.push_back(_vertices.size() - 1);
-            _vertices.push_back(v2);
-            _iLines.push_back(_vertices.size() - 1);
-            return _iLines.size() / 2;
-        }
-
-        OpenGLMesh::TriangleHandle OpenGLMesh::addTriangle(OpenGLMesh::VertHandle v1, OpenGLMesh::VertHandle v2, OpenGLMesh::VertHandle v3) {
-            _iTriangles.push_back(v1);
-            _iTriangles.push_back(v2);
-            _iTriangles.push_back(v3);
-            return _iTriangles.size() / 3;
-        }
-
-        OpenGLMesh::TriangleHandle OpenGLMesh::addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3) {
-            _vertices.push_back(v1);
-            _iTriangles.push_back(_vertices.size() - 1);
-            _vertices.push_back(v2);
-            _iTriangles.push_back(_vertices.size() - 1);
-            _vertices.push_back(v3);
-            _iTriangles.push_back(_vertices.size() - 1);
-            return _iTriangles.size() / 3;
-        }
-
-        void OpenGLMesh::addQuad(OpenGLMesh::VertHandle v1, OpenGLMesh::VertHandle v2, OpenGLMesh::VertHandle v3, OpenGLMesh::VertHandle v4) {
-            addTriangle(v1, v2, v3);
-            addTriangle(v1, v3, v4);
-        }
+       
 
         namespace {
 
@@ -671,113 +613,11 @@ namespace panoramix {
 
         }
 
-        void OpenGLMesh::addPolygon(const std::vector<OpenGLMesh::VertHandle> & vhs) {
-            assert(vhs.size() >= 3);
-            // get normal direction
-            Vec3 normal = normalize(
-                (ToVec3Affine(_vertices[vhs[1]].position4) - ToVec3Affine(_vertices[vhs[0]].position4)).cross(
-                (ToVec3Affine(_vertices[vhs[2]].position4) - ToVec3Affine(_vertices[vhs[1]].position4)))
-            );
-
-            TriangulatePolygon(vhs.begin(), vhs.end(), [this, &normal](VertHandle vh) {
-                Vec3 v = ToVec3Affine(_vertices[vh].position4);
-                return ToVec2(v - v.dot(normal) * normal);
-            }, [this](VertHandle a, VertHandle b, VertHandle c){
-                addTriangle(a, b, c);
-            });
-        }
-
-        void OpenGLMesh::clear() {
-            _vertices.clear();
-            _iPoints.clear();
-            _iLines.clear();
-            _iTriangles.clear();
-        }
-
-        Box3 OpenGLMesh::boundingBox() const {
-            if (_vertices.empty())
-                return Box3();
-            Box3 box(ToVec3Affine(_vertices.front().position4), ToVec3Affine(_vertices.front().position4));
-            for (auto & v : _vertices) {
-                auto p = ToVec3Affine(v.position4);
-                box = box | BoundingBox(p);
-            }
-            return box;
-        }
-
-        OpenGLMesh OpenGLMesh::MakeCube() {
-            OpenGLMesh mesh;
-            mesh._vertices.reserve(8);
-
-            static const Vec4 verts[] = {
-                { -1, -1, -1, 1 },
-                { 1, -1, -1, 1 },
-                { 1, 1, -1, 1 },
-                { -1, 1, -1, 1 },
-                { -1, -1, 1, 1 },
-                { 1, -1, 1, 1 },
-                { 1, 1, 1, 1 },
-                { -1, 1, 1, 1 }
-            };
-
-            for (auto & v : verts){
-                mesh.addVertex(v);
-            }
-
-            static const VertHandle quadfaces[6][4] = {
-                { 0, 1, 5, 4 },
-                { 4, 5, 6, 7 },
-                { 1, 2, 6, 5 },
-                { 0, 4, 7, 3 },
-                { 2, 3, 7, 6 },
-                { 1, 0, 3, 2 }
-            };
-
-            for (int i = 0; i < 6; i++) {
-                mesh.addTriangle(quadfaces[i][0], quadfaces[i][1], quadfaces[i][2]);
-                mesh.addTriangle(quadfaces[i][0], quadfaces[i][2], quadfaces[i][3]);
-            }
-            return mesh;
-        }
-
-        OpenGLMesh OpenGLMesh::MakeSphere(int m, int n) {
-            OpenGLMesh mesh;
-            mesh._vertices.reserve(m * n);
-            std::vector<std::vector<VertHandle>> vhs(m, std::vector<VertHandle>(n));
-            for (int i = 0; i < m; i++) {
-                for (int j = 0; j < n; j++) {
-                    float xratio = 1.0f / (n - 1) * j;
-                    float yratio = 1.0f / (m - 1) * i;
-                    float xangle = M_PI * 2 * xratio;
-                    float yangle = M_PI * yratio - M_PI_2;
-                    Vec4 point = { cos(xangle)*cos(yangle), sin(xangle)*cos(yangle), sin(yangle), 1 };
-                    Vertex v;
-                    v.position4 = point;
-                    v.texCoord2 = { xratio, yratio };
-                    vhs[i][j] = mesh.addVertex(v);
-                }
-            }
-
-            for (int i = 1; i < m; i++) {
-                for (int j = 1; j < n; j++) {
-                    mesh.addTriangle(vhs[i][j], vhs[i][j - 1], vhs[i - 1][j - 1]);
-                    mesh.addTriangle(vhs[i][j], vhs[i - 1][j - 1], vhs[i - 1][j]);
-                }
-            }
-            return mesh;
-        }
-
-
-
-
-
-
-
 
 
         // tri mesh implementation
         TriMesh::Vertex::Vertex()
-            : position(0, 0, 0, 1), normal(0, 0, 0), color(0, 0, 0, 1), texCoord(0, 0), claz(-1) {
+            : position(0, 0, 0, 1), normal(0, 0, 0), color(0, 0, 0, 1), texCoord(0, 0), entityIndex(-1) {
         }
 
 
@@ -785,16 +625,6 @@ namespace panoramix {
             vertices.push_back(v);
             iPoints.push_back(static_cast<TriMesh::VertHandle>(vertices.size() - 1));
             return iPoints.back();
-        }
-
-        TriMesh::VertHandle TriMesh::addVertex(const Vec4f & p, const Vec3f & n, const Vec4f & c, const Vec2f & t, int32_t claz) {
-            Vertex v;
-            v.position = p;
-            v.normal = n;
-            v.color = c;
-            v.texCoord = t;
-            v.claz = claz;
-            return addVertex(v);
         }
 
         TriMesh::LineHandle TriMesh::addLine(TriMesh::VertHandle v1, TriMesh::VertHandle v2) {
@@ -887,78 +717,7 @@ namespace panoramix {
         }
 
 
-        TriMesh & Discretize(TriMesh & mesh, const core::Sphere3 & s, const DiscretizeOptions & o) {
-            int m = o.subdivisionNums[0];
-            int n = o.subdivisionNums[1];
-            if (!o.isolatedTriangles){
-                mesh.vertices.reserve(mesh.vertices.size() + m * n);
-                std::vector<std::vector<TriMesh::VertHandle>> vhs(m, std::vector<TriMesh::VertHandle>(n));
-                for (int i = 0; i < m; i++) {
-                    for (int j = 0; j < n; j++) {
-                        float xratio = 1.0f / n * j;
-                        float yratio = 1.0f / (m-1) * i;
-                        float xangle = M_PI * 2 * xratio;
-                        float yangle = M_PI * yratio - M_PI_2;
-                        Vec4 point = { cos(xangle)*cos(yangle), sin(xangle)*cos(yangle), sin(yangle), 1 };
-                        TriMesh::Vertex v;
-                        v.position = point;
-                        v.texCoord = { xratio, yratio };
-                        v.color = Vec4f(o.color[0], o.color[1], o.color[2], 1.0f);
-                        vhs[i][j] = mesh.addVertex(v);
-                    }
-                }
-                for (int i = 1; i < m; i++) {
-                    int previ = i == 0 ? m - 1 : i -1;
-                    for (int j = 0; j < n; j++) {
-                        int prevj = j == 0 ? n - 1 : j -1;
-                        mesh.addTriangle(vhs[i][j], vhs[i][prevj], vhs[previ][prevj]);
-                        mesh.addTriangle(vhs[i][j], vhs[previ][prevj], vhs[previ][j]);
-                    }
-                }
-            }
-            else {
-                std::vector<std::vector<TriMesh::Vertex>> vs(m, std::vector<TriMesh::Vertex>(n));
-                for (int i = 0; i < m; i++) {
-                    for (int j = 0; j < n; j++) {
-                        float xratio = 1.0f / n * j;
-                        float yratio = 1.0f / (m-1) * i;
-                        float xangle = M_PI * 2 * xratio;
-                        float yangle = M_PI * yratio - M_PI_2;
-                        Vec4 point = { cos(xangle)*cos(yangle), sin(xangle)*cos(yangle), sin(yangle), 1 };
-                        TriMesh::Vertex v;
-                        v.position = point;
-                        v.texCoord = { xratio, yratio };
-                        v.color = Vec4f(o.color[0], o.color[1], o.color[2], 1.0f);
-                        vs[i][j] = v;
-                    }
-                }
-                for (int i = 1; i < m; i++) {
-                    int previ = i == 0 ? m - 1 : i -1;
-                    for (int j = 0; j < n; j++) {
-                        int prevj = j == 0 ? n - 1 : j -1;
-                        mesh.addIsolatedTriangle(vs[i][j], vs[i][prevj], vs[previ][prevj]);
-                        mesh.addIsolatedTriangle(vs[i][j], vs[previ][prevj], vs[previ][j]);
-                    }
-                }
-            }
-            return mesh;
-        }
-
-
-
-        TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o){
-            std::vector<Vec3> cs(spp.corners.size());
-            for (int i = 0; i < spp.corners.size(); i++){
-                InfiniteLine3 line(spp.projectionCenter, spp.corners[i] - spp.projectionCenter);
-                cs[i] = IntersectionOfLineAndPlane(line, spp.plane).position;
-            }
-            std::vector<TriMesh::VertHandle> vhandles(cs.size());
-            for (int i = 0; i < cs.size(); i++){
-                vhandles[i] = mesh.addVertex(Concat(cs[i], 1.0), spp.plane.normal, o.color);
-            }
-            mesh.addPolygon(vhandles);
-            return mesh;
-        }
+      
 
 
     }

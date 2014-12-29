@@ -112,8 +112,8 @@ namespace panoramix {
         }
 
         inline void AdjustNearAndFar(double & n, double & f, const Sphere3 & target, const Vec3 & eye){
-            n = BoundBetween(norm(target.center - eye) - target.radius, 1e-2, 1e4);
-            f = BoundBetween(norm(target.center - eye) + target.radius, 1e2, 1e6);
+            n = BoundBetween(norm(target.center - eye) - target.radius, 1e-2, 1e8);
+            f = BoundBetween(norm(target.center - eye) + target.radius, 1e2, 1e8);
         }
 
         void PerspectiveCamera::focusOn(const Sphere3 & target, bool updateMat) {

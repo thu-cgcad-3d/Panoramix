@@ -558,12 +558,8 @@ namespace panoramix {
         struct Polygon {
             std::vector<core::Point<T, N>> corners;
             core::Vec<T, N> normal;
+            inline Plane<T, N> plane() const { return Plane<T, N>(corners.front(), normal); }
         };
-
-        template <class T, int N>
-        inline bool operator == (const Polygon<T, N> & a, const Polygon<T, N> & b){
-            return a.corners == b.corners && a.normal == b.normal;
-        }
 
         template <class Archive, class T, int N>
         inline void serialize(Archive & ar, Polygon<T, N> & p) {
