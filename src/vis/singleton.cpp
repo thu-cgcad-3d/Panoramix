@@ -3,7 +3,6 @@
 #include <QApplication>
 
 #include "qt_glue.hpp"
-#include "renderable_object.hpp"
 #include "singleton.hpp"
 
 namespace panoramix {

@@ -34,31 +34,47 @@ static_assert(vis::CallbackFunctionTraits<decltype(a), core::Sphere3>::value == 
 static_assert(vis::CallbackFunctionTraits<decltype(b), core::Sphere3>::value == vis::CallbackFunctionType::Complex, "");
 static_assert(vis::CallbackFunctionTraits<int, core::Sphere3>::value == vis::CallbackFunctionType::None, "");
 
+void Print(const core::PerspectiveCamera & cam) {
+    std::cout << std::setprecision(6) << "======================================" << std::endl;
+    std::cout << std::setprecision(6) << "eye:\t" << cam.eye() << std::endl;
+    std::cout << std::setprecision(6) << "center:\t" << cam.center() << std::endl;
+    std::cout << std::setprecision(6) << "up:\t" << cam.up() << std::endl;
+    std::cout << std::setprecision(6) << "size:\t" << cam.screenSize() << std::endl;
+    std::cout << std::setprecision(6) << "focal:\t" << cam.focal() << std::endl;
+    std::cout << std::setprecision(6) << "near:\t" << cam.nearPlane() << std::endl;
+    std::cout << std::setprecision(6) << "far:\t" << cam.farPlane() << std::endl;
+    std::cout << std::setprecision(6) << "viewMat:\t" << std::endl << cam.viewMatrix() << std::endl;
+    std::cout << std::setprecision(6) << "projectMat:\t" << std::endl << cam.projectionMatrix() << std::endl;
+    std::cout << std::setprecision(6) << "viewProjMat:\t" << std::endl << cam.viewProjectionMatrix() << std::endl;
+    std::cout << std::setprecision(6) << "======================================" << std::endl;
+}
 
 TEST(Visualizer, _1){
 
     using namespace vis;
+    
     std::vector<core::Point3> pts(10);
     for (int i = 0; i < pts.size(); i++)
         pts[i] = core::Point3(i / 10.0, i / 10.0, i / 10.0);
     core::Sphere3 s = { core::Point3(0, 0, 0), 0.3f };
-    auto t = core::MakeTriangle(core::Point3(0, 0, 1), core::Point3(1, 0, 1), core::Point3(0, 1, 0));
+    auto t = core::MakeTriangle(core::Point3(0, 0, 1), core::Point3(1, 0, 0), core::Point3(0, 1, 0));
+    
     vis::ResourceStore::set("texture", cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
+
     int clickedCount = 0;
     Visualizer("_1")
         .begin(core::Line3(core::Point3(1, 0, 1), core::Point3(0, 1, 0)))
             .shaderSource(vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XLines))
         .end()
-        .beginWithBinding(t, [&clickedCount](vis::InteractionID iid, decltype(t) & s){
+        .begin(s, [&clickedCount](vis::InteractionID iid, decltype(s) &){
             if (iid == vis::ClickLeftButton)
-                std::cout << "clicked on the triangle, count: " << (++clickedCount) << std::endl;
+                std::cout << "clicked on the sphere, count: " << (++clickedCount) << std::endl;
             })
             .resource("texture")
             .shaderSource(vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama))
         .end()
         .add(pts)
         .show();
-
 
 }
 

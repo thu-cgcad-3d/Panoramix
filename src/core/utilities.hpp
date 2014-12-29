@@ -287,6 +287,37 @@ namespace panoramix {
             return Box<T, N>(s.center).expand(s.radius);
         }
 
+        template <class T, int N>
+        inline Box<T, N> BoundingBox(const Polygon<T, N> & p){
+            Box<T, N> b;
+            for (auto & c : p.corners){
+                b |= BoundingBox(c);
+            }
+            return b;
+        }
+
+        // pointers
+        template <class T>
+        inline auto BoundingBox(T const * const ptr) -> decltype(BoundingBox(*ptr)) {
+            return BoundingBox(*ptr);
+        }
+
+        template <class T>
+        inline auto BoundingBox(std::shared_ptr<T> ptr) -> decltype(BoundingBox(*ptr)) {
+            return BoundingBox(*ptr);
+        }
+
+        template <class T>
+        inline auto BoundingBox(std::unique_ptr<T> ptr) -> decltype(BoundingBox(*ptr)) {
+            return BoundingBox(*ptr);
+        }
+
+        template <class T>
+        inline auto BoundingBox(std::weak_ptr<T> ptr) -> decltype(BoundingBox(*ptr)) {
+            return BoundingBox(*ptr);
+        }
+
+        // decorators
         template <class T>
         inline auto BoundingBox(const Classified<T> & c) -> decltype(BoundingBox(c.component)) {
             return BoundingBox(c.component);

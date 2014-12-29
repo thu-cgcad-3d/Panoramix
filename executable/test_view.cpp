@@ -3,7 +3,7 @@
 #include "../src/core/algorithms.hpp"
 #include "../src/core/view.hpp"
 #include "../src/vis/visualize2d.hpp"
-#include "../src/vis/visualize3d.hpp"
+#include "../src/vis/visualizers.hpp"
 
 #include "test_config.hpp"
 
@@ -215,8 +215,8 @@ void VisualizeMixedGraph(const core::Image & panorama,
     const std::vector<core::Vec3> & vps,
     bool doModal){
     
-    vis::Visualizer3D viz;
-    viz << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB);
+    vis::Visualizer viz("mixed graph");
+    viz.doptions.colorTable = vis::ColorTableDescriptor::RGB;
     
     std::vector<vis::SpatialProjectedPolygon> spps;
     std::vector<core::Classified<core::Line3>> lines;
@@ -248,9 +248,11 @@ void VisualizeMixedGraph(const core::Image & panorama,
         }
     }
 
-    viz << vis::manip3d::Begin(spps) << vis::manip3d::SetTexture(panorama) << vis::manip3d::End;
-    viz << vis::manip3d::SetDefaultLineWidth(5.0) << lines;
-    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black);
+    vis::ResourceStore::set("texture", panorama);
+    viz.begin(spps).resource("texture").end();
+    viz.options.lineWidth = 5.0;
+    viz.doptions.color = vis::ColorFromTag(vis::ColorTag::Black);
+    viz.add(lines);    
 
     std::vector<core::Line3> connectionLines;
     for (auto & patch : patches){
@@ -265,10 +267,10 @@ void VisualizeMixedGraph(const core::Image & panorama,
         }
     }
 
-    viz << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::DarkGray) 
-        << vis::manip3d::SetDefaultLineWidth(1.0)
-        << connectionLines;
-    viz << vis::manip3d::Show(doModal);
+    viz.doptions.color = vis::ColorFromTag(vis::ColorTag::DarkGray);
+    viz.options.lineWidth = 1.0;
+    viz.add(connectionLines);
+    viz.show(doModal);
 
 }
 

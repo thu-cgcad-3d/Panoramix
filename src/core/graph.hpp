@@ -604,6 +604,13 @@ namespace panoramix {
                 return ConditionalContainerWrapper<TripletArray<ForestTopo, T>, NodeExistsPred>(&_nodes);
             }
             inline const TripletArray<ForestTopo, T> & internalNodes() const { return _nodes; }
+            inline NodeHandle firstRoot() const { 
+                for (auto & n : _nodes){
+                    if (n.topo.parent.isInvalid())
+                        return n.topo.hd;
+                }
+                return NodeHandle();
+            }
 
             inline NodeHandle add(NodeHandle parent, const T & data) {
                 ForestTopo topo;
@@ -675,25 +682,6 @@ namespace panoramix {
                 return true;
             }
 
-            //template <class NodeHandleCallbackFunT>
-            //bool depthFirstTraverse(const NodeHandleCallbackFunT & callback) const {
-            //    std::unordered_map<NodeHandle, bool, HandleHasher<ForestTopo>> visited;
-            //    visited.reserve(_nodes.size());
-            //    while (true){
-            //        NodeHandle notVisited;
-            //        for (auto & v : visited){
-            //            if (!v.second){
-            //                notVisited = v.first;
-            //            }
-            //        }
-            //        if (notVisited.isInvalid()){
-            //            return true;
-            //        }
-            //        if (!depthFirstSearch(notVisited, [&callback, &visited](NodeHandle nh) -> bool {
-            //            if (visited)
-            //        }))
-            //    }
-            //}
 
             template <class NodeHandleCallbackFunT>
             bool breadthFirstSearch(NodeHandle asRoot, const NodeHandleCallbackFunT & callback) const {

@@ -130,11 +130,11 @@ namespace panoramix {
             void initialize() const;
 
             // render with given camera 
-            void render(const Options & options, const core::Mat4 & thisModelMatrix) const;
+            void render(const Options & options, const core::Mat4f & thisModelMatrix) const;
 
             // model matrix
-            core::Mat4 & modelMatrix() { return _modelMat; }
-            const core::Mat4 & modelMatrix() const { return _modelMat; }
+            core::Mat4f & modelMatrix() { return _modelMat; }
+            const core::Mat4f & modelMatrix() const { return _modelMat; }
 
             // mesh
             TriMesh & mesh() { return _mesh; }
@@ -164,7 +164,7 @@ namespace panoramix {
             } flags;
 
         protected:
-            core::Mat4 _modelMat;
+            core::Mat4f _modelMat;
             TriMesh _mesh;
             core::Point3 _projectionCenter;
             std::vector<ResourcePtr> _resources;
@@ -231,13 +231,11 @@ namespace panoramix {
             ~VisualObjectScene();
 
             inline void install(const VisualObjectTree & tree) {
-                clear();
                 _tree = tree;
                 update();
             }
 
             inline void install(VisualObjectTree && tree) {
-                clear();
                 _tree = std::move(tree);
                 update();
             }
@@ -253,15 +251,15 @@ namespace panoramix {
             void update();
             void clear();
 
-            core::Box3 boundingBox() const;
-            core::Box3 boundingBoxOfObject(VisualObject * ro) const;
+            const core::Box3 & boundingBox() const;
+            core::Box3 boundingBoxOfObject(VisualObjectHandle h) const;
             core::Box3 boundingBoxOfTriangleInObjectMesh(const VisualObjectMeshTriangle & omt) const;
 
             void initialize() const;
             void render(const Options & options) const;
 
             VisualObjectMeshTriangle pickOnScreen(const Options & options,
-                const core::Point2 & pOnScreen, double distThresOnScreen = 1.0) const;
+                const core::Point2 & pOnScreen) const;
 
         private:
             VisualObjectSceneInternal * _internal;
@@ -311,7 +309,7 @@ namespace panoramix {
                 return *this;
             }
             template <class T, class FunT>
-            inline Visualizer & addWithBinding(T & data, const FunT & fun) {
+            inline Visualizer & add(T & data, const FunT & fun) {
                 _tree.add(_activeOH, VisualizeWithBinding<T, FunT>(data, fun, doptions, 
                     std::integral_constant<CallbackFunctionType, CallbackFunctionTraits<FunT, T>::value>()));
                 return *this;
@@ -324,7 +322,7 @@ namespace panoramix {
                 return *this;
             }
             template <class T, class FunT>
-            inline Visualizer & beginWithBinding(T & data, const FunT & fun) { 
+            inline Visualizer & begin(T & data, const FunT & fun) { 
                 _activeOH = _tree.add(_activeOH, VisualizeWithBinding<T, FunT>(data, fun, doptions,
                     std::integral_constant<CallbackFunctionType, CallbackFunctionTraits<FunT, T>::value>()));
                 return *this;
@@ -348,6 +346,7 @@ namespace panoramix {
                 return *this; 
             }
 
+            inline Visualizer & camera(const core::PerspectiveCamera & cam) { options.camera = cam; return *this; }
 
             void show(bool doModal = true, bool autoSetCamera = true);
 
@@ -363,6 +362,7 @@ namespace panoramix {
 
 
     }
+
 }
  
 #endif

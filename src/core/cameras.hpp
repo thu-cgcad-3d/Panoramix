@@ -37,7 +37,7 @@ namespace panoramix {
             inline const Mat4 & viewMatrix() const { return _viewMatrix; }
             inline const Mat4 & projectionMatrix() const { return _projectionMatrix; }
             inline const Mat4 & viewProjectionMatrix() const { return _viewProjectionMatrix; }
-            inline const Mat4 & viewProjectionMatrixInv() const { return _viewProjectionMatrixInv; }
+            //inline const Mat4 & viewProjectionMatrixInv() const { return _viewProjectionMatrixInv; }
 
             // operations
             void resizeScreen(const Size & sz, bool updateMat = true);
@@ -67,13 +67,13 @@ namespace panoramix {
             double _focal;
             double _near, _far;
             Vec3 _eye, _center, _up;
-            Mat4 _viewMatrix, _projectionMatrix, _viewProjectionMatrix, _viewProjectionMatrixInv;
+            Mat4 _viewMatrix, _projectionMatrix, _viewProjectionMatrix/*, _viewProjectionMatrixInv*/;
 
             template <class Archive> inline void serialize(Archive & ar) {
                 ar(_screenW, _screenH);
                 ar(_focal, _near, _far);
                 ar(_eye, _center, _up);
-                ar(_viewMatrix, _projectionMatrix, _viewProjectionMatrix, _viewProjectionMatrixInv);
+                ar(_viewMatrix, _projectionMatrix, _viewProjectionMatrix/*, _viewProjectionMatrixInv*/);
             }
             friend class cereal::access;
         };

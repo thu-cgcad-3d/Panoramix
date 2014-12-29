@@ -34,12 +34,13 @@ add_subdirectory("vis")
 set_property(TARGET ${VIS_STATIC_LIB} PROPERTY FOLDER "${PROJECT_NAME}.Libs")
 
 
-# rec MODULE
-set (REC_MODULE_NAME Rec)
-set (REC_STATIC_LIB ${REC_MODULE_NAME}.Static CACHE STRING 
-	"static lib name of module ${REC_MODULE_NAME}")
-set (REC_SHARED_LIB ${REC_MODULE_NAME}.Shared CACHE STRING
-	"shared lib name of module ${REC_MODULE_NAME}")
+# # rec MODULE
+# set (REC_MODULE_NAME Rec)
+# set (REC_STATIC_LIB ${REC_MODULE_NAME}.Static CACHE STRING 
+# 	"static lib name of module ${REC_MODULE_NAME}")
+# set (REC_SHARED_LIB ${REC_MODULE_NAME}.Shared CACHE STRING
+# 	"shared lib name of module ${REC_MODULE_NAME}")
 
-add_subdirectory("rec")
-set_property(TARGET ${REC_STATIC_LIB} PROPERTY FOLDER "${PROJECT_NAME}.Libs")
+# add_subdirectory("rec")
+# set_property(TARGET ${REC_STATIC_LIB} PROPERTY FOLDER "${PROJECT_NAME}.Libs")
+

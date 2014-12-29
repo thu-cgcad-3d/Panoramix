@@ -58,6 +58,8 @@ namespace panoramix {
         template <class T, int M, int N> using Mat = cv::Matx<T, M, N>;
         using Mat3 = Mat<double, 3, 3>;
         using Mat4 = Mat<double, 4, 4>;
+        using Mat3f = Mat<float, 3, 3>;
+        using Mat4f = Mat<float, 4, 4>;
 
         using cv::norm;
         template <class T>
@@ -441,103 +443,6 @@ namespace panoramix {
 
 
 
-        // something classified
-        template <class T>
-        struct Classified {
-            int claz;
-            T component;
-        };
-        template <class T>
-        inline Classified<T> ClassifyAs(const T & comp, int claz){
-            return Classified<T>{claz, comp};
-        }
-        template <class T>
-        inline bool operator == (const Classified<T> & a, const Classified<T> & b) {
-            return a.claz == b.claz && a.component == b.component;
-        }
-        template <class Archive, class T>
-        inline void serialize(Archive & ar, Classified<T> & c) {
-            ar(c.claz, c.component);
-        }
-
-
-        // something noted
-        template <class T>
-        struct Noted {
-            std::string note;
-            T component;
-        };
-        template <class T>
-        inline Noted<T> NoteAs(const T & comp, const std::string & note){
-            return Noted<T>{note, comp};
-        }
-        template <class T>
-        inline bool operator == (const Noted<T> & a, const Noted<T> & b) {
-            return a.note == b.note && a.component == b.component;
-        }
-        template <class Archive, class T>
-        inline void serialize(Archive & ar, Noted<T> & c) {
-            ar(c.note, c.component);
-        }
-
-
-        // something scored for sorting
-        template <class T, class S = double>
-        struct Scored {
-            S score;
-            T component;
-        };
-        template <class T, class S>
-        inline Scored<T, S> ScoreAs(const T & comp, const S & score){
-            return Scored<T, S>{score, comp};
-        }
-        // note this!!!
-        template <class T, class S>
-        inline bool operator == (const Scored<T, S> & a, const Scored<T, S> & b) {
-            return a.score == b.score && a.component == b.component;
-        }
-        template <class T, class S>
-        inline bool operator < (const Scored<T, S> & a, const Scored<T, S> & b){
-            return a.score < b.score;
-        }
-        template <class T, class S>
-        inline bool operator > (const Scored<T, S> & a, const Scored<T, S> & b){
-            return a.score > b.score;
-        }
-        template <class T, class S>
-        inline bool operator <= (const Scored<T, S> & a, const Scored<T, S> & b){
-            return a.score <= b.score;
-        }
-        template <class T, class S>
-        inline bool operator >= (const Scored<T, S> & a, const Scored<T, S> & b){
-            return a.score >= b.score;
-        }
-        template <class Archive, class T, class S>
-        inline void serialize(Archive & ar, Scored<T, S> & c) {
-            ar(c.score, c.component);
-        }
-
-
-        // something enabled
-        template <class T>
-        struct Enabled {
-            bool enabled;
-            T component;
-        };
-        template <class T>
-        inline Enabled<T> EnableAs(const T & comp, bool e = true){
-            return Enabled<T>{e, comp};
-        }
-        template <class T>
-        inline bool operator == (const Enabled<T> & a, const Enabled<T> & b) {
-            return a.enabled == b.enabled && a.component == b.component;
-        }
-        template <class Archive, class T>
-        inline void serialize(Archive & ar, Enabled<T> & c) {
-            ar(c.enabled, c.component);
-        }
-
-
         namespace {
             template <class T, int N>
             Vec<T, N> MakeMin(const Vec<T, N>& v1, const Vec<T, N>& v2) {
@@ -655,12 +560,124 @@ namespace panoramix {
             core::Vec<T, N> normal;
         };
 
+        template <class T, int N>
+        inline bool operator == (const Polygon<T, N> & a, const Polygon<T, N> & b){
+            return a.corners == b.corners && a.normal == b.normal;
+        }
+
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, Polygon<T, N> & p) {
+            ar(p.corners, p.normal);
+        }
+
         using Polygon3 = Polygon<double, 3>;
         using Polygon3f = Polygon<float, 3>;
 
         template <class T>
         inline Polygon<T, 3> MakeTriangle(const Point<T, 3> & p1, const Point<T, 3> & p2, const Point<T, 3> & p3){
             return Polygon<T, 3>{{ p1, p2, p3 }, (p2 - p1).cross(p3 - p1)};
+        }
+
+
+
+
+
+        // something classified
+        template <class T>
+        struct Classified {
+            int claz;
+            T component;
+        };
+        template <class T>
+        inline Classified<T> ClassifyAs(const T & comp, int claz){
+            return Classified<T>{claz, comp};
+        }
+        template <class T>
+        inline bool operator == (const Classified<T> & a, const Classified<T> & b) {
+            return a.claz == b.claz && a.component == b.component;
+        }
+        template <class Archive, class T>
+        inline void serialize(Archive & ar, Classified<T> & c) {
+            ar(c.claz, c.component);
+        }
+
+
+        // something noted
+        template <class T>
+        struct Noted {
+            std::string note;
+            T component;
+        };
+        template <class T>
+        inline Noted<T> NoteAs(const T & comp, const std::string & note){
+            return Noted<T>{note, comp};
+        }
+        template <class T>
+        inline bool operator == (const Noted<T> & a, const Noted<T> & b) {
+            return a.note == b.note && a.component == b.component;
+        }
+        template <class Archive, class T>
+        inline void serialize(Archive & ar, Noted<T> & c) {
+            ar(c.note, c.component);
+        }
+
+
+        // something scored for sorting
+        template <class T, class S = double>
+        struct Scored {
+            S score;
+            T component;
+        };
+        template <class T, class S>
+        inline Scored<T, S> ScoreAs(const T & comp, const S & score){
+            return Scored<T, S>{score, comp};
+        }
+        // note this!!!
+        template <class T, class S>
+        inline bool operator == (const Scored<T, S> & a, const Scored<T, S> & b) {
+            return a.score == b.score && a.component == b.component;
+        }
+
+        // score comparison
+        template <class T, class S>
+        inline bool operator < (const Scored<T, S> & a, const Scored<T, S> & b){
+            return a.score < b.score;
+        }
+        template <class T, class S>
+        inline bool operator >(const Scored<T, S> & a, const Scored<T, S> & b){
+            return a.score > b.score;
+        }
+        template <class T, class S>
+        inline bool operator <= (const Scored<T, S> & a, const Scored<T, S> & b){
+            return a.score <= b.score;
+        }
+        template <class T, class S>
+        inline bool operator >= (const Scored<T, S> & a, const Scored<T, S> & b){
+            return a.score >= b.score;
+        }
+        template <class Archive, class T, class S>
+        inline void serialize(Archive & ar, Scored<T, S> & c) {
+            ar(c.score, c.component);
+        }
+
+
+        // something enabled
+        template <class T>
+        struct Enabled {
+            bool enabled;
+            T component;
+        };
+        template <class T>
+        inline Enabled<T> EnableAs(const T & comp, bool e = true){
+            return Enabled<T>{e, comp};
+        }
+        template <class T>
+        inline bool operator == (const Enabled<T> & a, const Enabled<T> & b) {
+            return a.enabled == b.enabled && a.component == b.component;
+        }
+        template <class Archive, class T>
+        inline void serialize(Archive & ar, Enabled<T> & c) {
+            ar(c.enabled, c.component);
         }
 
     }

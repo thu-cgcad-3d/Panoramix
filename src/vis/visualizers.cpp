@@ -16,17 +16,18 @@ namespace panoramix {
 
 
         ResourcePtr MakeResource(const core::Image & image){
+            
             struct TextureResource : Resource {
-                inline TextureResource(const core::Image & im) :
-                image(MakeQImage(im)),
-                texture(new QOpenGLTexture(QOpenGLTexture::Target2D)) {}
+                inline TextureResource(const core::Image & im)
+                    : image(MakeQImage(im)), texture(new QOpenGLTexture(QOpenGLTexture::Target2D)) {}
+                
                 virtual bool isNull() const override { return image.isNull(); }
                 virtual bool initialize() override {
                     if (!texture->isCreated()){
                         texture->create();
                     }
                     if (!texture->isCreated()){
-                        return false;
+                        return true;
                     }
                     Q_ASSERT(texture->textureId());
                     texture->setData(image.mirrored());
@@ -125,7 +126,8 @@ namespace panoramix {
         }
 
         VisualObject::VisualObject(const OpenGLShaderSource & shaderSource)
-            : _shaderSource(shaderSource), _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
+            : _shaderSource(shaderSource),
+            _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
             _internal = new VisualObjectInternal;
             flags.isSelected = false;
         }
@@ -143,8 +145,13 @@ namespace panoramix {
         }
 
         void VisualObject::initialize() const {
+
             auto vo = _internal;
             auto program = vo->program;
+
+            if (program->isLinked()) {
+                return;
+            }
 
             // setup shaders
             if (!program->addShaderFromSourceCode(QOpenGLShader::Vertex,
@@ -157,7 +164,6 @@ namespace panoramix {
                 qDebug() << (program->log());
                 return;
             }
-
             Q_ASSERT(program->isLinked());
 
             // initialize resources
@@ -169,7 +175,7 @@ namespace panoramix {
             program->release();
         }
 
-        void VisualObject::render(const Options & options, const core::Mat4 & thisModelMatrix) const {
+        void VisualObject::render(const Options & options, const core::Mat4f & thisModelMatrix) const {
             if (_mesh.vertices.empty())
                 return;
 
@@ -184,6 +190,8 @@ namespace panoramix {
                 if (!res->bind())
                     qDebug() << (program->log());
             }
+
+            assert(thisModelMatrix == core::Mat4f::eye());
 
             program->setUniformValue("panoramaCenter", MakeQVec(_projectionCenter));
 
@@ -248,10 +256,11 @@ namespace panoramix {
                 : rtree(VisualObjectMeshTriangleBoundingBoxFunctor(this))
             {}
 
-            std::map<VisualObject*, core::Mat4> calculatedModelMatrices;
-            std::map<VisualObject*, core::Box3> calculatedBoundingBoxes;
+            std::map<VisualObjectHandle, core::Mat4f> calculatedModelMatrices;
+            std::map<VisualObjectHandle, core::Box3> calculatedBoundingBoxes;
             std::map<VisualObjectMeshTriangle, core::Box3> calculatedBoundingBoxesOfMeshTriangles;
             core::RTreeWrapper<VisualObjectMeshTriangle, VisualObjectMeshTriangleBoundingBoxFunctor> rtree;
+            core::Box3 boundingBox;
         };
 
         VisualObjectScene::VisualObjectScene() : _internal(new VisualObjectSceneInternal()) {}
@@ -284,20 +293,19 @@ namespace panoramix {
                     VisualObject * ro = _tree.data(h).get();
                     // update model matrix
                     if (_tree.isRoot(h)) { // is root
-                        assert(!core::Contains(_internal->calculatedModelMatrices, ro));
-                        _internal->calculatedModelMatrices[ro] = ro->modelMatrix();
+                        assert(!core::Contains(_internal->calculatedModelMatrices, h));
+                        _internal->calculatedModelMatrices[h] = ro->modelMatrix();
                     }
                     else {
-                        VisualObject * parent = _tree.data(_tree.parent(h)).get();
-                        assert(core::Contains(_internal->calculatedModelMatrices, parent));
-                        _internal->calculatedModelMatrices[ro] = _internal->calculatedModelMatrices.at(parent) * ro->modelMatrix();
+                        assert(core::Contains(_internal->calculatedModelMatrices, _tree.parent(h)));
+                        _internal->calculatedModelMatrices[h] = _internal->calculatedModelMatrices.at(_tree.parent(h)) * ro->modelMatrix();
                     }
                     // update bounding box in world space
                     auto & mesh = ro->mesh();
                     std::vector<Point3> transformedVertexPositions;
                     transformedVertexPositions.reserve(mesh.vertices.size());
                     for (auto & vert : mesh.vertices){
-                        Point4 transformedHCorner = _internal->calculatedModelMatrices.at(ro) * core::ConvertTo<double>(vert.position);
+                        Point4 transformedHCorner = _internal->calculatedModelMatrices.at(h) * vert.position;
                         transformedVertexPositions.push_back(Point3(transformedHCorner[0], transformedHCorner[1], transformedHCorner[2]) / transformedHCorner[3]);
                     }
                     for (TriMesh::TriangleHandle i = 0; i < mesh.numberOfTriangles(); i++){
@@ -311,11 +319,16 @@ namespace panoramix {
                         });
                         _internal->rtree.insert(std::make_pair(h, i));
                     }
-                    _internal->calculatedBoundingBoxes[ro] = BoundingBoxOfContainer(transformedVertexPositions);
+                    _internal->calculatedBoundingBoxes[h] = BoundingBoxOfContainer(transformedVertexPositions);
                     return true;
                 });
 
             }
+
+            _internal->boundingBox = 
+                core::BoundingBoxOfPairRange(_internal->calculatedBoundingBoxes.begin(),
+                _internal->calculatedBoundingBoxes.end());
+
         }
 
         void VisualObjectScene::clear() {
@@ -326,16 +339,12 @@ namespace panoramix {
         }
 
 
-        Box3 VisualObjectScene::boundingBox() const {
-            Box3 bbox;
-            for (auto & b : _internal->calculatedBoundingBoxes) {
-                bbox |= b.second;
-            }
-            return bbox;
+        const Box3 & VisualObjectScene::boundingBox() const {
+            return _internal->boundingBox;
         }
 
-        Box3 VisualObjectScene::boundingBoxOfObject(VisualObject * ro) const {
-            return _internal->calculatedBoundingBoxes.at(ro);
+        Box3 VisualObjectScene::boundingBoxOfObject(VisualObjectHandle h) const {
+            return _internal->calculatedBoundingBoxes.at(h);
         }
 
         core::Box3 VisualObjectScene::boundingBoxOfTriangleInObjectMesh(const VisualObjectMeshTriangle & omt) const{
@@ -353,7 +362,7 @@ namespace panoramix {
         void VisualObjectScene::render(const Options & options) const {
             for (auto & n : _tree.nodes()){
                 if (n.exists){
-                    _tree.data(n.topo.hd)->render(options, _internal->calculatedModelMatrices.at(_tree.data(n.topo.hd).get()));
+                    _tree.data(n.topo.hd)->render(options, _internal->calculatedModelMatrices.at(n.topo.hd));
                 }
             }
         }
@@ -415,12 +424,23 @@ namespace panoramix {
             return false;
         }
 
-        static const bool g_UseBruteForce = true;
+        static const bool g_UseBruteForce = false;
 
         VisualObjectMeshTriangle VisualObjectScene::pickOnScreen(const Options & options,
-            const core::Point2 & pOnScreen, double distThresOnScreen) const {
+            const core::Point2 & pOnScreen) const {
 
             InfiniteLine3 centerRay(options.camera.eye(), normalize(options.camera.spatialDirection(pOnScreen)));
+
+            ///// add ray
+            //{
+            //    vis::DiscretizeOptions dopts;
+            //    dopts.color = vis::ColorFromTag(vis::ColorTag::Blue);
+            //    dopts.defaultShaderSource = vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XLines);
+            //    _tree.add(_tree.firstRoot(), Visualize(Line3(centerRay.anchor, centerRay.anchor + centerRay.direction * 1000), dopts));
+            //    update();
+            //    initialize();
+            //}
+
             Box3 bboxAll = boundingBox();
             auto bballAll = bboxAll.outerSphere();
             
@@ -430,20 +450,23 @@ namespace panoramix {
             double stepNum = 1000.0;
             double stepLen = (stopLen - startLen) / stepNum;
 
+            float epsilon = 1e-20f;
             std::map<VisualObjectMeshTriangle, double> resultsWithDepths;
 
             if (g_UseBruteForce){
                 for (auto & mtiBB : _internal->calculatedBoundingBoxesOfMeshTriangles){
+                    auto & modelMat = _internal->calculatedModelMatrices.at(mtiBB.first.first);
                     auto & mti = mtiBB.first;
                     auto & vo = _tree.data(mti.first);
                     TriMesh::VertHandle v1, v2, v3;
                     vo->mesh().fetchTriangleVerts(mti.second, v1, v2, v3);
                     float out = 0.0;
-                    bool intersected = TriangleIntersection(ToAffinePoint(vo->mesh().vertices[v1].position),
-                        ToAffinePoint(vo->mesh().vertices[v2].position),
-                        ToAffinePoint(vo->mesh().vertices[v3].position),
+                    bool intersected = TriangleIntersection(
+                        ToAffinePoint(modelMat * vo->mesh().vertices[v1].position),
+                        ToAffinePoint(modelMat * vo->mesh().vertices[v2].position),
+                        ToAffinePoint(modelMat * vo->mesh().vertices[v3].position),
                         ConvertTo<float>(centerRay.anchor), ConvertTo<float>(centerRay.direction),
-                        &out, static_cast<float>(stepLen) / 100.0f);
+                        &out, epsilon);
                     if (intersected){
                         resultsWithDepths[mti] = out;
                     }
@@ -461,7 +484,7 @@ namespace panoramix {
                     detectionBox.expand(stepLen);
 
                     _internal->rtree.search(detectionBox,
-                        [&resultsWithDepths, this, &centerRay, &options, &pOnScreen, &distThresOnScreen, &stepLen](const VisualObjectMeshTriangle & mti){
+                        [&resultsWithDepths, this, &centerRay, &options, &pOnScreen, epsilon](const VisualObjectMeshTriangle & mti){
                         auto & vo = _tree.data(mti.first);
                         TriMesh::VertHandle v1, v2, v3;
                         vo->mesh().fetchTriangleVerts(mti.second, v1, v2, v3);
@@ -470,7 +493,7 @@ namespace panoramix {
                             ToAffinePoint(vo->mesh().vertices[v2].position),
                             ToAffinePoint(vo->mesh().vertices[v3].position),
                             ConvertTo<float>(centerRay.anchor), ConvertTo<float>(centerRay.direction),
-                            &out, static_cast<float>(stepLen) / 100.0f);
+                            &out, epsilon);
                         if (intersected){
                             resultsWithDepths[mti] = out;
                         }
@@ -508,13 +531,9 @@ namespace panoramix {
         public:
             Options options;
             VisualObjectScene scene;
-            core::Box3 boundingBox;
 
             VisualizerWidget(const Visualizer & v, QWidget * parent = nullptr) 
                 : QGLWidget(parent), options(v.options), scene(v.tree()) {
-                for (auto & n : scene.tree().nodes()){
-                    boundingBox |= core::BoundingBox(n.data->mesh());
-                }
                 setMouseTracking(true);
                 setAutoBufferSwap(false);
             }
@@ -555,7 +574,7 @@ namespace panoramix {
                 glEnable(GL_POINT_SPRITE);
 
                 core::PerspectiveCamera & camera = options.camera;
-                camera.resizeScreen(core::SizeI(width(), height()));
+                camera.resizeScreen(core::Size(width(), height()));
 
                 glPointSize(options.pointSize);
                 glLineWidth(options.lineWidth);
@@ -577,7 +596,8 @@ namespace panoramix {
 
         public:
             void autoSetCamera() {
-                auto sphere = boundingBox.outerSphere();
+                auto sphere = scene.boundingBox().outerSphere();
+                options.camera.resizeScreen(core::Size(width(), height()), false);
                 options.camera.focusOn(sphere, true);
                 update();
             }
@@ -590,7 +610,7 @@ namespace panoramix {
                 else if (e->buttons() & Qt::MidButton)
                     setCursor(Qt::SizeAllCursor);
                 else if (e->buttons() & Qt::LeftButton){
-                    auto omt = scene.pickOnScreen(options, core::Point2(e->pos().x(), e->pos().y()), 2.0);
+                    auto omt = scene.pickOnScreen(options, core::Point2(e->pos().x(), e->pos().y()));
                     if (omt.first.isValid()){
                         if (e->modifiers() & Qt::ControlModifier){
                             scene.select(omt.first);
@@ -605,14 +625,14 @@ namespace panoramix {
                     else{
                         scene.clearSelection();
                     }
-                    update();
                 }
+                update();
             }
 
             virtual void mouseMoveEvent(QMouseEvent * e) override {
                 QVector3D t(e->pos() - _lastPos);
                 t.setX(-t.x());
-                auto sphere = boundingBox.outerSphere();
+                auto sphere = scene.boundingBox().outerSphere();
                 if (e->buttons() & Qt::RightButton) {
                     core::Vec3 trans = t.x() * options.camera.rightward() + t.y() * options.camera.upward();
                     trans *= 0.02;
@@ -630,7 +650,7 @@ namespace panoramix {
             }
 
             virtual void wheelEvent(QWheelEvent * e) override {
-                auto sphere = boundingBox.outerSphere();
+                auto sphere = scene.boundingBox().outerSphere();
                 double d = e->delta() / 10;
                 double dist = core::Distance(options.camera.eye(), options.camera.center());
                 core::Vec3 trans = d * dist / 1000.0 * options.camera.forward();

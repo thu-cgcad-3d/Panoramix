@@ -18,7 +18,7 @@ namespace panoramix {
             _projectionMatrix = MakeMat4Perspective(verticalViewAngle, aspect, _near, _far);
 
             _viewProjectionMatrix = _projectionMatrix * _viewMatrix;
-            _viewProjectionMatrixInv = _viewProjectionMatrix.inv();
+            //_viewProjectionMatrixInv = _viewProjectionMatrix.inv(cv::DECOMP_LU);
         }
 
         Vec2 PerspectiveCamera::screenProjection(const Vec3 & p3) const {
@@ -53,7 +53,9 @@ namespace panoramix {
             double xratio = (p2d(0) / _screenW - 0.5) * 2;
             double yratio = ((_screenH - p2d(1)) / _screenH - 0.5) * 2;
             Vec4 position(xratio, yratio, 1, 1);
-            Vec4 realPosition = _viewProjectionMatrixInv * position;
+            Vec4 realPosition;
+            bool solvable = cv::solve(_viewProjectionMatrix, position, realPosition);// _viewProjectionMatrixInv * position;
+            assert(solvable);
             return Vec3(realPosition(0) / realPosition(3),
                 realPosition(1) / realPosition(3),
                 realPosition(2) / realPosition(3));
@@ -109,13 +111,17 @@ namespace panoramix {
                 updateMatrices();
         }
 
+        inline void AdjustNearAndFar(double & n, double & f, const Sphere3 & target, const Vec3 & eye){
+            n = BoundBetween(norm(target.center - eye) - target.radius, 1e-2, 1e4);
+            f = BoundBetween(norm(target.center - eye) + target.radius, 1e2, 1e6);
+        }
+
         void PerspectiveCamera::focusOn(const Sphere3 & target, bool updateMat) {
             _center = target.center;
             auto eyedirection = _eye - _center;
             eyedirection = eyedirection / core::norm(eyedirection) * target.radius * 0.8;
             _eye = _center + eyedirection;
-            _near = BoundBetween(norm(target.center - _eye) - target.radius - 1.0, 1e-3, 1e3);
-            _far = BoundBetween(norm(target.center - _eye) + target.radius + 1.0, 1e-3, 1e3);
+            AdjustNearAndFar(_near, _far, target, _eye);
             if (updateMat)
                 updateMatrices();
         }
@@ -123,8 +129,7 @@ namespace panoramix {
         void PerspectiveCamera::translate(const Vec3 & t, const Sphere3 & target, bool updateMat){
             _eye += t;
             _center += t;
-            _near = BoundBetween(norm(target.center - _eye) - target.radius - 1.0, 1e-3, 1e3);
-            _far = BoundBetween(norm(target.center - _eye) + target.radius + 1.0, 1e-3, 1e3);
+            AdjustNearAndFar(_near, _far, target, _eye);
             if (updateMat)
                 updateMatrices();
         }
@@ -135,8 +140,7 @@ namespace panoramix {
             if (distanceFixed){
                 _eye = normalize(_eye - _center) * dist + _center;
             }
-            _near = BoundBetween(norm(target.center - _eye) - target.radius - 1.0, 1e-3, 1e3);
-            _far = BoundBetween(norm(target.center - _eye) + target.radius + 1.0, 1e-3, 1e3);
+            AdjustNearAndFar(_near, _far, target, _eye);
             if (updateMat)
                 updateMatrices();
         }
