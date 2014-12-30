@@ -113,27 +113,38 @@ namespace panoramix {
             
             struct TextureResource : Resource {
                 inline TextureResource(const core::Image & im)
-                    : image(MakeQImage(im)), texture(new QOpenGLTexture(QOpenGLTexture::Target2D)) {}
+                    : initialized(false), 
+                    image(MakeQImage(im)), texture(new QOpenGLTexture(QOpenGLTexture::Target2D)) {}
                 
                 virtual bool isNull() const override { return image.isNull(); }
-                virtual bool initialize() override {
+                virtual void initialize() override {
                     if (!texture->isCreated()){
                         texture->create();
                     }
                     if (!texture->isCreated()){
-                        return true;
+                        return;
                     }
                     Q_ASSERT(texture->textureId());
                     texture->setData(image.mirrored());
                     texture->setMinificationFilter(QOpenGLTexture::Linear);
                     texture->setMagnificationFilter(QOpenGLTexture::Linear);
                     texture->release();
-                    return true;
+                    initialized = true;
+                }
+                virtual bool isInitialized() const override {
+                    return initialized;
+                }
+                virtual void destroy() override {
+                    if (texture->isCreated()){
+                        texture->destroy();
+                    }
+                    initialized = false;
                 }
                 virtual bool bind() override { texture->bind(0); return texture->isBound(); }
-                virtual ~TextureResource() { delete texture; }
+                virtual ~TextureResource() { texture->destroy();  delete texture; }
                 QImage image;
                 QOpenGLTexture * texture;
+                bool initialized;
             };
 
             return std::make_shared<TextureResource>(image);
@@ -154,7 +165,9 @@ namespace panoramix {
         bool ResourceStore::has(const std::string & name){
             return Contains(g_ResourcesTable, name);
         }
-
+        void ResourceStore::clear(){
+            g_ResourcesTable.clear();
+        }
 
 
 
@@ -213,26 +226,32 @@ namespace panoramix {
         };
 
         VisualObject::VisualObject(int eleNum)
-            : _eleNum(eleNum),
+            : _entitiNum(eleNum),
             _shaderSource(PredefinedShaderSource(OpenGLShaderSourceDescriptor::XLines)),
             _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
             _internal = new VisualObjectInternal;
-            flags.isSelected = false;
             _lineWidth = 2.0;
             _pointSize = 5.0;
         }
 
         VisualObject::VisualObject(int eleNum, const OpenGLShaderSource & shaderSource)
-            : _eleNum(eleNum),
+            : _entitiNum(eleNum),
             _shaderSource(shaderSource),
             _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
             _internal = new VisualObjectInternal;
-            flags.isSelected = false;
             _lineWidth = 2.0;
             _pointSize = 5.0;
         }
 
         VisualObject::~VisualObject(){
+            for (auto & res : _resources){
+                if (!res->isInitialized())
+                    continue;
+                res->destroy();
+                if (res->isInitialized())
+                    qDebug() << (_internal->program->log());
+            }
+
             delete _internal;
         }
 
@@ -268,11 +287,15 @@ namespace panoramix {
 
             // initialize resources
             for (auto & res : _resources){
-                if (!res->initialize())
+                if (res->isInitialized())
+                    continue;
+                res->initialize();
+                if (!res->isInitialized())
                     qDebug() << (program->log());
             }           
 
             program->release();
+
         }
 
         void VisualObject::render(const RenderOptions & options, const core::Mat4f & thisModelMatrix) const {
@@ -305,19 +328,19 @@ namespace panoramix {
             program->setUniformValue("bwColor", options.bwColor);
             program->setUniformValue("bwTexColor", options.bwTexColor);
 
-            program->setUniformValue("isSelected", flags.isSelected);
-
             SetAttributeArrayWithTriMeshVertices(program, "position", _mesh.vertices.front().position);
             SetAttributeArrayWithTriMeshVertices(program, "normal", _mesh.vertices.front().normal);
             SetAttributeArrayWithTriMeshVertices(program, "color", _mesh.vertices.front().color);
             SetAttributeArrayWithTriMeshVertices(program, "texCoord", _mesh.vertices.front().texCoord);
             SetAttributeArrayWithTriMeshVertices(program, "entityIndex", _mesh.vertices.front().entityIndex);
+            SetAttributeArrayWithTriMeshVertices(program, "isSelected", _mesh.vertices.front().isSelected);
 
             program->enableAttributeArray("position");
             program->enableAttributeArray("normal");
             program->enableAttributeArray("color");
             program->enableAttributeArray("texCoord");
             program->enableAttributeArray("entityIndex");
+            program->enableAttributeArray("isSelected");
 
             if (options.renderMode & RenderModeFlag::Triangles) {
                 DrawElements(GL_TRIANGLES, _mesh.iTriangles);
@@ -334,14 +357,62 @@ namespace panoramix {
             program->disableAttributeArray("color");
             program->disableAttributeArray("texCoord");
             program->disableAttributeArray("entityIndex");
+            program->disableAttributeArray("isSelected");
             
             program->release();
 
         }
 
+        bool VisualObject::isSingleEntityMeshTriangle(TriMesh::TriangleHandle t) const{
+            TriMesh::VertHandle v1, v2, v3;
+            _mesh.fetchTriangleVerts(t, v1, v2, v3);
+            auto & vs = _mesh.vertices;
+            return (vs[v1].entityIndex == vs[v2].entityIndex && vs[v2].entityIndex == vs[v3].entityIndex);
+        }
+
+        int VisualObject::entityIDOfMeshTriangle(TriMesh::TriangleHandle t) const {
+            TriMesh::VertHandle v1, v2, v3;
+            _mesh.fetchTriangleVerts(t, v1, v2, v3);
+            auto & vs = _mesh.vertices;
+            assert(vs[v1].entityIndex == vs[v2].entityIndex && vs[v2].entityIndex == vs[v3].entityIndex);
+            return vs[v1].entityIndex;
+        }
 
 
+        void VisualObject::selectEntity(int entID) {
+            _selectedEntities.insert(entID);
+            for (auto & v : _mesh.vertices){
+                if (v.entityIndex == entID){
+                    v.isSelected = true;
+                }
+            }
+        }
 
+        void VisualObject::switchEntitySelection(int entID) {
+            if (core::Contains(_selectedEntities, entID)){
+                _selectedEntities.erase(entID);
+                for (auto & v : _mesh.vertices){
+                    if (v.entityIndex == entID){
+                        v.isSelected = false;
+                    }
+                }
+            }
+            else{
+                _selectedEntities.insert(entID);
+                for (auto & v : _mesh.vertices){
+                    if (v.entityIndex == entID){
+                        v.isSelected = true;
+                    }
+                }
+            }
+        }
+
+        void VisualObject::clearSelection(){
+            _selectedEntities.clear();
+            for (auto & v : _mesh.vertices){
+                v.isSelected = false;
+            }
+        }
 
 
 
@@ -639,6 +710,7 @@ namespace panoramix {
                 : QGLWidget(parent), options(v.renderOptions), scene(v.tree()) {
                 setMouseTracking(true);
                 setAutoBufferSwap(false);
+                grabKeyboard();
             }
 
         protected:
@@ -710,19 +782,22 @@ namespace panoramix {
                 else if (e->buttons() & Qt::MidButton)
                     setCursor(Qt::SizeAllCursor);
                 else if (e->buttons() & Qt::LeftButton){
-                    auto omt = scene.pickOnScreen(options, core::Point2(e->pos().x(), e->pos().y()));
-                    if (omt.first.isValid()){
+                    VisualObjectHandle oh;
+                    TriMesh::TriangleHandle t;
+                    std::tie(oh, t) = scene.pickOnScreen(options, core::Point2(e->pos().x(), e->pos().y()));                    
+                    if (oh.isValid()){
+                        int entityID = scene.tree().data(oh)->entityIDOfMeshTriangle(t);
                         if (e->modifiers() & Qt::ControlModifier){
-                            scene.select(omt.first);
+                            scene.switchSelect(std::make_pair(oh, entityID));
                         }
                         else{
                             scene.clearSelection();
-                            scene.select(omt.first);
+                            scene.select(std::make_pair(oh, entityID));
                         }
-                        scene.tree().data(omt.first)
-                            ->invokeCallbackFunction(InteractionID::ClickLeftButton, scene.tree(), omt);
+                        scene.tree().data(oh)
+                            ->invokeCallbackFunction(InteractionID::ClickLeftButton, scene.tree(), std::make_pair(oh, entityID));
                     }
-                    else{
+                    else if (!(e->modifiers() & Qt::ControlModifier)){
                         scene.clearSelection();
                     }
                 }
@@ -766,8 +841,11 @@ namespace panoramix {
                 if (e->key() == Qt::Key_Space){
                     for (auto & n : scene.tree().nodes()){
                         if (n.exists){
-                            n.data->invokeCallbackFunction(InteractionID::PressSpace, scene.tree(),
-                                VisualObjectMeshTriangle{ n.topo.hd, -1 }); // FIXME!!!!!!!!!!!!!!
+                            for (int entityID : n.data->selectedEntities()){
+                                n.data->invokeCallbackFunction(InteractionID::PressSpace,
+                                    scene.tree(),
+                                    VisualObjectEntityID{ n.topo.hd, entityID });
+                            }
                         }
                     }
                 }

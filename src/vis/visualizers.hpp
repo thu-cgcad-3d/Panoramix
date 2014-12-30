@@ -94,6 +94,11 @@ namespace panoramix {
             return Discretize(mesh, c.component, oo);
         }
 
+        template <class AttachedT, class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const std::pair<AttachedT, T> & p, const DiscretizeOptions & o){
+            return Discretize(mesh, p.second, o);
+        }
+
 
         // Is discretizable ?
         namespace {
@@ -117,8 +122,10 @@ namespace panoramix {
         // resource making
         struct Resource {
             virtual bool isNull() const = 0;
-            virtual bool initialize() { return true; }
-            virtual bool bind() { return true; }
+            virtual void initialize() = 0;
+            virtual bool isInitialized() const = 0;
+            virtual bool bind() = 0;
+            virtual void destroy() = 0;
             virtual ~Resource() {}
         };
         
@@ -131,6 +138,7 @@ namespace panoramix {
             static void set(const std::string & name, const T & data) { set(name, MakeResource(data)); }
             static ResourcePtr get(const std::string & name);
             static bool has(const std::string & name);
+            static void clear();
         };
 
        
@@ -143,9 +151,9 @@ namespace panoramix {
 
         using VisualObjectHandle = VisualObjectTree::NodeHandle;
         using VisualObjectMeshTriangle = std::pair<VisualObjectHandle, TriMesh::TriangleHandle>;
+        using VisualObjectEntityID = std::pair<VisualObjectHandle, int>;
 
-        typedef bool VisualObjectCallbackFunction(InteractionID, 
-            const VisualObjectTree &, const VisualObjectMeshTriangle &);        
+        typedef bool VisualObjectCallbackFunction(InteractionID, const VisualObjectTree &, const VisualObjectEntityID &);
         template <class T> using VisualObjectCallbackFunctionSimple = void(InteractionID, T & data);
 
         namespace {
@@ -156,7 +164,7 @@ namespace panoramix {
                 static auto test(int) -> decltype(
                     std::declval<FunAndArgTT>().first(Unknown,
                         std::declval<VisualObjectTree>(), 
-                        std::declval<VisualObjectMeshTriangle>()),
+                        std::declval<VisualObjectEntityID>()),
                     std::true_type()
                     );
 
@@ -236,6 +244,15 @@ namespace panoramix {
             TriMesh & mesh() { return _mesh; }
             const TriMesh & mesh() const { return _mesh; }
 
+            bool isSingleEntityMeshTriangle(TriMesh::TriangleHandle t) const;
+            int entityIDOfMeshTriangle(TriMesh::TriangleHandle t) const;
+
+            void selectEntity(int entId);
+            void switchEntitySelection(int entId);
+            void clearSelection();
+            inline const std::set<int> & selectedEntities() const { return _selectedEntities; }
+            inline bool entityIsSelected(int entId) const { return core::Contains(_selectedEntities, entId); }
+
             // resource
             std::vector<ResourcePtr> & resources() { return _resources; }
             const std::vector<ResourcePtr> & resources() const { return _resources; }
@@ -248,19 +265,14 @@ namespace panoramix {
 
             inline bool invokeCallbackFunction(InteractionID iid,
                 const VisualObjectTree & tree, 
-                const VisualObjectMeshTriangle & omt) const {
+                const VisualObjectEntityID & entity) const {
                 if (_callback)
-                    return _callback(iid, tree, omt); 
+                    return _callback(iid, tree, entity);
                 return false;
             }
 
             inline void setLineWidth(float lw){ _lineWidth = lw; }
             inline void setPointSize(float ps){ _pointSize = ps; }
-
-        public:
-            struct Flags {
-                bool isSelected;
-            } flags;
 
         protected:
             core::Mat4f _modelMat;
@@ -275,7 +287,9 @@ namespace panoramix {
             VisualObjectInternal * _internal;
             
             std::function<VisualObjectCallbackFunction> _callback;
-            int _eleNum;
+            
+            int _entitiNum;
+            std::set<int> _selectedEntities;
         };
 
 
@@ -373,7 +387,7 @@ namespace panoramix {
                 inline CallbackFunction(T & d, const FunT & f)
                     : originalData(d), originalFun(f){}
                 inline bool operator() (InteractionID iid, 
-                    const VisualObjectTree &, const VisualObjectMeshTriangle &) const {
+                    const VisualObjectTree &, const VisualObjectEntityID &) const {
                     originalFun(iid, originalData);
                     return true;
                 }
@@ -404,16 +418,8 @@ namespace panoramix {
                 inline CallbackFunction(std::vector<T> & d, const FunT & f)
                 : originalData(d), originalFun(f){}
                 inline bool operator() (InteractionID iid,
-                    const VisualObjectTree & tree, const VisualObjectMeshTriangle & omt) const {
-                    auto & mesh = tree.data(omt.first)->mesh();
-                    TriMesh::TriangleHandle v1, v2, v3;
-                    mesh.fetchTriangleVerts(omt.second, v1, v2, v3);
-                    int indices[] = { 
-                        mesh.vertices[v1].entityIndex, 
-                        mesh.vertices[v2].entityIndex, 
-                        mesh.vertices[v3].entityIndex 
-                    };
-                    originalFun(iid, originalData[indices[0]]);
+                    const VisualObjectTree & tree, const VisualObjectEntityID & entityID) const {
+                    originalFun(iid, originalData[entityID.second]);
                     return true;
                 }
                 std::vector<T> & originalData;
@@ -448,10 +454,11 @@ namespace panoramix {
 
             inline const VisualObjectTree & tree() const { return _tree; }
 
-            inline void select(VisualObjectHandle oh) { _tree.data(oh)->flags.isSelected = true; }
+            inline void select(VisualObjectEntityID ent) { _tree.data(ent.first)->selectEntity(ent.second); }
+            inline void switchSelect(VisualObjectEntityID ent) { _tree.data(ent.first)->switchEntitySelection(ent.second); }
             inline void clearSelection() {
                 for (auto & n : _tree.nodes())
-                    n.data->flags.isSelected = false;
+                    n.data->clearSelection();
             }
 
             void update();
@@ -487,7 +494,7 @@ namespace panoramix {
 
                 installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::Black);
                 installingOptions.discretizeOptions.colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
-                installingOptions.discretizeOptions.isolatedTriangles = true;
+                installingOptions.discretizeOptions.isolatedTriangles = false;
                 installingOptions.discretizeOptions.subdivisionNums[0] = 32;
                 installingOptions.discretizeOptions.subdivisionNums[1] = 64;
                 installingOptions.defaultShaderSource = vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XTriangles);
@@ -566,6 +573,7 @@ namespace panoramix {
                 return *this; 
             }
 
+            inline Visualizer & renderMode(vis::RenderModeFlags flags) { renderOptions.renderMode = flags; return *this; }
             inline Visualizer & camera(const core::PerspectiveCamera & cam) { renderOptions.camera = cam; return *this; }
 
             void show(bool doModal = true, bool autoSetCamera = true);

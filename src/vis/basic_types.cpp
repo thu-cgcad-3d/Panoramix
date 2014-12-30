@@ -379,7 +379,7 @@ namespace panoramix {
 
 
             static const OpenGLShaderSource xPointsShaderSource = {
-                "#version 120\n"
+                "#version 130\n"
 
                 "attribute highp vec4 position;\n"
                 "attribute highp vec3 normal;\n"
@@ -402,7 +402,7 @@ namespace panoramix {
 
 
 
-                "#version 120\n"
+                "#version 130\n"
 
                 "uniform sampler2D tex;\n"
                 "uniform lowp vec4 globalColor;\n"
@@ -427,7 +427,7 @@ namespace panoramix {
             };
 
             static const OpenGLShaderSource xLinesShaderSource = {
-                "#version 120\n"
+                "#version 130\n"
 
                 "attribute highp vec4 position;\n"
                 "attribute highp vec3 normal;\n"
@@ -450,7 +450,7 @@ namespace panoramix {
 
 
 
-                "#version 120\n"
+                "#version 130\n"
 
                 "uniform sampler2D tex;\n"
                 "uniform lowp vec4 globalColor;\n"
@@ -470,31 +470,33 @@ namespace panoramix {
             };
 
             static const OpenGLShaderSource xTrianglesShaderSource = {
-                "#version 120\n"
+                "#version 130\n"
 
                 "attribute highp vec4 position;\n"
                 "attribute highp vec3 normal;\n"
                 "attribute lowp vec4 color;\n"
                 "attribute lowp vec2 texCoord;\n"
+                "attribute uint isSelected;\n"
 
                 "uniform highp mat4 viewMatrix;\n"
                 "uniform highp mat4 modelMatrix;\n"
                 "uniform highp mat4 projectionMatrix;\n"
-                "uniform bool isSelected;\n"
 
                 "varying lowp vec4 pixelColor;\n"
                 "varying lowp vec2 pixelTexCoord;\n"
+                "varying lowp float pixelSelection;\n"
 
                 "void main(void)\n"
                 "{\n"
                 "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
                 "    pixelColor = color;\n"
                 "    pixelTexCoord = texCoord;\n"
+                "    pixelSelection = isSelected == 0u ? 0.0 : 1.0;\n"
                 "}\n",
 
 
 
-                "#version 120\n"
+                "#version 130\n"
 
                 "uniform sampler2D tex;\n"
                 "uniform lowp vec4 globalColor;\n"
@@ -502,41 +504,36 @@ namespace panoramix {
                 "uniform lowp float bwColor;\n"
                 "uniform lowp float bwTexColor;\n"
 
-                "uniform bool isSelected;\n"
-
                 "varying lowp vec4 pixelColor;\n"
                 "varying lowp vec2 pixelTexCoord;\n"
+                "varying lowp float pixelSelection;\n"
 
                 "void main(void)\n"
                 "{\n"
                 "    lowp vec4 texColor = texture2D(tex, pixelTexCoord);\n"
                 "    gl_FragColor = (pixelColor * bwColor + texColor * bwTexColor)"
                 "       / (bwColor + bwTexColor);\n"
-                "    if (isSelected){"
-                "        gl_FragColor.a = 0.7;\n"
-                "    }else{\n"
-                "        gl_FragColor.a = 1.0;\n"
-                "    }"
+                "    gl_FragColor.a = 1.0 - pixelSelection * 0.5;\n"
                 "}\n"
             };
 
             static const OpenGLShaderSource xPanoramaShaderSource = {
-                "#version 120\n"
+                "#version 130\n"
 
                 "attribute highp vec3 position;\n"
                 "attribute highp vec3 normal;\n"
                 "attribute highp vec4 color;\n"
                 "attribute lowp vec2 texCoord;\n"
+                "attribute uint isSelected;\n"
 
                 "uniform highp mat4 viewMatrix;\n"
                 "uniform highp mat4 modelMatrix;\n"
                 "uniform highp mat4 projectionMatrix;\n"
 
-                "uniform bool isSelected;\n"
-
                 "varying highp vec3 pixelPosition;\n"
                 "varying highp vec3 pixelNormal;\n"
                 "varying highp vec4 pixelColor;\n"
+                "varying lowp float pixelSelection;\n"
 
                 "void main(void)\n"
                 "{\n"
@@ -544,11 +541,12 @@ namespace panoramix {
                 "    pixelNormal = normal;\n"
                 "    pixelColor = color;\n"
                 "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);\n"
+                "    pixelSelection = isSelected == 0u ? 0.0 : 1.0;\n"
                 "}\n"
                 ,
 
                 // 3.14159265358979323846264338327950288
-                "#version 120\n"
+                "#version 130\n"
 
                 "uniform sampler2D tex;\n"
 
@@ -556,11 +554,10 @@ namespace panoramix {
                 "uniform lowp float bwTexColor;\n"
                 "uniform highp vec3 panoramaCenter;\n"
 
-                "uniform bool isSelected;\n"
-
                 "varying highp vec3 pixelPosition;\n"
                 "varying highp vec3 pixelNormal;\n"
                 "varying highp vec4 pixelColor;\n"
+                "varying lowp float pixelSelection;\n"
 
                 "void main(void)\n"
                 "{\n"
@@ -571,11 +568,7 @@ namespace panoramix {
                 "    lowp vec4 texColor = texture2D(tex, texCoord);\n"
                 "    gl_FragColor = (pixelColor * bwColor + texColor * bwTexColor)"
                 "       / (bwColor + bwTexColor);\n"
-                "    if (isSelected){"
-                "        gl_FragColor.a = 0.7;\n"
-                "    }else{\n"
-                "        gl_FragColor.a = 1.0;\n"
-                "    }"
+                "    gl_FragColor.a = 1.0 - pixelSelection * 0.5;\n"
                 "}\n"
             };
 
@@ -617,7 +610,7 @@ namespace panoramix {
 
         // tri mesh implementation
         TriMesh::Vertex::Vertex()
-            : position(0, 0, 0, 1), normal(0, 0, 0), color(0, 0, 0, 1), texCoord(0, 0), entityIndex(-1) {
+            : position(0, 0, 0, 1), normal(0, 0, 0), color(0, 0, 0, 1), texCoord(0, 0), entityIndex(-1), isSelected(false) {
         }
 
 
@@ -641,11 +634,11 @@ namespace panoramix {
             return iLines.size() / 2;
         }
 
-        size_t TriMesh::numberOfLines(){
+        size_t TriMesh::numberOfLines() const {
             return iLines.size() / 2;
         }
 
-        void TriMesh::fetchLineVerts(TriMesh::LineHandle l, TriMesh::VertHandle & v1, TriMesh::VertHandle & v2){
+        void TriMesh::fetchLineVerts(TriMesh::LineHandle l, TriMesh::VertHandle & v1, TriMesh::VertHandle & v2) const {
             v1 = iLines[l * 2];
             v2 = iLines[l * 2 + 1];
         }
@@ -667,11 +660,11 @@ namespace panoramix {
             return iTriangles.size() / 3;
         }
 
-        size_t TriMesh::numberOfTriangles(){
+        size_t TriMesh::numberOfTriangles() const {
             return iTriangles.size() / 3;
         }
 
-        void TriMesh::fetchTriangleVerts(TriMesh::TriangleHandle t, TriMesh::VertHandle & v1, TriMesh::VertHandle & v2, TriMesh::VertHandle & v3){
+        void TriMesh::fetchTriangleVerts(TriMesh::TriangleHandle t, TriMesh::VertHandle & v1, TriMesh::VertHandle & v2, TriMesh::VertHandle & v3) const {
             v1 = iTriangles[t * 3];
             v2 = iTriangles[t * 3 + 1];
             v3 = iTriangles[t * 3 + 2];

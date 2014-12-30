@@ -2569,7 +2569,7 @@ namespace panoramix {
                     
                     bool hasDuplicates = false;
                     double feas = FeasibilityOfBinary(mg.data(bh), patch.uhs.at(insider).claz, option.claz, vps);
-                    feas = 0.5 - Pitfall(1.0 - feas, 0.1); // -0.5 ~ +0.5
+                    feas = 0.5 - Pitfall(1.0 - feas, 0.2); // -0.5 ~ +0.5
 
                     double scoreOnThisBh = mg.data(bh).importanceRatioInRelatedUnaries[option.uh == mg.topo(bh).lowers[0] ? 0 : 1]
                         * feas;
@@ -2608,7 +2608,7 @@ namespace panoramix {
                     }
                 }
                 else if (mg.data(outsider).type == MGUnary::Line){
-                    outOptionsWithVPScores = { ScoreAs(UOption{ outsider, unaryVars.at(outsider).claz }, 2.0) };
+                    outOptionsWithVPScores = { ScoreAs(UOption{ outsider, unaryVars.at(outsider).claz }, 1.0) };
                 }
 
                 // find best dependencies with current patch
@@ -2619,16 +2619,24 @@ namespace panoramix {
                     
                     // get entropy of all choice scores
                     std::vector<double> scores(dependencies.size());
+                    double scoresSum = 0.0;
                     for (int i = 0; i < scores.size(); i++){
                         scores[i] = dependencies[i].score;
+                        scoresSum += scores[i];
                     }
-                    double scoreEntropy = 1.0 + EntropyOfContainer(scores, 1.0);
+                    for (auto & score : scores){
+                        score /= scoresSum;
+                    }
+                    double scoreEntropy = 1.0 - exp(-EntropyOfContainer(scores, 1.0)); // 0 ~ 1
+                    assert(IsBetween(scoreEntropy, -1e-4, 1.0 + 1e-4));
                     auto maxDSIter = std::max_element(dependencies.begin(), dependencies.end());
 
                     // register the depth
                     optionDependencies[outOption] = std::move(maxDSIter->component);
                     // update the score
                     double outOptionScore = (maxDSIter->score - scoreEntropy) * outOptionWithVPScore.score;
+                    if (std::isnan(outOptionScore))
+                        outOptionScore = std::numeric_limits<double>::lowest();
 
                     if (!Contains(Q, outOption)){
                         Q.push(outOption, outOptionScore);
@@ -2642,9 +2650,9 @@ namespace panoramix {
         }
         
         std::unordered_map<MGUnaryHandle, double> GrowAPatch(const MixedGraph & mg, MGPatch & patch,
+            const Vec3 & centerDirection, double boundingAngle,
             MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars,
-            const std::vector<Vec3> & vps,
-            double visualRadiusAngle, double scoreThreshold,
+            const std::vector<Vec3> & vps, double scoreThreshold,
             int uhMaxNum){
 
             std::unordered_map<MGUnaryHandle, double> uhScores;
@@ -2661,13 +2669,21 @@ namespace panoramix {
                         outsider = mg.topo(bh).lowers[1];
                     if (Contains(patch, outsider))
                         continue;
+                    double angleOffset = 
+                        AngleBetweenDirections(mg.data(outsider).normalizedCenter, centerDirection);
+                    if (angleOffset > boundingAngle)
+                        continue;
                     UpdateOptionsOfAnOutsiderUnary(mg, outsider, Q, optionDependencies, patch, unaryVars, vps);
                 }
             }
 
             std::unordered_set<UOption, UOptionHasher> blockedOptions;
 
-            while (!Q.empty() && Q.topScore() > scoreThreshold){
+            while (true){
+
+                std::cout << "Q score " << Q.topScore() << "  Q size " << Q.size() << std::endl;
+                if (!(!Q.empty() && Q.topScore() >= scoreThreshold))
+                    break;
 
                 if (patch.uhs.size() > uhMaxNum + originalUhNum)
                     break;
@@ -2678,7 +2694,7 @@ namespace panoramix {
                 Q.pop();
 
                 if (Contains(patch, o.uh))
-                    continue;
+                    continue;               
 
                 // install option to patch
                 patch.uhs[o.uh] = MGUnaryVariable{ o.claz, optionDependencies.at(o).precomputedDepth };
@@ -2690,7 +2706,7 @@ namespace panoramix {
                 std::cout << patch.uhs.size() << "-th uh installed" << std::endl;
 
                 patch.updateBinaryVars(mg, vps);
-                MGPatchDepthsOptimizer(mg, patch, vps, false, MGPatchDepthsOptimizer::EigenSparseQR).optimize();                
+                //MGPatchDepthsOptimizer(mg, patch, vps, false, MGPatchDepthsOptimizer::EigenSparseQR).optimize();                
 
                 // update neighbor uhs
                 for (auto & bh : mg.topo(o.uh).uppers){
@@ -2699,19 +2715,24 @@ namespace panoramix {
                         outsider = mg.topo(bh).lowers[1];
                     if (Contains(patch, outsider))
                         continue;
+                    double angleOffset =
+                        AngleBetweenDirections(mg.data(outsider).normalizedCenter, centerDirection);
+                    if (angleOffset > boundingAngle)
+                        continue;
                     UpdateOptionsOfAnOutsiderUnary(mg, outsider, Q, optionDependencies, patch, unaryVars, vps);
                 }
 
+                
             }
 
             patch.updateBinaryVars(mg, vps);
-            MGPatchDepthsOptimizer pdo(mg, patch, vps, false, MGPatchDepthsOptimizer::EigenSparseQR);   
-            pdo.optimize();
-            if (!IsTreePatch(mg, patch)){
-                patch = MinimumSpanningTreePatch(mg, patch);
-                MGPatchDepthsOptimizer(mg, patch, vps, false, MGPatchDepthsOptimizer::MosekLinearProgramming)
-                    .optimize();
-            }
+            //MGPatchDepthsOptimizer pdo(mg, patch, vps, false, MGPatchDepthsOptimizer::EigenSparseQR);   
+            //pdo.optimize();
+            //if (!IsTreePatch(mg, patch)){
+            //    patch = MinimumSpanningTreePatch(mg, patch);
+            //    MGPatchDepthsOptimizer(mg, patch, vps, false, MGPatchDepthsOptimizer::MosekLinearProgramming)
+            //        .optimize();
+            //}
             return uhScores;
 
         }

@@ -218,10 +218,16 @@ void VisualizeMixedGraph(const core::Image & panorama,
     vis::Visualizer viz("mixed graph");
     viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
     
-    std::vector<vis::SpatialProjectedPolygon> spps;
+    struct UnaryID {
+        int patchId;
+        core::MGUnaryHandle uh;
+    };
+
+    std::vector<std::pair<UnaryID, vis::SpatialProjectedPolygon>> spps;
     std::vector<core::Classified<core::Line3>> lines;
 
-    for (auto & patch : patches){
+    for (int i = 0; i < patches.size(); i++){
+        auto & patch = patches[i];
         for (auto & uhv : patch.uhs){
             auto uh = uhv.first;
             auto & v = mg.data(uh);
@@ -239,7 +245,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
 
                 spp.projectionCenter = core::Point3(0, 0, 0);
                 spp.plane = core::PlaneOfMGUnary(region, vps, uhv.second);
-                spps.push_back(std::move(spp));
+                spps.emplace_back(UnaryID{ i, uh }, std::move(spp));
             }
             else if (v.type == core::MGUnary::Line){
                 auto & line = v;
@@ -250,9 +256,12 @@ void VisualizeMixedGraph(const core::Image & panorama,
 
     vis::ResourceStore::set("texture", panorama);
 
-    viz.begin(spps).resource("texture").end();
+    auto sppCallbackFun = [&patches, &vps, &mg](vis::InteractionID iid, const std::pair<UnaryID, vis::SpatialProjectedPolygon> & spp) {
+        std::cout << "uh: " << spp.first.uh.id << "in patch " << spp.first.patchId << std::endl;
+    };
+
+    viz.begin(spps, sppCallbackFun).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
     viz.installingOptions.lineWidth = 4.0;
-    viz.installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::Black);
     viz.add(lines);    
 
     std::vector<core::Line3> connectionLines;
@@ -270,9 +279,95 @@ void VisualizeMixedGraph(const core::Image & panorama,
 
     viz.installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::DarkGray);
     viz.installingOptions.lineWidth = 2.0;
+    viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
     viz.add(connectionLines);
     viz.camera(core::PerspectiveCamera(800, 800, 500, { 1.0, 1.0, -1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, -1.0 }));
     viz.show(doModal);
+
+}
+
+
+void ManuallyOptimizeMixedGraph(const core::Image & panorama,
+    const core::MixedGraph & mg,
+    core::MGPatch & patch,
+    const std::vector<core::Vec3> & vps) {
+
+    bool modified = true;
+    auto sppCallbackFun = [&patch, &vps, &mg, &modified](vis::InteractionID iid, 
+        const std::pair<core::MGUnaryHandle, vis::SpatialProjectedPolygon> & spp) {
+        std::cout << "uh: " << spp.first.id << std::endl;
+        if (iid == vis::InteractionID::PressSpace){
+            std::cout << "space pressed!" << std::endl;
+            int & claz = patch.uhs[spp.first].claz;
+            claz = (claz + 1) % vps.size();
+            std::cout << "current orientation is : " << vps[claz] << std::endl;
+            modified = true;
+        }
+    };    
+
+    while (modified){
+
+        vis::ResourceStore::set("texture", panorama);
+
+        modified = false;
+        core::MGPatchDepthsOptimizer(mg, patch, vps, false, core::MGPatchDepthsOptimizer::EigenSparseQR)
+            .optimize();
+        patch /= core::AverageDepthOfPatch(patch);        
+
+        vis::Visualizer viz("mixed graph optimizable");
+        viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
+        std::vector<std::pair<core::MGUnaryHandle, vis::SpatialProjectedPolygon>> spps;
+        std::vector<core::Classified<core::Line3>> lines;
+
+        for (auto & uhv : patch.uhs){
+            auto uh = uhv.first;
+            auto & v = mg.data(uh);
+            if (v.type == core::MGUnary::Region){
+                auto & region = v;
+                vis::SpatialProjectedPolygon spp;
+                // filter corners
+                core::ForeachCompatibleWithLastElement(region.normalizedCorners.begin(), region.normalizedCorners.end(),
+                    std::back_inserter(spp.corners),
+                    [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
+                    return core::AngleBetweenDirections(a, b) > M_PI / 500.0;
+                });
+                if (spp.corners.size() < 3)
+                    continue;
+
+                spp.projectionCenter = core::Point3(0, 0, 0);
+                spp.plane = core::PlaneOfMGUnary(region, vps, uhv.second);
+                spps.emplace_back(uh, std::move(spp));
+            }
+            else if (v.type == core::MGUnary::Line){
+                auto & line = v;
+                lines.push_back(core::ClassifyAs(core::LineOfMGUnary(line, vps, uhv.second), uhv.second.claz));
+            }
+        }
+
+        viz.begin(spps, sppCallbackFun).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+        viz.installingOptions.lineWidth = 4.0;
+        viz.add(lines);
+
+        std::vector<core::Line3> connectionLines;
+        for (auto & bhv : patch.bhs){
+            auto bh = bhv.first;
+            auto & v = bhv.second;
+            auto & samples = mg.data(bh).normalizedAnchors;
+            for (int i = 0; i < samples.size(); i++){
+                connectionLines.emplace_back(normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.front()[i],
+                    normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.back()[i]);
+            }
+        }
+
+        viz.installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::DarkGray);
+        viz.installingOptions.lineWidth = 2.0;
+        viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
+        viz.add(connectionLines);
+        viz.camera(core::PerspectiveCamera(800, 800, 500, { 1.0, 1.0, -1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, -1.0 }));
+        viz.show(true, false);
+
+        vis::ResourceStore::clear();
+    }
 
 }
 
@@ -496,7 +591,7 @@ TEST(MixedGraph, NaiveHolisticOptimization) {
         VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
     }
 
-    core::SaveToDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization.naivePatches", naivePatches);
+    core::SaveToDisk("./cache/test_view.MixedGraph.NaiveHolisticOptimization.naivePatches", naivePatches);
 
 }
 
@@ -519,7 +614,7 @@ TEST(MixedGraph, GoodPatchOptimization){
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
     std::vector<core::MGPatch> naivePatches;
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization.naivePatches", naivePatches);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.NaiveHolisticOptimization.naivePatches", naivePatches);
 
     std::vector<core::MGPatch> goodPatches;
     for (auto & p : naivePatches){
@@ -546,7 +641,7 @@ TEST(MixedGraph, GoodPatchOptimization){
     VisualizeMixedGraph(panorama, mg, naivePatches, vanishingPoints, false);
     VisualizeMixedGraph(panorama, mg, goodPatches, vanishingPoints, true);
 
-    core::SaveToDisk("./cache/test_view.MixedGraph.Build.GoodPatchOptimization.goodPatches", goodPatches);
+    core::SaveToDisk("./cache/test_view.MixedGraph.GoodPatchOptimization.goodPatches", goodPatches);
 
 }
 
@@ -569,7 +664,7 @@ TEST(MixedGraph, LinesOptimization) {
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
     std::vector<core::MGPatch> naivePatches;
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization.naivePatches", naivePatches);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.NaiveHolisticOptimization.naivePatches", naivePatches);
 
     std::vector<core::MGPatch> linePatches;
     std::vector<core::MGPatch> lineMSTPatches;
@@ -603,8 +698,8 @@ TEST(MixedGraph, LinesOptimization) {
     VisualizeMixedGraph(panorama, mg, linePatches, vanishingPoints, false);
     VisualizeMixedGraph(panorama, mg, lineMSTPatches, vanishingPoints, true);
 
-    core::SaveToDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.linePatches", linePatches);
-    core::SaveToDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.lineMSTPatches", lineMSTPatches);
+    core::SaveToDisk("./cache/test_view.MixedGraph.LinesOptimization.linePatches", linePatches);
+    core::SaveToDisk("./cache/test_view.MixedGraph.LinesOptimization.lineMSTPatches", lineMSTPatches);
 
 }
 
@@ -625,25 +720,24 @@ TEST(MixedGraph, GrowAPatch){
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
-    std::vector<core::MGPatch> naivePatches;
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.NaiveHolisticOptimization.naivePatches", naivePatches);
+    std::vector<core::MGPatch> patches;
+    core::LoadFromDisk("./cache/test_view.MixedGraph.AdjustPatch.grownLinePatches", patches);
 
-    std::vector<core::MGPatch> linePatches;
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.linePatches", linePatches);
+    patches.front().updateBinaryVars(mg, vanishingPoints);
+    core::MGPatchDepthsOptimizer(mg, patches.front(), vanishingPoints, false, core::MGPatchDepthsOptimizer::EigenSparseQR).optimize();
 
-    for (auto & lp : linePatches){
-        core::MGPatch patch = lp;
-        std::unordered_map<core::MGUnaryHandle, double> uhScores;
-        uhScores = core::GrowAPatch(mg, patch,
-            unaryVars, binaryVars, vanishingPoints, 0.1, 1e6);
+    core::GrowAPatch(mg, patches.front(), core::Vec3(1, 1, 1), 1e5,
+        unaryVars, binaryVars, vanishingPoints, 0.01, 1e6);
+    VisualizeMixedGraph(panorama, mg, { patches.front() }, vanishingPoints, true);
 
-        VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
-    }
-
+    core::SaveToDisk("./cache/test_view.MixedGraph.GrowAPatch.grownLinePatches_ii", patches);
 }
 
 
-TEST(MixedGraph, PlanePotentialsOfLinesPatches){
+
+
+
+TEST(MixedGraph, AdjustPatch){
 
     core::Image panorama;
     std::vector<core::Vec3> vanishingPoints;
@@ -659,15 +753,41 @@ TEST(MixedGraph, PlanePotentialsOfLinesPatches){
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
-    std::vector<core::MGPatch> linePatches;
-    std::vector<core::MGPatch> lineMSTPatches;
+    std::vector<core::MGPatch> grownLinePatches;
+    core::LoadFromDisk("./cache/test_view.MixedGraph.AdjustPatch.grownLinePatches", grownLinePatches);
 
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.linePatches", linePatches);
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.lineMSTPatches", lineMSTPatches);
+    ManuallyOptimizeMixedGraph(panorama, mg, grownLinePatches.front(), vanishingPoints);
 
-
-
+    core::SaveToDisk("./cache/test_view.MixedGraph.AdjustPatch.grownLinePatches", grownLinePatches);
+    
 }
+
+
+
+
+//TEST(MixedGraph, PlanePotentialsOfLinesPatches){
+//
+//    core::Image panorama;
+//    std::vector<core::Vec3> vanishingPoints;
+//
+//    core::MixedGraph mg;
+//    core::MGUnaryVarTable unaryVars;
+//    core::MGBinaryVarTable binaryVars;
+//
+//    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+//    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
+//
+//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
+//
+//    std::vector<core::MGPatch> linePatches;
+//    std::vector<core::MGPatch> lineMSTPatches;
+//
+//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.linePatches", linePatches);
+//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.lineMSTPatches", lineMSTPatches);
+//
+//}
 
 
 

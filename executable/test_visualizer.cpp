@@ -65,12 +65,15 @@ TEST(Visualizer, _1){
         .begin(ss, [&clickedCount](vis::InteractionID iid, core::Sphere3 & s){
             if (iid == vis::ClickLeftButton)
                 std::cout << "clicked on the spheres, its center is at " << s.center << std::endl;
+            else
+                std::cout << "pressed on the spheres, its center is at " << s.center << std::endl;
             })
             .resource("texture")
             .shaderSource(vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama))
         .end()
+        .renderMode(vis::RenderModeFlag::Lines | vis::RenderModeFlag::Triangles)
         .show();
-
+    
 }
 
 

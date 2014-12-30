@@ -161,6 +161,7 @@ namespace panoramix {
                 core::Vec4f color; // the intrinsic color
                 core::Vec2f texCoord;
                 int entityIndex; // index in container
+                uint8_t isSelected;
             };
 
             using VertHandle = uint32_t;
@@ -177,13 +178,13 @@ namespace panoramix {
 
             LineHandle addLine(VertHandle v1, VertHandle v2);
             LineHandle addIsolatedLine(const Vertex & v1, const Vertex & v2);
-            size_t numberOfLines();
-            void fetchLineVerts(LineHandle l, VertHandle & v1, VertHandle & v2);
+            size_t numberOfLines() const;
+            void fetchLineVerts(LineHandle l, VertHandle & v1, VertHandle & v2) const;
 
             TriangleHandle addTriangle(VertHandle v1, VertHandle v2, VertHandle v3);
             TriangleHandle addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3);
-            size_t numberOfTriangles();
-            void fetchTriangleVerts(TriangleHandle t, VertHandle & v1, VertHandle & v2, VertHandle & v3);
+            size_t numberOfTriangles() const;
+            void fetchTriangleVerts(TriangleHandle t, VertHandle & v1, VertHandle & v2, VertHandle & v3) const;
 
             void addQuad(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4);
             void addPolygon(const std::vector<VertHandle> & vhs);

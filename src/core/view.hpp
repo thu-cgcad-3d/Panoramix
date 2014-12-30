@@ -4,6 +4,7 @@
 #include "basic_types.hpp"
 #include "graph.hpp"
 #include "cameras.hpp"
+#include "utilities.hpp"
  
 namespace panoramix {
     namespace core {
@@ -327,6 +328,7 @@ namespace panoramix {
         struct MGPatch {
             MGUnaryVarTable uhs;
             MGBinaryVarTable bhs;
+ 
             inline void updateBinaryVars(const MixedGraph & mg, const std::vector<Vec3> & vps) {
                 UpdateBinaryVars(mg, vps, uhs, bhs);
             }
@@ -397,6 +399,10 @@ namespace panoramix {
             ScalePatch(result, scale);
             return result;
         }
+        inline MGPatch & operator /= (MGPatch & patch, double scale){ 
+            patch *= (1.0 / scale); return patch; 
+        }
+
 
 
 
@@ -436,13 +442,17 @@ namespace panoramix {
             MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars);
 
         // grow a reasonable patch from one root uh
-        std::unordered_map<MGUnaryHandle, double> GrowAPatch(const MixedGraph & mg, MGPatch & patch,
+        std::unordered_map<MGUnaryHandle, double> GrowAPatch(const MixedGraph & mg, MGPatch & patch, 
+            const Vec3 & centerDirection, double boundingAngle,
             MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars,
             const std::vector<Vec3> & vps,
-            double visualRadiusAngle,
             double scoreThreshold = 0.3,
             int uhMaxNum = 500);
 
+
+
+        // generate potential planes, assign pixels onto these planes
+        std::vector<Plane3> PotentialPlanes(const MixedGraph & mg, const MGPatch & patch, const std::vector<Vec3> & vps);
 
 
     }
