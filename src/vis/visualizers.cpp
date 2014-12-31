@@ -855,28 +855,48 @@ namespace panoramix {
             QPointF _lastPos;
         };
 
-
-        class VisualizerMainWindow : public QMainWindow {
-        public:
-            explicit VisualizerMainWindow(QWidget * parent = nullptr) : QMainWindow(parent) {
-                setupGui();
-            }
-            void setupGui() {
-                auto menuView = this->menuBar()->addMenu(tr("View"));
-                auto menuAbout = this->menuBar()->addMenu(tr("About"));
-                this->statusBar()->show();
-
-                auto actionAbout = menuAbout->addAction(tr("About"));
-                connect(actionAbout, &QAction::triggered, [this](){
-                    QMessageBox::about(this, tr("About this program"),
-                        tr("Panoramix.Vis is the visulization module of project Panoramix developped by Yang Hao."));
-                });
-            }
-        };
-
         
+        template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>>
+        QWidget * MakeGuiAgent(core::Noted<T> & value, QWidget * parent = nullptr){
+            QDoubleSpinBox * spinBox = new QDoubleSpinBox(parent);
+            spinBox->setValue(value.component);
+            spinBox->setSingleStep(0.01);
+            spinBox->setDecimals(3);
+            spinBox->setRange(0.0, 1.0);
+            auto signal = static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged);
+            QObject::connect(spinBox, signal, [&value](double v){
+                std::cout << "value of " << value.note << " is set to " << v << "!" << std::endl;
+                value.component = v;
+            });
+            return spinBox;
+        }
+
+        QWidget * MakeGuiAgent(core::Noted<Color> & value, QWidget * parent = nullptr){
+            NOT_IMPLEMENTED_YET();
+        }
 
 
+        template <class ... Ts>
+        void PopUpDialog(QWidget * parent, core::Noted<Ts> & ... values){
+            QString names[] = { QString::fromStdString(values.note) ... };
+            QWidget * agents[] = { MakeGuiAgent(values, nullptr) ... };
+            QDialog dialog;
+            QFormLayout * layout = new QFormLayout;
+            for (int i = 0; i < sizeof...(Ts); i++){
+                layout->addRow(names[i], agents[i]);
+            }
+            dialog.setLayout(layout);
+            dialog.exec();
+        }
+
+
+        void PopUpGui(RenderOptions & options, QWidget * widget = nullptr){
+            core::Noted<float> bwColor = core::NoteAs(options.bwColor, "Blend Weight of Color");
+            core::Noted<float> bwTexColor = core::NoteAs(options.bwTexColor, "Blend Weight of Texture Color");
+            PopUpDialog(widget, bwColor, bwTexColor);
+            options.bwColor = bwColor.component;
+            options.bwTexColor = bwTexColor.component;
+        }
 
 
 
@@ -885,13 +905,30 @@ namespace panoramix {
         void Visualizer::show(bool doModal, bool autoSetCamera) {
             auto app = Singleton::InitGui();
             VisualizerWidget * w = new VisualizerWidget(*this);
-            VisualizerMainWindow * mwin = new VisualizerMainWindow();
+            
+            QMainWindow * mwin = new QMainWindow;
             mwin->setCentralWidget(w);
             mwin->setAttribute(Qt::WA_DeleteOnClose);
             mwin->resize(MakeQSize(renderOptions.camera.screenSize()));
             mwin->setWindowTitle(QString::fromStdString(renderOptions.winName));
             mwin->setWindowIcon(Singleton::DefaultConfiguration().icon);
             mwin->setStyleSheet(Singleton::DefaultConfiguration().css);
+
+            auto menuView = mwin->menuBar()->addMenu(QObject::tr("View"));
+            auto actionSettings = menuView->addAction(QObject::tr("Settings"));
+            QObject::connect(actionSettings, &QAction::triggered, [w](){
+                PopUpGui(w->options, w);
+                w->update();
+            });
+            auto menuAbout = mwin->menuBar()->addMenu(QObject::tr("About"));
+            auto actionAbout = menuAbout->addAction(QObject::tr("About"));
+            QObject::connect(actionAbout, &QAction::triggered, [mwin](){
+                QMessageBox::about(mwin, QObject::tr("About this program"),
+                    QObject::tr("Panoramix.Vis is the visulization module of project Panoramix developped by Yang Hao."));
+            });
+            mwin->statusBar()->show();
+
+
             auto palette = mwin->palette();
             palette.setColor(QPalette::Window, MakeQColor(renderOptions.backgroundColor));
             mwin->setPalette(palette);

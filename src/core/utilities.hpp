@@ -155,7 +155,8 @@ namespace panoramix {
             T e = 0;
             while (begin != end){
                 auto & v = *begin;
-                e -= v * log2(v);
+                auto ve = (v * log2(v));
+                e -= (std::isnan(ve) ? 0.0 : ve);
                 ++begin;
             }
             return e * factor;

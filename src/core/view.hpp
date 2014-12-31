@@ -332,6 +332,7 @@ namespace panoramix {
             inline void updateBinaryVars(const MixedGraph & mg, const std::vector<Vec3> & vps) {
                 UpdateBinaryVars(mg, vps, uhs, bhs);
             }
+            MGPatch firstUnary() const { return MGPatch{ { *uhs.begin() }, {} }; }
             template <class Archive> void serialize(Archive & ar) {
                 ar(uhs, bhs);
             }
@@ -436,24 +437,19 @@ namespace panoramix {
         };
 
 
-
-
-        void AddUnaryAndRelatedBinariesToPatch(const MixedGraph & mg, MGPatch & patch, const MGUnaryHandle & uh,
-            MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars);
-
-        // grow a reasonable patch from one root uh
-        std::unordered_map<MGUnaryHandle, double> GrowAPatch(const MixedGraph & mg, MGPatch & patch, 
-            const Vec3 & centerDirection, double boundingAngle,
-            MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars,
+        void ExtandPatch(const MixedGraph & mg, MGPatch & patch,
+            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars,
             const std::vector<Vec3> & vps,
-            double scoreThreshold = 0.3,
-            int uhMaxNum = 500);
+            std::unordered_map<MGUnaryHandle, double> & uhScores,
+            std::unordered_map<MGBinaryHandle, double> & bhScores,
+            std::vector<MGUnaryHandle> & uhsOrder,
+            double scoreThreshold,
+            const std::function<bool(MGUnaryHandle)> & uhIsValid);
 
-
-
-        // generate potential planes, assign pixels onto these planes
-        std::vector<Plane3> PotentialPlanes(const MixedGraph & mg, const MGPatch & patch, const std::vector<Vec3> & vps);
-
+        // reconstruction
+        std::vector<MGPatch> Reconstruct(const MixedGraph & mg,
+            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars,
+            const std::vector<Vec3> & vps);
 
     }
 }

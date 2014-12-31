@@ -704,7 +704,7 @@ TEST(MixedGraph, LinesOptimization) {
 }
 
 
-TEST(MixedGraph, GrowAPatch){
+TEST(MixedGraph, Reconstrut){
 
     core::Image panorama;
     std::vector<core::Vec3> vanishingPoints;
@@ -720,17 +720,107 @@ TEST(MixedGraph, GrowAPatch){
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
-    std::vector<core::MGPatch> patches;
-    core::LoadFromDisk("./cache/test_view.MixedGraph.AdjustPatch.grownLinePatches", patches);
+    using namespace core;
+    auto & vps = vanishingPoints;
 
-    patches.front().updateBinaryVars(mg, vanishingPoints);
-    core::MGPatchDepthsOptimizer(mg, patches.front(), vanishingPoints, false, core::MGPatchDepthsOptimizer::EigenSparseQR).optimize();
 
-    core::GrowAPatch(mg, patches.front(), core::Vec3(1, 1, 1), 1e5,
-        unaryVars, binaryVars, vanishingPoints, 0.01, 1e6);
-    VisualizeMixedGraph(panorama, mg, { patches.front() }, vanishingPoints, true);
 
-    core::SaveToDisk("./cache/test_view.MixedGraph.GrowAPatch.grownLinePatches_ii", patches);
+    std::vector<core::MGPatch> patches =
+        core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
+
+    struct AlwaysTrue {
+        bool operator()(MGUnaryHandle uh) const { return true; }
+    } alwaysTrue;
+
+    for (auto & patch : patches){
+
+        for (auto uhv : patch.uhs) {
+
+            if (mg.data(uhv.first).type == MGUnary::Region)
+                continue;
+
+            core::MGPatch patchSeed = { { uhv }, {} };
+
+            std::unordered_map<MGUnaryHandle, double> uhScores;
+            std::unordered_map<MGBinaryHandle, double> bhScores;
+
+            std::vector<MGUnaryHandle> orderedUhs; // the installation order
+            orderedUhs.push_back(uhv.first);
+
+            ExtandPatch(mg, patchSeed, unaryVars, binaryVars, vps, uhScores, bhScores, orderedUhs, 0.1, alwaysTrue);
+            patch.updateBinaryVars(mg, vps);
+
+            if (patchSeed.uhs.size() == 1)
+                continue;
+
+            std::unordered_map<MGUnaryHandle, int> uhOrders;
+            for (int o = 0; o < orderedUhs.size(); o++){
+                uhOrders[orderedUhs[o]] = o;
+            }
+            std::vector<std::vector<MGBinaryHandle>> binariesDeterminedByOrderedUhs(orderedUhs.size());
+
+            // for each uh-i, collect all binaries connecting two uhs: 
+            //      one uh installed before uh-i, 
+            //      another installed after uh-i (or IS uh-i)
+            // sum the violations of these binaries for uh-i
+            // we can iterate each bh to install bh into its determiner uhs
+            for (auto & bhv : patchSeed.bhs){
+                auto bh = bhv.first;
+                auto uh1 = mg.topo(bh).lowers[0];
+                auto uh2 = mg.topo(bh).lowers[1];
+                int uh1InstallOrd = uhOrders.at(uh1);
+                int uh2InstallOrd = uhOrders.at(uh2);
+
+                if (uh1InstallOrd > uh2InstallOrd){
+                    std::swap(uh1InstallOrd, uh2InstallOrd);
+                }
+                for (int ord = uh1InstallOrd + 1; ord <= uh2InstallOrd; ord++){
+                    binariesDeterminedByOrderedUhs[ord].push_back(bh);
+                }
+            }
+
+            // compute the confidence of each uh installation
+            std::vector<double> installationConfidenceOfOrderedUhs(orderedUhs.size(), 0.0);
+            double avgDepthOfPatch = AverageDepthOfPatch(patch);
+            for (int i = 0; i < orderedUhs.size(); i++){
+                auto uh = orderedUhs[i];
+                //double uhScore = uhScores.at(uh);
+                auto & affectedBhs = binariesDeterminedByOrderedUhs[i];
+                if (affectedBhs.size() == 0){
+                    assert(uh == uhv.first);
+                    installationConfidenceOfOrderedUhs[i] = 1e5;
+                    continue;
+                }
+
+                double distanceSum = 0.0;
+                for (auto bh : affectedBhs){
+                    distanceSum += BinaryDistanceOfPatch(bh, patch);
+                }
+                distanceSum /= affectedBhs.size();
+                distanceSum /= avgDepthOfPatch;
+                if (distanceSum == 0.0){
+                    distanceSum = 1e-5;
+                }
+                double uhConfidence = 1.0 - distanceSum;
+
+                installationConfidenceOfOrderedUhs[i] = uhConfidence;
+            }
+
+            // check the most unconfident uhs
+            std::vector<MGUnaryHandle> uhsOrderedByUnConfidencies = orderedUhs;
+            std::sort(uhsOrderedByUnConfidencies.begin(), uhsOrderedByUnConfidencies.end(),
+                [&uhOrders, &installationConfidenceOfOrderedUhs](MGUnaryHandle uh1, MGUnaryHandle uh2){
+                return installationConfidenceOfOrderedUhs[uhOrders.at(uh1)] <
+                    installationConfidenceOfOrderedUhs[uhOrders.at(uh2)];
+            });
+
+            for (auto uh : uhsOrderedByUnConfidencies){
+
+            }
+
+        }
+    }
+
 }
 
 
@@ -754,41 +844,13 @@ TEST(MixedGraph, AdjustPatch){
     core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
 
     std::vector<core::MGPatch> grownLinePatches;
-    core::LoadFromDisk("./cache/test_view.MixedGraph.AdjustPatch.grownLinePatches", grownLinePatches);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.GrowAPatch.grownLinePatches", grownLinePatches);
 
     ManuallyOptimizeMixedGraph(panorama, mg, grownLinePatches.front(), vanishingPoints);
 
-    core::SaveToDisk("./cache/test_view.MixedGraph.AdjustPatch.grownLinePatches", grownLinePatches);
+    core::SaveToDisk("./cache/test_view.MixedGraph.GrowAPatch.grownLinePatches", grownLinePatches);
     
 }
-
-
-
-
-//TEST(MixedGraph, PlanePotentialsOfLinesPatches){
-//
-//    core::Image panorama;
-//    std::vector<core::Vec3> vanishingPoints;
-//
-//    core::MixedGraph mg;
-//    core::MGUnaryVarTable unaryVars;
-//    core::MGBinaryVarTable binaryVars;
-//
-//    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
-//    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
-//
-//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
-//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
-//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
-//
-//    std::vector<core::MGPatch> linePatches;
-//    std::vector<core::MGPatch> lineMSTPatches;
-//
-//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.linePatches", linePatches);
-//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.LinesOptimization.lineMSTPatches", lineMSTPatches);
-//
-//}
-
 
 
 
@@ -798,6 +860,6 @@ int main(int argc, char * argv[], char * envp[]) {
     testing::InitGoogleTest(&argc, argv);
     testing::GTEST_FLAG(catch_exceptions) = false;
     testing::GTEST_FLAG(throw_on_failure) = true;
-    testing::GTEST_FLAG(filter) = "MixedGraph.GrowAPatch";
+    testing::GTEST_FLAG(filter) = "MixedGraph.AdjustPatch";
     return RUN_ALL_TESTS();
 }

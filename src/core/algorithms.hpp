@@ -458,8 +458,21 @@ namespace panoramix {
         }
 
 
+        template <
+            class VertIteratorT, class EdgeIteratorT,
+            class EdgeVertsGetterT,
+            class EdgeOutputIteratorT,
+            class EdgeCompareOnWeightT,
+            class VertCompareT = std::less < typename std::iterator_traits<VertIteratorT>::value_type >
+        >
+        void MinCut(VertIteratorT vertsBegin, VertIteratorT vertsEnd, 
+            EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd, 
+            EdgeVertsGetterT vertsGetter, 
+            EdgeCompareOnWeightT cmpEdge, VertCompareT cmpVert = VertCompareT()){
 
-        
+            
+
+        }
 
 
     }

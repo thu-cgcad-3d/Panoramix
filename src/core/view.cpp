@@ -2545,7 +2545,7 @@ namespace panoramix {
             using UOptionQueue = MaxHeap<UOption, double, std::unordered_map<UOption, int, UOptionHasher>>;
 
             struct UDependency{
-                std::unordered_set<MGBinaryHandle> bhs;
+                std::unordered_map<MGBinaryHandle, double> bhs;
                 double precomputedDepth;
             };
 
@@ -2577,12 +2577,12 @@ namespace panoramix {
                     for (auto & ds : dependencies){
                         if (abs(ds.component.precomputedDepth - depth) < depthThreshold){
                             ds.score += scoreOnThisBh;
-                            ds.component.bhs.insert(bh);
+                            ds.component.bhs[bh] = scoreOnThisBh;
                             hasDuplicates = true;
                         }
                     }
                     if (!hasDuplicates){
-                        dependencies.push_back(ScoreAs(UDependency{ {}, depth }, scoreOnThisBh));
+                        dependencies.push_back(ScoreAs(UDependency{ {std::make_pair(bh, scoreOnThisBh)},  depth }, scoreOnThisBh));
                     }
                 }
 
@@ -2599,16 +2599,26 @@ namespace panoramix {
 
                 // candidate options for this uh
                 std::vector<Scored<UOption>> outOptionsWithVPScores;
-                if (mg.data(outsider).type == MGUnary::Region){
+                if (mg.data(outsider).type == MGUnary::Region){ // if is a Region
                     outOptionsWithVPScores.resize(vps.size());
                     const Vec3 & ncenter = mg.data(outsider).normalizedCenter;
                     for (int i = 0; i < vps.size(); i++){
-                        double angle = AngleBetweenUndirectedVectors(ncenter, vps[i]);
-                        outOptionsWithVPScores[i] = ScoreAs(UOption{ outsider, i }, Pitfall(M_PI_2 - angle, M_PI_4));
+                        double maxAngle = 0.0;
+                        for (auto & ncorner : mg.data(outsider).normalizedCorners){
+                            double angle = AngleBetweenUndirectedVectors(ncorner, vps[i]);
+                            if (angle > maxAngle){
+                                maxAngle = angle;
+                            }
+                        }  
+                        double score = 1.0;
+                        if (maxAngle >= M_PI_2 * 0.8){
+                            score *= Square((maxAngle - M_PI_2) / (M_PI_2 * 0.2));
+                        }
+                        outOptionsWithVPScores[i] = ScoreAs(UOption{ outsider, i }, score);
                     }
                 }
-                else if (mg.data(outsider).type == MGUnary::Line){
-                    outOptionsWithVPScores = { ScoreAs(UOption{ outsider, unaryVars.at(outsider).claz }, 1.0) };
+                else if (mg.data(outsider).type == MGUnary::Line){ // if is a Line
+                    outOptionsWithVPScores = { ScoreAs(UOption{ outsider, unaryVars.at(outsider).claz }, 0.1) };
                 }
 
                 // find best dependencies with current patch
@@ -2617,26 +2627,38 @@ namespace panoramix {
                     // get the depth with the highest score
                     auto dependencies = DependenciesOfOption(mg, patch, outOption, vps, 0.02);
                     
+                    ///// [[commented out the Entropy calculation]]
                     // get entropy of all choice scores
-                    std::vector<double> scores(dependencies.size());
-                    double scoresSum = 0.0;
-                    for (int i = 0; i < scores.size(); i++){
-                        scores[i] = dependencies[i].score;
-                        scoresSum += scores[i];
-                    }
-                    for (auto & score : scores){
-                        score /= scoresSum;
-                    }
-                    double scoreEntropy = 1.0 - exp(-EntropyOfContainer(scores, 1.0)); // 0 ~ 1
-                    assert(IsBetween(scoreEntropy, -1e-4, 1.0 + 1e-4));
+                    //std::vector<double> scores;
+                    //scores.reserve(dependencies.size());
+                    //double scoresSum = 0.0;
+                    //for (auto & dep : dependencies){
+                    //    if (dep.score >= 0.0){
+                    //        scores.push_back(dep.score);
+                    //        scoresSum += scores.back();
+                    //    }
+                    //}
+                    //for (auto & score : scores){
+                    //    score /= scoresSum;
+                    //}
+                    //double scoreEntropy = 1.0 - exp(-EntropyOfContainer(scores, 1.0)); // 0 ~ 1
+                    //assert(IsBetween(scoreEntropy, -1e-4, 1.0 + 1e-4));
+
                     auto maxDSIter = std::max_element(dependencies.begin(), dependencies.end());
+                    double maxScore = maxDSIter->score;
+                    double bhsSize = maxDSIter->component.bhs.size();
+                    assert(IsBetween(maxScore,
+                        -bhsSize,
+                        bhsSize));
 
                     // register the depth
                     optionDependencies[outOption] = std::move(maxDSIter->component);
                     // update the score
-                    double outOptionScore = (maxDSIter->score - scoreEntropy) * outOptionWithVPScore.score;
-                    if (std::isnan(outOptionScore))
+                    double outOptionScore = (maxDSIter->score/* - scoreEntropy*/) * outOptionWithVPScore.score;
+                    if (std::isnan(outOptionScore)){
                         outOptionScore = std::numeric_limits<double>::lowest();
+                        std::cerr << "nan option score!" << std::endl;
+                    }
 
                     if (!Contains(Q, outOption)){
                         Q.push(outOption, outOptionScore);
@@ -2647,18 +2669,19 @@ namespace panoramix {
                 }
 
             }
-        }
         
-        std::unordered_map<MGUnaryHandle, double> GrowAPatch(const MixedGraph & mg, MGPatch & patch,
-            const Vec3 & centerDirection, double boundingAngle,
-            MGUnaryVarTable & unaryVars, MGBinaryVarTable & binaryVars,
-            const std::vector<Vec3> & vps, double scoreThreshold,
-            int uhMaxNum){
+        }
 
-            std::unordered_map<MGUnaryHandle, double> uhScores;
+        void ExtandPatch(const MixedGraph & mg, MGPatch & patch,
+            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars,
+            const std::vector<Vec3> & vps,
+            std::unordered_map<MGUnaryHandle, double> & uhScores,
+            std::unordered_map<MGBinaryHandle, double> & bhScores,
+            std::vector<MGUnaryHandle> & uhsOrder,
+            double scoreThreshold,
+            const std::function<bool(MGUnaryHandle)> & uhIsValid){
+
             std::unordered_map<UOption, UDependency, UOptionHasher> optionDependencies;
-
-            int originalUhNum = patch.uhs.size();
 
             UOptionQueue Q; // all adjacent uh options
             for (auto & uhv : patch.uhs){
@@ -2669,9 +2692,7 @@ namespace panoramix {
                         outsider = mg.topo(bh).lowers[1];
                     if (Contains(patch, outsider))
                         continue;
-                    double angleOffset = 
-                        AngleBetweenDirections(mg.data(outsider).normalizedCenter, centerDirection);
-                    if (angleOffset > boundingAngle)
+                    if (!uhIsValid(outsider))
                         continue;
                     UpdateOptionsOfAnOutsiderUnary(mg, outsider, Q, optionDependencies, patch, unaryVars, vps);
                 }
@@ -2685,23 +2706,23 @@ namespace panoramix {
                 if (!(!Q.empty() && Q.topScore() >= scoreThreshold))
                     break;
 
-                if (patch.uhs.size() > uhMaxNum + originalUhNum)
-                    break;
-
                 // pop best option
                 UOption o = Q.top();
                 double score = Q.topScore();
                 Q.pop();
 
                 if (Contains(patch, o.uh))
-                    continue;               
+                    continue;
 
                 // install option to patch
                 patch.uhs[o.uh] = MGUnaryVariable{ o.claz, optionDependencies.at(o).precomputedDepth };
-                for (auto & bh : optionDependencies.at(o).bhs){
-                    patch.bhs[bh] = binaryVars.at(bh);
+                for (auto & bhs : optionDependencies.at(o).bhs){
+                    assert(!Contains(patch, bhs.first));
+                    patch.bhs[bhs.first] = binaryVars.at(bhs.first);
+                    bhScores[bhs.first] = bhs.second;
                 }
                 uhScores[o.uh] = score;
+                uhsOrder.push_back(o.uh);
 
                 std::cout << patch.uhs.size() << "-th uh installed" << std::endl;
 
@@ -2715,26 +2736,52 @@ namespace panoramix {
                         outsider = mg.topo(bh).lowers[1];
                     if (Contains(patch, outsider))
                         continue;
-                    double angleOffset =
-                        AngleBetweenDirections(mg.data(outsider).normalizedCenter, centerDirection);
-                    if (angleOffset > boundingAngle)
+                    if (!uhIsValid(outsider))
                         continue;
                     UpdateOptionsOfAnOutsiderUnary(mg, outsider, Q, optionDependencies, patch, unaryVars, vps);
                 }
 
-                
             }
 
             patch.updateBinaryVars(mg, vps);
-            //MGPatchDepthsOptimizer pdo(mg, patch, vps, false, MGPatchDepthsOptimizer::EigenSparseQR);   
-            //pdo.optimize();
-            //if (!IsTreePatch(mg, patch)){
-            //    patch = MinimumSpanningTreePatch(mg, patch);
-            //    MGPatchDepthsOptimizer(mg, patch, vps, false, MGPatchDepthsOptimizer::MosekLinearProgramming)
-            //        .optimize();
-            //}
-            return uhScores;
 
+        }
+
+
+
+        std::vector<MGPatch> Reconstruct(const MixedGraph & mg,
+            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars,
+            const std::vector<Vec3> & vps){
+
+            std::vector<core::MGPatch> patches =
+                core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
+
+            struct AlwaysTrue {
+                bool operator()(MGUnaryHandle uh) const { return true; }
+            } alwaysTrue;
+
+            for (auto & patch : patches){
+
+                std::vector<MGUnaryHandle> orderedUhs; // the installation order
+                std::unordered_map<MGUnaryHandle, double> uhScores;
+                std::unordered_map<MGBinaryHandle, double> bhScores;
+
+                ExtandPatch(mg, patch, unaryVars, binaryVars, vps, uhScores, bhScores, orderedUhs, 0.1, alwaysTrue);
+                patch.updateBinaryVars(mg, vps);
+
+
+
+                // evaluate the violations on binaries
+                // graph-cut on 
+                
+                
+               
+
+            }
+
+            // post adjust
+
+            return patches;
         }
     }
 }
