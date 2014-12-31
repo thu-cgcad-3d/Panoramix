@@ -348,6 +348,7 @@ namespace panoramix {
             return FeasibilityOfPatch(mg, patch, vps) < 0.999;
         }
 
+        double AnchorDistanceSumOnBinaryOfPatch(const MGBinaryHandle & bh, const MGPatch & patch);
         double BinaryDistanceOfPatch(const MGBinaryHandle & bh, const MGPatch & patch);
         double AverageBinaryDistanceOfPatch(const MGPatch & patch, int power = 1);
         double AverageDepthOfPatch(const MGPatch & patch);

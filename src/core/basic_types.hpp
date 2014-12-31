@@ -676,6 +676,16 @@ namespace panoramix {
             ar(c.enabled, c.component);
         }
 
+
+
+
+        template <class RetT, RetT Val, class ... ParamTs>
+        struct AlwaysConstantFunctor {
+            static const RetT value = Val;
+            inline operator RetT() const { return value; }
+            inline RetT operator()(ParamTs ... params) const { return value; }
+        };
+
     }
 }
 

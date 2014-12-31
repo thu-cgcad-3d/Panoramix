@@ -94,6 +94,13 @@ namespace panoramix {
             return Discretize(mesh, c.component, oo);
         }
 
+        template <class T>
+        inline TriMesh & Discretize(TriMesh & mesh, const Colored<T> & c, const DiscretizeOptions & o){
+            auto oo = o;
+            oo.color = c.color;
+            return Discretize(mesh, c.component, oo);
+        }
+
         template <class AttachedT, class T>
         inline TriMesh & Discretize(TriMesh & mesh, const std::pair<AttachedT, T> & p, const DiscretizeOptions & o){
             return Discretize(mesh, p.second, o);

@@ -286,15 +286,22 @@ void VisualizeMixedGraph(const core::Image & panorama,
 
 }
 
+struct DefaultColorizer {
+    vis::Color operator()(core::MGUnaryHandle uh) const {
+        return vis::ColorFromTag(vis::ColorTag::White);
+    }
+};
 
+template <class UhColorizerFunT = DefaultColorizer>
 void ManuallyOptimizeMixedGraph(const core::Image & panorama,
     const core::MixedGraph & mg,
     core::MGPatch & patch,
-    const std::vector<core::Vec3> & vps) {
+    const std::vector<core::Vec3> & vps,
+    UhColorizerFunT uhColorizer = UhColorizerFunT()) {
 
     bool modified = true;
     auto sppCallbackFun = [&patch, &vps, &mg, &modified](vis::InteractionID iid, 
-        const std::pair<core::MGUnaryHandle, vis::SpatialProjectedPolygon> & spp) {
+        const std::pair<core::MGUnaryHandle, vis::Colored<vis::SpatialProjectedPolygon>> & spp) {
         std::cout << "uh: " << spp.first.id << std::endl;
         if (iid == vis::InteractionID::PressSpace){
             std::cout << "space pressed!" << std::endl;
@@ -316,8 +323,8 @@ void ManuallyOptimizeMixedGraph(const core::Image & panorama,
 
         vis::Visualizer viz("mixed graph optimizable");
         viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
-        std::vector<std::pair<core::MGUnaryHandle, vis::SpatialProjectedPolygon>> spps;
-        std::vector<core::Classified<core::Line3>> lines;
+        std::vector<std::pair<core::MGUnaryHandle, vis::Colored<vis::SpatialProjectedPolygon>>> spps;
+        std::vector<vis::Colored<core::Line3>> lines;
 
         for (auto & uhv : patch.uhs){
             auto uh = uhv.first;
@@ -336,11 +343,11 @@ void ManuallyOptimizeMixedGraph(const core::Image & panorama,
 
                 spp.projectionCenter = core::Point3(0, 0, 0);
                 spp.plane = core::PlaneOfMGUnary(region, vps, uhv.second);
-                spps.emplace_back(uh, std::move(spp));
+                spps.emplace_back(uh, std::move(vis::ColorAs(spp, uhColorizer(uh))));
             }
             else if (v.type == core::MGUnary::Line){
                 auto & line = v;
-                lines.push_back(core::ClassifyAs(core::LineOfMGUnary(line, vps, uhv.second), uhv.second.claz));
+                lines.push_back(vis::ColorAs(core::LineOfMGUnary(line, vps, uhv.second), uhColorizer(uh)));
             }
         }
 
@@ -704,7 +711,7 @@ TEST(MixedGraph, LinesOptimization) {
 }
 
 
-TEST(MixedGraph, Reconstrut){
+TEST(MixedGraph, Reconstruct){
 
     core::Image panorama;
     std::vector<core::Vec3> vanishingPoints;
@@ -728,10 +735,6 @@ TEST(MixedGraph, Reconstrut){
     std::vector<core::MGPatch> patches =
         core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
 
-    struct AlwaysTrue {
-        bool operator()(MGUnaryHandle uh) const { return true; }
-    } alwaysTrue;
-
     for (auto & patch : patches){
 
         for (auto uhv : patch.uhs) {
@@ -747,7 +750,8 @@ TEST(MixedGraph, Reconstrut){
             std::vector<MGUnaryHandle> orderedUhs; // the installation order
             orderedUhs.push_back(uhv.first);
 
-            ExtandPatch(mg, patchSeed, unaryVars, binaryVars, vps, uhScores, bhScores, orderedUhs, 0.1, alwaysTrue);
+            ExtandPatch(mg, patchSeed, unaryVars, binaryVars, vps, uhScores, bhScores, orderedUhs, 1e-3, 
+                core::AlwaysConstantFunctor<bool, true, MGUnaryHandle>());
             patch.updateBinaryVars(mg, vps);
 
             if (patchSeed.uhs.size() == 1)
@@ -764,10 +768,14 @@ TEST(MixedGraph, Reconstrut){
             //      another installed after uh-i (or IS uh-i)
             // sum the violations of these binaries for uh-i
             // we can iterate each bh to install bh into its determiner uhs
-            for (auto & bhv : patchSeed.bhs){
-                auto bh = bhv.first;
+            // # FIXME!! // ignore unrelated uh-bhs!!!
+            for (auto & b : mg.elements<1>()){
+                auto bh = b.topo.hd;
                 auto uh1 = mg.topo(bh).lowers[0];
                 auto uh2 = mg.topo(bh).lowers[1];
+                if (!Contains(patchSeed, uh1) || !Contains(patchSeed, uh2))
+                    continue;
+
                 int uh1InstallOrd = uhOrders.at(uh1);
                 int uh2InstallOrd = uhOrders.at(uh2);
 
@@ -778,6 +786,9 @@ TEST(MixedGraph, Reconstrut){
                     binariesDeterminedByOrderedUhs[ord].push_back(bh);
                 }
             }
+
+            
+
 
             // compute the confidence of each uh installation
             std::vector<double> installationConfidenceOfOrderedUhs(orderedUhs.size(), 0.0);
@@ -794,7 +805,7 @@ TEST(MixedGraph, Reconstrut){
 
                 double distanceSum = 0.0;
                 for (auto bh : affectedBhs){
-                    distanceSum += BinaryDistanceOfPatch(bh, patch);
+                    distanceSum += AnchorDistanceSumOnBinaryOfPatch(bh, patch);
                 }
                 distanceSum /= affectedBhs.size();
                 distanceSum /= avgDepthOfPatch;
@@ -814,43 +825,56 @@ TEST(MixedGraph, Reconstrut){
                     installationConfidenceOfOrderedUhs[uhOrders.at(uh2)];
             });
 
-            for (auto uh : uhsOrderedByUnConfidencies){
-
-            }
+            ManuallyOptimizeMixedGraph(panorama, mg, patchSeed, vps, 
+                [&uhsOrderedByUnConfidencies, &uhOrders](MGUnaryHandle curUh){
+                
+                return vis::ColorFromTag(uhOrders.at(curUh) < uhOrders.at(uhsOrderedByUnConfidencies.front()) ?
+                    vis::ColorTag::Blue : 
+                    (uhsOrderedByUnConfidencies.size() >= 2 ? (
+                      uhOrders.at(curUh) < uhOrders.at(uhsOrderedByUnConfidencies[1]) ? vis::ColorTag::Yellow : vis::ColorTag::Red) : 
+                      vis::ColorTag::Red));
+            });
 
         }
     }
 
 }
 
+TEST(MixedGraph, Test){
+    std::vector<double> installationConfidenceOfOrderedUhs;
+    core::LoadFromDisk("./cache/temp", installationConfidenceOfOrderedUhs);
 
-
-
-
-TEST(MixedGraph, AdjustPatch){
-
-    core::Image panorama;
-    std::vector<core::Vec3> vanishingPoints;
-
-    core::MixedGraph mg;
-    core::MGUnaryVarTable unaryVars;
-    core::MGBinaryVarTable binaryVars;
-
-    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
-    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
-
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
-
-    std::vector<core::MGPatch> grownLinePatches;
-    core::LoadFromDisk("./cache/test_view.MixedGraph.GrowAPatch.grownLinePatches", grownLinePatches);
-
-    ManuallyOptimizeMixedGraph(panorama, mg, grownLinePatches.front(), vanishingPoints);
-
-    core::SaveToDisk("./cache/test_view.MixedGraph.GrowAPatch.grownLinePatches", grownLinePatches);
-    
+    int a = 1;
 }
+
+
+
+
+
+//TEST(MixedGraph, AdjustPatch){
+//
+//    core::Image panorama;
+//    std::vector<core::Vec3> vanishingPoints;
+//
+//    core::MixedGraph mg;
+//    core::MGUnaryVarTable unaryVars;
+//    core::MGBinaryVarTable binaryVars;
+//
+//    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+//    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
+//
+//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+//    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
+//
+//    std::vector<core::MGPatch> grownLinePatches;
+//    core::LoadFromDisk("./cache/test_view.MixedGraph.GrowAPatch.grownLinePatches", grownLinePatches);
+//
+//    ManuallyOptimizeMixedGraph(panorama, mg, grownLinePatches.front(), vanishingPoints);
+//
+//    core::SaveToDisk("./cache/test_view.MixedGraph.GrowAPatch.grownLinePatches", grownLinePatches);
+//    
+//}
 
 
 
@@ -860,6 +884,6 @@ int main(int argc, char * argv[], char * envp[]) {
     testing::InitGoogleTest(&argc, argv);
     testing::GTEST_FLAG(catch_exceptions) = false;
     testing::GTEST_FLAG(throw_on_failure) = true;
-    testing::GTEST_FLAG(filter) = "MixedGraph.AdjustPatch";
+    testing::GTEST_FLAG(filter) = "MixedGraph.Reconstruct";
     return RUN_ALL_TESTS();
 }

@@ -196,11 +196,16 @@ namespace panoramix {
         };
 
 
-      
+        template <class T>
+        struct Colored {
+            T component;
+            Color color;
+        };
 
-
-
-
+        template <class T>
+        inline Colored<T> ColorAs(const T & comp, const Color & color){
+            return Colored<T>{comp, color};
+        }
     }
 
 

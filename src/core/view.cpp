@@ -1695,14 +1695,17 @@ namespace panoramix {
             return minConsistency;
         }
 
-
-        double BinaryDistanceOfPatch(const MGBinaryHandle & bh, const MGPatch & patch){
+        double AnchorDistanceSumOnBinaryOfPatch(const MGBinaryHandle & bh, const MGPatch & patch){
             auto & sampleDepths = patch.bhs.at(bh).sampleDepthsOnRelatedUnaries;
             double distanceSum = 0.0;
             for (int i = 0; i < sampleDepths[0].size(); i++){
                 distanceSum += abs(sampleDepths[0][i] - sampleDepths[1][i]);
             }
-            return distanceSum / sampleDepths[0].size();
+            return distanceSum;
+        }
+
+        double BinaryDistanceOfPatch(const MGBinaryHandle & bh, const MGPatch & patch){
+            return AnchorDistanceSumOnBinaryOfPatch(bh, patch) / patch.bhs.at(bh).sampleDepthsOnRelatedUnaries[0].size();
         }
 
         double AverageBinaryDistanceOfPatch(const MGPatch & patch, int pow){
