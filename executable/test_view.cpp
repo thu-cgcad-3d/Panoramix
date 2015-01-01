@@ -730,34 +730,34 @@ TEST(MixedGraph, Reconstruct){
     using namespace core;
     auto & vps = vanishingPoints;
 
-
-
     std::vector<core::MGPatch> patches =
         core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
 
-    for (auto & patch : patches){
-
+    for (auto & patch : patches) {
         for (auto uhv : patch.uhs) {
-
             if (mg.data(uhv.first).type == MGUnary::Region)
                 continue;
 
             core::MGPatch patchSeed = { { uhv }, {} };
 
-            std::unordered_map<MGUnaryHandle, double> uhScores;
-            std::unordered_map<MGBinaryHandle, double> bhScores;
+            core::HandledTable<MGUnaryHandle, double> uhScores(mg.internalElements<0>().size(), -1.0);
+            core::HandledTable<MGBinaryHandle, double> bhScores(mg.internalElements<1>().size(), -1.0);
 
             std::vector<MGUnaryHandle> orderedUhs; // the installation order
+            orderedUhs.reserve(mg.internalElements<0>().size());
             orderedUhs.push_back(uhv.first);
 
-            ExtandPatch(mg, patchSeed, unaryVars, binaryVars, vps, uhScores, bhScores, orderedUhs, 1e-3, 
-                core::AlwaysConstantFunctor<bool, true, MGUnaryHandle>());
-            patch.updateBinaryVars(mg, vps);
+            {
+                core::Clock clock = "extend patch";
+                ExtandPatch(mg, patchSeed, unaryVars, binaryVars, vps, uhScores, bhScores, orderedUhs, 1e-3,
+                    core::AlwaysConstantFunctor<bool, true, MGUnaryHandle>());
+                patch.updateBinaryVars(mg, vps);
+            }
 
             if (patchSeed.uhs.size() == 1)
                 continue;
 
-            std::unordered_map<MGUnaryHandle, int> uhOrders;
+            core::HandledTable<MGUnaryHandle, int> uhOrders(mg.internalElements<0>().size(), -1);
             for (int o = 0; o < orderedUhs.size(); o++){
                 uhOrders[orderedUhs[o]] = o;
             }
@@ -768,25 +768,55 @@ TEST(MixedGraph, Reconstruct){
             //      another installed after uh-i (or IS uh-i)
             // sum the violations of these binaries for uh-i
             // we can iterate each bh to install bh into its determiner uhs
-            // # FIXME!! // ignore unrelated uh-bhs!!!
-            for (auto & b : mg.elements<1>()){
-                auto bh = b.topo.hd;
-                auto uh1 = mg.topo(bh).lowers[0];
-                auto uh2 = mg.topo(bh).lowers[1];
-                if (!Contains(patchSeed, uh1) || !Contains(patchSeed, uh2))
-                    continue;
+            // # FIXME!! TOO SLOW!!
+            // record ancestries
+            {
+                core::Clock clock = "...";
+                for (auto & b : mg.elements<1>()){
+                    auto bh = b.topo.hd;
+                    auto uh1 = mg.topo(bh).lowers[0];
+                    auto uh2 = mg.topo(bh).lowers[1];
+                    if (!Contains(patchSeed, uh1) || !Contains(patchSeed, uh2))
+                        continue;
 
-                int uh1InstallOrd = uhOrders.at(uh1);
-                int uh2InstallOrd = uhOrders.at(uh2);
+                    int uh1InstallOrd = uhOrders.at(uh1);
+                    int uh2InstallOrd = uhOrders.at(uh2);
 
-                if (uh1InstallOrd > uh2InstallOrd){
-                    std::swap(uh1InstallOrd, uh2InstallOrd);
-                }
-                for (int ord = uh1InstallOrd + 1; ord <= uh2InstallOrd; ord++){
-                    binariesDeterminedByOrderedUhs[ord].push_back(bh);
+                    if (uh1InstallOrd > uh2InstallOrd){
+                        std::swap(uh1, uh2);
+                        std::swap(uh1InstallOrd, uh2InstallOrd);
+                    }
+
+                    std::unordered_set<MGUnaryHandle> mayBeRelatedUhs;
+                    for (int ord = uh1InstallOrd + 1; ord <= uh2InstallOrd; ord++){
+                        mayBeRelatedUhs.insert(orderedUhs[ord]);
+                    }
+
+                    auto getUhParentsInPatch = [&mg, &patchSeed, &uhOrders, uh1InstallOrd, uh2InstallOrd](MGUnaryHandle uh){
+                        std::vector<MGUnaryHandle> parents;
+                        int uhOrd = uhOrders.at(uh);
+                        for (auto bh : mg.topo(uh).uppers){
+                            if (!Contains(patchSeed, bh)) // only conisder bhs in patch
+                                continue;
+                            auto anotherUh = mg.topo(bh).lowers[0];
+                            if (anotherUh == uh)
+                                anotherUh = mg.topo(bh).lowers[1];
+                            int anotherUhOrd = uhOrders.at(anotherUh);
+                            if (anotherUhOrd > uhOrd)
+                                continue;
+                            if (anotherUhOrd <= uh1InstallOrd || anotherUhOrd > uh2InstallOrd)
+                                continue;
+                            parents.push_back(anotherUh);
+                        }
+                        return parents;
+                    };
+                    DepthFirstSearch(mayBeRelatedUhs.begin(), mayBeRelatedUhs.end(), getUhParentsInPatch, 
+                        [&binariesDeterminedByOrderedUhs, &uhOrders, bh](MGUnaryHandle uh){
+                        binariesDeterminedByOrderedUhs[uhOrders.at(uh)].push_back(bh);
+                        return true;
+                    });
                 }
             }
-
             
 
 
@@ -827,12 +857,10 @@ TEST(MixedGraph, Reconstruct){
 
             ManuallyOptimizeMixedGraph(panorama, mg, patchSeed, vps, 
                 [&uhsOrderedByUnConfidencies, &uhOrders](MGUnaryHandle curUh){
-                
-                return vis::ColorFromTag(uhOrders.at(curUh) < uhOrders.at(uhsOrderedByUnConfidencies.front()) ?
-                    vis::ColorTag::Blue : 
-                    (uhsOrderedByUnConfidencies.size() >= 2 ? (
-                      uhOrders.at(curUh) < uhOrders.at(uhsOrderedByUnConfidencies[1]) ? vis::ColorTag::Yellow : vis::ColorTag::Red) : 
-                      vis::ColorTag::Red));
+                auto pos = std::find(uhsOrderedByUnConfidencies.begin(), uhsOrderedByUnConfidencies.end(), curUh) - 
+                    uhsOrderedByUnConfidencies.begin();
+                double r = double(pos) / uhsOrderedByUnConfidencies.size();
+                return vis::Color(r, r, r, 1.0);
             });
 
         }

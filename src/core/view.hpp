@@ -441,16 +441,16 @@ namespace panoramix {
         void ExtandPatch(const MixedGraph & mg, MGPatch & patch,
             const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars,
             const std::vector<Vec3> & vps,
-            std::unordered_map<MGUnaryHandle, double> & uhScores,
-            std::unordered_map<MGBinaryHandle, double> & bhScores,
+            HandledTable<MGUnaryHandle, double> & uhScores,
+            HandledTable<MGBinaryHandle, double> & bhScores,
             std::vector<MGUnaryHandle> & uhsOrder,
             double scoreThreshold,
             const std::function<bool(MGUnaryHandle)> & uhIsValid);
 
         // reconstruction
-        std::vector<MGPatch> Reconstruct(const MixedGraph & mg,
+        /*std::vector<MGPatch> Reconstruct(const MixedGraph & mg,
             const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars,
-            const std::vector<Vec3> & vps);
+            const std::vector<Vec3> & vps);*/
 
     }
 }

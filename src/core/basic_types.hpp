@@ -678,7 +678,7 @@ namespace panoramix {
 
 
 
-
+        // to represent any functor type which returns constant int value
         template <class RetT, RetT Val, class ... ParamTs>
         struct AlwaysConstantFunctor {
             static const RetT value = Val;

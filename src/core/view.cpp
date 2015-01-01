@@ -2678,8 +2678,8 @@ namespace panoramix {
         void ExtandPatch(const MixedGraph & mg, MGPatch & patch,
             const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars,
             const std::vector<Vec3> & vps,
-            std::unordered_map<MGUnaryHandle, double> & uhScores,
-            std::unordered_map<MGBinaryHandle, double> & bhScores,
+            HandledTable<MGUnaryHandle, double> & uhScores,
+            HandledTable<MGBinaryHandle, double> & bhScores,
             std::vector<MGUnaryHandle> & uhsOrder,
             double scoreThreshold,
             const std::function<bool(MGUnaryHandle)> & uhIsValid){
@@ -2705,7 +2705,7 @@ namespace panoramix {
 
             while (true){
 
-                std::cout << "Q score " << Q.topScore() << "  Q size " << Q.size() << std::endl;
+                //std::cout << "Q score " << Q.topScore() << "  Q size " << Q.size() << std::endl;
                 if (!(!Q.empty() && Q.topScore() >= scoreThreshold))
                     break;
 
@@ -2727,7 +2727,7 @@ namespace panoramix {
                 uhScores[o.uh] = score;
                 uhsOrder.push_back(o.uh);
 
-                std::cout << patch.uhs.size() << "-th uh installed" << std::endl;
+                //std::cout << patch.uhs.size() << "-th uh installed" << std::endl;
 
                 patch.updateBinaryVars(mg, vps);
                 //MGPatchDepthsOptimizer(mg, patch, vps, false, MGPatchDepthsOptimizer::EigenSparseQR).optimize();                
@@ -2752,39 +2752,5 @@ namespace panoramix {
 
 
 
-        std::vector<MGPatch> Reconstruct(const MixedGraph & mg,
-            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars,
-            const std::vector<Vec3> & vps){
-
-            std::vector<core::MGPatch> patches =
-                core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
-
-            struct AlwaysTrue {
-                bool operator()(MGUnaryHandle uh) const { return true; }
-            } alwaysTrue;
-
-            for (auto & patch : patches){
-
-                std::vector<MGUnaryHandle> orderedUhs; // the installation order
-                std::unordered_map<MGUnaryHandle, double> uhScores;
-                std::unordered_map<MGBinaryHandle, double> bhScores;
-
-                ExtandPatch(mg, patch, unaryVars, binaryVars, vps, uhScores, bhScores, orderedUhs, 0.1, alwaysTrue);
-                patch.updateBinaryVars(mg, vps);
-
-
-
-                // evaluate the violations on binaries
-                // graph-cut on 
-                
-                
-               
-
-            }
-
-            // post adjust
-
-            return patches;
-        }
     }
 }
