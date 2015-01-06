@@ -349,6 +349,7 @@ namespace panoramix {
         }
 
         double AnchorDistanceSumOnBinaryOfPatch(const MGBinaryHandle & bh, const MGPatch & patch);
+        double AnchorDistanceSumOnBinary(const MixedGraph & mg, const MGBinaryHandle & bh, const MGPatch & patch, const std::vector<Vec3> & vps);
         double BinaryDistanceOfPatch(const MGBinaryHandle & bh, const MGPatch & patch);
         double AverageBinaryDistanceOfPatch(const MGPatch & patch, int power = 1);
         double AverageDepthOfPatch(const MGPatch & patch);

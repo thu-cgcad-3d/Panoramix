@@ -1696,10 +1696,26 @@ namespace panoramix {
         }
 
         double AnchorDistanceSumOnBinaryOfPatch(const MGBinaryHandle & bh, const MGPatch & patch){
+            assert(Contains(patch, bh));
             auto & sampleDepths = patch.bhs.at(bh).sampleDepthsOnRelatedUnaries;
             double distanceSum = 0.0;
             for (int i = 0; i < sampleDepths[0].size(); i++){
                 distanceSum += abs(sampleDepths[0][i] - sampleDepths[1][i]);
+            }
+            return distanceSum;
+        }
+
+        double AnchorDistanceSumOnBinary(const MixedGraph & mg, const MGBinaryHandle & bh, const MGPatch & patch, const std::vector<Vec3> & vps){
+            auto uhs = mg.topo(bh).lowers;
+            assert(Contains(patch, uhs.front()) && Contains(patch, uhs.back()));
+            auto & nanchors = mg.data(bh).normalizedAnchors;
+            double distanceSum = 0.0;
+            for (auto & na : nanchors){
+                double d1 = patch.uhs.at(uhs.front()).depthOfCenter *
+                    DepthRatioOnMGUnary(na, mg.data(uhs.front()), vps, patch.uhs.at(uhs.front()).claz);
+                double d2 = patch.uhs.at(uhs.back()).depthOfCenter *
+                    DepthRatioOnMGUnary(na, mg.data(uhs.back()), vps, patch.uhs.at(uhs.back()).claz);
+                distanceSum += abs(d1 - d2);
             }
             return distanceSum;
         }

@@ -67,11 +67,15 @@ namespace panoramix {
         template <class HandleT, class DataT>
         struct HandledTable {
             static_assert(IsHandle<HandleT>::value, "HandleT must be a Handle!");
+            HandledTable() {}
             explicit HandledTable(size_t maxSize) : data(maxSize) {}
             HandledTable(size_t maxSize, const DataT & d) : data(maxSize, d) {}
+            void resize(size_t sz) { data.resize(sz); }
             const DataT & operator[](HandleT h) const { return data[h.id]; }
             const DataT & at(HandleT h) const { return data[h.id]; }
             DataT & operator[](HandleT h) { return data[h.id]; }
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(data); }
             std::vector<DataT> data;
         };
 

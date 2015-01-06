@@ -33,6 +33,7 @@ namespace panoramix {
         const std::vector<ColorTag> & AllColorTags();
         std::ostream & operator << (std::ostream & os, ColorTag ct);
         Color ColorFromRGB(double r, double g, double b, double a = 255.0);
+        Color ColorFromHSV(double h, double s, double v, double a = 255.0);
         Color ColorFromTag(ColorTag t);
         Color RandomColor();
         core::Vec3b ToVec3b(const Color & c);

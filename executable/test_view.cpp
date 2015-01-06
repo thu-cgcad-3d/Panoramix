@@ -297,7 +297,8 @@ void ManuallyOptimizeMixedGraph(const core::Image & panorama,
     const core::MixedGraph & mg,
     core::MGPatch & patch,
     const std::vector<core::Vec3> & vps,
-    UhColorizerFunT uhColorizer = UhColorizerFunT()) {
+    UhColorizerFunT uhColorizer = UhColorizerFunT(),
+    bool optimizeInEachIteration = true) {
 
     bool modified = true;
     auto sppCallbackFun = [&patch, &vps, &mg, &modified](vis::InteractionID iid, 
@@ -317,8 +318,10 @@ void ManuallyOptimizeMixedGraph(const core::Image & panorama,
         vis::ResourceStore::set("texture", panorama);
 
         modified = false;
-        core::MGPatchDepthsOptimizer(mg, patch, vps, false, core::MGPatchDepthsOptimizer::EigenSparseQR)
-            .optimize();
+        if (optimizeInEachIteration){
+            core::MGPatchDepthsOptimizer(mg, patch, vps, false, core::MGPatchDepthsOptimizer::EigenSparseQR)
+                .optimize();
+        }
         patch /= core::AverageDepthOfPatch(patch);        
 
         vis::Visualizer viz("mixed graph optimizable");
@@ -733,8 +736,8 @@ TEST(MixedGraph, Reconstruct){
     std::vector<core::MGPatch> patches =
         core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
 
-    for (auto & patch : patches) {
-        for (auto uhv : patch.uhs) {
+    for (auto & pp : patches) {
+        for (auto uhv : pp.uhs) {
             if (mg.data(uhv.first).type == MGUnary::Region)
                 continue;
 
@@ -751,11 +754,20 @@ TEST(MixedGraph, Reconstruct){
                 core::Clock clock = "extend patch";
                 ExtandPatch(mg, patchSeed, unaryVars, binaryVars, vps, uhScores, bhScores, orderedUhs, 1e-3,
                     core::AlwaysConstantFunctor<bool, true, MGUnaryHandle>());
-                patch.updateBinaryVars(mg, vps);
+                patchSeed.updateBinaryVars(mg, vps);
             }
 
             if (patchSeed.uhs.size() == 1)
                 continue;
+
+
+            core::SaveToDisk("./cache/tmp", patchSeed, uhScores, bhScores, orderedUhs);
+            return;
+
+            core::HandledTable<MGBinaryHandle, int> containedInPatchSeed(mg.internalElements<1>().size(), false);
+            for (auto bhv : patchSeed.bhs){
+                containedInPatchSeed[bhv.first] = true;
+            }
 
             core::HandledTable<MGUnaryHandle, int> uhOrders(mg.internalElements<0>().size(), -1);
             for (int o = 0; o < orderedUhs.size(); o++){
@@ -770,7 +782,56 @@ TEST(MixedGraph, Reconstruct){
             // we can iterate each bh to install bh into its determiner uhs
             // # FIXME!! TOO SLOW!!
             // record ancestries
-            {
+            //{
+            //    core::Clock clock = "...";
+            //    for (auto & b : mg.elements<1>()){
+            //        auto bh = b.topo.hd;
+            //        auto uh1 = mg.topo(bh).lowers[0];
+            //        auto uh2 = mg.topo(bh).lowers[1];
+            //        if (!Contains(patchSeed, uh1) || !Contains(patchSeed, uh2))
+            //            continue;
+
+            //        int uh1InstallOrd = uhOrders.at(uh1);
+            //        int uh2InstallOrd = uhOrders.at(uh2);
+
+            //        if (uh1InstallOrd > uh2InstallOrd){
+            //            std::swap(uh1, uh2);
+            //            std::swap(uh1InstallOrd, uh2InstallOrd);
+            //        }
+
+            //        std::unordered_set<MGUnaryHandle> mayBeRelatedUhs;
+            //        for (int ord = uh1InstallOrd + 1; ord <= uh2InstallOrd; ord++){
+            //            mayBeRelatedUhs.insert(orderedUhs[ord]);
+            //        }
+
+            //        auto getUhParentsInPatch = [&mg, &patchSeed, &uhOrders, &containedInPatchSeed,
+            //            uh1InstallOrd, uh2InstallOrd](MGUnaryHandle uh){
+            //            std::vector<MGUnaryHandle> parents;
+            //            int uhOrd = uhOrders.at(uh);
+            //            for (auto bh : mg.topo(uh).uppers){
+            //                if (!containedInPatchSeed[bh]) // only conisder bhs in patch
+            //                    continue;
+            //                auto anotherUh = mg.topo(bh).lowers[0];
+            //                if (anotherUh == uh)
+            //                    anotherUh = mg.topo(bh).lowers[1];
+            //                int anotherUhOrd = uhOrders.at(anotherUh);
+            //                if (anotherUhOrd > uhOrd)
+            //                    continue;
+            //                if (anotherUhOrd <= uh1InstallOrd || anotherUhOrd > uh2InstallOrd)
+            //                    continue;
+            //                parents.push_back(anotherUh);
+            //            }
+            //            return parents;
+            //        };
+            //        DepthFirstSearch(mayBeRelatedUhs.begin(), mayBeRelatedUhs.end(), getUhParentsInPatch, 
+            //            [&binariesDeterminedByOrderedUhs, &uhOrders, bh](MGUnaryHandle uh){
+            //            binariesDeterminedByOrderedUhs[uhOrders.at(uh)].push_back(bh);
+            //            return true;
+            //        });
+            //    }
+            //}
+
+            { // not accurate ? do we need the absolute accuracy?
                 core::Clock clock = "...";
                 for (auto & b : mg.elements<1>()){
                     auto bh = b.topo.hd;
@@ -783,38 +844,11 @@ TEST(MixedGraph, Reconstruct){
                     int uh2InstallOrd = uhOrders.at(uh2);
 
                     if (uh1InstallOrd > uh2InstallOrd){
-                        std::swap(uh1, uh2);
                         std::swap(uh1InstallOrd, uh2InstallOrd);
                     }
-
-                    std::unordered_set<MGUnaryHandle> mayBeRelatedUhs;
                     for (int ord = uh1InstallOrd + 1; ord <= uh2InstallOrd; ord++){
-                        mayBeRelatedUhs.insert(orderedUhs[ord]);
+                        binariesDeterminedByOrderedUhs[ord].push_back(bh);
                     }
-
-                    auto getUhParentsInPatch = [&mg, &patchSeed, &uhOrders, uh1InstallOrd, uh2InstallOrd](MGUnaryHandle uh){
-                        std::vector<MGUnaryHandle> parents;
-                        int uhOrd = uhOrders.at(uh);
-                        for (auto bh : mg.topo(uh).uppers){
-                            if (!Contains(patchSeed, bh)) // only conisder bhs in patch
-                                continue;
-                            auto anotherUh = mg.topo(bh).lowers[0];
-                            if (anotherUh == uh)
-                                anotherUh = mg.topo(bh).lowers[1];
-                            int anotherUhOrd = uhOrders.at(anotherUh);
-                            if (anotherUhOrd > uhOrd)
-                                continue;
-                            if (anotherUhOrd <= uh1InstallOrd || anotherUhOrd > uh2InstallOrd)
-                                continue;
-                            parents.push_back(anotherUh);
-                        }
-                        return parents;
-                    };
-                    DepthFirstSearch(mayBeRelatedUhs.begin(), mayBeRelatedUhs.end(), getUhParentsInPatch, 
-                        [&binariesDeterminedByOrderedUhs, &uhOrders, bh](MGUnaryHandle uh){
-                        binariesDeterminedByOrderedUhs[uhOrders.at(uh)].push_back(bh);
-                        return true;
-                    });
                 }
             }
             
@@ -822,7 +856,7 @@ TEST(MixedGraph, Reconstruct){
 
             // compute the confidence of each uh installation
             std::vector<double> installationConfidenceOfOrderedUhs(orderedUhs.size(), 0.0);
-            double avgDepthOfPatch = AverageDepthOfPatch(patch);
+            double avgDepthOfPatch = AverageDepthOfPatch(patchSeed);
             for (int i = 0; i < orderedUhs.size(); i++){
                 auto uh = orderedUhs[i];
                 //double uhScore = uhScores.at(uh);
@@ -835,7 +869,7 @@ TEST(MixedGraph, Reconstruct){
 
                 double distanceSum = 0.0;
                 for (auto bh : affectedBhs){
-                    distanceSum += AnchorDistanceSumOnBinaryOfPatch(bh, patch);
+                    distanceSum += AnchorDistanceSumOnBinary(mg, bh, patchSeed, vanishingPoints);
                 }
                 distanceSum /= affectedBhs.size();
                 distanceSum /= avgDepthOfPatch;
@@ -857,10 +891,14 @@ TEST(MixedGraph, Reconstruct){
 
             ManuallyOptimizeMixedGraph(panorama, mg, patchSeed, vps, 
                 [&uhsOrderedByUnConfidencies, &uhOrders](MGUnaryHandle curUh){
-                auto pos = std::find(uhsOrderedByUnConfidencies.begin(), uhsOrderedByUnConfidencies.end(), curUh) - 
+              /*  auto pos = std::find(uhsOrderedByUnConfidencies.begin(), uhsOrderedByUnConfidencies.end(), curUh) - 
                     uhsOrderedByUnConfidencies.begin();
                 double r = double(pos) / uhsOrderedByUnConfidencies.size();
-                return vis::Color(r, r, r, 1.0);
+                return vis::Color(r, r, r, 1.0);*/
+                return vis::ColorFromTag(curUh == uhsOrderedByUnConfidencies.front() ? 
+                    vis::ColorTag::Red : vis::ColorTag::Blue);
+                /*double r = double(uhOrders[curUh]) / uhsOrderedByUnConfidencies.size();
+                return vis::ColorFromHSV(r, 0.8, 0.8) / 255.0;*/
             });
 
         }
@@ -869,10 +907,185 @@ TEST(MixedGraph, Reconstruct){
 }
 
 TEST(MixedGraph, Test){
-    std::vector<double> installationConfidenceOfOrderedUhs;
-    core::LoadFromDisk("./cache/temp", installationConfidenceOfOrderedUhs);
+    using namespace core;
+    core::Image panorama;
+    std::vector<core::Vec3> vanishingPoints;
 
-    int a = 1;
+    core::MixedGraph mg;
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
+
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
+
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
+
+    core::MGPatch patchSeed;
+
+    core::HandledTable<MGUnaryHandle, double> uhScores;
+    core::HandledTable<MGBinaryHandle, double> bhScores;
+
+    std::vector<MGUnaryHandle> orderedUhs;
+    core::LoadFromDisk("./cache/tmp", patchSeed, uhScores, bhScores, orderedUhs);
+
+    core::HandledTable<MGBinaryHandle, int> containedInPatchSeed(mg.internalElements<1>().size(), false);
+    for (auto bhv : patchSeed.bhs){
+        containedInPatchSeed[bhv.first] = true;
+    }
+
+    core::HandledTable<MGUnaryHandle, int> uhOrders(mg.internalElements<0>().size(), -1);
+    for (int o = 0; o < orderedUhs.size(); o++){
+        uhOrders[orderedUhs[o]] = o;
+    }
+    std::vector<std::vector<MGBinaryHandle>> binariesDeterminedByOrderedUhs(orderedUhs.size());
+
+    // for each uh-i, collect all binaries connecting two uhs: 
+    //      one uh installed before uh-i, 
+    //      another installed after uh-i (or IS uh-i)
+    // sum the violations of these binaries for uh-i
+    // we can iterate each bh to install bh into its determiner uhs
+    // # FIXME!! TOO SLOW!!
+    // record ancestries
+    //{
+    //    core::Clock clock = "...";
+    //    for (auto & b : mg.elements<1>()){
+    //        auto bh = b.topo.hd;
+    //        auto uh1 = mg.topo(bh).lowers[0];
+    //        auto uh2 = mg.topo(bh).lowers[1];
+    //        if (!Contains(patchSeed, uh1) || !Contains(patchSeed, uh2))
+    //            continue;
+
+    //        int uh1InstallOrd = uhOrders.at(uh1);
+    //        int uh2InstallOrd = uhOrders.at(uh2);
+
+    //        if (uh1InstallOrd > uh2InstallOrd){
+    //            std::swap(uh1, uh2);
+    //            std::swap(uh1InstallOrd, uh2InstallOrd);
+    //        }
+
+    //        std::unordered_set<MGUnaryHandle> mayBeRelatedUhs;
+    //        for (int ord = uh1InstallOrd + 1; ord <= uh2InstallOrd; ord++){
+    //            mayBeRelatedUhs.insert(orderedUhs[ord]);
+    //        }
+
+    //        auto getUhParentsInPatch = [&mg, &patchSeed, &uhOrders, &containedInPatchSeed,
+    //            uh1InstallOrd, uh2InstallOrd](MGUnaryHandle uh){
+    //            std::vector<MGUnaryHandle> parents;
+    //            int uhOrd = uhOrders.at(uh);
+    //            for (auto bh : mg.topo(uh).uppers){
+    //                if (!containedInPatchSeed[bh]) // only conisder bhs in patch
+    //                    continue;
+    //                auto anotherUh = mg.topo(bh).lowers[0];
+    //                if (anotherUh == uh)
+    //                    anotherUh = mg.topo(bh).lowers[1];
+    //                int anotherUhOrd = uhOrders.at(anotherUh);
+    //                if (anotherUhOrd > uhOrd)
+    //                    continue;
+    //                if (anotherUhOrd <= uh1InstallOrd || anotherUhOrd > uh2InstallOrd)
+    //                    continue;
+    //                parents.push_back(anotherUh);
+    //            }
+    //            return parents;
+    //        };
+    //        DepthFirstSearch(mayBeRelatedUhs.begin(), mayBeRelatedUhs.end(), getUhParentsInPatch, 
+    //            [&binariesDeterminedByOrderedUhs, &uhOrders, bh](MGUnaryHandle uh){
+    //            binariesDeterminedByOrderedUhs[uhOrders.at(uh)].push_back(bh);
+    //            return true;
+    //        });
+    //    }
+    //}
+
+    { // not accurate ? do we need the absolute accuracy?
+        core::Clock clock = "...";
+        for (auto & b : mg.elements<1>()){
+            auto bh = b.topo.hd;
+            auto uh1 = mg.topo(bh).lowers[0];
+            auto uh2 = mg.topo(bh).lowers[1];
+            if (!Contains(patchSeed, uh1) || !Contains(patchSeed, uh2))
+                continue;
+
+            int uh1InstallOrd = uhOrders.at(uh1);
+            int uh2InstallOrd = uhOrders.at(uh2);
+
+            if (uh1InstallOrd > uh2InstallOrd){
+                std::swap(uh1InstallOrd, uh2InstallOrd);
+            }
+            for (int ord = uh1InstallOrd + 1; ord <= uh2InstallOrd; ord++){
+                if (mg.data(orderedUhs[ord]).type == MGUnary::Region){
+                    binariesDeterminedByOrderedUhs[ord].push_back(bh);
+                }
+            }
+        }
+    }
+
+
+
+    // compute the confidence of each uh installation
+    std::vector<double> installationConfidenceOfOrderedUhs(orderedUhs.size(), 0.0);
+    double avgDepthOfPatch = AverageDepthOfPatch(patchSeed);
+    for (int i = 0; i < orderedUhs.size(); i++){
+        auto uh = orderedUhs[i];
+        //double uhScore = uhScores.at(uh);
+        auto & affectedBhs = binariesDeterminedByOrderedUhs[i];
+        if (affectedBhs.size() == 0){
+            installationConfidenceOfOrderedUhs[i] = 1e5;
+            continue;
+        }
+
+        double distanceSum = 0.0;
+        for (auto bh : affectedBhs){
+            distanceSum += AnchorDistanceSumOnBinary(mg, bh, patchSeed, vanishingPoints);
+        }
+        distanceSum /= affectedBhs.size();
+        distanceSum /= avgDepthOfPatch;
+        if (distanceSum == 0.0){
+            distanceSum = 1e-5;
+        }
+        double uhConfidence = 1.0 - distanceSum;
+
+        installationConfidenceOfOrderedUhs[i] = uhConfidence;
+    }
+
+    // check the most unconfident uhs
+    std::vector<MGUnaryHandle> uhsOrderedByUnConfidencies = orderedUhs;
+    std::sort(uhsOrderedByUnConfidencies.begin(), uhsOrderedByUnConfidencies.end(),
+        [&uhOrders, &installationConfidenceOfOrderedUhs](MGUnaryHandle uh1, MGUnaryHandle uh2){
+        return installationConfidenceOfOrderedUhs[uhOrders.at(uh1)] <
+            installationConfidenceOfOrderedUhs[uhOrders.at(uh2)];
+    });
+
+    ManuallyOptimizeMixedGraph(panorama, mg, patchSeed, vanishingPoints,
+        [&uhsOrderedByUnConfidencies, &uhOrders](MGUnaryHandle curUh){
+        /*  auto pos = std::find(uhsOrderedByUnConfidencies.begin(), uhsOrderedByUnConfidencies.end(), curUh) -
+        uhsOrderedByUnConfidencies.begin();
+        double r = double(pos) / uhsOrderedByUnConfidencies.size();
+        return vis::Color(r, r, r, 1.0);*/
+       /* return vis::ColorFromTag(curUh == uhsOrderedByUnConfidencies.front() ?
+            vis::ColorTag::Red : vis::ColorTag::Blue);*/
+       /* double r = double(uhOrders[curUh]) / uhsOrderedByUnConfidencies.size();
+        return vis::ColorFromHSV(r, 0.8, 0.8) / 255.0;*/
+
+        bool v = false;
+        for (int i = 0; i < 10; i++){
+            if (curUh == uhsOrderedByUnConfidencies[i]){
+                return vis::ColorFromTag(vis::ColorTag::Blue);
+            }
+        }
+        return vis::ColorFromTag(vis::ColorTag::Red);
+
+    }, false);
+}
+
+TEST(MixedGraph, Test2){
+
+    using namespace core;
+    std::vector<MGUnaryHandle> uhsOrderedByUnConfidencies;
+    
+    core::LoadFromDisk("./cache/uhsOrderedByUnConfidencies", uhsOrderedByUnConfidencies);
+    
+
 }
 
 
@@ -912,6 +1125,6 @@ int main(int argc, char * argv[], char * envp[]) {
     testing::InitGoogleTest(&argc, argv);
     testing::GTEST_FLAG(catch_exceptions) = false;
     testing::GTEST_FLAG(throw_on_failure) = true;
-    testing::GTEST_FLAG(filter) = "MixedGraph.Reconstruct";
+    testing::GTEST_FLAG(filter) = "MixedGraph.Test";
     return RUN_ALL_TESTS();
 }

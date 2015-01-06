@@ -56,6 +56,30 @@ namespace panoramix {
             return Color(b, g, r, a);
         }
 
+        Color ColorFromHSV(double h, double s, double v, double a) {
+            int i;
+            double f, p, q, t;
+            if (s == 0) {
+                // achromatic (grey)
+                return ColorFromRGB(v * 255, v * 255, v * 255, a);
+            }
+            h *= 360.0;
+            h /= 60;			// sector 0 to 5
+            i = floor(h);
+            f = h - i;			// factorial part of h
+            p = v * (1 - s);
+            q = v * (1 - s * f);
+            t = v * (1 - s * (1 - f));
+            switch (i) {
+            case 0: return ColorFromRGB(v*255, t*255, p*255, a);
+            case 1: return ColorFromRGB(q*255, v*255, p*255, a);
+            case 2: return ColorFromRGB(p*255, v*255, t*255, a);
+            case 3: return ColorFromRGB(p*255, q*255, v*255, a);
+            case 4: return ColorFromRGB(t*255, p*255, v*255, a);
+            default:return ColorFromRGB(v*255, p*255, q*255, a);
+            }
+        }
+
         Color ColorFromTag(ColorTag t) {
             switch (t){
             case ColorTag::Transparent: return ColorFromRGB(0, 0, 0, 0);
