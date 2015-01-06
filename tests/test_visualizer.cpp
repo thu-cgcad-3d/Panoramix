@@ -77,9 +77,9 @@ TEST(Visualizer, _1){
 }
 
 
-int main(int argc, char * argv[], char * envp[]) {
-    testing::InitGoogleTest(&argc, argv);
-    testing::GTEST_FLAG(catch_exceptions) = false;
-    testing::GTEST_FLAG(throw_on_failure) = true;
-    return RUN_ALL_TESTS();
-}
+//int main(int argc, char * argv[], char * envp[]) {
+//    testing::InitGoogleTest(&argc, argv);
+//    testing::GTEST_FLAG(catch_exceptions) = false;
+//    testing::GTEST_FLAG(throw_on_failure) = true;
+//    return RUN_ALL_TESTS();
+//}

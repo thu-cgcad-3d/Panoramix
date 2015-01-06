@@ -9,7 +9,7 @@
 using namespace panoramix;
 using namespace test;
 
-double randf(){
+inline double randf(){
     return (std::rand() % 100000) / 100000.0;
 }
 
@@ -112,9 +112,9 @@ TEST(Serialization, FileTime) {
 
 
 
-int main(int argc, char * argv[], char * envp[])
-{
-    testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-
-}
+//int main(int argc, char * argv[], char * envp[])
+//{
+//    testing::InitGoogleTest(&argc, argv);
+//    return RUN_ALL_TESTS();
+//
+//}

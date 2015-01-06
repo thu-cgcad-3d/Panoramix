@@ -3,7 +3,7 @@
 
 #include "basic_types.hpp"
 #include "utilities.hpp"
- 
+
 namespace panoramix {
     namespace core {
 
