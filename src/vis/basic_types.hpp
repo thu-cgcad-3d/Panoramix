@@ -40,10 +40,10 @@ namespace panoramix {
 
             // from vec4
             template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
-            inline Color(const core::Vec<T, 4> & v) : _rgba(core::ConvertTo<int>(v)) {}
+            inline Color(const core::Vec<T, 4> & v) : _rgba(core::vec_cast<int>(v)) {}
 
             template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>, class = void>
-            inline Color(const core::Vec<T, 4> & v) : _rgba(core::ConvertTo<int>(v * 255)) {}
+            inline Color(const core::Vec<T, 4> & v) : _rgba(core::vec_cast<int>(v * 255)) {}
 
             // from vec3
             template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
@@ -74,10 +74,10 @@ namespace panoramix {
             
             // to vec4            
             template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
-            inline operator core::Vec<T, 4>() const { return core::ConvertTo<T>(_rgba); }
+            inline operator core::Vec<T, 4>() const { return core::vec_cast<T>(_rgba); }
 
             template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>, class = void>
-            inline operator core::Vec<T, 4>() const { return core::ConvertTo<T>(_rgba) / 255.0; }
+            inline operator core::Vec<T, 4>() const { return core::vec_cast<T>(_rgba) / 255.0; }
 
         private:
             core::Vec4i _rgba;

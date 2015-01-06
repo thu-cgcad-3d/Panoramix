@@ -65,13 +65,24 @@ namespace panoramix {
         template <class T>
         inline T normalize(const T & d) { return d / norm(d); }
 
-        template <class To, class From, int N>
-        inline Vec<To, N> ConvertTo(const Vec<From, N> & v) {
-            Vec<To, N> out;
-            for (int i = 0; i < N; i++) {
-                out[i] = static_cast<To>(v[i]);
+        namespace {
+            template <class To, class From, int N>
+            inline Vec<To, N> VecCastPrivate(const Vec<From, N> & v, std::false_type) {
+                Vec<To, N> out;
+                for (int i = 0; i < N; i++) {
+                    out[i] = static_cast<To>(v[i]);
+                }
+                return out;
             }
-            return out;
+            template <class To, int N>
+            inline Vec<To, N> VecCastPrivate(const Vec<To, N> & v, std::true_type) {
+                return v;
+            }
+        }
+
+        template <class To, class From, int N>
+        inline Vec<To, N> vec_cast(const Vec<From, N> & v) {
+            return VecCastPrivate<To>(v, std::integral_constant<bool, std::is_same<To, From>::value>());
         }
 
         template <class T, int M, int N>

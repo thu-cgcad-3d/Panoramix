@@ -44,10 +44,10 @@ namespace panoramix {
         template <class T>
         inline void Discretize(TriMesh & mesh, const core::Line<T, 3> & l, const DiscretizeOptions & o){
             TriMesh::Vertex v1, v2;
-            v1.position = core::Concat(core::ConvertTo<float>(l.first), 1.0f);
+            v1.position = core::Concat(core::vec_cast<float>(l.first), 1.0f);
             v1.color = o.color;
             v1.entityIndex = o.index;
-            v2.position = core::Concat(core::ConvertTo<float>(l.second), 1.0f);
+            v2.position = core::Concat(core::vec_cast<float>(l.second), 1.0f);
             v2.color = o.color;
             v2.entityIndex = o.index;
             mesh.addIsolatedLine(v1, v2);
@@ -57,7 +57,7 @@ namespace panoramix {
 
         template <class T>
         inline void Discretize(TriMesh & mesh, const core::Sphere<T, 3> & s, const DiscretizeOptions & o){
-            Discretize(mesh, core::Sphere3{ ConvertTo<double>(s.center), static_cast<double>(s.radius) });
+            Discretize(mesh, core::Sphere3{ vec_cast<double>(s.center), static_cast<double>(s.radius) });
         }
 
         template <class T>
@@ -66,7 +66,7 @@ namespace panoramix {
             for (int i = 0; i < p.corners.size(); i++){
                 TriMesh::Vertex v;
                 v.position = core::Vec4f(p.corners[i][0], p.corners[i][1], p.corners[i][2], 1.0);
-                v.normal = core::ConvertTo<float>(p.normal);
+                v.normal = core::vec_cast<float>(p.normal);
                 v.color = o.color;
                 v.entityIndex = o.index;
                 vhandles[i] = mesh.addVertex(v);

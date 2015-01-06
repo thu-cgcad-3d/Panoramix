@@ -145,7 +145,7 @@ namespace panoramix {
         
         template <class T>
         inline Visualizer2D operator << (Visualizer2D viz, const InfiniteLine<T, 2> & line){
-            return viz << InfiniteLine2(core::ConvertTo<double>(line.anchor), core::ConvertTo<double>(line.direction));
+            return viz << InfiniteLine2(core::vec_cast<double>(line.anchor), core::vec_cast<double>(line.direction));
         }
 
         // keypoints

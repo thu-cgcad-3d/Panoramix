@@ -637,7 +637,7 @@ namespace panoramix {
                         ToAffinePoint(modelMat * vo->mesh().vertices[v1].position),
                         ToAffinePoint(modelMat * vo->mesh().vertices[v2].position),
                         ToAffinePoint(modelMat * vo->mesh().vertices[v3].position),
-                        ConvertTo<float>(centerRay.anchor), ConvertTo<float>(centerRay.direction),
+                        vec_cast<float>(centerRay.anchor), vec_cast<float>(centerRay.direction),
                         &out, epsilon);
                     if (intersected){
                         resultsWithDepths[mti] = out;
@@ -664,7 +664,7 @@ namespace panoramix {
                         bool intersected = TriangleIntersection(ToAffinePoint(vo->mesh().vertices[v1].position),
                             ToAffinePoint(vo->mesh().vertices[v2].position),
                             ToAffinePoint(vo->mesh().vertices[v3].position),
-                            ConvertTo<float>(centerRay.anchor), ConvertTo<float>(centerRay.direction),
+                            vec_cast<float>(centerRay.anchor), vec_cast<float>(centerRay.direction),
                             &out, epsilon);
                         if (intersected){
                             resultsWithDepths[mti] = out;
