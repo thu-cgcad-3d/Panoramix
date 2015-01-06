@@ -147,8 +147,8 @@ TEST(View, RegionLineConnections){
         vis::ColorTable colors = vis::CreateRandomColorTableWithSize(regionsGraphs[i].internalElements<0>().size());
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                coloredOutput(cv::Point(x, y)) =
-                    vis::ToVec3b(colors[segmentedRegionsArray[i](cv::Point(x, y))]);
+                auto & c = colors[segmentedRegionsArray[i](cv::Point(x, y))];
+                coloredOutput(cv::Point(x, y)) = core::Vec3b(c.red(), c.green(), c.blue());
             }
         }
         vizs[i].setImage(views[i].image);
@@ -277,7 +277,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
         }
     }
 
-    viz.installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::DarkGray);
+    viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
     viz.installingOptions.lineWidth = 2.0;
     viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
     viz.add(connectionLines);
@@ -288,7 +288,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
 
 struct DefaultColorizer {
     vis::Color operator()(core::MGUnaryHandle uh) const {
-        return vis::ColorFromTag(vis::ColorTag::White);
+        return vis::ColorTag::White;
     }
 };
 
@@ -753,7 +753,7 @@ TEST(MixedGraph, Reconstruct){
             {
                 core::Clock clock = "extend patch";
                 ExtandPatch(mg, patchSeed, unaryVars, binaryVars, vps, uhScores, bhScores, orderedUhs, 1e-3,
-                    core::AlwaysConstantFunctor<bool, true, MGUnaryHandle>());
+                    core::StaticConstantFunctor<bool, true>());
                 patchSeed.updateBinaryVars(mg, vps);
             }
 
@@ -895,8 +895,8 @@ TEST(MixedGraph, Reconstruct){
                     uhsOrderedByUnConfidencies.begin();
                 double r = double(pos) / uhsOrderedByUnConfidencies.size();
                 return vis::Color(r, r, r, 1.0);*/
-                return vis::ColorFromTag(curUh == uhsOrderedByUnConfidencies.front() ? 
-                    vis::ColorTag::Red : vis::ColorTag::Blue);
+                return curUh == uhsOrderedByUnConfidencies.front() ? 
+                    vis::ColorTag::Red : vis::ColorTag::Blue;
                 /*double r = double(uhOrders[curUh]) / uhsOrderedByUnConfidencies.size();
                 return vis::ColorFromHSV(r, 0.8, 0.8) / 255.0;*/
             });
@@ -1070,10 +1070,10 @@ TEST(MixedGraph, Test){
         bool v = false;
         for (int i = 0; i < 10; i++){
             if (curUh == uhsOrderedByUnConfidencies[i]){
-                return vis::ColorFromTag(vis::ColorTag::Blue);
+                return vis::ColorTag::Blue;
             }
         }
-        return vis::ColorFromTag(vis::ColorTag::Red);
+        return vis::ColorTag::Red;
 
     }, false);
 }

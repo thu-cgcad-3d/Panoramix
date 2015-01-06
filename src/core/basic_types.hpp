@@ -678,12 +678,21 @@ namespace panoramix {
 
 
 
-        // to represent any functor type which returns constant int value
-        template <class RetT, RetT Val, class ... ParamTs>
-        struct AlwaysConstantFunctor {
+        // to represent any functor type which returns constant value
+        template <class RetT, RetT Val>
+        struct StaticConstantFunctor {
             static const RetT value = Val;
-            inline operator RetT() const { return value; }
+            template <class ... ParamTs>
             inline RetT operator()(ParamTs ... params) const { return value; }
+        };
+
+        template <class RetT>
+        struct ConstantFunctor {
+            inline ConstantFunctor(const RetT & v) : value(v) {}
+            inline ConstantFunctor(RetT && v) : value(std::move(v)) {}            
+            template <class ... ParamTs>
+            inline RetT operator()(ParamTs ... params) const { return value; }
+            const RetT value;
         };
 
     }

@@ -64,10 +64,6 @@ namespace panoramix {
                         color);
             }
 
-            inline Manipulator<Color> SetColor(const ColorTag & color) {
-                return SetColor(ColorFromTag(color));
-            }
-
             inline Manipulator<int> SetThickness(int thickness) {
                 return Manipulator<int>(
                     [](Visualizer2D & viz, int t){

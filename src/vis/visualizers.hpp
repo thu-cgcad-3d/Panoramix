@@ -33,15 +33,16 @@ namespace panoramix {
         };
 
         template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Point<T, 3> & p, const DiscretizeOptions & o){
-            auto vh = mesh.addVertex(core::Vec4f(p[0], p[1], p[2], 1.0f));
-            mesh.vertices[vh].color = o.color;
-            mesh.vertices[vh].entityIndex = o.index;
-            return mesh;
+        inline void Discretize(TriMesh & mesh, const core::Point<T, 3> & p, const DiscretizeOptions & o){
+            TriMesh::Vertex v;
+            v.position = core::Vec4f(p[0], p[1], p[2], 1.0f);
+            v.color = o.color;
+            v.entityIndex = o.index;
+            mesh.addVertex(v);
         }
 
         template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Line<T, 3> & l, const DiscretizeOptions & o){
+        inline void Discretize(TriMesh & mesh, const core::Line<T, 3> & l, const DiscretizeOptions & o){
             TriMesh::Vertex v1, v2;
             v1.position = core::Concat(core::ConvertTo<float>(l.first), 1.0f);
             v1.color = o.color;
@@ -50,18 +51,17 @@ namespace panoramix {
             v2.color = o.color;
             v2.entityIndex = o.index;
             mesh.addIsolatedLine(v1, v2);
-            return mesh;
         }
 
-        TriMesh & Discretize(TriMesh & mesh, const core::Sphere3 & s, const DiscretizeOptions & o);
+        void Discretize(TriMesh & mesh, const core::Sphere3 & s, const DiscretizeOptions & o);
 
         template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Sphere<T, 3> & s, const DiscretizeOptions & o){
-            return Discretize(mesh, core::Sphere3{ ConvertTo<double>(s.center), static_cast<double>(s.radius) });
+        inline void Discretize(TriMesh & mesh, const core::Sphere<T, 3> & s, const DiscretizeOptions & o){
+            Discretize(mesh, core::Sphere3{ ConvertTo<double>(s.center), static_cast<double>(s.radius) });
         }
 
         template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Polygon<T, 3> & p, const DiscretizeOptions & o) {
+        inline void Discretize(TriMesh & mesh, const core::Polygon<T, 3> & p, const DiscretizeOptions & o) {
             std::vector<TriMesh::VertHandle> vhandles(p.corners.size());
             for (int i = 0; i < p.corners.size(); i++){
                 TriMesh::Vertex v;
@@ -72,38 +72,36 @@ namespace panoramix {
                 vhandles[i] = mesh.addVertex(v);
             }
             mesh.addPolygon(vhandles);
-            return mesh;
         }
 
-        TriMesh & Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o);
+        void Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o);
         
         template <class T, class AllocT>
-        inline TriMesh & Discretize(TriMesh & mesh, const std::vector<T, AllocT> & v, const DiscretizeOptions & o){
+        inline void Discretize(TriMesh & mesh, const std::vector<T, AllocT> & v, const DiscretizeOptions & o){
             auto oo = o;
             for (auto & e : v){
                 Discretize(mesh, e, oo);
                 oo.index++;
             }
-            return mesh;
         }
 
         template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const core::Classified<T> & c, const DiscretizeOptions & o){
+        inline void Discretize(TriMesh & mesh, const core::Classified<T> & c, const DiscretizeOptions & o){
             auto oo = o;
             oo.color = o.colorTable[c.claz];
-            return Discretize(mesh, c.component, oo);
+            Discretize(mesh, c.component, oo);
         }
 
         template <class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const Colored<T> & c, const DiscretizeOptions & o){
+        inline void Discretize(TriMesh & mesh, const Colored<T> & c, const DiscretizeOptions & o){
             auto oo = o;
             oo.color = c.color;
-            return Discretize(mesh, c.component, oo);
+            Discretize(mesh, c.component, oo);
         }
 
         template <class AttachedT, class T>
-        inline TriMesh & Discretize(TriMesh & mesh, const std::pair<AttachedT, T> & p, const DiscretizeOptions & o){
-            return Discretize(mesh, p.second, o);
+        inline void Discretize(TriMesh & mesh, const std::pair<AttachedT, T> & p, const DiscretizeOptions & o){
+            Discretize(mesh, p.second, o);
         }
 
 

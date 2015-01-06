@@ -7,7 +7,6 @@ namespace panoramix {
     namespace vis {
 
         // color
-        using Color = cv::Scalar;
         enum class ColorTag {
             Transparent,
 
@@ -30,13 +29,66 @@ namespace panoramix {
             Orange
         };
 
+        class Color {
+        public:
+            inline Color() : _rgba(255, 255, 255, 255){}
+            inline Color(int r, int g, int b, int a = 255) 
+                : _rgba(r, g, b, a) {}
+            inline Color(double r, double g, double b, double a = 1.0)
+                : _rgba(static_cast<int>(r * 255), static_cast<int>(g * 255),
+                static_cast<int>(b * 255), static_cast<int>(a * 255)) {}
+
+            // from vec4
+            template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
+            inline Color(const core::Vec<T, 4> & v) : _rgba(core::ConvertTo<int>(v)) {}
+
+            template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>, class = void>
+            inline Color(const core::Vec<T, 4> & v) : _rgba(core::ConvertTo<int>(v * 255)) {}
+
+            // from vec3
+            template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
+            inline Color(const core::Vec<T, 3> & v, T a = 255) 
+                : _rgba(static_cast<int>(v[0]), static_cast<int>(v[1]), 
+                static_cast<int>(v[2]), a) {}
+
+            template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>, class = void>
+            inline Color(const core::Vec<T, 3> & v, T a = 1.0) 
+                : _rgba(static_cast<int>(v[0] * 255), static_cast<int>(v[1] * 255),
+                static_cast<int>(v[2] * 255), a * 255) {}
+
+            Color(ColorTag tag);
+            
+        public:
+            inline int red() const { return _rgba[0]; }
+            inline int green() const { return _rgba[1]; }
+            inline int blue() const { return _rgba[2]; }
+            inline int alpha() const { return _rgba[3]; }
+
+            inline float redf() const { return _rgba[0] / 255.0f; }
+            inline float greenf() const { return _rgba[1] / 255.0f; }
+            inline float bluef() const { return _rgba[2] / 255.0f; }
+            inline float alphaf() const { return _rgba[3] / 255.0f; }
+
+            // to cv::Scalar (bgra)
+            inline operator cv::Scalar() const { return cv::Scalar(_rgba[2], _rgba[1], _rgba[0], _rgba[3]); }
+            
+            // to vec4            
+            template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
+            inline operator core::Vec<T, 4>() const { return core::ConvertTo<T>(_rgba); }
+
+            template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>, class = void>
+            inline operator core::Vec<T, 4>() const { return core::ConvertTo<T>(_rgba) / 255.0; }
+
+        private:
+            core::Vec4i _rgba;
+        };
+
+
         const std::vector<ColorTag> & AllColorTags();
         std::ostream & operator << (std::ostream & os, ColorTag ct);
-        Color ColorFromRGB(double r, double g, double b, double a = 255.0);
         Color ColorFromHSV(double h, double s, double v, double a = 255.0);
         Color ColorFromTag(ColorTag t);
         Color RandomColor();
-        core::Vec3b ToVec3b(const Color & c);
         
 
         // line style

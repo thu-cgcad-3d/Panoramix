@@ -15,8 +15,7 @@ namespace panoramix {
 
         // color
         inline QRgb MakeQRgb(const vis::Color & c) { 
-            return qRgba(static_cast<int>(c[2]), static_cast<int>(c[1]), 
-                static_cast<int>(c[0]), static_cast<int>(c[3])); 
+            return qRgba(c.red(), c.green(), c.blue(), c.alpha()); 
         }
 
         inline QColor MakeQColor(const vis::Color & c) {
@@ -51,8 +50,7 @@ namespace panoramix {
         }
 
         inline QVector4D MakeQVec(const vis::Color & v) {
-            return QVector4D(static_cast<float>(v[2]), static_cast<float>(v[1]),
-                static_cast<float>(v[0]), static_cast<float>(v[3] == 0.0 ? 255.0f : v[3]));
+            return QVector4D(v.redf(), v.greenf(), v.bluef(), v.alphaf());
         }
 
 
