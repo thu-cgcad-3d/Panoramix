@@ -5,6 +5,10 @@
 namespace panoramix {
     namespace vis {
 
+        inline core::Vec3b ToVec3b(const Color & color) {
+            return core::Vec3b(color.red(), color.green(), color.blue());
+        }
+
         Visualizer2D::Visualizer2D(const Image & im, const Params & p) : params(p){
             setImage(im);
         }

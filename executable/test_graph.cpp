@@ -1,6 +1,6 @@
 #include "../src/core/graph.hpp"
 #include "../src/core/utilities.hpp"
-#include "../src/vis/visualize3d.hpp"
+#include "../src/vis/visualizers.hpp"
 
 #include "gtest/gtest.h"
 #include "test_config.hpp"
@@ -41,18 +41,19 @@ void VisualizeMesh(const TestMesh & mesh){
         points.push_back(v.data);
     }
 
-    vis::Visualizer3D()
-        << vis::manip3d::SetDefaultColorTable(vis::ColorTableDescriptor::RGB)
-        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Black)
-        << lines
-        << vis::manip3d::SetDefaultForegroundColor(vis::ColorTag::Red)
-        << vis::manip3d::SetDefaultPointSize(20)
-        << points
-        << vis::manip3d::SetCamera(core::PerspectiveCamera(500, 500, 500,
+    vis::Visualizer viz;
+    viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
+    viz.installingOptions.discretizeOptions.color = vis::ColorTag::Black;
+    viz.installingOptions.lineWidth = 5;
+    viz.add(lines);
+    viz.installingOptions.discretizeOptions.color = vis::ColorTag::Red;
+    viz.installingOptions.pointSize = 20;
+    viz.add(points);
+    viz.renderOptions.backgroundColor = vis::ColorTag::White;
+    viz.camera(core::PerspectiveCamera(500, 500, 500,
         core::Vec3(-3, 0, 0),
-        core::Vec3(0.5, 0.5, 0.5)))
-        << vis::manip3d::SetBackgroundColor(vis::ColorTag::White)
-        << vis::manip3d::Show();
+        core::Vec3(0.5, 0.5, 0.5)));
+    viz.show();
 }
 
 
@@ -217,7 +218,7 @@ TEST(ForestTest, Basic){
     f.remove(n1);
     f.gc();
 
-    EXPECT_EQ(f.internalNodes().size(), 1);
+    EXPECT_EQ(f.internalNodes().size(), 2);
 
 }
 
@@ -319,6 +320,6 @@ int main(int argc, char * argv[], char * envp[])
     testing::InitGoogleTest(&argc, argv);
     testing::GTEST_FLAG(catch_exceptions) = false;
     testing::GTEST_FLAG(throw_on_failure) = true;
-    testing::GTEST_FLAG(filter) = "MixedGraph.Forest.Basic";
+    //testing::GTEST_FLAG(filter) = "MixedGraph.Forest.Basic";
     return RUN_ALL_TESTS();
 }

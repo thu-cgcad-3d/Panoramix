@@ -36,7 +36,7 @@ namespace panoramix {
                         TriMesh::Vertex v;
                         v.position = point;
                         v.texCoord = { xratio, yratio };
-                        v.color = Vec4f(o.color[0], o.color[1], o.color[2], 1.0f);
+                        v.color = o.color;
                         v.entityIndex = o.index;
                         vhs[i][j] = mesh.addVertex(v);
                     }
@@ -67,7 +67,7 @@ namespace panoramix {
                         TriMesh::Vertex v;
                         v.position = point;
                         v.texCoord = { xratio, yratio };
-                        v.color = Vec4f(o.color[0], o.color[1], o.color[2], 1.0f);
+                        v.color = o.color;
                         v.entityIndex = o.index;
                         vs[i][j] = v;
                     }

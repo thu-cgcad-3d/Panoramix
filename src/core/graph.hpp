@@ -133,13 +133,15 @@ namespace panoramix {
             template <class UpdateHandleTableT, class TopoT>
             inline void UpdateOldHandle(const UpdateHandleTableT & newlocationTable, Handle<TopoT> & h) {
                 // UpdateHandleTableT: std::vector<Handle<TopoT>>
-                h = newlocationTable[h.id];
+                if (h.isValid())
+                    h = newlocationTable[h.id];
             }
             template <class UpdateHandleTableT, class ContainerT>
             inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, ContainerT & hs) {
                 // UpdateHandleTableT: std::vector<Handle<TopoT>>
                 for (auto & h : hs){
-                    h = newlocationTable[h.id];
+                    if (h.isValid())
+                        h = newlocationTable[h.id];
                 }
             }
             template <class UpdateHandleTableT, class K, class CompareK, class AllocK>

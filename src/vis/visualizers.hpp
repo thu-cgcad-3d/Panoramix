@@ -34,9 +34,11 @@ namespace panoramix {
 
         template <class T>
         inline TriMesh & Discretize(TriMesh & mesh, const core::Point<T, 3> & p, const DiscretizeOptions & o){
-            auto vh = mesh.addVertex(core::Vec4f(p[0], p[1], p[2], 1.0f));
-            mesh.vertices[vh].color = o.color;
-            mesh.vertices[vh].entityIndex = o.index;
+            TriMesh::Vertex v;
+            v.position = core::Vec4f(p[0], p[1], p[2], 1.0f);
+            v.color = o.color;
+            v.entityIndex = o.index;
+            mesh.addVertex(v);
             return mesh;
         }
 

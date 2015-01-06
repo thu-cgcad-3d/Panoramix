@@ -147,8 +147,8 @@ TEST(View, RegionLineConnections){
         vis::ColorTable colors = vis::CreateRandomColorTableWithSize(regionsGraphs[i].internalElements<0>().size());
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                coloredOutput(cv::Point(x, y)) =
-                    vis::ToVec3b(colors[segmentedRegionsArray[i](cv::Point(x, y))]);
+                auto & c = colors[segmentedRegionsArray[i](cv::Point(x, y))];
+                coloredOutput(cv::Point(x, y)) = core::Vec3b(c.red(), c.green(), c.blue());
             }
         }
         vizs[i].setImage(views[i].image);
@@ -750,7 +750,7 @@ TEST(MixedGraph, Reconstruct){
             {
                 core::Clock clock = "extend patch";
                 ExtandPatch(mg, patchSeed, unaryVars, binaryVars, vps, uhScores, bhScores, orderedUhs, 1e-3,
-                    core::AlwaysConstantFunctor<bool, true, MGUnaryHandle>());
+                    core::StaticConstantFunctor<bool, true>());
                 patch.updateBinaryVars(mg, vps);
             }
 

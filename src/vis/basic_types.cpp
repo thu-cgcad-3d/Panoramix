@@ -8,6 +8,8 @@ namespace panoramix {
 
         using namespace core;
 
+        Color::Color(ColorTag tag) : _rgba(ColorFromTag(tag)._rgba) {}
+
         const std::vector<ColorTag> & AllColorTags() {
             static const std::vector<ColorTag> _allColorTags = {
                 ColorTag::Transparent,
@@ -52,31 +54,27 @@ namespace panoramix {
             return os;
         }
 
-        Color ColorFromRGB(double r, double g, double b, double a) {
-            return Color(b, g, r, a);
-        }
-
         Color ColorFromTag(ColorTag t) {
             switch (t){
-            case ColorTag::Transparent: return ColorFromRGB(0, 0, 0, 0);
+            case ColorTag::Transparent: return Color(0, 0, 0, 0);
 
-            case ColorTag::White: return ColorFromRGB(255, 255, 255);
-            case ColorTag::Black: return ColorFromRGB(0, 0, 0);
+            case ColorTag::White: return Color(255, 255, 255);
+            case ColorTag::Black: return Color(0, 0, 0);
 
-            case ColorTag::DimGray: return ColorFromRGB(105, 105, 105);
-            case ColorTag::Gray: return ColorFromRGB(128, 128, 128);
-            case ColorTag::DarkGray: return ColorFromRGB(169, 169, 169);
-            case ColorTag::Silver: return ColorFromRGB(192, 192, 192);
-            case ColorTag::LightGray: return ColorFromRGB(211, 211, 211);
+            case ColorTag::DimGray: return Color(105, 105, 105);
+            case ColorTag::Gray: return Color(128, 128, 128);
+            case ColorTag::DarkGray: return Color(169, 169, 169);
+            case ColorTag::Silver: return Color(192, 192, 192);
+            case ColorTag::LightGray: return Color(211, 211, 211);
 
-            case ColorTag::Red: return ColorFromRGB(255, 0, 0);
-            case ColorTag::Green: return ColorFromRGB(0, 255, 0);
-            case ColorTag::Blue: return ColorFromRGB(0, 0, 255);
+            case ColorTag::Red: return Color(255, 0, 0);
+            case ColorTag::Green: return Color(0, 255, 0);
+            case ColorTag::Blue: return Color(0, 0, 255);
 
-            case ColorTag::Yellow: return ColorFromRGB(255, 255, 0);
-            case ColorTag::Magenta: return ColorFromRGB(255, 0, 255);
-            case ColorTag::Cyan: return ColorFromRGB(0, 255, 255);
-            case ColorTag::Orange: return ColorFromRGB(255, 165, 0);
+            case ColorTag::Yellow: return Color(255, 255, 0);
+            case ColorTag::Magenta: return Color(255, 0, 255);
+            case ColorTag::Cyan: return Color(0, 255, 255);
+            case ColorTag::Orange: return Color(255, 165, 0);
             default:
                 return Color(255, 255, 255);
             }
@@ -84,10 +82,6 @@ namespace panoramix {
 
         Color RandomColor() {
             return Color(rand() % 255, rand() % 255, rand() % 255);
-        }
-
-        core::Vec3b ToVec3b(const Color & c) {
-            return core::Vec3b(static_cast<uint8_t>(c[0]), static_cast<uint8_t>(c[1]), static_cast<uint8_t>(c[2]));
         }
 
 
@@ -222,10 +216,10 @@ namespace panoramix {
 
         ColorTable CreateGreyColorTableWithSize(int sz) {
             auto exeptColor = ColorFromTag(ColorTag::Blue);
-            Color full(255, 255, 255);
+            core::Vec3 full(255, 255, 255);
             std::vector<Color> colors(sz);
             for (int i = 0; i < sz; i++){
-                colors[i] = double(i) * full / double(sz);
+                colors[i] = Color(double(i) * full / double(sz));
             }
             return ColorTable(colors, exeptColor);
         }
