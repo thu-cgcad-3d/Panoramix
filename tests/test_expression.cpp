@@ -839,23 +839,3 @@ TEST(Expression, TempFun) {
         //mina.derivatives(a[0]);
     }
 }
-
-
-
-
-
-
-
-
-//int main(int argc, char * argv[], char * envp[])
-//{
-//    testing::InitGoogleTest(&argc, argv);
-//    testing::GTEST_FLAG(catch_exceptions) = true;
-//    testing::GTEST_FLAG(show_internal_stack_frames) = true;
-//    return RUN_ALL_TESTS();
-//    //run();
-//    return 1;
-//}
-
-
-

@@ -6,11 +6,9 @@
 using namespace panoramix;
 using namespace test;
 
-TEST(Camera, IsCamera) {
-    static_assert(core::IsCamera<core::PerspectiveCamera>::value, "");
-    static_assert(core::IsCamera<core::PanoramicCamera>::value, "");
-    static_assert(!core::IsCamera<core::Line3>::value, "");
-}
+static_assert(core::IsCamera<core::PerspectiveCamera>::value, "");
+static_assert(core::IsCamera<core::PanoramicCamera>::value, "");
+static_assert(!core::IsCamera<core::Line3>::value, "");
 
 TEST(Camera, PerspectiveCamera){
     core::PerspectiveCamera cam(1000, 1000, 500, 
@@ -86,11 +84,3 @@ TEST(Camera, CameraSampler) {
         vis::Visualizer2D(sampledIm) << vis::manip2d::Show();
     }
 }
-
-
-//int main(int argc, char * argv[], char * envp[])
-//{
-//    testing::InitGoogleTest(&argc, argv);
-//    return RUN_ALL_TESTS();
-//}
-

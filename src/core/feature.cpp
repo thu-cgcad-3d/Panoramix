@@ -6,8 +6,9 @@
 #include <Eigen/Sparse>
 
 extern "C" {
-    #include <lsd.h>
+#include <lsd.h>
 }
+#include <quickshift_common.h>
 
 #include <SLIC.h>
 
@@ -437,15 +438,6 @@ namespace panoramix {
 
         namespace {
 
-            inline Point2 ToPoint2(const PixelLoc & p) {
-                return Point2(p.x, p.y);
-            }
-
-            template <class T>
-            inline Point2 ToPoint2(const Point<T, 2> & p) {
-                return Point2(static_cast<double>(p[0]), static_cast<double>(p[1]));
-            }
-
             std::pair<double, double> ComputeSpanningArea(const Point2 & a, const Point2 & b, const InfiniteLine2 & line) {
                 auto ad = SignedDistanceFromPointToLine(a, line);
                 auto bd = SignedDistanceFromPointToLine(b, line);
@@ -481,8 +473,8 @@ namespace panoramix {
                 for (int i = 0; i < e.size() - 1; i++) {
                     double area, len;
                     std::tie(area, len) = ComputeSpanningArea(
-                        ToPoint2(e[i]),
-                        ToPoint2(e[i + 1]),
+                        vec_cast<double>(e[i]),
+                        vec_cast<double>(e[i + 1]),
                         fittedLine);
                     interArea += area;
                     interLen += len;
@@ -853,25 +845,314 @@ namespace panoramix {
                 return std::make_pair(labels, nlabels);
             }
 
+
+            inline void ToQuickShiftImage(const Image & IMG, image_t & im){
+                im.N1 = IMG.rows;
+                im.N2 = IMG.cols;
+                im.K = IMG.channels();
+                assert(im.K == 3);
+                im.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+                for (int k = 0; k < im.K; k++)
+                for (int col = 0; col < im.N2; col++)
+                for (int row = 0; row < im.N1; row++)
+                {
+                    auto & pt = IMG.at<cv::Vec<uint8_t, 3>>(/*im.N1 - 1 - row*/row, col);
+                    im.I[row + col*im.N1 + k*im.N1*im.N2] = 32. * pt[k] / 255.; // Scale 0-32
+                }
+            }
+
+
+            int * map_to_flatmap(float * map, unsigned int size)
+            {
+                /********** Flatmap **********/
+                int *flatmap = (int *)malloc(size*sizeof(int));
+                for (unsigned int p = 0; p < size; p++)
+                {
+                    flatmap[p] = map[p];
+                }
+
+                bool changed = true;
+                while (changed)
+                {
+                    changed = false;
+                    for (unsigned int p = 0; p < size; p++)
+                    {
+                        changed = changed || (flatmap[p] != flatmap[flatmap[p]]);
+                        flatmap[p] = flatmap[flatmap[p]];
+                    }
+                }
+
+                /* Consistency check */
+                for (unsigned int p = 0; p < size; p++)
+                    assert(flatmap[p] == flatmap[flatmap[p]]);
+
+                return flatmap;
+            }
+
+            image_t imseg(image_t im, int * flatmap)
+            {
+                /********** Mean Color **********/
+                float * meancolor = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+                float * counts = (float *)calloc(im.N1*im.N2, sizeof(float));
+
+                for (int p = 0; p < im.N1*im.N2; p++)
+                {
+                    counts[flatmap[p]]++;
+                    for (int k = 0; k < im.K; k++)
+                        meancolor[flatmap[p] + k*im.N1*im.N2] += im.I[p + k*im.N1*im.N2];
+                }
+
+                int roots = 0;
+                for (int p = 0; p < im.N1*im.N2; p++)
+                {
+                    if (flatmap[p] == p)
+                        roots++;
+                }
+                printf("Roots: %d\n", roots);
+
+                int nonzero = 0;
+                for (int p = 0; p < im.N1*im.N2; p++)
+                {
+                    if (counts[p] > 0)
+                    {
+                        nonzero++;
+                        for (int k = 0; k < im.K; k++)
+                            meancolor[p + k*im.N1*im.N2] /= counts[p];
+                    }
+                }
+                if (roots != nonzero)
+                    printf("Nonzero: %d\n", nonzero);
+                assert(roots == nonzero);
+
+
+                /********** Create output image **********/
+                image_t imout = im;
+                imout.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+                for (int p = 0; p < im.N1*im.N2; p++)
+                for (int k = 0; k < im.K; k++)
+                    imout.I[p + k*im.N1*im.N2] = meancolor[flatmap[p] + k*im.N1*im.N2];
+
+                free(meancolor);
+                free(counts);
+
+                return imout;
+            }
+
+
+            std::pair<Imagei, int> SegmentImageUsingQuickShiftCPU(const Image & originalIm, float sigma, float tau) {
+                image_t im;
+                ToQuickShiftImage(originalIm, im);
+                float *map, *E, *gaps;
+                int * flatmap;
+                image_t imout;
+
+                map = (float *)calloc(im.N1*im.N2, sizeof(float));
+                gaps = (float *)calloc(im.N1*im.N2, sizeof(float));
+                E = (float *)calloc(im.N1*im.N2, sizeof(float));
+
+                quickshift(im, sigma, tau, map, gaps, E);
+
+                /* Consistency check */
+                for (int p = 0; p < im.N1*im.N2; p++)
+                if (map[p] == p) assert(gaps[p] == INF);
+
+                flatmap = map_to_flatmap(map, im.N1*im.N2);
+                imout = imseg(im, flatmap);
+                Imagei segmented(im.N1, im.N2);
+                for (int col = 0; col < im.N2; col++)
+                for (int row = 0; row < im.N1; row++)
+                {                    
+                    segmented(row, col) = flatmap[row + col*im.N1];
+                }
+                int segnum = *std::max_element(flatmap, flatmap + im.N1 * im.N2) + 1;
+
+                free(im.I);
+                free(imout.I);
+                free(map);
+                free(gaps);
+                free(E);
+                free(flatmap);
+                return std::make_pair(segmented, segnum);
+            }
+
+            std::pair<Imagei, int> SegmentImageUsingQuickShiftGPU(const Image & originalIm, float sigma, float tau) {
+                image_t im;
+                ToQuickShiftImage(originalIm, im);
+                float *map, *E, *gaps;
+                int * flatmap;
+                image_t imout;
+
+                map = (float *)calloc(im.N1*im.N2, sizeof(float));
+                gaps = (float *)calloc(im.N1*im.N2, sizeof(float));
+                E = (float *)calloc(im.N1*im.N2, sizeof(float));
+
+                quickshift_gpu(im, sigma, tau, map, gaps, E);
+
+                /* Consistency check */
+                for (int p = 0; p < im.N1*im.N2; p++)
+                if (map[p] == p) assert(gaps[p] == INF);
+
+                flatmap = map_to_flatmap(map, im.N1*im.N2);
+                imout = imseg(im, flatmap);
+                Imagei segmented(im.N1, im.N2);
+                for (int col = 0; col < im.N2; col++)
+                for (int row = 0; row < im.N1; row++)
+                {
+                    segmented(row, col) = flatmap[row + col*im.N1];
+                }
+                int segnum = *std::max_element(flatmap, flatmap + im.N1 * im.N2) + 1;
+
+                free(im.I);
+                free(imout.I);
+                free(map);
+                free(gaps);
+                free(E);
+                free(flatmap);
+                return std::make_pair(segmented, segnum);
+            }
+
         }
 
 
         std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im) const {
-            if (_params.useSLIC){
+            if (_params.algorithm == SLIC){
                 return SegmentImageUsingSLIC(im, _params.superpixelSizeSuggestion, _params.superpixelNumberSuggestion);
             }
-            else{
+            else if (_params.algorithm == GraphCut){
                 int numCCs;
                 Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
                 return std::make_pair(segim, numCCs);
             }
+            else if (_params.algorithm == QuickShiftCPU){
+                return SegmentImageUsingQuickShiftCPU(im, 6, 10);
+            }
+            else if (_params.algorithm == QuickShiftGPU){
+                return SegmentImageUsingQuickShiftGPU(im, 6, 10);
+            }
+            else{
+                SHOULD_NEVER_BE_CALLED();
+            }
         }
 
         std::pair<Imagei, int>  SegmentationExtractor::operator() (const Image & im, const std::vector<Line2> & lines) const {
-            assert(!_params.useSLIC);
+            assert(_params.algorithm == GraphCut);
             int numCCs;
             Imagei segim = SegmentImageWithLinesSplits(im, _params.sigma, _params.c, _params.minSize, lines, numCCs, false).first;
             return std::make_pair(segim, numCCs);
+        }
+
+
+        namespace {
+
+            inline double LatitudeFromLongitudeAndNormalVector(double longitude, const Vec3 & normal) {
+                // normal(0)*cos(long)*cos(la) + normal(1)*sin(long)*cos(lat) + normal(2)*sin(la) = 0
+                // normal(0)*cos(long) + normal(1)*sin(long) + normal(2)*tan(la) = 0
+                return -atan((normal(0)*cos(longitude) + normal(1)*sin(longitude)) / normal(2));
+            }
+
+            inline double Longitude1FromLatitudeAndNormalVector(double latitude, const Vec3 & normal) {
+                double a = normal(1) * cos(latitude);
+                double b = normal(0) * cos(latitude);
+                double c = -normal(2) * sin(latitude);
+                double sinLong = (a * c + sqrt(Square(a*c) - (Square(a) + Square(b))*(Square(c) - Square(b)))) / (Square(a) + Square(b));
+                return asin(sinLong);
+            }
+
+            inline double Longitude2FromLatitudeAndNormalVector(double latitude, const Vec3 & normal) {
+                double a = normal(1) * cos(latitude);
+                double b = normal(0) * cos(latitude);
+                double c = -normal(2) * sin(latitude);
+                double sinLong = (a * c - sqrt(Square(a*c) - (Square(a) + Square(b))*(Square(c) - Square(b)))) / (Square(a) + Square(b));
+                return asin(sinLong);
+            }
+
+            inline double UnOrthogonality(const Vec3 & v1, const Vec3 & v2, const Vec3 & v3) {
+                return norm(Vec3(v1.dot(v2), v2.dot(v3), v3.dot(v1)));
+            }
+        }
+
+        std::vector<Vec3> FindThreeOrthogonalPrinicipleDirections(const std::vector<Vec3>& intersections,
+            int longitudeDivideNum, int latitudeDivideNum) {
+
+            std::vector<Vec3> vps(3);
+
+            // collect votes of intersection directions
+            Imagef votePanel = Imagef::zeros(longitudeDivideNum, latitudeDivideNum);
+            size_t pn = intersections.size();
+            for (const Vec3& p : intersections){
+                PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
+                votePanel(pixel.x, pixel.y) += 1.0;
+            }
+            cv::GaussianBlur(votePanel, votePanel, cv::Size((longitudeDivideNum / 50) * 2 + 1, (latitudeDivideNum / 50) * 2 + 1),
+                4, 4, cv::BORDER_REPLICATE);
+
+            // set the direction with the max votes as the first vanishing point
+            double minVal = 0, maxVal = 0;
+            int maxIndex[] = { -1, -1 };
+            cv::minMaxIdx(votePanel, &minVal, &maxVal, 0, maxIndex);
+            cv::Point maxPixel(maxIndex[0], maxIndex[1]);
+
+            vps[0] = GeoCoordFromPixelLoc(maxPixel, longitudeDivideNum, latitudeDivideNum).toVector();
+            const Vec3 & vec0 = vps[0];
+
+            // iterate locations orthogonal to vps[0]
+            double maxScore = -1;
+            for (int x = 0; x < longitudeDivideNum; x++){
+                double longt1 = double(x) / longitudeDivideNum * M_PI * 2 - M_PI;
+                double lat1 = LatitudeFromLongitudeAndNormalVector(longt1, vec0);
+                Vec3 vec1 = GeoCoord(longt1, lat1).toVector();
+                Vec3 vec1rev = -vec1;
+                Vec3 vec2 = vec0.cross(vec1);
+                Vec3 vec2rev = -vec2;
+                Vec3 vecs[] = { vec1, vec1rev, vec2, vec2rev };
+
+                double score = 0;
+                for (Vec3 & v : vecs){
+                    PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                    score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
+                        WrapBetween(pixel.y, 0, latitudeDivideNum));
+                }
+                if (score > maxScore){
+                    maxScore = score;
+                    vps[1] = vec1;
+                    vps[2] = vec2;
+                }
+            }
+
+            if (UnOrthogonality(vps[0], vps[1], vps[2]) < 0.1)
+                return vps;
+
+            // failed, then use y instead of x
+            maxScore = -1;
+            for (int y = 0; y < latitudeDivideNum; y++){
+                double lat1 = double(y) / latitudeDivideNum * M_PI - M_PI_2;
+                double longt1s[] = { Longitude1FromLatitudeAndNormalVector(lat1, vec0),
+                    Longitude2FromLatitudeAndNormalVector(lat1, vec0) };
+                for (double longt1 : longt1s){
+                    Vec3 vec1 = GeoCoord(longt1, lat1).toVector();
+                    Vec3 vec1rev = -vec1;
+                    Vec3 vec2 = vec0.cross(vec1);
+                    Vec3 vec2rev = -vec2;
+                    Vec3 vecs[] = { vec1, vec1rev, vec2, vec2rev };
+
+                    double score = 0;
+                    for (Vec3 & v : vecs){
+                        PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                        score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
+                            WrapBetween(pixel.y, 0, latitudeDivideNum));
+                    }
+                    if (score > maxScore){
+                        maxScore = score;
+                        vps[1] = vec1;
+                        vps[2] = vec2;
+                    }
+                }
+            }
+
+            assert(UnOrthogonality(vps[0], vps[1], vps[2]) < 0.1);
+
+            return vps;
+
         }
 
 
@@ -1300,7 +1581,6 @@ namespace panoramix {
         }
 
        
-
 
 
         LocalManhattanVanishingPointsDetector::Result LocalManhattanVanishingPointsDetector::estimateWithProjectionCenterAtOriginIII(

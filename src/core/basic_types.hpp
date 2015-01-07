@@ -372,6 +372,11 @@ namespace panoramix {
         using Line2 = Line<double, 2>;
         using Line3 = Line<double, 3>;
 
+        template <class T, int N>
+        inline Line<T, N> normalize(const Line<T, N> & line) { 
+            return Line<T, N>(normalize(line.first), normalize(line.second)); 
+        }
+
 
         
         // position on line/infline
@@ -436,6 +441,10 @@ namespace panoramix {
         using Imaged3 = ImageWithType<Vec<double, 3>>;
 
         using PixelLoc = cv::Point;
+        template <class T>
+        inline Vec<T, 2> vec_cast(const PixelLoc & p) { 
+            return Vec<T, 2>(static_cast<T>(p.x), static_cast<T>(p.y)); 
+        }
 
         inline int AreaOfImage(const Image & im) { return im.cols * im.rows; }
 		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);

@@ -36,8 +36,19 @@ TEST(Feature, SegmentationExtractor) {
     }
     {
         core::SegmentationExtractor::Params p;
-        p.useSLIC = true;
+        p.algorithm = core::SegmentationExtractor::SLIC;
         p.superpixelSizeSuggestion = 3000;
+        core::SegmentationExtractor seg(p);
+        core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        vis::Visualizer2D(im) << vis::manip2d::Show();
+        auto segs = seg(im);
+        vis::Visualizer2D(segs.first)
+            << vis::manip2d::SetColorTable(vis::CreateRandomColorTableWithSize(segs.second))
+            << vis::manip2d::Show();
+    }
+    {
+        core::SegmentationExtractor::Params p;
+        p.algorithm = core::SegmentationExtractor::QuickShiftCPU;
         core::SegmentationExtractor seg(p);
         core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
         vis::Visualizer2D(im) << vis::manip2d::Show();
@@ -97,11 +108,6 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
 
     using namespace core;
 
-    //auto googlePano = 
-    //    cv::imread("F:\\Project.GitHub\\Panoramix\\unused\\tools\\StreetViewGrabber(v1.6.0)\\Output\\j1phMKGOrb6rVRjucc-4eg_welded.png");
-
-
-
     // forged experiment for panorama
     core::Image im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/14.jpg");
     core::ResizeToMakeWidthUnder(im, 2000);
@@ -121,17 +127,12 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
     Vec3 vp1 = { 0, 0, 1 };
     std::vector<Classified<Line3>> line3s(line2s.size());
     std::vector<Vec3> line3norms(line2s.size());
-    for (int i = 0; i < line2s.size(); i++){
+    for (int i = 0; i < line2s.size(); i++) {
         line3s[i].component.first = normalize(cam.spatialDirection(line2s[i].first));
         line3s[i].component.second = normalize(cam.spatialDirection(line2s[i].second));
         line3norms[i] = line3s[i].component.first.cross(line3s[i].component.second);
         line3s[i].claz = abs(line3norms[i].dot(vp1)) < 0.006 ? 0 : -1;
     }
-
-    /*vis::Visualizer3D() 
-        << vis::manip3d::SetDefaultColorTable(vis::CreateRandomColorTableWithSize(5, vis::ColorFromTag(vis::ColorTag::Black))) 
-        << line3s 
-        << vis::manip3d::Show();*/
 
     std::vector<std::pair<int, int>> pairs;
     for (int i = 0; i < line2s.size(); i++){
@@ -289,10 +290,3 @@ TEST(Feature, GeometricContextMatlab) {
     cv::extractChannel(gc, gc, 0);
     vis::Visualizer2D(gc) << vis::manip2d::Show();
 }
-
-
-//int main(int argc, char * argv[], char * envp[])
-//{
-//    testing::InitGoogleTest(&argc, argv);
-//    return RUN_ALL_TESTS();
-//}

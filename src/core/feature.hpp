@@ -10,10 +10,34 @@
 namespace panoramix {
     namespace core { 
 
+
+        // a simple wrapper of cv point detecters
+        template <class CVFeatureExtractorT, class FeatureT = std::vector<cv::KeyPoint>>
+        class CVFeatureExtractor {
+        public:
+            using Feature = FeatureT;
+        public:
+            template <class ... ArgT>
+            explicit inline CVFeatureExtractor(ArgT ... args) : _feature2D(args ...) {}
+            inline Feature operator() (const Image & im, const Image & mask = cv::Mat(),
+                cv::OutputArray descriptors = cv::noArray()) const {
+                Feature fea;
+                _feature2D(im, mask, fea, descriptors);
+                return fea;
+            }
+        private:
+            CVFeatureExtractorT _feature2D;
+        };
+
+
+
+
         // non maxima suppression
         void NonMaximaSuppression(const Image & src, Image & dst, int sz = 50,
             std::vector<PixelLoc> * pixels = nullptr,
             const Imageb & mask = Imageb());
+
+
 
 
         // line extractor
@@ -43,6 +67,9 @@ namespace panoramix {
 
 
 
+
+
+
         // compute line intersections
         std::vector<HPoint2> ComputeLineIntersections(const std::vector<Line2> & lines,
             std::vector<std::pair<int, int>> * lineids = nullptr,
@@ -64,41 +91,28 @@ namespace panoramix {
 
 
 
-        // point feature extractor
-        template <class CVFeatureExtractorT, class FeatureT = std::vector<cv::KeyPoint>>
-        class CVFeatureExtractor {
-        public:
-            using Feature = FeatureT;
-        public:
-            template <class ... ArgT>
-            explicit inline CVFeatureExtractor(ArgT ... args) : _feature2D(args ...) {}
-            inline Feature operator() (const Image & im, const Image & mask = cv::Mat(), 
-                cv::OutputArray descriptors = cv::noArray()) const {
-                Feature fea;
-                _feature2D(im, mask, fea, descriptors);
-                return fea;
-            }
-        private:
-            CVFeatureExtractorT _feature2D;
-        };
-
-
         // segmentation
         class SegmentationExtractor {
         public:
             using Feature = Imagei; // CV_32SC1
+            enum Algorithm {
+                GraphCut,
+                SLIC,
+                QuickShiftCPU,
+                QuickShiftGPU
+            };
             struct Params {
-                inline Params() : sigma(0.8f), c(100.0f), minSize(200), useSLIC(false), 
+                inline Params() : sigma(0.8f), c(100.0f), minSize(200), algorithm(GraphCut),
                     superpixelSizeSuggestion(1000), superpixelNumberSuggestion(100) {
                 }
                 float sigma; // for smoothing
                 float c; // threshold function
                 int minSize; // min component size
-                bool useSLIC;
+                Algorithm algorithm;
                 int superpixelSizeSuggestion; // use superpixel size suggestion if [superpixelSizeSuggestion > 0]
                 int superpixelNumberSuggestion; // use superpixel number suggestion if [superpixelSizeSuggestion < 0]
                 template <class Archive> inline void serialize(Archive & ar) { 
-                    ar(sigma, c, minSize, useSLIC, superpixelSizeSuggestion, superpixelNumberSuggestion); 
+                    ar(sigma, c, minSize, algorithm, superpixelSizeSuggestion, superpixelNumberSuggestion);
                 }
             };
         public:
@@ -113,8 +127,12 @@ namespace panoramix {
         };
 
 
+        // find 3 orthogonal directions
+        std::vector<Vec3> FindThreeOrthogonalPrinicipleDirections(const std::vector<Vec3> & directions,
+            int longitudeDivideNum = 1000, int latitudeDivideNum = 500);
 
-        // vanishing point detection
+
+        // 2d vanishing point detection
         class VanishingPointsDetector {
         public:
             struct Params {
@@ -140,6 +158,11 @@ namespace panoramix {
                 estimateWithProjectionCenterAtOrigin (const std::vector<Line2> & lines) const;
             Params _params;
         };
+
+
+
+
+
 
 
 

@@ -312,14 +312,3 @@ TEST(GraphicalModelTest, Basic) {
         EXPECT_EQ(id++, c.topo.hd.id);
     }
 }
-
-
-
-//int main(int argc, char * argv[], char * envp[])
-//{
-//    testing::InitGoogleTest(&argc, argv);
-//    testing::GTEST_FLAG(catch_exceptions) = false;
-//    testing::GTEST_FLAG(throw_on_failure) = true;
-//    //testing::GTEST_FLAG(filter) = "MixedGraph.Forest.Basic";
-//    return RUN_ALL_TESTS();
-//}
