@@ -329,6 +329,12 @@ namespace panoramix {
         inline Plane<T, 3> Plane3From3Points(const Point<T, 3> & a, const Point<T, 3> & b, const Point<T, 3> & c){
             return Plane<T, 3>(a, normalize((b - a).cross(c - a)));
         }
+        // ax + by + cz = 1
+        template <class T>
+        inline Plane<T, 3> Plane3FromEquation(T a, T b, T c){
+            T k = (a * a + b * b + c * c);
+            return Plane<T, 3>(Point<T, 3>(a, b, c) / k, normalize(Vec<T, 3>(a, b, c)));
+        }
 
 
 

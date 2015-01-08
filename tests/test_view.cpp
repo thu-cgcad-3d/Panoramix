@@ -12,7 +12,7 @@ using namespace test;
 
 TEST(View, SampleViews) {
 
-    auto panorama = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/14.jpg");
+    auto panorama = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
     core::ResizeToMakeHeightUnder(panorama, 800);
     auto panoView = core::CreatePanoramicView(panorama);
 

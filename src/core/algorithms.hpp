@@ -303,9 +303,9 @@ namespace panoramix {
             class VertCompareT = std::less <typename std::iterator_traits<VertIteratorT>::value_type>
         >
         void DepthFirstSearch(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-        NeighborVertsContainerGetterT neighborVertsContainerGetter,
-        VertCallbackT vertCallback,
-        VertCompareT vertCompare = VertCompareT()
+            NeighborVertsContainerGetterT neighborVertsContainerGetter,
+            VertCallbackT vertCallback,
+            VertCompareT vertCompare = VertCompareT()
         ) {
 
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
@@ -318,7 +318,7 @@ namespace panoramix {
 
             struct {
                 bool operator()(Vert root, std::map<Vert, bool, VertCompareT>& vVisited,
-                NeighborVertsContainerGetterT vNeighborsGetter, VertCallbackT vCallback) {
+                    NeighborVertsContainerGetterT vNeighborsGetter, VertCallbackT vCallback) {
                     if (vVisited[root])
                         return true;
                     if (!vCallback(root))
@@ -350,6 +350,64 @@ namespace panoramix {
         }
 
 
+       // BreadthFirstSearch
+        template <
+            class VertIteratorT, class NeighborVertsContainerGetterT, class VertCallbackT,
+            class VertCompareT = std::less <typename std::iterator_traits<VertIteratorT>::value_type>
+        >
+        void BreadthFirstSearch(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+            NeighborVertsContainerGetterT neighborVertsContainerGetter,
+            VertCallbackT vertCallback,
+            VertCompareT vertCompare = VertCompareT()
+        ) {
+
+            using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
+            static_assert(std::is_same<Vert,
+                std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(std::declval<Vert>()))) >> ::value,
+                "NeighborVertsContainerGetterT should returns a container of Vert");
+            static_assert(std::is_same<Vert,
+                std::decay_t<decltype(*std::end(neighborVertsContainerGetter(std::declval<Vert>()))) >> ::value,
+                "NeighborVertsContainerGetterT should returns a container of Vert");
+
+            struct {
+                bool operator()(const Vert & root, std::map<Vert, bool, VertCompareT>& vVisited,
+                    const NeighborVertsContainerGetterT & vNeighborsGetter, VertCallbackT vCallback) {
+                    std::queue<Vert> Q;
+                    Q.push(root);
+                    vVisited[root] = true;
+                    while (!Q.empty()){
+                        Vert v = Q.front();
+                        Q.pop();
+                        if (!vCallback(v))
+                            return false;
+                        auto vNeighborsContainer = vNeighborsGetter(v);
+                        for (const auto & vv : vNeighborsContainer) {
+                            if (vVisited.at(vv))
+                                continue;
+                            Q.push(vv);
+                            vVisited[vv] = true;
+                        }
+                    }
+                    return true;
+                }
+            } breadthFirstSearchOneTree;
+
+            std::map<Vert, bool, VertCompareT> visited(vertCompare);
+            for (auto i = vertsBegin; i != vertsEnd; ++i)
+                visited[*i] = false;
+            while (true) {
+                auto rootIter = vertsBegin;
+                while (rootIter != vertsEnd && visited[*rootIter]){
+                    ++rootIter;
+                }
+                if (rootIter == vertsEnd)
+                    break;
+                if (!breadthFirstSearchOneTree(*rootIter, visited, neighborVertsContainerGetter, vertCallback))
+                    break;
+            }
+        }
+
+
 
 
 
@@ -359,10 +417,10 @@ namespace panoramix {
             class VertCompareT = std::less<typename std::iterator_traits<VertIteratorT>::value_type>
         >
         void TopologicalSort(
-        VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-        VertOutIteratorT sortedVertsBegin,
-        PredecessorVertsContainerGetterT predecessorVertsContainerGetter,
-        VertCompareT vertCompare = VertCompareT()){
+            VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+            VertOutIteratorT sortedVertsBegin,
+            PredecessorVertsContainerGetterT predecessorVertsContainerGetter,
+            VertCompareT vertCompare = VertCompareT()){
 
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
             static_assert(std::is_same<Vert,
@@ -411,9 +469,9 @@ namespace panoramix {
             class VertCompareT = std::less<typename std::iterator_traits<VertIteratorT>::value_type>
         >
         int ConnectedComponents(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-        NeighborVertsContainerGetterT neighborVertsContainerGetter,
-        VertexTypeRecorderT vertTypeRecorder,
-        VertCompareT vertCompare = VertCompareT()) {
+            NeighborVertsContainerGetterT neighborVertsContainerGetter,
+            VertexTypeRecorderT vertTypeRecorder,
+            VertCompareT vertCompare = VertCompareT()) {
 
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
             static_assert(std::is_same<Vert, std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
@@ -421,21 +479,43 @@ namespace panoramix {
             static_assert(std::is_same<Vert, std::decay_t<decltype(*std::end(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
                 "NeighborVertsContainerGetterT should returns a container of Vert");
 
+            //struct {
+            //    void operator()(const Vert & root, std::map<Vert, bool, VertCompareT>& vVisited,
+            //        const NeighborVertsContainerGetterT & vNeighborsGetter,
+            //        const VertexTypeRecorderT & vTypeRecorder, int cid) {
+
+            //        if (vVisited[root])
+            //            return;
+            //        vTypeRecorder(root, cid);
+            //        vVisited[root] = true;
+            //        auto vNeighborsContainer = vNeighborsGetter(root);
+            //        for (const auto & v : vNeighborsContainer) {
+            //            (*this)(v, vVisited, vNeighborsGetter, vTypeRecorder, cid);
+            //        }
+            //    }
+            //} depthFirstSearchOneTree;
+
             struct {
                 void operator()(const Vert & root, std::map<Vert, bool, VertCompareT>& vVisited,
-                const NeighborVertsContainerGetterT & vNeighborsGetter,
-                const VertexTypeRecorderT & vTypeRecorder, int cid) {
-
-                    if (vVisited[root])
-                        return;
-                    vTypeRecorder(root, cid);
+                    const NeighborVertsContainerGetterT & vNeighborsGetter,
+                    const VertexTypeRecorderT & vTypeRecorder, int cid) {
+                    std::queue<Vert> Q;
+                    Q.push(root);
                     vVisited[root] = true;
-                    auto vNeighborsContainer = vNeighborsGetter(root);
-                    for (const auto & v : vNeighborsContainer) {
-                        (*this)(v, vVisited, vNeighborsGetter, vTypeRecorder, cid);
+                    while (!Q.empty()){
+                        Vert v = Q.front();
+                        Q.pop();
+                        vTypeRecorder(v, cid);
+                        auto vNeighborsContainer = vNeighborsGetter(v);
+                        for (const auto & vv : vNeighborsContainer) {
+                            if (vVisited.at(vv))
+                                continue;
+                            Q.push(vv);
+                            vVisited[vv] = true;
+                        }
                     }
                 }
-            } depthFirstSearchOneTree;
+            } breadthFirstSearchOneTree;
 
 
             std::map<Vert, bool, VertCompareT> visited(vertCompare);
@@ -450,7 +530,7 @@ namespace panoramix {
                 }
                 if (rootIter == vertsEnd)
                     break;
-                depthFirstSearchOneTree(*rootIter, visited, neighborVertsContainerGetter, vertTypeRecorder, cid);
+                breadthFirstSearchOneTree(*rootIter, visited, neighborVertsContainerGetter, vertTypeRecorder, cid);
                 cid++;
             }
 
