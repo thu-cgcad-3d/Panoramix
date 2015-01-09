@@ -420,7 +420,8 @@ namespace panoramix {
             VertIteratorT vertsBegin, VertIteratorT vertsEnd,
             VertOutIteratorT sortedVertsBegin,
             PredecessorVertsContainerGetterT predecessorVertsContainerGetter,
-            VertCompareT vertCompare = VertCompareT()){
+            VertCompareT vertCompare = VertCompareT()
+        ){
 
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
             static_assert(std::is_same<Vert,
@@ -471,7 +472,8 @@ namespace panoramix {
         int ConnectedComponents(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
             NeighborVertsContainerGetterT neighborVertsContainerGetter,
             VertexTypeRecorderT vertTypeRecorder,
-            VertCompareT vertCompare = VertCompareT()) {
+            VertCompareT vertCompare = VertCompareT()
+        ) {
 
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
             static_assert(std::is_same<Vert, std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,

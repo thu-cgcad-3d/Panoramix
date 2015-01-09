@@ -569,7 +569,7 @@ namespace panoramix {
                             maxOffsetedAnchorId = k;
                         }
                     }
-                    if (maxDotProd > 1e-2){
+                    if (maxDotProd > 1e-3){
                         return{ b.normalizedAnchors.front(), b.normalizedAnchors[maxOffsetedAnchorId], b.normalizedAnchors.back() };
                     }
                     else {
@@ -609,22 +609,25 @@ namespace panoramix {
                 std::unordered_map<MGBinaryHandle, int> bh2consStartPosition;
                 std::unordered_map<MGBinaryHandle, std::vector<Vec3>> appliedBinaryAnchors;
 
+                std::unordered_map<MGUnaryHandle, bool> uhFixed;
+                std::map<int, std::vector<MGUnaryHandle>> uhCCs;
+                std::unordered_map<MGUnaryHandle, int> uhCCIds;
+
                 virtual void initialize(const MixedGraph & mg, MGPatch & patch,
                     const std::vector<Vec3> & vanishingPoints, bool useWeights){
 
                     assert(BinaryHandlesAreValidInPatch(mg, patch));
                     assert(UnariesAreConnectedInPatch(mg, patch));
 
-                    int varNum = 0;
+                    assert(BinaryHandlesAreValidInPatch(mg, patch));
+                    assert(UnariesAreConnectedInPatch(mg, patch));
+
+                    
                     for (auto & uhv : patch.uhs){
-                        if (uhv.second.fixed){
-                            continue;
-                        }
-                        uh2varStartPosition[uhv.first] = varNum;
-                        varNum += uhv.second.variables.size();
+                        uhFixed[uhv.first] = uhv.second.fixed;
                     }
 
-                    int consNum = 0;
+                    // find cc with more than 3 necessary anchors
                     for (auto & bhv : patch.bhs){
                         if (!bhv.second.enabled)
                             continue;
@@ -639,8 +642,102 @@ namespace panoramix {
                         if (u1IsFixed && u2IsFixed)
                             continue;
 
-                        bh2consStartPosition[bhv.first] = consNum;
                         appliedBinaryAnchors[bhv.first] = NecessaryAnchorsForBinary(mg, bh);
+                    }
+
+                    
+                    {
+                        std::vector<MGUnaryHandle> uhs;
+                        uhs.reserve(patch.uhs.size());
+                        for (auto & uhv : patch.uhs){
+                            uhs.push_back(uhv.first);
+                        }
+                        core::ConnectedComponents(uhs.begin(), uhs.end(),
+                            [&mg, &patch, this](MGUnaryHandle uh) -> std::vector<MGUnaryHandle> {
+                            std::vector<MGUnaryHandle> neighbors;
+                            for (auto & bh : mg.topo(uh).uppers){
+                                if (!Contains(appliedBinaryAnchors, bh))
+                                    continue;
+                                if (appliedBinaryAnchors.at(bh).size() != 3) // use only STRONG connections!!
+                                    continue;
+                                MGUnaryHandle anotherUh = mg.topo(bh).lowers[0];
+                                if (anotherUh == uh)
+                                    anotherUh = mg.topo(bh).lowers[1];
+                                if (!Contains(patch, uh))
+                                    continue;
+                                neighbors.push_back(anotherUh);
+                            }
+                            return neighbors;
+                        }, [this](MGUnaryHandle uh, int ccId){
+                            uhCCs[ccId].push_back(uh);
+                            uhCCIds[uh] = ccId;
+                        });
+                    }
+
+                    // spread the fix status and assign the fixed variable
+                    for (auto & cc : uhCCs){
+                        auto & uhs = cc.second;
+                        // collect fixed uhs in this cc
+                        Vec3 abc(0, 0, 0);
+                        int fixedNum = 0;
+                        for (auto uh : uhs){
+                            assert(mg.data(uh).type == MGUnary::Region);
+                            auto & uhVar = patch.uhs.at(uh);
+                            if (uhVar.fixed){
+                                Vec3 thisAbc(uhVar.variables[0], uhVar.variables[1], uhVar.variables[2]);
+                                if (Distance(abc / fixedNum, thisAbc) > 1e-2){
+                                    std::cerr << "variables of fixed unaries do not match!!!!" << std::endl;
+                                }
+                                abc += thisAbc;
+                                fixedNum++;
+                            }
+                        }
+                        if (fixedNum == 0)
+                            continue;
+                        abc /= fixedNum;
+                        for (auto uh : uhs){
+                            auto & uhVar = patch.uhs.at(uh);
+                            if (!uhVar.fixed){
+                                uhVar.variables = { abc[0], abc[1], abc[2] };
+                            }
+                            uhFixed[uh] = true;
+                        }
+                    }
+
+
+
+                    int varNum = 0;
+                    for (auto & uhv : patch.uhs){
+                        if (uhFixed.at(uhv.first)){
+                            continue;
+                        }
+                        int ccId = uhCCIds.at(uhv.first);
+                        auto firstUhInThisCC = uhCCs.at(ccId).front();
+                        if (firstUhInThisCC == uhv.first){ // this is the first uh
+                            uh2varStartPosition[uhv.first] = varNum;
+                            varNum += uhv.second.variables.size();
+                        }
+                        else{
+                            uh2varStartPosition[uhv.first] = uh2varStartPosition.at(firstUhInThisCC); // share the variables!!
+                        }
+                    }
+
+                    int consNum = 0;
+                    for (auto & bhv : patch.bhs){
+                        if (!bhv.second.enabled)
+                            continue;
+                        auto bh = bhv.first;
+                        auto uh1 = mg.topo(bh).lowers.front();
+                        auto uh2 = mg.topo(bh).lowers.back();
+                        auto & u1 = mg.data(uh1);
+                        auto & u2 = mg.data(uh2);
+
+                        bool u1IsFixed = uhFixed.at(uh1);
+                        bool u2IsFixed = uhFixed.at(uh2);
+                        if (u1IsFixed && u2IsFixed)
+                            continue;
+
+                        bh2consStartPosition[bhv.first] = consNum;
                         consNum += appliedBinaryAnchors[bhv.first].size();
                     }
 
@@ -763,6 +860,8 @@ namespace panoramix {
                 virtual void finalize() {}
             };
 
+            MGPatchDepthsOptimizerInternalMosek::Mosek MGPatchDepthsOptimizerInternalMosek::mosek;
+
 
             struct MGPatchDepthsOptimizerInternalEigen : MGPatchDepthsOptimizerInternalBase {
                 Eigen::SparseMatrix<double> A, W;
@@ -770,7 +869,7 @@ namespace panoramix {
                 bool useWeights;
 
                 std::unordered_map<MGUnaryHandle, int> uh2varStartPosition;
-                std::unordered_map<MGBinaryHandle, int> bh2consStaartPosition;
+                std::unordered_map<MGBinaryHandle, int> bh2consStartPosition;
 
                 std::unordered_map<MGBinaryHandle, std::vector<Vec3>> appliedBinaryAnchors;
 
@@ -780,15 +879,81 @@ namespace panoramix {
                     assert(BinaryHandlesAreValidInPatch(mg, patch));
                     assert(UnariesAreConnectedInPatch(mg, patch));
 
+                    //std::unordered_map<MGUnaryHandle, bool> uhFixed;
+                    //for (auto & uhv : patch.uhs){
+                    //    uhFixed[uhv.first] = uhv.second.fixed;
+                    //}
+
+                    //// find cc with more than 3 necessary anchors
+                    //for (auto & bhv : patch.bhs){
+                    //    if (!bhv.second.enabled)
+                    //        continue;
+                    //    auto bh = bhv.first;
+                    //    auto uh1 = mg.topo(bh).lowers.front();
+                    //    auto uh2 = mg.topo(bh).lowers.back();
+                    //    auto & u1 = mg.data(uh1);
+                    //    auto & u2 = mg.data(uh2);
+
+                    //    bool u1IsFixed = !Contains(uh2varStartPosition, uh1);
+                    //    bool u2IsFixed = !Contains(uh2varStartPosition, uh2);
+                    //    if (u1IsFixed && u2IsFixed)
+                    //        continue;
+
+                    //    appliedBinaryAnchors[bhv.first] = NecessaryAnchorsForBinary(mg, bh);
+                    //}
+
+                    //std::map<int, std::vector<MGUnaryHandle>> uhCCs;
+                    //std::unordered_map<MGUnaryHandle, int> uhCCIds;
+                    //{
+                    //    std::vector<MGUnaryHandle> uhs;
+                    //    uhs.reserve(patch.uhs.size());
+                    //    for (auto & uhv : patch.uhs){
+                    //        uhs.push_back(uhv.first);
+                    //    }
+                    //    core::ConnectedComponents(uhs.begin(), uhs.end(),
+                    //        [&mg, &patch, this](MGUnaryHandle uh) -> std::vector<MGUnaryHandle> {
+                    //        std::vector<MGUnaryHandle> neighbors;
+                    //        for (auto & bh : mg.topo(uh).uppers){
+                    //            if (!Contains(appliedBinaryAnchors, bh))
+                    //                continue;
+                    //            if (appliedBinaryAnchors.at(bh).size() != 3) // use only STRONG connections!!
+                    //                continue;
+                    //            MGUnaryHandle anotherUh = mg.topo(bh).lowers[0];
+                    //            if (anotherUh == uh)
+                    //                anotherUh = mg.topo(bh).lowers[1];
+                    //            if (!Contains(patch, uh))
+                    //                continue;
+                    //            neighbors.push_back(anotherUh);
+                    //        }
+                    //        return neighbors;
+                    //    }, [&uhCCs, &uhCCIds](MGUnaryHandle uh, int ccId){
+                    //        uhCCs[ccId].push_back(uh);
+                    //        uhCCIds[uh] = ccId;
+                    //    });
+                    //}
+
+                    //// spread the fix status
+                    //for ()
+
+
+
                     int varNum = 0;
                     bool hasFixedUnary = false;
                     for (auto & uhv : patch.uhs){
+                        //if (uhFixed.at(uhv.first)){
                         if (uhv.second.fixed){
                             hasFixedUnary = true;
                             continue;
                         }
-                        uh2varStartPosition[uhv.first] = varNum;
-                        varNum += uhv.second.variables.size();
+                        //int ccId = uhCCIds.at(uhv.first);
+                        //auto firstUhInThisCC = uhCCs.at(ccId).front();
+                        //if (firstUhInThisCC == uhv.first){ // this is the first uh
+                            uh2varStartPosition[uhv.first] = varNum;
+                            varNum += uhv.second.variables.size();
+                        //}
+                        //else{
+                        //    uh2varStartPosition[uhv.first] = uh2varStartPosition.at(firstUhInThisCC); // share the variables!!
+                        //}                        
                     }
 
                     int consNum = 0;
@@ -810,7 +975,7 @@ namespace panoramix {
                         if (u1IsFixed && u2IsFixed)
                             continue;
 
-                        bh2consStaartPosition[bhv.first] = consNum;
+                        bh2consStartPosition[bhv.first] = consNum;
                         appliedBinaryAnchors[bhv.first] = NecessaryAnchorsForBinary(mg, bh);
                         consNum += appliedBinaryAnchors[bhv.first].size();
                     }

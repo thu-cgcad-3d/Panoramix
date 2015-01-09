@@ -71,9 +71,7 @@ TEST(View, LinesGraph) {
     }
 
     core::SaveToDisk("./cache/test_view.View.LinesGraph.linesGraphs", linesGraphs);
-    core::SaveToDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
-
-   
+    core::SaveToDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);  
 
 
 }

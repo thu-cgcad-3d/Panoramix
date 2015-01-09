@@ -285,13 +285,17 @@ TEST(MixedGraph, NaiveHolisticOptimization) {
         core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false,
             core::MGPatchDepthsOptimizer::EigenSparseQR);
 
-        double distBefore = core::AverageBinaryDistanceOfPatch(mg, patch, vanishingPoints) 
-            / core::AverageUnaryCenterDepthOfPatch(mg, patch, vanishingPoints);
-        pdo.optimize();
-        double distAfter = core::AverageBinaryDistanceOfPatch(mg, patch, vanishingPoints) 
-            / core::AverageUnaryCenterDepthOfPatch(mg, patch, vanishingPoints);
+        {
+            core::Clock clock("holistic optimization");
+            double distBefore = core::AverageBinaryDistanceOfPatch(mg, patch, vanishingPoints)
+                / core::AverageUnaryCenterDepthOfPatch(mg, patch, vanishingPoints);
+            pdo.optimize();
+            double distAfter = core::AverageBinaryDistanceOfPatch(mg, patch, vanishingPoints)
+                / core::AverageUnaryCenterDepthOfPatch(mg, patch, vanishingPoints);
 
-        EXPECT_GE(distBefore, distAfter);
+            EXPECT_GE(distBefore, distAfter);
+        }
+
         VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
     }
 
