@@ -5,7 +5,7 @@
 #include "../src/vis/visualize2d.hpp"
 #include "../src/vis/visualizers.hpp"
 
-#include "test_config.hpp"
+#include "config.hpp"
 
 using namespace panoramix;
 using namespace test;

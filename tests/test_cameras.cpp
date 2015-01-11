@@ -1,7 +1,7 @@
 #include "../src/core/cameras.hpp"
 #include "../src/vis/visualize2d.hpp"
 
-#include "test_config.hpp"
+#include "config.hpp"
 
 using namespace panoramix;
 using namespace test;

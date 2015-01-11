@@ -6,8 +6,7 @@
 #include <random>
 #include <list>
 
-#include "gtest/gtest.h"
-#include "test_config.hpp"
+#include "config.hpp"
 
 using namespace panoramix;
 

@@ -5,7 +5,7 @@
 #include "../src/vis/visualize2d.hpp"
 #include "../src/vis/visualizers.hpp"
 
-#include "test_config.hpp"
+#include "config.hpp"
 
 using namespace panoramix;
 using namespace test;
@@ -166,7 +166,7 @@ void ManuallyOptimizeMixedGraph(const core::Image & panorama,
             }
         }
 
-        viz.installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::DarkGray);
+        viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
         viz.installingOptions.lineWidth = 2.0;
         viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
         viz.add(connectionLines);

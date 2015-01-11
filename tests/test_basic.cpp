@@ -1,6 +1,6 @@
 #include "../src/core/version.hpp"
 #include "../src/core/basic_types.hpp"
-#include "gtest/gtest.h"
+#include "config.hpp"
 
 #include <iostream>
 #include <random>

@@ -8,6 +8,33 @@ namespace panoramix {
 
         using namespace core;
 
+        inline Color ColorFromTag(ColorTag t) {
+            switch (t){
+            case ColorTag::Transparent: return Color(0, 0, 0, 0);
+
+            case ColorTag::White: return Color(255, 255, 255);
+            case ColorTag::Black: return Color(0, 0, 0);
+
+            case ColorTag::DimGray: return Color(105, 105, 105);
+            case ColorTag::Gray: return Color(128, 128, 128);
+            case ColorTag::DarkGray: return Color(169, 169, 169);
+            case ColorTag::Silver: return Color(192, 192, 192);
+            case ColorTag::LightGray: return Color(211, 211, 211);
+
+            case ColorTag::Red: return Color(255, 0, 0);
+            case ColorTag::Green: return Color(0, 255, 0);
+            case ColorTag::Blue: return Color(0, 0, 255);
+
+            case ColorTag::Yellow: return Color(255, 255, 0);
+            case ColorTag::Magenta: return Color(255, 0, 255);
+            case ColorTag::Cyan: return Color(0, 255, 255);
+            case ColorTag::Orange: return Color(255, 165, 0);
+            default:
+                return Color(255, 255, 255);
+            }
+        }
+
+
         Color::Color(ColorTag tag) : _rgba(ColorFromTag(tag)._rgba) {}
 
         const std::vector<ColorTag> & AllColorTags() {
@@ -74,32 +101,6 @@ namespace panoramix {
             case 3: return Color(p, q, v, a);
             case 4: return Color(t, p, v, a);
             default:return Color(v, p, q, a);
-            }
-        }
-
-        Color ColorFromTag(ColorTag t) {
-            switch (t){
-            case ColorTag::Transparent: return Color(0, 0, 0, 0);
-
-            case ColorTag::White: return Color(255, 255, 255);
-            case ColorTag::Black: return Color(0, 0, 0);
-
-            case ColorTag::DimGray: return Color(105, 105, 105);
-            case ColorTag::Gray: return Color(128, 128, 128);
-            case ColorTag::DarkGray: return Color(169, 169, 169);
-            case ColorTag::Silver: return Color(192, 192, 192);
-            case ColorTag::LightGray: return Color(211, 211, 211);
-
-            case ColorTag::Red: return Color(255, 0, 0);
-            case ColorTag::Green: return Color(0, 255, 0);
-            case ColorTag::Blue: return Color(0, 0, 255);
-
-            case ColorTag::Yellow: return Color(255, 255, 0);
-            case ColorTag::Magenta: return Color(255, 0, 255);
-            case ColorTag::Cyan: return Color(0, 255, 255);
-            case ColorTag::Orange: return Color(255, 165, 0);
-            default:
-                return Color(255, 255, 255);
             }
         }
 

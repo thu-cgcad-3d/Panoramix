@@ -491,13 +491,13 @@ namespace panoramix {
                 _activeOH = _tree.addRoot(std::make_shared<VisualObject>());
 
                 renderOptions.winName = winName;
-                renderOptions.backgroundColor = ColorFromTag(vis::ColorTag::White);
+                renderOptions.backgroundColor = vis::ColorTag::White;
                 renderOptions.renderMode = vis::RenderModeFlag::All;
                 renderOptions.camera = core::PerspectiveCamera(500, 500, 250, { 1.0, 1.0, 1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 });
                 renderOptions.bwColor = 0.3;
                 renderOptions.bwTexColor = 0.7;
 
-                installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::Black);
+                installingOptions.discretizeOptions.color = vis::ColorTag::Black;
                 installingOptions.discretizeOptions.colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
                 installingOptions.discretizeOptions.isolatedTriangles = false;
                 installingOptions.discretizeOptions.subdivisionNums[0] = 32;

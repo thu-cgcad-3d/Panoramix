@@ -1,5 +1,6 @@
 #include "../src/core/meta.hpp"
-#include "gtest/gtest.h"
+
+#include "config.hpp"
 
 #include <iostream>
 #include <random>

@@ -44,15 +44,19 @@ namespace panoramix {
         class LineSegmentExtractor {
         public:
             using Feature = std::vector<Line2>;
+            enum Algorithm {
+                GradientGrouping,
+                LSD
+            };
             struct Params {
-                inline Params() : minLength(15), xBorderWidth(1), yBorderWidth(1), numDirs(8), useLSD(true) {}
+                inline Params() : minLength(15), xBorderWidth(1), yBorderWidth(1), numDirs(8), algorithm(LSD) {}
                 int minLength;
                 int xBorderWidth, yBorderWidth;
                 int numDirs;
-                bool useLSD;
+                Algorithm algorithm;
                 template <class Archive> 
                 inline void serialize(Archive & ar) { 
-                    ar(minLength, xBorderWidth, yBorderWidth, numDirs, useLSD);
+                    ar(minLength, xBorderWidth, yBorderWidth, numDirs, algorithm);
                 }
             };
         public:

@@ -295,10 +295,10 @@ namespace panoramix {
 
         LineSegmentExtractor::Feature LineSegmentExtractor::operator() (const Image & im) const {
             LineSegmentExtractor::Feature lines;
-            if (_params.useLSD) {
+            if (_params.algorithm == LSD) {
                 ExtractLinesUsingLSD(im, lines, _params.minLength, _params.xBorderWidth, _params.yBorderWidth);
             }
-            else{
+            else if(_params.algorithm == GradientGrouping){
                 ExtractLines(im, lines, _params.minLength, _params.xBorderWidth, _params.yBorderWidth, _params.numDirs);
             }
             return lines;

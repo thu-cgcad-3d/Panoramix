@@ -1,9 +1,7 @@
 #include "../src/core/graph.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/vis/visualizers.hpp"
-
-#include "gtest/gtest.h"
-#include "test_config.hpp"
+#include "config.hpp"
 
 using namespace panoramix;
 using namespace test;

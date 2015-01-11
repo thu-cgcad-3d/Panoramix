@@ -18,6 +18,10 @@ namespace panoramix {
             return View<PanoramicCamera>{panorama, PanoramicCamera(panorama.cols / M_PI / 2.0)};
         }
 
+        View<PerspectiveCamera> CreatePerspectiveView(const Image & perspectiveImage){
+            NOT_IMPLEMENTED_YET();
+        }
+
 
         namespace {
 

@@ -56,6 +56,7 @@ namespace panoramix {
                 : _rgba(static_cast<int>(v[0] * 255), static_cast<int>(v[1] * 255),
                 static_cast<int>(v[2] * 255), a * 255) {}
 
+            // from tag
             Color(ColorTag tag);
             
         public:
@@ -86,8 +87,7 @@ namespace panoramix {
 
         const std::vector<ColorTag> & AllColorTags();
         std::ostream & operator << (std::ostream & os, ColorTag ct);
-        Color ColorFromHSV(double h, double s, double v, double a = 255.0);
-        Color ColorFromTag(ColorTag t);
+        Color ColorFromHSV(double h, double s, double v, double a = 1.0);
         Color RandomColor();
         
 
@@ -114,8 +114,8 @@ namespace panoramix {
         class ColorTable {
         public:
             inline ColorTable() 
-                : _exceptionalColor(ColorFromTag(ColorTag::Transparent)) {}
-            inline ColorTable(const std::vector<Color> & ctable, const Color & exceptColor = ColorFromTag(ColorTag::Transparent))
+                : _exceptionalColor(ColorTag::Transparent) {}
+            inline ColorTable(const std::vector<Color> & ctable, const Color & exceptColor = ColorTag::Transparent)
                 : _colors(ctable), _exceptionalColor(exceptColor) {}
 
             ColorTable(ColorTableDescriptor descriptor);
@@ -126,7 +126,7 @@ namespace panoramix {
             ColorTable(std::initializer_list<ColorTag> ctags, ColorTag exceptColor);
 
             template <class ColorIteratorT, class = std::enable_if_t<std::is_same<std::iterator_traits<ColorIteratorT>::value_type, Color>::value>>
-            inline ColorTable(ColorIteratorT begin, ColorIteratorT end, const Color & exceptColor = ColorFromTag(ColorTag::Transparent))
+            inline ColorTable(ColorIteratorT begin, ColorIteratorT end, const Color & exceptColor = ColorTag::Transparent)
                 : _colors(begin, end), _exceptionalColor(exceptColor) {}
 
         public:
@@ -149,7 +149,7 @@ namespace panoramix {
 
         const ColorTable & PredefinedColorTable(ColorTableDescriptor descriptor);
         ColorTable CreateGreyColorTableWithSize(int sz);
-        ColorTable CreateRandomColorTableWithSize(int sz, const Color & exceptColor = ColorFromTag(ColorTag::Transparent));
+        ColorTable CreateRandomColorTableWithSize(int sz, const Color & exceptColor = ColorTag::Transparent);
 
 
         // render mode

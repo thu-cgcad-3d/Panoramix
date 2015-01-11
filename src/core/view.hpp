@@ -24,6 +24,9 @@ namespace panoramix {
         // create panoramic view
         View<PanoramicCamera> CreatePanoramicView(const Image & panorama);
 
+        // create perspective view
+        View<PerspectiveCamera> CreatePerspectiveView(const Image & perspectiveImage);
+
         // view sampling
         template <class OriginalCameraT, class TargetCameraIteratorT, class ViewOutIteratorT>
         inline void SampleViews(const View<OriginalCameraT> & originalView,

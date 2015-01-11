@@ -5,10 +5,30 @@
 #include <string>
 #include <random>
 
-#include "test_config.hpp"
+#include "config.hpp"
 
 using namespace panoramix;
 using namespace test;
+
+
+
+TEST(Visualizer, Color) {
+
+    int m = 600;
+    core::ImageWithType<core::Vec<double, 4>> hs(m, m);
+    core::ImageWithType<core::Vec<double, 4>> sv(m, m);
+    for (int i = 0; i < m; i++){
+        for (int j = 0; j < m; j++){
+            hs(i, j) = vis::ColorFromHSV(i / (double)m, j / (double)m, 0.5);
+            sv(i, j) = vis::ColorFromHSV(0.5, i / (double)m, j / (double)m);
+        }
+    }
+    cv::imshow("[HS]V color", hs);
+    cv::imshow("H[SV] color", sv);
+    cv::waitKey();
+
+}
+
 
 static_assert(vis::IsDiscretizable<core::Line3>::value, "Line3 is not renderable!");
 static_assert(vis::IsDiscretizable<core::Point3>::value, "Point3 is not renderable!");
@@ -49,10 +69,9 @@ void Print(const core::PerspectiveCamera & cam) {
     std::cout << std::setprecision(6) << "======================================" << std::endl;
 }
 
-TEST(Visualizer, _1){
+TEST(Visualizer, Interaction){
 
-    using namespace vis;
-    
+    using namespace vis;    
    
     std::vector<core::Sphere3> ss = { { core::Point3(1, 1, 1), 2.0 }, { core::Point3(-1, -1, -1), 2.0 } };
 

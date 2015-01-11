@@ -3,7 +3,7 @@
 #include "../src/core/feature.hpp"
 #include "../src/vis/visualize2d.hpp"
 
-#include "test_config.hpp"
+#include "config.hpp"
 
 using namespace panoramix;
 using namespace test;
@@ -69,7 +69,7 @@ TEST(Feature, LineSegmentExtractor) {
     //    << vis::manip2d::Show();
 
     core::LineSegmentExtractor::Params params;
-    params.useLSD = true;
+    params.algorithm = core::LineSegmentExtractor::LSD;
     core::LineSegmentExtractor lineseg2(params);
     vis::Visualizer2D(im)
         << vis::manip2d::SetColor(vis::ColorTag::Yellow)
@@ -121,7 +121,7 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
 
     core::LineSegmentExtractor lineseg;
     lineseg.params().minLength = 5;
-    lineseg.params().useLSD = true;
+    lineseg.params().algorithm = core::LineSegmentExtractor::LSD;
     std::vector<Line2> line2s = lineseg(pim);
 
     Vec3 vp1 = { 0, 0, 1 };
@@ -261,7 +261,7 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
 TEST(Feature, FeatureExtractor) {
     core::SegmentationExtractor segmenter;
     core::LineSegmentExtractor::Params params;
-    params.useLSD = true;
+    params.algorithm = core::LineSegmentExtractor::LSD;
     core::LineSegmentExtractor lineSegmentExtractor(params);
     
     core::CVFeatureExtractor<cv::SIFT> sift;

@@ -3,8 +3,8 @@
 #include <random>
 
 #include "../src/core/matlab.hpp"
-#include "gtest/gtest.h"
-#include "test_config.hpp"
+
+#include "config.hpp"
 
 using namespace panoramix;
 using namespace test;

@@ -719,7 +719,7 @@ namespace panoramix {
                         }
                     }*/
 
-                    viz.installingOptions.discretizeOptions.color = vis::ColorFromTag(vis::ColorTag::DarkGray);
+                    viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
                     viz.installingOptions.lineWidth = 2.0;
                     viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
                     //viz.add(connectionLines);
