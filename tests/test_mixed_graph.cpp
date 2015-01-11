@@ -87,18 +87,12 @@ void VisualizeMixedGraph(const core::Image & panorama,
 
 }
 
-struct DefaultColorizer {
-    vis::Color operator()(core::MGUnaryHandle uh) const {
-        return vis::ColorTag::White;
-    }
-};
-
-template <class UhColorizerFunT = DefaultColorizer>
+template <class UhColorizerFunT = core::ConstantFunctor<vis::Color>>
 void ManuallyOptimizeMixedGraph(const core::Image & panorama,
     const core::MixedGraph & mg,
     core::MGPatch & patch,
     const std::vector<core::Vec3> & vps,
-    UhColorizerFunT uhColorizer = UhColorizerFunT(),
+    UhColorizerFunT uhColorizer = UhColorizerFunT(vis::ColorTag::White),
     bool optimizeInEachIteration = true) {
 
     bool modified = true;
@@ -283,7 +277,7 @@ TEST(MixedGraph, NaiveHolisticOptimization) {
     for (auto & patch : naivePatches){
         //VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
         core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false,
-            core::MGPatchDepthsOptimizer::EigenSparseQR);
+            core::MGPatchDepthsOptimizer::EigenSparseQRSimplified);
 
         {
             core::Clock clock("holistic optimization");

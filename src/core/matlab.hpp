@@ -35,7 +35,7 @@ namespace panoramix {
         public:
             inline Matlab & operator << (const std::string & cmd) { 
                 RunScript(cmd + ";");
-                return *this; 
+                return *this;
             }
         };
 

@@ -256,7 +256,7 @@ namespace panoramix {
                     for (int k = 0; k < dimSplit; k++){
                         if (i == j && j == k)
                             continue;
-                        colors.push_back(Color(255.0 * i / dimSplit, 255.0 * j / dimSplit, 255.0 * k / dimSplit));
+                        colors.push_back(Color(1.0 * i / dimSplit, 1.0 * j / dimSplit, 1.0 * k / dimSplit));
                     }
                 }
             }

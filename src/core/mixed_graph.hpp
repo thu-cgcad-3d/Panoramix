@@ -17,6 +17,7 @@ namespace panoramix {
             bool fixed; // fixed -> not optimizable
             std::vector<double> variables; // (a, b, c) for region plane ax+by+c=1, 1/centerDepth for line
             
+            double rawDepth() const;
             Plane3 interpretAsPlane() const;
             Line3 interpretAsLine(const MGUnary & unary, const std::vector<Vec3> & vps) const;
             std::vector<double> variableCoeffsForInverseDepthAtDirection(const Vec3 & direction,
@@ -121,6 +122,24 @@ namespace panoramix {
             const MGPatch & patch, const std::vector<Vec3> & vps);
         double AverageUnaryCenterDepthOfPatch(const MixedGraph & mg,
             const MGPatch & patch, const std::vector<Vec3> & vps);
+        double AverageRawDepthOfPatch(const MGPatch & patch);
+
+        
+        void ScalePatch(MGPatch & patch, double scale);
+        inline MGPatch & operator *= (MGPatch & patch, double scale){
+            ScalePatch(patch, scale);
+            return patch;
+        }
+        inline MGPatch operator * (const MGPatch & patch, double scale) {
+            MGPatch result = patch;
+            ScalePatch(result, scale);
+            return result;
+        }
+        inline MGPatch & operator /= (MGPatch & patch, double scale){
+            patch *= (1.0 / scale); return patch;
+        }
+
+
 
 
         std::vector<MGPatch> SplitMixedGraphIntoPatches(const MixedGraph & mg,
@@ -147,7 +166,9 @@ namespace panoramix {
         public:
             enum Algorithm {
                 MosekLinearProgramming,
-                EigenSparseQR
+                EigenSparseQR,
+                EigenSparseQRSimplified,
+                MATLAB_CVX
             };
 
             MGPatchDepthsOptimizer(const MixedGraph & mg, MGPatch & patch,

@@ -1,46 +1,40 @@
 
 set_property(GLOBAL PROPERTY USE_FOLDERS On)
 
+include_directories (${Fundamental_INCLUDES} ${MATLAB_INCLUDES})
+include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES})
 
-# core MODULE
-set (CORE_MODULE_NAME Core)
-set (CORE_STATIC_LIB ${CORE_MODULE_NAME}.Static CACHE STRING 
-	"static lib name of module ${CORE_MODULE_NAME}")
-set (CORE_SHARED_LIB ${CORE_MODULE_NAME}.Shared CACHE STRING
-	"shared lib name of module ${CORE_MODULE_NAME}")
+file (GLOB CORE_HEADERS ./core/*.hpp)
+file (GLOB CORE_SOURCES ./core/*.cpp)
 
-add_subdirectory("core")
-set_property(TARGET ${CORE_STATIC_LIB} PROPERTY FOLDER "${PROJECT_NAME}.Libs")
+source_group ("core" FILES ${CORE_HEADERS} ${CORE_SOURCES})
+
+file (GLOB VIS_HEADERS ./vis/*.hpp)
+file (GLOB VIS_SOURCES ./vis/*.cpp)
+file (GLOB VIS_RESOURCES ./vis/*.qrc)	
+file (GLOB VIS_UIS ./vis/*.ui)	
+
+source_group ("vis" FILES ${VIS_HEADERS} ${VIS_SOURCES} ${VIS_RESOURCES} ${VIS_UIS})
+
+set(CMAKE_AUTOMOC on)
+set(CMAKE_AUTOUIC on)
+set(CMAKE_AUTORCC on)
+
+add_library ( ${PROJECT_NAME} STATIC 
+	${CORE_SOURCES} 
+	${CORE_HEADERS}
+	${VIS_SOURCES} 
+	${VIS_HEADERS} 
+	${VIS_RESOURCES}
+	${VIS_UIS}
+)
+target_link_libraries ( ${PROJECT_NAME} 
+	${Fundamental_LIBS} 
+	${MATLAB_LIBS}
+	${Qt_LIBS}
+)
+
+set_property(TARGET ${PROJECT_NAME} PROPERTY FOLDER "${PROJECT_NAME}.Libs")
 
 
-# deriv MODULE
-set (DERIV_MODULE_NAME Deriv)
-set (DERIV_STATIC_LIB ${DERIV_MODULE_NAME}.Static CACHE STRING 
-	"static lib name of module ${DERIV_MODULE_NAME}")
-set (DERIV_SHARED_LIB ${DERIV_MODULE_NAME}.Shared CACHE STRING
-	"shared lib name of module ${DERIV_MODULE_NAME}")
-
-add_subdirectory("deriv")
-set_property(TARGET ${DERIV_STATIC_LIB} PROPERTY FOLDER "${PROJECT_NAME}.Libs")
-
-# vis MODULE
-set (VIS_MODULE_NAME Vis)
-set (VIS_STATIC_LIB ${VIS_MODULE_NAME}.Static CACHE STRING 
-	"static lib name of module ${VIS_MODULE_NAME}")
-set (VIS_SHARED_LIB ${VIS_MODULE_NAME}.Shared CACHE STRING
-	"shared lib name of module ${VIS_MODULE_NAME}")
-
-add_subdirectory("vis")
-set_property(TARGET ${VIS_STATIC_LIB} PROPERTY FOLDER "${PROJECT_NAME}.Libs")
-
-
-# # rec MODULE
-# set (REC_MODULE_NAME Rec)
-# set (REC_STATIC_LIB ${REC_MODULE_NAME}.Static CACHE STRING 
-# 	"static lib name of module ${REC_MODULE_NAME}")
-# set (REC_SHARED_LIB ${REC_MODULE_NAME}.Shared CACHE STRING
-# 	"shared lib name of module ${REC_MODULE_NAME}")
-
-# add_subdirectory("rec")
-# set_property(TARGET ${REC_STATIC_LIB} PROPERTY FOLDER "${PROJECT_NAME}.Libs")
 
