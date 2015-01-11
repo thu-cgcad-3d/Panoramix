@@ -90,6 +90,27 @@ namespace panoramix {
             MGUnaryVarTable & unaryVars, MGBinaryVarTable& binaryVars,
             double initialDepth = 1.0);
 
+        MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views, 
+            std::vector<Vec3> & vps,
+            MGUnaryVarTable & unaryVars, MGBinaryVarTable& binaryVars,
+
+            double initialDepth = 1.0,
+            const core::LineSegmentExtractor & lineseger = core::LineSegmentExtractor(),
+            double intersectionDistanceThreshold = 10,
+            double incidenceDistanceAlongDirectionThreshold = 100,
+            double incidenceDistanceVerticalDirectionThreshold = 5,
+            
+            const core::SegmentationExtractor & segmenter = core::SegmentationExtractor(),
+            double samplingStepLengthOnBoundary = 10.0, 
+            double samplingStepLengthOnLines = 5.0,
+            int dilationSize = 3,
+
+            double interViewIncidenceAngleAlongDirectionThreshold = M_PI_4,
+            double interViewIncidenceAngleVerticalDirectionThreshold = 20.0 / 300.0);
+
+
+
+
 
         //// patch on mixed graph
         struct MGPatch {

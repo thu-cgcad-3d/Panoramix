@@ -4,9 +4,11 @@
 #include "basic_types.hpp"
 #include "graph.hpp"
 #include "cameras.hpp"
- 
+#include "feature.hpp"
+
 namespace panoramix {
     namespace core {
+
 
         // view class
         template <class CameraT, class = std::enable_if_t<IsCamera<CameraT>::value>>
@@ -65,7 +67,7 @@ namespace panoramix {
         // create a compressed regions graph from segmented regions
         // ensurance: RegionHandle(i) always represents the region data for region mask: segmentedRegions == i
         RegionsGraph CreateRegionsGraph(const Imagei & segmentedRegions,
-            double samplingStepLengthOnBoundary = 15.0, int dilationSize = 3);
+            double samplingStepLengthOnBoundary, int dilationSize);
 
 
 
@@ -196,6 +198,7 @@ namespace panoramix {
         void EstimateVanishingPointsAndBuildLinesGraphs(const std::vector<View<PerspectiveCamera>> & views,
             std::vector<Vec3> & vanishingPoints,
             std::vector<LinesGraph> & linesGraphs,
+            const LineSegmentExtractor & lineseg,
             double intersectionDistanceThreshold,
             double incidenceDistanceAlongDirectionThreshold,
             double incidenceDistanceVerticalDirectionThreshold,

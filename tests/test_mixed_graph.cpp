@@ -216,6 +216,39 @@ TEST(MixedGraph, Build) {
 }
 
 
+TEST(MixedGraph, RebuildOneView){
+
+    std::vector<core::View<core::PerspectiveCamera>> views;
+    core::Image panorama;
+
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
+    core::LoadFromDisk("./cache/test_view.View.SampleViews.views", views);    
+  
+    for (int i = 0; i < views.size(); i++){
+        core::MGUnaryVarTable unaryVars;
+        core::MGBinaryVarTable binaryVars;
+        std::vector<core::Vec3> vanishingPoints;
+
+        core::MixedGraph mg = core::BuildMixedGraph({ views[i] }, vanishingPoints, unaryVars, binaryVars);
+        core::SaveToDisk("./cache/test_view.MixedGraph.RebuildOneView.mg[" + std::to_string(i) + "]", mg);
+        std::vector<core::MGPatch> naivePatches =
+            core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
+
+        core::MGPatch & largestPatch = *std::max_element(naivePatches.begin(), naivePatches.end(),
+            [](const core::MGPatch & a, const core::MGPatch & b){return a.uhs.size() < b.uhs.size(); });
+
+        core::MGPatchDepthsOptimizer pdo(mg, largestPatch, vanishingPoints, false,
+            core::MGPatchDepthsOptimizer::EigenSparseQR);
+        pdo.optimize();
+
+        VisualizeMixedGraph(panorama, mg, { largestPatch }, vanishingPoints, true);
+    }
+
+
+}
+
+
+
 TEST(MixedGraph, BasicOptimization) {
 
     core::Image panorama;

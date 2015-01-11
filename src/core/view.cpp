@@ -5,7 +5,6 @@ extern "C" {
 
 #include "utilities.hpp"
 #include "algorithms.hpp"
-#include "feature.hpp"
 #include "containers.hpp"
 #include "view.hpp"
 
@@ -736,6 +735,7 @@ namespace panoramix {
         void EstimateVanishingPointsAndBuildLinesGraphs(const std::vector<View<PerspectiveCamera>> & views,
             std::vector<Vec3> & vanishingPoints,
             std::vector<LinesGraph> & linesGraphs,
+            const core::LineSegmentExtractor & lineseg,
             double intersectionDistanceThreshold,
             double incidenceDistanceAlongDirectionThreshold,
             double incidenceDistanceVerticalDirectionThreshold,
@@ -747,8 +747,7 @@ namespace panoramix {
 
             linesInViews.reserve(views.size());
             std::vector<Vec3> lineIntersections;
-            LineSegmentExtractor lineseg;
-            lineseg.params().useLSD = true;
+
             for (auto & v : views){
                 linesInViews.push_back(lineseg(v.image));
                 linesNum += linesInViews.back().size();
@@ -871,6 +870,8 @@ namespace panoramix {
             }));
 
             ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> regionOverlappings;
+            if (views.size() <= 1)
+                return regionOverlappings;
 
             // compute spatial positions of each region
             ComponentIndexHashMap<RegionIndex, std::vector<Vec3>>
@@ -993,6 +994,9 @@ namespace panoramix {
             double interViewIncidenceAngleVerticalDirectionThreshold){
 
             ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> interViewLineIncidences;
+
+            if (views.size() <= 1)
+                return interViewLineIncidences;
 
             //// LINES ////
             // compute spatial normal directions for each line

@@ -298,6 +298,71 @@ namespace panoramix {
         }
 
 
+        MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views,
+            std::vector<Vec3> & vps,
+            MGUnaryVarTable & unaryVars, MGBinaryVarTable& binaryVars,
+
+            double initialDepth,
+            const core::LineSegmentExtractor & lineseger,
+            double intersectionDistanceThreshold,
+            double incidenceDistanceAlongDirectionThreshold,
+            double incidenceDistanceVerticalDirectionThreshold,
+
+            const core::SegmentationExtractor & segmenter,
+            double samplingStepLengthOnBoundary ,
+            double samplingStepLengthOnLines,
+            int dilationSize,
+
+            double interViewIncidenceAngleAlongDirectionThreshold,
+            double interViewIncidenceAngleVerticalDirectionThreshold){
+
+            std::vector<core::LinesGraph> linesGraphs;
+            core::EstimateVanishingPointsAndBuildLinesGraphs(views, vps, linesGraphs, lineseger,
+                intersectionDistanceThreshold, incidenceDistanceAlongDirectionThreshold, incidenceDistanceVerticalDirectionThreshold);
+
+            std::vector<core::Imagei> segmentedRegionsArray;
+            std::vector<core::RegionsGraph> regionsGraphs;
+
+            for (int i = 0; i < views.size(); i++){
+                auto & v = views[i];
+                std::vector<core::Line2> lines;
+                for (auto & ld : linesGraphs[i].elements<0>()){
+                    auto line = ld.data.line.component;
+                    line.first -= core::normalize(line.direction()) * 5.0;
+                    line.second += core::normalize(line.direction()) * 5.0;
+                    lines.push_back(line);
+                }
+                auto segmentedRegions = segmenter(v.image, lines).first;
+                int samplePointsOnBoundariesSum = 0;
+                auto regions = core::CreateRegionsGraph(segmentedRegions, samplingStepLengthOnBoundary, dilationSize);
+                for (auto & r : regions.elements<1>()){
+                    for (auto & ps : r.data.sampledPoints){
+                        samplePointsOnBoundariesSum += ps.size();
+                    }
+                }
+                regionsGraphs.push_back(std::move(regions));
+                segmentedRegionsArray.push_back(segmentedRegions);
+            }
+
+            std::vector<std::map<std::pair<core::RegionHandle, core::LineHandle>, std::vector<core::Point2>>>
+                regionLineConnectionsArray(views.size());
+            for (int i = 0; i < views.size(); i++){
+                regionLineConnectionsArray[i] = 
+                    core::RecognizeRegionLineConnections(segmentedRegionsArray[i], linesGraphs[i], samplingStepLengthOnLines);
+            }
+
+            auto regionOverlappingsAcrossViews =
+                core::RecognizeRegionOverlappingsAcrossViews(views, regionsGraphs);
+            auto lineIncidencesAcrossViews =
+                core::RecognizeLineIncidencesAcrossViews(views, linesGraphs,
+                interViewIncidenceAngleAlongDirectionThreshold, interViewIncidenceAngleVerticalDirectionThreshold);
+
+            return BuildMixedGraph(views, regionsGraphs, linesGraphs,
+                regionOverlappingsAcrossViews, lineIncidencesAcrossViews, regionLineConnectionsArray, vps,
+                unaryVars, binaryVars, initialDepth);
+
+        }
+
 
 
 
