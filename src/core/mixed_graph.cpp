@@ -670,12 +670,6 @@ namespace panoramix {
 
 
 
-
-
-
-
-
-
             std::vector<Vec3> NecessaryAnchorsForBinary(const MixedGraph & mg, MGBinaryHandle bh){
                 auto & b = mg.data(bh);
                 if (b.type == MGBinary::LineLineIncidence || b.type == MGBinary::LineLineIntersection){
@@ -700,10 +694,10 @@ namespace panoramix {
                             maxOffsetedAnchorId = k;
                         }
                     }
-                    /*if (maxDotProd > 1e-3){
+                    if (maxDotProd > 2e-1){
                         return{ b.normalizedAnchors.front(), b.normalizedAnchors[maxOffsetedAnchorId], b.normalizedAnchors.back() };
                     }
-                    else*/ {
+                    else {
                         return{ b.normalizedAnchors.front(), b.normalizedAnchors.back() };
                     }
                 }
