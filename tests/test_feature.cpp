@@ -264,8 +264,6 @@ TEST(Feature, FeatureExtractor) {
     params.algorithm = core::LineSegmentExtractor::LSD;
     core::LineSegmentExtractor lineSegmentExtractor(params);
     
-    core::CVFeatureExtractor<cv::SIFT> sift;
-    core::CVFeatureExtractor<cv::SURF> surf(300.0);
     for (int i = 0; i < 4; i++) {
         std::string name = ProjectDataDirStrings::Normal + "/" + "sampled_" + std::to_string(i) + ".png";
         cv::Mat im = cv::imread(name);
@@ -275,7 +273,6 @@ TEST(Feature, FeatureExtractor) {
         << vis::manip2d::SetColorTable(vis::CreateRandomColorTableWithSize(segs.second))
             << segs.first
             << lineSegmentExtractor(im) 
-            << sift(im) << surf(im)
             << vis::manip2d::Show();
     }
 }

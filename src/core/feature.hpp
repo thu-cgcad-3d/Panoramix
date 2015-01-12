@@ -11,27 +11,6 @@ namespace panoramix {
     namespace core { 
 
 
-        // a simple wrapper of cv point detecters
-        template <class CVFeatureExtractorT, class FeatureT = std::vector<cv::KeyPoint>>
-        class CVFeatureExtractor {
-        public:
-            using Feature = FeatureT;
-        public:
-            template <class ... ArgT>
-            explicit inline CVFeatureExtractor(ArgT ... args) : _feature2D(args ...) {}
-            inline Feature operator() (const Image & im, const Image & mask = cv::Mat(),
-                cv::OutputArray descriptors = cv::noArray()) const {
-                Feature fea;
-                _feature2D(im, mask, fea, descriptors);
-                return fea;
-            }
-        private:
-            CVFeatureExtractorT _feature2D;
-        };
-
-
-
-
         // non maxima suppression
         void NonMaximaSuppression(const Image & src, Image & dst, int sz = 50,
             std::vector<PixelLoc> * pixels = nullptr,
@@ -93,42 +72,6 @@ namespace panoramix {
         std::pair<double, InfiniteLine2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
             double * interArea = nullptr, double * interLen = nullptr);
 
-
-
-        // segmentation
-        class SegmentationExtractor {
-        public:
-            using Feature = Imagei; // CV_32SC1
-            enum Algorithm {
-                GraphCut,
-                SLIC,
-                QuickShiftCPU,
-                QuickShiftGPU
-            };
-            struct Params {
-                inline Params() : sigma(0.8f), c(100.0f), minSize(200), algorithm(GraphCut),
-                    superpixelSizeSuggestion(1000), superpixelNumberSuggestion(100) {
-                }
-                float sigma; // for smoothing
-                float c; // threshold function
-                int minSize; // min component size
-                Algorithm algorithm;
-                int superpixelSizeSuggestion; // use superpixel size suggestion if [superpixelSizeSuggestion > 0]
-                int superpixelNumberSuggestion; // use superpixel number suggestion if [superpixelSizeSuggestion < 0]
-                template <class Archive> inline void serialize(Archive & ar) { 
-                    ar(sigma, c, minSize, algorithm, superpixelSizeSuggestion, superpixelNumberSuggestion);
-                }
-            };
-        public:
-            inline explicit SegmentationExtractor(const Params & params = Params()) : _params(params){}
-            const Params & params() const { return _params; }
-            Params & params() { return _params; }
-            std::pair<Feature, int> operator() (const Image & im) const;
-            std::pair<Feature, int> operator() (const Image & im, const std::vector<Line2> & lines) const;
-            template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
-        private:
-            Params _params;
-        };
 
 
         // find 3 orthogonal directions
@@ -228,6 +171,47 @@ namespace panoramix {
 
         /// homography estimation
         std::pair<double, double> ComputeFocalsFromHomography(const Mat3 & H, std::pair<bool, bool> * ok = nullptr);
+
+
+
+
+
+        // segmentation
+        class SegmentationExtractor {
+        public:
+            using Feature = Imagei; // CV_32SC1
+            enum Algorithm {
+                GraphCut,
+                SLIC,
+                QuickShiftCPU,
+                QuickShiftGPU
+            };
+            struct Params {
+                inline Params() : sigma(0.8f), c(100.0f), minSize(200), algorithm(GraphCut),
+                    superpixelSizeSuggestion(1000), superpixelNumberSuggestion(100) {
+                }
+                float sigma; // for smoothing
+                float c; // threshold function
+                int minSize; // min component size
+                Algorithm algorithm;
+                int superpixelSizeSuggestion; // use superpixel size suggestion if [superpixelSizeSuggestion > 0]
+                int superpixelNumberSuggestion; // use superpixel number suggestion if [superpixelSizeSuggestion < 0]
+                template <class Archive> inline void serialize(Archive & ar) {
+                    ar(sigma, c, minSize, algorithm, superpixelSizeSuggestion, superpixelNumberSuggestion);
+                }
+            };
+        public:
+            inline explicit SegmentationExtractor(const Params & params = Params()) : _params(params){}
+            const Params & params() const { return _params; }
+            Params & params() { return _params; }
+            std::pair<Feature, int> operator() (const Image & im) const;
+            std::pair<Feature, int> operator() (const Image & im, const std::vector<Line2> & lines) const;
+            template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
+        private:
+            Params _params;
+        };
+
+
 
 
         /// geometric context estimator

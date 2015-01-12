@@ -497,549 +497,7 @@ namespace panoramix {
 
 
 
-        namespace {
-
-            struct Edge {
-                float w;
-                int a, b;
-            };
-
-            class Universe {
-            public:
-                struct Element {
-                    int rank;
-                    int p; // parent
-                    int size;
-                };
-                INLINE Universe(int eleNum) : elements(eleNum), num(eleNum) {
-                    for (int i = 0; i < eleNum; i++){
-                        elements[i].rank = 0;
-                        elements[i].size = 1;
-                        elements[i].p = i;
-                    }
-                }
-                INLINE int find(int x) {
-                    int y = x;
-                    while (y != elements[y].p)
-                        y = elements[y].p;
-                    elements[x].p = y;
-                    return y;
-                }
-                INLINE void join(int x, int y) {
-                    if (elements[x].rank > elements[y].rank) {
-                        elements[y].p = x;
-                        elements[x].size += elements[y].size;
-                    } else {
-                        elements[x].p = y;
-                        elements[y].size += elements[x].size;
-                        if (elements[x].rank == elements[y].rank)
-                            elements[y].rank++;
-                    }
-                    num--;
-                }
-                INLINE int size(int x) const { return elements[x].size; }
-                INLINE int numSets() const { return num; }
-            private:
-                int num;
-                std::vector<Element> elements;
-            };
-
-            inline float Threshold(int size, float c) {
-                return c / size;
-            }
-
-            INLINE Universe SegmentGraph(int numVertices, std::vector<Edge> & edges, float c) {
-                std::sort(edges.begin(), edges.end(), [](const Edge & e1, const Edge & e2){
-                    return e1.w < e2.w;
-                });
-
-                Universe u(numVertices);
-                std::vector<float> threshold(numVertices);
-
-                for (int i = 0; i < numVertices; i++)
-                    threshold[i] = Threshold(1, c);
-
-                for (int i = 0; i < edges.size(); i++) {
-                    const Edge & edge = edges[i];
-
-                    // components conected by this edge
-                    int a = u.find(edge.a);
-                    int b = u.find(edge.b);
-                    if (a != b) {
-                        if ((edge.w <= threshold[a]) &&
-                            (edge.w <= threshold[b])) {
-                            u.join(a, b);
-                            a = u.find(a);
-                            threshold[a] = edge.w + Threshold(u.size(a), c);
-                        }
-                    }
-                }
-
-                return u;
-            }
-
-            inline float PixelDiff(const Image & im, const cv::Point & p1, const cv::Point & p2) {
-                assert(im.depth() == CV_8U && im.channels() == 3);
-                Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
-                Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
-                return static_cast<float>(norm(c1 - c2));
-            }
-
-            inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
-                const PixelLoc & p1, const PixelLoc & p2,
-                const std::vector<Line2> & lines){
-                assert(im.depth() == CV_8U && im.channels() == 3);
-                for (int lineId : { linesOccupation(p1), linesOccupation(p2) }){
-                    if (lineId >= 0){
-                        auto & line = lines[lineId];
-                        double p1OnLeftFlag = (p1 - ToPixelLoc(line.first)).cross(ToPixelLoc(line.direction()));
-                        double p2OnLeftFlag = (p2 - ToPixelLoc(line.first)).cross(ToPixelLoc(line.direction()));
-                        if (p1OnLeftFlag * p2OnLeftFlag < 0){
-                            return 1e5;
-                        }
-                    }
-                }
-                Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
-                Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
-                return static_cast<float>(norm(c1 - c2));
-            }
-
-            // first return is CV_32SC1, the second is CV_8UC3 (for display)
-            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, 
-                int & numCCs, bool returnColoredResult = false) {
-
-                assert(im.depth() == CV_8U && im.channels() == 3);
-                //std::cout << "depth: " << ImageDepth2Str(im.depth()) << std::endl;
-                //std::cout << "channels: " << im.channels() << std::endl;
-
-                int width = im.cols;
-                int height = im.rows;
-                Image smoothed;
-                cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
-
-                // build pixel graph
-                std::vector<Edge> edges;
-                edges.reserve(width * height * 4);
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        if (x < width - 1) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = y * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y });
-                            edges.push_back(edge);
-                        }
-
-                        if (y < height - 1) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y + 1) * width + x;
-                            edge.w = PixelDiff(smoothed, { x, y }, { x, y + 1 });
-                            edges.push_back(edge);
-                        }
-
-                        if ((x < width - 1) && (y < height - 1)) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y + 1) * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y + 1 });
-                            edges.push_back(edge);
-                        }
-
-                        if ((x < width - 1) && (y > 0)) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y - 1) * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y - 1 });
-                            edges.push_back(edge);
-                        }
-                    }
-                }
-
-                int num = (int)edges.size();
-                Universe u = SegmentGraph(width * height, edges, c);
-
-                for (int i = 0; i < num; i++) {
-                    int a = u.find(edges[i].a);
-                    int b = u.find(edges[i].b);
-                    if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize)))
-                        u.join(a, b);
-                }
-
-                numCCs = u.numSets();
-                std::unordered_map<int, int> compIntSet;
-                Imagei output(im.size());
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        int comp = u.find(y * width + x);
-                        if (compIntSet.find(comp) == compIntSet.end()){
-                            compIntSet.insert(std::make_pair(comp, (int)compIntSet.size()));
-                        }
-                        output(cv::Point(x, y)) = compIntSet[comp];
-                    }
-                }
-                assert(compIntSet.size() == numCCs);
-
-                if (!returnColoredResult){
-                    return std::make_pair(output, Image());
-                }
-
-                Image coloredOutput(im.size(), CV_8UC3);
-                std::vector<cv::Vec<uint8_t, 3>> colors(numCCs);
-                std::generate(colors.begin(), colors.end(), [](){
-                    return cv::Vec<uint8_t, 3>(uint8_t(std::rand() % 256), 
-                        uint8_t(std::rand() % 256), 
-                        uint8_t(std::rand() % 256));
-                });
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        coloredOutput.at<cv::Vec<uint8_t, 3>>(cv::Point(x, y)) = 
-                            colors[output(cv::Point(x, y))];
-                    }
-                }
-
-                //cv::imshow("result", coloredOutput);
-                //cv::waitKey();
-
-                return std::make_pair(output, coloredOutput);
-            }
-
-            // first return is CV_32SC1, the second is CV_8UC3 (for display)
-            std::pair<Imagei, Image> SegmentImageWithLinesSplits(const Image & im, float sigma, float c, int minSize,
-                const std::vector<Line2> & lines,
-                int & numCCs, bool returnColoredResult = false){
-
-                assert(im.depth() == CV_8U && im.channels() == 3);
-                //std::cout << "depth: " << ImageDepth2Str(im.depth()) << std::endl;
-                //std::cout << "channels: " << im.channels() << std::endl;
-
-                int width = im.cols;
-                int height = im.rows;
-                Image smoothed;
-                cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
-
-                Imagei linesOccupation(im.size(), -1);
-                for (int i = 0; i < lines.size(); i++){
-                    auto & l = lines[i];
-                    cv::line(linesOccupation, ToPixelLoc(l.first), ToPixelLoc(l.second), i, 2);
-                }
-
-                // build pixel graph
-                std::vector<Edge> edges;
-                edges.reserve(width * height * 4);
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        if (x < width - 1) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = y * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y }, lines);
-                            edges.push_back(edge);
-                        }
-                        if (y < height - 1) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y + 1) * width + x;
-                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x, y + 1 }, lines);
-                            edges.push_back(edge);
-                        }
-                        if ((x < width - 1) && (y < height - 1)) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y + 1) * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y + 1 }, lines);
-                            edges.push_back(edge);
-                        }
-                        if ((x < width - 1) && (y > 0)) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y - 1) * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y - 1 }, lines);
-                            edges.push_back(edge);
-                        }
-                    }
-                }
-
-                int num = (int)edges.size();
-                Universe u = SegmentGraph(width * height, edges, c);
-
-                for (int i = 0; i < num; i++) {
-                    int a = u.find(edges[i].a);
-                    int b = u.find(edges[i].b);
-                    if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize)))
-                        u.join(a, b);
-                }
-
-                numCCs = u.numSets();
-                std::unordered_map<int, int> compIntSet;
-                Imagei output(im.size());
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        int comp = u.find(y * width + x);
-                        if (compIntSet.find(comp) == compIntSet.end()){
-                            compIntSet.insert(std::make_pair(comp, (int)compIntSet.size()));
-                        }
-                        output(cv::Point(x, y)) = compIntSet[comp];
-                    }
-                }
-                assert(compIntSet.size() == numCCs);
-
-                if (!returnColoredResult){
-                    return std::make_pair(output, Image());
-                }
-
-                Image coloredOutput(im.size(), CV_8UC3);
-                std::vector<cv::Vec<uint8_t, 3>> colors(numCCs);
-                std::generate(colors.begin(), colors.end(), [](){
-                    return cv::Vec<uint8_t, 3>(uint8_t(std::rand() % 256),
-                        uint8_t(std::rand() % 256),
-                        uint8_t(std::rand() % 256));
-                });
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        coloredOutput.at<cv::Vec<uint8_t, 3>>(cv::Point(x, y)) =
-                            colors[output(cv::Point(x, y))];
-                    }
-                }
-
-                //cv::imshow("result", coloredOutput);
-                //cv::waitKey();
-
-                return std::make_pair(output, coloredOutput);
-            }
-
-            std::pair<Imagei, int> SegmentImageUsingSLIC(const Image & im, int spsize, int spnum){
-                assert(im.depth() == CV_8U && im.channels() == 3);
-
-                SLIC slic;
-                unsigned int * ubuff = new unsigned int[im.cols * im.rows];
-                // fill buffer
-                for (int x = 0; x < im.cols; x++){
-                    for (int y = 0; y < im.rows; y++){
-                        auto & pixel = ubuff[y * im.cols + x];
-                        auto & color = im.at<Vec3b>(PixelLoc(x, y));
-                        pixel = (color[2] << 16) + (color[1] << 8) + color[0];
-                    }
-                }
-
-                int * klabels = nullptr;
-                int nlabels = 0;
-                if (spsize > 0){
-                    slic.DoSuperpixelSegmentation_ForGivenSuperpixelSize(ubuff, im.cols, im.rows, klabels, nlabels, spsize, 50);
-                }
-                else{
-                    slic.DoSuperpixelSegmentation_ForGivenNumberOfSuperpixels(ubuff, im.cols, im.rows, klabels, nlabels, spnum, 50);
-                }
-
-                // fill labels back
-                Imagei labels = Imagei::zeros(im.size());
-                for (int x = 0; x < im.cols; x++){
-                    for (int y = 0; y < im.rows; y++){
-                        labels(PixelLoc(x, y)) = klabels[y * im.cols + x];
-                    }
-                }
-
-                delete[] ubuff;
-                delete[] klabels;
-
-                return std::make_pair(labels, nlabels);
-            }
-
-
-            inline void ToQuickShiftImage(const Image & IMG, image_t & im){
-                im.N1 = IMG.rows;
-                im.N2 = IMG.cols;
-                im.K = IMG.channels();
-                assert(im.K == 3);
-                im.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
-                for (int k = 0; k < im.K; k++)
-                for (int col = 0; col < im.N2; col++)
-                for (int row = 0; row < im.N1; row++)
-                {
-                    auto & pt = IMG.at<cv::Vec<uint8_t, 3>>(/*im.N1 - 1 - row*/row, col);
-                    im.I[row + col*im.N1 + k*im.N1*im.N2] = 32. * pt[k] / 255.; // Scale 0-32
-                }
-            }
-
-
-            int * map_to_flatmap(float * map, unsigned int size)
-            {
-                /********** Flatmap **********/
-                int *flatmap = (int *)malloc(size*sizeof(int));
-                for (unsigned int p = 0; p < size; p++)
-                {
-                    flatmap[p] = map[p];
-                }
-
-                bool changed = true;
-                while (changed)
-                {
-                    changed = false;
-                    for (unsigned int p = 0; p < size; p++)
-                    {
-                        changed = changed || (flatmap[p] != flatmap[flatmap[p]]);
-                        flatmap[p] = flatmap[flatmap[p]];
-                    }
-                }
-
-                /* Consistency check */
-                for (unsigned int p = 0; p < size; p++)
-                    assert(flatmap[p] == flatmap[flatmap[p]]);
-
-                return flatmap;
-            }
-
-            image_t imseg(image_t im, int * flatmap)
-            {
-                /********** Mean Color **********/
-                float * meancolor = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
-                float * counts = (float *)calloc(im.N1*im.N2, sizeof(float));
-
-                for (int p = 0; p < im.N1*im.N2; p++)
-                {
-                    counts[flatmap[p]]++;
-                    for (int k = 0; k < im.K; k++)
-                        meancolor[flatmap[p] + k*im.N1*im.N2] += im.I[p + k*im.N1*im.N2];
-                }
-
-                int roots = 0;
-                for (int p = 0; p < im.N1*im.N2; p++)
-                {
-                    if (flatmap[p] == p)
-                        roots++;
-                }
-                printf("Roots: %d\n", roots);
-
-                int nonzero = 0;
-                for (int p = 0; p < im.N1*im.N2; p++)
-                {
-                    if (counts[p] > 0)
-                    {
-                        nonzero++;
-                        for (int k = 0; k < im.K; k++)
-                            meancolor[p + k*im.N1*im.N2] /= counts[p];
-                    }
-                }
-                if (roots != nonzero)
-                    printf("Nonzero: %d\n", nonzero);
-                assert(roots == nonzero);
-
-
-                /********** Create output image **********/
-                image_t imout = im;
-                imout.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
-                for (int p = 0; p < im.N1*im.N2; p++)
-                for (int k = 0; k < im.K; k++)
-                    imout.I[p + k*im.N1*im.N2] = meancolor[flatmap[p] + k*im.N1*im.N2];
-
-                free(meancolor);
-                free(counts);
-
-                return imout;
-            }
-
-
-            std::pair<Imagei, int> SegmentImageUsingQuickShiftCPU(const Image & originalIm, float sigma, float tau) {
-                image_t im;
-                ToQuickShiftImage(originalIm, im);
-                float *map, *E, *gaps;
-                int * flatmap;
-                image_t imout;
-
-                map = (float *)calloc(im.N1*im.N2, sizeof(float));
-                gaps = (float *)calloc(im.N1*im.N2, sizeof(float));
-                E = (float *)calloc(im.N1*im.N2, sizeof(float));
-
-                quickshift(im, sigma, tau, map, gaps, E);
-
-                /* Consistency check */
-                for (int p = 0; p < im.N1*im.N2; p++)
-                if (map[p] == p) assert(gaps[p] == INF);
-
-                flatmap = map_to_flatmap(map, im.N1*im.N2);
-                imout = imseg(im, flatmap);
-                Imagei segmented(im.N1, im.N2);
-                for (int col = 0; col < im.N2; col++)
-                for (int row = 0; row < im.N1; row++)
-                {                    
-                    segmented(row, col) = flatmap[row + col*im.N1];
-                }
-                int segnum = *std::max_element(flatmap, flatmap + im.N1 * im.N2) + 1;
-
-                free(im.I);
-                free(imout.I);
-                free(map);
-                free(gaps);
-                free(E);
-                free(flatmap);
-                return std::make_pair(segmented, segnum);
-            }
-
-            std::pair<Imagei, int> SegmentImageUsingQuickShiftGPU(const Image & originalIm, float sigma, float tau) {
-                image_t im;
-                ToQuickShiftImage(originalIm, im);
-                float *map, *E, *gaps;
-                int * flatmap;
-                image_t imout;
-
-                map = (float *)calloc(im.N1*im.N2, sizeof(float));
-                gaps = (float *)calloc(im.N1*im.N2, sizeof(float));
-                E = (float *)calloc(im.N1*im.N2, sizeof(float));
-
-                quickshift_gpu(im, sigma, tau, map, gaps, E);
-
-                /* Consistency check */
-                for (int p = 0; p < im.N1*im.N2; p++)
-                if (map[p] == p) assert(gaps[p] == INF);
-
-                flatmap = map_to_flatmap(map, im.N1*im.N2);
-                imout = imseg(im, flatmap);
-                Imagei segmented(im.N1, im.N2);
-                for (int col = 0; col < im.N2; col++)
-                for (int row = 0; row < im.N1; row++)
-                {
-                    segmented(row, col) = flatmap[row + col*im.N1];
-                }
-                int segnum = *std::max_element(flatmap, flatmap + im.N1 * im.N2) + 1;
-
-                free(im.I);
-                free(imout.I);
-                free(map);
-                free(gaps);
-                free(E);
-                free(flatmap);
-                return std::make_pair(segmented, segnum);
-            }
-
-        }
-
-
-        std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im) const {
-            if (_params.algorithm == SLIC){
-                return SegmentImageUsingSLIC(im, _params.superpixelSizeSuggestion, _params.superpixelNumberSuggestion);
-            }
-            else if (_params.algorithm == GraphCut){
-                int numCCs;
-                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
-                return std::make_pair(segim, numCCs);
-            }
-            else if (_params.algorithm == QuickShiftCPU){
-                return SegmentImageUsingQuickShiftCPU(im, 6, 10);
-            }
-            else if (_params.algorithm == QuickShiftGPU){
-                return SegmentImageUsingQuickShiftGPU(im, 6, 10);
-            }
-            else{
-                SHOULD_NEVER_BE_CALLED();
-            }
-        }
-
-        std::pair<Imagei, int>  SegmentationExtractor::operator() (const Image & im, const std::vector<Line2> & lines) const {
-            assert(_params.algorithm == GraphCut);
-            int numCCs;
-            Imagei segim = SegmentImageWithLinesSplits(im, _params.sigma, _params.c, _params.minSize, lines, numCCs, false).first;
-            return std::make_pair(segim, numCCs);
-        }
+      
 
 
         namespace {
@@ -2125,6 +1583,569 @@ namespace panoramix {
 
             return std::make_pair(f0, f1);
         }
+
+
+
+
+
+
+
+
+
+        namespace {
+
+            struct Edge {
+                float w;
+                int a, b;
+            };
+
+            class Universe {
+            public:
+                struct Element {
+                    int rank;
+                    int p; // parent
+                    int size;
+                };
+                INLINE Universe(int eleNum) : elements(eleNum), num(eleNum) {
+                    for (int i = 0; i < eleNum; i++){
+                        elements[i].rank = 0;
+                        elements[i].size = 1;
+                        elements[i].p = i;
+                    }
+                }
+                INLINE int find(int x) {
+                    int y = x;
+                    while (y != elements[y].p)
+                        y = elements[y].p;
+                    elements[x].p = y;
+                    return y;
+                }
+                INLINE void join(int x, int y) {
+                    if (elements[x].rank > elements[y].rank) {
+                        elements[y].p = x;
+                        elements[x].size += elements[y].size;
+                    }
+                    else {
+                        elements[x].p = y;
+                        elements[y].size += elements[x].size;
+                        if (elements[x].rank == elements[y].rank)
+                            elements[y].rank++;
+                    }
+                    num--;
+                }
+                INLINE int size(int x) const { return elements[x].size; }
+                INLINE int numSets() const { return num; }
+            private:
+                int num;
+                std::vector<Element> elements;
+            };
+
+            INLINE float Threshold(int size, float c) {
+                return c / size;
+            }
+
+            INLINE Universe SegmentGraph(int numVertices, std::vector<Edge> & edges, float c) {
+                std::sort(edges.begin(), edges.end(), [](const Edge & e1, const Edge & e2){
+                    return e1.w < e2.w;
+                });
+
+                Universe u(numVertices);
+                std::vector<float> threshold(numVertices);
+
+                for (int i = 0; i < numVertices; i++)
+                    threshold[i] = Threshold(1, c);
+
+                for (int i = 0; i < edges.size(); i++) {
+                    const Edge & edge = edges[i];
+
+                    // components conected by this edge
+                    int a = u.find(edge.a);
+                    int b = u.find(edge.b);
+                    if (a != b) {
+                        if ((edge.w <= threshold[a]) &&
+                            (edge.w <= threshold[b])) {
+                            u.join(a, b);
+                            a = u.find(a);
+                            threshold[a] = edge.w + Threshold(u.size(a), c);
+                        }
+                    }
+                }
+
+                return u;
+            }
+
+            inline float PixelDiff(const Image & im, const cv::Point & p1, const cv::Point & p2) {
+                assert(im.depth() == CV_8U && im.channels() == 3);
+                Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
+                Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
+                return static_cast<float>(norm(c1 - c2));
+            }
+
+            inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
+                const PixelLoc & p1, const PixelLoc & p2,
+                const std::vector<Line2> & lines){
+                assert(im.depth() == CV_8U && im.channels() == 3);
+                for (int lineId : { linesOccupation(p1), linesOccupation(p2) }){
+                    if (lineId >= 0){
+                        auto & line = lines[lineId];
+                        double p1OnLeftFlag = (p1 - ToPixelLoc(line.first)).cross(ToPixelLoc(line.direction()));
+                        double p2OnLeftFlag = (p2 - ToPixelLoc(line.first)).cross(ToPixelLoc(line.direction()));
+                        if (p1OnLeftFlag * p2OnLeftFlag < 0){
+                            return 1e5;
+                        }
+                    }
+                }
+                Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
+                Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
+                return static_cast<float>(norm(c1 - c2));
+            }
+
+            // first return is CV_32SC1, the second is CV_8UC3 (for display)
+            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize,
+                int & numCCs, bool returnColoredResult = false) {
+
+                assert(im.depth() == CV_8U && im.channels() == 3);
+                //std::cout << "depth: " << ImageDepth2Str(im.depth()) << std::endl;
+                //std::cout << "channels: " << im.channels() << std::endl;
+
+                int width = im.cols;
+                int height = im.rows;
+                Image smoothed;
+                cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
+
+                // build pixel graph
+                std::vector<Edge> edges;
+                edges.reserve(width * height * 4);
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        if (x < width - 1) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = y * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y });
+                            edges.push_back(edge);
+                        }
+
+                        if (y < height - 1) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y + 1) * width + x;
+                            edge.w = PixelDiff(smoothed, { x, y }, { x, y + 1 });
+                            edges.push_back(edge);
+                        }
+
+                        if ((x < width - 1) && (y < height - 1)) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y + 1) * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y + 1 });
+                            edges.push_back(edge);
+                        }
+
+                        if ((x < width - 1) && (y > 0)) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y - 1) * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y - 1 });
+                            edges.push_back(edge);
+                        }
+                    }
+                }
+
+                int num = (int)edges.size();
+                Universe u = SegmentGraph(width * height, edges, c);
+
+                for (int i = 0; i < num; i++) {
+                    int a = u.find(edges[i].a);
+                    int b = u.find(edges[i].b);
+                    if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize)))
+                        u.join(a, b);
+                }
+
+                numCCs = u.numSets();
+                std::unordered_map<int, int> compIntSet;
+                Imagei output(im.size());
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        int comp = u.find(y * width + x);
+                        if (compIntSet.find(comp) == compIntSet.end()){
+                            compIntSet.insert(std::make_pair(comp, (int)compIntSet.size()));
+                        }
+                        output(cv::Point(x, y)) = compIntSet[comp];
+                    }
+                }
+                assert(compIntSet.size() == numCCs);
+
+                if (!returnColoredResult){
+                    return std::make_pair(output, Image());
+                }
+
+                Image coloredOutput(im.size(), CV_8UC3);
+                std::vector<cv::Vec<uint8_t, 3>> colors(numCCs);
+                std::generate(colors.begin(), colors.end(), [](){
+                    return cv::Vec<uint8_t, 3>(uint8_t(std::rand() % 256),
+                        uint8_t(std::rand() % 256),
+                        uint8_t(std::rand() % 256));
+                });
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        coloredOutput.at<cv::Vec<uint8_t, 3>>(cv::Point(x, y)) =
+                            colors[output(cv::Point(x, y))];
+                    }
+                }
+
+                //cv::imshow("result", coloredOutput);
+                //cv::waitKey();
+
+                return std::make_pair(output, coloredOutput);
+            }
+
+            // first return is CV_32SC1, the second is CV_8UC3 (for display)
+            std::pair<Imagei, Image> SegmentImageWithLinesSplits(const Image & im, float sigma, float c, int minSize,
+                const std::vector<Line2> & lines,
+                int & numCCs, bool returnColoredResult = false){
+
+                assert(im.depth() == CV_8U && im.channels() == 3);
+                //std::cout << "depth: " << ImageDepth2Str(im.depth()) << std::endl;
+                //std::cout << "channels: " << im.channels() << std::endl;
+
+                int width = im.cols;
+                int height = im.rows;
+                Image smoothed;
+                cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
+
+                Imagei linesOccupation(im.size(), -1);
+                for (int i = 0; i < lines.size(); i++){
+                    auto & l = lines[i];
+                    cv::line(linesOccupation, ToPixelLoc(l.first), ToPixelLoc(l.second), i, 2);
+                }
+
+                // build pixel graph
+                std::vector<Edge> edges;
+                edges.reserve(width * height * 4);
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        if (x < width - 1) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = y * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y }, lines);
+                            edges.push_back(edge);
+                        }
+                        if (y < height - 1) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y + 1) * width + x;
+                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x, y + 1 }, lines);
+                            edges.push_back(edge);
+                        }
+                        if ((x < width - 1) && (y < height - 1)) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y + 1) * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y + 1 }, lines);
+                            edges.push_back(edge);
+                        }
+                        if ((x < width - 1) && (y > 0)) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = (y - 1) * width + (x + 1);
+                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y - 1 }, lines);
+                            edges.push_back(edge);
+                        }
+                    }
+                }
+
+                int num = (int)edges.size();
+                Universe u = SegmentGraph(width * height, edges, c);
+
+                for (int i = 0; i < num; i++) {
+                    int a = u.find(edges[i].a);
+                    int b = u.find(edges[i].b);
+                    if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize)))
+                        u.join(a, b);
+                }
+
+                numCCs = u.numSets();
+                std::unordered_map<int, int> compIntSet;
+                Imagei output(im.size());
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        int comp = u.find(y * width + x);
+                        if (compIntSet.find(comp) == compIntSet.end()){
+                            compIntSet.insert(std::make_pair(comp, (int)compIntSet.size()));
+                        }
+                        output(cv::Point(x, y)) = compIntSet[comp];
+                    }
+                }
+                assert(compIntSet.size() == numCCs);
+
+                if (!returnColoredResult){
+                    return std::make_pair(output, Image());
+                }
+
+                Image coloredOutput(im.size(), CV_8UC3);
+                std::vector<cv::Vec<uint8_t, 3>> colors(numCCs);
+                std::generate(colors.begin(), colors.end(), [](){
+                    return cv::Vec<uint8_t, 3>(uint8_t(std::rand() % 256),
+                        uint8_t(std::rand() % 256),
+                        uint8_t(std::rand() % 256));
+                });
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        coloredOutput.at<cv::Vec<uint8_t, 3>>(cv::Point(x, y)) =
+                            colors[output(cv::Point(x, y))];
+                    }
+                }
+
+                //cv::imshow("result", coloredOutput);
+                //cv::waitKey();
+
+                return std::make_pair(output, coloredOutput);
+            }
+
+            std::pair<Imagei, int> SegmentImageUsingSLIC(const Image & im, int spsize, int spnum){
+                assert(im.depth() == CV_8U && im.channels() == 3);
+
+                SLIC slic;
+                unsigned int * ubuff = new unsigned int[im.cols * im.rows];
+                // fill buffer
+                for (int x = 0; x < im.cols; x++){
+                    for (int y = 0; y < im.rows; y++){
+                        auto & pixel = ubuff[y * im.cols + x];
+                        auto & color = im.at<Vec3b>(PixelLoc(x, y));
+                        pixel = (color[2] << 16) + (color[1] << 8) + color[0];
+                    }
+                }
+
+                int * klabels = nullptr;
+                int nlabels = 0;
+                if (spsize > 0){
+                    slic.DoSuperpixelSegmentation_ForGivenSuperpixelSize(ubuff, im.cols, im.rows, klabels, nlabels, spsize, 50);
+                }
+                else{
+                    slic.DoSuperpixelSegmentation_ForGivenNumberOfSuperpixels(ubuff, im.cols, im.rows, klabels, nlabels, spnum, 50);
+                }
+
+                // fill labels back
+                Imagei labels = Imagei::zeros(im.size());
+                for (int x = 0; x < im.cols; x++){
+                    for (int y = 0; y < im.rows; y++){
+                        labels(PixelLoc(x, y)) = klabels[y * im.cols + x];
+                    }
+                }
+
+                delete[] ubuff;
+                delete[] klabels;
+
+                return std::make_pair(labels, nlabels);
+            }
+
+
+            inline void ToQuickShiftImage(const Image & IMG, image_t & im){
+                im.N1 = IMG.rows;
+                im.N2 = IMG.cols;
+                im.K = IMG.channels();
+                assert(im.K == 3);
+                im.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+                for (int k = 0; k < im.K; k++)
+                for (int col = 0; col < im.N2; col++)
+                for (int row = 0; row < im.N1; row++)
+                {
+                    auto & pt = IMG.at<cv::Vec<uint8_t, 3>>(/*im.N1 - 1 - row*/row, col);
+                    im.I[row + col*im.N1 + k*im.N1*im.N2] = 32. * pt[k] / 255.; // Scale 0-32
+                }
+            }
+
+
+            int * map_to_flatmap(float * map, unsigned int size)
+            {
+                /********** Flatmap **********/
+                int *flatmap = (int *)malloc(size*sizeof(int));
+                for (unsigned int p = 0; p < size; p++)
+                {
+                    flatmap[p] = map[p];
+                }
+
+                bool changed = true;
+                while (changed)
+                {
+                    changed = false;
+                    for (unsigned int p = 0; p < size; p++)
+                    {
+                        changed = changed || (flatmap[p] != flatmap[flatmap[p]]);
+                        flatmap[p] = flatmap[flatmap[p]];
+                    }
+                }
+
+                /* Consistency check */
+                for (unsigned int p = 0; p < size; p++)
+                    assert(flatmap[p] == flatmap[flatmap[p]]);
+
+                return flatmap;
+            }
+
+            image_t imseg(image_t im, int * flatmap)
+            {
+                /********** Mean Color **********/
+                float * meancolor = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+                float * counts = (float *)calloc(im.N1*im.N2, sizeof(float));
+
+                for (int p = 0; p < im.N1*im.N2; p++)
+                {
+                    counts[flatmap[p]]++;
+                    for (int k = 0; k < im.K; k++)
+                        meancolor[flatmap[p] + k*im.N1*im.N2] += im.I[p + k*im.N1*im.N2];
+                }
+
+                int roots = 0;
+                for (int p = 0; p < im.N1*im.N2; p++)
+                {
+                    if (flatmap[p] == p)
+                        roots++;
+                }
+                printf("Roots: %d\n", roots);
+
+                int nonzero = 0;
+                for (int p = 0; p < im.N1*im.N2; p++)
+                {
+                    if (counts[p] > 0)
+                    {
+                        nonzero++;
+                        for (int k = 0; k < im.K; k++)
+                            meancolor[p + k*im.N1*im.N2] /= counts[p];
+                    }
+                }
+                if (roots != nonzero)
+                    printf("Nonzero: %d\n", nonzero);
+                assert(roots == nonzero);
+
+
+                /********** Create output image **********/
+                image_t imout = im;
+                imout.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+                for (int p = 0; p < im.N1*im.N2; p++)
+                for (int k = 0; k < im.K; k++)
+                    imout.I[p + k*im.N1*im.N2] = meancolor[flatmap[p] + k*im.N1*im.N2];
+
+                free(meancolor);
+                free(counts);
+
+                return imout;
+            }
+
+
+            std::pair<Imagei, int> SegmentImageUsingQuickShiftCPU(const Image & originalIm, float sigma, float tau) {
+                image_t im;
+                ToQuickShiftImage(originalIm, im);
+                float *map, *E, *gaps;
+                int * flatmap;
+                image_t imout;
+
+                map = (float *)calloc(im.N1*im.N2, sizeof(float));
+                gaps = (float *)calloc(im.N1*im.N2, sizeof(float));
+                E = (float *)calloc(im.N1*im.N2, sizeof(float));
+
+                quickshift(im, sigma, tau, map, gaps, E);
+
+                /* Consistency check */
+                for (int p = 0; p < im.N1*im.N2; p++)
+                if (map[p] == p) assert(gaps[p] == INF);
+
+                flatmap = map_to_flatmap(map, im.N1*im.N2);
+                imout = imseg(im, flatmap);
+                Imagei segmented(im.N1, im.N2);
+                for (int col = 0; col < im.N2; col++)
+                for (int row = 0; row < im.N1; row++)
+                {
+                    segmented(row, col) = flatmap[row + col*im.N1];
+                }
+                int segnum = *std::max_element(flatmap, flatmap + im.N1 * im.N2) + 1;
+
+                free(im.I);
+                free(imout.I);
+                free(map);
+                free(gaps);
+                free(E);
+                free(flatmap);
+                return std::make_pair(segmented, segnum);
+            }
+
+            std::pair<Imagei, int> SegmentImageUsingQuickShiftGPU(const Image & originalIm, float sigma, float tau) {
+                image_t im;
+                ToQuickShiftImage(originalIm, im);
+                float *map, *E, *gaps;
+                int * flatmap;
+                image_t imout;
+
+                map = (float *)calloc(im.N1*im.N2, sizeof(float));
+                gaps = (float *)calloc(im.N1*im.N2, sizeof(float));
+                E = (float *)calloc(im.N1*im.N2, sizeof(float));
+
+                quickshift_gpu(im, sigma, tau, map, gaps, E);
+
+                /* Consistency check */
+                for (int p = 0; p < im.N1*im.N2; p++)
+                if (map[p] == p) assert(gaps[p] == INF);
+
+                flatmap = map_to_flatmap(map, im.N1*im.N2);
+                imout = imseg(im, flatmap);
+                Imagei segmented(im.N1, im.N2);
+                for (int col = 0; col < im.N2; col++)
+                for (int row = 0; row < im.N1; row++)
+                {
+                    segmented(row, col) = flatmap[row + col*im.N1];
+                }
+                int segnum = *std::max_element(flatmap, flatmap + im.N1 * im.N2) + 1;
+
+                free(im.I);
+                free(imout.I);
+                free(map);
+                free(gaps);
+                free(E);
+                free(flatmap);
+                return std::make_pair(segmented, segnum);
+            }
+
+        }
+
+
+        std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im) const {
+            if (_params.algorithm == SLIC){
+                return SegmentImageUsingSLIC(im, _params.superpixelSizeSuggestion, _params.superpixelNumberSuggestion);
+            }
+            else if (_params.algorithm == GraphCut){
+                int numCCs;
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
+                return std::make_pair(segim, numCCs);
+            }
+            else if (_params.algorithm == QuickShiftCPU){
+                return SegmentImageUsingQuickShiftCPU(im, 6, 10);
+            }
+            else if (_params.algorithm == QuickShiftGPU){
+                return SegmentImageUsingQuickShiftGPU(im, 6, 10);
+            }
+            else{
+                SHOULD_NEVER_BE_CALLED();
+            }
+        }
+
+        std::pair<Imagei, int>  SegmentationExtractor::operator() (const Image & im, const std::vector<Line2> & lines) const {
+            assert(_params.algorithm == GraphCut);
+            int numCCs;
+            Imagei segim = SegmentImageWithLinesSplits(im, _params.sigma, _params.c, _params.minSize, lines, numCCs, false).first;
+            return std::make_pair(segim, numCCs);
+        }
+
+
+
+
+
+
+
+
+
+
 
 
 
