@@ -9,6 +9,8 @@
 #include <string.h>
 #include <assert.h>
 #include <stdio.h>
+#include <cuda_runtime_api.h>
+#include <texture_types.h>
 #include "quickshift_common.h"
 //#include <cutil_inline.h>
 
