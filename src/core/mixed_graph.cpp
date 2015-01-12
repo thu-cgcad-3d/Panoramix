@@ -1965,7 +1965,7 @@ namespace panoramix {
                     const std::vector<Vec3> & vanishingPoints, bool useWeights) override {
 
                     FormulateConstraintsAsMatrices(mg, patch, vanishingPoints,
-                        uh2varStartPosition, bh2consStartPosition, appliedBinaryAnchors, A, W, B, false);
+                        uh2varStartPosition, bh2consStartPosition, appliedBinaryAnchors, A, W, B, true);
 
                 }
 
@@ -2016,8 +2016,8 @@ namespace panoramix {
                         << "cvx_begin"
                         << "   variable X(n)"
                         << "   minimize(norm(A*X - B'))"
-                        << "   subject to"
-                        << "      ones(n, 1) <= X"
+                        //<< "   subject to"
+                        //<< "      ones(n, 1) * 0.5 <= X"
                         << "cvx_end"
                         << "X = X';";
                     
