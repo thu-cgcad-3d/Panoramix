@@ -35,6 +35,3 @@ target_link_libraries ( ${PROJECT_NAME}
 )
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY FOLDER "${PROJECT_NAME}.Libs")
-
-
-

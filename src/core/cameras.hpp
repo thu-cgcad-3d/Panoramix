@@ -16,7 +16,7 @@ namespace panoramix {
                 const Vec3 & up = Vec3(0, 0, -1),
                 double nearPlane = 0.01, double farPlane = 1e4);
 
-            inline Size screenSize() const { return Size(static_cast<float>(_screenW), static_cast<float>(_screenH)); }
+            inline SizeI screenSize() const { return Size(static_cast<int>(_screenW), static_cast<int>(_screenH)); }
             inline double screenWidth() const { return _screenW; }
             inline double screenHeight() const { return _screenH; }
             inline double fovRadians() const { return atan(_screenH / 2.0 / _focal) * 2; }
@@ -86,7 +86,7 @@ namespace panoramix {
                 const Vec3 & center = Vec3(1, 0, 0),
                 const Vec3 & up = Vec3(0, 0, 1));
 
-            inline Size screenSize() const { return Size(static_cast<float>(_focal * 2 * M_PI), static_cast<float>(_focal * M_PI)); }
+            inline SizeI screenSize() const { return SizeI(static_cast<int>(_focal * 2 * M_PI), static_cast<int>(_focal * M_PI)); }
             inline double focal() const { return _focal; }
             inline const Vec3 & eye() const { return _eye; }
             inline const Vec3 & center() const { return _center; }
@@ -117,10 +117,11 @@ namespace panoramix {
             CameraSampler(const OutCameraT & outCam, const InCameraT & inCam)
                 : _outCam(outCam), _inCam(inCam) {
                 assert(outCam.eye() == inCam.eye());
-                _mapx = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
-                _mapy = cv::Mat::zeros(_outCam.screenSize(), CV_32FC1);
-                for (int j = 0; j < _outCam.screenSize().height; j++) {
-                    for (int i = 0; i < _outCam.screenSize().width; i++) {
+                auto outCamSize = _outCam.screenSize();
+                _mapx = cv::Mat::zeros(outCamSize, CV_32FC1);
+                _mapy = cv::Mat::zeros(outCamSize, CV_32FC1);
+                for (int j = 0; j < outCamSize.height; j++) {
+                    for (int i = 0; i < outCamSize.width; i++) {
                         Vec2 screenp(i, j);
                         Vec3 p3 = _outCam.spatialDirection(screenp);
                         Vec2 screenpOnInCam = _inCam.screenProjection(p3);
@@ -170,6 +171,7 @@ namespace panoramix {
                     std::declval<TT>().screenProjectionInHPoint(std::declval<core::Vec3>()),
                     std::declval<TT>().spatialDirection(std::declval<core::Vec2>()),
                     std::declval<TT>().spatialDirection(std::declval<core::PixelLoc>()),
+                    std::declval<TT>().screenSize(),
                     std::true_type()
                     );
                 template <class>

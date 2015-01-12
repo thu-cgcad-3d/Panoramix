@@ -759,7 +759,7 @@ namespace panoramix {
                             maxOffsetedAnchorId = k;
                         }
                     }
-                    if (maxDotProd > 2e-1){
+                    if (maxDotProd > 5e-1){
                         return{ b.normalizedAnchors.front(), b.normalizedAnchors[maxOffsetedAnchorId], b.normalizedAnchors.back() };
                     }
                     else {

@@ -168,57 +168,37 @@ namespace panoramix {
 
 
 
+        //template <class WalkerT>
+        //class WalkerContainerWrapper {
+        //public:
+        //    using reference_type = decltype(std::declval<NexterT>().next());
+        //    using value_type = std::decay_t<reference_type>;
+        //    struct iterator : public std::iterator<std::forward_iterator_tag, value_type> {
+        //        const bool isEnd;
+        //        WalkerT nexter;
+        //        reference_type * curValuePtr;
+        //        explicit iterator(bool e, WalkerT n) : isEnd(e), nexter(n), curValuePtr(nullptr) {}
+        //        inline reference_type operator *() const { return *curValuePtr; }
+        //        inline reference_type * operator -> () const { return curValuePtr; }
+        //        inline iterator & operator ++() { curValuePtr = &(nexter.next()); }
+        //        inline bool operator == (iterator it) const { 
+        //            assert(isEnd || it.isEnd);
+        //            return isEnd ? it.nexter.hasNext() : nexter.hasNext();
+        //        }
+        //    };
+        //    
+        //    explicit WalkerContainerWrapper(NexterT nexter) : _nexter(nexter) {}
+        //    inline iterator begin() { return iterator(false, _nexter); }
+        //    inline iterator end() { return iterator(true, _nexter); }
 
+        //private:
+        //    WalkerT _nexter;
+        //};
 
-
-        // make an iterator
-        template <class CoreDataT, class GetValueT, class SetToNextT, class CompareCoreDataT = std::equal_to<CoreDataT>>
-        class EasyForwardIterator : public std::iterator<std::forward_iterator_tag, 
-            decltype(std::declval<GetValueT>()(std::declval<CoreDataT>()))> {
-        public:
-            inline explicit EasyForwardIterator(const CoreDataT & cdata, const GetValueT & getValue, const SetToNextT & setToNext, 
-                const CompareCoreDataT & cmpCData = CompareCoreDataT())
-                : _coreData(cdata), _getValue(getValue), _setToNext(setToNext), _compareCoreData(cmpCData) {}
-            inline EasyForwardIterator & operator++() {
-                _setToNext(_coreData);
-                return *this;
-            }
-
-            inline value_type operator * () const {
-                return _getValue(_coreData);
-            }
-
-            inline pointer operator -> () const {
-                return &(_getValue(_coreData));
-            }
-
-            inline bool operator == (const EasyForwardIterator & i) const {
-                return _compareCoreData(_coreData, i._coreData);
-            }
-
-            inline bool operator != (const EasyForwardIterator & i) const {
-                return !(*this == i);
-            }
-
-            inline const CoreDataT & coreData() const {
-                return _coreData;
-            }
-        private:
-            CoreDataT _coreData;
-            GetValueT _getValue;
-            SetToNextT _setToNext;
-            CompareCoreDataT _compareCoreData;
-        };
-
-        // make easy forward iterator
-        template <class CoreDataT, class GetValueT, class SetToNextT, class CompareCoreDataT = std::equal_to<CoreDataT>>
-        inline EasyForwardIterator<CoreDataT, GetValueT, SetToNextT, CompareCoreDataT> 
-            MakeEasyForwardIterator(const CoreDataT & cdata, const GetValueT & getValue, const SetToNextT & setToNext, 
-            const CompareCoreDataT & cmpCData = CompareCoreDataT()) {
-            return EasyForwardIterator<CoreDataT, GetValueT, SetToNextT, CompareCoreDataT>(cdata, getValue, setToNext, cmpCData);
-        }
-
-
+        //template <class WalkerT>
+        //inline WalkerContainerWrapper<WalkerT> WrapWalker(const WalkerT & w) {
+        //    return WalkerContainerWrapper<WalkerT>(w);
+        //}
 
         
     }

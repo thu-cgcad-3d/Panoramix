@@ -85,7 +85,7 @@ TEST(Feature, VanishingPointsDetector) {
     core::LineSegmentExtractor lineseg(lsParams);
     core::VanishingPointsDetector vpdetector;
 
-    core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
+    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room.png");
     core::ResizeToMakeWidthUnder(im, 1000);
     auto lines = lineseg(im);
     std::vector<int> lineClasses;

@@ -12,7 +12,8 @@ extern "C" {
 
 #include <SLIC.h>
 
-#include "misc.hpp"
+#include "MSAC.h"
+
 #include "feature.hpp"
 #include "utilities.hpp"
 #include "containers.hpp"
@@ -356,7 +357,7 @@ namespace panoramix {
 
 
 
-        void ClassifyLines2D(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
+        void ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
             double angleThreshold, double sigma, double scoreThreshold){
 
             for (auto & line : lines){
@@ -393,7 +394,7 @@ namespace panoramix {
         }
 
 
-        void ClassifyLines3D(std::vector<Classified<Line3>> & lines, const std::vector<Vec3> & vps,
+        void ClassifyLines(std::vector<Classified<Line3>> & lines, const std::vector<Vec3> & vps,
             double angleThreshold, double sigma, double scoreThreshold) {
 
             size_t nlines = lines.size();
@@ -619,7 +620,7 @@ namespace panoramix {
 
             struct LineVPScoreFunctor {
                 inline LineVPScoreFunctor(double angleThres = M_PI / 3.0, double s = 0.1) 
-                : angleThreshold(angleThres), sigma(s) {}
+                    : angleThreshold(angleThres), sigma(s) {}
                 inline double operator()(double angle, bool liesOnLine) const {
                     if (angle >= angleThreshold)
                         return 0;
@@ -884,6 +885,12 @@ namespace panoramix {
         }
 
 
+        namespace {
+            //std::tuple<std::array<HPoint2, 3>, double, std::vector<int>>
+        }
+
+
+
         std::tuple<std::array<HPoint2, 3>, double, std::vector<int>> VanishingPointsDetector::estimateWithProjectionCenterAtOrigin (
             const std::vector<Line2> & lines) const {
 
@@ -928,9 +935,6 @@ namespace panoramix {
                 }
             }
             //std::cout << "remained lines num: " << remainedLines.size() << std::endl;
-
-
-
 
             // get remained intersections
             std::vector<std::pair<int, int>> remainedIntersectionMakerLineIds;

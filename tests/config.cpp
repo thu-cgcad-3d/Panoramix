@@ -23,7 +23,7 @@ int main(int argc, char * argv[], char * envp[]) {
 
    testing::GTEST_FLAG(catch_exceptions) = false;
    testing::GTEST_FLAG(throw_on_failure) = false;
-   testing::GTEST_FLAG(filter) = "MixedGraph.RebuildOneView";
+   testing::GTEST_FLAG(filter) = "MixedGraph.RebuildOneImage";
 
    return RUN_ALL_TESTS();
 }

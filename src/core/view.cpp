@@ -18,8 +18,18 @@ namespace panoramix {
             return View<PanoramicCamera>{panorama, PanoramicCamera(panorama.cols / M_PI / 2.0)};
         }
 
-        View<PerspectiveCamera> CreatePerspectiveView(const Image & perspectiveImage){
-            NOT_IMPLEMENTED_YET();
+        View<PerspectiveCamera> CreatePerspectiveView(const Image & perspectiveImage, 
+            const LineSegmentExtractor & lse, const VanishingPointsDetector & vpd){
+            
+            auto lines = lse(perspectiveImage);            
+            std::array<HPoint2, 3> vps;
+            double focal;
+            std::tie(vps, focal, std::ignore) = vpd(lines, Point2(perspectiveImage.cols / 2.0, perspectiveImage.rows / 2.0));
+
+            View<PerspectiveCamera> view;
+            view.image = perspectiveImage;
+            view.camera = PerspectiveCamera(perspectiveImage.cols, perspectiveImage.rows, focal);
+            return view;
         }
 
 
@@ -782,7 +792,7 @@ namespace panoramix {
             }
 
             // classify lines
-            ClassifyLines3D(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8);
+            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8);
 
             // build lines graph
             linesGraphs.clear();

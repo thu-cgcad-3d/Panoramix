@@ -246,10 +246,44 @@ TEST(MixedGraph, RebuildOneView){
             pdo.optimize();
         }
         VisualizeMixedGraph(panorama, mg, { largestPatch }, vanishingPoints, true);
-    }
-
+    }    
 
 }
+
+
+
+TEST(MixedGraph, RebuildOneImage){
+
+    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room.png");
+    core::ResizeToMakeWidthUnder(im, 800);
+    auto view = core::CreatePerspectiveView(im);
+
+    core::MGUnaryVarTable unaryVars;
+    core::MGBinaryVarTable binaryVars;
+    std::vector<core::Vec3> vanishingPoints;
+
+    core::MGPatch largestPatch;
+    core::MixedGraph mg;
+    {
+        core::Clock clock("view");
+        mg = core::BuildMixedGraph({ view }, vanishingPoints, unaryVars, binaryVars);
+        //core::SaveToDisk("./cache/test_view.MixedGraph.RebuildOneView.mg[" + std::to_string(i) + "]", mg);
+        std::vector<core::MGPatch> naivePatches =
+            core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars);
+        largestPatch = *std::max_element(naivePatches.begin(), naivePatches.end(),
+            [](const core::MGPatch & a, const core::MGPatch & b){
+            return a.uhs.size() < b.uhs.size();
+        });
+        core::MGPatchDepthsOptimizer pdo(mg, largestPatch, vanishingPoints, true,
+            core::MGPatchDepthsOptimizer::EigenSparseQR);
+        pdo.optimize();
+    }
+
+    VisualizeMixedGraph(core::MakeCameraSampler(core::PanoramicCamera(view.camera.focal()), view.camera)(im),
+        mg, { largestPatch }, vanishingPoints, true);
+
+}
+
 
 
 

@@ -4,6 +4,7 @@
 #include <typeinfo>
 #include <string>
 #include <exception>
+#include <cassert>
 
 namespace panoramix {
     namespace core {
@@ -27,15 +28,6 @@ namespace panoramix {
             template <class Archive> inline void serialize(Archive & ar) { ar(value); }
 
             T value;
-        };
-
-
-        class CastError : public std::exception {
-        public:
-            inline explicit CastError(const std::string & message)
-                : std::exception(message.c_str()) {}
-            inline explicit CastError(const char * message)
-                : std::exception(message) {}
         };
 
 
@@ -81,15 +73,7 @@ namespace panoramix {
 
             template <class T>
             inline T & ref() const {
-                if (_data->type() == typeid(T))
-                    return reinterpret_cast<Data<T>*>(_data)->value;
-                throw CastError("type not matched! "
-                    "intrinsic type is '" + std::string(_data->type().name()) +
-                    "', while target type is '" + typeid(T).name() + "'");
-            }
-
-            template <class T>
-            inline T & uncheckedRef() const {
+                assert(_data->type() == typeid(T));
                 return reinterpret_cast<Data<T>*>(_data)->value;
             }
 

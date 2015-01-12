@@ -61,11 +61,11 @@ namespace panoramix {
 
 
         // classify lines in 2d
-        void ClassifyLines2D(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
+        void ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
             double angleThreshold, double sigma, double scoreThreshold = 0.8);
 
         // classify lines in 3d
-        void ClassifyLines3D(std::vector<Classified<Line3>> &lines, const std::vector<Vec3> & vps,
+        void ClassifyLines(std::vector<Classified<Line3>> &lines, const std::vector<Vec3> & vps,
             double angleThreshold, double sigma, double scoreThreshold = 0.8);
 
         // compute straightness of points
@@ -82,24 +82,32 @@ namespace panoramix {
         // 2d vanishing point detection
         class VanishingPointsDetector {
         public:
+            enum Algorithm {
+                Hedau,
+                MSAC
+            };
             struct Params {
                 inline Params(double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5)
-                : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal) {}
+                    : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal), algorithm(Hedau) {}
                 double maxPrinciplePointOffset;
                 double minFocalLength, maxFocalLength;
+                Algorithm algorithm;
                 template <class Archive> inline void serialize(Archive & ar) { 
-                    ar(maxPrinciplePointOffset, minFocalLength, maxFocalLength);
+                    ar(maxPrinciplePointOffset, minFocalLength, maxFocalLength, algorithm);
                 }
             };
+
         public:
             inline explicit VanishingPointsDetector(const Params & params = Params()) : _params(params) {}
             const Params & params() const { return _params; }
             Params & params() { return _params; }
+            
             // accepts (lines, projection center)
             // returns (3 vanishing points, the focal length, line classes)
             std::tuple<std::array<HPoint2, 3>, double, std::vector<int>>
                 operator() (const std::vector<Line2> & lines, const Point2 & projCenter) const;            
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
+        
         private:
             std::tuple<std::array<HPoint2, 3>, double, std::vector<int>>
                 estimateWithProjectionCenterAtOrigin (const std::vector<Line2> & lines) const;

@@ -9,7 +9,7 @@
 #include <Eigen/Core>
 
 #include "meta.hpp"
-#include "misc.hpp"
+#include "iterators.hpp"
 
 namespace panoramix {
     namespace core {
