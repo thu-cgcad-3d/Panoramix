@@ -35,6 +35,7 @@ set (USE_MATLAB true CACHE BOOL "Whether using MATLAB")
 include (LocateMATLABLibs)
 if (MATLAB_ROOT)
 	set(MATLAB_RELEASE ${MATLAB_ROOT})
+	set(MATLAB_CODE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/matlab CACHE PATH "Directory of MATLAB code")
 endif ()
 
 

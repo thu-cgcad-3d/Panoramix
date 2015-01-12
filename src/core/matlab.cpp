@@ -85,6 +85,8 @@ namespace panoramix {
                     std::memset(_buffer, 0, bufferSize);
                     engOutputBuffer(_engine, _buffer, bufferSize);
                     std::cout << "Matlab Engine Launched" << std::endl;
+                    engEvalString(_engine, ("cd " + Matlab::DefaultCodeDir() + "; startup; pwd").c_str());
+                    std::cout << _buffer << std::endl;
                 }
             }
             inline ~MatlabEngine() { 
@@ -104,6 +106,8 @@ namespace panoramix {
         static MatlabEngine _Engine;
 
         bool Matlab::IsBuilt() { return true; }
+
+        std::string Matlab::DefaultCodeDir() { return MATLAB_CODE_DIR; }
 
         bool Matlab::IsUsable() {
             return _Engine.eng() != nullptr;
@@ -247,6 +251,7 @@ namespace panoramix {
 
 #else
         bool Matlab::IsBuilt() { return false; }
+        std::string Matlab::DefaultCodeDir() { return ""; }
         bool Matlab::IsUsable() {return false;}
         bool Matlab::RunScript(const char *) {return false;}
         const char * Matlab::LastMessage() {return nullptr;}

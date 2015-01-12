@@ -173,10 +173,13 @@ namespace panoramix {
             std::function<bool(MGBinaryHandle, MGBinaryHandle)> compareBh);
         inline MGPatch MinimumSpanningTreePatch(const MixedGraph & mg, const MGPatch & patch, 
             const std::vector<Vec3> & vps){
+            std::unordered_map<MGBinaryHandle, double> binaryDistances;
+            for (auto & bhv : patch.bhs){
+                binaryDistances[bhv.first] = core::BinaryDistanceOfPatch(mg, bhv.first, patch, vps);
+            }
             return core::MinimumSpanningTreePatch(mg, patch,
-                [&patch, &mg, &vps](core::MGBinaryHandle a, core::MGBinaryHandle b){
-                return core::BinaryDistanceOfPatch(mg, a, patch, vps) <
-                    core::BinaryDistanceOfPatch(mg, b, patch, vps);
+                [&binaryDistances](core::MGBinaryHandle a, core::MGBinaryHandle b){
+                return binaryDistances.at(a) < binaryDistances.at(b);
             });
         }
 
@@ -187,6 +190,7 @@ namespace panoramix {
         public:
             enum Algorithm {
                 MosekLinearProgramming,
+                MosekLinearProgrammingSimplified,
                 EigenSparseQR,
                 EigenSparseQRSimplified,
                 MATLAB_CVX

@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <random>
+#include <thread>
 
 #include "../src/core/matlab.hpp"
 
@@ -8,6 +9,33 @@
 
 using namespace panoramix;
 using namespace test;
+
+
+TEST(Matlab, CVX) {
+#ifdef USE_MATLAB
+
+    core::Matlab::RunScript("clear");
+    core::Matlab::RunScript("cvx_setup");
+    int m = 16, n = 8;
+    core::Matlab::PutVariable("m", m);
+    core::Matlab::PutVariable("n", n);
+    core::Matlab::RunScript("[m n]");
+    core::Matlab matlab;
+    matlab
+        << "A = randn(m, n);"
+        << "b = randn(m, 1);"
+        << "save tempfile;"
+        << "cvx_begin"
+        << "   variable x(n)"
+        << "   minimize(norm(A*x - b))"
+        << "cvx_end";
+    std::vector<double> x;
+    core::Matlab::GetVariable("x", x, false);
+    ASSERT_EQ(x.size(), n);
+
+#endif 
+}
+
 
 TEST(Matlab, CDAndAddPath){
 

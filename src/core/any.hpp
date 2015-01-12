@@ -89,9 +89,6 @@ namespace panoramix {
             DataBase * _data;
         };
 
-        template <class ...T>
-        using AnyOfTypes = Any;
-
    	}
 }
 

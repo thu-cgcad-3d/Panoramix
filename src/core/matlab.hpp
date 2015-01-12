@@ -12,11 +12,13 @@ namespace panoramix {
         class Matlab {
         public:
             static bool IsBuilt();
+            static std::string DefaultCodeDir();
 
             static bool IsUsable();
             static bool RunScript(const char * cmd);
             static bool RunScript(const std::string & cmd) { return RunScript(cmd.data()); }
             static const char * LastMessage();
+            static inline void PrintLastMessage() { std::cout << LastMessage(); }
 
             static inline bool CDAndAddAllSubfolders(const std::string & dir){
                 return RunScript("cd " + dir) && RunScript("addpath(genpath('.'));");
@@ -26,15 +28,15 @@ namespace panoramix {
             static bool GetVariable(const char * name, CVOutputArray a, bool lastDimIsChannel = true);
             
             static inline bool PutVariable(const std::string & name, CVInputArray a){
-                PutVariable(name.data(), a); 
+                return PutVariable(name.data(), a); 
             }
             static inline bool GetVariable(const std::string & name, CVOutputArray a, bool lastDimIsChannel = true) {
-                GetVariable(name.data(), a, lastDimIsChannel); 
+                return GetVariable(name.data(), a, lastDimIsChannel); 
             }           
 
         public:
             inline Matlab & operator << (const std::string & cmd) { 
-                RunScript(cmd + ";");
+                RunScript(cmd);
                 return *this;
             }
         };

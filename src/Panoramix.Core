@@ -1,7 +1,0 @@
-#include "./core/basic_types.hpp"
-#include "./core/cameras.hpp"
-#include "./core/feature.hpp"
-#include "./core/version.hpp"
-#include "./core/view.hpp"
-
-namespace xc = panoramix::core;

@@ -274,13 +274,24 @@ TEST(MixedGraph, RebuildOneImage){
             [](const core::MGPatch & a, const core::MGPatch & b){
             return a.uhs.size() < b.uhs.size();
         });
-        core::MGPatchDepthsOptimizer pdo(mg, largestPatch, vanishingPoints, true,
-            core::MGPatchDepthsOptimizer::EigenSparseQR);
+        core::MGPatchDepthsOptimizer pdo(mg, largestPatch, vanishingPoints, false,
+            core::MGPatchDepthsOptimizer::MATLAB_CVX);
         pdo.optimize();
     }
 
     VisualizeMixedGraph(core::MakeCameraSampler(core::PanoramicCamera(view.camera.focal()), view.camera)(im),
         mg, { largestPatch }, vanishingPoints, true);
+
+   /* {
+        core::Clock clock("view mst");
+        largestPatch = core::MinimumSpanningTreePatch(mg, largestPatch, vanishingPoints);
+        core::MGPatchDepthsOptimizer pdo(mg, largestPatch, vanishingPoints, false,
+            core::MGPatchDepthsOptimizer::EigenSparseQR);
+        pdo.optimize();
+    }
+
+    VisualizeMixedGraph(core::MakeCameraSampler(core::PanoramicCamera(view.camera.focal()), view.camera)(im),
+        mg, { largestPatch }, vanishingPoints, true);*/
 
 }
 
