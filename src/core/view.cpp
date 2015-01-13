@@ -505,7 +505,8 @@ namespace panoramix {
             const std::vector<HPoint2> & vps,
             double intersectionDistanceThreshold,
             double incidenceDistanceAlongDirectionThreshold,
-            double incidenceDistanceVerticalDirectionThreshold){
+            double incidenceDistanceVerticalDirectionThreshold,
+            bool includeUnclassifiedLines){
 
             LinesGraph graph;
 
@@ -515,7 +516,7 @@ namespace panoramix {
             graph.internalElements<0>().reserve(lines.size());
 
             for (auto & line : lines){
-                if (line.claz == -1)
+                if (line.claz == -1 && !includeUnclassifiedLines)
                     continue;
                 LineData ld;
                 ld.line = line;
@@ -527,17 +528,22 @@ namespace panoramix {
             for (int i = 0; i < linesData.size(); i++){
                 auto & linei = linesData[i].data.line.component;
                 int clazi = linesData[i].data.line.claz;
-                assert(clazi != -1);
+                if (!includeUnclassifiedLines)
+                    assert(clazi != -1);
 
                 for (int j = i + 1; j < linesData.size(); j++){
                     auto & linej = linesData[j].data.line.component;
                     int clazj = linesData[j].data.line.claz;
-                    assert(clazj != -1);
+                    if (!includeUnclassifiedLines)
+                        assert(clazj != -1);
 
                     auto nearest = DistanceBetweenTwoLines(linei, linej);
                     double d = nearest.first;
 
-                    if (clazi == clazj){
+                    if (clazi == -1 || clazj == -1)
+                        continue;
+
+                    if (clazi == clazj){ // incidences
                         auto conCenter = (nearest.second.first.position + nearest.second.second.position) / 2.0;
                         auto conDir = (nearest.second.first.position - nearest.second.second.position);
                         auto & vp = vps[clazi];
@@ -561,7 +567,7 @@ namespace panoramix {
                             graph.add<1>({ handles[i], handles[j] }, std::move(lrd));
                         }
                     }
-                    else {
+                    else { // intersections
                         if (d < intersectionDistanceThreshold){
                             auto conCenter = HPointFromVector(GetCoeffs(linei.infiniteLine())
                                 .cross(GetCoeffs(linej.infiniteLine()))).value();
@@ -612,6 +618,9 @@ namespace panoramix {
                     for (auto & ld : graph.elements<0>()){
                         auto & line = ld.data.line.component;
                         int claz = ld.data.line.claz;
+                        if (claz == -1)
+                            continue;
+
                         auto & vp = vps[claz];
                         Point2 center = line.center();
 
@@ -753,7 +762,8 @@ namespace panoramix {
             double intersectionDistanceThreshold,
             double incidenceDistanceAlongDirectionThreshold,
             double incidenceDistanceVerticalDirectionThreshold,
-            bool considerNonManhattanVPs){
+            bool considerNonManhattanVPs,
+            bool includeUnclassifiedLines){
 
             // collect lines and intersections
             std::vector<std::vector<Line2>> linesInViews;
@@ -813,7 +823,8 @@ namespace panoramix {
                 }
                 linesGraphs.push_back(CreateLinesGraph(clines, vanishingPointsInThisView,
                     intersectionDistanceThreshold, 
-                    incidenceDistanceAlongDirectionThreshold, incidenceDistanceVerticalDirectionThreshold));
+                    incidenceDistanceAlongDirectionThreshold, incidenceDistanceVerticalDirectionThreshold,
+                    includeUnclassifiedLines));
             }
         }
 

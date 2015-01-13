@@ -29,19 +29,33 @@ namespace panoramix {
         }
 
         Line3 MGUnaryVariable::interpretAsLine(const MGUnary & line, const std::vector<Vec3> & vps) const {
-            InfiniteLine3 infLine(line.normalizedCenter / variables[0], vps[line.lineClaz]);
-            return Line3(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.front()), infLine).second.second,
-                DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.back()), infLine).second.second);
+            if (line.lineClaz >= 0){
+                InfiniteLine3 infLine(line.normalizedCenter / variables[0], vps[line.lineClaz]);
+                return Line3(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.front()), infLine).second.second,
+                    DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.back()), infLine).second.second);
+            }
+            else{
+            /*           | sin(theta) | | p | | q |
+                len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                    | p sin(phi) - q sin(phi - theta) |
+            */
+                // variables[0] -> 1/p
+                // variables[1] -> 1/q
+                return Line3(line.normalizedCorners.front() / variables[0], line.normalizedCorners.back() / variables[1]);
+            }
         }
 
         std::vector<double> MGUnaryVariable::variableCoeffsForInverseDepthAtDirection(const Vec3 & direction,
             const MGUnary & unary, const std::vector<Vec3> & vps) const{
             if (unary.type == MGUnary::Region){
+                assert(variables.size() == 3);
                 // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
                 // -> 1.0/depth = ax + by + cz
                 return std::vector<double>{direction[0], direction[1], direction[2]};
             }
-            else /*if (unary.type == MGUnary::Line)*/{
+            else /*if (unary.type == MGUnary::Line)*/
+            if (unary.lineClaz >= 0){
+                assert(variables.size() == 1);
                 const auto & line = unary;
                 InfiniteLine3 infLine(line.normalizedCenter, vps[line.lineClaz]);
                 // variable is 1.0/centerDepth
@@ -50,16 +64,35 @@ namespace panoramix {
                 double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
                 return std::vector<double>{1.0 / depthRatio};
             }
+            else /*if(unary.lineClaz == -1)*/{
+                assert(variables.size() == 2);
+                const auto & line = unary;
+                double theta = AngleBetweenDirections(line.normalizedCorners.front(), line.normalizedCorners.back());
+                double phi = AngleBetweenDirections(line.normalizedCorners.front(), direction);
+                /*           | sin(theta) | | p | | q |
+                    len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                       | p sin(phi) - q sin(phi - theta) |
+                */
+                // variables[0] -> 1/p
+                // variables[1] -> 1/q
+                double coeffFor1_p = -sin(phi - theta) / sin(theta);
+                double coeffFor1_q = sin(phi) / sin(theta);
+                assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
+                return std::vector<double>{coeffFor1_p, coeffFor1_q};
+            }
         }
 
         double MGUnaryVariable::inverseDepthAtDirection(const Vec3 & direction,
             const MGUnary & unary, const std::vector<Vec3> & vps) const {
             if (unary.type == MGUnary::Region){
+                assert(variables.size() == 3);
                 // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
                 // -> 1.0/depth = ax + by + cz
                 return variables[0] * direction[0] + variables[1] * direction[1] + variables[2] * direction[2];
             }
-            else /*if (unary.type == MGUnary::Line)*/{
+            else /*if (unary.type == MGUnary::Line)*/
+            if(unary.lineClaz >= 0){
+                assert(variables.size() == 1);
                 const auto & line = unary;
                 InfiniteLine3 infLine(line.normalizedCenter, vps[line.lineClaz]);
                 // variable is 1.0/centerDepth
@@ -67,6 +100,22 @@ namespace panoramix {
                 // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
                 double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
                 return variables[0] / depthRatio; 
+            }
+            else /*if(unary.lineClaz == -1)*/ {
+                assert(variables.size() == 2);
+                const auto & line = unary;
+                double theta = AngleBetweenDirections(line.normalizedCorners.front(), line.normalizedCorners.back());
+                double phi = AngleBetweenDirections(line.normalizedCorners.front(), direction);
+                /*           | sin(theta) | | p | | q |
+                len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                | p sin(phi) - q sin(phi - theta) |
+                */
+                // variables[0] -> 1/p
+                // variables[1] -> 1/q
+                double coeffFor1_p = -sin(phi - theta) / sin(theta);
+                double coeffFor1_q = sin(phi) / sin(theta);
+                assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
+                return variables[0] * coeffFor1_p + variables[1] * coeffFor1_q;
             }
         }
 
@@ -139,7 +188,8 @@ namespace panoramix {
                         ld.data.line.claz
                     });
                     mgh2li[li2mgh[li]] = li;
-                    unaryVars[li2mgh[li]].variables = { 1.0 };
+                    unaryVars[li2mgh[li]].variables = ld.data.line.claz == -1 ? 
+                        std::vector<double>{ 1.0, 1.0 } : std::vector<double>{ 1.0 };
                     unaryVars[li2mgh[li]].fixed = false;
                 }
                 // region-region in each view
@@ -319,7 +369,8 @@ namespace panoramix {
 
             std::vector<core::LinesGraph> linesGraphs;
             core::EstimateVanishingPointsAndBuildLinesGraphs(views, vps, linesGraphs, lineseger,
-                intersectionDistanceThreshold, incidenceDistanceAlongDirectionThreshold, incidenceDistanceVerticalDirectionThreshold);
+                intersectionDistanceThreshold, incidenceDistanceAlongDirectionThreshold, incidenceDistanceVerticalDirectionThreshold, 
+                false, true);
 
             std::vector<core::Imagei> segmentedRegionsArray;
             std::vector<core::RegionsGraph> regionsGraphs;

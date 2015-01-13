@@ -70,6 +70,15 @@ namespace panoramix {
             return false;
         }
 
+        template <class T, class TesterT>
+        inline bool HasValue(std::initializer_list<T> list, const TesterT & tester){
+            for (auto & e : list){
+                if (HasValue(e, tester))
+                    return true;
+            }
+            return false;
+        }
+
 
 
 

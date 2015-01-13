@@ -113,7 +113,8 @@ namespace panoramix {
             const std::vector<HPoint2> & vps,
             double intersectionDistanceThreshold = 8,
             double incidenceDistanceAlongDirectionThreshold = 15,
-            double incidenceDistanceVerticalDirectionThreshold = 3);
+            double incidenceDistanceVerticalDirectionThreshold = 3,
+            bool includeUnclassifiedLines = false);
 
 
         // recognize region-line connections
@@ -207,7 +208,8 @@ namespace panoramix {
             double intersectionDistanceThreshold,
             double incidenceDistanceAlongDirectionThreshold,
             double incidenceDistanceVerticalDirectionThreshold,
-            bool considerNonManhattanVPs = false);
+            bool considerNonManhattanVPs = false,
+            bool includeUnclassifiedLines = false);
 
 
         // recognize region overlappings across views
