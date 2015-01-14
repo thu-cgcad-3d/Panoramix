@@ -86,6 +86,8 @@ namespace panoramix {
         // triplet 
         template <class TopoT, class DataT>
         struct Triplet {
+            using TopoType = TopoT;
+            using DataType = DataT;
             TopoT topo;
             uint8_t exists;
             DataT data;
@@ -102,6 +104,13 @@ namespace panoramix {
                 return t.exists; 
             }
         };
+        template <class TripletT>
+        struct TripletExistsPredFromTripletType {};
+        template <class TopoT, class DataT>
+        struct TripletExistsPredFromTripletType<Triplet<TopoT, DataT>> {
+            using type = TripletExistsPred<TopoT, DataT>;
+        };
+
         template <class TopoT, class DataT>
         using TripletArray = std::vector<Triplet<TopoT, DataT>>;
 
@@ -785,37 +794,42 @@ namespace panoramix {
         template <class DataT, int ChildN>
         struct IsLayerConfig<LayerConfig<DataT, ChildN>> : public std::true_type{};
 
-        // content of each layer
-        template <int Level, class T>
-        struct LayerContent {};
-
-        template <int Level, class DataT, int ChildN>
-        struct LayerContent<Level, LayerConfig<DataT, ChildN>> {
-            using TopoType = Topo<Level, ChildN>;
-            using DataType = DataT;
-            using TripletType = Triplet<TopoType, DataT>;
-            using TableType = TripletArray<TopoType, DataT>;
-            TableType contentTable;
-            template <class Archive> inline void serialize(Archive & ar) { ar(contentTable); }
-        };
-
-        template <class CConfTupleT, int Level>
-        struct LayerContentFromConfigTuple {
-            using type = LayerContent<Level, typename std::tuple_element<size_t(Level), CConfTupleT>::type>;
-        };
-
-        // make a layer content tuple with levels
-        template <class CConfTupleT, class SequenceT>
-        struct LayerContentTuple {};
-
-        template <class CConfTupleT, int ...Levels>
-        struct LayerContentTuple<CConfTupleT, Sequence<Levels...>> {
-            using type = std::tuple<typename LayerContentFromConfigTuple<CConfTupleT, Levels>::type...>;
-        };
+        namespace {
 
 
+            // content of each layer
+            template <int Level, class T>
+            struct LayerContent {};
 
-        // Graphical Model
+            template <int Level, class DataT, int ChildN>
+            struct LayerContent<Level, LayerConfig<DataT, ChildN>> {
+                using TopoType = Topo<Level, ChildN>;
+                using DataType = DataT;
+                using TripletType = Triplet<TopoType, DataT>;
+                using TableType = TripletArray<TopoType, DataT>;
+                TableType contentTable;
+                template <class Archive> inline void serialize(Archive & ar) { ar(contentTable); }
+            };
+
+
+            // make a layer content tuple with levels
+            template <class CConfTupleT, int Level>
+            struct LayerContentFromConfigTuple {
+                using type = LayerContent<Level, typename std::tuple_element<size_t(Level), CConfTupleT>::type>;
+            };
+
+            template <class CConfTupleT, class SequenceT>
+            struct LayerContentTuple {};
+
+            template <class CConfTupleT, int ...Levels>
+            struct LayerContentTuple<CConfTupleT, Sequence<Levels...>> {
+                using type = std::tuple<typename LayerContentFromConfigTuple<CConfTupleT, Levels>::type...>;
+            };
+
+        }
+
+
+        // Homogeneous Graph
         template <class BaseDataT, class ...CConfs>
         class HomogeneousGraph {
             // number of layers
@@ -1069,6 +1083,144 @@ namespace panoramix {
 
 
 
+
+
+
+        // configuration for constraint
+        template <class ComponentDataT, int N>
+        struct ComponentOccupation {
+            using ComponentDataType = ComponentDataT;
+            enum { Degree = N };
+        };
+
+        template <class ConstraintDataT, class ...ComponentOccupationTs>
+        struct ConstraintConfig {
+            using ConstraintDataType = ConstraintDataT;
+            using ComponentOccupationTuple = std::tuple<ComponentOccupationTs...>;
+        };
+
+        template <class T>
+        struct IsConstraintConfig : public std::false_type {};
+
+        template <class ...ComponentOccupationTs>
+        struct IsConstraintConfig<ConstraintConfig<ComponentOccupationTs...>> : public std::true_type{};
+
+        namespace {
+
+            template <class ComponentOccupationT>
+            struct LowerHandlesArrayFromComponentOccupation {};
+
+            template <class DataT, int N>
+            struct LowerHandlesArrayFromComponentOccupation<ComponentOccupation<DataT, N>> {
+                using type = std::array<Handle<DataT>, N>;
+            };
+
+            template <class DataT>
+            struct LowerHandlesArrayFromComponentOccupation<ComponentOccupation<DataT, Dynamic>> {
+                using type = std::vector<Handle<DataT>>;
+            };
+
+        }
+
+
+
+        // make a layer content tuple with 2 levels
+        template <class ComponentDataT, class ... ConstraintDataTs>
+        struct ComponentTopo {
+            std::tuple<std::set<Handle<ConstraintDataTs>>...> uppers;
+            Handle<ComponentDataT> hd;
+            explicit inline ComponentTopo(int id = -1) : hd(id){}
+            template <class Archive> inline void serialize(Archive & ar) { ar(uppers, hd); }
+        };
+        
+        template <class ConstraintDataT, class ... ComponentOccupationTs>
+        struct ConstraintTopo {
+            static_assert(sizeof...(ComponentOccupationTs) > 0, "ComponentOccupationTs must be more than zero");
+            std::tuple<typename LowerHandlesArrayFromComponentOccupation<ComponentOccupationTs>::type ...> lowers;
+            Handle<ConstraintDataT> hd;
+            explicit inline ConstraintTopo(int id = -1) : hd(id){}
+            template <class Archive> inline void serialize(Archive & ar) { ar(lowers, hd); }
+        };
+
+
+        namespace {
+
+            template <class ComponentDataT, class ConstraintConfigTupleT>
+            struct ComponentTripletArrayFromConstraintConfigTuple {};
+
+            template <class ComponentDataT, class ... ConstraintDataTs>
+            struct ComponentTripletArrayFromConstraintConfigTuple<ComponentDataT, std::tuple<ConstraintDataTs...>> {
+                using type = TripletArray<ComponentTopo<ComponentDataT, ConstraintDataTs...>, ComponentDataT>;
+            };
+
+            template <class ComponentDataTupleT, class ConstraintConfigTupleT>
+            struct ComponentTripletArrayTupleFromConstraintConfigTuple {};
+
+            template <class ConstraintConfigTupleT, class ... ComponentDataTs>
+            struct ComponentTripletArrayTupleFromConstraintConfigTuple<std::tuple<ComponentDataTs...>, ConstraintConfigTupleT> {
+                using type = std::tuple<typename ComponentTripletArrayFromConstraintConfigTuple<ComponentDataTs, ConstraintConfigTupleT>::type ...>;
+            };
+
+            template <class ConstraintConfigT>
+            struct ConstraintTripletArrayFromConstraintConfig {};
+
+            template <class ConstraintDataT, class ...ComponentOccupationTs>
+            struct ConstraintTripletArrayFromConstraintConfig<ConstraintConfig<ConstraintDataT, ComponentOccupationTs...>> {
+                using type = TripletArray<ConstraintTopo<ConstraintDataT, ComponentOccupationTs...>, ConstraintDataT>;
+            };
+
+            template <class ConstraintConfigTupleT>
+            struct ConstraintTripetArrayTupleFromConstraintConfigTuple {};
+
+            template <class ... ConstraintConfigTs>
+            struct ConstraintTripetArrayTupleFromConstraintConfigTuple<std::tuple<ConstraintConfigTs...>> {
+                using type = std::tuple<typename ConstraintTripletArrayFromConstraintConfig<ConstraintConfigTs>::type...>;
+            };
+
+        }
+
+
+        template <class ComponentDataTupleT, class ConstraintConfigTupleT>
+        class ConstraintGraph {
+            static_assert(IsTuple<ComponentDataTupleT>::value, "ComponentDataTupleT must be std::tuple");
+            static_assert(IsTuple<ConstraintConfigTupleT>::value, "ConstraintConfigTupleT must be std::tuple");
+            using ComponentsTripletArrayTuple = 
+                typename ComponentTripletArrayTupleFromConstraintConfigTuple<ComponentDataTupleT, ConstraintConfigTupleT>::type;
+            using ConstraintsTripletArrayTuple =
+                typename ConstraintTripetArrayTupleFromConstraintConfigTuple<ConstraintConfigTupleT>::type;
+        public:
+            template <class DataT>
+            inline Handle<DataT> addComponent(const DataT & data) {
+                enum { _idx = TypeFirstLocationInTuple<DataT, ComponentDataTupleT>::value };
+                static_assert(_idx >= 0, "DataT is not supported here!");
+                using _TripletType = typename std::tuple_element<_idx, ComponentsTripletArrayTuple>::type::value_type;
+                using _TopoType = typename _TripletType::TopoType;
+                auto & correspondingComponents = std::get<_idx>(_components);
+                _TopoType topo;
+                topo.hd = Handle<DataT>(correspondingComponents.size());
+                correspondingComponents.emplace_back(std::move(topo), data, true);
+                return topo.hd;
+            }
+
+            template <class DataT>
+            inline const DataT & componentData(Handle<DataT> hd) const {
+                enum { _idx = TypeFirstLocationInTuple<DataT, ComponentDataTupleT>::value };
+                static_assert(_idx >= 0, "DataT is not supported here!");
+                return std::get<_idx>(_components).at(hd.id).data;
+            }
+
+            template <class DataT>
+            inline DataT & componentData(Handle<DataT> hd){
+                enum { _idx = TypeFirstLocationInTuple<DataT, ComponentDataTupleT>::value };
+                static_assert(_idx >= 0, "DataT is not supported here!");
+                return std::get<_idx>(_components)[hd.id].data;
+            }
+
+            template <class Archiver> inline void serialize(Archiver & ar) { ar(_components, _constraints); }
+        private:
+            ComponentsTripletArrayTuple _components;
+            ConstraintsTripletArrayTuple _constraints;
+        };
 
 
     }
