@@ -2,7 +2,7 @@
 #define PANORAMIX_CORE_VIEW_HPP
 
 #include "basic_types.hpp"
-#include "graph.hpp"
+#include "generic_topo.hpp"
 #include "cameras.hpp"
 #include "feature.hpp"
 

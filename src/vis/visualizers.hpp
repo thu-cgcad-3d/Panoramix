@@ -5,7 +5,7 @@
 #include "../core/cameras.hpp"
 #include "../core/iterators.hpp"
 #include "../core/containers.hpp"
-#include "../core/graph.hpp"
+#include "../core/generic_topo.hpp"
 #include "basic_types.hpp"
 
 namespace panoramix {

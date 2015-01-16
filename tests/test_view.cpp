@@ -41,7 +41,7 @@ TEST(View, LinesGraph) {
     std::vector<core::Vec3> vanishingPoints;
     std::vector<core::LinesGraph> linesGraphs;
     core::EstimateVanishingPointsAndBuildLinesGraphs(views, vanishingPoints, linesGraphs, 
-        core::LineSegmentExtractor(), 10, 100, 5);
+        core::LineSegmentExtractor(), 10, 100, 5, false, true);
 
     for (int i = 0; i < views.size(); i++){
         vis::Visualizer2D viz(views[i].image);

@@ -137,6 +137,43 @@ namespace panoramix {
         };
 
 
+        //template <class ...Ts>
+        //struct Tuple : public std::tuple<Ts...> {
+        //    using BaseType = std::tuple<Ts...>;
+        //    
+        //    template <class ... ArgTs>
+        //    inline Tuple(ArgTs ... args) : BaseType(std::forward<ArgTs>(args) ...) {}
+
+        //    inline Tuple & operator = (const BaseType & t) { return BaseType::operator=(t); }
+        //    inline Tuple & operator = (BaseType && t) { return BaseType::operator=(std::move(t)); }
+
+        //    inline operator BaseType() const { return BaseType(*this); }
+
+        //    // get element
+        //    template <size_t Idx>
+        //    inline typename std::tuple_element<Idx, BaseType>::type & get() { 
+        //        return std::get<Idx>((BaseType&)(*this)); 
+        //    }
+        //    template <size_t Idx>
+        //    inline const typename std::tuple_element<Idx, BaseType>::type & get() const {
+        //        return std::get<Idx>((const BaseType&)(*this));
+        //    }
+        //    template <class T, int Idx = TypeFirstLocationInTuple<T, BaseType>::value>
+        //    inline typename std::tuple_element<Idx, BaseType>::type & get() {
+        //        return std::get<Idx>((BaseType&)(*this));
+        //    }
+        //    template <class T, int Idx = TypeFirstLocationInTuple<T, BaseType>::value>
+        //    inline const typename std::tuple_element<Idx, BaseType>::type & get() const {
+        //        return std::get<Idx>((const BaseType&)(*this));
+        //    }
+
+        //    template <class Archiver>
+        //    inline void serialize(Archiver & ar){
+        //        ar((BaseType&)(*this));
+        //    }
+        //};
+
+
 
         namespace {
             template <class FunctorT, class TupleT, int ...S>

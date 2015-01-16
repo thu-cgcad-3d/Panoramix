@@ -76,7 +76,7 @@ namespace panoramix {
 
         class MatlabEngine {
         public:
-            inline explicit MatlabEngine(const char * cmd = nullptr, int bufferSize = 1024) 
+            inline explicit MatlabEngine(const char * cmd = nullptr, int bufferSize = 5e4) 
                 : _engine(nullptr), _buffer(nullptr) { 
                 _engine = engOpen(cmd);
                 if (_engine){

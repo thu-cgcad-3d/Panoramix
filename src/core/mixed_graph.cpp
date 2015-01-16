@@ -843,6 +843,12 @@ namespace panoramix {
             }
 
 
+            
+
+
+
+
+
             void FormulateConstraintsAsMatrices(const MixedGraph & mg, MGPatch & patch,
                 const std::vector<Vec3> & vanishingPoints,
                 std::unordered_map<MGUnaryHandle, int> & uh2varStartPosition,
@@ -980,6 +986,9 @@ namespace panoramix {
 
             }
 
+
+
+            
 
 
 
@@ -2058,17 +2067,22 @@ namespace panoramix {
                     std::vector<double> Bv(B.size());
                     std::copy_n(B.data(), B.size(), Bv.begin());
                     core::Matlab::PutVariable("B", Bv);
-                    //core::Matlab::RunScript("save tempfile");
+                    core::Matlab::RunScript("save tempfile");
 
                     core::Matlab matlab;
                     matlab
                         << "n = size(A, 2);"
+                        << "m = size(A, 1);"
                         << "cvx_setup;"
                         << "cvx_begin"
                         << "   variable X(n)"
-                        << "   minimize(norm(A*X - B'))"
+                        << "   variable slack(m)"
+                        << "   minimize(norm((A * X - B')))"
                         //<< "   subject to"
-                        //<< "      ones(n, 1) * 0.5 <= X"
+                        //<< "      ones(n, 1) <= X"
+                        //<< "       <= slack"
+                        //<< "      B' - A * X <= slack"
+                        //<< "      zeros(m, 1) <= slack"
                         << "cvx_end"
                         << "X = X';";
                     
@@ -2090,6 +2104,228 @@ namespace panoramix {
 
             };
 
+
+
+            struct MGPatchDepthsOptimizerInternalMATLABCVX_v2 : MGPatchDepthsOptimizerInternalBase {
+                Eigen::SparseMatrix<double> unaryFixedToAnchorDepths;
+                Eigen::SparseMatrix<double> unaryLeftToAnchorDepths, unaryRightToAnchorDepths;
+                Eigen::SparseMatrix<double> anchorDepthsWeights;
+                Eigen::VectorXd Rhs;
+                bool useWeights;
+
+                std::unordered_map<MGUnaryHandle, int> uh2varStartPosition;
+                std::unordered_map<MGBinaryHandle, int> bh2consStartPosition;
+
+                std::unordered_map<MGBinaryHandle, std::vector<Vec3>> appliedBinaryAnchors;
+                
+                virtual void initialize(const MixedGraph & mg, MGPatch & patch,
+                    const std::vector<Vec3> & vanishingPoints, bool useWeights) override {
+
+                    bool addAnchor = false;
+
+                    assert(BinaryHandlesAreValidInPatch(mg, patch));
+                    assert(UnariesAreConnectedInPatch(mg, patch));
+
+                    int varNum = 0;
+                    bool hasFixedUnary = false;
+                    for (auto & uhv : patch.uhs){
+                        if (uhv.second.fixed){
+                            hasFixedUnary = true;
+                            continue;
+                        }
+                        uh2varStartPosition[uhv.first] = varNum;
+                        varNum += uhv.second.variables.size();
+                    }
+
+                    int consNum = 0;
+
+                    if (addAnchor){
+                        if (!hasFixedUnary){
+                            consNum++;
+                        }
+                    }
+                    for (auto & bhv : patch.bhs){
+                        if (!bhv.second.enabled)
+                            continue;
+                        auto bh = bhv.first;
+                        auto uh1 = mg.topo(bh).lowers.front();
+                        auto uh2 = mg.topo(bh).lowers.back();
+                        auto & u1 = mg.data(uh1);
+                        auto & u2 = mg.data(uh2);
+
+                        bool u1IsFixed = !Contains(uh2varStartPosition, uh1);
+                        bool u2IsFixed = !Contains(uh2varStartPosition, uh2);
+                        if (u1IsFixed && u2IsFixed)
+                            continue;
+
+                        bh2consStartPosition[bhv.first] = consNum;
+                        appliedBinaryAnchors[bhv.first] = NecessaryAnchorsForBinary(mg, bh);
+                        consNum += appliedBinaryAnchors[bhv.first].size();
+                    }
+
+                    unaryLeftToAnchorDepths.resize(consNum, varNum);
+                    unaryRightToAnchorDepths.resize(consNum, varNum);
+                    anchorDepthsWeights.resize(consNum, consNum);
+                    Rhs.resize(consNum);
+
+                    unaryLeftToAnchorDepths.reserve(consNum * 3);
+                    unaryRightToAnchorDepths.reserve(consNum * 3);
+                    anchorDepthsWeights.reserve(consNum);
+
+                    // write equations
+                    int eid = 0;
+                    if (addAnchor){
+                        if (!hasFixedUnary){ // the anchor constraint
+                            MGUnaryHandle uh = patch.uhs.begin()->first;
+                            auto & uhVar = patch.uhs.begin()->second;
+                            int uhVarNum = uhVar.variables.size();
+                            Vec3 uhCenter = mg.data(uh).normalizedCenter;
+                            auto uhVarCoeffsAtCenter = uhVar.variableCoeffsForInverseDepthAtDirection(uhCenter, mg.data(uh), vanishingPoints);
+                            assert(uhVarCoeffsAtCenter.size() == uhVar.variables.size());
+                            int uhVarStartPosition = uh2varStartPosition.at(uh);
+                            for (int i = 0; i < uhVarCoeffsAtCenter.size(); i++){
+                                unaryLeftToAnchorDepths.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
+                            }
+                            Rhs(eid) = 1.0;
+                            anchorDepthsWeights.insert(eid, eid) = 1.0;
+                            eid++;
+                        }
+                    }
+                    for (auto & bhv : patch.bhs){
+                        if (!bhv.second.enabled)
+                            continue;
+
+                        auto & bh = bhv.first;
+                        auto uh1 = mg.topo(bh).lowers.front();
+                        auto uh2 = mg.topo(bh).lowers.back();
+                        auto & u1 = mg.data(uh1);
+                        auto & u2 = mg.data(uh2);
+
+                        bool u1IsFixed = !Contains(uh2varStartPosition, uh1);
+                        bool u2IsFixed = !Contains(uh2varStartPosition, uh2);
+
+                        if (u1IsFixed && u2IsFixed){
+                            continue;
+                        }
+
+                        int u1VarStartPosition = u1IsFixed ? -1 : uh2varStartPosition.at(uh1);
+                        auto & u1Var = patch.uhs.at(uh1);
+                        int u1VarNum = u1Var.variables.size();
+
+                        int u2VarStartPosition = u2IsFixed ? -1 : uh2varStartPosition.at(uh2);
+                        auto & u2Var = patch.uhs.at(uh2);
+                        int u2VarNum = u2Var.variables.size();
+
+                        for (auto & a : appliedBinaryAnchors.at(bh)){
+
+                            Rhs(eid) = 0.0;
+                            assert(mg.data(bh).weight >= 0.0);
+                            anchorDepthsWeights.insert(eid, eid) = mg.data(bh).weight;
+
+                            if (u1IsFixed){
+                                double inverseDepthAtA = u1Var.inverseDepthAtDirection(a, u1, vanishingPoints);
+                                Rhs(eid) = -inverseDepthAtA;
+                            }
+                            else{
+                                auto u1VarCoeffs = u1Var.variableCoeffsForInverseDepthAtDirection(a, u1, vanishingPoints);
+                                assert(u1VarCoeffs.size() == u1VarNum);
+                                for (int i = 0; i < u1VarCoeffs.size(); i++){
+                                    unaryLeftToAnchorDepths.insert(eid, u1VarStartPosition + i) = u1VarCoeffs[i]; // pos
+                                }
+                            }
+
+                            if (u2IsFixed){
+                                double inverseDepthAtA = u2Var.inverseDepthAtDirection(a, u2, vanishingPoints);
+                                Rhs(eid) = inverseDepthAtA;
+                            }
+                            else{
+                                auto u2VarCoeffs = u2Var.variableCoeffsForInverseDepthAtDirection(a, u2, vanishingPoints);
+                                assert(u2VarCoeffs.size() == u2VarNum);
+                                for (int i = 0; i < u2VarCoeffs.size(); i++){
+                                    unaryRightToAnchorDepths.insert(eid, u2VarStartPosition + i) = u2VarCoeffs[i]; // neg
+                                }
+                            }
+
+                            eid++;
+                        }
+                    }
+                    assert(eid == consNum);
+
+                }
+
+                static inline void putSparseMatrixIntoMatlab(const std::string & name, const Eigen::SparseMatrix<double> & m) {
+                    assert(!m.isCompressed());
+                    std::vector<double> i, j;
+                    std::vector<double> s;
+                    i.reserve(m.nonZeros());
+                    j.reserve(m.nonZeros());
+                    s.reserve(m.nonZeros());
+                    for (int r = 0; r < m.rows(); r++){
+                        for (int c = 0; c < m.cols(); c++){
+                            if (m.coeff(r, c) != 0){
+                                i.push_back(r + 1);
+                                j.push_back(c + 1);
+                                s.push_back(m.coeff(r, c));
+                            }
+                        }
+                    }
+                    core::Matlab::PutVariable(name + "_i", i);
+                    core::Matlab::PutVariable(name + "_j", j);
+                    core::Matlab::PutVariable(name + "_s", s);
+                    core::Matlab::PutVariable(name + "_m", m.rows());
+                    core::Matlab::PutVariable(name + "_n", m.cols());
+                    core::Matlab::RunScript(name + "=" +
+                        "sparse(" + name + "_i," + name + "_j," + name + "_s," + name + "_m," + name + "_n" + ");");
+                    core::Matlab::RunScript("clear " + name + "_i " + name + "_j " + name + "_s " + name + "_m " + name + "_n;");
+                }
+
+                virtual bool optimize(const MixedGraph & mg, MGPatch & patch,
+                    const std::vector<Vec3> & vanishingPoints)  override {
+
+                    //using namespace Eigen;
+
+                    //core::Matlab::RunScript("clear");
+
+                    //putSparseMatrixIntoMatlab("A", A);
+                    //putSparseMatrixIntoMatlab("W", W);
+                    //std::vector<double> Bv(B.size());
+                    //std::copy_n(B.data(), B.size(), Bv.begin());
+                    //core::Matlab::PutVariable("B", Bv);
+                    //core::Matlab::RunScript("save tempfile");
+
+                    //core::Matlab matlab;
+                    //matlab
+                    //    << "n = size(A, 2);"
+                    //    << "m = size(A, 1);"
+                    //    << "cvx_setup;"
+                    //    << "cvx_begin"
+                    //    << "   variable X(n)"
+                    //    << "   variable slack(m)"
+                    //    << "   minimize(norm((A * X - B')))"
+                    //    //<< "   subject to"
+                    //    //<< "      ones(n, 1) <= X"
+                    //    //<< "       <= slack"
+                    //    //<< "      B' - A * X <= slack"
+                    //    //<< "      zeros(m, 1) <= slack"
+                    //    << "cvx_end"
+                    //    << "X = X';";
+
+                    //std::vector<double> X;
+                    //core::Matlab::GetVariable("X", X, false);
+
+                    //for (auto & uhv : patch.uhs){
+                    //    if (!Contains(uh2varStartPosition, uhv.first))
+                    //        continue;
+                    //    int uhStartPosition = uh2varStartPosition.at(uhv.first);
+                    //    for (int i = 0; i < uhv.second.variables.size(); i++){
+                    //        uhv.second.variables[i] = X[uhStartPosition + i];
+                    //    }
+                    //}
+
+                    return true;
+                }
+                virtual void finalize() {}
+            };
         }
 
 
@@ -2112,18 +2348,13 @@ namespace panoramix {
             else if (_at == Algorithm::MATLAB_CVX) {
                 _internal = new MGPatchDepthsOptimizerInternalMATLABCVX;
             }
+            else if (_at == Algorithm::MATLAB_CVX_v2){
+                _internal = new MGPatchDepthsOptimizerInternalMATLABCVX_v2;
+            }
 
             auto internalData = static_cast<MGPatchDepthsOptimizerInternalBase*>(_internal);
             internalData->initialize(mg, patch, vanishingPoints, useWeights);
         }
-
-        MGPatchDepthsOptimizer::MGPatchDepthsOptimizer(MGPatchDepthsOptimizer && pdo)
-            :_at(pdo._at), _mg(pdo._mg), _patch(pdo._patch), _vanishingPoints(pdo._vanishingPoints) {
-            _internal = pdo._internal;
-            pdo._internal = nullptr;
-        }
-
-
 
         MGPatchDepthsOptimizer::~MGPatchDepthsOptimizer(){
             if (_internal){

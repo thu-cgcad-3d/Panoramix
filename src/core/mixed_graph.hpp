@@ -24,8 +24,6 @@ namespace panoramix {
                 const MGUnary & unary, const std::vector<Vec3> & vps) const;
             double inverseDepthAtDirection(const Vec3 & direction, const MGUnary & unary, const std::vector<Vec3> & vps) const;
             double depthAtCenter(const MGUnary & unary, const std::vector<Vec3> & vps) const;
-            std::vector<double> variableUpperBounds(const MGUnary & unary, const std::vector<Vec3> & vps) const;
-            std::vector<double> variableLowerBounds(const MGUnary & unary, const std::vector<Vec3> & vps) const;
 
             template <class Archive> void serialize(Archive & ar) {
                 ar(fixed, variables);
@@ -41,7 +39,7 @@ namespace panoramix {
             template <class Archive> void serialize(Archive & ar) {
                 ar(type, normalizedCorners, normalizedCenter, lineClaz);
             }
-        };        
+        };    
       
 
         struct MGBinaryVariable {
@@ -193,7 +191,8 @@ namespace panoramix {
                 MosekLinearProgrammingSimplified,
                 EigenSparseQR,
                 EigenSparseQRSimplified,
-                MATLAB_CVX
+                MATLAB_CVX,
+                MATLAB_CVX_v2
             };
 
             MGPatchDepthsOptimizer(const MixedGraph & mg, MGPatch & patch,
@@ -201,7 +200,6 @@ namespace panoramix {
                 bool useWeights = false,
                 Algorithm at = EigenSparseQR);
             MGPatchDepthsOptimizer(const MGPatchDepthsOptimizer &) = delete;
-            MGPatchDepthsOptimizer(MGPatchDepthsOptimizer && pdo);
             ~MGPatchDepthsOptimizer();
 
         public:

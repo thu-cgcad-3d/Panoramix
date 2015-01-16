@@ -1,201 +1,12 @@
-#ifndef PANORAMIX_CORE_GRAPH_HPP
-#define PANORAMIX_CORE_GRAPH_HPP
+#ifndef PANORAMIX_CORE_GENERIC_TOPO_HPP
+#define PANORAMIX_CORE_GENERIC_TOPO_HPP
 
-#include <cstdint>
-#include <array>
-#include <set>
-#include <vector>
 
-#include <Eigen/Core>
-
-#include "meta.hpp"
-#include "iterators.hpp"
+#include "handle.hpp"
 
 namespace panoramix {
-    namespace core {
-        
-        struct Dummy {
-            template <class Archive> inline void serialize(Archive & ar) {}
-        };
-        
-        /**
-         * @brief Handle struct
-         */
-        template <class Tag>
-        struct Handle {
-            int64_t id;
-            inline Handle(int64_t id_ = -1) : id(id_){}
-            inline bool operator == (Handle h) const { return id == h.id; }
-            inline bool operator != (Handle h) const { return id != h.id; }
-            inline void reset() { id = -1; }
-            inline bool isValid() const { return id >= 0; }
-            inline bool isInvalid() const { return id < 0; }
-            template <class Archive> inline void serialize(Archive & ar) { ar(id); }
-        };
-        template <class Tag>
-        using HandleArray = std::vector<Handle<Tag>>;
-        template <class Tag>
-        using HandlePtrArray = std::vector<Handle<Tag>*>;
-        template <class Tag>
-        inline bool operator < (const Handle<Tag> & a, const Handle<Tag> & b){
-            return a.id < b.id;
-        }
-        template <class Tag>
-        struct HandleHasher {
-            inline uint64_t operator()(Handle<Tag> a) const {
-                return static_cast<uint64_t>(a.id);
-            }
-        };
+    namespace core { 
 
-        // is handle ?
-        template <class T>
-        struct IsHandle : no {};
-
-        template <class Tag>
-        struct IsHandle<Handle<Tag>> : yes {};
-
-        // decorated handle types
-
-        template <int L>
-        struct AtLevel {
-            static const int Level = L;
-        };
-        template <int L>
-        using HandleAtLevel = Handle<AtLevel<L>>;
-
-        // handled table
-        template <class HandleT, class DataT>
-        struct HandledTable {
-            static_assert(IsHandle<HandleT>::value, "HandleT must be a Handle!");
-            HandledTable() {}
-            explicit HandledTable(size_t maxSize) : data(maxSize) {}
-            HandledTable(size_t maxSize, const DataT & d) : data(maxSize, d) {}
-            void resize(size_t sz) { data.resize(sz); }
-            const DataT & operator[](HandleT h) const { return data[h.id]; }
-            const DataT & at(HandleT h) const { return data[h.id]; }
-            DataT & operator[](HandleT h) { return data[h.id]; }
-
-            template <class Archive> inline void serialize(Archive & ar) { ar(data); }
-            std::vector<DataT> data;
-        };
-
-
-
-
-        
-        // triplet 
-        template <class TopoT, class DataT>
-        struct Triplet {
-            using TopoType = TopoT;
-            using DataType = DataT;
-            TopoT topo;
-            uint8_t exists;
-            DataT data;
-            inline Triplet(){}
-            inline Triplet(const TopoT & t, const DataT & d, uint8_t e = true) 
-                : topo(t), exists(e), data(d){}
-            inline Triplet(const TopoT & t, DataT && d, uint8_t e = true)
-                : topo(t), exists(e), data(std::forward<DataT>(d)) {}
-            template <class Archive> inline void serialize(Archive & ar) { ar(topo, exists, data); }
-        };
-        template <class TopoT, class DataT>
-        struct TripletExistsPred {
-            inline uint8_t operator()(const Triplet<TopoT, DataT> & t) const { 
-                return t.exists; 
-            }
-        };
-        template <class TripletT>
-        struct TripletExistsPredFromTripletType {};
-        template <class TopoT, class DataT>
-        struct TripletExistsPredFromTripletType<Triplet<TopoT, DataT>> {
-            using type = TripletExistsPred<TopoT, DataT>;
-        };
-
-        template <class TopoT, class DataT>
-        using TripletArray = std::vector<Triplet<TopoT, DataT>>;
-
-
-        template <class TopoT, class DataT>
-        inline auto BoundingBox(const Triplet<TopoT, DataT> & t) -> decltype(BoundingBox(t.data)) {
-            return BoundingBox(t.data);
-        }
-
-
-        
-        namespace {
-            // helper functions
-            template <class ComponentTableT, class UpdateHandleTableT>
-            int RemoveAndMap(ComponentTableT & v, UpdateHandleTableT & newlocations) {
-                // ComponentTableT : std::vector<Triplet<TopoT, DataT>>
-                // UpdateHandleTableT: std::vector<Handle<TopoT>>
-                newlocations.resize(v.size());
-                int64_t index = 0;
-                for (size_t i = 0; i < v.size(); i++){
-                    newlocations[i] = { v[i].exists == false ? -1 : (index++) };
-                }
-                //for (int i = int(v.size() - 1); i >= 0; --i){
-                //    if (!v[i].exists){
-                //        v.erase(v.begin() + i);
-                //    }
-                //}
-                v.erase(std::remove_if(v.begin(), v.end(), [](const typename ComponentTableT::value_type & t){
-                    return !t.exists;
-                }), v.end());
-                return 0;
-            }
-            template <class UpdateHandleTableT, class TopoT>
-            inline void UpdateOldHandle(const UpdateHandleTableT & newlocationTable, Handle<TopoT> & h) {
-                // UpdateHandleTableT: std::vector<Handle<TopoT>>
-                if (h.isValid())
-                    h = newlocationTable[h.id];
-            }
-            template <class UpdateHandleTableT, class ContainerT>
-            inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, ContainerT & hs) {
-                // UpdateHandleTableT: std::vector<Handle<TopoT>>
-                for (auto & h : hs){
-                    if (h.isValid())
-                        h = newlocationTable[h.id];
-                }
-            }
-            template <class UpdateHandleTableT, class K, class CompareK, class AllocK>
-            inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, std::set<K, CompareK, AllocK> & hs) {
-                // UpdateHandleTableT: std::vector<Handle<TopoT>>
-                std::set<K, CompareK, AllocK> oldhs = hs;
-                hs.clear();
-                for (const auto & oldh : oldhs) {
-                    hs.insert(newlocationTable[oldh.id]);
-                }
-            }
-            template <class ContainerT>
-            inline void RemoveInValidHandleFromContainer(ContainerT & hs) {
-                auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
-                invalid.reset();
-                hs.erase(std::remove(std::begin(hs), std::end(hs), invalid), std::end(hs));
-            }
-            template <class T, int N>
-            inline void RemoveInValidHandleFromContainer(std::array<T, N> & hs){}
-            template <class K, class CompareK, class AllocK>
-            inline void RemoveInValidHandleFromContainer(std::set<K, CompareK, AllocK> & hs) {
-                auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
-                invalid.reset();
-                hs.erase(invalid);
-            }
-            template <class K, class HasherK, class EqualK, class AllocK>
-            inline void RemoveInValidHandleFromContainer(std::unordered_set<K, HasherK, EqualK, AllocK> & hs){
-                auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
-                invalid.reset();
-                hs.erase(invalid);
-            }
-
-        }
-
-
-
-
-
-
-
-        
         // the mesh class
         struct VertTopo;
         struct HalfTopo;
@@ -223,22 +34,22 @@ namespace panoramix {
         };
 
         template <class VertDataT, class HalfDataT = Dummy, class FaceDataT = Dummy>
-        class Mesh {            
+        class Mesh {
         public:
             static const int LayerNum = 2;
 
             using VertData = VertDataT;
             using HalfData = HalfDataT;
             using FaceData = FaceDataT;
-            
+
             using VertHandle = Handle<VertTopo>;
             using HalfHandle = Handle<HalfTopo>;
             using FaceHandle = Handle<FaceTopo>;
-            
+
             using VertsTable = TripletArray<VertTopo, VertDataT>;
             using HalfsTable = TripletArray<HalfTopo, HalfDataT>;
             using FacesTable = TripletArray<FaceTopo, FaceDataT>;
-            
+
             using VertExistsPred = TripletExistsPred<VertTopo, VertDataT>;
             using HalfExistsPred = TripletExistsPred<HalfTopo, HalfDataT>;
             using FaceExistsPred = TripletExistsPred<FaceTopo, FaceDataT>;
@@ -246,252 +57,252 @@ namespace panoramix {
             using Vertex = typename VertsTable::value_type;
             using HalfEdge = typename HalfsTable::value_type;
             using Face = typename FacesTable::value_type;
-            
+
             inline VertsTable & internalVertices() { return _verts; }
             inline HalfsTable & internalHalfEdges() { return _halfs; }
             inline FacesTable & internalFaces() { return _faces; }
             inline const VertsTable & internalVertices() const { return _verts; }
             inline const HalfsTable & internalHalfEdges() const { return _halfs; }
             inline const FacesTable & internalFaces() const { return _faces; }
-            
-            inline ConditionalContainerWrapper<VertsTable, VertExistsPred> vertices() { 
-                return ConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts); 
+
+            inline ConditionalContainerWrapper<VertsTable, VertExistsPred> vertices() {
+                return ConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts);
             }
-            inline ConditionalContainerWrapper<HalfsTable, HalfExistsPred> halfedges() { 
-                return ConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs); 
+            inline ConditionalContainerWrapper<HalfsTable, HalfExistsPred> halfedges() {
+                return ConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs);
             }
-            inline ConditionalContainerWrapper<FacesTable, FaceExistsPred> faces() { 
-                return ConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces); 
+            inline ConditionalContainerWrapper<FacesTable, FaceExistsPred> faces() {
+                return ConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces);
             }
-            inline ConstConditionalContainerWrapper<VertsTable, VertExistsPred> vertices() const { 
-                return ConstConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts); 
+            inline ConstConditionalContainerWrapper<VertsTable, VertExistsPred> vertices() const {
+                return ConstConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts);
             }
-            inline ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred> halfedges() const { 
-                return ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs); 
+            inline ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred> halfedges() const {
+                return ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs);
             }
-            inline ConstConditionalContainerWrapper<FacesTable, FaceExistsPred> faces() const { 
-                return ConstConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces); 
+            inline ConstConditionalContainerWrapper<FacesTable, FaceExistsPred> faces() const {
+                return ConstConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces);
             }
-            
+
             inline VertTopo & topo(VertHandle v) { return _verts[v.id].topo; }
             inline HalfTopo & topo(HalfHandle h) { return _halfs[h.id].topo; }
             inline FaceTopo & topo(FaceHandle f) { return _faces[f.id].topo; }
             inline const VertTopo & topo(VertHandle v) const { return _verts[v.id].topo; }
             inline const HalfTopo & topo(HalfHandle h) const { return _halfs[h.id].topo; }
             inline const FaceTopo & topo(FaceHandle f) const { return _faces[f.id].topo; }
-            
+
             inline VertDataT & data(VertHandle v) { return _verts[v.id].data; }
             inline HalfDataT & data(HalfHandle h) { return _halfs[h.id].data; }
             inline FaceDataT & data(FaceHandle f) { return _faces[f.id].data; }
             inline const VertDataT & data(VertHandle v) const { return _verts[v.id].data; }
             inline const HalfDataT & data(HalfHandle h) const { return _halfs[h.id].data; }
             inline const FaceDataT & data(FaceHandle f) const { return _faces[f.id].data; }
-            
+
             VertHandle addVertex(const VertDataT & vd = VertDataT());
             HalfHandle addEdge(VertHandle from, VertHandle to,
                 const HalfDataT & hd = HalfDataT(), const HalfDataT & hdrev = HalfDataT(), bool mergeDuplicateEdge = true);
             FaceHandle addFace(const HandleArray<HalfTopo> & halfedges,
-                               const FaceDataT & fd = FaceDataT());
+                const FaceDataT & fd = FaceDataT());
             FaceHandle addFace(const HandleArray<VertTopo> & vertices, bool autoflip = true,
-                               const FaceDataT & fd = FaceDataT());
-            template <class VertHandleIteratorT, 
-                      class = std::enable_if_t<std::is_same<std::iterator_traits<VertHandleIteratorT>::value_type, VertHandle>::value>>
-            FaceHandle addFace(VertHandleIteratorT vhBegin, VertHandleIteratorT vhEnd, bool autoflip = true, const FaceDataT & fd = FaceDataT());
-            FaceHandle addFace(VertHandle v1, VertHandle v2, VertHandle v3, bool autoflip = true, 
-                               const FaceDataT & fd = FaceDataT());
+                const FaceDataT & fd = FaceDataT());
+            template <class VertHandleIteratorT,
+            class = std::enable_if_t<std::is_same<std::iterator_traits<VertHandleIteratorT>::value_type, VertHandle>::value >>
+                FaceHandle addFace(VertHandleIteratorT vhBegin, VertHandleIteratorT vhEnd, bool autoflip = true, const FaceDataT & fd = FaceDataT());
+            FaceHandle addFace(VertHandle v1, VertHandle v2, VertHandle v3, bool autoflip = true,
+                const FaceDataT & fd = FaceDataT());
             FaceHandle addFace(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4, bool autoflip = true,
-                               const FaceDataT & fd = FaceDataT());
-            
+                const FaceDataT & fd = FaceDataT());
+
             HalfHandle findEdge(VertHandle from, VertHandle to) const;
-            
+
             inline bool removed(FaceHandle f) const { return !_faces[f.id].exists; }
             inline bool removed(HalfHandle e) const { return !_halfs[e.id].exists; }
             inline bool removed(VertHandle v) const { return !_verts[v.id].exists; }
-            
+
             inline void remove(FaceHandle f);
             inline void remove(HalfHandle e);
             inline void remove(VertHandle v);
-            
+
             Mesh & unite(const Mesh & m);
-            
+
             // garbage collection
             template <class VertHandlePtrContainerT = HandlePtrArray<VertTopo>,
             class HalfHandlePtrContainerT = HandlePtrArray<HalfTopo>,
             class FaceHandlePtrContainerT = HandlePtrArray<FaceTopo>
             >
             void gc(const VertHandlePtrContainerT & vps = VertHandlePtrContainerT(),
-                    const HalfHandlePtrContainerT & hps = HalfHandlePtrContainerT(),
-                    const FaceHandlePtrContainerT & fps = FaceHandlePtrContainerT());
-            
+            const HalfHandlePtrContainerT & hps = HalfHandlePtrContainerT(),
+            const FaceHandlePtrContainerT & fps = FaceHandlePtrContainerT());
+
             void clear();
 
             template <class Archive> inline void serialize(Archive & ar) { ar(_verts, _halfs, _faces); }
-            
+
         private:
             VertsTable _verts;
             HalfsTable _halfs;
             FacesTable _faces;
         };
-        
+
         // implementation of class Mesh
-        
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addVertex(const VertDataT & vd) {
-            VertTopo topo;
-            topo.hd.id = _verts.size();
-            _verts.emplace_back(std::move(topo), vd, true);
-            return _verts.back().topo.hd;
-        }
-        
+            Mesh<VertDataT, HalfDataT, FaceDataT>::addVertex(const VertDataT & vd) {
+                VertTopo topo;
+                topo.hd.id = _verts.size();
+                _verts.emplace_back(std::move(topo), vd, true);
+                return _verts.back().topo.hd;
+            }
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addEdge(VertHandle from, VertHandle to, const HalfDataT & hd, const HalfDataT & hdrev, bool mergeDuplicateEdge) {
-            if (from == to){
-                return HalfHandle();
-            }
-            // find existed halfedge
-            if (mergeDuplicateEdge){
-                HalfHandle hh = findEdge(from, to);
-                if (hh.isValid()){
-                    _halfs[hh.id].data = hd;
-                    _halfs[_halfs[hh.id].topo.opposite.id].data = hdrev;
-                    return hh;
+            Mesh<VertDataT, HalfDataT, FaceDataT>::addEdge(VertHandle from, VertHandle to, const HalfDataT & hd, const HalfDataT & hdrev, bool mergeDuplicateEdge) {
+                if (from == to){
+                    return HalfHandle();
                 }
+                // find existed halfedge
+                if (mergeDuplicateEdge){
+                    HalfHandle hh = findEdge(from, to);
+                    if (hh.isValid()){
+                        _halfs[hh.id].data = hd;
+                        _halfs[_halfs[hh.id].topo.opposite.id].data = hdrev;
+                        return hh;
+                    }
+                }
+
+                HalfHandle hh1(_halfs.size());
+                Triplet<HalfTopo, HalfDataT> ht;
+                ht.topo.hd.id = _halfs.size();
+                ht.topo.from() = from;
+                ht.topo.to() = to;
+                ht.exists = true;
+                ht.data = hd;
+                //_halfs.push_back({ { { _halfs.size() }, { from, to }, { -1 }, { -1 } }, true, hd });
+                _halfs.push_back(ht);
+                HalfHandle hh2(_halfs.size());
+                ht.topo.hd.id = _halfs.size();
+                ht.topo.from() = to;
+                ht.topo.to() = from;
+                ht.exists = true;
+                ht.data = hdrev;
+                //_halfs.push_back({ { { _halfs.size() }, { to, from }, { -1 }, { -1 } }, true, hdrev });
+                _halfs.push_back(ht);
+
+                _halfs[hh1.id].topo.opposite = hh2;
+                _halfs[hh2.id].topo.opposite = hh1;
+
+                _verts[from.id].topo.halfedges.push_back(hh1);
+                _verts[to.id].topo.halfedges.push_back(hh2);
+                return hh1;
             }
-            
-            HalfHandle hh1(_halfs.size());
-            Triplet<HalfTopo, HalfDataT> ht;
-            ht.topo.hd.id = _halfs.size();
-            ht.topo.from() = from;
-            ht.topo.to() = to;
-            ht.exists = true;
-            ht.data = hd;
-            //_halfs.push_back({ { { _halfs.size() }, { from, to }, { -1 }, { -1 } }, true, hd });
-            _halfs.push_back(ht);
-            HalfHandle hh2(_halfs.size());
-            ht.topo.hd.id = _halfs.size();
-            ht.topo.from() = to;
-            ht.topo.to() = from;
-            ht.exists = true;
-            ht.data = hdrev;
-            //_halfs.push_back({ { { _halfs.size() }, { to, from }, { -1 }, { -1 } }, true, hdrev });
-            _halfs.push_back(ht);
-            
-            _halfs[hh1.id].topo.opposite = hh2;
-            _halfs[hh2.id].topo.opposite = hh1;
-            
-            _verts[from.id].topo.halfedges.push_back(hh1);
-            _verts[to.id].topo.halfedges.push_back(hh2);
-            return hh1;
-        }
-        
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(const HandleArray<HalfTopo> & halfedges, const FaceDataT & fd) {
-            Triplet<FaceTopo, FaceDataT> ft;
-            ft.topo.hd.id = _faces.size();
-            ft.topo.halfedges = halfedges;
-            ft.exists = true;
-            ft.data = fd;
-            //_faces.push_back({ { { _faces.size() }, halfedges }, true, fd });
-            _faces.push_back(ft);
-            for (HalfHandle hh : halfedges){
-                _halfs[hh.id].topo.face = _faces.back().topo.hd;
+            Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(const HandleArray<HalfTopo> & halfedges, const FaceDataT & fd) {
+                Triplet<FaceTopo, FaceDataT> ft;
+                ft.topo.hd.id = _faces.size();
+                ft.topo.halfedges = halfedges;
+                ft.exists = true;
+                ft.data = fd;
+                //_faces.push_back({ { { _faces.size() }, halfedges }, true, fd });
+                _faces.push_back(ft);
+                for (HalfHandle hh : halfedges){
+                    _halfs[hh.id].topo.face = _faces.back().topo.hd;
+                }
+                return _faces.back().topo.hd;
             }
-            return _faces.back().topo.hd;
-        }
-        
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(const HandleArray<VertTopo> & vertices, bool autoflip, const FaceDataT & fd) {
-            HandleArray<HalfTopo> halfs;
-            assert(vertices.size() >= 3);
-            HalfHandle hh = findEdge(vertices.back(), vertices.front());
-            auto verts = vertices;
-            if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
-                std::reverse(verts.begin(), verts.end());
+            Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(const HandleArray<VertTopo> & vertices, bool autoflip, const FaceDataT & fd) {
+                HandleArray<HalfTopo> halfs;
+                assert(vertices.size() >= 3);
+                HalfHandle hh = findEdge(vertices.back(), vertices.front());
+                auto verts = vertices;
+                if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                    std::reverse(verts.begin(), verts.end());
+                }
+
+                for (size_t i = 0; i < verts.size(); i++){
+                    size_t inext = (i + 1) % verts.size();
+                    halfs.push_back(addEdge(verts[i], verts[inext]));
+                }
+                return addFace(halfs, fd);
             }
-            
-            for (size_t i = 0; i < verts.size(); i++){
-                size_t inext = (i + 1) % verts.size();
-                halfs.push_back(addEdge(verts[i], verts[inext]));
-            }
-            return addFace(halfs, fd);
-        }
 
         template <class VertDataT, class HalfDataT, class FaceDataT>
         template <class VertHandleIteratorT, class>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(
-        VertHandleIteratorT vhBegin, VertHandleIteratorT vhEnd, bool autoflip, const FaceDataT & fd) {
-            HandleArray<HalfTopo> halfs;
-            HalfHandle hh = findEdge(vertices.back(), vertices.front());
-            HandleArray<VertTopo> verts(vhBegin, vhEnd);
-            assert(verts.size() >= 3);
-            if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
-                std::reverse(verts.begin(), verts.end());
-            }
+            Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(
+            VertHandleIteratorT vhBegin, VertHandleIteratorT vhEnd, bool autoflip, const FaceDataT & fd) {
+                HandleArray<HalfTopo> halfs;
+                HalfHandle hh = findEdge(vertices.back(), vertices.front());
+                HandleArray<VertTopo> verts(vhBegin, vhEnd);
+                assert(verts.size() >= 3);
+                if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                    std::reverse(verts.begin(), verts.end());
+                }
 
-            for (size_t i = 0; i < verts.size(); i++){
-                size_t inext = (i + 1) % verts.size();
-                halfs.push_back(addEdge(verts[i], verts[inext]));
+                for (size_t i = 0; i < verts.size(); i++){
+                    size_t inext = (i + 1) % verts.size();
+                    halfs.push_back(addEdge(verts[i], verts[inext]));
+                }
+                return addFace(halfs, fd);
             }
-            return addFace(halfs, fd);
-        }
 
         template <class VertDataT, class HalfDataT, class FaceDataT>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(VertHandle v1, VertHandle v2, VertHandle v3, bool autoflip, const FaceDataT & fd) {            
-            HalfHandle hh = findEdge(v3, v1);
-            if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
-                std::swap(v1, v3);
+            Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(VertHandle v1, VertHandle v2, VertHandle v3, bool autoflip, const FaceDataT & fd) {
+                HalfHandle hh = findEdge(v3, v1);
+                if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                    std::swap(v1, v3);
+                }
+                return addFace({
+                    addEdge(v1, v2),
+                    addEdge(v2, v3),
+                    addEdge(v3, v1)
+                }, fd);
             }
-            return addFace({
-                addEdge(v1, v2),
-                addEdge(v2, v3),
-                addEdge(v3, v1)
-            }, fd);
-        }
 
         template <class VertDataT, class HalfDataT, class FaceDataT>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4, bool autoflip, const FaceDataT & fd) {
-            HalfHandle hh = findEdge(v4, v1);
-            if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
-                std::swap(v1, v4);
+            Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4, bool autoflip, const FaceDataT & fd) {
+                HalfHandle hh = findEdge(v4, v1);
+                if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                    std::swap(v1, v4);
+                }
+                return addFace({
+                    addEdge(v1, v2),
+                    addEdge(v2, v3),
+                    addEdge(v3, v4),
+                    addEdge(v4, v1)
+                }, fd);
             }
-            return addFace({
-                addEdge(v1, v2),
-                addEdge(v2, v3),
-                addEdge(v3, v4),
-                addEdge(v4, v1)
-            }, fd);
-        }
 
-        
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle
-        Mesh<VertDataT, HalfDataT, FaceDataT>::findEdge(VertHandle from, VertHandle to) const {
-            for (HalfHandle hh : _verts[from.id].topo.halfedges){
-                assert(_halfs[hh.id].topo.endVertices[0] == from);
-                if (_halfs[hh.id].topo.endVertices[1] == to){
-                    return hh;
+            Mesh<VertDataT, HalfDataT, FaceDataT>::findEdge(VertHandle from, VertHandle to) const {
+                for (HalfHandle hh : _verts[from.id].topo.halfedges){
+                    assert(_halfs[hh.id].topo.endVertices[0] == from);
+                    if (_halfs[hh.id].topo.endVertices[1] == to){
+                        return hh;
+                    }
                 }
+                return HalfHandle();
             }
-            return HalfHandle();
-        }
-        
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(FaceHandle f) {
             if (f.isInvalid() || removed(f))
                 return;
             _faces[f.id].exists = false;
-            for(auto & hh : _faces[f.id].topo.halfedges){
+            for (auto & hh : _faces[f.id].topo.halfedges){
                 hh.reset();
             }
         }
-        
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(HalfHandle h) {
             if (h.isInvalid() || removed(h))
@@ -499,16 +310,16 @@ namespace panoramix {
             HalfHandle hop = _halfs[h.id].topo.opposite;
             _halfs[h.id].exists = false;
             _halfs[hop.id].exists = false;
-            
+
             remove(_halfs[h.id].topo.face);
             remove(_halfs[hop.id].topo.face);
-            
+
             _halfs[h.id].topo.from().reset();
             _halfs[hop.id].topo.to().reset();
             _halfs[h.id].topo.face.reset();
             _halfs[hop.id].topo.face.reset();
         }
-        
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(VertHandle v) {
             if (v.isInvalid() || removed(v))
@@ -518,13 +329,13 @@ namespace panoramix {
                 remove(hh);
             _verts[v.id].topo.halfedges.clear();
         }
-        
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         Mesh<VertDataT, HalfDataT, FaceDataT>& Mesh<VertDataT, HalfDataT, FaceDataT>::unite(const Mesh & m) {
             std::vector<VertHandle> vtable(m.Vertices().size());
             std::vector<HalfHandle> htable(m.HalfEdges().size());
             std::vector<FaceHandle> ftable(m.Faces().size());
-            
+
             for (auto v : m.vertices()){
                 vtable[v.topo.hd.id] = addVertex(v.data);
             }
@@ -543,24 +354,24 @@ namespace panoramix {
                 }
                 ftable[f.topo.hd.id] = addFace(hs, f.data);
             }
-            
+
             return *this;
         }
-        
-        
-        
+
+
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         template <class VertHandlePtrContainerT, class HalfHandlePtrContainerT, class FaceHandlePtrContainerT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::gc(const VertHandlePtrContainerT & vps,
-                                                       const HalfHandlePtrContainerT & hps,
-                                                       const FaceHandlePtrContainerT & fps){
+            const HalfHandlePtrContainerT & hps,
+            const FaceHandlePtrContainerT & fps){
             std::vector<VertHandle> vnlocs;
             std::vector<HalfHandle> hnlocs;
             std::vector<FaceHandle> fnlocs;
             RemoveAndMap(_verts, vnlocs);
             RemoveAndMap(_halfs, hnlocs);
             RemoveAndMap(_faces, fnlocs);
-            
+
             for (size_t i = 0; i < _verts.size(); i++){
                 UpdateOldHandle(vnlocs, _verts[i].topo.hd);
                 UpdateOldHandleContainer(hnlocs, _verts[i].topo.halfedges);
@@ -587,19 +398,13 @@ namespace panoramix {
                 UpdateOldHandle(fnlocs, *fp);
             }
         }
-        
+
         template <class VertDataT, class HalfDataT, class FaceDataT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::clear() {
             _verts.clear();
             _halfs.clear();
             _faces.clear();
         }
-
-
-
-
-
-        using Eigen::Dynamic;
 
 
         // Forest 
@@ -629,7 +434,7 @@ namespace panoramix {
                 return ConditionalContainerWrapper<TripletArray<ForestTopo, T>, NodeExistsPred>(&_nodes);
             }
             inline const TripletArray<ForestTopo, T> & internalNodes() const { return _nodes; }
-            inline NodeHandle firstRoot() const { 
+            inline NodeHandle firstRoot() const {
                 for (auto & n : _nodes){
                     if (n.topo.parent.isInvalid())
                         return n.topo.hd;
@@ -662,8 +467,8 @@ namespace panoramix {
             inline NodeHandle addRoot(const T & data){ return add(NodeHandle(), data); }
             inline NodeHandle addRoot(T && data) { return add(NodeHandle(), std::move(data)); }
             inline bool isRoot(NodeHandle nh) const { return _nodes[nh.id].topo.parent.isInvalid(); }
-            inline bool isLeaf(NodeHandle nh) const { 
-                auto & children = _nodes[nh.id].topo.children; 
+            inline bool isLeaf(NodeHandle nh) const {
+                auto & children = _nodes[nh.id].topo.children;
                 for (auto & ch : children){
                     if (ch.isValid())
                         return false;
@@ -917,7 +722,7 @@ namespace panoramix {
             HandleAtLevel<Level> add(std::initializer_list<HandleAtLevel<Level - 1>> depends,
                 typename LayerContentTypeStruct<Level>::type::DataType && d) {
                 int id = static_cast<int>(internalElements<Level>().size());
-                internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, depends), 
+                internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, depends),
                     std::forward<typename LayerContentTypeStruct<Level>::type::DataType>(d), true);
                 for (const HandleAtLevel<Level - 1> & lowh : depends) {
                     topo(lowh).uppers.insert(HandleAtLevel<Level>(id));
@@ -934,7 +739,7 @@ namespace panoramix {
 
             HandleAtLevel<0> add(typename LayerContentTypeStruct<0>::type::DataType && d){
                 int id = static_cast<int>(internalElements<0>().size());
-                internalElements<0>().emplace_back(typename LayerContentTypeStruct<0>::type::TopoType(id), 
+                internalElements<0>().emplace_back(typename LayerContentTypeStruct<0>::type::TopoType(id),
                     std::forward<typename LayerContentTypeStruct<0>::type::DataType>(d), true);
                 return HandleAtLevel<0>(id);
             }
@@ -1086,156 +891,10 @@ namespace panoramix {
 
 
 
-        // configuration for constraint
-        template <class ComponentDataT, int N>
-        struct ComponentOccupation {
-            using ComponentDataType = ComponentDataT;
-            enum { Degree = N };
-        };
-
-        template <class ConstraintDataT, class ...ComponentOccupationTs>
-        struct ConstraintConfig {
-            using ConstraintDataType = ConstraintDataT;
-            using ComponentOccupationTuple = std::tuple<ComponentOccupationTs...>;
-        };
-
-        template <class T>
-        struct IsConstraintConfig : public std::false_type {};
-
-        template <class ...ComponentOccupationTs>
-        struct IsConstraintConfig<ConstraintConfig<ComponentOccupationTs...>> : public std::true_type{};
-
-        namespace {
-
-            template <class ComponentOccupationT>
-            struct LowerHandlesArrayFromComponentOccupation {};
-
-            template <class DataT, int N>
-            struct LowerHandlesArrayFromComponentOccupation<ComponentOccupation<DataT, N>> {
-                using type = std::array<Handle<DataT>, N>;
-            };
-
-            template <class DataT>
-            struct LowerHandlesArrayFromComponentOccupation<ComponentOccupation<DataT, Dynamic>> {
-                using type = std::vector<Handle<DataT>>;
-            };
-
-        }
-
-
-
-        // make a layer content tuple with 2 levels
-        template <class ComponentDataT, class ... ConstraintDataTs>
-        struct ComponentTopo {
-            std::tuple<std::set<Handle<ConstraintDataTs>>...> uppers;
-            Handle<ComponentDataT> hd;
-            explicit inline ComponentTopo(int id = -1) : hd(id){}
-            template <class Archive> inline void serialize(Archive & ar) { ar(uppers, hd); }
-        };
-        
-        template <class ConstraintDataT, class ... ComponentOccupationTs>
-        struct ConstraintTopo {
-            static_assert(sizeof...(ComponentOccupationTs) > 0, "ComponentOccupationTs must be more than zero");
-            std::tuple<typename LowerHandlesArrayFromComponentOccupation<ComponentOccupationTs>::type ...> lowers;
-            Handle<ConstraintDataT> hd;
-            explicit inline ConstraintTopo(int id = -1) : hd(id){}
-            template <class Archive> inline void serialize(Archive & ar) { ar(lowers, hd); }
-        };
-
-
-        namespace {
-
-            template <class ComponentDataT, class ConstraintConfigTupleT>
-            struct ComponentTripletArrayFromConstraintConfigTuple {};
-
-            template <class ComponentDataT, class ... ConstraintDataTs>
-            struct ComponentTripletArrayFromConstraintConfigTuple<ComponentDataT, std::tuple<ConstraintDataTs...>> {
-                using type = TripletArray<ComponentTopo<ComponentDataT, ConstraintDataTs...>, ComponentDataT>;
-            };
-
-            template <class ComponentDataTupleT, class ConstraintConfigTupleT>
-            struct ComponentTripletArrayTupleFromConstraintConfigTuple {};
-
-            template <class ConstraintConfigTupleT, class ... ComponentDataTs>
-            struct ComponentTripletArrayTupleFromConstraintConfigTuple<std::tuple<ComponentDataTs...>, ConstraintConfigTupleT> {
-                using type = std::tuple<typename ComponentTripletArrayFromConstraintConfigTuple<ComponentDataTs, ConstraintConfigTupleT>::type ...>;
-            };
-
-            template <class ConstraintConfigT>
-            struct ConstraintTripletArrayFromConstraintConfig {};
-
-            template <class ConstraintDataT, class ...ComponentOccupationTs>
-            struct ConstraintTripletArrayFromConstraintConfig<ConstraintConfig<ConstraintDataT, ComponentOccupationTs...>> {
-                using type = TripletArray<ConstraintTopo<ConstraintDataT, ComponentOccupationTs...>, ConstraintDataT>;
-            };
-
-            template <class ConstraintConfigTupleT>
-            struct ConstraintTripetArrayTupleFromConstraintConfigTuple {};
-
-            template <class ... ConstraintConfigTs>
-            struct ConstraintTripetArrayTupleFromConstraintConfigTuple<std::tuple<ConstraintConfigTs...>> {
-                using type = std::tuple<typename ConstraintTripletArrayFromConstraintConfig<ConstraintConfigTs>::type...>;
-            };
-
-        }
-
-
-        template <class ComponentDataTupleT, class ConstraintConfigTupleT>
-        class ConstraintGraph {
-            static_assert(IsTuple<ComponentDataTupleT>::value, "ComponentDataTupleT must be std::tuple");
-            static_assert(IsTuple<ConstraintConfigTupleT>::value, "ConstraintConfigTupleT must be std::tuple");
-            using ComponentsTripletArrayTuple = 
-                typename ComponentTripletArrayTupleFromConstraintConfigTuple<ComponentDataTupleT, ConstraintConfigTupleT>::type;
-            using ConstraintsTripletArrayTuple =
-                typename ConstraintTripetArrayTupleFromConstraintConfigTuple<ConstraintConfigTupleT>::type;
-        public:
-            template <class DataT>
-            inline Handle<DataT> addComponent(const DataT & data) {
-                enum { _idx = TypeFirstLocationInTuple<DataT, ComponentDataTupleT>::value };
-                static_assert(_idx >= 0, "DataT is not supported here!");
-                using _TripletType = typename std::tuple_element<_idx, ComponentsTripletArrayTuple>::type::value_type;
-                using _TopoType = typename _TripletType::TopoType;
-                auto & correspondingComponents = std::get<_idx>(_components);
-                _TopoType topo;
-                topo.hd = Handle<DataT>(correspondingComponents.size());
-                correspondingComponents.emplace_back(std::move(topo), data, true);
-                return topo.hd;
-            }
-
-            template <class DataT>
-            inline const DataT & componentData(Handle<DataT> hd) const {
-                enum { _idx = TypeFirstLocationInTuple<DataT, ComponentDataTupleT>::value };
-                static_assert(_idx >= 0, "DataT is not supported here!");
-                return std::get<_idx>(_components).at(hd.id).data;
-            }
-
-            template <class DataT>
-            inline DataT & componentData(Handle<DataT> hd){
-                enum { _idx = TypeFirstLocationInTuple<DataT, ComponentDataTupleT>::value };
-                static_assert(_idx >= 0, "DataT is not supported here!");
-                return std::get<_idx>(_components)[hd.id].data;
-            }
-
-            template <class Archiver> inline void serialize(Archiver & ar) { ar(_components, _constraints); }
-        private:
-            ComponentsTripletArrayTuple _components;
-            ConstraintsTripletArrayTuple _constraints;
-        };
 
 
     }
 
 }
-
-namespace std {
-
-   template <class Tag>
-   struct hash<panoramix::core::Handle<Tag>> {
-       inline uint64_t operator()(panoramix::core::Handle<Tag> a) const {
-           return static_cast<uint64_t>(a.id);
-       }
-   };
-
-}
-
+ 
 #endif

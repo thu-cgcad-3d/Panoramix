@@ -1,4 +1,4 @@
-#include "../src/core/graph.hpp"
+#include "../src/core/generic_topo.hpp"
 #include "../src/core/iterators.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/vis/visualizers.hpp"

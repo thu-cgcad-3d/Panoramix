@@ -83,12 +83,12 @@ namespace panoramix {
         class VanishingPointsDetector {
         public:
             enum Algorithm {
-                Hedau,
-                MSAC
+                Naive,
+                HedauMatlab
             };
             struct Params {
                 inline Params(double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5)
-                    : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal), algorithm(Hedau) {}
+                    : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal), algorithm(Naive) {}
                 double maxPrinciplePointOffset;
                 double minFocalLength, maxFocalLength;
                 Algorithm algorithm;

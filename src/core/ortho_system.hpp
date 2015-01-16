@@ -11,8 +11,11 @@ namespace panoramix {
         class SemiOrthogonalSystem {
         public:
             using DirectionIndex = int;
-            explicit SemiOrthogonalSystem(const Vec3 & archD = Vec3(0, 0, 1))
+            SemiOrthogonalSystem() : _archDirectionId(-1) {}
+            explicit SemiOrthogonalSystem(const Vec3 & archD)
                 : _directions(1, archD), _archDirectionId(0) {}
+
+            inline bool isNull() const { return _archDirectionId == -1; }
 
             inline const Vec3 & archDirection() const { return _directions[_archDirectionId]; }
             inline Vec3 & archDirection() { return _directions[_archDirectionId]; }

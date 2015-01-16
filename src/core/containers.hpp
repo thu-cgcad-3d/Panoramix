@@ -10,7 +10,6 @@ namespace panoramix {
     namespace core {
 
 
-
         template <class IteratorT>
         class PointCloudWrapper {
             using PointType = typename std::iterator_traits<IteratorT>::value_type;

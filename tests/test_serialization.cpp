@@ -1,5 +1,5 @@
 #include "../src/core/basic_types.hpp"
-#include "../src/core/graph.hpp"
+#include "../src/core/generic_topo.hpp"
 
 #include <random>
 

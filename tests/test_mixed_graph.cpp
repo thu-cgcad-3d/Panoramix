@@ -359,7 +359,7 @@ TEST(MixedGraph, NaiveHolisticOptimization) {
     for (auto & patch : naivePatches){
         //VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
         core::MGPatchDepthsOptimizer pdo(mg, patch, vanishingPoints, false,
-            core::MGPatchDepthsOptimizer::EigenSparseQRSimplified);
+            core::MGPatchDepthsOptimizer::MATLAB_CVX);
 
         {
             core::Clock clock("holistic optimization");

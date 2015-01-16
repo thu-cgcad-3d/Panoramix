@@ -129,7 +129,9 @@ namespace panoramix {
                         intersections.push_back(intersection);
                 }
             }
-            assert(!intersections.empty());
+            if (intersections.empty()){
+                return SemiOrthogonalSystem();
+            }
 
             // collect votes of intersection directions
             Imagef votePanel = Imagef::zeros(longitudeDivideNum, latitudeDivideNum);
