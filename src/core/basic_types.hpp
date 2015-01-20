@@ -335,6 +335,10 @@ namespace panoramix {
             T k = (a * a + b * b + c * c);
             return Plane<T, 3>(Point<T, 3>(a, b, c) / k, normalize(Vec<T, 3>(a, b, c)));
         }
+        template <class T>
+        inline Vec<T, 3> Plane3ToEquation(const Plane<T, 3> & p){
+            return p.normal / p.anchor.dot(p.normal);
+        }
 
 
 
@@ -349,6 +353,7 @@ namespace panoramix {
             inline Vec<T, N> direction() const { return second - first; }
             inline Line reversed() const { return Line(second, first); }
             inline InfiniteLine<T, N> infiniteLine() const { return InfiniteLine<T, N>{ first, second - first }; }
+            inline Line & operator *= (const T & factor) { first *= factor; second *= factor; return *this; }
             Point<T, N> first, second;
         };
         template <class T, int N>
@@ -466,6 +471,30 @@ namespace panoramix {
 
         PixelLoc PixelLocFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv);
         GeoCoord GeoCoordFromPixelLoc(const PixelLoc & pixel, int longidiv, int latidiv);
+
+
+        // sparse mat
+        template <class T>
+        using SparseMat = cv::SparseMat_<T>;
+        template <class T>
+        struct SparseMatElement {
+            using ValueType = T;
+            int row, col;
+            T value;
+            inline SparseMatElement() : row(-1), col(-1) {}
+            inline SparseMatElement(int r, int c, T v) : row(r), col(c), value(v) {}
+        };
+        template <class SparseMatElementIteratorT, class T = typename std::iterator_traits<SparseMatElementIteratorT>::value_type::ValueType>
+        inline SparseMat<T> MakeSparseMatFromElements(int row, int col, 
+            SparseMatElementIteratorT && begin, SparseMatElementIteratorT && end){
+            int dims[] = { row, col };
+            SparseMat<T> mat(2, dims);
+            while (begin != end){
+                mat.ref(begin->row, begin->col) = begin->value;
+                ++begin;
+            }
+            return mat;
+        }
 
 
 

@@ -26,6 +26,8 @@ namespace panoramix {
 
             static bool PutVariable(const char * name, CVInputArray a);
             static bool GetVariable(const char * name, CVOutputArray a, bool lastDimIsChannel = true);
+
+            static bool PutVariable(const char * name, const cv::SparseMat & mat);
             
             static inline bool PutVariable(const std::string & name, CVInputArray a){
                 return PutVariable(name.data(), a); 

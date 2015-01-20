@@ -848,20 +848,22 @@ namespace panoramix {
 
 
 
-
+            template <class SparseMatElementT>
             void FormulateConstraintsAsMatrices(const MixedGraph & mg, MGPatch & patch,
                 const std::vector<Vec3> & vanishingPoints,
                 std::unordered_map<MGUnaryHandle, int> & uh2varStartPosition,
                 std::unordered_map<MGBinaryHandle, int> & bh2consStartPosition,
                 std::unordered_map<MGBinaryHandle, std::vector<Vec3>> & appliedBinaryAnchors,
-                Eigen::SparseMatrix<double> & A,
-                Eigen::SparseMatrix<double> & W, Eigen::VectorXd & B,
+                int & varNum, int & consNum,
+                std::vector<SparseMatElementT> & Atriplets,
+                std::vector<SparseMatElementT> & Wtriplets,
+                Eigen::VectorXd & B,
                 bool addAnchor = true){
 
                 assert(BinaryHandlesAreValidInPatch(mg, patch));
                 assert(UnariesAreConnectedInPatch(mg, patch));
 
-                int varNum = 0;
+                varNum = 0;
                 bool hasFixedUnary = false;
                 for (auto & uhv : patch.uhs){
                     if (uhv.second.fixed){
@@ -872,7 +874,7 @@ namespace panoramix {
                     varNum += uhv.second.variables.size();
                 }
 
-                int consNum = 0;
+                consNum = 0;
 
                 if (addAnchor){
                     if (!hasFixedUnary){
@@ -898,12 +900,12 @@ namespace panoramix {
                     consNum += appliedBinaryAnchors[bhv.first].size();
                 }
 
-                A.resize(consNum, varNum);
-                W.resize(consNum, consNum);
+                //A.resize(consNum, varNum);
+                //W.resize(consNum, consNum);
                 B.resize(consNum);
 
-                A.reserve(consNum * 6);
-                W.reserve(consNum);
+                Atriplets.reserve(consNum * 6);
+                Wtriplets.reserve(consNum);
 
                 // write equations
                 int eid = 0;
@@ -917,10 +919,12 @@ namespace panoramix {
                         assert(uhVarCoeffsAtCenter.size() == uhVar.variables.size());
                         int uhVarStartPosition = uh2varStartPosition.at(uh);
                         for (int i = 0; i < uhVarCoeffsAtCenter.size(); i++){
-                            A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
+                            //A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
+                            Atriplets.emplace_back(eid, uhVarStartPosition + i, uhVarCoeffsAtCenter[i]);
                         }
                         B(eid) = 1.0;
-                        W.insert(eid, eid) = 1.0;
+                        //W.insert(eid, eid) = 1.0;
+                        Wtriplets.emplace_back(eid, eid, 1.0);
                         eid++;
                     }
                 }
@@ -953,7 +957,8 @@ namespace panoramix {
 
                         B(eid) = 0.0;
                         assert(mg.data(bh).weight >= 0.0);
-                        W.insert(eid, eid) = mg.data(bh).weight;
+                        //W.insert(eid, eid) = mg.data(bh).weight;
+                        Wtriplets.emplace_back(eid, eid, mg.data(bh).weight);
 
                         if (u1IsFixed){
                             double inverseDepthAtA = u1Var.inverseDepthAtDirection(a, u1, vanishingPoints);
@@ -963,7 +968,8 @@ namespace panoramix {
                             auto u1VarCoeffs = u1Var.variableCoeffsForInverseDepthAtDirection(a, u1, vanishingPoints);
                             assert(u1VarCoeffs.size() == u1VarNum);
                             for (int i = 0; i < u1VarCoeffs.size(); i++){
-                                A.insert(eid, u1VarStartPosition + i) = u1VarCoeffs[i]; // pos
+                                //A.insert(eid, u1VarStartPosition + i) = u1VarCoeffs[i]; // pos
+                                Atriplets.emplace_back(eid, u1VarStartPosition + i, u1VarCoeffs[i]);
                             }
                         }
 
@@ -975,7 +981,8 @@ namespace panoramix {
                             auto u2VarCoeffs = u2Var.variableCoeffsForInverseDepthAtDirection(a, u2, vanishingPoints);
                             assert(u2VarCoeffs.size() == u2VarNum);
                             for (int i = 0; i < u2VarCoeffs.size(); i++){
-                                A.insert(eid, u2VarStartPosition + i) = -u2VarCoeffs[i]; // neg
+                                //A.insert(eid, u2VarStartPosition + i) = -u2VarCoeffs[i]; // neg
+                                Atriplets.emplace_back(eid, u2VarStartPosition + i, - u2VarCoeffs[i]);
                             }
                         }
 
@@ -1948,8 +1955,6 @@ namespace panoramix {
             };
 
 
-
-
             struct MGPatchDepthsOptimizerInternalEigen : MGPatchDepthsOptimizerInternalBase {
                 Eigen::SparseMatrix<double> A, W;
                 Eigen::VectorXd B;
@@ -1963,8 +1968,14 @@ namespace panoramix {
                 virtual void initialize(const MixedGraph & mg, MGPatch & patch,
                     const std::vector<Vec3> & vanishingPoints, bool useWeights) override {
 
+                    int varNum, consNum;
+                    std::vector<Eigen::Triplet<double>> Atriplets, Wtriplets;
                     FormulateConstraintsAsMatrices(mg, patch, vanishingPoints, 
-                        uh2varStartPosition, bh2consStartPosition, appliedBinaryAnchors, A, W, B);
+                        uh2varStartPosition, bh2consStartPosition, appliedBinaryAnchors, varNum, consNum, Atriplets, Wtriplets, B);
+                    A.resize(consNum, varNum);
+                    W.resize(consNum, consNum);
+                    A.setFromTriplets(Atriplets.begin(), Atriplets.end());
+                    W.setFromTriplets(Wtriplets.begin(), Wtriplets.end());
 
                 }
 
@@ -2012,7 +2023,7 @@ namespace panoramix {
 
 
             struct MGPatchDepthsOptimizerInternalMATLABCVX : MGPatchDepthsOptimizerInternalBase {
-                Eigen::SparseMatrix<double> A, W;
+                SparseMat<double> A, W;
                 Eigen::VectorXd B;
                 bool useWeights;
 
@@ -2024,35 +2035,12 @@ namespace panoramix {
                 virtual void initialize(const MixedGraph & mg, MGPatch & patch,
                     const std::vector<Vec3> & vanishingPoints, bool useWeights) override {
 
+                    int varNum, consNum;
+                    std::vector<SparseMatElement<double>> Atriplets, Wtriplets;
                     FormulateConstraintsAsMatrices(mg, patch, vanishingPoints,
-                        uh2varStartPosition, bh2consStartPosition, appliedBinaryAnchors, A, W, B, true);
-
-                }
-
-                static inline void putSparseMatrixIntoMatlab(const std::string & name, const Eigen::SparseMatrix<double> & m) {
-                    assert(!m.isCompressed());
-                    std::vector<double> i, j;
-                    std::vector<double> s;
-                    i.reserve(m.nonZeros());
-                    j.reserve(m.nonZeros());
-                    s.reserve(m.nonZeros());                    
-                    for (int r = 0; r < m.rows(); r++){
-                        for (int c = 0; c < m.cols(); c++){
-                            if (m.coeff(r, c) != 0){
-                                i.push_back(r+1);
-                                j.push_back(c+1);
-                                s.push_back(m.coeff(r, c));
-                            }
-                        }
-                    }
-                    core::Matlab::PutVariable(name + "_i", i);
-                    core::Matlab::PutVariable(name + "_j", j);
-                    core::Matlab::PutVariable(name + "_s", s);
-                    core::Matlab::PutVariable(name + "_m", m.rows());
-                    core::Matlab::PutVariable(name + "_n", m.cols());
-                    core::Matlab::RunScript(name + "=" + 
-                        "sparse(" + name + "_i," + name + "_j," + name + "_s," + name + "_m," + name + "_n" + ");");
-                    core::Matlab::RunScript("clear " + name + "_i " + name + "_j " + name + "_s " + name + "_m " + name + "_n;");
+                        uh2varStartPosition, bh2consStartPosition, appliedBinaryAnchors, varNum, consNum, Atriplets, Wtriplets, B);
+                    A = MakeSparseMatFromElements(consNum, varNum, Atriplets.begin(), Atriplets.end());
+                    W = MakeSparseMatFromElements(consNum, consNum, Wtriplets.begin(), Wtriplets.end());
                 }
 
                 virtual bool optimize(const MixedGraph & mg, MGPatch & patch,
@@ -2062,8 +2050,8 @@ namespace panoramix {
 
                     core::Matlab::RunScript("clear");
                     
-                    putSparseMatrixIntoMatlab("A", A);
-                    putSparseMatrixIntoMatlab("W", W); 
+                    core::Matlab::PutVariable("A", A);
+                    core::Matlab::PutVariable("W", W);
                     std::vector<double> Bv(B.size());
                     std::copy_n(B.data(), B.size(), Bv.begin());
                     core::Matlab::PutVariable("B", Bv);
@@ -2076,7 +2064,7 @@ namespace panoramix {
                         << "cvx_setup;"
                         << "cvx_begin"
                         << "   variable X(n)"
-                        << "   variable slack(m)"
+                        //<< "   variable slack(m)"
                         << "   minimize(norm((A * X - B')))"
                         //<< "   subject to"
                         //<< "      ones(n, 1) <= X"

@@ -108,11 +108,26 @@ TEST(Matlab, GeneralConversion){
 
 }
 
+TEST(Matlab, SparseMatrix){
 
+#ifdef USE_MATLAB
+    EXPECT_TRUE(core::Matlab::IsBuilt());
+    ASSERT_TRUE(core::Matlab::IsUsable());
+    
+    core::SparseMat<double> mat(2, (std::initializer_list<int>{ 15, 10 }).begin());
+    mat.ref(0, 0) = -10.0;
+    mat.ref(1, 2) = 5.0;
+    mat.ref(3, 5) = 7.0;
+    mat.ref(6, 5) = 10.0;
+    mat.ref(6, 6) = 11.0;
+    mat.ref(7, 6) = 12.0;
+    mat.ref(14, 9) = 20.0;
 
-//int main(int argc, char * argv[], char * envp[])
-//{
-//	testing::InitGoogleTest(&argc, argv);
-//    return RUN_ALL_TESTS();
-//}
-//
+    ASSERT_TRUE(core::Matlab::PutVariable("mat", mat));
+    ASSERT_TRUE(core::Matlab::RunScript("mat"));
+
+#else
+    EXPECT_FALSE(core::Matlab::IsBuilt());
+#endif  
+
+}

@@ -164,7 +164,7 @@ namespace panoramix {
                 // find existed halfedge
                 if (mergeDuplicateEdge){
                     HalfHandle hh = findEdge(from, to);
-                    if (hh.isValid()){
+                    if (hh.valid()){
                         _halfs[hh.id].data = hd;
                         _halfs[_halfs[hh.id].topo.opposite.id].data = hdrev;
                         return hh;
@@ -220,7 +220,7 @@ namespace panoramix {
                 assert(vertices.size() >= 3);
                 HalfHandle hh = findEdge(vertices.back(), vertices.front());
                 auto verts = vertices;
-                if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip){
                     std::reverse(verts.begin(), verts.end());
                 }
 
@@ -240,7 +240,7 @@ namespace panoramix {
                 HalfHandle hh = findEdge(vertices.back(), vertices.front());
                 HandleArray<VertTopo> verts(vhBegin, vhEnd);
                 assert(verts.size() >= 3);
-                if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip){
                     std::reverse(verts.begin(), verts.end());
                 }
 
@@ -255,7 +255,7 @@ namespace panoramix {
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
             Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(VertHandle v1, VertHandle v2, VertHandle v3, bool autoflip, const FaceDataT & fd) {
                 HalfHandle hh = findEdge(v3, v1);
-                if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip){
                     std::swap(v1, v3);
                 }
                 return addFace({
@@ -269,7 +269,7 @@ namespace panoramix {
         typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle
             Mesh<VertDataT, HalfDataT, FaceDataT>::addFace(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4, bool autoflip, const FaceDataT & fd) {
                 HalfHandle hh = findEdge(v4, v1);
-                if (hh.isValid() && _halfs[hh.id].topo.face.isValid() && autoflip){
+                if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip){
                     std::swap(v1, v4);
                 }
                 return addFace({
@@ -295,7 +295,7 @@ namespace panoramix {
 
         template <class VertDataT, class HalfDataT, class FaceDataT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(FaceHandle f) {
-            if (f.isInvalid() || removed(f))
+            if (f.invalid() || removed(f))
                 return;
             _faces[f.id].exists = false;
             for (auto & hh : _faces[f.id].topo.halfedges){
@@ -305,7 +305,7 @@ namespace panoramix {
 
         template <class VertDataT, class HalfDataT, class FaceDataT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(HalfHandle h) {
-            if (h.isInvalid() || removed(h))
+            if (h.invalid() || removed(h))
                 return;
             HalfHandle hop = _halfs[h.id].topo.opposite;
             _halfs[h.id].exists = false;
@@ -322,7 +322,7 @@ namespace panoramix {
 
         template <class VertDataT, class HalfDataT, class FaceDataT>
         void Mesh<VertDataT, HalfDataT, FaceDataT>::remove(VertHandle v) {
-            if (v.isInvalid() || removed(v))
+            if (v.invalid() || removed(v))
                 return;
             _verts[v.id].exists = false;
             for (HalfHandle hh : _verts[v.id].topo.halfedges)
@@ -436,7 +436,7 @@ namespace panoramix {
             inline const TripletArray<ForestTopo, T> & internalNodes() const { return _nodes; }
             inline NodeHandle firstRoot() const {
                 for (auto & n : _nodes){
-                    if (n.topo.parent.isInvalid())
+                    if (n.topo.parent.invalid())
                         return n.topo.hd;
                 }
                 return NodeHandle();
@@ -447,7 +447,7 @@ namespace panoramix {
                 topo.hd = NodeHandle(_nodes.size());
                 topo.parent = parent;
                 _nodes.emplace_back(std::move(topo), data);
-                if (parent.isValid()){
+                if (parent.valid()){
                     _nodes[parent.id].topo.children.insert(topo.hd);
                 }
                 return topo.hd;
@@ -458,7 +458,7 @@ namespace panoramix {
                 topo.hd = NodeHandle(_nodes.size());
                 topo.parent = parent;
                 _nodes.emplace_back(std::move(topo), std::move(data));
-                if (parent.isValid()){
+                if (parent.valid()){
                     _nodes[parent.id].topo.children.insert(topo.hd);
                 }
                 return topo.hd;
@@ -466,11 +466,11 @@ namespace panoramix {
 
             inline NodeHandle addRoot(const T & data){ return add(NodeHandle(), data); }
             inline NodeHandle addRoot(T && data) { return add(NodeHandle(), std::move(data)); }
-            inline bool isRoot(NodeHandle nh) const { return _nodes[nh.id].topo.parent.isInvalid(); }
+            inline bool isRoot(NodeHandle nh) const { return _nodes[nh.id].topo.parent.invalid(); }
             inline bool isLeaf(NodeHandle nh) const {
                 auto & children = _nodes[nh.id].topo.children;
                 for (auto & ch : children){
-                    if (ch.isValid())
+                    if (ch.valid())
                         return false;
                 }
                 return true;
@@ -753,7 +753,7 @@ namespace panoramix {
             // remove
             template <int Level>
             void remove(HandleAtLevel<Level> h) {
-                if (h.isInvalid() || removed(h))
+                if (h.invalid() || removed(h))
                     return;
                 cleanLowers<Level>(h, std::integral_constant<bool, (Level > 0)>());
                 internalElements<Level>()[h.id].exists = false; // mark as deleted
@@ -771,7 +771,7 @@ namespace panoramix {
                 auto & clowerTable = internalElements<Level - 1>();
 
                 for (auto & lowh : c.topo.lowers) { // remove this h from all lowers' uppers set
-                    if (lowh.isInvalid() || removed(lowh))
+                    if (lowh.invalid() || removed(lowh))
                         continue;
                     auto & low = clowerTable[lowh.id];
                     low.topo.uppers.erase(h);

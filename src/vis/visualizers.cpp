@@ -457,7 +457,7 @@ namespace panoramix {
                         break;
                     }
                 }
-                if (notVisited.isInvalid())
+                if (notVisited.invalid())
                     break;
 
                 _tree.depthFirstSearch(notVisited, [this, &visited](VisualObjectHandle h) -> bool {
@@ -783,7 +783,7 @@ namespace panoramix {
                     VisualObjectHandle oh;
                     TriMesh::TriangleHandle t;
                     std::tie(oh, t) = scene.pickOnScreen(options, core::Point2(e->pos().x(), e->pos().y()));                    
-                    if (oh.isValid()){
+                    if (oh.valid()){
                         int entityID = scene.tree().data(oh)->entityIDOfMeshTriangle(t);
                         if (e->modifiers() & Qt::ControlModifier){
                             scene.switchSelect(std::make_pair(oh, entityID));

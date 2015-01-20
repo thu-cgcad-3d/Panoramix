@@ -124,7 +124,7 @@ namespace panoramix {
         // returns the begin iterators of merged groups
         template < 
             class IteratorT, class IterOutIteratorT, class DistanceT,
-            class DistanceFunctorT = DefaultDistanceFunctor <typename std::iterator_traits<IteratorT>::value_type>
+            class DistanceFunctorT = DefaultDistanceFunctor
         >
         IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::true_type,
         DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
@@ -163,7 +163,7 @@ namespace panoramix {
         // returns the iterators pointing to group leaders
         template < 
             class IteratorT, class IterOutIteratorT, class DistanceT,
-            class DistanceFunctorT = DefaultDistanceFunctor <typename std::iterator_traits<IteratorT>::value_type>
+            class DistanceFunctorT = DefaultDistanceFunctor
         >
         IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
         DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
@@ -198,8 +198,8 @@ namespace panoramix {
         // returns the iterators pointing to group leaders
         template <
             class IteratorT, class IterOutIteratorT, class DistanceT,
-            class DistanceFunctorT = DefaultDistanceFunctor<typename std::iterator_traits<IteratorT>::value_type>,
-            class BoundingBoxFunctorT = DefaultBoundingBoxFunctor<typename std::iterator_traits<IteratorT>::value_type>
+            class DistanceFunctorT = DefaultDistanceFunctor,
+            class BoundingBoxFunctorT = DefaultBoundingBoxFunctor
         >
         IterOutIteratorT MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
         DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT(),

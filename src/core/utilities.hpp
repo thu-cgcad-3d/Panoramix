@@ -12,8 +12,8 @@ namespace panoramix {
 
         // test value
         // can be used to check whether NaN exists by invoking: HasValue(a, std::isnan)
-        template <class T, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
-        inline bool HasValue(const T & v, const TesterT & tester) {
+        template <class TesterT>
+        inline bool HasValue(double v, const TesterT & tester) {
             return tester(v);
         }
 
@@ -221,10 +221,10 @@ namespace panoramix {
 
 
         // standard distance functor
-        template <class T>
         struct DefaultDistanceFunctor {
-            using DistanceType = decltype(Distance(std::declval<T>(), std::declval<T>()));
-            inline DistanceType operator()(const T & a, const T & b) const {
+            template <class T>
+            inline auto operator()(const T & a, const T & b) const 
+                -> decltype(Distance(std::declval<T>(), std::declval<T>())) {
                 return Distance(a, b);
             }
         };
@@ -386,10 +386,9 @@ namespace panoramix {
 
 
         // the default bounding box functor
-        template <class T>
         struct DefaultBoundingBoxFunctor {
-            using BoxType = decltype(BoundingBox(std::declval<T>()));
-            inline BoxType operator()(const T & t) const {
+            template <class T>
+            inline auto operator()(const T & t) const -> decltype(BoundingBox(std::declval<T>())){
                 return BoundingBox(t);
             }
         };

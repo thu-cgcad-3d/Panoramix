@@ -136,7 +136,7 @@ TEST(View, RegionLineConnections){
         vis::Visualizer2D vis(views[i].image);
 
         // visualize connections between regions and lines
-        std::unordered_map<int, vis::Visualizer2D, core::HandleHasher<core::AtLevel<0>>> vizs;
+        std::unordered_map<int, vis::Visualizer2D> vizs;
 
         //vis::Visualizer2D viz(vd.data.regionNet->image);
         int height = views[i].image.rows;

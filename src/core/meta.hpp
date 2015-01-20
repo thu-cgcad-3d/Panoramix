@@ -137,44 +137,97 @@ namespace panoramix {
         };
 
 
-        //template <class ...Ts>
-        //struct Tuple : public std::tuple<Ts...> {
-        //    using BaseType = std::tuple<Ts...>;
-        //    
-        //    template <class ... ArgTs>
-        //    inline Tuple(ArgTs ... args) : BaseType(std::forward<ArgTs>(args) ...) {}
-
-        //    inline Tuple & operator = (const BaseType & t) { return BaseType::operator=(t); }
-        //    inline Tuple & operator = (BaseType && t) { return BaseType::operator=(std::move(t)); }
-
-        //    inline operator BaseType() const { return BaseType(*this); }
-
-        //    // get element
-        //    template <size_t Idx>
-        //    inline typename std::tuple_element<Idx, BaseType>::type & get() { 
-        //        return std::get<Idx>((BaseType&)(*this)); 
-        //    }
-        //    template <size_t Idx>
-        //    inline const typename std::tuple_element<Idx, BaseType>::type & get() const {
-        //        return std::get<Idx>((const BaseType&)(*this));
-        //    }
-        //    template <class T, int Idx = TypeFirstLocationInTuple<T, BaseType>::value>
-        //    inline typename std::tuple_element<Idx, BaseType>::type & get() {
-        //        return std::get<Idx>((BaseType&)(*this));
-        //    }
-        //    template <class T, int Idx = TypeFirstLocationInTuple<T, BaseType>::value>
-        //    inline const typename std::tuple_element<Idx, BaseType>::type & get() const {
-        //        return std::get<Idx>((const BaseType&)(*this));
-        //    }
-
-        //    template <class Archiver>
-        //    inline void serialize(Archiver & ar){
-        //        ar((BaseType&)(*this));
-        //    }
-        //};
 
 
 
+
+        // determine whether T is a container
+        namespace {
+            template <class T>
+            struct IsContainerImp {
+                template <class TT>
+                static auto test(int) -> decltype(
+                    std::begin(std::declval<TT>()),
+                    std::end(std::declval<TT>()),
+                    std::true_type()
+                    );
+                template <class>
+                static std::false_type test(...);
+                static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
+            };
+        }
+
+        template <class T>
+        struct IsContainer : std::integral_constant<bool, IsContainerImp<T>::value> {};
+
+        // iterate over
+        namespace {
+            template <class FunT, class T>
+            inline void IterateOverImp(T && t, FunT && fun, std::false_type){
+                fun(std::forward<T>(t));
+            }
+            template <class FunT, class T>
+            inline void IterateOverImp(T && t, FunT && fun, std::true_type){
+                for (auto && e : t){
+                    IterateOver(e, fun);
+                }
+            }
+        }
+
+        template <class FunT, class T>
+        inline void IterateOver(T && t, FunT && fun){
+            IterateOverImp(std::forward<T>(t), std::forward<FunT>(fun), std::integral_constant<bool, IsContainer<T>::value>());
+        }
+
+        template <class FunT, class T1, class T2>
+        inline void IterateOver(std::pair<T1, T2> & p, FunT && fun){
+            IterateOver(p.first, fun);
+            IterateOver(p.second, fun);
+        }
+
+        template <class FunT, class T1, class T2>
+        inline void IterateOver(const std::pair<T1, T2> & p, FunT && fun){
+            IterateOver(p.first, fun);
+            IterateOver(p.second, fun);
+        }
+
+        template <class FunT, class T1, class T2>
+        inline void IterateOver(std::pair<T1, T2> && p, FunT && fun){
+            IterateOver(p.first, fun);
+            IterateOver(p.second, fun);
+        }
+
+        namespace {
+            template <class FunT, class ArgT>
+            inline bool EvalOneArg(FunT && fun, ArgT && arg) { 
+                IterateOver(std::forward<ArgT>(arg), std::forward<FunT>(fun)); return true; 
+            }
+            template <class FunT, class TupleT, int ... I>
+            inline void IterateOverTupleUsingSequence(TupleT && t, FunT && fun, Sequence<I...>){
+                bool dummy[] = { EvalOneArg(fun, std::get<I>(t))... };
+            }
+        }
+
+        template <class FunT, class ...Ts>
+        inline void IterateOver(std::tuple<Ts...> & t, FunT && fun){
+            IterateOverTupleUsingSequence(t, std::forward<FunT>(fun), SequenceGenerator<sizeof...(Ts)>::type());
+        }
+
+        template <class FunT, class ...Ts>
+        inline void IterateOver(const std::tuple<Ts...> & t, FunT && fun){
+            IterateOverTupleUsingSequence(t, std::forward<FunT>(fun), SequenceGenerator<sizeof...(Ts)>::type());
+        }
+
+        template <class FunT, class ...Ts>
+        inline void IterateOver(std::tuple<Ts...> && t, FunT && fun){
+            IterateOverTupleUsingSequence(std::move(t), std::forward<FunT>(fun), SequenceGenerator<sizeof...(Ts)>::type());
+        }
+
+
+
+
+
+        // invocation with tuple
         namespace {
             template <class FunctorT, class TupleT, int ...S>
             inline auto InvokeWithEachTupleArg(FunctorT fun, TupleT args, Sequence<S...>)
@@ -207,6 +260,8 @@ namespace panoramix {
             return InvokeWithEachTupleArg(fun, args,
                 typename SequenceGenerator<std::tuple_size<TupleT>::value>::type());
         }
+
+
 
     }
 }

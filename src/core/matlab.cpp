@@ -175,6 +175,7 @@ namespace panoramix {
             return result == 0;
         }
 
+
         bool Matlab::GetVariable(const char * name, CVOutputArray mat, bool lastDimIsChannel){
             if (!_Engine.eng())
                 return false;
@@ -249,6 +250,78 @@ namespace panoramix {
         }
 
 
+
+
+        bool Matlab::PutVariable(const char * name, const cv::SparseMat & mat){
+            if (!_Engine.eng())
+                return false;
+            
+            auto & im = mat;
+
+            // collect all dimensions of im
+            int channelNum = im.channels();
+            assert(channelNum == 1);
+
+            // create mxArray
+            int nzc = mat.nzcount();
+            mxArray* ma = mxCreateSparse(im.size(0), im.size(1), nzc, mxREAL);
+
+            if (!ma)
+                return false;
+
+            std::vector<std::tuple<int, int, double>> triplets; // col - row - val
+            triplets.reserve(nzc);
+            for (auto iter = mat.begin(); iter != mat.end(); ++iter){
+                int ii = iter.node()->idx[0];
+                int jj = iter.node()->idx[1];
+                uchar* data = iter.ptr;
+                double v = 0.0;
+                if (mat.type() == CV_32FC1){
+                    float value = 0.0f;
+                    std::memcpy(&value, data, sizeof(float));
+                    v = value;
+                }
+                else if (mat.type() == CV_64FC1){
+                    double value = 0.0f;
+                    std::memcpy(&value, data, sizeof(double));
+                    v = value;
+                }
+                else{
+                    assert(false && "only SparseMat<float> or SparseMat<double> is supported here!");
+                }
+                triplets.emplace_back(jj, ii, v); // col - row - val
+            }
+
+            // make triplets ordered in column indices to satisfy matlab interface
+            std::sort(triplets.begin(), triplets.end());
+
+            // fill in matlab data
+            auto sr = mxGetPr(ma);
+            //auto si = mxGetPi(ma);
+            auto irs = mxGetIr(ma);
+            auto jcs = mxGetJc(ma);
+            jcs = (mwIndex*)mxRealloc(jcs, (im.size(1) + 1) * sizeof(mwIndex));
+            std::fill(jcs, jcs + (im.size(1) + 1), 0);
+            mxSetJc(ma, jcs);
+
+            for (int i = 0; i < triplets.size(); i++){
+                sr[i] = std::get<2>(triplets[i]);
+                int ii = std::get<1>(triplets[i]) + 1;
+                int jj = std::get<0>(triplets[i]) + 1;
+                irs[i] = ii - 1;
+                jcs[jj] ++;
+            }
+
+            for (int j = 1; j < (im.size(1) + 1); j++){
+                jcs[j] += jcs[j - 1];
+            }
+
+            int result = engPutVariable(_Engine.eng(), name, ma);
+            mxDestroyArray(ma);
+            return result == 0;
+        }
+
+
 #else
         bool Matlab::IsBuilt() { return false; }
         std::string Matlab::DefaultCodeDir() { return ""; }
@@ -257,6 +330,7 @@ namespace panoramix {
         const char * Matlab::LastMessage() {return nullptr;}
         bool Matlab::PutVariable(const char * name, CVInputArray a) {return false;}
         bool Matlab::GetVariable(const char * name, CVOutputArray a, bool lastDimIsChannel) {return false;}
+        bool Matlab::PutVariable(const char * name, const cv::SparseMat & mat) { return false; }
 #endif
 
     }

@@ -25,29 +25,40 @@ namespace panoramix {
         */
         template <class Tag>
         struct Handle {
-            int64_t id;
-            inline Handle(int64_t id_ = -1) : id(id_){}
+            int id;
+            inline Handle(int id_ = -1) : id(id_){}
             inline bool operator == (Handle h) const { return id == h.id; }
             inline bool operator != (Handle h) const { return id != h.id; }
             inline void reset() { id = -1; }
-            inline bool isValid() const { return id >= 0; }
-            inline bool isInvalid() const { return id < 0; }
+            inline bool valid() const { return id >= 0; }
+            inline bool invalid() const { return id < 0; }
             template <class Archive> inline void serialize(Archive & ar) { ar(id); }
         };
+
+        template <class ValueT, int N = Dynamic>
+        struct SizedContainer {
+            using type = std::array<ValueT, N>;
+        };
+
+        template <class ValueT>
+        struct SizedContainer<ValueT, Dynamic> {
+            using type = std::vector<ValueT>;
+        };
+
+        template <class ValueT, int N = Dynamic>
+        using SizedContainerType = typename SizedContainer<ValueT, N>::type;
+
+
         template <class Tag>
         using HandleArray = std::vector<Handle<Tag>>;
         template <class Tag>
         using HandlePtrArray = std::vector<Handle<Tag>*>;
+        
         template <class Tag>
         inline bool operator < (const Handle<Tag> & a, const Handle<Tag> & b){
             return a.id < b.id;
         }
-        template <class Tag>
-        struct HandleHasher {
-            inline uint64_t operator()(Handle<Tag> a) const {
-                return static_cast<uint64_t>(a.id);
-            }
-        };
+
 
         // is handle ?
         template <class T>
@@ -98,19 +109,20 @@ namespace panoramix {
         struct Triplet {
             using TopoType = TopoT;
             using DataType = DataT;
+
             TopoT topo;
-            uint8_t exists;
+            bool exists;
             DataT data;
             inline Triplet(){}
-            inline Triplet(const TopoT & t, const DataT & d, uint8_t e = true)
+            inline Triplet(const TopoT & t, const DataT & d, bool e = true)
                 : topo(t), exists(e), data(d){}
-            inline Triplet(const TopoT & t, DataT && d, uint8_t e = true)
+            inline Triplet(const TopoT & t, DataT && d, bool e = true)
                 : topo(t), exists(e), data(std::forward<DataT>(d)) {}
             template <class Archive> inline void serialize(Archive & ar) { ar(topo, exists, data); }
         };
         template <class TopoT, class DataT>
         struct TripletExistsPred {
-            inline uint8_t operator()(const Triplet<TopoT, DataT> & t) const {
+            inline bool operator()(const Triplet<TopoT, DataT> & t) const {
                 return t.exists;
             }
         };
@@ -123,6 +135,22 @@ namespace panoramix {
 
         template <class TopoT, class DataT>
         using TripletArray = std::vector<Triplet<TopoT, DataT>>;
+        template <class TripletArrayT>
+        struct ConditionalContainerTypeFromTripletArrayType {};
+        template <class TopoT, class DataT>
+        struct ConditionalContainerTypeFromTripletArrayType<TripletArray<TopoT, DataT>> {
+            using type = ConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>>;
+            using const_type = ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>>;
+        };
+
+        template <class TopoT, class DataT>
+        inline ConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>> MakeConditionalContainer(TripletArray<TopoT, DataT> & arr) {
+            return ConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>>(&arr, TripletExistsPred<TopoT, DataT>());
+        }
+        template <class TopoT, class DataT>
+        inline ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>> MakeConditionalContainer(const TripletArray<TopoT, DataT> & arr) {
+            return ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>>(&arr, TripletExistsPred<TopoT, DataT>());
+        }
 
 
         template <class TopoT, class DataT>
@@ -139,15 +167,10 @@ namespace panoramix {
                 // ComponentTableT : std::vector<Triplet<TopoT, DataT>>
                 // UpdateHandleTableT: std::vector<Handle<TopoT>>
                 newlocations.resize(v.size());
-                int64_t index = 0;
+                int index = 0;
                 for (size_t i = 0; i < v.size(); i++){
                     newlocations[i] = { v[i].exists == false ? -1 : (index++) };
                 }
-                //for (int i = int(v.size() - 1); i >= 0; --i){
-                //    if (!v[i].exists){
-                //        v.erase(v.begin() + i);
-                //    }
-                //}
                 v.erase(std::remove_if(v.begin(), v.end(), [](const typename ComponentTableT::value_type & t){
                     return !t.exists;
                 }), v.end());
@@ -156,14 +179,14 @@ namespace panoramix {
             template <class UpdateHandleTableT, class TopoT>
             inline void UpdateOldHandle(const UpdateHandleTableT & newlocationTable, Handle<TopoT> & h) {
                 // UpdateHandleTableT: std::vector<Handle<TopoT>>
-                if (h.isValid())
+                if (h.valid())
                     h = newlocationTable[h.id];
             }
             template <class UpdateHandleTableT, class ContainerT>
             inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, ContainerT & hs) {
                 // UpdateHandleTableT: std::vector<Handle<TopoT>>
                 for (auto & h : hs){
-                    if (h.isValid())
+                    if (h.valid())
                         h = newlocationTable[h.id];
                 }
             }

@@ -49,7 +49,7 @@ namespace panoramix {
 
         
         // RTree Wrapper
-        template <class T, class BoundingBoxFunctorT = DefaultBoundingBoxFunctor<T>>
+        template <class T, class BoundingBoxFunctorT = DefaultBoundingBoxFunctor>
         class RTreeWrapper {
         public:
             using BoxType = decltype(std::declval<BoundingBoxFunctorT>()(std::declval<T>()));

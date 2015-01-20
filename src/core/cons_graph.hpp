@@ -1,128 +1,11 @@
 #ifndef PANORAMIX_CORE_CONS_GRAPH_HPP
 #define PANORAMIX_CORE_CONS_GRAPH_HPP
  
+#include <numeric>
 #include "handle.hpp" 
 
 namespace panoramix {
     namespace core {
-
-
-        // used to register all variables into one vector or 
-        // or register all constraints into one sparse matrix (represented as a vector of nonzero triplets)
-        template <class IdentityT, class ValueT>
-        class Registration {
-        public:
-            inline Registration() {}
-            template <class IdentityIteratorT, class GetValuesNumFunT>
-            Registration(IdentityIteratorT begin, IdentityIteratorT end,
-                GetValuesNumFunT getValuesNum, const ValueT & defaultValue = ValueT()){
-                size_t sz = 0;
-                size_t identityNum = 0;
-                for (auto i = begin; i != end; ++i){
-                    sz += getValuesNum(*i);
-                    identityNum++;
-                }
-                _values.reserve(sz);
-                _valueIdentities.reserve(sz);
-                _startPositions.reserve(identityNum);
-                while (begin != end){
-                    auto & identity = *begin;
-                    _startPositions[identity] = _values.size();
-                    _values.insert(_values.end(), getValuesNum(*i), defaultValue);
-                    _valueIdentities.insert(_valueIdentities.end(), getValuesNum(*i), identity);
-                    ++begin;
-                }
-            }
-            template <class IdentityIteratorT, class GetValuesNumFunT, class GetValuesFunT>
-            Registration(IdentityIteratorT begin, IdentityIteratorT end,
-                GetValuesNumFunT getValuesNum, GetValuesFunT getValues){
-                size_t sz = 0;
-                size_t identityNum = 0;
-                for (auto i = begin; i != end; ++i){
-                    sz += getValuesNum(*i);
-                    identityNum++;
-                }
-                _values.reserve(sz);
-                _valueIdentities.reserve(sz);
-                _startPositions.reserve(identityNum);
-                while (begin != end){
-                    auto & identity = *begin;
-                    _startPositions[identity] = _values.size();
-                    for (auto && v : getValues(identity)){
-                        _values.push_back(v);
-                        _valueIdentities.push_back(identity);
-                    }
-                    ++begin;
-                }
-            }
-
-        public:
-            size_t size() const { return _values.size(); }
-
-            typename std::vector<ValueT>::iterator begin() { return _values.begin(); }
-            typename std::vector<ValueT>::iterator end() { return _values.end(); }
-
-            typename std::vector<ValueT>::const_iterator begin() const { return _values.begin(); }
-            typename std::vector<ValueT>::const_iterator end() const { return _values.end(); }
-
-            typename std::vector<ValueT>::const_iterator cbegin() const { return _values.cbegin(); }
-            typename std::vector<ValueT>::const_iterator cend() const { return _values.cend(); }
-
-            const ValueT & operator[](size_t index) const { return _values[index]; }
-            ValueT & operator[](size_t index) { return _values[index]; }
-
-            const std::vector<ValueT> & values() const { return _values; }
-
-            const IdentityT & identity(size_t index) const { return _valueIdentities.at(index); }
-            const size_t startPositionOfIdentity(const IdentityT & id) const { return _startPositions.at(id); }
-            size_t orderInIdentity(size_t index) const { return index - startPositionOfIdentity(identity(index)); }
-
-            const ValueT & operator()(const IdentityT & id, size_t nthValue) const {
-                return _values[startPositionOfIdentity(id) + nthValue];
-            }
-            ValueT & operator()(const IdentityT & id, size_t nthValue) {
-                return _values[startPositionOfIdentity(id) + nthValue];
-            }
-
-            bool empty() const { return _values.empty(); }
-            void clear() {
-                _values.clear();
-                _valueIdentities.clear();
-                _startPositions.clear();
-            }
-
-            Registration & concat(const Registration & v) {
-                size_t oldSize = _values.size();
-                _values.insert(_values.end(), v._values.begin(), v._values.end());
-                _valueIdentities.insert(_valueIdentities.end(), v._valueIdentities.begin(), v._valueIdentities.end());
-                for (auto && idPos : v._startPositions){
-                    assert(!Contains(_startPositions, idPos.first));
-                    _startPositions[idPos.first] = idPos.second + oldSize;
-                }
-                return *this;
-            }
-
-        public:
-            template <class VectorT>
-            void convertTo(VectorT & v) const {
-                v.resize(_values.size());
-                for (size_t i = 0; i < _values.size(); i++){
-                    v(i) = _values[i];
-                }
-            }
-
-        private:
-            std::vector<ValueT> _values;
-            std::vector<IdentityT> _valueIdentities;
-            std::unordered_map<IdentityT, size_t> _startPositions;
-        };
-
-
-
-
-
-
-
 
 
         // configuration for constraint
@@ -188,19 +71,31 @@ namespace panoramix {
                 using type = std::vector<HandleOfType<ComponentTagT, DataT>>;
             };
 
+            template <class T>
+            struct TempContainer {
+                template <class ... Ts>
+                inline TempContainer(Ts && ... elements) : data({elements ...}) {}
+                template <int N>
+                inline operator std::array<T, N>() const {
+                    std::array<T, N> arr;
+                    std::copy(data.begin(), data.end(), arr.begin());
+                    return arr;
+                }
+                template <class AllocT>
+                inline operator std::vector<T, AllocT> () {
+                    return std::move(data);
+                }
+                inline typename std::vector<T>::const_iterator begin() const { return data.begin(); }
+                inline typename std::vector<T>::const_iterator end() const { return data.end(); }
+                std::vector<T> data;
+            };
+
         }
 
-
-        template <int N, class HandleT, class ... HandleTs, class = std::enable_if_t<N != Dynamic>>
-        inline std::array<HandleT, N> Depends(HandleT h, HandleTs ... hs) {
-            return { h, hs ... };
+        template <class HandleT, class ... HandleTs>
+        inline TempContainer<HandleT> Depends(HandleT h, HandleTs ... hs) {
+            return TempContainer<HandleT>(h, hs ... );
         }
-
-        template <int N, class HandleT, class ... HandleTs, class = std::enable_if_t<N == Dynamic>, class = void>
-        inline std::vector<HandleT> Depends(HandleT h, HandleTs ... hs) {
-            return { h, hs ... };
-        }
-
 
         // make a layer content tuple with 2 levels
         template <class ComponentTagT, class ConstraintTagT, class ComponentDataT, class ... ConstraintConfigTs>
@@ -236,11 +131,14 @@ namespace panoramix {
             std::tuple<typename ComponentHandlesArrayFromComponentOccupation<ComponentTagT, ComponentOccupationTs>::type ...> allComponents;
 
             HandleOfType<ConstraintTagT, ConstraintDataT> hd;
-            explicit inline ConstraintTopo() : hd(-1){}
+            explicit inline ConstraintTopo() : hd(-1){}            
             explicit inline ConstraintTopo(int id, 
-                typename ComponentHandlesArrayFromComponentOccupation<ComponentTagT, ComponentOccupationTs>::type && ... handleArrays)
+                const typename ComponentHandlesArrayFromComponentOccupation<ComponentTagT, ComponentOccupationTs>::type & ... handleArrays)
                 : hd(id), 
-                allComponents(std::forward<typename ComponentHandlesArrayFromComponentOccupation<ComponentTagT, ComponentOccupationTs>::type>(handleArrays) ...) {}
+                allComponents(std::forward_as_tuple(handleArrays...)) {}
+           /* template <class ... ComponentHandleArrayTs>
+            explicit inline ConstraintTopo(int id, ComponentHandleArrayTs && ... handleArrays) 
+                : hd(id), allComponents(std::forward_as_tuple(handleArrays...)) {}*/
 
             template <class ComponentDataT, int Idx = TypeFirstLocationInTuple<ComponentDataT, ComponentDataTuple>::value>
             inline typename std::tuple_element<Idx, ComponentHandlesArrayTuple>::type & components() {
@@ -326,6 +224,7 @@ namespace panoramix {
                 typename ConstraintTripetArrayTupleFromConstraintConfigTuple<ComponentTag, ConstraintTag,
                 ConstraintConfigTupleT>::type;
 
+        public:
             using ComponentDataTupleType = ComponentDataTupleT;
             using ConstraintDataTupleType = typename ConstraintDataTupleFromConstraintConfigTuple<ConstraintConfigTupleT>::type;
 
@@ -359,9 +258,72 @@ namespace panoramix {
                 correspondingConstraints.emplace_back(std::move(topo), std::forward<DataT>(data), true);
                 
                 // update constraint handles in each component
-                bool dummy[] = { updateConstraintHandleInComponent(topo.hd, comps) ... };
+                bool dummy[] = { insertConstraintHandleInComponent(topo.hd, comps) ... };
                 return topo.hd;
             }
+
+            // removed ?
+            template <class DataT>
+            inline bool removed(ComponentHandle<DataT> h) const {
+                enum { _idx = TypeFirstLocationInTuple<DataT, ComponentDataTupleType>::value };
+                static_assert(_idx >= 0, "DataT is not supported here!");
+                using _TripletType = typename std::tuple_element<_idx, ComponentsTripletArrayTuple>::type::value_type;
+                using _TopoType = typename _TripletType::TopoType;
+                auto & correspondingComponents = std::get<_idx>(_components);
+                if (h.invalid())
+                    return true;
+                return !correspondingComponents.at(h.id).exists;
+            }
+
+            template <class DataT>
+            inline bool removed(ConstraintHandle<DataT> h) const {
+                enum { _idx = TypeFirstLocationInTuple<DataT, ConstraintDataTupleType>::value };
+                static_assert(_idx >= 0, "DataT is not supported here!");
+                using _TripletType = typename std::tuple_element<_idx, ConstraintsTripletArrayTuple>::type::value_type;
+                using _TopoType = typename _TripletType::TopoType;
+                auto & correspondingConstraints = std::get<_idx>(_constraints);
+                if (h.invalid())
+                    return true;
+                return !correspondingConstraints.at(h.id).exists;
+            }
+
+
+            template <class DataT>
+            inline void remove(ConstraintHandle<DataT> h){
+                enum { _idx = TypeFirstLocationInTuple<DataT, ConstraintDataTupleType>::value };
+                static_assert(_idx >= 0, "DataT is not supported here!");
+                using _TripletType = typename std::tuple_element<_idx, ConstraintsTripletArrayTuple>::type::value_type;
+                using _TopoType = typename _TripletType::TopoType;
+
+                if (removed(h))
+                    return;
+
+                auto & correspondingConstraints = std::get<_idx>(_constraints);
+                // remove constraint handles in each component
+                removeConstraintHandleInRelatedComponentsUsingSequence(h,
+                    typename SequenceGenerator<std::tuple_size<typename _TopoType::ComponentDataTuple>::value>::type());
+
+                correspondingConstraints[h.id].exists = false;
+            }
+
+            template <class DataT>
+            void remove(ComponentHandle<DataT> h){
+                enum { _idx = TypeFirstLocationInTuple<DataT, ComponentDataTupleType>::value };
+                static_assert(_idx >= 0, "DataT is not supported here!");
+                using _TripletType = typename std::tuple_element<_idx, ComponentsTripletArrayTuple>::type::value_type;
+                using _TopoType = typename _TripletType::TopoType;
+
+                if (removed(h))
+                    return;
+
+                auto & correspondingComponents = std::get<_idx>(_components);
+                correspondingComponents[h.id].exists = false;
+
+                // remove related constraints
+                removeHandlesInContainerTupleUsingSequence(topo(h).allConstraints,
+                    typename SequenceGenerator<std::tuple_size<typename _TopoType::ConstraintDataTuple>::value>::type());
+            }
+
 
             // component info
             template <class DataT>
@@ -425,18 +387,104 @@ namespace panoramix {
                 return std::get<_idx>(_constraints)[hd.id].topo;
             }
 
+            // all info
+            
+            template <class DataT>
+            inline typename ConditionalContainerTypeFromTripletArrayType<typename std::tuple_element<TypeFirstLocationInTuple<DataT, 
+                ComponentDataTupleType>::value, ComponentsTripletArrayTuple>::type>::const_type components() const{
+                return MakeConditionalContainer(std::get<TypeFirstLocationInTuple<DataT, ComponentDataTupleType>::value>(_components));
+            }
+
+            template <class DataT>
+            inline typename ConditionalContainerTypeFromTripletArrayType<typename std::tuple_element<TypeFirstLocationInTuple<DataT, 
+                ComponentDataTupleType>::value, ComponentsTripletArrayTuple>::type>::type components() {
+                return MakeConditionalContainer(std::get<TypeFirstLocationInTuple<DataT, ComponentDataTupleType>::value>(_components));
+            }
+
+            template <class DataT>
+            inline const typename std::tuple_element<TypeFirstLocationInTuple<DataT, ComponentDataTupleType>::value,
+                ComponentsTripletArrayTuple>::type & internalComponents() const {
+                return std::get<TypeFirstLocationInTuple<DataT, ComponentDataTupleType>::value>(_components);
+            }
+
+            template <class DataT>
+            inline typename std::tuple_element<TypeFirstLocationInTuple<DataT, ComponentDataTupleType>::value,
+                ComponentsTripletArrayTuple>::type & internalComponents() {
+                return std::get<TypeFirstLocationInTuple<DataT, ComponentDataTupleType>::value>(_components);
+            }
+
+            inline const ComponentsTripletArrayTuple & allComponents() const { return _components; }
+            inline ComponentsTripletArrayTuple & allComponents() { return _components; }
+
+
+            template <class DataT>
+            inline typename ConditionalContainerTypeFromTripletArrayType<typename std::tuple_element<TypeFirstLocationInTuple<DataT, 
+                ConstraintDataTupleType>::value, ConstraintsTripletArrayTuple>::type>::const_type constraints() const{
+                return MakeConditionalContainer(std::get<TypeFirstLocationInTuple<DataT, ConstraintDataTupleType>::value>(_constraints));
+            }
+
+            template <class DataT>
+            inline typename ConditionalContainerTypeFromTripletArrayType<typename std::tuple_element<TypeFirstLocationInTuple<DataT,
+                ConstraintDataTupleType>::value, ConstraintsTripletArrayTuple>::type>::type constraints() {
+                return MakeConditionalContainer(std::get<TypeFirstLocationInTuple<DataT, ConstraintDataTupleType>::value>(_constraints));
+            }
+
+            template <class DataT>
+            inline const typename std::tuple_element<TypeFirstLocationInTuple<DataT, ConstraintDataTupleType>::value, 
+                ConstraintsTripletArrayTuple>::type & internalConstraints() const {
+                return std::get<TypeFirstLocationInTuple<DataT, ConstraintDataTupleType>::value>(_constraints);
+            }
+
+            template <class DataT>
+            inline typename std::tuple_element<TypeFirstLocationInTuple<DataT, ConstraintDataTupleType>::value, 
+                ConstraintsTripletArrayTuple>::type & internalConstraints() {
+                return std::get<TypeFirstLocationInTuple<DataT, ConstraintDataTupleType>::value>(_constraints);
+            }
+
+            inline const ConstraintsTripletArrayTuple & allConstraints() const { return _constraints; }
+            inline ConstraintsTripletArrayTuple & allConstraints() { return _constraints; }
+
 
             template <class Archiver> inline void serialize(Archiver & ar) { ar(_components, _constraints); }
         
         private:
             template <class DataT, class ComponentHandleArrayT>
-            inline bool updateConstraintHandleInComponent(HandleOfType<ConstraintTag, DataT> consH, ComponentHandleArrayT && compArr){
+            inline bool insertConstraintHandleInComponent(ConstraintHandle<DataT> consH, ComponentHandleArrayT && compArr){
                 for (auto && compH : compArr){
                     topo(compH).constraints<DataT>().insert(consH);
                 }
                 return true;
             }
-        
+            
+            template <class DataT, class ComponentHandleArrayT>
+            inline bool removeConstraintHandleInComponent(ConstraintHandle<DataT> consH, ComponentHandleArrayT & compArr){
+                for (auto && compH : compArr){
+                    if (compH.invalid() || removed(compH))
+                        continue;
+                    topo(compH).constraints<DataT>().erase(consH);
+                }
+                return true;
+            }
+
+            template <class DataT, int ... Is>
+            inline bool removeConstraintHandleInRelatedComponentsUsingSequence(ConstraintHandle<DataT> consH, Sequence<Is...>){
+                bool d[] = { removeConstraintHandleInComponent(consH, std::get<Is>(topo(consH).allComponents))... };
+                return true;
+            }
+
+            template <class ContainerT>
+            inline bool removeHandlesInContainer(ContainerT && hs){
+                for (auto && h : hs){
+                    remove(h);
+                }
+                return true;
+            }
+
+            template <class ContainerTupleT, int ... Is>
+            inline bool removeHandlesInContainerTupleUsingSequence(ContainerTupleT & hs, Sequence<Is...>){
+                bool d[] = { removeHandlesInContainer(std::get<Is>(hs))... };
+                return true;
+            }
         
         private:
             ComponentsTripletArrayTuple _components;
