@@ -24,13 +24,22 @@ namespace panoramix {
             return 1.0 / sqrt(sqSum);
         }
 
-        Plane3 MGUnaryVariable::interpretAsPlane() const {
-            return Plane3FromEquation(variables[0], variables[1], variables[2]);
+        Plane3 MGUnaryVariable::interpretAsPlane(const MGUnary & region, const std::vector<Vec3> & vps) const {
+            assert(region.type == MGUnary::Region);
+            if (region.orientationClaz >= 0){
+                assert(variables.size() == 1);
+                return Plane3(region.normalizedCenter / variables[0], vps[region.orientationClaz]);
+            }
+            else{
+                assert(variables.size() == 3);
+                return Plane3FromEquation(variables[0], variables[1], variables[2]);
+            }
         }
 
         Line3 MGUnaryVariable::interpretAsLine(const MGUnary & line, const std::vector<Vec3> & vps) const {
-            if (line.lineClaz >= 0){
-                InfiniteLine3 infLine(line.normalizedCenter / variables[0], vps[line.lineClaz]);
+            assert(region.type == MGUnary::Line);
+            if (line.orientationClaz >= 0){
+                InfiniteLine3 infLine(line.normalizedCenter / variables[0], vps[line.orientationClaz]);
                 return Line3(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.front()), infLine).second.second,
                     DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.back()), infLine).second.second);
             }
@@ -48,74 +57,98 @@ namespace panoramix {
         std::vector<double> MGUnaryVariable::variableCoeffsForInverseDepthAtDirection(const Vec3 & direction,
             const MGUnary & unary, const std::vector<Vec3> & vps) const{
             if (unary.type == MGUnary::Region){
-                assert(variables.size() == 3);
-                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
-                // -> 1.0/depth = ax + by + cz
-                return std::vector<double>{direction[0], direction[1], direction[2]};
+                if (unary.orientationClaz >= 0){
+                    assert(variables.size() == 1);
+                    Plane3 plane(unary.normalizedCenter, vps[unary.orientationClaz]);
+                    // variable is 1.0/centerDepth
+                    // corresponding coeff is 1.0/depthRatio
+                    // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                    double depthRatio = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
+                    return std::vector<double>{1.0 / depthRatio};
+                }
+                else {
+                    assert(variables.size() == 3);
+                    // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                    // -> 1.0/depth = ax + by + cz
+                    return std::vector<double>{direction[0], direction[1], direction[2]};
+                }
             }
-            else /*if (unary.type == MGUnary::Line)*/
-            if (unary.lineClaz >= 0){
-                assert(variables.size() == 1);
-                const auto & line = unary;
-                InfiniteLine3 infLine(line.normalizedCenter, vps[line.lineClaz]);
-                // variable is 1.0/centerDepth
-                // corresponding coeff is 1.0/depthRatio
-                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
-                double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
-                return std::vector<double>{1.0 / depthRatio};
-            }
-            else /*if(unary.lineClaz == -1)*/{
-                assert(variables.size() == 2);
-                const auto & line = unary;
-                double theta = AngleBetweenDirections(line.normalizedCorners.front(), line.normalizedCorners.back());
-                double phi = AngleBetweenDirections(line.normalizedCorners.front(), direction);
-                /*           | sin(theta) | | p | | q |
-                    len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
-                       | p sin(phi) - q sin(phi - theta) |
-                */
-                // variables[0] -> 1/p
-                // variables[1] -> 1/q
-                double coeffFor1_p = -sin(phi - theta) / sin(theta);
-                double coeffFor1_q = sin(phi) / sin(theta);
-                assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
-                return std::vector<double>{coeffFor1_p, coeffFor1_q};
+            else /*if (unary.type == MGUnary::Line)*/ {
+                if (unary.orientationClaz >= 0){
+                    assert(variables.size() == 1);
+                    const auto & line = unary;
+                    InfiniteLine3 infLine(line.normalizedCenter, vps[line.orientationClaz]);
+                    // variable is 1.0/centerDepth
+                    // corresponding coeff is 1.0/depthRatio
+                    // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                    double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
+                    return std::vector<double>{1.0 / depthRatio};
+                }
+                else /*if(unary.lineClaz == -1)*/{
+                    assert(variables.size() == 2);
+                    const auto & line = unary;
+                    double theta = AngleBetweenDirections(line.normalizedCorners.front(), line.normalizedCorners.back());
+                    double phi = AngleBetweenDirections(line.normalizedCorners.front(), direction);
+                    /*           | sin(theta) | | p | | q |
+                        len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                        | p sin(phi) - q sin(phi - theta) |
+                        */
+                    // variables[0] -> 1/p
+                    // variables[1] -> 1/q
+                    double coeffFor1_p = -sin(phi - theta) / sin(theta);
+                    double coeffFor1_q = sin(phi) / sin(theta);
+                    assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
+                    return std::vector<double>{coeffFor1_p, coeffFor1_q};
+                }
             }
         }
 
         double MGUnaryVariable::inverseDepthAtDirection(const Vec3 & direction,
             const MGUnary & unary, const std::vector<Vec3> & vps) const {
             if (unary.type == MGUnary::Region){
-                assert(variables.size() == 3);
-                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
-                // -> 1.0/depth = ax + by + cz
-                return variables[0] * direction[0] + variables[1] * direction[1] + variables[2] * direction[2];
+                if (unary.orientationClaz >= 0){
+                    assert(variables.size() == 1);
+                    Plane3 plane(unary.normalizedCenter, vps[unary.orientationClaz]);
+                    // variable is 1.0/centerDepth
+                    // corresponding coeff is 1.0/depthRatio
+                    // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                    double depthRatio = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
+                    return variables[0] / depthRatio;
+                }
+                else {
+                    assert(variables.size() == 3);
+                    // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                    // -> 1.0/depth = ax + by + cz
+                    return variables[0] * direction[0] + variables[1] * direction[1] + variables[2] * direction[2];
+                }
             }
-            else /*if (unary.type == MGUnary::Line)*/
-            if(unary.lineClaz >= 0){
-                assert(variables.size() == 1);
-                const auto & line = unary;
-                InfiniteLine3 infLine(line.normalizedCenter, vps[line.lineClaz]);
-                // variable is 1.0/centerDepth
-                // corresponding coeff is 1.0/depthRatio
-                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
-                double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
-                return variables[0] / depthRatio; 
-            }
-            else /*if(unary.lineClaz == -1)*/ {
-                assert(variables.size() == 2);
-                const auto & line = unary;
-                double theta = AngleBetweenDirections(line.normalizedCorners.front(), line.normalizedCorners.back());
-                double phi = AngleBetweenDirections(line.normalizedCorners.front(), direction);
-                /*           | sin(theta) | | p | | q |
-                len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
-                | p sin(phi) - q sin(phi - theta) |
-                */
-                // variables[0] -> 1/p
-                // variables[1] -> 1/q
-                double coeffFor1_p = -sin(phi - theta) / sin(theta);
-                double coeffFor1_q = sin(phi) / sin(theta);
-                assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
-                return variables[0] * coeffFor1_p + variables[1] * coeffFor1_q;
+            else /*if (unary.type == MGUnary::Line)*/{
+                if (unary.orientationClaz >= 0){
+                    assert(variables.size() == 1);
+                    const auto & line = unary;
+                    InfiniteLine3 infLine(line.normalizedCenter, vps[line.orientationClaz]);
+                    // variable is 1.0/centerDepth
+                    // corresponding coeff is 1.0/depthRatio
+                    // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                    double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
+                    return variables[0] / depthRatio;
+                }
+                else /*if(unary.lineClaz == -1)*/ {
+                    assert(variables.size() == 2);
+                    const auto & line = unary;
+                    double theta = AngleBetweenDirections(line.normalizedCorners.front(), line.normalizedCorners.back());
+                    double phi = AngleBetweenDirections(line.normalizedCorners.front(), direction);
+                    /*           | sin(theta) | | p | | q |
+                    len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                    | p sin(phi) - q sin(phi - theta) |
+                    */
+                    // variables[0] -> 1/p
+                    // variables[1] -> 1/q
+                    double coeffFor1_p = -sin(phi - theta) / sin(theta);
+                    double coeffFor1_q = sin(phi) / sin(theta);
+                    assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
+                    return variables[0] * coeffFor1_p + variables[1] * coeffFor1_q;
+                }
             }
         }
 
@@ -123,6 +156,49 @@ namespace panoramix {
             return 1.0 / inverseDepthAtDirection(unary.normalizedCenter, unary, vps);
         }
 
+        int MGUnaryVariable::fitClosestOrientation(const MGUnary & unary, const std::vector<Vec3> & vps, double angleThreshold){
+            if (unary.type == MGUnary::Region){
+                if (unary.orientationClaz >= 0){
+                    assert(variables.size() == 1);
+                    return unary.orientationClaz;
+                }
+                else{
+                    assert(variables.size() == 3);
+                    Vec3 normal(variables[0], variables[1], variables[2]);
+                    int claz = -1;
+                    double minAngle = angleThreshold;
+                    for (int i = 0; i < vps.size(); i++){
+                        double angle = AngleBetweenUndirectedVectors(normal, vps[i]);
+                        if (angle < minAngle){
+                            claz = i;
+                            minAngle = angle;
+                        }
+                    }
+                    return claz;
+                }
+            }
+            else /*if (unary.type == MGUnary::Line)*/{
+                if (unary.orientationClaz >= 0){
+                    assert(variables.size() == 1);
+                    return unary.orientationClaz;
+                }
+                else /*if(unary.lineClaz == -1)*/ {
+                    assert(variables.size() == 2);
+                    Line3 line(unary.normalizedCorners.front() / variables[0], unary.normalizedCorners.back() / variables[1]);
+                    Vec3 direction = line.direction();
+                    int claz = -1;
+                    double minAngle = angleThreshold;
+                    for (int i = 0; i < vps.size(); i++){
+                        double angle = AngleBetweenUndirectedVectors(direction, vps[i]);
+                        if (angle < minAngle){
+                            claz = i;
+                            minAngle = angle;
+                        }
+                    }
+                    return claz;
+                }
+            }
+        }
 
         MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views,
             const std::vector<RegionsGraph> & regionsGraphs, const std::vector<LinesGraph> & linesGraphs,

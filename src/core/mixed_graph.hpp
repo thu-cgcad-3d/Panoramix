@@ -18,12 +18,14 @@ namespace panoramix {
             std::vector<double> variables; // (a, b, c) for region plane ax+by+c=1, 1/centerDepth for line
             
             double rawDepth() const;
-            Plane3 interpretAsPlane() const;
+            Plane3 interpretAsPlane(const MGUnary & unary, const std::vector<Vec3> & vps) const;
             Line3 interpretAsLine(const MGUnary & unary, const std::vector<Vec3> & vps) const;
             std::vector<double> variableCoeffsForInverseDepthAtDirection(const Vec3 & direction,
                 const MGUnary & unary, const std::vector<Vec3> & vps) const;
-            double inverseDepthAtDirection(const Vec3 & direction, const MGUnary & unary, const std::vector<Vec3> & vps) const;
+            double inverseDepthAtDirection(const Vec3 & direction, const MGUnary & unary, const std::vector<Vec3> & vps) const;         
             double depthAtCenter(const MGUnary & unary, const std::vector<Vec3> & vps) const;
+
+            int fitClosestOrientation(const MGUnary & unary, const std::vector<Vec3> & vps, double angleThreshold);
 
             template <class Archive> void serialize(Archive & ar) {
                 ar(fixed, variables);
@@ -35,9 +37,9 @@ namespace panoramix {
             enum Type { Region, Line } type;            
             std::vector<Vec3> normalizedCorners;
             Vec3 normalizedCenter;
-            int lineClaz;
+            int orientationClaz;
             template <class Archive> void serialize(Archive & ar) {
-                ar(type, normalizedCorners, normalizedCenter, lineClaz);
+                ar(type, normalizedCorners, normalizedCenter, orientationClaz);
             }
         };    
       

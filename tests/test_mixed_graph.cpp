@@ -24,7 +24,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
         core::MGUnaryHandle uh;
     };
 
-    std::vector<std::pair<UnaryID, vis::SpatialProjectedPolygon>> spps;
+    std::vector<std::pair<UnaryID, core::Classified<vis::SpatialProjectedPolygon>>> spps;
     std::vector<core::Classified<core::Line3>> lines;
 
     for (int i = 0; i < patches.size(); i++){
@@ -45,19 +45,19 @@ void VisualizeMixedGraph(const core::Image & panorama,
                     continue;
 
                 spp.projectionCenter = core::Point3(0, 0, 0);                
-                spp.plane = uhv.second.interpretAsPlane();
-                spps.emplace_back(UnaryID{ i, uh }, std::move(spp));
+                spp.plane = uhv.second.interpretAsPlane(mg.data(uh), vps);
+                spps.emplace_back(UnaryID{ i, uh }, std::move(core::ClassifyAs(spp, mg.data(uh).orientationClaz)));
             }
             else if (v.type == core::MGUnary::Line){
                 auto & line = v;
-                lines.push_back(core::ClassifyAs(uhv.second.interpretAsLine(mg.data(uh), vps), mg.data(uh).lineClaz));
+                lines.push_back(core::ClassifyAs(uhv.second.interpretAsLine(mg.data(uh), vps), mg.data(uh).orientationClaz));
             }
         }
     }
 
     vis::ResourceStore::set("texture", panorama);
 
-    auto sppCallbackFun = [&patches, &vps, &mg](vis::InteractionID iid, const std::pair<UnaryID, vis::SpatialProjectedPolygon> & spp) {
+    auto sppCallbackFun = [&patches, &vps, &mg](vis::InteractionID iid, const std::pair<UnaryID, core::Classified<vis::SpatialProjectedPolygon>> & spp) {
         std::cout << "uh: " << spp.first.uh.id << "in patch " << spp.first.patchId << std::endl;
     };
 
@@ -254,7 +254,7 @@ TEST(MixedGraph, RebuildOneView){
 
 TEST(MixedGraph, RebuildOneImage){
 
-    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room.png");
+    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room2.jpg");
     core::ResizeToMakeWidthUnder(im, 800);
     auto view = core::CreatePerspectiveView(im);
 
