@@ -286,6 +286,11 @@ namespace panoramix {
                     std::memcpy(&value, data, sizeof(double));
                     v = value;
                 }
+                else if (mat.type() == CV_32SC1){
+                    int32_t value = 0;
+                    std::memcpy(&value, data, sizeof(int32_t));
+                    v = value;
+                }
                 else{
                     assert(false && "only SparseMat<float> or SparseMat<double> is supported here!");
                 }

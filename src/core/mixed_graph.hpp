@@ -187,10 +187,7 @@ namespace panoramix {
         class MGPatchDepthsOptimizer {
         public:
             enum Algorithm {
-                MosekLinearProgramming,
-                MosekLinearProgrammingSimplified,
                 EigenSparseQR,
-                EigenSparseQRSimplified,
                 MATLAB_CVX,
                 MATLAB_CVX_v2
             };
