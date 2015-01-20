@@ -1260,30 +1260,41 @@ namespace panoramix {
                     core::Matlab::PutVariable("W", W);
                     core::Matlab::PutVariable("B", B);
                     core::Matlab::PutVariable("X0", X);
-
                     core::Matlab matlab;
+
+                    matlab << "B = B(:); X0 = X0(:);";
+
                     matlab
-                        << "n = size(A, 2);"
-                        << "m = size(A, 1);"
                         << "cvx_setup;"
                         << "cvx_begin"
-                        << "   variable X1(n)"
-                        << "   minimize(norm((A * X1 - B')))"
+                        << "   variable X1(size(A, 2))"
+                        << "   minimize(norm((A * X1 - B)))"
                         << "cvx_end";
 
                     matlab
                         << "m = median(X1);"
-                        << "outs = find((X1 < 0.02 * m) || (X1 > 50 * m));";
+                        << "outs = (X1 < 0.1 * m) | (X1 > 10 * m);";
+                    
+                    matlab
+                        << "A2 = A(:, outs);"
+                        << "B2 = B - A(:, ~outs) * X1(~outs);";
+
+                    matlab
+                        << "cvx_setup;"
+                        << "cvx_begin"
+                        << "   variable X2(size(A2, 2))"
+                        << "   minimize(norm((A2 * X2 - B2)) * 100 + norm(X2))"
+                        //<< "     subject to"
+                        //<< "        abs(X2) <= abs(X1(outs(:))) / 2.0"
+                        << "cvx_end";
+
+                    matlab
+                        << "X1(find(outs)) = X2;";
+
+                    matlab << "X1 = X1';";
+
                     matlab << "save temp;";
 
-                    //matlab
-                    //    << "cvx_begin"
-                    //    << "   variable X2(n)"
-                    //    << "   minimize(norm((A * X2 - B')))"
-                    //    << "   subject to"
-                    //    << "      X1 <= X2"
-                    //    << "cvx_end"
-                    //    << "X = X2';";
                     
                     std::vector<double> X;
                     core::Matlab::GetVariable("X1", X, false);
