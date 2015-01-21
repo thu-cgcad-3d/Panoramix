@@ -254,7 +254,7 @@ TEST(MixedGraph, RebuildOneView){
 
 TEST(MixedGraph, RebuildOneImage){
 
-    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room2.jpg");
+    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/13-1.png");
     core::ResizeToMakeWidthUnder(im, 800);
     auto view = core::CreatePerspectiveView(im);
 
@@ -274,24 +274,24 @@ TEST(MixedGraph, RebuildOneImage){
             [](const core::MGPatch & a, const core::MGPatch & b){
             return a.uhs.size() < b.uhs.size();
         });
-        core::MGPatchDepthsOptimizer pdo(mg, largestPatch, vanishingPoints, false,
-            core::MGPatchDepthsOptimizer::MATLAB_CVX);
-        pdo.optimize();
+        
+        core::MGPatchDepthsOptimizer(mg, largestPatch, vanishingPoints, false,
+            core::MGPatchDepthsOptimizer::MATLAB_CVX).optimize();
+
+        VisualizeMixedGraph(core::MakeCameraSampler(core::PanoramicCamera(view.camera.focal()), view.camera)(im),
+            mg, { largestPatch }, vanishingPoints, true);
+
+
+        for (int k = 0; k < 10; k++){
+            core::FitUnariesToClosestOrientations(mg, largestPatch, vanishingPoints, M_PI_4 / 2);
+
+            core::MGPatchDepthsOptimizer(mg, largestPatch, vanishingPoints, false,
+                core::MGPatchDepthsOptimizer::MATLAB_CVX).optimize();
+
+            VisualizeMixedGraph(core::MakeCameraSampler(core::PanoramicCamera(view.camera.focal()), view.camera)(im),
+                mg, { largestPatch }, vanishingPoints, true);
+        }
     }
-
-    VisualizeMixedGraph(core::MakeCameraSampler(core::PanoramicCamera(view.camera.focal()), view.camera)(im),
-        mg, { largestPatch }, vanishingPoints, true);
-
-   /* {
-        core::Clock clock("view mst");
-        largestPatch = core::MinimumSpanningTreePatch(mg, largestPatch, vanishingPoints);
-        core::MGPatchDepthsOptimizer pdo(mg, largestPatch, vanishingPoints, false,
-            core::MGPatchDepthsOptimizer::EigenSparseQR);
-        pdo.optimize();
-    }
-
-    VisualizeMixedGraph(core::MakeCameraSampler(core::PanoramicCamera(view.camera.focal()), view.camera)(im),
-        mg, { largestPatch }, vanishingPoints, true);*/
 
 }
 

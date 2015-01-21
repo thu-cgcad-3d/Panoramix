@@ -25,7 +25,7 @@ namespace panoramix {
             double inverseDepthAtDirection(const Vec3 & direction, const MGUnary & unary, const std::vector<Vec3> & vps) const;         
             double depthAtCenter(const MGUnary & unary, const std::vector<Vec3> & vps) const;
 
-            int fitClosestOrientation(const MGUnary & unary, const std::vector<Vec3> & vps, double angleThreshold);
+            void fitToClosestOrientation(MGUnary & unary, const std::vector<Vec3> & vps, double angleThreshold);
 
             template <class Archive> void serialize(Archive & ar) {
                 ar(fixed, variables);
@@ -214,7 +214,8 @@ namespace panoramix {
 
 
 
-
+        void FitUnariesToClosestOrientations(MixedGraph & mg, MGPatch & patch,
+            const std::vector<Vec3> & vps, double angleThreshold);
 
 
     }

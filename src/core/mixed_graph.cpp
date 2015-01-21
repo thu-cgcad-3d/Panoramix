@@ -37,13 +37,15 @@ namespace panoramix {
         }
 
         Line3 MGUnaryVariable::interpretAsLine(const MGUnary & line, const std::vector<Vec3> & vps) const {
-            assert(region.type == MGUnary::Line);
+            assert(line.type == MGUnary::Line);
             if (line.orientationClaz >= 0){
+                assert(variables.size() == 1);
                 InfiniteLine3 infLine(line.normalizedCenter / variables[0], vps[line.orientationClaz]);
                 return Line3(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.front()), infLine).second.second,
                     DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.back()), infLine).second.second);
             }
             else{
+                assert(variables.size() == 2);
             /*           | sin(theta) | | p | | q |
                 len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
                     | p sin(phi) - q sin(phi - theta) |
@@ -156,11 +158,11 @@ namespace panoramix {
             return 1.0 / inverseDepthAtDirection(unary.normalizedCenter, unary, vps);
         }
 
-        int MGUnaryVariable::fitClosestOrientation(const MGUnary & unary, const std::vector<Vec3> & vps, double angleThreshold){
+        void MGUnaryVariable::fitToClosestOrientation(MGUnary & unary, const std::vector<Vec3> & vps, double angleThreshold){
             if (unary.type == MGUnary::Region){
                 if (unary.orientationClaz >= 0){
                     assert(variables.size() == 1);
-                    return unary.orientationClaz;
+                    //return unary.orientationClaz;
                 }
                 else{
                     assert(variables.size() == 3);
@@ -169,18 +171,23 @@ namespace panoramix {
                     double minAngle = angleThreshold;
                     for (int i = 0; i < vps.size(); i++){
                         double angle = AngleBetweenUndirectedVectors(normal, vps[i]);
+                        assert(angle >= 0);
                         if (angle < minAngle){
                             claz = i;
                             minAngle = angle;
                         }
                     }
-                    return claz;
+                    unary.orientationClaz = claz;
+                    if (claz >= 0){
+                        variables.resize(1);
+                        assert(variables.size() == 1);
+                    }
                 }
             }
             else /*if (unary.type == MGUnary::Line)*/{
                 if (unary.orientationClaz >= 0){
                     assert(variables.size() == 1);
-                    return unary.orientationClaz;
+                    //return unary.orientationClaz;
                 }
                 else /*if(unary.lineClaz == -1)*/ {
                     assert(variables.size() == 2);
@@ -190,12 +197,17 @@ namespace panoramix {
                     double minAngle = angleThreshold;
                     for (int i = 0; i < vps.size(); i++){
                         double angle = AngleBetweenUndirectedVectors(direction, vps[i]);
+                        assert(angle >= 0);
                         if (angle < minAngle){
                             claz = i;
                             minAngle = angle;
                         }
                     }
-                    return claz;
+                    unary.orientationClaz = claz;
+                    if (claz >= 0){
+                        variables.resize(1);
+                        assert(variables.size() == 1);
+                    }
                 }
             }
         }
@@ -1347,29 +1359,29 @@ namespace panoramix {
                         << "   minimize(norm((A * X1 - B)))"
                         << "cvx_end";
 
-                    matlab
-                        << "m = median(X1);"
-                        << "outs = (X1 < 0.1 * m) | (X1 > 10 * m);";
-                    
-                    matlab
-                        << "A2 = A(:, outs);"
-                        << "B2 = B - A(:, ~outs) * X1(~outs);";
+                    //matlab
+                    //    << "m = median(X1);"
+                    //    << "outs = (X1 < 0.1 * m) | (X1 > 10 * m);";
+                    //
+                    //matlab
+                    //    << "A2 = A(:, outs);"
+                    //    << "B2 = B - A(:, ~outs) * X1(~outs);";
 
-                    matlab
-                        << "cvx_setup;"
-                        << "cvx_begin"
-                        << "   variable X2(size(A2, 2))"
-                        << "   minimize(norm((A2 * X2 - B2)) * 100 + norm(X2))"
-                        //<< "     subject to"
-                        //<< "        abs(X2) <= abs(X1(outs(:))) / 2.0"
-                        << "cvx_end";
+                    //matlab
+                    //    << "cvx_setup;"
+                    //    << "cvx_begin"
+                    //    << "   variable X2(size(A2, 2))"
+                    //    << "   minimize(norm((A2 * X2 - B2)) * 100 + norm(X2))"
+                    //    //<< "     subject to"
+                    //    //<< "        abs(X2) <= abs(X1(outs(:))) / 2.0"
+                    //    << "cvx_end";
 
-                    matlab
-                        << "X1(find(outs)) = X2;";
+                    /*matlab
+                        << "X1(find(outs)) = X2;";*/
 
                     matlab << "X1 = X1';";
 
-                    matlab << "save temp;";
+                    //matlab << "save temp;";
 
                     
                     std::vector<double> X;
@@ -1645,6 +1657,12 @@ namespace panoramix {
             return static_cast<MGPatchDepthsOptimizerInternalBase*>(_internal)->optimize(_mg, _patch, _vanishingPoints);
         }
 
+
+        void FitUnariesToClosestOrientations(MixedGraph & mg, MGPatch & patch, const std::vector<Vec3> & vps, double angleThreshold){
+            for (auto & uhv : patch.uhs){
+                uhv.second.fitToClosestOrientation(mg.data(uhv.first), vps, angleThreshold);
+            }
+        }
 
 
    	}
