@@ -1,6 +1,7 @@
 #include "../src/core/cameras.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/core/feature.hpp"
+#include "../src/core/view.hpp"
 #include "../src/vis/visualize2d.hpp"
 
 #include "config.hpp"
@@ -279,11 +280,34 @@ TEST(Feature, FeatureExtractor) {
 
 TEST(Feature, GeometricContextMatlab) {
     core::GeometricContextEstimator gcEstimator;
-    gcEstimator.params().matlabCodeFolder = ProjectDataDirStrings::Scripts + "/GC";
     gcEstimator.params().useMatlab = true;
 
     core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
-    core::Image gc = gcEstimator(im);
-    cv::extractChannel(gc, gc, 0);
-    vis::Visualizer2D(gc) << vis::manip2d::Show();
+    auto gc = gcEstimator(im, core::SceneClass::Indoor);
+}
+
+TEST(Feature, GeometricContextPanorama) {
+    //core::GeometricContextEstimator gcEstimator;
+    //gcEstimator.params().useMatlab = true;
+
+    //core::Image pan = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
+    //core::ResizeToMakeHeightUnder(pan, 500);
+    //auto panview = core::CreatePanoramicView(pan);
+
+    //auto pviews = core::SampleHorizontalPerspectiveViews(pan, 10);
+    //std::vector<core::ViewX<core::PerspectiveCamera>> pviewGCs(pviews.size());
+    ////for (int i = 0; i < pviews.size(); i++){
+    ////    pviewGCs[i].camera = pviews[i].camera;
+    ////    auto gc = gcEstimator(pviews[i].image);
+    ////    pviewGCs[i].image.resize(gc.size());
+    ////    for (int k = 0; k < gc.size(); k++)
+    ////        pviewGCs[i].image[k] = gc[k];
+    ////}
+    //core::LoadFromDisk("./cache/Feature.GeometricContextPanorama.pviewGCs", pviewGCs);
+
+    //auto gcs = core::MergePerspectiveViewsBack(pviewGCs, panview.camera).image;
+    //core::Image wholeGC;
+    //cv::merge(gcs, wholeGC);
+    //vis::Visualizer2D(wholeGC) << vis::manip2d::Show();
+
 }

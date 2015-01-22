@@ -90,7 +90,7 @@ namespace panoramix {
             MGUnaryVarTable & unaryVars, MGBinaryVarTable& binaryVars,
             double initialDepth = 1.0);
 
-        MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views, 
+        MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views,
             std::vector<Vec3> & vps,
             MGUnaryVarTable & unaryVars, MGBinaryVarTable& binaryVars,
 
@@ -109,7 +109,26 @@ namespace panoramix {
             double interViewIncidenceAngleVerticalDirectionThreshold = 20.0 / 300.0);
 
 
+        // unary properties
+        struct MGUnaryProperty {
+            std::map<OrientationContext::Orientation, double> orientationHints;
+            inline OrientationContext::Orientation mostLikely() const {
+                return std::max_element(orientationHints.begin(), orientationHints.end(), 
+                    [](const std::pair<OrientationContext::Orientation, double> & a,
+                    const std::pair<OrientationContext::Orientation, double> & b){
+                    return a.second < b.second;
+                })->first;
+            }
+            template <class Archive> void serialize(Archive & ar) {
+                ar(orientationHints);
+            }
+        };
+        using MGUnaryPropertyTable = std::unordered_map<MGUnaryHandle, MGUnaryProperty>;
 
+        MGUnaryPropertyTable BuildUnaryPropertyTable(const MixedGraph & mg, 
+            const OrientationContext & oc, const PanoramicCamera & panoCam);
+        MGUnaryPropertyTable BuildUnaryPropertyTable(const MixedGraph & mg,
+            const OrientationContext & oc, const PerspectiveCamera & panoCam);
 
 
         //// patch on mixed graph

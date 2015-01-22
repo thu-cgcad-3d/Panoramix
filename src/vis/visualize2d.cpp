@@ -49,13 +49,20 @@ namespace panoramix {
 
         namespace manip2d {
 
-            Manipulator<int> Show(int delay) {
-                return Manipulator<int>([](Visualizer2D & viz, int d) {
+            Manipulator<std::pair<int, bool>> Show(int delay, bool asLabels) {
+                return Manipulator<std::pair<int, bool>>([](Visualizer2D & viz, std::pair<int, bool> d) {
                     static int id = 0;
-                    cv::imshow(viz.params.winName, viz.image());
-                    cv::imwrite("./vis_outputs/" + std::to_string(id++) + viz.params.winName + ".png", viz.image());
-                    cv::waitKey(d);
-                }, delay);
+                    core::Image im = viz.image().clone();
+                    if (viz.image().channels() > 3){
+                        std::vector<cv::Mat> cs(3);
+                        for (int i = 0; i < 3; i++)
+                            cv::extractChannel(im, cs[i], i);
+                        cv::merge(cs, im);
+                    }
+                    cv::imshow(viz.params.winName, im);
+                    cv::imwrite("./vis_outputs/" + std::to_string(id++) + viz.params.winName + ".png", im);
+                    cv::waitKey(d.first);
+                }, std::make_pair(delay, asLabels));
             }
 
         }

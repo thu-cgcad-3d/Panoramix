@@ -92,6 +92,7 @@ namespace panoramix {
             inline const Vec3 & center() const { return _center; }
             inline const Vec3 & up() const { return _up; }
             Vec2 screenProjection(const Vec3 & p3d) const;
+            bool isVisibleOnScreen(const Vec3 & p3d) const { return true; }
             inline HPoint2 screenProjectionInHPoint(const Vec3 & p3d) const { return HPoint2(screenProjection(p3d), 1.0); }
             Vec3 spatialDirection(const Vec2 & p2d) const;
             inline Vec3 spatialDirection(const PixelLoc & p) const { return spatialDirection(Vec2(p.x, p.y)); }
@@ -124,6 +125,11 @@ namespace panoramix {
                     for (int i = 0; i < outCamSize.width; i++) {
                         Vec2 screenp(i, j);
                         Vec3 p3 = _outCam.spatialDirection(screenp);
+                        if (!_inCam.isVisibleOnScreen(p3)){
+                            _mapx.at<float>(j, i) = -1;
+                            _mapy.at<float>(j, i) = -1;
+                            continue;
+                        }
                         Vec2 screenpOnInCam = _inCam.screenProjection(p3);
                         _mapx.at<float>(j, i) = static_cast<float>(screenpOnInCam(0));
                         _mapy.at<float>(j, i) = static_cast<float>(screenpOnInCam(1));
@@ -133,9 +139,10 @@ namespace panoramix {
 
             Image operator() (const Image & inputIm,
                 int borderMode = cv::BORDER_REPLICATE,
-                const cv::Scalar & borderValue = cv::Scalar(0, 0, 0, 1)) const {
+                const cv::Scalar & borderValue = cv::Scalar(0, 0, 0, 0)) const {
                 Image outputIm;
-                cv::remap(inputIm, outputIm, _mapx, _mapy, cv::INTER_LINEAR, borderMode, borderValue);
+                cv::remap(inputIm, outputIm, _mapx, _mapy,
+                    inputIm.channels() <= 4 ? cv::INTER_LINEAR : cv::INTER_NEAREST, borderMode, borderValue);
                 return outputIm;
             }
 
@@ -169,6 +176,7 @@ namespace panoramix {
                     std::declval<TT>().eye(),
                     std::declval<TT>().screenProjection(std::declval<core::Vec3>()),
                     std::declval<TT>().screenProjectionInHPoint(std::declval<core::Vec3>()),
+                    std::declval<TT>().isVisibleOnScreen(std::declval<core::Vec3>()),
                     std::declval<TT>().spatialDirection(std::declval<core::Vec2>()),
                     std::declval<TT>().spatialDirection(std::declval<core::PixelLoc>()),
                     std::declval<TT>().screenSize(),

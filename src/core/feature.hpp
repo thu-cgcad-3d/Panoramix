@@ -223,19 +223,56 @@ namespace panoramix {
 
 
         /// geometric context estimator
+        enum class SceneClass {
+            Indoor,
+            Outdoor
+        };
+        enum class GeometricContextLabel {
+            None = -1,
+            // for indoor scenes
+            Front, Left, Right,
+            Floor, Ceiling,
+            Furniture,
+            // for outdoor scenes
+            Ground, Sky, Vertical, NotPlanar,
+            Other
+        };
+
+
         class GeometricContextEstimator {
         public:
             struct Params {
                 Params();
                 bool useMatlab;
-                std::string matlabCodeFolder;
-            };
+            };           
+
+            using Feature = std::map<GeometricContextLabel, Imaged>;
 
         public:
             inline explicit GeometricContextEstimator(const Params & params = Params()) : _params(params) {}
             const Params & params() const { return _params; }
             Params & params() { return _params; }
-            Image operator() (const Image & im) const; // CV_64FCX
+            Feature operator() (const Image & im, SceneClass sceneClass) const;
+
+        private:
+            Params _params;
+        };
+
+        
+
+
+
+        // scene classifier
+        class SceneClassifier {
+        public:
+            struct Params {
+                Params();
+                bool useMatlab;
+            };
+
+        public:
+            inline explicit SceneClassifier(const Params & params = Params()) : _params(params) {}
+            std::map<SceneClass, double> operator() (const Image & im) const;
 
         private:
             Params _params;

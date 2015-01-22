@@ -2154,24 +2154,64 @@ namespace panoramix {
 
 
         GeometricContextEstimator::Params::Params() 
-            : useMatlab(false) {
+            : useMatlab(true) {
         }
 
 
-        Image GeometricContextEstimator::operator() (const Image & im) const{
+        GeometricContextEstimator::Feature GeometricContextEstimator::operator() (const Image & im, SceneClass sceneClaz) const{
             if (_params.useMatlab && Matlab::IsUsable()){
-                Matlab::RunScript("clear;");
-                Matlab::CDAndAddAllSubfolders(_params.matlabCodeFolder);
                 Matlab::PutVariable("inputIm", im);
-                Matlab::RunScript("[~, ~, slabelConfMap] = gc(inputIm);");
+                Matlab::PutVariable("isOutdoor", sceneClaz == SceneClass::Outdoor);
+                Matlab matlab;
+                
+                matlab
+                    << "slabelConfMap = gcPanoramix(inputIm, isOutdoor);"
+                    << "save temp;";
+                
                 Image slabelConfMap;
                 Matlab::GetVariable("slabelConfMap", slabelConfMap, true);
-                return slabelConfMap;
+                assert(!slabelConfMap.empty());
+                std::vector<Imaged> result;
+                cv::split(slabelConfMap, result);
+                assert(result.size() == 7);
+                return sceneClaz == SceneClass::Indoor ? std::map<GeometricContextLabel, Imaged>{
+                    { GeometricContextLabel::Floor, result[0] }, 
+                    { GeometricContextLabel::Right, result[1] },
+                    { GeometricContextLabel::Front, result[2] },
+                    { GeometricContextLabel::Left, result[3] }, 
+                    { GeometricContextLabel::NotPlanar, result[4] },
+                    { GeometricContextLabel::Furniture, result[5] }, 
+                    { GeometricContextLabel::Ceiling, result[6] }
+                } : std::map<GeometricContextLabel, Imaged>{
+                    { GeometricContextLabel::Ground, result[0] },
+                    { GeometricContextLabel::Sky, result[6] },
+                    { GeometricContextLabel::NotPlanar, result[4] },
+                    { GeometricContextLabel::Vertical, result[3] + result[2] + result[1] }
+                };
             }
             else{
                 NOT_IMPLEMENTED_YET();
             }
         }
+
+
+        SceneClassifier::Params::Params()
+            : useMatlab(true) {
+        }
+
+        std::map<SceneClass, double> SceneClassifier::operator() (const Image & im) const{
+            if (_params.useMatlab && Matlab::IsUsable()){
+                Matlab::PutVariable("inputIm", im);
+                Matlab matlab;
+                
+
+                NOT_IMPLEMENTED_YET();
+            }
+            else{
+                NOT_IMPLEMENTED_YET();
+            }
+        }
+
 
     }
 }

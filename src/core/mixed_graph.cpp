@@ -46,10 +46,10 @@ namespace panoramix {
             }
             else{
                 assert(variables.size() == 2);
-            /*           | sin(theta) | | p | | q |
-                len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                /*           | sin(theta) | | p | | q |
+                    len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
                     | p sin(phi) - q sin(phi - theta) |
-            */
+                    */
                 // variables[0] -> 1/p
                 // variables[1] -> 1/q
                 return Line3(line.normalizedCorners.front() / variables[0], line.normalizedCorners.back() / variables[1]);
@@ -192,10 +192,13 @@ namespace panoramix {
                 else /*if(unary.lineClaz == -1)*/ {
                     assert(variables.size() == 2);
                     Line3 line(unary.normalizedCorners.front() / variables[0], unary.normalizedCorners.back() / variables[1]);
+                    Vec3 normal = normalize(line.first.cross(line.second));
                     Vec3 direction = line.direction();
                     int claz = -1;
                     double minAngle = angleThreshold;
                     for (int i = 0; i < vps.size(); i++){
+                        if (abs(normal.dot(normalize(vps[i]))) > 0.2) // projection does not match!!!
+                            continue;
                         double angle = AngleBetweenUndirectedVectors(direction, vps[i]);
                         assert(angle >= 0);
                         if (angle < minAngle){
@@ -256,10 +259,10 @@ namespace panoramix {
                     });
                     mgh2ri[ri2mgh[ri]] = ri;
                     int sign = center.dot(vps[initialClaz]) < 0 ? -1 : 1;
-                    unaryVars[ri2mgh[ri]].variables = { 
+                    unaryVars[ri2mgh[ri]].variables = {
                         sign * vps[initialClaz][0],
-                        sign * vps[initialClaz][1], 
-                        sign * vps[initialClaz][2] 
+                        sign * vps[initialClaz][1],
+                        sign * vps[initialClaz][2]
                     };
                     unaryVars[ri2mgh[ri]].fixed = false;
                 }
@@ -276,7 +279,7 @@ namespace panoramix {
                         ld.data.line.claz
                     });
                     mgh2li[li2mgh[li]] = li;
-                    unaryVars[li2mgh[li]].variables = ld.data.line.claz == -1 ? 
+                    unaryVars[li2mgh[li]].variables = ld.data.line.claz == -1 ?
                         std::vector<double>{ 1.0, 1.0 } : std::vector<double>{ 1.0 };
                     unaryVars[li2mgh[li]].fixed = false;
                 }
@@ -448,7 +451,7 @@ namespace panoramix {
             double incidenceDistanceVerticalDirectionThreshold,
 
             const core::SegmentationExtractor & segmenter,
-            double samplingStepLengthOnBoundary ,
+            double samplingStepLengthOnBoundary,
             double samplingStepLengthOnLines,
             int dilationSize,
 
@@ -457,7 +460,7 @@ namespace panoramix {
 
             std::vector<core::LinesGraph> linesGraphs;
             core::EstimateVanishingPointsAndBuildLinesGraphs(views, vps, linesGraphs, lineseger,
-                intersectionDistanceThreshold, incidenceDistanceAlongDirectionThreshold, incidenceDistanceVerticalDirectionThreshold, 
+                intersectionDistanceThreshold, incidenceDistanceAlongDirectionThreshold, incidenceDistanceVerticalDirectionThreshold,
                 false, true);
 
             std::vector<core::Imagei> segmentedRegionsArray;
@@ -487,7 +490,7 @@ namespace panoramix {
             std::vector<std::map<std::pair<core::RegionHandle, core::LineHandle>, std::vector<core::Point2>>>
                 regionLineConnectionsArray(views.size());
             for (int i = 0; i < views.size(); i++){
-                regionLineConnectionsArray[i] = 
+                regionLineConnectionsArray[i] =
                     core::RecognizeRegionLineConnections(segmentedRegionsArray[i], linesGraphs[i], samplingStepLengthOnLines);
             }
 
@@ -502,6 +505,87 @@ namespace panoramix {
                 unaryVars, binaryVars, initialDepth);
 
         }
+
+
+
+
+        namespace {
+
+            template <class CameraT>
+            MGUnaryPropertyTable BuildUnaryPropertyTableTemplate(const MixedGraph & mg, const OrientationContext & oc, const CameraT & panoCam){
+
+                MGUnaryPropertyTable upt;
+                upt.reserve(mg.internalElements<0>().size());
+
+                assert(!oc.probs.empty());
+
+                for (auto & u : mg.elements<0>()){
+
+                    if (u.data.type == MGUnary::Region){
+                        std::vector<cv::Point> panoContour;
+                        panoContour.reserve(u.data.normalizedCorners.size());
+                        for (auto & nc : u.data.normalizedCorners){
+                            panoContour.push_back(ToPixelLoc(panoCam.screenProjection(nc)));
+                        }
+                        cv::Rect roi(cv::boundingRect(panoContour));
+                        if (roi.x < 0) roi.x = 0;
+                        if (roi.y < 0) roi.y = 0;
+                        if (roi.x + roi.width >= panoCam.screenSize().width) roi.width = panoCam.screenSize().width - 1 - roi.x;
+                        if (roi.y + roi.height >= panoCam.screenSize().height) roi.height = panoCam.screenSize().height - 1 - roi.y;
+
+                        for (int o = 0; o < oc.probs.size(); o++){
+                            cv::Mat cropProb(oc.probs[o], roi);
+                            cv::Mat mask(cv::Mat::zeros(cropProb.rows, cropProb.cols, CV_8UC1));
+
+                            typedef cv::vector<cv::Point> TContour;
+                            typedef cv::vector<TContour> TContours;
+
+                            cv::drawContours(mask, TContours(1, panoContour), -1, cv::Scalar(255), CV_FILLED, CV_AA, cv::noArray(), 1, -roi.tl());
+                            double mean = cv::mean(cropProb, mask).val[0];
+
+                            upt[u.topo.hd].orientationHints[(OrientationContext::Orientation)o] = mean;
+                        }
+                    }
+                    else{
+                        auto p1 = ToPixelLoc(panoCam.screenProjection(u.data.normalizedCorners.front()));
+                        auto p2 = ToPixelLoc(panoCam.screenProjection(u.data.normalizedCorners.back()));
+                        cv::Rect roi(cv::boundingRect(std::vector<PixelLoc>{p1, p2}));
+                        if (roi.x < 0) roi.x = 0;
+                        if (roi.y < 0) roi.y = 0;
+                        if (roi.x + roi.width >= panoCam.screenSize().width) roi.width = panoCam.screenSize().width - 1 - roi.x;
+                        if (roi.y + roi.height >= panoCam.screenSize().height) roi.height = panoCam.screenSize().height - 1 - roi.y;
+
+                        for (int o = 0; o < oc.probs.size(); o++){
+                            cv::Mat cropProb(oc.probs[o], roi);
+                            cv::Mat mask(cv::Mat::zeros(cropProb.rows, cropProb.cols, CV_8UC1));
+
+                            typedef cv::vector<cv::Point> TContour;
+                            typedef cv::vector<TContour> TContours;
+
+                            cv::line(mask, p1 - roi.tl(), p2 - roi.tl(), cv::Scalar(255), 3, 8);
+                            double mean = cv::mean(cropProb, mask).val[0];
+
+                            upt[u.topo.hd].orientationHints[(OrientationContext::Orientation)o] = mean;
+                        }
+                    }
+
+                }
+                return upt;
+            }
+
+
+        }
+
+
+        MGUnaryPropertyTable BuildUnaryPropertyTable(const MixedGraph & mg,
+            const OrientationContext & oc, const PanoramicCamera & panoCam){
+            return BuildUnaryPropertyTableTemplate(mg, oc, panoCam);
+        }
+        MGUnaryPropertyTable BuildUnaryPropertyTable(const MixedGraph & mg,
+            const OrientationContext & oc, const PerspectiveCamera & panoCam){
+            return BuildUnaryPropertyTableTemplate(mg, oc, panoCam);
+        }
+       
 
 
 

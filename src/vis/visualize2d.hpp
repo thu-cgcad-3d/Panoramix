@@ -96,7 +96,7 @@ namespace panoramix {
                 return SetColorTable(PredefinedColorTable(d));
             }
             
-            Manipulator<int> Show(int delay = 0);
+            Manipulator<std::pair<int, bool>> Show(int delay = 0, bool asLabels = false);
         }
 
         inline Visualizer2D & operator << (Visualizer2D & viz, void (*func)(Visualizer2D&)) {

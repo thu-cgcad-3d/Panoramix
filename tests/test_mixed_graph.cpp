@@ -31,6 +31,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
         auto & patch = patches[i];
         for (auto & uhv : patch.uhs){
             auto uh = uhv.first;
+
             auto & v = mg.data(uh);
             if (v.type == core::MGUnary::Region){
                 auto & region = v;
@@ -86,6 +87,92 @@ void VisualizeMixedGraph(const core::Image & panorama,
     viz.show(doModal);
 
 }
+
+
+
+void VisualizeMixedGraph(const core::Image & panorama,
+    const core::MixedGraph & mg,
+    const std::vector<core::MGPatch> & patches,
+    const std::vector<core::Vec3> & vps,
+    const core::MGUnaryPropertyTable & uhProp,
+    bool doModal){
+
+    vis::Visualizer viz("mixed graph");
+    viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
+
+    struct UnaryID {
+        int patchId;
+        core::MGUnaryHandle uh;
+    };
+
+    std::vector<std::pair<UnaryID, core::Classified<vis::SpatialProjectedPolygon>>> spps;
+    std::vector<core::Classified<core::Line3>> lines;
+
+    for (int i = 0; i < patches.size(); i++){
+        auto & patch = patches[i];
+        for (auto & uhv : patch.uhs){
+            auto uh = uhv.first;
+
+            if (uhProp.at(uh).mostLikely() == core::OrientationContext::Void)
+                continue;
+
+            auto & v = mg.data(uh);
+            if (v.type == core::MGUnary::Region){
+                auto & region = v;
+                vis::SpatialProjectedPolygon spp;
+                // filter corners
+                core::ForeachCompatibleWithLastElement(region.normalizedCorners.begin(), region.normalizedCorners.end(),
+                    std::back_inserter(spp.corners),
+                    [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
+                    return core::AngleBetweenDirections(a, b) > M_PI / 500.0;
+                });
+                if (spp.corners.size() < 3)
+                    continue;
+
+                spp.projectionCenter = core::Point3(0, 0, 0);
+                spp.plane = uhv.second.interpretAsPlane(mg.data(uh), vps);
+                spps.emplace_back(UnaryID{ i, uh }, std::move(core::ClassifyAs(spp, mg.data(uh).orientationClaz)));
+            }
+            else if (v.type == core::MGUnary::Line){
+                auto & line = v;
+                lines.push_back(core::ClassifyAs(uhv.second.interpretAsLine(mg.data(uh), vps), mg.data(uh).orientationClaz));
+            }
+        }
+    }
+
+    vis::ResourceStore::set("texture", panorama);
+
+    auto sppCallbackFun = [&patches, &vps, &mg, &uhProp](vis::InteractionID iid, const std::pair<UnaryID, core::Classified<vis::SpatialProjectedPolygon>> & spp) {
+        std::cout << "uh: " << spp.first.uh.id << "in patch " << spp.first.patchId <<
+            ",  its orientation context label is " << uhProp.at(spp.first.uh).mostLikely() << std::endl;
+    };
+
+    viz.begin(spps, sppCallbackFun).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+    viz.installingOptions.lineWidth = 4.0;
+    viz.add(lines);
+
+    /* std::vector<core::Line3> connectionLines;
+    for (auto & patch : patches){
+    for (auto & bhv : patch.bhs){
+    auto bh = bhv.first;
+    auto & v = bhv.second;
+    auto & samples = mg.data(bh).normalizedAnchors;
+    for (int i = 0; i < samples.size(); i++){
+    connectionLines.emplace_back(normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.front()[i],
+    normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.back()[i]);
+    }
+    }
+    }*/
+
+    viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
+    viz.installingOptions.lineWidth = 2.0;
+    viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
+    //viz.add(connectionLines);
+    viz.camera(core::PerspectiveCamera(800, 800, 500, { 1.0, 1.0, -1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, -1.0 }));
+    viz.show(doModal);
+
+}
+
 
 template <class UhColorizerFunT = core::ConstantFunctor<vis::Color>>
 void ManuallyOptimizeMixedGraph(const core::Image & panorama,
@@ -216,13 +303,25 @@ TEST(MixedGraph, Build) {
 }
 
 
-TEST(MixedGraph, RebuildOneView){
+TEST(MixedGraph, RebuildOnOnePanorama){
+
+    core::Image panorama = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
+    core::ResizeToMakeHeightUnder(panorama, 800);
+    auto panoView = core::CreatePanoramicView(panorama);
+    //core::OrientationContext oc = core::ComputeOrientationContext(panoView, core::SceneClass::Outdoor);
+    //core::SaveToDisk("./cache/test_view.MixedGraph.RebuildOnOnePanorama.oc", oc);
+
+    std::vector<core::PerspectiveCamera> cams = {
+        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
+        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
+        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
+        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
+        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
+        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
+    };
 
     std::vector<core::View<core::PerspectiveCamera>> views;
-    core::Image panorama;
-
-    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
-    core::LoadFromDisk("./cache/test_view.View.SampleViews.views", views);    
+    core::SampleViews(panoView, cams.begin(), cams.end(), std::back_inserter(views));
   
     for (int i = 0; i < views.size(); i++){
         core::MGUnaryVarTable unaryVars;
@@ -234,6 +333,10 @@ TEST(MixedGraph, RebuildOneView){
         {
             core::Clock clock("view - " + std::to_string(i));
             mg = core::BuildMixedGraph({ views[i] }, vanishingPoints, unaryVars, binaryVars);
+
+            core::OrientationContext oc = core::ComputeOrientationContext(views[i], core::SceneClass::Outdoor);
+            auto uhProperties = core::BuildUnaryPropertyTable(mg, oc, views[i].camera);
+
             //core::SaveToDisk("./cache/test_view.MixedGraph.RebuildOneView.mg[" + std::to_string(i) + "]", mg);
             std::vector<core::MGPatch> naivePatches =
                 core::SplitMixedGraphIntoPatches(mg, unaryVars, binaryVars); 
@@ -243,9 +346,12 @@ TEST(MixedGraph, RebuildOneView){
             });
             core::MGPatchDepthsOptimizer pdo(mg, largestPatch, vanishingPoints, false,
                 core::MGPatchDepthsOptimizer::EigenSparseQR);
-            pdo.optimize();
+            //pdo.optimize();
+
+            VisualizeMixedGraph(panorama, mg, { largestPatch }, vanishingPoints, uhProperties, true);
         }
-        VisualizeMixedGraph(panorama, mg, { largestPatch }, vanishingPoints, true);
+
+       
     }    
 
 }
@@ -254,7 +360,7 @@ TEST(MixedGraph, RebuildOneView){
 
 TEST(MixedGraph, RebuildOneImage){
 
-    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/13-1.png");
+    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room.png");
     core::ResizeToMakeWidthUnder(im, 800);
     auto view = core::CreatePerspectiveView(im);
 

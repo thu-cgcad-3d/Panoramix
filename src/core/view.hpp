@@ -11,9 +11,9 @@ namespace panoramix {
 
 
         // view class
-        template <class CameraT, class = std::enable_if_t<IsCamera<CameraT>::value>>
+        template <class CameraT, class ImageT = Image, class = std::enable_if_t<IsCamera<CameraT>::value>>
         struct View {
-            Image image;
+            ImageT image;
             CameraT camera;
             template <class Archiver>
             void serialize(Archiver & ar) {
@@ -21,24 +21,69 @@ namespace panoramix {
             }
         };
 
+        template <class CameraT, class ImageT = Image>
+        using ViewX = View<CameraT, std::vector<ImageT>>;
+
         // create panoramic view
         View<PanoramicCamera> CreatePanoramicView(const Image & panorama);
 
         // create perspective view
         View<PerspectiveCamera> CreatePerspectiveView(const Image & perspectiveImage, 
             const LineSegmentExtractor & lse = LineSegmentExtractor(), 
-            const VanishingPointsDetector & vpd = VanishingPointsDetector());
+            const VanishingPointsDetector & vpd = VanishingPointsDetector(),
+            std::array<HPoint2, 3> * vps = nullptr, 
+            double * focal = nullptr);
+
 
         // view sampling
-        template <class OriginalCameraT, class TargetCameraIteratorT, class ViewOutIteratorT>
-        inline void SampleViews(const View<OriginalCameraT> & originalView,
+        template <class OriginalCameraT, class ImageT, class TargetCameraIteratorT, class ViewOutIteratorT>
+        inline void SampleViews(const View<OriginalCameraT, ImageT> & originalView,
             TargetCameraIteratorT camBegin, TargetCameraIteratorT camEnd, ViewOutIteratorT outputViewIter){
             using TargetCameraType = typename std::iterator_traits<TargetCameraIteratorT>::value_type;
             for (; camBegin != camEnd; ++camBegin, ++outputViewIter){
                 CameraSampler<TargetCameraType, OriginalCameraT> camSampler(*camBegin, originalView.camera);
-                *outputViewIter = View<TargetCameraType>{camSampler(originalView.image), *camBegin};
+                *outputViewIter = { camSampler(originalView.image), *camBegin };
             }
         }
+
+
+        // create horizontal cameras
+        std::vector<PerspectiveCamera> CreateHorizontalPerspectiveCameras(const PanoramicCamera & panoCam,
+            int num = 16, int width = 500, int height = 500, double focal = 250.0);
+
+
+        // probs estimated using geometric context
+        struct OrientationContext {
+            enum Orientation : int { Vertical, Downward, Upward, Void, PlanarObject, NonPlanarObject, Unknown, OrientationNum };
+            std::array<Imaged, OrientationNum> probs;
+            
+            inline OrientationContext() {}
+            explicit OrientationContext(SizeI size);
+
+            // get labels and confidences
+            using OrientationImage = ImageWithType<int>;
+            std::pair<OrientationImage, Imaged> labelsAndConfidences() const;
+            
+            template <class Archiver>
+            void serialize(Archiver & ar) {
+                ar(probs);
+            }
+        };
+
+        void ReOrderVanishingPoints(const PanoramicCamera & panoCam, 
+            Vec3 & horizontalVP1, Vec3 & horizontalVP2, Vec3 & verticalVP3);
+
+        OrientationContext ComputeOrientationContext(const View<PanoramicCamera> & panoView,
+            const std::vector<View<PerspectiveCamera, GeometricContextEstimator::Feature>> & perspectiveGCs);
+
+        OrientationContext ComputeOrientationContext(const View<PanoramicCamera> & panoView, SceneClass sceneClaz,
+            const GeometricContextEstimator & gcEstimator = GeometricContextEstimator(),
+            int num = 16, int width = 400, int height = 700, double focal = 250.0);
+        OrientationContext ComputeOrientationContext(const View<PerspectiveCamera> & perspView, SceneClass sceneClaz,
+            const GeometricContextEstimator & gcEstimator = GeometricContextEstimator());
+
+
+
 
 
         // regions graph
@@ -46,11 +91,13 @@ namespace panoramix {
             Vec2 center;
             double area;
             std::vector<std::vector<PixelLoc>> contours; 
-            std::vector<std::vector<PixelLoc>> dilatedContours;
+            std::vector<std::vector<PixelLoc>> dilatedContours;           
+
             Box2 boundingBox;
             template <class Archiver>
             void serialize(Archiver & ar) {
-                ar(center, area, contours, dilatedContours, boundingBox);
+                ar(center, area, contours, dilatedContours, 
+                    boundingBox);
             }
         };
         struct RegionBoundaryData {
@@ -73,7 +120,6 @@ namespace panoramix {
         // ensurance: RegionHandle(i) always represents the region data for region mask: segmentedRegions == i
         RegionsGraph CreateRegionsGraph(const Imagei & segmentedRegions,
             double samplingStepLengthOnBoundary, int dilationSize);
-
 
 
         // junction weight 

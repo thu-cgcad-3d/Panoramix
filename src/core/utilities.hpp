@@ -95,6 +95,11 @@ namespace panoramix {
             return std::find(c.cbegin(), c.cend(), v) != c.cend();
         }
 
+        template <class T, class ValueT>
+        inline bool Contains(std::initializer_list<T> ilist, const ValueT & v){
+            return std::find(ilist.begin(), ilist.end(), v) != ilist.end();
+        }
+
         template <class KeyT, class ValueT, class PredT, class AllocT>
         inline bool Contains(const std::map<KeyT, ValueT, PredT, AllocT> & m, const KeyT & k) {
             return m.find(k) != m.end();
