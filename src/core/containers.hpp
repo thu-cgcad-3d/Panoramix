@@ -3,11 +3,28 @@
 
 #include <nanoflann.hpp>
 
+#include "meta.hpp"
 #include "basic_types.hpp"
 #include "utilities.hpp"
  
 namespace panoramix {
     namespace core {
+
+
+        template <template <class> class ContainerT, class ... DataTs>
+        struct MixedContainer {
+            template <class DataT>
+            const ContainerT<DataT> & container() const {
+                enum { _idx = TypeFirstLocationInTuple<DataT, std::tuple<DataTs...>>::value };
+                return std::get<_idx>(containers);
+            };
+            template <class DataT>
+            ContainerT<DataT> & container() {
+                enum { _idx = TypeFirstLocationInTuple<DataT, std::tuple<DataTs...>>::value };
+                return std::get<_idx>(containers);
+            };
+            std::tuple<ContainerT<DataTs> ...> containers;
+        };
 
 
         template <class IteratorT>

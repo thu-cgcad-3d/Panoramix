@@ -1,6 +1,5 @@
 #include "../src/core/cons_graph.hpp"
 #include "../src/core/optimization.hpp"
-#include "../src/core/p3graph.hpp"
 #include "../src/vis/visualize2d.hpp"
 
 #include "config.hpp"
@@ -11,12 +10,7 @@ using namespace test;
 using CG = core::ConstraintGraph<
         std::tuple<int, double, std::string, core::Vec3>, 
         std::tuple<
-            core::ConstraintConfig<std::string, 
-                core::ComponentOccupation<int, 2>, 
-                core::ComponentOccupation<double, core::Dynamic>,
-                core::ComponentOccupation<std::string, 1>,
-                core::ComponentOccupation<core::Vec3, 3>
-            >
+            core::ConstraintConfig<std::string, int, double, std::string, core::Vec3>
         >
     >;
 
@@ -42,16 +36,17 @@ TEST(ConstraintGraph, Basic){
     auto h7 = cg.addComponent(core::Vec3(3, 4, 5));
 
     auto c = cg.addConstraint(std::string("a constraint"), 
-        core::Depends(h1),
-        core::Depends(h3, h4),
-        core::Depends(h2),
-        core::Depends(h5, h6, h7));
+        h1, h3, h2, h5);
 
     core::IterateOver(std::make_pair(cg.allComponents(), cg.allConstraints()), Print());
 
     ASSERT_TRUE(!cg.removed(c));
     cg.remove(h1);    
     ASSERT_TRUE(cg.removed(c));
+
+    auto cg2 = cg;
+    cg2.merge(cg);
+
 }
 
 

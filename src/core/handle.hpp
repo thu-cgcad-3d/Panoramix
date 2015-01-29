@@ -53,7 +53,7 @@ namespace panoramix {
         using HandleArray = std::vector<Handle<Tag>>;
         template <class Tag>
         using HandlePtrArray = std::vector<Handle<Tag>*>;
-        
+
         template <class Tag>
         inline bool operator < (const Handle<Tag> & a, const Handle<Tag> & b){
             return a.id < b.id;
@@ -83,6 +83,9 @@ namespace panoramix {
         template <class TypeTag, class Tag>
         using HandleOfType = Handle<OfType<TypeTag, Tag>>;
 
+        template <class TypeTag, int L>
+        using HandleOfTypeAtLevel = Handle<OfType<TypeTag, AtLevel<L>>>;
+
 
         // handled table
         template <class HandleT, class DataT>
@@ -98,6 +101,42 @@ namespace panoramix {
 
             template <class Archive> inline void serialize(Archive & ar) { ar(data); }
             std::vector<DataT> data;
+        };
+
+
+        // mixed handled table
+        template <class DataT, class ... HandleTs>
+        struct MixedHandledTable {
+            using HandleTupleType = std::tuple<HandleTs...>;
+            template <class ... IntTs>
+            explicit MixedHandledTable(IntTs ... maxSizes) : data({ { std::vector<DataT>(maxSizes)... } }) {}
+            template <class ... IntTs>
+            explicit MixedHandledTable(const std::tuple<IntTs...> & maxSizes)
+                : data({ { std::vector<DataT>(std::get<TypeFirstLocationInTuple<HandleTs, HandleTupleType>::value>(maxSizes)) } }) {}
+            template <class HandleT>
+            const DataT & operator[](HandleT h) const {
+                return data[TypeFirstLocationInTuple<HandleT, HandleTupleType>::value][h.id];
+            }
+            template <class HandleT>
+            const DataT & at(HandleT h) const {
+                return data[TypeFirstLocationInTuple<HandleT, HandleTupleType>::value].at(h.id);
+            }
+            template <class HandleT>
+            DataT & operator[](HandleT h) {
+                return data[TypeFirstLocationInTuple<HandleT, HandleTupleType>::value][h.id];
+            }
+            std::array<DataT &, sizeof...(HandleTs)> at(size_t i) {
+                return std::array<DataT &, sizeof...(HandleTs)>{{ data[TypeFirstLocationInTuple<HandleTs, HandleTupleType>::value][i]... }};
+            }
+            std::array<const DataT &, sizeof...(HandleTs)> at(size_t i) const {
+                return std::array<DataT &, sizeof...(HandleTs)>{{ data[TypeFirstLocationInTuple<HandleTs, HandleTupleType>::value][i]... }};
+            }
+            template <class HandleT>
+            std::vector<DataT> & dataOfType() {
+                return data[TypeFirstLocationInTuple<HandleT, HandleTupleType>::value];
+            }
+            template <class Archive> inline void serialize(Archive & ar) { ar(data); }
+            std::array<std::vector<DataT>, sizeof...(HandleTs)> data;
         };
 
 
@@ -144,11 +183,13 @@ namespace panoramix {
         };
 
         template <class TopoT, class DataT>
-        inline ConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>> MakeConditionalContainer(TripletArray<TopoT, DataT> & arr) {
+        inline ConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>> 
+            MakeConditionalContainer(TripletArray<TopoT, DataT> & arr) {
             return ConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>>(&arr, TripletExistsPred<TopoT, DataT>());
         }
         template <class TopoT, class DataT>
-        inline ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>> MakeConditionalContainer(const TripletArray<TopoT, DataT> & arr) {
+        inline ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>> 
+            MakeConditionalContainer(const TripletArray<TopoT, DataT> & arr) {
             return ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>, TripletExistsPred<TopoT, DataT>>(&arr, TripletExistsPred<TopoT, DataT>());
         }
 
@@ -160,66 +201,95 @@ namespace panoramix {
 
 
 
-        namespace {
-            // helper functions
-            template <class ComponentTableT, class UpdateHandleTableT>
-            int RemoveAndMap(ComponentTableT & v, UpdateHandleTableT & newlocations) {
-                // ComponentTableT : std::vector<Triplet<TopoT, DataT>>
-                // UpdateHandleTableT: std::vector<Handle<TopoT>>
-                newlocations.resize(v.size());
-                int index = 0;
-                for (size_t i = 0; i < v.size(); i++){
-                    newlocations[i] = { v[i].exists == false ? -1 : (index++) };
-                }
-                v.erase(std::remove_if(v.begin(), v.end(), [](const typename ComponentTableT::value_type & t){
-                    return !t.exists;
-                }), v.end());
-                return 0;
+        // helper functions
+        template <class ComponentTableT, class UpdateHandleTableT>
+        int RemoveAndMap(ComponentTableT & v, UpdateHandleTableT & newlocations) {
+            // ComponentTableT : std::vector<Triplet<TopoT, DataT>>
+            // UpdateHandleTableT: std::vector<Handle<TopoT>>
+            newlocations.resize(v.size());
+            int index = 0;
+            for (size_t i = 0; i < v.size(); i++){
+                newlocations[i] = { v[i].exists == false ? -1 : (index++) };
             }
-            template <class UpdateHandleTableT, class TopoT>
-            inline void UpdateOldHandle(const UpdateHandleTableT & newlocationTable, Handle<TopoT> & h) {
-                // UpdateHandleTableT: std::vector<Handle<TopoT>>
+            v.erase(std::remove_if(v.begin(), v.end(), [](const typename ComponentTableT::value_type & t){
+                return !t.exists;
+            }), v.end());
+            return 0;
+        }
+
+
+        template <class UpdateHandleTableT, class T>
+        inline int UpdateOldHandle(const UpdateHandleTableT & newlocationTable, Handle<T> & h) {
+            // UpdateHandleTableT: std::vector<Handle<T>>
+            if (h.valid())
+                h = newlocationTable[h.id];
+            return 0;
+        }       
+
+
+        template <class UpdateHandleTableT, class ContainerT, class = std::enable_if_t<IsContainer<ContainerT>::value>>
+        inline int UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, ContainerT & hs) {
+            // UpdateHandleTableT: std::vector<Handle<TopoT>>
+            for (auto & h : hs){
                 if (h.valid())
                     h = newlocationTable[h.id];
             }
-            template <class UpdateHandleTableT, class ContainerT>
-            inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, ContainerT & hs) {
-                // UpdateHandleTableT: std::vector<Handle<TopoT>>
-                for (auto & h : hs){
-                    if (h.valid())
-                        h = newlocationTable[h.id];
-                }
-            }
-            template <class UpdateHandleTableT, class K, class CompareK, class AllocK>
-            inline void UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, std::set<K, CompareK, AllocK> & hs) {
-                // UpdateHandleTableT: std::vector<Handle<TopoT>>
-                std::set<K, CompareK, AllocK> oldhs = hs;
-                hs.clear();
-                for (const auto & oldh : oldhs) {
-                    hs.insert(newlocationTable[oldh.id]);
-                }
-            }
-            template <class ContainerT>
-            inline void RemoveInValidHandleFromContainer(ContainerT & hs) {
-                auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
-                invalid.reset();
-                hs.erase(std::remove(std::begin(hs), std::end(hs), invalid), std::end(hs));
-            }
-            template <class T, int N>
-            inline void RemoveInValidHandleFromContainer(std::array<T, N> & hs){}
-            template <class K, class CompareK, class AllocK>
-            inline void RemoveInValidHandleFromContainer(std::set<K, CompareK, AllocK> & hs) {
-                auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
-                invalid.reset();
-                hs.erase(invalid);
-            }
-            template <class K, class HasherK, class EqualK, class AllocK>
-            inline void RemoveInValidHandleFromContainer(std::unordered_set<K, HasherK, EqualK, AllocK> & hs){
-                auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
-                invalid.reset();
-                hs.erase(invalid);
-            }
+            return 0;
+        }
 
+        template <class UpdateHandleTableT, class K, class CompareK, class AllocK>
+        inline int UpdateOldHandleContainer(const UpdateHandleTableT& newlocationTable, std::set<Handle<K>, CompareK, AllocK> & hs) {
+            // UpdateHandleTableT: std::vector<Handle<TopoT>>
+            std::set<Handle<K>, CompareK, AllocK> oldhs = hs;
+            hs.clear();
+            for (const auto & oldh : oldhs) {
+                hs.insert(newlocationTable[oldh.id]);
+            }
+            return 0;
+        }
+
+       /* namespace {
+            template <class UpdateHandleTableTupleT, class ContainerT, int ... Is>
+            inline int UpdateOldHandleUsingSequence1(const UpdateHandleTableTupleT & newlocationTable, ContainerT & hs, Sequence<Is...>){
+                int dummy[] = { UpdateOldHandle(std::get<Is>(newlocationTable), hs)... };
+                return 0;
+            }
+            template <class UpdateHandleTableT, class ContainerTupleT, int ... Is>
+            inline int UpdateOldHandleUsingSequence2(const UpdateHandleTableT & newlocationTable, ContainerTupleT & hs, Sequence<Is...>){
+                int dummy[] = { UpdateOldHandle(newlocationTable, std::get<Is>(hs))... };
+                return 0;
+            }
+        }
+
+        template <class ... UpdateHandleTableTs, class ContainerT, class = std::enable_if_t<!IsTuple<ContainerT>::value>>
+        inline int UpdateOldHandle(const std::tuple<UpdateHandleTableTs...> & newlocationTable, ContainerT & hs){
+            return UpdateOldHandleUsingSequence1(newlocationTable, hs, SequenceGenerator<sizeof...(UpdateHandleTableTs)>::type());
+        }
+
+        template <class UpdateHandleTableT, class ... ContainerTs>
+        inline int UpdateOldHandle(const UpdateHandleTableT & newlocationTable, std::tuple<ContainerTs...> & hs){
+            return UpdateOldHandleUsingSequence2(newlocationTable, hs, SequenceGenerator<sizeof...(ContainerTs)>::type());
+        }*/
+
+        template <class ContainerT>
+        inline void RemoveInValidHandleFromContainer(ContainerT & hs) {
+            auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
+            invalid.reset();
+            hs.erase(std::remove(std::begin(hs), std::end(hs), invalid), std::end(hs));
+        }
+        template <class T, int N>
+        inline void RemoveInValidHandleFromContainer(std::array<T, N> & hs){}
+        template <class K, class CompareK, class AllocK>
+        inline void RemoveInValidHandleFromContainer(std::set<K, CompareK, AllocK> & hs) {
+            auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
+            invalid.reset();
+            hs.erase(invalid);
+        }
+        template <class K, class HasherK, class EqualK, class AllocK>
+        inline void RemoveInValidHandleFromContainer(std::unordered_set<K, HasherK, EqualK, AllocK> & hs){
+            auto invalid = typename std::iterator_traits<decltype(std::begin(hs))>::value_type();
+            invalid.reset();
+            hs.erase(invalid);
         }
 
 

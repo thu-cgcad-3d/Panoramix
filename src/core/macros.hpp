@@ -27,6 +27,14 @@ namespace panoramix {
     "in line: " + std::to_string(__LINE__) + "\n" \
     "in file: "__FILE__) << std::endl 
 
+        // there are bugs here
+#define THERE_ARE_BUGS_HERE()  \
+    std::cout << ("This feature has BUGS! FIXME!!!!!! \n" \
+    "in function: "__FUNCSIG__ "\n" \
+    "in line: " + std::to_string(__LINE__) + "\n" \
+    "in file: "__FILE__) << std::endl
+
+
         // should never be called error
 #define SHOULD_NEVER_BE_CALLED() \
     throw std::runtime_error("This feature should never be called! \n" \

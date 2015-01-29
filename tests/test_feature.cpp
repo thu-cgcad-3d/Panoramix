@@ -60,6 +60,21 @@ TEST(Feature, SegmentationExtractor) {
     }
 }
 
+
+TEST(Feature, SegmentationExtractorInPanorama){
+
+    core::Image im = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
+    core::ResizeToMakeHeightUnder(im, 800);
+    core::SegmentationExtractor::Params p;
+    p.isPanorama = true;
+    auto segs = core::SegmentationExtractor(p)(im);
+    vis::Visualizer2D(segs.first)
+        << vis::manip2d::SetColorTable(vis::CreateRandomColorTableWithSize(segs.second))
+        << vis::manip2d::Show();
+
+}
+
+
 TEST(Feature, LineSegmentExtractor) {
     core::LineSegmentExtractor lineseg;
     core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");

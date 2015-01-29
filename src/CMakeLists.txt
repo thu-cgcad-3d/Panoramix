@@ -16,6 +16,13 @@ file (GLOB CORE_SOURCES ./core/*.cpp)
 
 source_group ("core" FILES ${CORE_HEADERS} ${CORE_SOURCES})
 
+
+file (GLOB ML_HEADERS ./ml/*.hpp)
+file (GLOB ML_SOURCES ./ml/*.cpp)
+
+source_group ("ml" FILES ${ML_HEADERS} ${ML_SOURCES})
+
+
 file (GLOB VIS_HEADERS ./vis/*.hpp)
 file (GLOB VIS_SOURCES ./vis/*.cpp)
 file (GLOB VIS_RESOURCES ./vis/*.qrc)
@@ -30,6 +37,8 @@ set(CMAKE_AUTORCC on)
 add_library ( ${PROJECT_NAME} STATIC 
 	${CORE_SOURCES} 
 	${CORE_HEADERS}
+	${ML_HEADERS} 
+	${ML_SOURCES}
 	${VIS_SOURCES} 
 	${VIS_HEADERS} 
 	${VIS_RESOURCES}

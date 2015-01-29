@@ -177,5 +177,59 @@ namespace panoramix {
         }
 
 
+
+        std::vector<PerspectiveCamera> CreateHorizontalPerspectiveCameras(const PanoramicCamera & panoCam, int num,
+            int width, int height, double focal){
+            std::vector<PerspectiveCamera> cams(num);
+            Vec3 x, y;
+            std::tie(x, y) = ProposeXYDirectionsFromZDirection(-panoCam.up());
+            for (int i = 0; i < num; i++){
+                double angle = M_PI * 2.0 / num * i;
+                Vec3 direction = sin(angle) * x + cos(angle) * y;
+                cams[i] = PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + direction, -panoCam.up(), 0.01, 1e4);
+            }
+            return cams;
+        }
+
+
+
+
+        View<PanoramicCamera> CreatePanoramicView(const Image & panorama,
+            const Point3 & eye, const Point3 & center, const Vec3 & up) {
+            assert(abs(panorama.cols - panorama.rows * 2) < panorama.rows / 10.0f);
+            return View<PanoramicCamera>{
+                panorama,
+                    PanoramicCamera(panorama.cols / M_PI / 2.0, eye, center, up)
+            };
+        }
+
+        View<PerspectiveCamera> CreatePerspectiveView(const Image & perspectiveImage,
+            const Point3 & eye, const Point3 & center, const Vec3 & up,
+            const LineSegmentExtractor & lse, const VanishingPointsDetector & vpd,
+            std::array<HPoint2, 3> * vpsPtr,
+            double * focalPtr){
+
+            auto lines = lse(perspectiveImage);
+            std::array<HPoint2, 3> vps;
+            double focal;
+            std::tie(vps, focal, std::ignore) = vpd(lines, Point2(perspectiveImage.cols / 2.0, perspectiveImage.rows / 2.0));
+
+            View<PerspectiveCamera> view;
+            view.image = perspectiveImage;
+            view.camera = PerspectiveCamera(perspectiveImage.cols, perspectiveImage.rows, focal, eye, center, up);
+
+            if (vpsPtr){
+                *vpsPtr = vps;
+            }
+            if (focalPtr){
+                *focalPtr = focal;
+            }
+
+            return view;
+
+        }
+
+
+
     }
 }

@@ -2,6 +2,7 @@
 #define PANORAMIX_CORE_CAMERAS_HPP
 
 #include "basic_types.hpp"
+#include "feature.hpp"
 
 namespace panoramix {
     namespace core {
@@ -146,6 +147,16 @@ namespace panoramix {
                 return outputIm;
             }
 
+            template <class T>
+            ImageWithType<T> operator() (const ImageWithType<T> & inputIm,
+                int borderMode = cv::BORDER_REPLICATE,
+                const T & borderValue = 0) const {
+                ImageWithType<T> outputIm;
+                cv::remap(inputIm, outputIm, _mapx, _mapy,
+                    inputIm.channels() <= 4 ? cv::INTER_LINEAR : cv::INTER_NEAREST, borderMode, borderValue);
+                return outputIm;
+            }
+
         private:
             OutCameraT _outCam;
             InCameraT _inCam;
@@ -189,10 +200,58 @@ namespace panoramix {
         }
 
         // judge whether T is a camera type
-        // camera c should support:
-        //      c.eye(), c.screenProjection(Vec3), c.spatialDirection(Vec2)
         template <class T>
         struct IsCamera : std::integral_constant<bool, IsCameraImpl<T>::value> {};
+
+
+
+        // create horizontal cameras
+        std::vector<PerspectiveCamera> CreateHorizontalPerspectiveCameras(const PanoramicCamera & panoCam,
+            int num = 16, int width = 500, int height = 500, double focal = 250.0);
+
+
+
+
+
+
+        // view class
+        template <class CameraT, class ImageT = Image, class = std::enable_if_t<IsCamera<CameraT>::value>>
+        struct View {
+            ImageT image;
+            CameraT camera;
+
+            template <class AnotherCameraT, class = std::enable_if_t<IsCamera<std::decay_t<AnotherCameraT>>::value>>
+            inline View<std::decay_t<AnotherCameraT>, ImageT> sampled(AnotherCameraT && cam) const {
+                View<std::decay_t<AnotherCameraT>, ImageT> v;
+                v.image = MakeCameraSampler(cam, camera)(image);
+                v.camera = std::forward<AnotherCameraT>(cam);
+                return v;
+            }
+
+            template <class Archiver>
+            void serialize(Archiver & ar) {
+                ar(image, camera);
+            }
+        };
+
+
+
+
+        // create panoramic view
+        View<PanoramicCamera> CreatePanoramicView(const Image & panorama,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, -1));
+
+        // create perspective view
+        View<PerspectiveCamera> CreatePerspectiveView(const Image & perspectiveImage,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, -1),
+            const LineSegmentExtractor & lse = LineSegmentExtractor(),
+            const VanishingPointsDetector & vpd = VanishingPointsDetector(),
+            std::array<HPoint2, 3> * vps = nullptr,
+            double * focal = nullptr);
 
 
     }

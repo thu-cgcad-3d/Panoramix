@@ -1,20 +1,863 @@
 
-extern "C" {
-    #include <mosek.h>
-}
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
-
+//extern "C" {
+//    #include <mosek.h>
+//}
+//#include <Eigen/Dense>
+//#include <Eigen/Sparse>
+//
 #include "algorithms.hpp"
 #include "containers.hpp"
-#include "matlab.hpp"
+//#include "matlab.hpp"
+#include "utilities.hpp"
 #include "mixed_graph.hpp"
 
-#include "../vis/visualizers.hpp"
-#include "matlab.hpp"
+//#include "../vis/visualizers.hpp"
+//#include "matlab.hpp"
+
 
 namespace panoramix {
+    namespace core{
+
+
+        namespace {
+
+            struct ComparePixelLoc {
+                inline bool operator ()(const PixelLoc & a, const PixelLoc & b) const {
+                    if (a.x != b.x)
+                        return a.x < b.x;
+                    return a.y < b.y;
+                }
+            };
+
+            template <class T>
+            inline std::pair<T, T> MakeOrderedPair(const T & a, const T & b) {
+                return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
+            }
+
+            void FindContoursOfRegionsAndBoundaries(const Imagei & segRegions, int regionNum,
+                std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryEdges) {
+
+                std::map<std::pair<int, int>, std::set<PixelLoc, ComparePixelLoc>> boundaryPixels;
+
+                int width = segRegions.cols;
+                int height = segRegions.rows;
+                for (int y = 0; y < height - 1; y++) {
+                    for (int x = 0; x < width - 1; x++) {
+                        PixelLoc p1(x, y), p2(x + 1, y), p3(x, y + 1), p4(x + 1, y + 1);
+                        int rs[] = {
+                            segRegions(p1),
+                            segRegions(p2),
+                            segRegions(p3),
+                            segRegions(p4)
+                        };
+
+                        if (rs[0] != rs[1]) {
+                            boundaryPixels[MakeOrderedPair(rs[0], rs[1])].insert(p1);
+                        }
+                        if (rs[0] != rs[2]) {
+                            boundaryPixels[MakeOrderedPair(rs[0], rs[2])].insert(p1);
+                        }
+                        if (rs[0] != rs[3]) {
+                            boundaryPixels[MakeOrderedPair(rs[0], rs[3])].insert(p1);
+                        }
+                    }
+                }
+
+                for (auto & bpp : boundaryPixels) {
+                    int rid1 = bpp.first.first;
+                    int rid2 = bpp.first.second;
+                    auto & pixels = bpp.second;
+
+                    if (pixels.empty())
+                        continue;
+
+                    PixelLoc p = *pixels.begin();
+
+                    static const int xdirs[] = { 1, 0, -1, 0, -1, 1, 1, -1, 0, 0, 2, -2 };
+                    static const int ydirs[] = { 0, 1, 0, -1, 1, -1, 1, -1, 2, -2, 0, 0 };
+
+                    std::vector<std::vector<PixelLoc>> edges;
+                    edges.push_back({ p });
+                    pixels.erase(p);
+
+                    while (true) {
+                        auto & curEdge = edges.back();
+                        auto & curTail = curEdge.back();
+
+                        bool foundMore = false;
+                        for (int i = 0; i < std::distance(std::begin(xdirs), std::end(xdirs)); i++) {
+                            PixelLoc next = curTail;
+                            next.x += xdirs[i];
+                            next.y += ydirs[i];
+                            if (!IsBetween(next.x, 0, width - 1) || !IsBetween(next.y, 0, height - 1))
+                                continue;
+                            if (pixels.find(next) == pixels.end()) // not a boundary pixel or already recorded
+                                continue;
+
+                            curEdge.push_back(next);
+                            pixels.erase(next);
+                            foundMore = true;
+                            break;
+                        }
+
+                        if (!foundMore) {
+                            // simplify current edge
+                            if (edges.back().size() <= 1) {
+                                edges.pop_back();
+                            }
+                            else {
+                                bool closed = Distance(edges.back().front(), edges.back().back()) <= 1.5;
+                                cv::approxPolyDP(edges.back(), edges.back(), 2, closed);
+                                if (edges.back().size() <= 1)
+                                    edges.pop_back();
+                            }
+
+                            if (pixels.empty()) { // no more pixels
+                                break;
+                            }
+                            else { // more pixels
+                                PixelLoc p = *pixels.begin();
+                                edges.push_back({ p });
+                                pixels.erase(p);
+                            }
+                        }
+                    }
+
+                    if (!edges.empty()) {
+                        boundaryEdges[MakeOrderedPair(rid1, rid2)] = edges;
+                    }
+                }
+
+            }
+
+
+            inline Point2 ToPoint2(const PixelLoc & p) {
+                return Point2(p.x, p.y);
+            }
+
+            template <class T>
+            inline Point2 ToPoint2(const Point<T, 2> & p) {
+                return Point2(static_cast<double>(p[0]), static_cast<double>(p[1]));
+            }
+
+            template <class T>
+            inline Point<float, 2> ToPoint2f(const Point<T, 2> & p) {
+                return Point<float, 2>(static_cast<float>(p[0]), static_cast<float>(p[1]));
+            }
+
+            inline PixelLoc ToPixelLoc(const Point2 & p) {
+                return PixelLoc(static_cast<int>(p[0]), static_cast<int>(p[1]));
+            }
+
+            std::pair<double, double> ComputeSpanningArea(const Point2 & a, const Point2 & b, const InfiniteLine2 & line) {
+                auto ad = SignedDistanceFromPointToLine(a, line);
+                auto bd = SignedDistanceFromPointToLine(b, line);
+                auto ap = DistanceFromPointToLine(a, line).second;
+                auto bp = DistanceFromPointToLine(b, line).second;
+                auto len = norm(ap - bp);
+                if (ad * bd >= 0) {
+                    return std::make_pair(len * std::abs(ad + bd) / 2.0, len);
+                }
+                ad = abs(ad);
+                bd = abs(bd);
+                return std::make_pair((ad * ad + bd * bd) * len / (ad + bd) / 2.0, len);
+            }
+
+        }
+
+
+
+
+
+
+
+        float IncidenceJunctionWeight(bool acrossViews){
+            return acrossViews ? 10.0f : 7.0f;
+        }
+        float OutsiderIntersectionJunctionWeight(){
+            return 2.0f;
+        }
+        float ComputeIntersectionJunctionWeightWithLinesVotes(const Mat<float, 3, 2> & v){
+            double junctionWeight = 0.0;
+            // Y
+            double Y = 0.0;
+            for (int s = 0; s < 2; s++) {
+                Y += v(0, s) * v(1, s) * v(2, s) * DiracDelta(v(0, 1 - s) + v(1, 1 - s) + v(2, 1 - s));
+            }
+
+            // W
+            double W = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    for (int s = 0; s < 2; s++) {
+                        W += v(i, s) * v(j, 1 - s) * v(k, 1 - s) * DiracDelta(v(i, 1 - s) + v(j, s) + v(k, s));
+                    }
+                }
+            }
+
+            // K
+            double K = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    K += v(i, 0) * v(i, 1) * v(j, 0) * v(k, 1) * DiracDelta(v(j, 1) + v(k, 0));
+                    K += v(i, 0) * v(i, 1) * v(j, 1) * v(k, 0) * DiracDelta(v(j, 0) + v(k, 1));
+                }
+            }
+
+            // compute X junction
+            double X = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    X += v(i, 0) * v(i, 1) * v(j, 0) * v(j, 1) * DiracDelta(v(k, 0) + v(k, 1));
+                }
+            }
+
+            // compute T junction
+            double T = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    T += v(i, 0) * v(i, 1) * v(j, 0) * DiracDelta(v(j, 1) + v(k, 0) + v(k, 1));
+                    T += v(i, 0) * v(i, 1) * v(j, 1) * DiracDelta(v(j, 0) + v(k, 0) + v(k, 1));
+                }
+            }
+
+            // compute L junction
+            double L = 0.0;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    if (i == j)
+                        continue;
+                    int k = 3 - i - j;
+                    for (int a = 0; a < 2; a++) {
+                        int nota = 1 - a;
+                        for (int b = 0; b < 2; b++) {
+                            int notb = 1 - b;
+                            L += v(i, a) * v(j, b) * DiracDelta(v(i, nota) + v(j, notb) + v(k, 0) + v(k, 1));
+                        }
+                    }
+                }
+            }
+
+            //std::cout << " Y-" << Y << " W-" << W << " K-" << K << 
+            //    " X-" << X << " T-" << T << " L-" << L << std::endl; 
+            static const double threshold = 1e-4;
+            if (Y > threshold) {
+                junctionWeight += 5.0;
+            }
+            else if (W > threshold) {
+                junctionWeight += 5.0;
+            }
+            else if (L > threshold) {
+                junctionWeight += 4.0;
+            }
+            else if (K > threshold) {
+                junctionWeight += 3.0;
+            }
+            else if (X > threshold) {
+                junctionWeight += 5.0;
+            }
+            else if (T > threshold) {
+                junctionWeight += 0.0;
+            }
+
+            return junctionWeight;
+        }
+
+
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
+            std::vector<std::vector<Classified<Line2>>> & lineSegments){
+
+            assert(cams.size() == lineSegments.size());
+            std::vector<Vec3> lineIntersections;
+
+            int linesNum;
+            for (int i = 0; i < cams.size(); i++){
+                std::vector<Line2> pureLines(lineSegments[i].size());
+                linesNum += lineSegments[i].size();
+                for (int k = 0; k < pureLines.size(); k++){
+                    pureLines[k] = lineSegments[i][k].component;
+                }
+                auto inters = ComputeLineIntersections(pureLines, nullptr, true, std::numeric_limits<double>::max());
+                // insert line intersections
+                for (auto & p : inters){
+                    lineIntersections.push_back(normalize(cams[i].spatialDirection(p.value())));
+                }
+            }
+
+            auto vanishingPoints = FindThreeOrthogonalPrinicipleDirections(lineIntersections);
+
+            // project lines to space
+            std::vector<Classified<Line3>> spatialLineSegments;
+            spatialLineSegments.reserve(linesNum);
+            for (int i = 0; i < cams.size(); i++){
+                for (const auto & line : lineSegments[i]) {
+                    auto & p1 = line.component.first;
+                    auto & p2 = line.component.second;
+                    auto pp1 = cams[i].spatialDirection(p1);
+                    auto pp2 = cams[i].spatialDirection(p2);
+                    Classified<Line3> cline3;
+                    cline3.claz = -1;
+                    cline3.component = Line3{ pp1, pp2 };
+                    spatialLineSegments.push_back(cline3);
+                }
+            }
+
+            // classify lines
+            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8);
+
+            int ii = 0;
+            for (int i = 0; i < lineSegments.size(); i++){
+                for (int j = 0; j < lineSegments[i].size(); j++){
+                    lineSegments[i][j].claz = spatialLineSegments[ii].claz;
+                    ii++;
+                }
+            }
+
+            return vanishingPoints;
+
+        }
+
+
+
+        namespace {
+
+            // lines graph in 2d
+            struct LineData2D {
+                Classified<Line2> line;
+                template <class Archiver>
+                void serialize(Archiver & ar) {
+                    ar(line);
+                }
+            };
+            struct LineRelationData2D {
+                Point2 relationCenter;
+                float junctionWeight;
+                LineRelationData::Type type;
+                template <class Archiver>
+                void serialize(Archiver & ar) {
+                    ar(relationCenter, junctionWeight, type);
+                }
+            };
+            using LinesGraph2D = HomogeneousGraph02<LineData2D, LineRelationData2D>;
+            using LineHandle2D = HandleOfTypeAtLevel<LinesGraph2D, 0>;
+            using LineRelationHandle2D = HandleOfTypeAtLevel<LinesGraph2D, 1>;
+
+            LinesGraph2D CreateLinesGraph2D(const std::vector<Classified<Line2>> & lines,
+                const std::vector<HPoint2> & vps,
+                double intersectionDistanceThreshold,
+                double incidenceDistanceAlongDirectionThreshold,
+                double incidenceDistanceVerticalDirectionThreshold,
+                bool includeUnclassifiedLines){
+
+                LinesGraph2D graph;
+
+                // insert lines
+                std::vector<LineHandle2D> handles;
+                handles.reserve(lines.size());
+                graph.internalElements<0>().reserve(lines.size());
+
+                for (auto & line : lines){
+                    if (line.claz == -1 && !includeUnclassifiedLines)
+                        continue;
+                    LineData2D ld;
+                    ld.line = line;
+                    handles.push_back(graph.add(std::move(ld)));
+                }
+
+                // construct incidence/intersection relations
+                auto & linesData = graph.internalElements<0>();
+                for (int i = 0; i < linesData.size(); i++){
+                    auto & linei = linesData[i].data.line.component;
+                    int clazi = linesData[i].data.line.claz;
+                    if (!includeUnclassifiedLines)
+                        assert(clazi != -1);
+
+                    for (int j = i + 1; j < linesData.size(); j++){
+                        auto & linej = linesData[j].data.line.component;
+                        int clazj = linesData[j].data.line.claz;
+                        if (!includeUnclassifiedLines)
+                            assert(clazj != -1);
+
+                        auto nearest = DistanceBetweenTwoLines(linei, linej);
+                        double d = nearest.first;
+
+                        if (clazi == -1 || clazj == -1)
+                            continue;
+
+                        if (clazi == clazj){ // incidences
+                            auto conCenter = (nearest.second.first.position + nearest.second.second.position) / 2.0;
+                            auto conDir = (nearest.second.first.position - nearest.second.second.position);
+                            auto & vp = vps[clazi];
+
+                            if (Distance(vp.value(), conCenter) < intersectionDistanceThreshold)
+                                continue;
+
+                            auto dir = normalize((vp - HPoint2(conCenter)).numerator);
+                            double dAlong = abs(conDir.dot(dir));
+                            double dVert = sqrt(Square(norm(conDir)) - dAlong*dAlong);
+
+                            if (dAlong < incidenceDistanceAlongDirectionThreshold &&
+                                dVert < incidenceDistanceVerticalDirectionThreshold){
+                                LineRelationData2D lrd;
+                                lrd.type = LineRelationData::Type::Incidence;
+                                lrd.relationCenter = conCenter;
+
+                                if (HasValue(lrd.relationCenter, IsInfOrNaN<double>))
+                                    continue;
+
+                                graph.add<1>({ handles[i], handles[j] }, std::move(lrd));
+                            }
+                        }
+                        else { // intersections
+                            if (d < intersectionDistanceThreshold){
+                                auto conCenter = HPointFromVector(GetCoeffs(linei.infiniteLine())
+                                    .cross(GetCoeffs(linej.infiniteLine()))).value();
+
+                                assert(conCenter != Point2(0.0, 0.0));
+
+                                if (DistanceFromPointToLine(conCenter, linei).first > intersectionDistanceThreshold * 4 ||
+                                    DistanceFromPointToLine(conCenter, linej).first > intersectionDistanceThreshold * 4)
+                                    continue;
+
+                                LineRelationData2D lrd;
+                                lrd.type = LineRelationData::Type::Intersection;
+                                lrd.relationCenter = conCenter;
+
+                                if (HasValue(lrd.relationCenter, IsInfOrNaN<double>))
+                                    continue;
+
+                                graph.add<1>({ handles[i], handles[j] }, std::move(lrd));
+                            }
+                        }
+                    }
+                }
+
+                static const double angleThreshold = M_PI / 32;
+                static const double sigma = 0.1;
+
+                enum LineVotingDirection : int {
+                    TowardsVanishingPoint = 0,
+                    TowardsOppositeOfVanishingPoint = 1
+                };
+                enum class JunctionType : int {
+                    L, T, Y, W, X
+                };
+
+                Box2 linesBBox = BoundingBoxOfContainer(lines);
+                linesBBox.expand(linesBBox.outerSphere().radius / 2.0);
+
+                // compute junction weights
+                for (auto & lr : graph.elements<1>()){
+                    auto & lrd = lr.data;
+                    if (lrd.type == LineRelationData::Type::Incidence){
+                        lrd.junctionWeight = IncidenceJunctionWeight(false);
+                    }
+                    else if (lrd.type == LineRelationData::Type::Intersection){
+                        Mat<float, 3, 2> votingData;
+                        std::fill(std::begin(votingData.val), std::end(votingData.val), 0);
+
+                        for (auto & ld : graph.elements<0>()){
+                            auto & line = ld.data.line.component;
+                            int claz = ld.data.line.claz;
+                            if (claz == -1)
+                                continue;
+
+                            auto & vp = vps[claz];
+                            Point2 center = line.center();
+
+                            Vec2 center2vp = vp.value() - center;
+                            Vec2 center2pos = lrd.relationCenter - center;
+
+                            if (norm(center2pos) <= 1)
+                                continue;
+
+                            double angle = AngleBetweenDirections(center2pos, center2vp);
+                            double angleSmall = angle > M_PI_2 ? (M_PI - angle) : angle;
+                            if (IsInfOrNaN(angleSmall))
+                                continue;
+
+                            assert(angleSmall >= 0 && angleSmall <= M_PI_2);
+
+                            double angleScore =
+                                exp(-(angleSmall / angleThreshold) * (angleSmall / angleThreshold) / sigma / sigma / 2);
+
+                            auto proj = ProjectionOfPointOnLine(lrd.relationCenter, line);
+                            double projRatio = BoundBetween(proj.ratio, 0.0, 1.0);
+
+                            if (AngleBetweenDirections(center2vp, line.direction()) < M_PI_2){ // first-second-vp
+                                votingData(claz, TowardsVanishingPoint) += angleScore * line.length() * (1 - projRatio);
+                                votingData(claz, TowardsOppositeOfVanishingPoint) += angleScore * line.length() * projRatio;
+                            }
+                            else{ // vp-first-second
+                                votingData(claz, TowardsOppositeOfVanishingPoint) += angleScore * line.length() * (1 - projRatio);
+                                votingData(claz, TowardsVanishingPoint) += angleScore * line.length() * projRatio;
+                            }
+                        }
+
+
+                        auto p = ToPixelLoc(lrd.relationCenter);
+                        if (core::IsBetween(lrd.relationCenter[0], 0, linesBBox.size()[0] - 1) &&
+                            core::IsBetween(lrd.relationCenter[1], 0, linesBBox.size()[1] - 1)){
+                            lrd.junctionWeight = ComputeIntersectionJunctionWeightWithLinesVotes(
+                                votingData);
+                        }
+                        else{
+                            lrd.junctionWeight = OutsiderIntersectionJunctionWeight();
+                        }
+                    }
+                    else{
+                        assert(false && "invalid branch!");
+                    }
+                }
+
+                return graph;
+
+            }
+
+
+
+            template <class T, int N>
+            inline Line<T, N> NormalizeLine(const Line<T, N> & l) {
+                return Line<T, N>(normalize(l.first), normalize(l.second));
+            }
+        }
+
+
+        void AddLines(MixedGraph & mg, const std::vector<Classified<Line2>> & lineSegments,
+            const PerspectiveCamera & cam,
+            const std::vector<Vec3> & vps,
+            double intersectionAngleThreshold /*= 0.04*/,
+            double incidenceAngleAlongDirectionThreshold /*= 0.1*/,
+            double incidenceAngleVerticalDirectionThreshold /*= 0.02*/,
+            double interViewIncidenceAngleAlongDirectionThreshold /*= 0.15*/, // for new line-line incidence recognition
+            double interViewIncidenceAngleVerticalDirectionThreshold /*= 0.03*/,
+            bool includeUnclassifiedLines /*= false*/){
+
+            if (lineSegments.empty())
+                return;
+
+            std::vector<HPoint2> vps2d(vps.size());
+            for (int i = 0; i < vps.size(); i++){
+                vps2d[i] = cam.screenProjectionInHPoint(vps[i]);
+            }
+            LinesGraph2D graph2d = CreateLinesGraph2D(lineSegments, vps2d, 
+                cam.focal() * intersectionAngleThreshold,
+                cam.focal() * incidenceAngleAlongDirectionThreshold,
+                cam.focal() * incidenceAngleVerticalDirectionThreshold, includeUnclassifiedLines);
+
+            mg.internalComponents<LineData>().reserve(mg.internalComponents<LineData>().size() + 
+                graph2d.internalElements<0>().size());
+            mg.internalConstraints<LineRelationData>().reserve(mg.internalConstraints<LineRelationData>().size() + 
+                graph2d.internalElements<1>().size());
+
+            assert(graph2d.isDense());
+
+            std::unordered_set<LineHandle> newLineHandles;
+            std::unordered_map<LineHandle2D, LineHandle> lh2dToLh;
+
+            for (auto & l2d : graph2d.elements<0>()){
+                auto & ld2d = l2d.data;
+                LineData ld;
+                ld.line.claz = ld2d.line.claz;
+                ld.line.component.first = normalize(cam.spatialDirection(ld2d.line.component.first));
+                ld.line.component.second = normalize(cam.spatialDirection(ld2d.line.component.second));
+                lh2dToLh[l2d.topo.hd] = mg.addComponent(std::move(ld));
+                newLineHandles.insert(lh2dToLh[l2d.topo.hd]);
+            }
+
+            for (auto & r2d : graph2d.elements<1>()){
+                auto & rd2d = r2d.data;
+                LineRelationData rd;
+                rd.type = rd2d.type;
+                rd.junctionWeight = rd2d.junctionWeight;
+                rd.normalizedRelationCenter = normalize(cam.spatialDirection(rd2d.relationCenter));
+                mg.addConstraint(std::move(rd), lh2dToLh.at(r2d.topo.lowers.front()), lh2dToLh.at(r2d.topo.lowers.back()));
+            }
+
+            // line incidence relations between old lines and new lines
+            std::map<std::pair<LineHandle, LineHandle>, Vec3> interViewLineIncidences;
+
+            // build rtree for lines
+            auto lookupLineNormal = [&mg](const LineHandle & li) -> Box3 {
+                auto normal = mg.data(li).line.component.first.cross(mg.data(li).line.component.second);
+                Box3 b = BoundingBox(normalize(normal));
+                static const double s = 0.2;
+                b.minCorner = b.minCorner - Vec3(s, s, s);
+                b.maxCorner = b.maxCorner + Vec3(s, s, s);
+                return b;
+            };
+
+            RTreeWrapper<LineHandle, decltype(lookupLineNormal)> linesRTree(lookupLineNormal);
+            for (auto & l : mg.components<LineData>()) {
+                linesRTree.insert(l.topo.hd);
+            }
+
+            // recognize incidence constraints between lines of different views
+            for (auto & l : mg.components<LineData>()) {
+                auto lh = l.topo.hd;
+                if (Contains(newLineHandles, lh))
+                    continue; // stick old lh, find new lh
+                auto & lineData = l.data;
+                linesRTree.search(lookupLineNormal(lh),
+                    [interViewIncidenceAngleAlongDirectionThreshold, interViewIncidenceAngleVerticalDirectionThreshold,
+                    &l, &mg, &interViewLineIncidences, &newLineHandles](const LineHandle & relatedLh) -> bool {
+                    if (!Contains(newLineHandles, relatedLh))
+                        return true;
+
+                    assert(l.topo.hd < relatedLh);
+
+                    auto & line1 = l.data.line;
+                    auto & line2 = mg.data(relatedLh).line;
+                    if (line1.claz != line2.claz) // only incidence relations are recognized here
+                        return true;
+
+                    auto normal1 = normalize(line1.component.first.cross(line1.component.second));
+                    auto normal2 = normalize(line2.component.first.cross(line2.component.second));
+
+                    if (std::min(std::abs(AngleBetweenDirections(normal1, normal2)),
+                        std::abs(AngleBetweenDirections(normal1, -normal2))) <
+                        interViewIncidenceAngleVerticalDirectionThreshold) {
+
+                        auto nearest = DistanceBetweenTwoLines(NormalizeLine(line1.component), NormalizeLine(line2.component));
+                        if (AngleBetweenDirections(nearest.second.first.position, nearest.second.second.position) >
+                            interViewIncidenceAngleAlongDirectionThreshold) // ignore too far-away relations
+                            return true;
+
+                        auto relationCenter = (nearest.second.first.position + nearest.second.second.position) / 2.0;
+                        relationCenter /= norm(relationCenter);
+
+                        interViewLineIncidences[std::make_pair(l.topo.hd, relatedLh)] = relationCenter;
+                    }
+                    return true;
+                });
+            }
+
+            // add to mixed graph
+            for (auto & ivli : interViewLineIncidences){
+                LineRelationData lrd;
+                lrd.type = LineRelationData::Incidence;
+                lrd.junctionWeight = IncidenceJunctionWeight(true);
+                lrd.normalizedRelationCenter = ivli.second;
+                mg.addConstraint(std::move(lrd), ivli.first.first, ivli.first.second);
+            }
+
+        }
+
+
+        namespace {
+
+
+            template <class T, int N>
+            std::vector<Point<T, N>> NormalizedSamplePointsOnLine(const Line<T, N> & line, const T & stepLen){
+                T len = line.length();
+                auto dir = normalize(line.direction());
+                std::vector<Point<T, N>> pts;
+                pts.reserve(len / stepLen);
+                for (T l = 0; l <= len; l += stepLen){
+                    pts.push_back(normalize(line.first + dir * l));
+                }
+                return pts;
+            }
+
+
+            template <class CameraT>
+            void AddRegionsTemplate(MixedGraph & mg, const Imagei & segmentedRegions, const CameraT & cam,
+                double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
+
+                double minVal, maxVal;
+                std::tie(minVal, maxVal) = MinMaxValOfImage(segmentedRegions);
+                assert(minVal == 0.0);
+
+                int regionNum = static_cast<int>(maxVal)+1;
+
+                mg.internalComponents<RegionData>().reserve(mg.internalComponents<RegionData>().size() + regionNum);
+
+                std::vector<RegionHandle> regionHandles(regionNum);
+
+                // calculate contours and tangential projected areas for each region data
+                for (int i = 0; i < regionNum; i++){
+                    Image regionMask = (segmentedRegions == i);
+
+                    // find contour of the region
+                    std::vector<std::vector<PixelLoc>> contours;
+
+                    cv::findContours(regionMask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the outer contours
+                    std::sort(contours.begin(), contours.end(),
+                        [](const std::vector<PixelLoc> & ca, const std::vector<PixelLoc> & cb){return ca.size() > cb.size(); });
+                    assert(!contours.empty() && "no contour? impossible~");
+
+                    RegionData rd;
+                    Vec3 center(0, 0, 0);
+                    rd.normalizedContours.resize(contours.size());
+                    for (int k = 0; k < contours.size(); k++){
+                        rd.normalizedContours[k].reserve(contours[k].size());
+                        for (auto & p : contours[k]){
+                            rd.normalizedContours[k].push_back(normalize(cam.spatialDirection(p)));
+                            center += rd.normalizedContours[k].back();
+                        }
+                    }
+                    rd.normalizedCenter = normalize(center);
+
+                    // project the contours onto tangential plane 
+                    Vec3 x, y;
+                    std::tie(x, y) = core::ProposeXYDirectionsFromZDirection(rd.normalizedCenter);
+                    rd.area = 0.0;
+                    for (int k = 0; k < contours.size(); k++){
+                        std::vector<Point2> tangentialContour;
+                        tangentialContour.reserve(contours[k].size());
+                        for (const Vec3 & d : rd.normalizedContours[k]){
+                            tangentialContour.emplace_back((d - rd.normalizedCenter).dot(x), (d - rd.normalizedCenter).dot(y));
+                        }
+                        double a = cv::contourArea(tangentialContour);
+                        assert(a > 0.0);
+                        rd.area += a;
+                    }
+
+                    regionHandles[i] = mg.addComponent(std::move(rd));
+                }
+
+
+                // add region boundary constraints
+                std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges;
+                FindContoursOfRegionsAndBoundaries(segmentedRegions, regionNum, boundaryEdges);
+
+                for (auto & bep : boundaryEdges) {
+                    auto & rids = bep.first;
+                    auto & edges = bep.second;
+
+                    RegionBoundaryData bd;
+                    bd.normalizedEdges.resize(edges.size());
+                    for (int k = 0; k < edges.size(); k++){
+                        bd.normalizedEdges[k].reserve(edges[k].size());
+                        for (auto & p : edges[k]){
+                            bd.normalizedEdges[k].push_back(normalize(cam.spatialDirection(p)));
+                        }
+                    }
+
+                    bd.length = 0;
+                    for (auto & e : bd.normalizedEdges) {
+                        assert(!e.empty() && "edges should never be empty!");
+                        // get edge point projections
+                        for (int i = 0; i < e.size() - 1; i++) {
+                            bd.length += AngleBetweenDirections(e[i], e[i + 1]);
+                        }
+                    }
+
+                    bd.normalizedSampledPoints.resize(bd.normalizedEdges.size());
+                    for (int k = 0; k < bd.normalizedEdges.size(); k++){
+                        ForeachCompatibleWithLastElement(bd.normalizedEdges[k].begin(), bd.normalizedEdges[k].end(),
+                            std::back_inserter(bd.normalizedSampledPoints[k]),
+                            [samplingStepAngleOnBoundary](const Vec3 & a, const Vec3 & b){
+                            return AngleBetweenDirections(a, b) >= samplingStepAngleOnBoundary;
+                        });
+                    }
+
+                    mg.addConstraint(std::move(bd), RegionHandle(rids.first), RegionHandle(rids.second));
+                }
+
+
+                // add region-line connections
+                std::map<std::pair<RegionHandle, LineHandle>, std::vector<Vec3>> regionLineConnections;
+
+                for (auto & ld : mg.components<LineData>()){
+                    auto & line = ld.data.line.component;
+                    auto samples = NormalizedSamplePointsOnLine(line, samplingStepAngleOnLine);
+                    for (int k = 0; k < samples.size(); k++){
+                        if (!cam.isVisibleOnScreen(samples[k]))
+                            continue;
+                        PixelLoc p = ToPixelLoc(cam.screenProjection(samples[k]));
+                        if (p.x < 0 || p.x >= segmentedRegions.cols || p.y < 0 || p.y >= segmentedRegions.rows)
+                            continue;
+                        int regionId = segmentedRegions(p);
+                        auto rh = regionHandles[regionId];
+                        regionLineConnections[std::make_pair(rh, ld.topo.hd)].push_back(samples[k]);
+                    }
+                }
+
+                for (auto & rlc : regionLineConnections){
+                    RegionLineConnectionData rlcd;
+                    rlcd.normalizedAnchors = std::move(rlc.second);
+                    mg.addConstraint(std::move(rlcd), rlc.first.first, rlc.first.second);
+                }
+
+            }
+
+
+        }
+
+        void AddRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
+            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
+            AddRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine);
+        }
+        void AddRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
+            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
+            AddRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine);
+        }
+
+        
+
+
+
+    }
+}
+
+
+#if 0
+namespace panoramix {
     namespace core {
+
+        namespace {
+            int SwappedComponent(const MGUnary & u){
+                for (int i = 0; i < 2; i++){
+                    if (abs(u.normalizedOrientation[i]) >= 1e-8){
+                        return i;
+                    }
+                }
+                return 2;
+            }
+        }
+
+        MGUnaryVariable::MGUnaryVariable(const MGUnary & u, bool f) : fixed(f) {
+            if (u.type == MGUnary::RegionFree){
+                // (a, b, c) for RegionFree ax+by+c=1, 
+                variables = { u.normalizedCenter[0], u.normalizedCenter[1], u.normalizedCenter[2] };
+            }
+            else if (u.type == MGUnary::RegionAlongFixedAxis){
+                // (a, b), {or (b, c) or (a, c)} for RegionAlongFixedAxis  ax+by+c=1,
+                Vec3 anotherAxis = u.normalizedCenter.cross(u.normalizedOrientation);
+                Vec3 trueNormal = u.normalizedOrientation.cross(anotherAxis);
+                Plane3 plane(u.normalizedCenter, trueNormal);
+                auto eq = Plane3ToEquation(plane);
+                int c = SwappedComponent(u);
+                std::swap(eq[c], eq[2]);
+                variables = { eq[0], eq[1] };
+            }
+            else if (u.type == MGUnary::RegionWithFixedNormal){
+                // 1/centerDepth for RegionWithFixedNormal
+                variables = { 1.0 };
+            }
+            else if (u.type == MGUnary::LineFree){
+                // (1/cornerDepth1, 1/cornerDepth2) for LineFree
+                variables = { 1.0, 1.0 };
+            }
+            else if (u.type == MGUnary::LineOriented){
+                // 1/centerDepth for LineOriented,
+                variables = { 1.0 };
+            }
+        }
+
 
         double MGUnaryVariable::rawDepth() const{
             double sqSum = 0.0;
@@ -24,27 +867,39 @@ namespace panoramix {
             return 1.0 / sqrt(sqSum);
         }
 
-        Plane3 MGUnaryVariable::interpretAsPlane(const MGUnary & region, const std::vector<Vec3> & vps) const {
-            assert(region.type == MGUnary::Region);
-            if (region.orientationClaz >= 0){
+        Plane3 MGUnaryVariable::interpretAsPlane(const MGUnary & region) const {
+            assert(region.isRegion());
+            if (region.type == MGUnary::RegionWithFixedNormal){
                 assert(variables.size() == 1);
-                return Plane3(region.normalizedCenter / variables[0], vps[region.orientationClaz]);
+                return Plane3(region.normalizedCenter / variables[0], region.normalizedOrientation);
             }
-            else{
+            else if (region.type == MGUnary::RegionAlongFixedAxis){
+                assert(variables.size() == 2);
+                double vs[] = { variables[0], variables[1], 0.0 }; // fake vs
+                // v1 * o1 + v2 * o2 + v3 * o3 = 0, since region.orientation is orthogonal to normal
+                int c = SwappedComponent(region);
+                Vec3 orientation = region.normalizedOrientation;
+                std::swap(orientation[c], orientation[2]); // now fake orientation
+                vs[2] = (-vs[0] * orientation[0] - vs[1] * orientation[1])
+                    / orientation[2];
+                std::swap(vs[c], vs[2]); // now real vs
+                return Plane3FromEquation(vs[0], vs[1], vs[2]);
+            }
+            else /*if (region.type == MGUnary::RegionWithFixedNormal)*/{
                 assert(variables.size() == 3);
                 return Plane3FromEquation(variables[0], variables[1], variables[2]);
             }
         }
 
-        Line3 MGUnaryVariable::interpretAsLine(const MGUnary & line, const std::vector<Vec3> & vps) const {
-            assert(line.type == MGUnary::Line);
-            if (line.orientationClaz >= 0){
+        Line3 MGUnaryVariable::interpretAsLine(const MGUnary & line) const {
+            assert(line.isLine());
+            if (line.type == MGUnary::LineOriented){
                 assert(variables.size() == 1);
-                InfiniteLine3 infLine(line.normalizedCenter / variables[0], vps[line.orientationClaz]);
+                InfiniteLine3 infLine(line.normalizedCenter / variables[0], line.normalizedOrientation);
                 return Line3(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.front()), infLine).second.second,
                     DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), line.normalizedCorners.back()), infLine).second.second);
             }
-            else{
+            else /*if (line.type == MGUnary::LineFree)*/{
                 assert(variables.size() == 2);
                 /*           | sin(theta) | | p | | q |
                     len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
@@ -57,141 +912,151 @@ namespace panoramix {
         }
 
         std::vector<double> MGUnaryVariable::variableCoeffsForInverseDepthAtDirection(const Vec3 & direction,
-            const MGUnary & unary, const std::vector<Vec3> & vps) const{
-            if (unary.type == MGUnary::Region){
-                if (unary.orientationClaz >= 0){
-                    assert(variables.size() == 1);
-                    Plane3 plane(unary.normalizedCenter, vps[unary.orientationClaz]);
-                    // variable is 1.0/centerDepth
-                    // corresponding coeff is 1.0/depthRatio
-                    // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
-                    double depthRatio = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
-                    return std::vector<double>{1.0 / depthRatio};
-                }
-                else {
-                    assert(variables.size() == 3);
-                    // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
-                    // -> 1.0/depth = ax + by + cz
-                    return std::vector<double>{direction[0], direction[1], direction[2]};
-                }
+            const MGUnary & u) const{
+            if (u.type == MGUnary::RegionWithFixedNormal){
+                assert(variables.size() == 1);
+                Plane3 plane(u.normalizedCenter, u.normalizedOrientation);
+                // variable is 1.0/centerDepth
+                // corresponding coeff is 1.0/depthRatio
+                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                double depthRatio = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
+                return std::vector<double>{1.0 / depthRatio};
             }
-            else /*if (unary.type == MGUnary::Line)*/ {
-                if (unary.orientationClaz >= 0){
-                    assert(variables.size() == 1);
-                    const auto & line = unary;
-                    InfiniteLine3 infLine(line.normalizedCenter, vps[line.orientationClaz]);
-                    // variable is 1.0/centerDepth
-                    // corresponding coeff is 1.0/depthRatio
-                    // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
-                    double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
-                    return std::vector<double>{1.0 / depthRatio};
-                }
-                else /*if(unary.lineClaz == -1)*/{
-                    assert(variables.size() == 2);
-                    const auto & line = unary;
-                    double theta = AngleBetweenDirections(line.normalizedCorners.front(), line.normalizedCorners.back());
-                    double phi = AngleBetweenDirections(line.normalizedCorners.front(), direction);
-                    /*           | sin(theta) | | p | | q |
-                        len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
-                        | p sin(phi) - q sin(phi - theta) |
-                        */
-                    // variables[0] -> 1/p
-                    // variables[1] -> 1/q
-                    double coeffFor1_p = -sin(phi - theta) / sin(theta);
-                    double coeffFor1_q = sin(phi) / sin(theta);
-                    assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
-                    return std::vector<double>{coeffFor1_p, coeffFor1_q};
-                }
+            else if (u.type == MGUnary::RegionAlongFixedAxis){
+                assert(variables.size() == 2);
+                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                // -> 1.0/depth = ax + by + cz
+                // -> 1.0/depth = ax + by + (- o1a - o2b)/o3 * z = a(x-o1*z/o3) + b(y-o2*z/o3)
+                int c = SwappedComponent(u);
+                Vec3 forientation = u.normalizedOrientation;
+                std::swap(forientation[c], forientation[2]);
+                Vec3 fdirection = direction;
+                std::swap(fdirection[c], fdirection[2]);
+                return std::vector<double>{
+                    fdirection[0] - forientation[0] * fdirection[2] / forientation[2],
+                        fdirection[1] - forientation[1] * fdirection[2] / forientation[2]
+                };
             }
-        }
-
-        double MGUnaryVariable::inverseDepthAtDirection(const Vec3 & direction,
-            const MGUnary & unary, const std::vector<Vec3> & vps) const {
-            if (unary.type == MGUnary::Region){
-                if (unary.orientationClaz >= 0){
-                    assert(variables.size() == 1);
-                    Plane3 plane(unary.normalizedCenter, vps[unary.orientationClaz]);
-                    // variable is 1.0/centerDepth
-                    // corresponding coeff is 1.0/depthRatio
-                    // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
-                    double depthRatio = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
-                    return variables[0] / depthRatio;
-                }
-                else {
-                    assert(variables.size() == 3);
-                    // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
-                    // -> 1.0/depth = ax + by + cz
-                    return variables[0] * direction[0] + variables[1] * direction[1] + variables[2] * direction[2];
-                }
+            else if (u.type == MGUnary::RegionFree){
+                assert(variables.size() == 3);
+                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                // -> 1.0/depth = ax + by + cz
+                return std::vector<double>{direction[0], direction[1], direction[2]};
             }
-            else /*if (unary.type == MGUnary::Line)*/{
-                if (unary.orientationClaz >= 0){
-                    assert(variables.size() == 1);
-                    const auto & line = unary;
-                    InfiniteLine3 infLine(line.normalizedCenter, vps[line.orientationClaz]);
-                    // variable is 1.0/centerDepth
-                    // corresponding coeff is 1.0/depthRatio
-                    // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
-                    double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
-                    return variables[0] / depthRatio;
-                }
-                else /*if(unary.lineClaz == -1)*/ {
-                    assert(variables.size() == 2);
-                    const auto & line = unary;
-                    double theta = AngleBetweenDirections(line.normalizedCorners.front(), line.normalizedCorners.back());
-                    double phi = AngleBetweenDirections(line.normalizedCorners.front(), direction);
-                    /*           | sin(theta) | | p | | q |
+            else if (u.type == MGUnary::LineOriented){
+                assert(variables.size() == 1);
+                InfiniteLine3 infLine(u.normalizedCenter, u.normalizedOrientation);
+                // variable is 1.0/centerDepth
+                // corresponding coeff is 1.0/depthRatio
+                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
+                return std::vector<double>{1.0 / depthRatio};
+            }
+            else /*if(u.type == MGUnary::LineFree)*/{
+                assert(variables.size() == 2);
+                const auto & line = u;
+                double theta = AngleBetweenDirections(line.normalizedCorners.front(), line.normalizedCorners.back());
+                double phi = AngleBetweenDirections(line.normalizedCorners.front(), direction);
+                /*           | sin(theta) | | p | | q |
                     len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
                     | p sin(phi) - q sin(phi - theta) |
                     */
-                    // variables[0] -> 1/p
-                    // variables[1] -> 1/q
-                    double coeffFor1_p = -sin(phi - theta) / sin(theta);
-                    double coeffFor1_q = sin(phi) / sin(theta);
-                    assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
-                    return variables[0] * coeffFor1_p + variables[1] * coeffFor1_q;
-                }
+                // variables[0] -> 1/p
+                // variables[1] -> 1/q
+                double coeffFor1_p = -sin(phi - theta) / sin(theta);
+                double coeffFor1_q = sin(phi) / sin(theta);
+                assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
+                return std::vector<double>{coeffFor1_p, coeffFor1_q};
             }
         }
 
-        double MGUnaryVariable::depthAtCenter(const MGUnary & unary, const std::vector<Vec3> & vps) const {
-            return 1.0 / inverseDepthAtDirection(unary.normalizedCenter, unary, vps);
+        double MGUnaryVariable::inverseDepthAtDirection(const Vec3 & direction, const MGUnary & u) const {
+            if (u.type == MGUnary::RegionWithFixedNormal){
+                assert(variables.size() == 1);
+                Plane3 plane(u.normalizedCenter, u.normalizedOrientation);
+                // variable is 1.0/centerDepth
+                // corresponding coeff is 1.0/depthRatio
+                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                double depthRatio = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
+                return variables[0] / depthRatio;
+            }
+            else if (u.type == MGUnary::RegionAlongFixedAxis){
+                assert(variables.size() == 2);
+                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                // -> 1.0/depth = ax + by + cz
+                // -> 1.0/depth = ax + by + (- o1a - o2b)/o3 * z = a(x-o1*z/o3) + b(y-o2*z/o3)
+                int c = SwappedComponent(u);
+                Vec3 forientation = u.normalizedOrientation;
+                std::swap(forientation[c], forientation[2]);
+                Vec3 fdirection = direction;
+                std::swap(fdirection[c], fdirection[2]);
+                double xx = fdirection[0] - forientation[0] * fdirection[2] / forientation[2];
+                double yy = fdirection[1] - forientation[1] * fdirection[2] / forientation[2];
+                return variables[0] * xx + variables[1] * yy;
+            }
+            else if (u.type == MGUnary::RegionFree){
+                assert(variables.size() == 3);
+                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                // -> 1.0/depth = ax + by + cz
+                return variables[0] * direction[0] + variables[1] * direction[1] + variables[2] * direction[2];
+            }
+            else if (u.type == MGUnary::LineOriented){
+                assert(variables.size() == 1);
+                const auto & line = u;
+                InfiniteLine3 infLine(line.normalizedCenter, u.normalizedOrientation);
+                // variable is 1.0/centerDepth
+                // corresponding coeff is 1.0/depthRatio
+                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
+                return variables[0] / depthRatio;
+            }
+            else  /*if(u.type == MGUnary::LineFree)*/{
+                assert(variables.size() == 2);
+                const auto & line = u;
+                double theta = AngleBetweenDirections(line.normalizedCorners.front(), line.normalizedCorners.back());
+                double phi = AngleBetweenDirections(line.normalizedCorners.front(), direction);
+                /*           | sin(theta) | | p | | q |
+                len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                | p sin(phi) - q sin(phi - theta) |
+                */
+                // variables[0] -> 1/p
+                // variables[1] -> 1/q
+                double coeffFor1_p = -sin(phi - theta) / sin(theta);
+                double coeffFor1_q = sin(phi) / sin(theta);
+                assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
+                return variables[0] * coeffFor1_p + variables[1] * coeffFor1_q;
+            }
         }
 
-        void MGUnaryVariable::fitToClosestOrientation(MGUnary & unary, const std::vector<Vec3> & vps, double angleThreshold){
-            if (unary.type == MGUnary::Region){
-                if (unary.orientationClaz >= 0){
-                    assert(variables.size() == 1);
-                    //return unary.orientationClaz;
-                }
-                else{
-                    assert(variables.size() == 3);
-                    Vec3 normal(variables[0], variables[1], variables[2]);
+        double MGUnaryVariable::depthAtCenter(const MGUnary & unary) const {
+            return 1.0 / inverseDepthAtDirection(unary.normalizedCenter, unary);
+        }
+
+        void MGUnaryVariable::fitToClosestOrientation(MGUnary & u, const std::vector<Vec3> & vps, double angleThreshold){
+            if (u.isRegion()){
+                if (!u.hasOrientationConstraints()){
+                    Plane3 plane = interpretAsPlane(u);
                     int claz = -1;
                     double minAngle = angleThreshold;
                     for (int i = 0; i < vps.size(); i++){
-                        double angle = AngleBetweenUndirectedVectors(normal, vps[i]);
+                        double angle = AngleBetweenUndirectedVectors(plane.normal, vps[i]);
                         assert(angle >= 0);
                         if (angle < minAngle){
                             claz = i;
                             minAngle = angle;
                         }
                     }
-                    unary.orientationClaz = claz;
                     if (claz >= 0){
+                        u.type = MGUnary::RegionWithFixedNormal;
+                        u.normalizedOrientation = normalize(vps[claz]);
                         variables.resize(1);
-                        assert(variables.size() == 1);
                     }
                 }
             }
             else /*if (unary.type == MGUnary::Line)*/{
-                if (unary.orientationClaz >= 0){
-                    assert(variables.size() == 1);
-                    //return unary.orientationClaz;
-                }
-                else /*if(unary.lineClaz == -1)*/ {
+                if (!u.hasOrientationConstraints()){
                     assert(variables.size() == 2);
-                    Line3 line(unary.normalizedCorners.front() / variables[0], unary.normalizedCorners.back() / variables[1]);
+                    Line3 line(u.normalizedCorners.front() / variables[0], u.normalizedCorners.back() / variables[1]);
                     Vec3 normal = normalize(line.first.cross(line.second));
                     Vec3 direction = line.direction();
                     int claz = -1;
@@ -206,22 +1071,35 @@ namespace panoramix {
                             minAngle = angle;
                         }
                     }
-                    unary.orientationClaz = claz;
                     if (claz >= 0){
+                        u.type = MGUnary::LineOriented;
+                        u.normalizedOrientation = vps[claz];
                         variables.resize(1);
-                        assert(variables.size() == 1);
                     }
                 }
             }
         }
 
-        MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views,
+
+
+
+
+        bool MGUnary::hasOrientationConstraints() const { return type == RegionAlongFixedAxis || type == RegionWithFixedNormal || type == LineOriented; }
+        bool MGUnary::isRegion() const { return type == RegionFree || type == RegionAlongFixedAxis || type == RegionWithFixedNormal; }
+        bool MGUnary::isLine() const { return type == LineFree || type == LineOriented; }
+
+
+
+
+
+        template <class CameraT>
+        MixedGraph BuildMixedGraphTemplate(const std::vector<View<PerspectiveCamera>> & views,
             const std::vector<RegionsGraph> & regionsGraphs, const std::vector<LinesGraph> & linesGraphs,
             const ComponentIndexHashMap<std::pair<RegionIndex, RegionIndex>, double> & regionOverlappingsAcrossViews,
             const ComponentIndexHashMap<std::pair<LineIndex, LineIndex>, Vec3> & lineIncidencesAcrossViews,
             const std::vector<std::map<std::pair<RegionHandle, LineHandle>, std::vector<Point2>>> & regionLineConnections,
             const std::vector<Vec3> & vps,
-            MGUnaryVarTable & unaryVars, MGBinaryVarTable& binaryVars,
+            const SurfaceLabels<CameraT> & surfaceLabels,
             double initialDepth){
 
             MixedGraph mg;
@@ -229,6 +1107,11 @@ namespace panoramix {
             ComponentIndexHashMap<LineIndex, MGUnaryHandle> li2mgh;
             std::unordered_map<MGUnaryHandle, RegionIndex> mgh2ri;
             std::unordered_map<MGUnaryHandle, LineIndex> mgh2li;
+
+            // get the vertical vp
+            int vertVPId = std::distance(vps.begin(), std::min_element(vps.begin(), vps.end(), [](const Vec3 & a, const Vec3 & b){
+                return AngleBetweenUndirectedVectors(a, Vec3(0, 0, 1)) < AngleBetweenUndirectedVectors(b, Vec3(0, 0, 1));
+            }));
 
             // add components in each view
             for (int i = 0; i < views.size(); i++){
@@ -245,43 +1128,111 @@ namespace panoramix {
                     if (normalizedContour.size() <= 2){
                         continue;
                     }
-                    auto center = normalize(cam.spatialDirection(rd.data.center));
-                    int initialClaz = std::distance(vps.begin(), std::min_element(vps.begin(), vps.end(),
-                        [&center](const Vec3 & vp1, const Vec3 & vp2) -> bool {
-                        return AngleBetweenUndirectedVectors(center, vp1) <
-                            AngleBetweenUndirectedVectors(center, vp2);
-                    }));
-                    ri2mgh[ri] = mg.add(MGUnary{
-                        MGUnary::Region,
-                        std::move(normalizedContour),
-                        center,
-                        -1
-                    });
-                    mgh2ri[ri2mgh[ri]] = ri;
-                    int sign = center.dot(vps[initialClaz]) < 0 ? -1 : 1;
-                    unaryVars[ri2mgh[ri]].variables = {
-                        sign * vps[initialClaz][0],
-                        sign * vps[initialClaz][1],
-                        sign * vps[initialClaz][2]
-                    };
-                    unaryVars[ri2mgh[ri]].fixed = false;
+                    SurfaceLabelNames slabel = surfaceLabels.mostLikelyLabelAt(normalizedContour);
+                    if (slabel == SurfaceLabelNames::None) {
+                        continue;
+                    }
+
+                    // initialization
+                    MGUnary u;
+                    u.type = MGUnary::Undefined;
+                    u.normalizedCorners = std::move(normalizedContour);
+                    u.normalizedCenter = normalize(cam.spatialDirection(rd.data.center));
+                    u.normalizedOrientation = u.normalizedCenter;
+                    u.material = MGUnary::Unknown;
+
+                    // set members
+                    if (slabel == SurfaceLabelNames::Horizontal){
+                        u.type = MGUnary::RegionWithFixedNormal;
+                        u.normalizedOrientation = normalize(vps.at(vertVPId));
+                        u.material = MGUnary::Planar;
+                    }
+                    else if (slabel == SurfaceLabelNames::Vertical){
+                        u.type = MGUnary::RegionAlongFixedAxis;
+                        u.normalizedOrientation = normalize(vps.at(vertVPId));
+                        u.material = MGUnary::Planar;
+                    }
+                    else if (slabel == SurfaceLabelNames::Planar){
+                        u.type = MGUnary::RegionFree;
+                        u.material = MGUnary::Planar;
+                    }
+                    else if (slabel == SurfaceLabelNames::NonPlanar){
+                        u.type = MGUnary::RegionAlongFixedAxis;
+                        u.normalizedOrientation = normalize(vps.at(vertVPId));
+                        u.material = MGUnary::NonPlanar;
+                    }
+                    else if (slabel == SurfaceLabelNames::Void){
+                        u.type = MGUnary::RegionWithFixedNormal;
+                        u.normalizedOrientation = normalize(vps.at(vertVPId));
+                        u.material = MGUnary::Void;
+                    }
+                    else{
+                        SHOULD_NEVER_BE_CALLED();
+                    }
+
+                    ri2mgh[ri] = mg.add(std::move(u));
+                    mgh2ri[ri2mgh[ri]] = ri;                    
                 }
                 // lines
                 for (auto & ld : linesGraphs[i].elements<0>()){
                     auto li = LineIndex{ i, ld.topo.hd };
+
+                    MGUnary u;
+                    u.type = MGUnary::Undefined;
+                    u.normalizedCorners = {
+                        normalize(cam.spatialDirection(ld.data.line.component.first)),
+                        normalize(cam.spatialDirection(ld.data.line.component.second))
+                    };
+                    u.normalizedCenter = normalize(cam.spatialDirection(ld.data.line.component.center()));
+                    u.normalizedOrientation = u.normalizedCenter;
+                    u.material = MGUnary::Unknown;
+
+                    SurfaceLabelNames slabel = surfaceLabels.mostLikelyLabelAt(normalizedContour);
+                    if (slabel == SurfaceLabelNames::None) {
+                        continue;
+                    }
+
+                    // set members
+                    if (slabel == SurfaceLabelNames::Horizontal){
+                        u.type = MGUnary::RegionWithFixedNormal;
+                        u.normalizedOrientation = normalize(vps.at(vertVPId));
+                        u.material = MGUnary::Planar;
+                    }
+                    else if (slabel == SurfaceLabelNames::Vertical){
+                        u.type = MGUnary::RegionAlongFixedAxis;
+                        u.normalizedOrientation = normalize(vps.at(vertVPId));
+                        u.material = MGUnary::Planar;
+                    }
+                    else if (slabel == SurfaceLabelNames::Planar){
+                        u.type = MGUnary::RegionFree;
+                        u.material = MGUnary::Planar;
+                    }
+                    else if (slabel == SurfaceLabelNames::NonPlanar){
+                        u.type = MGUnary::RegionAlongFixedAxis;
+                        u.normalizedOrientation = normalize(vps.at(vertVPId));
+                        u.material = MGUnary::NonPlanar;
+                    }
+                    else if (slabel == SurfaceLabelNames::Void){
+                        u.type = MGUnary::RegionWithFixedNormal;
+                        u.normalizedOrientation = normalize(vps.at(vertVPId));
+                        u.material = MGUnary::Void;
+                    }
+                    else{
+                        SHOULD_NEVER_BE_CALLED();
+                    }
+
+
                     li2mgh[li] = mg.add(MGUnary{
                         MGUnary::Line,
-                        {
-                            normalize(cam.spatialDirection(ld.data.line.component.first)),
-                            normalize(cam.spatialDirection(ld.data.line.component.second))
-                        },
-                        normalize(cam.spatialDirection(ld.data.line.component.center())),
+                        ,
+                        ,
                         ld.data.line.claz
                     });
                     mgh2li[li2mgh[li]] = li;
-                    unaryVars[li2mgh[li]].variables = ld.data.line.claz == -1 ?
+                    /*unaryVars[li2mgh[li]].variables = ld.data.line.claz == -1 ?
                         std::vector<double>{ 1.0, 1.0 } : std::vector<double>{ 1.0 };
                     unaryVars[li2mgh[li]].fixed = false;
+                    unaryVars[li2mgh[li]].orientationClaz = mg.data(li2mgh.at(li)).primaryOrientationClaz;*/
                 }
                 // region-region in each view
                 for (auto & bd : regionsGraphs[i].elements<1>()){
@@ -432,17 +1383,21 @@ namespace panoramix {
                 assert(FuzzyEquals(importanceRatioSum, 1.0, 0.01));
             }
 #endif
-            for (auto & b : mg.internalElements<1>()){
+            /*for (auto & b : mg.internalElements<1>()){
                 binaryVars[b.topo.hd].enabled = true;
-            }
+            }*/
 
             return mg;
         }
 
 
+
+
+
+
+
         MixedGraph BuildMixedGraph(const std::vector<View<PerspectiveCamera>> & views,
             std::vector<Vec3> & vps,
-            MGUnaryVarTable & unaryVars, MGBinaryVarTable& binaryVars,
 
             double initialDepth,
             const core::LineSegmentExtractor & lineseger,
@@ -502,91 +1457,15 @@ namespace panoramix {
 
             return BuildMixedGraph(views, regionsGraphs, linesGraphs,
                 regionOverlappingsAcrossViews, lineIncidencesAcrossViews, regionLineConnectionsArray, vps,
-                unaryVars, binaryVars, initialDepth);
+                initialDepth);
 
         }
 
 
 
 
-        namespace {
-
-            template <class CameraT>
-            MGUnaryPropertyTable BuildUnaryPropertyTableTemplate(const MixedGraph & mg, const OrientationContext & oc, const CameraT & panoCam){
-
-                MGUnaryPropertyTable upt;
-                upt.reserve(mg.internalElements<0>().size());
-
-                assert(!oc.probs.empty());
-
-                for (auto & u : mg.elements<0>()){
-
-                    if (u.data.type == MGUnary::Region){
-                        std::vector<cv::Point> panoContour;
-                        panoContour.reserve(u.data.normalizedCorners.size());
-                        for (auto & nc : u.data.normalizedCorners){
-                            panoContour.push_back(ToPixelLoc(panoCam.screenProjection(nc)));
-                        }
-                        cv::Rect roi(cv::boundingRect(panoContour));
-                        if (roi.x < 0) roi.x = 0;
-                        if (roi.y < 0) roi.y = 0;
-                        if (roi.x + roi.width >= panoCam.screenSize().width) roi.width = panoCam.screenSize().width - 1 - roi.x;
-                        if (roi.y + roi.height >= panoCam.screenSize().height) roi.height = panoCam.screenSize().height - 1 - roi.y;
-
-                        for (int o = 0; o < oc.probs.size(); o++){
-                            cv::Mat cropProb(oc.probs[o], roi);
-                            cv::Mat mask(cv::Mat::zeros(cropProb.rows, cropProb.cols, CV_8UC1));
-
-                            typedef cv::vector<cv::Point> TContour;
-                            typedef cv::vector<TContour> TContours;
-
-                            cv::drawContours(mask, TContours(1, panoContour), -1, cv::Scalar(255), CV_FILLED, CV_AA, cv::noArray(), 1, -roi.tl());
-                            double mean = cv::mean(cropProb, mask).val[0];
-
-                            upt[u.topo.hd].orientationHints[(OrientationContext::Orientation)o] = mean;
-                        }
-                    }
-                    else{
-                        auto p1 = ToPixelLoc(panoCam.screenProjection(u.data.normalizedCorners.front()));
-                        auto p2 = ToPixelLoc(panoCam.screenProjection(u.data.normalizedCorners.back()));
-                        cv::Rect roi(cv::boundingRect(std::vector<PixelLoc>{p1, p2}));
-                        if (roi.x < 0) roi.x = 0;
-                        if (roi.y < 0) roi.y = 0;
-                        if (roi.x + roi.width >= panoCam.screenSize().width) roi.width = panoCam.screenSize().width - 1 - roi.x;
-                        if (roi.y + roi.height >= panoCam.screenSize().height) roi.height = panoCam.screenSize().height - 1 - roi.y;
-
-                        for (int o = 0; o < oc.probs.size(); o++){
-                            cv::Mat cropProb(oc.probs[o], roi);
-                            cv::Mat mask(cv::Mat::zeros(cropProb.rows, cropProb.cols, CV_8UC1));
-
-                            typedef cv::vector<cv::Point> TContour;
-                            typedef cv::vector<TContour> TContours;
-
-                            cv::line(mask, p1 - roi.tl(), p2 - roi.tl(), cv::Scalar(255), 3, 8);
-                            double mean = cv::mean(cropProb, mask).val[0];
-
-                            upt[u.topo.hd].orientationHints[(OrientationContext::Orientation)o] = mean;
-                        }
-                    }
-
-                }
-                return upt;
-            }
-
-
-        }
-
-
-        MGUnaryPropertyTable BuildUnaryPropertyTable(const MixedGraph & mg,
-            const OrientationContext & oc, const PanoramicCamera & panoCam){
-            return BuildUnaryPropertyTableTemplate(mg, oc, panoCam);
-        }
-        MGUnaryPropertyTable BuildUnaryPropertyTable(const MixedGraph & mg,
-            const OrientationContext & oc, const PerspectiveCamera & panoCam){
-            return BuildUnaryPropertyTableTemplate(mg, oc, panoCam);
-        }
-       
-
+     
+ 
 
 
 
@@ -634,29 +1513,27 @@ namespace panoramix {
         }
 
 
-        MGPatch MakePatchOnBinary(const MixedGraph & mg, const MGBinaryHandle & bh,
-            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars){
+        MGPatch MakePatchOnBinary(const MixedGraph & mg, const MGBinaryHandle & bh, const std::vector<Vec3> & vps){
             MGPatch patch;
-            patch.bhs[bh] = binaryVars.at(bh);
+            patch.bhs[bh] = MGBinaryVariable(mg.data(bh));
             auto uhs = mg.topo(bh).lowers;
-            patch.uhs[uhs[0]] = unaryVars.at(uhs[0]);
-            patch.uhs[uhs[1]] = unaryVars.at(uhs[1]);
+            patch.uhs[uhs[0]] = MGUnaryVariable(mg.data(uhs[0]), vps);
+            patch.uhs[uhs[1]] = MGUnaryVariable(mg.data(uhs[1]), vps);
             assert(BinaryHandlesAreValidInPatch(mg, patch));
             assert(UnariesAreConnectedInPatch(mg, patch));
             return patch;
         }
 
 
-        MGPatch MakeStarPatchAroundUnary(const MixedGraph & mg, const MGUnaryHandle & uh,
-            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars){
+        MGPatch MakeStarPatchAroundUnary(const MixedGraph & mg, const MGUnaryHandle & uh, const std::vector<Vec3> & vps){
             MGPatch patch;
-            patch.uhs[uh] = unaryVars.at(uh);
+            patch.uhs[uh] = MGUnaryVariable(mg.data(uh), vps);
             for (auto & bh : mg.topo(uh).uppers){
                 auto anotherUh = mg.topo(bh).lowers.front();
                 if (anotherUh == uh)
                     anotherUh = mg.topo(bh).lowers.back();
-                patch.bhs[bh] = binaryVars.at(bh);
-                patch.uhs[anotherUh] = unaryVars.at(uh);
+                patch.bhs[bh] = MGBinaryVariable(mg.data(bh));
+                patch.uhs[anotherUh] = MGUnaryVariable(mg.data(uh), vps);
             }
             assert(BinaryHandlesAreValidInPatch(mg, patch));
             assert(UnariesAreConnectedInPatch(mg, patch));
@@ -726,8 +1603,7 @@ namespace panoramix {
 
 
 
-        std::vector<MGPatch> SplitMixedGraphIntoPatches(const MixedGraph & mg,
-            const MGUnaryVarTable & unaryVars, const MGBinaryVarTable & binaryVars){
+        std::vector<MGPatch> SplitMixedGraphIntoPatches(const MixedGraph & mg, const std::vector<Vec3> & vps){
 
             std::unordered_map<MGUnaryHandle, int> ccids;
             std::vector<MGUnaryHandle> uhs;
@@ -752,12 +1628,12 @@ namespace panoramix {
             for (auto & uhccid : ccids){
                 auto uh = uhccid.first;
                 int ccid = uhccid.second;
-                patches[ccid].uhs[uh] = unaryVars.at(uh);
+                patches[ccid].uhs[uh] = MGUnaryVariable(mg.data(uh), vps);
             }
             for (auto & b : mg.elements<1>()){
                 auto & uhs = mg.topo(b.topo.hd).lowers;
                 assert(ccids[uhs.front()] == ccids[uhs.back()]);
-                patches[ccids[uhs.front()]].bhs[b.topo.hd] = binaryVars.at(b.topo.hd);
+                patches[ccids[uhs.front()]].bhs[b.topo.hd] = MGBinaryVariable(b.data);
             }
 
             for (auto & p : patches){
@@ -1229,9 +2105,6 @@ namespace panoramix {
                     appliedBinaryAnchors[bhv.first] = NecessaryAnchorsForBinary(mg, bh);
                     consNum += appliedBinaryAnchors[bhv.first].size();
                 }
-
-                //A.resize(consNum, varNum);
-                //W.resize(consNum, consNum);
 
                 B.resize(consNum);
 
@@ -1742,7 +2615,7 @@ namespace panoramix {
         }
 
 
-        void FitUnariesToClosestOrientations(MixedGraph & mg, MGPatch & patch, const std::vector<Vec3> & vps, double angleThreshold){
+        void FitUnariesToClosestOrientations(const MixedGraph & mg, MGPatch & patch, const std::vector<Vec3> & vps, double angleThreshold){
             for (auto & uhv : patch.uhs){
                 uhv.second.fitToClosestOrientation(mg.data(uhv.first), vps, angleThreshold);
             }
@@ -1751,3 +2624,5 @@ namespace panoramix {
 
    	}
 }
+
+#endif

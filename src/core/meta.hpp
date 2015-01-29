@@ -160,6 +160,22 @@ namespace panoramix {
         template <class T>
         struct IsContainer : std::integral_constant<bool, IsContainerImp<T>::value> {};
 
+        // determine whether T can accepts ArgTs as arguments
+        namespace {
+            template <class T, class ... ArgTs>
+            struct IsCallableImp {
+                template <class TT, class ... AAs>
+                static auto test(int) -> decltype(std::declval<TT>()(std::declval<AAs>()...), std::true_type());
+                template <class ...>
+                static std::false_type test(...);
+                static const bool value = std::is_same<decltype(test<T, ArgTs...>(0)), std::true_type>::value;
+            };
+        }
+
+        template <class T, class ... ArgTs>
+        struct IsCallable : std::integral_constant<bool, IsCallableImp<T, ArgTs...>::value> {};
+
+
         // iterate over
         namespace {
             template <class FunT, class T>
@@ -193,8 +209,8 @@ namespace panoramix {
 
         template <class FunT, class T1, class T2>
         inline void IterateOver(std::pair<T1, T2> && p, FunT && fun){
-            IterateOver(p.first, fun);
-            IterateOver(p.second, fun);
+            IterateOver(std::move(p.first), fun);
+            IterateOver(std::move(p.second), fun);
         }
 
         namespace {
@@ -222,6 +238,8 @@ namespace panoramix {
         inline void IterateOver(std::tuple<Ts...> && t, FunT && fun){
             IterateOverTupleUsingSequence(std::move(t), std::forward<FunT>(fun), SequenceGenerator<sizeof...(Ts)>::type());
         }
+
+
 
 
 
@@ -260,6 +278,46 @@ namespace panoramix {
             return InvokeWithEachTupleArg(fun, args,
                 typename SequenceGenerator<std::tuple_size<TupleT>::value>::type());
         }
+
+
+
+        namespace {
+            template <class FunT, class TupleT, int ... Is>
+            inline auto TupleMapUsingSequence(FunT && fun, const TupleT & t, Sequence<Is...>) -> decltype(std::make_tuple(fun(std::get<Is>(t)) ...)) {
+                return std::make_tuple(fun(std::get<Is>(t)) ...);
+            }
+            /*template <int I, class FunT, class TupleTupleT>
+            inline auto TupleOpEach(FunT && fun, TupleTupleT && ts) -> decltype(fun(std::get<I>(ts)...)) {
+                return Invoke(fun, )
+            }
+            template <class FunT, class ... TupleTs, int ... Is>
+            inline auto TupleOpUsingSequence(FunT && fun, const TupleTs & ... ts, Sequence<Is...>){
+                return std::make_tuple(TupleOpEach<Is>(fun, ts ...)
+            }*/
+        }
+
+        template <class FunT, class ... Ts>
+        inline auto TupleMap(FunT && fun, const std::tuple<Ts...> & t) -> decltype(TupleMapUsingSequence(std::forward<FunT>(fun), t, SequenceGenerator<sizeof...(Ts)>::type())) {
+            return TupleMapUsingSequence(std::forward<FunT>(fun), t, SequenceGenerator<sizeof...(Ts)>::type());
+        }
+
+
+
+
+        // some common used functors for std classes
+        struct SizeFunctor {
+            template <class T>
+            inline size_t operator()(const T & t) const{
+                return t.size();
+            }
+        };
+
+        struct ClearFunctor {
+            template <class T>
+            inline void operator()(T & t) const{
+                t.clear();
+            }
+        };
 
 
 

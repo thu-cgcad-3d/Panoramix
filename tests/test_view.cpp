@@ -17,16 +17,19 @@ TEST(View, SampleViews) {
     auto panoView = core::CreatePanoramicView(panorama);
 
     std::vector<core::PerspectiveCamera> cams = {
-        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, -1 }),
-        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, -1 }),
+        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, 1 }),
+        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }),
+        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { -1, 0, 0 }, { 0, 0, 1 }),
+        core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, -1, 0 }, { 0, 0, 1 }),
         core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, 0, 1 }, { 1, 0, 0 }),
         core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 0, 0, -1 }, { 1, 0, 0 })
     };
     
     std::vector<core::View<core::PerspectiveCamera>> views;
-    core::SampleViews(panoView, cams.begin(), cams.end(), std::back_inserter(views));
+    for (auto & cam : cams){
+        auto v = panoView.sampled(cam);
+        views.push_back(v);
+    }
 
     for (int i = 0; i < cams.size(); i++){
         cv::imwrite("./cache/univ1_" + std::to_string(i) + ".jpg", views[i].image);
@@ -78,57 +81,6 @@ TEST(View, LinesGraph) {
     core::SaveToDisk("./cache/test_view.View.LinesGraph.linesGraphs", linesGraphs);
     core::SaveToDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);  
 }
-
-
-
-TEST(View, OrientationContextPerspective) {
-
-    std::vector<core::OrientationContext> ocs(3);
-    //for (int i = 0; i < 3; i++){
-    //    core::Image im = cv::imread("./cache/univ1_" + std::to_string(i) + ".jpg");
-    //    auto pview = core::CreatePerspectiveView(im);
-    //    auto oc = core::ComputeOrientationContext(pview, core::SceneClass::Outdoor);
-    //    ocs[i] = oc;
-    //}
-
-    core::LoadFromDisk("./cache/test_view.View.OrientationContextPerspective.ocs", ocs);
-
-}
-
-
-
-TEST(View, OrientationContext){
-
-    core::Image panorama;
-    std::vector<core::Vec3> vanishingPoints;
-    core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
-    core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
-
-    auto panoView = core::CreatePanoramicView(panorama);
-    auto cams = core::CreateHorizontalPerspectiveCameras(panoView.camera, 17, 500, 1000, 250);
-
-    std::vector<core::View<core::PerspectiveCamera, core::GeometricContextEstimator::Feature>> gcFeatures(cams.size());
-    //core::GeometricContextEstimator gcEstimator;
-    //for (int i = 0; i < cams.size(); i++){
-    //    gcFeatures[i].image = gcEstimator(core::MakeCameraSampler(cams[i], panoView.camera)(panoView.image), core::SceneClass::Outdoor);
-    //    gcFeatures[i].camera = cams[i];
-    //}
-    core::LoadFromDisk("./cache/test_view.View.OrientationContext.gcFeatures", gcFeatures);
-
-    //core::ReOrderVanishingPoints(panoView.camera, vanishingPoints[0], vanishingPoints[1], vanishingPoints[2]);
-
-    core::OrientationContext oc = core::ComputeOrientationContext(panoView, gcFeatures);
-
-    for (int i = 0; i < oc.probs.size(); i++){
-        cv::imshow(std::to_string(i), oc.probs[i]);
-    }
-    cv::waitKey();
-
-    core::SaveToDisk("./cache/test_view.View.OrientationContext.oc", oc);
-
-}
-
-
 
 
 TEST(View, RegionsGraph) {

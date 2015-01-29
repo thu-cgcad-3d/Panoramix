@@ -195,17 +195,18 @@ namespace panoramix {
                 QuickShiftGPU
             };
             struct Params {
-                inline Params() : sigma(0.8f), c(100.0f), minSize(200), algorithm(GraphCut),
+                inline Params() : sigma(0.8f), c(100.0f), minSize(200), isPanorama(false), algorithm(GraphCut),
                     superpixelSizeSuggestion(1000), superpixelNumberSuggestion(100) {
                 }
                 float sigma; // for smoothing
                 float c; // threshold function
                 int minSize; // min component size
+                bool isPanorama; // whether the input image is a panorama
                 Algorithm algorithm;
                 int superpixelSizeSuggestion; // use superpixel size suggestion if [superpixelSizeSuggestion > 0]
                 int superpixelNumberSuggestion; // use superpixel number suggestion if [superpixelSizeSuggestion < 0]
                 template <class Archive> inline void serialize(Archive & ar) {
-                    ar(sigma, c, minSize, algorithm, superpixelSizeSuggestion, superpixelNumberSuggestion);
+                    ar(sigma, c, minSize, isPanorama, algorithm, superpixelSizeSuggestion, superpixelNumberSuggestion);
                 }
             };
         public:

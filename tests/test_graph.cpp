@@ -242,7 +242,7 @@ TEST(GraphicalModelTest, Basic) {
 
     for (size_t i = 0; i < cgraph.internalElements<0>().size(); i++){
         CGraph ncgraph = cgraph;
-        ncgraph.remove(core::HandleAtLevel<0>(i));
+        ncgraph.remove(core::HandleOfTypeAtLevel<CGraph, 0>(i));
         ncgraph.gc();
 
         EXPECT_EQ(3, ncgraph.internalElements<0>().size());
@@ -260,8 +260,8 @@ TEST(GraphicalModelTest, Basic) {
 
     for (size_t i = 0; i < cgraph.internalElements<0>().size(); i++){
         CGraph ncgraph = cgraph;
-        ncgraph.remove(core::HandleAtLevel<0>(i));
-        ncgraph.remove(core::HandleAtLevel<0>((i+1) % ncgraph.internalElements<0>().size()));
+        ncgraph.remove(core::HandleOfTypeAtLevel<CGraph, 0>(i));
+        ncgraph.remove(core::HandleOfTypeAtLevel<CGraph, 0>((i + 1) % ncgraph.internalElements<0>().size()));
         ncgraph.gc();
 
         EXPECT_EQ(2, ncgraph.internalElements<0>().size());
@@ -279,7 +279,7 @@ TEST(GraphicalModelTest, Basic) {
 
     for (size_t i = 0; i < cgraph.internalElements<1>().size(); i++){
         CGraph ncgraph = cgraph;
-        ncgraph.remove(core::HandleAtLevel<1>(i));
+        ncgraph.remove(core::HandleOfTypeAtLevel<CGraph, 1>(i));
         ncgraph.gc();
 
         EXPECT_EQ(4, ncgraph.internalElements<0>().size());

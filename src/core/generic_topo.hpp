@@ -544,14 +544,14 @@ namespace panoramix {
 
 
         // helper classes for HomogeneousGraph
-        template <int L, int ChildN>
+        template <class Tag, int L, int ChildN>
         struct Topo {
             static const int Level = L;
-            std::array<Handle<AtLevel<Level - 1>>, ChildN> lowers; // use std::array
-            std::set<Handle<AtLevel<Level + 1>>> uppers;
-            HandleAtLevel<Level> hd;
+            std::array<HandleOfTypeAtLevel<Tag, Level - 1>, ChildN> lowers; // use std::array
+            std::set<HandleOfTypeAtLevel<Tag, Level + 1>> uppers;
+            HandleOfTypeAtLevel<Tag, Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
-            explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls) : hd(id) {
+            explicit inline Topo(int id, std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> ls) : hd(id) {
                 assert(ls.size() == lowers.size());
                 std::copy(ls.begin(), ls.end(), lowers.begin());
             }
@@ -559,27 +559,27 @@ namespace panoramix {
         };
 
         // dynamic sized
-        template <int L>
-        struct Topo<L, Dynamic> {
+        template <class Tag, int L>
+        struct Topo<Tag, L, Dynamic> {
             static const int Level = L;
-            std::vector<Handle<AtLevel<Level - 1>>> lowers; // use std::array
-            std::set<Handle<AtLevel<Level + 1>>> uppers;
-            HandleAtLevel<Level> hd;
+            std::vector<HandleOfTypeAtLevel<Tag, Level - 1>> lowers; // use std::array
+            std::set<HandleOfTypeAtLevel<Tag, Level + 1>> uppers;
+            HandleOfTypeAtLevel<Tag, Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
-            explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls)
+            explicit inline Topo(int id, std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> ls)
                 : hd(id), lowers(ls) {}
             template <class Archive> inline void serialize(Archive & ar) { ar(lowers, uppers, hd); }
         };
 
 
         // zero sized
-        template <int L>
-        struct Topo<L, 0> {
+        template <class Tag, int L>
+        struct Topo<Tag, L, 0> {
             static const int Level = L;
-            std::set<Handle<AtLevel<Level + 1>>> uppers;
-            HandleAtLevel<Level> hd;
+            std::set<HandleOfTypeAtLevel<Tag, Level + 1>> uppers;
+            HandleOfTypeAtLevel<Tag, Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
-            explicit inline Topo(int id, std::initializer_list<Handle<AtLevel<Level - 1>>> ls)
+            explicit inline Topo(int id, std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> ls)
                 : hd(id) {
                 assert(ls.size() == 0);
             }
@@ -603,12 +603,12 @@ namespace panoramix {
 
 
             // content of each layer
-            template <int Level, class T>
+            template <class Tag, int Level, class T>
             struct LayerContent {};
 
-            template <int Level, class DataT, int ChildN>
-            struct LayerContent<Level, LayerConfig<DataT, ChildN>> {
-                using TopoType = Topo<Level, ChildN>;
+            template <class Tag, int Level, class DataT, int ChildN>
+            struct LayerContent<Tag, Level, LayerConfig<DataT, ChildN>> {
+                using TopoType = Topo<Tag, Level, ChildN>;
                 using DataType = DataT;
                 using TripletType = Triplet<TopoType, DataT>;
                 using TableType = TripletArray<TopoType, DataT>;
@@ -618,17 +618,17 @@ namespace panoramix {
 
 
             // make a layer content tuple with levels
-            template <class CConfTupleT, int Level>
+            template <class Tag, class CConfTupleT, int Level>
             struct LayerContentFromConfigTuple {
-                using type = LayerContent<Level, typename std::tuple_element<size_t(Level), CConfTupleT>::type>;
+                using type = LayerContent<Tag, Level, typename std::tuple_element<size_t(Level), CConfTupleT>::type>;
             };
 
-            template <class CConfTupleT, class SequenceT>
+            template <class Tag, class CConfTupleT, class SequenceT>
             struct LayerContentTuple {};
 
-            template <class CConfTupleT, int ...Levels>
-            struct LayerContentTuple<CConfTupleT, Sequence<Levels...>> {
-                using type = std::tuple<typename LayerContentFromConfigTuple<CConfTupleT, Levels>::type...>;
+            template <class Tag, class CConfTupleT, int ...Levels>
+            struct LayerContentTuple<Tag, CConfTupleT, Sequence<Levels...>> {
+                using type = std::tuple<typename LayerContentFromConfigTuple<Tag, CConfTupleT, Levels>::type...>;
             };
 
         }
@@ -637,10 +637,12 @@ namespace panoramix {
         // Homogeneous Graph
         template <class BaseDataT, class ...CConfs>
         class HomogeneousGraph {
+            using Tag = HomogeneousGraph;
+
             // number of layers
             static const unsigned LayerNum = sizeof...(CConfs)+1;
             // tuple of all layers
-            using ContentsType = typename LayerContentTuple<std::tuple<LayerConfig<BaseDataT, 0>, CConfs...>,
+            using ContentsType = typename LayerContentTuple<Tag, std::tuple<LayerConfig<BaseDataT, 0>, CConfs...>,
                 typename SequenceGenerator<LayerNum>::type>::type;
             // layer content type at level Level
             template <int Level>
@@ -651,6 +653,7 @@ namespace panoramix {
             template <int Level>
             using ElementExistsPred = TripletExistsPred<typename LayerContentTypeStruct<Level>::type::TopoType,
                 typename LayerContentTypeStruct<Level>::type::DataType>;
+
 
         public:
 
@@ -672,23 +675,23 @@ namespace panoramix {
 
             // topo
             template <int Level>
-            inline const typename LayerContentTypeStruct<Level>::type::TopoType & topo(HandleAtLevel<Level> h) const {
+            inline const typename LayerContentTypeStruct<Level>::type::TopoType & topo(HandleOfTypeAtLevel<Tag, Level> h) const {
                 return internalElements<Level>()[h.id].topo;
             }
 
             template <int Level>
-            inline typename LayerContentTypeStruct<Level>::type::TopoType & topo(HandleAtLevel<Level> h) {
+            inline typename LayerContentTypeStruct<Level>::type::TopoType & topo(HandleOfTypeAtLevel<Tag, Level> h) {
                 return internalElements<Level>()[h.id].topo;
             }
 
             // data
             template <int Level>
-            inline const typename LayerContentTypeStruct<Level>::type::DataType & data(HandleAtLevel<Level> h) const {
+            inline const typename LayerContentTypeStruct<Level>::type::DataType & data(HandleOfTypeAtLevel<Tag, Level> h) const {
                 return internalElements<Level>()[h.id].data;
             }
 
             template <int Level>
-            inline typename LayerContentTypeStruct<Level>::type::DataType & data(HandleAtLevel<Level> h) {
+            inline typename LayerContentTypeStruct<Level>::type::DataType & data(HandleOfTypeAtLevel<Tag, Level> h) {
                 return internalElements<Level>()[h.id].data;
             }
 
@@ -708,51 +711,51 @@ namespace panoramix {
 
             // add element
             template <int Level>
-            HandleAtLevel<Level> add(std::initializer_list<HandleAtLevel<Level - 1>> depends,
+            HandleOfTypeAtLevel<Tag, Level> add(std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> depends,
                 const typename LayerContentTypeStruct<Level>::type::DataType & d = typename LayerContentTypeStruct<Level>::type::DataType()) {
                 int id = static_cast<int>(internalElements<Level>().size());
                 internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, depends), d, true);
-                for (const HandleAtLevel<Level - 1> & lowh : depends) {
-                    topo(lowh).uppers.insert(HandleAtLevel<Level>(id));
+                for (const HandleOfTypeAtLevel<Tag, Level - 1> & lowh : depends) {
+                    topo(lowh).uppers.insert(HandleOfTypeAtLevel<Tag, Level>(id));
                 }
-                return HandleAtLevel<Level>(id);
+                return HandleOfTypeAtLevel<Tag, Level>(id);
             }
 
             template <int Level>
-            HandleAtLevel<Level> add(std::initializer_list<HandleAtLevel<Level - 1>> depends,
+            HandleOfTypeAtLevel<Tag, Level> add(std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> depends,
                 typename LayerContentTypeStruct<Level>::type::DataType && d) {
                 int id = static_cast<int>(internalElements<Level>().size());
                 internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, depends),
                     std::forward<typename LayerContentTypeStruct<Level>::type::DataType>(d), true);
-                for (const HandleAtLevel<Level - 1> & lowh : depends) {
-                    topo(lowh).uppers.insert(HandleAtLevel<Level>(id));
+                for (const HandleOfTypeAtLevel<Tag, Level - 1> & lowh : depends) {
+                    topo(lowh).uppers.insert(HandleOfTypeAtLevel<Tag, Level>(id));
                 }
-                return HandleAtLevel<Level>(id);
+                return HandleOfTypeAtLevel<Tag, Level>(id);
             }
 
             // add element of the lowest level
-            HandleAtLevel<0> add(const typename LayerContentTypeStruct<0>::type::DataType & d = LayerContentTypeStruct<0>::type::DataType()) {
+            HandleOfTypeAtLevel<Tag, 0> add(const typename LayerContentTypeStruct<0>::type::DataType & d = LayerContentTypeStruct<0>::type::DataType()) {
                 int id = static_cast<int>(internalElements<0>().size());
                 internalElements<0>().emplace_back(typename LayerContentTypeStruct<0>::type::TopoType(id), d, true);
-                return HandleAtLevel<0>(id);
+                return HandleOfTypeAtLevel<Tag, 0>(id);
             }
 
-            HandleAtLevel<0> add(typename LayerContentTypeStruct<0>::type::DataType && d){
+            HandleOfTypeAtLevel<Tag, 0> add(typename LayerContentTypeStruct<0>::type::DataType && d){
                 int id = static_cast<int>(internalElements<0>().size());
                 internalElements<0>().emplace_back(typename LayerContentTypeStruct<0>::type::TopoType(id),
                     std::forward<typename LayerContentTypeStruct<0>::type::DataType>(d), true);
-                return HandleAtLevel<0>(id);
+                return HandleOfTypeAtLevel<Tag, 0>(id);
             }
 
             // removed
             template <int Level>
-            inline bool removed(HandleAtLevel<Level> h) const {
+            inline bool removed(HandleOfTypeAtLevel<Tag, Level> h) const {
                 return !internalElements<Level>()[h.id].exists;
             }
 
             // remove
             template <int Level>
-            void remove(HandleAtLevel<Level> h) {
+            void remove(HandleOfTypeAtLevel<Tag, Level> h) {
                 if (h.invalid() || removed(h))
                     return;
                 cleanLowers<Level>(h, std::integral_constant<bool, (Level > 0)>());
@@ -764,9 +767,9 @@ namespace panoramix {
 
         private:
             template <int Level>
-            inline void cleanLowers(HandleAtLevel<Level> h, std::false_type) {}
+            inline void cleanLowers(HandleOfTypeAtLevel<Tag, Level> h, std::false_type) {}
             template <int Level>
-            void cleanLowers(HandleAtLevel<Level> h, std::true_type) {
+            void cleanLowers(HandleOfTypeAtLevel<Tag, Level> h, std::true_type) {
                 auto & c = internalElements<Level>()[h.id];
                 auto & clowerTable = internalElements<Level - 1>();
 
@@ -779,9 +782,9 @@ namespace panoramix {
             }
 
             template <int Level>
-            inline void cleanUppers(HandleAtLevel<Level> h, std::false_type) {}
+            inline void cleanUppers(HandleOfTypeAtLevel<Tag, Level> h, std::false_type) {}
             template <int Level>
-            void cleanUppers(HandleAtLevel<Level> h, std::true_type) {
+            void cleanUppers(HandleOfTypeAtLevel<Tag, Level> h, std::true_type) {
                 auto & c = internalElements<Level>()[h.id];
                 for (auto & uph : c.topo.uppers) {
                     remove(uph);
@@ -809,7 +812,7 @@ namespace panoramix {
         private:
             template <int ...S>
             void gcUsingSequence(Sequence<S...>) {
-                std::tuple<std::vector<HandleAtLevel<S>>...> nlocs;
+                std::tuple<std::vector<HandleOfTypeAtLevel<Tag, S>>...> nlocs;
                 int dummy[] = { RemoveAndMap(internalElements<S>(), std::get<S>(nlocs))... };
                 int dummy2[] = { updateEachLayerHandles<S>(nlocs)... };
             }

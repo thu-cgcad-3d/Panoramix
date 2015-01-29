@@ -1704,8 +1704,52 @@ namespace panoramix {
                 return static_cast<float>(norm(c1 - c2));
             }
 
+
+            template <class PixelDiffFuncT>
+            inline std::vector<Edge> ComposeGraphEdges(int width, int height, bool isPanorama, const Image & smoothed, const PixelDiffFuncT & pixelDiff){
+                std::vector<Edge> edges;
+                edges.reserve(width * height * 4);
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        if (x < width - 1 || isPanorama) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = y * width + ((x + 1) % width);
+                            edge.w = pixelDiff(smoothed, { x, y }, { (x + 1) % width, y });
+                            edges.push_back(edge);
+                        }
+
+                        if (y < height - 1 || isPanorama) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = ((y + 1) % height) * width + x;
+                            edge.w = pixelDiff(smoothed, { x, y }, { x, (y + 1) % height });
+                            edges.push_back(edge);
+                        }
+
+                        if ((x < width - 1) && (y < height - 1) || isPanorama) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = ((y + 1) % height) * width + ((x + 1) % width);
+                            edge.w = pixelDiff(smoothed, { x, y }, { (x + 1) % width, (y + 1) % height });
+                            edges.push_back(edge);
+                        }
+
+                        if ((x < width - 1) && (y > 0) || isPanorama) {
+                            Edge edge;
+                            edge.a = y * width + x;
+                            edge.b = ((y + height - 1) % height) * width + ((x + 1) % width);
+                            edge.w = pixelDiff(smoothed, { x, y }, { (x + 1) % width, (y + height - 1) % height });
+                            edges.push_back(edge);
+                        }
+                    }
+                }
+                return edges;
+            }
+
+
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
-            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize,
+            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, bool isPanorama, 
                 int & numCCs, bool returnColoredResult = false) {
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
@@ -1718,43 +1762,8 @@ namespace panoramix {
                 cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
 
                 // build pixel graph
-                std::vector<Edge> edges;
-                edges.reserve(width * height * 4);
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        if (x < width - 1) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = y * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y });
-                            edges.push_back(edge);
-                        }
-
-                        if (y < height - 1) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y + 1) * width + x;
-                            edge.w = PixelDiff(smoothed, { x, y }, { x, y + 1 });
-                            edges.push_back(edge);
-                        }
-
-                        if ((x < width - 1) && (y < height - 1)) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y + 1) * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y + 1 });
-                            edges.push_back(edge);
-                        }
-
-                        if ((x < width - 1) && (y > 0)) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y - 1) * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, { x, y }, { x + 1, y - 1 });
-                            edges.push_back(edge);
-                        }
-                    }
-                }
+                float(*pixelDiff)(const Image & im, const cv::Point & p1, const cv::Point & p2) = PixelDiff;
+                std::vector<Edge> edges = ComposeGraphEdges(width, height, isPanorama, smoothed, pixelDiff);
 
                 int num = (int)edges.size();
                 Universe u = SegmentGraph(width * height, edges, c);
@@ -1805,7 +1814,7 @@ namespace panoramix {
             }
 
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
-            std::pair<Imagei, Image> SegmentImageWithLinesSplits(const Image & im, float sigma, float c, int minSize,
+            std::pair<Imagei, Image> SegmentImageWithLinesSplits(const Image & im, float sigma, float c, int minSize, bool isPanorama,
                 const std::vector<Line2> & lines,
                 int & numCCs, bool returnColoredResult = false){
 
@@ -1825,40 +1834,10 @@ namespace panoramix {
                 }
 
                 // build pixel graph
-                std::vector<Edge> edges;
-                edges.reserve(width * height * 4);
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        if (x < width - 1) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = y * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y }, lines);
-                            edges.push_back(edge);
-                        }
-                        if (y < height - 1) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y + 1) * width + x;
-                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x, y + 1 }, lines);
-                            edges.push_back(edge);
-                        }
-                        if ((x < width - 1) && (y < height - 1)) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y + 1) * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y + 1 }, lines);
-                            edges.push_back(edge);
-                        }
-                        if ((x < width - 1) && (y > 0)) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = (y - 1) * width + (x + 1);
-                            edge.w = PixelDiff(smoothed, linesOccupation, { x, y }, { x + 1, y - 1 }, lines);
-                            edges.push_back(edge);
-                        }
-                    }
-                }
+                std::vector<Edge> edges = ComposeGraphEdges(width, height, isPanorama, smoothed, 
+                    [&linesOccupation, &lines](const Image & im, const cv::Point & p1, const cv::Point & p2){
+                    return PixelDiff(im, linesOccupation, p1, p2, lines);
+                });
 
                 int num = (int)edges.size();
                 Universe u = SegmentGraph(width * height, edges, c);
@@ -2116,17 +2095,20 @@ namespace panoramix {
 
         std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im) const {
             if (_params.algorithm == SLIC){
+                assert(!_params.isPanorama);
                 return SegmentImageUsingSLIC(im, _params.superpixelSizeSuggestion, _params.superpixelNumberSuggestion);
             }
-            else if (_params.algorithm == GraphCut){
+            else if (_params.algorithm == GraphCut){                
                 int numCCs;
-                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, numCCs, false).first;
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, _params.isPanorama, numCCs, false).first;
                 return std::make_pair(segim, numCCs);
             }
             else if (_params.algorithm == QuickShiftCPU){
+                assert(!_params.isPanorama);
                 return SegmentImageUsingQuickShiftCPU(im, 6, 10);
             }
             else if (_params.algorithm == QuickShiftGPU){
+                assert(!_params.isPanorama);
                 return SegmentImageUsingQuickShiftGPU(im, 6, 10);
             }
             else{
@@ -2137,7 +2119,7 @@ namespace panoramix {
         std::pair<Imagei, int>  SegmentationExtractor::operator() (const Image & im, const std::vector<Line2> & lines) const {
             assert(_params.algorithm == GraphCut);
             int numCCs;
-            Imagei segim = SegmentImageWithLinesSplits(im, _params.sigma, _params.c, _params.minSize, lines, numCCs, false).first;
+            Imagei segim = SegmentImageWithLinesSplits(im, _params.sigma, _params.c, _params.minSize, _params.isPanorama, lines, numCCs, false).first;
             return std::make_pair(segim, numCCs);
         }
 

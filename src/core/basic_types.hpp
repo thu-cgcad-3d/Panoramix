@@ -460,6 +460,7 @@ namespace panoramix {
         inline int AreaOfImage(const Image & im) { return im.cols * im.rows; }
 		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);
         void ResizeToMakeHeightUnder(Image & im, int heightUpperBound);
+        bool MayBeAPanorama(const Image & im);
         
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im);
         std::pair<double, double> MinMaxValOfImage(const Image & im);
