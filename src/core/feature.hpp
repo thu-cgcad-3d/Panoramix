@@ -185,6 +185,7 @@ namespace panoramix {
 
 
         // segmentation
+        class PanoramicCamera;
         class SegmentationExtractor {
         public:
             using Feature = Imagei; // CV_32SC1
@@ -215,6 +216,7 @@ namespace panoramix {
             Params & params() { return _params; }
             std::pair<Feature, int> operator() (const Image & im) const;
             std::pair<Feature, int> operator() (const Image & im, const std::vector<Line2> & lines) const;
+            std::pair<Feature, int> operator() (const Image & im, const std::vector<Line3> & lines, const PanoramicCamera & cam) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
             Params _params;

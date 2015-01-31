@@ -474,9 +474,15 @@ namespace panoramix {
         GeoCoord GeoCoordFromPixelLoc(const PixelLoc & pixel, int longidiv, int latidiv);
 
 
+        // dense mat
+        template <class T>
+        using DenseMat = cv::Mat_<T>;
+        using DenseMatd = DenseMat<double>;
+
         // sparse mat
         template <class T>
         using SparseMat = cv::SparseMat_<T>;
+        using SparseMatd = SparseMat<double>;
         template <class T>
         struct SparseMatElement {
             using ValueType = T;

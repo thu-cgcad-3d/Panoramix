@@ -596,8 +596,35 @@ namespace panoramix {
         };
 
 
+        template <class DataT, class ConstraintGraphT>
+        struct ComponentHandledTableFromConstraintGraph {};
 
+        template <class DataT, class ... ComponentTs, class ConstraintConfigTupleT>
+        struct ComponentHandledTableFromConstraintGraph<DataT, ConstraintGraph<std::tuple<ComponentTs ...>, ConstraintConfigTupleT>> {
+            using type = MixedHandledTable<DataT, ComponentHandle<ComponentTs>...>;
+        };
 
+        template <class DataT, class ConstraintGraphT>
+        struct ConstraintHandledTableFromConstraintGraph {};
+
+        template <class DataT, class ComponentDataTupleT, class ... ConstraintConfigTs>
+        struct ConstraintHandledTableFromConstraintGraph<DataT, ConstraintGraph<ComponentDataTupleT, std::tuple<ConstraintConfigTs...>>> {
+            using type = MixedHandledTable<DataT, ConstraintHandle<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>...>;
+        };
+
+        template <class DataT, class ... ComponentTs, class ConstraintConfigTupleT>
+        inline MixedHandledTable<DataT, ComponentHandle<ComponentTs>...> MakeHandledTableForComponents(
+            const ConstraintGraph<std::tuple<ComponentTs ...>, ConstraintConfigTupleT> & cg) {
+            return MixedHandledTable<DataT, ComponentHandle<ComponentTs>...>(cg.internalComponents<ComponentTs>().size() ...);
+        }
+
+        template <class DataT, class ComponentDataTupleT, class ... ConstraintConfigTs>
+        inline MixedHandledTable<DataT, ConstraintHandle<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>...> 
+            MakeHandledTableForConstraints(
+            const ConstraintGraph<ComponentDataTupleT, std::tuple<ConstraintConfigTs...>> & cg){
+            return MixedHandledTable<DataT, ConstraintHandle<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>...>(
+                cg.internalConstraints<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>().size() ...);
+        }
     	
     }
 }

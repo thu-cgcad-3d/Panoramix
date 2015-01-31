@@ -271,6 +271,8 @@ namespace panoramix {
 
             std::vector<std::tuple<int, int, double>> triplets; // col - row - val
             triplets.reserve(nzc);
+
+            THERE_ARE_BOTTLENECKS_HERE(); // we should only iterate non zero elements
             for (auto iter = mat.begin(); iter != mat.end(); ++iter){
                 int ii = iter.node()->idx[0];
                 int jj = iter.node()->idx[1];
@@ -278,23 +280,34 @@ namespace panoramix {
                 double v = 0.0;
                 if (mat.type() == CV_32FC1){
                     float value = 0.0f;
-                    std::memcpy(&value, data, sizeof(float));
+                    std::memcpy(&value, data, sizeof(value));
                     v = value;
                 }
                 else if (mat.type() == CV_64FC1){
                     double value = 0.0f;
-                    std::memcpy(&value, data, sizeof(double));
+                    std::memcpy(&value, data, sizeof(value));
                     v = value;
                 }
                 else if (mat.type() == CV_32SC1){
                     int32_t value = 0;
-                    std::memcpy(&value, data, sizeof(int32_t));
+                    std::memcpy(&value, data, sizeof(value));
+                    v = value;
+                }
+                else if (mat.type() == CV_64FC1){
+                    int64_t value = 0;
+                    std::memcpy(&value, data, sizeof(value));
+                    v = value;
+                }
+                else if (mat.type() == CV_8UC1){
+                    uint8_t value = 0;
+                    std::memcpy(&value, data, sizeof(value));
                     v = value;
                 }
                 else{
-                    assert(false && "only SparseMat<float> or SparseMat<double> is supported here!");
+                    assert(false && "element type is not supported here!");
                 }
-                triplets.emplace_back(jj, ii, v); // col - row - val
+                if (v != 0.0)
+                    triplets.emplace_back(jj, ii, v); // col - row - val
             }
 
             // make triplets ordered in column indices to satisfy matlab interface

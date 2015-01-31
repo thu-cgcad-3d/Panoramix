@@ -19,14 +19,16 @@ namespace panoramix {
             if (abs(im.cols - im.rows * 2) > im.rows / 10.0f)
                 return false;
             // check boundary pixels
-            for (int x = 0; x < im.cols; x++){
+           /* for (int x = 0; x < im.cols; x++){
                 const uchar* p1 = im.ptr(0, x);
                 const uchar* p2 = im.ptr(im.rows - 1, x);
                 for (int k = 0; k < im.elemSize(); k++){
                     NOT_IMPLEMENTED_YET();
                 }
-            }
-            NOT_IMPLEMENTED_YET();
+            }*/
+            //NOT_IMPLEMENTED_YET();
+            IMPROVABLE_HERE("check continuity on borders");
+            return true;
         }
 
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im) {

@@ -2,22 +2,44 @@
 //extern "C" {
 //    #include <mosek.h>
 //}
-//#include <Eigen/Dense>
-//#include <Eigen/Sparse>
+#include <Eigen/Dense>
+#include <Eigen/Sparse>
 //
 #include "algorithms.hpp"
 #include "containers.hpp"
-//#include "matlab.hpp"
+#include "matlab.hpp"
 #include "utilities.hpp"
 #include "mixed_graph.hpp"
 
-//#include "../vis/visualizers.hpp"
+#include "../vis/visualizers.hpp"
 //#include "matlab.hpp"
 
 
 namespace panoramix {
     namespace core{
 
+        template <class FunT>
+        inline void ForeachMixedGraphComponentHandle(const MixedGraph & mg, FunT && fun){
+            for (auto & c : mg.components<LineData>()){
+                fun(c.topo.hd);
+            }
+            for (auto & c : mg.components<RegionData>()){
+                fun(c.topo.hd);
+            }
+        }
+
+        template <class FunT>
+        inline void ForeachMixedGraphConstraintHandle(const MixedGraph & mg, FunT && fun){
+            for (auto & c : mg.constraints<RegionBoundaryData>()){
+                fun(c.topo.hd);
+            }
+            for (auto & c : mg.components<LineRelationData>()){
+                fun(c.topo.hd);
+            }
+            for (auto & c : mg.components<RegionLineConnectionData>()){
+                fun(c.topo.hd);
+            }
+        }
 
         namespace {
 
@@ -282,7 +304,7 @@ namespace panoramix {
             assert(cams.size() == lineSegments.size());
             std::vector<Vec3> lineIntersections;
 
-            int linesNum;
+            int linesNum = 0;
             for (int i = 0; i < cams.size(); i++){
                 std::vector<Line2> pureLines(lineSegments[i].size());
                 linesNum += lineSegments[i].size();
@@ -335,10 +357,11 @@ namespace panoramix {
 
             // lines graph in 2d
             struct LineData2D {
-                Classified<Line2> line;
+                Line2 line;
+                int claz;
                 template <class Archiver>
                 void serialize(Archiver & ar) {
-                    ar(line);
+                    ar(line, claz);
                 }
             };
             struct LineRelationData2D {
@@ -358,8 +381,9 @@ namespace panoramix {
                 const std::vector<HPoint2> & vps,
                 double intersectionDistanceThreshold,
                 double incidenceDistanceAlongDirectionThreshold,
-                double incidenceDistanceVerticalDirectionThreshold,
-                bool includeUnclassifiedLines){
+                double incidenceDistanceVerticalDirectionThreshold){
+
+                /// TODO include all line relations is NOT STABLE!
 
                 LinesGraph2D graph;
 
@@ -369,36 +393,29 @@ namespace panoramix {
                 graph.internalElements<0>().reserve(lines.size());
 
                 for (auto & line : lines){
-                    if (line.claz == -1 && !includeUnclassifiedLines)
-                        continue;
                     LineData2D ld;
-                    ld.line = line;
+                    ld.line = line.component;
+                    ld.claz = line.claz;
                     handles.push_back(graph.add(std::move(ld)));
                 }
 
                 // construct incidence/intersection relations
                 auto & linesData = graph.internalElements<0>();
                 for (int i = 0; i < linesData.size(); i++){
-                    auto & linei = linesData[i].data.line.component;
-                    int clazi = linesData[i].data.line.claz;
-                    if (!includeUnclassifiedLines)
-                        assert(clazi != -1);
+                    auto & linei = linesData[i].data.line;
+                    int clazi = linesData[i].data.claz;
 
                     for (int j = i + 1; j < linesData.size(); j++){
-                        auto & linej = linesData[j].data.line.component;
-                        int clazj = linesData[j].data.line.claz;
-                        if (!includeUnclassifiedLines)
-                            assert(clazj != -1);
+                        auto & linej = linesData[j].data.line;
+                        int clazj = linesData[j].data.claz;
 
                         auto nearest = DistanceBetweenTwoLines(linei, linej);
                         double d = nearest.first;
 
-                        if (clazi == -1 || clazj == -1)
-                            continue;
-
-                        if (clazi == clazj){ // incidences
+                        if (clazi == clazj && clazi >= 0 ){ // incidences for classified lines
                             auto conCenter = (nearest.second.first.position + nearest.second.second.position) / 2.0;
                             auto conDir = (nearest.second.first.position - nearest.second.second.position);
+
                             auto & vp = vps[clazi];
 
                             if (Distance(vp.value(), conCenter) < intersectionDistanceThreshold)
@@ -420,7 +437,7 @@ namespace panoramix {
                                 graph.add<1>({ handles[i], handles[j] }, std::move(lrd));
                             }
                         }
-                        else { // intersections
+                        else if(clazi != clazj && clazi >= 0 && clazj >= 0) { // intersections for classified lines
                             if (d < intersectionDistanceThreshold){
                                 auto conCenter = HPointFromVector(GetCoeffs(linei.infiniteLine())
                                     .cross(GetCoeffs(linej.infiniteLine()))).value();
@@ -441,6 +458,31 @@ namespace panoramix {
                                 graph.add<1>({ handles[i], handles[j] }, std::move(lrd));
                             }
                         }
+                        else if (clazi == clazj && clazi == -1){ // incidence for unclassified lines
+                            if (d >= incidenceDistanceAlongDirectionThreshold / 3.0)
+                                continue;
+
+                            double angle = AngleBetweenUndirectedVectors(linei.direction(), linej.direction());
+                            if (angle >= DegreesToRadians(2))
+                                continue;
+
+                            double angle2 = std::max(AngleBetweenUndirectedVectors(linei.direction(), 
+                                nearest.second.first.position - nearest.second.second.position), 
+                                AngleBetweenUndirectedVectors(linej.direction(),
+                                nearest.second.first.position - nearest.second.second.position));
+                            if (angle2 >= DegreesToRadians(3))
+                                continue;
+
+                            LineRelationData2D lrd;
+                            lrd.type = LineRelationData::Type::Incidence;
+                            lrd.relationCenter = (nearest.second.first.position + nearest.second.second.position) / 2.0;
+
+                            if (HasValue(lrd.relationCenter, IsInfOrNaN<double>))
+                                continue;
+
+                            graph.add<1>({ handles[i], handles[j] }, std::move(lrd));
+                        }
+
                     }
                 }
 
@@ -469,8 +511,8 @@ namespace panoramix {
                         std::fill(std::begin(votingData.val), std::end(votingData.val), 0);
 
                         for (auto & ld : graph.elements<0>()){
-                            auto & line = ld.data.line.component;
-                            int claz = ld.data.line.claz;
+                            auto & line = ld.data.line;
+                            int claz = ld.data.claz;
                             if (claz == -1)
                                 continue;
 
@@ -527,7 +569,6 @@ namespace panoramix {
             }
 
 
-
             template <class T, int N>
             inline Line<T, N> NormalizeLine(const Line<T, N> & l) {
                 return Line<T, N>(normalize(l.first), normalize(l.second));
@@ -535,18 +576,19 @@ namespace panoramix {
         }
 
 
-        void AddLines(MixedGraph & mg, const std::vector<Classified<Line2>> & lineSegments,
+        void AppendLines(MixedGraph & mg, const std::vector<Classified<Line2>> & lineSegments,
             const PerspectiveCamera & cam,
             const std::vector<Vec3> & vps,
             double intersectionAngleThreshold /*= 0.04*/,
             double incidenceAngleAlongDirectionThreshold /*= 0.1*/,
             double incidenceAngleVerticalDirectionThreshold /*= 0.02*/,
             double interViewIncidenceAngleAlongDirectionThreshold /*= 0.15*/, // for new line-line incidence recognition
-            double interViewIncidenceAngleVerticalDirectionThreshold /*= 0.03*/,
-            bool includeUnclassifiedLines /*= false*/){
+            double interViewIncidenceAngleVerticalDirectionThreshold /*= 0.03*/){
 
             if (lineSegments.empty())
                 return;
+
+            assert(mg.internalComponents<RegionData>().empty() && "Regions must be added AFTER all lines!!!");
 
             std::vector<HPoint2> vps2d(vps.size());
             for (int i = 0; i < vps.size(); i++){
@@ -555,7 +597,7 @@ namespace panoramix {
             LinesGraph2D graph2d = CreateLinesGraph2D(lineSegments, vps2d, 
                 cam.focal() * intersectionAngleThreshold,
                 cam.focal() * incidenceAngleAlongDirectionThreshold,
-                cam.focal() * incidenceAngleVerticalDirectionThreshold, includeUnclassifiedLines);
+                cam.focal() * incidenceAngleVerticalDirectionThreshold);
 
             mg.internalComponents<LineData>().reserve(mg.internalComponents<LineData>().size() + 
                 graph2d.internalElements<0>().size());
@@ -570,9 +612,9 @@ namespace panoramix {
             for (auto & l2d : graph2d.elements<0>()){
                 auto & ld2d = l2d.data;
                 LineData ld;
-                ld.line.claz = ld2d.line.claz;
-                ld.line.component.first = normalize(cam.spatialDirection(ld2d.line.component.first));
-                ld.line.component.second = normalize(cam.spatialDirection(ld2d.line.component.second));
+                ld.initialClaz = ld2d.claz;
+                ld.line.first = normalize(cam.spatialDirection(ld2d.line.first));
+                ld.line.second = normalize(cam.spatialDirection(ld2d.line.second));
                 lh2dToLh[l2d.topo.hd] = mg.addComponent(std::move(ld));
                 newLineHandles.insert(lh2dToLh[l2d.topo.hd]);
             }
@@ -591,7 +633,7 @@ namespace panoramix {
 
             // build rtree for lines
             auto lookupLineNormal = [&mg](const LineHandle & li) -> Box3 {
-                auto normal = mg.data(li).line.component.first.cross(mg.data(li).line.component.second);
+                auto normal = mg.data(li).line.first.cross(mg.data(li).line.second);
                 Box3 b = BoundingBox(normalize(normal));
                 static const double s = 0.2;
                 b.minCorner = b.minCorner - Vec3(s, s, s);
@@ -620,17 +662,18 @@ namespace panoramix {
 
                     auto & line1 = l.data.line;
                     auto & line2 = mg.data(relatedLh).line;
-                    if (line1.claz != line2.claz) // only incidence relations are recognized here
+                    
+                    if (l.data.initialClaz != mg.data(relatedLh).initialClaz) // only incidence relations are recognized here
                         return true;
 
-                    auto normal1 = normalize(line1.component.first.cross(line1.component.second));
-                    auto normal2 = normalize(line2.component.first.cross(line2.component.second));
+                    auto normal1 = normalize(line1.first.cross(line1.second));
+                    auto normal2 = normalize(line2.first.cross(line2.second));
 
                     if (std::min(std::abs(AngleBetweenDirections(normal1, normal2)),
                         std::abs(AngleBetweenDirections(normal1, -normal2))) <
                         interViewIncidenceAngleVerticalDirectionThreshold) {
 
-                        auto nearest = DistanceBetweenTwoLines(NormalizeLine(line1.component), NormalizeLine(line2.component));
+                        auto nearest = DistanceBetweenTwoLines(NormalizeLine(line1), NormalizeLine(line2));
                         if (AngleBetweenDirections(nearest.second.first.position, nearest.second.second.position) >
                             interViewIncidenceAngleAlongDirectionThreshold) // ignore too far-away relations
                             return true;
@@ -671,9 +714,12 @@ namespace panoramix {
                 return pts;
             }
 
+         /*   template <class CameraT>
+            std::vector<Vec3> RefineReigonContour()*/
+
 
             template <class CameraT>
-            void AddRegionsTemplate(MixedGraph & mg, const Imagei & segmentedRegions, const CameraT & cam,
+            void AppendRegionsTemplate(MixedGraph & mg, const Imagei & segmentedRegions, const CameraT & cam,
                 double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
 
                 double minVal, maxVal;
@@ -683,7 +729,6 @@ namespace panoramix {
                 int regionNum = static_cast<int>(maxVal)+1;
 
                 mg.internalComponents<RegionData>().reserve(mg.internalComponents<RegionData>().size() + regionNum);
-
                 std::vector<RegionHandle> regionHandles(regionNum);
 
                 // calculate contours and tangential projected areas for each region data
@@ -696,7 +741,18 @@ namespace panoramix {
                     cv::findContours(regionMask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the outer contours
                     std::sort(contours.begin(), contours.end(),
                         [](const std::vector<PixelLoc> & ca, const std::vector<PixelLoc> & cb){return ca.size() > cb.size(); });
-                    assert(!contours.empty() && "no contour? impossible~");
+                    
+                    auto iter = std::find_if(contours.begin(), contours.end(), [](const std::vector<PixelLoc> & c){return c.size() <= 2; });
+                    contours.erase(iter, contours.end());
+
+                    //assert(!contours.empty() && "no contour? impossible~");
+                    if (contours.empty() || contours.front().size() <= 2 ){
+                        continue;
+                    }
+
+                    for (auto & cs : contours){
+                        assert(cs.size() > 2);
+                    }
 
                     RegionData rd;
                     Vec3 center(0, 0, 0);
@@ -715,15 +771,20 @@ namespace panoramix {
                     std::tie(x, y) = core::ProposeXYDirectionsFromZDirection(rd.normalizedCenter);
                     rd.area = 0.0;
                     for (int k = 0; k < contours.size(); k++){
-                        std::vector<Point2> tangentialContour;
+                        std::vector<Point2f> tangentialContour;
                         tangentialContour.reserve(contours[k].size());
                         for (const Vec3 & d : rd.normalizedContours[k]){
                             tangentialContour.emplace_back((d - rd.normalizedCenter).dot(x), (d - rd.normalizedCenter).dot(y));
                         }
                         double a = cv::contourArea(tangentialContour);
-                        assert(a > 0.0);
+                        assert(a >= 0.0);
                         rd.area += a;
                     }
+
+                    IMPROVABLE_HERE("remap and get a more precise and compact shape of region!!!");
+
+                    if (rd.area < 1e-5)
+                        continue;
 
                     regionHandles[i] = mg.addComponent(std::move(rd));
                 }
@@ -736,6 +797,9 @@ namespace panoramix {
                 for (auto & bep : boundaryEdges) {
                     auto & rids = bep.first;
                     auto & edges = bep.second;
+
+                    if (regionHandles[rids.first].invalid() || regionHandles[rids.second].invalid())
+                        continue;
 
                     RegionBoundaryData bd;
                     bd.normalizedEdges.resize(edges.size());
@@ -764,7 +828,7 @@ namespace panoramix {
                         });
                     }
 
-                    mg.addConstraint(std::move(bd), RegionHandle(rids.first), RegionHandle(rids.second));
+                    mg.addConstraint(std::move(bd), regionHandles[rids.first], regionHandles[rids.second]);
                 }
 
 
@@ -772,7 +836,7 @@ namespace panoramix {
                 std::map<std::pair<RegionHandle, LineHandle>, std::vector<Vec3>> regionLineConnections;
 
                 for (auto & ld : mg.components<LineData>()){
-                    auto & line = ld.data.line.component;
+                    auto & line = ld.data.line;
                     auto samples = NormalizedSamplePointsOnLine(line, samplingStepAngleOnLine);
                     for (int k = 0; k < samples.size(); k++){
                         if (!cam.isVisibleOnScreen(samples[k]))
@@ -782,7 +846,11 @@ namespace panoramix {
                             continue;
                         int regionId = segmentedRegions(p);
                         auto rh = regionHandles[regionId];
+                        if (rh.invalid())
+                            continue;
                         regionLineConnections[std::make_pair(rh, ld.topo.hd)].push_back(samples[k]);
+
+                        IMPROVABLE_HERE("search neighors and connect to more regions")
                     }
                 }
 
@@ -797,18 +865,865 @@ namespace panoramix {
 
         }
 
-        void AddRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
+        void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
-            AddRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine);
+            AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine);
         }
-        void AddRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
+        void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
-            AddRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine);
+            AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine);
         }
 
+
+
+
+
+
+
+
+
+
+
+        MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps) {
+            auto compProps = MakeHandledTableForComponents<MixedGraphComponentProperty>(mg);
+            auto consProps = MakeHandledTableForConstraints<MixedGraphConstraintProperty>(mg);
+            for (auto & l : mg.internalComponents<LineData>()){
+                compProps[l.topo.hd].orientationClaz = l.data.initialClaz;
+                compProps[l.topo.hd].orientationNotClaz = -1;
+            }
+            for (auto & r : mg.internalComponents<RegionData>()){
+                compProps[r.topo.hd].orientationClaz = compProps[r.topo.hd].orientationNotClaz = -1;
+            }
+            for (auto & dtable : consProps.data){
+                for (auto & d : dtable){
+                    d.used = true;
+                }
+            }
+            return MixedGraphPropertyTable{ vps, std::move(compProps), std::move(consProps) };
+        }
+
+
+
+
+
+        namespace {
+
+            int SwappedComponent(const Vec3 & orientation){
+                for (int i = 0; i < 2; i++){
+                    if (abs(orientation[i]) >= 1e-8){
+                        return i;
+                    }
+                }
+                return 2;
+            }
+
+            struct InitializeVariablesForEachHandle {
+                const MixedGraph & mg;
+                MixedGraphPropertyTable & props;
+
+                void operator()(const LineHandle & lh) const {
+                    auto & lp = props.componentProperties[lh];
+                    if (lp.orientationClaz == -1){
+                        // (1/cornerDepth1, 1/cornerDepth2) for LineFree
+                        lp.variables = { 1.0, 1.0 };
+                    }
+                    else{
+                        // 1/centerDepth for LineOriented,
+                        lp.variables = { 1.0 };
+                    }
+                }
+
+                void operator()(const RegionHandle & rh) const {
+                    auto & rd = mg.data(rh);
+                    auto & rp = props.componentProperties[rh];
+                    if (rp.orientationClaz == -1 && rp.orientationNotClaz == -1){
+                        // (a, b, c) for RegionFree ax+by+c=1, 
+                        rp.variables = { rd.normalizedCenter[0], rd.normalizedCenter[1], rd.normalizedCenter[2] };
+                    }
+                    else if (rp.orientationClaz == -1 && rp.orientationNotClaz >= 0){
+                        // (a, b), {or (b, c) or (a, c)} for RegionAlongFixedAxis  ax+by+c=1,
+                        Vec3 anotherAxis = rd.normalizedCenter.cross(normalize(props.vanishingPoints[rp.orientationNotClaz]));
+                        Vec3 trueNormal = props.vanishingPoints[rp.orientationNotClaz].cross(anotherAxis);
+                        Plane3 plane(rd.normalizedCenter, trueNormal);
+                        auto eq = Plane3ToEquation(plane);
+                        int c = SwappedComponent(normalize(props.vanishingPoints[rp.orientationNotClaz]));
+                        std::swap(eq[c], eq[2]);
+                        rp.variables = { eq[0], eq[1] };
+                    }
+                    else {
+                        // 1/centerDepth for RegionWithFixedNormal
+                        rp.variables = { 1.0 };
+                    }
+                }
+            };
+
+            
+        }
+
+
+        void InitializeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
+            ForeachMixedGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+        }
+
+
+        Line3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const LineHandle & lh){
+            auto & ld = mg.data(lh);
+            auto & lp = props.componentProperties.at(lh);
+            if (lp.orientationClaz >= 0){
+                assert(lp.variables.size() == 1);
+                InfiniteLine3 infLine(normalize(ld.line.center()) / lp.variables[0], props.vanishingPoints[lp.orientationClaz]);
+                return Line3(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), normalize(ld.line.first)), infLine).second.second,
+                    DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), normalize(ld.line.second)), infLine).second.second);
+            }
+            else /*if (line.type == MGUnary::LineFree)*/{
+                assert(lp.variables.size() == 2);
+                /*           | sin(theta) | | p | | q |
+                len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                | p sin(phi) - q sin(phi - theta) |
+                */
+                // variables[0] -> 1/p
+                // variables[1] -> 1/q
+                return Line3(normalize(ld.line.first) / lp.variables[0], normalize(ld.line.second) / lp.variables[1]);
+            }
+        }
+
+
+
+        Plane3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const RegionHandle & rh){
+            auto & rd = mg.data(rh);
+            auto & rp = props.componentProperties.at(rh);
+            if (rp.orientationClaz >= 0){
+                assert(rp.variables.size() == 1);
+                return Plane3(rd.normalizedCenter / rp.variables[0], props.vanishingPoints[rp.orientationClaz]);
+            }
+            else if (rp.orientationClaz == -1 && rp.orientationNotClaz >= 0){
+                assert(rp.variables.size() == 2);
+                double vs[] = { rp.variables[0], rp.variables[1], 0.0 }; // fake vs
+                // v1 * o1 + v2 * o2 + v3 * o3 = 0, since region.orientation is orthogonal to normal
+                auto orientation = normalize(props.vanishingPoints[rp.orientationNotClaz]);
+                int c = SwappedComponent(orientation);
+                std::swap(orientation[c], orientation[2]); // now fake orientation
+                vs[2] = (-vs[0] * orientation[0] - vs[1] * orientation[1])
+                    / orientation[2];
+                std::swap(vs[c], vs[2]); // now real vs
+                return Plane3FromEquation(vs[0], vs[1], vs[2]);
+            }
+            else /*if (region.type == MGUnary::RegionWithFixedNormal)*/{
+                assert(rp.variables.size() == 3);
+                return Plane3FromEquation(rp.variables[0], rp.variables[1], rp.variables[2]);
+            }
+        }
+
+
+
+        std::vector<double> VariableCoefficientsForInverseDepthAtDirection(const MixedGraph & mg,
+            const MixedGraphPropertyTable & props, const Vec3 & direction, const LineHandle & lh){
+            auto & ld = mg.data(lh);
+            auto & lp = props.componentProperties.at(lh);
+            if (lp.orientationClaz >= 0){
+                assert(lp.variables.size() == 1);
+                InfiniteLine3 infLine(normalize(ld.line.center()), props.vanishingPoints[lp.orientationClaz]);
+                 // variable is 1.0/centerDepth
+                 // corresponding coeff is 1.0/depthRatio
+                 // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                 double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
+                 return std::vector<double>{1.0 / depthRatio};
+             }
+             else /*if(u.type == MGUnary::LineFree)*/{
+                 assert(lp.variables.size() == 2);
+                 double theta = AngleBetweenDirections(normalize(ld.line.first), normalize(ld.line.second));
+                 double phi = AngleBetweenDirections(normalize(ld.line.first), direction);
+                 /*           | sin(theta) | | p | | q |
+                 len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                 | p sin(phi) - q sin(phi - theta) |
+                 */
+                 // variables[0] -> 1/p
+                 // variables[1] -> 1/q
+                 double coeffFor1_p = -sin(phi - theta) / sin(theta);
+                 double coeffFor1_q = sin(phi) / sin(theta);
+                 assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
+                 return std::vector<double>{coeffFor1_p, coeffFor1_q};
+             }
+        }
+
+
+        std::vector<double> VariableCoefficientsForInverseDepthAtDirection(const MixedGraph & mg,
+            const MixedGraphPropertyTable & props, const Vec3 & direction, const RegionHandle & rh){
+            auto & rd = mg.data(rh);
+            auto & rp = props.componentProperties.at(rh);
+            if (rp.orientationClaz >= 0){
+                assert(rp.variables.size() == 1);
+                Plane3 plane(rd.normalizedCenter, props.vanishingPoints[rp.orientationClaz]);
+                // variable is 1.0/centerDepth
+                // corresponding coeff is 1.0/depthRatio
+                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                double depthRatio = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
+                return std::vector<double>{1.0 / depthRatio};
+            }
+            else if (rp.orientationClaz == -1 && rp.orientationNotClaz >= 0){
+                assert(rp.variables.size() == 2);
+                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                // -> 1.0/depth = ax + by + cz
+                // -> 1.0/depth = ax + by + (- o1a - o2b)/o3 * z = a(x-o1*z/o3) + b(y-o2*z/o3)
+                auto orientation = normalize(props.vanishingPoints[rp.orientationNotClaz]);
+                int c = SwappedComponent(orientation);
+                Vec3 forientation = orientation;
+                std::swap(forientation[c], forientation[2]);
+                Vec3 fdirection = direction;
+                std::swap(fdirection[c], fdirection[2]);
+                return std::vector<double>{
+                    fdirection[0] - forientation[0] * fdirection[2] / forientation[2],
+                        fdirection[1] - forientation[1] * fdirection[2] / forientation[2]
+                };
+            }
+            else{
+                assert(rp.variables.size() == 3);
+                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                // -> 1.0/depth = ax + by + cz
+                return std::vector<double>{direction[0], direction[1], direction[2]};
+            }
+        }
+
+
+
+        namespace {
+            
+            template <class T>
+            size_t StdVectorElementsNum(const T & t) { return 1; }
+            template <class T>
+            size_t StdVectorElementsNum(const std::vector<T> & v){
+                size_t s = 0;
+                for (auto & e : v){
+                    s += StdVectorElementsNum(e);
+                }
+                return s;
+            }
+
+            inline double DepthAt(const Vec3 & direction, const Plane3 & plane){
+                InfiniteLine3 ray(Point3(0, 0, 0), direction);
+                return norm(IntersectionOfLineAndPlane(ray, plane).position);
+            }
+
+            inline double DepthAt(const Vec3 & direction, const Line3 & line){
+                InfiniteLine3 ray(Point3(0, 0, 0), direction);
+                return norm(DistanceBetweenTwoLines(ray, line.infiniteLine()).second.first);
+            }
+
+
+
+            std::vector<Vec3> NecessaryAnchorsForBinary(const MixedGraph & mg, RegionBoundaryHandle bh, double & weightForEachAnchor){
+                size_t n = StdVectorElementsNum(mg.data(bh).normalizedSampledPoints);
+
+                assert(n > 0);
+                const auto & points = mg.data(bh).normalizedSampledPoints;
+
+                if (n == 1){
+                    weightForEachAnchor = 1.0;
+                    return{ points.front().front() };
+                }
+
+                auto & p1 = points.front().front();
+                auto pp2 = &p1;
+                for (auto & ps : points){
+                    for (auto & p : ps){
+                        if (AngleBetweenDirections(p, p1) > AngleBetweenDirections(p, *pp2)){
+                            pp2 = &p;
+                        }
+                    }
+                }
+                auto & p2 = *pp2;
+
+                if (n == 2){
+                    weightForEachAnchor = 1.0;
+                    return{ p1, p2 };
+                }
+                
+                auto normal12 = p1.cross(p2);
+                auto pp3 = &p1;
+                for (auto & ps : points){
+                    for (auto & p : ps){
+                        if (abs(p.dot(normal12)) > abs(pp3->dot(normal12))){
+                            pp3 = &p;
+                        }
+                    }
+                }
+                auto & p3 = *pp3;
+                weightForEachAnchor = n / 2.0;
+                IMPROVABLE_HERE(?);
+                return{ p1, p3 };
+            }
+
+            inline std::vector<Vec3> NecessaryAnchorsForBinary(const MixedGraph & mg, LineRelationHandle bh, double & weightForEachAnchor){
+                weightForEachAnchor = 5.0;
+                return{ mg.data(bh).normalizedRelationCenter };
+            }
+
+            inline std::vector<Vec3> NecessaryAnchorsForBinary(const MixedGraph & mg, RegionLineConnectionHandle bh, double & weightForEachAnchor){
+                weightForEachAnchor = mg.data(bh).normalizedAnchors.size() / 2.0;
+                return{ mg.data(bh).normalizedAnchors.front(), mg.data(bh).normalizedAnchors.back() };
+            }
+
+
+            template <class DataT>
+            inline void RegisterConstraintEquations(int & eid, const MixedGraph & mg, MixedGraphPropertyTable & props,
+                ComponentHandledTableFromConstraintGraph<int, MixedGraph>::type & uh2varStartPosition,
+                ConstraintHandledTableFromConstraintGraph<std::vector<Vec3>, MixedGraph>::type & appliedBinaryAnchors,
+                ConstraintHandledTableFromConstraintGraph<double, MixedGraph>::type & weightsForEachAppliedBinaryAnchor,
+                std::vector<SparseMatElement<double>> & Atriplets,
+                std::vector<SparseMatElement<double>> & Wtriplets,
+                std::vector<double> & B) {
+
+                for (auto & c : mg.constraints<DataT>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
+                    auto bh = c.topo.hd;
+                    auto uh1 = mg.topo(bh).component<0>();
+                    auto uh2 = mg.topo(bh).component<1>();
+                    auto & u1 = mg.data(uh1);
+                    auto & u2 = mg.data(uh2);
+
+                    int u1VarStartPosition = uh2varStartPosition.at(uh1);
+                    int u1VarNum = props[uh1].variables.size();
+
+                    int u2VarStartPosition = uh2varStartPosition.at(uh2);
+                    int u2VarNum = props[uh2].variables.size();
+
+                    for (auto & a : appliedBinaryAnchors.at(bh)){
+                        B[eid] = 0.0;
+                        Wtriplets.emplace_back(eid, eid, weightsForEachAppliedBinaryAnchor.at(bh));
+                        {
+                            auto u1VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, props, a, uh1);
+                            assert(u1VarCoeffs.size() == u1VarNum);
+                            for (int i = 0; i < u1VarCoeffs.size(); i++){
+                                //A.insert(eid, u1VarStartPosition + i) = u1VarCoeffs[i]; // pos
+                                Atriplets.emplace_back(eid, u1VarStartPosition + i, u1VarCoeffs[i]);
+                            }
+                        }
+                        {
+                            auto u2VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, props, a, uh2);
+                            assert(u2VarCoeffs.size() == u2VarNum);
+                            for (int i = 0; i < u2VarCoeffs.size(); i++){
+                                //A.insert(eid, u2VarStartPosition + i) = -u2VarCoeffs[i]; // neg
+                                Atriplets.emplace_back(eid, u2VarStartPosition + i, -u2VarCoeffs[i]);
+                            }
+                        }
+                        eid++;
+                    }
+                }
+            }
+
+
+            void FormulateComponentsAndConstraintsAsMatrices(const MixedGraph & mg, MixedGraphPropertyTable & props,
+                ComponentHandledTableFromConstraintGraph<int, MixedGraph>::type & uh2varStartPosition,
+                ConstraintHandledTableFromConstraintGraph<int, MixedGraph>::type & bh2consStartPosition,
+                ConstraintHandledTableFromConstraintGraph<std::vector<Vec3>, MixedGraph>::type & appliedBinaryAnchors,
+                ConstraintHandledTableFromConstraintGraph<double, MixedGraph>::type & weightsForEachAppliedBinaryAnchor,
+                int & varNum, int & consNum,
+                std::vector<SparseMatElement<double>> & Atriplets,
+                std::vector<SparseMatElement<double>> & Wtriplets,
+                std::vector<double> & X,
+                std::vector<double> & B,
+                bool addAnchor = true){
+
+                IMPROVABLE_HERE("make sure mg is single connected");
+
+                varNum = 0;
+                for (auto & c : mg.components<LineData>()){
+                    uh2varStartPosition[c.topo.hd] = varNum;
+                    varNum += props[c.topo.hd].variables.size();
+                }
+                for (auto & c : mg.components<RegionData>()){
+                    uh2varStartPosition[c.topo.hd] = varNum;
+                    varNum += props[c.topo.hd].variables.size();
+                }
+
+                X.resize(varNum);
+                for (auto & c : mg.components<LineData>()){
+                    for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+                        X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
+                    }
+                }
+                for (auto & c : mg.components<RegionData>()){
+                    for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+                        X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
+                    }
+                }
+
+
+                consNum = 0;
+
+                if (addAnchor){
+                    consNum++;
+                }
+                for (auto & c : mg.constraints<RegionBoundaryData>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
+                    bh2consStartPosition[c.topo.hd] = consNum;
+                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd, 
+                        weightsForEachAppliedBinaryAnchor[c.topo.hd]);
+                    consNum += appliedBinaryAnchors[c.topo.hd].size();
+                }
+                for (auto & c : mg.constraints<LineRelationData>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
+                    bh2consStartPosition[c.topo.hd] = consNum;
+                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
+                        weightsForEachAppliedBinaryAnchor[c.topo.hd]);
+                    consNum += appliedBinaryAnchors[c.topo.hd].size();
+                }
+                for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
+                    bh2consStartPosition[c.topo.hd] = consNum;
+                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
+                        weightsForEachAppliedBinaryAnchor[c.topo.hd]);
+                    consNum += appliedBinaryAnchors[c.topo.hd].size();
+                }
+
+                B.resize(consNum);
+
+                Atriplets.reserve(consNum * 6);
+                Wtriplets.reserve(consNum);
+
+                // write equations
+                int eid = 0;
+                if (addAnchor){ // the anchor constraint
+                    IMPROVABLE_HERE("find a most connected component to set the anchor");
+
+                    // largest plane
+                    double maxArea = 0.0;
+                    RegionHandle rhAnchored;
+                    for (auto & c : mg.components<RegionData>()){
+                        if (c.data.area > maxArea){
+                            rhAnchored = c.topo.hd;
+                            maxArea = c.data.area;
+                        }
+                    }
+
+                    int uhVarNum = props[rhAnchored].variables.size();
+                    Vec3 uhCenter = mg.data(rhAnchored).normalizedCenter;
+                    auto uhVarCoeffsAtCenter = VariableCoefficientsForInverseDepthAtDirection(mg, props, uhCenter, rhAnchored);
+                    assert(uhVarCoeffsAtCenter.size() == uhVarNum);
+                    int uhVarStartPosition = uh2varStartPosition.at(rhAnchored);
+                    for (int i = 0; i < uhVarCoeffsAtCenter.size(); i++){
+                        //A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
+                        Atriplets.emplace_back(eid, uhVarStartPosition + i, uhVarCoeffsAtCenter[i]);
+                    }
+                    B[eid] = 1.0;
+                    //W.insert(eid, eid) = 1.0;
+                    Wtriplets.emplace_back(eid, eid, 10.0);
+                    eid++;
+                }
+
+
+                RegisterConstraintEquations<RegionBoundaryData>(eid, mg, props, uh2varStartPosition,
+                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, B);
+                RegisterConstraintEquations<LineRelationData>(eid, mg, props, uh2varStartPosition,
+                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, B);
+                RegisterConstraintEquations<RegionLineConnectionData>(eid, mg, props, uh2varStartPosition,
+                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, B);
+
+                assert(eid == consNum);
+
+            }
+
+        }
+
+
+
+        void SolveVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){            
+
+            auto uh2varStartPosition = MakeHandledTableForComponents<int>(mg);
+            auto bh2consStartPosition = MakeHandledTableForConstraints<int>(mg);
+            auto appliedBinaryAnchors = MakeHandledTableForConstraints<std::vector<Vec3>>(mg);
+            auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForConstraints<double>(mg);
+
+            int varNum = 0;
+            int consNum = 0;
+            std::vector<SparseMatElement<double>> Atriplets;
+            std::vector<SparseMatElement<double>> Wtriplets;
+            std::vector<double> Xdata;
+            std::vector<double> Bdata;
+
+            FormulateComponentsAndConstraintsAsMatrices(mg, props, uh2varStartPosition, bh2consStartPosition, 
+                appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, 
+                varNum, consNum, Atriplets, Wtriplets, Xdata, Bdata);
+            
+            Eigen::SparseMatrix<double> A, W;
+            A.resize(consNum, varNum);
+            W.resize(consNum, consNum);
+            A.reserve(Atriplets.size());
+            W.reserve(Wtriplets.size());
+
+            for (auto & t : Atriplets){
+                A.insert(t.row, t.col) = t.value;
+            }
+            for (auto & t : Wtriplets){
+                W.insert(t.row, t.col) = t.value;
+            }
+
+            Eigen::Map<Eigen::VectorXd> B(Bdata.data(), Bdata.size());
+
+            Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
+            static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
+            Eigen::SparseMatrix<double> WA = W * A;
+            A.makeCompressed();
+            WA.makeCompressed();
+
+            static const bool useWeights = false;
+            solver.compute(useWeights ? WA : A);
+
+            if (solver.info() != Eigen::Success) {
+                assert(0);
+                std::cout << "computation error" << std::endl;
+                return;
+            }
+
+            Eigen::VectorXd WB = W * B;
+            Eigen::VectorXd X = solver.solve(useWeights ? WB : B);
+            if (solver.info() != Eigen::Success) {
+                assert(0);
+                std::cout << "solving error" << std::endl;
+                return;
+            }
+
+
+            for (auto & c : mg.components<RegionData>()){
+                int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+                    props[c.topo.hd].variables[i] = X(uhStartPosition + i);
+                }
+            }
+            for (auto & c : mg.components<LineData>()){
+                int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+                    props[c.topo.hd].variables[i] = X(uhStartPosition + i);
+                }
+            }
+        }
+
+
+
+        void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
+            for (auto & c : mg.components<RegionData>()){
+                for (auto & v : props[c.topo.hd].variables){
+                    assert(!IsInfOrNaN(v));
+                }
+            }
+            for (auto & c : mg.components<LineData>()){
+                for (auto & v : props[c.topo.hd].variables){
+                    assert(!IsInfOrNaN(v));
+                }
+            }
+
+            double meanCenterDepth = 0.0;
+            int componentsNum = 0;
+            for (auto & c : mg.components<RegionData>()){
+                meanCenterDepth += DepthAt(c.data.normalizedCenter, Instance(mg, props, c.topo.hd));
+                assert(!IsInfOrNaN(meanCenterDepth));
+                componentsNum++;
+            }
+            for (auto & c : mg.components<LineData>()){
+                meanCenterDepth += DepthAt(normalize(c.data.line.center()), Instance(mg, props, c.topo.hd));
+                assert(!IsInfOrNaN(meanCenterDepth));
+                componentsNum++;
+            }
+            meanCenterDepth /= componentsNum;
+            assert(!IsInfOrNaN(meanCenterDepth));
+
+            // normalize variables
+            for (auto & c : mg.components<RegionData>()){
+                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+                    props[c.topo.hd].variables[i] /= meanCenterDepth;
+                }
+            }
+            for (auto & c : mg.components<LineData>()){
+                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+                    props[c.topo.hd].variables[i] /= meanCenterDepth;
+                }
+            }
+        }
+
+
+        double ComputeScore(const MixedGraph & mg, const MixedGraphPropertyTable & props){
+
+            // manhattan fitness
+            double sumOfComponentWeightedFitness = 0.0;
+            double sumOfComponentWeights = 0.0;
+
+            // lines
+            double maxLineSpanAngle = 0.0;
+            for (auto & l : mg.components<LineData>()){
+                double lineSpanAngle = AngleBetweenDirections(l.data.line.first, l.data.line.second);
+                if (lineSpanAngle > maxLineSpanAngle)
+                    maxLineSpanAngle = lineSpanAngle;
+            }
+
+            HandledTable<LineHandle, Line3> lines(mg.internalComponents<LineData>().size());
+            HandledTable<RegionHandle, Plane3> planes(mg.internalComponents<RegionData>().size());
+
+            for (auto & l : mg.components<LineData>()){
+                lines[l.topo.hd] = Instance(mg, props, l.topo.hd);
+
+                double fitness = 0.0;
+                double weight = 0.0;
+                double lineSpanAngle = AngleBetweenDirections(l.data.line.first, l.data.line.second);
+                auto & prop = props.componentProperties[l.topo.hd];
+                if (prop.orientationClaz >= 0){
+                    fitness = 1.0;
+                    weight = lineSpanAngle / maxLineSpanAngle;
+                }
+                else{
+                    static const double angleThreshold = DegreesToRadians(10);
+                    double minAngle = angleThreshold;
+                    int bestVPId = -1;
+                    for (int i = 0; i < props.vanishingPoints.size(); i++){
+                        double angle = AngleBetweenUndirectedVectors(props.vanishingPoints[i], lines[l.topo.hd].direction());
+                        if (angle < minAngle){
+                            minAngle = angle;
+                            bestVPId = i;
+                        }
+                    }
+                    fitness = Gaussian(minAngle / angleThreshold, 0.1);
+                    weight = lineSpanAngle / maxLineSpanAngle;
+                }
+                sumOfComponentWeightedFitness += (fitness * weight);
+                sumOfComponentWeights += weight;
+            }
+
+            // regions
+            double maxRegionArea = 0.0;
+            for (auto & r : mg.components<RegionData>()){
+                if (r.data.area > maxRegionArea){
+                    maxRegionArea = r.data.area;
+                }
+            }
+
+            for (auto & r : mg.components<RegionData>()){
+                planes[r.topo.hd] = Instance(mg, props, r.topo.hd);
+
+                double fitness = 0.0;
+                double weight = 1.0;
+                auto & prop = props.componentProperties[r.topo.hd];
+                if (prop.orientationClaz >= 0){
+                    fitness = 1.0;
+                    weight = r.data.area / maxRegionArea;
+                }
+                else{
+                    static const double angleThreshold = DegreesToRadians(10);
+                    double minAngle = angleThreshold;
+                    int bestVPId = -1;
+                    for (int i = 0; i < props.vanishingPoints.size(); i++){
+                        double angle = AngleBetweenUndirectedVectors(props.vanishingPoints[i], planes[r.topo.hd].normal);
+                        if (angle < minAngle){
+                            minAngle = angle;
+                            bestVPId = i;
+                        }
+                    }
+                    fitness = Gaussian(minAngle / angleThreshold, 0.1);
+                    weight = r.data.area / maxRegionArea;
+                }
+                sumOfComponentWeightedFitness += (fitness * weight);
+                sumOfComponentWeights += weight;
+            }
+
+
+            // constraint fitness
+            double sumOfConstraintWeightedFitness = 0.0;
+            double sumOfConstraintWeights = 0.0;
+            double sumOfNotUsedConstraintWeights = 0.0;
+            for (auto & c : mg.constraints<RegionBoundaryData>()){
+                static const double typeWeight = 1.0;
+                if (!props.constraintProperties[c.topo.hd].used){
+                    sumOfNotUsedConstraintWeights += StdVectorElementsNum(c.data.normalizedSampledPoints) * typeWeight;
+                    continue;
+                }
+
+                auto & plane1 = planes[c.topo.component<0>()];
+                auto & plane2 = planes[c.topo.component<1>()];
+                for (auto & ss : c.data.normalizedSampledPoints){
+                    for (auto & s : ss){
+                        double d1 = DepthAt(s, plane1);
+                        double d2 = DepthAt(s, plane2);
+                        assert(d1 > 0 && d2 > 0);
+                        
+                        double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
+                        double weight = typeWeight;
+
+                        sumOfConstraintWeightedFitness += (fitness * weight);
+                        sumOfConstraintWeights += weight;
+                    }
+                }
+            }
+            double maxJunctionWeight = 0.0;
+            for (auto & c : mg.constraints<LineRelationData>()){
+                if (c.data.junctionWeight > maxJunctionWeight){
+                    maxJunctionWeight = c.data.junctionWeight;
+                }
+            }
+            for (auto & c : mg.constraints<LineRelationData>()){
+                static const double typeWeight = 8.0;
+                if (!props.constraintProperties[c.topo.hd].used){
+                    sumOfNotUsedConstraintWeights += c.data.junctionWeight / maxJunctionWeight * typeWeight;
+                    continue;
+                }
+
+                auto & line1 = lines[c.topo.component<0>()];
+                auto & line2 = lines[c.topo.component<1>()];
+                double d1 = DepthAt(c.data.normalizedRelationCenter, line1);
+                double d2 = DepthAt(c.data.normalizedRelationCenter, line2);
+
+                double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
+                double weight = typeWeight;
+
+                sumOfConstraintWeightedFitness += (fitness * weight);
+                sumOfConstraintWeights += weight;
+            }
+            for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                static const double typeWeight = 1.0;
+                if (!props.constraintProperties[c.topo.hd].used){
+                    sumOfNotUsedConstraintWeights += StdVectorElementsNum(c.data.normalizedAnchors) * typeWeight;
+                    continue;
+                }
+
+                auto & plane = planes[c.topo.component<0>()];
+                auto & line = lines[c.topo.component<1>()];
+                for (auto & a : c.data.normalizedAnchors){
+                    double d1 = DepthAt(a, plane);
+                    double d2 = DepthAt(a, line);
+                    assert(d1 > 0 && d2 > 0);
+
+                    double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
+                    double weight = typeWeight;
+
+                    sumOfConstraintWeightedFitness += (fitness * weight);
+                    sumOfConstraintWeights += weight;
+                }
+            }
+
+            double score = sumOfComponentWeightedFitness / sumOfComponentWeights * 50
+                + sumOfConstraintWeightedFitness / sumOfConstraintWeights * 100
+                - sumOfNotUsedConstraintWeights / (sumOfConstraintWeights + sumOfNotUsedConstraintWeights) * 5;
+
+            return score;
+        }
+
+
+
+
+        namespace {
+
+            template <class UhColorizerFunT = core::ConstantFunctor<vis::Color>>
+            void ManuallyOptimizeMixedGraph(const core::Image & panorama,
+                const MixedGraph & mg,
+                MixedGraphPropertyTable & props,
+                UhColorizerFunT uhColorizer = UhColorizerFunT(vis::ColorTag::White),
+                bool optimizeInEachIteration = false) {
+
+                bool modified = true;
+
+                struct ComponentID {
+                    int handleID;
+                    bool isRegion;
+                };
+
+                auto sppCallbackFun = [&props, &mg, &modified](vis::InteractionID iid,
+                    const std::pair<ComponentID, vis::Colored<vis::SpatialProjectedPolygon>> & spp) {
+                    std::cout << (spp.first.isRegion ? "Region" : "Line") << spp.first.handleID << std::endl;
+                    /* if (iid == vis::InteractionID::PressSpace){
+                    std::cout << "space pressed!" << std::endl;
+                    int & claz = patch.uhs[spp.first].claz;
+                    claz = (claz + 1) % vps.size();
+                    std::cout << "current orientation is : " << vps[claz] << std::endl;
+                    modified = true;
+                    }*/
+                };
+
+                while (modified){
+
+                    vis::ResourceStore::set("texture", panorama);
+
+                    modified = false;
+                    if (optimizeInEachIteration){
+                        SolveVariables(mg, props);
+                    }
+
+                    vis::Visualizer viz("mixed graph optimizable");
+                    viz.renderOptions.bwColor = 1.0;
+                    viz.renderOptions.bwTexColor = 0.0;
+                    viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
+                    std::vector<std::pair<ComponentID, vis::Colored<vis::SpatialProjectedPolygon>>> spps;
+                    std::vector<vis::Colored<core::Line3>> lines;
+
+                    for (auto & c : mg.components<RegionData>()){
+                        auto uh = c.topo.hd;
+                        auto & region = c.data;
+                        vis::SpatialProjectedPolygon spp;
+                        // filter corners
+                        core::ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
+                            std::back_inserter(spp.corners),
+                            [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
+                            return core::AngleBetweenDirections(a, b) > M_PI / 100.0;
+                        });
+                        if (spp.corners.size() < 3)
+                            continue;
+
+                        spp.projectionCenter = core::Point3(0, 0, 0);
+                        spp.plane = Instance(mg, props, uh);
+                        spps.emplace_back(ComponentID{ uh.id, true }, std::move(vis::ColorAs(spp, uhColorizer(uh))));
+                    }
+
+                    for (auto & c : mg.components<LineData>()){
+                        auto uh = c.topo.hd;
+                        auto & line = c.data;
+                        lines.push_back(vis::ColorAs(Instance(mg, props, uh), uhColorizer(uh)));
+                    }
+
+                    viz.begin(spps, sppCallbackFun).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+                    viz.installingOptions.lineWidth = 4.0;
+                    viz.add(lines);
+
+                    /* std::vector<core::Line3> connectionLines;
+                    for (auto & bhv : patch.bhs){
+                    auto bh = bhv.first;
+                    auto & v = bhv.second;
+                    auto & samples = mg.data(bh).normalizedAnchors;
+                    for (int i = 0; i < samples.size(); i++){
+                    connectionLines.emplace_back(normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.front()[i],
+                    normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.back()[i]);
+                    }
+                    }*/
+
+                    viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
+                    viz.installingOptions.lineWidth = 2.0;
+                    viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
+                    //viz.add(connectionLines);
+                    viz.camera(core::PerspectiveCamera(800, 800, 500, { 1.0, 1.0, -1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, -1.0 }));
+                    viz.renderOptions.backgroundColor = vis::ColorTag::White;
+                    viz.renderOptions.bwColor = 0.0;
+                    viz.renderOptions.bwTexColor = 1.0;
+                    viz.show(true, false);
+
+                    vis::ResourceStore::clear();
+                }
+
+            }
+
+
+        }
+
+
+
+
+        void Visualize(const View<PanoramicCamera> & texture, const PanoramicCamera & pcam,
+            const MixedGraph & mg, MixedGraphPropertyTable & props){
+            ManuallyOptimizeMixedGraph(texture.image, mg, props);
+        }
         
-
-
+        void Visualize(const View<PerspectiveCamera> & texture, const PanoramicCamera & pcam,
+            const MixedGraph & mg, MixedGraphPropertyTable & props) {
+            ManuallyOptimizeMixedGraph(texture.sampled(PanoramicCamera(250, Point3(0, 0, 0), Point3(1, 0, 0), Vec3(0, 0, -1))).image, mg, props);
+        }
 
     }
 }

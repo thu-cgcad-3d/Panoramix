@@ -3,21 +3,8 @@
 namespace panoramix {
     namespace core { 
 
-
-        SurfaceLabelNames MostLikelyLabelAtPosition(const SurfaceLabelDistribution & distribution, const PixelLoc & p) {
-            double maxProb = 1e-8;
-            int n = (int)SurfaceLabelNames::None;
-            for (int i = 0; i < distribution.size(); i++){
-                double prob = distribution[i](p);
-                if (prob > maxProb){
-                    n = i;
-                    maxProb = prob;
-                }
-            }
-            return (SurfaceLabelNames)(n);
-        }
-
-        SurfaceLabelNames MostLikelySurfaceLabelInRegion(const SurfaceLabelDistribution & distribution, const std::vector<PixelLoc> & contour) {
+        SurfaceLabelPixelVec MeanPixelVecInRegion(const SurfaceLabelDistribution & distribution,
+            const std::vector<PixelLoc> & contour){
             auto size = distribution.front().size();
             cv::Rect roi(cv::boundingRect(contour));
             if (roi.x < 0) roi.x = 0;
@@ -25,8 +12,7 @@ namespace panoramix {
             if (roi.x + roi.width >= size.width) roi.width = size.width - 1 - roi.x;
             if (roi.y + roi.height >= size.height) roi.height = size.height - 1 - roi.y;
 
-            double maxProb = 1e-8;
-            int n = (int)SurfaceLabelNames::None;
+            SurfaceLabelPixelVec pv;
             for (int o = 0; o < distribution.size(); o++){
                 cv::Mat cropProb(distribution[o], roi);
                 cv::Mat mask(cv::Mat::zeros(cropProb.rows, cropProb.cols, CV_8UC1));
@@ -36,12 +22,18 @@ namespace panoramix {
 
                 cv::drawContours(mask, TContours(1, contour), -1, cv::Scalar(255), CV_FILLED, CV_AA, cv::noArray(), 1, -roi.tl());
                 double prob = cv::mean(cropProb, mask).val[0];
-                if (prob > maxProb){
-                    n = o;
-                    maxProb = prob;
-                }
+                pv[o] = prob;
             }
-            return (SurfaceLabelNames)(n);
+            return pv;
+        }
+
+        SurfaceLabelPixelVec PixelVecAtPosition(const SurfaceLabelDistribution & distribution,
+            const PixelLoc & p){
+            SurfaceLabelPixelVec pv;
+            for (int i = 0; i < (int)SurfaceLabelNames::Count; i++){
+                pv[i] = distribution[i](p);
+            }
+            return pv;
         }
 
 
@@ -105,6 +97,7 @@ namespace panoramix {
                 }
 
                 /// FIXME: Fill the area of unknowns !!!!!!!!!!!!!!!!!!!!!!!!!!!
+                THERE_ARE_BUGS_HERE();
                 // maybe we can use GraphCut!!!!!!!! MRF???
                 NOT_IMPLEMENTED_YET();
 

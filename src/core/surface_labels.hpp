@@ -2,7 +2,7 @@
 #define PANORAMIX_CORE_SURFACE_LABELS_HPP
 
 #include "feature.hpp"
-#include "view.hpp"
+#include "cameras.hpp"
  
 namespace panoramix {
     namespace core { 
@@ -18,12 +18,12 @@ namespace panoramix {
         };
 
         using SurfaceLabelDistribution = std::array<Imaged, (unsigned)SurfaceLabelNames::Count>;
+        using SurfaceLabelPixelVec = Vec<double, (unsigned)SurfaceLabelNames::Count>;
 
-        SurfaceLabelNames MostLikelySurfaceLabelAtPosition(const SurfaceLabelDistribution & distribution, 
-            const PixelLoc & p);
-        SurfaceLabelNames MostLikelySurfaceLabelInRegion(const SurfaceLabelDistribution & distribution, 
+        SurfaceLabelPixelVec MeanPixelVecInRegion(const SurfaceLabelDistribution & distribution,
             const std::vector<PixelLoc> & contour);
-
+        SurfaceLabelPixelVec PixelVecAtPosition(const SurfaceLabelDistribution & distribution,
+            const PixelLoc & p);
 
         template <class CameraT, class = std::enable_if_t<IsCamera<CameraT>::value>>
         class SurfaceLabels {
@@ -44,33 +44,31 @@ namespace panoramix {
             const Imaged & distribution(SurfaceLabelNames label) const { return _distributions[(int)(label)]; }
             Imaged & distribution(SurfaceLabelNames label) { return _distributions[(int)(label)]; }
 
-            SurfaceLabelNames mostLikelyLabelAt(const Vec3 & dir) const {
-                return MostLikelyLabelAtPosition(_distributions, ToPixelLoc(_camera.screenProjection(dir)));
+
+            // pixel vector at ...
+            SurfaceLabelPixelVec pixelVecAt(const Vec3 & dir) const {
+                return PixelVecAtPosition(_distributions, ToPixelLoc(_camera.screenProjection(dir)));
             }
 
-            SurfaceLabelNames mostLikelyLabelAt(const std::vector<Vec3> & regionContour) const {
+            SurfaceLabelPixelVec pixelVecAt(const std::vector<Vec3> & regionContour) const {
                 std::vector<PixelLoc> contour(regionContour.size());
                 for (int i = 0; i < regionContour.size(); i++){
                     contour[i] = ToPixelLoc(_camera.screenProjection(regionContour[i]));
                 }
-                return MostLikelySurfaceLabelInRegion(_distributions, contour);
+                return PixelVecAtPosition(_distributions, contour);
             }
 
-            SurfaceLabelNames mostLikelyLabelAt(const Line3 & lineProj, double thickness = 1.0) const {
-                //// FIXME: not correct using this method!!!!
-                Point2 p1 = _camera.screenProjection(lineProj.first);
-                Point2 p2 = _camera.screenProjection(lineProj.second);
-                Vec2 y = normalize(p2 - p1);
-                Vec2 x(y[1], - y[0]);                
-                std::vector<PixelLoc> contour = {
-                    ToPixelLoc(p1 - x * thickness),
-                    ToPixelLoc(p1 - y * thickness),
-                    ToPixelLoc(p1 + x * thickness),
-                    ToPixelLoc(p2 + x * thickness),
-                    ToPixelLoc(p2 + y * thickness),
-                    ToPixelLoc(p2 - x * thickness)
-                };
-                return MostLikelySurfaceLabelInRegion(_distributions, contour);
+            SurfaceLabelPixelVec pixelVecAt(const Line3 & lineProj, double sampleStepAngle = 0.005) const {
+                double angle = AngleBetweenDirections(lineProj.first, lineProj.second);
+                SurfaceLabelPixelVec pv;
+                int count = 0;
+                for (double a = 0.0; a <= angle; a += sampleStepAngle){
+                    Vec3 dir = RotateDirection(lineProj.first, lineProj.second, a);
+                    Point2 p = _camera.screenProjection(dir);
+                    pv += PixelVecAtPosition(_distributions, ToPixelLoc(p));
+                    count++;
+                }
+                return pv / (double)count;
             }
 
         public:

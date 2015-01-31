@@ -27,9 +27,18 @@ namespace panoramix {
     "in line: " + std::to_string(__LINE__) + "\n" \
     "in file: "__FILE__) << std::endl 
 
+#define IMPROVABLE_HERE(...)
+
         // there are bugs here
 #define THERE_ARE_BUGS_HERE()  \
     std::cout << ("This feature has BUGS! FIXME!!!!!! \n" \
+    "in function: "__FUNCSIG__ "\n" \
+    "in line: " + std::to_string(__LINE__) + "\n" \
+    "in file: "__FILE__) << std::endl
+
+        // there are bottlenecks here
+#define THERE_ARE_BOTTLENECKS_HERE() \
+    std::cout << ("This feature has improvable BOTTLENECKS! \n" \
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \
     "in file: "__FILE__) << std::endl

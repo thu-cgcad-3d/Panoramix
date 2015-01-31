@@ -147,13 +147,13 @@ namespace panoramix {
 
         // squared
         template <class T>
-        INLINE T Square(const T & v) {
+        INLINE T Square(T v) {
             return v * v;
         }
 
         // gaussian
         template <class T, class K>
-        INLINE T Gaussian(const T & x, const K & sigma) {
+        INLINE T Gaussian(T x, K sigma) {
             return std::exp(- Square(x / sigma) / 2.0);
         }
 
@@ -181,13 +181,18 @@ namespace panoramix {
             return EntropyOfRange(std::begin(cont), std::end(cont), factor);
         }
 
+        template <class T>
+        inline double DegreesToRadians(T degrees){
+            return degrees * M_PI / 180.0;
+        }
+
 
 
 
         /// distance functions
         // for real numbers
         template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
-        inline T Distance(const T & a, const T & b) {
+        inline T Distance(T a, T b) {
             return std::abs(a - b);
         }
 
@@ -779,6 +784,13 @@ namespace panoramix {
         template <class T, int N>
         inline std::array<Scored<Vec<T, N>, T>, N> EigenVectorAndValuesFromPoints(const std::vector<Point<T, N>> & pts) {
             return EigenVectorAndValuesFromPoints((const Point<T, N>*)pts.data(), pts.size());
+        }
+
+        template <class T>
+        inline Vec<T, 3> RotateDirection(const Vec<T, 3> & originalDirection, const Vec<T, 3> & toDirection, double angle) {
+            Vec<T, 3> tovec = originalDirection.cross(toDirection).cross(originalDirection);
+            Vec<T, 3> result3 = originalDirection + tovec * tan(angle);
+            return result3 / norm(result3);
         }
 
 

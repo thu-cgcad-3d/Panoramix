@@ -191,6 +191,21 @@ namespace panoramix {
             return cams;
         }
 
+        std::vector<PerspectiveCamera> CreateCubicFacedCameras(const PanoramicCamera & panoCam,
+            int width/* = 500*/, int height/* = 500*/, double focal/* = 250.0*/){
+            Vec3 x, y;
+            std::tie(x, y) = ProposeXYDirectionsFromZDirection(-panoCam.up());
+            std::vector<core::PerspectiveCamera> cams = {
+                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ 1, 0, 0 },  -panoCam.up()),
+                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, 1, 0 },  -panoCam.up()),
+                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ -1, 0, 0 }, -panoCam.up()),
+                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, -1, 0 }, -panoCam.up()),
+                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, 0, 1 }, x),
+                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, 0, -1 }, x)
+            };
+            return cams;
+        }
+
 
 
 

@@ -7,7 +7,7 @@
 #include "cons_graph.hpp"
 #include "cameras.hpp"
 
-//#include "surface_labels.hpp"
+#include "surface_labels.hpp"
 
 namespace panoramix {
     namespace core {
@@ -47,7 +47,7 @@ namespace panoramix {
             std::vector<std::vector<Vec3>> normalizedSampledPoints;
             template <class Archiver>
             void serialize(Archiver & ar) {
-                ar(edges, length, normalizedSampledPoints);
+                ar(normalizedEdges, length, normalizedSampledPoints);
             }
         };
         using RegionBoundaryHandle = ConstraintHandle<RegionBoundaryData>;
@@ -56,10 +56,11 @@ namespace panoramix {
 
         // lines
         struct LineData {
-            Classified<Line3> line;
+            Line3 line;
+            int initialClaz;
             template <class Archiver>
             void serialize(Archiver & ar) {
-                ar(line);
+                ar(line, initialClaz);
             }
         };
         using LineHandle = ComponentHandle<LineData>;
@@ -103,28 +104,102 @@ namespace panoramix {
             std::vector<std::vector<Classified<Line2>>> & lineSegments);
 
 
-
         // add lines to mixed graph from classified line segments
-        void AddLines(MixedGraph & mg, const std::vector<Classified<Line2>> & lineSegments,
+        void AppendLines(MixedGraph & mg, const std::vector<Classified<Line2>> & lineSegments,
             const PerspectiveCamera & cam,
             const std::vector<Vec3> & vps,
             double intersectionAngleThreshold = 0.04,
             double incidenceAngleAlongDirectionThreshold = 0.1,
             double incidenceAngleVerticalDirectionThreshold = 0.02,
             double interViewIncidenceAngleAlongDirectionThreshold = 0.15, // for new line-line incidence recognition
-            double interViewIncidenceAngleVerticalDirectionThreshold = 0.03,
-            bool includeUnclassifiedLines = false);
+            double interViewIncidenceAngleVerticalDirectionThreshold = 0.03);
 
 
         // add more regions and related constraints to mixed graph
-        void AddRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
+        void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine);
-        void AddRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
+        void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine);
 
 
 
 
+
+
+
+        struct MixedGraphComponentProperty {
+            int orientationClaz;
+            int orientationNotClaz; // if region is tangential with some vp ?
+            std::vector<double> variables;
+            template <class Archiver>
+            inline void serialize(Archiver & ar) {
+                ar(orientationClaz, orientationNotClaz, variables);
+            }
+        };
+        struct MixedGraphConstraintProperty {
+            bool used;
+            template <class Archiver>
+            inline void serialize(Archiver & ar) { 
+                ar(used);
+            }
+        };
+        
+        using MixedGraphComponentPropertyTable = 
+            ComponentHandledTableFromConstraintGraph<MixedGraphComponentProperty, MixedGraph>::type;
+        using MixedGraphConstraintPropertyTable =
+            ConstraintHandledTableFromConstraintGraph<MixedGraphConstraintProperty, MixedGraph>::type;
+        
+        struct MixedGraphPropertyTable {
+            std::vector<Vec3> vanishingPoints;
+            MixedGraphComponentPropertyTable componentProperties;
+            MixedGraphConstraintPropertyTable constraintProperties;
+            template <class DataT> 
+            MixedGraphComponentProperty & operator[](ComponentHandle<DataT> h) { 
+                return componentProperties[h]; 
+            }
+            template <class DataT>
+            const MixedGraphComponentProperty & operator[](ComponentHandle<DataT> h) const {
+                return componentProperties[h]; 
+            }
+            template <class DataT>
+            MixedGraphConstraintProperty & operator[](ConstraintHandle<DataT> h) { 
+                return constraintProperties[h]; 
+            }
+            template <class DataT>
+            const MixedGraphConstraintProperty & operator[](ConstraintHandle<DataT> h) const { 
+                return constraintProperties[h]; 
+            }
+
+            template <class Archiver>
+            inline void serialize(Archiver & ar) {
+                ar(vanishingPoints, componentProperties, constraintProperties); 
+            }
+        };
+        MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps);
+
+
+
+        
+        void InitializeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
+
+        Line3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const LineHandle & lh);
+        Plane3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const RegionHandle & rh);     
+
+        std::vector<double> VariableCoefficientsForInverseDepthAtDirection(const MixedGraph & mg, 
+            const MixedGraphPropertyTable & props, const Vec3 & direction, const LineHandle & lh);
+        std::vector<double> VariableCoefficientsForInverseDepthAtDirection(const MixedGraph & mg,
+            const MixedGraphPropertyTable & props, const Vec3 & direction, const RegionHandle & rh);
+
+        void SolveVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
+        void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
+        double ComputeScore(const MixedGraph & mg, const MixedGraphPropertyTable & props);
+
+
+
+        void Visualize(const View<PanoramicCamera> & texture, const PanoramicCamera & pcam, 
+            const MixedGraph & mg, MixedGraphPropertyTable & props);
+        void Visualize(const View<PerspectiveCamera> & texture, const PanoramicCamera & pcam,
+            const MixedGraph & mg, MixedGraphPropertyTable & props);
 
 
     }
