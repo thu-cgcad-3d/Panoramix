@@ -112,6 +112,44 @@ namespace panoramix {
         };
 
 
+        // partial panoramic camera
+        class PartialPanoramicCamera {
+        public:
+            explicit PartialPanoramicCamera(int w = 500, int h = 500, double focal = 250,
+                const Vec3 & eye = Vec3(0, 0, 0),
+                const Vec3 & center = Vec3(1, 0, 0),
+                const Vec3 & up = Vec3(0, 0, -1));
+            explicit PartialPanoramicCamera(const PanoramicCamera & panoCam, int w = 500, int h = 500);
+
+            inline SizeI screenSize() const { return Size(static_cast<int>(_screenW), static_cast<int>(_screenH)); }
+            inline double focal() const { return _focal; }
+            inline const Vec3 & eye() const { return _eye; }
+            inline const Vec3 & center() const { return _center; }
+            inline const Vec3 & up() const { return _up; }
+            Vec2 screenProjection(const Vec3 & p3d) const;
+            bool isVisibleOnScreen(const Vec3 & p3d) const;
+            inline HPoint2 screenProjectionInHPoint(const Vec3 & p3d) const { return HPoint2(screenProjection(p3d), 1.0); }
+            Vec3 spatialDirection(const Vec2 & p2d) const;
+            inline Vec3 spatialDirection(const PixelLoc & p) const { return spatialDirection(Vec2(p.x, p.y)); }
+
+            PanoramicCamera toPanoramic() const { return PanoramicCamera(_focal, _eye, _center, _up); }
+
+        private:
+            double _screenW, _screenH;
+            double _focal;
+            Vec3 _eye, _center, _up;
+            Vec3 _xaxis, _yaxis, _zaxis;
+
+            template <class Archive> inline void serialize(Archive & ar) {
+                ar(_screenW, _screenH);
+                ar(_focal);
+                ar(_eye, _center, _up);
+                ar(_xaxis, _yaxis, _zaxis);
+            }
+            friend class cereal::access;
+        };
+
+
         // sample image from image using camera conversion
         template <class OutCameraT, class InCameraT>
         class CameraSampler {
@@ -153,7 +191,7 @@ namespace panoramix {
                 const T & borderValue = 0) const {
                 ImageWithType<T> outputIm;
                 cv::remap(inputIm, outputIm, _mapx, _mapy,
-                    inputIm.channels() <= 4 ? cv::INTER_LINEAR : cv::INTER_NEAREST, borderMode, borderValue);
+                    cv::INTER_NEAREST, borderMode, borderValue);
                 return outputIm;
             }
 

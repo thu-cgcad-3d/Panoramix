@@ -196,25 +196,24 @@ namespace panoramix {
                 QuickShiftGPU
             };
             struct Params {
-                inline Params() : sigma(0.8f), c(100.0f), minSize(200), isPanorama(false), algorithm(GraphCut),
+                inline Params() : sigma(0.8f), c(100.0f), minSize(200), algorithm(GraphCut),
                     superpixelSizeSuggestion(1000), superpixelNumberSuggestion(100) {
                 }
                 float sigma; // for smoothing
                 float c; // threshold function
                 int minSize; // min component size
-                bool isPanorama; // whether the input image is a panorama
                 Algorithm algorithm;
                 int superpixelSizeSuggestion; // use superpixel size suggestion if [superpixelSizeSuggestion > 0]
                 int superpixelNumberSuggestion; // use superpixel number suggestion if [superpixelSizeSuggestion < 0]
                 template <class Archive> inline void serialize(Archive & ar) {
-                    ar(sigma, c, minSize, isPanorama, algorithm, superpixelSizeSuggestion, superpixelNumberSuggestion);
+                    ar(sigma, c, minSize, algorithm, superpixelSizeSuggestion, superpixelNumberSuggestion);
                 }
             };
         public:
             inline explicit SegmentationExtractor(const Params & params = Params()) : _params(params){}
             const Params & params() const { return _params; }
             Params & params() { return _params; }
-            std::pair<Feature, int> operator() (const Image & im) const;
+            std::pair<Feature, int> operator() (const Image & im, bool isPanorama = false) const;
             std::pair<Feature, int> operator() (const Image & im, const std::vector<Line2> & lines) const;
             std::pair<Feature, int> operator() (const Image & im, const std::vector<Line3> & lines, const PanoramicCamera & cam) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }

@@ -1599,33 +1599,36 @@ namespace panoramix {
 
         namespace {
 
+            // the edge of graph
             struct Edge {
                 float w;
                 int a, b;
             };
 
+            // graph data
             class Universe {
             public:
                 struct Element {
                     int rank;
                     int p; // parent
-                    int size;
+                    float size;
                 };
-                INLINE Universe(int eleNum) : elements(eleNum), num(eleNum) {
-                    for (int i = 0; i < eleNum; i++){
+                explicit Universe(const std::vector<float> & eleSizes) 
+                        : elements(eleSizes.size()), num(eleSizes.size()) {
+                    for (int i = 0; i < eleSizes.size(); i++){
                         elements[i].rank = 0;
-                        elements[i].size = 1;
+                        elements[i].size = eleSizes[i];
                         elements[i].p = i;
                     }
                 }
-                INLINE int find(int x) {
+                int find(int x) {
                     int y = x;
                     while (y != elements[y].p)
                         y = elements[y].p;
                     elements[x].p = y;
                     return y;
                 }
-                INLINE void join(int x, int y) {
+                void join(int x, int y) {
                     if (elements[x].rank > elements[y].rank) {
                         elements[y].p = x;
                         elements[x].size += elements[y].size;
@@ -1638,27 +1641,32 @@ namespace panoramix {
                     }
                     num--;
                 }
-                INLINE int size(int x) const { return elements[x].size; }
-                INLINE int numSets() const { return num; }
+                float size(int x) const { return elements[x].size; }
+                int numSets() const { return num; }
             private:
                 int num;
                 std::vector<Element> elements;
             };
 
-            INLINE float Threshold(int size, float c) {
-                return c / size;
+            inline float DefaultThreshold(float size, float c) {
+                return size == 0.0 ? 1e8 : c / size;
             }
 
-            INLINE Universe SegmentGraph(int numVertices, std::vector<Edge> & edges, float c) {
+            // merge similar nodes in graph
+            template <class ThresholdFunT = float (*)(float, float)>
+            Universe SegmentGraph(const std::vector<float> & verticesSizes, std::vector<Edge> & edges, float c, 
+                ThresholdFunT thresholdFun = DefaultThreshold) {
+                
                 std::sort(edges.begin(), edges.end(), [](const Edge & e1, const Edge & e2){
                     return e1.w < e2.w;
                 });
 
-                Universe u(numVertices);
+                int numVertices = verticesSizes.size();
+                Universe u(verticesSizes);
                 std::vector<float> threshold(numVertices);
 
                 for (int i = 0; i < numVertices; i++)
-                    threshold[i] = Threshold(1, c);
+                    threshold[i] = thresholdFun(1, c);
 
                 for (int i = 0; i < edges.size(); i++) {
                     const Edge & edge = edges[i];
@@ -1671,7 +1679,7 @@ namespace panoramix {
                             (edge.w <= threshold[b])) {
                             u.join(a, b);
                             a = u.find(a);
-                            threshold[a] = edge.w + Threshold(u.size(a), c);
+                            threshold[a] = edge.w + thresholdFun(u.size(a), c);
                         }
                     }
                 }
@@ -1679,6 +1687,8 @@ namespace panoramix {
                 return u;
             }
 
+            // for edge weight computation
+            // measure pixel distance
             inline float PixelDiff(const Image & im, const cv::Point & p1, const cv::Point & p2) {
                 assert(im.depth() == CV_8U && im.channels() == 3);
                 Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
@@ -1686,9 +1696,11 @@ namespace panoramix {
                 return static_cast<float>(norm(c1 - c2));
             }
 
+            // measure pixel distance with 2d line cuttings
             inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
                 const PixelLoc & p1, const PixelLoc & p2,
                 const std::vector<Line2> & lines){
+
                 assert(im.depth() == CV_8U && im.channels() == 3);
                 for (int lineId : { linesOccupation(p1), linesOccupation(p2) }){
                     if (lineId >= 0){
@@ -1708,6 +1720,7 @@ namespace panoramix {
             inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
                 const PixelLoc & p1, const PixelLoc & p2,
                 const std::vector<Line3> & lines, const PanoramicCamera & cam){
+
                 assert(im.depth() == CV_8U && im.channels() == 3);
                 auto direction1 = cam.spatialDirection(p1);
                 auto direction2 = cam.spatialDirection(p2);
@@ -1729,10 +1742,10 @@ namespace panoramix {
 
 
 
-
             template <class PixelDiffFuncT>
-            inline std::vector<Edge> ComposeGraphEdges(int width, int height, bool isPanorama, 
+            std::vector<Edge> ComposeGraphEdges(int width, int height, bool isPanorama,
                 const Image & smoothed, const PixelDiffFuncT & pixelDiff){
+
                 std::vector<Edge> edges;
                 edges.reserve(width * height * 4);
                 for (int y = 0; y < height; y++) {
@@ -1770,7 +1783,7 @@ namespace panoramix {
                         }
                     }
                 }
-                if (isPanorama){
+                if (isPanorama){ // collect panorama borders
                     for (int y = 0; y < height; y++){
                         Edge edge;
                         edge.a = y * width + 0;
@@ -1778,9 +1791,6 @@ namespace panoramix {
                         edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y });
                         edges.push_back(edge);
                         if (y < height - 1){
-                            edge.b = (y + 1) * width + 0;
-                            edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ 0, y + 1 });
-                            edges.push_back(edge);
                             edge.b = (y + 1) * width + width - 1;
                             edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y + 1});
                             edges.push_back(edge);
@@ -1808,11 +1818,34 @@ namespace panoramix {
                 return edges;
             }
 
-            std::pair<Imagei, Image> PerformSegmentation(std::vector<Edge> & edges, int width, int height, 
+
+            std::vector<float> ComposeGraphVerticesSizes(int width, int height, bool isPanorama){
+                if (!isPanorama){
+                    return std::vector<float>(width * height, 1.0f);
+                }
+                std::vector<float> vsizes(width * height);
+                float radius = width / 2.0 / M_PI;
+                for (int y = 0; y < height; y++){
+                    float longitude = (y - height/2.0f) / radius;
+                    float scale = cos(longitude);
+                    if (scale < 0){
+                        scale = 0.0;
+                    }
+                    std::fill_n(vsizes.data() + y * width, width, scale);
+                    /*for (int x = 0; x < width; x++){
+                        vsizes[y * width + x] = scale;
+                    }*/
+                }
+                return vsizes;
+            }
+
+
+            std::pair<Imagei, Image> PerformSegmentation(const std::vector<float> & verticesSizes, 
+                std::vector<Edge> & edges, int width, int height, 
                 float sigma, float c, int minSize, int & numCCs, bool returnColoredResult = false){
 
                 int num = (int)edges.size();
-                Universe u = SegmentGraph(width * height, edges, c);
+                Universe u = SegmentGraph(verticesSizes, edges, c);
 
                 for (int i = 0; i < num; i++) {
                     int a = u.find(edges[i].a);
@@ -1852,10 +1885,6 @@ namespace panoramix {
                             colors[output(cv::Point(x, y))];
                     }
                 }
-
-                //cv::imshow("result", coloredOutput);
-                //cv::waitKey();
-
                 return std::make_pair(output, coloredOutput);
             }
 
@@ -1867,8 +1896,6 @@ namespace panoramix {
                 int & numCCs, bool returnColoredResult = false) {
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
-                //std::cout << "depth: " << ImageDepth2Str(im.depth()) << std::endl;
-                //std::cout << "channels: " << im.channels() << std::endl;
 
                 int width = im.cols;
                 int height = im.rows;
@@ -1876,14 +1903,15 @@ namespace panoramix {
                 cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
 
                 // build pixel graph
+                std::vector<float> vSizes = ComposeGraphVerticesSizes(width, height, isPanorama);
                 float(*pixelDiff)(const Image & im, const cv::Point & p1, const cv::Point & p2) = PixelDiff;
                 std::vector<Edge> edges = ComposeGraphEdges(width, height, isPanorama, smoothed, pixelDiff);
 
-                return PerformSegmentation(edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);
+                return PerformSegmentation(vSizes, edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);
             }
 
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
-            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, bool isPanorama,
+            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize,
                 const std::vector<Line2> & lines,
                 int & numCCs, bool returnColoredResult = false){
 
@@ -1901,16 +1929,17 @@ namespace panoramix {
                 }
 
                 // build pixel graph
-                std::vector<Edge> edges = ComposeGraphEdges(width, height, isPanorama, smoothed, 
+                std::vector<float> vSizes = ComposeGraphVerticesSizes(width, height, false);
+                std::vector<Edge> edges = ComposeGraphEdges(width, height, false, smoothed, 
                     [&linesOccupation, &lines](const Image & im, const cv::Point & p1, const cv::Point & p2){
                     return PixelDiff(im, linesOccupation, p1, p2, lines);
                 });
 
-                return PerformSegmentation(edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);
+                return PerformSegmentation(vSizes, edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);
             }
 
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
-            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, bool isPanorama,
+            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize,
                 const std::vector<Line3> & lines, const PanoramicCamera & cam,
                 int & numCCs, bool returnColoredResult = false){
 
@@ -1934,12 +1963,13 @@ namespace panoramix {
                 }
 
                 // build pixel graph
-                std::vector<Edge> edges = ComposeGraphEdges(width, height, isPanorama, smoothed,
+                std::vector<float> vSizes = ComposeGraphVerticesSizes(width, height, true);
+                std::vector<Edge> edges = ComposeGraphEdges(width, height, true, smoothed,
                     [&linesOccupation, &lines, &cam](const Image & im, const cv::Point & p1, const cv::Point & p2){
                     return PixelDiff(im, linesOccupation, p1, p2, lines, cam);
                 });
 
-                return PerformSegmentation(edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);
+                return PerformSegmentation(vSizes, edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);
             }
 
 
@@ -2149,22 +2179,22 @@ namespace panoramix {
         }
 
 
-        std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im) const {
+        std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im, bool isPanorama) const {
             if (_params.algorithm == SLIC){
-                assert(!_params.isPanorama);
+                assert(!isPanorama);
                 return SegmentImageUsingSLIC(im, _params.superpixelSizeSuggestion, _params.superpixelNumberSuggestion);
             }
             else if (_params.algorithm == GraphCut){                
                 int numCCs;
-                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, _params.isPanorama, numCCs, false).first;
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, isPanorama, numCCs, false).first;
                 return std::make_pair(segim, numCCs);
             }
             else if (_params.algorithm == QuickShiftCPU){
-                assert(!_params.isPanorama);
+                assert(!isPanorama);
                 return SegmentImageUsingQuickShiftCPU(im, 6, 10);
             }
             else if (_params.algorithm == QuickShiftGPU){
-                assert(!_params.isPanorama);
+                assert(!isPanorama);
                 return SegmentImageUsingQuickShiftGPU(im, 6, 10);
             }
             else{
@@ -2175,14 +2205,14 @@ namespace panoramix {
         std::pair<Imagei, int>  SegmentationExtractor::operator() (const Image & im, const std::vector<Line2> & lines) const {
             assert(_params.algorithm == GraphCut);
             int numCCs;
-            Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, _params.isPanorama, lines, numCCs, false).first;
+            Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, lines, numCCs, false).first;
             return std::make_pair(segim, numCCs);
         }
 
         std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im, const std::vector<Line3> & lines, const PanoramicCamera & cam) const {
             assert(_params.algorithm == GraphCut);
             int numCCs;
-            Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, _params.isPanorama, lines, cam, numCCs, false).first;
+            Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, lines, cam, numCCs, false).first;
             return std::make_pair(segim, numCCs);
         }
 

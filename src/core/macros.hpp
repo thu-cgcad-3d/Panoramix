@@ -21,7 +21,7 @@ namespace panoramix {
     "in file: "__FILE__)
 
         // not tested warning
-#define NOT_TESTED_YET() \
+#define NOT_TESTED_YET(...) \
     std::cout << ("This feature has not yet been tested! \n" \
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \
@@ -30,14 +30,14 @@ namespace panoramix {
 #define IMPROVABLE_HERE(...)
 
         // there are bugs here
-#define THERE_ARE_BUGS_HERE()  \
+#define THERE_ARE_BUGS_HERE(...)  \
     std::cout << ("This feature has BUGS! FIXME!!!!!! \n" \
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \
     "in file: "__FILE__) << std::endl
 
         // there are bottlenecks here
-#define THERE_ARE_BOTTLENECKS_HERE() \
+#define THERE_ARE_BOTTLENECKS_HERE(...) \
     std::cout << ("This feature has improvable BOTTLENECKS! \n" \
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \

@@ -178,6 +178,73 @@ namespace panoramix {
 
 
 
+
+        PartialPanoramicCamera::PartialPanoramicCamera(int w, int h, double focal, const Vec3 & eye,
+            const Vec3 & center, const Vec3 & up)
+            : _screenW(w), _screenH(h), _focal(focal), _eye(eye), _center(center), _up(up){
+            _xaxis = (_center - _eye); _xaxis /= core::norm(_xaxis);
+            _yaxis = _up.cross(_xaxis); _yaxis /= core::norm(_yaxis);
+            _zaxis = _xaxis.cross(_yaxis);
+        }
+
+        PartialPanoramicCamera::PartialPanoramicCamera(const PanoramicCamera & panoCam, 
+            int w, int h) 
+            : _screenW(w), _screenH(h), _focal(panoCam.focal()), _eye(panoCam.eye()), _center(panoCam.center()), _up(panoCam.up()){
+            _xaxis = (_center - _eye); _xaxis /= core::norm(_xaxis);
+            _yaxis = _up.cross(_xaxis); _yaxis /= core::norm(_yaxis);
+            _zaxis = _xaxis.cross(_yaxis);
+        }
+
+        Vec2 PartialPanoramicCamera::screenProjection(const Vec3 & p3) const {
+            double xx = (p3 - _eye).dot(_xaxis);
+            double yy = (p3 - _eye).dot(_yaxis);
+            double zz = (p3 - _eye).dot(_zaxis);
+            GeoCoord pg = core::Vec3(xx, yy, zz);
+
+            double halfLongitudeAngleBound = _screenW / 2.0 / _focal;
+            double halfLatitudeAngleBound = _screenH / 2.0 / _focal;
+
+            double x = (pg.longitude + halfLongitudeAngleBound) * _focal;
+            double y = (pg.latitude + halfLatitudeAngleBound) * _focal;
+
+            return Vec2(x, y);
+        }
+
+        bool PartialPanoramicCamera::isVisibleOnScreen(const Vec3 & p3) const{
+            double xx = (p3 - _eye).dot(_xaxis);
+            double yy = (p3 - _eye).dot(_yaxis);
+            double zz = (p3 - _eye).dot(_zaxis);
+            GeoCoord pg = core::Vec3(xx, yy, zz);
+
+            double halfLongitudeAngleBound = _screenW / 2.0 / _focal;
+            double halfLatitudeAngleBound = _screenH / 2.0 / _focal;
+
+            double x = (pg.longitude + halfLongitudeAngleBound) * _focal;
+            double y = (pg.latitude + halfLatitudeAngleBound) * _focal;
+
+            return IsBetween(x, 0, _screenW) && IsBetween(y, 0, _screenH);
+        }
+
+        Vec3 PartialPanoramicCamera::spatialDirection(const Vec2 & p2d) const {
+            double halfLongitudeAngleBound = _screenW / 2.0 / _focal;
+            double halfLatitudeAngleBound = _screenH / 2.0 / _focal;
+
+            double longi = p2d(0) / _focal - halfLongitudeAngleBound;
+            double lati = p2d(1) / _focal - halfLatitudeAngleBound;
+
+            Vec3 dd = (GeoCoord(longi, lati).toVector());
+            return dd(0) * _xaxis + dd(1) * _yaxis + dd(2) * _zaxis;
+        }
+
+
+
+
+
+
+
+
+
+
         std::vector<PerspectiveCamera> CreateHorizontalPerspectiveCameras(const PanoramicCamera & panoCam, int num,
             int width, int height, double focal){
             std::vector<PerspectiveCamera> cams(num);

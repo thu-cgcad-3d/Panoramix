@@ -43,6 +43,21 @@ namespace panoramix {
 
         namespace {
 
+
+            template <class T>
+            inline size_t ElementsNum(const std::vector<T> & v){
+                return v.size();
+            }
+
+            template <class T>
+            inline size_t ElementsNum(const std::vector<std::vector<T>> & v){
+                size_t n = 0;
+                for (auto & vv : v){
+                    n += vv.size();
+                }
+                return n;
+            }
+
             struct ComparePixelLoc {
                 inline bool operator ()(const PixelLoc & a, const PixelLoc & b) const {
                     if (a.x != b.x)
@@ -50,107 +65,6 @@ namespace panoramix {
                     return a.y < b.y;
                 }
             };
-
-            template <class T>
-            inline std::pair<T, T> MakeOrderedPair(const T & a, const T & b) {
-                return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
-            }
-
-            void FindContoursOfRegionsAndBoundaries(const Imagei & segRegions, int regionNum,
-                std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryEdges) {
-
-                std::map<std::pair<int, int>, std::set<PixelLoc, ComparePixelLoc>> boundaryPixels;
-
-                int width = segRegions.cols;
-                int height = segRegions.rows;
-                for (int y = 0; y < height - 1; y++) {
-                    for (int x = 0; x < width - 1; x++) {
-                        PixelLoc p1(x, y), p2(x + 1, y), p3(x, y + 1), p4(x + 1, y + 1);
-                        int rs[] = {
-                            segRegions(p1),
-                            segRegions(p2),
-                            segRegions(p3),
-                            segRegions(p4)
-                        };
-
-                        if (rs[0] != rs[1]) {
-                            boundaryPixels[MakeOrderedPair(rs[0], rs[1])].insert(p1);
-                        }
-                        if (rs[0] != rs[2]) {
-                            boundaryPixels[MakeOrderedPair(rs[0], rs[2])].insert(p1);
-                        }
-                        if (rs[0] != rs[3]) {
-                            boundaryPixels[MakeOrderedPair(rs[0], rs[3])].insert(p1);
-                        }
-                    }
-                }
-
-                for (auto & bpp : boundaryPixels) {
-                    int rid1 = bpp.first.first;
-                    int rid2 = bpp.first.second;
-                    auto & pixels = bpp.second;
-
-                    if (pixels.empty())
-                        continue;
-
-                    PixelLoc p = *pixels.begin();
-
-                    static const int xdirs[] = { 1, 0, -1, 0, -1, 1, 1, -1, 0, 0, 2, -2 };
-                    static const int ydirs[] = { 0, 1, 0, -1, 1, -1, 1, -1, 2, -2, 0, 0 };
-
-                    std::vector<std::vector<PixelLoc>> edges;
-                    edges.push_back({ p });
-                    pixels.erase(p);
-
-                    while (true) {
-                        auto & curEdge = edges.back();
-                        auto & curTail = curEdge.back();
-
-                        bool foundMore = false;
-                        for (int i = 0; i < std::distance(std::begin(xdirs), std::end(xdirs)); i++) {
-                            PixelLoc next = curTail;
-                            next.x += xdirs[i];
-                            next.y += ydirs[i];
-                            if (!IsBetween(next.x, 0, width - 1) || !IsBetween(next.y, 0, height - 1))
-                                continue;
-                            if (pixels.find(next) == pixels.end()) // not a boundary pixel or already recorded
-                                continue;
-
-                            curEdge.push_back(next);
-                            pixels.erase(next);
-                            foundMore = true;
-                            break;
-                        }
-
-                        if (!foundMore) {
-                            // simplify current edge
-                            if (edges.back().size() <= 1) {
-                                edges.pop_back();
-                            }
-                            else {
-                                bool closed = Distance(edges.back().front(), edges.back().back()) <= 1.5;
-                                cv::approxPolyDP(edges.back(), edges.back(), 2, closed);
-                                if (edges.back().size() <= 1)
-                                    edges.pop_back();
-                            }
-
-                            if (pixels.empty()) { // no more pixels
-                                break;
-                            }
-                            else { // more pixels
-                                PixelLoc p = *pixels.begin();
-                                edges.push_back({ p });
-                                pixels.erase(p);
-                            }
-                        }
-                    }
-
-                    if (!edges.empty()) {
-                        boundaryEdges[MakeOrderedPair(rid1, rid2)] = edges;
-                    }
-                }
-
-            }
 
 
             inline Point2 ToPoint2(const PixelLoc & p) {
@@ -714,20 +628,12 @@ namespace panoramix {
                 return pts;
             }
 
-         /*   template <class CameraT>
-            std::vector<Vec3> RefineReigonContour()*/
-
-
-            template <class CameraT>
-            void AppendRegionsTemplate(MixedGraph & mg, const Imagei & segmentedRegions, const CameraT & cam,
-                double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
-
+            std::vector<RegionHandle> CollectRegionsFromSegmentation(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam){
                 double minVal, maxVal;
                 std::tie(minVal, maxVal) = MinMaxValOfImage(segmentedRegions);
                 assert(minVal == 0.0);
 
                 int regionNum = static_cast<int>(maxVal)+1;
-
                 mg.internalComponents<RegionData>().reserve(mg.internalComponents<RegionData>().size() + regionNum);
                 std::vector<RegionHandle> regionHandles(regionNum);
 
@@ -741,12 +647,16 @@ namespace panoramix {
                     cv::findContours(regionMask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the outer contours
                     std::sort(contours.begin(), contours.end(),
                         [](const std::vector<PixelLoc> & ca, const std::vector<PixelLoc> & cb){return ca.size() > cb.size(); });
-                    
+
+                    if (contours.size() >= 2){
+                        std::cout << "multiple contours for one region in perspective projection!";
+                    }
+
                     auto iter = std::find_if(contours.begin(), contours.end(), [](const std::vector<PixelLoc> & c){return c.size() <= 2; });
                     contours.erase(iter, contours.end());
 
                     //assert(!contours.empty() && "no contour? impossible~");
-                    if (contours.empty() || contours.front().size() <= 2 ){
+                    if (contours.empty() || contours.front().size() <= 2){
                         continue;
                     }
 
@@ -781,14 +691,207 @@ namespace panoramix {
                         rd.area += a;
                     }
 
-                    IMPROVABLE_HERE("remap and get a more precise and compact shape of region!!!");
-
-                    if (rd.area < 1e-5)
-                        continue;
+                   /* if (rd.area < 1e-6)
+                        continue;*/
 
                     regionHandles[i] = mg.addComponent(std::move(rd));
                 }
 
+                return regionHandles;
+            }
+
+            std::vector<RegionHandle> CollectRegionsFromSegmentation(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam){
+                double minVal, maxVal;
+                std::tie(minVal, maxVal) = MinMaxValOfImage(segmentedRegions);
+                assert(minVal == 0.0);
+
+                int regionNum = static_cast<int>(maxVal)+1;
+
+                mg.internalComponents<RegionData>().reserve(mg.internalComponents<RegionData>().size() + regionNum);
+                std::vector<RegionHandle> regionHandles(regionNum);
+
+                // calculate contours and tangential projected areas for each region data
+                for (int i = 0; i < regionNum; i++){
+
+                    Image regionMask = (segmentedRegions == i);
+
+                    // find contour of the region
+                    std::vector<std::vector<PixelLoc>> contours;
+                    cv::findContours(regionMask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the outer contours
+                    if (contours.empty()){
+                        continue;
+                    }
+
+                    Vec3 centerDirection(0, 0, 0);
+                    std::vector<Vec3> directions;
+                    directions.reserve(ElementsNum(contours));
+                    for (auto & cs : contours){
+                        for (auto & c : cs){
+                            directions.push_back(normalize(cam.spatialDirection(c)));
+                            centerDirection += directions.back();
+                        }
+                    }
+                    centerDirection /= norm(centerDirection);
+                    // get max angle distance from center direction
+                    double radiusAngle = 0.0;
+                    for (auto & d : directions){
+                        double a = AngleBetweenDirections(centerDirection, d);
+                        if (radiusAngle < a){
+                            radiusAngle = a;
+                        }
+                    }
+
+                    // perform a more precise sample !
+                    int newSampleSize = cam.focal() * radiusAngle * 2 + 2;
+                    PartialPanoramicCamera sCam(newSampleSize, newSampleSize, cam.focal(), cam.eye(), centerDirection, 
+                        ProposeXYDirectionsFromZDirection(centerDirection).second);
+                    Imagei sampledSegmentedRegions = MakeCameraSampler(sCam, cam)(segmentedRegions);
+
+                    // collect better contours
+                    contours.clear();
+                    regionMask = (sampledSegmentedRegions == i);
+                    cv::findContours(regionMask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the outer contours
+                    std::sort(contours.begin(), contours.end(),
+                        [](const std::vector<PixelLoc> & ca, const std::vector<PixelLoc> & cb){return ca.size() > cb.size(); });
+
+                    if (contours.size() >= 2){
+                        //std::cout << "multiple contours for one region in projection!";
+                    }
+
+                    auto iter = std::find_if(contours.begin(), contours.end(), [](const std::vector<PixelLoc> & c){return c.size() <= 2; });
+                    contours.erase(iter, contours.end());
+
+                    //assert(!contours.empty() && "no contour? impossible~");
+                    if (contours.empty() || contours.front().size() <= 2){
+                        continue;
+                    }
+
+
+                    RegionData rd;
+                    Vec3 center(0, 0, 0);
+                    rd.normalizedContours.resize(contours.size());
+                    rd.area = 0.0;
+                    for (int k = 0; k < contours.size(); k++){
+                        rd.normalizedContours[k].reserve(contours[k].size());
+                        for (auto & p : contours[k]){
+                            rd.normalizedContours[k].push_back(normalize(sCam.spatialDirection(p)));
+                            center += rd.normalizedContours[k].back();
+                        }
+                        std::vector<Point2f> contourf(contours[k].size());
+                        for (int kk = 0; kk < contours[k].size(); kk++){
+                            contourf[kk] = vec_cast<float>(contours[k][kk]);
+                        }
+                        rd.area += cv::contourArea(contourf);
+                    }
+                    rd.normalizedCenter = normalize(center);
+                    //std::cout << "region area: " << rd.area << std::endl;
+                                       
+                    regionHandles[i] = mg.addComponent(std::move(rd));
+                }
+
+                return regionHandles;
+            }
+
+
+            template <class T>
+            inline std::pair<T, T> MakeOrderedPair(const T & a, const T & b) {
+                return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
+            }
+
+            void FindContoursOfRegionsAndBoundaries(const Imagei & segRegions, int regionNum,
+                std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryEdges) {
+                static const int detectionSize = 3;
+                std::map<std::pair<int, int>, std::set<PixelLoc, ComparePixelLoc>> boundaryPixels;
+
+                int width = segRegions.cols;
+                int height = segRegions.rows;
+                for (int y = 0; y < height - 1; y++) {
+                    for (int x = 0; x < width - 1; x++) {
+                        int originalRegionId = segRegions(PixelLoc(x, y));
+                        for (int xx = std::max(x - detectionSize, 0); xx <= std::min(x + detectionSize, width - 1); xx++){
+                            for (int yy = std::max(y - detectionSize, 0); yy <= std::min(y + detectionSize, height - 1); yy++){
+                                int regionIdHere = segRegions(PixelLoc(xx, yy));
+                                if (originalRegionId != regionIdHere){
+                                    boundaryPixels[MakeOrderedPair(originalRegionId, regionIdHere)].insert(PixelLoc((x + xx) / 2, (y + yy) / 2));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                for (auto & bpp : boundaryPixels) {
+                    int rid1 = bpp.first.first;
+                    int rid2 = bpp.first.second;
+                    auto & pixels = bpp.second;
+
+                    if (pixels.empty())
+                        continue;
+
+                    PixelLoc p = *pixels.begin();
+
+                    static const int xdirs[] = { 1, 0, -1, 0, -1, 1, 1, -1, 0, 0, 2, -2 };
+                    static const int ydirs[] = { 0, 1, 0, -1, 1, -1, 1, -1, 2, -2, 0, 0 };
+
+                    std::vector<std::vector<PixelLoc>> edges;
+                    edges.push_back({ p });
+                    pixels.erase(p);
+
+                    while (true) {
+                        auto & curEdge = edges.back();
+                        auto & curTail = curEdge.back();
+
+                        bool foundMore = false;
+                        for (int i = 0; i < std::distance(std::begin(xdirs), std::end(xdirs)); i++) {
+                            PixelLoc next = curTail;
+                            next.x += xdirs[i];
+                            next.y += ydirs[i];
+                            if (!IsBetween(next.x, 0, width - 1) || !IsBetween(next.y, 0, height - 1))
+                                continue;
+                            if (pixels.find(next) == pixels.end()) // not a boundary pixel or already recorded
+                                continue;
+
+                            curEdge.push_back(next);
+                            pixels.erase(next);
+                            foundMore = true;
+                            break;
+                        }
+
+                        if (!foundMore) {
+                            // simplify current edge
+                            if (edges.back().size() <= 1) {
+                                edges.pop_back();
+                            }
+                            else {
+                                bool closed = Distance(edges.back().front(), edges.back().back()) <= 1.5;
+                                cv::approxPolyDP(edges.back(), edges.back(), 2, closed);
+                                if (edges.back().size() <= 1)
+                                    edges.pop_back();
+                            }
+
+                            if (pixels.empty()) { // no more pixels
+                                break;
+                            }
+                            else { // more pixels
+                                PixelLoc p = *pixels.begin();
+                                edges.push_back({ p });
+                                pixels.erase(p);
+                            }
+                        }
+                    }
+
+                    if (!edges.empty()) {
+                        boundaryEdges[MakeOrderedPair(rid1, rid2)] = edges;
+                    }
+                }
+            }
+
+
+            template <class CameraT>
+            void AppendRegionsTemplate(MixedGraph & mg, const Imagei & segmentedRegions, const CameraT & cam,
+                double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
+
+                auto regionHandles = CollectRegionsFromSegmentation(mg, segmentedRegions, cam);
+                int regionNum = regionHandles.size();
 
                 // add region boundary constraints
                 std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges;
@@ -841,16 +944,22 @@ namespace panoramix {
                     for (int k = 0; k < samples.size(); k++){
                         if (!cam.isVisibleOnScreen(samples[k]))
                             continue;
-                        PixelLoc p = ToPixelLoc(cam.screenProjection(samples[k]));
-                        if (p.x < 0 || p.x >= segmentedRegions.cols || p.y < 0 || p.y >= segmentedRegions.rows)
-                            continue;
-                        int regionId = segmentedRegions(p);
-                        auto rh = regionHandles[regionId];
-                        if (rh.invalid())
-                            continue;
-                        regionLineConnections[std::make_pair(rh, ld.topo.hd)].push_back(samples[k]);
-
-                        IMPROVABLE_HERE("search neighors and connect to more regions")
+                        PixelLoc originalP = ToPixelLoc(cam.screenProjection(samples[k]));
+                        // collect neighbors
+                        static const int sz = 3;
+                        for (int x = originalP.x - sz; x <= originalP.x + sz; x++){
+                            for (int y = originalP.y - sz; y <= originalP.y + sz; y++){
+                                PixelLoc p(x, y);
+                                if (p.x < 0 || p.x >= segmentedRegions.cols || p.y < 0 || p.y >= segmentedRegions.rows)
+                                    continue;
+                                int regionId = segmentedRegions(p);
+                                auto rh = regionHandles[regionId];
+                                if (rh.invalid())
+                                    continue;
+                                regionLineConnections[std::make_pair(rh, ld.topo.hd)].push_back(samples[k]);
+                            }
+                        }                      
+                        
                     }
                 }
 
@@ -1086,18 +1195,8 @@ namespace panoramix {
 
 
 
+
         namespace {
-            
-            template <class T>
-            size_t StdVectorElementsNum(const T & t) { return 1; }
-            template <class T>
-            size_t StdVectorElementsNum(const std::vector<T> & v){
-                size_t s = 0;
-                for (auto & e : v){
-                    s += StdVectorElementsNum(e);
-                }
-                return s;
-            }
 
             inline double DepthAt(const Vec3 & direction, const Plane3 & plane){
                 InfiniteLine3 ray(Point3(0, 0, 0), direction);
@@ -1112,7 +1211,7 @@ namespace panoramix {
 
 
             std::vector<Vec3> NecessaryAnchorsForBinary(const MixedGraph & mg, RegionBoundaryHandle bh, double & weightForEachAnchor){
-                size_t n = StdVectorElementsNum(mg.data(bh).normalizedSampledPoints);
+                size_t n = ElementsNum(mg.data(bh).normalizedSampledPoints);
 
                 assert(n > 0);
                 const auto & points = mg.data(bh).normalizedSampledPoints;
@@ -1148,9 +1247,9 @@ namespace panoramix {
                     }
                 }
                 auto & p3 = *pp3;
-                weightForEachAnchor = n / 2.0;
+                weightForEachAnchor = n / 3.0;
                 IMPROVABLE_HERE(?);
-                return{ p1, p3 };
+                return{ p1, p2, p3 };
             }
 
             inline std::vector<Vec3> NecessaryAnchorsForBinary(const MixedGraph & mg, LineRelationHandle bh, double & weightForEachAnchor){
@@ -1535,7 +1634,7 @@ namespace panoramix {
             for (auto & c : mg.constraints<RegionBoundaryData>()){
                 static const double typeWeight = 1.0;
                 if (!props.constraintProperties[c.topo.hd].used){
-                    sumOfNotUsedConstraintWeights += StdVectorElementsNum(c.data.normalizedSampledPoints) * typeWeight;
+                    sumOfNotUsedConstraintWeights += ElementsNum(c.data.normalizedSampledPoints) * typeWeight;
                     continue;
                 }
 
@@ -1582,7 +1681,7 @@ namespace panoramix {
             for (auto & c : mg.constraints<RegionLineConnectionData>()){
                 static const double typeWeight = 1.0;
                 if (!props.constraintProperties[c.topo.hd].used){
-                    sumOfNotUsedConstraintWeights += StdVectorElementsNum(c.data.normalizedAnchors) * typeWeight;
+                    sumOfNotUsedConstraintWeights += ElementsNum(c.data.normalizedAnchors) * typeWeight;
                     continue;
                 }
 
@@ -1602,7 +1701,7 @@ namespace panoramix {
             }
 
             double score = sumOfComponentWeightedFitness / sumOfComponentWeights * 50
-                + sumOfConstraintWeightedFitness / sumOfConstraintWeights * 100
+                + sumOfConstraintWeightedFitness / sumOfConstraintWeights * 1000
                 - sumOfNotUsedConstraintWeights / (sumOfConstraintWeights + sumOfNotUsedConstraintWeights) * 5;
 
             return score;
@@ -1683,16 +1782,28 @@ namespace panoramix {
                     viz.installingOptions.lineWidth = 4.0;
                     viz.add(lines);
 
-                    /* std::vector<core::Line3> connectionLines;
-                    for (auto & bhv : patch.bhs){
-                    auto bh = bhv.first;
-                    auto & v = bhv.second;
-                    auto & samples = mg.data(bh).normalizedAnchors;
-                    for (int i = 0; i < samples.size(); i++){
-                    connectionLines.emplace_back(normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.front()[i],
-                    normalize(samples[i]) * v.sampleDepthsOnRelatedUnaries.back()[i]);
+                    std::vector<core::Line3> connectionLines;
+                    for (auto & c : mg.constraints<RegionBoundaryData>()){
+                        auto & samples = c.data.normalizedSampledPoints;
+                        auto inst1 = Instance(mg, props, c.topo.component<0>());
+                        auto inst2 = Instance(mg, props, c.topo.component<1>());
+                        for (auto & ss : samples){
+                            for (auto & s : ss){
+                                double d1 = DepthAt(s, inst1);
+                                double d2 = DepthAt(s, inst2);
+                                connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
+                            }
+                        }
                     }
-                    }*/
+                    for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                        auto inst1 = Instance(mg, props, c.topo.component<0>());
+                        auto inst2 = Instance(mg, props, c.topo.component<1>());
+                        for (auto & s : c.data.normalizedAnchors){
+                            double d1 = DepthAt(s, inst1);
+                            double d2 = DepthAt(s, inst2);
+                            connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
+                        }
+                    }
 
                     viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
                     viz.installingOptions.lineWidth = 2.0;
@@ -1702,6 +1813,7 @@ namespace panoramix {
                     viz.renderOptions.backgroundColor = vis::ColorTag::White;
                     viz.renderOptions.bwColor = 0.0;
                     viz.renderOptions.bwTexColor = 1.0;
+                    viz.camera(core::PerspectiveCamera(600, 600, 300, Point3(5, 5, 5), Point3(0, 0, 0)));
                     viz.show(true, false);
 
                     vis::ResourceStore::clear();
