@@ -108,7 +108,8 @@ namespace panoramix {
             AllColors,
             AllColorsExcludingWhite,
             AllColorsExcludingBlack,
-            AllColorsExcludingWhiteAndBlack
+            AllColorsExcludingWhiteAndBlack,
+            RGBGreys
         };
 
         class ColorTable {

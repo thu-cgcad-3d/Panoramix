@@ -97,6 +97,7 @@ namespace panoramix {
             inline HPoint2 screenProjectionInHPoint(const Vec3 & p3d) const { return HPoint2(screenProjection(p3d), 1.0); }
             Vec3 spatialDirection(const Vec2 & p2d) const;
             inline Vec3 spatialDirection(const PixelLoc & p) const { return spatialDirection(Vec2(p.x, p.y)); }
+            inline Vec3 spatialDirection(const HPoint2 & p) const { return spatialDirection(p.value()); }
 
         private:
             double _focal;
@@ -289,7 +290,9 @@ namespace panoramix {
             const Vec3 & up = Vec3(0, 0, -1),
             const LineSegmentExtractor & lse = LineSegmentExtractor(),
             const VanishingPointsDetector & vpd = VanishingPointsDetector(),
-            std::array<HPoint2, 3> * vps = nullptr,
+            std::vector<Classified<Line3>> * line3s = nullptr,
+            std::vector<Classified<Line2>> * line2s = nullptr,
+            std::vector<Vec3> * vps = nullptr,
             double * focal = nullptr);
 
 

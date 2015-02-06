@@ -62,8 +62,13 @@ TEST(Camera, CameraSampler) {
         core::Vec3(0, 0, 0), 
         core::Vec3(0, 0, 1),
         core::Vec3(0, 1, 0));
-    viz << core::CameraSampler<core::PanoramicCamera, core::PanoramicCamera>(newCam, originCam)(im)
+    viz << core::MakeCameraSampler(newCam, originCam)(im)
+        << vis::manip2d::Show(false);
+
+    core::PartialPanoramicCamera newCam2(newCam);
+    vis::Visualizer2D(core::MakeCameraSampler(newCam2, originCam)(im))
         << vis::manip2d::Show();
+
 
     float camPositions[4][3] = {
         {1, 0, 0},

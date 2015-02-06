@@ -581,7 +581,12 @@ namespace panoramix {
             inline Visualizer & renderMode(vis::RenderModeFlags flags) { renderOptions.renderMode = flags; return *this; }
             inline Visualizer & camera(const core::PerspectiveCamera & cam) { renderOptions.camera = cam; return *this; }
 
-            void show(bool doModal = true, bool autoSetCamera = true);
+            enum CameraScalePolicy {
+                WatchAtMedianScale,
+                WatchAtMeanScale,
+                WatchAtMaxScale
+            };
+            void show(bool doModal = true, bool autoSetCamera = true, CameraScalePolicy csp = WatchAtMedianScale);
 
         private:
             VisualObjectTree _tree;

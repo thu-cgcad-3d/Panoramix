@@ -651,6 +651,13 @@ namespace panoramix {
             return Classified<T>{claz, comp};
         }
         template <class T>
+        inline std::vector<Classified<T>> ClassifyEachAs(const std::vector<T> & comps, int claz){
+            std::vector<Classified<T>> cs(comps.size());
+            for (int i = 0; i < comps.size(); i++)
+                cs[i] = ClassifyAs(comps[i], claz);
+            return cs;
+        }
+        template <class T>
         inline bool operator == (const Classified<T> & a, const Classified<T> & b) {
             return a.claz == b.claz && a.component == b.component;
         }

@@ -140,26 +140,26 @@ namespace panoramix {
 
         // zero
         template <class T>
-        INLINE bool IsFuzzyZero(const T & t, const T & epsilon = 1e-8){
+        inline bool IsFuzzyZero(T t, T epsilon = 1e-8){
             return t < epsilon && t > -epsilon;
         }
 
 
         // squared
         template <class T>
-        INLINE T Square(T v) {
+        inline T Square(T v) {
             return v * v;
         }
 
         // gaussian
         template <class T, class K>
-        INLINE T Gaussian(T x, K sigma) {
+        inline T Gaussian(T x, K sigma) {
             return std::exp(- Square(x / sigma) / 2.0);
         }
 
         // pitfall
         template <class T, class K>
-        INLINE T Pitfall(const T & x, const K & sigma) {
+        inline T Pitfall(T x, K sigma) {
             return abs(x) <= sigma ? Square(x / sigma) : 1;
         }
 
@@ -788,9 +788,8 @@ namespace panoramix {
 
         template <class T>
         inline Vec<T, 3> RotateDirection(const Vec<T, 3> & originalDirection, const Vec<T, 3> & toDirection, double angle) {
-            Vec<T, 3> tovec = originalDirection.cross(toDirection).cross(originalDirection);
-            Vec<T, 3> result3 = originalDirection + tovec * tan(angle);
-            return result3 / norm(result3);
+            Vec<T, 3> tovec = normalize(originalDirection.cross(toDirection).cross(originalDirection));
+            return normalize(normalize(originalDirection) + tovec * tan(angle));
         }
 
 

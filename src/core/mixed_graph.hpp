@@ -117,9 +117,11 @@ namespace panoramix {
 
         // add more regions and related constraints to mixed graph
         void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
-            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine);
+            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine,
+            int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3);
         void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
-            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine);
+            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
+            int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3);
 
 
 
@@ -191,14 +193,15 @@ namespace panoramix {
             const MixedGraphPropertyTable & props, const Vec3 & direction, const RegionHandle & rh);
 
         void SolveVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
+        
         void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
         double ComputeScore(const MixedGraph & mg, const MixedGraphPropertyTable & props);
 
 
 
-        void Visualize(const View<PanoramicCamera> & texture, const PanoramicCamera & pcam, 
+        void Visualize(const View<PanoramicCamera> & texture, 
             const MixedGraph & mg, MixedGraphPropertyTable & props);
-        void Visualize(const View<PerspectiveCamera> & texture, const PanoramicCamera & pcam,
+        void Visualize(const View<PerspectiveCamera> & texture,
             const MixedGraph & mg, MixedGraphPropertyTable & props);
 
 

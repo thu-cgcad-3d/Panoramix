@@ -14,7 +14,7 @@ namespace panoramix {
 
 
         // not implemented error
-#define NOT_IMPLEMENTED_YET() \
+#define NOT_IMPLEMENTED_YET(...) \
     throw std::runtime_error("This feature has not yet been implemented! \n" \
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \
@@ -27,11 +27,12 @@ namespace panoramix {
     "in line: " + std::to_string(__LINE__) + "\n" \
     "in file: "__FILE__) << std::endl 
 
+        // improvable here
 #define IMPROVABLE_HERE(...)
 
         // there are bugs here
 #define THERE_ARE_BUGS_HERE(...)  \
-    std::cout << ("This feature has BUGS! FIXME!!!!!! \n" \
+    std::cout << ("This feature may have BUGS, Check it: \""__VA_ARGS__"\"\n" \
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \
     "in file: "__FILE__) << std::endl
@@ -45,7 +46,7 @@ namespace panoramix {
 
 
         // should never be called error
-#define SHOULD_NEVER_BE_CALLED() \
+#define SHOULD_NEVER_BE_CALLED(...) \
     throw std::runtime_error("This feature should never be called! \n" \
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \

@@ -4,6 +4,7 @@
 
 #include <iostream>
 #include <random>
+#include <Eigen/Dense>
 
 using namespace panoramix;
 
@@ -37,5 +38,22 @@ TEST(BasicType, HPoint) {
         ASSERT_LT(core::norm(p5 - v4), 1e-5);
     }
 }
+
+TEST(BasicType, Line) {
+
+    std::vector<core::Line2> lines = {
+        { core::Point2(1, 2), core::Point2(3, 4) },
+        { core::Point2(5, 6), core::Point2(7, 8) },
+        { core::Point2(9, 10), core::Point2(11, 12) },
+        { core::Point2(13, 14), core::Point2(15, 16) },
+        { core::Point2(17, 18), core::Point2(19, 20) },
+        { core::Point2(21, 22), core::Point2(23, 24) }
+    };
+
+    Eigen::Map<Eigen::Matrix<double, 4, Eigen::Dynamic>> linesData((double*)(lines.data()), 4, lines.size());
+    std::cout << linesData << std::endl;
+
+}
+
 
 

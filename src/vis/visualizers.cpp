@@ -863,7 +863,7 @@ namespace panoramix {
             spinBox->setRange(0.0, 1.0);
             auto signal = static_cast<void (QDoubleSpinBox::*)(double)>(&QDoubleSpinBox::valueChanged);
             QObject::connect(spinBox, signal, [&value](double v){
-                std::cout << "value of " << value.note << " is set to " << v << "!" << std::endl;
+                //std::cout << "value of " << value.note << " is set to " << v << "!" << std::endl;
                 value.component = v;
             });
             return spinBox;
@@ -900,7 +900,7 @@ namespace panoramix {
 
 
 
-        void Visualizer::show(bool doModal, bool autoSetCamera) {
+        void Visualizer::show(bool doModal, bool autoSetCamera, Visualizer::CameraScalePolicy csp) {
             auto app = Singleton::InitGui();
             VisualizerWidget * w = new VisualizerWidget(*this);
             

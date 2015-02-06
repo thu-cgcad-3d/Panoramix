@@ -227,13 +227,28 @@ namespace panoramix {
                 ColorTag::White
             };
 
+            static const ColorTable RGBGreysColorTable = {
+                {
+                    ColorTag::Red,
+                    ColorTag::Green,
+                    ColorTag::Blue,
+
+                    ColorTag::DimGray,
+                    ColorTag::Gray,
+                    ColorTag::DarkGray,
+                    ColorTag::Silver,
+                    ColorTag::LightGray
+                },
+                ColorTag::White
+            };
+
             switch (descriptor) {
             case ColorTableDescriptor::RGB: return RGBColorTable;
             case ColorTableDescriptor::AllColorsExcludingBlack: return allColorExcludingBlackTable;
             case ColorTableDescriptor::AllColorsExcludingWhite: return allColorExcludingWhiteTable;
             case ColorTableDescriptor::AllColorsExcludingWhiteAndBlack: return allColorExcludingWhiteAndBlackTable;
             case ColorTableDescriptor::AllColors: return allColorTable;
-            default: return allColorTable;
+            default: return RGBGreysColorTable;
             }
             
         }

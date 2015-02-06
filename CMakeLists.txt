@@ -71,5 +71,6 @@ add_subdirectory (src lib)
 
 # executable
 add_subdirectory (tests tests)
+add_subdirectory (executable executable)
 
 

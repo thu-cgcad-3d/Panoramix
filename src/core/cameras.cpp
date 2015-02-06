@@ -288,20 +288,43 @@ namespace panoramix {
         View<PerspectiveCamera> CreatePerspectiveView(const Image & perspectiveImage,
             const Point3 & eye, const Point3 & center, const Vec3 & up,
             const LineSegmentExtractor & lse, const VanishingPointsDetector & vpd,
-            std::array<HPoint2, 3> * vpsPtr,
+            std::vector<Classified<Line3>> * line3sPtr,
+            std::vector<Classified<Line2>> * line2sPtr,
+            std::vector<Vec3> * vpsPtr,
             double * focalPtr){
 
             auto lines = lse(perspectiveImage);
-            std::array<HPoint2, 3> vps;
+            std::vector<HPoint2> vps;
             double focal;
-            std::tie(vps, focal, std::ignore) = vpd(lines, Point2(perspectiveImage.cols / 2.0, perspectiveImage.rows / 2.0));
+            std::vector<int> lineClasses;
+            std::tie(vps, focal, lineClasses) = vpd(lines, Point2(perspectiveImage.cols / 2.0, perspectiveImage.rows / 2.0));
 
             View<PerspectiveCamera> view;
             view.image = perspectiveImage;
             view.camera = PerspectiveCamera(perspectiveImage.cols, perspectiveImage.rows, focal, eye, center, up);
-
+                
+            if (line3sPtr){
+                std::vector<Classified<Line3>> line3s(lines.size());
+                for (int i = 0; i < lines.size(); i++){
+                    line3s[i].component.first = view.camera.spatialDirection(lines[i].first);
+                    line3s[i].component.second = view.camera.spatialDirection(lines[i].second);
+                    line3s[i].claz = lineClasses[i];
+                }
+                *line3sPtr = std::move(line3s);
+            }
+            if (line2sPtr){
+                auto line2s = ClassifyEachAs(lines, -1);
+                for (int i = 0; i < lines.size(); i++)
+                    line2s[i].claz = lineClasses[i];
+                *line2sPtr = std::move(line2s);
+            }
             if (vpsPtr){
-                *vpsPtr = vps;
+                std::vector<Vec3> vp3s = {
+                    normalize(view.camera.spatialDirection(vps[0].value())),
+                    normalize(view.camera.spatialDirection(vps[1].value())),
+                    normalize(view.camera.spatialDirection(vps[2].value()))
+                };
+                *vpsPtr = std::move(vp3s);
             }
             if (focalPtr){
                 *focalPtr = focal;

@@ -27,7 +27,7 @@ namespace panoramix {
                 }
             }*/
             //NOT_IMPLEMENTED_YET();
-            IMPROVABLE_HERE("check continuity on borders");
+            THERE_ARE_BUGS_HERE("check continuity on borders");
             return true;
         }
 

@@ -8,7 +8,8 @@ int main(int argc, char ** argv) {
     std::string filename;
     if (argc < 2){
         std::cout << "no input" << std::endl;
-        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+        filename = PROJECT_TEST_DATA_DIR_STR"/normal/room2e.jpg";
     }
     else{
         filename = argv[1];
@@ -16,7 +17,7 @@ int main(int argc, char ** argv) {
     std::cout << "filename: " << filename << std::endl;
 
     core::Image image = cv::imread(filename);
-    core::ResizeToMakeHeightUnder(image, 800);
+    core::ResizeToMakeHeightUnder(image, 600);
 
     bool isPanorama = core::MayBeAPanorama(image);
     std::cout << "is panorama: " << (isPanorama ? "yes" : "no") << std::endl;
@@ -59,47 +60,88 @@ int main(int argc, char ** argv) {
             }
         }
         core::SegmentationExtractor segmenter;
-        segmenter.params().isPanorama = true;
         segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
         segmenter.params().c = 100.0;
         auto segmentedImage = segmenter(view.image, line3ds, view.camera).first;
-        int segmentsNum = core::MinMaxValOfImage(segmentedImage).second + 1;
+        //vis::Visualizer2D(segmentedImage) << vis::manip2d::Show();
+        //int segmentsNum = core::MinMaxValOfImage(segmentedImage).second + 1;
 
-        core::AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001);
+        core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
 
         // optimize
         auto props = core::MakeMixedGraphPropertyTable(mg, vps);
         core::InitializeVariables(mg, props);
+        core::Visualize(view, mg, props);
 
         double scoreBefore = core::ComputeScore(mg, props);
         std::cout << "score before = " << scoreBefore << std::endl;
         
-        //core::SolveVariables(mg, props);        
+        core::SolveVariables(mg, props);        
 
         core::SaveToDisk("./cache/view", view);
         core::SaveToDisk("./cache/mg", mg);
-        core::LoadFromDisk("./cache/props", props);
+        core::SaveToDisk("./cache/props", props);
 
         core::NormalizeVariables(mg, props);
 
         double scoreAfter = core::ComputeScore(mg, props);
         std::cout << "score after = " << scoreAfter << std::endl;
 
-        core::Visualize(view, view.camera, mg, props);
+        core::Visualize(view, mg, props);
 
     }
     else {
-        std::array<core::HPoint2, 3> vps;
-        double focal = 1.0;
-        auto view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
-            core::LineSegmentExtractor(), core::VanishingPointsDetector(), &vps, &focal);
-
-        core::SegmentationExtractor segmenter;
-        segmenter.params().isPanorama = false;
-        segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
-        auto segmentedImage = segmenter(image).first;
-        
+        std::vector<core::Classified<core::Line2>> lines;
+        std::vector<core::Vec3> vps;
+        double focal;
+        core::View<core::PerspectiveCamera> view;
         core::MixedGraph mg;
+        std::vector<core::Line2> pureLines;
+        core::Imagei segmentedImage;
+        core::MixedGraphPropertyTable props;
+
+        view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
+            core::LineSegmentExtractor(), core::VanishingPointsDetector(), nullptr, &lines, &vps, &focal);
+        vis::Visualizer2D(view.image) << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB)
+            << vis::manip2d::SetThickness(2.0)
+            << lines << vis::manip2d::Show();       
+
+        // append lines
+        core::AppendLines(mg, lines, view.camera, vps);
+
+        // append regions
+        core::SegmentationExtractor segmenter;
+        segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
+        segmenter.params().c = 100.0;
+        pureLines.resize(lines.size());
+        for (int i = 0; i < lines.size(); i++)
+            pureLines[i] = lines[i].component;
+        int segmentsNum = 0;
+        std::tie(segmentedImage, segmentsNum) = segmenter(image, pureLines);    
+        vis::Visualizer2D::Params vParams;
+        vParams.colorTable = vis::CreateRandomColorTableWithSize(segmentsNum);
+        vis::Visualizer2D(segmentedImage, vParams)
+            << vis::manip2d::Show();
+
+        core::AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001, 3, 1);
+
+        // optimize
+        props = core::MakeMixedGraphPropertyTable(mg, vps);
+        core::InitializeVariables(mg, props);
+        core::Visualize(view, mg, props);
+
+        double scoreBefore = core::ComputeScore(mg, props);
+        std::cout << "score before = " << scoreBefore << std::endl;
+
+        core::SolveVariables(mg, props);
+        core::NormalizeVariables(mg, props);
+
+        double scoreAfter = core::ComputeScore(mg, props);
+        std::cout << "score after = " << scoreAfter << std::endl;
+
+        core::SaveToDisk("./cache/all", lines, vps, focal, view, mg, pureLines, segmentedImage, props);
+
+        core::Visualize(view, mg, props);
 
     }
 

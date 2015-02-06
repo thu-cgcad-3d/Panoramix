@@ -295,7 +295,8 @@ namespace panoramix {
                 const std::vector<HPoint2> & vps,
                 double intersectionDistanceThreshold,
                 double incidenceDistanceAlongDirectionThreshold,
-                double incidenceDistanceVerticalDirectionThreshold){
+                double incidenceDistanceVerticalDirectionThreshold,
+                bool includeIncidencesBetweenUnclassifiedLines = false){
 
                 /// TODO include all line relations is NOT STABLE!
 
@@ -372,7 +373,7 @@ namespace panoramix {
                                 graph.add<1>({ handles[i], handles[j] }, std::move(lrd));
                             }
                         }
-                        else if (clazi == clazj && clazi == -1){ // incidence for unclassified lines
+                        else if (includeIncidencesBetweenUnclassifiedLines && clazi == clazj && clazi == -1){ // incidence for unclassified lines
                             if (d >= incidenceDistanceAlongDirectionThreshold / 3.0)
                                 continue;
 
@@ -616,17 +617,17 @@ namespace panoramix {
         namespace {
 
 
-            template <class T, int N>
-            std::vector<Point<T, N>> NormalizedSamplePointsOnLine(const Line<T, N> & line, const T & stepLen){
-                T len = line.length();
-                auto dir = normalize(line.direction());
-                std::vector<Point<T, N>> pts;
-                pts.reserve(len / stepLen);
-                for (T l = 0; l <= len; l += stepLen){
-                    pts.push_back(normalize(line.first + dir * l));
-                }
-                return pts;
-            }
+            //template <class T, int N>
+            //std::vector<Point<T, N>> NormalizedSamplePointsOnLine(const Line<T, N> & line, const T & stepLen){
+            //    T len = line.length();
+            //    auto dir = normalize(line.direction());
+            //    std::vector<Point<T, N>> pts;
+            //    pts.reserve(len / stepLen);
+            //    for (T l = 0; l <= len; l += stepLen){
+            //        pts.push_back(normalize(line.first + dir * l));
+            //    }
+            //    return pts;
+            //}
 
             std::vector<RegionHandle> CollectRegionsFromSegmentation(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam){
                 double minVal, maxVal;
@@ -649,7 +650,7 @@ namespace panoramix {
                         [](const std::vector<PixelLoc> & ca, const std::vector<PixelLoc> & cb){return ca.size() > cb.size(); });
 
                     if (contours.size() >= 2){
-                        std::cout << "multiple contours for one region in perspective projection!";
+                        //std::cout << "multiple contours for one region in perspective projection!";
                     }
 
                     auto iter = std::find_if(contours.begin(), contours.end(), [](const std::vector<PixelLoc> & c){return c.size() <= 2; });
@@ -799,8 +800,9 @@ namespace panoramix {
             }
 
             void FindContoursOfRegionsAndBoundaries(const Imagei & segRegions, int regionNum,
-                std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryEdges) {
-                static const int detectionSize = 3;
+                std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryEdges,
+                int connectionExtendSize) {
+
                 std::map<std::pair<int, int>, std::set<PixelLoc, ComparePixelLoc>> boundaryPixels;
 
                 int width = segRegions.cols;
@@ -808,8 +810,8 @@ namespace panoramix {
                 for (int y = 0; y < height - 1; y++) {
                     for (int x = 0; x < width - 1; x++) {
                         int originalRegionId = segRegions(PixelLoc(x, y));
-                        for (int xx = std::max(x - detectionSize, 0); xx <= std::min(x + detectionSize, width - 1); xx++){
-                            for (int yy = std::max(y - detectionSize, 0); yy <= std::min(y + detectionSize, height - 1); yy++){
+                        for (int xx = std::max(x - connectionExtendSize, 0); xx <= std::min(x + connectionExtendSize, width - 1); xx++){
+                            for (int yy = std::max(y - connectionExtendSize, 0); yy <= std::min(y + connectionExtendSize, height - 1); yy++){
                                 int regionIdHere = segRegions(PixelLoc(xx, yy));
                                 if (originalRegionId != regionIdHere){
                                     boundaryPixels[MakeOrderedPair(originalRegionId, regionIdHere)].insert(PixelLoc((x + xx) / 2, (y + yy) / 2));
@@ -831,6 +833,8 @@ namespace panoramix {
 
                     static const int xdirs[] = { 1, 0, -1, 0, -1, 1, 1, -1, 0, 0, 2, -2 };
                     static const int ydirs[] = { 0, 1, 0, -1, 1, -1, 1, -1, 2, -2, 0, 0 };
+
+                    IMPROVABLE_HERE("what if connectionExtendSize is too large? will it cause bugs here searching edges?");
 
                     std::vector<std::vector<PixelLoc>> edges;
                     edges.push_back({ p });
@@ -888,14 +892,15 @@ namespace panoramix {
 
             template <class CameraT>
             void AppendRegionsTemplate(MixedGraph & mg, const Imagei & segmentedRegions, const CameraT & cam,
-                double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
+                double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
+                int samplerSizeOnBoundary, int samplerSizeOnLine){
 
                 auto regionHandles = CollectRegionsFromSegmentation(mg, segmentedRegions, cam);
                 int regionNum = regionHandles.size();
 
                 // add region boundary constraints
                 std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges;
-                FindContoursOfRegionsAndBoundaries(segmentedRegions, regionNum, boundaryEdges);
+                FindContoursOfRegionsAndBoundaries(segmentedRegions, regionNum, boundaryEdges, samplerSizeOnBoundary);
 
                 for (auto & bep : boundaryEdges) {
                     auto & rids = bep.first;
@@ -940,15 +945,19 @@ namespace panoramix {
 
                 for (auto & ld : mg.components<LineData>()){
                     auto & line = ld.data.line;
-                    auto samples = NormalizedSamplePointsOnLine(line, samplingStepAngleOnLine);
-                    for (int k = 0; k < samples.size(); k++){
-                        if (!cam.isVisibleOnScreen(samples[k]))
+                    double spanAngle = AngleBetweenDirections(line.first, line.second);
+                    int stepNum = static_cast<int>(std::ceil(spanAngle / samplingStepAngleOnLine));
+                    assert(stepNum >= 1);
+                    for (int step = 0; step <= stepNum; step ++){
+                        double angle = step * samplingStepAngleOnLine;
+                        Vec3 sample = RotateDirection(line.first, line.second, angle);
+                        if (!cam.isVisibleOnScreen(sample))
                             continue;
-                        PixelLoc originalP = ToPixelLoc(cam.screenProjection(samples[k]));
+                        PixelLoc originalP = ToPixelLoc(cam.screenProjection(sample));
                         // collect neighbors
-                        static const int sz = 3;
-                        for (int x = originalP.x - sz; x <= originalP.x + sz; x++){
-                            for (int y = originalP.y - sz; y <= originalP.y + sz; y++){
+                        std::set<int> connectedRegionIds;
+                        for (int x = originalP.x - samplerSizeOnLine; x <= originalP.x + samplerSizeOnLine; x++){
+                            for (int y = originalP.y - samplerSizeOnLine; y <= originalP.y + samplerSizeOnLine; y++){
                                 PixelLoc p(x, y);
                                 if (p.x < 0 || p.x >= segmentedRegions.cols || p.y < 0 || p.y >= segmentedRegions.rows)
                                     continue;
@@ -956,10 +965,12 @@ namespace panoramix {
                                 auto rh = regionHandles[regionId];
                                 if (rh.invalid())
                                     continue;
-                                regionLineConnections[std::make_pair(rh, ld.topo.hd)].push_back(samples[k]);
+                                connectedRegionIds.insert(regionId);
                             }
                         }                      
-                        
+                        for (int regionId : connectedRegionIds){
+                            regionLineConnections[std::make_pair(regionHandles[regionId], ld.topo.hd)].push_back(normalize(sample));
+                        }
                     }
                 }
 
@@ -975,12 +986,16 @@ namespace panoramix {
         }
 
         void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
-            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
-            AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine);
+            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
+            int samplerSizeOnBoundary, int samplerSizeOnLine){
+            AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
+                samplerSizeOnBoundary, samplerSizeOnLine);
         }
         void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
-            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine){
-            AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine);
+            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine,
+            int samplerSizeOnBoundary, int samplerSizeOnLine){
+            AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
+                samplerSizeOnBoundary, samplerSizeOnLine);
         }
 
 
@@ -1221,15 +1236,26 @@ namespace panoramix {
                     return{ points.front().front() };
                 }
 
-                auto & p1 = points.front().front();
-                auto pp2 = &p1;
-                for (auto & ps : points){
-                    for (auto & p : ps){
-                        if (AngleBetweenDirections(p, p1) > AngleBetweenDirections(p, *pp2)){
-                            pp2 = &p;
+                const Vec3 * pp1 = nullptr;
+                const Vec3 * pp2 = nullptr;
+                double maxAngle = 0.0;
+                for (int i = 0; i < points.size(); i++){
+                    for (int ii = 0; ii < points[i].size(); ii++){
+                        for (int j = i; j < points.size(); j++){
+                            for (int jj = 0; jj < points[j].size(); jj++){
+                                if (std::tie(i, ii) >= std::tie(j, jj))
+                                    continue;
+                                double angle = AngleBetweenDirections(points[i][ii], points[j][jj]);
+                                if (angle > maxAngle){
+                                    maxAngle = angle;
+                                    pp1 = &points[i][ii];
+                                    pp2 = &points[j][jj];
+                                }
+                            }
                         }
                     }
                 }
+                auto & p1 = *pp1;
                 auto & p2 = *pp2;
 
                 if (n == 2){
@@ -1324,7 +1350,7 @@ namespace panoramix {
                 std::vector<double> & B,
                 bool addAnchor = true){
 
-                IMPROVABLE_HERE("make sure mg is single connected");
+                THERE_ARE_BUGS_HERE("make sure mg is single connected");
 
                 varNum = 0;
                 for (auto & c : mg.components<LineData>()){
@@ -1515,30 +1541,32 @@ namespace panoramix {
                 }
             }
 
-            double meanCenterDepth = 0.0;
-            int componentsNum = 0;
+            std::vector<double> centerDepths;
+            centerDepths.reserve(mg.internalComponents<RegionData>().size() + mg.internalComponents<LineData>().size());
             for (auto & c : mg.components<RegionData>()){
-                meanCenterDepth += DepthAt(c.data.normalizedCenter, Instance(mg, props, c.topo.hd));
-                assert(!IsInfOrNaN(meanCenterDepth));
-                componentsNum++;
+                centerDepths.push_back(DepthAt(c.data.normalizedCenter, Instance(mg, props, c.topo.hd)));
+                assert(!IsInfOrNaN(centerDepths.back()));
             }
             for (auto & c : mg.components<LineData>()){
-                meanCenterDepth += DepthAt(normalize(c.data.line.center()), Instance(mg, props, c.topo.hd));
-                assert(!IsInfOrNaN(meanCenterDepth));
-                componentsNum++;
+                centerDepths.push_back(DepthAt(normalize(c.data.line.center()), Instance(mg, props, c.topo.hd)));
+                assert(!IsInfOrNaN(centerDepths.back()));
             }
-            meanCenterDepth /= componentsNum;
-            assert(!IsInfOrNaN(meanCenterDepth));
+            std::nth_element(centerDepths.begin(), centerDepths.begin() + centerDepths.size() / 2, centerDepths.end());
+            double medianCenterDepth = centerDepths[centerDepths.size() / 2];
+            std::cout << "median center depth: " << medianCenterDepth << std::endl;
+            //medianCenterDepth /= 1000.0;
+
+            assert(!IsInfOrNaN(medianCenterDepth));
 
             // normalize variables
             for (auto & c : mg.components<RegionData>()){
                 for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    props[c.topo.hd].variables[i] /= meanCenterDepth;
+                    props[c.topo.hd].variables[i] /= medianCenterDepth;
                 }
             }
             for (auto & c : mg.components<LineData>()){
                 for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    props[c.topo.hd].variables[i] /= meanCenterDepth;
+                    props[c.topo.hd].variables[i] /= medianCenterDepth;
                 }
             }
         }
@@ -1644,7 +1672,7 @@ namespace panoramix {
                     for (auto & s : ss){
                         double d1 = DepthAt(s, plane1);
                         double d2 = DepthAt(s, plane2);
-                        assert(d1 > 0 && d2 > 0);
+                        assert(d1 >= 0 && d2 >= 0);
                         
                         double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
                         double weight = typeWeight;
@@ -1690,7 +1718,7 @@ namespace panoramix {
                 for (auto & a : c.data.normalizedAnchors){
                     double d1 = DepthAt(a, plane);
                     double d2 = DepthAt(a, line);
-                    assert(d1 > 0 && d2 > 0);
+                    assert(d1 >= 0 && d2 >= 0);
 
                     double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
                     double weight = typeWeight;
@@ -1712,10 +1740,11 @@ namespace panoramix {
 
         namespace {
 
-            template <class UhColorizerFunT = core::ConstantFunctor<vis::Color>>
+            template <class UhClickHandlerFunT, class UhColorizerFunT = core::ConstantFunctor<vis::Color>>
             void ManuallyOptimizeMixedGraph(const core::Image & panorama,
                 const MixedGraph & mg,
                 MixedGraphPropertyTable & props,
+                UhClickHandlerFunT uhClicked,
                 UhColorizerFunT uhColorizer = UhColorizerFunT(vis::ColorTag::White),
                 bool optimizeInEachIteration = false) {
 
@@ -1726,16 +1755,15 @@ namespace panoramix {
                     bool isRegion;
                 };
 
-                auto sppCallbackFun = [&props, &mg, &modified](vis::InteractionID iid,
+                auto sppCallbackFun = [&props, &mg, &modified, &uhClicked](vis::InteractionID iid,
                     const std::pair<ComponentID, vis::Colored<vis::SpatialProjectedPolygon>> & spp) {
                     std::cout << (spp.first.isRegion ? "Region" : "Line") << spp.first.handleID << std::endl;
-                    /* if (iid == vis::InteractionID::PressSpace){
-                    std::cout << "space pressed!" << std::endl;
-                    int & claz = patch.uhs[spp.first].claz;
-                    claz = (claz + 1) % vps.size();
-                    std::cout << "current orientation is : " << vps[claz] << std::endl;
-                    modified = true;
-                    }*/
+                    if (spp.first.isRegion){
+                        modified = uhClicked(RegionHandle(spp.first.handleID));
+                    }
+                    else {
+                        modified = uhClicked(LineHandle(spp.first.handleID));
+                    }
                 };
 
                 while (modified){
@@ -1762,13 +1790,14 @@ namespace panoramix {
                         core::ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
                             std::back_inserter(spp.corners),
                             [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
-                            return core::AngleBetweenDirections(a, b) > M_PI / 100.0;
+                            return core::AngleBetweenDirections(a, b) > M_PI / 1000.0;
                         });
                         if (spp.corners.size() < 3)
                             continue;
 
                         spp.projectionCenter = core::Point3(0, 0, 0);
                         spp.plane = Instance(mg, props, uh);
+                        assert(!HasValue(spp.plane, IsInfOrNaN<double>));
                         spps.emplace_back(ComponentID{ uh.id, true }, std::move(vis::ColorAs(spp, uhColorizer(uh))));
                     }
 
@@ -1779,7 +1808,8 @@ namespace panoramix {
                     }
 
                     viz.begin(spps, sppCallbackFun).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
-                    viz.installingOptions.lineWidth = 4.0;
+                    viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
+                    viz.installingOptions.lineWidth = 5.0;
                     viz.add(lines);
 
                     std::vector<core::Line3> connectionLines;
@@ -1805,15 +1835,15 @@ namespace panoramix {
                         }
                     }
 
-                    viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
-                    viz.installingOptions.lineWidth = 2.0;
+                    viz.installingOptions.discretizeOptions.color = vis::ColorTag::Black;
+                    viz.installingOptions.lineWidth = 1.0;
+                    viz.add(connectionLines);
+
                     viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
-                    //viz.add(connectionLines);
-                    viz.camera(core::PerspectiveCamera(800, 800, 500, { 1.0, 1.0, -1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, -1.0 }));
                     viz.renderOptions.backgroundColor = vis::ColorTag::White;
-                    viz.renderOptions.bwColor = 0.0;
-                    viz.renderOptions.bwTexColor = 1.0;
-                    viz.camera(core::PerspectiveCamera(600, 600, 300, Point3(5, 5, 5), Point3(0, 0, 0)));
+                    viz.renderOptions.bwColor = 0.8;
+                    viz.renderOptions.bwTexColor = 0.2;
+                    viz.camera(core::PerspectiveCamera(1000, 800, 800, Point3(-2, -2, -2), Point3(0, 0, 0)));
                     viz.show(true, false);
 
                     vis::ResourceStore::clear();
@@ -1825,16 +1855,57 @@ namespace panoramix {
         }
 
 
+        struct ComponentHandleColorizer {
+            const MixedGraph & mg;
+            const MixedGraphPropertyTable & props;
+            inline vis::Color operator()(ComponentHandle<RegionData> rh) const{
+                double maxPlaneDist = 0.0;
+                for (auto & r : mg.components<RegionData>()){
+                    double pdist = Instance(mg, props, r.topo.hd).distanceTo(Point3(0, 0, 0));
+                    if (pdist > maxPlaneDist)
+                        maxPlaneDist = pdist;
+                }
+                return vis::ColorFromHSV(Instance(mg, props, rh).distanceTo(Point3(0, 0, 0)) / maxPlaneDist, 0.5, 0.8);
+            }
+            inline vis::Color operator()(ComponentHandle<LineData> rh) const {
+                static const vis::ColorTable rgbTable(vis::ColorTableDescriptor::RGB);
+                return rgbTable[props[rh].orientationClaz];
+            }
+        };
+
+        struct ComponentHandleClickHandler {
+            const MixedGraph & mg;
+            const MixedGraphPropertyTable & props;
+            inline bool operator()(ComponentHandle<RegionData> rh) const{
+                std::cout << "area: " << mg.data(rh).area
+                    << " connected regions: " << mg.topo(rh).constraints<RegionBoundaryData>().size()
+                    << " connected lines: " << mg.topo(rh).constraints<RegionLineConnectionData>().size() << std::endl;
+                std::cout << "==connected regions info==" << std::endl;
+                for (auto & h : mg.topo(rh).constraints<RegionBoundaryData>()){
+                    std::cout << "  sample points num: " << ElementsNum(mg.data(h).normalizedSampledPoints) << std::endl;
+                }
+                std::cout << "==connected lines info==" << std::endl;
+                for (auto & h : mg.topo(rh).constraints<RegionLineConnectionData>()){
+                    std::cout << "  anchors num: " << ElementsNum(mg.data(h).normalizedAnchors) << std::endl;
+                }
+                return false;
+            }
+            inline bool operator()(ComponentHandle<LineData> rh) const {               
+                return false;
+            }
+        };
 
 
-        void Visualize(const View<PanoramicCamera> & texture, const PanoramicCamera & pcam,
+        void Visualize(const View<PanoramicCamera> & texture,
             const MixedGraph & mg, MixedGraphPropertyTable & props){
-            ManuallyOptimizeMixedGraph(texture.image, mg, props);
+            ManuallyOptimizeMixedGraph(texture.image,
+                mg, props, ComponentHandleClickHandler{ mg, props }, ComponentHandleColorizer{ mg, props });
         }
         
-        void Visualize(const View<PerspectiveCamera> & texture, const PanoramicCamera & pcam,
+        void Visualize(const View<PerspectiveCamera> & texture,
             const MixedGraph & mg, MixedGraphPropertyTable & props) {
-            ManuallyOptimizeMixedGraph(texture.sampled(PanoramicCamera(250, Point3(0, 0, 0), Point3(1, 0, 0), Vec3(0, 0, -1))).image, mg, props);
+            ManuallyOptimizeMixedGraph(texture.sampled(PanoramicCamera(250, Point3(0, 0, 0), Point3(1, 0, 0), Vec3(0, 0, 1))).image, 
+                mg, props, ComponentHandleClickHandler{ mg, props }, ComponentHandleColorizer{ mg, props });
         }
 
     }

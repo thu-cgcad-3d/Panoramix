@@ -66,8 +66,7 @@ TEST(Feature, SegmentationExtractorInPanorama){
     core::Image im = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
     core::ResizeToMakeHeightUnder(im, 800);
     core::SegmentationExtractor::Params p;
-    p.isPanorama = true;
-    auto segs = core::SegmentationExtractor(p)(im);
+    auto segs = core::SegmentationExtractor(p)(im, true);
     vis::Visualizer2D(segs.first)
         << vis::manip2d::SetColorTable(vis::CreateRandomColorTableWithSize(segs.second))
         << vis::manip2d::Show();
@@ -95,28 +94,51 @@ TEST(Feature, LineSegmentExtractor) {
 }
 
 TEST(Feature, VanishingPointsDetector) {
+
+    std::vector<std::string> filenames = {
+        "room.png",
+        "room1.jpg",
+        "room2.jpg",
+        "room3.jpg",
+        "room4.jpg"
+    };
+
     core::LineSegmentExtractor::Params lsParams;
     lsParams.minLength = 20;
     lsParams.xBorderWidth = lsParams.yBorderWidth = 20;
     core::LineSegmentExtractor lineseg(lsParams);
     core::VanishingPointsDetector vpdetector;
+    vpdetector.params().algorithm = core::VanishingPointsDetector::Naive;
 
-    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room.png");
-    core::ResizeToMakeWidthUnder(im, 1000);
-    auto lines = lineseg(im);
-    std::vector<int> lineClasses;
-    std::array<core::HPoint2, 3> vps;
-    double focalLength;
-    std::tie(vps, focalLength, lineClasses) = vpdetector(lines, core::Point2(im.cols/2, im.rows/2));
-    std::vector<core::Classified<core::Line2>> classifiedLines;
-    for (int i = 0; i < lines.size(); i++) {
-        classifiedLines.push_back({ lineClasses[i], lines[i]});
+    for (auto & filename : filenames){
+        core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/" + filename);
+        core::ResizeToMakeWidthUnder(im, 800);
+        
+        auto lines = lineseg(im);
+
+        std::vector<int> lineClasses;
+        std::vector<core::HPoint2> vps;
+        double focalLength;        
+        std::tie(vps, focalLength, lineClasses) = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
+        std::vector<core::Classified<core::Line2>> classifiedLines;
+        for (int i = 0; i < lines.size(); i++) {
+            classifiedLines.push_back({ lineClasses[i] >= 3 ? -1 : lineClasses[i], lines[i] });
+        }
+
+        std::vector<core::Classified<core::InfiniteLine2>> vpRays;
+        for (int i = 0; i < 3; i++){
+            for (double a = 0; a <= M_PI * 2.0; a += 0.1){
+                core::Point2 p = core::Point2(im.cols / 2, im.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
+                vpRays.push_back(core::ClassifyAs(core::InfiniteLine2(p, (vps[i] - core::HPoint2(p, 1.0)).numerator), i));
+            }
+        }
+        vis::Visualizer2D(im)
+            << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGBGreys)
+            << vis::manip2d::SetThickness(2)
+            << classifiedLines
+            << vpRays
+            << vis::manip2d::Show(0);
     }
-    vis::Visualizer2D(im)
-        << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB)
-        << vis::manip2d::SetThickness(2) <<
-        classifiedLines
-        << vis::manip2d::Show(0);
 }
 
 

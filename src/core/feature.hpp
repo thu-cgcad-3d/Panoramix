@@ -84,7 +84,7 @@ namespace panoramix {
         public:
             enum Algorithm {
                 Naive,
-                HedauMatlab
+                Tardif
             };
             struct Params {
                 inline Params(double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5)
@@ -103,14 +103,13 @@ namespace panoramix {
             Params & params() { return _params; }
             
             // accepts (lines, projection center)
-            // returns (3 vanishing points, the focal length, line classes)
-            std::tuple<std::array<HPoint2, 3>, double, std::vector<int>>
-                operator() (const std::vector<Line2> & lines, const Point2 & projCenter) const;            
+            // returns (>= 3 vanishing points (the first 3 vanishing points should be the Manhattan VPs), the focal length, line classes)
+            std::tuple<std::vector<HPoint2>, double, std::vector<int>> operator() (
+                const std::vector<Line2> & lines, const Point2 & projCenter) const;  
+
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         
         private:
-            std::tuple<std::array<HPoint2, 3>, double, std::vector<int>>
-                estimateWithProjectionCenterAtOrigin (const std::vector<Line2> & lines) const;
             Params _params;
         };
 
