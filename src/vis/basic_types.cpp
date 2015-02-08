@@ -122,7 +122,26 @@ namespace panoramix {
             _exceptionalColor = ColorFromTag(exceptColor);
         }
 
-        void ColorTable::randomize() { std::random_shuffle(_colors.begin(), _colors.end()); }
+        ColorTable & ColorTable::randomize() { std::random_shuffle(_colors.begin(), _colors.end()); return *this; }
+
+        ColorTable & ColorTable::appendRandomizedColors(size_t sz) {
+            int dimSplit = std::max(int(sqrt(sz)), 3);
+            std::vector<Color> colors;
+            colors.reserve(dimSplit * dimSplit * dimSplit - dimSplit);
+            for (int i = 0; i < dimSplit; i++){
+                for (int j = 0; j < dimSplit; j++){
+                    for (int k = 0; k < dimSplit; k++){
+                        if (i == j && j == k)
+                            continue;
+                        colors.push_back(Color(1.0 * i / dimSplit, 1.0 * j / dimSplit, 1.0 * k / dimSplit));
+                    }
+                }
+            }
+            assert(colors.size() > sz);
+            std::random_shuffle(colors.begin(), colors.end());
+            _colors.insert(_colors.end(), colors.begin(), colors.begin() + sz);
+            return *this;
+        }
 
         const ColorTable & PredefinedColorTable(ColorTableDescriptor descriptor) {
            

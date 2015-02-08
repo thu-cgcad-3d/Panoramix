@@ -11,3 +11,4 @@ doc/paperscript/*/*.synctex.gz
 backup
 _backup
 scripts
+matlab/startup.m

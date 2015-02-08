@@ -50,26 +50,5 @@ TEST(ConstraintGraph, Basic){
 }
 
 
-//TEST(ConstraintGraph, P3Graph) {
-//
-//    core::P3Graph p3g;
-//    auto h1 = p3g.addComponent(core::P3Line());
-//    auto h2 = p3g.addComponent(core::P3Region());
-//
-//    core::P3Environment env;
-//
-//    auto varReg = core::RegisterComponents<double>(p3g, env);
-//    for (int i = 0; i < 3; i++)
-//        varReg(h2, i) = i+1;
-//
-//    core::UpdateComponents(p3g, varReg, env);
-//    auto & reg = p3g.data(h2);
-//    ASSERT_TRUE(reg.plane.component == core::Plane3FromEquation(1.0, 2.0, 3.0));
-//
-//    auto consReg = core::RegisterConstraints(p3g, varReg, env);
-//
-//}
-
-
 
 

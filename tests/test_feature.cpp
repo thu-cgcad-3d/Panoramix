@@ -62,7 +62,6 @@ TEST(Feature, SegmentationExtractor) {
 
 
 TEST(Feature, SegmentationExtractorInPanorama){
-
     core::Image im = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
     core::ResizeToMakeHeightUnder(im, 800);
     core::SegmentationExtractor::Params p;
@@ -70,19 +69,12 @@ TEST(Feature, SegmentationExtractorInPanorama){
     vis::Visualizer2D(segs.first)
         << vis::manip2d::SetColorTable(vis::CreateRandomColorTableWithSize(segs.second))
         << vis::manip2d::Show();
-
 }
 
 
 TEST(Feature, LineSegmentExtractor) {
     core::LineSegmentExtractor lineseg;
     core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
-    //vis::Visualizer2D(im) 
-    //    << vis::manip2d::SetColor(vis::ColorTag::Yellow) 
-    //    << vis::manip2d::SetThickness(2) << 
-    //    lineseg(im) 
-    //    << vis::manip2d::Show();
-
     core::LineSegmentExtractor::Params params;
     params.algorithm = core::LineSegmentExtractor::LSD;
     core::LineSegmentExtractor lineseg2(params);
@@ -112,18 +104,13 @@ TEST(Feature, VanishingPointsDetector) {
 
     for (auto & filename : filenames){
         core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/" + filename);
-        core::ResizeToMakeWidthUnder(im, 800);
-        
-        auto lines = lineseg(im);
+        core::ResizeToMakeWidthUnder(im, 600);
 
-        std::vector<int> lineClasses;
         std::vector<core::HPoint2> vps;
-        double focalLength;        
-        std::tie(vps, focalLength, lineClasses) = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
-        std::vector<core::Classified<core::Line2>> classifiedLines;
-        for (int i = 0; i < lines.size(); i++) {
-            classifiedLines.push_back({ lineClasses[i] >= 3 ? -1 : lineClasses[i], lines[i] });
-        }
+        double focalLength;
+
+        std::vector<core::Classified<core::Line2>> classifiedLines = core::ClassifyEachAs(lineseg(im), -1);
+        std::tie(vps, focalLength) = vpdetector(classifiedLines, core::Point2(im.cols / 2, im.rows / 2));
 
         std::vector<core::Classified<core::InfiniteLine2>> vpRays;
         for (int i = 0; i < 3; i++){
@@ -133,10 +120,11 @@ TEST(Feature, VanishingPointsDetector) {
             }
         }
         vis::Visualizer2D(im)
-            << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGBGreys)
+            << vis::manip2d::SetColorTable(vis::ColorTable(vis::ColorTableDescriptor::RGB).appendRandomizedColors(vps.size()-3))
+            << vis::manip2d::SetThickness(1)
+            << vpRays
             << vis::manip2d::SetThickness(2)
             << classifiedLines
-            << vpRays
             << vis::manip2d::Show(0);
     }
 }
@@ -231,67 +219,6 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
 
     viz << vis::manip2d::Show();
 
-    return;
-
-
-    //core::LineSegmentExtractor lineseg;
-    //lineseg.params().useLSD = true;
-    //core::LocalManhattanVanishingPointsDetector::Params params;
-
-    //std::vector<core::Image> ims = {
-    //    cv::imread(ProjectDataDirStrings::LocalManhattan + "/cuboids.png")//,
-    //    //cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings3.jpg"),
-    //    //cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg")
-    //};
-
-    //for (auto & im : ims) {
-    //    core::ResizeToMakeWidthUnder(im, 1000);
-    //    params.image = im;
-
-    //    core::LocalManhattanVanishingPointsDetector vpdetector(params);
-
-    //    std::vector<core::Line2> lines;
-    //    core::LocalManhattanVanishingPointsDetector::Result result;
-
-    //    lines = lineseg(im);
-    //    //core::LoadFromDisk(ProjectDataDirStrings::Serialization + "/temp.state", lines);
-    //    result = vpdetector(lines, core::Point2(im.cols / 2, im.rows / 2));
-
-    //    for (auto & op : result.horizontalVanishingPointIds){
-    //        std::cout << "[ " << op.first << ", " << op.second << "]" << "---"
-    //            << result.vanishingPoints[op.first].value()
-    //            << result.vanishingPoints[op.second].value() << std::endl;
-    //    }
-
-    //    std::vector<int> vpPairIds(result.vanishingPoints.size(), -1);
-    //    for (int i = 0; i < result.horizontalVanishingPointIds.size(); i++){
-    //        vpPairIds[result.horizontalVanishingPointIds[i].first] = i;
-    //        vpPairIds[result.horizontalVanishingPointIds[i].second] = i;
-    //    }
-
-    //    auto ctable = vis::CreateRandomColorTableWithSize(result.vanishingPoints.size());
-    //    ctable.exceptoinalColor() = vis::ColorFromTag(vis::ColorTag::White);
-
-    //    auto viz = vis::Visualizer2D(im)
-    //        << vis::manip2d::SetColorTable(ctable)
-    //        << vis::manip2d::SetThickness(4);
-
-    //    for (int i = 0; i < lines.size(); i++) {
-    //        int claz = result.lineClasses[i];
-    //        viz << vis::manip2d::SetThickness(claz == -1 ? 1 : vpPairIds[claz] + 3)
-    //            << vis::manip2d::SetColor(ctable[claz])
-    //            << core::NoteAs(lines[i], std::to_string(i) + "." + std::to_string(result.lineClasses[i]));
-    //    }
-
-    //    viz << vis::manip2d::SetColor(vis::ColorTag::Red)
-    //        << result.vanishingPoints;
-
-    //    viz /*<< vis::manip2d::SetColor(vis::ColorTag::Black)
-    //        << result.hlineCands
-    //        << vis::manip2d::SetColor(vis::ColorTag::Red)
-    //        << result.horizon*/
-    //        << vis::manip2d::Show(0);
-    //}
 }
 
 
@@ -319,32 +246,6 @@ TEST(Feature, GeometricContextMatlab) {
     core::GeometricContextEstimator gcEstimator;
     gcEstimator.params().useMatlab = true;
 
-    core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
+    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room1.jpg");
     auto gc = gcEstimator(im, core::SceneClass::Indoor);
-}
-
-TEST(Feature, GeometricContextPanorama) {
-    //core::GeometricContextEstimator gcEstimator;
-    //gcEstimator.params().useMatlab = true;
-
-    //core::Image pan = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
-    //core::ResizeToMakeHeightUnder(pan, 500);
-    //auto panview = core::CreatePanoramicView(pan);
-
-    //auto pviews = core::SampleHorizontalPerspectiveViews(pan, 10);
-    //std::vector<core::ViewX<core::PerspectiveCamera>> pviewGCs(pviews.size());
-    ////for (int i = 0; i < pviews.size(); i++){
-    ////    pviewGCs[i].camera = pviews[i].camera;
-    ////    auto gc = gcEstimator(pviews[i].image);
-    ////    pviewGCs[i].image.resize(gc.size());
-    ////    for (int k = 0; k < gc.size(); k++)
-    ////        pviewGCs[i].image[k] = gc[k];
-    ////}
-    //core::LoadFromDisk("./cache/Feature.GeometricContextPanorama.pviewGCs", pviewGCs);
-
-    //auto gcs = core::MergePerspectiveViewsBack(pviewGCs, panview.camera).image;
-    //core::Image wholeGC;
-    //cv::merge(gcs, wholeGC);
-    //vis::Visualizer2D(wholeGC) << vis::manip2d::Show();
-
 }

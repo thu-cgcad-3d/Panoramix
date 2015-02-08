@@ -216,8 +216,9 @@ namespace panoramix {
         }
 
         template <class T, int N>
-        inline T Distance(const HPoint<T, N> & a, const HPoint<T, N> & b) {
-            return norm(a.value() - b.value());
+        inline Ratio<T, T> Distance(const HPoint<T, N> & a, const HPoint<T, N> & b) {
+            THERE_ARE_BUGS_HERE("not precise!");
+            return norm(a - b);
         }
 
         template <class T, int N>
@@ -405,21 +406,14 @@ namespace panoramix {
 
 
         // the default influence box functor
-        template <class T>
+        template <class ScalarT>
         struct DefaultInfluenceBoxFunctor {
-            using BoxType = decltype(BoundingBox(std::declval<T>()));
-            using ValueType = typename BoxType::Type;
-
-            inline explicit DefaultInfluenceBoxFunctor(const ValueType & extSz = 0) : extendedSize(extSz){}
-            inline BoxType operator()(const T & t) const {
-                auto box = BoundingBox(t);
-                for (int i = 0; i < BoxType::Dimension; i++){
-                    box.minCorner[i] -= extendedSize;
-                    box.maxCorner[i] += extendedSize;
-                }
-                return box;
+            inline explicit DefaultInfluenceBoxFunctor(const ScalarT & extSz = 0) : extendedSize(extSz){}
+            template <class T>
+            inline auto operator()(const T & t) const -> decltype(BoundingBox(std::declval<T>())) {
+                return BoundingBox(t).expand(extendedSize);
             }
-            const ValueType extendedSize;
+            const ScalarT extendedSize;
         };
 
 

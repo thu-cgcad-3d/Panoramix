@@ -22,6 +22,7 @@
 #include "version.hpp"
 #include "macros.hpp"
 #include "serialization.hpp"
+#include "ratio.hpp"
 
 namespace panoramix {
     namespace core {
@@ -109,94 +110,6 @@ namespace panoramix {
             return ab;
         }
 
-
-        // ratio
-        template <class T, class S>
-        struct Ratio {
-            inline Ratio() : denominator(1) {}
-            inline Ratio(const T & c) : numerator(c), denominator(1) {}
-            inline Ratio(const T & c, const S & s) : numerator(c), denominator(s) {}
-            inline T value() const { return numerator / denominator; }
-            inline T value(const T & retIfDenomIsZero) const { return denominator == 0 ? retIfDenomIsZero : (numerator / denominator); }
-            T numerator;
-            S denominator;
-        };
-        template <class Archive, class T, class S>
-        inline void serialize(Archive & ar, Ratio<T, S> & r) {
-            ar(r.numerator, r.denominator);
-        }
-        template <class T, class S>
-        inline Ratio<T, S> MakeRatio(const T & c, const S & s) { return Ratio<T, S>(c, s); }
-
-        namespace {
-            enum RatioOperationType { Plus, Minus, Mult, Div };
-            template <class T1, class S1, class T2, class S2, RatioOperationType>
-            struct RatioOperationResult {};
-            template <class T1, class S1, class T2, class S2>
-            struct RatioOperationResult<T1, S1, T2, S2, Plus> {
-                using type = Ratio<
-                decltype(std::declval<T1>() * std::declval<S2>() + std::declval<T2>() * std::declval<S1>()),
-                decltype(std::declval<S1>() * std::declval<S2>())
-                >;
-            };
-            template <class T1, class S1, class T2, class S2>
-            struct RatioOperationResult<T1, S1, T2, S2, Minus> {
-                using type = Ratio<
-                decltype(std::declval<T1>() * std::declval<S2>() - std::declval<T2>() * std::declval<S1>()),
-                decltype(std::declval<S1>()  *std::declval<S2>())
-                >;
-            };
-            template <class T1, class S1, class T2, class S2>
-            struct RatioOperationResult<T1, S1, T2, S2, Mult> {
-                using type = Ratio<
-                decltype(std::declval<T1>() * std::declval<T2>()),
-                decltype(std::declval<S1>() * std::declval<S2>())
-                >;
-            };
-            template <class T1, class S1, class T2, class S2>
-            struct RatioOperationResult<T1, S1, T2, S2, Div> {
-                using type = Ratio<
-                decltype(std::declval<T1>() * std::declval<S2>()),
-                decltype(std::declval<S1>() * std::declval<T2>())
-                >;
-            };
-        }
-
-        template <class T1, class S1, class T2, class S2>
-        inline typename RatioOperationResult<T1, S1, T2, S2, Plus>::type
-            operator + (const Ratio<T1, S1> & a, const Ratio<T2, S2> & b) {
-                return MakeRatio(a.numerator * b.denominator + b.numerator * a.denominator, a.denominator * b.denominator);
-            }
-        template <class T1, class S1, class T2, class S2>
-        inline typename RatioOperationResult<T1, S1, T2, S2, Minus>::type
-            operator - (const Ratio<T1, S1> & a, const Ratio<T2, S2> & b) {
-                return MakeRatio(a.numerator * b.denominator - b.numerator * a.denominator, a.denominator * b.denominator);
-            }
-        template <class T1, class S1, class T2, class S2>
-        inline typename RatioOperationResult<T1, S1, T2, S2, Mult>::type
-            operator * (const Ratio<T1, S1> & a, const Ratio<T2, S2> & b) {
-                return MakeRatio(a.numerator * b.numerator, a.denominator * b.denominator);
-            }
-        template <class T1, class S1, class T2, class S2>
-        inline typename RatioOperationResult<T1, S1, T2, S2, Div>::type
-            operator / (const Ratio<T1, S1> & a, const Ratio<T2, S2> & b) {
-                return MakeRatio(a.numerator * b.denominator, a.denominator * b.numerator);
-            }
-        template <class T, class S>
-        inline Ratio<T, S> operator - (const Ratio<T, S> & r) {
-            return Ratio<T, S>(-r.numerator, r.denominator);
-        }
-        template <class T, class S>
-        inline bool operator == (const Ratio<T, S> & a, const Ratio<T, S> & b) {
-            return a.numerator == b.numerator && a.denominator == b.denominator;
-        }
-
-        using Rational = Ratio<double, double>;
-        template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>>
-        inline Ratio<T, T> MakeRational(const T & v) {
-            return std::isinf(v) ? (v > 0 ? Ratio<T, T>(1.0, 0.0) : Ratio<T, T>(-1.0, 0.0))
-                : (std::isnan(v) ? Ratio<T, T>(0.0, 0.0) : Ratio<T, T>(v, 1.0));
-        }
 
 
         // homogeneous point
@@ -655,6 +568,13 @@ namespace panoramix {
             std::vector<Classified<T>> cs(comps.size());
             for (int i = 0; i < comps.size(); i++)
                 cs[i] = ClassifyAs(comps[i], claz);
+            return cs;
+        }
+        template <class T>
+        inline std::vector<Classified<T>> ClassifyEachAs(std::vector<T> && comps, int claz){
+            std::vector<Classified<T>> cs(comps.size());
+            for (int i = 0; i < comps.size(); i++)
+                cs[i] = ClassifyAs(std::move(comps[i]), claz);
             return cs;
         }
         template <class T>

@@ -298,6 +298,7 @@ namespace panoramix {
             double focal;
             std::vector<int> lineClasses;
             std::tie(vps, focal, lineClasses) = vpd(lines, Point2(perspectiveImage.cols / 2.0, perspectiveImage.rows / 2.0));
+            assert(vps.size() >= 3);
 
             View<PerspectiveCamera> view;
             view.image = perspectiveImage;
@@ -319,11 +320,10 @@ namespace panoramix {
                 *line2sPtr = std::move(line2s);
             }
             if (vpsPtr){
-                std::vector<Vec3> vp3s = {
-                    normalize(view.camera.spatialDirection(vps[0].value())),
-                    normalize(view.camera.spatialDirection(vps[1].value())),
-                    normalize(view.camera.spatialDirection(vps[2].value()))
-                };
+                std::vector<Vec3> vp3s(vps.size());
+                for (int i = 0; i < vps.size(); i++){
+                    vp3s[i] = normalize(view.camera.spatialDirection(vps[i].value()));
+                }
                 *vpsPtr = std::move(vp3s);
             }
             if (focalPtr){

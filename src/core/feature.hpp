@@ -84,7 +84,7 @@ namespace panoramix {
         public:
             enum Algorithm {
                 Naive,
-                Tardif
+                TardifSimplified
             };
             struct Params {
                 inline Params(double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5)
@@ -104,8 +104,8 @@ namespace panoramix {
             
             // accepts (lines, projection center)
             // returns (>= 3 vanishing points (the first 3 vanishing points should be the Manhattan VPs), the focal length, line classes)
-            std::tuple<std::vector<HPoint2>, double, std::vector<int>> operator() (
-                const std::vector<Line2> & lines, const Point2 & projCenter) const;  
+            std::tuple<std::vector<HPoint2>, double, std::vector<int>> operator() (const std::vector<Line2> & lines, const Point2 & projCenter) const;  
+            std::tuple<std::vector<HPoint2>, double> operator() (std::vector<Classified<Line2>> & lines, const Point2 & projCenter) const;
 
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         
@@ -120,7 +120,7 @@ namespace panoramix {
 
 
 
-
+#if 0
         // vanishing point detection for local manhattan scenes
         class LocalManhattanVanishingPointsDetector {
         public:
@@ -173,7 +173,7 @@ namespace panoramix {
             Params _params;
         };
 
-
+#endif
 
 
         /// homography estimation

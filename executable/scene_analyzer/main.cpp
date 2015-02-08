@@ -8,8 +8,8 @@ int main(int argc, char ** argv) {
     std::string filename;
     if (argc < 2){
         std::cout << "no input" << std::endl;
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
-        filename = PROJECT_TEST_DATA_DIR_STR"/normal/room2e.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
+        filename = PROJECT_TEST_DATA_DIR_STR"/normal/room1.jpg";
     }
     else{
         filename = argv[1];
@@ -76,7 +76,7 @@ int main(int argc, char ** argv) {
         double scoreBefore = core::ComputeScore(mg, props);
         std::cout << "score before = " << scoreBefore << std::endl;
         
-        core::SolveVariables(mg, props);        
+        core::SolveVariablesUsingInversedDepths(mg, props);
 
         core::SaveToDisk("./cache/view", view);
         core::SaveToDisk("./cache/mg", mg);
@@ -100,9 +100,11 @@ int main(int argc, char ** argv) {
         core::Imagei segmentedImage;
         core::MixedGraphPropertyTable props;
 
+        core::VanishingPointsDetector::Params vpdParams;
+        vpdParams.algorithm = core::VanishingPointsDetector::Naive;
         view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
-            core::LineSegmentExtractor(), core::VanishingPointsDetector(), nullptr, &lines, &vps, &focal);
-        vis::Visualizer2D(view.image) << vis::manip2d::SetColorTable(vis::ColorTableDescriptor::RGB)
+            core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal);
+        vis::Visualizer2D(view.image) << vis::manip2d::SetColorTable(vis::ColorTable(vis::ColorTableDescriptor::RGB).appendRandomizedColors(vps.size() - 3))
             << vis::manip2d::SetThickness(2.0)
             << lines << vis::manip2d::Show();       
 
@@ -128,21 +130,23 @@ int main(int argc, char ** argv) {
         // optimize
         props = core::MakeMixedGraphPropertyTable(mg, vps);
         core::InitializeVariables(mg, props);
+        core::NormalizeVariables(mg, props);
+        std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+        core::Visualize(view, mg, props);       
+
+        core::SolveVariablesUsingInversedDepths(mg, props);
+        core::NormalizeVariables(mg, props);
+        std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
         core::Visualize(view, mg, props);
 
-        double scoreBefore = core::ComputeScore(mg, props);
-        std::cout << "score before = " << scoreBefore << std::endl;
-
-        core::SolveVariables(mg, props);
-        core::NormalizeVariables(mg, props);
-
-        double scoreAfter = core::ComputeScore(mg, props);
-        std::cout << "score after = " << scoreAfter << std::endl;
+        //core::SolveVariablesUsingNormalDepths(mg, props);
+        //core::NormalizeVariables(mg, props);
+        //std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+        //core::Visualize(view, mg, props);
 
         core::SaveToDisk("./cache/all", lines, vps, focal, view, mg, pureLines, segmentedImage, props);
-
+        core::NormalizeVariables(mg, props);
         core::Visualize(view, mg, props);
-
     }
 
     return 0;
