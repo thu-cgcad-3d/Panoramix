@@ -1,11 +1,15 @@
 
-//extern "C" {
+extern "C" {
+    #include <gpc.h>
 //    #include <mosek.h>
-//}
+}
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include <unsupported/Eigen/NonLinearOptimization>
 #include <unsupported/Eigen/NumericalDiff>
+
+//
+#include <GCoptimization.h>
 
 //
 #include "algorithms.hpp"
@@ -36,10 +40,10 @@ namespace panoramix {
             for (auto & c : mg.constraints<RegionBoundaryData>()){
                 fun(c.topo.hd);
             }
-            for (auto & c : mg.components<LineRelationData>()){
+            for (auto & c : mg.constraints<LineRelationData>()){
                 fun(c.topo.hd);
             }
-            for (auto & c : mg.components<RegionLineConnectionData>()){
+            for (auto & c : mg.constraints<RegionLineConnectionData>()){
                 fun(c.topo.hd);
             }
         }
@@ -1011,9 +1015,37 @@ namespace panoramix {
 
 
 
+        namespace {
 
+            template <class FunctorT>
+            struct DataCostFunctorWrapper : GCoptimization::DataCostFunctor{
+                inline DataCostFunctorWrapper(FunctorT && f) : fun(std::forward<FunctorT>(f)) {}
+                virtual GCoptimization::EnergyTermType compute(GCoptimization::SiteID s, GCoptimization::LabelID l) override {
+                    return fun(s, l);
+                }
+                FunctorT fun;
+            };
+            template <class FunctorT>
+            inline DataCostFunctorWrapper<FunctorT> * AllocDataCostFunctor(FunctorT && f) {
+                return new DataCostFunctorWrapper<FunctorT>(std::forward<FunctorT>(f));
+            }
 
+            template <class FunctorT>
+            struct SmoothCostFunctorWrapper : GCoptimization::SmoothCostFunctor {
+                inline SmoothCostFunctorWrapper(FunctorT && f) : fun(std::forward<FunctorT>(f)){}
+                virtual GCoptimization::EnergyTermType compute(
+                    GCoptimization::SiteID s1, GCoptimization::SiteID s2,
+                    GCoptimization::LabelID l1, GCoptimization::LabelID l2) override {
+                    return fun(s1, s2, l1, l2);
+                }
+                FunctorT fun;
+            };
+            template <class FunctorT>
+            inline SmoothCostFunctorWrapper<FunctorT> * AllocSmoothCostFunctor(FunctorT && f) {
+                return new SmoothCostFunctorWrapper<FunctorT>(std::forward<FunctorT>(f));
+            }
 
+        }
 
 
 
@@ -1039,6 +1071,328 @@ namespace panoramix {
 
 
 
+        namespace {
+
+            class GPCPolygon {
+            public:
+                GPCPolygon() : _p(nullptr) {}
+                explicit GPCPolygon(gpc_polygon * p) : _p(p) {}
+                template <class T>
+                GPCPolygon(const std::vector<std::vector<Point<T, 2>>> & pts) {
+                    _p = new gpc_polygon;
+                    auto & poly = *_p;
+                    poly.num_contours = pts.size();
+                    poly.contour = new gpc_vertex_list[pts.size()];
+                    for (int k = 0; k < pts.size(); k++){
+                        poly.contour[k].num_vertices = pts[k].size();
+                        poly.contour[k].vertex = new gpc_vertex[pts[k].size()];
+                        for (int i = 0; i < pts[k].size(); i++){
+                            poly.contour[k].vertex[i].x = pts[k][i][0];
+                            poly.contour[k].vertex[i].y = pts[k][i][1];
+                        }
+                    }
+                    poly.hole = new int[pts.size()];
+                    std::fill(poly.hole, poly.hole + pts.size(), 0);
+                }
+                GPCPolygon(const GPCPolygon & p) = delete;
+                GPCPolygon(GPCPolygon && p) {
+                    _p = p._p;
+                    p._p = nullptr;
+                }
+                GPCPolygon & operator = (const GPCPolygon & p) = delete;
+                GPCPolygon & operator = (GPCPolygon && p) {
+                    std::swap(_p, p._p);
+                    return *this;
+                }
+
+                ~GPCPolygon(){
+                    if (!_p)
+                        return;
+                    gpc_free_polygon(_p);
+                    delete _p;
+                    _p = nullptr;
+                }
+                template <class T>
+                operator std::vector<std::vector<Point<T, 2>>>() const {
+                    std::vector<std::vector<Point<T, 2>>> pts;
+                    auto & poly = *_p;
+                    pts.reserve(poly.num_contours);
+                    for (int k = 0; k < poly.num_contours; k++){
+                        if (poly.hole[k])
+                            continue;
+
+                        std::vector<Point<T, 2>> ps(poly.contour[k].num_vertices);
+                        for (int i = 0; i < ps.size(); i++){
+                            ps[i][0] = static_cast<T>(poly.contour[k].vertex[i].x);
+                            ps[i][1] = static_cast<T>(poly.contour[k].vertex[i].y);
+                        }
+                        pts.push_back(std::move(ps));
+                    }
+                    return pts;
+                }
+            public:
+                GPCPolygon clipWith(gpc_op op, const GPCPolygon & clipPoly) const {
+                    GPCPolygon result(new gpc_polygon);
+                    gpc_polygon_clip(op, _p, clipPoly._p, result._p);
+                    return result;
+                }
+
+                inline GPCPolygon operator - (const GPCPolygon & clipPoly) const {
+                    return clipWith(GPC_DIFF, clipPoly);
+                }
+                inline GPCPolygon operator & (const GPCPolygon & clipPoly) const {
+                    return clipWith(GPC_INT, clipPoly);
+                }
+                inline GPCPolygon operator ^ (const GPCPolygon & clipPoly) const {
+                    return clipWith(GPC_XOR, clipPoly);
+                }
+                inline GPCPolygon operator | (const GPCPolygon & clipPoly) const {
+                    return clipWith(GPC_UNION, clipPoly);
+                }
+
+            private:
+                gpc_polygon * _p;
+            };
+
+
+
+            enum class OrientationHint {
+                Void,
+                Horizontal,
+                OtherPlanar,
+                NonPlanar,
+                Count
+            };
+
+            inline OrientationHint ToOrientationHint(GeometricContextLabel label){
+                switch (label){
+                case GeometricContextLabel::Ceiling: return OrientationHint::Horizontal;
+                case GeometricContextLabel::Floor: return OrientationHint::Horizontal;
+                case GeometricContextLabel::Front:
+                case GeometricContextLabel::Left:
+                case GeometricContextLabel::Right:
+                    return OrientationHint::OtherPlanar;
+                case GeometricContextLabel::Furniture: return OrientationHint::OtherPlanar;
+                case GeometricContextLabel::Ground: return OrientationHint::Horizontal;
+                case GeometricContextLabel::Sky: return OrientationHint::Void;
+                case GeometricContextLabel::Vertical: return OrientationHint::OtherPlanar;
+                case GeometricContextLabel::NotPlanar: return OrientationHint::NonPlanar;
+                default:
+                    return OrientationHint::Void;
+                }
+            }
+
+            struct ConstraintUsableFlagUpdater {
+                const MixedGraph & mg;
+                MixedGraphPropertyTable & props;
+                template <class T>
+                void operator()(ConstraintHandle<T> h) const {
+                    props[h].used = props[mg.topo(h).component<0>()].used && props[mg.topo(h).component<1>()].used;
+                }
+            };
+
+        }
+
+
+
+        MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps,
+            const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
+            const std::vector<PerspectiveCamera> & gcCameras){
+
+            MixedGraphPropertyTable props = { vps, 
+                MakeHandledTableForComponents<MixedGraphComponentProperty>(mg), 
+                MakeHandledTableForConstraints<MixedGraphConstraintProperty>(mg)
+            };
+
+            HandledTable<RegionHandle, std::unordered_map<OrientationHint, double>> orientationVotes(
+                mg.internalComponents<RegionData>().size(),
+                std::unordered_map<OrientationHint, double>((size_t)OrientationHint::Count));
+
+            assert(perspectiveGCs.size() == gcCameras.size());
+
+            // image rect
+            std::vector<GPCPolygon> imRectPolygons(perspectiveGCs.size());
+            for (int i = 0; i < perspectiveGCs.size(); i++){
+                int w = perspectiveGCs[i].begin()->second.cols;
+                int h = perspectiveGCs[i].begin()->second.rows;
+                imRectPolygons[i] = std::vector<std::vector<Point2f>>{{
+                    Point2f(0, 0), Point2f(w, 0),
+                    Point2f(w, h), Point2f(0, h)
+                }};
+            }
+
+            // initialize
+            THERE_ARE_BUGS_HERE("what if the projection of a region onto a perspective image plane is too large that...");
+            for (auto & r : mg.components<RegionData>()){
+                auto h = r.topo.hd;
+                auto & contours = r.data.normalizedContours;
+                for (int i = 0; i < perspectiveGCs.size(); i++){
+                    int w = perspectiveGCs[i].begin()->second.cols;
+                    int h = perspectiveGCs[i].begin()->second.rows;
+                    // project contours to gc image
+                    double area = 0.0;
+                    std::vector<std::vector<Point2f>> contourProjs(contours.size());
+                    for (int k = 0; k < contours.size(); k++){
+                        auto & contourProj = contourProjs[k];
+                        contourProj.reserve(contours[k].size());
+                        for (auto & d : contours[k]){
+                            contourProj.push_back(vec_cast<float>(gcCameras[i].screenProjection(d)));
+                        }
+                        area += cv::contourArea(contourProj);
+                    }
+                    // clip contourProjs with image rect
+                    auto clippedContourProjs = (std::vector<std::vector<Point2i>>)(GPCPolygon(contourProjs) & imRectPolygons[i]);
+                    double clippedArea = 0.0;
+                    for (auto & c : clippedContourProjs){
+                        clippedArea += cv::contourArea(c);
+                    }
+                    // remove small pieces
+                    clippedContourProjs.erase(std::remove_if(clippedContourProjs.begin(), clippedContourProjs.end(),
+                        [](const std::vector<Point2i> & c){
+                        return c.size() <= 2;
+                    }), clippedContourProjs.end());
+
+                    if (clippedContourProjs.empty()){
+                        continue;
+                    }
+
+                    // get bounding rect
+                    Box<int, 2> bbox;
+                    for (auto & c : clippedContourProjs){
+                        bbox |= BoundingBoxOfContainer(c);
+                    }
+                    assert(bbox.minCorner[0] >= 0 && bbox.maxCorner[0] <= w);
+                    assert(bbox.minCorner[1] >= 0 && bbox.maxCorner[1] <= h);
+
+                    bbox.minCorner[0] = BoundBetween(bbox.minCorner[0], 0, w - 1);
+                    bbox.minCorner[1] = BoundBetween(bbox.minCorner[1], 0, h - 1);
+                    bbox.maxCorner[0] = BoundBetween(bbox.maxCorner[0], 0, w - 1);
+                    bbox.maxCorner[1] = BoundBetween(bbox.maxCorner[1], 0, h - 1);
+
+                    cv::Rect roi(bbox.minCorner[0], bbox.minCorner[1],
+                        bbox.maxCorner[0] - bbox.minCorner[0], 
+                        bbox.maxCorner[1] - bbox.minCorner[1]);
+                    Imageub mask = Imageub::zeros(roi.size());
+                    cv::fillPoly(mask, clippedContourProjs, (uint8_t)255, 8, 0, -roi.tl());
+
+                    // get gc label
+                    GeometricContextLabel maxLabel = GeometricContextLabel::None;
+                    double maxVote = 0.0;
+                    for (auto & gcc : perspectiveGCs[i]){
+                        auto label = gcc.first;
+                        auto & gc = gcc.second;
+                        Imaged gcROI(gc, roi);
+                        double vote = cv::mean(gcROI, mask).val[0];
+                        if (vote > maxVote){
+                            maxVote = vote;
+                            maxLabel = label;
+                        }
+                    }
+                    if (maxLabel != GeometricContextLabel::None){
+                        orientationVotes[r.topo.hd][ToOrientationHint(maxLabel)] += clippedArea / area;
+                    }
+                }
+            }
+
+            // optimize
+            GCoptimizationGeneralGraph graph(mg.internalComponents<RegionData>().size(), (int)OrientationHint::Count);
+
+            double maxBoundaryLength = 0;
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
+                maxBoundaryLength = std::max(maxBoundaryLength, b.data.length);
+            }
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
+                graph.setNeighbors(b.topo.component<0>().id, b.topo.component<1>().id,
+                    100 * b.data.length / maxBoundaryLength);
+            }
+            for (auto & r : mg.components<RegionData>()){
+                auto & orientationVote = orientationVotes[r.topo.hd];
+                // normalize votes
+                double votesSum = 0.0;
+                for (auto & v : orientationVote){
+                    votesSum += v.second;
+                }
+                assert(votesSum >= 0.0);
+                for (auto & v : orientationVote){
+                    assert(v.second >= 0.0);
+                    assert(votesSum > 0.0);
+                    v.second /= votesSum;
+                }
+                for (int label = 0; label < (int)OrientationHint::Count; label++){
+                    double vote = Contains(orientationVote, (OrientationHint)label) ?
+                        orientationVote.at((OrientationHint)label) : 0.0;
+                    graph.setDataCost(r.topo.hd.id, label,
+                        orientationVote.empty() ? 0 : (10000 * (1.0 - vote)));
+                }
+            }
+            for (int label1 = 0; label1 < (int)OrientationHint::Count; label1++){
+                for (int label2 = 0; label2 < (int)OrientationHint::Count; label2++){
+                    if (label1 == label2){
+                        graph.setSmoothCost(label1, label2, 0);
+                    }
+                    else{
+                        graph.setSmoothCost(label1, label2, 1);
+                    }
+                }
+            }
+
+            graph.expansion();
+            graph.swap();
+
+            // get the most vertical vp id
+            int vVPId = -1;
+            double angleToVert = std::numeric_limits<double>::max();
+            for (int i = 0; i < props.vanishingPoints.size(); i++){
+                double a = AngleBetweenUndirectedVectors(props.vanishingPoints[i], Vec3(0, 0, 1));
+                if (a < angleToVert){
+                    vVPId = i;
+                    angleToVert = a;
+                }
+            }
+            assert(vVPId != -1);
+
+            // install gc labels
+            for (auto & r : mg.components<RegionData>()){
+                OrientationHint oh = (OrientationHint)(graph.whatLabel(r.topo.hd.id));
+                switch (oh) {
+                case OrientationHint::Void:
+                    props[r.topo.hd].used = false;
+                    props[r.topo.hd].orientationClaz = -1;
+                    props[r.topo.hd].orientationNotClaz = -1;
+                    break;
+                case OrientationHint::Horizontal:
+                    props[r.topo.hd].used = true;
+                    props[r.topo.hd].orientationClaz = vVPId;
+                    props[r.topo.hd].orientationNotClaz = -1;
+                    break;
+                case OrientationHint::OtherPlanar:
+                    props[r.topo.hd].used = true;
+                    props[r.topo.hd].orientationClaz = -1;
+                    props[r.topo.hd].orientationNotClaz = -1;
+                    break;
+                case OrientationHint::NonPlanar:
+                    props[r.topo.hd].used = false;
+                    props[r.topo.hd].orientationClaz = -1;
+                    props[r.topo.hd].orientationNotClaz = -1;
+                    break;
+                default:
+                    assert(0);
+                    break;
+                }
+            }
+
+            for (auto & l : mg.internalComponents<LineData>()){
+                props[l.topo.hd].orientationClaz = l.data.initialClaz;
+                props[l.topo.hd].orientationNotClaz = -1;
+            }
+
+            ForeachMixedGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
+
+            return props;
+        }
+
+
+
 
 
         namespace {
@@ -1058,6 +1412,10 @@ namespace panoramix {
 
                 void operator()(const LineHandle & lh) const {
                     auto & lp = props.componentProperties[lh];
+                    if (!lp.used){
+                        lp.variables = {};
+                        return;
+                    }
                     if (lp.orientationClaz == -1){
                         // (1/cornerDepth1, 1/cornerDepth2) for LineFree
                         lp.variables = { 1.0, 1.0 };
@@ -1071,6 +1429,10 @@ namespace panoramix {
                 void operator()(const RegionHandle & rh) const {
                     auto & rd = mg.data(rh);
                     auto & rp = props.componentProperties[rh];
+                    if (!rp.used){
+                        rp.variables = {};
+                        return;
+                    }
                     if (rp.orientationClaz == -1 && rp.orientationNotClaz == -1){
                         // (a, b, c) for RegionFree ax+by+c=1, 
                         rp.variables = { rd.normalizedCenter[0], rd.normalizedCenter[1], rd.normalizedCenter[2] };
@@ -1092,7 +1454,6 @@ namespace panoramix {
                 }
             };
 
-            
         }
 
 
@@ -1103,7 +1464,9 @@ namespace panoramix {
 
         Line3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const LineHandle & lh){
             auto & ld = mg.data(lh);
-            auto & lp = props.componentProperties.at(lh);
+            auto & lp = props[lh];
+            //if (!lp.used)
+            //    return Line3();
             if (lp.orientationClaz >= 0){
                 assert(lp.variables.size() == 1);
                 InfiniteLine3 infLine(normalize(ld.line.center()) / lp.variables[0], props.vanishingPoints[lp.orientationClaz]);
@@ -1126,7 +1489,9 @@ namespace panoramix {
 
         Plane3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const RegionHandle & rh){
             auto & rd = mg.data(rh);
-            auto & rp = props.componentProperties.at(rh);
+            auto & rp = props[rh];
+            /*if (!rp.used)
+                return Plane3();*/
             if (rp.orientationClaz >= 0){
                 assert(rp.variables.size() == 1);
                 return Plane3(rd.normalizedCenter / rp.variables[0], props.vanishingPoints[rp.orientationClaz]);
@@ -1385,6 +1750,7 @@ namespace panoramix {
                     auto bh = c.topo.hd;
                     auto uh1 = mg.topo(bh).component<0>();
                     auto uh2 = mg.topo(bh).component<1>();
+                    assert(props[uh1].used || props[uh2].used);
                     auto & u1 = mg.data(uh1);
                     auto & u2 = mg.data(uh2);
 
@@ -1435,21 +1801,29 @@ namespace panoramix {
 
                 varNum = 0;
                 for (auto & c : mg.components<LineData>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
                     uh2varStartPosition[c.topo.hd] = varNum;
                     varNum += props[c.topo.hd].variables.size();
                 }
                 for (auto & c : mg.components<RegionData>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
                     uh2varStartPosition[c.topo.hd] = varNum;
                     varNum += props[c.topo.hd].variables.size();
                 }
 
                 X.resize(varNum);
                 for (auto & c : mg.components<LineData>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
                     for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
                         X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
                     }
                 }
                 for (auto & c : mg.components<RegionData>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
                     for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
                         X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
                     }
@@ -1500,6 +1874,8 @@ namespace panoramix {
                     double maxArea = 0.0;
                     RegionHandle rhAnchored;
                     for (auto & c : mg.components<RegionData>()){
+                        if (!props[c.topo.hd].used)
+                            continue;
                         if (c.data.area > maxArea){
                             rhAnchored = c.topo.hd;
                             maxArea = c.data.area;
@@ -1596,12 +1972,16 @@ namespace panoramix {
 
 
             for (auto & c : mg.components<RegionData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
                 for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
                     props[c.topo.hd].variables[i] = X(uhStartPosition + i);
                 }
             }
             for (auto & c : mg.components<LineData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
                 for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
                     props[c.topo.hd].variables[i] = X(uhStartPosition + i);
@@ -1681,10 +2061,14 @@ namespace panoramix {
 
             varNum = 0;
             for (auto & c : mg.components<LineData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 uh2varStartPosition[c.topo.hd] = varNum;
                 varNum += props[c.topo.hd].variables.size();
             }
             for (auto & c : mg.components<RegionData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 uh2varStartPosition[c.topo.hd] = varNum;
                 varNum += props[c.topo.hd].variables.size();
             }
@@ -1692,11 +2076,15 @@ namespace panoramix {
             VectorXd X;
             X.resize(varNum);
             for (auto & c : mg.components<LineData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
                     X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
                 }
             }
             for (auto & c : mg.components<RegionData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
                     X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
                 }
@@ -1713,6 +2101,8 @@ namespace panoramix {
                 // largest plane
                 double maxArea = 0.0;
                 for (auto & c : mg.components<RegionData>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
                     if (c.data.area > maxArea){
                         rhAnchored = c.topo.hd;
                         maxArea = c.data.area;
@@ -1825,12 +2215,16 @@ namespace panoramix {
 
             // install X
             for (auto & c : mg.components<RegionData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
                 for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
                     props[c.topo.hd].variables[i] = X(uhStartPosition + i);
                 }
             }
             for (auto & c : mg.components<LineData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
                 for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
                     props[c.topo.hd].variables[i] = X(uhStartPosition + i);
@@ -1844,11 +2238,15 @@ namespace panoramix {
 
         void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
             for (auto & c : mg.components<RegionData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 for (auto & v : props[c.topo.hd].variables){
                     assert(!IsInfOrNaN(v));
                 }
             }
             for (auto & c : mg.components<LineData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 for (auto & v : props[c.topo.hd].variables){
                     assert(!IsInfOrNaN(v));
                 }
@@ -1857,6 +2255,8 @@ namespace panoramix {
             std::vector<double> centerDepths;
             centerDepths.reserve(mg.internalComponents<RegionData>().size() + mg.internalComponents<LineData>().size());
             for (auto & c : mg.components<RegionData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 double d = DepthAt(c.data.normalizedCenter, Instance(mg, props, c.topo.hd));
                 if (!IsInfOrNaN(d)){
                     centerDepths.push_back(d);
@@ -1864,6 +2264,8 @@ namespace panoramix {
                 assert(!IsInfOrNaN(centerDepths.back()));
             }
             for (auto & c : mg.components<LineData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 double d = DepthAt(normalize(c.data.line.center()), Instance(mg, props, c.topo.hd));
                 if (!IsInfOrNaN(d)){
                     centerDepths.push_back(d);
@@ -1878,11 +2280,15 @@ namespace panoramix {
 
             // normalize variables
             for (auto & c : mg.components<RegionData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
                     props[c.topo.hd].variables[i] *= medianCenterDepth;
                 }
             }
             for (auto & c : mg.components<LineData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
                 for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
                     props[c.topo.hd].variables[i] *= medianCenterDepth;
                 }
@@ -1899,6 +2305,8 @@ namespace panoramix {
             // lines
             double maxLineSpanAngle = 0.0;
             for (auto & l : mg.components<LineData>()){
+                if (!props[l.topo.hd].used)
+                    continue;
                 double lineSpanAngle = AngleBetweenDirections(l.data.line.first, l.data.line.second);
                 if (lineSpanAngle > maxLineSpanAngle)
                     maxLineSpanAngle = lineSpanAngle;
@@ -1908,6 +2316,8 @@ namespace panoramix {
             HandledTable<RegionHandle, Plane3> planes(mg.internalComponents<RegionData>().size());
 
             for (auto & l : mg.components<LineData>()){
+                if (!props[l.topo.hd].used)
+                    continue;
                 lines[l.topo.hd] = Instance(mg, props, l.topo.hd);
 
                 double fitness = 0.0;
@@ -1939,12 +2349,16 @@ namespace panoramix {
             // regions
             double maxRegionArea = 0.0;
             for (auto & r : mg.components<RegionData>()){
+                if (!props[r.topo.hd].used)
+                    continue;
                 if (r.data.area > maxRegionArea){
                     maxRegionArea = r.data.area;
                 }
             }
 
             for (auto & r : mg.components<RegionData>()){
+                if (!props[r.topo.hd].used)
+                    continue;
                 planes[r.topo.hd] = Instance(mg, props, r.topo.hd);
 
                 double fitness = 0.0;
@@ -1979,7 +2393,7 @@ namespace panoramix {
             double sumOfNotUsedConstraintWeights = 0.0;
             for (auto & c : mg.constraints<RegionBoundaryData>()){
                 static const double typeWeight = 1.0;
-                if (!props.constraintProperties[c.topo.hd].used){
+                if (!props[c.topo.hd].used){
                     sumOfNotUsedConstraintWeights += ElementsNum(c.data.normalizedSampledPoints) * typeWeight;
                     continue;
                 }
@@ -2008,7 +2422,7 @@ namespace panoramix {
             }
             for (auto & c : mg.constraints<LineRelationData>()){
                 static const double typeWeight = 8.0;
-                if (!props.constraintProperties[c.topo.hd].used){
+                if (!props[c.topo.hd].used){
                     sumOfNotUsedConstraintWeights += c.data.junctionWeight / maxJunctionWeight * typeWeight;
                     continue;
                 }
@@ -2026,7 +2440,7 @@ namespace panoramix {
             }
             for (auto & c : mg.constraints<RegionLineConnectionData>()){
                 static const double typeWeight = 1.0;
-                if (!props.constraintProperties[c.topo.hd].used){
+                if (!props[c.topo.hd].used){
                     sumOfNotUsedConstraintWeights += ElementsNum(c.data.normalizedAnchors) * typeWeight;
                     continue;
                 }
@@ -2101,6 +2515,8 @@ namespace panoramix {
                     std::vector<vis::Colored<core::Line3>> lines;
 
                     for (auto & c : mg.components<RegionData>()){
+                        if (!props[c.topo.hd].used)
+                            continue;
                         auto uh = c.topo.hd;
                         auto & region = c.data;
                         vis::SpatialProjectedPolygon spp;
@@ -2120,6 +2536,8 @@ namespace panoramix {
                     }
 
                     for (auto & c : mg.components<LineData>()){
+                        if (!props[c.topo.hd].used)
+                            continue;
                         auto uh = c.topo.hd;
                         auto & line = c.data;
                         lines.push_back(vis::ColorAs(Instance(mg, props, uh), uhColorizer(uh)));
@@ -2132,6 +2550,8 @@ namespace panoramix {
 
                     std::vector<core::Line3> connectionLines;
                     for (auto & c : mg.constraints<RegionBoundaryData>()){
+                        if (!props[c.topo.hd].used)
+                            continue;
                         auto & samples = c.data.normalizedSampledPoints;
                         auto inst1 = Instance(mg, props, c.topo.component<0>());
                         auto inst2 = Instance(mg, props, c.topo.component<1>());
@@ -2144,6 +2564,8 @@ namespace panoramix {
                         }
                     }
                     for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                        if (!props[c.topo.hd].used)
+                            continue;
                         auto inst1 = Instance(mg, props, c.topo.component<0>());
                         auto inst2 = Instance(mg, props, c.topo.component<1>());
                         for (auto & s : c.data.normalizedAnchors){

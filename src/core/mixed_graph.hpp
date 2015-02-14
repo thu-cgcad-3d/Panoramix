@@ -127,15 +127,14 @@ namespace panoramix {
 
 
 
-
-
         struct MixedGraphComponentProperty {
+            bool used; // not used for void/non-planar areas
             int orientationClaz;
             int orientationNotClaz; // if region is tangential with some vp ?
             std::vector<double> variables;
             template <class Archiver>
             inline void serialize(Archiver & ar) {
-                ar(orientationClaz, orientationNotClaz, variables);
+                ar(used, orientationClaz, orientationNotClaz, variables);
             }
         };
         struct MixedGraphConstraintProperty {
@@ -178,10 +177,11 @@ namespace panoramix {
             }
         };
         MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps);
+        MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps,
+            const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
+            const std::vector<PerspectiveCamera> & gcCameras);
 
 
-
-        
         void InitializeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
 
         Line3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const LineHandle & lh);

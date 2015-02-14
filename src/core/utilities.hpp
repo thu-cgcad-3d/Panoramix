@@ -433,11 +433,13 @@ namespace panoramix {
             return v == 0 ? 1 : 0;
         }
 
+        // [low, high]
         template <class T, class K1, class K2>
         inline bool IsBetween(const T & v, const K1 & low, const K2 & high) {
             return !(v < low) && !(high < v);
         }
 
+        // [low, high]
         template <class T, class K1, class K2>
         inline T BoundBetween(const T & v, const K1 & low, const K2 & high) {
             if (v < low)

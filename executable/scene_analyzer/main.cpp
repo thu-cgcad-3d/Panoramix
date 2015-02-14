@@ -8,8 +8,8 @@ int main(int argc, char ** argv) {
     std::string filename;
     if (argc < 2){
         std::cout << "no input" << std::endl;
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
-        filename = PROJECT_TEST_DATA_DIR_STR"/normal/room1.jpg";
+        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/normal/room.png";
     }
     else{
         filename = argv[1];
@@ -23,64 +23,96 @@ int main(int argc, char ** argv) {
     std::cout << "is panorama: " << (isPanorama ? "yes" : "no") << std::endl;
 
     if (isPanorama){
-        auto view = core::CreatePanoramicView(image);
+        core::View<core::PanoramicCamera> view;
 
-        // collect lines in each view
-        auto cams = core::CreateCubicFacedCameras(view.camera);
-        std::vector<std::vector<core::Classified<core::Line2>>> lines(cams.size());
-        std::vector<core::Image> images(cams.size());
-        for (int i = 0; i < cams.size(); i++){
-            images[i] = view.sampled(cams[i]).image;
-            core::LineSegmentExtractor lineExtractor;
-            lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
-            auto ls = lineExtractor(images[i]);
-            lines[i].reserve(ls.size());
-            for (auto & l : ls){
-                lines[i].push_back(core::ClassifyAs(l, -1));
-            }
-        }
+        std::vector<core::PerspectiveCamera> cams;
+        std::vector<std::vector<core::Classified<core::Line2>>> lines;
+        std::vector<core::Vec3> vps;
 
-        // estimate vp
-        auto vps = core::EstimateVanishingPointsAndClassifyLines(cams, lines);
+        std::vector<core::PerspectiveCamera> hCams; // horizontal cams
+        std::vector<core::GeometricContextEstimator::Feature> gcs;
+
+        core::Imagei segmentedImage;
 
         core::MixedGraph mg;
+        core::MixedGraphPropertyTable props;
 
-        // append lines
-        for (int i = 0; i < cams.size(); i++){
-            core::AppendLines(mg, lines[i], cams[i], vps);
-        }
 
-        // append regions
-        // make 3d lines
-        std::vector<core::Line3> line3ds;
-        for (int i = 0; i < cams.size(); i++){
-            for (auto & l : lines[i]){
-                line3ds.emplace_back(normalize(cams[i].spatialDirection(l.component.first)), 
-                    normalize(cams[i].spatialDirection(l.component.second)));
+        if (1){
+            view = core::CreatePanoramicView(image);
+
+            // collect lines in each view
+            cams = core::CreateCubicFacedCameras(view.camera);
+            lines.resize(cams.size());
+            for (int i = 0; i < cams.size(); i++){
+                auto pim = view.sampled(cams[i]).image;
+                core::LineSegmentExtractor lineExtractor;
+                lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
+                auto ls = lineExtractor(pim);
+                lines[i].reserve(ls.size());
+                for (auto & l : ls){
+                    lines[i].push_back(core::ClassifyAs(l, -1));
+                }
             }
-        }
-        core::SegmentationExtractor segmenter;
-        segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
-        segmenter.params().c = 100.0;
-        auto segmentedImage = segmenter(view.image, line3ds, view.camera).first;
-        //vis::Visualizer2D(segmentedImage) << vis::manip2d::Show();
-        //int segmentsNum = core::MinMaxValOfImage(segmentedImage).second + 1;
 
-        core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
+            // estimate vp
+            vps = core::EstimateVanishingPointsAndClassifyLines(cams, lines);
+
+            // collect gcs in each horizontal view
+            hCams = core::CreateHorizontalPerspectiveCameras(view.camera, 8);
+            gcs.resize(hCams.size());
+            for (int i = 0; i < hCams.size(); i++){
+                auto pim = view.sampled(hCams[i]).image;
+                core::GeometricContextEstimator gce;
+                gcs[i] = gce(pim, core::SceneClass::Indoor);
+            }
+
+
+            // append lines
+            for (int i = 0; i < cams.size(); i++){
+                core::AppendLines(mg, lines[i], cams[i], vps);
+            }
+
+            // append regions
+            // make 3d lines
+            std::vector<core::Line3> line3ds;
+            for (int i = 0; i < cams.size(); i++){
+                for (auto & l : lines[i]){
+                    line3ds.emplace_back(normalize(cams[i].spatialDirection(l.component.first)),
+                        normalize(cams[i].spatialDirection(l.component.second)));
+                }
+            }
+            core::SegmentationExtractor segmenter;
+            segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
+            segmenter.params().c = 100.0;
+            segmentedImage = segmenter(view.image, line3ds, view.camera).first;
+            //vis::Visualizer2D(segmentedImage) << vis::manip2d::Show();
+            //int segmentsNum = core::MinMaxValOfImage(segmentedImage).second + 1;
+
+            core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
+
+            core::SaveToDisk("./cache/all", view, cams, lines, vps, hCams, gcs, segmentedImage, mg, props);
+        }
+        else{
+            core::LoadFromDisk("./cache/all", view, cams, lines, vps, hCams, gcs, segmentedImage, mg, props);
+        }
 
         // optimize
-        auto props = core::MakeMixedGraphPropertyTable(mg, vps);
-        core::InitializeVariables(mg, props);
-        core::Visualize(view, mg, props);
+        if (1){
+            props = core::MakeMixedGraphPropertyTable(mg, vps, gcs, hCams);
+            core::InitializeVariables(mg, props);
+            core::Visualize(view, mg, props);
 
-        double scoreBefore = core::ComputeScore(mg, props);
-        std::cout << "score before = " << scoreBefore << std::endl;
-        
-        core::SolveVariablesUsingInversedDepths(mg, props);
+            double scoreBefore = core::ComputeScore(mg, props);
+            std::cout << "score before = " << scoreBefore << std::endl;
 
-        core::SaveToDisk("./cache/view", view);
-        core::SaveToDisk("./cache/mg", mg);
-        core::SaveToDisk("./cache/props", props);
+            core::SolveVariablesUsingInversedDepths(mg, props);
+
+            core::SaveToDisk("./cache/mgp", mg, props);
+        }
+        else{
+            core::LoadFromDisk("./cache/mgp", mg, props);
+        }
 
         core::NormalizeVariables(mg, props);
 
