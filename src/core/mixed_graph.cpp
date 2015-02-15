@@ -1159,12 +1159,15 @@ namespace panoramix {
             enum class OrientationHint {
                 Void,
                 Horizontal,
+                Vertical,
                 OtherPlanar,
                 NonPlanar,
                 Count
             };
 
             inline OrientationHint ToOrientationHint(GeometricContextLabel label){
+                //THERE_ARE_BUGS_HERE("Only OtherPlanar is returned!");
+                //return OrientationHint::OtherPlanar;
                 switch (label){
                 case GeometricContextLabel::Ceiling: return OrientationHint::Horizontal;
                 case GeometricContextLabel::Floor: return OrientationHint::Horizontal;
@@ -1172,7 +1175,7 @@ namespace panoramix {
                 case GeometricContextLabel::Left:
                 case GeometricContextLabel::Right:
                     return OrientationHint::OtherPlanar;
-                case GeometricContextLabel::Furniture: return OrientationHint::OtherPlanar;
+                case GeometricContextLabel::Furniture: return OrientationHint::Void;
                 case GeometricContextLabel::Ground: return OrientationHint::Horizontal;
                 case GeometricContextLabel::Sky: return OrientationHint::Void;
                 case GeometricContextLabel::Vertical: return OrientationHint::OtherPlanar;
@@ -1186,7 +1189,7 @@ namespace panoramix {
                 const MixedGraph & mg;
                 MixedGraphPropertyTable & props;
                 template <class T>
-                void operator()(ConstraintHandle<T> h) const {
+                inline void operator()(ConstraintHandle<T> h) const {
                     props[h].used = props[mg.topo(h).component<0>()].used && props[mg.topo(h).component<1>()].used;
                 }
             };
@@ -1197,7 +1200,7 @@ namespace panoramix {
 
         MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps,
             const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
-            const std::vector<PerspectiveCamera> & gcCameras){
+            const std::vector<PerspectiveCamera> & gcCameras, int shrinkRegionOrientationIteration){
 
             MixedGraphPropertyTable props = { vps, 
                 MakeHandledTableForComponents<MixedGraphComponentProperty>(mg), 
@@ -1210,86 +1213,64 @@ namespace panoramix {
 
             assert(perspectiveGCs.size() == gcCameras.size());
 
-            // image rect
-            std::vector<GPCPolygon> imRectPolygons(perspectiveGCs.size());
-            for (int i = 0; i < perspectiveGCs.size(); i++){
-                int w = perspectiveGCs[i].begin()->second.cols;
-                int h = perspectiveGCs[i].begin()->second.rows;
-                imRectPolygons[i] = std::vector<std::vector<Point2f>>{{
-                    Point2f(0, 0), Point2f(w, 0),
-                    Point2f(w, h), Point2f(0, h)
-                }};
-            }
-
-            // initialize
-            THERE_ARE_BUGS_HERE("what if the projection of a region onto a perspective image plane is too large that...");
+            // region views
+            HandledTable<RegionHandle, View<PartialPanoramicCamera, Imageub>> regionMaskViews(mg.internalComponents<RegionData>().size());
             for (auto & r : mg.components<RegionData>()){
                 auto h = r.topo.hd;
                 auto & contours = r.data.normalizedContours;
-                for (int i = 0; i < perspectiveGCs.size(); i++){
-                    int w = perspectiveGCs[i].begin()->second.cols;
-                    int h = perspectiveGCs[i].begin()->second.rows;
-                    // project contours to gc image
-                    double area = 0.0;
-                    std::vector<std::vector<Point2f>> contourProjs(contours.size());
-                    for (int k = 0; k < contours.size(); k++){
-                        auto & contourProj = contourProjs[k];
-                        contourProj.reserve(contours[k].size());
-                        for (auto & d : contours[k]){
-                            contourProj.push_back(vec_cast<float>(gcCameras[i].screenProjection(d)));
+                double radiusAngle = 0.0;               
+                for (auto & cs : r.data.normalizedContours){
+                    for (auto & c : cs){
+                        double angle = AngleBetweenDirections(r.data.normalizedCenter, c);
+                        if (angle > radiusAngle){
+                            radiusAngle = angle;
                         }
-                        area += cv::contourArea(contourProj);
                     }
-                    // clip contourProjs with image rect
-                    auto clippedContourProjs = (std::vector<std::vector<Point2i>>)(GPCPolygon(contourProjs) & imRectPolygons[i]);
-                    double clippedArea = 0.0;
-                    for (auto & c : clippedContourProjs){
-                        clippedArea += cv::contourArea(c);
+                }
+                float ppcFocal = 100.0f;
+                int ppcSize = 2 * radiusAngle * ppcFocal;
+                Vec3 x, y;
+                std::tie(x, y) = ProposeXYDirectionsFromZDirection(r.data.normalizedCenter);
+                PartialPanoramicCamera ppc(ppcSize, ppcSize, ppcFocal, Point3(0, 0, 0), r.data.normalizedCenter, x);
+                Imageub mask = Imageub::zeros(ppc.screenSize());
+
+                // project contours to ppc
+                std::vector<std::vector<Point2i>> contourProjs(contours.size());
+                for (int k = 0; k < contours.size(); k++){
+                    auto & contourProj = contourProjs[k];
+                    contourProj.reserve(contours[k].size());
+                    for (auto & d : contours[k]){
+                        contourProj.push_back(vec_cast<int>(ppc.screenProjection(d)));
                     }
-                    // remove small pieces
-                    clippedContourProjs.erase(std::remove_if(clippedContourProjs.begin(), clippedContourProjs.end(),
-                        [](const std::vector<Point2i> & c){
-                        return c.size() <= 2;
-                    }), clippedContourProjs.end());
+                }
+                cv::fillPoly(mask, contourProjs, (uint8_t)1);
+                regionMaskViews[h].camera = ppc;
+                regionMaskViews[h].image = mask;
+            }
 
-                    if (clippedContourProjs.empty()){
-                        continue;
-                    }
-
-                    // get bounding rect
-                    Box<int, 2> bbox;
-                    for (auto & c : clippedContourProjs){
-                        bbox |= BoundingBoxOfContainer(c);
-                    }
-                    assert(bbox.minCorner[0] >= 0 && bbox.maxCorner[0] <= w);
-                    assert(bbox.minCorner[1] >= 0 && bbox.maxCorner[1] <= h);
-
-                    bbox.minCorner[0] = BoundBetween(bbox.minCorner[0], 0, w - 1);
-                    bbox.minCorner[1] = BoundBetween(bbox.minCorner[1], 0, h - 1);
-                    bbox.maxCorner[0] = BoundBetween(bbox.maxCorner[0], 0, w - 1);
-                    bbox.maxCorner[1] = BoundBetween(bbox.maxCorner[1], 0, h - 1);
-
-                    cv::Rect roi(bbox.minCorner[0], bbox.minCorner[1],
-                        bbox.maxCorner[0] - bbox.minCorner[0], 
-                        bbox.maxCorner[1] - bbox.minCorner[1]);
-                    Imageub mask = Imageub::zeros(roi.size());
-                    cv::fillPoly(mask, clippedContourProjs, (uint8_t)255, 8, 0, -roi.tl());
-
-                    // get gc label
+            for (auto & r : mg.components<RegionData>()){
+                auto h = r.topo.hd;
+                auto & ppMask = regionMaskViews[h];
+                for (int i = 0; i < perspectiveGCs.size(); i++){
+                    auto sampler = MakeCameraSampler(ppMask.camera, gcCameras[i]);
+                    double area = cv::sum(ppMask.image).val[0];
+                    auto occupation = sampler(Imageub::ones(gcCameras[i].screenSize()), cv::BORDER_CONSTANT, 0.0);
+                    double areaOccupied = cv::sum(ppMask.image & occupation).val[0];
+                    double ratio = areaOccupied / area;
+                    assert(ratio <= 1.01);
                     GeometricContextLabel maxLabel = GeometricContextLabel::None;
-                    double maxVote = 0.0;
+                    double maxScore = 0.0;
                     for (auto & gcc : perspectiveGCs[i]){
                         auto label = gcc.first;
-                        auto & gc = gcc.second;
-                        Imaged gcROI(gc, roi);
-                        double vote = cv::mean(gcROI, mask).val[0];
-                        if (vote > maxVote){
-                            maxVote = vote;
+                        Imaged ppGC = sampler(gcc.second);
+                        double score = cv::mean(ppGC, ppMask.image).val[0];
+                        if (score > maxScore){
+                            maxScore = score;
                             maxLabel = label;
                         }
                     }
                     if (maxLabel != GeometricContextLabel::None){
-                        orientationVotes[r.topo.hd][ToOrientationHint(maxLabel)] += clippedArea / area;
+                        orientationVotes[r.topo.hd][ToOrientationHint(maxLabel)] += ratio;
                     }
                 }
             }
@@ -1313,16 +1294,17 @@ namespace panoramix {
                     votesSum += v.second;
                 }
                 assert(votesSum >= 0.0);
-                for (auto & v : orientationVote){
-                    assert(v.second >= 0.0);
-                    assert(votesSum > 0.0);
-                    v.second /= votesSum;
+                if (votesSum > 0.0){
+                    for (auto & v : orientationVote){
+                        assert(v.second >= 0.0);
+                        v.second /= votesSum;
+                    }
                 }
                 for (int label = 0; label < (int)OrientationHint::Count; label++){
                     double vote = Contains(orientationVote, (OrientationHint)label) ?
                         orientationVote.at((OrientationHint)label) : 0.0;
                     graph.setDataCost(r.topo.hd.id, label,
-                        orientationVote.empty() ? 0 : (10000 * (1.0 - vote)));
+                        votesSum == 0.0 ? 0 : (10000 * (1.0 - vote)));
                 }
             }
             for (int label1 = 0; label1 < (int)OrientationHint::Count; label1++){
@@ -1351,9 +1333,36 @@ namespace panoramix {
             }
             assert(vVPId != -1);
 
+            // free outside oriented gc labels
+            HandledTable<RegionHandle, OrientationHint> regionOrientations(mg.internalComponents<RegionData>().size());
+            for (auto & r : mg.components<RegionData>()){
+                regionOrientations[r.topo.hd] = (OrientationHint)(graph.whatLabel(r.topo.hd.id));
+            }
+
+            for (int i = 0; i < shrinkRegionOrientationIteration; i++){
+                auto shrinked = regionOrientations;
+                for (auto & b : mg.constraints<RegionBoundaryData>()){
+                    auto l1 = regionOrientations[b.topo.component<0>()];
+                    auto l2 = regionOrientations[b.topo.component<1>()];
+                    if (l1 == OrientationHint::Horizontal && l2 != OrientationHint::Horizontal){
+                        shrinked[b.topo.component<0>()] = OrientationHint::OtherPlanar;
+                    }
+                    else if (l1 != OrientationHint::Horizontal && l2 == OrientationHint::Horizontal){
+                        shrinked[b.topo.component<1>()] = OrientationHint::OtherPlanar;
+                    }
+                    if (l1 == OrientationHint::Vertical && l2 != OrientationHint::Vertical){
+                        shrinked[b.topo.component<0>()] = OrientationHint::OtherPlanar;
+                    }
+                    else if (l1 != OrientationHint::Vertical && l2 == OrientationHint::Vertical){
+                        shrinked[b.topo.component<1>()] = OrientationHint::OtherPlanar;
+                    }
+                }
+                regionOrientations = std::move(shrinked);
+            }
+
             // install gc labels
             for (auto & r : mg.components<RegionData>()){
-                OrientationHint oh = (OrientationHint)(graph.whatLabel(r.topo.hd.id));
+                OrientationHint oh = regionOrientations[r.topo.hd];
                 switch (oh) {
                 case OrientationHint::Void:
                     props[r.topo.hd].used = false;
@@ -1364,6 +1373,11 @@ namespace panoramix {
                     props[r.topo.hd].used = true;
                     props[r.topo.hd].orientationClaz = vVPId;
                     props[r.topo.hd].orientationNotClaz = -1;
+                    break;
+                case OrientationHint::Vertical:
+                    props[r.topo.hd].used = true;
+                    props[r.topo.hd].orientationClaz = -1;
+                    props[r.topo.hd].orientationNotClaz = vVPId;
                     break;
                 case OrientationHint::OtherPlanar:
                     props[r.topo.hd].used = true;
@@ -1382,6 +1396,7 @@ namespace panoramix {
             }
 
             for (auto & l : mg.internalComponents<LineData>()){
+                props[l.topo.hd].used = true;
                 props[l.topo.hd].orientationClaz = l.data.initialClaz;
                 props[l.topo.hd].orientationNotClaz = -1;
             }
@@ -2096,7 +2111,7 @@ namespace panoramix {
             if (addAnchor){
                 consNum++;
 
-                IMPROVABLE_HERE("find a most connected component to set the anchor");
+                //IMPROVABLE_HERE("find a most connected component to set the anchor");
 
                 // largest plane
                 double maxArea = 0.0;
@@ -2607,6 +2622,8 @@ namespace panoramix {
             inline vis::Color operator()(ComponentHandle<RegionData> rh) const{
                 double maxPlaneDist = 0.0;
                 for (auto & r : mg.components<RegionData>()){
+                    if (!props[r.topo.hd].used)
+                        continue;
                     double pdist = Instance(mg, props, r.topo.hd).distanceTo(Point3(0, 0, 0));
                     if (pdist > maxPlaneDist)
                         maxPlaneDist = pdist;

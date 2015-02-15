@@ -7,8 +7,6 @@
 #include "cons_graph.hpp"
 #include "cameras.hpp"
 
-#include "surface_labels.hpp"
-
 namespace panoramix {
     namespace core {
 
@@ -155,19 +153,19 @@ namespace panoramix {
             MixedGraphComponentPropertyTable componentProperties;
             MixedGraphConstraintPropertyTable constraintProperties;
             template <class DataT> 
-            MixedGraphComponentProperty & operator[](ComponentHandle<DataT> h) { 
+            inline MixedGraphComponentProperty & operator[](ComponentHandle<DataT> h) { 
                 return componentProperties[h]; 
             }
             template <class DataT>
-            const MixedGraphComponentProperty & operator[](ComponentHandle<DataT> h) const {
+            inline const MixedGraphComponentProperty & operator[](ComponentHandle<DataT> h) const {
                 return componentProperties[h]; 
             }
             template <class DataT>
-            MixedGraphConstraintProperty & operator[](ConstraintHandle<DataT> h) { 
+            inline MixedGraphConstraintProperty & operator[](ConstraintHandle<DataT> h) {
                 return constraintProperties[h]; 
             }
             template <class DataT>
-            const MixedGraphConstraintProperty & operator[](ConstraintHandle<DataT> h) const { 
+            inline const MixedGraphConstraintProperty & operator[](ConstraintHandle<DataT> h) const {
                 return constraintProperties[h]; 
             }
 
@@ -179,7 +177,7 @@ namespace panoramix {
         MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps);
         MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps,
             const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
-            const std::vector<PerspectiveCamera> & gcCameras);
+            const std::vector<PerspectiveCamera> & gcCameras, int shrinkRegionOrientationIteration = 1);
 
 
         void InitializeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);

@@ -94,6 +94,10 @@ namespace panoramix {
             HandledTable() {}
             explicit HandledTable(size_t maxSize) : data(maxSize) {}
             HandledTable(size_t maxSize, const DataT & d) : data(maxSize, d) {}
+
+            HandledTable(HandledTable && t) : data(std::move(t.data)) {}
+            HandledTable & operator = (HandledTable && t) { data = std::move(t.data); return *this; }
+
             void resize(size_t sz) { data.resize(sz); }
             const DataT & operator[](HandleT h) const { return data[h.id]; }
             const DataT & at(HandleT h) const { return data[h.id]; }

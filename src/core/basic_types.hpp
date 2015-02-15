@@ -76,7 +76,7 @@ namespace panoramix {
                 return out;
             }
             template <class To, int N>
-            inline Vec<To, N> VecCastPrivate(const Vec<To, N> & v, std::true_type) {
+            inline const Vec<To, N> & VecCastPrivate(const Vec<To, N> & v, std::true_type) {
                 return v;
             }
         }

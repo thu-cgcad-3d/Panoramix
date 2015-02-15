@@ -9,6 +9,7 @@ int main(int argc, char ** argv) {
     if (argc < 2){
         std::cout << "no input" << std::endl;
         filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/normal/room.png";
     }
     else{
@@ -38,7 +39,7 @@ int main(int argc, char ** argv) {
         core::MixedGraphPropertyTable props;
 
 
-        if (1){
+        if (0){
             view = core::CreatePanoramicView(image);
 
             // collect lines in each view
@@ -99,7 +100,34 @@ int main(int argc, char ** argv) {
 
         // optimize
         if (1){
-            props = core::MakeMixedGraphPropertyTable(mg, vps, gcs, hCams);
+            props = core::MakeMixedGraphPropertyTable(mg, vps, gcs, hCams, 2);
+
+            // visualize using segmented image
+            {
+                std::vector<vis::Color> colors(mg.internalComponents<core::RegionData>().size());
+                for (auto & r : mg.components<core::RegionData>()){
+                    auto & p = props[r.topo.hd];
+                    auto & color = colors[r.topo.hd.id];
+                    if (!p.used){
+                        color = vis::ColorTag::Black;
+                    }
+                    else{
+                        if (p.orientationClaz != -1){
+                            color = vis::ColorTag::Green;
+                        }
+                        else{
+                            color = vis::ColorTag::Blue;
+                        }
+                    }
+                }
+                vis::Visualizer2D::Params params;
+                params.colorTable = vis::ColorTable(colors, vis::ColorTag::White);
+                vis::Visualizer2D(segmentedImage)
+                    << vis::manip2d::Show();
+                vis::Visualizer2D(segmentedImage, params) 
+                    << vis::manip2d::Show();
+            }
+
             core::InitializeVariables(mg, props);
             core::Visualize(view, mg, props);
 
