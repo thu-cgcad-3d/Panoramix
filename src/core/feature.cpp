@@ -8,7 +8,7 @@
 #include <unsupported/Eigen/NumericalDiff>
 
 extern "C" {
-#include <lsd.h>
+    #include <lsd.h>
 }
 #include <quickshift_common.h>
 

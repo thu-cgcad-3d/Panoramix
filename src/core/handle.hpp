@@ -88,7 +88,7 @@ namespace panoramix {
 
 
         // handled table
-        template <class HandleT, class DataT>
+        template <class HandleT, class DataT, class ContainerT = std::vector<DataT>>
         struct HandledTable {
             static_assert(IsHandle<HandleT>::value, "HandleT must be a Handle!");
             HandledTable() {}
@@ -103,8 +103,17 @@ namespace panoramix {
             const DataT & at(HandleT h) const { return data[h.id]; }
             DataT & operator[](HandleT h) { return data[h.id]; }
 
+            using iterator = typename ContainerT::iterator;
+            using const_iterator = typename ContainerT::const_iterator;
+            using value_type = typename ContainerT::value_type;
+            
+            inline iterator begin() { return data.begin(); }
+            inline iterator end() { return data.end(); }
+            inline const_iterator begin() const { return data.begin(); }
+            inline const_iterator end() const { return data.end(); }
+
             template <class Archive> inline void serialize(Archive & ar) { ar(data); }
-            std::vector<DataT> data;
+            ContainerT data;
         };
 
 

@@ -1229,8 +1229,8 @@ namespace panoramix {
                 }
                 float ppcFocal = 100.0f;
                 int ppcSize = 2 * radiusAngle * ppcFocal;
-                Vec3 x, y;
-                std::tie(x, y) = ProposeXYDirectionsFromZDirection(r.data.normalizedCenter);
+                Vec3 x;
+                std::tie(x, std::ignore) = ProposeXYDirectionsFromZDirection(r.data.normalizedCenter);
                 PartialPanoramicCamera ppc(ppcSize, ppcSize, ppcFocal, Point3(0, 0, 0), r.data.normalizedCenter, x);
                 Imageub mask = Imageub::zeros(ppc.screenSize());
 
@@ -1248,12 +1248,14 @@ namespace panoramix {
                 regionMaskViews[h].image = mask;
             }
 
+            HandledTable<RegionHandle, double> regionAreas(mg.internalComponents<RegionData>().size());
             for (auto & r : mg.components<RegionData>()){
                 auto h = r.topo.hd;
                 auto & ppMask = regionMaskViews[h];
+                double area = cv::sum(ppMask.image).val[0];
+                regionAreas[h] = area;
                 for (int i = 0; i < perspectiveGCs.size(); i++){
                     auto sampler = MakeCameraSampler(ppMask.camera, gcCameras[i]);
-                    double area = cv::sum(ppMask.image).val[0];
                     auto occupation = sampler(Imageub::ones(gcCameras[i].screenSize()), cv::BORDER_CONSTANT, 0.0);
                     double areaOccupied = cv::sum(ppMask.image & occupation).val[0];
                     double ratio = areaOccupied / area;
@@ -1333,7 +1335,7 @@ namespace panoramix {
             }
             assert(vVPId != -1);
 
-            // free outside oriented gc labels
+            // disorient outsided oriented gc labels
             HandledTable<RegionHandle, OrientationHint> regionOrientations(mg.internalComponents<RegionData>().size());
             for (auto & r : mg.components<RegionData>()){
                 regionOrientations[r.topo.hd] = (OrientationHint)(graph.whatLabel(r.topo.hd.id));
@@ -1392,6 +1394,68 @@ namespace panoramix {
                 default:
                     assert(0);
                     break;
+                }
+            }
+
+            // detect big aligned rectangular regions and orient them
+            double regionAreaSum = std::accumulate(regionAreas.begin(), regionAreas.end(), 0.0);
+            assert(regionAreaSum > 0);
+
+            static const double dotThreshold = 0.1;
+
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
+                auto & edges = b.data.normalizedEdges;
+                for (auto & edge : edges){
+                    std::vector<std::vector<bool>> edgeVPFlags(props.vanishingPoints.size(),
+                        std::vector<bool>(edge.size() - 1, false));
+                    for (int i = 0; i < edge.size() - 1; i++){
+                        Vec3 n = normalize(edge[i].cross(edge[i + 1]));
+                        for (int k = 0; k < props.vanishingPoints.size(); k++){
+                            auto vp = normalize(props.vanishingPoints[k]);
+                            double dotv = abs(vp.dot(n));
+                            if (dotv <= dotThreshold){
+                                edgeVPFlags[k][i] = true;
+                            }
+                        }
+                    }
+                    // detect aligned longest lines from edge
+                    for (int k = 0; k < props.vanishingPoints.size(); k++){
+                        auto vp = normalize(props.vanishingPoints[k]);
+                        auto & edgeFlags = edgeVPFlags[k];
+                        int lastHead = -1, lastTail = -1;
+                        bool inChain = false;
+                        for (int j = 0; j <= edgeFlags.size(); j++){
+                            if (!inChain && j < edgeFlags.size() && edgeFlags[j]){
+                                lastHead = j;
+                                inChain = true;
+                            }
+                            else if (inChain && (j == edgeFlags.size() || !edgeFlags[j])){
+                                lastTail = j;
+                                inChain = false;
+                                // examine current chain
+                                assert(lastHead != -1);
+                                const Vec3 & headCorner = edge[lastHead];
+                                const Vec3 & tailCorner = edge[lastTail];
+                                double spanAngle = AngleBetweenDirections(headCorner, tailCorner);
+                                // fit line
+                                NOT_IMPLEMENTED_YET();
+                            }
+                        }
+                    }
+                }
+            }
+            for (auto & r : mg.components<RegionData>()){
+                double area = regionAreas[r.topo.hd];
+                if (area / regionAreaSum < 0.02){
+                    continue;
+                }
+                auto & contours = r.data.normalizedContours;
+                
+                for (auto & c : contours){
+                    
+                    for (int i = 0; i < c.size(); i++){
+
+                    }
                 }
             }
 
