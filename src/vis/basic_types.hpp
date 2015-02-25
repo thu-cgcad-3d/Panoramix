@@ -80,6 +80,15 @@ namespace panoramix {
             template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>, class = void>
             inline operator core::Vec<T, 4>() const { return core::vec_cast<T>(_rgba) / 255.0; }
 
+            // to vec3
+            template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
+            inline operator core::Vec<T, 3>() const { return core::Vec<T, 3>(_rgba[0], _rgba[1], _rgba[2]); }
+
+            template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>, class = void>
+            inline operator core::Vec<T, 3>() const { 
+                return core::Vec<T, 3>(_rgba[0] / 255.0, _rgba[1] / 255.0, _rgba[2] / 255.0); 
+            }
+
         private:
             core::Vec4i _rgba;
         };
@@ -138,6 +147,8 @@ namespace panoramix {
             const Color & operator[](int claz) const { return claz < 0 ? _exceptionalColor : _colors[claz]; }
             Color & operator[](int claz) { return claz < 0 ? _exceptionalColor : _colors[claz]; }
             bool empty() const { return _colors.empty(); }
+
+            core::Imageub3 operator()(const core::Imagei & indexIm) const;
 
             const Color & roundedAt(int claz) const { return claz < 0 ? _exceptionalColor : _colors[claz % _colors.size()]; }
 

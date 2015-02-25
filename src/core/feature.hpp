@@ -43,6 +43,7 @@ namespace panoramix {
             const Params & params() const { return _params; }
             Params & params() { return _params; }
             Feature operator() (const Image & im) const;
+            Feature operator() (const Image & im, int pyramidHeight, int minSize = 100) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
             Params _params;
@@ -66,7 +67,8 @@ namespace panoramix {
 
         // classify lines in 3d
         void ClassifyLines(std::vector<Classified<Line3>> &lines, const std::vector<Vec3> & vps,
-            double angleThreshold, double sigma, double scoreThreshold = 0.8);
+            double angleThreshold, double sigma, double scoreThreshold = 0.8, 
+            double avoidVPAngleThreshold = M_PI / 18.0);
 
         // compute straightness of points
         std::pair<double, InfiniteLine2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,

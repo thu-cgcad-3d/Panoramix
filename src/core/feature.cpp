@@ -311,6 +311,21 @@ namespace panoramix {
             return lines;
         }
 
+        LineSegmentExtractor::Feature LineSegmentExtractor::operator() (const Image & im, int pyramidHeight, int minSize) const{
+            Feature lines;
+            Image image = im.clone();
+            for (int i = 0; i < pyramidHeight; i++){
+                if (image.cols < minSize || image.rows < minSize)
+                    break;
+                Feature ls = (*this)(image);
+                for (auto & l : ls){
+                    lines.push_back(l * (double(im.cols) / image.cols));
+                }
+                cv::pyrDown(image, image);
+            }
+            return lines;
+        }
+
 
         std::vector<HPoint2> ComputeLineIntersections(const std::vector<Line2> & lines,
             std::vector<std::pair<int, int>> * lineids,
@@ -401,7 +416,7 @@ namespace panoramix {
 
 
         void ClassifyLines(std::vector<Classified<Line3>> & lines, const std::vector<Vec3> & vps,
-            double angleThreshold, double sigma, double scoreThreshold) {
+            double angleThreshold, double sigma, double scoreThreshold, double avoidVPAngleThreshold) {
 
             size_t nlines = lines.size();
             size_t npoints = vps.size();
@@ -412,26 +427,30 @@ namespace panoramix {
                 Vec3 normab = a.cross(b);
                 normab /= norm(normab);
 
-                std::vector<double> lineangles(npoints);
                 std::vector<double> linescores(npoints);
-
-                for (int j = 0; j < npoints; j++){
-                    const Vec3 & point = vps[j];
-                    double angle = abs(asin(normab.dot(point)));
-                    lineangles[j] = angle;
-                }
 
                 // get score based on angle
                 for (int j = 0; j < npoints; j++){
-                    double angle = lineangles[j];
+                    const Vec3 & point = vps[j];
+                    double angle = abs(asin(normab.dot(point)));
                     double score = exp(-(angle / angleThreshold) * (angle / angleThreshold) / sigma / sigma / 2);
-                    linescores[j] = (angle > angleThreshold) ? 0 : score;
+                    auto dist = std::min(
+                        DistanceFromPointToLine(normalize(point), normalize(lines[i].component)).first,
+                        DistanceFromPointToLine(normalize(-point), normalize(lines[i].component)).first
+                    );
+                    if (dist < 2.0 * sin(avoidVPAngleThreshold / 2.0)){ // avoid that a line belongs to its nearby vp
+                        linescores[j] = -1.0;
+                    }
+                    else{
+                        linescores[j] = (angle > angleThreshold) ? 0 : score;
+                    }
                 }
 
                 // classify lines
                 lines[i].claz = -1;
                 double curscore = scoreThreshold;
                 for (int j = 0; j < npoints; j++){
+
                     if (linescores[j] > curscore){
                         lines[i].claz = j;
                         curscore = linescores[j];

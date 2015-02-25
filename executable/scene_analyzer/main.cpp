@@ -6,11 +6,21 @@ using namespace panoramix;
 
 int main(int argc, char ** argv) {
     std::string filename;
+    bool isOutdoor = false;
     if (argc < 2){
         std::cout << "no input" << std::endl;
-        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/normal/room.png";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/yard.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (11).jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (10).jpg";
+        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
+        isOutdoor = false;
     }
     else{
         filename = argv[1];
@@ -18,7 +28,7 @@ int main(int argc, char ** argv) {
     std::cout << "filename: " << filename << std::endl;
 
     core::Image image = cv::imread(filename);
-    core::ResizeToMakeHeightUnder(image, 600);
+    core::ResizeToMakeHeightUnder(image, 900);
 
     bool isPanorama = core::MayBeAPanorama(image);
     std::cout << "is panorama: " << (isPanorama ? "yes" : "no") << std::endl;
@@ -38,43 +48,27 @@ int main(int argc, char ** argv) {
         core::MixedGraph mg;
         core::MixedGraphPropertyTable props;
 
-
-        if (0){
+        if (1){
             view = core::CreatePanoramicView(image);
 
             // collect lines in each view
-            cams = core::CreateCubicFacedCameras(view.camera);
+            cams = core::CreateCubicFacedCameras(view.camera, 800, 800, 300);
             lines.resize(cams.size());
             for (int i = 0; i < cams.size(); i++){
                 auto pim = view.sampled(cams[i]).image;
                 core::LineSegmentExtractor lineExtractor;
                 lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
-                auto ls = lineExtractor(pim);
+                auto ls = lineExtractor(pim, 5, 300); // use pyramid
                 lines[i].reserve(ls.size());
                 for (auto & l : ls){
                     lines[i].push_back(core::ClassifyAs(l, -1));
                 }
+                vis::Visualizer2D(pim) << ls << vis::manip2d::Show();
             }
 
             // estimate vp
             vps = core::EstimateVanishingPointsAndClassifyLines(cams, lines);
-
-            // collect gcs in each horizontal view
-            hCams = core::CreateHorizontalPerspectiveCameras(view.camera, 8);
-            gcs.resize(hCams.size());
-            for (int i = 0; i < hCams.size(); i++){
-                auto pim = view.sampled(hCams[i]).image;
-                core::GeometricContextEstimator gce;
-                gcs[i] = gce(pim, core::SceneClass::Indoor);
-            }
-
-
-            // append lines
-            for (int i = 0; i < cams.size(); i++){
-                core::AppendLines(mg, lines[i], cams[i], vps);
-            }
-
-            // append regions
+            // extract lines from segmentated region boundaries and classify them using estimated vps
             // make 3d lines
             std::vector<core::Line3> line3ds;
             for (int i = 0; i < cams.size(); i++){
@@ -86,9 +80,40 @@ int main(int argc, char ** argv) {
             core::SegmentationExtractor segmenter;
             segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
             segmenter.params().c = 100.0;
-            segmentedImage = segmenter(view.image, line3ds, view.camera).first;
-            //vis::Visualizer2D(segmentedImage) << vis::manip2d::Show();
-            //int segmentsNum = core::MinMaxValOfImage(segmentedImage).second + 1;
+            int segmentsNum = 0;
+            std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera);
+            //auto colorTable = vis::CreateRandomColorTableWithSize(segmentsNum);
+            ////vis::Visualizer2D(segmentedImage) << vis::manip2d::Show();
+            ////int segmentsNum = core::MinMaxValOfImage(segmentedImage).second + 1;
+            //for (int i = 0; i < cams.size(); i++){
+            //    auto pim = core::MakeCameraSampler(cams[i], view.camera)(segmentedImage);
+            //    core::LineSegmentExtractor lineExtractor;
+            //    lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
+            //    lineExtractor.params().minLength = 50;
+            //    lineExtractor.params().xBorderWidth = lineExtractor.params().yBorderWidth = 10;
+            //    auto ls = lineExtractor(colorTable(pim));
+            //    
+            //    vis::Visualizer2D(pim) << ls << vis::manip2d::Show();
+            //}
+
+
+            // collect gcs in each horizontal view
+            hCams = core::CreateHorizontalPerspectiveCameras(view.camera, 8, 500, 500, 280);
+            gcs.resize(hCams.size());
+            for (int i = 0; i < hCams.size(); i++){
+                auto pim = view.sampled(hCams[i]).image;
+                core::GeometricContextEstimator gce;
+                gcs[i] = gce(pim, isOutdoor ? core::SceneClass::Outdoor : core::SceneClass::Indoor);
+            }
+
+
+            // append lines
+            for (int i = 0; i < cams.size(); i++){
+                core::AppendLines(mg, lines[i], cams[i], vps);
+            }
+
+            // append regions
+
 
             core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
 
@@ -105,6 +130,8 @@ int main(int argc, char ** argv) {
             // visualize using segmented image
             {
                 std::vector<vis::Color> colors(mg.internalComponents<core::RegionData>().size());
+                std::vector<vis::Color> oColors = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
+                std::vector<vis::Color> noColors = { vis::ColorTag::DimGray, vis::ColorTag::Gray, vis::ColorTag::DarkGray };
                 for (auto & r : mg.components<core::RegionData>()){
                     auto & p = props[r.topo.hd];
                     auto & color = colors[r.topo.hd.id];
@@ -113,10 +140,13 @@ int main(int argc, char ** argv) {
                     }
                     else{
                         if (p.orientationClaz != -1){
-                            color = vis::ColorTag::Green;
+                            color = oColors[p.orientationClaz];
+                        }
+                        else if(p.orientationNotClaz != -1){
+                            color = noColors[p.orientationNotClaz];
                         }
                         else{
-                            color = vis::ColorTag::Blue;
+                            color = vis::ColorTag::White;
                         }
                     }
                 }

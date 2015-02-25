@@ -258,7 +258,7 @@ namespace panoramix {
             }
 
             // classify lines
-            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8);
+            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
 
             int ii = 0;
             for (int i = 0; i < lineSegments.size(); i++){
@@ -1397,67 +1397,135 @@ namespace panoramix {
                 }
             }
 
-            // detect big aligned rectangular regions and orient them
-            double regionAreaSum = std::accumulate(regionAreas.begin(), regionAreas.end(), 0.0);
-            assert(regionAreaSum > 0);
+            //// detect big aligned rectangular regions and orient them
+            //double regionAreaSum = std::accumulate(regionAreas.begin(), regionAreas.end(), 0.0);
+            //assert(regionAreaSum > 0);
 
-            static const double dotThreshold = 0.1;
+            //static const double dotThreshold = 0.001;
+            //static const double spanAngleThreshold = DegreesToRadians(10);
+            //static const double wholeDotThreshold = 0.01;
+            //static const double wholeSpanAngleThreshold = DegreesToRadians(10);
 
-            for (auto & b : mg.constraints<RegionBoundaryData>()){
-                auto & edges = b.data.normalizedEdges;
-                for (auto & edge : edges){
-                    std::vector<std::vector<bool>> edgeVPFlags(props.vanishingPoints.size(),
-                        std::vector<bool>(edge.size() - 1, false));
-                    for (int i = 0; i < edge.size() - 1; i++){
-                        Vec3 n = normalize(edge[i].cross(edge[i + 1]));
-                        for (int k = 0; k < props.vanishingPoints.size(); k++){
-                            auto vp = normalize(props.vanishingPoints[k]);
-                            double dotv = abs(vp.dot(n));
-                            if (dotv <= dotThreshold){
-                                edgeVPFlags[k][i] = true;
-                            }
-                        }
-                    }
-                    // detect aligned longest lines from edge
-                    for (int k = 0; k < props.vanishingPoints.size(); k++){
-                        auto vp = normalize(props.vanishingPoints[k]);
-                        auto & edgeFlags = edgeVPFlags[k];
-                        int lastHead = -1, lastTail = -1;
-                        bool inChain = false;
-                        for (int j = 0; j <= edgeFlags.size(); j++){
-                            if (!inChain && j < edgeFlags.size() && edgeFlags[j]){
-                                lastHead = j;
-                                inChain = true;
-                            }
-                            else if (inChain && (j == edgeFlags.size() || !edgeFlags[j])){
-                                lastTail = j;
-                                inChain = false;
-                                // examine current chain
-                                assert(lastHead != -1);
-                                const Vec3 & headCorner = edge[lastHead];
-                                const Vec3 & tailCorner = edge[lastTail];
-                                double spanAngle = AngleBetweenDirections(headCorner, tailCorner);
-                                // fit line
-                                NOT_IMPLEMENTED_YET();
-                            }
-                        }
-                    }
-                }
-            }
-            for (auto & r : mg.components<RegionData>()){
-                double area = regionAreas[r.topo.hd];
-                if (area / regionAreaSum < 0.02){
-                    continue;
-                }
-                auto & contours = r.data.normalizedContours;
-                
-                for (auto & c : contours){
-                    
-                    for (int i = 0; i < c.size(); i++){
+            //HandledTable<RegionBoundaryHandle, std::vector<double>> boundaryMaxSpanAnglesForVPs(mg.internalConstraints<RegionBoundaryData>().size());
+            //for (auto & b : mg.constraints<RegionBoundaryData>()){
+            //    auto & edges = b.data.normalizedEdges;
+            //    std::vector<double> maxSpanAngleForVPs(props.vanishingPoints.size(), 0.0);
+            //    if (b.topo.hd.id == 849){
+            //        std::cout << std::endl;
+            //    }
 
-                    }
-                }
-            }
+            //    for (auto & edge : edges){
+            //        std::vector<std::vector<bool>> edgeVPFlags(props.vanishingPoints.size(),
+            //            std::vector<bool>(edge.size() - 1, false));
+            //        for (int i = 0; i < edge.size() - 1; i++){
+            //            Vec3 n = normalize(edge[i].cross(edge[i + 1]));
+            //            for (int k = 0; k < props.vanishingPoints.size(); k++){
+            //                auto vp = normalize(props.vanishingPoints[k]);
+            //                double dotv = abs(vp.dot(n));
+            //                if (dotv <= dotThreshold){
+            //                    edgeVPFlags[k][i] = true;
+            //                }
+            //            }
+            //        }
+            //        // detect aligned longest line spanAngles from edge
+            //        for (int k = 0; k < props.vanishingPoints.size(); k++){
+            //            auto vp = normalize(props.vanishingPoints[k]);
+            //            auto & edgeFlags = edgeVPFlags[k];
+            //            int lastHead = -1, lastTail = -1;
+            //            bool inChain = false;
+
+            //            double & maxSpanAngle = maxSpanAngleForVPs[k];
+            //            for (int j = 0; j <= edgeFlags.size(); j++){
+            //                if (!inChain && j < edgeFlags.size() && edgeFlags[j]){
+            //                    lastHead = j;
+            //                    inChain = true;
+            //                }
+            //                else if (inChain && (j == edgeFlags.size() || !edgeFlags[j])){
+            //                    lastTail = j;
+            //                    inChain = false;
+            //                    // examine current chain
+            //                    assert(lastHead != -1);
+            //                    // compute full span angle
+            //                    double spanAngle = 0.0;
+            //                    for (int i = lastHead; i < lastTail; i++){
+            //                        spanAngle += AngleBetweenDirections(edge[i], edge[i + 1]);
+            //                    }
+            //                    if (spanAngle < spanAngleThreshold){
+            //                        continue;
+            //                    }
+            //                    // fit line
+            //                    const Vec3 & midCorner = edge[(lastHead + lastTail) / 2];
+            //                    Vec3 commonNormal = normalize(midCorner.cross(vp));
+            //                    std::vector<double> dotsToCommonNormal(lastTail - lastHead + 1, 0.0);
+            //                    for (int i = lastHead; i <= lastTail; i++){
+            //                        dotsToCommonNormal[i - lastHead] = abs(edge[i].dot(commonNormal));
+            //                    }
+            //                    if (*std::max_element(dotsToCommonNormal.begin(), dotsToCommonNormal.end()) <= wholeDotThreshold){
+            //                        // acceptable!
+            //                        if (spanAngle > maxSpanAngle){
+            //                            maxSpanAngle = spanAngle;
+            //                        }
+            //                    }
+            //                }
+            //            }
+            //        }             
+            //    }
+            //    if ((b.topo.component<0>().id == 355 || b.topo.component<1>().id == 355) && std::accumulate(maxSpanAngleForVPs.begin(), maxSpanAngleForVPs.end(), 0.0) > 0){
+            //        std::cout << std::endl;
+            //    }
+            //    boundaryMaxSpanAnglesForVPs[b.topo.hd] = std::move(maxSpanAngleForVPs);
+            //}
+            //for (auto & r : mg.components<RegionData>()){
+            //    if (!props[r.topo.hd].used)
+            //        continue;
+            //    if (props[r.topo.hd].orientationClaz != -1 || props[r.topo.hd].orientationNotClaz != -1)
+            //        continue;
+
+            //    if (r.topo.hd.id == 355){
+            //        std::cout << std::endl;
+            //    }
+
+            //    double area = regionAreas[r.topo.hd];
+            //    if (area / regionAreaSum < 0.005){
+            //        continue;
+            //    }
+            //    std::vector<double> spanAngleSumsForVPs(props.vanishingPoints.size(), 0.0);
+            //    for (auto & h : r.topo.constraints<RegionBoundaryData>()){
+            //        for (int i = 0; i < props.vanishingPoints.size(); i++){
+            //            spanAngleSumsForVPs[i] += boundaryMaxSpanAnglesForVPs[h][i];
+            //        }
+            //    }
+            //    auto maxIter = std::max_element(spanAngleSumsForVPs.begin(), spanAngleSumsForVPs.end());
+            //    int firstMaxVPId = std::distance(spanAngleSumsForVPs.begin(), maxIter);
+            //    double firstMaxSpanAngle = *maxIter;
+            //    *maxIter = -1.0;
+            //    maxIter = std::max_element(spanAngleSumsForVPs.begin(), spanAngleSumsForVPs.end());
+            //    int secondMaxVPId = std::distance(spanAngleSumsForVPs.begin(), maxIter);
+            //    double secondMaxSpanAngle = *maxIter;
+            //    if (secondMaxSpanAngle >= wholeSpanAngleThreshold){
+            //        assert(firstMaxVPId != secondMaxVPId);
+            //        Vec3 normal = props.vanishingPoints[firstMaxVPId].cross(props.vanishingPoints[secondMaxVPId]);
+            //        double minAngle = 0.1;
+            //        int bestMatchedVPId = -1;
+            //        for (int i = 0; i < props.vanishingPoints.size(); i++){
+            //            double angle = AngleBetweenUndirectedVectors(normal, props.vanishingPoints[i]);
+            //            if (angle < minAngle){
+            //                minAngle = angle;
+            //                bestMatchedVPId = i;
+            //            }
+            //        }
+            //        if (bestMatchedVPId != -1){
+            //            std::cout << "vpid:::: " << bestMatchedVPId << std::endl;
+            //            props[r.topo.hd].orientationClaz = bestMatchedVPId;
+            //            props[r.topo.hd].orientationNotClaz = -1;
+            //        }
+            //    }
+            //    else if (firstMaxSpanAngle >= wholeSpanAngleThreshold){
+            //        std::cout << "vpid-along:::: " << firstMaxVPId << std::endl;
+            //        props[r.topo.hd].orientationClaz = -1;
+            //        props[r.topo.hd].orientationNotClaz = firstMaxVPId;
+            //    }
+            //}
 
             for (auto & l : mg.internalComponents<LineData>()){
                 props[l.topo.hd].used = true;
@@ -1917,6 +1985,7 @@ namespace panoramix {
                 for (auto & c : mg.constraints<RegionBoundaryData>()){
                     if (!props[c.topo.hd].used)
                         continue;
+                    assert(props[c.topo.component<0>()].used && props[c.topo.component<1>()].used);
                     bh2consStartPosition[c.topo.hd] = consNum;
                     appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd, 
                         weightsForEachAppliedBinaryAnchor[c.topo.hd]);
@@ -1925,6 +1994,7 @@ namespace panoramix {
                 for (auto & c : mg.constraints<LineRelationData>()){
                     if (!props[c.topo.hd].used)
                         continue;
+                    assert(props[c.topo.component<0>()].used && props[c.topo.component<1>()].used);
                     bh2consStartPosition[c.topo.hd] = consNum;
                     appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
                         weightsForEachAppliedBinaryAnchor[c.topo.hd]);
@@ -1933,6 +2003,7 @@ namespace panoramix {
                 for (auto & c : mg.constraints<RegionLineConnectionData>()){
                     if (!props[c.topo.hd].used)
                         continue;
+                    assert(props[c.topo.component<0>()].used && props[c.topo.component<1>()].used);
                     bh2consStartPosition[c.topo.hd] = consNum;
                     appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
                         weightsForEachAppliedBinaryAnchor[c.topo.hd]);
@@ -2663,7 +2734,7 @@ namespace panoramix {
                     viz.renderOptions.bwColor = 0.8;
                     viz.renderOptions.bwTexColor = 0.2;
                     viz.camera(core::PerspectiveCamera(1000, 800, 800, Point3(-1, 1, 1), Point3(0, 0, 0)));
-                    viz.show(true, true);
+                    viz.show(true, false);
 
                     vis::ResourceStore::clear();
                 }

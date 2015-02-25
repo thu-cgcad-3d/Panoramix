@@ -122,6 +122,15 @@ namespace panoramix {
             _exceptionalColor = ColorFromTag(exceptColor);
         }
 
+        core::Imageub3 ColorTable::operator()(const core::Imagei & indexIm) const{
+            core::Imageub3 im(indexIm.size());
+            for (auto i = indexIm.begin(); i != indexIm.end(); ++i){
+                core::Vec3b color = (*this)[*i];
+                im(i.pos()) = color;
+            }
+            return im;
+        }
+
         ColorTable & ColorTable::randomize() { std::random_shuffle(_colors.begin(), _colors.end()); return *this; }
 
         ColorTable & ColorTable::appendRandomizedColors(size_t sz) {
