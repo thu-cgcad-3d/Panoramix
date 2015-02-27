@@ -12,8 +12,8 @@ int main(int argc, char ** argv) {
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
-        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
+        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/normal/room.png";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";
@@ -49,7 +49,7 @@ int main(int argc, char ** argv) {
         core::MixedGraph mg;
         core::MixedGraphPropertyTable props;
 
-        if (1){
+        if (0){
             view = core::CreatePanoramicView(image);
 
             // collect lines in each view
@@ -174,7 +174,19 @@ int main(int argc, char ** argv) {
             core::Visualize(view, mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
 
-            core::LooseOrientationConstraintsOnLines(mg, props, 0.2);
+            core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02);            
+            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::NormalizeVariables(mg, props);
+            core::Visualize(view, mg, props);
+            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+
+            core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02);
+            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::NormalizeVariables(mg, props);
+            core::Visualize(view, mg, props);
+            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+
+            core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02);
             core::SolveVariablesUsingInversedDepths(mg, props);
             core::NormalizeVariables(mg, props);
             core::Visualize(view, mg, props);
@@ -186,7 +198,7 @@ int main(int argc, char ** argv) {
             core::LoadFromDisk("./cache/mgp", mg, props);
         }
 
-        core::Visualize(view, mg, props);
+        //core::Visualize(view, mg, props);
 
     }
     else {

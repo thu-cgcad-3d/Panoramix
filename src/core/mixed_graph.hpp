@@ -177,7 +177,8 @@ namespace panoramix {
         MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps);
         MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps,
             const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
-            const std::vector<PerspectiveCamera> & gcCameras, int shrinkRegionOrientationIteration = 1);
+            const std::vector<PerspectiveCamera> & gcCameras, 
+            int shrinkRegionOrientationIteration = 1, bool considerGCVerticalConstraint = false);
 
 
         void InitializeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
@@ -202,9 +203,8 @@ namespace panoramix {
         void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
         double ComputeScore(const MixedGraph & mg, const MixedGraphPropertyTable & props);
 
-        void LooseOrientationConstraintsOnLines(const MixedGraph & mg, MixedGraphPropertyTable & props,
-            double loosableRatio = 0.2);
-
+        void LooseOrientationConstraintsOnComponents(const MixedGraph & mg, MixedGraphPropertyTable & props,
+            double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05);
 
 
         void Visualize(const View<PanoramicCamera> & texture, 
