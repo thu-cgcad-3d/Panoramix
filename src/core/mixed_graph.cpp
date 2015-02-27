@@ -1174,7 +1174,7 @@ namespace panoramix {
                 case GeometricContextLabel::Front:
                 case GeometricContextLabel::Left:
                 case GeometricContextLabel::Right:
-                    return OrientationHint::Vertical;
+                    return OrientationHint::OtherPlanar;
                 case GeometricContextLabel::Furniture: return OrientationHint::Void;
                 case GeometricContextLabel::Ground: return OrientationHint::Horizontal;
                 case GeometricContextLabel::Sky: return OrientationHint::Void;
@@ -1610,6 +1610,14 @@ namespace panoramix {
         }
 
 
+        namespace {
+
+            inline double NonZeroize(double d){
+                return d == 0.0 ? 1e-6 : d;
+            }
+
+        }
+
         Line3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const LineHandle & lh){
             auto & ld = mg.data(lh);
             auto & lp = props[lh];
@@ -1617,7 +1625,7 @@ namespace panoramix {
             //    return Line3();
             if (lp.orientationClaz >= 0){
                 assert(lp.variables.size() == 1);
-                InfiniteLine3 infLine(normalize(ld.line.center()) / lp.variables[0], props.vanishingPoints[lp.orientationClaz]);
+                InfiniteLine3 infLine(normalize(ld.line.center()) / NonZeroize(lp.variables[0]), props.vanishingPoints[lp.orientationClaz]);
                 return Line3(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), normalize(ld.line.first)), infLine).second.second,
                     DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), normalize(ld.line.second)), infLine).second.second);
             }
@@ -1629,7 +1637,7 @@ namespace panoramix {
                 */
                 // variables[0] -> 1/p
                 // variables[1] -> 1/q
-                return Line3(normalize(ld.line.first) / lp.variables[0], normalize(ld.line.second) / lp.variables[1]);
+                return Line3(normalize(ld.line.first) / NonZeroize(lp.variables[0]), normalize(ld.line.second) / NonZeroize(lp.variables[1]));
             }
         }
 
@@ -1642,7 +1650,7 @@ namespace panoramix {
                 return Plane3();*/
             if (rp.orientationClaz >= 0){
                 assert(rp.variables.size() == 1);
-                return Plane3(rd.normalizedCenter / rp.variables[0], props.vanishingPoints[rp.orientationClaz]);
+                return Plane3(rd.normalizedCenter / NonZeroize(rp.variables[0]), props.vanishingPoints[rp.orientationClaz]);
             }
             else if (rp.orientationClaz == -1 && rp.orientationNotClaz >= 0){
                 assert(rp.variables.size() == 2);
@@ -2385,9 +2393,7 @@ namespace panoramix {
         }
 
 
-
-
-        void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
+        double ComponentMedianCenterDepth(const MixedGraph & mg, const MixedGraphPropertyTable & props){
             for (auto & c : mg.components<RegionData>()){
                 if (!props[c.topo.hd].used)
                     continue;
@@ -2425,6 +2431,12 @@ namespace panoramix {
             }
             std::nth_element(centerDepths.begin(), centerDepths.begin() + centerDepths.size() / 2, centerDepths.end());
             double medianCenterDepth = centerDepths[centerDepths.size() / 2];
+            return medianCenterDepth;
+        }
+
+
+        void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
+            double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
             std::cout << "median center depth: " << medianCenterDepth << std::endl;
 
             assert(!IsInfOrNaN(medianCenterDepth));
@@ -2565,16 +2577,16 @@ namespace panoramix {
                     }
                 }
             }
-            double maxJunctionWeight = 0.0;
-            for (auto & c : mg.constraints<LineRelationData>()){
-                if (c.data.junctionWeight > maxJunctionWeight){
-                    maxJunctionWeight = c.data.junctionWeight;
-                }
-            }
+            //double maxJunctionWeight = 0.0;
+            //for (auto & c : mg.constraints<LineRelationData>()){
+            //    if (c.data.junctionWeight > maxJunctionWeight){
+            //        maxJunctionWeight = c.data.junctionWeight;
+            //    }
+            //}
             for (auto & c : mg.constraints<LineRelationData>()){
                 static const double typeWeight = 8.0;
                 if (!props[c.topo.hd].used){
-                    sumOfNotUsedConstraintWeights += c.data.junctionWeight / maxJunctionWeight * typeWeight;
+                    sumOfNotUsedConstraintWeights += /* c.data.junctionWeight / maxJunctionWeight **/ typeWeight;
                     continue;
                 }
 
@@ -2618,7 +2630,97 @@ namespace panoramix {
             return score;
         }
 
+        void LooseOrientationConstraintsOnLines(const MixedGraph & mg, MixedGraphPropertyTable & props, double loosableRatio){
+            
+            double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
+            double distThres = medianCenterDepth / 50.0;
+            double nnSearchRange = medianCenterDepth / 5.0;
+            
+            // collect keypoints
+            struct ComponentKeyPoint {
+                Point3 point;
+                int handleId;
+                bool isOnRegion;
+                inline ComponentKeyPoint() {}
+                inline ComponentKeyPoint(const Point3 & p, RegionHandle rh) : point(p), isOnRegion(true), handleId(rh.id) {}
+                inline ComponentKeyPoint(const Point3 & p, LineHandle lh) : point(p), isOnRegion(false), handleId(lh.id) {}
+                inline bool matches(RegionHandle rh) const { return isOnRegion && handleId == rh.id; }
+                inline bool matches(LineHandle lh) const { return !isOnRegion && handleId == lh.id; }
+            };
+            auto getBB = [distThres](const ComponentKeyPoint & p) {return BoundingBox(p.point).expand(distThres); };
+            RTreeWrapper<ComponentKeyPoint, decltype(getBB)> keyPointsRTree(getBB);
 
+            // collect current instances
+            HandledTable<LineHandle, Line3> lines(mg.internalComponents<LineData>().size());
+            HandledTable<RegionHandle, Plane3> planes(mg.internalComponents<RegionData>().size());
+
+            // keypoints on regions
+            for (auto & r : mg.components<RegionData>()){
+                if (!props[r.topo.hd].used)
+                    continue;
+                auto plane = Instance(mg, props, r.topo.hd);
+                planes[r.topo.hd] = plane;
+                for (auto & cs : r.data.normalizedContours){
+                    for (auto & c : cs){
+                        double depth = DepthAt(c, plane);
+                        keyPointsRTree.insert(ComponentKeyPoint(c * depth, r.topo.hd));
+                    }
+                }
+            }
+            // keypoints on lines
+            for (auto & l : mg.components<LineData>()){
+                if (!props[l.topo.hd].used)
+                    continue;
+                auto line = Instance(mg, props, l.topo.hd);
+                lines[l.topo.hd] = line;
+                keyPointsRTree.insert(ComponentKeyPoint(line.first, l.topo.hd));
+                keyPointsRTree.insert(ComponentKeyPoint(line.second, l.topo.hd));
+            }
+
+            // find most isolated lines
+            HandledTable<LineHandle, std::array<double, 2>> lineCornerNNDistances(mg.internalComponents<LineData>().size());
+            std::vector<LineHandle> usableLineHandles;
+            for (auto & l : mg.components<LineData>()){
+                if (!props[l.topo.hd].used)
+                    continue;
+                usableLineHandles.push_back(l.topo.hd);
+                auto & line = lines[l.topo.hd];
+                auto & nnDistances = lineCornerNNDistances[l.topo.hd];
+                nnDistances = { { std::numeric_limits<double>::max(), std::numeric_limits<double>::max() } };
+                keyPointsRTree.search(BoundingBox(line.first).expand(nnSearchRange), [&l, &line, &nnDistances](const ComponentKeyPoint & p){
+                    if (p.matches(l.topo.hd))
+                        return true;
+                    nnDistances[0] = std::min(Distance(line.first, p.point), nnDistances[0]);
+                    nnDistances[1] = std::min(Distance(line.second, p.point), nnDistances[1]);
+                    return true;
+                });
+            }
+
+            std::sort(usableLineHandles.begin(), usableLineHandles.end(), [&lineCornerNNDistances](LineHandle l1, LineHandle l2){
+                return std::max(lineCornerNNDistances[l1][0], lineCornerNNDistances[l1][1]) >
+                    std::max(lineCornerNNDistances[l2][0], lineCornerNNDistances[l2][1]);
+            });
+
+            // loose orientation constraints on these lines
+            for (int i = 0; i < usableLineHandles.size() * loosableRatio; i++){
+                double maxCornerDist = std::max(lineCornerNNDistances[usableLineHandles[i]][0], 
+                    lineCornerNNDistances[usableLineHandles[i]][1]);
+                if (maxCornerDist < distThres)
+                    continue;
+                auto & lp = props[usableLineHandles[i]];
+                assert(lp.used);
+                if (lp.orientationClaz >= 0){
+                    lp.orientationClaz = -1;
+                }
+                assert(lp.orientationNotClaz == -1);
+                if (lp.orientationClaz == -1){
+                    lp.used = false; // disable this line!!!!!!!!!
+                }
+            }
+
+            ForeachMixedGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
+
+        }
 
 
         namespace {

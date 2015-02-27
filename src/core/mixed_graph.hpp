@@ -198,8 +198,12 @@ namespace panoramix {
         void SolveVariablesUsingInversedDepths(const MixedGraph & mg, MixedGraphPropertyTable & props);
         void SolveVariablesUsingNormalDepths(const MixedGraph & mg, MixedGraphPropertyTable & props);
         
+        double ComponentMedianCenterDepth(const MixedGraph & mg, const MixedGraphPropertyTable & props);
         void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
         double ComputeScore(const MixedGraph & mg, const MixedGraphPropertyTable & props);
+
+        void LooseOrientationConstraintsOnLines(const MixedGraph & mg, MixedGraphPropertyTable & props,
+            double loosableRatio = 0.2);
 
 
 

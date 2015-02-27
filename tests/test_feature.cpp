@@ -1,7 +1,6 @@
 #include "../src/core/cameras.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/core/feature.hpp"
-#include "../src/core/view.hpp"
 #include "../src/vis/visualize2d.hpp"
 
 #include "config.hpp"
