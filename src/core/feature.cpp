@@ -379,29 +379,29 @@ namespace panoramix {
 
 
         void ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
-            double angleThreshold, double sigma, double scoreThreshold){
+            double angleThreshold, double sigma, double scoreThreshold, double avoidVPDistanceThreshold){
 
             for (auto & line : lines){
                 // classify lines
                 line.claz = -1;
 
                 // classify
-                std::vector<double> lineangles(vps.size());
                 std::vector<double> linescores(vps.size());
 
+                // get score based on angle
                 for (int j = 0; j < vps.size(); j++){
                     auto & point = vps[j];
                     double angle = std::min(
                         AngleBetweenDirections(line.component.direction(), (point - HPoint2(line.component.center())).numerator),
                         AngleBetweenDirections(-line.component.direction(), (point - HPoint2(line.component.center())).numerator));
-                    lineangles[j] = angle;
-                }
-
-                // get score based on angle
-                for (int j = 0; j < vps.size(); j++){
-                    double angle = lineangles[j];
                     double score = exp(-(angle / angleThreshold) * (angle / angleThreshold) / sigma / sigma / 2);
-                    linescores[j] = (angle > angleThreshold) ? 0 : score;
+                    if (avoidVPDistanceThreshold >= 0.0 && 
+                        DistanceFromPointToLine(point.value(), line.component).first < avoidVPDistanceThreshold){
+                        linescores[j] = -1.0;
+                    }
+                    else{
+                        linescores[j] = (angle > angleThreshold) ? 0 : score;
+                    }
                 }
 
                 double curscore = scoreThreshold;
@@ -434,11 +434,10 @@ namespace panoramix {
                     const Vec3 & point = vps[j];
                     double angle = abs(asin(normab.dot(point)));
                     double score = exp(-(angle / angleThreshold) * (angle / angleThreshold) / sigma / sigma / 2);
-                    auto dist = std::min(
-                        DistanceFromPointToLine(normalize(point), normalize(lines[i].component)).first,
-                        DistanceFromPointToLine(normalize(-point), normalize(lines[i].component)).first
-                    );
-                    if (dist < 2.0 * sin(avoidVPAngleThreshold / 2.0)){ // avoid that a line belongs to its nearby vp
+                    if (avoidVPAngleThreshold >= 0.0 && std::min(
+                            DistanceFromPointToLine(normalize(point), normalize(lines[i].component)).first,
+                            DistanceFromPointToLine(normalize(-point), normalize(lines[i].component)).first
+                        ) < 2.0 * sin(avoidVPAngleThreshold / 2.0)){ // avoid that a line belongs to its nearby vp
                         linescores[j] = -1.0;
                     }
                     else{

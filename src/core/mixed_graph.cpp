@@ -1174,7 +1174,7 @@ namespace panoramix {
                 case GeometricContextLabel::Front:
                 case GeometricContextLabel::Left:
                 case GeometricContextLabel::Right:
-                    return OrientationHint::OtherPlanar;
+                    return OrientationHint::Vertical;
                 case GeometricContextLabel::Furniture: return OrientationHint::Void;
                 case GeometricContextLabel::Ground: return OrientationHint::Horizontal;
                 case GeometricContextLabel::Sky: return OrientationHint::Void;
@@ -1272,7 +1272,8 @@ namespace panoramix {
                         }
                     }
                     if (maxLabel != GeometricContextLabel::None){
-                        orientationVotes[r.topo.hd][ToOrientationHint(maxLabel)] += ratio;
+                        auto & v = orientationVotes[r.topo.hd][ToOrientationHint(maxLabel)];
+                        v = std::max(v, ratio);
                     }
                 }
             }
@@ -2731,8 +2732,8 @@ namespace panoramix {
 
                     viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
                     viz.renderOptions.backgroundColor = vis::ColorTag::White;
-                    viz.renderOptions.bwColor = 0.8;
-                    viz.renderOptions.bwTexColor = 0.2;
+                    viz.renderOptions.bwColor = 0.5;
+                    viz.renderOptions.bwTexColor = 0.5;
                     viz.camera(core::PerspectiveCamera(1000, 800, 800, Point3(-1, 1, 1), Point3(0, 0, 0)));
                     viz.show(true, false);
 
@@ -2749,13 +2750,15 @@ namespace panoramix {
             const MixedGraph & mg;
             const MixedGraphPropertyTable & props;
             vis::ColorTable colorTableForVPs;
+            vis::ColorTable colorTableForRegionAlongOrientations;
             ComponentHandleColorizer(const MixedGraph & g, const MixedGraphPropertyTable & p) : mg(g), props(p) {
                 colorTableForVPs = vis::ColorTable(vis::ColorTableDescriptor::RGB)
                     .appendRandomizedColors(props.vanishingPoints.size()-3);
+                colorTableForRegionAlongOrientations = vis::CreateGreyColorTableWithSize(props.vanishingPoints.size());
             }
 
             inline vis::Color operator()(ComponentHandle<RegionData> rh) const{
-                double maxPlaneDist = 0.0;
+                /*double maxPlaneDist = 0.0;
                 for (auto & r : mg.components<RegionData>()){
                     if (!props[r.topo.hd].used)
                         continue;
@@ -2763,7 +2766,15 @@ namespace panoramix {
                     if (pdist > maxPlaneDist)
                         maxPlaneDist = pdist;
                 }
-                return vis::ColorFromHSV(Instance(mg, props, rh).distanceTo(Point3(0, 0, 0)) / maxPlaneDist, 0.5, 0.8);
+                return vis::ColorFromHSV(Instance(mg, props, rh).distanceTo(Point3(0, 0, 0)) / maxPlaneDist, 0.5, 0.8);*/
+                auto & prop = props[rh];
+                if (!prop.used)
+                    return vis::ColorTag::Yellow;
+                if (prop.orientationClaz >= 0)
+                    return colorTableForVPs[prop.orientationClaz];
+                if (prop.orientationNotClaz >= 0)
+                    return colorTableForRegionAlongOrientations[prop.orientationNotClaz];
+                return vis::ColorTag::Yellow;
             }
             inline vis::Color operator()(ComponentHandle<LineData> rh) const {
                 return colorTableForVPs[props[rh].orientationClaz];

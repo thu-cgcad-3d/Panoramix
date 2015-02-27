@@ -813,7 +813,8 @@ namespace panoramix {
                     setCursor(Qt::ClosedHandCursor);
                     update();
                 }
-                else if (e->buttons() & Qt::MidButton) {
+                else if ((e->buttons() & Qt::MidButton) || 
+                    ((e->buttons() & Qt::RightButton) && (e->modifiers() & Qt::Modifier::SHIFT))) {
                     core::Vec3 trans = t.x() * options.camera.rightward() + t.y() * options.camera.upward();
                     trans *= 0.02;
                     options.camera.translate(trans, sphere, true);

@@ -248,6 +248,10 @@ namespace panoramix {
         std::vector<PerspectiveCamera> CreateHorizontalPerspectiveCameras(const PanoramicCamera & panoCam,
             int num = 16, int width = 500, int height = 500, double focal = 250.0);
 
+        std::vector<PerspectiveCamera> CreateHorizontalPerspectiveCameras(const PanoramicCamera & panoCam, 
+            const std::vector<Vec3> & dirs,
+            int width = 500, int height = 500, double focal = 250.0, double angleThreshold = 0.1);
+
         // create cameras toward cubic faces
         std::vector<PerspectiveCamera> CreateCubicFacedCameras(const PanoramicCamera & panoCam,
             int width = 500, int height = 500, double focal = 250.0);

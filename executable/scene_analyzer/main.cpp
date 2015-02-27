@@ -10,16 +10,17 @@ int main(int argc, char ** argv) {
     if (argc < 2){
         std::cout << "no input" << std::endl;
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
+        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/normal/room.png";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/yard.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (11).jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (10).jpg";
-        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
         isOutdoor = false;
     }
     else{
@@ -58,7 +59,7 @@ int main(int argc, char ** argv) {
                 auto pim = view.sampled(cams[i]).image;
                 core::LineSegmentExtractor lineExtractor;
                 lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
-                auto ls = lineExtractor(pim, 5, 300); // use pyramid
+                auto ls = lineExtractor(pim, 2, 300); // use pyramid
                 lines[i].reserve(ls.size());
                 for (auto & l : ls){
                     lines[i].push_back(core::ClassifyAs(l, -1));
@@ -98,12 +99,20 @@ int main(int argc, char ** argv) {
 
 
             // collect gcs in each horizontal view
-            hCams = core::CreateHorizontalPerspectiveCameras(view.camera, 8, 500, 500, 280);
+            hCams = core::CreateHorizontalPerspectiveCameras(view.camera, vps, 500, 500, 200);
             gcs.resize(hCams.size());
             for (int i = 0; i < hCams.size(); i++){
                 auto pim = view.sampled(hCams[i]).image;
                 core::GeometricContextEstimator gce;
                 gcs[i] = gce(pim, isOutdoor ? core::SceneClass::Outdoor : core::SceneClass::Indoor);
+                std::vector<core::Image> channels = {
+                    cv::max(gcs[i][core::GeometricContextLabel::Left], gcs[i][core::GeometricContextLabel::Right]),
+                    gcs[i][core::GeometricContextLabel::Front],
+                    cv::max(gcs[i][core::GeometricContextLabel::Ceiling],  gcs[i][core::GeometricContextLabel::Floor])
+                };
+                core::Image gc = core::Imaged3::zeros(channels.front().size());
+                cv::mixChannels(channels, gc, {0, 0, 1, 1, 2, 2});
+                vis::Visualizer2D(gc) << vis::manip2d::Show();
             }
 
 
