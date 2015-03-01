@@ -264,9 +264,7 @@ namespace panoramix {
 
             // data binding   
             template <class FunT>
-            inline void bindCallbackFunction(const FunT & fun) { _callback = fun; }
-            template <class FunT>
-            inline void bindCallbackFunction(FunT && fun) { _callback = std::move(fun); }
+            inline void bindCallbackFunction(FunT && fun) { _callback = std::forward<FunT>(fun); }
 
             inline bool invokeCallbackFunction(InteractionID iid,
                 const VisualObjectTree & tree, 

@@ -10,10 +10,10 @@ int main(int argc, char ** argv) {
     if (argc < 2){
         std::cout << "no input" << std::endl;
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
+        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
-        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/normal/room.png";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";
@@ -49,7 +49,7 @@ int main(int argc, char ** argv) {
         core::MixedGraph mg;
         core::MixedGraphPropertyTable props;
 
-        if (0){
+        if (1){
             view = core::CreatePanoramicView(image);
 
             // collect lines in each view
@@ -82,7 +82,7 @@ int main(int argc, char ** argv) {
             segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
             segmenter.params().c = 100.0;
             int segmentsNum = 0;
-            std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera);
+            std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, M_PI / 36.0);
             //auto colorTable = vis::CreateRandomColorTableWithSize(segmentsNum);
             ////vis::Visualizer2D(segmentedImage) << vis::manip2d::Show();
             ////int segmentsNum = core::MinMaxValOfImage(segmentedImage).second + 1;
@@ -99,7 +99,7 @@ int main(int argc, char ** argv) {
 
 
             // collect gcs in each horizontal view
-            hCams = core::CreateHorizontalPerspectiveCameras(view.camera, vps, 500, 500, 200);
+            /*hCams = core::CreateHorizontalPerspectiveCameras(view.camera, vps, 500, 500, 200);
             gcs.resize(hCams.size());
             for (int i = 0; i < hCams.size(); i++){
                 auto pim = view.sampled(hCams[i]).image;
@@ -113,7 +113,7 @@ int main(int argc, char ** argv) {
                 core::Image gc = core::Imaged3::zeros(channels.front().size());
                 cv::mixChannels(channels, gc, {0, 0, 1, 1, 2, 2});
                 vis::Visualizer2D(gc) << vis::manip2d::Show();
-            }
+            }*/
 
 
             // append lines
@@ -132,7 +132,10 @@ int main(int argc, char ** argv) {
 
         // optimize
         if (1){
-            props = core::MakeMixedGraphPropertyTable(mg, vps, gcs, hCams, 2);
+            props = core::MakeMixedGraphPropertyTable(mg, vps);
+            core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 15.0);
+            core::AttachWallFaceConstriants(mg, props, M_PI / 30.0);
+            //core::AttachGeometricContextConstraints(mg, props, gcs, hCams, 2);
 
             // visualize using segmented image
             {
@@ -165,7 +168,6 @@ int main(int argc, char ** argv) {
                     << vis::manip2d::Show();
             }
 
-            core::InitializeVariables(mg, props);
             core::Visualize(view, mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
 
@@ -240,7 +242,6 @@ int main(int argc, char ** argv) {
 
         // optimize
         props = core::MakeMixedGraphPropertyTable(mg, vps);
-        core::InitializeVariables(mg, props);
         core::NormalizeVariables(mg, props);
         std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
         core::Visualize(view, mg, props);       

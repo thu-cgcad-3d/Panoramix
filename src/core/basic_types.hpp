@@ -672,7 +672,7 @@ namespace panoramix {
         struct StaticConstantFunctor {
             static const RetT value = Val;
             template <class ... ParamTs>
-            inline RetT operator()(ParamTs ... params) const { return value; }
+            inline RetT operator()(ParamTs && ... params) const { return value; }
         };
 
         template <class RetT>
@@ -680,7 +680,7 @@ namespace panoramix {
             inline ConstantFunctor(const RetT & v) : value(v) {}
             inline ConstantFunctor(RetT && v) : value(std::move(v)) {}            
             template <class ... ParamTs>
-            inline RetT operator()(ParamTs ... params) const { return value; }
+            inline RetT operator()(ParamTs && ... params) const { return value; }
             const RetT value;
         };
 

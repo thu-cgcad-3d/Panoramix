@@ -217,7 +217,8 @@ namespace panoramix {
             Params & params() { return _params; }
             std::pair<Feature, int> operator() (const Image & im, bool isPanorama = false) const;
             std::pair<Feature, int> operator() (const Image & im, const std::vector<Line2> & lines) const;
-            std::pair<Feature, int> operator() (const Image & im, const std::vector<Line3> & lines, const PanoramicCamera & cam) const;
+            std::pair<Feature, int> operator() (const Image & im, const std::vector<Line3> & lines,
+                const PanoramicCamera & cam, double extensionAngle = 0.0) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         private:
             Params _params;

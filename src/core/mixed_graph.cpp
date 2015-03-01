@@ -5,6 +5,11 @@ extern "C" {
 }
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
+
+#include <SuiteSparseQR.hpp>
+using UF_long = SuiteSparse_long;
+#include <Eigen/SPQRSupport>
+
 #include <unsupported/Eigen/NonLinearOptimization>
 #include <unsupported/Eigen/NumericalDiff>
 
@@ -1045,6 +1050,68 @@ namespace panoramix {
                 return new SmoothCostFunctorWrapper<FunctorT>(std::forward<FunctorT>(f));
             }
 
+
+            namespace {
+
+                int SwappedComponent(const Vec3 & orientation){
+                    for (int i = 0; i < 2; i++){
+                        if (abs(orientation[i]) >= 1e-8){
+                            return i;
+                        }
+                    }
+                    return 2;
+                }
+
+                struct InitializeVariablesForEachHandle {
+                    const MixedGraph & mg;
+                    MixedGraphPropertyTable & props;
+
+                    void operator()(const LineHandle & lh) const {
+                        auto & lp = props.componentProperties[lh];
+                        if (!lp.used){
+                            lp.variables = {};
+                            return;
+                        }
+                        if (lp.orientationClaz == -1){
+                            // (1/cornerDepth1, 1/cornerDepth2) for LineFree
+                            lp.variables = { 1.0, 1.0 };
+                        }
+                        else{
+                            // 1/centerDepth for LineOriented,
+                            lp.variables = { 1.0 };
+                        }
+                    }
+
+                    void operator()(const RegionHandle & rh) const {
+                        auto & rd = mg.data(rh);
+                        auto & rp = props.componentProperties[rh];
+                        if (!rp.used){
+                            rp.variables = {};
+                            return;
+                        }
+                        if (rp.orientationClaz == -1 && rp.orientationNotClaz == -1){
+                            // (a, b, c) for RegionFree ax+by+c=1, 
+                            rp.variables = { rd.normalizedCenter[0], rd.normalizedCenter[1], rd.normalizedCenter[2] };
+                        }
+                        else if (rp.orientationClaz == -1 && rp.orientationNotClaz >= 0){
+                            // (a, b), {or (b, c) or (a, c)} for RegionAlongFixedAxis  ax+by+c=1,
+                            Vec3 anotherAxis = rd.normalizedCenter.cross(normalize(props.vanishingPoints[rp.orientationNotClaz]));
+                            Vec3 trueNormal = props.vanishingPoints[rp.orientationNotClaz].cross(anotherAxis);
+                            Plane3 plane(rd.normalizedCenter, trueNormal);
+                            auto eq = Plane3ToEquation(plane);
+                            int c = SwappedComponent(normalize(props.vanishingPoints[rp.orientationNotClaz]));
+                            std::swap(eq[c], eq[2]);
+                            rp.variables = { eq[0], eq[1] };
+                        }
+                        else {
+                            // 1/centerDepth for RegionWithFixedNormal
+                            rp.variables = { 1.0 };
+                        }
+                    }
+                };
+
+            }
+
         }
 
 
@@ -1061,12 +1128,19 @@ namespace panoramix {
             for (auto & r : mg.internalComponents<RegionData>()){
                 compProps[r.topo.hd].orientationClaz = compProps[r.topo.hd].orientationNotClaz = -1;
             }
+            for (auto & dtable : compProps.data){
+                for (auto & d : dtable){
+                    d.used = true;
+                }
+            }
             for (auto & dtable : consProps.data){
                 for (auto & d : dtable){
                     d.used = true;
                 }
             }
-            return MixedGraphPropertyTable{ vps, std::move(compProps), std::move(consProps) };
+            MixedGraphPropertyTable props{ vps, std::move(compProps), std::move(consProps) };
+            ForeachMixedGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+            return props;
         }
 
 
@@ -1197,415 +1271,7 @@ namespace panoramix {
         }
 
 
-
-        MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps,
-            const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
-            const std::vector<PerspectiveCamera> & gcCameras, int shrinkRegionOrientationIteration, bool considerGCVerticalConstraint){
-
-            MixedGraphPropertyTable props = { vps, 
-                MakeHandledTableForComponents<MixedGraphComponentProperty>(mg), 
-                MakeHandledTableForConstraints<MixedGraphConstraintProperty>(mg)
-            };
-
-            HandledTable<RegionHandle, std::unordered_map<OrientationHint, double>> orientationVotes(
-                mg.internalComponents<RegionData>().size(),
-                std::unordered_map<OrientationHint, double>((size_t)OrientationHint::Count));
-
-            assert(perspectiveGCs.size() == gcCameras.size());
-
-            // region views
-            HandledTable<RegionHandle, View<PartialPanoramicCamera, Imageub>> regionMaskViews(mg.internalComponents<RegionData>().size());
-            for (auto & r : mg.components<RegionData>()){
-                auto h = r.topo.hd;
-                auto & contours = r.data.normalizedContours;
-                double radiusAngle = 0.0;               
-                for (auto & cs : r.data.normalizedContours){
-                    for (auto & c : cs){
-                        double angle = AngleBetweenDirections(r.data.normalizedCenter, c);
-                        if (angle > radiusAngle){
-                            radiusAngle = angle;
-                        }
-                    }
-                }
-                float ppcFocal = 100.0f;
-                int ppcSize = 2 * radiusAngle * ppcFocal;
-                Vec3 x;
-                std::tie(x, std::ignore) = ProposeXYDirectionsFromZDirection(r.data.normalizedCenter);
-                PartialPanoramicCamera ppc(ppcSize, ppcSize, ppcFocal, Point3(0, 0, 0), r.data.normalizedCenter, x);
-                Imageub mask = Imageub::zeros(ppc.screenSize());
-
-                // project contours to ppc
-                std::vector<std::vector<Point2i>> contourProjs(contours.size());
-                for (int k = 0; k < contours.size(); k++){
-                    auto & contourProj = contourProjs[k];
-                    contourProj.reserve(contours[k].size());
-                    for (auto & d : contours[k]){
-                        contourProj.push_back(vec_cast<int>(ppc.screenProjection(d)));
-                    }
-                }
-                cv::fillPoly(mask, contourProjs, (uint8_t)1);
-                regionMaskViews[h].camera = ppc;
-                regionMaskViews[h].image = mask;
-            }
-
-            HandledTable<RegionHandle, double> regionAreas(mg.internalComponents<RegionData>().size());
-            for (auto & r : mg.components<RegionData>()){
-                auto h = r.topo.hd;
-                auto & ppMask = regionMaskViews[h];
-                double area = cv::sum(ppMask.image).val[0];
-                regionAreas[h] = area;
-                for (int i = 0; i < perspectiveGCs.size(); i++){
-                    auto sampler = MakeCameraSampler(ppMask.camera, gcCameras[i]);
-                    auto occupation = sampler(Imageub::ones(gcCameras[i].screenSize()), cv::BORDER_CONSTANT, 0.0);
-                    double areaOccupied = cv::sum(ppMask.image & occupation).val[0];
-                    double ratio = areaOccupied / area;
-                    assert(ratio <= 1.01);
-                    GeometricContextLabel maxLabel = GeometricContextLabel::None;
-                    double maxScore = 0.0;
-                    for (auto & gcc : perspectiveGCs[i]){
-                        auto label = gcc.first;
-                        Imaged ppGC = sampler(gcc.second);
-                        double score = cv::mean(ppGC, ppMask.image).val[0];
-                        if (score > maxScore){
-                            maxScore = score;
-                            maxLabel = label;
-                        }
-                    }
-                    if (maxLabel != GeometricContextLabel::None){
-                        auto & v = orientationVotes[r.topo.hd][ToOrientationHint(maxLabel, considerGCVerticalConstraint)];
-                        v = std::max(v, ratio);
-                    }
-                }
-            }
-
-            // optimize
-            GCoptimizationGeneralGraph graph(mg.internalComponents<RegionData>().size(), (int)OrientationHint::Count);
-
-            double maxBoundaryLength = 0;
-            for (auto & b : mg.constraints<RegionBoundaryData>()){
-                maxBoundaryLength = std::max(maxBoundaryLength, b.data.length);
-            }
-            for (auto & b : mg.constraints<RegionBoundaryData>()){
-                graph.setNeighbors(b.topo.component<0>().id, b.topo.component<1>().id,
-                    100 * b.data.length / maxBoundaryLength);
-            }
-            for (auto & r : mg.components<RegionData>()){
-                auto & orientationVote = orientationVotes[r.topo.hd];
-                // normalize votes
-                double votesSum = 0.0;
-                for (auto & v : orientationVote){
-                    votesSum += v.second;
-                }
-                assert(votesSum >= 0.0);
-                if (votesSum > 0.0){
-                    for (auto & v : orientationVote){
-                        assert(v.second >= 0.0);
-                        v.second /= votesSum;
-                    }
-                }
-                for (int label = 0; label < (int)OrientationHint::Count; label++){
-                    double vote = Contains(orientationVote, (OrientationHint)label) ?
-                        orientationVote.at((OrientationHint)label) : 0.0;
-                    graph.setDataCost(r.topo.hd.id, label,
-                        votesSum == 0.0 ? 0 : (10000 * (1.0 - vote)));
-                }
-            }
-            for (int label1 = 0; label1 < (int)OrientationHint::Count; label1++){
-                for (int label2 = 0; label2 < (int)OrientationHint::Count; label2++){
-                    if (label1 == label2){
-                        graph.setSmoothCost(label1, label2, 0);
-                    }
-                    else{
-                        graph.setSmoothCost(label1, label2, 1);
-                    }
-                }
-            }
-
-            graph.expansion();
-            graph.swap();
-
-            // get the most vertical vp id
-            int vVPId = -1;
-            double angleToVert = std::numeric_limits<double>::max();
-            for (int i = 0; i < props.vanishingPoints.size(); i++){
-                double a = AngleBetweenUndirectedVectors(props.vanishingPoints[i], Vec3(0, 0, 1));
-                if (a < angleToVert){
-                    vVPId = i;
-                    angleToVert = a;
-                }
-            }
-            assert(vVPId != -1);
-
-            // disorient outsided oriented gc labels
-            HandledTable<RegionHandle, OrientationHint> regionOrientations(mg.internalComponents<RegionData>().size());
-            for (auto & r : mg.components<RegionData>()){
-                regionOrientations[r.topo.hd] = (OrientationHint)(graph.whatLabel(r.topo.hd.id));
-            }
-
-            for (int i = 0; i < shrinkRegionOrientationIteration; i++){
-                auto shrinked = regionOrientations;
-                for (auto & b : mg.constraints<RegionBoundaryData>()){
-                    auto l1 = regionOrientations[b.topo.component<0>()];
-                    auto l2 = regionOrientations[b.topo.component<1>()];
-                    if (l1 == OrientationHint::Horizontal && l2 != OrientationHint::Horizontal){
-                        shrinked[b.topo.component<0>()] = OrientationHint::OtherPlanar;
-                    }
-                    else if (l1 != OrientationHint::Horizontal && l2 == OrientationHint::Horizontal){
-                        shrinked[b.topo.component<1>()] = OrientationHint::OtherPlanar;
-                    }
-                    if (l1 == OrientationHint::Vertical && l2 != OrientationHint::Vertical){
-                        shrinked[b.topo.component<0>()] = OrientationHint::OtherPlanar;
-                    }
-                    else if (l1 != OrientationHint::Vertical && l2 == OrientationHint::Vertical){
-                        shrinked[b.topo.component<1>()] = OrientationHint::OtherPlanar;
-                    }
-                }
-                regionOrientations = std::move(shrinked);
-            }
-
-            // install gc labels
-            for (auto & r : mg.components<RegionData>()){
-                OrientationHint oh = regionOrientations[r.topo.hd];
-                switch (oh) {
-                case OrientationHint::Void:
-                    props[r.topo.hd].used = false;
-                    props[r.topo.hd].orientationClaz = -1;
-                    props[r.topo.hd].orientationNotClaz = -1;
-                    break;
-                case OrientationHint::Horizontal:
-                    props[r.topo.hd].used = true;
-                    props[r.topo.hd].orientationClaz = vVPId;
-                    props[r.topo.hd].orientationNotClaz = -1;
-                    break;
-                case OrientationHint::Vertical:
-                    props[r.topo.hd].used = true;
-                    props[r.topo.hd].orientationClaz = -1;
-                    props[r.topo.hd].orientationNotClaz = vVPId;
-                    break;
-                case OrientationHint::OtherPlanar:
-                    props[r.topo.hd].used = true;
-                    props[r.topo.hd].orientationClaz = -1;
-                    props[r.topo.hd].orientationNotClaz = -1;
-                    break;
-                case OrientationHint::NonPlanar:
-                    props[r.topo.hd].used = false;
-                    props[r.topo.hd].orientationClaz = -1;
-                    props[r.topo.hd].orientationNotClaz = -1;
-                    break;
-                default:
-                    assert(0);
-                    break;
-                }
-            }
-
-            //// detect big aligned rectangular regions and orient them
-            //double regionAreaSum = std::accumulate(regionAreas.begin(), regionAreas.end(), 0.0);
-            //assert(regionAreaSum > 0);
-
-            //static const double dotThreshold = 0.001;
-            //static const double spanAngleThreshold = DegreesToRadians(10);
-            //static const double wholeDotThreshold = 0.01;
-            //static const double wholeSpanAngleThreshold = DegreesToRadians(10);
-
-            //HandledTable<RegionBoundaryHandle, std::vector<double>> boundaryMaxSpanAnglesForVPs(mg.internalConstraints<RegionBoundaryData>().size());
-            //for (auto & b : mg.constraints<RegionBoundaryData>()){
-            //    auto & edges = b.data.normalizedEdges;
-            //    std::vector<double> maxSpanAngleForVPs(props.vanishingPoints.size(), 0.0);
-            //    if (b.topo.hd.id == 849){
-            //        std::cout << std::endl;
-            //    }
-
-            //    for (auto & edge : edges){
-            //        std::vector<std::vector<bool>> edgeVPFlags(props.vanishingPoints.size(),
-            //            std::vector<bool>(edge.size() - 1, false));
-            //        for (int i = 0; i < edge.size() - 1; i++){
-            //            Vec3 n = normalize(edge[i].cross(edge[i + 1]));
-            //            for (int k = 0; k < props.vanishingPoints.size(); k++){
-            //                auto vp = normalize(props.vanishingPoints[k]);
-            //                double dotv = abs(vp.dot(n));
-            //                if (dotv <= dotThreshold){
-            //                    edgeVPFlags[k][i] = true;
-            //                }
-            //            }
-            //        }
-            //        // detect aligned longest line spanAngles from edge
-            //        for (int k = 0; k < props.vanishingPoints.size(); k++){
-            //            auto vp = normalize(props.vanishingPoints[k]);
-            //            auto & edgeFlags = edgeVPFlags[k];
-            //            int lastHead = -1, lastTail = -1;
-            //            bool inChain = false;
-
-            //            double & maxSpanAngle = maxSpanAngleForVPs[k];
-            //            for (int j = 0; j <= edgeFlags.size(); j++){
-            //                if (!inChain && j < edgeFlags.size() && edgeFlags[j]){
-            //                    lastHead = j;
-            //                    inChain = true;
-            //                }
-            //                else if (inChain && (j == edgeFlags.size() || !edgeFlags[j])){
-            //                    lastTail = j;
-            //                    inChain = false;
-            //                    // examine current chain
-            //                    assert(lastHead != -1);
-            //                    // compute full span angle
-            //                    double spanAngle = 0.0;
-            //                    for (int i = lastHead; i < lastTail; i++){
-            //                        spanAngle += AngleBetweenDirections(edge[i], edge[i + 1]);
-            //                    }
-            //                    if (spanAngle < spanAngleThreshold){
-            //                        continue;
-            //                    }
-            //                    // fit line
-            //                    const Vec3 & midCorner = edge[(lastHead + lastTail) / 2];
-            //                    Vec3 commonNormal = normalize(midCorner.cross(vp));
-            //                    std::vector<double> dotsToCommonNormal(lastTail - lastHead + 1, 0.0);
-            //                    for (int i = lastHead; i <= lastTail; i++){
-            //                        dotsToCommonNormal[i - lastHead] = abs(edge[i].dot(commonNormal));
-            //                    }
-            //                    if (*std::max_element(dotsToCommonNormal.begin(), dotsToCommonNormal.end()) <= wholeDotThreshold){
-            //                        // acceptable!
-            //                        if (spanAngle > maxSpanAngle){
-            //                            maxSpanAngle = spanAngle;
-            //                        }
-            //                    }
-            //                }
-            //            }
-            //        }             
-            //    }
-            //    if ((b.topo.component<0>().id == 355 || b.topo.component<1>().id == 355) && std::accumulate(maxSpanAngleForVPs.begin(), maxSpanAngleForVPs.end(), 0.0) > 0){
-            //        std::cout << std::endl;
-            //    }
-            //    boundaryMaxSpanAnglesForVPs[b.topo.hd] = std::move(maxSpanAngleForVPs);
-            //}
-            //for (auto & r : mg.components<RegionData>()){
-            //    if (!props[r.topo.hd].used)
-            //        continue;
-            //    if (props[r.topo.hd].orientationClaz != -1 || props[r.topo.hd].orientationNotClaz != -1)
-            //        continue;
-
-            //    if (r.topo.hd.id == 355){
-            //        std::cout << std::endl;
-            //    }
-
-            //    double area = regionAreas[r.topo.hd];
-            //    if (area / regionAreaSum < 0.005){
-            //        continue;
-            //    }
-            //    std::vector<double> spanAngleSumsForVPs(props.vanishingPoints.size(), 0.0);
-            //    for (auto & h : r.topo.constraints<RegionBoundaryData>()){
-            //        for (int i = 0; i < props.vanishingPoints.size(); i++){
-            //            spanAngleSumsForVPs[i] += boundaryMaxSpanAnglesForVPs[h][i];
-            //        }
-            //    }
-            //    auto maxIter = std::max_element(spanAngleSumsForVPs.begin(), spanAngleSumsForVPs.end());
-            //    int firstMaxVPId = std::distance(spanAngleSumsForVPs.begin(), maxIter);
-            //    double firstMaxSpanAngle = *maxIter;
-            //    *maxIter = -1.0;
-            //    maxIter = std::max_element(spanAngleSumsForVPs.begin(), spanAngleSumsForVPs.end());
-            //    int secondMaxVPId = std::distance(spanAngleSumsForVPs.begin(), maxIter);
-            //    double secondMaxSpanAngle = *maxIter;
-            //    if (secondMaxSpanAngle >= wholeSpanAngleThreshold){
-            //        assert(firstMaxVPId != secondMaxVPId);
-            //        Vec3 normal = props.vanishingPoints[firstMaxVPId].cross(props.vanishingPoints[secondMaxVPId]);
-            //        double minAngle = 0.1;
-            //        int bestMatchedVPId = -1;
-            //        for (int i = 0; i < props.vanishingPoints.size(); i++){
-            //            double angle = AngleBetweenUndirectedVectors(normal, props.vanishingPoints[i]);
-            //            if (angle < minAngle){
-            //                minAngle = angle;
-            //                bestMatchedVPId = i;
-            //            }
-            //        }
-            //        if (bestMatchedVPId != -1){
-            //            std::cout << "vpid:::: " << bestMatchedVPId << std::endl;
-            //            props[r.topo.hd].orientationClaz = bestMatchedVPId;
-            //            props[r.topo.hd].orientationNotClaz = -1;
-            //        }
-            //    }
-            //    else if (firstMaxSpanAngle >= wholeSpanAngleThreshold){
-            //        std::cout << "vpid-along:::: " << firstMaxVPId << std::endl;
-            //        props[r.topo.hd].orientationClaz = -1;
-            //        props[r.topo.hd].orientationNotClaz = firstMaxVPId;
-            //    }
-            //}
-
-            for (auto & l : mg.internalComponents<LineData>()){
-                props[l.topo.hd].used = true;
-                props[l.topo.hd].orientationClaz = l.data.initialClaz;
-                props[l.topo.hd].orientationNotClaz = -1;
-            }
-
-            ForeachMixedGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
-
-            return props;
-        }
-
-
-
-
-
-        namespace {
-
-            int SwappedComponent(const Vec3 & orientation){
-                for (int i = 0; i < 2; i++){
-                    if (abs(orientation[i]) >= 1e-8){
-                        return i;
-                    }
-                }
-                return 2;
-            }
-
-            struct InitializeVariablesForEachHandle {
-                const MixedGraph & mg;
-                MixedGraphPropertyTable & props;
-
-                void operator()(const LineHandle & lh) const {
-                    auto & lp = props.componentProperties[lh];
-                    if (!lp.used){
-                        lp.variables = {};
-                        return;
-                    }
-                    if (lp.orientationClaz == -1){
-                        // (1/cornerDepth1, 1/cornerDepth2) for LineFree
-                        lp.variables = { 1.0, 1.0 };
-                    }
-                    else{
-                        // 1/centerDepth for LineOriented,
-                        lp.variables = { 1.0 };
-                    }
-                }
-
-                void operator()(const RegionHandle & rh) const {
-                    auto & rd = mg.data(rh);
-                    auto & rp = props.componentProperties[rh];
-                    if (!rp.used){
-                        rp.variables = {};
-                        return;
-                    }
-                    if (rp.orientationClaz == -1 && rp.orientationNotClaz == -1){
-                        // (a, b, c) for RegionFree ax+by+c=1, 
-                        rp.variables = { rd.normalizedCenter[0], rd.normalizedCenter[1], rd.normalizedCenter[2] };
-                    }
-                    else if (rp.orientationClaz == -1 && rp.orientationNotClaz >= 0){
-                        // (a, b), {or (b, c) or (a, c)} for RegionAlongFixedAxis  ax+by+c=1,
-                        Vec3 anotherAxis = rd.normalizedCenter.cross(normalize(props.vanishingPoints[rp.orientationNotClaz]));
-                        Vec3 trueNormal = props.vanishingPoints[rp.orientationNotClaz].cross(anotherAxis);
-                        Plane3 plane(rd.normalizedCenter, trueNormal);
-                        auto eq = Plane3ToEquation(plane);
-                        int c = SwappedComponent(normalize(props.vanishingPoints[rp.orientationNotClaz]));
-                        std::swap(eq[c], eq[2]);
-                        rp.variables = { eq[0], eq[1] };
-                    }
-                    else {
-                        // 1/centerDepth for RegionWithFixedNormal
-                        rp.variables = { 1.0 };
-                    }
-                }
-            };
-
-        }
-
-
-        void InitializeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
+        void ResetVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
             ForeachMixedGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
         }
 
@@ -2106,27 +1772,51 @@ namespace panoramix {
 
             Eigen::Map<Eigen::VectorXd> B(Bdata.data(), Bdata.size());
 
-            Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
-            static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
+            static const bool useSPQR = true;
+
             Eigen::SparseMatrix<double> WA = W * A;
             A.makeCompressed();
             WA.makeCompressed();
-
             static const bool useWeights = false;
-            solver.compute(useWeights ? WA : A);
 
-            if (solver.info() != Eigen::Success) {
-                assert(0);
-                std::cout << "computation error" << std::endl;
-                return;
+            Eigen::VectorXd X;
+            if (!useSPQR) {
+                Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
+                static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
+
+                solver.compute(useWeights ? WA : A);
+
+                if (solver.info() != Eigen::Success) {
+                    assert(0);
+                    std::cout << "computation error" << std::endl;
+                    return;
+                }
+
+                Eigen::VectorXd WB = W * B;
+                X = solver.solve(useWeights ? WB : B);
+                if (solver.info() != Eigen::Success) {
+                    assert(0);
+                    std::cout << "solving error" << std::endl;
+                    return;
+                }
             }
+            else{
+                Eigen::SPQR<Eigen::SparseMatrix<double>> solver;
+                solver.compute(useWeights ? WA : A);
 
-            Eigen::VectorXd WB = W * B;
-            Eigen::VectorXd X = solver.solve(useWeights ? WB : B);
-            if (solver.info() != Eigen::Success) {
-                assert(0);
-                std::cout << "solving error" << std::endl;
-                return;
+                if (solver.info() != Eigen::Success) {
+                    assert(0);
+                    std::cout << "computation error" << std::endl;
+                    return;
+                }
+
+                Eigen::VectorXd WB = W * B;
+                X = solver.solve(useWeights ? WB : B);
+                if (solver.info() != Eigen::Success) {
+                    assert(0);
+                    std::cout << "solving error" << std::endl;
+                    return;
+                }
             }
 
 
@@ -2435,30 +2125,6 @@ namespace panoramix {
         }
 
 
-        void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
-            double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
-            std::cout << "median center depth: " << medianCenterDepth << std::endl;
-
-            assert(!IsInfOrNaN(medianCenterDepth));
-
-            // normalize variables
-            for (auto & c : mg.components<RegionData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    props[c.topo.hd].variables[i] *= medianCenterDepth;
-                }
-            }
-            for (auto & c : mg.components<LineData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    props[c.topo.hd].variables[i] *= medianCenterDepth;
-                }
-            }
-        }
-
-
         double ComputeScore(const MixedGraph & mg, const MixedGraphPropertyTable & props){
 
             // manhattan fitness
@@ -2630,6 +2296,603 @@ namespace panoramix {
             return score;
         }
 
+
+
+
+
+        void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
+            double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
+            std::cout << "median center depth: " << medianCenterDepth << std::endl;
+
+            assert(!IsInfOrNaN(medianCenterDepth));
+
+            // normalize variables
+            for (auto & c : mg.components<RegionData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
+                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+                    props[c.topo.hd].variables[i] *= medianCenterDepth;
+                }
+            }
+            for (auto & c : mg.components<LineData>()){
+                if (!props[c.topo.hd].used)
+                    continue;
+                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+                    props[c.topo.hd].variables[i] *= medianCenterDepth;
+                }
+            }
+        }
+
+
+
+
+        namespace {
+            
+            // returns false if confliction occurs
+            bool MakeRegionPlaneUsable(RegionHandle rh, bool usable, MixedGraphPropertyTable & props) {
+                auto & p = props[rh];
+                if (p.used == usable)
+                    return true;
+                if (p.used && !usable){
+                    p.used = false;
+                    p.orientationClaz = p.orientationNotClaz = -1;
+                    return true;
+                }
+                p.orientationClaz = p.orientationNotClaz = -1;
+                return true;
+            }
+
+
+            // returns false if confliction occurs
+            bool MakeRegionPlaneToward(RegionHandle rh, int normalVPId, MixedGraphPropertyTable & props){
+                auto & p = props[rh];
+                if (!p.used)
+                    return true;
+                assert(normalVPId != -1);
+                if (p.orientationClaz != -1){
+                    if (p.orientationClaz != normalVPId)
+                        return false;
+                    return true;
+                }
+                if (p.orientationNotClaz == -1) {
+                    p.orientationClaz = normalVPId;
+                    return true;
+                }
+                auto & dir = props.vanishingPoints[p.orientationNotClaz];
+                if (IsFuzzyPerpendicular(props.vanishingPoints[normalVPId], dir)){
+                    p.orientationClaz = normalVPId;
+                    p.orientationNotClaz = -1;
+                    return true;
+                }
+                return false;
+            }
+
+            // returns false if confliction occurs
+            bool MakeRegionPlaneAlsoAlong(RegionHandle rh, int alongVPId, MixedGraphPropertyTable & props){
+                auto & p = props[rh];
+                if (!p.used)
+                    return true;
+                assert(alongVPId != -1);
+                auto & dir = props.vanishingPoints[alongVPId];
+                if (p.orientationClaz != -1){
+                    auto & normal = props.vanishingPoints[p.orientationClaz];
+                    return IsFuzzyPerpendicular(normal, dir);
+                }
+                if (p.orientationNotClaz == -1){
+                    p.orientationNotClaz = alongVPId;
+                    return true;
+                }
+                if (p.orientationNotClaz == alongVPId)
+                    return true;
+
+                auto newNormal = dir.cross(props.vanishingPoints[p.orientationNotClaz]);
+                double minAngle = M_PI;
+                for (int i = 0; i < props.vanishingPoints.size(); i++){
+                    double angle = AngleBetweenUndirectedVectors(props.vanishingPoints[i], newNormal);
+                    if (angle < minAngle){
+                        p.orientationClaz = i;
+                        minAngle = angle;
+                    }
+                }
+                if (p.orientationClaz != -1){
+                    p.orientationNotClaz = -1;
+                    return true;
+                }
+                return false;
+            }
+
+        }
+
+
+
+        void AttachPrincipleDirectionConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props,
+            double rangeAngle){
+
+            // find peaky regions
+            std::vector<std::vector<RegionHandle>> peakyRegionHandles(props.vanishingPoints.size());
+            for (auto & r : mg.components<RegionData>()){
+                auto h = r.topo.hd;
+                auto & contours = r.data.normalizedContours;
+                double radiusAngle = 0.0;
+                for (auto & cs : r.data.normalizedContours){
+                    for (auto & c : cs){
+                        double angle = AngleBetweenDirections(r.data.normalizedCenter, c);
+                        if (angle > radiusAngle){
+                            radiusAngle = angle;
+                        }
+                    }
+                }
+
+                bool mayCrossAnyVP = false;
+                for (auto & vp : props.vanishingPoints){
+                    double angle = AngleBetweenUndirectedVectors(vp, r.data.normalizedCenter);
+                    if (angle < radiusAngle){
+                        mayCrossAnyVP = true;
+                        break;
+                    }
+                }
+
+                if (!mayCrossAnyVP){
+                    continue;
+                }
+
+                float ppcFocal = 100.0f;
+                int ppcSize = 2 * radiusAngle * ppcFocal + 10;
+                Vec3 x;
+                std::tie(x, std::ignore) = ProposeXYDirectionsFromZDirection(r.data.normalizedCenter);
+                PartialPanoramicCamera ppc(ppcSize, ppcSize, ppcFocal, Point3(0, 0, 0), r.data.normalizedCenter, x);
+                Imageub mask = Imageub::zeros(ppc.screenSize());
+
+                // project contours to ppc
+                std::vector<std::vector<Point2i>> contourProjs(contours.size());
+                for (int k = 0; k < contours.size(); k++){
+                    auto & contourProj = contourProjs[k];
+                    contourProj.reserve(contours[k].size());
+                    for (auto & d : contours[k]){
+                        contourProj.push_back(vec_cast<int>(ppc.screenProjection(d)));
+                    }
+                }
+                cv::fillPoly(mask, contourProjs, (uint8_t)1);
+                
+                // intersection test
+                for (int i = 0; i < props.vanishingPoints.size(); i++){
+                    auto p1 = ToPixelLoc(ppc.screenProjection(props.vanishingPoints[i]));
+                    auto p2 = ToPixelLoc(ppc.screenProjection(-props.vanishingPoints[i]));
+                    
+                    int dilateSize = ppcFocal * rangeAngle;
+                    bool intersected = false;
+                    for (int x = -dilateSize; x <= dilateSize; x++){
+                        if (intersected)
+                            break;
+                        for (int y = -dilateSize; y <= dilateSize; y++){
+                            if (intersected)
+                                break;
+                            auto pp1 = PixelLoc(p1.x + x, p1.y + y);
+                            auto pp2 = PixelLoc(p2.x + x, p2.y + y);
+                            if (Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp1) && mask(pp1)){
+                                peakyRegionHandles[i].push_back(r.topo.hd);
+                                intersected = true;
+                            }
+                            else if (Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp2) && mask(pp2)){
+                                peakyRegionHandles[i].push_back(r.topo.hd);
+                                intersected = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+  
+            for (int i = 0; i < props.vanishingPoints.size(); i++){
+                auto & vp = props.vanishingPoints[i];
+                auto & rhs = peakyRegionHandles[i];
+                for (auto rh : rhs){
+                    MakeRegionPlaneToward(rh, i, props);
+                }
+            }
+
+            ForeachMixedGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
+            ForeachMixedGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+
+        }
+
+
+        void AttachWallFaceConstriants(const MixedGraph & mg, MixedGraphPropertyTable & props,
+            double rangeAngle, const Vec3 & verticalSeed){
+
+            int vertVPId = -1;
+            double minAngle = M_PI;
+            for (int i = 0; i < props.vanishingPoints.size(); i++){
+                double angle = AngleBetweenUndirectedVectors(verticalSeed, props.vanishingPoints[i]);
+                if (angle < minAngle){
+                    minAngle = angle;
+                    vertVPId = i;
+                }
+            }
+            assert(vertVPId != -1);
+            auto & vertical = props.vanishingPoints[vertVPId];
+
+            std::vector<RegionHandle> horizontalRegionHandles;
+            for (auto & r : mg.components<RegionData>()){
+                auto h = r.topo.hd;
+                auto & contours = r.data.normalizedContours;
+                bool intersected = false;
+                for (auto & cs : r.data.normalizedContours){
+                    if (intersected)
+                        break;
+                    for (auto & c : cs){
+                        double angle = M_PI_2 - AngleBetweenUndirectedVectors(c, vertical);
+                        if (angle <= rangeAngle){
+                            intersected = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (intersected){
+                    horizontalRegionHandles.push_back(h);
+                }
+            }
+
+            for (auto h : horizontalRegionHandles){
+                MakeRegionPlaneAlsoAlong(h, vertVPId, props);
+            }
+
+            ForeachMixedGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
+            ForeachMixedGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+        }
+
+
+        void AttachGeometricContextConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props,
+            const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
+            const std::vector<PerspectiveCamera> & gcCameras,
+            int shrinkRegionOrientationIteration, bool considerGCVerticalConstraint){
+
+            auto orientationVotes = mg.createComponentTable<RegionData, std::unordered_map<OrientationHint, double>>(
+                std::unordered_map<OrientationHint, double>((size_t)OrientationHint::Count));
+
+            assert(perspectiveGCs.size() == gcCameras.size());
+
+            // region views
+            auto regionMaskViews = mg.createComponentTable<RegionData, View<PartialPanoramicCamera, Imageub>>();
+            for (auto & r : mg.components<RegionData>()){
+                auto h = r.topo.hd;
+                auto & contours = r.data.normalizedContours;
+                double radiusAngle = 0.0;
+                for (auto & cs : r.data.normalizedContours){
+                    for (auto & c : cs){
+                        double angle = AngleBetweenDirections(r.data.normalizedCenter, c);
+                        if (angle > radiusAngle){
+                            radiusAngle = angle;
+                        }
+                    }
+                }
+                float ppcFocal = 100.0f;
+                int ppcSize = 2 * radiusAngle * ppcFocal;
+                Vec3 x;
+                std::tie(x, std::ignore) = ProposeXYDirectionsFromZDirection(r.data.normalizedCenter);
+                PartialPanoramicCamera ppc(ppcSize, ppcSize, ppcFocal, Point3(0, 0, 0), r.data.normalizedCenter, x);
+                Imageub mask = Imageub::zeros(ppc.screenSize());
+
+                // project contours to ppc
+                std::vector<std::vector<Point2i>> contourProjs(contours.size());
+                for (int k = 0; k < contours.size(); k++){
+                    auto & contourProj = contourProjs[k];
+                    contourProj.reserve(contours[k].size());
+                    for (auto & d : contours[k]){
+                        contourProj.push_back(vec_cast<int>(ppc.screenProjection(d)));
+                    }
+                }
+                cv::fillPoly(mask, contourProjs, (uint8_t)1);
+                regionMaskViews[h].camera = ppc;
+                regionMaskViews[h].image = mask;
+            }
+
+            auto regionAreas = mg.createComponentTable<RegionData, double>(0.0);
+            for (auto & r : mg.components<RegionData>()){
+                auto h = r.topo.hd;
+                auto & ppMask = regionMaskViews[h];
+                double area = cv::sum(ppMask.image).val[0];
+                regionAreas[h] = area;
+                for (int i = 0; i < perspectiveGCs.size(); i++){
+                    auto sampler = MakeCameraSampler(ppMask.camera, gcCameras[i]);
+                    auto occupation = sampler(Imageub::ones(gcCameras[i].screenSize()), cv::BORDER_CONSTANT, 0.0);
+                    double areaOccupied = cv::sum(ppMask.image & occupation).val[0];
+                    double ratio = areaOccupied / area;
+                    assert(ratio <= 1.01);
+                    GeometricContextLabel maxLabel = GeometricContextLabel::None;
+                    double maxScore = 0.0;
+                    for (auto & gcc : perspectiveGCs[i]){
+                        auto label = gcc.first;
+                        Imaged ppGC = sampler(gcc.second);
+                        double score = cv::mean(ppGC, ppMask.image).val[0];
+                        if (score > maxScore){
+                            maxScore = score;
+                            maxLabel = label;
+                        }
+                    }
+                    if (maxLabel != GeometricContextLabel::None){
+                        auto & v = orientationVotes[r.topo.hd][ToOrientationHint(maxLabel, considerGCVerticalConstraint)];
+                        v = std::max(v, ratio);
+                    }
+                }
+            }
+
+            // optimize
+            GCoptimizationGeneralGraph graph(mg.internalComponents<RegionData>().size(), (int)OrientationHint::Count);
+
+            double maxBoundaryLength = 0;
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
+                maxBoundaryLength = std::max(maxBoundaryLength, b.data.length);
+            }
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
+                graph.setNeighbors(b.topo.component<0>().id, b.topo.component<1>().id,
+                    100 * b.data.length / maxBoundaryLength);
+            }
+            for (auto & r : mg.components<RegionData>()){
+                auto & orientationVote = orientationVotes[r.topo.hd];
+                // normalize votes
+                double votesSum = 0.0;
+                for (auto & v : orientationVote){
+                    votesSum += v.second;
+                }
+                assert(votesSum >= 0.0);
+                if (votesSum > 0.0){
+                    for (auto & v : orientationVote){
+                        assert(v.second >= 0.0);
+                        v.second /= votesSum;
+                    }
+                }
+                for (int label = 0; label < (int)OrientationHint::Count; label++){
+                    double vote = Contains(orientationVote, (OrientationHint)label) ?
+                        orientationVote.at((OrientationHint)label) : 0.0;
+                    graph.setDataCost(r.topo.hd.id, label,
+                        votesSum == 0.0 ? 0 : (10000 * (1.0 - vote)));
+                }
+            }
+            for (int label1 = 0; label1 < (int)OrientationHint::Count; label1++){
+                for (int label2 = 0; label2 < (int)OrientationHint::Count; label2++){
+                    if (label1 == label2){
+                        graph.setSmoothCost(label1, label2, 0);
+                    }
+                    else{
+                        graph.setSmoothCost(label1, label2, 1);
+                    }
+                }
+            }
+
+            graph.expansion();
+            graph.swap();
+
+            // get the most vertical vp id
+            int vVPId = -1;
+            double angleToVert = std::numeric_limits<double>::max();
+            for (int i = 0; i < props.vanishingPoints.size(); i++){
+                double a = AngleBetweenUndirectedVectors(props.vanishingPoints[i], Vec3(0, 0, 1));
+                if (a < angleToVert){
+                    vVPId = i;
+                    angleToVert = a;
+                }
+            }
+            assert(vVPId != -1);
+
+            // disorient outsided oriented gc labels
+            auto regionOrientations = mg.createComponentTable<RegionData, OrientationHint>(OrientationHint::Void);
+            for (auto & r : mg.components<RegionData>()){
+                regionOrientations[r.topo.hd] = (OrientationHint)(graph.whatLabel(r.topo.hd.id));
+            }
+
+            for (int i = 0; i < shrinkRegionOrientationIteration; i++){
+                auto shrinked = regionOrientations;
+                for (auto & b : mg.constraints<RegionBoundaryData>()){
+                    auto l1 = regionOrientations[b.topo.component<0>()];
+                    auto l2 = regionOrientations[b.topo.component<1>()];
+                    if (l1 == OrientationHint::Horizontal && l2 != OrientationHint::Horizontal){
+                        shrinked[b.topo.component<0>()] = OrientationHint::OtherPlanar;
+                    }
+                    else if (l1 != OrientationHint::Horizontal && l2 == OrientationHint::Horizontal){
+                        shrinked[b.topo.component<1>()] = OrientationHint::OtherPlanar;
+                    }
+                    if (l1 == OrientationHint::Vertical && l2 != OrientationHint::Vertical){
+                        shrinked[b.topo.component<0>()] = OrientationHint::OtherPlanar;
+                    }
+                    else if (l1 != OrientationHint::Vertical && l2 == OrientationHint::Vertical){
+                        shrinked[b.topo.component<1>()] = OrientationHint::OtherPlanar;
+                    }
+                }
+                regionOrientations = std::move(shrinked);
+            }
+
+            // install gc labels
+            for (auto & r : mg.components<RegionData>()){
+                OrientationHint oh = regionOrientations[r.topo.hd];
+                switch (oh) {
+                case OrientationHint::Void:
+                    /*props[r.topo.hd].used = false;
+                    props[r.topo.hd].orientationClaz = -1;
+                    props[r.topo.hd].orientationNotClaz = -1;*/
+                    MakeRegionPlaneUsable(r.topo.hd, false, props);
+                    break;
+                case OrientationHint::Horizontal:
+                    /*props[r.topo.hd].used = true;
+                    props[r.topo.hd].orientationClaz = vVPId;
+                    props[r.topo.hd].orientationNotClaz = -1;*/
+                    MakeRegionPlaneToward(r.topo.hd, vVPId, props);
+                    break;
+                case OrientationHint::Vertical:
+                    //props[r.topo.hd].used = true;
+                    //props[r.topo.hd].orientationClaz = -1;
+                    //props[r.topo.hd].orientationNotClaz = vVPId;
+                    MakeRegionPlaneAlsoAlong(r.topo.hd, vVPId, props);
+                    break;
+                case OrientationHint::OtherPlanar:
+                    /*props[r.topo.hd].used = true;
+                    props[r.topo.hd].orientationClaz = -1;
+                    props[r.topo.hd].orientationNotClaz = -1;*/
+                    //MakeRegionPlaneUsable(r.topo.hd, true, props);
+                    break;
+                case OrientationHint::NonPlanar:
+                    /*props[r.topo.hd].used = false;
+                    props[r.topo.hd].orientationClaz = -1;
+                    props[r.topo.hd].orientationNotClaz = -1;*/
+                    MakeRegionPlaneUsable(r.topo.hd, false, props);
+                    break;
+                default:
+                    assert(0);
+                    break;
+                }
+            }
+
+            /*
+            // detect big aligned rectangular regions and orient them
+            double regionAreaSum = std::accumulate(regionAreas.begin(), regionAreas.end(), 0.0);
+            assert(regionAreaSum > 0);
+
+            static const double dotThreshold = 0.001;
+            static const double spanAngleThreshold = DegreesToRadians(10);
+            static const double wholeDotThreshold = 0.01;
+            static const double wholeSpanAngleThreshold = DegreesToRadians(10);
+
+            HandledTable<RegionBoundaryHandle, std::vector<double>> boundaryMaxSpanAnglesForVPs(mg.internalConstraints<RegionBoundaryData>().size());
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
+            auto & edges = b.data.normalizedEdges;
+            std::vector<double> maxSpanAngleForVPs(props.vanishingPoints.size(), 0.0);
+            if (b.topo.hd.id == 849){
+            std::cout << std::endl;
+            }
+
+            for (auto & edge : edges){
+            std::vector<std::vector<bool>> edgeVPFlags(props.vanishingPoints.size(),
+            std::vector<bool>(edge.size() - 1, false));
+            for (int i = 0; i < edge.size() - 1; i++){
+            Vec3 n = normalize(edge[i].cross(edge[i + 1]));
+            for (int k = 0; k < props.vanishingPoints.size(); k++){
+            auto vp = normalize(props.vanishingPoints[k]);
+            double dotv = abs(vp.dot(n));
+            if (dotv <= dotThreshold){
+            edgeVPFlags[k][i] = true;
+            }
+            }
+            }
+            // detect aligned longest line spanAngles from edge
+            for (int k = 0; k < props.vanishingPoints.size(); k++){
+            auto vp = normalize(props.vanishingPoints[k]);
+            auto & edgeFlags = edgeVPFlags[k];
+            int lastHead = -1, lastTail = -1;
+            bool inChain = false;
+
+            double & maxSpanAngle = maxSpanAngleForVPs[k];
+            for (int j = 0; j <= edgeFlags.size(); j++){
+            if (!inChain && j < edgeFlags.size() && edgeFlags[j]){
+            lastHead = j;
+            inChain = true;
+            }
+            else if (inChain && (j == edgeFlags.size() || !edgeFlags[j])){
+            lastTail = j;
+            inChain = false;
+            // examine current chain
+            assert(lastHead != -1);
+            // compute full span angle
+            double spanAngle = 0.0;
+            for (int i = lastHead; i < lastTail; i++){
+            spanAngle += AngleBetweenDirections(edge[i], edge[i + 1]);
+            }
+            if (spanAngle < spanAngleThreshold){
+            continue;
+            }
+            // fit line
+            const Vec3 & midCorner = edge[(lastHead + lastTail) / 2];
+            Vec3 commonNormal = normalize(midCorner.cross(vp));
+            std::vector<double> dotsToCommonNormal(lastTail - lastHead + 1, 0.0);
+            for (int i = lastHead; i <= lastTail; i++){
+            dotsToCommonNormal[i - lastHead] = abs(edge[i].dot(commonNormal));
+            }
+            if (*std::max_element(dotsToCommonNormal.begin(), dotsToCommonNormal.end()) <= wholeDotThreshold){
+            // acceptable!
+            if (spanAngle > maxSpanAngle){
+            maxSpanAngle = spanAngle;
+            }
+            }
+            }
+            }
+            }
+            }
+            if ((b.topo.component<0>().id == 355 || b.topo.component<1>().id == 355) && std::accumulate(maxSpanAngleForVPs.begin(), maxSpanAngleForVPs.end(), 0.0) > 0){
+            std::cout << std::endl;
+            }
+            boundaryMaxSpanAnglesForVPs[b.topo.hd] = std::move(maxSpanAngleForVPs);
+            }
+            for (auto & r : mg.components<RegionData>()){
+            if (!props[r.topo.hd].used)
+            continue;
+            if (props[r.topo.hd].orientationClaz != -1 || props[r.topo.hd].orientationNotClaz != -1)
+            continue;
+
+            if (r.topo.hd.id == 355){
+            std::cout << std::endl;
+            }
+
+            double area = regionAreas[r.topo.hd];
+            if (area / regionAreaSum < 0.005){
+            continue;
+            }
+            std::vector<double> spanAngleSumsForVPs(props.vanishingPoints.size(), 0.0);
+            for (auto & h : r.topo.constraints<RegionBoundaryData>()){
+            for (int i = 0; i < props.vanishingPoints.size(); i++){
+            spanAngleSumsForVPs[i] += boundaryMaxSpanAnglesForVPs[h][i];
+            }
+            }
+            auto maxIter = std::max_element(spanAngleSumsForVPs.begin(), spanAngleSumsForVPs.end());
+            int firstMaxVPId = std::distance(spanAngleSumsForVPs.begin(), maxIter);
+            double firstMaxSpanAngle = *maxIter;
+            *maxIter = -1.0;
+            maxIter = std::max_element(spanAngleSumsForVPs.begin(), spanAngleSumsForVPs.end());
+            int secondMaxVPId = std::distance(spanAngleSumsForVPs.begin(), maxIter);
+            double secondMaxSpanAngle = *maxIter;
+            if (secondMaxSpanAngle >= wholeSpanAngleThreshold){
+            assert(firstMaxVPId != secondMaxVPId);
+            Vec3 normal = props.vanishingPoints[firstMaxVPId].cross(props.vanishingPoints[secondMaxVPId]);
+            double minAngle = 0.1;
+            int bestMatchedVPId = -1;
+            for (int i = 0; i < props.vanishingPoints.size(); i++){
+            double angle = AngleBetweenUndirectedVectors(normal, props.vanishingPoints[i]);
+            if (angle < minAngle){
+            minAngle = angle;
+            bestMatchedVPId = i;
+            }
+            }
+            if (bestMatchedVPId != -1){
+            std::cout << "vpid:::: " << bestMatchedVPId << std::endl;
+            props[r.topo.hd].orientationClaz = bestMatchedVPId;
+            props[r.topo.hd].orientationNotClaz = -1;
+            }
+            }
+            else if (firstMaxSpanAngle >= wholeSpanAngleThreshold){
+            std::cout << "vpid-along:::: " << firstMaxVPId << std::endl;
+            props[r.topo.hd].orientationClaz = -1;
+            props[r.topo.hd].orientationNotClaz = firstMaxVPId;
+            }
+            }*/
+
+            //for (auto & l : mg.internalComponents<LineData>()){
+            //    props[l.topo.hd].used = true;
+            //    props[l.topo.hd].orientationClaz = l.data.initialClaz;
+            //    props[l.topo.hd].orientationNotClaz = -1;
+            //}
+
+            ForeachMixedGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
+            ForeachMixedGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+
+        }
+
+
+
+
+
+
+
+
+
         void LooseOrientationConstraintsOnComponents(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double linesLoosableRatio, double regionsLoosableRatio){
 
@@ -2683,7 +2946,8 @@ namespace panoramix {
 
             // find most isolated lines
             if (linesLoosableRatio > 0.0){
-                HandledTable<LineHandle, double> lineMaxCornerNNDistances(mg.internalComponents<LineData>().size());
+
+                auto lineMaxCornerNNDistances = mg.createComponentTable<LineData, double>();
                 std::vector<LineHandle> usableLineHandles;
                 for (auto & l : mg.components<LineData>()){
                     if (!props[l.topo.hd].used)
@@ -2735,7 +2999,8 @@ namespace panoramix {
 
             // find most isolated regions
             if (regionsLoosableRatio > 0.0){
-                HandledTable<RegionHandle, double> regionMaxCornerNNDistances(mg.internalComponents<RegionData>().size());
+
+                auto regionMaxCornerNNDistances = mg.createComponentTable<RegionData, double>();
                 std::vector<RegionHandle> usableRegionHandles;
                 for (auto & r : mg.components<RegionData>()){
                     if (!props[r.topo.hd].used)
@@ -2788,6 +3053,19 @@ namespace panoramix {
             ForeachMixedGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
 
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         namespace {

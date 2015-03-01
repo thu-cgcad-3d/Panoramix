@@ -124,7 +124,7 @@ namespace panoramix {
 
 
 
-
+        // mixed grpah property
         struct MixedGraphComponentProperty {
             bool used; // not used for void/non-planar areas
             int orientationClaz;
@@ -148,6 +148,7 @@ namespace panoramix {
         using MixedGraphConstraintPropertyTable =
             ConstraintHandledTableFromConstraintGraph<MixedGraphConstraintProperty, MixedGraph>::type;
         
+        // property table
         struct MixedGraphPropertyTable {
             std::vector<Vec3> vanishingPoints;
             MixedGraphComponentPropertyTable componentProperties;
@@ -174,34 +175,36 @@ namespace panoramix {
                 ar(vanishingPoints, componentProperties, constraintProperties); 
             }
         };
+
+        // make property table
         MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps);
-        MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps,
-            const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
-            const std::vector<PerspectiveCamera> & gcCameras, 
-            int shrinkRegionOrientationIteration = 1, bool considerGCVerticalConstraint = false);
 
+        // reset variables
+        void ResetVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
 
-        void InitializeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
-
+        // get component instances
         Line3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const LineHandle & lh);
-        Plane3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const RegionHandle & rh);     
+        Plane3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const RegionHandle & rh);
 
-        std::vector<double> VariableCoefficientsForInverseDepthAtDirection(const MixedGraph & mg, 
-            const MixedGraphPropertyTable & props, const Vec3 & direction, const LineHandle & lh);
-        std::vector<double> VariableCoefficientsForInverseDepthAtDirection(const MixedGraph & mg,
-            const MixedGraphPropertyTable & props, const Vec3 & direction, const RegionHandle & rh);
-
-        double DepthAtDirectionGivenVariables(const MixedGraph & mg, const double * variables,
-            const MixedGraphPropertyTable & props, const Vec3 & direction, const LineHandle & lh);
-        double DepthAtDirectionGivenVariables(const MixedGraph & mg, const double * variables,
-            const MixedGraphPropertyTable & props, const Vec3 & direction, const RegionHandle & rh);
-
+        // solve equations
         void SolveVariablesUsingInversedDepths(const MixedGraph & mg, MixedGraphPropertyTable & props);
         void SolveVariablesUsingNormalDepths(const MixedGraph & mg, MixedGraphPropertyTable & props);
         
+        // model properties
         double ComponentMedianCenterDepth(const MixedGraph & mg, const MixedGraphPropertyTable & props);
-        void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
         double ComputeScore(const MixedGraph & mg, const MixedGraphPropertyTable & props);
+
+        void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
+
+        // adjust constraints
+        void AttachPrincipleDirectionConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props, 
+            double rangeAngle = M_PI / 100.0);
+        void AttachWallFaceConstriants(const MixedGraph & mg, MixedGraphPropertyTable & props,
+            double rangeAngle = M_PI / 100.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
+        void AttachGeometricContextConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props, 
+            const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
+            const std::vector<PerspectiveCamera> & gcCameras,
+            int shrinkRegionOrientationIteration = 1, bool considerGCVerticalConstraint = false);
 
         void LooseOrientationConstraintsOnComponents(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05);

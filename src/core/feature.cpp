@@ -2502,11 +2502,24 @@ namespace panoramix {
             return std::make_pair(segim, numCCs);
         }
 
-        std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im, const std::vector<Line3> & lines, const PanoramicCamera & cam) const {
+        std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im, const std::vector<Line3> & lines, const PanoramicCamera & cam, double extensionAngle) const {
             assert(_params.algorithm == GraphCut);
             int numCCs;
-            Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, lines, cam, numCCs, false).first;
-            return std::make_pair(segim, numCCs);
+            if (extensionAngle == 0.0){
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, lines, cam, numCCs, false).first;
+                return std::make_pair(segim, numCCs);
+            }
+            else{
+                auto extLines = lines;
+                for (auto & line : extLines){
+                    auto p1 = RotateDirection(line.first, line.second, -extensionAngle);
+                    auto p2 = RotateDirection(line.second, line.first, -extensionAngle);
+                    line.first = p1;
+                    line.second = p2;
+                }
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, extLines, cam, numCCs, false).first;
+                return std::make_pair(segim, numCCs);
+            }
         }
 
 

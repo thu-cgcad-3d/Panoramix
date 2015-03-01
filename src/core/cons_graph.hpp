@@ -373,6 +373,16 @@ namespace panoramix {
                 return std::get<TypeFirstLocationInTuple<DataT, ComponentDataTupleType>::value>(_components);
             }
 
+            template <class DataT, class ValueT>
+            inline HandledTable<ComponentHandle<DataT>, ValueT> createComponentTable(const ValueT & defaultValue = ValueT()) const {
+                return HandledTable<ComponentHandle<DataT>, ValueT>(internalComponents<DataT>().size(), defaultValue);
+            }
+
+            template <class DataT, class ValueT>
+            inline HandledTable<ConstraintHandle<DataT>, ValueT> createConstraintTable(const ValueT & defaultValue = ValueT()) const {
+                return HandledTable<ConstraintHandle<DataT>, ValueT>(internalConstraints<DataT>().size(), defaultValue);
+            }
+
             inline const ComponentsTripletArrayTuple & allComponents() const { return _components; }
             inline ComponentsTripletArrayTuple & allComponents() { return _components; }
 

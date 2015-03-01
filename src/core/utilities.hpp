@@ -555,7 +555,7 @@ namespace panoramix {
         }
 
         template <class T, int N>
-        inline bool IsFuzzyPerpenducular(const Vec<T, N> & v1, const Vec<T, N> & v2, const T & epsilon = 0.1) {
+        inline bool IsFuzzyPerpendicular(const Vec<T, N> & v1, const Vec<T, N> & v2, const T & epsilon = 0.1) {
             auto s = v1.dot(v2) / norm(v1) / norm(v2);
             return abs(s) <= epsilon;
         }
@@ -843,7 +843,7 @@ namespace panoramix {
 
         // generate Fibonacci Directions
         template <class AddVec3FunT>
-        inline void GenerateFibonacciDirections(int n, AddVec3FunT addVec3){
+        inline void GenerateFibonacciDirections(int n, AddVec3FunT && addVec3){
             static const float ga = M_PI * (- 1.0f + std::sqrt(5.0f)) / 2.0f;
             for (int i = 0; i < n; i++){
                 auto d = GeoCoord(ga * (float)i, asin(-1.0f + 2.0f * float(i) / n)).toVector();
@@ -856,7 +856,7 @@ namespace panoramix {
         // mesh makers
         // make tetrahedron
         template <class AddVertex3FunT, class AddTriFaceFunT>
-        void MakeTetrahedron(AddVertex3FunT addVertex, AddTriFaceFunT addFace) {
+        void MakeTetrahedron(AddVertex3FunT && addVertex, AddTriFaceFunT && addFace) {
             auto v1 = addVertex(0.0f, 0.0f, 0.0f);
             auto v2 = addVertex(0.0f, 0.0f, 1.0f);
             auto v3 = addVertex(0.0f, 1.0f, 0.0f);
@@ -870,7 +870,7 @@ namespace panoramix {
 
         // make quad faced cube
         template <class AddVertex3FunT, class AddQuadFaceFunT>
-        void MakeQuadFacedCube(AddVertex3FunT addVertex, AddQuadFaceFunT addFace) {
+        void MakeQuadFacedCube(AddVertex3FunT && addVertex, AddQuadFaceFunT && addFace) {
             /*
                 4 ----- 5
                /       /|
@@ -903,7 +903,7 @@ namespace panoramix {
 
         // make tri faced cube
         template <class AddVertex3FunT, class AddTriFaceFunT>
-        void MakeTriFacedCube(AddVertex3FunT addVertex, AddTriFaceFunT addFace) {
+        void MakeTriFacedCube(AddVertex3FunT && addVertex, AddTriFaceFunT && addFace) {
             auto v1 = addVertex(0.0f, 1.0f, 1.0f);
             auto v2 = addVertex(1.0f, 1.0f, 1.0f);
             auto v3 = addVertex(1.0f, 1.0f, 0.0f);
@@ -935,7 +935,7 @@ namespace panoramix {
 
         // make quad faced sphere
         template <class AddVertex3FunT, class AddQuadFaceFunT>
-        void MakeQuadFacedSphere(AddVertex3FunT addVertex, AddQuadFaceFunT addFace, int m, int n) {
+        void MakeQuadFacedSphere(AddVertex3FunT && addVertex, AddQuadFaceFunT && addFace, int m, int n) {
             using ThisVertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
             std::vector<std::vector<ThisVertHandle>> vhs(m, std::vector<ThisVertHandle>(n - 1));
             for (int i = 0; i < m; i++){
@@ -957,7 +957,7 @@ namespace panoramix {
 
         // make tri faced sphere
         template <class AddVertex3FunT, class AddTriFaceFunT>
-        void MakeTriFacedSphere(AddVertex3FunT addVertex, AddTriFaceFunT addFace, int m, int n) {
+        void MakeTriFacedSphere(AddVertex3FunT && addVertex, AddTriFaceFunT && addFace, int m, int n) {
             using VertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
             std::vector<std::vector<VertHandle>> vhs(m, std::vector<VertHandle>(n - 1));
             for (int i = 0; i < m; i++){
@@ -981,7 +981,7 @@ namespace panoramix {
 
         // make an icosahedron
         template <class AddVertex3FunT, class AddTriFaceFunT>
-        void MakeIcosahedron(AddVertex3FunT addVertex, AddTriFaceFunT addFace) {
+        void MakeIcosahedron(AddVertex3FunT && addVertex, AddTriFaceFunT && addFace) {
             using VertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
             // create a basic icosahedron
             static const float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
@@ -1024,7 +1024,7 @@ namespace panoramix {
 
         // make mesh from simple mesh file
         template <class AddVertex3FunT, class AddTriFaceFunT>
-        void MakeTriMeshFromSMFFile(AddVertex3FunT addVertex, AddTriFaceFunT addFace, const std::string & fileName) {
+        void MakeTriMeshFromSMFFile(AddVertex3FunT && addVertex, AddTriFaceFunT && addFace, const std::string & fileName) {
             using VertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
             std::vector<VertHandle> vhs;
             std::vector<std::array<int, 3>> fvids;

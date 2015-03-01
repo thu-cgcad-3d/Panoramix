@@ -6,6 +6,10 @@ find_package (OpenCV REQUIRED)
 #find_package (GLEW REQUIRED)
 # find_package (Armadillo REQUIRED CONFIG)
 find_package (MOSEK REQUIRED)
+find_package (SuiteSparse REQUIRED)
+
+set (SuiteSparse_USE_LAPACK_BLAS "on")
+include(${USE_SuiteSparse})
 
 set (Fundamental_INCLUDES 
 	#${EIGEN3_INCLUDE_DIR} 
@@ -13,7 +17,8 @@ set (Fundamental_INCLUDES
 	#${GLPK_INCLUDE_DIR} 
 	#${GLEW_INCLUDE_DIRS} 
 #	${ARMADILLO_INCLUDE_DIRS}
-	${MOSEK_INCLUDE_DIR}
+	${MOSEK_INCLUDE_DIR} 
+	";${SuiteSparse_INCLUDE_DIRS}"
 )
 
 foreach (i ${Fundamental_INCLUDES})
@@ -26,6 +31,7 @@ set (Fundamental_LIBS
 	#${GLEW_LIBRARIES} 
 	#${ARMADILLO_LIBRARIES}
 	${MOSEK_LIBRARY}
+	"${SuiteSparse_LIBRARIES}"
 )
 
 foreach (i ${Fundamental_LIBS})
@@ -42,3 +48,5 @@ endif ()
 # endif ()
 
 # list (APPEND Fundamental_PATH ${ARMADILLO_LIBRARY_DIRS})
+
+list (APPEND Fundamental_PATH "${SuiteSparse_LIB_DIRS}")
