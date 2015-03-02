@@ -1757,7 +1757,7 @@ namespace panoramix {
                 appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, 
                 varNum, consNum, Atriplets, Wtriplets, Xdata, Bdata);
             
-            Eigen::SparseMatrix<double> A, W;
+            Eigen::SparseMatrix<double, Eigen::ColMajor> A, W;
             A.resize(consNum, varNum);
             W.resize(consNum, consNum);
             A.reserve(Atriplets.size());
@@ -1775,16 +1775,17 @@ namespace panoramix {
             static const bool useSPQR = true;
 
             Eigen::SparseMatrix<double> WA = W * A;
-            A.makeCompressed();
-            WA.makeCompressed();
-            static const bool useWeights = false;
+            //static const bool useWeights = false;
 
             Eigen::VectorXd X;
             if (!useSPQR) {
+                A.makeCompressed();
+                WA.makeCompressed();
+
                 Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
                 static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
 
-                solver.compute(useWeights ? WA : A);
+                solver.compute(/*useWeights ? WA : */A);
 
                 if (solver.info() != Eigen::Success) {
                     assert(0);
@@ -1793,7 +1794,7 @@ namespace panoramix {
                 }
 
                 Eigen::VectorXd WB = W * B;
-                X = solver.solve(useWeights ? WB : B);
+                X = solver.solve(/*useWeights ? WB : */B);
                 if (solver.info() != Eigen::Success) {
                     assert(0);
                     std::cout << "solving error" << std::endl;
@@ -1801,8 +1802,9 @@ namespace panoramix {
                 }
             }
             else{
-                Eigen::SPQR<Eigen::SparseMatrix<double>> solver;
-                solver.compute(useWeights ? WA : A);
+
+                Eigen::SPQR<Eigen::SparseMatrix<double, Eigen::ColMajor>> solver;
+                solver.compute(/*useWeights ? WA : */A);
 
                 if (solver.info() != Eigen::Success) {
                     assert(0);
@@ -1811,7 +1813,10 @@ namespace panoramix {
                 }
 
                 Eigen::VectorXd WB = W * B;
-                X = solver.solve(useWeights ? WB : B);
+                //int r1 = solver.derived().rows();
+                //int r2 = B.rows();
+                //assert(r1 == r2);
+                X = solver.solve(/*useWeights ? WB : */B);
                 if (solver.info() != Eigen::Success) {
                     assert(0);
                     std::cout << "solving error" << std::endl;
@@ -2325,6 +2330,19 @@ namespace panoramix {
 
 
 
+        HandledTable<RegionHandle, int> SegmentRegions(const MixedGraph & mg, const MixedGraphPropertyTable & props){
+
+            auto regionLabels = mg.createComponentTable<RegionData, int>();
+            
+            NOT_IMPLEMENTED_YET();
+
+
+            return regionLabels;
+
+        }
+
+
+
 
         namespace {
             
@@ -2412,6 +2430,9 @@ namespace panoramix {
             std::vector<std::vector<RegionHandle>> peakyRegionHandles(props.vanishingPoints.size());
             for (auto & r : mg.components<RegionData>()){
                 auto h = r.topo.hd;
+                if (!props[h].used)
+                    continue;
+
                 auto & contours = r.data.normalizedContours;
                 double radiusAngle = 0.0;
                 for (auto & cs : r.data.normalizedContours){
@@ -2497,7 +2518,7 @@ namespace panoramix {
         }
 
 
-        void AttachWallFaceConstriants(const MixedGraph & mg, MixedGraphPropertyTable & props,
+        void AttachWallConstriants(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double rangeAngle, const Vec3 & verticalSeed){
 
             int vertVPId = -1;
@@ -2515,6 +2536,8 @@ namespace panoramix {
             std::vector<RegionHandle> horizontalRegionHandles;
             for (auto & r : mg.components<RegionData>()){
                 auto h = r.topo.hd;
+                if (!props[h].used)
+                    continue;
                 auto & contours = r.data.normalizedContours;
                 bool intersected = false;
                 for (auto & cs : r.data.normalizedContours){
@@ -2541,6 +2564,208 @@ namespace panoramix {
             ForeachMixedGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
             ForeachMixedGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
         }
+
+
+
+        void AttachFloorAndCeilingConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props,
+            double eyeHeightRatioLowerBound, double eyeHeightRatioUpperBound,
+            double angleThreshold, const Vec3 & verticalSeed){
+
+            int vertVPId = -1;
+            double minAngle = M_PI;
+            for (int i = 0; i < props.vanishingPoints.size(); i++){
+                double angle = AngleBetweenUndirectedVectors(verticalSeed, props.vanishingPoints[i]);
+                if (angle < minAngle){
+                    minAngle = angle;
+                    vertVPId = i;
+                }
+            }
+            assert(vertVPId != -1);
+            auto & vertical = props.vanishingPoints[vertVPId];
+
+            int horizVPId = -1;
+            double maxAngle = 0;
+            for (int i = 0; i < props.vanishingPoints.size(); i++){
+                double angle = AngleBetweenUndirectedVectors(vertical, props.vanishingPoints[i]);
+                if (angle > maxAngle){
+                    maxAngle = angle;
+                    horizVPId = i;
+                }
+            }
+            assert(horizVPId != -1);
+            auto xDir = normalize(props.vanishingPoints[horizVPId]);
+            auto yDir = normalize(vertical.cross(xDir));
+
+            // compute horizontal bounding range of may-be ceilings and floors
+            double xmin = std::numeric_limits<double>::max(), ymin = std::numeric_limits<double>::max();
+            double xmax = std::numeric_limits<double>::lowest(), ymax = std::numeric_limits<double>::lowest();
+
+            std::vector<Scored<RegionHandle>> maybeCeilinsOrFloors[2];
+
+            auto regionPlanes = mg.createComponentTable<RegionData, Plane3>();
+            for (auto & r : mg.components<RegionData>()){
+                if (!props[r.topo.hd].used)
+                    continue;
+
+                auto plane = Instance(mg, props, r.topo.hd);
+                regionPlanes[r.topo.hd] = plane;
+                double angleToVert = AngleBetweenUndirectedVectors(plane.normal, vertical);
+                if (angleToVert < angleThreshold){
+                    int belonging = r.data.normalizedCenter.dot(vertical) < 0 ? 0 : 1;                    
+                    double centerZ = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), r.data.normalizedCenter), plane).position.dot(vertical);
+                    maybeCeilinsOrFloors[belonging].push_back(ScoreAs(r.topo.hd, centerZ));
+
+                    for (auto & cs : r.data.normalizedContours){
+                        for (auto & c : cs){
+                            Point3 point = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), c), plane).position;
+                            float x = point.dot(xDir), y = point.dot(yDir);
+                            if (x < xmin) xmin = x;
+                            if (x > xmax) xmax = x;
+                            if (y < ymin) ymin = y;
+                            if (y > ymax) ymax = y; 
+                        }
+                    }
+                }
+            }
+
+            // estimate height or ceiling/floor, remove non-ceiling/floor horizontal regions
+            double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
+            static const double heightAffectRange = medianCenterDepth * 0.01;
+            for (int i = 0; i < 2; i++){
+                auto & rhsWithHeights = maybeCeilinsOrFloors[i];
+                std::sort(rhsWithHeights.begin(), rhsWithHeights.end());
+                std::vector<double> votes(rhsWithHeights.size(), 0.0);
+                for (int a = 0; a < rhsWithHeights.size(); a++){
+                    for (int b = 0; b < rhsWithHeights.size(); b++){
+                        votes[a] += Gaussian(rhsWithHeights[a].score - rhsWithHeights[a].score,
+                            heightAffectRange);
+                    }
+                }
+                int maxId = std::distance(votes.begin(), std::max_element(votes.begin(), votes.end()));
+                
+                std::vector<Scored<RegionHandle>> hs; 
+                hs.reserve(rhsWithHeights.size());
+                for (auto rhh : rhsWithHeights){
+                    if (Distance(rhh.score, rhsWithHeights[maxId].score) < heightAffectRange){
+                        hs.push_back(rhh);
+                    }
+                }
+                rhsWithHeights = std::move(hs);
+            }
+
+            assert(xmax > xmin && ymax > ymin);
+            int imSize = 300;
+            double scale = imSize / ((xmax + ymax - xmin - ymin) / 2.0);
+            int width = static_cast<int>((xmax - xmin) * scale + 1);
+            int height = static_cast<int>((ymax - ymin) * scale + 1);
+            Imageub ceilingOrFloorHorizontalRegionMasks[] = {
+                Imageub::zeros(cv::Size(width, height)),
+                Imageub::zeros(cv::Size(width, height))
+            };
+            for (int i = 0; i < 2; i++){
+                for (auto & rhh : maybeCeilinsOrFloors[i]){
+                    auto rh = rhh.component;
+                    auto & contours = mg.data(rh).normalizedContours;
+                    std::vector<std::vector<Point2i>> contourResized;
+                    contourResized.reserve(contours.size());
+                    for (auto & cs : contours){
+                        std::vector<Point2i> csresized;
+                        csresized.reserve(cs.size());
+                        for (auto & c : cs){
+                            Point3 point = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), c), regionPlanes[rh]).position;
+                            float x = point.dot(xDir), y = point.dot(yDir);
+                            csresized.emplace_back(static_cast<int>((x - xmin) * scale), 
+                                static_cast<int>((y - ymin) * scale));
+                        }
+                        contourResized.push_back(std::move(csresized));
+                    }
+                    cv::fillPoly(ceilingOrFloorHorizontalRegionMasks[i], contourResized, (uint8_t)1);
+                }
+            }
+
+            Imagei ceilingOrFloorRegionMasks[] = {
+                Imagei(cv::Size(width, height), -1),
+                Imagei(cv::Size(width, height), -1)
+            };
+            for (auto & r : mg.components<RegionData>()){
+                const auto & prop = props[r.topo.hd];
+                if (!prop.used)
+                    continue;
+                if (prop.orientationClaz != -1) // already strongly constrained
+                    continue;
+                if (prop.orientationNotClaz == vertVPId) // constrained to be vertical
+                    continue;
+
+                auto & plane = regionPlanes[r.topo.hd];
+                auto & contours = r.data.normalizedContours;
+                
+                std::vector<std::vector<Point2i>> contourResized;
+                contourResized.reserve(contours.size());
+                
+                bool hasPosDot = false, hasNegDot = false;
+                for (auto & cs : contours){
+                    std::vector<Point2i> csresized;
+                    csresized.reserve(cs.size());
+                    for (auto & c : cs){
+                        Point3 point = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), c), plane).position;
+                        float x = point.dot(xDir), y = point.dot(yDir);
+                        float z = point.dot(vertical);
+                        hasPosDot |= z >= 0;
+                        hasNegDot |= z <= 0;
+                        csresized.emplace_back(static_cast<int>((x - xmin) * scale),
+                            static_cast<int>((y - ymin) * scale));
+                    }
+                    contourResized.push_back(std::move(csresized));
+                }
+
+                if (hasPosDot && hasNegDot){ // this region crosses the horizon
+                    continue;
+                }
+                if (contourResized.empty()){
+                    continue;
+                }
+
+                auto & mask = ceilingOrFloorRegionMasks[hasNegDot ? 0 : 1];
+                cv::fillPoly(mask, contourResized, r.topo.hd.id);
+            }
+
+            // match masks
+            for (auto & horizontalMask : ceilingOrFloorHorizontalRegionMasks){
+                static const int erosionSize = 5;
+                cv::erode(horizontalMask, horizontalMask, cv::getStructuringElement(cv::MORPH_ELLIPSE,
+                    cv::Size(2 * erosionSize + 1, 2 * erosionSize + 1),
+                    cv::Point(erosionSize, erosionSize)));
+            }
+
+            //cv::imshow("0", ceilingOrFloorHorizontalRegionMasks[0] * 255);
+            //cv::imshow("1", ceilingOrFloorHorizontalRegionMasks[1] * 255);
+            //cv::waitKey();
+
+            auto regionAffectedCounts = mg.createComponentTable<RegionData, int>(0);
+
+            for (int i = 0; i < 2; i++){
+                auto & regionMasksHere = ceilingOrFloorRegionMasks[i];
+                auto & horizontalMaskThere = ceilingOrFloorHorizontalRegionMasks[1 - i];
+                for (auto it = regionMasksHere.begin(); it != regionMasksHere.end(); ++it){
+                    if (!horizontalMaskThere(it.pos()))
+                        continue;
+                    RegionHandle regionHandle(*it);
+                    if (regionHandle.invalid())
+                        continue;
+                    
+                    regionAffectedCounts[regionHandle] ++;
+                    // add horizontal constraint
+                    if (regionAffectedCounts[regionHandle] > 10){
+                        MakeRegionPlaneToward(regionHandle, vertVPId, props);
+                    }
+                }
+            }
+
+            ForeachMixedGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
+            ForeachMixedGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+
+        }
+
 
 
         void AttachGeometricContextConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props,
@@ -2894,14 +3119,14 @@ namespace panoramix {
 
 
         void LooseOrientationConstraintsOnComponents(const MixedGraph & mg, MixedGraphPropertyTable & props,
-            double linesLoosableRatio, double regionsLoosableRatio){
+            double linesLoosableRatio, double regionsLoosableRatio, double distThresRatio){
 
             if (linesLoosableRatio <= 0.0 && regionsLoosableRatio <= 0.0)
                 return;
             
             double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
-            double distThres = medianCenterDepth / 8.0;
-            double nnSearchRange = distThres * 4.0;
+            double distThres = medianCenterDepth * distThresRatio;
+            double nnSearchRange = distThres;
             
             // collect keypoints
             struct ComponentKeyPoint {

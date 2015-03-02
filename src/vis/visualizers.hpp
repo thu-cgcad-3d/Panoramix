@@ -222,6 +222,7 @@ namespace panoramix {
             core::PerspectiveCamera camera;
             float bwColor;
             float bwTexColor;
+            bool showInside;
         };
 
         class VisualObjectInternal;
@@ -494,6 +495,7 @@ namespace panoramix {
                 renderOptions.camera = core::PerspectiveCamera(500, 500, 250, { 1.0, 1.0, 1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 });
                 renderOptions.bwColor = 0.3;
                 renderOptions.bwTexColor = 0.7;
+                renderOptions.showInside = true;
 
                 installingOptions.discretizeOptions.color = vis::ColorTag::Black;
                 installingOptions.discretizeOptions.colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);

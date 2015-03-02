@@ -196,18 +196,25 @@ namespace panoramix {
 
         void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
 
+        // segment regions using current variables
+        HandledTable<RegionHandle, int> SegmentRegions(const MixedGraph & mg, const MixedGraphPropertyTable & props);
+
         // adjust constraints
         void AttachPrincipleDirectionConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props, 
             double rangeAngle = M_PI / 100.0);
-        void AttachWallFaceConstriants(const MixedGraph & mg, MixedGraphPropertyTable & props,
+        void AttachWallConstriants(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double rangeAngle = M_PI / 100.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
+        void AttachFloorAndCeilingConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props,
+            double eyeHeightRatioLowerBound = 0.1, double eyeHeightRatioUpperBound = 0.6,
+            double angleThreshold = M_PI / 100.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
+
         void AttachGeometricContextConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props, 
             const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
             const std::vector<PerspectiveCamera> & gcCameras,
             int shrinkRegionOrientationIteration = 1, bool considerGCVerticalConstraint = false);
 
         void LooseOrientationConstraintsOnComponents(const MixedGraph & mg, MixedGraphPropertyTable & props,
-            double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05);
+            double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05, double distThresRatio = 0.12);
 
 
         void Visualize(const View<PanoramicCamera> & texture, 

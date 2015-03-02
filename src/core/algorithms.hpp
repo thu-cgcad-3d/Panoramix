@@ -30,7 +30,7 @@ namespace panoramix {
         // triangulate polygon
         template <class VertIteratorT, class VertPoint2GetterT, class AddTriFaceFunT>
         int TriangulatePolygon(VertIteratorT vertsBegin, VertIteratorT vertsEnd, 
-            VertPoint2GetterT getPoint2, AddTriFaceFunT addFace){
+            VertPoint2GetterT && getPoint2, AddTriFaceFunT && addFace){
 
             using VHandleT = typename std::iterator_traits<VertIteratorT>::value_type;
             std::deque<std::vector<VHandleT>> vhGroupQ;
@@ -127,7 +127,7 @@ namespace panoramix {
             class DistanceFunctorT = DefaultDistanceFunctor
         >
         IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::true_type,
-        DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
+            DistanceT thres, DistanceFunctorT && distFun = DistanceFunctorT()) {
             if (begin == end)
                 return itersOut;
 
@@ -166,7 +166,7 @@ namespace panoramix {
             class DistanceFunctorT = DefaultDistanceFunctor
         >
         IterOutIteratorT MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
-        DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT()) {
+            DistanceT thres, DistanceFunctorT && distFun = DistanceFunctorT()) {
             if (begin == end)
                 return itersOut;
 
@@ -202,8 +202,8 @@ namespace panoramix {
             class BoundingBoxFunctorT = DefaultBoundingBoxFunctor
         >
         IterOutIteratorT MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut, std::false_type,
-        DistanceT thres, DistanceFunctorT distFun = DistanceFunctorT(),
-        BoundingBoxFunctorT getBoundingBox = BoundingBoxFunctorT()) {
+            DistanceT thres, DistanceFunctorT && distFun = DistanceFunctorT(),
+            BoundingBoxFunctorT && getBoundingBox = BoundingBoxFunctorT()) {
 
             if (begin == end)
                 return itersOut;
@@ -257,9 +257,9 @@ namespace panoramix {
         VertIteratorT vertsBegin, VertIteratorT vertsEnd,
         EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
         EdgeOutputIteratorT MSTedges,
-        EdgeVertsGetterT vertsGetter,
-        EdgeCompareOnWeightT edgeCompareOnWeight,
-        VertCompareT vertCompare = VertCompareT()
+        EdgeVertsGetterT && vertsGetter,
+        EdgeCompareOnWeightT && edgeCompareOnWeight,
+        VertCompareT && vertCompare = VertCompareT()
         ) {
 
             using Edge = typename std::iterator_traits<typename EdgeIteratorT>::value_type;
@@ -303,9 +303,9 @@ namespace panoramix {
             class VertCompareT = std::less <typename std::iterator_traits<VertIteratorT>::value_type>
         >
         void DepthFirstSearch(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-            NeighborVertsContainerGetterT neighborVertsContainerGetter,
-            VertCallbackT vertCallback,
-            VertCompareT vertCompare = VertCompareT()
+            NeighborVertsContainerGetterT && neighborVertsContainerGetter,
+            VertCallbackT && vertCallback,
+            VertCompareT && vertCompare = VertCompareT()
         ) {
 
             using Vert = typename std::iterator_traits<typename VertIteratorT>::value_type;
@@ -480,22 +480,6 @@ namespace panoramix {
                 "NeighborVertsContainerGetterT should returns a container of Vert");
             static_assert(std::is_same<Vert, std::decay_t<decltype(*std::end(neighborVertsContainerGetter(std::declval<Vert>())))>>::value,
                 "NeighborVertsContainerGetterT should returns a container of Vert");
-
-            //struct {
-            //    void operator()(const Vert & root, std::map<Vert, bool, VertCompareT>& vVisited,
-            //        const NeighborVertsContainerGetterT & vNeighborsGetter,
-            //        const VertexTypeRecorderT & vTypeRecorder, int cid) {
-
-            //        if (vVisited[root])
-            //            return;
-            //        vTypeRecorder(root, cid);
-            //        vVisited[root] = true;
-            //        auto vNeighborsContainer = vNeighborsGetter(root);
-            //        for (const auto & v : vNeighborsContainer) {
-            //            (*this)(v, vVisited, vNeighborsGetter, vTypeRecorder, cid);
-            //        }
-            //    }
-            //} depthFirstSearchOneTree;
 
             struct {
                 void operator()(const Vert & root, std::map<Vert, bool, VertCompareT>& vVisited,

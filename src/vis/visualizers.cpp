@@ -211,8 +211,6 @@ namespace panoramix {
 
 
 
-
-
         class VisualObjectInternal {
         public:
             QOpenGLShaderProgram * program;            
@@ -733,12 +731,18 @@ namespace panoramix {
 
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-                glFrontFace(GL_CW); // face direction set to clockwise
+                glFrontFace(GL_CCW); // face direction set to clockwise
                 glEnable(GL_MULTISAMPLE);
                 glEnable(GL_DEPTH_TEST);
                 glEnable(GL_STENCIL_TEST);
 
                 glEnable(GL_ALPHA_TEST);
+                if (options.showInside){
+                    glEnable(GL_CULL_FACE);
+                }
+                else{
+                    glDisable(GL_CULL_FACE);
+                }
 
                 glEnable(GL_BLEND);
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -752,7 +756,9 @@ namespace panoramix {
                 scene.render(options);
 
                 glDisable(GL_DEPTH_TEST);
-                glDisable(GL_CULL_FACE);
+                if (options.showInside){
+                    glDisable(GL_CULL_FACE);
+                }
 
                 painter.endNativePainting();
                 swapBuffers();
@@ -814,7 +820,7 @@ namespace panoramix {
                     update();
                 }
                 else if ((e->buttons() & Qt::MidButton) || 
-                    ((e->buttons() & Qt::RightButton) && (e->modifiers() & Qt::Modifier::SHIFT))) {
+                    ((e->buttons() & Qt::RightButton) && (e->modifiers() & Qt::ShiftModifier))) {
                     core::Vec3 trans = t.x() * options.camera.rightward() + t.y() * options.camera.upward();
                     trans *= 0.02;
                     options.camera.translate(trans, sphere, true);
@@ -870,6 +876,16 @@ namespace panoramix {
             return spinBox;
         }
 
+        QWidget * MakeGuiAgent(core::Noted<bool> & value, QWidget * parent = nullptr){
+            QCheckBox * checkBox = new QCheckBox(parent);
+            checkBox->setCheckable(true);
+            checkBox->setChecked(value.component);
+            QObject::connect(checkBox, &QCheckBox::clicked, [&value, checkBox](){
+                value.component = checkBox->isChecked();
+            });
+            return checkBox;
+        }
+
         QWidget * MakeGuiAgent(core::Noted<Color> & value, QWidget * parent = nullptr){
             NOT_IMPLEMENTED_YET();
         }
@@ -892,9 +908,11 @@ namespace panoramix {
         void PopUpGui(RenderOptions & options, QWidget * widget = nullptr){
             core::Noted<float> bwColor = core::NoteAs(options.bwColor, "Blend Weight of Color");
             core::Noted<float> bwTexColor = core::NoteAs(options.bwTexColor, "Blend Weight of Texture Color");
-            PopUpDialog(widget, bwColor, bwTexColor);
+            core::Noted<bool> showInside = core::NoteAs(options.showInside, "Show Inside");
+            PopUpDialog(widget, bwColor, bwTexColor, showInside);
             options.bwColor = bwColor.component;
             options.bwTexColor = bwTexColor.component;
+            options.showInside = showInside.component;
         }
 
 

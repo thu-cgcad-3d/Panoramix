@@ -9,8 +9,8 @@ int main(int argc, char ** argv) {
     bool isOutdoor = false;
     if (argc < 2){
         std::cout << "no input" << std::endl;
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
-        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
+        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
@@ -134,65 +134,57 @@ int main(int argc, char ** argv) {
         if (1){
             props = core::MakeMixedGraphPropertyTable(mg, vps);
             core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 15.0);
-            core::AttachWallFaceConstriants(mg, props, M_PI / 30.0);
+            core::AttachWallConstriants(mg, props, M_PI / 30.0);
             //core::AttachGeometricContextConstraints(mg, props, gcs, hCams, 2);
 
-            // visualize using segmented image
-            {
-                std::vector<vis::Color> colors(mg.internalComponents<core::RegionData>().size());
-                std::vector<vis::Color> oColors = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
-                std::vector<vis::Color> noColors = { vis::ColorTag::DimGray, vis::ColorTag::Gray, vis::ColorTag::DarkGray };
-                for (auto & r : mg.components<core::RegionData>()){
-                    auto & p = props[r.topo.hd];
-                    auto & color = colors[r.topo.hd.id];
-                    if (!p.used){
-                        color = vis::ColorTag::Black;
-                    }
-                    else{
-                        if (p.orientationClaz != -1){
-                            color = oColors[p.orientationClaz];
-                        }
-                        else if(p.orientationNotClaz != -1){
-                            color = noColors[p.orientationNotClaz];
+            core::Visualize(view, mg, props);
+            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+
+            for (int i = 0; i < 10; i++){
+
+                // visualize using segmented image
+                {
+                    std::vector<vis::Color> colors(mg.internalComponents<core::RegionData>().size());
+                    std::vector<vis::Color> oColors = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
+                    std::vector<vis::Color> noColors = { vis::ColorTag::DimGray, vis::ColorTag::Gray, vis::ColorTag::DarkGray };
+                    for (auto & r : mg.components<core::RegionData>()){
+                        auto & p = props[r.topo.hd];
+                        auto & color = colors[r.topo.hd.id];
+                        if (!p.used){
+                            color = vis::ColorTag::Black;
                         }
                         else{
-                            color = vis::ColorTag::White;
+                            if (p.orientationClaz != -1){
+                                color = oColors[p.orientationClaz];
+                            }
+                            else if (p.orientationNotClaz != -1){
+                                color = noColors[p.orientationNotClaz];
+                            }
+                            else{
+                                color = vis::ColorTag::White;
+                            }
                         }
                     }
+                    vis::Visualizer2D::Params params;
+                    params.colorTable = vis::ColorTable(colors, vis::ColorTag::White);
+                    vis::Visualizer2D(segmentedImage)
+                        << vis::manip2d::Show();
+                    vis::Visualizer2D(segmentedImage, params)
+                        << vis::manip2d::Show();
                 }
-                vis::Visualizer2D::Params params;
-                params.colorTable = vis::ColorTable(colors, vis::ColorTag::White);
-                vis::Visualizer2D(segmentedImage)
-                    << vis::manip2d::Show();
-                vis::Visualizer2D(segmentedImage, params) 
-                    << vis::manip2d::Show();
+
+                core::SolveVariablesUsingInversedDepths(mg, props);
+                core::NormalizeVariables(mg, props);
+                std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+                core::Visualize(view, mg, props);
+                core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02, 0.1);                
+
+                core::SolveVariablesUsingInversedDepths(mg, props);
+                core::NormalizeVariables(mg, props);
+                std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+                core::Visualize(view, mg, props);
+                core::AttachFloorAndCeilingConstraints(mg, props, 0.1, 0.6);
             }
-
-            core::Visualize(view, mg, props);
-            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-
-            core::SolveVariablesUsingInversedDepths(mg, props);
-            core::NormalizeVariables(mg, props);
-            core::Visualize(view, mg, props);
-            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-
-            core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02);            
-            core::SolveVariablesUsingInversedDepths(mg, props);
-            core::NormalizeVariables(mg, props);
-            core::Visualize(view, mg, props);
-            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-
-            core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02);
-            core::SolveVariablesUsingInversedDepths(mg, props);
-            core::NormalizeVariables(mg, props);
-            core::Visualize(view, mg, props);
-            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-
-            core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02);
-            core::SolveVariablesUsingInversedDepths(mg, props);
-            core::NormalizeVariables(mg, props);
-            core::Visualize(view, mg, props);
-            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
 
             core::SaveToDisk("./cache/mgp", mg, props);
         }
