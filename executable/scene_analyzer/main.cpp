@@ -4,12 +4,14 @@
 
 using namespace panoramix;
 
+
+
 int main(int argc, char ** argv) {
     std::string filename;
     bool isOutdoor = false;
     if (argc < 2){
         std::cout << "no input" << std::endl;
-        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
@@ -21,6 +23,15 @@ int main(int argc, char ** argv) {
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (11).jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (10).jpg";
         //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab2.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (2).jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x5.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x6.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x7.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x8.jpg";
+        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x9.jpg";
+        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/google_chinese.png";
         isOutdoor = false;
     }
     else{

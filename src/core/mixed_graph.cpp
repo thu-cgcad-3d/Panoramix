@@ -2637,7 +2637,7 @@ namespace panoramix {
                 std::vector<double> votes(rhsWithHeights.size(), 0.0);
                 for (int a = 0; a < rhsWithHeights.size(); a++){
                     for (int b = 0; b < rhsWithHeights.size(); b++){
-                        votes[a] += Gaussian(rhsWithHeights[a].score - rhsWithHeights[a].score,
+                        votes[a] += Gaussian(rhsWithHeights[a].score - rhsWithHeights[b].score,
                             heightAffectRange);
                     }
                 }
@@ -2741,7 +2741,7 @@ namespace panoramix {
             //cv::imshow("1", ceilingOrFloorHorizontalRegionMasks[1] * 255);
             //cv::waitKey();
 
-            auto regionAffectedCounts = mg.createComponentTable<RegionData, int>(0);
+            auto regionAffectedCounts = mg.createComponentTable<RegionData>(0);
 
             for (int i = 0; i < 2; i++){
                 auto & regionMasksHere = ceilingOrFloorRegionMasks[i];
@@ -2755,7 +2755,7 @@ namespace panoramix {
                     
                     regionAffectedCounts[regionHandle] ++;
                     // add horizontal constraint
-                    if (regionAffectedCounts[regionHandle] > 10){
+                    if (regionAffectedCounts[regionHandle] > Square(imSize * 0.02)){
                         MakeRegionPlaneToward(regionHandle, vertVPId, props);
                     }
                 }
