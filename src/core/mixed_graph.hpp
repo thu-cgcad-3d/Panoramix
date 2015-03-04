@@ -196,8 +196,9 @@ namespace panoramix {
 
         void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
 
-        // segment regions using current variables
-        HandledTable<RegionHandle, int> SegmentRegions(const MixedGraph & mg, const MixedGraphPropertyTable & props);
+
+
+
 
         // adjust constraints
         void AttachPrincipleDirectionConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props, 
@@ -216,7 +217,17 @@ namespace panoramix {
         void LooseOrientationConstraintsOnComponents(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05, double distThresRatio = 0.12);
 
+        void LooseMaybeOcclusionBoundaryConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props);
 
+
+
+
+
+
+
+
+
+        // visualize current mixed graph
         void Visualize(const View<PanoramicCamera> & texture, 
             const MixedGraph & mg, MixedGraphPropertyTable & props);
         void Visualize(const View<PerspectiveCamera> & texture,

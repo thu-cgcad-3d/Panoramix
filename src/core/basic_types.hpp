@@ -374,6 +374,7 @@ namespace panoramix {
 		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);
         void ResizeToMakeHeightUnder(Image & im, int heightUpperBound);
         bool MayBeAPanorama(const Image & im);
+        bool MakePanorama(Image & im);
         
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im);
         std::pair<double, double> MinMaxValOfImage(const Image & im);
@@ -665,24 +666,6 @@ namespace panoramix {
             ar(c.enabled, c.component);
         }
 
-
-
-        // to represent any functor type which returns constant value
-        template <class RetT, RetT Val>
-        struct StaticConstantFunctor {
-            static const RetT value = Val;
-            template <class ... ParamTs>
-            inline RetT operator()(ParamTs && ... params) const { return value; }
-        };
-
-        template <class RetT>
-        struct ConstantFunctor {
-            inline ConstantFunctor(const RetT & v) : value(v) {}
-            inline ConstantFunctor(RetT && v) : value(std::move(v)) {}            
-            template <class ... ParamTs>
-            inline RetT operator()(ParamTs && ... params) const { return value; }
-            const RetT value;
-        };
 
     }
 }

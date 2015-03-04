@@ -2330,16 +2330,8 @@ namespace panoramix {
 
 
 
-        HandledTable<RegionHandle, int> SegmentRegions(const MixedGraph & mg, const MixedGraphPropertyTable & props){
-
-            auto regionLabels = mg.createComponentTable<RegionData, int>();
-            
-            NOT_IMPLEMENTED_YET();
 
 
-            return regionLabels;
-
-        }
 
 
 
@@ -2570,6 +2562,8 @@ namespace panoramix {
         void AttachFloorAndCeilingConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double eyeHeightRatioLowerBound, double eyeHeightRatioUpperBound,
             double angleThreshold, const Vec3 & verticalSeed){
+
+            IMPROVABLE_HERE("we need a better way!");
 
             int vertVPId = -1;
             double minAngle = M_PI;
@@ -3287,6 +3281,14 @@ namespace panoramix {
 
 
 
+        void LooseMaybeOcclusionBoundaryConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props){
+
+
+
+        }
+
+
+
 
 
 
@@ -3299,8 +3301,8 @@ namespace panoramix {
             void ManuallyOptimizeMixedGraph(const core::Image & panorama,
                 const MixedGraph & mg,
                 MixedGraphPropertyTable & props,
-                UhClickHandlerFunT uhClicked,
-                UhColorizerFunT uhColorizer = UhColorizerFunT(vis::ColorTag::White),
+                UhClickHandlerFunT && uhClicked,
+                UhColorizerFunT && uhColorizer = UhColorizerFunT(vis::ColorTag::White),
                 bool optimizeInEachIteration = false) {
 
                 bool modified = true;

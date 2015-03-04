@@ -1,2 +1,1 @@
-add_subdirectory ("scene_analyzer")
-add_subdirectory ("scene_visualizer")
+add_subdirectory ("panolyz")

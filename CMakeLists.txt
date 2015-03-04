@@ -68,6 +68,10 @@ list (APPEND Fundamental_LIBS ${ThirdParty_LIBS})
 # the libs
 add_subdirectory (src lib)
 
+# data dir
+get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
+message (STATUS "test data directory: " ${TEST_DATA_DIR})
+
 
 # executable
 add_subdirectory (tests tests)

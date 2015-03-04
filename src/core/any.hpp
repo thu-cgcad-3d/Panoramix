@@ -43,7 +43,7 @@ namespace panoramix {
                 _data = a._data->clone();
                 return *this;
             }
-            //inline Any(Any && a) { swap(a);  ASSERTVALID; }
+
             inline Any & operator = (Any && a) { swap(a); return *this; }
             inline void swap(Any & a){ std::swap(_data, a._data); }
 

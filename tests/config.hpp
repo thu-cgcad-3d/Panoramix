@@ -7,7 +7,6 @@
 
 #include "gtest/gtest.h"
 
-#include "../src/core/clock.hpp"
 
 namespace panoramix {
     namespace test {

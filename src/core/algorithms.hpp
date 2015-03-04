@@ -10,7 +10,7 @@ namespace panoramix {
         // generic algorithms
         template <class IteratorT, class OutIteratorT, class IsCompatibleFunT>
         inline void ForeachCompatibleWithLastElement(IteratorT begin, IteratorT end, OutIteratorT out, 
-            IsCompatibleFunT isCompWithLast){
+            IsCompatibleFunT && isCompWithLast){
             if (begin == end)
                 return;
             *out = *begin;

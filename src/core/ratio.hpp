@@ -13,6 +13,8 @@ namespace panoramix {
             inline Ratio() : denominator(1) {}
             inline Ratio(const T & c) : numerator(c), denominator(1) {}
             inline Ratio(const T & c, const S & s) : numerator(c), denominator(s) {}
+            template <intmax_t A, intmax_t B>
+            inline Ratio(std::ratio<A, B> r) : numerator(r.num), denominator(r.den) {}
             inline T value() const { return numerator / denominator; }
             inline T value(const T & retIfDenomIsZero) const { return denominator == 0 ? retIfDenomIsZero : (numerator / denominator); }
             T numerator;

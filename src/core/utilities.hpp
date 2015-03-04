@@ -782,6 +782,8 @@ namespace panoramix {
             return EigenVectorAndValuesFromPoints((const Point<T, N>*)pts.data(), pts.size());
         }
 
+        // rotate a vec3 toward another with given rotation angle
+        // resulted vec is normalized
         template <class T>
         inline Vec<T, 3> RotateDirection(const Vec<T, 3> & originalDirection, const Vec<T, 3> & toDirection, double angle) {
             Vec<T, 3> tovec = normalize(originalDirection.cross(toDirection).cross(originalDirection));

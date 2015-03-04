@@ -90,6 +90,12 @@ namespace cv {
         ar(s.width, s.height);
     }
 
+    // Serialization for cv::Rect_<T>
+    template <class Archive, class T>
+    inline void serialize(Archive & ar, Rect_<T> & r) {
+        ar(r.x, r.y, r.width, r.height);
+    }
+
     // Serialization for cv::KeyPoint
     template <class Archive>
     inline void serialize(Archive & ar, KeyPoint & p) {
@@ -113,7 +119,7 @@ namespace panoramix {
 
         // serialization wrapper
         template <class StringT, class ...T>
-        inline void SaveToDisk(const StringT & filename, const T & ... data) {
+        inline void SaveToDisk(StringT && filename, const T & ... data) {
             std::ofstream out(filename, std::ios::binary);
             cereal::PortableBinaryOutputArchive archive(out);
             archive(data...);
@@ -122,7 +128,7 @@ namespace panoramix {
         }
 
         template <class StringT, class ...T>
-        inline void LoadFromDisk(const StringT & filename, T & ... data) {
+        inline void LoadFromDisk(StringT && filename, T & ... data) {
             std::ifstream in(filename, std::ios::binary);
             cereal::PortableBinaryInputArchive archive(in);
             archive(data...);

@@ -31,6 +31,18 @@ namespace panoramix {
             return true;
         }
 
+        bool MakePanorama(Image & im){
+            if (im.cols < im.rows * 2)
+                return false;
+            if (im.cols == im.rows * 2)
+                return true;
+            Image pim = Image::zeros(im.cols / 2, im.cols, im.type());
+            pim(cv::Rect(0, (pim.rows - im.rows) / 2, pim.cols, im.rows)) = im;
+            im = pim;
+            return true;
+        }
+
+
         std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im) {
             PixelLoc minLoc, maxLoc;
             double minVal, maxVal;

@@ -9,9 +9,7 @@ namespace panoramix {
             enum { value = false };
         };
 
-
-#define INLINE __forceinline
-
+// macros describing function implementations
 
         // not implemented error
 #define NOT_IMPLEMENTED_YET(...) \
@@ -58,6 +56,7 @@ namespace panoramix {
     "in function: "__FUNCSIG__ "\n" \
     "in line: " + std::to_string(__LINE__) + "\n" \
     "in file: "__FILE__)
+
 
 
     }

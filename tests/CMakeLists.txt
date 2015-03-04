@@ -9,8 +9,6 @@ include_directories (${GTEST_INCLUDE_DIR})
 
 
 # define test data location
-get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
-message (STATUS "test data directory: " ${TEST_DATA_DIR})
 if (MSVC)
 	add_definitions ( "/DPROJECT_TEST_DATA_DIR_STR=\"${TEST_DATA_DIR}\"" )
 else ()
