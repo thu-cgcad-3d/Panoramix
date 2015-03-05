@@ -1,64 +1,51 @@
 #include "core/basic_types.hpp"
-#include "core/any.hpp"
 #include "core/mixed_graph.hpp"
 #include "vis/visualize2d.hpp"
+#include "misc/cmd_tools.hpp"
 
 using namespace panoramix;
 
 int main(int argc, char ** argv) {
+    
+    std::string defaultFileName;
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room.png";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/yard.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (11).jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (10).jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab2.jpg";
+    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab3.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (2).jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x5.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x6.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x7.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x8.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x9.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/google_chinese.png";
 
-    std::unordered_map<std::string, std::string> options;
-
-    //if (argc <= 1){
-    //    std::cout << "Usage: SceneAnalyzer %image_path% %options...% " << std::endl;
-    //    return 0;
-    //}
-
-    //for (int i = 1; i < argc; i++){
-    //    std::string arg = argv[i];
-    //        
-    //}
-
-    std::string filename;
-    bool isOutdoor = false;
-    if (argc < 2){
-        std::cout << "no input" << std::endl;
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/normal/room.png";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/yard.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (11).jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (10).jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab2.jpg";
-        filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab3.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (2).jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x5.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x6.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x7.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x8.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x9.jpg";
-        //filename = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/google_chinese.png";
-        isOutdoor = false;
+    misc::CmdOptions cmdOptions = {
+        {"f", defaultFileName, "input image file path"},
+        {"p", true, "whether the input image is a panorama"},
+        {"i", true, "whether the scene is indoor"},
+        {"h", 900, "maximum height for image resizing"}
+    };
+    
+    if (!cmdOptions.parseArguments(argc, argv)){
+        return 0;
     }
-    else{
-        filename = argv[1];
-    }
-    std::cout << "filename: " << filename << std::endl;
 
-    core::Image image = cv::imread(filename);
-    core::ResizeToMakeHeightUnder(image, 900);
+    core::Image image = cv::imread(cmdOptions.value<std::string>("f"));
+    core::ResizeToMakeHeightUnder(image, cmdOptions.value<int>("h"));
 
-    bool isPanorama = core::MayBeAPanorama(image);
-    std::cout << "is panorama: " << (isPanorama ? "yes" : "no") << std::endl;
-
-    if (isPanorama){
+    if (cmdOptions.value<bool>("p")){
         core::View<core::PanoramicCamera> view;
 
         std::vector<core::PerspectiveCamera> cams;
@@ -77,7 +64,7 @@ int main(int argc, char ** argv) {
             view = core::CreatePanoramicView(image);
 
             // collect lines in each view
-            cams = core::CreateCubicFacedCameras(view.camera, 800, 800, 300);
+            cams = core::CreateCubicFacedCameras(view.camera, image.cols * 0.7, image.cols * 0.7, image.cols * 0.3);
             lines.resize(cams.size());
             for (int i = 0; i < cams.size(); i++){
                 auto pim = view.sampled(cams[i]).image;
@@ -161,7 +148,7 @@ int main(int argc, char ** argv) {
             core::AttachWallConstriants(mg, props, M_PI / 30.0);
             //core::AttachGeometricContextConstraints(mg, props, gcs, hCams, 2);
 
-            core::Visualize(view, mg, props);
+            //core::Visualize(view, mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
 
             for (int i = 0; i < 10; i++){

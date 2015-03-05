@@ -28,11 +28,18 @@ file (GLOB VIS_SOURCES ./vis/*.cpp)
 file (GLOB VIS_RESOURCES ./vis/*.qrc)
 file (GLOB VIS_UIS ./vis/*.ui)
 
-source_group ("vis" FILES ${VIS_HEADERS} ${VIS_SOURCES} ${VIS_RESOURCES} ${VIS_UIS})
-
 set(CMAKE_AUTOMOC on)
 set(CMAKE_AUTOUIC on)
 set(CMAKE_AUTORCC on)
+
+source_group ("vis" FILES ${VIS_HEADERS} ${VIS_SOURCES} ${VIS_RESOURCES} ${VIS_UIS})
+
+
+file (GLOB MISC_HEADERS ./misc/*.hpp)
+file (GLOB MISC_SOURCES ./misc/*.cpp)
+
+source_group ("misc" FILES ${MISC_HEADERS} ${MISC_SOURCES})
+
 
 add_library ( ${PROJECT_NAME} STATIC 
 	${CORE_SOURCES} 
@@ -43,6 +50,8 @@ add_library ( ${PROJECT_NAME} STATIC
 	${VIS_HEADERS} 
 	${VIS_RESOURCES}
 	${VIS_UIS}
+	${MISC_HEADERS}
+	${MISC_SOURCES}
 )
 target_link_libraries ( ${PROJECT_NAME} 
 	${Fundamental_LIBS} 
