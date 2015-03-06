@@ -6,8 +6,6 @@ extern "C" {
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 
-#include <SuiteSparseQR.hpp>
-using UF_long = SuiteSparse_long;
 #include <Eigen/SPQRSupport>
 
 #include <unsupported/Eigen/NonLinearOptimization>
@@ -21,6 +19,7 @@ using UF_long = SuiteSparse_long;
 #include "containers.hpp"
 #include "matlab.hpp"
 #include "utilities.hpp"
+#include "clock.hpp"
 #include "mixed_graph.hpp"
 
 #include "../vis/visualizers.hpp"
@@ -1619,6 +1618,8 @@ namespace panoramix {
                 std::vector<double> & B,
                 bool addAnchor = true){
 
+                SetClock();
+
                 THERE_ARE_BUGS_HERE("make sure mg is single connected");
 
                 varNum = 0;
@@ -1740,6 +1741,8 @@ namespace panoramix {
 
         void SolveVariablesUsingInversedDepths(const MixedGraph & mg, MixedGraphPropertyTable & props){
 
+            SetClock();
+
             auto uh2varStartPosition = MakeHandledTableForComponents<int>(mg);
             auto bh2consStartPosition = MakeHandledTableForConstraints<int>(mg);
             auto appliedBinaryAnchors = MakeHandledTableForConstraints<std::vector<Vec3>>(mg);
@@ -1757,30 +1760,37 @@ namespace panoramix {
                 appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, 
                 varNum, consNum, Atriplets, Wtriplets, Xdata, Bdata);
             
-            Eigen::SparseMatrix<double, Eigen::ColMajor> A, W;
-            A.resize(consNum, varNum);
-            W.resize(consNum, consNum);
-            A.reserve(Atriplets.size());
-            W.reserve(Wtriplets.size());
 
-            for (auto & t : Atriplets){
-                A.insert(t.row, t.col) = t.value;
-            }
-            for (auto & t : Wtriplets){
-                W.insert(t.row, t.col) = t.value;
+            Eigen::SparseMatrix<double, Eigen::ColMajor> A/*, W*/;
+            {
+                Clock clock("form matrix");
+                std::vector<Eigen::Triplet<double>> AtripletsEigen(Atriplets.size());
+                for (int i = 0; i < Atriplets.size(); i++){
+                    AtripletsEigen[i] = Eigen::Triplet<double>(Atriplets[i].row, Atriplets[i].col, Atriplets[i].value);
+                }
+                A.resize(consNum, varNum);
+                A.setFromTriplets(AtripletsEigen.begin(), AtripletsEigen.end());
+                //W.resize(consNum, consNum);
+                //W.reserve(Wtriplets.size());
+                //for (auto & t : Wtriplets){
+                //    W.insert(t.row, t.col) = t.value;
+                //}
             }
 
-            Eigen::Map<Eigen::VectorXd> B(Bdata.data(), Bdata.size());
+            Eigen::Map<const Eigen::VectorXd> B(Bdata.data(), Bdata.size());
 
             static const bool useSPQR = true;
 
-            Eigen::SparseMatrix<double> WA = W * A;
+            //Eigen::SparseMatrix<double> WA = W * A;
             //static const bool useWeights = false;
+
 
             Eigen::VectorXd X;
             if (!useSPQR) {
+                Clock clock("solve equations using Eigen::SparseQR");
+
                 A.makeCompressed();
-                WA.makeCompressed();
+                //WA.makeCompressed();
 
                 Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
                 static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
@@ -1793,7 +1803,7 @@ namespace panoramix {
                     return;
                 }
 
-                Eigen::VectorXd WB = W * B;
+                //Eigen::VectorXd WB = W * B;
                 X = solver.solve(/*useWeights ? WB : */B);
                 if (solver.info() != Eigen::Success) {
                     assert(0);
@@ -1802,8 +1812,10 @@ namespace panoramix {
                 }
             }
             else{
+                Clock clock("solve equations using Eigen::SPQR");
 
                 Eigen::SPQR<Eigen::SparseMatrix<double, Eigen::ColMajor>> solver;
+                solver.cholmodCommon()->useGPU = 1;
                 solver.compute(/*useWeights ? WA : */A);
 
                 if (solver.info() != Eigen::Success) {
@@ -1812,7 +1824,7 @@ namespace panoramix {
                     return;
                 }
 
-                Eigen::VectorXd WB = W * B;
+                //Eigen::VectorXd WB = W * B;
                 //int r1 = solver.derived().rows();
                 //int r2 = B.rows();
                 //assert(r1 == r2);
@@ -1824,21 +1836,23 @@ namespace panoramix {
                 }
             }
 
-
-            for (auto & c : mg.components<RegionData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    props[c.topo.hd].variables[i] = X(uhStartPosition + i);
+            {
+                Clock clock("install solved variables");
+                for (auto & c : mg.components<RegionData>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
+                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+                    for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+                        props[c.topo.hd].variables[i] = X(uhStartPosition + i);
+                    }
                 }
-            }
-            for (auto & c : mg.components<LineData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    props[c.topo.hd].variables[i] = X(uhStartPosition + i);
+                for (auto & c : mg.components<LineData>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
+                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+                    for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+                        props[c.topo.hd].variables[i] = X(uhStartPosition + i);
+                    }
                 }
             }
         }
@@ -2307,6 +2321,9 @@ namespace panoramix {
 
         void NormalizeVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
             double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
+            
+            SetClock();
+
             std::cout << "median center depth: " << medianCenterDepth << std::endl;
 
             assert(!IsInfOrNaN(medianCenterDepth));
@@ -2418,6 +2435,8 @@ namespace panoramix {
         void AttachPrincipleDirectionConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double rangeAngle){
 
+            SetClock();
+
             // find peaky regions
             std::vector<std::vector<RegionHandle>> peakyRegionHandles(props.vanishingPoints.size());
             for (auto & r : mg.components<RegionData>()){
@@ -2513,6 +2532,8 @@ namespace panoramix {
         void AttachWallConstriants(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double rangeAngle, const Vec3 & verticalSeed){
 
+            SetClock();
+
             int vertVPId = -1;
             double minAngle = M_PI;
             for (int i = 0; i < props.vanishingPoints.size(); i++){
@@ -2562,6 +2583,8 @@ namespace panoramix {
         void AttachFloorAndCeilingConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double eyeHeightRatioLowerBound, double eyeHeightRatioUpperBound,
             double angleThreshold, const Vec3 & verticalSeed){
+
+            SetClock();
 
             IMPROVABLE_HERE("we need a better way!");
 
@@ -3115,157 +3138,300 @@ namespace panoramix {
         void LooseOrientationConstraintsOnComponents(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double linesLoosableRatio, double regionsLoosableRatio, double distThresRatio){
 
+            SetClock();
+
             if (linesLoosableRatio <= 0.0 && regionsLoosableRatio <= 0.0)
                 return;
             
             double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
             double distThres = medianCenterDepth * distThresRatio;
             double nnSearchRange = distThres;
-            
-            // collect keypoints
-            struct ComponentKeyPoint {
-                Point3 point;
-                int handleId;
-                bool isOnRegion;
-                inline ComponentKeyPoint() {}
-                inline ComponentKeyPoint(const Point3 & p, RegionHandle rh) : point(p), isOnRegion(true), handleId(rh.id) {}
-                inline ComponentKeyPoint(const Point3 & p, LineHandle lh) : point(p), isOnRegion(false), handleId(lh.id) {}
-                inline bool matches(RegionHandle rh) const { return isOnRegion && handleId == rh.id; }
-                inline bool matches(LineHandle lh) const { return !isOnRegion && handleId == lh.id; }
-            };
-            auto getBB = [distThres](const ComponentKeyPoint & p) {return BoundingBox(p.point).expand(distThres); };
-            RTreeWrapper<ComponentKeyPoint, decltype(getBB)> keyPointsRTree(getBB);
 
-            // collect current instances
-            HandledTable<LineHandle, Line3> lines(mg.internalComponents<LineData>().size());
-            HandledTable<RegionHandle, Plane3> planes(mg.internalComponents<RegionData>().size());
+            bool directApproach = true;
+            if (directApproach){
 
-            // keypoints on regions
-            for (auto & r : mg.components<RegionData>()){
-                if (!props[r.topo.hd].used)
-                    continue;
-                auto plane = Instance(mg, props, r.topo.hd);
-                planes[r.topo.hd] = plane;
-                for (auto & cs : r.data.normalizedContours){
-                    for (auto & c : cs){
-                        double depth = DepthAt(c, plane);
-                        keyPointsRTree.insert(ComponentKeyPoint(c * depth, r.topo.hd));
-                    }
-                }
-            }
-            // keypoints on lines
-            for (auto & l : mg.components<LineData>()){
-                if (!props[l.topo.hd].used)
-                    continue;
-                auto line = Instance(mg, props, l.topo.hd);
-                lines[l.topo.hd] = line;
-                keyPointsRTree.insert(ComponentKeyPoint(line.first, l.topo.hd));
-                keyPointsRTree.insert(ComponentKeyPoint(line.second, l.topo.hd));
-            }
+                // collect current instances
+                HandledTable<LineHandle, Line3> lines(mg.internalComponents<LineData>().size());
+                HandledTable<RegionHandle, Plane3> planes(mg.internalComponents<RegionData>().size());
 
-            // find most isolated lines
-            if (linesLoosableRatio > 0.0){
-
-                auto lineMaxCornerNNDistances = mg.createComponentTable<LineData, double>();
-                std::vector<LineHandle> usableLineHandles;
-                for (auto & l : mg.components<LineData>()){
-                    if (!props[l.topo.hd].used)
-                        continue;
-                    usableLineHandles.push_back(l.topo.hd);
-                    auto & line = lines[l.topo.hd];
-                    double nnDistances[] = { std::numeric_limits<double>::max(), std::numeric_limits<double>::max() };
-                    keyPointsRTree.search(BoundingBox(line.first).expand(nnSearchRange), [&l, &line, &nnDistances](const ComponentKeyPoint & p){
-                        if (p.matches(l.topo.hd))
-                            return true;
-                        if (!p.isOnRegion)
-                            return true;
-                        nnDistances[0] = std::min(Distance(line.first, p.point), nnDistances[0]);
-                        //nnDistances[1] = std::min(Distance(line.second, p.point), nnDistances[1]);
-                        return true;
-                    });
-                    keyPointsRTree.search(BoundingBox(line.second).expand(nnSearchRange), [&l, &line, &nnDistances](const ComponentKeyPoint & p){
-                        if (p.matches(l.topo.hd))
-                            return true;
-                        //nnDistances[0] = std::min(Distance(line.first, p.point), nnDistances[0]);
-                        nnDistances[1] = std::min(Distance(line.second, p.point), nnDistances[1]);
-                        return true;
-                    });
-                    lineMaxCornerNNDistances[l.topo.hd] = std::max(nnDistances[0], nnDistances[1]);
-                }
-
-                std::sort(usableLineHandles.begin(), usableLineHandles.end(), [&lineMaxCornerNNDistances](LineHandle l1, LineHandle l2){
-                    return lineMaxCornerNNDistances[l1] > lineMaxCornerNNDistances[l2];
-                });
-
-                // loose orientation constraints on these lines
-                for (int i = 0; i < usableLineHandles.size() * linesLoosableRatio; i++){
-                    double maxCornerDist = lineMaxCornerNNDistances[usableLineHandles[i]];
-                    if (maxCornerDist < distThres)
-                        continue;
-                    auto & lp = props[usableLineHandles[i]];
-                    assert(lp.used);
-                    if (lp.orientationClaz >= 0){
-                        lp.orientationClaz = -1;
-                        lp.variables = { 1.0, 1.0 };
-                    }
-                    assert(lp.orientationNotClaz == -1);
-                    if (lp.orientationClaz == -1){
-                        lp.used = false; // disable this line!!!!!!!!!
-                        lp.variables.clear();
-                    }
-                }
-            }
-
-            // find most isolated regions
-            if (regionsLoosableRatio > 0.0){
-
-                auto regionMaxCornerNNDistances = mg.createComponentTable<RegionData, double>();
-                std::vector<RegionHandle> usableRegionHandles;
                 for (auto & r : mg.components<RegionData>()){
                     if (!props[r.topo.hd].used)
                         continue;
-                    usableRegionHandles.push_back(r.topo.hd);
-                    auto & plane = planes[r.topo.hd];
-                    double maxCornerNNDistance = 0.0;
-                    for (int i = 0; i < r.data.normalizedContours.size(); i++){
-                        auto & contour = r.data.normalizedContours[i];
-                        for (int j = 0; j < contour.size(); j++){
-                            auto c = contour[j];
-                            double depth = DepthAt(c, plane);
-                            c *= depth; // the corner position
-                            auto id = std::make_pair(i, j); // the corner id
-                            double cornerNNDistance = std::numeric_limits<double>::max(); // find nearest neighbor distance to this corner
-                            keyPointsRTree.search(BoundingBox(c).expand(nnSearchRange), [&r, &plane, &cornerNNDistance, id, &c](const ComponentKeyPoint & p){
-                                if (p.matches(r.topo.hd))
-                                    return true;
-                                double d = Distance(c, p.point);
-                                cornerNNDistance = std::min(cornerNNDistance, d);
-                                return true;
-                            });
-                            if (cornerNNDistance > maxCornerNNDistance){
-                                maxCornerNNDistance = cornerNNDistance; // get the maximum nn distance of all corners on this region
+                    planes[r.topo.hd] = Instance(mg, props, r.topo.hd);
+                }
+                for (auto & l : mg.components<LineData>()){
+                    if (!props[l.topo.hd].used)
+                        continue;
+                    lines[l.topo.hd] = Instance(mg, props, l.topo.hd);
+                }
+
+                if (linesLoosableRatio > 0.0){
+                    std::vector<LineHandle> usableLineHandles;
+                    usableLineHandles.reserve(mg.internalComponents<LineData>().size());
+                    auto distanceToNearestRegions = mg.createComponentTable<LineData>(0.0);
+                    for (auto & l : mg.components<LineData>()){
+                        if (!props[l.topo.hd].used)
+                            continue;
+                        usableLineHandles.push_back(l.topo.hd);
+
+                        Point3 points[] = { lines[l.topo.hd].first, lines[l.topo.hd].second };
+                        double & ndist = distanceToNearestRegions[l.topo.hd];
+                        for (auto & linePoint : points){
+                            double distToThis = std::numeric_limits<double>::max();
+                            for (auto rlch : l.topo.constraints<RegionLineConnectionData>()){
+                                auto & anchors = mg.data(rlch).normalizedAnchors;
+                                RegionHandle rh = mg.topo(rlch).component<0>();
+                                Plane3 & plane = planes[rh];
+                                for (auto & anchor : anchors){
+                                    auto planePoint = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane).position;
+                                    double distance = Distance(planePoint, linePoint);
+                                    if (distance < distToThis){
+                                        distToThis = distance;
+                                    }
+                                }
+                            }
+                            if (distToThis > ndist){
+                                ndist = distToThis;
                             }
                         }
                     }
-                    regionMaxCornerNNDistances[r.topo.hd] = maxCornerNNDistance;
+
+                    std::sort(usableLineHandles.begin(), usableLineHandles.end(), [&distanceToNearestRegions](LineHandle l1, LineHandle l2){
+                        return distanceToNearestRegions[l1] > distanceToNearestRegions[l2];
+                    });
+
+                    // loose orientation constraints on these lines
+                    for (int i = 0; i < usableLineHandles.size() * linesLoosableRatio; i++){
+                        double maxCornerDist = distanceToNearestRegions[usableLineHandles[i]];
+                        if (maxCornerDist < distThres)
+                            continue;
+                        auto & lp = props[usableLineHandles[i]];
+                        assert(lp.used);
+                        if (lp.orientationClaz >= 0){
+                            lp.orientationClaz = -1;
+                            lp.variables = { 1.0, 1.0 };
+                        }
+                        assert(lp.orientationNotClaz == -1);
+                        if (lp.orientationClaz == -1){
+                            lp.used = false; // disable this line!!!!!!!!!
+                            lp.variables.clear();
+                        }
+                    }
                 }
 
-                std::sort(usableRegionHandles.begin(), usableRegionHandles.end(), [&regionMaxCornerNNDistances](RegionHandle l1, RegionHandle l2){
-                    return regionMaxCornerNNDistances[l1] > regionMaxCornerNNDistances[l2];
-                });
+                if (regionsLoosableRatio > 0.0){
+                    std::vector<RegionHandle> usableRegionHandles;
+                    usableRegionHandles.reserve(mg.internalComponents<RegionData>().size());
+                    auto maxDistanceToNearestComponents = mg.createComponentTable<RegionData>(0.0);
 
-                // loose orientation constraints on these lines
-                for (int i = 0; i < usableRegionHandles.size() * regionsLoosableRatio; i++){
-                    double maxCornerDist = regionMaxCornerNNDistances[usableRegionHandles[i]];
-                    if (maxCornerDist < distThres)
+                    for (auto & r : mg.components<RegionData>()){
+                        if (!props[r.topo.hd].used)
+                            continue;
+                        usableRegionHandles.push_back(r.topo.hd);
+                        Plane3 & thisPlane = planes[r.topo.hd];
+
+                        double & ndist = maxDistanceToNearestComponents[r.topo.hd];
+
+                        // region region
+                        for (auto rrch : r.topo.constraints<RegionBoundaryData>()){
+                            RegionHandle thatRh = mg.topo(rrch).component<0>();
+                            if (thatRh == r.topo.hd){
+                                thatRh = mg.topo(rrch).component<1>();
+                            }
+                            Plane3 & thatPlane = planes[thatRh];
+                            for (auto & cs : mg.data(rrch).normalizedSampledPoints){
+                                for (auto & c : cs){
+                                    Point3 pointHere = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), c), thisPlane).position;
+                                    Point3 pointThere = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), c), thatPlane).position;
+                                    double dist = Distance(pointHere, pointThere);
+                                    if (dist > ndist){
+                                        ndist = dist;
+                                    }
+                                }
+                            }
+                        }
+
+                        // region line
+                        for (auto & rlch : r.topo.constraints<RegionLineConnectionData>()){
+                            LineHandle lh = mg.topo(rlch).component<1>();
+                            Line3 & thatLine = lines[lh];
+                            for (auto & a : mg.data(rlch).normalizedAnchors){
+                                Point3 pointHere = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), a), thisPlane).position;
+                                Point3 pointThere = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), a), thatLine.infiniteLine()).second.first;
+                                double dist = Distance(pointHere, pointThere);
+                                if (dist > ndist){
+                                    ndist = dist;
+                                }
+                            }
+                        }
+                    }
+
+                    std::sort(usableRegionHandles.begin(), usableRegionHandles.end(), [&maxDistanceToNearestComponents](RegionHandle l1, RegionHandle l2){
+                        return maxDistanceToNearestComponents[l1] > maxDistanceToNearestComponents[l2];
+                    });
+
+                    // loose orientation constraints on these lines
+                    for (int i = 0; i < usableRegionHandles.size() * regionsLoosableRatio; i++){
+                        double maxCornerDist = maxDistanceToNearestComponents[usableRegionHandles[i]];
+                        if (maxCornerDist < distThres)
+                            continue;
+                        auto & rp = props[usableRegionHandles[i]];
+                        assert(rp.used);
+                        rp.orientationClaz = rp.orientationNotClaz = -1;
+                        rp.variables = { 1.0, 1.0, 1.0 };
+                        //if (lp.orientationClaz == -1){
+                        //    lp.used = false; // disable this line!!!!!!!!!
+                        //}
+                    }
+                }
+            }
+            else {
+
+                // collect keypoints
+                struct ComponentKeyPoint {
+                    Point3 point;
+                    int handleId;
+                    bool isOnRegion;
+                    inline ComponentKeyPoint() {}
+                    inline ComponentKeyPoint(const Point3 & p, RegionHandle rh) : point(p), isOnRegion(true), handleId(rh.id) {}
+                    inline ComponentKeyPoint(const Point3 & p, LineHandle lh) : point(p), isOnRegion(false), handleId(lh.id) {}
+                    inline bool matches(RegionHandle rh) const { return isOnRegion && handleId == rh.id; }
+                    inline bool matches(LineHandle lh) const { return !isOnRegion && handleId == lh.id; }
+                };
+                auto getBB = [distThres](const ComponentKeyPoint & p) {return BoundingBox(p.point).expand(distThres); };
+                RTreeWrapper<ComponentKeyPoint, decltype(getBB)> keyPointsRTree(getBB);
+
+                // collect current instances
+                HandledTable<LineHandle, Line3> lines(mg.internalComponents<LineData>().size());
+                HandledTable<RegionHandle, Plane3> planes(mg.internalComponents<RegionData>().size());
+
+                // keypoints on regions
+                for (auto & r : mg.components<RegionData>()){
+                    if (!props[r.topo.hd].used)
                         continue;
-                    auto & rp = props[usableRegionHandles[i]];
-                    assert(rp.used);
-                    rp.orientationClaz = rp.orientationNotClaz = -1;
-                    rp.variables = { 1.0, 1.0, 1.0 };
-                    //if (lp.orientationClaz == -1){
-                    //    lp.used = false; // disable this line!!!!!!!!!
-                    //}
+                    auto plane = Instance(mg, props, r.topo.hd);
+                    planes[r.topo.hd] = plane;
+                    for (auto & cs : r.data.normalizedContours){
+                        for (auto & c : cs){
+                            double depth = DepthAt(c, plane);
+                            keyPointsRTree.insert(ComponentKeyPoint(c * depth, r.topo.hd));
+                        }
+                    }
+                }
+                // keypoints on lines
+                for (auto & l : mg.components<LineData>()){
+                    if (!props[l.topo.hd].used)
+                        continue;
+                    auto line = Instance(mg, props, l.topo.hd);
+                    lines[l.topo.hd] = line;
+                    keyPointsRTree.insert(ComponentKeyPoint(line.first, l.topo.hd));
+                    keyPointsRTree.insert(ComponentKeyPoint(line.second, l.topo.hd));
+                }
+
+                // find most isolated lines
+                if (linesLoosableRatio > 0.0){
+
+                    auto lineMaxCornerNNDistances = mg.createComponentTable<LineData, double>();
+                    std::vector<LineHandle> usableLineHandles;
+                    for (auto & l : mg.components<LineData>()){
+                        if (!props[l.topo.hd].used)
+                            continue;
+                        usableLineHandles.push_back(l.topo.hd);
+                        auto & line = lines[l.topo.hd];
+                        double nnDistances[] = { std::numeric_limits<double>::max(), std::numeric_limits<double>::max() };
+                        keyPointsRTree.search(BoundingBox(line.first).expand(nnSearchRange), [&l, &line, &nnDistances](const ComponentKeyPoint & p){
+                            if (p.matches(l.topo.hd))
+                                return true;
+                            if (!p.isOnRegion)
+                                return true;
+                            nnDistances[0] = std::min(Distance(line.first, p.point), nnDistances[0]);
+                            //nnDistances[1] = std::min(Distance(line.second, p.point), nnDistances[1]);
+                            return true;
+                        });
+                        keyPointsRTree.search(BoundingBox(line.second).expand(nnSearchRange), [&l, &line, &nnDistances](const ComponentKeyPoint & p){
+                            if (p.matches(l.topo.hd))
+                                return true;
+                            //nnDistances[0] = std::min(Distance(line.first, p.point), nnDistances[0]);
+                            nnDistances[1] = std::min(Distance(line.second, p.point), nnDistances[1]);
+                            return true;
+                        });
+                        lineMaxCornerNNDistances[l.topo.hd] = std::max(nnDistances[0], nnDistances[1]);
+                    }
+
+                    std::sort(usableLineHandles.begin(), usableLineHandles.end(), [&lineMaxCornerNNDistances](LineHandle l1, LineHandle l2){
+                        return lineMaxCornerNNDistances[l1] > lineMaxCornerNNDistances[l2];
+                    });
+
+                    // loose orientation constraints on these lines
+                    for (int i = 0; i < usableLineHandles.size() * linesLoosableRatio; i++){
+                        double maxCornerDist = lineMaxCornerNNDistances[usableLineHandles[i]];
+                        if (maxCornerDist < distThres)
+                            continue;
+                        auto & lp = props[usableLineHandles[i]];
+                        assert(lp.used);
+                        if (lp.orientationClaz >= 0){
+                            lp.orientationClaz = -1;
+                            lp.variables = { 1.0, 1.0 };
+                        }
+                        assert(lp.orientationNotClaz == -1);
+                        if (lp.orientationClaz == -1){
+                            lp.used = false; // disable this line!!!!!!!!!
+                            lp.variables.clear();
+                        }
+                    }
+                }
+
+                // find most isolated regions
+                if (regionsLoosableRatio > 0.0){
+
+                    auto regionMaxCornerNNDistances = mg.createComponentTable<RegionData, double>();
+                    std::vector<RegionHandle> usableRegionHandles;
+                    for (auto & r : mg.components<RegionData>()){
+                        if (!props[r.topo.hd].used)
+                            continue;
+                        usableRegionHandles.push_back(r.topo.hd);
+                        auto & plane = planes[r.topo.hd];
+                        double maxCornerNNDistance = 0.0;
+                        for (int i = 0; i < r.data.normalizedContours.size(); i++){
+                            auto & contour = r.data.normalizedContours[i];
+                            for (int j = 0; j < contour.size(); j++){
+                                auto c = contour[j];
+                                double depth = DepthAt(c, plane);
+                                c *= depth; // the corner position
+                                auto id = std::make_pair(i, j); // the corner id
+                                double cornerNNDistance = std::numeric_limits<double>::max(); // find nearest neighbor distance to this corner
+                                keyPointsRTree.search(BoundingBox(c).expand(nnSearchRange), [&r, &plane, &cornerNNDistance, id, &c](const ComponentKeyPoint & p){
+                                    if (p.matches(r.topo.hd))
+                                        return true;
+                                    double d = Distance(c, p.point);
+                                    cornerNNDistance = std::min(cornerNNDistance, d);
+                                    return true;
+                                });
+                                if (cornerNNDistance > maxCornerNNDistance){
+                                    maxCornerNNDistance = cornerNNDistance; // get the maximum nn distance of all corners on this region
+                                }
+                            }
+                        }
+                        regionMaxCornerNNDistances[r.topo.hd] = maxCornerNNDistance;
+                    }
+
+                    std::sort(usableRegionHandles.begin(), usableRegionHandles.end(), [&regionMaxCornerNNDistances](RegionHandle l1, RegionHandle l2){
+                        return regionMaxCornerNNDistances[l1] > regionMaxCornerNNDistances[l2];
+                    });
+
+                    // loose orientation constraints on these lines
+                    for (int i = 0; i < usableRegionHandles.size() * regionsLoosableRatio; i++){
+                        double maxCornerDist = regionMaxCornerNNDistances[usableRegionHandles[i]];
+                        if (maxCornerDist < distThres)
+                            continue;
+                        auto & rp = props[usableRegionHandles[i]];
+                        assert(rp.used);
+                        rp.orientationClaz = rp.orientationNotClaz = -1;
+                        rp.variables = { 1.0, 1.0, 1.0 };
+                        //if (lp.orientationClaz == -1){
+                        //    lp.used = false; // disable this line!!!!!!!!!
+                        //}
+                    }
                 }
             }
 

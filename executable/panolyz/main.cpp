@@ -9,7 +9,7 @@ int main(int argc, char ** argv) {
     
     std::string defaultFileName;
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
+    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
@@ -22,7 +22,7 @@ int main(int argc, char ** argv) {
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab2.jpg";
-    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab3.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab3.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (2).jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x5.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x6.jpg";
@@ -60,11 +60,11 @@ int main(int argc, char ** argv) {
         core::MixedGraph mg;
         core::MixedGraphPropertyTable props;
 
-        if (1){
+        if (0){
             view = core::CreatePanoramicView(image);
 
             // collect lines in each view
-            cams = core::CreateCubicFacedCameras(view.camera, image.cols * 0.7, image.cols * 0.7, image.cols * 0.3);
+            cams = core::CreateCubicFacedCameras(view.camera, image.rows * 0.7, image.rows * 0.7, image.rows * 0.3);
             lines.resize(cams.size());
             for (int i = 0; i < cams.size(); i++){
                 auto pim = view.sampled(cams[i]).image;

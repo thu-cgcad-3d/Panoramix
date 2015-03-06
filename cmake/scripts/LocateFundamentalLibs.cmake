@@ -7,6 +7,7 @@ find_package (OpenCV REQUIRED)
 # find_package (Armadillo REQUIRED CONFIG)
 find_package (MOSEK REQUIRED)
 find_package (SuiteSparse REQUIRED)
+find_package (CUDA REQUIRED)
 
 set (SuiteSparse_USE_LAPACK_BLAS "on")
 include(${USE_SuiteSparse})
@@ -18,6 +19,7 @@ set (Fundamental_INCLUDES
 	#${GLEW_INCLUDE_DIRS} 
 #	${ARMADILLO_INCLUDE_DIRS}
 	${MOSEK_INCLUDE_DIR} 
+	";${CUDA_TOOLKIT_INCLUDE}"
 	";${SuiteSparse_INCLUDE_DIRS}"
 )
 

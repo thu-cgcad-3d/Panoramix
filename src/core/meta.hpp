@@ -333,6 +333,25 @@ namespace panoramix {
             }
         };
 
+        template <class StreamerT, class SeperatorT>
+        struct GeneralStreamFunctor {
+            StreamerT streamer;
+            SeperatorT seperator;
+            template <class T>
+            inline void operator()(T && t) const {
+                streamer = (streamer << std::forward<T>(t) << seperator);
+            }
+        };
+        
+        template <class StreamerT, class SeperatorT>
+        inline GeneralStreamFunctor<StreamerT, std::decay_t<SeperatorT>> MakeStreamFunctor(
+            StreamerT && streamer, SeperatorT && sep) {
+            return GeneralStreamFunctor<StreamerT, std::decay_t<SeperatorT>>{ 
+                std::forward<StreamerT>(streamer), 
+                    std::forward<SeperatorT>(sep) 
+            };
+        }
+
 
 
         // to represent any functor type which returns constant value

@@ -214,8 +214,10 @@ namespace panoramix {
             const std::vector<PerspectiveCamera> & gcCameras,
             int shrinkRegionOrientationIteration = 1, bool considerGCVerticalConstraint = false);
 
+
         void LooseOrientationConstraintsOnComponents(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05, double distThresRatio = 0.12);
+
 
         void LooseMaybeOcclusionBoundaryConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props);
 
