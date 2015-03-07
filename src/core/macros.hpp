@@ -10,52 +10,35 @@ namespace panoramix {
         };
 
 // macros describing function implementations
+#define FUNCTION_LINE_FILE_STRING ("[" __FUNCTION__ "][line: " + std::to_string(__LINE__) + "]["__FILE__"]")
 
         // not implemented error
 #define NOT_IMPLEMENTED_YET(...) \
-    throw std::runtime_error("This feature has not yet been implemented! \n" \
-    "in function: "__FUNCSIG__ "\n" \
-    "in line: " + std::to_string(__LINE__) + "\n" \
-    "in file: "__FILE__)
+    throw std::runtime_error(FUNCTION_LINE_FILE_STRING + " This feature has not yet been implemented! \n")
 
         // not tested warning
 #define NOT_TESTED_YET(...) \
-    std::cout << ("This feature has not yet been tested! \n" \
-    "in function: "__FUNCSIG__ "\n" \
-    "in line: " + std::to_string(__LINE__) + "\n" \
-    "in file: "__FILE__) << std::endl 
+    std::cout << (FUNCTION_LINE_FILE_STRING + "This feature has not yet been tested! \n") << std::endl 
 
         // improvable here
 #define IMPROVABLE_HERE(...)
 
         // there are bugs here
 #define THERE_ARE_BUGS_HERE(...)  \
-    std::cout << ("This feature may have BUGS, Check it: \""__VA_ARGS__"\"\n" \
-    "in function: "__FUNCSIG__ "\n" \
-    "in line: " + std::to_string(__LINE__) + "\n" \
-    "in file: "__FILE__) << std::endl
+    std::cout << (FUNCTION_LINE_FILE_STRING + "This feature may have BUGS, Check it: \""__VA_ARGS__"\"\n") << std::endl
 
         // there are bottlenecks here
 #define THERE_ARE_BOTTLENECKS_HERE(...) \
-    std::cout << ("This feature has improvable BOTTLENECKS! \n" \
-    "in function: "__FUNCSIG__ "\n" \
-    "in line: " + std::to_string(__LINE__) + "\n" \
-    "in file: "__FILE__) << std::endl
-
+    std::cout << (FUNCTION_LINE_FILE_STRING + "This feature has improvable BOTTLENECKS! \n") << std::endl
 
         // should never be called error
 #define SHOULD_NEVER_BE_CALLED(...) \
-    throw std::runtime_error("This feature should never be called! \n" \
-    "in function: "__FUNCSIG__ "\n" \
-    "in line: " + std::to_string(__LINE__) + "\n" \
-    "in file: "__FILE__)
+    throw std::runtime_error(FUNCTION_LINE_FILE_STRING + "This feature should never be called! \n")
 
         // should never be instanciated error
 #define SHOULD_NEVER_BE_INSTANCIATED(...) \
-    static_assert(panoramix::core::DelayStaticAssert<__VA_ARGS__>::value, "This feature should never be instanciated by compiler! \n" \
-    "in function: "__FUNCSIG__ "\n" \
-    "in line: " + std::to_string(__LINE__) + "\n" \
-    "in file: "__FILE__)
+    static_assert(panoramix::core::DelayStaticAssert<__VA_ARGS__>::value, \
+    FUNCTION_LINE_FILE_STRING + "This feature should never be instanciated by compiler! \n")
 
 
 

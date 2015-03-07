@@ -1556,13 +1556,13 @@ namespace panoramix {
             }
 
 
-            template <class DataT>
+            template <class DataT, class SparseMatElementT>
             inline void RegisterConstraintEquations(int & eid, const MixedGraph & mg, MixedGraphPropertyTable & props,
                 ComponentHandledTableFromConstraintGraph<int, MixedGraph>::type & uh2varStartPosition,
                 ConstraintHandledTableFromConstraintGraph<std::vector<Vec3>, MixedGraph>::type & appliedBinaryAnchors,
                 ConstraintHandledTableFromConstraintGraph<double, MixedGraph>::type & weightsForEachAppliedBinaryAnchor,
-                std::vector<SparseMatElement<double>> & Atriplets,
-                std::vector<SparseMatElement<double>> & Wtriplets,
+                std::vector<SparseMatElementT> & Atriplets,
+                std::vector<SparseMatElementT> & Wtriplets,
                 std::vector<double> & B) {
 
                 for (auto & c : mg.constraints<DataT>()){
@@ -1606,14 +1606,15 @@ namespace panoramix {
             }
 
 
+            template <class SparseMatElementT>
             void FormulateComponentsAndConstraintsAsMatricesForInverseDepthSolution(const MixedGraph & mg, MixedGraphPropertyTable & props,
                 ComponentHandledTableFromConstraintGraph<int, MixedGraph>::type & uh2varStartPosition,
                 ConstraintHandledTableFromConstraintGraph<int, MixedGraph>::type & bh2consStartPosition,
                 ConstraintHandledTableFromConstraintGraph<std::vector<Vec3>, MixedGraph>::type & appliedBinaryAnchors,
                 ConstraintHandledTableFromConstraintGraph<double, MixedGraph>::type & weightsForEachAppliedBinaryAnchor,
                 int & varNum, int & consNum,
-                std::vector<SparseMatElement<double>> & Atriplets,
-                std::vector<SparseMatElement<double>> & Wtriplets,
+                std::vector<SparseMatElementT> & Atriplets,
+                std::vector<SparseMatElementT> & Wtriplets,
                 std::vector<double> & X,
                 std::vector<double> & B,
                 bool addAnchor = true){
@@ -1750,8 +1751,8 @@ namespace panoramix {
 
             int varNum = 0;
             int consNum = 0;
-            std::vector<SparseMatElement<double>> Atriplets;
-            std::vector<SparseMatElement<double>> Wtriplets;
+            std::vector<Eigen::Triplet<double>> Atriplets;
+            std::vector<Eigen::Triplet<double>> Wtriplets;
             std::vector<double> Xdata;
             std::vector<double> Bdata;
 
@@ -1761,20 +1762,11 @@ namespace panoramix {
                 varNum, consNum, Atriplets, Wtriplets, Xdata, Bdata);
             
 
-            Eigen::SparseMatrix<double, Eigen::ColMajor> A/*, W*/;
+            Eigen::SparseMatrix<double, Eigen::ColMajor> A;
             {
                 Clock clock("form matrix");
-                std::vector<Eigen::Triplet<double>> AtripletsEigen(Atriplets.size());
-                for (int i = 0; i < Atriplets.size(); i++){
-                    AtripletsEigen[i] = Eigen::Triplet<double>(Atriplets[i].row, Atriplets[i].col, Atriplets[i].value);
-                }
                 A.resize(consNum, varNum);
-                A.setFromTriplets(AtripletsEigen.begin(), AtripletsEigen.end());
-                //W.resize(consNum, consNum);
-                //W.reserve(Wtriplets.size());
-                //for (auto & t : Wtriplets){
-                //    W.insert(t.row, t.col) = t.value;
-                //}
+                A.setFromTriplets(Atriplets.begin(), Atriplets.end());
             }
 
             Eigen::Map<const Eigen::VectorXd> B(Bdata.data(), Bdata.size());
