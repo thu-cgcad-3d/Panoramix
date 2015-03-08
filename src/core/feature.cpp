@@ -1288,116 +1288,262 @@ namespace panoramix {
                 }
                 return results;
             }
-            else /*if (_params.algorithm == TardifSimplified)*/{
-                
-                std::vector< std::vector<float> *> pts(lines.size());
+            else if (_params.algorithm == MATLAB_PanoContext){
+                assert(Matlab::IsUsable());
+                // install lines
+                Imaged linesData(lines.size(), 4);
                 for (int i = 0; i < lines.size(); i++){
-                    pts[i] = new std::vector<float>{
-                        (float)lines[i].first[0], (float)lines[i].first[1], (float)lines[i].second[0], (float)lines[i].second[1]
-                    };
+                    linesData(i, 0) = lines[i].first[0];
+                    linesData(i, 1) = lines[i].first[1];
+                    linesData(i, 2) = lines[i].second[0];
+                    linesData(i, 3) = lines[i].second[1];
+                }
+                Matlab::PutVariable("linesData", linesData);
+                Matlab::PutVariable("projCenter", projCenter);
+                // convert to struct array
+                Matlab matlab;
+                matlab << "[vp, f, lineclasses] = panoramix_wrapper_vpdetection(linesData, projCenter');";
+                Imaged vpData;
+                Imaged focal;
+                Imaged lineClassesData;
+                Matlab::GetVariable("vp", vpData, false);
+                Matlab::GetVariable("f", focal, false);
+                Matlab::GetVariable("lineclasses", lineClassesData, false);
+                assert(vpData.cols == 2 && vpData.rows == 3);
+                assert(lineClassesData.cols * lineClassesData.rows == lines.size());
+                std::vector<HPoint2> vps = {
+                    HPoint2({ vpData(0, 0), vpData(0, 1) }, 1.0),
+                    HPoint2({ vpData(1, 0), vpData(1, 1) }, 1.0),
+                    HPoint2({ vpData(2, 0), vpData(2, 1) }, 1.0)
+                };
+                std::vector<int> lineClasses(lines.size(), -1);
+                for (int i = 0; i < lines.size(); i++){
+                    lineClasses[i] = (int)std::round(lineClassesData(i) - 1);
+                }
+                return std::make_tuple(std::move(vps), focal(0), std::move(lineClasses));
+            }
+            else if (_params.algorithm == MATLAB_Tardif){
+                assert(Matlab::IsUsable());
+                // install lines
+                Imaged linesData(lines.size(), 5);
+                for (int i = 0; i < lines.size(); i++){
+                    linesData(i, 0) = lines[i].first[0];
+                    linesData(i, 1) = lines[i].first[1];
+                    linesData(i, 2) = lines[i].second[0];
+                    linesData(i, 3) = lines[i].second[1];
+                    linesData(i, 4) = 1.0;
+                }
+                Matlab::PutVariable("linesData", linesData);
+                NOT_IMPLEMENTED_YET();
+            }
+            else /*if (_params.algorithm == TardifSimplified)*/{
+
+                std::vector<std::vector<Line2>> lineClusters;
+                std::vector<double> clusterInitialScores;
+                std::vector<int> intLabels;
+                int classNum = 0;
+
+                {
+                    std::vector< std::vector<float> *> pts(lines.size());
+                    for (int i = 0; i < lines.size(); i++){
+                        pts[i] = new std::vector<float>{
+                            (float)lines[i].first[0], (float)lines[i].first[1], (float)lines[i].second[0], (float)lines[i].second[1]
+                        };
+                    }
+
+                    std::vector<std::vector<float> *> *mModels =
+                        VPSample::run(&pts, 5000, 2, 0, 3);
+                    std::vector<unsigned int> labels;
+                    std::vector<unsigned int> labelCount;
+                    classNum = VPCluster::run(labels, labelCount, &pts, mModels, 2, 2);
+
+                    assert(classNum >= 3);
+
+                    for (unsigned int i = 0; i < mModels->size(); ++i)
+                        delete (*mModels)[i];
+                    delete mModels;
+                    for (auto & p : pts){
+                        delete p;
+                    }
+
+                    // estimate vps
+                    assert(lines.size() == labels.size());
+                    lineClusters.resize(classNum);
+                    clusterInitialScores.resize(classNum, 0.0);
+                    intLabels.resize(labels.size());
+                    for (int i = 0; i < labels.size(); i++){
+                        lineClusters[labels[i]].push_back(lines[i]);
+                        clusterInitialScores[labels[i]] += lines[i].length();
+                        intLabels[i] = labels[i];
+                    }
                 }
 
-                std::vector<std::vector<float> *> *mModels =
-                    VPSample::run(&pts, 5000, 2, 0, 3);
-                std::vector<unsigned int> labels;
-                std::vector<unsigned int> labelCount;
-                int classNum = VPCluster::run(labels, labelCount, &pts, mModels, 2, 2);
-
-                for (unsigned int i = 0; i < mModels->size(); ++i)
-                    delete (*mModels)[i];
-                delete mModels;
-                for (auto & p : pts){
-                    delete p;
-                }
-
-                // estimate vps
-                assert(lines.size() == labels.size());
-                std::vector<std::vector<Line2>> lineClusters(classNum);
-                std::vector<int> intLabels(labels.size());
-                for (int i = 0; i < labels.size(); i++){
-                    lineClusters[labels[i]].push_back(lines[i]);
-                    intLabels[i] = labels[i];
-                }
+                // initial vps
                 std::vector<HPoint2> vps(classNum);
-                std::vector<double> vpScores(classNum, 0.0);
                 for (int i = 0; i < lineClusters.size(); i++){
                     if (lineClusters[i].empty())
                         continue;
-                    vps[i] = EstimateVanishingPointsFromLines(lineClusters[i], &vpScores[i]);
-                    //vpScores[i] /= lineClusters[i].size();
+                    vps[i] = EstimateVanishingPointsFromLines(lineClusters[i]);
                 }
 
 
-                // find Manhattan VPs and estimate focal length
-                struct VPTriplet {
-                    int id1, id2, id3;
-                };
 
-                VPTriplet finalTriplet;
-                double finalFocal;
+                // find class with maximum initial score as the first class
+                int firstClass = std::distance(clusterInitialScores.begin(), 
+                    std::max_element(clusterInitialScores.begin(), clusterInitialScores.end()));
+
+
+                int finalClasses[3] = { firstClass, -1, -1 };
+                double finalFocal = 1.0;
                 Point2 finalPP;
+                double minViolation = std::numeric_limits<double>::max();
 
-                double currentMaxScore = std::numeric_limits<double>::lowest();
-                
-                for (int i = 0; i < vps.size(); i++){
-                    for (int j = i + 1; j < vps.size(); j++){
-                        for (int k = j + 1; k < vps.size(); k++){
-                            int ids[] = { i, j, k };
-                            std::sort(std::begin(ids), std::end(ids), [&vpScores](int ida, int idb){
-                                return vpScores[ida] > vpScores[idb]; 
-                            });
+                double logMinFocal = std::log10(_params.minFocalLength);
+                double logMaxFocal = std::log10(_params.maxFocalLength);
+                double logMiddleFocal = (logMinFocal + logMaxFocal) / 2.0;
+
+                // select the other two classes by traversing
+                using namespace Eigen;
+                Map<const Array<double, 4, Eigen::Dynamic>> lineMat1((const double*)lineClusters[firstClass].data(), 4, lineClusters[firstClass].size());
+                for (int i = 0; i < classNum; i++){
+                    if (i == firstClass)
+                        continue;
+                    if (lineClusters[i].size() < 2)
+                        continue;
+                    Map<const Array<double, 4, Eigen::Dynamic>> lineMat2((const double*)lineClusters[i].data(), 4, lineClusters[i].size());
+                    for (int j = i + 1; j < classNum; j++){
+                        if (j == firstClass)
+                            continue;
+                        if (lineClusters[j].size() < 2)
+                            continue;
+                        Map<const Array<double, 4, Eigen::Dynamic>> lineMat3((const double*)lineClusters[j].data(), 4, lineClusters[j].size());
+
+
+                        int ids[] = { firstClass, i, j };
+                        
+                        // calc initial vp
+                        VectorXd x(6);
+                        for (int k = 0; k < 3; k++){
+                            auto & lineCluster = lineClusters[ids[k]];
+                            Vec3 initialVP = normalize(VectorFromHPoint(vps[ids[k]]));
+                            x(k * 2) = atan2(initialVP[1], initialVP[0]);
+                            x(k * 2 + 1) = acos(initialVP[2]);
+                        }
+                        
+                        int startPoses[] = { 0, lineMat1.cols(), lineMat1.cols() + lineMat2.cols() };
+                        auto costFunction = [&lineMat1, &lineMat2, &lineMat3, &startPoses, logMiddleFocal, &projCenter, &vps, &ids](const VectorXd & x, VectorXd & v){
+                            // x: input, v: output
+                            assert(x.size() == 6);
+                            v.resize(lineMat1.cols() + lineMat2.cols() + lineMat3.cols() + 1);
+
+                            Map<const Array<double, 4, Eigen::Dynamic>> * lineMats[] = { &lineMat1, &lineMat2, &lineMat3 };
+                            Vec3 currentVPs[3];
+                            double maxOutAngle = 0.0;
+                            for (int k = 0; k < 3; k++){
+                                currentVPs[k] = Vec3(cos(x(k * 2))*sin(x(k * 2 + 1)), sin(x[k * 2])*sin(x[k * 2 + 1]), cos(x[k * 2 + 1]));
+                                maxOutAngle = std::max(maxOutAngle, AngleBetweenUndirectedVectors(VectorFromHPoint(vps[ids[k]]), currentVPs[k]));
+                            }
+                            for (int k = 0; k < 3; k++){
+                                auto & lineMat = *lineMats[k];
+                                double vx = currentVPs[k][0], vy = currentVPs[k][1], vz = currentVPs[k][2];
+                                auto e1x = lineMat.row(0);
+                                auto e1y = lineMat.row(1);
+                                auto e2x = lineMat.row(2);
+                                auto e2y = lineMat.row(3);
+
+                                //                                                             2 
+                                //(e1y vx - e2y vx - e1x vy + e2x vy + e1x e2y vz - e2x e1y vz) 
+                                //-------------------------------------------------------------- 
+                                //                            2                           2 
+                                //    (e1x vz - 2 vx + e2x vz)  + (e1y vz - 2 vy + e2y vz)
+                                auto top = abs(e1y * vx - e2y * vx - e1x * vy + e2x * vy + e1x * e2y * vz - e2x * e1y * vz);
+                                auto bottom = sqrt((e1x * vz - vx * 2.0 + e2x * vz).square() + (e1y * vz - 2.0 * vy + e2y * vz).square());
+                                v.middleRows(startPoses[k], lineMats[k]->cols()) = (top / bottom).matrix().transpose();
+                            }
 
                             Point2 pp;
                             double focal;
                             std::tie(pp, focal) = ComputeProjectionCenterAndFocalLength(
-                                vps[i].value(), vps[j].value(), vps[k].value());
-
-                            if (std::isnan(focal) || std::isinf(focal))
-                                continue;
-
-                            if (!IsBetween(focal, _params.minFocalLength, _params.maxFocalLength))
-                                continue;
-
-                            double ppViolation = Distance(pp, projCenter);
-                            if (ppViolation >= _params.maxPrinciplePointOffset)
-                                continue;
-
-                            double tripletScore = 0.1 * vpScores[ids[0]] /*/ lineClusters[ids[0]].size()*/ 
-                                + 2.0 * vpScores[ids[1]] /*/ lineClusters[ids[1]].size() */
-                                + vpScores[ids[2]] /*/ lineClusters[ids[2]].size()*/
-                                - 0.01 * ppViolation / _params.maxPrinciplePointOffset;
-                            if (tripletScore > currentMaxScore){
-                                finalTriplet = { i, j, k };
-                                currentMaxScore = tripletScore;
-                                finalFocal = focal;
-                                finalPP = pp;
+                                Vec2(currentVPs[0][0], currentVPs[0][1]) / currentVPs[0][2],
+                                Vec2(currentVPs[1][0], currentVPs[1][1]) / currentVPs[1][2],
+                                Vec2(currentVPs[2][0], currentVPs[2][1]) / currentVPs[2][2]);
+                           
+                            if (std::isinf(focal) || std::isnan(focal)){
+                                v.bottomRows(1)(0) = 1;
+                                v *= 1e6;
                             }
+                            else{
+                                static const double angleThreshold = M_PI / 20.0;
+                                v.bottomRows(1)(0) = 1;
+                                //v.bottomRows(1)(0) = 10 * (Distance(pp, projCenter)) + 20.0 * abs(log10(focal) - logMiddleFocal);
+                                /*if (maxOutAngle > angleThreshold){
+                                    v *= (maxOutAngle / angleThreshold);
+                                }*/
+                            }
+                        };
+
+                        auto functor = MakeGenericNumericDiffFunctor<double>(costFunction, 6, lineMat1.cols() + lineMat2.cols() + lineMat3.cols() + 1);
+                        LevenbergMarquardt<decltype(functor)> lm(functor);
+
+                    
+                        VectorXd oldx = x;
+                        lm.minimize(x);
+                        /*if (oldx == x){
+                            std::cout << "NO OPTIMIZATION AT ALL !!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+                        }*/
+
+                        // get the optimized vps
+                        Vec3 currentVPs[3];
+                        for (int k = 0; k < 3; k++){
+                            currentVPs[k] = Vec3(cos(x(k * 2))*sin(x(k * 2 + 1)), sin(x[k * 2])*sin(x[k * 2 + 1]), cos(x[k * 2 + 1]));
+                        }
+
+                        Point2 pp;
+                        double focal;
+                        std::tie(pp, focal) = ComputeProjectionCenterAndFocalLength(
+                            Vec2(currentVPs[0][0], currentVPs[0][1]) / currentVPs[0][2],
+                            Vec2(currentVPs[1][0], currentVPs[1][1]) / currentVPs[1][2],
+                            Vec2(currentVPs[2][0], currentVPs[2][1]) / currentVPs[2][2]);
+                        
+                        if (std::isnan(focal) || std::isinf(focal))
+                            continue;
+
+                        if (!IsBetween(focal, _params.minFocalLength, _params.maxFocalLength))
+                            continue;
+
+                        double ppViolation = Distance(pp, projCenter);
+
+                        auto minmaxScore = std::minmax({ clusterInitialScores[i], clusterInitialScores[j] });
+                        double violation = ( ppViolation > _params.maxPrinciplePointOffset ? (80.0 * (ppViolation - _params.maxPrinciplePointOffset) / _params.maxPrinciplePointOffset) : 0.0 )
+                            - 100 * (minmaxScore.first + minmaxScore.second) / clusterInitialScores[firstClass];
+
+                        if (violation < minViolation){
+                            minViolation = violation;
+                            for (int k = 0; k < 3; k++){
+                                vps[ids[k]] = HPointFromVector(currentVPs[k]);
+                            }
+                            finalClasses[1] = i;
+                            finalClasses[2] = j;
+                            finalFocal = focal;
+                            finalPP = pp;
                         }
                     }
-                }              
+                }
 
-                std::swap(vps[0], vps[finalTriplet.id1]);
-                std::swap(vps[1], vps[finalTriplet.id2]);
-                std::swap(vps[2], vps[finalTriplet.id3]);
+                for (int k = 0; k < 3; k++){
+                    std::swap(vps[k], vps[finalClasses[k]]);
+                }
 
                 for (int & l : intLabels){
-                    if (l == 0){
-                        l = finalTriplet.id1;
-                    }
-                    else if (l == 1){
-                        l = finalTriplet.id2;
-                    }
-                    else if (l == 2){
-                        l = finalTriplet.id3;
-                    }
-                    else if (l == finalTriplet.id1){
-                        l = 0;
-                    }
-                    else if (l == finalTriplet.id2){
-                        l = 1;
-                    }
-                    else if (l == finalTriplet.id3){
-                        l = 2;
+                    for (int k = 0; k < 3; k++){
+                        if (l == k){
+                            l = finalClasses[k];
+                            break;
+                        }
+                        else if (l == finalClasses[k]){
+                            l = k;
+                            break;
+                        }
                     }
                 }
                 return std::make_tuple(std::move(vps), finalFocal, std::move(intLabels));
@@ -2143,7 +2289,7 @@ namespace panoramix {
                 Matlab matlab;
                 
                 matlab
-                    << "slabelConfMap = gcPanoramix(inputIm, isOutdoor);"
+                    << "slabelConfMap = panoramix_wrapper_gc(inputIm, isOutdoor);"
                     << "save temp;";
                 
                 Image slabelConfMap;

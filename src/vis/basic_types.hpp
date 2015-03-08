@@ -89,6 +89,10 @@ namespace panoramix {
                 return core::Vec<T, 3>(_rgba[0] / 255.0, _rgba[1] / 255.0, _rgba[2] / 255.0); 
             }
 
+            inline bool operator == (const Color & color) const { return _rgba == color._rgba; }
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(_rgba); }
+
         private:
             core::Vec4i _rgba;
         };
@@ -164,6 +168,9 @@ namespace panoramix {
 
             ColorTable & randomize();
             ColorTable & appendRandomizedColors(size_t size);
+            ColorTable & appendRandomizedGreyColors(size_t size);
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(_colors, _exceptionalColor); }
 
         private:
             std::vector<Color> _colors;
@@ -178,6 +185,7 @@ namespace panoramix {
         // render mode
         using RenderModeFlags = int8_t;
         enum RenderModeFlag : RenderModeFlags {
+            None        = 0,
             Points      = 1,
             Lines       = 1 << 1,
             Triangles   = 1 << 2,
@@ -212,6 +220,8 @@ namespace panoramix {
 
             const std::string & vertexShaderSource() const { return _vshaderSrc; }
             const std::string & fragmentShaderSource() const { return _fshaderSrc; }
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(_vshaderSrc, _fshaderSrc); }
 
         private:
             std::string _vshaderSrc, _fshaderSrc;
@@ -270,7 +280,11 @@ namespace panoramix {
 
             void clear();
 
-            core::Box3 boundingBox() const;     
+            core::Box3 boundingBox() const;   
+
+            template <class Archive> inline void serialize(Archive & ar) {
+                ar(vertices, iPoints, iLines, iTriangles); 
+            }
 
         };
 
@@ -279,11 +293,16 @@ namespace panoramix {
         struct Colored {
             T component;
             Color color;
+
+            template <class Archive> 
+            inline void serialize(Archive & ar) {
+                ar(component, color);
+            }
         };
 
         template <class T>
-        inline Colored<T> ColorAs(const T & comp, const Color & color){
-            return Colored<T>{comp, color};
+        inline Colored<std::decay_t<T>> ColorAs(T && comp, const Color & color){
+            return Colored<std::decay_t<T>>{std::forward<T>(comp), color};
         }
     }
 

@@ -24,8 +24,8 @@ int main(int argc, char * argv[], char * envp[]) {
    testing::GTEST_FLAG(catch_exceptions) = false;
    testing::GTEST_FLAG(throw_on_failure) = true;
    //testing::GTEST_FLAG(filter) = "BasicType.Line";
-   //testing::GTEST_FLAG(filter) = "Feature.VanishingPointsDetector";
-   testing::GTEST_FLAG(filter) = "Feature.GeometricContextMatlab";
+   testing::GTEST_FLAG(filter) = "Feature.VanishingPointsDetector";
+   //testing::GTEST_FLAG(filter) = "Feature.GeometricContextMatlab";
    //testing::GTEST_FLAG(filter) = "MixedGraph.RebuildOnOnePanorama";
    //testing::GTEST_FLAG(filter) = "Matlab.SparseMatrix";
    //testing::GTEST_FLAG(filter) = "View.OrientationContext";

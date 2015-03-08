@@ -210,7 +210,7 @@ namespace panolyz {
         // optimize
         props = core::MakeMixedGraphPropertyTable(mg, vps);
         core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 15.0);
-        core::AttachWallConstriants(mg, props, M_PI / 30.0);
+        core::AttachWallConstriants(mg, props, M_PI / 80.0);
 
         for (int i = 0; i < 10; i++){
 

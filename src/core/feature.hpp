@@ -93,12 +93,14 @@ namespace panoramix {
         public:
             enum Algorithm {
                 Naive,
-                TardifSimplified
+                TardifSimplified,
+                MATLAB_PanoContext,
+                MATLAB_Tardif
             };
             struct Params {
                 inline Params(Algorithm algo = Naive, double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5)
                     : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal), algorithm(algo) {}
-                inline Params(Algorithm algo, const SizeI & imSize, double maxPPOffsetRatio = 0.5, double minFocalRatio = 0.1, double maxFocalRatio = 10.0)
+                inline Params(Algorithm algo, const SizeI & imSize, double maxPPOffsetRatio = 0.8, double minFocalRatio = 0.1, double maxFocalRatio = 10.0)
                     : maxPrinciplePointOffset(maxPPOffsetRatio * sqrt(imSize.width * imSize.height)),
                     minFocalLength(minFocalRatio * sqrt(imSize.width * imSize.height)),
                     maxFocalLength(maxFocalRatio * sqrt(imSize.width * imSize.height)), algorithm(algo) {}

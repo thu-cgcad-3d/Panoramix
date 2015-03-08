@@ -909,10 +909,16 @@ namespace panoramix {
             core::Noted<float> bwColor = core::NoteAs(options.bwColor, "Blend Weight of Color");
             core::Noted<float> bwTexColor = core::NoteAs(options.bwTexColor, "Blend Weight of Texture Color");
             core::Noted<bool> showInside = core::NoteAs(options.showInside, "Show Inside");
-            PopUpDialog(widget, bwColor, bwTexColor, showInside);
+            core::Noted<bool> showPoints = core::NoteAs<bool>(options.renderMode & RenderModeFlag::Points, "Show Points");
+            core::Noted<bool> showLines = core::NoteAs<bool>(options.renderMode & RenderModeFlag::Lines, "Show Lines");
+            core::Noted<bool> showFaces = core::NoteAs<bool>(options.renderMode & RenderModeFlag::Triangles, "Show Faces");
+            PopUpDialog(widget, bwColor, bwTexColor, showInside, showPoints, showLines, showFaces);
             options.bwColor = bwColor.component;
             options.bwTexColor = bwTexColor.component;
             options.showInside = showInside.component;
+            options.renderMode = (showPoints.component ? RenderModeFlag::Points : RenderModeFlag::None)
+                | (showLines.component ? RenderModeFlag::Lines : RenderModeFlag::None)
+                | (showFaces.component ? RenderModeFlag::Triangles : RenderModeFlag::None);
         }
 
 

@@ -152,6 +152,17 @@ namespace panoramix {
             return *this;
         }
 
+        ColorTable & ColorTable::appendRandomizedGreyColors(size_t size) {
+            core::Vec3 full(255, 255, 255);
+            std::vector<Color> colors(size);
+            for (int i = 0; i < size; i++){
+                colors[i] = Color(double(i) * full / double(size));
+            }
+            std::random_shuffle(colors.begin(), colors.end());
+            _colors.insert(_colors.end(), colors.begin(), colors.end());
+            return *this;
+        }
+
         const ColorTable & PredefinedColorTable(ColorTableDescriptor descriptor) {
            
             static const ColorTable allColorTable = {
