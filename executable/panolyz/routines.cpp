@@ -178,13 +178,27 @@ namespace panolyz {
         core::Imagei segmentedImage;
         core::MixedGraphPropertyTable props;
 
-        core::VanishingPointsDetector::Params vpdParams;
-        vpdParams.algorithm = core::VanishingPointsDetector::Naive;
+        core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified, image.size());
         view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
             core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal);
-        vis::Visualizer2D(view.image) << vis::manip2d::SetColorTable(vis::ColorTable(vis::ColorTableDescriptor::RGB).appendRandomizedColors(vps.size() - 3))
-            << vis::manip2d::SetThickness(2.0)
-            << lines << vis::manip2d::Show();
+
+        {
+            std::vector<core::Classified<core::InfiniteLine2>> vpRays;
+            for (int i = 0; i < 3; i++){
+                std::cout << "vp[" << i << "] = " << view.camera.screenProjection(vps[i]) << std::endl;
+                for (double a = 0; a <= M_PI * 2.0; a += 0.1){
+                    core::Point2 p = core::Point2(image.cols / 2, image.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
+                    vpRays.push_back(core::ClassifyAs(core::InfiniteLine2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
+                }
+            }
+            vis::Visualizer2D(image)
+                << vis::manip2d::SetColorTable(vis::ColorTable(vis::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
+                << vis::manip2d::SetThickness(1)
+                << vpRays
+                << vis::manip2d::SetThickness(2)
+                << lines
+                << vis::manip2d::Show(0);
+        }
 
 
         // append lines
@@ -210,7 +224,7 @@ namespace panolyz {
         // optimize
         props = core::MakeMixedGraphPropertyTable(mg, vps);
         core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 15.0);
-        core::AttachWallConstriants(mg, props, M_PI / 80.0);
+        core::AttachWallConstriants(mg, props, M_PI / 30.0);
 
         for (int i = 0; i < 10; i++){
 

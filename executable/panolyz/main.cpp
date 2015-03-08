@@ -36,8 +36,10 @@ int main(int argc, char ** argv) {
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room4.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room7.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room9.jpg";
-    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room11.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room11.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room14.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room17.jpg";
+    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room19.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room22.jpg";
 
     misc::CmdOptions cmdOptions = {
