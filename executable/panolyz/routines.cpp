@@ -112,9 +112,6 @@ namespace panolyz {
             core::AttachWallConstriants(mg, props, M_PI / 30.0);
             //core::AttachGeometricContextConstraints(mg, props, gcs, hCams, 2);
 
-            //core::Visualize(view, mg, props);
-            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-
             for (int i = 0; i < 10; i++){
 
                 // visualize using segmented image
@@ -171,12 +168,13 @@ namespace panolyz {
 
     ROUTINE_FOR_ALGORITHM(Normal_v1){
 
+        core::View<core::PerspectiveCamera> view;
         std::vector<core::Classified<core::Line2>> lines;
         std::vector<core::Vec3> vps;
+
         double focal;
-        core::View<core::PerspectiveCamera> view;
         core::MixedGraph mg;
-        std::vector<core::Line2> pureLines;
+        
         core::Imagei segmentedImage;
         core::MixedGraphPropertyTable props;
 
@@ -188,6 +186,7 @@ namespace panolyz {
             << vis::manip2d::SetThickness(2.0)
             << lines << vis::manip2d::Show();
 
+
         // append lines
         core::AppendLines(mg, lines, view.camera, vps);
 
@@ -195,11 +194,12 @@ namespace panolyz {
         core::SegmentationExtractor segmenter;
         segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
         segmenter.params().c = 100.0;
-        pureLines.resize(lines.size());
+        std::vector<core::Line2> pureLines(lines.size());
         for (int i = 0; i < lines.size(); i++)
             pureLines[i] = lines[i].component;
         int segmentsNum = 0;
-        std::tie(segmentedImage, segmentsNum) = segmenter(image, pureLines);
+        std::tie(segmentedImage, segmentsNum) = segmenter(image, pureLines, image.cols / 100.0);
+
         vis::Visualizer2D::Params vParams;
         vParams.colorTable = vis::CreateRandomColorTableWithSize(segmentsNum);
         vis::Visualizer2D(segmentedImage, vParams)
@@ -209,23 +209,54 @@ namespace panolyz {
 
         // optimize
         props = core::MakeMixedGraphPropertyTable(mg, vps);
-        core::NormalizeVariables(mg, props);
-        std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-        core::Visualize(view, mg, props);
+        core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 15.0);
+        core::AttachWallConstriants(mg, props, M_PI / 30.0);
 
-        core::SolveVariablesUsingInversedDepths(mg, props);
-        core::NormalizeVariables(mg, props);
-        std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-        core::Visualize(view, mg, props);
+        for (int i = 0; i < 10; i++){
 
-        //core::SolveVariablesUsingNormalDepths(mg, props);
-        //core::NormalizeVariables(mg, props);
-        //std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-        //core::Visualize(view, mg, props);
+            // visualize using segmented image
+            {
+                std::vector<vis::Color> colors(mg.internalComponents<core::RegionData>().size());
+                std::vector<vis::Color> oColors = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
+                std::vector<vis::Color> noColors = { vis::ColorTag::DimGray, vis::ColorTag::Gray, vis::ColorTag::DarkGray };
+                for (auto & r : mg.components<core::RegionData>()){
+                    auto & p = props[r.topo.hd];
+                    auto & color = colors[r.topo.hd.id];
+                    if (!p.used){
+                        color = vis::ColorTag::Black;
+                    }
+                    else{
+                        if (p.orientationClaz != -1){
+                            color = oColors[p.orientationClaz];
+                        }
+                        else if (p.orientationNotClaz != -1){
+                            color = noColors[p.orientationNotClaz];
+                        }
+                        else{
+                            color = vis::ColorTag::White;
+                        }
+                    }
+                }
+                vis::Visualizer2D::Params params;
+                params.colorTable = vis::ColorTable(colors, vis::ColorTag::White);
+                vis::Visualizer2D(segmentedImage)
+                    << vis::manip2d::Show();
+                vis::Visualizer2D(segmentedImage, params)
+                    << vis::manip2d::Show();
+            }
 
-        core::SaveToDisk("./cache/all", lines, vps, focal, view, mg, pureLines, segmentedImage, props);
-        core::NormalizeVariables(mg, props);
-        core::Visualize(view, mg, props);
+            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::NormalizeVariables(mg, props);
+            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+            core::Visualize(view, mg, props);
+            core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0, 0.05);
+
+            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::NormalizeVariables(mg, props);
+            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+            core::Visualize(view, mg, props);
+            core::AttachFloorAndCeilingConstraints(mg, props, 0.1, 0.6);
+        }
 
     }
 

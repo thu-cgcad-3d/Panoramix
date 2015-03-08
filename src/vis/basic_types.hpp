@@ -139,6 +139,16 @@ namespace panoramix {
             inline ColorTable(ColorIteratorT begin, ColorIteratorT end, const Color & exceptColor = ColorTag::Transparent)
                 : _colors(begin, end), _exceptionalColor(exceptColor) {}
 
+
+            inline ColorTable(ColorTable && ctable) 
+                : _colors(std::move(ctable._colors)), _exceptionalColor(std::move(ctable._exceptionalColor)) {}
+            ColorTable & operator = (ColorTable && ctable) { 
+                _colors = std::move(ctable._colors); 
+                _exceptionalColor = std::move(ctable._exceptionalColor); 
+                return *this;
+            }
+
+
         public:
             const std::vector<Color> & colors() const { return _colors; }
             size_t size() const { return _colors.size(); }
@@ -195,8 +205,11 @@ namespace panoramix {
         class OpenGLShaderSource {
         public:
             OpenGLShaderSource(OpenGLShaderSourceDescriptor d = OpenGLShaderSourceDescriptor::DefaultTriangles);
-            inline OpenGLShaderSource(const char * vs, const char * fs) : _vshaderSrc(vs), _fshaderSrc(fs) {}
-            inline OpenGLShaderSource(const std::string & vs, const std::string & fs) :_vshaderSrc(vs), _fshaderSrc(fs) {}
+
+            template <class StringT1, class StringT2>
+            inline OpenGLShaderSource(StringT1 && vs, StringT2 && fs) : _vshaderSrc(std::forward<StringT1>(vs)), _fshaderSrc(std::forward<StringT2>(fs)) {}
+            inline OpenGLShaderSource(OpenGLShaderSource && ss) : _vshaderSrc(std::move(ss._vshaderSrc)), _fshaderSrc(std::move(ss._fshaderSrc)) {}
+
             const std::string & vertexShaderSource() const { return _vshaderSrc; }
             const std::string & fragmentShaderSource() const { return _fshaderSrc; }
 

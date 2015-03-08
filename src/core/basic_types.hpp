@@ -555,35 +555,35 @@ namespace panoramix {
 
 
         // something classified
-        template <class T>
+        template <class T, class ClassT = int>
         struct Classified {
-            int claz;
+            ClassT claz;
             T component;
         };
-        template <class T>
-        inline Classified<T> ClassifyAs(const T & comp, int claz){
-            return Classified<T>{claz, comp};
+        template <class T, class ClassT>
+        inline Classified<std::decay_t<T>, std::decay_t<ClassT>> ClassifyAs(T && comp, ClassT && claz){
+            return Classified<std::decay_t<T>, std::decay_t<ClassT>>{std::forward<ClassT>(claz), std::forward<T>(comp)};
         }
-        template <class T>
-        inline std::vector<Classified<T>> ClassifyEachAs(const std::vector<T> & comps, int claz){
-            std::vector<Classified<T>> cs(comps.size());
+        template <class T, class ClassT>
+        inline std::vector<Classified<T, ClassT>> ClassifyEachAs(const std::vector<T> & comps, const ClassT & claz){
+            std::vector<Classified<T, ClassT>> cs(comps.size());
             for (int i = 0; i < comps.size(); i++)
                 cs[i] = ClassifyAs(comps[i], claz);
             return cs;
         }
-        template <class T>
-        inline std::vector<Classified<T>> ClassifyEachAs(std::vector<T> && comps, int claz){
-            std::vector<Classified<T>> cs(comps.size());
+        template <class T, class ClassT>
+        inline std::vector<Classified<T, ClassT>> ClassifyEachAs(std::vector<T> && comps, const ClassT & claz){
+            std::vector<Classified<T, ClassT>> cs(comps.size());
             for (int i = 0; i < comps.size(); i++)
                 cs[i] = ClassifyAs(std::move(comps[i]), claz);
             return cs;
         }
-        template <class T>
-        inline bool operator == (const Classified<T> & a, const Classified<T> & b) {
+        template <class T, class ClassT>
+        inline bool operator == (const Classified<T, ClassT> & a, const Classified<T, ClassT> & b) {
             return a.claz == b.claz && a.component == b.component;
         }
-        template <class Archive, class T>
-        inline void serialize(Archive & ar, Classified<T> & c) {
+        template <class Archive, class T, class ClassT>
+        inline void serialize(Archive & ar, Classified<T, ClassT> & c) {
             ar(c.claz, c.component);
         }
 
@@ -594,9 +594,9 @@ namespace panoramix {
             std::string note;
             T component;
         };
-        template <class T>
-        inline Noted<T> NoteAs(const T & comp, const std::string & note){
-            return Noted<T>{note, comp};
+        template <class T, class StringT>
+        inline Noted<std::decay_t<T>> NoteAs(T && comp, StringT && note){
+            return Noted<std::decay_t<T>>{std::forward<StringT>(note), std::forward<T>(comp)};
         }
         template <class T>
         inline bool operator == (const Noted<T> & a, const Noted<T> & b) {
@@ -615,8 +615,8 @@ namespace panoramix {
             T component;
         };
         template <class T, class S>
-        inline Scored<T, S> ScoreAs(const T & comp, const S & score){
-            return Scored<T, S>{score, comp};
+        inline Scored<std::decay_t<T>, std::decay_t<S>> ScoreAs(T && comp, S && score){
+            return Scored<std::decay_t<T>, std::decay_t<S>>{std::forward<S>(score), std::forward<T>(comp)};
         }
         // note this!!!
         template <class T, class S>
@@ -654,8 +654,8 @@ namespace panoramix {
             T component;
         };
         template <class T>
-        inline Enabled<T> EnableAs(const T & comp, bool e = true){
-            return Enabled<T>{e, comp};
+        inline Enabled<std::decay_t<T>> EnableAs(T && comp, bool e = true){
+            return Enabled<std::decay_t<T>>{e, std::forward<T>(comp)};
         }
         template <class T>
         inline bool operator == (const Enabled<T> & a, const Enabled<T> & b) {

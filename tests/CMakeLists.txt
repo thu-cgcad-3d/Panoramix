@@ -28,7 +28,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS On)
 
 # build test project
 include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES})
-add_executable (Tests ${SOURCES})
+panoramix_add_executable (Tests ${SOURCES})
 target_link_libraries (Tests ${PROJECT_NAME} ${Qt_LIBS})
 target_link_libraries (Tests optimized ${GTEST_LIBRARY})
 target_link_libraries (Tests optimized ${GTEST_MAIN_LIBRARY})

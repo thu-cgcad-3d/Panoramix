@@ -87,10 +87,10 @@ TEST(Feature, LineSegmentExtractor) {
 TEST(Feature, VanishingPointsDetector) {
 
     std::vector<std::string> filenames = {
-        "room.png",
+      /*  "room.png",
         "room1.jpg",
         "room2.jpg",
-        "room3.jpg",
+        "room3.jpg",*/
         "room4.jpg"
     };
 
@@ -99,16 +99,16 @@ TEST(Feature, VanishingPointsDetector) {
     lsParams.xBorderWidth = lsParams.yBorderWidth = 20;
     core::LineSegmentExtractor lineseg(lsParams);
     core::VanishingPointsDetector vpdetector;
-    vpdetector.params().algorithm = core::VanishingPointsDetector::Naive;
 
     for (auto & filename : filenames){
         core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/" + filename);
-        core::ResizeToMakeWidthUnder(im, 600);
+        core::ResizeToMakeWidthUnder(im, 800);
 
         std::vector<core::HPoint2> vps;
         double focalLength;
 
-        std::vector<core::Classified<core::Line2>> classifiedLines = core::ClassifyEachAs(lineseg(im), -1);
+        std::vector<core::Classified<core::Line2>> classifiedLines = core::ClassifyEachAs(lineseg(im, 3), -1);
+        vpdetector.params() = core::VanishingPointsDetector::Params(core::VanishingPointsDetector::Naive, im.size(), 0.8);
         std::tie(vps, focalLength) = vpdetector(classifiedLines, core::Point2(im.cols / 2, im.rows / 2));
 
         std::vector<core::Classified<core::InfiniteLine2>> vpRays;

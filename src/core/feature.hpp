@@ -19,6 +19,7 @@ namespace panoramix {
 
 
 
+
         // line extractor
         class LineSegmentExtractor {
         public:
@@ -71,6 +72,8 @@ namespace panoramix {
             double angleThreshold, double sigma, double scoreThreshold = 0.8, 
             double avoidVPAngleThreshold = M_PI / 18.0);
 
+
+
         // compute straightness of points
         std::pair<double, InfiniteLine2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
             double * interArea = nullptr, double * interLen = nullptr);
@@ -82,6 +85,9 @@ namespace panoramix {
             int longitudeDivideNum = 1000, int latitudeDivideNum = 500);
 
 
+
+
+
         // 2d vanishing point detection
         class VanishingPointsDetector {
         public:
@@ -90,8 +96,13 @@ namespace panoramix {
                 TardifSimplified
             };
             struct Params {
-                inline Params(double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5)
-                    : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal), algorithm(Naive) {}
+                inline Params(Algorithm algo = Naive, double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5)
+                    : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal), algorithm(algo) {}
+                inline Params(Algorithm algo, const SizeI & imSize, double maxPPOffsetRatio = 0.5, double minFocalRatio = 0.1, double maxFocalRatio = 10.0)
+                    : maxPrinciplePointOffset(maxPPOffsetRatio * sqrt(imSize.width * imSize.height)),
+                    minFocalLength(minFocalRatio * sqrt(imSize.width * imSize.height)),
+                    maxFocalLength(maxFocalRatio * sqrt(imSize.width * imSize.height)), algorithm(algo) {}
+
                 double maxPrinciplePointOffset;
                 double minFocalLength, maxFocalLength;
                 Algorithm algorithm;
@@ -118,65 +129,6 @@ namespace panoramix {
 
 
 
-
-
-
-
-
-#if 0
-        // vanishing point detection for local manhattan scenes
-        class LocalManhattanVanishingPointsDetector {
-        public:
-            struct Params {
-				inline Params(double maxPPOffset = 200, double minFocal = 40, double maxFocal = 1e5) 
-					: verticalVPAngleRange(M_PI_4 / 6.0), 
-					verticalVPMinDistanceRatioToCenter(2.0), 
-					maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal) {
-				}
-				// the angle between {the line connecting verticalVP and image center} and {the vertical line} 
-				// should be within [-verticalVPAngleRange, +verticalVPAngleRange] 
-				double verticalVPAngleRange; 
-				double verticalVPMinDistanceRatioToCenter;
-                double maxPrinciplePointOffset;
-                double minFocalLength, maxFocalLength;
-                template <class Archive> inline void serialize(Archive & ar) {
-                    ar(verticalVPAngleRange, verticalVPMinDistanceRatioToCenter, 
-						maxPrinciplePointOffset, minFocalLength, maxFocalLength);
-                }
-
-                Image image;
-            };
-            struct Result {
-                std::vector<HPoint2> vanishingPoints;
-                int verticalVanishingPointId;
-                std::vector<std::pair<int, int>> horizontalVanishingPointIds;
-                double focalLength;
-                InfiniteLine2 horizon;
-                Point2 principlePoint;
-                std::vector<int> lineClasses;
-                template <class Archive> inline void serialize(Archive & ar) {
-                    ar(vanishingPoints, verticalVanishingPointId,
-                        horizontalVanishingPointIds, focalLength, horizon, principlePoint,
-                        lineClasses);
-                }
-
-                std::vector<InfiniteLine2> hlineCands;
-            };
-        public:
-            inline explicit LocalManhattanVanishingPointsDetector(const Params & params = Params()) : _params(params) {}
-            const Params & params() const { return _params; }
-            Params & params() { return _params; }
-            Result operator() (const std::vector<Line2> & lines, const Point2 & projCenter) const;
-            template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
-        private:
-            //Result estimateWithProjectionCenterAtOrigin(const std::vector<Line2> & lines) const;
-            //Result estimateWithProjectionCenterAtOriginII(const std::vector<Line2> & lines) const;
-            Result estimateWithProjectionCenterAtOriginIII(const std::vector<Line2> & lines) const;
-
-            Params _params;
-        };
-
-#endif
 
 
         /// homography estimation
@@ -216,7 +168,8 @@ namespace panoramix {
             const Params & params() const { return _params; }
             Params & params() { return _params; }
             std::pair<Feature, int> operator() (const Image & im, bool isPanorama = false) const;
-            std::pair<Feature, int> operator() (const Image & im, const std::vector<Line2> & lines) const;
+            std::pair<Feature, int> operator() (const Image & im, const std::vector<Line2> & lines,
+                double extensionLength = 0.0) const;
             std::pair<Feature, int> operator() (const Image & im, const std::vector<Line3> & lines,
                 const PanoramicCamera & cam, double extensionAngle = 0.0) const;
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }

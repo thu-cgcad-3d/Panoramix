@@ -307,7 +307,7 @@ namespace panoramix {
             std::vector<Vec3> * vpsPtr,
             double * focalPtr){
 
-            auto lines = lse(perspectiveImage);
+            auto lines = lse(perspectiveImage, 3);
             std::vector<HPoint2> vps;
             double focal;
             std::vector<int> lineClasses;

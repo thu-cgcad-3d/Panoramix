@@ -43,6 +43,12 @@ endif ()
 include (LocateFundamentalLibs)
 
 
+# get CUDA libs [optional]
+set (USE_CUDA true CACHE BOOL "Whether using CUDA")
+include (LocateCUDALibs)
+
+
+
 # get Qt libs
 set (Qt_DIR "" CACHE PATH "Qt root directory here")
 set (Qt_MODULES_REQUIRED Core Gui Widgets OpenGL)
