@@ -136,7 +136,7 @@ namespace panoramix {
 
 
         /// homography estimation
-        std::pair<double, double> ComputeFocalsFromHomography(const Mat3 & H, std::pair<bool, bool> * ok = nullptr);
+        std::pair<Optional<double>, Optional<double>> ComputeFocalsFromHomography(const Mat3 & H);
 
 
 

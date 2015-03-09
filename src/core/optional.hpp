@@ -11,17 +11,28 @@ namespace panoramix {
         class Optional {
         public:            
             Optional() : _exist(false) {}
+            
             Optional(nullptr_t) : _exist(false) {}
+            Optional & operator = (nullptr_t) {
+                _exist = false;
+                return *this;
+            }
+            
             Optional(T && v) : _exist(true), _temp(std::move(v)) {}
-
-            Optional(const Optional &) = delete;
-            Optional & operator = (const Optional &) = delete;
+            Optional & operator = (T && v) {
+                _temp = std::move(v);
+                _exist = true;
+                return *this;
+            }
 
             Optional(Optional && opt) { swap(opt); }
             Optional & operator = (Optional && opt) {
                 swap(opt);
                 return *this;
             }
+
+            Optional(const Optional &) = delete;
+            Optional & operator = (const Optional &) = delete;
 
             inline void swap(Optional & opt) {
                 std::swap(_exist, opt._exist);
