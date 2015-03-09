@@ -32,6 +32,9 @@ namespace panoramix {
             inline const T & ref() const { return _temp; }
 
             inline T unwrap() {
+                if (!_exist){
+                    std::cout << "unwrapping a null Optional<T>!!!!!!!" << std::endl;
+                }
                 assert(_exist);
                 _exist = false;
                 return std::move(_temp);

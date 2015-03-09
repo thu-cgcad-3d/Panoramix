@@ -28,7 +28,7 @@ namespace panolyz {
             view = core::CreatePanoramicView(image);
 
             // collect lines in each view
-            cams = core::CreateCubicFacedCameras(view.camera, image.rows * 0.7, image.rows * 0.7, image.rows * 0.3);
+            cams = core::CreateCubicFacedCameras(view.camera, image.rows, image.rows, image.rows * 0.4);
             lines.resize(cams.size());
             for (int i = 0; i < cams.size(); i++){
                 auto pim = view.sampled(cams[i]).image;
@@ -335,7 +335,7 @@ namespace panolyz {
         core::Imagei segmentedImage;
         core::MixedGraphPropertyTable props;
 
-        core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified, image.size());
+        core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified);
         view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
             core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal);
 
@@ -444,7 +444,7 @@ namespace panolyz {
         core::Imagei segmentedImage;
         core::MixedGraphPropertyTable props;
 
-        core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified, image.size());
+        core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified);
         view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
             core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal);
 

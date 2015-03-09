@@ -155,7 +155,7 @@ namespace panoramix {
             };
             struct Params {
                 inline Params() : sigma(0.8f), c(100.0f), minSize(200), algorithm(GraphCut),
-                    superpixelSizeSuggestion(1000), superpixelNumberSuggestion(100) {
+                    superpixelSizeSuggestion(1000), superpixelNumberSuggestion(100), useYUVColorSpace(false) {
                 }
                 float sigma; // for smoothing
                 float c; // threshold function
@@ -163,8 +163,9 @@ namespace panoramix {
                 Algorithm algorithm;
                 int superpixelSizeSuggestion; // use superpixel size suggestion if [superpixelSizeSuggestion > 0]
                 int superpixelNumberSuggestion; // use superpixel number suggestion if [superpixelSizeSuggestion < 0]
+                bool useYUVColorSpace;
                 template <class Archive> inline void serialize(Archive & ar) {
-                    ar(sigma, c, minSize, algorithm, superpixelSizeSuggestion, superpixelNumberSuggestion);
+                    ar(sigma, c, minSize, algorithm, superpixelSizeSuggestion, superpixelNumberSuggestion, useYUVColorSpace);
                 }
             };
         public:

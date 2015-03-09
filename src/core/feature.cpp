@@ -1743,19 +1743,30 @@ namespace panoramix {
                 return u;
             }
 
+
+            inline float ColorDistance(const Vec3 & a, const Vec3 & b, bool useYUV){
+                static const Mat3 RGB2YUV(
+                    0.299, 0.587, 0.114,
+                    -0.14713, -0.28886, 0.436,
+                    0.615, -0.51499, -0.10001
+                );
+                static const Mat3 BGR2VUY = RGB2YUV.t();
+                return useYUV ? norm(BGR2VUY * (a - b)) * 3.0 : norm(a - b);
+            }
+
             // for edge weight computation
             // measure pixel distance
-            inline float PixelDiff(const Image & im, const cv::Point & p1, const cv::Point & p2) {
+            inline float PixelDiff(const Image & im, const cv::Point & p1, const cv::Point & p2, bool useYUV) {
                 assert(im.depth() == CV_8U && im.channels() == 3);
                 Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
                 Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
-                return static_cast<float>(norm(c1 - c2));
+                return ColorDistance(c1, c2, useYUV);
             }
 
             // measure pixel distance with 2d line cuttings
             inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
                 const PixelLoc & p1, const PixelLoc & p2,
-                const std::vector<Line2> & lines){
+                const std::vector<Line2> & lines, bool useYUV){
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
                 for (int lineId : { linesOccupation(p1), linesOccupation(p2) }){
@@ -1770,12 +1781,12 @@ namespace panoramix {
                 }
                 Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
                 Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
-                return static_cast<float>(norm(c1 - c2));
+                return ColorDistance(c1, c2, useYUV);
             }
 
             inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
                 const PixelLoc & p1, const PixelLoc & p2,
-                const std::vector<Line3> & lines, const PanoramicCamera & cam){
+                const std::vector<Line3> & lines, const PanoramicCamera & cam, bool useYUV){
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
                 auto direction1 = cam.spatialDirection(p1);
@@ -1793,7 +1804,7 @@ namespace panoramix {
                 }
                 Vec3 c1 = im.at<cv::Vec<uint8_t, 3>>(p1);
                 Vec3 c2 = im.at<cv::Vec<uint8_t, 3>>(p2);
-                return static_cast<float>(norm(c1 - c2));
+                return ColorDistance(c1, c2, useYUV);
             }
 
 
@@ -1949,7 +1960,7 @@ namespace panoramix {
 
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
             std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, bool isPanorama, 
-                int & numCCs, bool returnColoredResult = false) {
+                int & numCCs, bool returnColoredResult = false, bool useYUV = true) {
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
 
@@ -1960,8 +1971,11 @@ namespace panoramix {
 
                 // build pixel graph
                 std::vector<float> vSizes = ComposeGraphVerticesSizes(width, height, isPanorama);
-                float(*pixelDiff)(const Image & im, const cv::Point & p1, const cv::Point & p2) = PixelDiff;
-                std::vector<Edge> edges = ComposeGraphEdges(width, height, isPanorama, smoothed, pixelDiff);
+                //float(*pixelDiff)(const Image & im, const cv::Point & p1, const cv::Point & p2, bool useYUV) = PixelDiff;
+                std::vector<Edge> edges = ComposeGraphEdges(width, height, isPanorama, smoothed, 
+                    [useYUV](const Image & im, const cv::Point & p1, const cv::Point & p2){
+                    return PixelDiff(im, p1, p2, useYUV);
+                });
 
                 return PerformSegmentation(vSizes, edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);
             }
@@ -1969,7 +1983,7 @@ namespace panoramix {
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
             std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize,
                 const std::vector<Line2> & lines,
-                int & numCCs, bool returnColoredResult = false){
+                int & numCCs, bool returnColoredResult = false, bool useYUV = true){
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
 
@@ -1987,8 +2001,8 @@ namespace panoramix {
                 // build pixel graph
                 std::vector<float> vSizes = ComposeGraphVerticesSizes(width, height, false);
                 std::vector<Edge> edges = ComposeGraphEdges(width, height, false, smoothed, 
-                    [&linesOccupation, &lines](const Image & im, const cv::Point & p1, const cv::Point & p2){
-                    return PixelDiff(im, linesOccupation, p1, p2, lines);
+                    [&linesOccupation, &lines, useYUV](const Image & im, const cv::Point & p1, const cv::Point & p2){
+                    return PixelDiff(im, linesOccupation, p1, p2, lines, useYUV);
                 });
 
                 return PerformSegmentation(vSizes, edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);
@@ -1997,7 +2011,7 @@ namespace panoramix {
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
             std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize,
                 const std::vector<Line3> & lines, const PanoramicCamera & cam,
-                int & numCCs, bool returnColoredResult = false){
+                int & numCCs, bool returnColoredResult = false, bool useYUV = true){
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
 
@@ -2021,8 +2035,8 @@ namespace panoramix {
                 // build pixel graph
                 std::vector<float> vSizes = ComposeGraphVerticesSizes(width, height, true);
                 std::vector<Edge> edges = ComposeGraphEdges(width, height, true, smoothed,
-                    [&linesOccupation, &lines, &cam](const Image & im, const cv::Point & p1, const cv::Point & p2){
-                    return PixelDiff(im, linesOccupation, p1, p2, lines, cam);
+                    [&linesOccupation, &lines, &cam, useYUV](const Image & im, const cv::Point & p1, const cv::Point & p2){
+                    return PixelDiff(im, linesOccupation, p1, p2, lines, cam, useYUV);
                 });
 
                 return PerformSegmentation(vSizes, edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);
@@ -2242,7 +2256,7 @@ namespace panoramix {
             }
             else if (_params.algorithm == GraphCut){                
                 int numCCs;
-                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, isPanorama, numCCs, false).first;
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, isPanorama, numCCs, false, _params.useYUVColorSpace).first;
                 return std::make_pair(segim, numCCs);
             }
             else if (_params.algorithm == QuickShiftCPU){
@@ -2262,7 +2276,7 @@ namespace panoramix {
             assert(_params.algorithm == GraphCut);
             int numCCs;
             if (extensionLength == 0.0){
-                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, lines, numCCs, false).first;
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, lines, numCCs, false, _params.useYUVColorSpace).first;
                 return std::make_pair(segim, numCCs);
             }
             else{
@@ -2272,7 +2286,7 @@ namespace panoramix {
                     line.first -= (d * extensionLength);
                     line.second += (d * extensionLength);
                 }
-                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, extLines, numCCs, false).first;
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, extLines, numCCs, false, _params.useYUVColorSpace).first;
                 return std::make_pair(segim, numCCs);
             }
         }
@@ -2281,7 +2295,7 @@ namespace panoramix {
             assert(_params.algorithm == GraphCut);
             int numCCs;
             if (extensionAngle == 0.0){
-                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, lines, cam, numCCs, false).first;
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, lines, cam, numCCs, false, _params.useYUVColorSpace).first;
                 return std::make_pair(segim, numCCs);
             }
             else{
@@ -2292,7 +2306,7 @@ namespace panoramix {
                     line.first = p1;
                     line.second = p2;
                 }
-                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, extLines, cam, numCCs, false).first;
+                Imagei segim = SegmentImage(im, _params.sigma, _params.c, _params.minSize, extLines, cam, numCCs, false, _params.useYUVColorSpace).first;
                 return std::make_pair(segim, numCCs);
             }
         }

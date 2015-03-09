@@ -10,13 +10,13 @@ int main(int argc, char ** argv) {
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
+    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";// too small
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/yard.jpg";
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (11).jpg";
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (10).jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (11).jpg"; // too small
+    //efaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (10).jpg"; // too small
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab2.jpg";
@@ -49,14 +49,15 @@ int main(int argc, char ** argv) {
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room16.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room17.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room18.jpg";
-    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room19.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room19.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room20.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room21.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room22.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room23.jpg";
 
     misc::CmdOptions cmdOptions = {
         {"f", defaultFileName, "input image file path"},
-        {"p", false, "whether the input image is a panorama"},
+        {"p", true, "whether the input image is a panorama"},
         {"i", true, "whether the scene is indoor"}
     };
     
