@@ -300,6 +300,25 @@ namespace panoramix {
             double * focal = nullptr);
 
 
+        template <class CameraT, class = std::enable_if_t<IsCamera<CameraT>::value>>
+        View<CameraT> CreateView(const Image & image,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, -1));
+
+
+        template <>
+        inline View<PanoramicCamera> CreateView(const Image & image,
+            const Point3 & eye, const Point3 & center, const Vec3 & up){
+            return CreatePanoramicView(image, eye, center, up);
+        }
+
+        template <>
+        inline View<PerspectiveCamera> CreateView(const Image & image,
+            const Point3 & eye, const Point3 & center, const Vec3 & up){
+            return CreatePerspectiveView(image, eye, center, up);
+        }
+
     }
 }
  

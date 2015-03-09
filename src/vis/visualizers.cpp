@@ -812,7 +812,7 @@ namespace panoramix {
                 QVector3D t(e->pos() - _lastPos);
                 t.setX(-t.x());
                 auto sphere = scene.boundingBox().outerSphere();
-                if (e->buttons() & Qt::RightButton) {
+                if ((e->buttons() & Qt::RightButton) && !(e->modifiers() & Qt::ShiftModifier)) {
                     core::Vec3 trans = t.x() * options.camera.rightward() + t.y() * options.camera.upward();
                     trans *= 0.02;
                     options.camera.moveEyeWithCenterFixed(trans, sphere, true, true);

@@ -307,12 +307,20 @@ namespace panoramix {
             std::vector<Vec3> * vpsPtr,
             double * focalPtr){
 
-            auto lines = lse(perspectiveImage, 3);
+            auto lines = lse(perspectiveImage, 2);
             std::vector<HPoint2> vps;
             double focal;
             std::vector<int> lineClasses;
-            std::tie(vps, focal, lineClasses) = vpd(lines, Point2(perspectiveImage.cols / 2.0, perspectiveImage.rows / 2.0));
+            bool succeed = false;
+            std::tie(vps, focal, lineClasses) = vpd(lines, Point2(perspectiveImage.cols / 2.0, perspectiveImage.rows / 2.0), &succeed);
+            assert(succeed);
             assert(vps.size() >= 3);
+
+            // only reserve first 3 vps
+            vps.erase(vps.begin() + 3, vps.end());
+            for (auto & c : lineClasses){
+                if (c >= 3) c = -1;
+            }
 
             View<PerspectiveCamera> view;
             view.image = perspectiveImage;

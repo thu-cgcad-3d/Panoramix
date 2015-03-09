@@ -120,8 +120,8 @@ namespace panoramix {
             
             // accepts (lines, projection center)
             // returns (>= 3 vanishing points (the first 3 vanishing points should be the Manhattan VPs), the focal length, line classes)
-            std::tuple<std::vector<HPoint2>, double, std::vector<int>> operator() (const std::vector<Line2> & lines, const Point2 & projCenter) const;  
-            std::tuple<std::vector<HPoint2>, double> operator() (std::vector<Classified<Line2>> & lines, const Point2 & projCenter) const;
+            std::tuple<std::vector<HPoint2>, double, std::vector<int>> operator() (const std::vector<Line2> & lines, const Point2 & projCenter, bool * succeed = nullptr) const;  
+            std::tuple<std::vector<HPoint2>, double> operator() (std::vector<Classified<Line2>> & lines, const Point2 & projCenter, bool * succeed = nullptr) const;
 
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         

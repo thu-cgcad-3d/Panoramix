@@ -987,7 +987,8 @@ namespace panoramix {
             }
 
             std::tuple<std::vector<HPoint2>, double, std::vector<int>> EstimateVanishingPointsWithProjectionCenterAtOrigin(
-                const std::vector<Line2> & lines, double minFocalLength, double maxFocalLength, double maxPrinciplePointOffset) {
+                const std::vector<Line2> & lines, double minFocalLength, double maxFocalLength, double maxPrinciplePointOffset,
+                bool & succeed) {
 
                 SetClock();
 
@@ -1031,6 +1032,12 @@ namespace panoramix {
                     else {
                         remainedLines.push_back(lines[i]);
                     }
+                }
+
+                if (remainedLines.empty()){
+                    std::cout << "no remained lines to locate other two vps, failed" << std::endl;
+                    succeed = false;
+                    return std::tuple<std::vector<HPoint2>, double, std::vector<int>>();
                 }
 
                 //std::cout << "remained lines num: " << remainedLines.size() << std::endl;
@@ -1143,13 +1150,18 @@ namespace panoramix {
 
                 }
 
-                assert(count > 0);
+                if (count == 0){
+                    std::cout << "no valid vps, failed" << std::endl;
+                    succeed = false;
+                    return std::tuple<std::vector<HPoint2>, double, std::vector<int>>();
+                }
 
                 std::vector<HPoint2> vps = { { vp1, vp2, vp3 } };
 
                 std::cout << "vp2: " << vp2.value() << "   " << "vp3: " << vp3.value() << std::endl;
 
                 lineClasses = ClassifyLines(LinesVotesToPoints(vps, lines), 0.8);
+                succeed = true;
                 return std::make_tuple(std::move(vps), curFocal, std::move(lineClasses));
             }
 
@@ -1274,15 +1286,19 @@ namespace panoramix {
 
 
         std::tuple<std::vector<HPoint2>, double, std::vector<int>> VanishingPointsDetector::operator() (
-            const std::vector<Line2> & lines, const Point2 & projCenter) const {
+            const std::vector<Line2> & lines, const Point2 & projCenter, bool * succeed) const {
             if (_params.algorithm == Naive){
                 std::vector<Line2> offsetedLines = lines;
                 for (auto & line : offsetedLines) {
                     line.first -= projCenter;
                     line.second -= projCenter;
                 }
+                bool ok = false;
                 auto results = EstimateVanishingPointsWithProjectionCenterAtOrigin(offsetedLines, 
-                    _params.minFocalLength, _params.maxFocalLength, _params.maxPrinciplePointOffset);
+                    _params.minFocalLength, _params.maxFocalLength, _params.maxPrinciplePointOffset, ok);
+                if (succeed){
+                    *succeed = ok;
+                }
                 for (HPoint2 & vp : std::get<0>(results)) {
                     vp = vp + HPoint2(projCenter);
                 }
@@ -1309,7 +1325,12 @@ namespace panoramix {
                 Matlab::GetVariable("vp", vpData, false);
                 Matlab::GetVariable("f", focal, false);
                 Matlab::GetVariable("lineclasses", lineClassesData, false);
-                assert(vpData.cols == 2 && vpData.rows == 3);
+                if (!(vpData.cols == 2 && vpData.rows == 3)){
+                    if (succeed){
+                        *succeed = false;
+                    }
+                    return std::tuple<std::vector<HPoint2>, double, std::vector<int>>();
+                }
                 assert(lineClassesData.cols * lineClassesData.rows == lines.size());
                 std::vector<HPoint2> vps = {
                     HPoint2({ vpData(0, 0), vpData(0, 1) }, 1.0),
@@ -1319,6 +1340,9 @@ namespace panoramix {
                 std::vector<int> lineClasses(lines.size(), -1);
                 for (int i = 0; i < lines.size(); i++){
                     lineClasses[i] = (int)std::round(lineClassesData(i) - 1);
+                }
+                if (succeed){
+                    *succeed = true;
                 }
                 return std::make_tuple(std::move(vps), focal(0), std::move(lineClasses));
             }
@@ -1408,16 +1432,11 @@ namespace panoramix {
                 for (int i = 0; i < classNum; i++){
                     if (i == firstClass)
                         continue;
-                    if (lineClusters[i].size() < 2)
-                        continue;
                     Map<const Array<double, 4, Eigen::Dynamic>> lineMat2((const double*)lineClusters[i].data(), 4, lineClusters[i].size());
                     for (int j = i + 1; j < classNum; j++){
                         if (j == firstClass)
                             continue;
-                        if (lineClusters[j].size() < 2)
-                            continue;
                         Map<const Array<double, 4, Eigen::Dynamic>> lineMat3((const double*)lineClusters[j].data(), 4, lineClusters[j].size());
-
 
                         int ids[] = { firstClass, i, j };
                         
@@ -1530,6 +1549,13 @@ namespace panoramix {
                     }
                 }
 
+                if (finalClasses[1] == -1 || finalClasses[2] == -1){
+                    if (succeed){
+                        *succeed = false;
+                    }
+                    return std::make_tuple(std::move(vps), finalFocal, std::move(intLabels));
+                }
+
                 for (int k = 0; k < 3; k++){
                     std::swap(vps[k], vps[finalClasses[k]]);
                 }
@@ -1546,6 +1572,9 @@ namespace panoramix {
                         }
                     }
                 }
+                if (succeed){
+                    *succeed = true;
+                }
                 return std::make_tuple(std::move(vps), finalFocal, std::move(intLabels));
             }
 
@@ -1553,14 +1582,14 @@ namespace panoramix {
 
        
         std::tuple<std::vector<HPoint2>, double> VanishingPointsDetector::operator() (
-            std::vector<Classified<Line2>> & lines, const Point2 & projCenter) const{
+            std::vector<Classified<Line2>> & lines, const Point2 & projCenter, bool * succeed) const{
             std::vector<HPoint2> vps;
             double focalLength = 0.0;
             std::vector<int> lineClassies;
             std::vector<Line2> plines(lines.size());
             for (int i = 0; i < lines.size(); i++)
                 plines[i] = lines[i].component;
-            std::tie(vps, focalLength, lineClassies) = (*this)(plines, projCenter);
+            std::tie(vps, focalLength, lineClassies) = (*this)(plines, projCenter, succeed);
             assert(lineClassies.size() == lines.size());
             for (int i = 0; i < lines.size(); i++)
                 lines[i].claz = lineClassies[i];
