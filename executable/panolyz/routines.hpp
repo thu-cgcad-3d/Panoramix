@@ -6,8 +6,10 @@
 namespace panolyz {
 
     enum PanolyzAlgorithm {
-        Panorama_v1,
-        Normal_v1
+        PanoramaIndoor_v1,
+        NormalIndoor_v1,
+        PanoramaOutdoor_v1,
+        NormalOutdoor_v1
     };
 
     template <PanolyzAlgorithm Algo>
@@ -22,10 +24,10 @@ namespace panolyz {
 
     // declare routines
 
-    ROUTINE_FOR_ALGORITHM(Panorama_v1);
-
-
-    ROUTINE_FOR_ALGORITHM(Normal_v1);
+    ROUTINE_FOR_ALGORITHM(PanoramaIndoor_v1);
+    ROUTINE_FOR_ALGORITHM(NormalIndoor_v1);
+    ROUTINE_FOR_ALGORITHM(PanoramaOutdoor_v1);
+    ROUTINE_FOR_ALGORITHM(NormalOutdoor_v1);
 
 }
 

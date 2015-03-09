@@ -1285,8 +1285,15 @@ namespace panoramix {
         }
 
 
-        std::tuple<std::vector<HPoint2>, double, std::vector<int>> VanishingPointsDetector::operator() (
-            const std::vector<Line2> & lines, const Point2 & projCenter, bool * succeed) const {
+        Optional<std::tuple<std::vector<HPoint2>, double, std::vector<int>>> VanishingPointsDetector::operator() (
+            const std::vector<Line2> & lines, const SizeI & imSize) const {
+            
+            Point2 projCenter(imSize.width / 2.0, imSize.height / 2.0);
+            double imScale = sqrt(imSize.area());
+            double minFocalLength = imScale * _params.minFocalLengthRatio;
+            double maxFocalLength = imScale * _params.maxFocalLengthRatio;
+            double maxPrinciplePointOffset = imScale * _params.maxPrinciplePointOffsetRatio;
+
             if (_params.algorithm == Naive){
                 std::vector<Line2> offsetedLines = lines;
                 for (auto & line : offsetedLines) {
@@ -1295,14 +1302,14 @@ namespace panoramix {
                 }
                 bool ok = false;
                 auto results = EstimateVanishingPointsWithProjectionCenterAtOrigin(offsetedLines, 
-                    _params.minFocalLength, _params.maxFocalLength, _params.maxPrinciplePointOffset, ok);
-                if (succeed){
-                    *succeed = ok;
+                    minFocalLength, maxFocalLength, maxPrinciplePointOffset, ok);
+                if (!ok){
+                    return nullptr;
                 }
                 for (HPoint2 & vp : std::get<0>(results)) {
                     vp = vp + HPoint2(projCenter);
                 }
-                return results;
+                return std::move(results);
             }
             else if (_params.algorithm == MATLAB_PanoContext){
                 assert(Matlab::IsUsable());
@@ -1326,10 +1333,7 @@ namespace panoramix {
                 Matlab::GetVariable("f", focal, false);
                 Matlab::GetVariable("lineclasses", lineClassesData, false);
                 if (!(vpData.cols == 2 && vpData.rows == 3)){
-                    if (succeed){
-                        *succeed = false;
-                    }
-                    return std::tuple<std::vector<HPoint2>, double, std::vector<int>>();
+                    return nullptr;
                 }
                 assert(lineClassesData.cols * lineClassesData.rows == lines.size());
                 std::vector<HPoint2> vps = {
@@ -1340,9 +1344,6 @@ namespace panoramix {
                 std::vector<int> lineClasses(lines.size(), -1);
                 for (int i = 0; i < lines.size(); i++){
                     lineClasses[i] = (int)std::round(lineClassesData(i) - 1);
-                }
-                if (succeed){
-                    *succeed = true;
                 }
                 return std::make_tuple(std::move(vps), focal(0), std::move(lineClasses));
             }
@@ -1422,8 +1423,8 @@ namespace panoramix {
                 Point2 finalPP;
                 double minViolation = std::numeric_limits<double>::max();
 
-                double logMinFocal = std::log10(_params.minFocalLength);
-                double logMaxFocal = std::log10(_params.maxFocalLength);
+                double logMinFocal = std::log10(minFocalLength);
+                double logMaxFocal = std::log10(maxFocalLength);
                 double logMiddleFocal = (logMinFocal + logMaxFocal) / 2.0;
 
                 // select the other two classes by traversing
@@ -1453,7 +1454,7 @@ namespace panoramix {
                         auto costFunction = [&lineMat1, &lineMat2, &lineMat3, &startPoses, logMiddleFocal, &projCenter, &vps, &ids](const VectorXd & x, VectorXd & v){
                             // x: input, v: output
                             assert(x.size() == 6);
-                            v.resize(lineMat1.cols() + lineMat2.cols() + lineMat3.cols() + 1);
+                            v.resize(lineMat1.cols() + lineMat2.cols() + lineMat3.cols());
 
                             Map<const Array<double, 4, Eigen::Dynamic>> * lineMats[] = { &lineMat1, &lineMat2, &lineMat3 };
                             Vec3 currentVPs[3];
@@ -1488,12 +1489,12 @@ namespace panoramix {
                                 Vec2(currentVPs[2][0], currentVPs[2][1]) / currentVPs[2][2]);
                            
                             if (std::isinf(focal) || std::isnan(focal)){
-                                v.bottomRows(1)(0) = 1;
+                                //v.bottomRows(1)(0) = 1;
                                 v *= 1e6;
                             }
                             else{
                                 static const double angleThreshold = M_PI / 20.0;
-                                v.bottomRows(1)(0) = 1;
+                                //v.bottomRows(1)(0) = 1;
                                 //v.bottomRows(1)(0) = 10 * (Distance(pp, projCenter)) + 20.0 * abs(log10(focal) - logMiddleFocal);
                                 /*if (maxOutAngle > angleThreshold){
                                     v *= (maxOutAngle / angleThreshold);
@@ -1501,7 +1502,7 @@ namespace panoramix {
                             }
                         };
 
-                        auto functor = MakeGenericNumericDiffFunctor<double>(costFunction, 6, lineMat1.cols() + lineMat2.cols() + lineMat3.cols() + 1);
+                        auto functor = MakeGenericNumericDiffFunctor<double>(costFunction, 6, lineMat1.cols() + lineMat2.cols() + lineMat3.cols());
                         LevenbergMarquardt<decltype(functor)> lm(functor);
 
                     
@@ -1527,13 +1528,13 @@ namespace panoramix {
                         if (std::isnan(focal) || std::isinf(focal))
                             continue;
 
-                        if (!IsBetween(focal, _params.minFocalLength, _params.maxFocalLength))
+                        if (!IsBetween(focal, minFocalLength, maxFocalLength))
                             continue;
 
                         double ppViolation = Distance(pp, projCenter);
 
                         auto minmaxScore = std::minmax({ clusterInitialScores[i], clusterInitialScores[j] });
-                        double violation = ( ppViolation > _params.maxPrinciplePointOffset ? (80.0 * (ppViolation - _params.maxPrinciplePointOffset) / _params.maxPrinciplePointOffset) : 0.0 )
+                        double violation = ( ppViolation > maxPrinciplePointOffset ? (80.0 * (ppViolation - maxPrinciplePointOffset) / maxPrinciplePointOffset) : 0.0 )
                             - 100 * (minmaxScore.first + minmaxScore.second) / clusterInitialScores[firstClass];
 
                         if (violation < minViolation){
@@ -1550,15 +1551,14 @@ namespace panoramix {
                 }
 
                 if (finalClasses[1] == -1 || finalClasses[2] == -1){
-                    if (succeed){
-                        *succeed = false;
-                    }
-                    return std::make_tuple(std::move(vps), finalFocal, std::move(intLabels));
+                    return nullptr;
                 }
 
                 for (int k = 0; k < 3; k++){
                     std::swap(vps[k], vps[finalClasses[k]]);
+                    std::cout << "vp[" << k << "] = " << vps[k].value() << std::endl;
                 }
+                std::cout << "focal = " << finalFocal << std::endl;
 
                 for (int & l : intLabels){
                     for (int k = 0; k < 3; k++){
@@ -1572,24 +1572,25 @@ namespace panoramix {
                         }
                     }
                 }
-                if (succeed){
-                    *succeed = true;
-                }
                 return std::make_tuple(std::move(vps), finalFocal, std::move(intLabels));
             }
 
         }
 
        
-        std::tuple<std::vector<HPoint2>, double> VanishingPointsDetector::operator() (
-            std::vector<Classified<Line2>> & lines, const Point2 & projCenter, bool * succeed) const{
+        Optional<std::tuple<std::vector<HPoint2>, double>> VanishingPointsDetector::operator() (
+            std::vector<Classified<Line2>> & lines, const SizeI & imSize) const {
             std::vector<HPoint2> vps;
             double focalLength = 0.0;
             std::vector<int> lineClassies;
             std::vector<Line2> plines(lines.size());
             for (int i = 0; i < lines.size(); i++)
                 plines[i] = lines[i].component;
-            std::tie(vps, focalLength, lineClassies) = (*this)(plines, projCenter, succeed);
+            auto result = (*this)(plines, imSize);
+            if (result.null()){
+                return nullptr;
+            }
+            std::tie(vps, focalLength, lineClassies) = result.unwrap();
             assert(lineClassies.size() == lines.size());
             for (int i = 0; i < lines.size(); i++)
                 lines[i].claz = lineClassies[i];

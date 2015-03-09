@@ -98,18 +98,18 @@ namespace panoramix {
                 MATLAB_Tardif
             };
             struct Params {
-                inline Params(Algorithm algo = Naive, double maxPPOffset = 80, double minFocal = 40, double maxFocal = 1e5)
-                    : maxPrinciplePointOffset(maxPPOffset), minFocalLength(minFocal), maxFocalLength(maxFocal), algorithm(algo) {}
-                inline Params(Algorithm algo, const SizeI & imSize, double maxPPOffsetRatio = 0.8, double minFocalRatio = 0.1, double maxFocalRatio = 10.0)
-                    : maxPrinciplePointOffset(maxPPOffsetRatio * sqrt(imSize.width * imSize.height)),
-                    minFocalLength(minFocalRatio * sqrt(imSize.width * imSize.height)),
-                    maxFocalLength(maxFocalRatio * sqrt(imSize.width * imSize.height)), algorithm(algo) {}
+                inline Params(Algorithm algo = Naive, double maxPPOffsetRatio = 2.0, double minFocalRatio = 0.05, double maxFocalRatio = 20.0)
+                    : maxPrinciplePointOffsetRatio(maxPPOffsetRatio),
+                    minFocalLengthRatio(minFocalRatio), 
+                    maxFocalLengthRatio(maxFocalRatio), 
+                    algorithm(algo) {
+                }
 
-                double maxPrinciplePointOffset;
-                double minFocalLength, maxFocalLength;
+                double maxPrinciplePointOffsetRatio;
+                double minFocalLengthRatio, maxFocalLengthRatio;
                 Algorithm algorithm;
                 template <class Archive> inline void serialize(Archive & ar) { 
-                    ar(maxPrinciplePointOffset, minFocalLength, maxFocalLength, algorithm);
+                    ar(maxPrinciplePointOffsetRatio, minFocalLengthRatio, maxFocalLengthRatio, algorithm);
                 }
             };
 
@@ -120,8 +120,10 @@ namespace panoramix {
             
             // accepts (lines, projection center)
             // returns (>= 3 vanishing points (the first 3 vanishing points should be the Manhattan VPs), the focal length, line classes)
-            std::tuple<std::vector<HPoint2>, double, std::vector<int>> operator() (const std::vector<Line2> & lines, const Point2 & projCenter, bool * succeed = nullptr) const;  
-            std::tuple<std::vector<HPoint2>, double> operator() (std::vector<Classified<Line2>> & lines, const Point2 & projCenter, bool * succeed = nullptr) const;
+            Optional<std::tuple<std::vector<HPoint2>, double, std::vector<int>>> operator() (
+                const std::vector<Line2> & lines, const SizeI & imSize) const;  
+            Optional<std::tuple<std::vector<HPoint2>, double>> operator() (
+                std::vector<Classified<Line2>> & lines, const SizeI & imSize) const;
 
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         

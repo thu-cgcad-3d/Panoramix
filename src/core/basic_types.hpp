@@ -23,6 +23,8 @@
 #include "macros.hpp"
 #include "serialization.hpp"
 #include "ratio.hpp"
+#include "any.hpp"
+#include "optional.hpp"
 
 namespace panoramix {
     namespace core {
@@ -630,7 +632,7 @@ namespace panoramix {
             return a.score < b.score;
         }
         template <class T, class S>
-        inline bool operator >(const Scored<T, S> & a, const Scored<T, S> & b){
+        inline bool operator > (const Scored<T, S> & a, const Scored<T, S> & b){
             return a.score > b.score;
         }
         template <class T, class S>

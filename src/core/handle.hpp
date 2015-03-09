@@ -126,6 +126,10 @@ namespace panoramix {
             template <class ... IntTs>
             explicit MixedHandledTable(const std::tuple<IntTs...> & maxSizes)
                 : data({ { std::vector<DataT>(std::get<TypeFirstLocationInTuple<HandleTs, HandleTupleType>::value>(maxSizes)) } }) {}
+
+            MixedHandledTable(MixedHandledTable && t) : data(std::move(t.data)) {}
+            MixedHandledTable & operator = (MixedHandledTable && t) { data = std::move(t.data); return *this; }
+
             template <class HandleT>
             const DataT & operator[](HandleT h) const {
                 return data[TypeFirstLocationInTuple<HandleT, HandleTupleType>::value][h.id];

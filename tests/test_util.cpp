@@ -16,7 +16,7 @@ inline double randf(){
 }
 
 
-TEST(MistTest, Any) {
+TEST(MiscTest, Any) {
 
     using namespace core;
 
@@ -69,6 +69,28 @@ TEST(MistTest, Any) {
         .cast<std::vector<Any>>().back().cast<std::pair<double, double>>()
         == std::pair<double, double>{ 1.5, 7.4 }));
 
+
+}
+
+
+
+
+TEST(MiscTest, Optional){
+
+    core::Optional<std::vector<int>> opt;
+    ASSERT_TRUE(opt.null());
+    opt = core::AsOptional(std::vector<int>{1, 2, 3, 4});
+    ASSERT_TRUE(!opt.null());
+
+    auto data = opt.unwrap();
+    ASSERT_TRUE((data == std::vector<int>{1, 2, 3}));
+    ASSERT_TRUE(opt.null());
+
+    auto opt2 = core::AsOptional(std::move(data));
+    ASSERT_TRUE(!opt2.null());
+
+    opt = std::move(opt2);
+    ASSERT_TRUE(!opt.null());
 
 }
 

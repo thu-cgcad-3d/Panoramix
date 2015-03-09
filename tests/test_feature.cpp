@@ -117,16 +117,25 @@ TEST(Feature, VanishingPointsDetector) {
     core::LineSegmentExtractor lineseg(lsParams);
     core::VanishingPointsDetector vpdetector;
 
+    std::vector<std::string> failedFileNames;
+
     for (auto & filename : filenames){
+        std::cout << "testing image file: " << filename << std::endl;
         core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/" + filename);
-        core::ResizeToMakeWidthUnder(im, 800);
+        core::ResizeToMakeWidthUnder(im, 400);
 
         std::vector<core::HPoint2> vps;
         double focalLength;
 
         std::vector<core::Classified<core::Line2>> classifiedLines = core::ClassifyEachAs(lineseg(im, 3), -1);
-        vpdetector.params() = core::VanishingPointsDetector::Params(core::VanishingPointsDetector::TardifSimplified, im.size());
-        std::tie(vps, focalLength) = vpdetector(classifiedLines, core::Point2(im.cols / 2, im.rows / 2));
+        vpdetector.params().algorithm = core::VanishingPointsDetector::TardifSimplified;
+        auto result = vpdetector(classifiedLines, im.size());
+        if (result.null()){
+            std::cout << "failed to find vanishing points!" << std::endl;
+            failedFileNames.push_back(filename);
+            continue;
+        }
+        std::tie(vps, focalLength) = result.unwrap();
 
         std::vector<core::Classified<core::InfiniteLine2>> vpRays;
         for (int i = 0; i < 3; i++){
@@ -144,6 +153,11 @@ TEST(Feature, VanishingPointsDetector) {
             << classifiedLines
             << vis::manip2d::Show(0);
     }
+
+    for (auto & filename : failedFileNames){
+        std::cout << "failed file: " << filename << std::endl;
+    }
+
 }
 
 
