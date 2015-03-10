@@ -90,7 +90,6 @@ namespace panoramix {
 
 
 
-
         // junction weight 
         float IncidenceJunctionWeight(bool acrossViews);
         float OutsiderIntersectionJunctionWeight();

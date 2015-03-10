@@ -1,5 +1,6 @@
 #include "../src/core/basic_types.hpp"
 #include "../src/core/generic_topo.hpp"
+#include "../src/ml/dataset.hpp"
 
 #include <random>
 
@@ -108,12 +109,10 @@ TEST(Serialization, FileTime) {
 }
 
 
+TEST(Serialization, SUNAnnotation) {
 
+    ml::annotations::sun::Panorama pano;
+    ml::annotations::LoadFromDisk(ProjectDataDirStrings::Serialization + "/pano.json", pano);
+    ml::annotations::SaveToDisk(ProjectDataDirStrings::Serialization + "/pano2.json", pano);
 
-
-//int main(int argc, char * argv[], char * envp[])
-//{
-//    testing::InitGoogleTest(&argc, argv);
-//    return RUN_ALL_TESTS();
-//
-//}
+}
