@@ -1546,7 +1546,7 @@ namespace panoramix {
             }
 
             inline std::vector<Vec3> NecessaryAnchorsForBinary(const MixedGraph & mg, LineRelationHandle bh, double & weightForEachAnchor){
-                weightForEachAnchor = 5.0;
+                weightForEachAnchor = mg.data(bh).junctionWeight * 2;
                 return{ mg.data(bh).normalizedRelationCenter };
             }
 
@@ -1762,32 +1762,40 @@ namespace panoramix {
                 varNum, consNum, Atriplets, Wtriplets, Xdata, Bdata);
             
 
-            Eigen::SparseMatrix<double, Eigen::ColMajor> A;
+            Eigen::SparseMatrix<double> A;
             {
-                Clock clock("form matrix");
+                Clock clock("form matrix A");
                 A.resize(consNum, varNum);
                 A.setFromTriplets(Atriplets.begin(), Atriplets.end());
             }
-
             Eigen::Map<const Eigen::VectorXd> B(Bdata.data(), Bdata.size());
 
+
+            static const bool useWeights = true;
+            Eigen::SparseMatrix<double> WA;
+            Eigen::VectorXd WB;
+            if(useWeights) {
+                Clock clock("form matrix WA");
+                Eigen::SparseMatrix<double> W;
+                W.resize(consNum, consNum);
+                W.setFromTriplets(Wtriplets.begin(), Wtriplets.end());
+                WA = W * A;
+                WB = W * B;
+            }
+
             static const bool useSPQR = true;
-
-            //Eigen::SparseMatrix<double> WA = W * A;
-            //static const bool useWeights = false;
-
 
             Eigen::VectorXd X;
             if (!useSPQR) {
                 Clock clock("solve equations using Eigen::SparseQR");
 
                 A.makeCompressed();
-                //WA.makeCompressed();
+                WA.makeCompressed();
 
                 Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
                 static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
 
-                solver.compute(/*useWeights ? WA : */A);
+                solver.compute(useWeights ? WA : A);
 
                 if (solver.info() != Eigen::Success) {
                     assert(0);
@@ -1795,8 +1803,7 @@ namespace panoramix {
                     return;
                 }
 
-                //Eigen::VectorXd WB = W * B;
-                X = solver.solve(/*useWeights ? WB : */B);
+                X = solver.solve(useWeights ? WB : B);
                 if (solver.info() != Eigen::Success) {
                     assert(0);
                     std::cout << "solving error" << std::endl;
@@ -1808,7 +1815,7 @@ namespace panoramix {
 
                 Eigen::SPQR<Eigen::SparseMatrix<double, Eigen::ColMajor>> solver;
                 solver.cholmodCommon()->useGPU = 1;
-                solver.compute(/*useWeights ? WA : */A);
+                solver.compute(useWeights ? WA : A);
 
                 if (solver.info() != Eigen::Success) {
                     assert(0);
@@ -1816,11 +1823,7 @@ namespace panoramix {
                     return;
                 }
 
-                //Eigen::VectorXd WB = W * B;
-                //int r1 = solver.derived().rows();
-                //int r2 = B.rows();
-                //assert(r1 == r2);
-                X = solver.solve(/*useWeights ? WB : */B);
+                X = solver.solve(useWeights ? WB : B);
                 if (solver.info() != Eigen::Success) {
                     assert(0);
                     std::cout << "solving error" << std::endl;
