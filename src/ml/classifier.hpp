@@ -2,7 +2,7 @@
 #define PANORAMIX_ML_CLASSIFIER_HPP
  
 namespace panoramix {
-    namespace core {
+    namespace ml {
 
     }
 }

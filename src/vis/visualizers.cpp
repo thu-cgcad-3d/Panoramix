@@ -934,8 +934,8 @@ namespace panoramix {
             mwin->setAttribute(Qt::WA_DeleteOnClose);
             mwin->resize(MakeQSize(renderOptions.camera.screenSize()));
             mwin->setWindowTitle(QString::fromStdString(renderOptions.winName));
-            mwin->setWindowIcon(Singleton::DefaultConfiguration().icon);
-            mwin->setStyleSheet(Singleton::DefaultConfiguration().css);
+            mwin->setWindowIcon(Singleton::DefaultIcon());
+            mwin->setStyleSheet(Singleton::DefaultCSS());
 
             auto menuView = mwin->menuBar()->addMenu(QObject::tr("View"));
             auto actionSettings = menuView->addAction(QObject::tr("Settings"));

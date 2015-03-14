@@ -176,6 +176,32 @@ namespace panoramix {
         struct IsCallable : std::integral_constant<bool, IsCallableImp<T, ArgTs...>::value> {};
 
 
+        // function traits
+        template <class T>
+        struct IsFunction : std::false_type {};
+
+        template <class ResultT, class ... ArgTs>
+        struct IsFunction<ResultT(ArgTs...)> : std::true_type{};
+
+        template <class T>
+        struct FunctionTraits : public FunctionTraits<decltype(&T::operator())> {};
+
+        template <class ResultT, class ... ArgTs>
+        struct FunctionTraits<ResultT(*)(ArgTs...)> {
+            using ResultType = ResultT;
+            using ArgumentsTupleType = std::tuple<ArgTs...>;
+            enum { ArgumentsNum = sizeof...(ArgTs) };
+        };
+
+        template <class ClassT, class ResultT, class... ArgTs>
+        struct FunctionTraits<ResultT(ClassT::*)(ArgTs...) const> {
+            // we specialize for pointers to member function
+            using ResultType = ResultT;
+            using ArgumentsTupleType = std::tuple<ArgTs...>;
+            enum { ArgumentsNum = sizeof...(ArgTs) };
+        };
+
+
         // iterate over
         namespace {
             template <class FunT, class T>

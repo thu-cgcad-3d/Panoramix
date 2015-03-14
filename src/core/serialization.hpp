@@ -119,11 +119,17 @@ namespace panoramix {
 
     namespace core {
 
+        using BinaryOutputArchive = cereal::PortableBinaryOutputArchive;
+        using BinaryInputArchive = cereal::PortableBinaryInputArchive;
+
+        using JSONOutputArchive = cereal::JSONOutputArchive;
+        using JSONInputArchive = cereal::JSONInputArchive;
+
         // serialization wrapper
         template <class StringT, class ...T>
         inline void SaveToDisk(StringT && filename, const T & ... data) {
             std::ofstream out(filename, std::ios::binary);
-            cereal::PortableBinaryOutputArchive archive(out);
+            BinaryOutputArchive archive(out);
             archive(data...);
             std::cout << "file \"" << filename << "\" saved" << std::endl;
             out.close();
@@ -132,7 +138,7 @@ namespace panoramix {
         template <class StringT, class ...T>
         inline void LoadFromDisk(StringT && filename, T & ... data) {
             std::ifstream in(filename, std::ios::binary);
-            cereal::PortableBinaryInputArchive archive(in);
+            BinaryInputArchive archive(in);
             archive(data...);
             std::cout << "file \"" << filename << "\" loaded" << std::endl;
             in.close();

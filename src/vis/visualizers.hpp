@@ -8,6 +8,9 @@
 #include "../core/generic_topo.hpp"
 #include "basic_types.hpp"
 
+class QWidget;
+class QAction;
+
 namespace panoramix {
     namespace vis {
 
@@ -482,6 +485,7 @@ namespace panoramix {
             VisualObjectSceneInternal * _internal;
             VisualObjectTree _tree;
         };
+
 
 
         class Visualizer {

@@ -8,9 +8,13 @@
 namespace panoramix {
     namespace vis {
 
-        static Singleton::Configuration defaultConfiguration;
-        const Singleton::Configuration & Singleton::DefaultConfiguration(){
-            return defaultConfiguration;
+        static QIcon defaultIcon;
+        const QIcon & Singleton::DefaultIcon(){
+            return defaultIcon;
+        }
+        static QString defaultCSS;
+        const QString & Singleton::DefaultCSS(){
+            return defaultCSS;
         }
 
         static char * appName = "Qt Gui";
@@ -21,14 +25,14 @@ namespace panoramix {
             Q_INIT_RESOURCE(vis);
             QApplication* app = new QApplication(argc, argv);
             
-            defaultConfiguration.icon = QIcon(":/icons/icon.png");
-            Q_ASSERT(!defaultConfiguration.icon.isNull());
+            defaultIcon = QIcon(":/icons/icon.png");
+            Q_ASSERT(!defaultIcon.isNull());
             QFile file(":/css/vis_win.css");
             bool opened = file.open(QFile::ReadOnly);
             Q_ASSERT(opened);
-            defaultConfiguration.css = QTextStream(&file).readAll();
-            QApplication::setWindowIcon(defaultConfiguration.icon);
-            app->setStyleSheet(defaultConfiguration.css);
+            defaultCSS = QTextStream(&file).readAll();
+            QApplication::setWindowIcon(defaultIcon);
+            app->setStyleSheet(defaultCSS);
 
             app->setQuitOnLastWindowClosed(true);
             QGLFormat glf = QGLFormat::defaultFormat();
@@ -43,13 +47,13 @@ namespace panoramix {
             return InitGui(1, &appName);
         }
 
-        void Singleton::ContinueGui(){
+        int Singleton::ContinueGui(){
             if (!qApp){
                 qDebug() << "call InitGui first!";
-                return;
+                return 0;
             }
             qApp->setQuitOnLastWindowClosed(true);            
-            qApp->exec();
+            return qApp->exec();
         }
 
 
