@@ -13,14 +13,15 @@ public:
     ~MainWin(){}
 
     void installProject(Project * proj);
+    Q_SLOT void switchToProject(int index);
 
 private:
-    QMdiArea * _mdiArea;
     QList<Project *> _projects;
     QList<QList<QMdiSubWindow*>> _subwins;
     QList<QList<QAction*>> _actions;
-    int _activeProject;
+    QTabWidget * _tabWidget;
     WorkThread * _workThread;
+    QProgressBar * _progressBar;
 };
  
 #endif

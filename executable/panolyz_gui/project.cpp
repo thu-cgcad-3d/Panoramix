@@ -11,24 +11,23 @@
 
 namespace px = panoramix;
 
+namespace data {
 
+    struct Input {
+        QImage qimage;
+        px::core::Image image;
+    };
 
-QWidget * BindWidget(px::core::Image & image) {
-    NOT_IMPLEMENTED_YET();
+    struct Segmentation {
+        QImage qimage;
+        px::core::Imagei segmentation;
+    };
+
+    struct Lines {
+
+    };
+
 }
-
-QWidget * BindWidget(px::core::Imageb & mask) {
-    NOT_IMPLEMENTED_YET();
-}
-
-QWidget * BindWidget(px::core::Imagei & segmentation) {
-    NOT_IMPLEMENTED_YET();
-}
-
-QWidget * BindWidget(std::pair<px::core::Image, std::vector<px::core::Line2>> & imAndLines) {
-    NOT_IMPLEMENTED_YET();
-}
-
 
 
 
@@ -53,7 +52,7 @@ void Project::initialize(const QString & image, bool isPano) {
     _core = std::make_unique<px::vis::ProjectCore>();
 
     // append steps
-    int stepLoadImage = _core->addStep("Input", [this](){
+    int stepLoadImage = _core->addStep("Load Input", [this](){
         QImage im;
         im.load(_imageFileInfo.absoluteFilePath());
         auto pim = px::vis::MakeCVMat(im);
@@ -61,7 +60,10 @@ void Project::initialize(const QString & image, bool isPano) {
     });
 
     
-    // todo
+    
+    if (isPano){
+        //int stepPerspSampling = 
+    }
 
 }
 
