@@ -54,13 +54,13 @@ namespace panoramix {
                     typename core::FunctionTraits<UpdateFunctionT>::ArgumentsTupleType;
                 //bool typeChecks[] = { dependencies.at(Idx)->has<typename std::tuple_element<Idx, ArgumentsTupleType>::type>() ... };
                 //assert(std::all_of(std::begin(typeChecks), std::end(typeChecks), [](bool b){return b; }));
-                storage = updater(dependencies.at(Idx)->storage<typename std::tuple_element<Idx, ArgumentsTupleType>::type>() ...);
+                storage = updater(dependencies.at(Idx)->storage<std::decay_t<typename std::tuple_element<Idx, ArgumentsTupleType>::type>>() ...);
             }
         };
 
 
 
-        class ProjectCore {
+        class Steps {
         public:
             size_t size() const { return _steps.size(); }
 

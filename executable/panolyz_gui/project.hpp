@@ -6,19 +6,17 @@
 #include <QtGui>
 
 namespace panoramix {namespace vis {
-    class ProjectCore;
+    class Steps;
 }}
 
 
-class Project : public QObject {
+class Project : public QObject {    
     Q_OBJECT
+
 public:
     explicit Project(QObject * parent = 0);
-    explicit Project(const QString & image, bool isPano, QObject * parent = 0);
     explicit Project(const QString & projFile, QObject * parent = 0);
     virtual ~Project();
-
-    void initialize(const QString & image, bool isPano);
 
     void saveToDisk(const QString & filename) const;
     void loadFromDisk(const QString & filename);
@@ -29,14 +27,15 @@ public:
 
     Q_SLOT void update();
 
-private:
+    static Project * createProject(const QString & image, bool isPano, QObject * parent = 0);
+
+protected:
     QFileInfo _projectFileInfo;
-    QFileInfo _imageFileInfo;
-    bool _isPanorama;
     QList<QWidget*> _widgets;
     QList<QAction*> _actions;
-    std::unique_ptr<panoramix::vis::ProjectCore> _core;
+    std::unique_ptr<panoramix::vis::Steps> _steps;
 };
+
 
  
 #endif
