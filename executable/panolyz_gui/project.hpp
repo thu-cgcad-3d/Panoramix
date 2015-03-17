@@ -32,7 +32,7 @@ protected:
     QFileInfo _projectFileInfo;
     QList<QWidget*> _widgets;
     QList<QAction*> _actions;
-    std::unique_ptr<Steps> _steps;
+    Steps * _steps;
 };
 
 
