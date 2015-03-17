@@ -156,10 +156,10 @@ void MainWin::installProject(Project * proj) {
     int tabId = _tabWidget->addTab(mdiArea, proj->projectFileInfo().fileName());
     // add widgets and actions
     QList<QMdiSubWindow*> ws;
-    for (QWidget * w : proj->widgets()){
+    for (int i = 0; i < proj->widgets().size(); i++){
+        auto w = proj->widgets().at(i);
         ws << mdiArea->addSubWindow(w);
-        //ws.last()->hide();
-        ws.last()->show();
+        ws.last()->hide();
     }
     _subwins << ws;
     QList<QAction*> as;

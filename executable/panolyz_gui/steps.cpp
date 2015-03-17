@@ -2,6 +2,13 @@
 #include "steps.hpp"
 
 
+void Steps::updateWidget(int i) {
+    if (_widgets[i]){
+        _widgets[i]->refreshData();
+        _widgets[i]->showWidget();
+        _widgets[i]->updatePainting();
+    }
+}
 
 bool Steps::needsUpdate(int id) const {
     for (int d : _dependencies[id]){
@@ -26,9 +33,8 @@ void Steps::updateAll(UpdateCallback const * callback, bool forceSourceStepUpdat
             _steps[i]->data->setModified();
             if (callback)
                 callback->afterUpdate(i);
-            if (_widgets[i]){
-                _widgets[i]->show();
-                _widgets[i]->update();
+            if (_widgets[i]){              
+                emit dataUpdated(i);
             }
         }
     }

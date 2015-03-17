@@ -6,6 +6,18 @@
 #include "../../src/core/meta.hpp"
 #include "../../src/core/basic_types.hpp"
 
+
+
+
+struct WidgetLike {
+    virtual void refreshData() = 0;
+    virtual void updatePainting() = 0;
+    virtual void showWidget() = 0;
+    virtual void hideWidget() = 0;
+};
+
+
+
 struct Data {
     panoramix::core::TimeStamp timeStamp;
     QReadWriteLock lock;
@@ -14,7 +26,7 @@ struct Data {
     inline void lockForWrite() { lock.lockForWrite(); }
     inline void unlock() { lock.unlock(); }
     inline bool isOlderThan(const Data & d) const { return timeStamp < d.timeStamp; }
-    virtual QWidget * createBindingWidgetAndActions(
+    virtual WidgetLike * createBindingWidgetAndActions(
         QList<QAction*> & actions, QWidget * parent = nullptr) {
         return nullptr;
     }
@@ -48,21 +60,20 @@ struct DataOfType : Data {
     DataOfType(T && c) : content(std::move(c)) {}
     DataOfType(const DataOfType &) = delete;
 
-    virtual QWidget * createBindingWidgetAndActions(
+    virtual WidgetLike * createBindingWidgetAndActions(
         QList<QAction*> & actions, QWidget * parent) {
         return createBindingWidgetAndActionsImpl(actions, parent, HasBindingWidgetAndActions<T>());
     }
 
-    inline QWidget * createBindingWidgetAndActionsImpl(
+    inline WidgetLike * createBindingWidgetAndActionsImpl(
         QList<QAction*> & actions, QWidget * parent, std::true_type &){
         return CreateBindingWidgetAndActions(*this, actions, parent);
     }
-    inline QWidget * createBindingWidgetAndActionsImpl(
+    inline WidgetLike * createBindingWidgetAndActionsImpl(
         QList<QAction*> & actions, QWidget * parent, std::false_type &){
         return nullptr;
     }
 };
-
 
 
 
@@ -117,7 +128,20 @@ struct StepWithTypedUpdater : Step {
 };
 
 
-class Steps {
+class Steps : public QObject {
+    
+    Q_OBJECT
+
+public:
+    explicit Steps(QObject * parent = 0) : QObject(parent) {
+        connect(this, SIGNAL(dataUpdated(int)), this, SLOT(updateWidget(int)), Qt::ConnectionType::QueuedConnection);
+    }
+
+signals:
+    void dataUpdated(int index);
+public slots:
+    void updateWidget(int index);
+
 public:
     size_t size() const { return _steps.size(); }
 
@@ -142,7 +166,7 @@ public:
 
     inline const QString & stepNameAt(int id) const { return _names[id]; }
 
-    inline const QList<QWidget*> widgets() const { return _widgets; }
+    inline const QList<WidgetLike *> widgets() const { return _widgets; }
     inline const QList<QAction*> actions() const { return _actions; }
 
     inline const std::vector<int> & stepDependenciesAt(int id) const { return _dependencies[id]; }
@@ -161,7 +185,7 @@ private:
     std::vector<QString> _names;
     std::vector<StepPtr> _steps;
 
-    QList<QWidget *> _widgets;
+    QList<WidgetLike *> _widgets;
     QList<QAction*> _actions;
 
     std::vector<std::vector<int>> _dependencies;

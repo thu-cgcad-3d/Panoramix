@@ -240,55 +240,6 @@ namespace panoramix {
         };
 
 
-        // triangular mesh
-        struct TriMesh {
-
-            struct Vertex {
-                Vertex();
-                core::Vec4f position;
-                core::Vec3f normal;
-                core::Vec4f color; // the intrinsic color
-                core::Vec2f texCoord;
-                int entityIndex; // index in container
-                uint8_t isSelected;
-            };
-
-            using VertHandle = uint32_t;
-            using LineHandle = uint32_t;
-            using TriangleHandle = uint32_t;
-
-            std::vector<Vertex> vertices;
-            std::vector<VertHandle> iPoints;
-            std::vector<LineHandle> iLines;
-            std::vector<TriangleHandle> iTriangles;
-
-
-            VertHandle addVertex(const Vertex & v);
-
-            LineHandle addLine(VertHandle v1, VertHandle v2);
-            LineHandle addIsolatedLine(const Vertex & v1, const Vertex & v2);
-            size_t numberOfLines() const;
-            void fetchLineVerts(LineHandle l, VertHandle & v1, VertHandle & v2) const;
-
-            TriangleHandle addTriangle(VertHandle v1, VertHandle v2, VertHandle v3);
-            TriangleHandle addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3);
-            size_t numberOfTriangles() const;
-            void fetchTriangleVerts(TriangleHandle t, VertHandle & v1, VertHandle & v2, VertHandle & v3) const;
-
-            void addQuad(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4);
-            void addPolygon(const std::vector<VertHandle> & vhs);
-
-            void clear();
-
-            core::Box3 boundingBox() const;   
-
-            template <class Archive> inline void serialize(Archive & ar) {
-                ar(vertices, iPoints, iLines, iTriangles); 
-            }
-
-        };
-
-
         template <class T>
         struct Colored {
             T component;
@@ -311,11 +262,8 @@ namespace panoramix {
 
         Box3 BoundingBox(const vis::SpatialProjectedPolygon & spp);
 
-        inline Box3 BoundingBox(const vis::TriMesh & m) {
-            return m.boundingBox();
-        }
-
     }
+
 }
  
 #endif
