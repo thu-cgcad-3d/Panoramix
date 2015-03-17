@@ -6,14 +6,7 @@
 
 class Project;
 class WorkThread;
-
-class ThreadPool : public QObject {
-    Q_OBJECT
-
-    void start(std::function<void(void)> && fun);
-
-};
-
+class ThreadPool;
 class MainWin : public QMainWindow {
 	Q_OBJECT
 	
@@ -25,15 +18,16 @@ public:
 
 public slots:
     void switchToProject(int index);
-    void updateProject(int index);
+    void updateProject(int index, bool forceSourceStepUpdate = false);
 
 private:
     QList<Project *> _projects;
     QList<QList<QMdiSubWindow*>> _subwins;
     QList<QList<QAction*>> _actions;
     QTabWidget * _tabWidget;
-    WorkThread * _workThread;
-    QProgressBar * _progressBar;
+    /*WorkThread * _workThread;
+    QProgressBar * _progressBar;*/
+    ThreadPool * _threadPool;
 };
  
 #endif

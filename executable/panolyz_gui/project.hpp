@@ -21,8 +21,10 @@ public:
     const QList<QWidget*> & widgets() const { return _widgets; }
     const QList<QAction*> & actions() const { return _actions; }
 
-    Q_SLOT void update();
+public slots:
+    void update(bool forceSourceStepUpdate = false);
 
+public:
     static Project * createProjectFromImage(const QString & image, bool isPano, QObject * parent = 0);
     static Project * loadProjectFromDisk(const QString & filename, QObject * parent = 0);
 

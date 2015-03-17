@@ -3,6 +3,39 @@
 #include "project.hpp"
 #include "mainwin.hpp"
 
+
+class SimpleThread : public QThread {
+public:
+    explicit SimpleThread(std::function<void(void)> && fun, QObject * parent = nullptr) 
+        : QThread(parent), _fun(std::move(fun)) {}
+protected:
+    virtual void run() override { _fun(); }
+private:
+    std::function<void(void)> _fun;
+};
+
+class ThreadPool : public QObject {
+public:
+    explicit ThreadPool(int maxThreads, QObject * parent = nullptr) 
+        : QObject(parent), _maxThreads(maxThreads) {}
+    
+    QPair<QProgressBar *, SimpleThread *> attach(std::function<void(void)> && fun, QWidget * barParent = nullptr){
+        SimpleThread * t = new SimpleThread(std::move(fun), this);
+        QProgressBar * bar = new QProgressBar(barParent);
+        bar->hide();
+        connect(t, SIGNAL(started()), bar, SLOT(show()));
+        connect(t, SIGNAL(finished()), bar, SLOT(hide()));
+        connect(t, SIGNAL(finished()), t, SLOT(deleteLater()));
+        connect(t, SIGNAL(finished()), bar, SLOT(deleteLater()));
+        return qMakePair(bar, t);
+    }
+
+private:
+    int _maxThreads;
+};
+
+
+
 MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
    
     //// menus
@@ -59,6 +92,20 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
 
 
     // tools
+    auto actionRerunAll = menuTools->addAction(tr("Rerun All Steps"));
+    QObject::connect(actionRerunAll, &QAction::triggered, [this](){
+        int index = _tabWidget->currentIndex();
+        if (index < 0)
+            return;
+        updateProject(index, true);
+    });
+    auto actionRerunThoseNeedUpdate = menuTools->addAction(tr("Rerun Those Need Update"));
+    QObject::connect(actionRerunThoseNeedUpdate, &QAction::triggered, [this](){
+        int index = _tabWidget->currentIndex();
+        if (index < 0)
+            return;
+        updateProject(index, false);
+    });
 
 
     // help
@@ -86,18 +133,9 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
     });
     _tabWidget->setTabPosition(QTabWidget::TabPosition::West);
     setCentralWidget(_tabWidget);
-    _workThread = new WorkThread(this);
 
-    _progressBar = new QProgressBar(this);
-    _progressBar->setFixedHeight(15);
-    _progressBar->setFixedWidth(300);
-    statusBar()->addPermanentWidget(_progressBar);
-    _progressBar->hide();
-    _progressBar->setRange(0, 0);
 
-    connect(_workThread, SIGNAL(started()), _progressBar, SLOT(show()));
-    connect(_workThread, SIGNAL(finished()), _progressBar, SLOT(hide()));
-    //connect(_workThread, SIGNAL(finished()), this, SLOT(postWork()));
+    _threadPool = new ThreadPool(4, this);
 
     setAcceptDrops(true);
 }
@@ -122,6 +160,7 @@ void MainWin::installProject(Project * proj) {
     Q_ASSERT(tabId == _projects.size() - 1);
     Q_ASSERT(tabId == _subwins.size() - 1);
     Q_ASSERT(tabId == _actions.size() - 1);
+    //updateProject(tabId, true);
 }
 
 void MainWin::switchToProject(int index){
@@ -129,6 +168,17 @@ void MainWin::switchToProject(int index){
 
 }
 
-void MainWin::updateProject(int index) {
-    
+void MainWin::updateProject(int index, bool forceSourceStepUpdate) {
+    if (index < 0)
+        return;
+    auto tb = _threadPool->attach([this, index, forceSourceStepUpdate](){
+        _projects[index]->update(forceSourceStepUpdate);
+    });
+    auto b = tb.first;
+    b->setFixedHeight(15);
+    b->setFixedWidth(300);
+    statusBar()->addPermanentWidget(b);
+    b->hide();
+    b->setRange(0, 0);
+    tb.second->start();
 }

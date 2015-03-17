@@ -26,6 +26,24 @@ struct Data {
 
 using DataPtr = std::shared_ptr<Data>;
 
+template <class T> struct DataOfType;
+
+template <class T>
+struct HasBindingWidgetAndActionsImpl {
+    template <class TT>
+    static auto test(int) -> decltype(
+        CreateBindingWidgetAndActions(std::declval<DataOfType<T>>(), std::declval<QList<QAction*>&>(), (QWidget*)nullptr),
+        std::true_type()
+        );
+    template <class>
+    static std::false_type test(...);
+    static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
+};
+
+template <class T>
+struct HasBindingWidgetAndActions : std::integral_constant<bool, HasBindingWidgetAndActionsImpl<T>::value> {};
+
+
 template <class T>
 struct DataOfType : Data {
     T content;
@@ -33,50 +51,93 @@ struct DataOfType : Data {
     DataOfType(const T & c) : content(c) {}
     DataOfType(T && c) : content(std::move(c)) {}
     DataOfType(const DataOfType &) = delete;
+    
     virtual QWidget * createBindingWidgetAndActions(
         QList<QAction*> & actions, QWidget * parent) {
-        return content.createBindingWidgetAndActions(actions, parent);
+        return createBindingWidgetAndActionsImpl(actions, parent, HasBindingWidgetAndActions<T>());
+    }
+
+    inline QWidget * createBindingWidgetAndActionsImpl(
+        QList<QAction*> & actions, QWidget * parent, std::true_type &){
+        return CreateBindingWidgetAndActions(*this, actions, parent);
+    }
+    inline QWidget * createBindingWidgetAndActionsImpl(
+        QList<QAction*> & actions, QWidget * parent, std::false_type &){
+        return nullptr;
     }
 };
 
 struct PanoView {
     core::View<core::PanoramicCamera> view;
-    QWidget * createBindingWidgetAndActions(
-        QList<QAction*> & actions, QWidget * parent) {
-        QLabel * label = new QLabel(parent);
-        label->setPixmap(QPixmap::fromImage(vis::MakeQImage(view.image)));
-        return label;
-    }
 };
+
+QWidget * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
+    QList<QAction*> & actions, QWidget * parent) {
+    
+    class Widget : public QWidget {
+    public:
+        explicit Widget(DataOfType<PanoView> * d, QWidget * parent) : QWidget(parent), data(d) {
+            setMinimumSize(300, 300);
+        }
+    protected:
+        virtual void paintEvent(QPaintEvent * e) override {
+            if (!data)
+                return;
+            QPainter painter(this);
+            data->lockForRead();
+            painter.drawImage(QPointF(), vis::MakeQImage(data->content.view.image));
+            data->unlock();
+        }
+    private:
+        DataOfType<PanoView>* data;
+    };
+
+    return new Widget(&pv, parent);
+}
 
 struct Segmentation {
     core::Imagei segmentation;
     int segmentsNum;
-    QWidget * createBindingWidgetAndActions(
-        QList<QAction*> & actions, QWidget * parent) {
-        return nullptr;
-    }
 };
+
+
+QWidget * CreateBindingWidgetAndActions(DataOfType<Segmentation> & segs,
+    QList<QAction*> & actions, QWidget * parent) {
+
+    class Widget : public QWidget {
+    public:
+        explicit Widget(DataOfType<Segmentation> * d, QWidget * parent) : QWidget(parent), data(d) {
+            setMinimumSize(300, 300);
+        }
+    protected:
+        virtual void paintEvent(QPaintEvent * e) override {
+            if (!data)
+                return;
+            QPainter painter(this);
+            data->lockForRead();
+            // todo
+            data->unlock();
+        }
+    private:
+        DataOfType<Segmentation>* data;
+    };
+
+    return new Widget(&segs, parent);
+}
+
+
 
 struct LinesAndVPs {
     std::vector<core::PerspectiveCamera> cams;
     std::vector<std::vector<core::Classified<core::Line2>>> lines;
     std::vector<core::Line3> line3ds;
     std::vector<core::Vec3> vps;
-    QWidget * createBindingWidgetAndActions(
-        QList<QAction*> & actions, QWidget * parent) {
-        return nullptr;
-    }
 };
 
 struct Reconstruction {
     core::View<core::PanoramicCamera> view;
     core::MixedGraph mg;
     core::MixedGraphPropertyTable props;
-    QWidget * createBindingWidgetAndActions(
-        QList<QAction*> & actions, QWidget * parent) {
-        return nullptr;
-    }
 };
 
 
@@ -174,9 +235,9 @@ public:
 
     /*using StepUpdateCallback = std::function<void(int stepId, int percent)>;*/
     template <class CallbackT>
-    void updateAll(CallbackT && callback) {
+    void updateAll(CallbackT && callback, bool forceSourceStepUpdate = false) {
         for (int i = 0; i < _steps.size(); i++){
-            if (needsUpdate(i)){
+            if (needsUpdate(i) || (forceSourceStepUpdate && _dependencies[i].empty())){
                 qDebug() << "updating [" << _names[i] << "]";
                 callback(i);
                 std::vector<Data *> deps(_dependencies[i].size());
@@ -185,8 +246,10 @@ public:
                 }
                 _steps[i]->update(deps);
                 _steps[i]->data->setModified();
-                if (_widgets[i])
+                if (_widgets[i]){
+                    _widgets[i]->show();
                     _widgets[i]->update();
+                }
             }
         }
     }
@@ -222,7 +285,9 @@ public:
         int stepLoad = _steps->addStep("Load Panorama", [this](){
             QImage im;
             im.load(_panoImFileInfo.absoluteFilePath());
+            im = im.convertToFormat(QImage::Format_RGB888);
             auto pim = vis::MakeCVMat(im);
+            core::ResizeToMakeHeightUnder(pim, 900);
             return PanoView{ core::CreatePanoramicView(pim) };
         });
 
@@ -402,15 +467,11 @@ void Project::loadFromDisk(const QString & filename){
 
 
 
-void Project::update() {
-
-    NOT_IMPLEMENTED_YET();
+void Project::update(bool forceSourceStepUpdate) {
 
     _steps->updateAll([this](int stepId){
         
-
-        
-    });
+    }, forceSourceStepUpdate);
 
 }
 
