@@ -4,65 +4,241 @@
 #include "../../src/core/basic_types.hpp"
 #include "../../src/core/mixed_graph.hpp"
 #include "../../src/vis/qt_glue.hpp"
-#include "../../src/vis/project.hpp"
 
 #include "widgets.hpp"
 #include "project.hpp"
 
 using namespace panoramix;
 
-namespace data {
+struct Data {
+    core::TimeStamp timeStamp;
+    QReadWriteLock lock;
+    inline void setModified() { timeStamp = core::CurrentTime(); }
+    inline void lockForRead() { lock.lockForRead(); }
+    inline void lockForWrite() { lock.lockForWrite(); }
+    inline void unlock() { lock.unlock(); }
+    inline bool isOlderThan(const Data & d) const { return timeStamp < d.timeStamp; }
+    virtual QWidget * createBindingWidgetAndActions(
+        QList<QAction*> & actions, QWidget * parent = nullptr) {
+        return nullptr;
+    }
+};
 
-    struct PanoImage {
-        core::View<core::PanoramicCamera> view;
-       
-    };
+using DataPtr = std::shared_ptr<Data>;
 
-    struct Segmentation {
-        core::Imagei segmentation;
-        int segmentsNum;
-    };
+template <class T>
+struct DataOfType : Data {
+    T content;
+    DataOfType() {}
+    DataOfType(const T & c) : content(c) {}
+    DataOfType(T && c) : content(std::move(c)) {}
+    DataOfType(const DataOfType &) = delete;
+    virtual QWidget * createBindingWidgetAndActions(
+        QList<QAction*> & actions, QWidget * parent) {
+        return content.createBindingWidgetAndActions(actions, parent);
+    }
+};
 
-    struct LinesAndVPs {
-        std::vector<core::PerspectiveCamera> cams;
-        std::vector<std::vector<core::Classified<core::Line2>>> lines;
-        std::vector<core::Line3> line3ds;
-        std::vector<core::Vec3> vps;
-    };
+struct PanoView {
+    core::View<core::PanoramicCamera> view;
+    QWidget * createBindingWidgetAndActions(
+        QList<QAction*> & actions, QWidget * parent) {
+        QLabel * label = new QLabel(parent);
+        label->setPixmap(QPixmap::fromImage(vis::MakeQImage(view.image)));
+        return label;
+    }
+};
 
-    struct Reconstruction {
-        core::View<core::PanoramicCamera> view;
-        core::MixedGraph mg;
-        core::MixedGraphPropertyTable props;
-    };
+struct Segmentation {
+    core::Imagei segmentation;
+    int segmentsNum;
+    QWidget * createBindingWidgetAndActions(
+        QList<QAction*> & actions, QWidget * parent) {
+        return nullptr;
+    }
+};
 
-}
+struct LinesAndVPs {
+    std::vector<core::PerspectiveCamera> cams;
+    std::vector<std::vector<core::Classified<core::Line2>>> lines;
+    std::vector<core::Line3> line3ds;
+    std::vector<core::Vec3> vps;
+    QWidget * createBindingWidgetAndActions(
+        QList<QAction*> & actions, QWidget * parent) {
+        return nullptr;
+    }
+};
+
+struct Reconstruction {
+    core::View<core::PanoramicCamera> view;
+    core::MixedGraph mg;
+    core::MixedGraphPropertyTable props;
+    QWidget * createBindingWidgetAndActions(
+        QList<QAction*> & actions, QWidget * parent) {
+        return nullptr;
+    }
+};
+
+
+
+
+struct Step;
+using StepPtr = std::shared_ptr<Step>;
+template <class ResultT> struct StepWithTypedResult;
+
+
+struct Step {
+    DataPtr data;
+    virtual void update(const std::vector<Data *> & dependencies) = 0;
+    inline bool null() const { return !data; }
+
+    template <class T>
+    inline T & contentAs() { return (dynamic_cast<DataOfType<T>*>(data.get()))->content; }
+    template <class T>
+    inline const T & contentAs() const { (dynamic_cast<const DataOfType<T>*>(data.get()))->content; }
+};
+
+template <class UpdateFunctionT>
+struct StepWithTypedUpdater : Step {  
+    using ResultContentType = std::decay_t<typename core::FunctionTraits<UpdateFunctionT>::ResultType>;
+    using ResultDataType = DataOfType<ResultContentType>;
+    using ArgumentsTupleType =
+        typename core::FunctionTraits<UpdateFunctionT>::ArgumentsTupleType;
+
+    UpdateFunctionT updater;
+    inline explicit StepWithTypedUpdater(UpdateFunctionT && fun)
+        : updater(std::move(fun)) {
+        data = std::make_shared<ResultDataType>();
+    }
+    inline explicit StepWithTypedUpdater(const UpdateFunctionT & fun)
+        : updater(fun){
+        data = std::make_shared<ResultDataType>();
+    }
+
+    virtual void update(const std::vector<Data *> & dependencies) override {
+        assert(core::FunctionTraits<UpdateFunctionT>::ArgumentsNum == dependencies.size());
+        updateUsingSequence(dependencies,
+            typename core::SequenceGenerator<core::FunctionTraits<UpdateFunctionT>::ArgumentsNum>::type());
+    }
+    template <int ...Idx>
+    void updateUsingSequence(const std::vector<Data *> & dependencies, core::Sequence<Idx...>){ 
+        static_assert(core::Sequence<std::is_base_of<Data, std::decay_t<typename std::tuple_element<Idx, ArgumentsTupleType>::type>>::value ...>::All,
+            "all input types must be derived from Data");
+        ResultContentType d =
+            updater(*dynamic_cast<std::decay_t<typename std::tuple_element<Idx, ArgumentsTupleType>::type>*>(dependencies.at(Idx)) ...);
+        data->lock.lockForWrite();
+        contentAs<ResultContentType>() = std::move(d);
+        data->lock.unlock();
+    }
+};
+
+
+class Steps {
+public:
+    size_t size() const { return _steps.size(); }
+
+    template <class UpdateFunctionT>
+    inline int addStep(const QString & name, UpdateFunctionT && updater,
+        const std::vector<int> & dependencies = std::vector<int>()) {
+        auto step = std::make_shared<StepWithTypedUpdater<std::decay_t<UpdateFunctionT>>>(std::forward<UpdateFunctionT>(updater));
+        for (int d : dependencies){
+            assert(d >= 0 && d < _steps.size());
+        }
+        step->data->setModified();
+        _names.push_back(name);
+        _steps.push_back(step);
+        _widgets.push_back(step->data->createBindingWidgetAndActions(_actions));
+        _dependencies.push_back(dependencies);
+        _stepIds[step.get()] = _steps.size() - 1;
+        return _steps.size() - 1;
+    }
+
+    inline int id(const StepPtr & s) const { return _stepIds.at(s.get()); }
+    inline int id(const Step * s) const { return _stepIds.at(s); }
+
+    inline const QString & stepNameAt(int id) const { return _names[id]; }
+
+    inline const QList<QWidget*> widgets() const { return _widgets; }
+    inline const QList<QAction*> actions() const { return _actions; }
+
+    inline const std::vector<int> & stepDependenciesAt(int id) const { return _dependencies[id]; }
+
+    bool needsUpdate(int id) const {
+        for (int d : _dependencies[id]){
+            if (_steps[id]->data->isOlderThan(*_steps[d]->data)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /*using StepUpdateCallback = std::function<void(int stepId, int percent)>;*/
+    template <class CallbackT>
+    void updateAll(CallbackT && callback) {
+        for (int i = 0; i < _steps.size(); i++){
+            if (needsUpdate(i)){
+                qDebug() << "updating [" << _names[i] << "]";
+                callback(i);
+                std::vector<Data *> deps(_dependencies[i].size());
+                for (int k = 0; k < deps.size(); k++){
+                    deps[k] = _steps[_dependencies[i][k]]->data.get();
+                }
+                _steps[i]->update(deps);
+                _steps[i]->data->setModified();
+                if (_widgets[i])
+                    _widgets[i]->update();
+            }
+        }
+    }
+
+private:
+    std::vector<QString> _names;
+    std::vector<StepPtr> _steps;
+
+    QList<QWidget *> _widgets;
+    QList<QAction*> _actions;
+
+    std::vector<std::vector<int>> _dependencies;
+    std::unordered_map<Step const *, int> _stepIds;
+};
+
+
+
+
+
+
+
+
+
+
 
 
 class PanoRecProject : public Project {
 public:
     explicit PanoRecProject(const QString & panoIm, QObject * parent) 
-        : Project(parent), _panoImFileInfo(panoIm) {
+        : Project(parent), _panoImFileInfo(panoIm){
     
         // initialize steps
         int stepLoad = _steps->addStep("Load Panorama", [this](){
             QImage im;
             im.load(_panoImFileInfo.absoluteFilePath());
             auto pim = vis::MakeCVMat(im);
-            return data::PanoImage{ core::CreatePanoramicView(pim) };
+            return PanoView{ core::CreatePanoramicView(pim) };
         });
 
-
-
         // lines and vps
-        int stepLinesVPs = _steps->addStep("Perspective Sampling, Extract Lines and Estimate Vanishing Points", [this](const data::PanoImage & im){
-            auto & view = im.view;
+        int stepLinesVPs = _steps->addStep(tr("Perspective Sampling, Extract Lines and Estimate Vanishing Points"), 
+            [this](DataOfType<PanoView> & im){
+            
+            im.lockForRead();
+
+            auto & view = im.content.view;
             
             std::vector<core::PerspectiveCamera> cams;
             std::vector<std::vector<core::Classified<core::Line2>>> lines;
             std::vector<core::Vec3> vps;
 
-            cams = core::CreateCubicFacedCameras(im.view.camera, im.view.image.rows, im.view.image.rows, im.view.image.rows * 0.4);
+            cams = core::CreateCubicFacedCameras(view.camera, view.image.rows, view.image.rows, view.image.rows * 0.4);
             lines.resize(cams.size());
             for (int i = 0; i < cams.size(); i++){
                 auto pim = view.sampled(cams[i]).image;
@@ -74,8 +250,8 @@ public:
                     lines[i].push_back(core::ClassifyAs(l, -1));
                 }
                 //vis::Visualizer2D(pim) << ls << vis::manip2d::Show();
-
             }
+            im.unlock();
 
             // estimate vp
             vps = core::EstimateVanishingPointsAndClassifyLines(cams, lines);
@@ -89,16 +265,20 @@ public:
                 }
             }
 
-            return data::LinesAndVPs{ std::move(cams), std::move(lines), std::move(line3ds), std::move(vps) };
+            return LinesAndVPs{ std::move(cams), std::move(lines), std::move(line3ds), std::move(vps) };
 
         }, { stepLoad });
 
 
         // segmentation
-        int stepSegmentation = _steps->addStep("Segmentation", [this](const data::PanoImage & im, const data::LinesAndVPs & linesVPs){
+        int stepSegmentation = _steps->addStep(tr("Segmentation"), 
+            [this](DataOfType<PanoView> & im, DataOfType<LinesAndVPs> & linesVPs){
             
-            auto & view = im.view;
-            auto & line3ds = linesVPs.line3ds;
+            im.lockForRead();
+            linesVPs.lockForRead();
+
+            auto & view = im.content.view;
+            auto & line3ds = linesVPs.content.line3ds;
 
             core::Imagei segmentedImage;
 
@@ -106,25 +286,32 @@ public:
             segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
             segmenter.params().c = 100.0;
             int segmentsNum = 0;
-            std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, M_PI / 36.0);
 
-            return data::Segmentation{ std::move(segmentedImage), segmentsNum };
+            std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, M_PI / 36.0);
+            linesVPs.unlock();
+            im.unlock();
+
+            return Segmentation{ std::move(segmentedImage), segmentsNum };
 
         }, { stepLoad, stepLinesVPs });
 
 
         // reconstruction setup
-        int stepReconstructionSetup = _steps->addStep("ReconstructionSetup", 
-            [this](const data::PanoImage & im, const data::LinesAndVPs & linesVPs, const data::Segmentation & segs){
+        int stepReconstructionSetup = _steps->addStep("Reconstruction Setup", 
+            [this](DataOfType<PanoView> & im, DataOfType<LinesAndVPs> & linesVPs, DataOfType<Segmentation> & segs){
         
             core::MixedGraph mg;
             core::MixedGraphPropertyTable props;
 
-            auto & view = im.view;
-            auto & lines = linesVPs.lines;
-            auto & cams = linesVPs.cams;
-            auto & vps = linesVPs.vps;
-            auto & segmentedImage = segs.segmentation;
+            im.lockForRead();
+            linesVPs.lockForRead();
+            segs.lockForRead();
+
+            auto & view = im.content.view;
+            auto & lines = linesVPs.content.lines;
+            auto & cams = linesVPs.content.cams;
+            auto & vps = linesVPs.content.vps;
+            auto & segmentedImage = segs.content.segmentation;
 
             // append lines
             for (int i = 0; i < cams.size(); i++){
@@ -135,19 +322,27 @@ public:
             core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
 
             props = core::MakeMixedGraphPropertyTable(mg, vps);
+
+            im.unlock();
+            linesVPs.unlock();
+            segs.unlock();
+
             core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 15.0);
             core::AttachWallConstriants(mg, props, M_PI / 30.0);
 
-            return data::Reconstruction{ view, std::move(mg), std::move(props) };
+            return Reconstruction{ view, std::move(mg), std::move(props) };
 
         }, { stepLoad, stepLinesVPs, stepSegmentation });
 
         
         // reconstruction 1
         int stepReconstruction1 = _steps->addStep("Reconstruction 1",
-            [this](const data::Reconstruction & lastRec){
+            [this](DataOfType<Reconstruction> & lastRec){
 
-            auto rec = lastRec;
+            lastRec.lockForRead();
+            auto rec = lastRec.content;
+            lastRec.unlock();
+
             auto & mg = rec.mg;
             auto & props = rec.props;
 
@@ -167,7 +362,11 @@ public:
         }, { stepReconstructionSetup });
 
         
-
+        // add widgets and actions
+        _widgets.clear();
+        for (auto w : _steps->widgets()){
+            if(w) _widgets << w;
+        }
     }
 
 
@@ -178,12 +377,12 @@ private:
 };
 
 
-
+static int UnnamedProjectId = 1;
 Project::Project(QObject * parent) 
-: QObject(parent), _steps(std::make_unique<vis::Steps>()) {
+: QObject(parent), _steps(std::make_unique<Steps>()), _projectFileInfo(tr("Unnamed Project %1").arg(UnnamedProjectId ++))  {
 }
 
-Project::Project(const QString & projFile, QObject * parent) : QObject(parent) {
+Project::Project(const QString & projFile, QObject * parent) : QObject(parent), _projectFileInfo(projFile) {
     loadFromDisk(projFile);
 }
 
@@ -216,11 +415,15 @@ void Project::update() {
 }
 
 
-Project * Project::createProject(const QString & image, bool isPano, QObject * parent){
+Project * Project::createProjectFromImage(const QString & image, bool isPano, QObject * parent){
     if (isPano){
         Project * proj = new PanoRecProject(image, parent);
         return proj;
     }
 
+    NOT_IMPLEMENTED_YET();
+}
+
+Project * Project::loadProjectFromDisk(const QString & filename, QObject * parent){
     NOT_IMPLEMENTED_YET();
 }

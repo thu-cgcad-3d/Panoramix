@@ -5,11 +5,7 @@
 #include <QtCore>
 #include <QtGui>
 
-namespace panoramix {namespace vis {
-    class Steps;
-}}
-
-
+class Steps;
 class Project : public QObject {    
     Q_OBJECT
 
@@ -27,13 +23,14 @@ public:
 
     Q_SLOT void update();
 
-    static Project * createProject(const QString & image, bool isPano, QObject * parent = 0);
+    static Project * createProjectFromImage(const QString & image, bool isPano, QObject * parent = 0);
+    static Project * loadProjectFromDisk(const QString & filename, QObject * parent = 0);
 
 protected:
     QFileInfo _projectFileInfo;
     QList<QWidget*> _widgets;
     QList<QAction*> _actions;
-    std::unique_ptr<panoramix::vis::Steps> _steps;
+    std::unique_ptr<Steps> _steps;
 };
 
 

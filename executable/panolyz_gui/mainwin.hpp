@@ -1,10 +1,19 @@
 #ifndef MAINWIN_HPP
 #define MAINWIN_HPP
- 
+
+#include <functional>
 #include <QtWidgets>
 
 class Project;
 class WorkThread;
+
+class ThreadPool : public QObject {
+    Q_OBJECT
+
+    void start(std::function<void(void)> && fun);
+
+};
+
 class MainWin : public QMainWindow {
 	Q_OBJECT
 	
@@ -13,7 +22,10 @@ public:
     ~MainWin(){}
 
     void installProject(Project * proj);
-    Q_SLOT void switchToProject(int index);
+
+public slots:
+    void switchToProject(int index);
+    void updateProject(int index);
 
 private:
     QList<Project *> _projects;

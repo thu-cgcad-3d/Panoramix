@@ -21,7 +21,7 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
             tr(PROJECT_TEST_DATA_DIR_STR),
             tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
         for (auto & filename : filenames)
-            installProject(new Project(filename, true, this));
+            installProject(Project::createProjectFromImage(filename, true, this));
     });
     auto actionNewProjNormal = menuFile->addAction(tr("Create A &New Panolyz Project from Normal Photo ..."));
     connect(actionNewProjNormal, &QAction::triggered, [this](){
@@ -29,7 +29,7 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
             tr(PROJECT_TEST_DATA_DIR_STR),
             tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
         for (auto & filename : filenames)
-            installProject(new Project(filename, false, this));
+            installProject(Project::createProjectFromImage(filename, false, this));
     });
     auto actionOpenProj = menuFile->addAction(tr("&Open An Existing Panolyz Project ..."));
     actionOpenProj->setShortcut(QKeySequence::Open);
@@ -38,7 +38,7 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
             tr(PROJECT_TEST_DATA_DIR_STR),
             tr("Panolyz Project File (*.panoproj)"));
         for (auto & filename : filenames)
-            installProject(new Project(filename, this));
+            installProject(Project::loadProjectFromDisk(filename, this));
     });
 
     menuFile->addSeparator();
@@ -110,7 +110,8 @@ void MainWin::installProject(Project * proj) {
     QList<QMdiSubWindow*> ws;
     for (QWidget * w : proj->widgets()){
         ws << mdiArea->addSubWindow(w);
-        ws.last()->hide();
+        //ws.last()->hide();
+        ws.last()->show();
     }
     _subwins << ws;
     QList<QAction*> as;
@@ -125,4 +126,9 @@ void MainWin::installProject(Project * proj) {
 
 void MainWin::switchToProject(int index){
     qDebug() << "switch to " << index;
+
+}
+
+void MainWin::updateProject(int index) {
+    
 }
