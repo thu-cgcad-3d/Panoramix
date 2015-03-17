@@ -1,71 +1,21 @@
 #include <QtGui>
 #include <QtWidgets>
 
+#include "../../src/core/algorithms.hpp"
 #include "../../src/core/basic_types.hpp"
 #include "../../src/core/mixed_graph.hpp"
 #include "../../src/vis/qt_glue.hpp"
+#include "../../src/vis/visualizers.hpp"
 
-#include "widgets.hpp"
+#include "steps.hpp"
 #include "project.hpp"
 
 using namespace panoramix;
 
-struct Data {
-    core::TimeStamp timeStamp;
-    QReadWriteLock lock;
-    inline void setModified() { timeStamp = core::CurrentTime(); }
-    inline void lockForRead() { lock.lockForRead(); }
-    inline void lockForWrite() { lock.lockForWrite(); }
-    inline void unlock() { lock.unlock(); }
-    inline bool isOlderThan(const Data & d) const { return timeStamp < d.timeStamp; }
-    virtual QWidget * createBindingWidgetAndActions(
-        QList<QAction*> & actions, QWidget * parent = nullptr) {
-        return nullptr;
-    }
-};
-
-using DataPtr = std::shared_ptr<Data>;
-
-template <class T> struct DataOfType;
-
-template <class T>
-struct HasBindingWidgetAndActionsImpl {
-    template <class TT>
-    static auto test(int) -> decltype(
-        CreateBindingWidgetAndActions(std::declval<DataOfType<T>>(), std::declval<QList<QAction*>&>(), (QWidget*)nullptr),
-        std::true_type()
-        );
-    template <class>
-    static std::false_type test(...);
-    static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
-};
-
-template <class T>
-struct HasBindingWidgetAndActions : std::integral_constant<bool, HasBindingWidgetAndActionsImpl<T>::value> {};
 
 
-template <class T>
-struct DataOfType : Data {
-    T content;
-    DataOfType() {}
-    DataOfType(const T & c) : content(c) {}
-    DataOfType(T && c) : content(std::move(c)) {}
-    DataOfType(const DataOfType &) = delete;
-    
-    virtual QWidget * createBindingWidgetAndActions(
-        QList<QAction*> & actions, QWidget * parent) {
-        return createBindingWidgetAndActionsImpl(actions, parent, HasBindingWidgetAndActions<T>());
-    }
 
-    inline QWidget * createBindingWidgetAndActionsImpl(
-        QList<QAction*> & actions, QWidget * parent, std::true_type &){
-        return CreateBindingWidgetAndActions(*this, actions, parent);
-    }
-    inline QWidget * createBindingWidgetAndActionsImpl(
-        QList<QAction*> & actions, QWidget * parent, std::false_type &){
-        return nullptr;
-    }
-};
+
 
 struct PanoView {
     core::View<core::PanoramicCamera> view;
@@ -73,7 +23,7 @@ struct PanoView {
 
 QWidget * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
     QList<QAction*> & actions, QWidget * parent) {
-    
+
     class Widget : public QWidget {
     public:
         explicit Widget(DataOfType<PanoView> * d, QWidget * parent) : QWidget(parent), data(d) {
@@ -120,9 +70,10 @@ QWidget * CreateBindingWidgetAndActions(DataOfType<Segmentation> & segs,
         }
     private:
         DataOfType<Segmentation>* data;
+        
     };
 
-    return new Widget(&segs, parent);
+    return nullptr;
 }
 
 
@@ -140,139 +91,102 @@ struct Reconstruction {
     core::MixedGraphPropertyTable props;
 };
 
+QWidget * CreateBindingWidgetAndActions(DataOfType<Reconstruction> & rec,
+    QList<QAction*> & actions, QWidget * parent) {
+    
+    vis::ResourceStore::set("texture", rec.content.view.image);
 
+    struct ComponentID {
+        int handleID;
+        bool isRegion;
+    };
 
+    vis::Visualizer viz("mixed graph optimizable");
+    viz.renderOptions.bwColor = 1.0;
+    viz.renderOptions.bwTexColor = 0.0;
+    viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
+    std::vector<std::pair<ComponentID, vis::Colored<vis::SpatialProjectedPolygon>>> spps;
+    std::vector<vis::Colored<core::Line3>> lines;
 
-struct Step;
-using StepPtr = std::shared_ptr<Step>;
-template <class ResultT> struct StepWithTypedResult;
+    auto & mg = rec.content.mg;
+    auto & props = rec.content.props;
 
+    for (auto & c : mg.components<core::RegionData>()){
+        if (!props[c.topo.hd].used)
+            continue;
+        auto uh = c.topo.hd;
+        auto & region = c.data;
+        vis::SpatialProjectedPolygon spp;
+        // filter corners
+        core::ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
+            std::back_inserter(spp.corners),
+            [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
+            return core::AngleBetweenDirections(a, b) > M_PI / 1000.0;
+        });
+        if (spp.corners.size() < 3)
+            continue;
 
-struct Step {
-    DataPtr data;
-    virtual void update(const std::vector<Data *> & dependencies) = 0;
-    inline bool null() const { return !data; }
-
-    template <class T>
-    inline T & contentAs() { return (dynamic_cast<DataOfType<T>*>(data.get()))->content; }
-    template <class T>
-    inline const T & contentAs() const { (dynamic_cast<const DataOfType<T>*>(data.get()))->content; }
-};
-
-template <class UpdateFunctionT>
-struct StepWithTypedUpdater : Step {  
-    using ResultContentType = std::decay_t<typename core::FunctionTraits<UpdateFunctionT>::ResultType>;
-    using ResultDataType = DataOfType<ResultContentType>;
-    using ArgumentsTupleType =
-        typename core::FunctionTraits<UpdateFunctionT>::ArgumentsTupleType;
-
-    UpdateFunctionT updater;
-    inline explicit StepWithTypedUpdater(UpdateFunctionT && fun)
-        : updater(std::move(fun)) {
-        data = std::make_shared<ResultDataType>();
-    }
-    inline explicit StepWithTypedUpdater(const UpdateFunctionT & fun)
-        : updater(fun){
-        data = std::make_shared<ResultDataType>();
-    }
-
-    virtual void update(const std::vector<Data *> & dependencies) override {
-        assert(core::FunctionTraits<UpdateFunctionT>::ArgumentsNum == dependencies.size());
-        updateUsingSequence(dependencies,
-            typename core::SequenceGenerator<core::FunctionTraits<UpdateFunctionT>::ArgumentsNum>::type());
-    }
-    template <int ...Idx>
-    void updateUsingSequence(const std::vector<Data *> & dependencies, core::Sequence<Idx...>){ 
-        static_assert(core::Sequence<std::is_base_of<Data, std::decay_t<typename std::tuple_element<Idx, ArgumentsTupleType>::type>>::value ...>::All,
-            "all input types must be derived from Data");
-        ResultContentType d =
-            updater(*dynamic_cast<std::decay_t<typename std::tuple_element<Idx, ArgumentsTupleType>::type>*>(dependencies.at(Idx)) ...);
-        data->lock.lockForWrite();
-        contentAs<ResultContentType>() = std::move(d);
-        data->lock.unlock();
-    }
-};
-
-
-class Steps {
-public:
-    size_t size() const { return _steps.size(); }
-
-    template <class UpdateFunctionT>
-    inline int addStep(const QString & name, UpdateFunctionT && updater,
-        const std::vector<int> & dependencies = std::vector<int>()) {
-        auto step = std::make_shared<StepWithTypedUpdater<std::decay_t<UpdateFunctionT>>>(std::forward<UpdateFunctionT>(updater));
-        for (int d : dependencies){
-            assert(d >= 0 && d < _steps.size());
-        }
-        step->data->setModified();
-        _names.push_back(name);
-        _steps.push_back(step);
-        _widgets.push_back(step->data->createBindingWidgetAndActions(_actions));
-        _dependencies.push_back(dependencies);
-        _stepIds[step.get()] = _steps.size() - 1;
-        return _steps.size() - 1;
+        spp.projectionCenter = core::Point3(0, 0, 0);
+        spp.plane = Instance(mg, props, uh);
+        assert(!core::HasValue(spp.plane, core::IsInfOrNaN<double>));
+        spps.emplace_back(ComponentID{ uh.id, true }, std::move(vis::ColorAs(spp, vis::ColorTag::Black)));
     }
 
-    inline int id(const StepPtr & s) const { return _stepIds.at(s.get()); }
-    inline int id(const Step * s) const { return _stepIds.at(s); }
-
-    inline const QString & stepNameAt(int id) const { return _names[id]; }
-
-    inline const QList<QWidget*> widgets() const { return _widgets; }
-    inline const QList<QAction*> actions() const { return _actions; }
-
-    inline const std::vector<int> & stepDependenciesAt(int id) const { return _dependencies[id]; }
-
-    bool needsUpdate(int id) const {
-        for (int d : _dependencies[id]){
-            if (_steps[id]->data->isOlderThan(*_steps[d]->data)){
-                return true;
-            }
-        }
-        return false;
+    for (auto & c : mg.components<core::LineData>()){
+        if (!props[c.topo.hd].used)
+            continue;
+        auto uh = c.topo.hd;
+        auto & line = c.data;
+        lines.push_back(vis::ColorAs(Instance(mg, props, uh), vis::ColorTag::Black));
     }
 
-    /*using StepUpdateCallback = std::function<void(int stepId, int percent)>;*/
-    template <class CallbackT>
-    void updateAll(CallbackT && callback, bool forceSourceStepUpdate = false) {
-        for (int i = 0; i < _steps.size(); i++){
-            if (needsUpdate(i) || (forceSourceStepUpdate && _dependencies[i].empty())){
-                qDebug() << "updating [" << _names[i] << "]";
-                callback(i);
-                std::vector<Data *> deps(_dependencies[i].size());
-                for (int k = 0; k < deps.size(); k++){
-                    deps[k] = _steps[_dependencies[i][k]]->data.get();
-                }
-                _steps[i]->update(deps);
-                _steps[i]->data->setModified();
-                if (_widgets[i]){
-                    _widgets[i]->show();
-                    _widgets[i]->update();
-                }
-            }
-        }
+    viz.begin(spps).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+    viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
+    viz.installingOptions.lineWidth = 5.0;
+    viz.add(lines);
+
+    //std::vector<core::Line3> connectionLines;
+    //for (auto & c : mg.constraints<core::RegionBoundaryData>()){
+    //    if (!props[c.topo.hd].used)
+    //        continue;
+    //    auto & samples = c.data.normalizedSampledPoints;
+    //    auto inst1 = Instance(mg, props, c.topo.component<0>());
+    //    auto inst2 = Instance(mg, props, c.topo.component<1>());
+    //    for (auto & ss : samples){
+    //        for (auto & s : ss){
+    //            double d1 = DepthAt(s, inst1);
+    //            double d2 = DepthAt(s, inst2);
+    //            connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
+    //        }
+    //    }
+    //}
+    //for (auto & c : mg.constraints<core::RegionLineConnectionData>()){
+    //    if (!props[c.topo.hd].used)
+    //        continue;
+    //    auto inst1 = Instance(mg, props, c.topo.component<0>());
+    //    auto inst2 = Instance(mg, props, c.topo.component<1>());
+    //    for (auto & s : c.data.normalizedAnchors){
+    //        double d1 = DepthAt(s, inst1);
+    //        double d2 = DepthAt(s, inst2);
+    //        connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
+    //    }
+    //}
+
+    viz.installingOptions.discretizeOptions.color = vis::ColorTag::Black;
+    viz.installingOptions.lineWidth = 1.0;
+    //viz.add(connectionLines);
+
+    viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
+    viz.renderOptions.backgroundColor = vis::ColorTag::White;
+    viz.renderOptions.bwColor = 0.5;
+    viz.renderOptions.bwTexColor = 0.5;
+    viz.camera(core::PerspectiveCamera(1000, 800, 800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
+    auto w = viz.createWidget(false, parent);
+    for (auto a : w->actions()){
+        actions << a;
     }
-
-private:
-    std::vector<QString> _names;
-    std::vector<StepPtr> _steps;
-
-    QList<QWidget *> _widgets;
-    QList<QAction*> _actions;
-
-    std::vector<std::vector<int>> _dependencies;
-    std::unordered_map<Step const *, int> _stepIds;
-};
-
-
-
-
-
-
-
-
-
+    return w;
+}
 
 
 
@@ -469,9 +383,7 @@ void Project::loadFromDisk(const QString & filename){
 
 void Project::update(bool forceSourceStepUpdate) {
 
-    _steps->updateAll([this](int stepId){
-        
-    }, forceSourceStepUpdate);
+    _steps->updateAll(nullptr, forceSourceStepUpdate);
 
 }
 

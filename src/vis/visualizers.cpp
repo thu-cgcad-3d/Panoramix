@@ -923,7 +923,21 @@ namespace panoramix {
 
 
 
-
+        QWidget * Visualizer::createWidget(bool autoSetCamera, QWidget * parent){
+            VisualizerWidget * w = new VisualizerWidget(*this, parent);
+            w->setMinimumSize(300, 300);
+            w->resize(MakeQSize(renderOptions.camera.screenSize()));
+            auto actionSettings = new QAction(QObject::tr("Settings"), nullptr);
+            QObject::connect(actionSettings, &QAction::triggered, [w](){
+                PopUpGui(w->options, w);
+                w->update();
+            });
+            if (autoSetCamera) {
+                w->autoSetCamera();
+            }
+            w->addAction(actionSettings);
+            return w;
+        }
 
         void Visualizer::show(bool doModal, bool autoSetCamera, Visualizer::CameraScalePolicy csp) {
             auto app = Singleton::InitGui();

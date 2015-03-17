@@ -590,6 +590,8 @@ namespace panoramix {
                 WatchAtMeanScale,
                 WatchAtMaxScale
             };
+
+            QWidget * createWidget(bool autoSetCamera, QWidget * parent);
             void show(bool doModal = true, bool autoSetCamera = true, CameraScalePolicy csp = WatchAtMedianScale);
 
         private:

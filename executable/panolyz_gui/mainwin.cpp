@@ -1,5 +1,3 @@
-#include "widgets.hpp"
-#include "workthread.hpp"
 #include "project.hpp"
 #include "mainwin.hpp"
 
@@ -86,6 +84,18 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
     menuFile->addAction(tr("&Quit"), this, SLOT(close()), QKeySequence::Quit);
 
     // view
+    auto actionViewCascade = menuView->addAction(tr("Cascade Views"));
+    connect(actionViewCascade, &QAction::triggered, [this](){
+        if (_tabWidget->currentIndex() < 0)
+            return;
+        qobject_cast<QMdiArea*>(_tabWidget->currentWidget())->cascadeSubWindows();
+    });
+    auto actionViewTile = menuView->addAction(tr("Tile Views"));
+    connect(actionViewTile, &QAction::triggered, [this](){
+        if (_tabWidget->currentIndex() < 0)
+            return;
+        qobject_cast<QMdiArea*>(_tabWidget->currentWidget())->tileSubWindows();
+    });
 
 
     // settings
@@ -174,6 +184,7 @@ void MainWin::updateProject(int index, bool forceSourceStepUpdate) {
     auto tb = _threadPool->attach([this, index, forceSourceStepUpdate](){
         _projects[index]->update(forceSourceStepUpdate);
     });
+    connect(_tabWidget->widget(index), SIGNAL(destroyed()), tb.second, SLOT(terminate()));
     auto b = tb.first;
     b->setFixedHeight(15);
     b->setFixedWidth(300);

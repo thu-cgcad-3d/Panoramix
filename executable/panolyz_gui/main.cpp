@@ -1,8 +1,6 @@
 #include "../../src/core/version.hpp"
 #include "../../src/vis/singleton.hpp"
 #include "mainwin.hpp"
-#include "widgets.hpp"
-#include "workthread.hpp"
 
 int main(int argc, char ** argv) {
     panoramix::vis::Singleton::InitGui(argc, argv);
