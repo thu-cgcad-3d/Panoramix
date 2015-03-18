@@ -7,31 +7,53 @@
 
 using namespace panoramix;
 
-WidgetLike * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
+
+
+template <class ContentT, class WidgetT>
+class StepWidgetAdaptor : public StepWidgetInterface, public WidgetT {
+    static_assert(std::is_base_of<QWidget, WidgetT>::value, "WidgetT must be derived from QWidget");
+public:
+    explicit StepWidgetAdaptor(DataOfType<ContentT> * d, QWidget * parent = nullptr) 
+        : WidgetT(parent), _data(d) {
+        setMinimumSize(500, 500);
+    }
+    virtual void refreshDataAsync() {}
+    virtual void refreshData() {}
+    virtual void updatePainting() { WidgetT::update(); }
+    virtual void showWidget() { WidgetT::show(); }
+    virtual void hideWidget() { WidgetT::hide(); }
+
+protected:
+    bool noData() const { return !_data; }
+    DataOfType<ContentT> & data() const { return *_data; }
+    void lockForRead() const { _data->lockForRead(); }
+    void lockForWrite() const { _data->lockForWrite(); }
+    void unlock() const { _data->unlock(); }
+    ContentT & content() const { return _data->content; }
+
+protected:
+    DataOfType<ContentT> * _data;
+};
+
+
+
+
+StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
     QList<QAction*> & actions, QWidget * parent) {
 
-    class Widget : public QWidget, public WidgetLike {
+    class Widget : public StepWidgetAdaptor<PanoView, QWidget> {
     public:
-        explicit Widget(DataOfType<PanoView> * d, QWidget * parent) : QWidget(parent), data(d) {
-            setMinimumSize(300, 300);
-        }
-
-        virtual void refreshData() {}
-        virtual void updatePainting() { update(); }
-        virtual void showWidget() { show(); }
-        virtual void hideWidget() { hide(); }
-
+        explicit Widget(DataOfType<PanoView> * d, QWidget * parent)
+            : StepWidgetAdaptor<PanoView, QWidget>(d, parent) {}
     protected:
         virtual void paintEvent(QPaintEvent * e) override {
-            if (!data)
+            if (noData())
                 return;
             QPainter painter(this);
-            data->lockForRead();
-            painter.drawImage(QPointF(), vis::MakeQImage(data->content.view.image));
-            data->unlock();
+            lockForRead();
+            painter.drawImage(QPointF(), vis::MakeQImage(content().view.image));
+            unlock();
         }
-    private:
-        DataOfType<PanoView>* data;
     };
 
     return new Widget(&pv, parent);
@@ -42,34 +64,27 @@ WidgetLike * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
 
 
 
-WidgetLike * CreateBindingWidgetAndActions(DataOfType<Segmentation> & segs,
+StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Segmentation> & segs,
     QList<QAction*> & actions, QWidget * parent) {
 
-    class Widget : public QWidget, public WidgetLike {
+    class Widget : public StepWidgetAdaptor<Segmentation, QWidget> {
     public:
-        explicit Widget(DataOfType<Segmentation> * d, QWidget * parent) : QWidget(parent), data(d) {
-            setMinimumSize(300, 300);
-        }
-
-        virtual void refreshData() {}
-        virtual void updatePainting() { update(); }
-        virtual void showWidget() { show(); }
-        virtual void hideWidget() { hide(); }
-
+        explicit Widget(DataOfType<Segmentation> * d, QWidget * parent)
+            : StepWidgetAdaptor<Segmentation, QWidget>(d, parent){}
     protected:
         virtual void paintEvent(QPaintEvent * e) override {
             if (!data)
                 return;
             QPainter painter(this);
-            data->lockForRead();
+            lockForRead();
             // todo
-            data->unlock();
+            unlock();
         }
     private:
         DataOfType<Segmentation>* data;
     };
 
-    return nullptr;
+    return new Widget(&segs, parent);
 }
 
 
@@ -78,27 +93,7 @@ WidgetLike * CreateBindingWidgetAndActions(DataOfType<Segmentation> & segs,
 
 
 
-//
-//WidgetLike * CreateBindingWidgetAndActions(DataOfType<RegionHints> & pv,
-//    QList<QAction*> & actions, QWidget * parent){
-//
-//
-//
-//    return nullptr;
-//}
-//
-
-
-
-
-
-
-
-
-
-
-
-WidgetLike * CreateBindingWidgetAndActions(DataOfType<LinesAndVPs> & segs,
+StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<LinesAndVPs> & segs,
     QList<QAction*> & actions, QWidget * parent){
 
 
@@ -112,33 +107,65 @@ WidgetLike * CreateBindingWidgetAndActions(DataOfType<LinesAndVPs> & segs,
 
 
 
-WidgetLike * CreateBindingWidgetAndActions(DataOfType<ReconstructionSetup> & segs,
+StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<ReconstructionSetup> & segs,
     QList<QAction*> & actions, QWidget * parent){
 
-    class Widget : public QWidget, public WidgetLike {
+    class Widget : public StepWidgetAdaptor<ReconstructionSetup, QWidget> {
     public:
-        explicit Widget(DataOfType<ReconstructionSetup> * d, QWidget * parent) : QWidget(parent), data(d) {
-            setMinimumSize(300, 300);
-        }
-
-        virtual void refreshData() {}
-        virtual void updatePainting() { update(); }
-        virtual void showWidget() { show(); }
-        virtual void hideWidget() { hide(); }
+        explicit Widget(DataOfType<ReconstructionSetup> * d, QWidget * parent) 
+            : StepWidgetAdaptor<ReconstructionSetup, QWidget>(d, parent) {}
 
     protected:
         virtual void paintEvent(QPaintEvent * e) override {
             if (!data)
                 return;
             QPainter painter(this);
-            data->lockForRead();
-            // todo
-            data->unlock();
+            painter.setOpacity(1.0);
+            if (_showIm){
+                painter.drawImage(QPoint(), _im);
+                painter.setOpacity(painter.opacity()*.5);
+            }
+            if (_showSeg)
+                painter.drawImage(QPoint(), _segShow);
+            painter.setOpacity(1.0);
+            if (_showLabel){ painter.drawImage(QPoint(), _labelBg); }
         }
+
+        void mousePressEvent(QMouseEvent *e) {
+            if (_im.isNull())
+                return;
+
+            //static const QString setLabelTempl = "seglabel(%1)=%2";
+            //static const QString getLabelTempl = "temp = seglabel(%1)";
+
+            //int segIdx = segData_.pixel(e->pos().x(), e->pos().y());
+            //matlab_ << getLabelTempl.arg(segIdx).toAscii();
+            //int oldLabel = matlab_.get("temp").constReal()[0];
+
+            ////if(labelLocks[oldLabel-1])
+            ////	return;
+
+            //redoCommands_.insert(commandIndex_, setLabelTempl.arg(segIdx).arg(currentLabel_));
+            //undoCommands_.insert(commandIndex_, setLabelTempl.arg(segIdx).arg(oldLabel));
+            //matlab_ << redoCommands_[commandIndex_].toAscii();
+            //commandIndex_++;
+
+            //refreshMasks();
+            //update();
+
+            //emit canUndoChanged(true);
+            //emit canRedoChanged(false);
+            //setWindowModified(true);
+        }
+
 
     private:
         DataOfType<ReconstructionSetup>* data;
-
+        bool _showIm, _showSeg, _showLabel;
+        QImage _im;
+        QImage _segShow;
+        QImage _segData;
+        QImage _labelBg;
     };
 
 
@@ -151,29 +178,23 @@ WidgetLike * CreateBindingWidgetAndActions(DataOfType<ReconstructionSetup> & seg
 
 
 
-WidgetLike * CreateBindingWidgetAndActions(DataOfType<Reconstruction> & rec,
+StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> & rec,
     QList<QAction*> & actions, QWidget * parent) {
 
-    class Widget : public QGLWidget, public WidgetLike {
+    class Widget : public StepWidgetAdaptor<Reconstruction, QGLWidget> {
     public:
         explicit Widget(DataOfType<Reconstruction> * d, QWidget * parent = nullptr)
-            : QGLWidget(parent), data(d) {
+            : StepWidgetAdaptor<Reconstruction, QGLWidget>(d, parent){
             setMouseTracking(true);
             setAutoBufferSwap(false);
             grabKeyboard();
-            setUpScene();
-            _needsInitialization = true;
+            //setUpScene();
             setMinimumSize(300, 300);
+            _needsInitialization = true;
         }
 
-        virtual void refreshData() { setUpScene(); }
-        virtual void updatePainting() { update(); }
-        virtual void showWidget() { show(); }
-        virtual void hideWidget() { hide(); }
-
-    public:
-        void setUpScene() {
-            if (!data){
+        virtual void refreshDataAsync() override {
+            if (noData()){
                 scene.clear();
                 return;
             }
@@ -183,26 +204,15 @@ WidgetLike * CreateBindingWidgetAndActions(DataOfType<Reconstruction> & rec,
                 bool isRegion;
             };
 
-
-            vis::VisualObjectTree tree;
-            auto activeOH = tree.addRoot(std::make_shared<vis::VisualObject>());
-
-            data->lockForRead();
-            vis::ResourceStore::set("texture", data->content.view.image);
-            data->unlock();
-
             vis::Visualizer viz("mixed graph optimizable");
-            viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles;
-            viz.renderOptions.bwColor = 1.0;
-            viz.renderOptions.bwTexColor = 0.0;
             viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
             std::vector<std::pair<ComponentID, vis::Colored<vis::SpatialProjectedPolygon>>> spps;
             std::vector<vis::Colored<core::Line3>> lines;
 
-            auto & mg = data->content.mg;
-            auto & props = data->content.props;
+            auto & mg = content().mg;
+            auto & props = content().props;
 
-            data->lockForRead();
+            lockForRead();
             for (auto & c : mg.components<core::RegionData>()){
                 if (!props[c.topo.hd].used)
                     continue;
@@ -231,6 +241,11 @@ WidgetLike * CreateBindingWidgetAndActions(DataOfType<Reconstruction> & rec,
                 auto & line = c.data;
                 lines.push_back(vis::ColorAs(Instance(mg, props, uh), vis::ColorTag::Black));
             }
+            unlock();
+
+            lockForRead();
+            vis::ResourceStore::set("texture", content().view.image);
+            unlock();
 
             viz.begin(spps).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
             viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
@@ -248,15 +263,18 @@ WidgetLike * CreateBindingWidgetAndActions(DataOfType<Reconstruction> & rec,
             viz.camera(core::PerspectiveCamera(1000, 800, 800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
             renderOptions = viz.renderOptions;
 
-            data->unlock();
-
-            scene.install(viz.tree());
+            scene.install(std::move(viz.tree()));
 
             _needsInitializationLock.lockForWrite();
             _needsInitialization = true;
             _needsInitializationLock.unlock();
-            //initializeGL();
         }
+
+        virtual void refreshData() override { 
+            initializeGL();
+        }
+
+    public:
 
         void autoSetCamera() {
             auto sphere = scene.boundingBox().outerSphere();
@@ -420,9 +438,8 @@ WidgetLike * CreateBindingWidgetAndActions(DataOfType<Reconstruction> & rec,
 
     private:
         vis::RenderOptions renderOptions;
-        //vis::VisualObjectInstallingOptions installingOptions;
         vis::VisualObjectScene scene;
-        DataOfType<Reconstruction> * data;
+        QReadWriteLock sceneLock;
     };
 
     return new Widget(&rec, parent);

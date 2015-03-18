@@ -7,15 +7,13 @@
 #include "../../src/core/basic_types.hpp"
 
 
-
-
-struct WidgetLike {
-    virtual void refreshData() = 0;
-    virtual void updatePainting() = 0;
-    virtual void showWidget() = 0;
-    virtual void hideWidget() = 0;
+struct StepWidgetInterface {
+    virtual void refreshDataAsync() = 0; // on back-end
+    virtual void refreshData() = 0; // on gui thread
+    virtual void updatePainting() = 0; // on gui thread
+    virtual void showWidget() = 0; // on gui thread
+    virtual void hideWidget() = 0; // on gui thread
 };
-
 
 
 struct Data {
@@ -26,7 +24,7 @@ struct Data {
     inline void lockForWrite() { lock.lockForWrite(); }
     inline void unlock() { lock.unlock(); }
     inline bool isOlderThan(const Data & d) const { return timeStamp < d.timeStamp; }
-    virtual WidgetLike * createBindingWidgetAndActions(
+    virtual StepWidgetInterface * createBindingWidgetAndActions(
         QList<QAction*> & actions, QWidget * parent = nullptr) {
         return nullptr;
     }
@@ -60,16 +58,16 @@ struct DataOfType : Data {
     DataOfType(T && c) : content(std::move(c)) {}
     DataOfType(const DataOfType &) = delete;
 
-    virtual WidgetLike * createBindingWidgetAndActions(
+    virtual StepWidgetInterface * createBindingWidgetAndActions(
         QList<QAction*> & actions, QWidget * parent) {
         return createBindingWidgetAndActionsImpl(actions, parent, HasBindingWidgetAndActions<T>());
     }
 
-    inline WidgetLike * createBindingWidgetAndActionsImpl(
+    inline StepWidgetInterface * createBindingWidgetAndActionsImpl(
         QList<QAction*> & actions, QWidget * parent, std::true_type &){
         return CreateBindingWidgetAndActions(*this, actions, parent);
     }
-    inline WidgetLike * createBindingWidgetAndActionsImpl(
+    inline StepWidgetInterface * createBindingWidgetAndActionsImpl(
         QList<QAction*> & actions, QWidget * parent, std::false_type &){
         return nullptr;
     }
@@ -132,19 +130,11 @@ struct StepWithTypedUpdater : Step {
 
 
 
-class StepsDAG : public QObject {
-    
+class StepsDAG : public QObject {    
     Q_OBJECT
 
 public:
     explicit StepsDAG(QObject * parent = 0);
-
-signals:
-    void dataUpdated(int index);
-
-
-public slots:
-    void updateWidget(int index);
 
 public:
     size_t size() const { return _steps.size(); }
@@ -165,19 +155,17 @@ public:
         return _steps.size() - 1;
     }
 
-    inline int id(const StepPtr & s) const { return _stepIds.at(s.get()); }
-    inline int id(const Step * s) const { return _stepIds.at(s); }
+    inline int id(const StepPtr & s) const { return _stepIds.value(s.get(), -1); }
+    inline int id(const Step * s) const { return _stepIds.value(s, -1); }
 
     inline const QString & stepNameAt(int id) const { return _names[id]; }
 
-    inline const QList<WidgetLike *> widgets() const { return _widgets; }
+    inline const QList<StepWidgetInterface *> widgets() const { return _widgets; }
     inline const QList<QAction*> actions() const { return _actions; }
 
     inline const std::vector<int> & stepDependenciesAt(int id) const { return _dependencies[id]; }
 
-    bool needsUpdate(int id) const;
-
-    
+    bool needsUpdate(int id) const;    
     struct UpdateCallback {
         virtual void beforeUpdate(int stepId) const = 0;
         virtual void afterUpdate(int stepId) const = 0;
@@ -186,14 +174,18 @@ public:
     void updateAll(UpdateCallback const * callback = nullptr, bool forceSourceStepUpdate = false);
 
 private:
-    std::vector<QString> _names;
-    std::vector<StepPtr> _steps;
+    Q_SIGNAL void dataUpdated(int index);
+    Q_SLOT void updateWidget(int index);
 
-    QList<WidgetLike *> _widgets;
+private:
+    QList<QString> _names;
+    QList<StepPtr> _steps;
+
+    QList<StepWidgetInterface *> _widgets;
     QList<QAction*> _actions;
 
-    std::vector<std::vector<int>> _dependencies;
-    std::unordered_map<Step const *, int> _stepIds;
+    QList<std::vector<int>> _dependencies;
+    QHash<Step const *, int> _stepIds;
 };
 
 

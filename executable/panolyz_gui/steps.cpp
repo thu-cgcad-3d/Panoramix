@@ -4,16 +4,8 @@
 
 
 StepsDAG::StepsDAG(QObject * parent) : QObject(parent) {
-    connect(this, SIGNAL(dataUpdated(int)), this, SLOT(updateWidget(int)), Qt::ConnectionType::QueuedConnection);
-}
-
-
-void StepsDAG::updateWidget(int i) {
-    if (_widgets[i]){
-        _widgets[i]->refreshData();
-        _widgets[i]->showWidget();
-        _widgets[i]->updatePainting();
-    }
+    connect(this, SIGNAL(dataUpdated(int)), this, SLOT(updateWidget(int)), 
+        Qt::ConnectionType::QueuedConnection);
 }
 
 bool StepsDAG::needsUpdate(int id) const {
@@ -39,9 +31,18 @@ void StepsDAG::updateAll(UpdateCallback const * callback, bool forceSourceStepUp
             _steps[i]->data->setModified();
             if (callback)
                 callback->afterUpdate(i);
-            if (_widgets[i]){              
+            if (_widgets[i]){ 
+                _widgets[i]->refreshDataAsync();
                 emit dataUpdated(i);
             }
         }
+    }
+}
+
+void StepsDAG::updateWidget(int i) {
+    if (_widgets[i]){
+        _widgets[i]->refreshData();
+        _widgets[i]->showWidget();
+        _widgets[i]->updatePainting();
     }
 }
