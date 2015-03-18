@@ -52,7 +52,10 @@ namespace panoramix {
         public:
             QOpenGLShaderProgram * program;
             inline VisualObjectInternal() :
-                program(new QOpenGLShaderProgram) {}
+                program(nullptr) {}
+            inline void initialize() { if(!program) program = new QOpenGLShaderProgram; }
+            inline bool isLinked() const { return program ? program->isLinked() : false; }
+            inline QString log() const { return program ? program->log() : "QOpenGLShaderProgram not initialized!"; }
             inline ~VisualObjectInternal(){
                 delete program;
             }
@@ -82,14 +85,14 @@ namespace panoramix {
                     continue;
                 res->destroy();
                 if (res->isInitialized())
-                    qDebug() << (_internal->program->log());
+                    qDebug() << (_internal->log());
             }
 
             delete _internal;
         }
 
         void VisualObject::setShaderSource(const OpenGLShaderSource & shaderSource){
-            if (_internal->program->isLinked()){
+            if (_internal->isLinked()){
                 qDebug() << "program is already linked! setting shaders failed!";
                 return;
             }
@@ -99,6 +102,7 @@ namespace panoramix {
         void VisualObject::initialize() const {
 
             auto vo = _internal;
+            vo->initialize();
             auto program = vo->program;
 
             if (program->isLinked()) {
@@ -136,6 +140,7 @@ namespace panoramix {
                 return;
 
             auto vo = _internal;
+            vo->initialize();
             auto program = vo->program;
 
             Q_ASSERT(program->isLinked());

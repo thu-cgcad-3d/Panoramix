@@ -153,6 +153,11 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
 void MainWin::installProject(Project * proj) {
     _projects.append(proj);
     QMdiArea * mdiArea = new QMdiArea;
+    QLinearGradient gradient(0, 0, 0, 800.0);
+    gradient.setColorAt(0, Qt::cyan);
+    gradient.setColorAt(0.6, Qt::lightGray);
+    gradient.setColorAt(1, Qt::green);
+    mdiArea->setBackground(gradient);
     int tabId = _tabWidget->addTab(mdiArea, proj->projectFileInfo().fileName());
     // add widgets and actions
     QList<QMdiSubWindow*> ws;
@@ -171,6 +176,7 @@ void MainWin::installProject(Project * proj) {
     Q_ASSERT(tabId == _subwins.size() - 1);
     Q_ASSERT(tabId == _actions.size() - 1);
     //updateProject(tabId, true);
+    _tabWidget->setCurrentIndex(tabId);
 }
 
 void MainWin::switchToProject(int index){

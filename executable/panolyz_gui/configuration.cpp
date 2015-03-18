@@ -188,7 +188,6 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             setMouseTracking(true);
             setAutoBufferSwap(false);
             grabKeyboard();
-            //setUpScene();
             setMinimumSize(300, 300);
             _needsInitialization = true;
         }
@@ -243,18 +242,21 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             }
             unlock();
 
+
             lockForRead();
             vis::ResourceStore::set("texture", content().view.image);
             unlock();
 
+            qDebug() << "loading texture";
             viz.begin(spps).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+            qDebug() << "texture loaded";
+
             viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
             viz.installingOptions.lineWidth = 5.0;
             viz.add(lines);
 
             viz.installingOptions.discretizeOptions.color = vis::ColorTag::Black;
             viz.installingOptions.lineWidth = 1.0;
-            //viz.add(connectionLines);
 
             viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles /*| vis::RenderModeFlag::Lines*/;
             viz.renderOptions.backgroundColor = vis::ColorTag::White;
@@ -295,6 +297,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             glGetIntegerv(GL_SAMPLES, &samples);
             qDebug("Have %d buffers and %d samples", bufs, samples);
             qglClearColor(MakeQColor(renderOptions.backgroundColor));
+
             scene.initialize();
 
             _needsInitializationLock.lockForWrite();
