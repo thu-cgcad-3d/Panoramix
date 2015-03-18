@@ -171,6 +171,7 @@ public:
             core::AttachFloorAndCeilingConstraints(mg, props, 0.1, 0.6);
 
             core::SolveVariablesUsingInversedDepths(mg, props);
+            core::NormalizeVariables(mg, props);
 
             return rec;
         }, { stepReconstructionSetup });

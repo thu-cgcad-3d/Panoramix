@@ -1771,7 +1771,7 @@ namespace panoramix {
             Eigen::Map<const Eigen::VectorXd> B(Bdata.data(), Bdata.size());
 
 
-            static const bool useWeights = true;
+            static const bool useWeights = false;
             Eigen::SparseMatrix<double> WA;
             Eigen::VectorXd WB;
             if(useWeights) {

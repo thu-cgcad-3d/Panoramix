@@ -36,27 +36,62 @@ protected:
 };
 
 
+template <class ContentT, class RendererT>
+class ImageViewer : public StepWidgetAdaptor<ContentT, QWidget> {
+public:
+    explicit ImageViewer(DataOfType<ContentT> * d, RendererT && r, QWidget * parent)
+        : StepWidgetAdaptor<ContentT, QWidget>(d, parent), _renderer(std::move(r)) {}
+    explicit ImageViewer(DataOfType<ContentT> * d, const RendererT & r, QWidget * parent)
+        : StepWidgetAdaptor<ContentT, QWidget>(d, parent), _renderer(r) {}
+
+    virtual void refreshDataAsync() {
+        if (noData())
+            return;
+        QImage im = _renderer(data());
+        _imageLock.lockForWrite();
+        _image = im;
+        _imageLock.unlock();
+    }
+
+protected:
+    virtual void paintEvent(QPaintEvent * e) override {
+        if (noData())
+            return;
+        QPainter painter(this);
+        painter.setBackground(QColor(70, 70, 70));
+        painter.eraseRect(rect());
+
+        _imageLock.lockForRead();
+        QPoint pos = QPoint(width() - _image.width(), height() - _image.height()) / 2;
+        painter.fillRect(_image.rect().translated(pos + QPoint(3, 3)), QColor(35, 30, 30));
+        painter.fillRect(_image.rect().translated(pos), QBrush(QColor(240, 240, 240), Qt::DiagCrossPattern));
+        painter.drawImage(pos, _image);
+        _imageLock.unlock();
+    }
+protected:
+    QReadWriteLock _imageLock;
+    QImage _image;
+    RendererT _renderer;
+};
+
+template <class ContentT, class RendererT>
+inline ImageViewer<ContentT, std::decay_t<RendererT>> * CreateImageViewer (
+    DataOfType<ContentT> * d, RendererT && r, QWidget * parent = nullptr) {
+    return new ImageViewer<ContentT, std::decay_t<RendererT>>(d, std::forward<RendererT>(r), parent);
+}
+
+
 
 
 StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
     QList<QAction*> & actions, QWidget * parent) {
 
-    class Widget : public StepWidgetAdaptor<PanoView, QWidget> {
-    public:
-        explicit Widget(DataOfType<PanoView> * d, QWidget * parent)
-            : StepWidgetAdaptor<PanoView, QWidget>(d, parent) {}
-    protected:
-        virtual void paintEvent(QPaintEvent * e) override {
-            if (noData())
-                return;
-            QPainter painter(this);
-            lockForRead();
-            painter.drawImage(QPointF(), vis::MakeQImage(content().view.image));
-            unlock();
-        }
-    };
-
-    return new Widget(&pv, parent);
+    return CreateImageViewer(&pv, [](DataOfType<PanoView>& pv){
+        pv.lockForRead();
+        QImage im = vis::MakeQImage(pv.content.view.image).scaledToHeight(400);
+        pv.unlock();
+        return im;
+    }, parent);
 }
 
 
@@ -66,25 +101,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
 
 StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Segmentation> & segs,
     QList<QAction*> & actions, QWidget * parent) {
-
-    class Widget : public StepWidgetAdaptor<Segmentation, QWidget> {
-    public:
-        explicit Widget(DataOfType<Segmentation> * d, QWidget * parent)
-            : StepWidgetAdaptor<Segmentation, QWidget>(d, parent){}
-    protected:
-        virtual void paintEvent(QPaintEvent * e) override {
-            if (!data)
-                return;
-            QPainter painter(this);
-            lockForRead();
-            // todo
-            unlock();
-        }
-    private:
-        DataOfType<Segmentation>* data;
-    };
-
-    return new Widget(&segs, parent);
+    return nullptr;
 }
 
 
@@ -95,8 +112,6 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Segmentation> & s
 
 StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<LinesAndVPs> & segs,
     QList<QAction*> & actions, QWidget * parent){
-
-
     return nullptr;
 }
 
@@ -107,69 +122,147 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<LinesAndVPs> & se
 
 
 
-StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<ReconstructionSetup> & segs,
+StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<ReconstructionSetup> & rec,
     QList<QAction*> & actions, QWidget * parent){
 
+    /*
     class Widget : public StepWidgetAdaptor<ReconstructionSetup, QWidget> {
     public:
-        explicit Widget(DataOfType<ReconstructionSetup> * d, QWidget * parent) 
-            : StepWidgetAdaptor<ReconstructionSetup, QWidget>(d, parent) {}
+        explicit Widget(DataOfType<ReconstructionSetup> * d, QWidget * parent) : 
+            StepWidgetAdaptor<ReconstructionSetup, QWidget>(d, parent) {
+        }
+
+        virtual void refreshDataAsync() override {           
+            lockForRead();
+            QImage transparentBg(content().segmentation.cols, content().segmentation.rows, QImage::Format::Format_RGB888);
+            {
+                transparentBg.fill(Qt::transparent);
+                QPainter painter(&transparentBg);
+                painter.fillRect(transparentBg.rect(), Qt::BrushStyle::HorPattern);
+            }
+
+            // render
+            core::Imageub3 rendered = core::Imageub3::zeros(content().segmentation.size());
+            vis::ColorTable rgb = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
+            vis::ColorTable ymc = { vis::ColorTag::Yellow, vis::ColorTag::Magenta, vis::ColorTag::Cyan };
+            double alpha = 0.3;
+            for (auto it = rendered.begin(); it != rendered.end(); ++it){
+                int regionId = content().segmentation(it.pos());
+                Q_ASSERT(regionId >= 0 && regionId < content().mg.internalComponents<core::RegionData>().size());
+                auto & prop = content().props[core::RegionHandle(regionId)];
+                if (!prop.used){
+                    QRgb transPixel = transparentBg.pixel(it.pos().x, it.pos().y);
+                    *it = core::Vec3b(qRed(transPixel), qGreen(transPixel), qBlue(transPixel));
+                    continue;
+                }
+                vis::Color imColor = vis::ColorFromImage(content().view.image, it.pos());
+                if (prop.orientationClaz >= 0 && prop.orientationNotClaz == -1){
+                    *it = imColor.blendWith(rgb[prop.orientationClaz], alpha);
+                }
+                else if (prop.orientationClaz == -1 && prop.orientationNotClaz >= 0){
+                    *it = imColor.blendWith(ymc[prop.orientationNotClaz], alpha);
+                }
+                else{
+                    *it = imColor;
+                }
+            }
+            // render disconnected boundaries
+            for (auto & b : content().mg.constraints<core::RegionBoundaryData>()){
+                if (content().props[b.topo.hd].used)
+                    continue;
+                for (auto & e : b.data.normalizedEdges){
+                    if (e.size() <= 1) continue;
+                    for (int i = 1; i < e.size(); i++){
+                        auto p1 = core::ToPixelLoc(content().view.camera.screenProjection(e[i - 1]));
+                        auto p2 = core::ToPixelLoc(content().view.camera.screenProjection(e[i]));
+                        cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
+                        cv::line(rendered, p1, p2, vis::Color(vis::ColorTag::Black), 3);
+                    }
+                }
+            }
+            unlock();
+
+            _renderedLock.lockForWrite();
+            _rendered = vis::MakeQImage(rendered);
+            _renderedLock.unlock();
+        }
 
     protected:
         virtual void paintEvent(QPaintEvent * e) override {
-            if (!data)
+            if (!noData())
                 return;
             QPainter painter(this);
-            painter.setOpacity(1.0);
-            if (_showIm){
-                painter.drawImage(QPoint(), _im);
-                painter.setOpacity(painter.opacity()*.5);
-            }
-            if (_showSeg)
-                painter.drawImage(QPoint(), _segShow);
-            painter.setOpacity(1.0);
-            if (_showLabel){ painter.drawImage(QPoint(), _labelBg); }
+            painter.drawImage(QPoint(), _rendered);
         }
 
         void mousePressEvent(QMouseEvent *e) {
-            if (_im.isNull())
+            if (!noData())
                 return;
-
-            //static const QString setLabelTempl = "seglabel(%1)=%2";
-            //static const QString getLabelTempl = "temp = seglabel(%1)";
-
-            //int segIdx = segData_.pixel(e->pos().x(), e->pos().y());
-            //matlab_ << getLabelTempl.arg(segIdx).toAscii();
-            //int oldLabel = matlab_.get("temp").constReal()[0];
-
-            ////if(labelLocks[oldLabel-1])
-            ////	return;
-
-            //redoCommands_.insert(commandIndex_, setLabelTempl.arg(segIdx).arg(currentLabel_));
-            //undoCommands_.insert(commandIndex_, setLabelTempl.arg(segIdx).arg(oldLabel));
-            //matlab_ << redoCommands_[commandIndex_].toAscii();
-            //commandIndex_++;
-
-            //refreshMasks();
-            //update();
-
-            //emit canUndoChanged(true);
-            //emit canRedoChanged(false);
-            //setWindowModified(true);
+            QPainter painter(this);
+            _renderedLock.lockForRead();
+            painter.drawImage(QPointF(), _rendered);
+            _renderedLock.unlock();
         }
 
 
     private:
-        DataOfType<ReconstructionSetup>* data;
-        bool _showIm, _showSeg, _showLabel;
-        QImage _im;
-        QImage _segShow;
-        QImage _segData;
-        QImage _labelBg;
+        QImage _rendered;
+        QReadWriteLock _renderedLock;
     };
+    */
 
+    return CreateImageViewer(&rec, [](DataOfType<ReconstructionSetup>& rec){
+        rec.lockForRead();
+        QImage transparentBg(rec.content.segmentation.cols, rec.content.segmentation.rows, QImage::Format::Format_RGB888);
+        {
+            transparentBg.fill(Qt::transparent);
+            QPainter painter(&transparentBg);
+            painter.fillRect(transparentBg.rect(), Qt::BrushStyle::HorPattern);
+        }
 
-    return new Widget(&segs, parent);
+        // render
+        core::Imageub3 rendered = core::Imageub3::zeros(rec.content.segmentation.size());
+        vis::ColorTable rgb = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
+        vis::ColorTable ymc = { vis::ColorTag::Yellow, vis::ColorTag::Magenta, vis::ColorTag::Cyan };
+        double alpha = 0.3;
+        for (auto it = rendered.begin(); it != rendered.end(); ++it){
+            int regionId = rec.content.segmentation(it.pos());
+            Q_ASSERT(regionId >= 0 && regionId < rec.content.mg.internalComponents<core::RegionData>().size());
+            auto & prop = rec.content.props[core::RegionHandle(regionId)];
+            if (!prop.used){
+                QRgb transPixel = transparentBg.pixel(it.pos().x, it.pos().y);
+                *it = core::Vec3b(qRed(transPixel), qGreen(transPixel), qBlue(transPixel));
+                continue;
+            }
+            vis::Color imColor = vis::ColorFromImage(rec.content.view.image, it.pos());
+            if (prop.orientationClaz >= 0 && prop.orientationNotClaz == -1){
+                *it = imColor.blendWith(rgb[prop.orientationClaz], alpha);
+            }
+            else if (prop.orientationClaz == -1 && prop.orientationNotClaz >= 0){
+                *it = imColor.blendWith(ymc[prop.orientationNotClaz], alpha);
+            }
+            else{
+                *it = imColor;
+            }
+        }
+        // render disconnected boundaries
+        for (auto & b : rec.content.mg.constraints<core::RegionBoundaryData>()){
+            if (rec.content.props[b.topo.hd].used)
+                continue;
+            for (auto & e : b.data.normalizedEdges){
+                if (e.size() <= 1) continue;
+                for (int i = 1; i < e.size(); i++){
+                    auto p1 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i - 1]));
+                    auto p2 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i]));
+                    cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
+                    cv::line(rendered, p1, p2, vis::Color(vis::ColorTag::Black), 3);
+                }
+            }
+        }
+        rec.unlock();
+        return vis::MakeQImage(rendered).scaledToHeight(500);
+
+    }, parent);
 }
 
 
@@ -188,7 +281,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             setMouseTracking(true);
             setAutoBufferSwap(false);
             grabKeyboard();
-            setMinimumSize(300, 300);
+            setMinimumSize(600, 600);
             _needsInitialization = true;
         }
 

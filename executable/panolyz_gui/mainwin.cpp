@@ -150,21 +150,27 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
     setAcceptDrops(true);
 }
 
+
+
 void MainWin::installProject(Project * proj) {
     _projects.append(proj);
     QMdiArea * mdiArea = new QMdiArea;
-    QLinearGradient gradient(0, 0, 0, 800.0);
-    gradient.setColorAt(0, Qt::cyan);
-    gradient.setColorAt(0.6, Qt::lightGray);
-    gradient.setColorAt(1, Qt::green);
-    mdiArea->setBackground(gradient);
+    QLinearGradient gradient(0, 0, 800.0, 1000.0);
+    gradient.setColorAt(0, QColor(80, 80, 80));
+    gradient.setColorAt(1, Qt::black);
+    mdiArea->setBackground(Qt::white);
     int tabId = _tabWidget->addTab(mdiArea, proj->projectFileInfo().fileName());
     // add widgets and actions
     QList<QMdiSubWindow*> ws;
     for (int i = 0; i < proj->widgets().size(); i++){
         auto w = proj->widgets().at(i);
-        ws << mdiArea->addSubWindow(w);
-        ws.last()->hide();
+        auto subwin = mdiArea->addSubWindow(w);
+        subwin->hide();
+        subwin->setStyleSheet(
+            "QMdiSubWindow { border: 5px solid darkGray; background: gray }"
+            "QMdiSubWindow:title{ background: white; }"
+        );
+        ws << subwin;
     }
     _subwins << ws;
     QList<QAction*> as;
@@ -175,7 +181,6 @@ void MainWin::installProject(Project * proj) {
     Q_ASSERT(tabId == _projects.size() - 1);
     Q_ASSERT(tabId == _subwins.size() - 1);
     Q_ASSERT(tabId == _actions.size() - 1);
-    //updateProject(tabId, true);
     _tabWidget->setCurrentIndex(tabId);
 }
 

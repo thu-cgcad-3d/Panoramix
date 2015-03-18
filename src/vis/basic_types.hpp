@@ -58,6 +58,8 @@ namespace panoramix {
 
             // from tag
             Color(ColorTag tag);
+            // from raw data
+            Color(const std::uint8_t * data, int cvType);
             
         public:
             inline int red() const { return _rgba[0]; }
@@ -90,6 +92,13 @@ namespace panoramix {
             }
 
             inline bool operator == (const Color & color) const { return _rgba == color._rgba; }
+            
+            template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+            inline Color & operator *= (T s) { _rgba *= s; return *this; }
+            template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+            inline Color & operator /= (T s) { _rgba /= s; return *this; }
+
+            inline Color blendWith(const Color & c, double alpha) const { return c._rgba * (1 - alpha) + c._rgba * alpha; }
 
             template <class Archive> inline void serialize(Archive & ar) { ar(_rgba); }
 
@@ -97,11 +106,19 @@ namespace panoramix {
             core::Vec4i _rgba;
         };
 
+        template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+        inline Color operator * (const Color & c, T d) { Color cc = c; cc *= d; return cc; }
+        template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+        inline Color operator * (T d, const Color & c) { Color cc = c; cc *= d; return cc; }
+        template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+        inline Color operator / (const Color & c, T d) { Color cc = c; cc /= d; return cc; }
+
 
         const std::vector<ColorTag> & AllColorTags();
         std::ostream & operator << (std::ostream & os, ColorTag ct);
         Color ColorFromHSV(double h, double s, double v, double a = 1.0);
         Color RandomColor();
+        inline Color ColorFromImage(const core::Image & im, core::PixelLoc p) { return Color(im.ptr(p.y, p.x), im.type()); }
         
 
         // line style
@@ -134,10 +151,10 @@ namespace panoramix {
 
             ColorTable(ColorTableDescriptor descriptor);
 
-            inline ColorTable(std::initializer_list<Color> c, const Color & exceptColor) 
+            inline ColorTable(std::initializer_list<Color> c, const Color & exceptColor = ColorTag::Transparent) 
                 : _colors(c), _exceptionalColor(exceptColor) {}
 
-            ColorTable(std::initializer_list<ColorTag> ctags, ColorTag exceptColor);
+            ColorTable(std::initializer_list<ColorTag> ctags, ColorTag exceptColor = ColorTag::Transparent);
 
             template <class ColorIteratorT, class = std::enable_if_t<std::is_same<std::iterator_traits<ColorIteratorT>::value_type, Color>::value>>
             inline ColorTable(ColorIteratorT begin, ColorIteratorT end, const Color & exceptColor = ColorTag::Transparent)

@@ -35,6 +35,37 @@ namespace panoramix {
 
 
         Color::Color(ColorTag tag) : _rgba(ColorFromTag(tag)._rgba) {}
+        Color::Color(const std::uint8_t * data, int cvType) {
+            const int16_t * datai16 = (const int16_t*)(data);
+            const int32_t * datai32 = (const int32_t*)(data);
+            const float * dataf32 = (const float *)(data);
+            const double * dataf64 = (const double *)(data);
+
+            switch (cvType){
+            case CV_8UC1: _rgba = Vec4i(data[0], data[0], data[0], 255); break;
+            case CV_8UC3: _rgba = Vec4i(data[0], data[1], data[2], 255); break;
+            case CV_8UC4: _rgba = Vec4i(data[0], data[1], data[2], data[3]); break;
+
+            case CV_16SC1: _rgba = Vec4i(datai16[0], datai16[0], datai16[0], 255); break;
+            case CV_16SC3: _rgba = Vec4i(datai16[0], datai16[1], datai16[2], 255); break;
+            case CV_16SC4: _rgba = Vec4i(datai16[0], datai16[1], datai16[2], datai16[3]); break;
+
+            case CV_32SC1: _rgba = Vec4i(datai32[0], datai32[0], datai32[0], 255); break;
+            case CV_32SC3: _rgba = Vec4i(datai32[0], datai32[1], datai32[2], 255); break;
+            case CV_32SC4: _rgba = Vec4i(datai32[0], datai32[1], datai32[2], datai32[3]); break;
+
+            case CV_32FC1: _rgba = Vec4i(dataf32[0], dataf32[0], dataf32[0], 1) * 255; break;
+            case CV_32FC3: _rgba = Vec4i(dataf32[0], dataf32[1], dataf32[2], 1) * 255; break;
+            case CV_32FC4: _rgba = Vec4i(dataf32[0], dataf32[1], dataf32[2], dataf32[3]) * 255; break;
+
+            case CV_64FC1: _rgba = Vec4i(dataf64[0], dataf64[0], dataf64[0], 1) * 255; break;
+            case CV_64FC3: _rgba = Vec4i(dataf64[0], dataf64[1], dataf64[2], 1) * 255; break;
+            case CV_64FC4: _rgba = Vec4i(dataf64[0], dataf64[1], dataf64[2], dataf64[3]) * 255; break;
+            default:
+                std::cerr << "cannot convert this cv type to vis::Color [cvType = " << cvType << "]!" << std::endl;
+                break;
+            }
+        }
 
         const std::vector<ColorTag> & AllColorTags() {
             static const std::vector<ColorTag> _allColorTags = {
