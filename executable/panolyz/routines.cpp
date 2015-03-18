@@ -39,7 +39,10 @@ namespace panolyz {
                 for (auto & l : ls){
                     lines[i].push_back(core::ClassifyAs(l, -1));
                 }
-                vis::Visualizer2D(pim) << ls << vis::manip2d::Show();
+                vis::Visualizer2D (pim)
+                    << vis::manip2d::SetThickness(3)
+                    << vis::manip2d::SetColor(vis::ColorTag::Red)
+                    << ls << vis::manip2d::Show();
             }
 
             // estimate vp

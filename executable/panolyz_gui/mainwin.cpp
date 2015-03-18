@@ -21,10 +21,10 @@ public:
         SimpleThread * t = new SimpleThread(std::move(fun), this);
         QProgressBar * bar = new QProgressBar(barParent);
         bar->hide();
-        connect(t, SIGNAL(started()), bar, SLOT(show()));
-        connect(t, SIGNAL(finished()), bar, SLOT(hide()));
-        connect(t, SIGNAL(finished()), t, SLOT(deleteLater()));
-        connect(t, SIGNAL(finished()), bar, SLOT(deleteLater()));
+        connect(t, SIGNAL(started()), bar, SLOT(show()), Qt::QueuedConnection);
+        connect(t, SIGNAL(finished()), bar, SLOT(hide()), Qt::QueuedConnection);
+        connect(t, SIGNAL(finished()), t, SLOT(deleteLater()), Qt::QueuedConnection);
+        connect(t, SIGNAL(finished()), bar, SLOT(deleteLater()), Qt::QueuedConnection);
         return qMakePair(bar, t);
     }
 
@@ -195,7 +195,7 @@ void MainWin::updateProject(int index, bool forceSourceStepUpdate) {
     auto tb = _threadPool->attach([this, index, forceSourceStepUpdate](){
         _projects[index]->update(forceSourceStepUpdate);
     });
-    connect(_tabWidget->widget(index), SIGNAL(destroyed()), tb.second, SLOT(terminate()));
+    connect(_tabWidget->widget(index), SIGNAL(destroyed()), tb.second, SLOT(terminate()), Qt::QueuedConnection);
     auto b = tb.first;
     b->setFixedHeight(15);
     b->setFixedWidth(300);

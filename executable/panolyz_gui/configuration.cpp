@@ -101,7 +101,14 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
 
 StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Segmentation> & segs,
     QList<QAction*> & actions, QWidget * parent) {
-    return nullptr;
+    
+    return CreateImageViewer(&segs, [](DataOfType<Segmentation> & segs){        
+        segs.lockForRead();
+        auto colorTable = vis::CreateRandomColorTableWithSize(segs.content.segmentsNum);
+        core::Imageub3 im = colorTable(segs.content.segmentation);
+        segs.unlock();
+        return vis::MakeQImage(im);    
+    }, parent);
 }
 
 
@@ -124,92 +131,6 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<LinesAndVPs> & se
 
 StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<ReconstructionSetup> & rec,
     QList<QAction*> & actions, QWidget * parent){
-
-    /*
-    class Widget : public StepWidgetAdaptor<ReconstructionSetup, QWidget> {
-    public:
-        explicit Widget(DataOfType<ReconstructionSetup> * d, QWidget * parent) : 
-            StepWidgetAdaptor<ReconstructionSetup, QWidget>(d, parent) {
-        }
-
-        virtual void refreshDataAsync() override {           
-            lockForRead();
-            QImage transparentBg(content().segmentation.cols, content().segmentation.rows, QImage::Format::Format_RGB888);
-            {
-                transparentBg.fill(Qt::transparent);
-                QPainter painter(&transparentBg);
-                painter.fillRect(transparentBg.rect(), Qt::BrushStyle::HorPattern);
-            }
-
-            // render
-            core::Imageub3 rendered = core::Imageub3::zeros(content().segmentation.size());
-            vis::ColorTable rgb = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
-            vis::ColorTable ymc = { vis::ColorTag::Yellow, vis::ColorTag::Magenta, vis::ColorTag::Cyan };
-            double alpha = 0.3;
-            for (auto it = rendered.begin(); it != rendered.end(); ++it){
-                int regionId = content().segmentation(it.pos());
-                Q_ASSERT(regionId >= 0 && regionId < content().mg.internalComponents<core::RegionData>().size());
-                auto & prop = content().props[core::RegionHandle(regionId)];
-                if (!prop.used){
-                    QRgb transPixel = transparentBg.pixel(it.pos().x, it.pos().y);
-                    *it = core::Vec3b(qRed(transPixel), qGreen(transPixel), qBlue(transPixel));
-                    continue;
-                }
-                vis::Color imColor = vis::ColorFromImage(content().view.image, it.pos());
-                if (prop.orientationClaz >= 0 && prop.orientationNotClaz == -1){
-                    *it = imColor.blendWith(rgb[prop.orientationClaz], alpha);
-                }
-                else if (prop.orientationClaz == -1 && prop.orientationNotClaz >= 0){
-                    *it = imColor.blendWith(ymc[prop.orientationNotClaz], alpha);
-                }
-                else{
-                    *it = imColor;
-                }
-            }
-            // render disconnected boundaries
-            for (auto & b : content().mg.constraints<core::RegionBoundaryData>()){
-                if (content().props[b.topo.hd].used)
-                    continue;
-                for (auto & e : b.data.normalizedEdges){
-                    if (e.size() <= 1) continue;
-                    for (int i = 1; i < e.size(); i++){
-                        auto p1 = core::ToPixelLoc(content().view.camera.screenProjection(e[i - 1]));
-                        auto p2 = core::ToPixelLoc(content().view.camera.screenProjection(e[i]));
-                        cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
-                        cv::line(rendered, p1, p2, vis::Color(vis::ColorTag::Black), 3);
-                    }
-                }
-            }
-            unlock();
-
-            _renderedLock.lockForWrite();
-            _rendered = vis::MakeQImage(rendered);
-            _renderedLock.unlock();
-        }
-
-    protected:
-        virtual void paintEvent(QPaintEvent * e) override {
-            if (!noData())
-                return;
-            QPainter painter(this);
-            painter.drawImage(QPoint(), _rendered);
-        }
-
-        void mousePressEvent(QMouseEvent *e) {
-            if (!noData())
-                return;
-            QPainter painter(this);
-            _renderedLock.lockForRead();
-            painter.drawImage(QPointF(), _rendered);
-            _renderedLock.unlock();
-        }
-
-
-    private:
-        QImage _rendered;
-        QReadWriteLock _renderedLock;
-    };
-    */
 
     return CreateImageViewer(&rec, [](DataOfType<ReconstructionSetup>& rec){
         rec.lockForRead();

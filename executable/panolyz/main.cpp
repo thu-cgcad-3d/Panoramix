@@ -7,7 +7,7 @@ using namespace panolyz;
 int main(int argc, char ** argv) {
     
     std::string defaultFileName;
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
@@ -38,7 +38,7 @@ int main(int argc, char ** argv) {
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room5.jpg"; //!
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room6.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room7.jpg";
-    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room8.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room8.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room9.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room10.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room11.jpg";
@@ -57,7 +57,7 @@ int main(int argc, char ** argv) {
 
     misc::CmdOptions cmdOptions = {
         {"f", defaultFileName, "input image file path"},
-        {"p", false, "whether the input image is a panorama"},
+        {"p", true, "whether the input image is a panorama"},
         {"i", true, "whether the scene is indoor"}
     };
     
@@ -66,7 +66,7 @@ int main(int argc, char ** argv) {
     }
 
     core::Image image = cv::imread(cmdOptions.value<std::string>("f"));
-    core::ResizeToMakeHeightUnder(image, cmdOptions.value<bool>("p") ? 900 : 400);
+    core::ResizeToHeight(image, cmdOptions.value<bool>("p") ? 900 : 400);
 
     if (cmdOptions.value<bool>("i")){
         if (cmdOptions.value<bool>("p")){
