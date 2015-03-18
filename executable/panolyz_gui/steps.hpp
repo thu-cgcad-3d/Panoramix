@@ -128,17 +128,21 @@ struct StepWithTypedUpdater : Step {
 };
 
 
-class Steps : public QObject {
+
+
+
+
+class StepsDAG : public QObject {
     
     Q_OBJECT
 
 public:
-    explicit Steps(QObject * parent = 0) : QObject(parent) {
-        connect(this, SIGNAL(dataUpdated(int)), this, SLOT(updateWidget(int)), Qt::ConnectionType::QueuedConnection);
-    }
+    explicit StepsDAG(QObject * parent = 0);
 
 signals:
     void dataUpdated(int index);
+
+
 public slots:
     void updateWidget(int index);
 

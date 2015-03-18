@@ -15,8 +15,8 @@ using namespace test;
 TEST(Visualizer, Color) {
 
     int m = 600;
-    core::ImageWithType<core::Vec<double, 4>> hs(m, m);
-    core::ImageWithType<core::Vec<double, 4>> sv(m, m);
+    core::ImageOfType<core::Vec<double, 4>> hs(m, m);
+    core::ImageOfType<core::Vec<double, 4>> sv(m, m);
     for (int i = 0; i < m; i++){
         for (int j = 0; j < m; j++){
             hs(i, j) = vis::ColorFromHSV(i / (double)m, j / (double)m, 0.5);
@@ -94,11 +94,3 @@ TEST(Visualizer, Interaction){
         .show();
     
 }
-
-
-//int main(int argc, char * argv[], char * envp[]) {
-//    testing::InitGoogleTest(&argc, argv);
-//    testing::GTEST_FLAG(catch_exceptions) = false;
-//    testing::GTEST_FLAG(throw_on_failure) = true;
-//    return RUN_ALL_TESTS();
-//}

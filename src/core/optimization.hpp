@@ -10,7 +10,7 @@ namespace panoramix {
     namespace core {
 
         template <class ValueT>
-        using CoeffMatrix = ImageWithType<ValueT>;
+        using CoeffMatrix = ImageOfType<ValueT>;
 
         struct RegisteredPosition {
             int64_t start;

@@ -5,7 +5,7 @@
 #include <QtCore>
 #include <QtGui>
 
-class Steps;
+class StepsDAG;
 class Project : public QObject {    
     Q_OBJECT
 
@@ -32,7 +32,7 @@ protected:
     QFileInfo _projectFileInfo;
     QList<QWidget*> _widgets;
     QList<QAction*> _actions;
-    Steps * _steps;
+    StepsDAG * _steps;
 };
 
 

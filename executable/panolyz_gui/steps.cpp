@@ -2,7 +2,13 @@
 #include "steps.hpp"
 
 
-void Steps::updateWidget(int i) {
+
+StepsDAG::StepsDAG(QObject * parent) : QObject(parent) {
+    connect(this, SIGNAL(dataUpdated(int)), this, SLOT(updateWidget(int)), Qt::ConnectionType::QueuedConnection);
+}
+
+
+void StepsDAG::updateWidget(int i) {
     if (_widgets[i]){
         _widgets[i]->refreshData();
         _widgets[i]->showWidget();
@@ -10,7 +16,7 @@ void Steps::updateWidget(int i) {
     }
 }
 
-bool Steps::needsUpdate(int id) const {
+bool StepsDAG::needsUpdate(int id) const {
     for (int d : _dependencies[id]){
         if (_steps[id]->data->isOlderThan(*_steps[d]->data)){
             return true;
@@ -19,7 +25,7 @@ bool Steps::needsUpdate(int id) const {
     return false;
 }
 
-void Steps::updateAll(UpdateCallback const * callback, bool forceSourceStepUpdate) {
+void StepsDAG::updateAll(UpdateCallback const * callback, bool forceSourceStepUpdate) {
     for (int i = 0; i < _steps.size(); i++){
         if (needsUpdate(i) || (forceSourceStepUpdate && _dependencies[i].empty())){
             qDebug() << "updating [" << _names[i] << "]";

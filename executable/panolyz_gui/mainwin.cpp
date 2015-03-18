@@ -102,7 +102,7 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
 
 
     // tools
-    auto actionRerunAll = menuTools->addAction(tr("Rerun All Steps"));
+    auto actionRerunAll = menuTools->addAction(tr("Rerun All StepsDAG"));
     QObject::connect(actionRerunAll, &QAction::triggered, [this](){
         int index = _tabWidget->currentIndex();
         if (index < 0)

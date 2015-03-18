@@ -3,6 +3,18 @@
 namespace panoramix {
     namespace core {
 
+        void ResizeToWidth(Image & im, int width){
+            if (im.cols == width)
+                return;
+            cv::resize(im, im, cv::Size(width, static_cast<int>(im.rows * width / im.cols)));
+        }
+
+        void ResizeToHeight(Image & im, int height){
+            if (im.rows == height)
+                return;
+            cv::resize(im, im, cv::Size(static_cast<int>(im.cols * height / im.rows), height));
+        }
+
 		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound) {
 			if (im.cols <= widthUpperBound)
 				return;

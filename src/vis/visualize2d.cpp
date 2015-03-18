@@ -15,7 +15,7 @@ namespace panoramix {
 
         void Visualizer2D::setImage(const Image & im) {
             if (im.type() == CV_32SC1){
-                ImageWithType<Vec3b> imv;
+                ImageOfType<Vec3b> imv;
                 imv.create(im.size());
                 for (int x = 0; x < im.cols; x++){
                     for (int y = 0; y < im.rows; y++){
@@ -36,8 +36,8 @@ namespace panoramix {
             return viz;
         }
 
-        Visualizer2D operator << (Visualizer2D viz, const ImageWithType<int32_t> & im) {
-            ImageWithType<Vec3b> imv;
+        Visualizer2D operator << (Visualizer2D viz, const ImageOfType<int32_t> & im) {
+            ImageOfType<Vec3b> imv;
             imv.create(im.size());
             for (int x = 0; x < im.cols; x++){
                 for (int y = 0; y < im.rows; y++){

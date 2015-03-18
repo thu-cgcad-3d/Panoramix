@@ -187,10 +187,10 @@ namespace panoramix {
             }
 
             template <class T>
-            ImageWithType<T> operator() (const ImageWithType<T> & inputIm,
+            ImageOfType<T> operator() (const ImageOfType<T> & inputIm,
                 int borderMode = cv::BORDER_REPLICATE,
                 const T & borderValue = 0) const {
-                ImageWithType<T> outputIm;
+                ImageOfType<T> outputIm;
                 cv::remap(inputIm, outputIm, _mapx, _mapy,
                     cv::INTER_NEAREST, borderMode, borderValue);
                 return outputIm;

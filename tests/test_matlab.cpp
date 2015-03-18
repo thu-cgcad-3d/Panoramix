@@ -71,10 +71,10 @@ TEST(Matlab, ImageConversion){
     cv::imshow("new image", newImage);
     cv::waitKey();
 
-    core::ImageWithType<core::Vec<int, 3>> all123s(500, 500, core::Vec<int, 3>(1, 2, 3));
+    core::ImageOfType<core::Vec<int, 3>> all123s(500, 500, core::Vec<int, 3>(1, 2, 3));
     ASSERT_TRUE(core::Matlab::PutVariable("all123s", all123s));
     ASSERT_TRUE(core::Matlab::RunScript("all246s = all123s * 2;"));
-    core::ImageWithType<core::Vec<int, 3>> all246s;
+    core::ImageOfType<core::Vec<int, 3>> all246s;
     ASSERT_TRUE(core::Matlab::GetVariable("all246s", all246s));
 
     for (auto & i : all246s){

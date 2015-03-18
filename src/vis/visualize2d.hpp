@@ -186,12 +186,12 @@ namespace panoramix {
 
         // image
         Visualizer2D operator << (Visualizer2D viz, const Image & im);
-        Visualizer2D operator << (Visualizer2D viz, const ImageWithType<int32_t> & im);
+        Visualizer2D operator << (Visualizer2D viz, const ImageOfType<int32_t> & im);
 
 
         // integer image
         template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
-        Visualizer2D operator << (Visualizer2D viz, const ImageWithType<T> & im) {
+        Visualizer2D operator << (Visualizer2D viz, const ImageOfType<T> & im) {
             NOT_IMPLEMENTED_YET();
         }
 

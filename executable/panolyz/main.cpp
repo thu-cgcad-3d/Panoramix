@@ -20,7 +20,7 @@ int main(int argc, char ** argv) {
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab2.jpg";
-    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab3.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab3.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (2).jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x5.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x6.jpg";
@@ -38,7 +38,7 @@ int main(int argc, char ** argv) {
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room5.jpg"; //!
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room6.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room7.jpg";
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room8.jpg";
+    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room8.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room9.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room10.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room11.jpg";
@@ -57,7 +57,7 @@ int main(int argc, char ** argv) {
 
     misc::CmdOptions cmdOptions = {
         {"f", defaultFileName, "input image file path"},
-        {"p", true, "whether the input image is a panorama"},
+        {"p", false, "whether the input image is a panorama"},
         {"i", true, "whether the scene is indoor"}
     };
     

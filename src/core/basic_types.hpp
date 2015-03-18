@@ -354,17 +354,17 @@ namespace panoramix {
 
         // image
         using Image = cv::Mat;
-        template <class T> using ImageWithType = cv::Mat_<T> ;
-        using Imageb = ImageWithType<bool>;
-        using Imageb3 = ImageWithType<Vec<bool, 3>>;
-        using Imageub = ImageWithType<uint8_t>;
-        using Imageub3 = ImageWithType<Vec<uint8_t, 3>>;
-        using Imagei = ImageWithType<int>;
-        using Imagei3 = ImageWithType<Vec<int, 3>>;
-        using Imagef = ImageWithType<float>;
-        using Imagef3 = ImageWithType<Vec<float, 3>>;
-        using Imaged = ImageWithType<double>;
-        using Imaged3 = ImageWithType<Vec<double, 3>>;
+        template <class T> using ImageOfType = cv::Mat_<T> ;
+        using Imageb = ImageOfType<bool>;
+        using Imageb3 = ImageOfType<Vec<bool, 3>>;
+        using Imageub = ImageOfType<uint8_t>;
+        using Imageub3 = ImageOfType<Vec<uint8_t, 3>>;
+        using Imagei = ImageOfType<int>;
+        using Imagei3 = ImageOfType<Vec<int, 3>>;
+        using Imagef = ImageOfType<float>;
+        using Imagef3 = ImageOfType<Vec<float, 3>>;
+        using Imaged = ImageOfType<double>;
+        using Imaged3 = ImageOfType<Vec<double, 3>>;
 
         using PixelLoc = cv::Point;
         template <class T>
@@ -373,6 +373,8 @@ namespace panoramix {
         }
 
         inline int AreaOfImage(const Image & im) { return im.cols * im.rows; }
+        void ResizeToWidth(Image & im, int width);
+        void ResizeToHeight(Image & im, int height);
 		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);
         void ResizeToMakeHeightUnder(Image & im, int heightUpperBound);
         bool MayBeAPanorama(const Image & im);
