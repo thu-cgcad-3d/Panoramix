@@ -40,9 +40,9 @@ template <class ContentT, class RendererT>
 class ImageViewer : public StepWidgetAdaptor<ContentT, QWidget> {
 public:
     explicit ImageViewer(DataOfType<ContentT> * d, RendererT && r, QWidget * parent)
-        : StepWidgetAdaptor<ContentT, QWidget>(d, parent), _renderer(std::move(r)) {}
+        : StepWidgetAdaptor<ContentT, QWidget>(d, parent), _renderer(std::move(r)), _scale(1.0) { setMouseTracking(true); }
     explicit ImageViewer(DataOfType<ContentT> * d, const RendererT & r, QWidget * parent)
-        : StepWidgetAdaptor<ContentT, QWidget>(d, parent), _renderer(r) {}
+        : StepWidgetAdaptor<ContentT, QWidget>(d, parent), _renderer(r), _scale(1.0) { setMouseTracking(true); }
 
     virtual void refreshDataAsync() {
         if (noData())
@@ -58,20 +58,61 @@ protected:
         if (noData())
             return;
         QPainter painter(this);
-        painter.setBackground(QColor(70, 70, 70));
+        painter.setBackground(Qt::white);
         painter.eraseRect(rect());
 
         _imageLock.lockForRead();
-        QPoint pos = QPoint(width() - _image.width(), height() - _image.height()) / 2;
-        painter.fillRect(_image.rect().translated(pos + QPoint(3, 3)), QColor(35, 30, 30));
-        painter.fillRect(_image.rect().translated(pos), QBrush(QColor(240, 240, 240), Qt::DiagCrossPattern));
-        painter.drawImage(pos, _image);
+        auto r = _image.rect();
+        r.setWidth(r.width() * _scale);
+        r.setHeight(r.height() * _scale);
+
+        QPoint centerPos = rect().center() + _translate;
+        QPoint pos = centerPos - r.center();
+
+        painter.fillRect(r.translated(pos + QPoint(5, 5)), QColor(35, 30, 30, 100));
+        painter.fillRect(r.translated(pos), QBrush(QColor(240, 240, 240), Qt::DiagCrossPattern));
+        painter.drawImage(r.translated(pos), _image);
         _imageLock.unlock();
     }
+
+    virtual void mousePressEvent(QMouseEvent * e) override {
+        _lastPos = e->pos();
+        if (e->buttons() & Qt::LeftButton || e->buttons() & Qt::MiddleButton){
+            setCursor(Qt::SizeAllCursor);
+        }
+        update();
+    }
+
+    virtual void mouseMoveEvent(QMouseEvent * e) override {
+        if (e->buttons() & Qt::LeftButton || e->buttons() & Qt::MiddleButton) {
+            QPoint t(e->pos() - _lastPos);
+            _translate += t;
+            update();
+        }
+        _lastPos = e->pos();
+    }
+
+    virtual void wheelEvent(QWheelEvent * e) override {
+        double d = e->delta() / 500.0;
+        if (_scale >= 50.0 && d >= 0)
+            return;
+        if (_scale <= 0.02 && d <= 0)
+            return;
+        _scale *= std::pow(2.0, d);
+        update();
+    }
+
+    virtual void mouseReleaseEvent(QMouseEvent * e) override {
+        unsetCursor();
+    }
+
 protected:
     QReadWriteLock _imageLock;
     QImage _image;
     RendererT _renderer;
+    double _scale;
+    QPoint _translate;
+    QPoint _lastPos;
 };
 
 template <class ContentT, class RendererT>
@@ -88,7 +129,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
 
     return CreateImageViewer(&pv, [](DataOfType<PanoView>& pv){
         pv.lockForRead();
-        QImage im = vis::MakeQImage(pv.content.view.image).scaledToHeight(400);
+        QImage im = vis::MakeQImage(pv.content.view.image);
         pv.unlock();
         return im;
     }, parent);
@@ -181,7 +222,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<ReconstructionSet
             }
         }
         rec.unlock();
-        return vis::MakeQImage(rendered).scaledToHeight(500);
+        return vis::MakeQImage(rendered);
 
     }, parent);
 }
