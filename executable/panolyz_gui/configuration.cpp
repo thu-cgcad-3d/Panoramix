@@ -55,11 +55,12 @@ public:
 
 protected:
     virtual void paintEvent(QPaintEvent * e) override {
-        if (noData())
-            return;
         QPainter painter(this);
         painter.setBackground(Qt::white);
         painter.eraseRect(rect());
+
+        if (noData())
+            return;
 
         _imageLock.lockForRead();
         auto r = _image.rect();
@@ -104,6 +105,11 @@ protected:
 
     virtual void mouseReleaseEvent(QMouseEvent * e) override {
         unsetCursor();
+    }
+
+protected:
+    QPointF positionOnImage(const QPointF & screenPos) const {
+
     }
 
 protected:

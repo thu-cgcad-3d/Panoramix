@@ -34,18 +34,19 @@ using DataPtr = std::shared_ptr<Data>;
 
 template <class T> struct DataOfType;
 
-template <class T>
-struct HasBindingWidgetAndActionsImpl {
-    template <class TT>
-    static auto test(int) -> decltype(
-        CreateBindingWidgetAndActions(std::declval<DataOfType<T>>(), std::declval<QList<QAction*>&>(), (QWidget*)nullptr),
-        std::true_type()
-        );
-    template <class>
-    static std::false_type test(...);
-    static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
-};
-
+namespace {
+    template <class T>
+    struct HasBindingWidgetAndActionsImpl {
+        template <class TT>
+        static auto test(int) -> decltype(
+            CreateBindingWidgetAndActions(std::declval<DataOfType<T>>(), std::declval<QList<QAction*>&>(), (QWidget*)nullptr),
+            std::true_type()
+            );
+        template <class>
+        static std::false_type test(...);
+        static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
+    };
+}
 template <class T>
 struct HasBindingWidgetAndActions : std::integral_constant<bool, HasBindingWidgetAndActionsImpl<T>::value> {};
 

@@ -24,9 +24,8 @@ private:
     QList<Project *> _projects;
     QList<QList<QMdiSubWindow*>> _subwins;
     QList<QList<QAction*>> _actions;
+    QList<QList<QAction*>> _subwinShowActions;
     QTabWidget * _tabWidget;
-    /*WorkThread * _workThread;
-    QProgressBar * _progressBar;*/
     ThreadPool * _threadPool;
 };
  

@@ -32,6 +32,36 @@ private:
     int _maxThreads;
 };
 
+class SubWindow : public QMdiSubWindow {
+    Q_OBJECT
+public:
+    explicit SubWindow(QWidget * parent = nullptr) : QMdiSubWindow(parent) {}
+    Q_SIGNAL void visibilityChanged(bool);
+protected:
+    virtual void showEvent(QShowEvent * event) override {
+        emit visibilityChanged(true);
+        QMdiSubWindow::showEvent(event);
+    }
+    virtual void hideEvent(QHideEvent * event) override{
+        emit visibilityChanged(false);
+        QMdiSubWindow::hideEvent(event);
+    }
+};
+
+class MdiArea : public QMdiArea {
+    Q_OBJECT
+public:
+    explicit MdiArea(QWidget * parent = nullptr) : QMdiArea(parent) {}
+    Q_SIGNAL void closed();
+protected:
+    virtual void closeEvent(QCloseEvent * event) override {
+        emit closed();
+        QMdiArea::closeEvent(event);
+    }
+};
+
+#include "mainwin.moc"
+
 
 
 MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
@@ -84,13 +114,15 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
     menuFile->addAction(tr("&Quit"), this, SLOT(close()), QKeySequence::Quit);
 
     // view
-    auto actionViewCascade = menuView->addAction(tr("Cascade Views"));
+    auto actionViewCascade = new QAction(tr("Cascade Subwindows"), this);
+    menuView->addAction(actionViewCascade);
     connect(actionViewCascade, &QAction::triggered, [this](){
         if (_tabWidget->currentIndex() < 0)
             return;
         qobject_cast<QMdiArea*>(_tabWidget->currentWidget())->cascadeSubWindows();
     });
-    auto actionViewTile = menuView->addAction(tr("Tile Views"));
+    auto actionViewTile = new QAction(tr("Tile Subwindows"), this);
+    menuView->addAction(actionViewTile);
     connect(actionViewTile, &QAction::triggered, [this](){
         if (_tabWidget->currentIndex() < 0)
             return;
@@ -133,13 +165,23 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
     _tabWidget->setTabShape(QTabWidget::TabShape::Rounded);
     QObject::connect(_tabWidget, &QTabWidget::tabCloseRequested, [this](int index){
         _subwins.removeAt(index);
+        _subwinShowActions.removeAt(index);
         _actions.removeAt(index);
+        _tabWidget->removeTab(index);
         _projects[index]->deleteLater();
         _projects.removeAt(index);
-        _tabWidget->removeTab(index);
+        qDebug() << "removed: " << index;
     });
-    QObject::connect(_tabWidget, &QTabWidget::currentChanged, [this](int index){
+    QObject::connect(_tabWidget, &QTabWidget::currentChanged, [this, menuView, actionViewCascade, actionViewTile](int index){
         switchToProject(index); 
+        // set menu actions
+        menuView->clear();
+        menuView->addAction(actionViewCascade);
+        menuView->addAction(actionViewTile);
+        if (index != -1){
+            menuView->addSeparator();
+            menuView->addActions(_subwinShowActions[index]);
+        }
     });
     _tabWidget->setTabPosition(QTabWidget::TabPosition::West);
     setCentralWidget(_tabWidget);
@@ -154,30 +196,44 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
 
 void MainWin::installProject(Project * proj) {
     _projects.append(proj);
-    QMdiArea * mdiArea = new QMdiArea;
+    MdiArea * mdiArea = new MdiArea;
     QLinearGradient gradient(0, 0, 800.0, 1000.0);
     gradient.setColorAt(0, QColor(80, 80, 80));
     gradient.setColorAt(1, Qt::black);
     mdiArea->setBackground(Qt::white);
-    int tabId = _tabWidget->addTab(mdiArea, proj->projectFileInfo().fileName());
+
     // add widgets and actions
     QList<QMdiSubWindow*> ws;
+    QList<QAction*> wShowActions;
     for (int i = 0; i < proj->widgets().size(); i++){
         auto w = proj->widgets().at(i);
-        auto subwin = mdiArea->addSubWindow(w);
+        SubWindow * subwin = new SubWindow;
+        subwin->setWidget(w);
+        mdiArea->addSubWindow(subwin);
+        //auto subwin = mdiArea->addSubWindow(w);
         subwin->hide();
         subwin->setStyleSheet(
             "QMdiSubWindow { border: 5px solid darkGray; background: gray }"
             "QMdiSubWindow:title{ background: white; }"
         );
+        QAction * a = new QAction(subwin->windowTitle(), subwin);
+        connect(a, SIGNAL(triggered(bool)), subwin, SLOT(setVisible(bool)));
+        connect(subwin, SIGNAL(visibilityChanged(bool)), a, SLOT(setChecked(bool)));
+        a->setCheckable(true);
+        a->setChecked(false);
         ws << subwin;
+        wShowActions << a;
     }
     _subwins << ws;
+    _subwinShowActions << wShowActions;
+
     QList<QAction*> as;
     for (QAction * a : proj->actions()){
         as << a;
     }
     _actions << as;
+
+    int tabId = _tabWidget->addTab(mdiArea, proj->projectFileInfo().fileName());
     Q_ASSERT(tabId == _projects.size() - 1);
     Q_ASSERT(tabId == _subwins.size() - 1);
     Q_ASSERT(tabId == _actions.size() - 1);
@@ -192,10 +248,10 @@ void MainWin::switchToProject(int index){
 void MainWin::updateProject(int index, bool forceSourceStepUpdate) {
     if (index < 0)
         return;
-    auto tb = _threadPool->attach([this, index, forceSourceStepUpdate](){
+    QPair<QProgressBar*, SimpleThread*> tb = _threadPool->attach([this, index, forceSourceStepUpdate](){
         _projects[index]->update(forceSourceStepUpdate);
     });
-    connect(_tabWidget->widget(index), SIGNAL(destroyed()), tb.second, SLOT(terminate()), Qt::QueuedConnection);
+    connect(_tabWidget->widget(index), SIGNAL(closed()), tb.second, SLOT(terminate()));
     auto b = tb.first;
     b->setFixedHeight(15);
     b->setFixedWidth(300);
