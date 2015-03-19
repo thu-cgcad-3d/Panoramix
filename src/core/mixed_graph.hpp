@@ -224,15 +224,17 @@ namespace panoramix {
 
 
 
-
-
-
-
         // visualize current mixed graph
         void Visualize(const View<PanoramicCamera> & texture, 
             const MixedGraph & mg, MixedGraphPropertyTable & props);
         void Visualize(const View<PerspectiveCamera> & texture,
             const MixedGraph & mg, MixedGraphPropertyTable & props);
+
+
+
+
+        // refine the mixed graph variables to a structure
+
 
 
     }

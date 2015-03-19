@@ -238,6 +238,7 @@ void MainWin::installProject(Project * proj) {
     Q_ASSERT(tabId == _subwins.size() - 1);
     Q_ASSERT(tabId == _actions.size() - 1);
     _tabWidget->setCurrentIndex(tabId);
+    updateProject(tabId, true);
 }
 
 void MainWin::switchToProject(int index){

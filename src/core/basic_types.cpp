@@ -49,7 +49,7 @@ namespace panoramix {
             if (im.cols == im.rows * 2)
                 return true;
             Image pim = Image::zeros(im.cols / 2, im.cols, im.type());
-            pim(cv::Rect(0, (pim.rows - im.rows) / 2, pim.cols, im.rows)) = im;
+            im.copyTo(pim(cv::Rect(0, (pim.rows - im.rows) / 2, pim.cols, im.rows)));
             im = pim;
             return true;
         }

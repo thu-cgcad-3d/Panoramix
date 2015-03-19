@@ -3444,7 +3444,7 @@ namespace panoramix {
 
         void LooseMaybeOcclusionBoundaryConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props){
 
-
+            NOT_IMPLEMENTED_YET();
 
         }
 

@@ -25,6 +25,8 @@ public:
             im = im.convertToFormat(QImage::Format_RGB888);
             auto pim = vis::MakeCVMat(im);
             core::ResizeToHeight(pim, 900);
+            bool b = core::MakePanorama(pim);
+            Q_ASSERT(b);
             return PanoView{ core::CreatePanoramicView(pim) };
         });
 

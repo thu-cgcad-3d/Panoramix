@@ -90,9 +90,9 @@ namespace panoramix {
 
 
         // contains
-        template <class ContainerT, class ValueT>
+        template <class ContainerT, class ValueT, class = std::enable_if_t<IsContainerOfType<ContainerT, ValueT>::value>>
         inline bool Contains(const ContainerT & c, const ValueT & v) {
-            return std::find(c.cbegin(), c.cend(), v) != c.cend();
+            return std::find(std::cbegin(c), std::cend(c), v) != std::cend(c);
         }
 
         template <class T, class ValueT>
@@ -118,6 +118,10 @@ namespace panoramix {
         template <class KeyT, class HasherT, class KeyeqT, class AllocT>
         inline bool Contains(const std::unordered_set<KeyT, HasherT, KeyeqT, AllocT> & m, const KeyT & k) {
             return m.find(k) != m.end();
+        }
+
+        inline bool Contains(const Image & im, const PixelLoc & pixel) {
+            return 0 <= pixel.x && pixel.x < im.cols && 0 <= pixel.y && pixel.y < im.rows;
         }
 
 

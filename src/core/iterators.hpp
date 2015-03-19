@@ -24,6 +24,11 @@ namespace panoramix {
             : std::is_same<typename std::iterator_traits<IteratorT>::value_type, T> {
         };
 
+        template <class ContainerT, class T>
+        struct IsContainerOfType
+            : IsIteratorOfType<decltype(std::begin(std::declval<ContainerT>())), T> {
+        };
+
  
         // element of container MUST support PredT(ele) -> bool
         // ConditionalIterator will automatically skip elements which DO NOT satisfy PredT in iteration

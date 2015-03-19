@@ -65,6 +65,12 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
 
 
 
+struct ReconstructionRefinement {
+    panoramix::core::View<panoramix::core::PanoramicCamera> view;
+    panoramix::core::MixedGraph mg;
+    panoramix::core::MixedGraphPropertyTable props;
+    
+};
 
 
 

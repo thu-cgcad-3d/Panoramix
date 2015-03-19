@@ -36,22 +36,14 @@ protected:
 };
 
 
-template <class ContentT, class RendererT>
-class ImageViewer : public StepWidgetAdaptor<ContentT, QWidget> {
-public:
-    explicit ImageViewer(DataOfType<ContentT> * d, RendererT && r, QWidget * parent)
-        : StepWidgetAdaptor<ContentT, QWidget>(d, parent), _renderer(std::move(r)), _scale(1.0) { setMouseTracking(true); }
-    explicit ImageViewer(DataOfType<ContentT> * d, const RendererT & r, QWidget * parent)
-        : StepWidgetAdaptor<ContentT, QWidget>(d, parent), _renderer(r), _scale(1.0) { setMouseTracking(true); }
 
-    virtual void refreshDataAsync() {
-        if (noData())
-            return;
-        QImage im = _renderer(data());
-        _imageLock.lockForWrite();
-        _image = im;
-        _imageLock.unlock();
-    }
+template <class ContentT>
+class ImageViewer : public StepWidgetAdaptor<ContentT, QWidget> {
+    using Base = StepWidgetAdaptor<ContentT, QWidget>;
+
+public:
+    explicit ImageViewer(DataOfType<ContentT> * d, QWidget * parent)
+        : StepWidgetAdaptor<ContentT, QWidget>(d, parent), _scale(1.0) { setMouseTracking(true); }
 
 protected:
     virtual void paintEvent(QPaintEvent * e) override {
@@ -63,17 +55,18 @@ protected:
             return;
 
         _imageLock.lockForRead();
-        auto r = _image.rect();
-        r.setWidth(r.width() * _scale);
-        r.setHeight(r.height() * _scale);
 
-        QPoint centerPos = rect().center() + _translate;
-        QPoint pos = centerPos - r.center();
+        painter.resetTransform();
+        painter.translate(rect().center() + _translate);
+        painter.scale(_scale, _scale);
+        painter.translate(-_image.rect().center());
 
-        painter.fillRect(r.translated(pos + QPoint(5, 5)), QColor(35, 30, 30, 100));
-        painter.fillRect(r.translated(pos), QBrush(QColor(240, 240, 240), Qt::DiagCrossPattern));
-        painter.drawImage(r.translated(pos), _image);
+        painter.fillRect(_image.rect().translated(QPoint(5, 5) / _scale), QColor(35, 30, 30, 100));
+        painter.drawImage(_image.rect(), _image);
         _imageLock.unlock();
+
+        painter.setPen(_strokePen);
+        painter.drawPolyline(_stroke);
     }
 
     virtual void mousePressEvent(QMouseEvent * e) override {
@@ -81,7 +74,13 @@ protected:
         if (e->buttons() & Qt::LeftButton || e->buttons() & Qt::MiddleButton){
             setCursor(Qt::SizeAllCursor);
         }
+       /* if (e->buttons() & Qt::RightButton){
+            auto p = positionOnImage(e->pos()).toPoint();
+            if (_image.rect().contains(p))
+                _image.setPixel(p, qRgb(0, 0, 0));
+        }*/
         update();
+        Base::mousePressEvent(e);
     }
 
     virtual void mouseMoveEvent(QMouseEvent * e) override {
@@ -91,6 +90,7 @@ protected:
             update();
         }
         _lastPos = e->pos();
+        Base::mouseMoveEvent(e);
     }
 
     virtual void wheelEvent(QWheelEvent * e) override {
@@ -101,32 +101,53 @@ protected:
             return;
         _scale *= std::pow(2.0, d);
         update();
+        Base::wheelEvent(e);
     }
 
     virtual void mouseReleaseEvent(QMouseEvent * e) override {
         unsetCursor();
+        Base::mouseReleaseEvent(e);
     }
 
 protected:
-    QPointF positionOnImage(const QPointF & screenPos) const {
-
+    inline QPointF positionOnImage(const QPointF & screenPos) const {
+        // (x - imcenter) * scale + rect.center + translate
+        return (screenPos - _translate - rect().center()) / _scale + _image.rect().center();
     }
 
 protected:
     QReadWriteLock _imageLock;
     QImage _image;
-    RendererT _renderer;
     double _scale;
     QPoint _translate;
     QPoint _lastPos;
+    QPolygonF _stroke;
+    QPen _strokePen;
 };
 
 template <class ContentT, class RendererT>
-inline ImageViewer<ContentT, std::decay_t<RendererT>> * CreateImageViewer (
+inline StepWidgetInterface * CreateImageViewer(
     DataOfType<ContentT> * d, RendererT && r, QWidget * parent = nullptr) {
-    return new ImageViewer<ContentT, std::decay_t<RendererT>>(d, std::forward<RendererT>(r), parent);
-}
 
+    using RendererType = std::decay_t<RendererT>;
+    class Widget : public ImageViewer<ContentT> {
+    public:
+        explicit Widget(DataOfType<ContentT> * dd, RendererT && rr, QWidget * p) 
+            : ImageViewer<ContentT>(dd, p), _renderer(std::forward<RendererT>(rr)) {}
+        virtual void refreshDataAsync() {
+            if (noData())
+                return;
+            QImage im = _renderer(data());
+            _imageLock.lockForWrite();
+            _image = im;
+            _imageLock.unlock();
+        }
+    private:
+        RendererType _renderer;
+    };
+
+    return new Widget(d, std::forward<RendererT>(r), parent);
+}
 
 
 
@@ -179,58 +200,183 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<LinesAndVPs> & se
 StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<ReconstructionSetup> & rec,
     QList<QAction*> & actions, QWidget * parent){
 
-    return CreateImageViewer(&rec, [](DataOfType<ReconstructionSetup>& rec){
-        rec.lockForRead();
-        QImage transparentBg(rec.content.segmentation.cols, rec.content.segmentation.rows, QImage::Format::Format_RGB888);
-        {
-            transparentBg.fill(Qt::transparent);
-            QPainter painter(&transparentBg);
-            painter.fillRect(transparentBg.rect(), Qt::BrushStyle::HorPattern);
+    class Widget : public ImageViewer<ReconstructionSetup> {
+
+        void setNoPen() { _strokePen = QPen(Qt::transparent); _applyStroke = nullptr; }
+        void setPen(const QColor & color, int strokeSize, 
+            bool regionPropUsed, int regionPropOrientationClaz, int regionPropOrientationNotClaz) {
+            _strokePen = QPen(color, strokeSize);
+            _applyStroke = [=]() -> bool {
+                bool changed = false;
+                auto & recSetup = data();
+                recSetup.lockForWrite();
+                for (QPointF & p : _stroke){
+                    int sz = strokeSize;
+                    for (int dx = -sz; dx <= sz; dx++){
+                        for (int dy = -sz; dy <= sz; dy++){
+                            core::PixelLoc pp(p.x() + dx, p.y() + dy);
+                            if (!core::Contains(recSetup.content.segmentation, pp))
+                                continue;
+                            int segId = recSetup.content.segmentation(pp);
+                            core::RegionHandle rh(segId);
+                            auto & prop = recSetup.content.props[rh];
+                            if (prop.used == regionPropUsed && 
+                                prop.orientationClaz == regionPropOrientationClaz && 
+                                prop.orientationNotClaz == regionPropOrientationNotClaz)
+                                continue;
+                            changed = true;
+                            prop.used = regionPropUsed;
+                            prop.orientationClaz = regionPropOrientationClaz;
+                            prop.orientationNotClaz = regionPropOrientationNotClaz;
+                        }
+                    }
+                }               
+                core::ResetVariables(recSetup.content.mg, recSetup.content.props);
+                recSetup.unlock();
+                return changed;
+            };            
         }
 
-        // render
-        core::Imageub3 rendered = core::Imageub3::zeros(rec.content.segmentation.size());
-        vis::ColorTable rgb = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
-        vis::ColorTable ymc = { vis::ColorTag::Yellow, vis::ColorTag::Magenta, vis::ColorTag::Cyan };
-        double alpha = 0.3;
-        for (auto it = rendered.begin(); it != rendered.end(); ++it){
-            int regionId = rec.content.segmentation(it.pos());
-            Q_ASSERT(regionId >= 0 && regionId < rec.content.mg.internalComponents<core::RegionData>().size());
-            auto & prop = rec.content.props[core::RegionHandle(regionId)];
-            if (!prop.used){
-                QRgb transPixel = transparentBg.pixel(it.pos().x, it.pos().y);
-                *it = core::Vec3b(qRed(transPixel), qGreen(transPixel), qBlue(transPixel));
-                continue;
+    public:
+        explicit Widget(DataOfType<ReconstructionSetup> * dd, QWidget * p) : ImageViewer<ReconstructionSetup>(dd, p) {            
+
+            setContextMenuPolicy(Qt::ActionsContextMenu);
+            QActionGroup * bas = new QActionGroup(this);
+            
+            QAction * defaultAction = nullptr;
+            connect(defaultAction = bas->addAction(tr("No Brush")), &QAction::triggered, [this](){setNoPen(); });
+            {
+                QAction * sep = new QAction(bas);
+                sep->setSeparator(true);
+                bas->addAction(sep);
             }
-            vis::Color imColor = vis::ColorFromImage(rec.content.view.image, it.pos());
-            if (prop.orientationClaz >= 0 && prop.orientationNotClaz == -1){
-                *it = imColor.blendWith(rgb[prop.orientationClaz], alpha);
+            connect(bas->addAction(tr("Paint Void")), &QAction::triggered, [this](){ setPen(Qt::black, 3, false, -1, -1); });
+            connect(bas->addAction(tr("Paint Free Plane")), &QAction::triggered, [this](){ setPen(Qt::gray, 3, true, -1, -1); });
+            connect(bas->addAction(tr("Paint Toward Direction 1")), &QAction::triggered, [this](){ setPen(Qt::red, 3, true, 0, -1); });
+            connect(bas->addAction(tr("Paint Toward Direction 2")), &QAction::triggered, [this](){ setPen(Qt::red, 3, true, 1, -1);  });
+            connect(bas->addAction(tr("Paint Toward Direction 3")), &QAction::triggered, [this](){ setPen(Qt::red, 3, true, 2, -1); });
+            connect(bas->addAction(tr("Paint Along Direction 1")), &QAction::triggered, [this](){ setPen(Qt::red, 3, true, -1, 0); });
+            connect(bas->addAction(tr("Paint Along Direction 2")), &QAction::triggered, [this](){ setPen(Qt::red, 3, true, -1, 1); });
+            connect(bas->addAction(tr("Paint Along Direction 3")), &QAction::triggered, [this](){ setPen(Qt::red, 3, true, -1, 2); });
+            {
+                QAction * sep = new QAction(bas);
+                sep->setSeparator(true);
+                bas->addAction(sep);
             }
-            else if (prop.orientationClaz == -1 && prop.orientationNotClaz >= 0){
-                *it = imColor.blendWith(ymc[prop.orientationNotClaz], alpha);
-            }
-            else{
-                *it = imColor;
-            }
+            connect(bas->addAction(tr("Draw Occlusion")), &QAction::triggered, [this](){}); 
+            connect(bas->addAction(tr("Remove Occlusion")), &QAction::triggered, [this](){});
+
+            for (auto a : bas->actions()) a->setCheckable(true);
+
+            bas->setExclusive(true);
+            defaultAction->setChecked(true);
+
+            addActions(bas->actions());
         }
-        // render disconnected boundaries
-        for (auto & b : rec.content.mg.constraints<core::RegionBoundaryData>()){
-            if (rec.content.props[b.topo.hd].used)
-                continue;
-            for (auto & e : b.data.normalizedEdges){
-                if (e.size() <= 1) continue;
-                for (int i = 1; i < e.size(); i++){
-                    auto p1 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i - 1]));
-                    auto p2 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i]));
-                    cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
-                    cv::line(rendered, p1, p2, vis::Color(vis::ColorTag::Black), 3);
+        
+    public:
+        virtual void refreshDataAsync() {
+            if (noData())
+                return;
+
+            auto & rec = data();
+            rec.lockForRead();
+            QImage transparentBg(rec.content.segmentation.cols, rec.content.segmentation.rows, QImage::Format::Format_RGB888);
+            {
+                transparentBg.fill(Qt::transparent);
+                QPainter painter(&transparentBg);
+                painter.fillRect(transparentBg.rect(), Qt::BrushStyle::HorPattern);
+            }
+
+            // render
+            core::Imageub3 rendered = core::Imageub3::zeros(rec.content.segmentation.size());
+            vis::ColorTable rgb = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
+            vis::ColorTable ymc = { vis::ColorTag::Yellow, vis::ColorTag::Magenta, vis::ColorTag::Cyan };
+            double alpha = 0.3;
+            for (auto it = rendered.begin(); it != rendered.end(); ++it){
+                int regionId = rec.content.segmentation(it.pos());
+                Q_ASSERT(regionId >= 0 && regionId < rec.content.mg.internalComponents<core::RegionData>().size());
+                auto & prop = rec.content.props[core::RegionHandle(regionId)];
+                if (!prop.used){
+                    QRgb transPixel = transparentBg.pixel(it.pos().x, it.pos().y);
+                    *it = core::Vec3b(qRed(transPixel), qGreen(transPixel), qBlue(transPixel));
+                    continue;
+                }
+                vis::Color imColor = vis::ColorFromImage(rec.content.view.image, it.pos());
+                if (prop.orientationClaz >= 0 && prop.orientationNotClaz == -1){
+                    *it = imColor.blendWith(rgb[prop.orientationClaz], alpha);
+                }
+                else if (prop.orientationClaz == -1 && prop.orientationNotClaz >= 0){
+                    *it = imColor.blendWith(ymc[prop.orientationNotClaz], alpha);
+                }
+                else{
+                    *it = imColor;
                 }
             }
+            // render disconnected boundaries
+            for (auto & b : rec.content.mg.constraints<core::RegionBoundaryData>()){
+                if (rec.content.props[b.topo.hd].used)
+                    continue;
+                for (auto & e : b.data.normalizedEdges){
+                    if (e.size() <= 1) continue;
+                    for (int i = 1; i < e.size(); i++){
+                        auto p1 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i - 1]));
+                        auto p2 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i]));
+                        cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
+                        cv::line(rendered, p1, p2, vis::Color(vis::ColorTag::Black), 3);
+                    }
+                }
+            }
+            rec.unlock();
+            _imageLock.lockForWrite();
+            _image = vis::MakeQImage(rendered);
+            _imageLock.unlock();
         }
-        rec.unlock();
-        return vis::MakeQImage(rendered);
 
-    }, parent);
+    protected:
+        virtual void mousePressEvent(QMouseEvent * e) override {
+            if (_applyStroke && e->buttons() & Qt::LeftButton){
+                _stroke << positionOnImage(e->pos());
+                setCursor(Qt::CursorShape::OpenHandCursor);
+                update();
+            }
+            else{
+                ImageViewer<ReconstructionSetup>::mousePressEvent(e);
+            }
+        }
+
+        virtual void mouseMoveEvent(QMouseEvent * e) override {
+            if (_applyStroke && e->buttons() & Qt::LeftButton){
+                auto pos = positionOnImage(e->pos());
+                setCursor(Qt::CursorShape::ClosedHandCursor);
+                if (_stroke.isEmpty() || (_stroke.last() - pos).manhattanLength() > 3){
+                    _stroke << pos;
+                    update();
+                }
+            }
+            else{
+                ImageViewer<ReconstructionSetup>::mouseMoveEvent(e);
+            }
+        }
+
+        virtual void mouseReleaseEvent(QMouseEvent * e) override {
+            if (_applyStroke && _applyStroke()){
+                refreshDataAsync();
+                refreshData();
+                data().lockForWrite();
+                data().setModified();
+                data().unlock();
+            }
+            _stroke.clear();
+            update();
+            ImageViewer<ReconstructionSetup>::mouseReleaseEvent(e);
+        }
+
+    private:
+        std::function<bool(void)> _applyStroke;
+    };
+
+    return new Widget(&rec, parent);
 }
 
 
