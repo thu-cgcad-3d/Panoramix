@@ -230,8 +230,11 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<ReconstructionSet
                             prop.orientationNotClaz = regionPropOrientationNotClaz;
                         }
                     }
-                }               
-                core::ResetVariables(recSetup.content.mg, recSetup.content.props);
+                }   
+                if (changed){
+                    core::UpdateConstraintUsabilities(recSetup.content.mg, recSetup.content.props, true);
+                    //core::ResetVariables(recSetup.content.mg, recSetup.content.props);
+                }
                 recSetup.unlock();
                 return changed;
             };            

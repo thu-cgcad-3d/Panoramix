@@ -181,6 +181,10 @@ namespace panoramix {
         // reset variables
         void ResetVariables(const MixedGraph & mg, MixedGraphPropertyTable & props);
 
+        // make dangling constraints unused
+        void UpdateConstraintUsabilities(const MixedGraph & mg, MixedGraphPropertyTable & props,
+            bool enableDisabledConstraints = true);
+
         // get component instances
         Line3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const LineHandle & lh);
         Plane3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const RegionHandle & rh);

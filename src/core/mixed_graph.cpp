@@ -1109,6 +1109,9 @@ namespace panoramix {
                     }
                 };
 
+            
+
+                
             }
 
         }
@@ -1267,11 +1270,31 @@ namespace panoramix {
                 }
             };
 
+            struct DanglingConstraintsDisabler {
+                const MixedGraph & mg;
+                MixedGraphPropertyTable & props;
+                template <class T>
+                inline void operator()(ConstraintHandle<T> h) const {
+                    auto allEndsUsable = props[mg.topo(h).component<0>()].used && props[mg.topo(h).component<1>()].used;
+                    if (!allEndsUsable)
+                        props[h].used = false;
+                }
+            };
+
         }
 
 
         void ResetVariables(const MixedGraph & mg, MixedGraphPropertyTable & props){
             ForeachMixedGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+        }
+
+        void UpdateConstraintUsabilities(const MixedGraph & mg, MixedGraphPropertyTable & props, bool enableDisabledConstraints){
+            if (!enableDisabledConstraints){
+                ForeachMixedGraphConstraintHandle(mg, DanglingConstraintsDisabler{ mg, props });
+            }
+            else{
+                ForeachMixedGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
+            }            
         }
 
 
