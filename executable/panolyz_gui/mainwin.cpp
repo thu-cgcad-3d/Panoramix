@@ -2,9 +2,9 @@
 #include "mainwin.hpp"
 
 
-class SimpleThread : public QThread {
+class WorkThread : public QThread {
 public:
-    explicit SimpleThread(std::function<void(void)> && fun, QObject * parent = nullptr) 
+    explicit WorkThread(std::function<void(void)> && fun, QObject * parent = nullptr) 
         : QThread(parent), _fun(std::move(fun)) {}
 protected:
     virtual void run() override { _fun(); }
@@ -12,14 +12,24 @@ private:
     std::function<void(void)> _fun;
 };
 
+class WorkProgressBar : public QProgressBar {
+    Q_OBJECT
+public:
+    explicit WorkProgressBar(QWidget * parent = nullptr) : QProgressBar(parent) {}
+    Q_SLOT void setText(const QString & t) { _text = t; }
+    virtual QString text() const override { return fontMetrics().elidedText(_text, Qt::TextElideMode::ElideRight, width() / 3); }
+private:
+    QString _text;
+};
+
 class ThreadPool : public QObject {
 public:
     explicit ThreadPool(int maxThreads, QObject * parent = nullptr) 
         : QObject(parent), _maxThreads(maxThreads) {}
     
-    QPair<QProgressBar *, SimpleThread *> attach(std::function<void(void)> && fun, QWidget * barParent = nullptr){
-        SimpleThread * t = new SimpleThread(std::move(fun), this);
-        QProgressBar * bar = new QProgressBar(barParent);
+    QPair<WorkProgressBar *, WorkThread *> attach(std::function<void(void)> && fun, QWidget * barParent = nullptr){
+        WorkThread * t = new WorkThread(std::move(fun), this);
+        WorkProgressBar * bar = new WorkProgressBar(barParent);
         bar->hide();
         connect(t, SIGNAL(started()), bar, SLOT(show()), Qt::QueuedConnection);
         connect(t, SIGNAL(finished()), bar, SLOT(hide()), Qt::QueuedConnection);
@@ -249,9 +259,10 @@ void MainWin::switchToProject(int index){
 void MainWin::updateProject(int index, bool forceSourceStepUpdate) {
     if (index < 0)
         return;
-    QPair<QProgressBar*, SimpleThread*> tb = _threadPool->attach([this, index, forceSourceStepUpdate](){
+    QPair<WorkProgressBar*, WorkThread*> tb = _threadPool->attach([this, index, forceSourceStepUpdate](){
         _projects[index]->update(forceSourceStepUpdate);
     });
+    connect(_projects[index], SIGNAL(messageUpdated(QString)), tb.first, SLOT(setText(QString)));
     connect(_tabWidget->widget(index), SIGNAL(closed()), tb.second, SLOT(terminate()));
     auto b = tb.first;
     b->setFixedHeight(15);

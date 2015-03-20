@@ -31,7 +31,7 @@ public:
         });
 
         // lines and vps
-        int stepLinesVPs = _steps->addStep(tr("Perspective Sampling, Extract Lines and Estimate Vanishing Points"), 
+        int stepLinesVPs = _steps->addStep(tr("Lines and Vanishing Points"), 
             [this](DataOfType<PanoView> & im){
             
             im.lockForRead();
@@ -202,6 +202,7 @@ static int UnnamedProjectId = 1;
 Project::Project(QObject * parent) 
 : QObject(parent), _projectFileInfo(tr("Unnamed Project %1").arg(UnnamedProjectId ++))  {
     _steps = new StepsDAG(this);
+    connect(_steps, SIGNAL(messageUpdated(QString)), this, SIGNAL(messageUpdated(QString)));
 }
 
 Project::Project(const QString & projFile, QObject * parent) : QObject(parent), _projectFileInfo(projFile) {

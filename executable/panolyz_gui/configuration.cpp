@@ -399,12 +399,14 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             setAutoBufferSwap(false);
             grabKeyboard();
             setMinimumSize(600, 600);
-            _needsInitialization = true;
+            _needsInitialization.component = true;
         }
 
         virtual void refreshDataAsync() override {
             if (noData()){
-                scene.clear();
+                _scene.lockForWrite();
+                _scene.component.clear();
+                _scene.unlock();
                 return;
             }
 
@@ -473,13 +475,15 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             viz.renderOptions.bwColor = 0.0;
             viz.renderOptions.bwTexColor = 1.0;
             viz.camera(core::PerspectiveCamera(1000, 800, 800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
-            renderOptions = viz.renderOptions;
+            _renderOptions = viz.renderOptions;
 
-            scene.install(std::move(viz.tree()));
+            _scene.lockForWrite();
+            _scene.component.install(std::move(viz.tree()));
+            _scene.unlock();
 
-            _needsInitializationLock.lockForWrite();
-            _needsInitialization = true;
-            _needsInitializationLock.unlock();
+            _needsInitialization.lockForWrite();
+            _needsInitialization.component = true;
+            _needsInitialization.unlock();
         }
 
         virtual void refreshData() override { 
@@ -489,15 +493,18 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
     public:
 
         void autoSetCamera() {
-            auto sphere = scene.boundingBox().outerSphere();
-            renderOptions.camera.resizeScreen(core::Size(width(), height()), false);
-            renderOptions.camera.focusOn(sphere, true);
+            _scene.lockForRead();
+            auto sphere = _scene.component.boundingBox().outerSphere();
+            _scene.unlock();
+
+            _renderOptions.camera.resizeScreen(core::Size(width(), height()), false);
+            _renderOptions.camera.focusOn(sphere, true);
             update();
         }
 
     protected:
         void initializeGL() {
-            if (!_needsInitialization)
+            if (!_needsInitialization.component)
                 return;
             makeCurrent();
             glEnable(GL_MULTISAMPLE);
@@ -506,13 +513,15 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
             glGetIntegerv(GL_SAMPLES, &samples);
             qDebug("Have %d buffers and %d samples", bufs, samples);
-            qglClearColor(MakeQColor(renderOptions.backgroundColor));
+            qglClearColor(MakeQColor(_renderOptions.backgroundColor));
 
-            scene.initialize();
+            _scene.lockForWrite();
+            _scene.component.initialize();
+            _scene.unlock();
 
-            _needsInitializationLock.lockForWrite();
-            _needsInitialization = false;
-            _needsInitializationLock.unlock();
+            _needsInitialization.lockForWrite();
+            _needsInitialization.component = false;
+            _needsInitialization.unlock();
         }
 
         void paintGL() {
@@ -523,7 +532,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             painter.begin(this);
 
             painter.beginNativePainting();
-            qglClearColor(MakeQColor(renderOptions.backgroundColor));
+            qglClearColor(MakeQColor(_renderOptions.backgroundColor));
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -533,7 +542,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             glEnable(GL_STENCIL_TEST);
 
             glEnable(GL_ALPHA_TEST);
-            if (renderOptions.showInside){
+            if (_renderOptions.showInside){
                 glEnable(GL_CULL_FACE);
             }
             else{
@@ -546,13 +555,15 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             glEnable(GL_PROGRAM_POINT_SIZE);
             glEnable(GL_POINT_SPRITE);
 
-            core::PerspectiveCamera & camera = renderOptions.camera;
+            core::PerspectiveCamera & camera = _renderOptions.camera;
             camera.resizeScreen(core::Size(width(), height()));
 
-            scene.render(renderOptions);
+            _scene.lockForRead();
+            _scene.component.render(_renderOptions);
+            _scene.unlock();
 
             glDisable(GL_DEPTH_TEST);
-            if (renderOptions.showInside){
+            if (_renderOptions.showInside){
                 glDisable(GL_CULL_FACE);
             }
 
@@ -561,7 +572,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
         }
 
         void resizeGL(int w, int h) {
-            core::PerspectiveCamera & camera = renderOptions.camera;
+            core::PerspectiveCamera & camera = _renderOptions.camera;
             camera.resizeScreen(core::Size(w, h));
             glViewport(0, 0, w, h);
         }
@@ -576,22 +587,24 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
             else if (e->buttons() & Qt::LeftButton){
                 vis::VisualObjectHandle oh;
                 vis::TriMesh::TriangleHandle t;
-                std::tie(oh, t) = scene.pickOnScreen(renderOptions, core::Point2(e->pos().x(), e->pos().y()));
+                _scene.lockForWrite();
+                std::tie(oh, t) = _scene.component.pickOnScreen(_renderOptions, core::Point2(e->pos().x(), e->pos().y()));
                 if (oh.valid()){
-                    int entityID = scene.tree().data(oh)->entityIDOfMeshTriangle(t);
+                    int entityID = _scene.component.tree().data(oh)->entityIDOfMeshTriangle(t);
                     if (e->modifiers() & Qt::ControlModifier){
-                        scene.switchSelect(std::make_pair(oh, entityID));
+                        _scene.component.switchSelect(std::make_pair(oh, entityID));
                     }
                     else{
-                        scene.clearSelection();
-                        scene.select(std::make_pair(oh, entityID));
+                        _scene.component.clearSelection();
+                        _scene.component.select(std::make_pair(oh, entityID));
                     }
-                    scene.tree().data(oh)
-                        ->invokeCallbackFunction(vis::InteractionID::ClickLeftButton, scene.tree(), std::make_pair(oh, entityID));
+                    _scene.component.tree().data(oh)
+                        ->invokeCallbackFunction(vis::InteractionID::ClickLeftButton, _scene.component.tree(), std::make_pair(oh, entityID));
                 }
                 else if (!(e->modifiers() & Qt::ControlModifier)){
-                    scene.clearSelection();
+                    _scene.component.clearSelection();
                 }
+                _scene.unlock();
             }
             update();
         }
@@ -599,30 +612,34 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
         virtual void mouseMoveEvent(QMouseEvent * e) override {
             QVector3D t(e->pos() - _lastPos);
             t.setX(-t.x());
-            auto sphere = scene.boundingBox().outerSphere();
+            _scene.lockForRead();
+            auto sphere = _scene.component.boundingBox().outerSphere();
+            _scene.unlock();
             if ((e->buttons() & Qt::RightButton) && !(e->modifiers() & Qt::ShiftModifier)) {
-                core::Vec3 trans = t.x() * renderOptions.camera.rightward() + t.y() * renderOptions.camera.upward();
+                core::Vec3 trans = t.x() * _renderOptions.camera.rightward() + t.y() * _renderOptions.camera.upward();
                 trans *= 0.02;
-                renderOptions.camera.moveEyeWithCenterFixed(trans, sphere, true, true);
+                _renderOptions.camera.moveEyeWithCenterFixed(trans, sphere, true, true);
                 setCursor(Qt::ClosedHandCursor);
                 update();
             }
             else if ((e->buttons() & Qt::MidButton) ||
                 ((e->buttons() & Qt::RightButton) && (e->modifiers() & Qt::ShiftModifier))) {
-                core::Vec3 trans = t.x() * renderOptions.camera.rightward() + t.y() * renderOptions.camera.upward();
+                core::Vec3 trans = t.x() * _renderOptions.camera.rightward() + t.y() * _renderOptions.camera.upward();
                 trans *= 0.02;
-                renderOptions.camera.translate(trans, sphere, true);
+                _renderOptions.camera.translate(trans, sphere, true);
                 update();
             }
             _lastPos = e->pos();
         }
 
         virtual void wheelEvent(QWheelEvent * e) override {
-            auto sphere = scene.boundingBox().outerSphere();
+            _scene.lockForRead();
+            auto sphere = _scene.component.boundingBox().outerSphere();
+            _scene.unlock();
             double d = e->delta() / 10;
-            double dist = core::Distance(renderOptions.camera.eye(), renderOptions.camera.center());
-            core::Vec3 trans = d * dist / 1000.0 * renderOptions.camera.forward();
-            renderOptions.camera.moveEyeWithCenterFixed(trans, sphere, false, true);
+            double dist = core::Distance(_renderOptions.camera.eye(), _renderOptions.camera.center());
+            core::Vec3 trans = d * dist / 1000.0 * _renderOptions.camera.forward();
+            _renderOptions.camera.moveEyeWithCenterFixed(trans, sphere, false, true);
             update();
         }
 
@@ -632,27 +649,27 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> &
 
         virtual void keyPressEvent(QKeyEvent * e) override {
             if (e->key() == Qt::Key_Space){
-                for (auto & n : scene.tree().nodes()){
+                _scene.lockForRead();
+                for (auto & n : _scene.component.tree().nodes()){
                     if (n.exists){
                         for (int entityID : n.data->selectedEntities()){
                             n.data->invokeCallbackFunction(vis::InteractionID::PressSpace,
-                                scene.tree(),
+                                _scene.component.tree(),
                                 vis::VisualObjectEntityID{ n.topo.hd, entityID });
                         }
                     }
                 }
+                _scene.unlock();
             }
         }
 
     private:
         QPointF _lastPos;
-        bool _needsInitialization;
-        QReadWriteLock _needsInitializationLock;
+        LockableType<bool> _needsInitialization;
 
     private:
-        vis::RenderOptions renderOptions;
-        vis::VisualObjectScene scene;
-        QReadWriteLock sceneLock;
+        vis::RenderOptions _renderOptions;
+        LockableType<vis::VisualObjectScene> _scene;
     };
 
     return new Widget(&rec, parent);

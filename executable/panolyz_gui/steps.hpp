@@ -16,13 +16,22 @@ struct StepWidgetInterface {
 };
 
 
-struct Data {
-    panoramix::core::TimeStamp timeStamp;
+struct Lockable {
     QReadWriteLock lock;
-    inline void setModified() { timeStamp = panoramix::core::CurrentTime(); }
     inline void lockForRead() { lock.lockForRead(); }
     inline void lockForWrite() { lock.lockForWrite(); }
     inline void unlock() { lock.unlock(); }
+};
+
+template <class T>
+struct LockableType : Lockable {
+    T component;
+};
+
+
+struct Data : Lockable {
+    panoramix::core::TimeStamp timeStamp;
+    inline void setModified() { timeStamp = panoramix::core::CurrentTime(); }
     inline bool isOlderThan(const Data & d) const { return timeStamp < d.timeStamp; }
     virtual StepWidgetInterface * createBindingWidgetAndActions(
         QList<QAction*> & actions, QWidget * parent = nullptr) {
@@ -174,8 +183,10 @@ public:
 
     void updateAll(UpdateCallback const * callback = nullptr, bool forceSourceStepUpdate = false);
 
-private:
     Q_SIGNAL void dataUpdated(int index);
+    Q_SIGNAL void messageUpdated(QString msg);
+
+private:
     Q_SLOT void updateWidget(int index);
 
 private:

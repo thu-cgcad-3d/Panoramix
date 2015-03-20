@@ -21,6 +21,9 @@ public:
     const QList<QWidget*> & widgets() const { return _widgets; }
     const QList<QAction*> & actions() const { return _actions; }
 
+signals:
+    void messageUpdated(QString);
+
 public slots:
     void update(bool forceSourceStepUpdate = false);
 

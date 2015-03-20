@@ -20,7 +20,8 @@ bool StepsDAG::needsUpdate(int id) const {
 void StepsDAG::updateAll(UpdateCallback const * callback, bool forceSourceStepUpdate) {
     for (int i = 0; i < _steps.size(); i++){
         if (needsUpdate(i) || (forceSourceStepUpdate && _dependencies[i].empty())){
-            qDebug() << "updating [" << _names[i] << "]";
+            //qDebug() << "updating [" << _names[i] << "]";
+            emit messageUpdated(tr("Updating ") + _names[i]);
             if (callback)
                 callback->beforeUpdate(i);
             std::vector<Data *> deps(_dependencies[i].size());
@@ -33,8 +34,8 @@ void StepsDAG::updateAll(UpdateCallback const * callback, bool forceSourceStepUp
                 callback->afterUpdate(i);
             if (_widgets[i]){ 
                 _widgets[i]->refreshDataAsync();
-                emit dataUpdated(i);
             }
+            emit dataUpdated(i);
         }
     }
 }
