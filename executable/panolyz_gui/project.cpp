@@ -6,7 +6,7 @@
 #include "../../src/core/mixed_graph.hpp"
 #include "../../src/vis/qt_glue.hpp"
 
-#include "steps.hpp"
+#include "stepsdag.hpp"
 #include "configuration.hpp"
 #include "project.hpp"
 

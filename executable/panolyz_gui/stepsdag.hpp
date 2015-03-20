@@ -1,5 +1,5 @@
-#ifndef STEPS_HPP
-#define STEPS_HPP
+#ifndef STEPSDAG_HPP
+#define STEPSDAG_HPP
  
 #include <QtWidgets>
 

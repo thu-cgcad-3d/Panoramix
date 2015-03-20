@@ -5,7 +5,7 @@
 #include "../../src/core/cameras.hpp"
 #include "../../src/core/mixed_graph.hpp"
 
-#include "steps.hpp"
+#include "stepsdag.hpp"
 
 struct PanoView {
     panoramix::core::View<panoramix::core::PanoramicCamera> view;
