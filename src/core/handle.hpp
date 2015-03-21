@@ -20,9 +20,6 @@ namespace panoramix {
         static const int Dynamic = -1;
 
 
-        /**
-        * @brief Handle struct
-        */
         template <class Tag>
         struct Handle {
             int id;

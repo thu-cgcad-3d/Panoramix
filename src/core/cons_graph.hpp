@@ -373,16 +373,6 @@ namespace panoramix {
                 return std::get<TypeFirstLocationInTuple<DataT, ComponentDataTupleType>::value>(_components);
             }
 
-            template <class DataT, class ValueT>
-            inline HandledTable<ComponentHandle<DataT>, ValueT> createComponentTable(const ValueT & defaultValue = ValueT()) const {
-                return HandledTable<ComponentHandle<DataT>, ValueT>(internalComponents<DataT>().size(), defaultValue);
-            }
-
-            template <class DataT, class ValueT>
-            inline HandledTable<ConstraintHandle<DataT>, ValueT> createConstraintTable(const ValueT & defaultValue = ValueT()) const {
-                return HandledTable<ConstraintHandle<DataT>, ValueT>(internalConstraints<DataT>().size(), defaultValue);
-            }
-
             inline const ComponentsTripletArrayTuple & allComponents() const { return _components; }
             inline ComponentsTripletArrayTuple & allComponents() { return _components; }
 
@@ -413,6 +403,27 @@ namespace panoramix {
 
             inline const ConstraintsTripletArrayTuple & allConstraints() const { return _constraints; }
             inline ConstraintsTripletArrayTuple & allConstraints() { return _constraints; }
+
+            
+            template <class DataT, class ValueT>
+            inline HandledTable<ComponentHandle<DataT>, ValueT> createComponentTable(const ValueT & defaultValue = ValueT()) const {
+                return HandledTable<ComponentHandle<DataT>, ValueT>(internalComponents<DataT>().size(), defaultValue);
+            }
+
+            template <class DataT, class ValueT>
+            inline HandledTable<ConstraintHandle<DataT>, ValueT> createConstraintTable(const ValueT & defaultValue = ValueT()) const {
+                return HandledTable<ConstraintHandle<DataT>, ValueT>(internalConstraints<DataT>().size(), defaultValue);
+            }
+
+            template <class ValueT>
+            inline auto createTableForAllComponents() const -> decltype(MakeHandledTableForAllComponents<ValueT>(*this)) {
+                return MakeHandledTableForAllComponents<ValueT>(*this);
+            }
+
+            template <class ValueT>
+            inline auto createTableForAllConstraints() const -> decltype(MakeHandledTableForAllConstraints<ValueT>(*this)) {
+                return MakeHandledTableForAllConstraints<ValueT>(*this);
+            }
 
 
             // gc stuff
@@ -622,15 +633,30 @@ namespace panoramix {
             using type = MixedHandledTable<DataT, ConstraintHandle<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>...>;
         };
 
+
+        template <class DataT, class ComponentT, class ... ComponentTs, class ConstraintConfigTupleT>
+        inline HandledTable<ComponentHandle<ComponentT>, DataT> MakeHandledTableForComponents(
+            const ConstraintGraph<std::tuple<ComponentTs...>, ConstraintConfigTupleT> & cg, 
+            const DataT & defaultValue = DataT()) {
+            return HandledTable<ComponentHandle<ComponentT>, DataT>(cg.internalComponents<ComponentT>().size(), defaultValue);
+        }
+
+        template <class DataT, class ConstraintT, class ... ComponentTs, class ConstraintConfigTupleT>
+        inline HandledTable<ConstraintHandle<ConstraintT>, DataT> MakeHandledTableForConstraints(
+            const ConstraintGraph<std::tuple<ComponentTs...>, ConstraintConfigTupleT> & cg,
+            const DataT & defaultValue = DataT()) {
+            return HandledTable<ConstraintHandle<ConstraintT>, DataT>(cg.internalConstraints<ConstraintT>().size(), defaultValue);
+        }
+
         template <class DataT, class ... ComponentTs, class ConstraintConfigTupleT>
-        inline MixedHandledTable<DataT, ComponentHandle<ComponentTs>...> MakeHandledTableForComponents(
+        inline MixedHandledTable<DataT, ComponentHandle<ComponentTs>...> MakeHandledTableForAllComponents(
             const ConstraintGraph<std::tuple<ComponentTs ...>, ConstraintConfigTupleT> & cg) {
             return MixedHandledTable<DataT, ComponentHandle<ComponentTs>...>(cg.internalComponents<ComponentTs>().size() ...);
         }
 
         template <class DataT, class ComponentDataTupleT, class ... ConstraintConfigTs>
         inline MixedHandledTable<DataT, ConstraintHandle<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>...> 
-            MakeHandledTableForConstraints(
+            MakeHandledTableForAllConstraints(
             const ConstraintGraph<ComponentDataTupleT, std::tuple<ConstraintConfigTs...>> & cg){
             return MixedHandledTable<DataT, ConstraintHandle<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>...>(
                 cg.internalConstraints<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>().size() ...);

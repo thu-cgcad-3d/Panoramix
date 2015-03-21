@@ -25,7 +25,9 @@ private:
     QList<QList<QMdiSubWindow*>> _subwins;
     QList<QList<QAction*>> _actions;
     QList<QList<QAction*>> _subwinShowActions;
+    QList<QAbstractItemModel *> _confModels;
     QTabWidget * _tabWidget;
+    QDockWidget * _confDock;
     ThreadPool * _threadPool;
 };
  

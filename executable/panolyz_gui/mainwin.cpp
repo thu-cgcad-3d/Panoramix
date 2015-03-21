@@ -1,6 +1,9 @@
+#include "../../src/vis/singleton.hpp"
+
 #include "project.hpp"
 #include "mainwin.hpp"
 
+using namespace panoramix;
 
 class WorkThread : public QThread {
 public:
@@ -45,7 +48,7 @@ private:
 class SubWindow : public QMdiSubWindow {
     Q_OBJECT
 public:
-    explicit SubWindow(QWidget * parent = nullptr) : QMdiSubWindow(parent) {}
+    explicit SubWindow(QWidget * parent = nullptr) : QMdiSubWindow(parent, Qt::SubWindow | Qt::Tool) {}
     Q_SIGNAL void visibilityChanged(bool);
 protected:
     virtual void showEvent(QShowEvent * event) override {
@@ -70,7 +73,110 @@ protected:
     }
 };
 
+class ConfigurationModel : public QAbstractItemModel {
+public:
+    ConfigurationModel(Project * p = nullptr, QObject * parent = nullptr) : QAbstractItemModel(parent), _project(p) {}
+    
+    virtual QVariant data(const QModelIndex & index, int role) const override {
+        if (!index.isValid() || !_project)
+            return QVariant();
+        auto names = _project->configurations().keys();
+        if (role == Qt::DisplayRole || role == Qt::EditRole){
+            int col = index.column();
+            int row = index.row();
+            return col == 0 ? names.at(row) : _project->conf(names.at(row));
+        }
+        else if (role == Qt::DecorationRole && index.column() == 0){
+            return vis::Singleton::DefaultIcon();
+        }
+        else if (role == Qt::BackgroundRole){
+            //return QBrush(Qt::darkGray);
+        }
+        else if (role == Qt::ForegroundRole){
+            //return QBrush(Qt::white);
+        }
+        return QVariant();
+    }
+    
+    bool setData(const QModelIndex &index, const QVariant &value, int role) {
+        if (!_project)
+            return false;
+        if (role == Qt::EditRole && index.isValid() && index.column() == 1){
+            auto names = _project->configurations().keys();
+            _project->setConf(names.at(index.row()), value);
+            emit dataChanged(index, index);
+            return true;
+        }
+        return false;
+    }
+
+    Qt::ItemFlags flags(const QModelIndex &index) const{
+        if (!index.isValid() || !_project)
+            return 0;
+        auto names = _project->configurations().keys();
+        if (index.column() == 0)
+            return (Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        return (Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsEditable);
+    }
+
+    QVariant headerData(int section, Qt::Orientation orientation,
+        int role = Qt::DisplayRole) const{
+        if (orientation == Qt::Horizontal && role == Qt::DisplayRole)
+            return section == 0 ? tr("Name") : tr("Value");
+        return QVariant();
+    }
+
+    QModelIndex index(int row, int column,
+        const QModelIndex &parent = QModelIndex()) const{
+        if (!hasIndex(row, column, parent))
+            return QModelIndex();
+        if (parent.isValid())
+            return QModelIndex();
+        return createIndex(row, column);
+    }
+
+    QModelIndex parent(const QModelIndex &index) const{
+        return QModelIndex();
+    }
+
+    int rowCount(const QModelIndex &parent = QModelIndex()) const {
+        if (!parent.isValid() && _project)
+            return _project->configurations().size();
+        return 0;
+    }
+
+    int columnCount(const QModelIndex &parent = QModelIndex()) const {
+        return 2;
+    }
+
+private:
+    Project * _project;
+};
+
+
+
 #include "mainwin.moc"
+
+
+
+static void CustomItemEditorFactory() {
+    struct DoubleEditorCreator : QItemEditorCreatorBase {
+        virtual QWidget *createWidget(QWidget *parent) const {
+            QDoubleSpinBox * sb = new QDoubleSpinBox(parent);
+            sb->setRange(0.0, 100.0);
+            sb->setDecimals(10);
+            sb->setSingleStep(0.005);
+            return sb;
+        }
+        virtual QByteArray valuePropertyName() const {
+            return "value";
+        }
+    };
+
+    QItemEditorFactory * f = new QItemEditorFactory(*QItemEditorFactory::defaultFactory());
+    f->registerEditor(QVariant::Double, new DoubleEditorCreator);
+    QItemEditorFactory::setDefaultFactory(f);
+}
 
 
 
@@ -177,12 +283,24 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
         _subwins.removeAt(index);
         _subwinShowActions.removeAt(index);
         _actions.removeAt(index);
+        _confModels.removeAt(index);
         _tabWidget->removeTab(index);
         _projects[index]->deleteLater();
         _projects.removeAt(index);
         qDebug() << "removed: " << index;
     });
-    QObject::connect(_tabWidget, &QTabWidget::currentChanged, [this, menuView, actionViewCascade, actionViewTile](int index){
+
+    _confDock = new QDockWidget(tr("Configurations"), this);
+    QTreeView * vw = new QTreeView;
+    vw->setAlternatingRowColors(true);
+    vw->setAutoScroll(true);
+    vw->setIndentation(0);
+    _confDock->setWidget(vw);
+    addDockWidget(Qt::DockWidgetArea::RightDockWidgetArea, _confDock);
+    _confDock->hide();
+    // item editor factory
+    CustomItemEditorFactory();
+    QObject::connect(_tabWidget, &QTabWidget::currentChanged, [this, menuView, actionViewCascade, actionViewTile, vw](int index){
         switchToProject(index); 
         // set menu actions
         menuView->clear();
@@ -191,6 +309,10 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
         if (index != -1){
             menuView->addSeparator();
             menuView->addActions(_subwinShowActions[index]);
+            vw->setModel(_confModels.at(index));
+        }
+        else{
+            _confDock->hide();
         }
     });
     _tabWidget->setTabPosition(QTabWidget::TabPosition::West);
@@ -243,11 +365,15 @@ void MainWin::installProject(Project * proj) {
     }
     _actions << as;
 
+    _confModels << (new ConfigurationModel(proj, proj));
+
     int tabId = _tabWidget->addTab(mdiArea, proj->projectFileInfo().fileName());
     Q_ASSERT(tabId == _projects.size() - 1);
     Q_ASSERT(tabId == _subwins.size() - 1);
     Q_ASSERT(tabId == _actions.size() - 1);
     _tabWidget->setCurrentIndex(tabId);
+    _confDock->show();
+
     updateProject(tabId, true);
 }
 

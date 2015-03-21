@@ -21,6 +21,10 @@ public:
     const QList<QWidget*> & widgets() const { return _widgets; }
     const QList<QAction*> & actions() const { return _actions; }
 
+    const QVariantMap & configurations() const { return _configurations; }
+    QVariant conf(const QString & name) const { return _configurations.value(name); }
+    void setConf(const QString & name, const QVariant & v) { _configurations.insert(name, v); }
+
 signals:
     void messageUpdated(QString);
 
@@ -36,6 +40,8 @@ protected:
     QList<QWidget*> _widgets;
     QList<QAction*> _actions;
     StepsDAG * _steps;
+    QVariantMap _configurations;
+    QReadWriteLock _confLock;
 };
 
 

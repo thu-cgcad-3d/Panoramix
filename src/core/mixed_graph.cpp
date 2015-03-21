@@ -1121,8 +1121,8 @@ namespace panoramix {
 
 
         MixedGraphPropertyTable MakeMixedGraphPropertyTable(const MixedGraph & mg, const std::vector<Vec3> & vps) {
-            auto compProps = MakeHandledTableForComponents<MixedGraphComponentProperty>(mg);
-            auto consProps = MakeHandledTableForConstraints<MixedGraphConstraintProperty>(mg);
+            auto compProps = MakeHandledTableForAllComponents<MixedGraphComponentProperty>(mg);
+            auto consProps = MakeHandledTableForAllConstraints<MixedGraphConstraintProperty>(mg);
             for (auto & l : mg.internalComponents<LineData>()){
                 compProps[l.topo.hd].orientationClaz = l.data.initialClaz;
                 compProps[l.topo.hd].orientationNotClaz = -1;
@@ -1767,10 +1767,10 @@ namespace panoramix {
 
             SetClock();
 
-            auto uh2varStartPosition = MakeHandledTableForComponents<int>(mg);
-            auto bh2consStartPosition = MakeHandledTableForConstraints<int>(mg);
-            auto appliedBinaryAnchors = MakeHandledTableForConstraints<std::vector<Vec3>>(mg);
-            auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForConstraints<double>(mg);
+            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto bh2consStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+            auto appliedBinaryAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
+            auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForAllConstraints<double>(mg);
 
             int varNum = 0;
             int consNum = 0;
@@ -1936,10 +1936,10 @@ namespace panoramix {
 
             using namespace Eigen;
 
-            auto uh2varStartPosition = MakeHandledTableForComponents<int>(mg);
-            auto bh2consStartPosition = MakeHandledTableForConstraints<int>(mg);
-            auto appliedBinaryAnchors = MakeHandledTableForConstraints<std::vector<Vec3>>(mg);
-            auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForConstraints<double>(mg);
+            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto bh2consStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+            auto appliedBinaryAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
+            auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForAllConstraints<double>(mg);
 
             // initialize vectors
             int varNum, consNum;
@@ -2449,9 +2449,10 @@ namespace panoramix {
         }
 
 
+        static const int regionLineRelatedThreshold = 2;
 
         void AttachPrincipleDirectionConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props,
-            double rangeAngle){
+            double rangeAngle, bool avoidLineConflictions){
 
             SetClock();
 
@@ -2519,11 +2520,11 @@ namespace panoramix {
                                 break;
                             auto pp1 = PixelLoc(p1.x + x, p1.y + y);
                             auto pp2 = PixelLoc(p2.x + x, p2.y + y);
-                            if (Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp1) && mask(pp1)){
+                            if (Contains(mask, pp1) /*Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp1)*/ && mask(pp1)){
                                 peakyRegionHandles[i].push_back(r.topo.hd);
                                 intersected = true;
                             }
-                            else if (Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp2) && mask(pp2)){
+                            else if (Contains(mask, pp2)/*Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp2) */&& mask(pp2)){
                                 peakyRegionHandles[i].push_back(r.topo.hd);
                                 intersected = true;
                             }
@@ -2531,13 +2532,38 @@ namespace panoramix {
                     }
                 }
             }
-
-  
+       
             for (int i = 0; i < props.vanishingPoints.size(); i++){
                 auto & vp = props.vanishingPoints[i];
                 auto & rhs = peakyRegionHandles[i];
                 for (auto rh : rhs){
-                    MakeRegionPlaneToward(rh, i, props);
+                    if (avoidLineConflictions){
+                        bool hasLineConflictions = false;
+                        for (auto conh : mg.topo(rh).constraints<RegionLineConnectionData>()){
+                            if (mg.data(conh).normalizedAnchors.size() < regionLineRelatedThreshold)
+                                continue;
+                            LineHandle lh = mg.topo(conh).component<1>();
+                            auto & lprop = props[lh];
+                            if (lprop.orientationClaz == i){
+                                hasLineConflictions = true;
+                                break;
+                            }
+                        }
+                        if (!hasLineConflictions)
+                            MakeRegionPlaneToward(rh, i, props);
+                    }
+                    else {
+                        MakeRegionPlaneToward(rh, i, props);
+                        for (auto conh : mg.topo(rh).constraints<RegionLineConnectionData>()){
+                            if (mg.data(conh).normalizedAnchors.size() < regionLineRelatedThreshold)
+                                continue;
+                            LineHandle lh = mg.topo(conh).component<1>();
+                            auto & lprop = props[lh];
+                            if (lprop.orientationClaz == i){
+                                lprop.orientationClaz = -1;
+                            }
+                        }
+                    }
                 }
             }
 
@@ -2637,7 +2663,7 @@ namespace panoramix {
 
             std::vector<Scored<RegionHandle>> maybeCeilinsOrFloors[2];
 
-            auto regionPlanes = mg.createComponentTable<RegionData, Plane3>();
+            auto regionPlanes = MakeHandledTableForComponents<Plane3, RegionData>(mg);
             for (auto & r : mg.components<RegionData>()){
                 if (!props[r.topo.hd].used)
                     continue;

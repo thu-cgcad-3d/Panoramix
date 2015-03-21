@@ -205,7 +205,7 @@ namespace panoramix {
 
         // adjust constraints
         void AttachPrincipleDirectionConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props, 
-            double rangeAngle = M_PI / 100.0);
+            double rangeAngle = M_PI / 100.0, bool avoidLineConflictions = true);
         void AttachWallConstriants(const MixedGraph & mg, MixedGraphPropertyTable & props,
             double rangeAngle = M_PI / 100.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
         void AttachFloorAndCeilingConstraints(const MixedGraph & mg, MixedGraphPropertyTable & props,

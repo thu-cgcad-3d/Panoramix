@@ -105,6 +105,8 @@ public:
 
 
         // reconstruction setup
+        setConf(tr("principle direction constraints angle"), M_PI / 30.0);
+        setConf(tr("wall constraints angle"), M_PI / 60.0);
         int stepReconstructionSetup = _steps->addStep(tr("Reconstruction Setup"), 
             [this](DataOfType<PanoView> & im, DataOfType<LinesAndVPs> & linesVPs, 
             DataOfType<Segmentation> & segs){
@@ -127,6 +129,8 @@ public:
                 core::AppendLines(mg, lines[i], cams[i], vps);
             }
 
+            _confLock.lockForRead();
+
             // append regions
             core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
 
@@ -136,8 +140,11 @@ public:
             linesVPs.unlock();
             segs.unlock();
 
-            core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 15.0);
-            core::AttachWallConstriants(mg, props, M_PI / 30.0);
+            core::AttachWallConstriants(mg, props, conf("wall constraints angle").value<double>());
+            core::AttachPrincipleDirectionConstraints(mg, props, conf("principle direction constraints angle").value<double>());            
+            //core::AttachGeometricContextConstraints(mg, props, )
+
+            _confLock.unlock();
 
             return ReconstructionSetup{ view, std::move(mg), std::move(props), std::move(segmentedImage) };
 
@@ -221,8 +228,6 @@ void Project::loadFromDisk(const QString & filename){
     _projectFileInfo = QFileInfo(filename);
     NOT_IMPLEMENTED_YET();
 }
-
-
 
 
 void Project::update(bool forceSourceStepUpdate) {
