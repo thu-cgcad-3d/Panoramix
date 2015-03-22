@@ -278,17 +278,21 @@ namespace panoramix {
             }
         };
 
+        using PerspectiveView = View<PerspectiveCamera>;
+        using PanoramicView = View<PanoramicCamera>;
+        using PartialPanoramicView = View<PartialPanoramicCamera>;
+
 
 
 
         // create panoramic view
-        View<PanoramicCamera> CreatePanoramicView(const Image & panorama,
+        PanoramicView CreatePanoramicView(const Image & panorama,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, 1));
 
         // create perspective view
-        View<PerspectiveCamera> CreatePerspectiveView(const Image & perspectiveImage,
+        PerspectiveView CreatePerspectiveView(const Image & perspectiveImage,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, -1),
