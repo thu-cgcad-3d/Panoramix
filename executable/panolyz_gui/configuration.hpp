@@ -7,14 +7,10 @@
 
 #include "stepsdag.hpp"
 
-struct PanoView {
-    panoramix::core::View<panoramix::core::PanoramicCamera> view;
-};
 
-StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<panoramix::core::PanoramicView> & pv,
     QList<QAction*> & actions, QWidget * parent);
-
-
 
 
 struct Segmentation {
@@ -22,45 +18,48 @@ struct Segmentation {
     int segmentsNum;
 };
 
-StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Segmentation> & segs,
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<Segmentation> & segs,
     QList<QAction*> & actions, QWidget * parent);
 
 
-
 struct LinesAndVPs {
-    std::vector<panoramix::core::PerspectiveCamera> cams;
+    std::vector<panoramix::core::PerspectiveView> perspectiveViews;
     std::vector<std::vector<panoramix::core::Classified<panoramix::core::Line2>>> lines;
     std::vector<panoramix::core::Line3> line3ds;
     std::vector<panoramix::core::Vec3> vps;
 };
 
-StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<LinesAndVPs> & segs,
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<LinesAndVPs> & segs,
     QList<QAction*> & actions, QWidget * parent);
 
 
 
-
+template <class CameraT>
 struct ReconstructionSetup {
-    panoramix::core::View<panoramix::core::PanoramicCamera> view;
+    panoramix::core::View<CameraT> view;
     panoramix::core::MixedGraph mg;
     panoramix::core::MixedGraphPropertyTable props;
     panoramix::core::Imagei segmentation;
 };
 
-StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<ReconstructionSetup> & segs,
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<ReconstructionSetup<panoramix::core::PanoramicCamera>> & segs,
     QList<QAction*> & actions, QWidget * parent);
 
 
 
 
-
+template <class CameraT>
 struct Reconstruction {
-    panoramix::core::View<panoramix::core::PanoramicCamera> view;
+    panoramix::core::View<CameraT> view;
     panoramix::core::MixedGraph mg;
     panoramix::core::MixedGraphPropertyTable props;
 };
 
-StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Reconstruction> & segs,
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<Reconstruction<panoramix::core::PanoramicCamera>> & segs,
     QList<QAction*> & actions, QWidget * parent);
 
 

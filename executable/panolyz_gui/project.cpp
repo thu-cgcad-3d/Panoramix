@@ -11,7 +11,7 @@
 #include "project.hpp"
 
 using namespace panoramix;
-
+using PanoView = core::View<core::PanoramicCamera>;
 
 class PanoRecProject : public Project {
 public:
@@ -27,7 +27,7 @@ public:
             core::ResizeToHeight(pim, 700);
             bool b = core::MakePanorama(pim);
             Q_ASSERT(b);
-            return PanoView{ core::CreatePanoramicView(pim) };
+            return core::CreatePanoramicView(pim);
         });
 
         // lines and vps
@@ -36,24 +36,25 @@ public:
             
             im.lockForRead();
 
-            auto & view = im.content.view;
+            auto & view = im.content;
             
             std::vector<core::PerspectiveCamera> cams;
+            std::vector<core::PerspectiveView> perspectiveViews;
             std::vector<std::vector<core::Classified<core::Line2>>> lines;
             std::vector<core::Vec3> vps;
 
             cams = core::CreateCubicFacedCameras(view.camera, view.image.rows, view.image.rows, view.image.rows * 0.4);
+            perspectiveViews.resize(cams.size());
             lines.resize(cams.size());
             for (int i = 0; i < cams.size(); i++){
-                auto pim = view.sampled(cams[i]).image;
+                perspectiveViews[i] = view.sampled(cams[i]);
                 core::LineSegmentExtractor lineExtractor;
                 lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
-                auto ls = lineExtractor(pim, 2, 300); // use pyramid
+                auto ls = lineExtractor(perspectiveViews[i].image, 2, 300); // use pyramid
                 lines[i].reserve(ls.size());
                 for (auto & l : ls){
                     lines[i].push_back(core::ClassifyAs(l, -1));
                 }
-                //vis::Visualizer2D(pim) << ls << vis::manip2d::Show();
             }
 
 
@@ -71,7 +72,12 @@ public:
                 }
             }
 
-            return LinesAndVPs{ std::move(cams), std::move(lines), std::move(line3ds), std::move(vps) };
+            return LinesAndVPs{ 
+                std::move(perspectiveViews), 
+                std::move(lines), 
+                std::move(line3ds), 
+                std::move(vps) 
+            };
 
         }, { stepLoad });
 
@@ -83,14 +89,15 @@ public:
             im.lockForRead();
             linesVPs.lockForRead();
 
-            auto & view = im.content.view;
+            auto & view = im.content;
             auto & line3ds = linesVPs.content.line3ds;
 
             core::Imagei segmentedImage;
 
             core::SegmentationExtractor segmenter;
             segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
-            segmenter.params().c = 100.0;
+            segmenter.params().useYUVColorSpace = false;
+            segmenter.params().c = 50.0;
             int segmentsNum = 0;
 
             std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, M_PI / 36.0);
@@ -109,7 +116,7 @@ public:
         setConf(tr("wall constraints angle"), M_PI / 60.0);
         int stepReconstructionSetup = _steps->addStep(tr("Reconstruction Setup"), 
             [this](DataOfType<PanoView> & im, DataOfType<LinesAndVPs> & linesVPs, 
-            DataOfType<Segmentation> & segs){
+            DataOfType<Segmentation> & segs) -> ReconstructionSetup<core::PanoramicCamera> {
         
             core::MixedGraph mg;
             core::MixedGraphPropertyTable props;
@@ -118,15 +125,15 @@ public:
             linesVPs.lockForRead();
             segs.lockForRead();
 
-            auto & view = im.content.view;
+            auto & view = im.content;
             auto & lines = linesVPs.content.lines;
-            auto & cams = linesVPs.content.cams;
+            auto & perspectiveViews = linesVPs.content.perspectiveViews;
             auto & vps = linesVPs.content.vps;
             auto segmentedImage = segs.content.segmentation;
 
             // append lines
-            for (int i = 0; i < cams.size(); i++){
-                core::AppendLines(mg, lines[i], cams[i], vps);
+            for (int i = 0; i < perspectiveViews.size(); i++){
+                core::AppendLines(mg, lines[i], perspectiveViews[i].camera, vps);
             }
 
             _confLock.lockForRead();
@@ -145,7 +152,11 @@ public:
 
             _confLock.unlock();
 
-            return ReconstructionSetup{ view, std::move(mg), std::move(props), std::move(segmentedImage) };
+            return ReconstructionSetup<core::PanoramicCamera>{ 
+                view, 
+                    std::move(mg), std::move(props), 
+                    std::move(segmentedImage) 
+            };
 
         }, { stepLoad, stepLinesVPs, stepSegmentation });
 
@@ -157,10 +168,10 @@ public:
         
         // reconstruction
         int stepReconstruction = _steps->addStep("Reconstruction",
-            [this](DataOfType<ReconstructionSetup> & lastRec){
+            [this](DataOfType<ReconstructionSetup<core::PanoramicCamera>> & lastRec){
 
             lastRec.lockForRead();
-            Reconstruction rec = { lastRec.content.view, lastRec.content.mg, lastRec.content.props };
+            Reconstruction<core::PanoramicCamera> rec = { lastRec.content.view, lastRec.content.mg, lastRec.content.props };
             lastRec.unlock();
 
             auto & mg = rec.mg;
@@ -203,6 +214,162 @@ private:
     std::vector<core::PerspectiveCamera> _cams;
 };
 
+using PerspView = panoramix::core::View<panoramix::core::PerspectiveCamera>;
+
+class NormalRecProject : public Project {
+public:
+    explicit NormalRecProject(const QString & normalIm, QObject * parent) 
+        : Project(parent), _imFileInfo(normalIm) {
+        
+        // initialize steps
+        int stepLoad = _steps->addStep("Photo, lines and Vanishing Points", [this](){
+            QImage im;
+            im.load(_imFileInfo.absoluteFilePath());
+            im = im.convertToFormat(QImage::Format_RGB888);
+            auto cvim = vis::MakeCVMat(im);
+            core::ResizeToHeight(cvim, 500);
+
+            core::View<core::PerspectiveCamera> view;
+            std::vector<core::Classified<core::Line2>> lines;
+            std::vector<core::Classified<core::Line3>> line3ds;
+            std::vector<core::Vec3> vps;
+
+            double focal;
+            core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified);
+            view = core::CreatePerspectiveView(cvim, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
+                core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), &line3ds, &lines, &vps, &focal);
+
+            std::vector<core::Line3> pureLine3ds(line3ds.size());
+            for (int i = 0; i < line3ds.size(); i++){
+                pureLine3ds[i] = line3ds[i].component;
+            }
+
+            return LinesAndVPs{ 
+                { std::move(view) }, 
+                { std::move(lines) }, 
+                std::move(pureLine3ds),
+                std::move(vps) 
+            };
+        });
+
+        // segmentation
+        int stepSegmentation = _steps->addStep(tr("Segmentation"),
+            [this](DataOfType<LinesAndVPs> & linesVPs){
+
+            linesVPs.lockForRead();
+
+            assert(linesVPs.content.perspectiveViews.size() == 1);
+            auto & view = linesVPs.content.perspectiveViews.front();
+            std::vector<core::Line2> pureLines(linesVPs.content.lines.size());
+            for (int i = 0; i < pureLines.size(); i++){
+                pureLines[i] = linesVPs.content.lines.front()[i].component;
+            }
+
+            core::Imagei segmentedImage;
+
+            core::SegmentationExtractor segmenter;
+            segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
+            segmenter.params().useYUVColorSpace = false;
+            segmenter.params().c = 100.0;
+            int segmentsNum = 0;
+
+            std::tie(segmentedImage, segmentsNum) = segmenter(view.image, pureLines, view.image.cols / 100.0);
+            linesVPs.unlock();
+
+            return Segmentation{ std::move(segmentedImage), segmentsNum };
+
+        }, { stepLoad });
+
+
+
+
+        // reconstruction setup
+        int stepReconstructionSetup = _steps->addStep(tr("Reconstruction Setup"),
+            [this](DataOfType<LinesAndVPs> & linesVPs, DataOfType<Segmentation> & segs) -> ReconstructionSetup<core::PerspectiveCamera> {
+
+            core::MixedGraph mg;
+            core::MixedGraphPropertyTable props;
+
+            linesVPs.lockForRead();
+            segs.lockForRead();
+
+            auto & lines = linesVPs.content.lines;
+            auto & perspectiveViews = linesVPs.content.perspectiveViews;
+            auto & vps = linesVPs.content.vps;
+            auto segmentedImage = segs.content.segmentation;
+
+            // append lines
+            for (int i = 0; i < perspectiveViews.size(); i++)
+                core::AppendLines(mg, lines[i], perspectiveViews[i].camera, vps);
+
+            // append regions
+            core::AppendRegions(mg, segmentedImage, perspectiveViews.front().camera, 0.001, 0.001, 3, 1);
+
+            props = core::MakeMixedGraphPropertyTable(mg, vps);
+
+            linesVPs.unlock();
+            segs.unlock();
+
+            core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 120.0);
+            core::AttachWallConstriants(mg, props, M_PI / 100.0);
+
+            return ReconstructionSetup<core::PerspectiveCamera>{ perspectiveViews.front(), std::move(mg), std::move(props), std::move(segmentedImage) };
+
+        }, { stepLoad, stepSegmentation });
+
+
+
+
+
+
+
+        // reconstruction
+        int stepReconstruction = _steps->addStep("Reconstruction",
+            [this](DataOfType<ReconstructionSetup<core::PerspectiveCamera>> & lastRec){
+
+            lastRec.lockForRead();
+            Reconstruction<core::PerspectiveCamera> rec = { 
+                lastRec.content.view, lastRec.content.mg, lastRec.content.props
+            };
+            lastRec.unlock();
+
+            auto & mg = rec.mg;
+            auto & props = rec.props;
+
+            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::NormalizeVariables(mg, props);
+            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+            //core::Visualize(view, mg, props);
+            core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0, 0.05);
+
+            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::NormalizeVariables(mg, props);
+            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
+            //core::Visualize(view, mg, props);
+            core::AttachFloorAndCeilingConstraints(mg, props, 0.1, 0.6);
+
+            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::NormalizeVariables(mg, props);
+
+            return rec;
+        }, { stepReconstructionSetup });
+
+
+        // add widgets and actions
+        _widgets.clear();
+        for (int i = 0; i < _steps->widgets().size(); i++){
+            auto w = dynamic_cast<QWidget*>(_steps->widgets()[i]);
+            if (w){
+                w->setWindowTitle(_steps->stepNameAt(i));
+                _widgets << w;
+            }
+        }
+
+    }
+
+private:
+    QFileInfo _imFileInfo;
+};
 
 static int UnnamedProjectId = 1;
 Project::Project(QObject * parent) 
@@ -239,6 +406,10 @@ void Project::update(bool forceSourceStepUpdate) {
 Project * Project::createProjectFromImage(const QString & image, bool isPano, QObject * parent){
     if (isPano){
         Project * proj = new PanoRecProject(image, parent);
+        return proj;
+    }
+    else {
+        Project * proj = new NormalRecProject(image, parent);
         return proj;
     }
 
