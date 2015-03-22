@@ -2690,6 +2690,9 @@ namespace panoramix {
                 }
             }
 
+            if (maybeCeilinsOrFloors[0].empty() && maybeCeilinsOrFloors[1].empty())
+                return;
+
             // estimate height or ceiling/floor, remove non-ceiling/floor horizontal regions
             double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
             static const double heightAffectRange = medianCenterDepth * 0.01;

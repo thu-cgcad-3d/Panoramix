@@ -197,12 +197,12 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
 
 
 
-using PanoReconstructionSetup = ReconstructionSetup<panoramix::core::PanoramicCamera>;
 
-StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoReconstructionSetup> & rec,
+template <class CameraT>
+StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<ReconstructionSetup<CameraT>> & rec,
     QList<QAction*> & actions, QWidget * parent){
 
-    class Widget : public ImageViewer<PanoReconstructionSetup> {
+    class Widget : public ImageViewer<ReconstructionSetup<CameraT>> {
 
         void setNoPen() { _strokePen = QPen(Qt::transparent); _applyStroke = nullptr; }
         void setPen(const QColor & color, int strokeSize, 
@@ -243,7 +243,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoReconstructio
         }
 
     public:
-        explicit Widget(DataOfType<PanoReconstructionSetup> * dd, QWidget * p) : ImageViewer<PanoReconstructionSetup>(dd, p) {
+        explicit Widget(DataOfType<ReconstructionSetup<CameraT>> * dd, QWidget * p) : ImageViewer<ReconstructionSetup<CameraT>>(dd, p) {
 
             setContextMenuPolicy(Qt::ActionsContextMenu);
             QActionGroup * bas = new QActionGroup(this);
@@ -346,7 +346,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoReconstructio
                 update();
             }
             else{
-                ImageViewer<PanoReconstructionSetup>::mousePressEvent(e);
+                ImageViewer<ReconstructionSetup<CameraT>>::mousePressEvent(e);
             }
         }
 
@@ -360,7 +360,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoReconstructio
                 }
             }
             else{
-                ImageViewer<PanoReconstructionSetup>::mouseMoveEvent(e);
+                ImageViewer<ReconstructionSetup<CameraT>>::mouseMoveEvent(e);
             }
         }
 
@@ -374,7 +374,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoReconstructio
             }
             _stroke.clear();
             update();
-            ImageViewer<PanoReconstructionSetup>::mouseReleaseEvent(e);
+            ImageViewer<ReconstructionSetup<CameraT>>::mouseReleaseEvent(e);
         }
 
     private:
@@ -384,19 +384,32 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoReconstructio
     return new Widget(&rec, parent);
 }
 
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<ReconstructionSetup<panoramix::core::PanoramicCamera>> & rec,
+    QList<QAction*> & actions, QWidget * parent){
+    return CreateBindingWidgetAndActionsTemplated(rec, actions, parent);
+}
+
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<ReconstructionSetup<panoramix::core::PerspectiveCamera>> & rec,
+    QList<QAction*> & actions, QWidget * parent){
+    return CreateBindingWidgetAndActionsTemplated(rec, actions, parent);
+}
 
 
+core::Image ImageForTexture(const core::PanoramicView & view) { return view.image; }
+core::Image ImageForTexture(const core::PerspectiveView & view) { 
+    return view.sampled(core::PanoramicCamera(250, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Vec3(0, 0, 1))).image; 
+}
 
-
-using PanoReconstruction = Reconstruction<panoramix::core::PanoramicCamera>;
-
-StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoReconstruction> & rec,
+template <class CameraT>
+StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstruction<CameraT>> & rec,
     QList<QAction*> & actions, QWidget * parent) {
 
-    class Widget : public StepWidgetAdaptor<PanoReconstruction, QGLWidget> {
+    class Widget : public StepWidgetAdaptor<Reconstruction<CameraT>, QGLWidget> {
     public:
-        explicit Widget(DataOfType<PanoReconstruction> * d, QWidget * parent = nullptr)
-            : StepWidgetAdaptor<PanoReconstruction, QGLWidget>(d, parent){
+        explicit Widget(DataOfType<Reconstruction<CameraT>> * d, QWidget * parent = nullptr)
+            : StepWidgetAdaptor<Reconstruction<CameraT>, QGLWidget>(d, parent){
             setMouseTracking(true);
             setAutoBufferSwap(false);
             grabKeyboard();
@@ -458,7 +471,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoReconstructio
 
 
             lockForRead();
-            vis::ResourceStore::set("texture", content().view.image);
+            vis::ResourceStore::set("texture", ImageForTexture(content().view));
             unlock();
 
             qDebug() << "loading texture";
@@ -677,7 +690,17 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoReconstructio
     return new Widget(&rec, parent);
 }
 
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<Reconstruction<panoramix::core::PanoramicCamera>> & rec,
+    QList<QAction*> & actions, QWidget * parent){
+    return CreateBindingWidgetAndActionsTemplated(rec, actions, parent);
+}
 
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<Reconstruction<panoramix::core::PerspectiveCamera>> & rec,
+    QList<QAction*> & actions, QWidget * parent){
+    return CreateBindingWidgetAndActionsTemplated(rec, actions, parent);
+}
 
 
 

@@ -244,12 +244,18 @@ public:
                 pureLine3ds[i] = line3ds[i].component;
             }
 
-            return LinesAndVPs{ 
-                { std::move(view) }, 
-                { std::move(lines) }, 
-                std::move(pureLine3ds),
-                std::move(vps) 
-            };
+            LinesAndVPs result;
+            result.perspectiveViews = { std::move(view) };
+            result.lines = { std::move(lines) };
+            result.line3ds = std::move(pureLine3ds);
+            result.vps = std::move(vps);
+            return result;
+            //return LinesAndVPs{ 
+            //    std::vector<core::PerspectiveView>{ std::move(view) },
+            //    std::vector<std::vector<core::Classified<core::Line2>>>{ std::move(lines) },
+            //    std::move(pureLine3ds),
+            //    std::move(vps) 
+            //};
         });
 
         // segmentation
@@ -313,7 +319,12 @@ public:
             core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 120.0);
             core::AttachWallConstriants(mg, props, M_PI / 100.0);
 
-            return ReconstructionSetup<core::PerspectiveCamera>{ perspectiveViews.front(), std::move(mg), std::move(props), std::move(segmentedImage) };
+            return ReconstructionSetup<core::PerspectiveCamera>{ 
+                perspectiveViews.front(), 
+                    std::move(mg), 
+                    std::move(props), 
+                    std::move(segmentedImage)
+            };
 
         }, { stepLoad, stepSegmentation });
 

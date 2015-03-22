@@ -45,10 +45,12 @@ struct ReconstructionSetup {
 };
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
-    DataOfType<ReconstructionSetup<panoramix::core::PanoramicCamera>> & segs,
+    DataOfType<ReconstructionSetup<panoramix::core::PanoramicCamera>> & rec,
     QList<QAction*> & actions, QWidget * parent);
 
-
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<ReconstructionSetup<panoramix::core::PerspectiveCamera>> & rec,
+    QList<QAction*> & actions, QWidget * parent);
 
 
 template <class CameraT>
@@ -59,7 +61,11 @@ struct Reconstruction {
 };
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
-    DataOfType<Reconstruction<panoramix::core::PanoramicCamera>> & segs,
+    DataOfType<Reconstruction<panoramix::core::PanoramicCamera>> & rec,
+    QList<QAction*> & actions, QWidget * parent);
+
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<Reconstruction<panoramix::core::PerspectiveCamera>> & rec,
     QList<QAction*> & actions, QWidget * parent);
 
 
