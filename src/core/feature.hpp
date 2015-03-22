@@ -75,14 +75,15 @@ namespace panoramix {
 
 
         // compute straightness of points
-        std::pair<double, InfiniteLine2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
+        std::pair<double, Ray2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
             double * interArea = nullptr, double * interLen = nullptr);
 
 
 
         // find 3 orthogonal directions
-        std::vector<Vec3> FindThreeOrthogonalPrinicipleDirections(const std::vector<Vec3> & directions,
-            int longitudeDivideNum = 1000, int latitudeDivideNum = 500);
+        Result<std::vector<Vec3>> FindOrthogonalPrinicipleDirections(const std::vector<Vec3> & directions,
+            int longitudeDivideNum = 1000, int latitudeDivideNum = 500, 
+            bool allowMoreThan2HorizontalVPs = false, const Vec3 & verticalSeed = Vec3(0, 0, 1));
 
 
 
@@ -120,9 +121,9 @@ namespace panoramix {
             
             // accepts (lines, projection center)
             // returns (>= 3 vanishing points (the first 3 vanishing points should be the Manhattan VPs), the focal length, line classes)
-            Optional<std::tuple<std::vector<HPoint2>, double, std::vector<int>>> operator() (
+            Result<std::tuple<std::vector<HPoint2>, double, std::vector<int>>> operator() (
                 const std::vector<Line2> & lines, const SizeI & imSize) const;  
-            Optional<std::tuple<std::vector<HPoint2>, double>> operator() (
+            Result<std::tuple<std::vector<HPoint2>, double>> operator() (
                 std::vector<Classified<Line2>> & lines, const SizeI & imSize) const;
 
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
@@ -136,7 +137,7 @@ namespace panoramix {
 
 
         /// homography estimation
-        std::pair<Optional<double>, Optional<double>> ComputeFocalsFromHomography(const Mat3 & H);
+        std::pair<Result<double>, Result<double>> ComputeFocalsFromHomography(const Mat3 & H);
 
 
 

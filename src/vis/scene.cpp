@@ -441,7 +441,7 @@ namespace panoramix {
         VisualObjectMeshTriangle VisualObjectScene::pickOnScreen(const RenderOptions & options,
             const core::Point2 & pOnScreen) const {
 
-            InfiniteLine3 centerRay(options.camera.eye(), normalize(options.camera.spatialDirection(pOnScreen)));
+            Ray3 centerRay(options.camera.eye(), normalize(options.camera.spatialDirection(pOnScreen)));
 
             ///// add ray
             //{

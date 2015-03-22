@@ -37,7 +37,7 @@ namespace panoramix {
         }
 
         template <class T, int N, class TesterT, class = std::enable_if_t<std::is_floating_point<T>::value>>
-        inline bool HasValue(const InfiniteLine<T, N> & v, const TesterT & tester){
+        inline bool HasValue(const Ray<T, N> & v, const TesterT & tester){
             return HasValue(v.anchor, tester) || HasValue(v.direction, tester);
         }
 
@@ -583,7 +583,7 @@ namespace panoramix {
 
         // returns (distance, nearest point)
         template <class T, int N>
-        std::pair<T, Point<T, N>> DistanceFromPointToLine(const Point<T, N> & p, const InfiniteLine<T, N> & line) {
+        std::pair<T, Point<T, N>> DistanceFromPointToLine(const Point<T, N> & p, const Ray<T, N> & line) {
             Vec<T, N> lineDir = line.direction;
             lineDir /= norm(lineDir);
             auto root = (p - line.anchor).dot(lineDir) * lineDir + line.anchor;
@@ -592,7 +592,7 @@ namespace panoramix {
 
         // returns signed distance
         template <class T>
-        T SignedDistanceFromPointToLine(const Point<T, 2> & p, const InfiniteLine<T, 2> & line) {
+        T SignedDistanceFromPointToLine(const Point<T, 2> & p, const Ray<T, 2> & line) {
             auto coeffs = GetCoeffs(line);
             return (coeffs[0] * p[0] + coeffs[1] * p[1] + coeffs[2]) / sqrt(Square(coeffs[0]) + Square(coeffs[1]));
         }
@@ -612,7 +612,7 @@ namespace panoramix {
         // see http://geomalgorithms.com/a07-_distance.html for explainations
         template <class T, int N>
         std::pair<T, std::pair<Point<T, N>, Point<T, N>>> DistanceBetweenTwoLines(
-            const InfiniteLine<T, N> & line1, const InfiniteLine<T, N> & line2) {
+            const Ray<T, N> & line1, const Ray<T, N> & line2) {
             
             auto u = normalize(line1.direction);
             auto v = normalize(line2.direction);
@@ -713,7 +713,7 @@ namespace panoramix {
 
         // intersecton between line and plane
         template <class T, int N>
-        PositionOnLine<T, N> IntersectionOfLineAndPlane(const InfiniteLine<T, N> & line, const Plane<T, N> & plane){
+        PositionOnLine<T, N> IntersectionOfLineAndPlane(const Ray<T, N> & line, const Plane<T, N> & plane){
             T lambda = (plane.anchor - line.anchor).dot(plane.normal) / line.direction.dot(plane.normal);
             return PositionOnLine<T, N>(line, lambda);
         }
@@ -728,7 +728,7 @@ namespace panoramix {
 
         template <class T, int N>
         Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
-            const InfiniteLine<T, N> & line, const Point<T, N> * cornersData){
+            const Ray<T, N> & line, const Point<T, N> * cornersData){
             using namespace Eigen;
             Map<const Matrix<T, N, N, Eigen::ColMajor>> corners((const T*)cornersData, N, N);
             Map<const Matrix<T, N, 1>> D(line.direction.val, N, 1);
@@ -750,7 +750,7 @@ namespace panoramix {
 
         template <class T, int N>
         inline Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
-            const InfiniteLine<T, N> & line, const std::array<Point<T, N>, N> & corners){
+            const Ray<T, N> & line, const std::array<Point<T, N>, N> & corners){
             return BarycentricCoordinatesOfLineAndPlaneUnitIntersection(line, corners.data());
         }
 

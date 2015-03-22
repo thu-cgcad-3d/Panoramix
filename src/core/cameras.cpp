@@ -311,7 +311,17 @@ namespace panoramix {
             std::vector<HPoint2> vps;
             double focal;
             std::vector<int> lineClasses;
-            std::tie(vps, focal, lineClasses) = vpd(lines, perspectiveImage.size()).unwrap();
+            int maxTry = 100;
+            while (vps.empty()){
+                auto result = vpd(lines, perspectiveImage.size());
+                if (-- maxTry < 0)
+                    break;
+                if (result.failed()){
+                    std::srand(clock());
+                    continue;
+                }
+                std::tie(vps, focal, lineClasses) = result.unwrap();
+            }
             assert(vps.size() >= 3);
 
             // only reserve first 3 vps

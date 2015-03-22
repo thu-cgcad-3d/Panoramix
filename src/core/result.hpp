@@ -1,50 +1,51 @@
-#ifndef PANORAMIX_CORE_OPTIONAL_HPP
-#define PANORAMIX_CORE_OPTIONAL_HPP
+#ifndef PANORAMIX_CORE_RESULT_HPP
+#define PANORAMIX_CORE_RESULT_HPP
 
 #include <utility>
  
 namespace panoramix {
     namespace core {
     
-        // optional
+        // failable result
         template <class T>
-        class Optional {
+        class Result {
         public:            
-            Optional() : _exist(false) {}
+            Result() : _exist(false) {}
             
-            Optional(nullptr_t) : _exist(false) {}
-            Optional & operator = (nullptr_t) {
+            Result(nullptr_t) : _exist(false) {}
+            Result & operator = (nullptr_t) {
                 _exist = false;
                 return *this;
             }
             
-            Optional(T && v) : _exist(true), _temp(std::move(v)) {}
-            Optional & operator = (T && v) {
+            Result(T && v) : _exist(true), _temp(std::move(v)) {}
+            Result & operator = (T && v) {
                 _temp = std::move(v);
                 _exist = true;
                 return *this;
             }
 
-            Optional(Optional && opt) { swap(opt); }
-            Optional & operator = (Optional && opt) {
+            Result(Result && opt) { swap(opt); }
+            Result & operator = (Result && opt) {
                 swap(opt);
                 return *this;
             }
 
-            Optional(const Optional &) = delete;
-            Optional & operator = (const Optional &) = delete;
+            Result(const Result &) = delete;
+            Result & operator = (const Result &) = delete;
 
-            inline void swap(Optional & opt) {
+            inline void swap(Result & opt) {
                 std::swap(_exist, opt._exist);
                 std::swap(_temp, opt._temp);
             }
 
             inline bool null() const { return !_exist; }
+            inline bool failed() const { return null(); }
             inline const T & ref() const { return _temp; }
 
             inline T unwrap() {
                 if (!_exist){
-                    std::cout << "unwrapping a null Optional<T>!!!!!!!" << std::endl;
+                    std::cout << "unwrapping a null Result<T>!!!!!!!" << std::endl;
                 }
                 assert(_exist);
                 _exist = false;
@@ -63,8 +64,8 @@ namespace panoramix {
         };
 
         template <class T, class = std::enable_if_t<!std::is_reference<T>::value>>
-        inline Optional<T> AsOptional(T && v){
-            return Optional<T>(std::move(v));
+        inline Result<T> AsResult(T && v){
+            return Result<T>(std::move(v));
         }
 
 
@@ -74,7 +75,7 @@ namespace panoramix {
 namespace std {
 
     template <class T>
-    void swap(panoramix::core::Optional<T> & a, panoramix::core::Optional<T> & b){
+    void swap(panoramix::core::Result<T> & a, panoramix::core::Result<T> & b){
         a.swap(b);
     }
 

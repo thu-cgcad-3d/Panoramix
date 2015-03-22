@@ -72,7 +72,7 @@ namespace panoramix {
             return PixelLoc(static_cast<int>(p[0]), static_cast<int>(p[1]));
         }
 
-        Visualizer2D operator << (Visualizer2D viz, const InfiniteLine<double, 2> & line){
+        Visualizer2D operator << (Visualizer2D viz, const Ray<double, 2> & line){
             Point2 imCenter(viz.image().cols / 2.0, viz.image().rows / 2.0);
             auto d = DistanceFromPointToLine(imCenter, line);
             const Point2 & root = d.second;

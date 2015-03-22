@@ -96,7 +96,7 @@ namespace panoramix {
                 return PixelLoc(static_cast<int>(p[0]), static_cast<int>(p[1]));
             }
 
-            std::pair<double, double> ComputeSpanningArea(const Point2 & a, const Point2 & b, const InfiniteLine2 & line) {
+            std::pair<double, double> ComputeSpanningArea(const Point2 & a, const Point2 & b, const Ray2 & line) {
                 auto ad = SignedDistanceFromPointToLine(a, line);
                 auto bd = SignedDistanceFromPointToLine(b, line);
                 auto ap = DistanceFromPointToLine(a, line).second;
@@ -243,7 +243,7 @@ namespace panoramix {
                 }
             }
 
-            auto vanishingPoints = FindThreeOrthogonalPrinicipleDirections(lineIntersections);
+            auto vanishingPoints = FindOrthogonalPrinicipleDirections(lineIntersections, 1000, 500, true).unwrap();
 
             // project lines to space
             std::vector<Classified<Line3>> spatialLineSegments;
@@ -1313,9 +1313,9 @@ namespace panoramix {
             //    return Line3();
             if (lp.orientationClaz >= 0){
                 assert(lp.variables.size() == 1);
-                InfiniteLine3 infLine(normalize(ld.line.center()) / NonZeroize(lp.variables[0]), props.vanishingPoints[lp.orientationClaz]);
-                return Line3(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), normalize(ld.line.first)), infLine).second.second,
-                    DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), normalize(ld.line.second)), infLine).second.second);
+                Ray3 infLine(normalize(ld.line.center()) / NonZeroize(lp.variables[0]), props.vanishingPoints[lp.orientationClaz]);
+                return Line3(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(ld.line.first)), infLine).second.second,
+                    DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(ld.line.second)), infLine).second.second);
             }
             else /*if (line.type == MGUnary::LineFree)*/{
                 assert(lp.variables.size() == 2);
@@ -1366,11 +1366,11 @@ namespace panoramix {
             auto & lp = props.componentProperties.at(lh);
             if (lp.orientationClaz >= 0){
                 assert(lp.variables.size() == 1);
-                InfiniteLine3 infLine(normalize(ld.line.center()), props.vanishingPoints[lp.orientationClaz]);
+                Ray3 infLine(normalize(ld.line.center()), props.vanishingPoints[lp.orientationClaz]);
                  // variable is 1.0/centerDepth
                  // corresponding coeff is 1.0/depthRatio
                  // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
-                 double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
+                 double depthRatio = norm(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), direction), infLine).second.first);
                  return std::vector<double>{1.0 / depthRatio};
              }
              else /*if(u.type == MGUnary::LineFree)*/{
@@ -1401,7 +1401,7 @@ namespace panoramix {
                 // variable is 1.0/centerDepth
                 // corresponding coeff is 1.0/depthRatio
                 // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
-                double depthRatio = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
+                double depthRatio = norm(IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), direction), plane).position);
                 return std::vector<double>{1.0 / depthRatio};
             }
             else if (rp.orientationClaz == -1 && rp.orientationNotClaz >= 0){
@@ -1435,10 +1435,10 @@ namespace panoramix {
             auto & lp = props.componentProperties.at(lh);
             if (lp.orientationClaz >= 0){
                 //assert(lp.variables.size() == 1);
-                InfiniteLine3 infLine(normalize(ld.line.center()), props.vanishingPoints[lp.orientationClaz]);
+                Ray3 infLine(normalize(ld.line.center()), props.vanishingPoints[lp.orientationClaz]);
                 // variable is 1.0/centerDepth
                 // depths = depthRatio * centerDepth
-                double depthRatio = norm(DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), direction), infLine).second.first);
+                double depthRatio = norm(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), direction), infLine).second.first);
                 double inversedCenterDepth = variables[0];
                 return depthRatio / inversedCenterDepth;
             }
@@ -1466,7 +1466,7 @@ namespace panoramix {
                 Plane3 plane(rd.normalizedCenter, props.vanishingPoints[rp.orientationClaz]);
                 // variable is 1.0/centerDepth
                 // depths = depthRatio * centerDepth
-                double depthRatio = norm(IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), direction), plane).position);
+                double depthRatio = norm(IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), direction), plane).position);
                 double inversedCenterDepth = variables[0];
                 return depthRatio / inversedCenterDepth;
             }
@@ -1504,12 +1504,12 @@ namespace panoramix {
         namespace {
 
             inline double DepthAt(const Vec3 & direction, const Plane3 & plane){
-                InfiniteLine3 ray(Point3(0, 0, 0), direction);
+                Ray3 ray(Point3(0, 0, 0), direction);
                 return norm(IntersectionOfLineAndPlane(ray, plane).position);
             }
 
             inline double DepthAt(const Vec3 & direction, const Line3 & line){
-                InfiniteLine3 ray(Point3(0, 0, 0), direction);
+                Ray3 ray(Point3(0, 0, 0), direction);
                 return norm(DistanceBetweenTwoLines(ray, line.infiniteLine()).second.first);
             }
 
@@ -1763,7 +1763,7 @@ namespace panoramix {
 
 
 
-        void SolveVariablesUsingInversedDepths(const MixedGraph & mg, MixedGraphPropertyTable & props){
+        void SolveVariablesUsingInversedDepths(const MixedGraph & mg, MixedGraphPropertyTable & props, bool useWeights){
 
             SetClock();
 
@@ -1794,7 +1794,6 @@ namespace panoramix {
             Eigen::Map<const Eigen::VectorXd> B(Bdata.data(), Bdata.size());
 
 
-            static const bool useWeights = true;
             Eigen::SparseMatrix<double> WA;
             Eigen::VectorXd WB;
             if(useWeights) {
@@ -1932,7 +1931,9 @@ namespace panoramix {
         }
 
         
-        void SolveVariablesUsingNormalDepths(const MixedGraph & mg, MixedGraphPropertyTable & props){
+        void SolveVariablesUsingNormalDepths(const MixedGraph & mg, MixedGraphPropertyTable & props, bool useWeights){
+
+            THERE_ARE_BUGS_HERE("weights not used yet");
 
             using namespace Eigen;
 
@@ -2673,12 +2674,12 @@ namespace panoramix {
                 double angleToVert = AngleBetweenUndirectedVectors(plane.normal, vertical);
                 if (angleToVert < angleThreshold){
                     int belonging = r.data.normalizedCenter.dot(vertical) < 0 ? 0 : 1;                    
-                    double centerZ = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), r.data.normalizedCenter), plane).position.dot(vertical);
+                    double centerZ = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), r.data.normalizedCenter), plane).position.dot(vertical);
                     maybeCeilinsOrFloors[belonging].push_back(ScoreAs(r.topo.hd, centerZ));
 
                     for (auto & cs : r.data.normalizedContours){
                         for (auto & c : cs){
-                            Point3 point = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), c), plane).position;
+                            Point3 point = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), c), plane).position;
                             float x = point.dot(xDir), y = point.dot(yDir);
                             if (x < xmin) xmin = x;
                             if (x > xmax) xmax = x;
@@ -2733,7 +2734,7 @@ namespace panoramix {
                         std::vector<Point2i> csresized;
                         csresized.reserve(cs.size());
                         for (auto & c : cs){
-                            Point3 point = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), c), regionPlanes[rh]).position;
+                            Point3 point = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), c), regionPlanes[rh]).position;
                             float x = point.dot(xDir), y = point.dot(yDir);
                             csresized.emplace_back(static_cast<int>((x - xmin) * scale), 
                                 static_cast<int>((y - ymin) * scale));
@@ -2768,7 +2769,7 @@ namespace panoramix {
                     std::vector<Point2i> csresized;
                     csresized.reserve(cs.size());
                     for (auto & c : cs){
-                        Point3 point = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), c), plane).position;
+                        Point3 point = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), c), plane).position;
                         float x = point.dot(xDir), y = point.dot(yDir);
                         float z = point.dot(vertical);
                         hasPosDot |= z >= 0;
@@ -3227,7 +3228,7 @@ namespace panoramix {
                                 RegionHandle rh = mg.topo(rlch).component<0>();
                                 Plane3 & plane = planes[rh];
                                 for (auto & anchor : anchors){
-                                    auto planePoint = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), anchor), plane).position;
+                                    auto planePoint = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), anchor), plane).position;
                                     double distance = Distance(planePoint, linePoint);
                                     if (distance < distToThis){
                                         distToThis = distance;
@@ -3285,8 +3286,8 @@ namespace panoramix {
                             Plane3 & thatPlane = planes[thatRh];
                             for (auto & cs : mg.data(rrch).normalizedSampledPoints){
                                 for (auto & c : cs){
-                                    Point3 pointHere = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), c), thisPlane).position;
-                                    Point3 pointThere = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), c), thatPlane).position;
+                                    Point3 pointHere = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), c), thisPlane).position;
+                                    Point3 pointThere = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), c), thatPlane).position;
                                     double dist = Distance(pointHere, pointThere);
                                     if (dist > ndist){
                                         ndist = dist;
@@ -3300,8 +3301,8 @@ namespace panoramix {
                             LineHandle lh = mg.topo(rlch).component<1>();
                             Line3 & thatLine = lines[lh];
                             for (auto & a : mg.data(rlch).normalizedAnchors){
-                                Point3 pointHere = IntersectionOfLineAndPlane(InfiniteLine3(Point3(0, 0, 0), a), thisPlane).position;
-                                Point3 pointThere = DistanceBetweenTwoLines(InfiniteLine3(Point3(0, 0, 0), a), thatLine.infiniteLine()).second.first;
+                                Point3 pointHere = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), a), thisPlane).position;
+                                Point3 pointThere = DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), a), thatLine.infiniteLine()).second.first;
                                 double dist = Distance(pointHere, pointThere);
                                 if (dist > ndist){
                                     ndist = dist;
@@ -3701,6 +3702,156 @@ namespace panoramix {
                 mg, props, ComponentHandleClickHandler{ mg, props },
                 ComponentHandleColorizer{ mg, props });
         }
+
+
+
+        namespace {
+
+            // graph data
+            class Universe {
+            public:
+                struct Element {
+                    int rank;
+                    int p; // parent
+                    float size;
+                };
+                explicit Universe(const std::vector<float> & eleSizes)
+                    : elements(eleSizes.size()), num(eleSizes.size()) {
+                    for (int i = 0; i < eleSizes.size(); i++){
+                        elements[i].rank = 0;
+                        elements[i].size = eleSizes[i];
+                        elements[i].p = i;
+                    }
+                }
+                int find(int x) {
+                    int y = x;
+                    while (y != elements[y].p)
+                        y = elements[y].p;
+                    elements[x].p = y;
+                    return y;
+                }
+                void join(int x, int y) {
+                    if (elements[x].rank > elements[y].rank) {
+                        elements[y].p = x;
+                        elements[x].size += elements[y].size;
+                    }
+                    else {
+                        elements[x].p = y;
+                        elements[y].size += elements[x].size;
+                        if (elements[x].rank == elements[y].rank)
+                            elements[y].rank++;
+                    }
+                    num--;
+                }
+                float size(int x) const { return elements[x].size; }
+                int numSets() const { return num; }
+            private:
+                int num;
+                std::vector<Element> elements;
+            };
+
+        }
+
+
+
+        HandledTable<RegionHandle, int> ClusterRegions(const MixedGraph & mg, const MixedGraphPropertyTable & props){
+
+            const double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
+
+            auto planes = mg.createComponentTable<RegionData, Plane3>();
+            auto regionAreas = mg.createComponentTable<RegionData>(0.0f);
+            for (auto & r : mg.components<RegionData>()){
+                planes[r.topo.hd] = Instance(mg, props, r.topo.hd);
+                regionAreas[r.topo.hd] = r.data.area;
+            }
+
+            // graph cut
+            std::vector<Scored<RegionBoundaryHandle>> bhs;
+            bhs.reserve(mg.internalConstraints<RegionBoundaryData>().size());
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
+                if (!props[b.topo.hd].used){
+                    continue;
+                }
+                auto rh1 = mg.topo(b.topo.hd).component<0>();
+                auto rh2 = mg.topo(b.topo.hd).component<1>();
+                assert(props[rh1].used && props[rh2].used);
+                
+                auto & plane1 = planes[rh1];
+                auto & plane2 = planes[rh2];
+                double angle = AngleBetweenUndirectedVectors(plane1.normal, plane2.normal);
+                double distance = 0.0;
+                for (auto & ps : b.data.normalizedSampledPoints){
+                    for (auto & p : ps){
+                        double d1 = DepthAt(p, plane1);
+                        double d2 = DepthAt(p, plane2);
+                        distance += abs(d1 - d2);
+                    }
+                }
+                distance /= ElementsNum(b.data.normalizedSampledPoints);
+                double weight = angle + distance / medianCenterDepth / 2.0;
+                bhs.push_back(ScoreAs(b.topo.hd, weight));
+            }
+
+            std::sort(bhs.begin(), bhs.end());
+
+
+            // segmentation
+            //auto regionOnes = mg.createComponentTable<RegionData>(1.0f);
+            Universe u(regionAreas.data);
+            static const float c = 30.f;
+            std::vector<float> threshold(regionAreas.data.size(), c);
+
+            for (auto & bhs : bhs){
+                auto bh = bhs.component;
+                double weight = bhs.score;
+                if (!props[bh].used){
+                    continue;
+                }
+
+                // components conected by this edge
+                auto rh1 = mg.topo(bh).component<0>();
+                auto rh2 = mg.topo(bh).component<1>();
+                assert(props[rh1].used && props[rh2].used);
+
+                int a = u.find(rh1.id);
+                int b = u.find(rh2.id);
+                if (a != b){
+                    if (weight <= threshold[a] && weight <= threshold[b]){
+                        u.join(a, b);
+                        a = u.find(a);
+                        threshold[a] = weight + c / u.size(a);
+                    }
+                }
+            }
+
+            // merge too small regions?
+            double minSize = 0;
+            if (minSize > 0){
+                for (auto & bhs : bhs) {
+                    auto bh = bhs.component;
+                    if (!props[bh].used){
+                        continue;
+                    }
+                    auto rh1 = mg.topo(bh).component<0>();
+                    auto rh2 = mg.topo(bh).component<1>();
+                    assert(props[rh1].used && props[rh2].used);
+
+                    int a = u.find(rh1.id);
+                    int b = u.find(rh2.id);
+                    if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize)))
+                        u.join(a, b);
+                }
+            }
+
+            // classify regions
+            auto planeIds = mg.createComponentTable<RegionData>(-1);
+            for (auto & r : mg.components<RegionData>()){
+                planeIds[r.topo.hd] = props[r.topo.hd].used ? u.find(r.topo.hd.id) : -1;
+            }
+
+            return planeIds;
+        }
+
 
     }
 }

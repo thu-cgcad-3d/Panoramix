@@ -374,8 +374,8 @@ TEST(UtilTest, DistanceBetweenTwoLines) {
         core::Line3 aa = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
         core::Line3 bb = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
         auto p = core::DistanceBetweenTwoLines(aa, bb);
-        core::InfiniteLine3 iaa = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
-        core::InfiniteLine3 ibb = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
+        core::Ray3 iaa = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
+        core::Ray3 ibb = { { randf(), randf(), randf() }, { randf(), randf(), randf() } };
         auto ip = core::DistanceBetweenTwoLines(iaa, ibb);
 
         EXPECT_LE(p.first - 0.1, core::Distance(aa.first, bb.first));
@@ -397,7 +397,7 @@ TEST(UtilTest, BarycentricCoordinatesOfLineAndPlaneUnitIntersection) {
     };
 
     auto bc1 = core::BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
-        core::InfiniteLine3(core::Point3(0, 0, 0), core::Point3(1, 1, 1)), pts);
+        core::Ray3(core::Point3(0, 0, 0), core::Point3(1, 1, 1)), pts);
 
     EXPECT_FLOAT_EQ(bc1[0], 1.0/3.0);
     EXPECT_FLOAT_EQ(bc1[1], 1.0/3.0);
@@ -405,7 +405,7 @@ TEST(UtilTest, BarycentricCoordinatesOfLineAndPlaneUnitIntersection) {
 
     for (int i = 0; i < 3; i++){
         auto bc2 = core::BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
-            core::InfiniteLine3(core::Point3(0, 0, 0), pts[i]), pts);
+            core::Ray3(core::Point3(0, 0, 0), pts[i]), pts);
         for (int k = 0; k < 3; k++){
             EXPECT_FLOAT_EQ(bc2[k], i == k ? 1.0 : 0.0);
         }
@@ -415,7 +415,7 @@ TEST(UtilTest, BarycentricCoordinatesOfLineAndPlaneUnitIntersection) {
         core::Vec3 dir(1, 1, 1);
         dir(i) = -.5;
         auto bc3 = core::BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
-            core::InfiniteLine3(core::Point3(0, 0, 0), dir), pts);
+            core::Ray3(core::Point3(0, 0, 0), dir), pts);
         for (int k = 0; k < 3; k++){
             EXPECT_FLOAT_EQ(bc3[k], k == i ? -1.0 / 3.0 : 2.0 / 3.0);
         }

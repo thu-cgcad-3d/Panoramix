@@ -39,14 +39,19 @@ namespace panolyz {
                 for (auto & l : ls){
                     lines[i].push_back(core::ClassifyAs(l, -1));
                 }
-                vis::Visualizer2D (pim)
-                    << vis::manip2d::SetThickness(3)
-                    << vis::manip2d::SetColor(vis::ColorTag::Red)
-                    << ls << vis::manip2d::Show();
             }
 
             // estimate vp
             vps = core::EstimateVanishingPointsAndClassifyLines(cams, lines);
+            auto ctable = vis::CreateRandomColorTableWithSize(vps.size());
+            for (int i = 0; i < cams.size(); i++){
+                auto pim = view.sampled(cams[i]).image;
+                vis::Visualizer2D(pim)
+                    << vis::manip2d::SetThickness(3)
+                    << vis::manip2d::SetColorTable(ctable)
+                    << lines[i] << vis::manip2d::Show();
+            }
+
             // extract lines from segmentated region boundaries and classify them using estimated vps
             // make 3d lines
             std::vector<core::Line3> line3ds;
@@ -111,17 +116,18 @@ namespace panolyz {
         // optimize
         if (1){
             props = core::MakeMixedGraphPropertyTable(mg, vps);
-            core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 15.0);
-            core::AttachWallConstriants(mg, props, M_PI / 30.0);
+            core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 30.0);
+            core::AttachWallConstriants(mg, props, M_PI / 60.0);
             //core::AttachGeometricContextConstraints(mg, props, gcs, hCams, 2);
 
-            for (int i = 0; i < 10; i++){
+            for (int i = 0; i < 2; i++){
 
                 // visualize using segmented image
                 {
                     std::vector<vis::Color> colors(mg.internalComponents<core::RegionData>().size());
-                    std::vector<vis::Color> oColors = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
-                    std::vector<vis::Color> noColors = { vis::ColorTag::DimGray, vis::ColorTag::Gray, vis::ColorTag::DarkGray };
+                    std::vector<vis::Color> oColors = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue, 
+                        vis::ColorTag::Yellow, vis::ColorTag::Cyan, vis::ColorTag::Magenta };
+                    auto noColors = vis::CreateGreyColorTableWithSize(vps.size()-1);
                     for (auto & r : mg.components<core::RegionData>()){
                         auto & p = props[r.topo.hd];
                         auto & color = colors[r.topo.hd.id];
@@ -166,6 +172,19 @@ namespace panolyz {
         else{
             core::LoadFromDisk("./cache/mgp", mg, props);
         }
+
+        auto regionClasses = core::ClusterRegions(mg, props);
+        {
+            core::Imagei segments = segmentedImage.clone();
+            for (int & segId : segments){
+                segId = regionClasses[core::RegionHandle(segId)];
+            }
+            vis::ColorTable ctable = vis::CreateRandomColorTableWithSize(regionClasses.data.size());
+            cv::imshow("Region Clusters", ctable(segments));
+            cv::imshow("Regions", ctable(segmentedImage));
+            cv::waitKey();
+        }
+
     }
 
     ROUTINE_FOR_ALGORITHM(PanoramaOutdoor_v1){
@@ -343,12 +362,12 @@ namespace panolyz {
             core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal);
 
         {
-            std::vector<core::Classified<core::InfiniteLine2>> vpRays;
+            std::vector<core::Classified<core::Ray2>> vpRays;
             for (int i = 0; i < 3; i++){
                 std::cout << "vp[" << i << "] = " << view.camera.screenProjection(vps[i]) << std::endl;
                 for (double a = 0; a <= M_PI * 2.0; a += 0.1){
                     core::Point2 p = core::Point2(image.cols / 2, image.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
-                    vpRays.push_back(core::ClassifyAs(core::InfiniteLine2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
+                    vpRays.push_back(core::ClassifyAs(core::Ray2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
                 }
             }
             vis::Visualizer2D(image)
@@ -383,8 +402,8 @@ namespace panolyz {
 
         // optimize
         props = core::MakeMixedGraphPropertyTable(mg, vps);
-        //core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 100.0);
-        //core::AttachWallConstriants(mg, props, M_PI / 60.0);
+        core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 120.0);
+        core::AttachWallConstriants(mg, props, M_PI / 100.0);
 
         for (int i = 0; i < 10; i++){
 
@@ -419,13 +438,13 @@ namespace panolyz {
                     << vis::manip2d::Show();
             }
 
-            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::SolveVariablesUsingInversedDepths(mg, props, false);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
             core::Visualize(view, mg, props);
             core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0, 0.05);
 
-            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::SolveVariablesUsingInversedDepths(mg, props, false);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
             core::Visualize(view, mg, props);
@@ -452,12 +471,12 @@ namespace panolyz {
             core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal);
 
         {
-            std::vector<core::Classified<core::InfiniteLine2>> vpRays;
+            std::vector<core::Classified<core::Ray2>> vpRays;
             for (int i = 0; i < 3; i++){
                 std::cout << "vp[" << i << "] = " << view.camera.screenProjection(vps[i]) << std::endl;
                 for (double a = 0; a <= M_PI * 2.0; a += 0.1){
                     core::Point2 p = core::Point2(image.cols / 2, image.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
-                    vpRays.push_back(core::ClassifyAs(core::InfiniteLine2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
+                    vpRays.push_back(core::ClassifyAs(core::Ray2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
                 }
             }
             vis::Visualizer2D(image)

@@ -137,12 +137,12 @@ TEST(Feature, VanishingPointsDetector) {
         }
         std::tie(vps, focalLength) = result.unwrap();
 
-        std::vector<core::Classified<core::InfiniteLine2>> vpRays;
+        std::vector<core::Classified<core::Ray2>> vpRays;
         for (int i = 0; i < 3; i++){
             std::cout << "vp[" << i << "] = " << vps[i].value() << std::endl;
             for (double a = 0; a <= M_PI * 2.0; a += 0.1){
                 core::Point2 p = core::Point2(im.cols / 2, im.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
-                vpRays.push_back(core::ClassifyAs(core::InfiniteLine2(p, (vps[i] - core::HPoint2(p, 1.0)).numerator), i));
+                vpRays.push_back(core::ClassifyAs(core::Ray2(p, (vps[i] - core::HPoint2(p, 1.0)).numerator), i));
             }
         }
         vis::Visualizer2D(im)

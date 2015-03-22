@@ -24,7 +24,7 @@
 #include "serialization.hpp"
 #include "ratio.hpp"
 #include "any.hpp"
-#include "optional.hpp"
+#include "result.hpp"
 
 namespace panoramix {
     namespace core {
@@ -187,35 +187,35 @@ namespace panoramix {
 
         // infinite line
         template <class T, int N>
-        struct InfiniteLine {
-            inline InfiniteLine() {}
-            inline InfiniteLine(const Point<T, N> & a, const Vec<T, N> & d) : anchor(a), direction(d) {}
+        struct Ray {
+            inline Ray() {}
+            inline Ray(const Point<T, N> & a, const Vec<T, N> & d) : anchor(a), direction(d) {}
             Point<T, N> anchor;
             Vec<T, N> direction;
         };
         template <class T, int N>
-        inline bool operator == (const InfiniteLine<T, N> & a, const InfiniteLine<T, N> & b) {
+        inline bool operator == (const Ray<T, N> & a, const Ray<T, N> & b) {
             return a.anchor == b.anchor && a.direction == b.direction;
         }
         template <class Archive, class T, int N>
-        inline void serialize(Archive & ar, InfiniteLine<T, N> & p) {
+        inline void serialize(Archive & ar, Ray<T, N> & p) {
             ar(p.anchor, p.direction);
         }
-        using InfiniteLine2 = InfiniteLine<double, 2>;
-        using InfiniteLine3 = InfiniteLine<double, 3>;
+        using Ray2 = Ray<double, 2>;
+        using Ray3 = Ray<double, 3>;
         template <class T>
-        inline Vec<T, 3> GetCoeffs(const InfiniteLine<T, 2> & line) {
+        inline Vec<T, 3> GetCoeffs(const Ray<T, 2> & line) {
             return Vec<T, 3>{line.direction[1], 
                 -line.direction[0], 
                 -(line.direction[1] * line.anchor[0] - line.direction[0] * line.anchor[1])
             };
         }
         template <class T>
-        inline InfiniteLine<T, 2> InfiniteLine2FromCoeffs(const Vec<T, 3> & c) {
+        inline Ray<T, 2> InfiniteLine2FromCoeffs(const Vec<T, 3> & c) {
             T d = Square(c[0]) + Square(c[1]);
             Point<T, 2> anchor(-c[2] * c[0] / d, -c[2] * c[1] / d);
             Vec<T, 2> dir(c[1], -c[0]);
-            return InfiniteLine<T, 2>(anchor, dir);
+            return Ray<T, 2>(anchor, dir);
         }
 
 
@@ -267,7 +267,7 @@ namespace panoramix {
             inline T length() const { return norm(first - second); }
             inline Vec<T, N> direction() const { return second - first; }
             inline Line reversed() const { return Line(second, first); }
-            inline InfiniteLine<T, N> infiniteLine() const { return InfiniteLine<T, N>{ first, second - first }; }
+            inline Ray<T, N> infiniteLine() const { return Ray<T, N>{ first, second - first }; }
             inline Line & operator *= (const T & factor) { first *= factor; second *= factor; return *this; }
             Point<T, N> first, second;
         };
@@ -311,7 +311,7 @@ namespace panoramix {
             inline PositionOnLine(){}
             inline PositionOnLine(const Line<T, N> & line, const T & r)
                 : ratio(r), position(line.first + (line.second - line.first) * ratio) {}
-            inline PositionOnLine(const InfiniteLine<T, N> & line, const T & r)
+            inline PositionOnLine(const Ray<T, N> & line, const T & r)
                 : ratio(r), position(line.anchor + line.direction * ratio) {}
             T ratio; // [0 ~ 1] on line, or [-inf, +inf] on infinite line
             // position = line.first + (line.second - line.fist) * ratio

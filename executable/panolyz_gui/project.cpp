@@ -24,7 +24,7 @@ public:
             im.load(_panoImFileInfo.absoluteFilePath());
             im = im.convertToFormat(QImage::Format_RGB888);
             auto pim = vis::MakeCVMat(im);
-            core::ResizeToHeight(pim, 900);
+            core::ResizeToHeight(pim, 700);
             bool b = core::MakePanorama(pim);
             Q_ASSERT(b);
             return PanoView{ core::CreatePanoramicView(pim) };
@@ -142,7 +142,6 @@ public:
 
             core::AttachWallConstriants(mg, props, conf("wall constraints angle").value<double>());
             core::AttachPrincipleDirectionConstraints(mg, props, conf("principle direction constraints angle").value<double>());            
-            //core::AttachGeometricContextConstraints(mg, props, )
 
             _confLock.unlock();
 

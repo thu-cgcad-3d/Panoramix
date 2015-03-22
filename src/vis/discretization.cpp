@@ -205,7 +205,7 @@ namespace panoramix {
         void Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o){
             std::vector<Vec3> cs(spp.corners.size());
             for (int i = 0; i < spp.corners.size(); i++){
-                InfiniteLine3 line(spp.projectionCenter, spp.corners[i] - spp.projectionCenter);
+                Ray3 line(spp.projectionCenter, spp.corners[i] - spp.projectionCenter);
                 cs[i] = IntersectionOfLineAndPlane(line, spp.plane).position;
             }
             std::vector<TriMesh::VertHandle> vhandles(cs.size());

@@ -481,7 +481,7 @@ namespace panoramix {
 
         namespace {
 
-            std::pair<double, double> ComputeSpanningArea(const Point2 & a, const Point2 & b, const InfiniteLine2 & line) {
+            std::pair<double, double> ComputeSpanningArea(const Point2 & a, const Point2 & b, const Ray2 & line) {
                 auto ad = SignedDistanceFromPointToLine(a, line);
                 auto bd = SignedDistanceFromPointToLine(b, line);
                 auto ap = DistanceFromPointToLine(a, line).second;
@@ -497,7 +497,7 @@ namespace panoramix {
         }
 
 
-        std::pair<double, InfiniteLine2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
+        std::pair<double, Ray2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
             double * interleavedArea, double * interleavedLen) {
             
             std::vector<Point<float, 2>> points;
@@ -509,7 +509,7 @@ namespace panoramix {
 
             cv::Vec4f line;
             cv::fitLine(points, line, CV_DIST_L2, 0, 0.01, 0.01);
-            auto fittedLine = InfiniteLine2({ line[2], line[3] }, { line[0], line[1] });
+            auto fittedLine = Ray2({ line[2], line[3] }, { line[0], line[1] });
             double interArea = 0;
             double interLen = 0;
             for (auto & e : edges) {
@@ -572,8 +572,8 @@ namespace panoramix {
             }
         }
 
-        std::vector<Vec3> FindThreeOrthogonalPrinicipleDirections(const std::vector<Vec3>& intersections,
-            int longitudeDivideNum, int latitudeDivideNum) {
+        Result<std::vector<Vec3>> FindOrthogonalPrinicipleDirections(const std::vector<Vec3> & intersections,
+            int longitudeDivideNum, int latitudeDivideNum, bool allowMoreThan2HorizontalVPs, const Vec3 & verticalSeed) {
 
             std::vector<Vec3> vps(3);
 
@@ -605,10 +605,9 @@ namespace panoramix {
                 Vec3 vec1rev = -vec1;
                 Vec3 vec2 = vec0.cross(vec1);
                 Vec3 vec2rev = -vec2;
-                Vec3 vecs[] = { vec1, vec1rev, vec2, vec2rev };
 
                 double score = 0;
-                for (Vec3 & v : vecs){
+                for (const Vec3 & v : { vec1, vec1rev, vec2, vec2rev }){
                     PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
                     score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
                         WrapBetween(pixel.y, 0, latitudeDivideNum));
@@ -620,39 +619,91 @@ namespace panoramix {
                 }
             }
 
-            if (UnOrthogonality(vps[0], vps[1], vps[2]) < 0.1)
-                return vps;
+            if (UnOrthogonality(vps[0], vps[1], vps[2]) >= 0.1){
+                // failed, then use y instead of x
+                maxScore = -1;
+                for (int y = 0; y < latitudeDivideNum; y++){
+                    double lat1 = double(y) / latitudeDivideNum * M_PI - M_PI_2;
+                    double longt1s[] = { Longitude1FromLatitudeAndNormalVector(lat1, vec0),
+                        Longitude2FromLatitudeAndNormalVector(lat1, vec0) };
+                    for (double longt1 : longt1s){
+                        Vec3 vec1 = GeoCoord(longt1, lat1).toVector();
+                        Vec3 vec1rev = -vec1;
+                        Vec3 vec2 = vec0.cross(vec1);
+                        Vec3 vec2rev = -vec2;
+                        Vec3 vecs[] = { vec1, vec1rev, vec2, vec2rev };
 
-            // failed, then use y instead of x
-            maxScore = -1;
-            for (int y = 0; y < latitudeDivideNum; y++){
-                double lat1 = double(y) / latitudeDivideNum * M_PI - M_PI_2;
-                double longt1s[] = { Longitude1FromLatitudeAndNormalVector(lat1, vec0),
-                    Longitude2FromLatitudeAndNormalVector(lat1, vec0) };
-                for (double longt1 : longt1s){
-                    Vec3 vec1 = GeoCoord(longt1, lat1).toVector();
-                    Vec3 vec1rev = -vec1;
-                    Vec3 vec2 = vec0.cross(vec1);
-                    Vec3 vec2rev = -vec2;
-                    Vec3 vecs[] = { vec1, vec1rev, vec2, vec2rev };
-
-                    double score = 0;
-                    for (Vec3 & v : vecs){
-                        PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
-                        score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
-                            WrapBetween(pixel.y, 0, latitudeDivideNum));
-                    }
-                    if (score > maxScore){
-                        maxScore = score;
-                        vps[1] = vec1;
-                        vps[2] = vec2;
+                        double score = 0;
+                        for (Vec3 & v : vecs){
+                            PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                            score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
+                                WrapBetween(pixel.y, 0, latitudeDivideNum));
+                        }
+                        if (score > maxScore){
+                            maxScore = score;
+                            vps[1] = vec1;
+                            vps[2] = vec2;
+                        }
                     }
                 }
             }
 
-            assert(UnOrthogonality(vps[0], vps[1], vps[2]) < 0.1);
+            if (UnOrthogonality(vps[0], vps[1], vps[2]) >= 0.1){
+                return nullptr; // failed
+            }
 
-            return vps;
+            // make vps[0] the vertical vp
+            {
+                int vertVPId = -1;
+                double minAngle = std::numeric_limits<double>::max();
+                for (int i = 0; i < vps.size(); i++){
+                    double a = AngleBetweenUndirectedVectors(vps[i], verticalSeed);
+                    if (a < minAngle){
+                        vertVPId = i;
+                        minAngle = a;
+                    }
+                }
+                std::swap(vps[0], vps[vertVPId]);
+            }
+
+            if (allowMoreThan2HorizontalVPs){            
+                // find more horizontal vps
+                double nextMaxScore = maxScore * 0.5; // threshold
+                double minAngleToCurHorizontalVPs = DegreesToRadians(30);
+                for (int x = 0; x < longitudeDivideNum; x++){
+                    double longt1 = double(x) / longitudeDivideNum * M_PI * 2 - M_PI;
+                    double lat1 = LatitudeFromLongitudeAndNormalVector(longt1, vps[0]);
+                    Vec3 vec1 = GeoCoord(longt1, lat1).toVector();
+                    Vec3 vec1rev = -vec1;
+                    Vec3 vec2 = vps[0].cross(vec1);
+                    Vec3 vec2rev = -vec2;
+
+                    double score = 0;
+                    for (const Vec3 & v : { vec1, vec1rev, vec2, vec2rev }){
+                        PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                        score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
+                            WrapBetween(pixel.y, 0, latitudeDivideNum));
+                    }
+
+                    bool tooCloseToExistingVP = false;
+                    for (int i = 0; i < vps.size(); i++){
+                        if (AngleBetweenUndirectedVectors(vps[i], vec1) < minAngleToCurHorizontalVPs){
+                            tooCloseToExistingVP = true;
+                            break;
+                        }
+                    }
+                    if (tooCloseToExistingVP)
+                        continue;
+
+                    if (score > nextMaxScore){
+                        nextMaxScore = score;
+                        vps.push_back(vec1);
+                        vps.push_back(vec2);
+                    }
+                }
+            }
+
+            return std::move(vps);
 
         }
 
@@ -1285,7 +1336,7 @@ namespace panoramix {
         }
 
 
-        Optional<std::tuple<std::vector<HPoint2>, double, std::vector<int>>> VanishingPointsDetector::operator() (
+        Result<std::tuple<std::vector<HPoint2>, double, std::vector<int>>> VanishingPointsDetector::operator() (
             const std::vector<Line2> & lines, const SizeI & imSize) const {
             
             Point2 projCenter(imSize.width / 2.0, imSize.height / 2.0);
@@ -1578,7 +1629,7 @@ namespace panoramix {
         }
 
        
-        Optional<std::tuple<std::vector<HPoint2>, double>> VanishingPointsDetector::operator() (
+        Result<std::tuple<std::vector<HPoint2>, double>> VanishingPointsDetector::operator() (
             std::vector<Classified<Line2>> & lines, const SizeI & imSize) const {
             std::vector<HPoint2> vps;
             double focalLength = 0.0;
@@ -1608,7 +1659,7 @@ namespace panoramix {
 
 
 
-        std::pair<Optional<double>, Optional<double>> ComputeFocalsFromHomography(const Mat3 & H) {
+        std::pair<Result<double>, Result<double>> ComputeFocalsFromHomography(const Mat3 & H) {
             /// from OpenCV code
 
             const double* h = reinterpret_cast<const double*>(H.val);
@@ -1617,7 +1668,7 @@ namespace panoramix {
             double v1, v2; // Focal squares value candidates
             double f0 = 0.0, f1 = 0.0;
 
-            std::pair<Optional<double>, Optional<double>> results;
+            std::pair<Result<double>, Result<double>> results;
 
             d1 = h[6] * h[7];
             d2 = (h[7] - h[6]) * (h[7] + h[6]);

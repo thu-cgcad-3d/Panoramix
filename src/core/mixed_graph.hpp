@@ -190,8 +190,8 @@ namespace panoramix {
         Plane3 Instance(const MixedGraph & mg, const MixedGraphPropertyTable & props, const RegionHandle & rh);
 
         // solve equations
-        void SolveVariablesUsingInversedDepths(const MixedGraph & mg, MixedGraphPropertyTable & props);
-        void SolveVariablesUsingNormalDepths(const MixedGraph & mg, MixedGraphPropertyTable & props);
+        void SolveVariablesUsingInversedDepths(const MixedGraph & mg, MixedGraphPropertyTable & props, bool useWeights = true);
+        void SolveVariablesUsingNormalDepths(const MixedGraph & mg, MixedGraphPropertyTable & props, bool useWeights = true);
         
         // model properties
         double ComponentMedianCenterDepth(const MixedGraph & mg, const MixedGraphPropertyTable & props);
@@ -238,6 +238,7 @@ namespace panoramix {
 
 
         // refine the mixed graph variables to a structure
+        HandledTable<RegionHandle, int> ClusterRegions(const MixedGraph & mg, const MixedGraphPropertyTable & props);
 
 
 
