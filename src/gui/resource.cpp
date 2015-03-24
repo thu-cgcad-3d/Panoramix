@@ -4,7 +4,7 @@
 
 
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
 
         using namespace core;

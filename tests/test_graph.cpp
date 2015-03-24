@@ -1,7 +1,7 @@
 #include "../src/core/generic_topo.hpp"
 #include "../src/core/iterators.hpp"
 #include "../src/core/utilities.hpp"
-#include "../src/vis/visualizers.hpp"
+#include "../src/gui/visualizers.hpp"
 #include "config.hpp"
 
 using namespace panoramix;
@@ -40,15 +40,15 @@ void VisualizeMesh(const TestMesh & mesh){
         points.push_back(v.data);
     }
 
-    vis::Visualizer viz;
-    viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
-    viz.installingOptions.discretizeOptions.color = vis::ColorTag::Black;
+    gui::Visualizer viz;
+    viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
+    viz.installingOptions.discretizeOptions.color = gui::ColorTag::Black;
     viz.installingOptions.lineWidth = 5;
     viz.add(lines);
-    viz.installingOptions.discretizeOptions.color = vis::ColorTag::Red;
+    viz.installingOptions.discretizeOptions.color = gui::ColorTag::Red;
     viz.installingOptions.pointSize = 20;
     viz.add(points);
-    viz.renderOptions.backgroundColor = vis::ColorTag::White;
+    viz.renderOptions.backgroundColor = gui::ColorTag::White;
     viz.camera(core::PerspectiveCamera(500, 500, 500,
         core::Vec3(-3, 0, 0),
         core::Vec3(0.5, 0.5, 0.5)));

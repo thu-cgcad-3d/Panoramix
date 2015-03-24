@@ -1,8 +1,8 @@
 #include <QtOpenGL>
 
 #include "../../src/core/algorithms.hpp"
-#include "../../src/vis/qt_glue.hpp"
-#include "../../src/vis/visualizers.hpp"
+#include "../../src/gui/qt_glue.hpp"
+#include "../../src/gui/visualizers.hpp"
 #include "configuration.hpp"
 
 using namespace panoramix;
@@ -157,7 +157,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
 
     return CreateImageViewer(&pv, [](DataOfType<PanoView>& pv){
         pv.lockForRead();
-        QImage im = vis::MakeQImage(pv.content.image);
+        QImage im = gui::MakeQImage(pv.content.image);
         pv.unlock();
         return im;
     }, parent);
@@ -173,10 +173,10 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Segmentation> & s
     
     return CreateImageViewer(&segs, [](DataOfType<Segmentation> & segs){        
         segs.lockForRead();
-        auto colorTable = vis::CreateRandomColorTableWithSize(segs.content.segmentsNum);
+        auto colorTable = gui::CreateRandomColorTableWithSize(segs.content.segmentsNum);
         core::Imageub3 im = colorTable(segs.content.segmentation);
         segs.unlock();
-        return vis::MakeQImage(im);    
+        return gui::MakeQImage(im);    
     }, parent);
 }
 
@@ -295,8 +295,8 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
 
             // render
             core::Imageub3 rendered = core::Imageub3::zeros(rec.content.segmentation.size());
-            vis::ColorTable rgb = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
-            vis::ColorTable ymc = { vis::ColorTag::Yellow, vis::ColorTag::Magenta, vis::ColorTag::Cyan };
+            gui::ColorTable rgb = { gui::ColorTag::Red, gui::ColorTag::Green, gui::ColorTag::Blue };
+            gui::ColorTable ymc = { gui::ColorTag::Yellow, gui::ColorTag::Magenta, gui::ColorTag::Cyan };
             double alpha = 0.3;
             for (auto it = rendered.begin(); it != rendered.end(); ++it){
                 int regionId = rec.content.segmentation(it.pos());
@@ -307,7 +307,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                     *it = core::Vec3b(qRed(transPixel), qGreen(transPixel), qBlue(transPixel));
                     continue;
                 }
-                vis::Color imColor = vis::ColorFromImage(rec.content.view.image, it.pos());
+                gui::Color imColor = gui::ColorFromImage(rec.content.view.image, it.pos());
                 if (prop.orientationClaz >= 0 && prop.orientationNotClaz == -1){
                     *it = imColor.blendWith(rgb[prop.orientationClaz], alpha);
                 }
@@ -328,13 +328,13 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                         auto p1 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i - 1]));
                         auto p2 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i]));
                         cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
-                        cv::line(rendered, p1, p2, vis::Color(vis::ColorTag::Black), 3);
+                        cv::line(rendered, p1, p2, gui::Color(gui::ColorTag::Black), 3);
                     }
                 }
             }
             rec.unlock();
             _imageLock.lockForWrite();
-            _image = vis::MakeQImage(rendered);
+            _image = gui::MakeQImage(rendered);
             _imageLock.unlock();
         }
 
@@ -430,10 +430,10 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                 bool isRegion;
             };
 
-            vis::Visualizer viz("mixed graph optimizable");
-            viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
-            std::vector<std::pair<ComponentID, vis::Colored<vis::SpatialProjectedPolygon>>> spps;
-            std::vector<vis::Colored<core::Line3>> lines;
+            gui::Visualizer viz("mixed graph optimizable");
+            viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
+            std::vector<std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>>> spps;
+            std::vector<gui::Colored<core::Line3>> lines;
 
             auto & mg = content().mg;
             auto & props = content().props;
@@ -444,7 +444,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                     continue;
                 auto uh = c.topo.hd;
                 auto & region = c.data;
-                vis::SpatialProjectedPolygon spp;
+                gui::SpatialProjectedPolygon spp;
                 // filter corners
                 core::ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
                     std::back_inserter(spp.corners),
@@ -457,7 +457,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                 spp.projectionCenter = core::Point3(0, 0, 0);
                 spp.plane = Instance(mg, props, uh);
                 assert(!core::HasValue(spp.plane, core::IsInfOrNaN<double>));
-                spps.emplace_back(ComponentID{ uh.id, true }, std::move(vis::ColorAs(spp, vis::ColorTag::Black)));
+                spps.emplace_back(ComponentID{ uh.id, true }, std::move(gui::ColorAs(spp, gui::ColorTag::Black)));
             }
 
             for (auto & c : mg.components<core::LineData>()){
@@ -465,28 +465,28 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                     continue;
                 auto uh = c.topo.hd;
                 auto & line = c.data;
-                lines.push_back(vis::ColorAs(Instance(mg, props, uh), vis::ColorTag::Black));
+                lines.push_back(gui::ColorAs(Instance(mg, props, uh), gui::ColorTag::Black));
             }
             unlock();
 
 
             lockForRead();
-            vis::ResourceStore::set("texture", ImageForTexture(content().view));
+            gui::ResourceStore::set("texture", ImageForTexture(content().view));
             unlock();
 
             qDebug() << "loading texture";
-            viz.begin(spps).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+            viz.begin(spps).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
             qDebug() << "texture loaded";
 
-            viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
+            viz.installingOptions.discretizeOptions.color = gui::ColorTag::DarkGray;
             viz.installingOptions.lineWidth = 5.0;
             viz.add(lines);
 
-            viz.installingOptions.discretizeOptions.color = vis::ColorTag::Black;
+            viz.installingOptions.discretizeOptions.color = gui::ColorTag::Black;
             viz.installingOptions.lineWidth = 1.0;
 
-            viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles /*| vis::RenderModeFlag::Lines*/;
-            viz.renderOptions.backgroundColor = vis::ColorTag::White;
+            viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles /*| gui::RenderModeFlag::Lines*/;
+            viz.renderOptions.backgroundColor = gui::ColorTag::White;
             viz.renderOptions.bwColor = 0.0;
             viz.renderOptions.bwTexColor = 1.0;
             viz.camera(core::PerspectiveCamera(1000, 800, 800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
@@ -600,8 +600,8 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
             else if (e->buttons() & Qt::MidButton)
                 setCursor(Qt::SizeAllCursor);
             else if (e->buttons() & Qt::LeftButton){
-                vis::VisualObjectHandle oh;
-                vis::TriMesh::TriangleHandle t;
+                gui::VisualObjectHandle oh;
+                gui::TriMesh::TriangleHandle t;
                 _scene.lockForWrite();
                 std::tie(oh, t) = _scene.component.pickOnScreen(_renderOptions, core::Point2(e->pos().x(), e->pos().y()));
                 if (oh.valid()){
@@ -614,7 +614,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                         _scene.component.select(std::make_pair(oh, entityID));
                     }
                     _scene.component.tree().data(oh)
-                        ->invokeCallbackFunction(vis::InteractionID::ClickLeftButton, _scene.component.tree(), std::make_pair(oh, entityID));
+                        ->invokeCallbackFunction(gui::InteractionID::ClickLeftButton, _scene.component.tree(), std::make_pair(oh, entityID));
                 }
                 else if (!(e->modifiers() & Qt::ControlModifier)){
                     _scene.component.clearSelection();
@@ -668,9 +668,9 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                 for (auto & n : _scene.component.tree().nodes()){
                     if (n.exists){
                         for (int entityID : n.data->selectedEntities()){
-                            n.data->invokeCallbackFunction(vis::InteractionID::PressSpace,
+                            n.data->invokeCallbackFunction(gui::InteractionID::PressSpace,
                                 _scene.component.tree(),
-                                vis::VisualObjectEntityID{ n.topo.hd, entityID });
+                                gui::VisualObjectEntityID{ n.topo.hd, entityID });
                         }
                     }
                 }
@@ -683,8 +683,8 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
         LockableType<bool> _needsInitialization;
 
     private:
-        vis::RenderOptions _renderOptions;
-        LockableType<vis::VisualObjectScene> _scene;
+        gui::RenderOptions _renderOptions;
+        LockableType<gui::VisualObjectScene> _scene;
     };
 
     return new Widget(&rec, parent);

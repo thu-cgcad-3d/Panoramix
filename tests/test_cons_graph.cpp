@@ -1,6 +1,5 @@
 #include "../src/core/cons_graph.hpp"
-#include "../src/core/optimization.hpp"
-#include "../src/vis/visualize2d.hpp"
+#include "../src/gui/visualize2d.hpp"
 
 #include "config.hpp"
 

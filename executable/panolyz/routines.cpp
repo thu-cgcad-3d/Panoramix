@@ -1,6 +1,6 @@
 #include "../../src/core/basic_types.hpp"
 #include "../../src/core/mixed_graph.hpp"
-#include "../../src/vis/visualize2d.hpp"
+#include "../../src/gui/visualize2d.hpp"
 
 #include "routines.hpp"
 
@@ -43,13 +43,13 @@ namespace panolyz {
 
             // estimate vp
             vps = core::EstimateVanishingPointsAndClassifyLines(cams, lines);
-            auto ctable = vis::CreateRandomColorTableWithSize(vps.size());
+            auto ctable = gui::CreateRandomColorTableWithSize(vps.size());
             for (int i = 0; i < cams.size(); i++){
                 auto pim = view.sampled(cams[i]).image;
-                vis::Visualizer2D(pim)
-                    << vis::manip2d::SetThickness(3)
-                    << vis::manip2d::SetColorTable(ctable)
-                    << lines[i] << vis::manip2d::Show();
+                gui::Visualizer2D(pim)
+                    << gui::manip2d::SetThickness(3)
+                    << gui::manip2d::SetColorTable(ctable)
+                    << lines[i] << gui::manip2d::Show();
             }
 
             // extract lines from segmentated region boundaries and classify them using estimated vps
@@ -66,8 +66,8 @@ namespace panolyz {
             segmenter.params().c = 100.0;
             int segmentsNum = 0;
             std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, M_PI / 36.0);
-            //auto colorTable = vis::CreateRandomColorTableWithSize(segmentsNum);
-            ////vis::Visualizer2D(segmentedImage) << vis::manip2d::Show();
+            //auto colorTable = gui::CreateRandomColorTableWithSize(segmentsNum);
+            ////gui::Visualizer2D(segmentedImage) << gui::manip2d::Show();
             ////int segmentsNum = core::MinMaxValOfImage(segmentedImage).second + 1;
             //for (int i = 0; i < cams.size(); i++){
             //    auto pim = core::MakeCameraSampler(cams[i], view.camera)(segmentedImage);
@@ -77,7 +77,7 @@ namespace panolyz {
             //    lineExtractor.params().xBorderWidth = lineExtractor.params().yBorderWidth = 10;
             //    auto ls = lineExtractor(colorTable(pim));
             //    
-            //    vis::Visualizer2D(pim) << ls << vis::manip2d::Show();
+            //    gui::Visualizer2D(pim) << ls << gui::manip2d::Show();
             //}
 
 
@@ -95,7 +95,7 @@ namespace panolyz {
             };
             core::Image gc = core::Imaged3::zeros(channels.front().size());
             cv::mixChannels(channels, gc, {0, 0, 1, 1, 2, 2});
-            vis::Visualizer2D(gc) << vis::manip2d::Show();
+            gui::Visualizer2D(gc) << gui::manip2d::Show();
             }*/
 
 
@@ -124,15 +124,15 @@ namespace panolyz {
 
                 // visualize using segmented image
                 {
-                    std::vector<vis::Color> colors(mg.internalComponents<core::RegionData>().size());
-                    std::vector<vis::Color> oColors = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue, 
-                        vis::ColorTag::Yellow, vis::ColorTag::Cyan, vis::ColorTag::Magenta };
-                    auto noColors = vis::CreateGreyColorTableWithSize(vps.size()-1);
+                    std::vector<gui::Color> colors(mg.internalComponents<core::RegionData>().size());
+                    std::vector<gui::Color> oColors = { gui::ColorTag::Red, gui::ColorTag::Green, gui::ColorTag::Blue, 
+                        gui::ColorTag::Yellow, gui::ColorTag::Cyan, gui::ColorTag::Magenta };
+                    auto noColors = gui::CreateGreyColorTableWithSize(vps.size()-1);
                     for (auto & r : mg.components<core::RegionData>()){
                         auto & p = props[r.topo.hd];
                         auto & color = colors[r.topo.hd.id];
                         if (!p.used){
-                            color = vis::ColorTag::Black;
+                            color = gui::ColorTag::Black;
                         }
                         else{
                             if (p.orientationClaz != -1){
@@ -142,16 +142,16 @@ namespace panolyz {
                                 color = noColors[p.orientationNotClaz];
                             }
                             else{
-                                color = vis::ColorTag::White;
+                                color = gui::ColorTag::White;
                             }
                         }
                     }
-                    vis::Visualizer2D::Params params;
-                    params.colorTable = vis::ColorTable(colors, vis::ColorTag::White);
-                    vis::Visualizer2D(segmentedImage)
-                        << vis::manip2d::Show();
-                    vis::Visualizer2D(segmentedImage, params)
-                        << vis::manip2d::Show();
+                    gui::Visualizer2D::Params params;
+                    params.colorTable = gui::ColorTable(colors, gui::ColorTag::White);
+                    gui::Visualizer2D(segmentedImage)
+                        << gui::manip2d::Show();
+                    gui::Visualizer2D(segmentedImage, params)
+                        << gui::manip2d::Show();
                 }
 
                 core::SolveVariablesUsingInversedDepths(mg, props);
@@ -179,7 +179,7 @@ namespace panolyz {
             for (int & segId : segments){
                 segId = regionClasses[core::RegionHandle(segId)];
             }
-            vis::ColorTable ctable = vis::CreateRandomColorTableWithSize(regionClasses.data.size());
+            gui::ColorTable ctable = gui::CreateRandomColorTableWithSize(regionClasses.data.size());
             cv::imshow("Region Clusters", ctable(segments));
             cv::imshow("Regions", ctable(segmentedImage));
             cv::waitKey();
@@ -218,7 +218,7 @@ namespace panolyz {
                 for (auto & l : ls){
                     lines[i].push_back(core::ClassifyAs(l, -1));
                 }
-                vis::Visualizer2D(pim) << ls << vis::manip2d::Show();
+                gui::Visualizer2D(pim) << ls << gui::manip2d::Show();
             }
 
             // estimate vp
@@ -237,8 +237,8 @@ namespace panolyz {
             segmenter.params().c = 100.0;
             int segmentsNum = 0;
             std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, M_PI / 36.0);
-            //auto colorTable = vis::CreateRandomColorTableWithSize(segmentsNum);
-            ////vis::Visualizer2D(segmentedImage) << vis::manip2d::Show();
+            //auto colorTable = gui::CreateRandomColorTableWithSize(segmentsNum);
+            ////gui::Visualizer2D(segmentedImage) << gui::manip2d::Show();
             ////int segmentsNum = core::MinMaxValOfImage(segmentedImage).second + 1;
             //for (int i = 0; i < cams.size(); i++){
             //    auto pim = core::MakeCameraSampler(cams[i], view.camera)(segmentedImage);
@@ -248,7 +248,7 @@ namespace panolyz {
             //    lineExtractor.params().xBorderWidth = lineExtractor.params().yBorderWidth = 10;
             //    auto ls = lineExtractor(colorTable(pim));
             //    
-            //    vis::Visualizer2D(pim) << ls << vis::manip2d::Show();
+            //    gui::Visualizer2D(pim) << ls << gui::manip2d::Show();
             //}
 
 
@@ -266,7 +266,7 @@ namespace panolyz {
             };
             core::Image gc = core::Imaged3::zeros(channels.front().size());
             cv::mixChannels(channels, gc, {0, 0, 1, 1, 2, 2});
-            vis::Visualizer2D(gc) << vis::manip2d::Show();
+            gui::Visualizer2D(gc) << gui::manip2d::Show();
             }*/
 
 
@@ -295,14 +295,14 @@ namespace panolyz {
 
                 // visualize using segmented image
                 {
-                    std::vector<vis::Color> colors(mg.internalComponents<core::RegionData>().size());
-                    std::vector<vis::Color> oColors = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
-                    std::vector<vis::Color> noColors = { vis::ColorTag::DimGray, vis::ColorTag::Gray, vis::ColorTag::DarkGray };
+                    std::vector<gui::Color> colors(mg.internalComponents<core::RegionData>().size());
+                    std::vector<gui::Color> oColors = { gui::ColorTag::Red, gui::ColorTag::Green, gui::ColorTag::Blue };
+                    std::vector<gui::Color> noColors = { gui::ColorTag::DimGray, gui::ColorTag::Gray, gui::ColorTag::DarkGray };
                     for (auto & r : mg.components<core::RegionData>()){
                         auto & p = props[r.topo.hd];
                         auto & color = colors[r.topo.hd.id];
                         if (!p.used){
-                            color = vis::ColorTag::Black;
+                            color = gui::ColorTag::Black;
                         }
                         else{
                             if (p.orientationClaz != -1){
@@ -312,16 +312,16 @@ namespace panolyz {
                                 color = noColors[p.orientationNotClaz];
                             }
                             else{
-                                color = vis::ColorTag::White;
+                                color = gui::ColorTag::White;
                             }
                         }
                     }
-                    vis::Visualizer2D::Params params;
-                    params.colorTable = vis::ColorTable(colors, vis::ColorTag::White);
-                    vis::Visualizer2D(segmentedImage)
-                        << vis::manip2d::Show();
-                    vis::Visualizer2D(segmentedImage, params)
-                        << vis::manip2d::Show();
+                    gui::Visualizer2D::Params params;
+                    params.colorTable = gui::ColorTable(colors, gui::ColorTag::White);
+                    gui::Visualizer2D(segmentedImage)
+                        << gui::manip2d::Show();
+                    gui::Visualizer2D(segmentedImage, params)
+                        << gui::manip2d::Show();
                 }
 
                 core::SolveVariablesUsingInversedDepths(mg, props);
@@ -370,13 +370,13 @@ namespace panolyz {
                     vpRays.push_back(core::ClassifyAs(core::Ray2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
                 }
             }
-            vis::Visualizer2D(image)
-                << vis::manip2d::SetColorTable(vis::ColorTable(vis::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
-                << vis::manip2d::SetThickness(1)
+            gui::Visualizer2D(image)
+                << gui::manip2d::SetColorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
+                << gui::manip2d::SetThickness(1)
                 << vpRays
-                << vis::manip2d::SetThickness(2)
+                << gui::manip2d::SetThickness(2)
                 << lines
-                << vis::manip2d::Show(0);
+                << gui::manip2d::Show(0);
         }
 
 
@@ -393,10 +393,10 @@ namespace panolyz {
         int segmentsNum = 0;
         std::tie(segmentedImage, segmentsNum) = segmenter(image, pureLines, image.cols / 100.0);
 
-        vis::Visualizer2D::Params vParams;
-        vParams.colorTable = vis::CreateRandomColorTableWithSize(segmentsNum);
-        vis::Visualizer2D(segmentedImage, vParams)
-            << vis::manip2d::Show();
+        gui::Visualizer2D::Params vParams;
+        vParams.colorTable = gui::CreateRandomColorTableWithSize(segmentsNum);
+        gui::Visualizer2D(segmentedImage, vParams)
+            << gui::manip2d::Show();
 
         core::AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001, 3, 1);
 
@@ -409,14 +409,14 @@ namespace panolyz {
 
             // visualize using segmented image
             {
-                std::vector<vis::Color> colors(mg.internalComponents<core::RegionData>().size());
-                std::vector<vis::Color> oColors = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
-                std::vector<vis::Color> noColors = { vis::ColorTag::DimGray, vis::ColorTag::Gray, vis::ColorTag::DarkGray };
+                std::vector<gui::Color> colors(mg.internalComponents<core::RegionData>().size());
+                std::vector<gui::Color> oColors = { gui::ColorTag::Red, gui::ColorTag::Green, gui::ColorTag::Blue };
+                std::vector<gui::Color> noColors = { gui::ColorTag::DimGray, gui::ColorTag::Gray, gui::ColorTag::DarkGray };
                 for (auto & r : mg.components<core::RegionData>()){
                     auto & p = props[r.topo.hd];
                     auto & color = colors[r.topo.hd.id];
                     if (!p.used){
-                        color = vis::ColorTag::Black;
+                        color = gui::ColorTag::Black;
                     }
                     else{
                         if (p.orientationClaz != -1){
@@ -426,16 +426,16 @@ namespace panolyz {
                             color = noColors[p.orientationNotClaz];
                         }
                         else{
-                            color = vis::ColorTag::White;
+                            color = gui::ColorTag::White;
                         }
                     }
                 }
-                vis::Visualizer2D::Params params;
-                params.colorTable = vis::ColorTable(colors, vis::ColorTag::White);
-                vis::Visualizer2D(segmentedImage)
-                    << vis::manip2d::Show();
-                vis::Visualizer2D(segmentedImage, params)
-                    << vis::manip2d::Show();
+                gui::Visualizer2D::Params params;
+                params.colorTable = gui::ColorTable(colors, gui::ColorTag::White);
+                gui::Visualizer2D(segmentedImage)
+                    << gui::manip2d::Show();
+                gui::Visualizer2D(segmentedImage, params)
+                    << gui::manip2d::Show();
             }
 
             core::SolveVariablesUsingInversedDepths(mg, props, false);
@@ -479,13 +479,13 @@ namespace panolyz {
                     vpRays.push_back(core::ClassifyAs(core::Ray2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
                 }
             }
-            vis::Visualizer2D(image)
-                << vis::manip2d::SetColorTable(vis::ColorTable(vis::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
-                << vis::manip2d::SetThickness(1)
+            gui::Visualizer2D(image)
+                << gui::manip2d::SetColorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
+                << gui::manip2d::SetThickness(1)
                 << vpRays
-                << vis::manip2d::SetThickness(2)
+                << gui::manip2d::SetThickness(2)
                 << lines
-                << vis::manip2d::Show(0);
+                << gui::manip2d::Show(0);
         }
 
 
@@ -502,10 +502,10 @@ namespace panolyz {
         int segmentsNum = 0;
         std::tie(segmentedImage, segmentsNum) = segmenter(image, pureLines, image.cols / 100.0);
 
-        vis::Visualizer2D::Params vParams;
-        vParams.colorTable = vis::CreateRandomColorTableWithSize(segmentsNum);
-        vis::Visualizer2D(segmentedImage, vParams)
-            << vis::manip2d::Show();
+        gui::Visualizer2D::Params vParams;
+        vParams.colorTable = gui::CreateRandomColorTableWithSize(segmentsNum);
+        gui::Visualizer2D(segmentedImage, vParams)
+            << gui::manip2d::Show();
 
         core::AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001, 3, 1);
 
@@ -518,14 +518,14 @@ namespace panolyz {
 
             // visualize using segmented image
             {
-                std::vector<vis::Color> colors(mg.internalComponents<core::RegionData>().size());
-                std::vector<vis::Color> oColors = { vis::ColorTag::Red, vis::ColorTag::Green, vis::ColorTag::Blue };
-                std::vector<vis::Color> noColors = { vis::ColorTag::DimGray, vis::ColorTag::Gray, vis::ColorTag::DarkGray };
+                std::vector<gui::Color> colors(mg.internalComponents<core::RegionData>().size());
+                std::vector<gui::Color> oColors = { gui::ColorTag::Red, gui::ColorTag::Green, gui::ColorTag::Blue };
+                std::vector<gui::Color> noColors = { gui::ColorTag::DimGray, gui::ColorTag::Gray, gui::ColorTag::DarkGray };
                 for (auto & r : mg.components<core::RegionData>()){
                     auto & p = props[r.topo.hd];
                     auto & color = colors[r.topo.hd.id];
                     if (!p.used){
-                        color = vis::ColorTag::Black;
+                        color = gui::ColorTag::Black;
                     }
                     else{
                         if (p.orientationClaz != -1){
@@ -535,16 +535,16 @@ namespace panolyz {
                             color = noColors[p.orientationNotClaz];
                         }
                         else{
-                            color = vis::ColorTag::White;
+                            color = gui::ColorTag::White;
                         }
                     }
                 }
-                vis::Visualizer2D::Params params;
-                params.colorTable = vis::ColorTable(colors, vis::ColorTag::White);
-                vis::Visualizer2D(segmentedImage)
-                    << vis::manip2d::Show();
-                vis::Visualizer2D(segmentedImage, params)
-                    << vis::manip2d::Show();
+                gui::Visualizer2D::Params params;
+                params.colorTable = gui::ColorTable(colors, gui::ColorTag::White);
+                gui::Visualizer2D(segmentedImage)
+                    << gui::manip2d::Show();
+                gui::Visualizer2D(segmentedImage, params)
+                    << gui::manip2d::Show();
             }
 
             core::SolveVariablesUsingInversedDepths(mg, props);

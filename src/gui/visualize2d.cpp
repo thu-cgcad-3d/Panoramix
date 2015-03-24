@@ -3,7 +3,7 @@
 #include "visualize2d.hpp"
 
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
         inline core::Vec3b ToVec3b(const Color & color) {
             return core::Vec3b(color.red(), color.green(), color.blue());

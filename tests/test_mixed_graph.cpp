@@ -2,8 +2,8 @@
 #include "../src/core/utilities.hpp"
 #include "../src/core/algorithms.hpp"
 #include "../src/core/mixed_graph.hpp"
-#include "../src/vis/visualize2d.hpp"
-#include "../src/vis/visualizers.hpp"
+#include "../src/gui/visualize2d.hpp"
+#include "../src/gui/visualizers.hpp"
 
 #include "config.hpp"
 
@@ -32,15 +32,15 @@ void VisualizeMixedGraph(const core::Image & panorama,
     const std::vector<core::Vec3> & vps,
     bool doModal){
 
-    vis::Visualizer viz("mixed graph");
-    viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
+    gui::Visualizer viz("mixed graph");
+    viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
 
     struct UnaryID {
         int patchId;
         core::MGUnaryHandle uh;
     };
 
-    std::vector<std::pair<UnaryID, core::Classified<vis::SpatialProjectedPolygon>>> spps;
+    std::vector<std::pair<UnaryID, core::Classified<gui::SpatialProjectedPolygon>>> spps;
     std::vector<core::Classified<core::Line3>> lines;
 
     for (int i = 0; i < patches.size(); i++){
@@ -54,7 +54,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
             auto & v = mg.data(uh);
             if (v.type == core::MGUnary::Region){
                 auto & region = v;
-                vis::SpatialProjectedPolygon spp;
+                gui::SpatialProjectedPolygon spp;
                 // filter corners
                 core::ForeachCompatibleWithLastElement(region.normalizedCorners.begin(), region.normalizedCorners.end(),
                     std::back_inserter(spp.corners),
@@ -75,14 +75,14 @@ void VisualizeMixedGraph(const core::Image & panorama,
         }
     }
 
-    vis::ResourceStore::set("texture", panorama);
+    gui::ResourceStore::set("texture", panorama);
 
-    auto sppCallbackFun = [&patches, &vps, &mg](vis::InteractionID iid, const std::pair<UnaryID, core::Classified<vis::SpatialProjectedPolygon>> & spp) {
+    auto sppCallbackFun = [&patches, &vps, &mg](gui::InteractionID iid, const std::pair<UnaryID, core::Classified<gui::SpatialProjectedPolygon>> & spp) {
         std::cout << "uh: " << spp.first.uh.id << "in patch " << spp.first.patchId <<
             ",  its orientation context label is " << mg.data(spp.first.uh).mostLikely() << std::endl;
     };
 
-    viz.begin(spps, sppCallbackFun).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+    viz.begin(spps, sppCallbackFun).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
     viz.installingOptions.lineWidth = 4.0;
     viz.add(lines);
 
@@ -99,9 +99,9 @@ void VisualizeMixedGraph(const core::Image & panorama,
     }
     }*/
 
-    viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
+    viz.installingOptions.discretizeOptions.color = gui::ColorTag::DarkGray;
     viz.installingOptions.lineWidth = 2.0;
-    viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
+    viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines;
     //viz.add(connectionLines);
     viz.camera(core::PerspectiveCamera(800, 800, 500, { 1.0, 1.0, -1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, -1.0 }));
     viz.show(doModal);
@@ -109,19 +109,19 @@ void VisualizeMixedGraph(const core::Image & panorama,
 }
 
 
-template <class UhColorizerFunT = core::ConstantFunctor<vis::Color>>
+template <class UhColorizerFunT = core::ConstantFunctor<gui::Color>>
 void ManuallyOptimizeMixedGraph(const core::Image & panorama,
     const core::MixedGraph & mg,
     core::MGPatch & patch,
     const std::vector<core::Vec3> & vps,
-    UhColorizerFunT uhColorizer = UhColorizerFunT(vis::ColorTag::White),
+    UhColorizerFunT uhColorizer = UhColorizerFunT(gui::ColorTag::White),
     bool optimizeInEachIteration = true) {
 
     bool modified = true;
-    auto sppCallbackFun = [&patch, &vps, &mg, &modified](vis::InteractionID iid,
-        const std::pair<core::MGUnaryHandle, vis::Colored<vis::SpatialProjectedPolygon>> & spp) {
+    auto sppCallbackFun = [&patch, &vps, &mg, &modified](gui::InteractionID iid,
+        const std::pair<core::MGUnaryHandle, gui::Colored<gui::SpatialProjectedPolygon>> & spp) {
         std::cout << "uh: " << spp.first.id << std::endl;
-        if (iid == vis::InteractionID::PressSpace){
+        if (iid == gui::InteractionID::PressSpace){
             std::cout << "space pressed!" << std::endl;
             int & claz = patch.uhs[spp.first].claz;
             claz = (claz + 1) % vps.size();
@@ -132,7 +132,7 @@ void ManuallyOptimizeMixedGraph(const core::Image & panorama,
 
     while (modified){
 
-        vis::ResourceStore::set("texture", panorama);
+        gui::ResourceStore::set("texture", panorama);
 
         modified = false;
         if (optimizeInEachIteration){
@@ -141,19 +141,19 @@ void ManuallyOptimizeMixedGraph(const core::Image & panorama,
         }
         patch /= core::AverageDepthOfPatch(patch);
 
-        vis::Visualizer viz("mixed graph optimizable");
+        gui::Visualizer viz("mixed graph optimizable");
         viz.renderOptions.bwColor = 1.0;
         viz.renderOptions.bwTexColor = 0.0;
-        viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
-        std::vector<std::pair<core::MGUnaryHandle, vis::Colored<vis::SpatialProjectedPolygon>>> spps;
-        std::vector<vis::Colored<core::Line3>> lines;
+        viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
+        std::vector<std::pair<core::MGUnaryHandle, gui::Colored<gui::SpatialProjectedPolygon>>> spps;
+        std::vector<gui::Colored<core::Line3>> lines;
 
         for (auto & uhv : patch.uhs){
             auto uh = uhv.first;
             auto & v = mg.data(uh);
             if (v.type == core::MGUnary::Region){
                 auto & region = v;
-                vis::SpatialProjectedPolygon spp;
+                gui::SpatialProjectedPolygon spp;
                 // filter corners
                 core::ForeachCompatibleWithLastElement(region.normalizedCorners.begin(), region.normalizedCorners.end(),
                     std::back_inserter(spp.corners),
@@ -165,15 +165,15 @@ void ManuallyOptimizeMixedGraph(const core::Image & panorama,
 
                 spp.projectionCenter = core::Point3(0, 0, 0);
                 spp.plane = core::PlaneOfMGUnary(region, vps, uhv.second);
-                spps.emplace_back(uh, std::move(vis::ColorAs(spp, uhColorizer(uh))));
+                spps.emplace_back(uh, std::move(gui::ColorAs(spp, uhColorizer(uh))));
             }
             else if (v.type == core::MGUnary::Line){
                 auto & line = v;
-                lines.push_back(vis::ColorAs(core::LineOfMGUnary(line, vps, uhv.second), uhColorizer(uh)));
+                lines.push_back(gui::ColorAs(core::LineOfMGUnary(line, vps, uhv.second), uhColorizer(uh)));
             }
         }
 
-        viz.begin(spps, sppCallbackFun).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+        viz.begin(spps, sppCallbackFun).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
         viz.installingOptions.lineWidth = 4.0;
         viz.add(lines);
 
@@ -188,14 +188,14 @@ void ManuallyOptimizeMixedGraph(const core::Image & panorama,
             }
         }
 
-        viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
+        viz.installingOptions.discretizeOptions.color = gui::ColorTag::DarkGray;
         viz.installingOptions.lineWidth = 2.0;
-        viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
+        viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines;
         viz.add(connectionLines);
         viz.camera(core::PerspectiveCamera(800, 800, 500, { 1.0, 1.0, -1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, -1.0 }));
         viz.show(true, false);
 
-        vis::ResourceStore::clear();
+        gui::ResourceStore::clear();
     }
 
 }

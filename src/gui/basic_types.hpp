@@ -1,10 +1,10 @@
-#ifndef PANORAMIX_VIS_BASIC_TYPES_HPP
-#define PANORAMIX_VIS_BASIC_TYPES_HPP
+#ifndef PANORAMIX_GUI_BASIC_TYPES_HPP
+#define PANORAMIX_GUI_BASIC_TYPES_HPP
 
 #include "../core/basic_types.hpp"
  
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
         // color
         enum class ColorTag {
@@ -277,7 +277,7 @@ namespace panoramix {
 
     namespace core {
 
-        Box3 BoundingBox(const vis::SpatialProjectedPolygon & spp);
+        Box3 BoundingBox(const gui::SpatialProjectedPolygon & spp);
 
     }
 

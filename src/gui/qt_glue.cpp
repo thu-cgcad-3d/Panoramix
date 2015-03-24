@@ -3,7 +3,7 @@
 #include <QtDebug>
 
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
         QMatrix4x4 MakeQMatrix(const core::Mat<float, 4, 4> & m){
             QMatrix4x4 mat;

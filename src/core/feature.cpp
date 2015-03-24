@@ -23,16 +23,17 @@ extern "C" {
 #include "feature.hpp"
 #include "utilities.hpp"
 #include "containers.hpp"
-#include "matlab.hpp"
 #include "clock.hpp"
 
-#include "debug.hpp"
+#include "../misc/matlab.hpp"
 
 
 
 
 namespace panoramix {
     namespace core {
+
+        using misc::Matlab;
 
 #pragma region NonMaximaSuppression
 

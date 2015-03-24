@@ -1,10 +1,10 @@
-#ifndef PANORAMIX_CORE_MATLAB_HPP
-#define PANORAMIX_CORE_MATLAB_HPP
+#ifndef PANORAMIX_MISC_MATLAB_HPP
+#define PANORAMIX_MISC_MATLAB_HPP
 
-#include "basic_types.hpp"
+#include "../core/basic_types.hpp"
 
 namespace panoramix {
-    namespace core {
+    namespace misc {
 
         using CVInputArray = cv::InputArray;
         using CVOutputArray = cv::OutputArray;

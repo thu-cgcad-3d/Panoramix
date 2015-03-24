@@ -14,15 +14,17 @@ extern "C" {
 //
 #include <GCoptimization.h>
 
+
+#include "../misc/matlab.hpp"
+
 //
 #include "algorithms.hpp"
 #include "containers.hpp"
-#include "matlab.hpp"
 #include "utilities.hpp"
 #include "clock.hpp"
 #include "mixed_graph.hpp"
 
-#include "../vis/visualizers.hpp"
+#include "../gui/visualizers.hpp"
 //#include "matlab.hpp"
 
 
@@ -3511,12 +3513,12 @@ namespace panoramix {
 
         namespace {
 
-            template <class UhClickHandlerFunT, class UhColorizerFunT = core::ConstantFunctor<vis::Color>>
+            template <class UhClickHandlerFunT, class UhColorizerFunT = core::ConstantFunctor<gui::Color>>
             void ManuallyOptimizeMixedGraph(const core::Image & panorama,
                 const MixedGraph & mg,
                 MixedGraphPropertyTable & props,
                 UhClickHandlerFunT && uhClicked,
-                UhColorizerFunT && uhColorizer = UhColorizerFunT(vis::ColorTag::White),
+                UhColorizerFunT && uhColorizer = UhColorizerFunT(gui::ColorTag::White),
                 bool optimizeInEachIteration = false) {
 
                 bool modified = true;
@@ -3526,8 +3528,8 @@ namespace panoramix {
                     bool isRegion;
                 };
 
-                auto sppCallbackFun = [&props, &mg, &modified, &uhClicked](vis::InteractionID iid,
-                    const std::pair<ComponentID, vis::Colored<vis::SpatialProjectedPolygon>> & spp) {
+                auto sppCallbackFun = [&props, &mg, &modified, &uhClicked](gui::InteractionID iid,
+                    const std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>> & spp) {
                     std::cout << (spp.first.isRegion ? "Region" : "Line") << spp.first.handleID << std::endl;
                     if (spp.first.isRegion){
                         modified = uhClicked(RegionHandle(spp.first.handleID));
@@ -3539,26 +3541,26 @@ namespace panoramix {
 
                 while (modified){
 
-                    vis::ResourceStore::set("texture", panorama);
+                    gui::ResourceStore::set("texture", panorama);
 
                     modified = false;
                     if (optimizeInEachIteration){
                         SolveVariablesUsingInversedDepths(mg, props);
                     }
 
-                    vis::Visualizer viz("mixed graph optimizable");
+                    gui::Visualizer viz("mixed graph optimizable");
                     viz.renderOptions.bwColor = 1.0;
                     viz.renderOptions.bwTexColor = 0.0;
-                    viz.installingOptions.discretizeOptions.colorTable = vis::ColorTableDescriptor::RGB;
-                    std::vector<std::pair<ComponentID, vis::Colored<vis::SpatialProjectedPolygon>>> spps;
-                    std::vector<vis::Colored<core::Line3>> lines;
+                    viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
+                    std::vector<std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>>> spps;
+                    std::vector<gui::Colored<core::Line3>> lines;
 
                     for (auto & c : mg.components<RegionData>()){
                         if (!props[c.topo.hd].used)
                             continue;
                         auto uh = c.topo.hd;
                         auto & region = c.data;
-                        vis::SpatialProjectedPolygon spp;
+                        gui::SpatialProjectedPolygon spp;
                         // filter corners
                         core::ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
                             std::back_inserter(spp.corners),
@@ -3571,7 +3573,7 @@ namespace panoramix {
                         spp.projectionCenter = core::Point3(0, 0, 0);
                         spp.plane = Instance(mg, props, uh);
                         assert(!HasValue(spp.plane, IsInfOrNaN<double>));
-                        spps.emplace_back(ComponentID{ uh.id, true }, std::move(vis::ColorAs(spp, uhColorizer(uh))));
+                        spps.emplace_back(ComponentID{ uh.id, true }, std::move(gui::ColorAs(spp, uhColorizer(uh))));
                     }
 
                     for (auto & c : mg.components<LineData>()){
@@ -3579,11 +3581,11 @@ namespace panoramix {
                             continue;
                         auto uh = c.topo.hd;
                         auto & line = c.data;
-                        lines.push_back(vis::ColorAs(Instance(mg, props, uh), uhColorizer(uh)));
+                        lines.push_back(gui::ColorAs(Instance(mg, props, uh), uhColorizer(uh)));
                     }
 
-                    viz.begin(spps, sppCallbackFun).shaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
-                    viz.installingOptions.discretizeOptions.color = vis::ColorTag::DarkGray;
+                    viz.begin(spps, sppCallbackFun).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+                    viz.installingOptions.discretizeOptions.color = gui::ColorTag::DarkGray;
                     viz.installingOptions.lineWidth = 5.0;
                     viz.add(lines);
 
@@ -3614,18 +3616,18 @@ namespace panoramix {
                         }
                     }
 
-                    viz.installingOptions.discretizeOptions.color = vis::ColorTag::Black;
+                    viz.installingOptions.discretizeOptions.color = gui::ColorTag::Black;
                     viz.installingOptions.lineWidth = 1.0;
                     viz.add(connectionLines);
 
-                    viz.renderOptions.renderMode = vis::RenderModeFlag::Triangles | vis::RenderModeFlag::Lines;
-                    viz.renderOptions.backgroundColor = vis::ColorTag::White;
+                    viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines;
+                    viz.renderOptions.backgroundColor = gui::ColorTag::White;
                     viz.renderOptions.bwColor = 0.5;
                     viz.renderOptions.bwTexColor = 0.5;
                     viz.camera(core::PerspectiveCamera(1000, 800, 800, Point3(-1, 1, 1), Point3(0, 0, 0)));
                     viz.show(true, false);
 
-                    vis::ResourceStore::clear();
+                    gui::ResourceStore::clear();
                 }
 
             }
@@ -3637,15 +3639,15 @@ namespace panoramix {
         struct ComponentHandleColorizer {
             const MixedGraph & mg;
             const MixedGraphPropertyTable & props;
-            vis::ColorTable colorTableForVPs;
-            vis::ColorTable colorTableForRegionAlongOrientations;
+            gui::ColorTable colorTableForVPs;
+            gui::ColorTable colorTableForRegionAlongOrientations;
             ComponentHandleColorizer(const MixedGraph & g, const MixedGraphPropertyTable & p) : mg(g), props(p) {
-                colorTableForVPs = vis::ColorTable(vis::ColorTableDescriptor::RGB)
+                colorTableForVPs = gui::ColorTable(gui::ColorTableDescriptor::RGB)
                     .appendRandomizedColors(props.vanishingPoints.size()-3);
-                colorTableForRegionAlongOrientations = vis::CreateGreyColorTableWithSize(props.vanishingPoints.size());
+                colorTableForRegionAlongOrientations = gui::CreateGreyColorTableWithSize(props.vanishingPoints.size());
             }
 
-            inline vis::Color operator()(ComponentHandle<RegionData> rh) const{
+            inline gui::Color operator()(ComponentHandle<RegionData> rh) const{
                 /*double maxPlaneDist = 0.0;
                 for (auto & r : mg.components<RegionData>()){
                     if (!props[r.topo.hd].used)
@@ -3654,17 +3656,17 @@ namespace panoramix {
                     if (pdist > maxPlaneDist)
                         maxPlaneDist = pdist;
                 }
-                return vis::ColorFromHSV(Instance(mg, props, rh).distanceTo(Point3(0, 0, 0)) / maxPlaneDist, 0.5, 0.8);*/
+                return gui::ColorFromHSV(Instance(mg, props, rh).distanceTo(Point3(0, 0, 0)) / maxPlaneDist, 0.5, 0.8);*/
                 auto & prop = props[rh];
                 if (!prop.used)
-                    return vis::ColorTag::Yellow;
+                    return gui::ColorTag::Yellow;
                 if (prop.orientationClaz >= 0)
                     return colorTableForVPs[prop.orientationClaz];
                 if (prop.orientationNotClaz >= 0)
                     return colorTableForRegionAlongOrientations[prop.orientationNotClaz];
-                return vis::ColorTag::Yellow;
+                return gui::ColorTag::Yellow;
             }
-            inline vis::Color operator()(ComponentHandle<LineData> rh) const {
+            inline gui::Color operator()(ComponentHandle<LineData> rh) const {
                 return colorTableForVPs[props[rh].orientationClaz];
             }
         };

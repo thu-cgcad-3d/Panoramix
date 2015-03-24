@@ -9,7 +9,7 @@
 #include "resource.hpp"
  
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
 
         enum InteractionID {

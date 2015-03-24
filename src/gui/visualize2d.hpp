@@ -1,11 +1,11 @@
-#ifndef PANORAMIX_VIS_VISUALIZE2D_HPP
-#define PANORAMIX_VIS_VISUALIZE2D_HPP
+#ifndef PANORAMIX_GUI_VISUALIZE2D_HPP
+#define PANORAMIX_GUI_VISUALIZE2D_HPP
 
 #include "../core/basic_types.hpp"
 #include "basic_types.hpp"
 
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
         using namespace core;
 

@@ -4,7 +4,7 @@
 #include "../core/basic_types.hpp"
 
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
 
         // resource making

@@ -23,16 +23,16 @@ file (GLOB ML_SOURCES ./ml/*.c*)
 source_group ("ml" FILES ${ML_HEADERS} ${ML_SOURCES})
 
 
-file (GLOB VIS_HEADERS ./vis/*.hpp)
-file (GLOB VIS_SOURCES ./vis/*.c*)
-file (GLOB VIS_RESOURCES ./vis/*.qrc)
-file (GLOB VIS_UIS ./vis/*.ui)
+file (GLOB GUI_HEADERS ./gui/*.hpp)
+file (GLOB GUI_SOURCES ./gui/*.c*)
+file (GLOB GUI_RESOURCES ./gui/*.qrc)
+file (GLOB GUI_UIS ./gui/*.ui)
 
 set(CMAKE_AUTOMOC on)
 set(CMAKE_AUTOUIC on)
 set(CMAKE_AUTORCC on)
 
-source_group ("vis" FILES ${VIS_HEADERS} ${VIS_SOURCES} ${VIS_RESOURCES} ${VIS_UIS})
+source_group ("gui" FILES ${GUI_HEADERS} ${GUI_SOURCES} ${GUI_RESOURCES} ${GUI_UIS})
 
 
 file (GLOB MISC_HEADERS ./misc/*.hpp)
@@ -46,10 +46,10 @@ panoramix_add_library ( ${PROJECT_NAME}
 	${CORE_HEADERS}
 	${ML_HEADERS} 
 	${ML_SOURCES}
-	${VIS_SOURCES} 
-	${VIS_HEADERS} 
-	${VIS_RESOURCES}
-	${VIS_UIS}
+	${GUI_SOURCES} 
+	${GUI_HEADERS} 
+	${GUI_RESOURCES}
+	${GUI_UIS}
 	${MISC_HEADERS}
 	${MISC_SOURCES}
 )

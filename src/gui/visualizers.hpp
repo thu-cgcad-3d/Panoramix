@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_VIS_VISUALIZERS_HPP
-#define PANORAMIX_VIS_VISUALIZERS_HPP
+#ifndef PANORAMIX_GUI_VISUALIZERS_HPP
+#define PANORAMIX_GUI_VISUALIZERS_HPP
 
 #include "../core/feature.hpp"
 #include "../core/cameras.hpp"
@@ -13,7 +13,7 @@ class QWidget;
 class QAction;
 
 namespace panoramix {
-    namespace vis {     
+    namespace gui {     
 
 
         class Visualizer {
@@ -22,19 +22,19 @@ namespace panoramix {
                 _activeOH = _tree.addRoot(std::make_shared<VisualObject>());
 
                 renderOptions.winName = winName;
-                renderOptions.backgroundColor = vis::ColorTag::White;
-                renderOptions.renderMode = vis::RenderModeFlag::All;
+                renderOptions.backgroundColor = ColorTag::White;
+                renderOptions.renderMode = RenderModeFlag::All;
                 renderOptions.camera = core::PerspectiveCamera(500, 500, 250, { 1.0, 1.0, 1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 });
                 renderOptions.bwColor = 0.3;
                 renderOptions.bwTexColor = 0.7;
                 renderOptions.showInside = true;
 
-                installingOptions.discretizeOptions.color = vis::ColorTag::Black;
-                installingOptions.discretizeOptions.colorTable = vis::PredefinedColorTable(vis::ColorTableDescriptor::AllColors);
+                installingOptions.discretizeOptions.color = ColorTag::Black;
+                installingOptions.discretizeOptions.colorTable = PredefinedColorTable(ColorTableDescriptor::AllColors);
                 installingOptions.discretizeOptions.isolatedTriangles = false;
                 installingOptions.discretizeOptions.subdivisionNums[0] = 32;
                 installingOptions.discretizeOptions.subdivisionNums[1] = 64;
-                installingOptions.defaultShaderSource = vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XTriangles);
+                installingOptions.defaultShaderSource = PredefinedShaderSource(OpenGLShaderSourceDescriptor::XTriangles);
                 installingOptions.pointSize = 10.0;
                 installingOptions.lineWidth = 5.0;
             }
@@ -110,7 +110,7 @@ namespace panoramix {
                 return *this; 
             }
 
-            inline Visualizer & renderMode(vis::RenderModeFlags flags) { renderOptions.renderMode = flags; return *this; }
+            inline Visualizer & renderMode(RenderModeFlags flags) { renderOptions.renderMode = flags; return *this; }
             inline Visualizer & camera(const core::PerspectiveCamera & cam) { renderOptions.camera = cam; return *this; }
 
             enum CameraScalePolicy {

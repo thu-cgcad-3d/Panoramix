@@ -4,7 +4,7 @@
 #include "../../src/core/basic_types.hpp"
 #include "../../src/core/utilities.hpp"
 #include "../../src/core/mixed_graph.hpp"
-#include "../../src/vis/qt_glue.hpp"
+#include "../../src/gui/qt_glue.hpp"
 
 #include "stepsdag.hpp"
 #include "configuration.hpp"
@@ -23,7 +23,7 @@ public:
             QImage im;
             im.load(_panoImFileInfo.absoluteFilePath());
             im = im.convertToFormat(QImage::Format_RGB888);
-            auto pim = vis::MakeCVMat(im);
+            auto pim = gui::MakeCVMat(im);
             core::ResizeToHeight(pim, 700);
             bool b = core::MakePanorama(pim);
             Q_ASSERT(b);
@@ -226,7 +226,7 @@ public:
             QImage im;
             im.load(_imFileInfo.absoluteFilePath());
             im = im.convertToFormat(QImage::Format_RGB888);
-            auto cvim = vis::MakeCVMat(im);
+            auto cvim = gui::MakeCVMat(im);
             core::ResizeToHeight(cvim, 500);
 
             core::View<core::PerspectiveCamera> view;

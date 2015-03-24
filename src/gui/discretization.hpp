@@ -5,7 +5,7 @@
 #include "basic_types.hpp"
  
 namespace panoramix {
-    namespace vis {
+    namespace gui {
  
 
         // triangular mesh
@@ -68,7 +68,7 @@ namespace panoramix {
                 subdivisionNums[1] = 64;
             }
             Color color;
-            vis::ColorTable colorTable;
+            ColorTable colorTable;
             int index;
             bool isolatedTriangles;
             int subdivisionNums[2];
@@ -153,7 +153,7 @@ namespace panoramix {
             struct IsDiscretizableImp {
                 template <class TT>
                 static auto test(int) -> decltype(
-                    vis::Discretize(std::declval<TriMesh &>(), std::declval<TT>(), std::declval<DiscretizeOptions>()),
+                    gui::Discretize(std::declval<TriMesh &>(), std::declval<TT>(), std::declval<DiscretizeOptions>()),
                     std::true_type()
                     );
                 template <class>
@@ -173,7 +173,7 @@ namespace panoramix {
 
     namespace core {
 
-        inline Box3 BoundingBox(const vis::TriMesh & m) {
+        inline Box3 BoundingBox(const gui::TriMesh & m) {
             return m.boundingBox();
         }
 

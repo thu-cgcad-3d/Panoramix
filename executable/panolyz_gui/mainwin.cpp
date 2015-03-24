@@ -1,4 +1,4 @@
-#include "../../src/vis/singleton.hpp"
+#include "../../src/gui/singleton.hpp"
 
 #include "project.hpp"
 #include "mainwin.hpp"
@@ -87,7 +87,7 @@ public:
             return col == 0 ? names.at(row) : _project->conf(names.at(row));
         }
         else if (role == Qt::DecorationRole && index.column() == 0){
-            return vis::Singleton::DefaultIcon();
+            return gui::Singleton::DefaultIcon();
         }
         else if (role == Qt::BackgroundRole){
             //return QBrush(Qt::darkGray);

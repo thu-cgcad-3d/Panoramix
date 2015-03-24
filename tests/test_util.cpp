@@ -75,18 +75,18 @@ TEST(MiscTest, Any) {
 
 
 
-TEST(MiscTest, Optional){
+TEST(MiscTest, Result){
 
-    core::Optional<std::vector<int>> opt;
+    core::Result<std::vector<int>> opt;
     ASSERT_TRUE(opt.null());
-    opt = core::AsOptional(std::vector<int>{1, 2, 3, 4});
+    opt = core::AsResult(std::vector<int>{1, 2, 3, 4});
     ASSERT_TRUE(!opt.null());
 
     auto data = opt.unwrap();
     ASSERT_TRUE((data == std::vector<int>{1, 2, 3}));
     ASSERT_TRUE(opt.null());
 
-    auto opt2 = core::AsOptional(std::move(data));
+    auto opt2 = core::AsResult(std::move(data));
     ASSERT_TRUE(!opt2.null());
 
     opt = std::move(opt2);

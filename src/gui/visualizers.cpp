@@ -8,7 +8,7 @@
 #define GL_ALPHA_TEST 0x0BC0
 
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
         using namespace core;
 

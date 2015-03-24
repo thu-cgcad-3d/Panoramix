@@ -5,7 +5,9 @@
 #include "matlab.hpp"
 
 namespace panoramix {
-    namespace core {
+    namespace misc {
+
+        using namespace core;
 
 #ifdef USE_MATLAB
         namespace {

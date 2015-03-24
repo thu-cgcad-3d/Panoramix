@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_VIS_QT_GLUE_HPP
-#define PANORAMIX_VIS_QT_GLUE_HPP
+#ifndef PANORAMIX_GUI_QT_GLUE_HPP
+#define PANORAMIX_GUI_QT_GLUE_HPP
 
 #include <QtCore>
 #include <QtGui>
@@ -10,15 +10,15 @@
 #include "basic_types.hpp"
 
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
 
         // color
-        inline QRgb MakeQRgb(const vis::Color & c) { 
+        inline QRgb MakeQRgb(const Color & c) {
             return qRgba(c.red(), c.green(), c.blue(), c.alpha()); 
         }
 
-        inline QColor MakeQColor(const vis::Color & c) {
+        inline QColor MakeQColor(const Color & c) {
             return QColor(MakeQRgb(c));
         }
 
@@ -49,7 +49,7 @@ namespace panoramix {
                 static_cast<float>(v[2]), static_cast<float>(v[3]));
         }
 
-        inline QVector4D MakeQVec(const vis::Color & v) {
+        inline QVector4D MakeQVec(const Color & v) {
             return QVector4D(v.redf(), v.greenf(), v.bluef(), v.alphaf());
         }
 

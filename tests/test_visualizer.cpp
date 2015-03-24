@@ -1,4 +1,4 @@
-#include "../src/vis/visualizers.hpp"
+#include "../src/gui/visualizers.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
@@ -19,8 +19,8 @@ TEST(Visualizer, Color) {
     core::ImageOfType<core::Vec<double, 4>> sv(m, m);
     for (int i = 0; i < m; i++){
         for (int j = 0; j < m; j++){
-            hs(i, j) = vis::ColorFromHSV(i / (double)m, j / (double)m, 0.5);
-            sv(i, j) = vis::ColorFromHSV(0.5, i / (double)m, j / (double)m);
+            hs(i, j) = gui::ColorFromHSV(i / (double)m, j / (double)m, 0.5);
+            sv(i, j) = gui::ColorFromHSV(0.5, i / (double)m, j / (double)m);
         }
     }
     cv::imshow("[HS]V color", hs);
@@ -30,29 +30,29 @@ TEST(Visualizer, Color) {
 }
 
 
-static_assert(vis::IsDiscretizable<core::Line3>::value, "Line3 is not renderable!");
-static_assert(vis::IsDiscretizable<core::Point3>::value, "Point3 is not renderable!");
-static_assert(vis::IsDiscretizable<core::Classified<core::Line3>>::value, "Classified<Line3> is not renderable!");
-static_assert(vis::IsDiscretizable<std::vector<core::Classified<core::Line3>>>::value, 
+static_assert(gui::IsDiscretizable<core::Line3>::value, "Line3 is not renderable!");
+static_assert(gui::IsDiscretizable<core::Point3>::value, "Point3 is not renderable!");
+static_assert(gui::IsDiscretizable<core::Classified<core::Line3>>::value, "Classified<Line3> is not renderable!");
+static_assert(gui::IsDiscretizable<std::vector<core::Classified<core::Line3>>>::value, 
     "std::vector<core::Classified<core::Line3>> is not renderable!");
-static_assert(!vis::IsDiscretizable<int>::value, "");
+static_assert(!gui::IsDiscretizable<int>::value, "");
 
-static auto a = [](vis::InteractionID iid, core::Sphere3 & s){
-    if (iid == vis::ClickLeftButton)
+static auto a = [](gui::InteractionID iid, core::Sphere3 & s){
+    if (iid == gui::ClickLeftButton)
         std::cout << "clicked on the sphere" << std::endl;
 };
 
-static auto b = [](vis::InteractionID iid, const vis::VisualObjectTree & tree, const vis::VisualObjectMeshTriangle & omt){
-    if (iid == vis::ClickLeftButton)
+static auto b = [](gui::InteractionID iid, const gui::VisualObjectTree & tree, const gui::VisualObjectMeshTriangle & omt){
+    if (iid == gui::ClickLeftButton)
         std::cout << "clicked on the sphere" << std::endl;
 };
 
-static_assert(vis::IsSimpleCallbackFunctionImp<std::pair<decltype(a), core::Sphere3>>::value, "");
-static_assert(!vis::IsSimpleCallbackFunctionImp<std::pair<int, core::Sphere3>>::value, "");
+static_assert(gui::IsSimpleCallbackFunctionImp<std::pair<decltype(a), core::Sphere3>>::value, "");
+static_assert(!gui::IsSimpleCallbackFunctionImp<std::pair<int, core::Sphere3>>::value, "");
 
-static_assert(vis::CallbackFunctionTraits<decltype(a), core::Sphere3>::value == vis::CallbackFunctionType::Simple, "");
-static_assert(vis::CallbackFunctionTraits<decltype(b), core::Sphere3>::value == vis::CallbackFunctionType::Complex, "");
-static_assert(vis::CallbackFunctionTraits<int, core::Sphere3>::value == vis::CallbackFunctionType::None, "");
+static_assert(gui::CallbackFunctionTraits<decltype(a), core::Sphere3>::value == gui::CallbackFunctionType::Simple, "");
+static_assert(gui::CallbackFunctionTraits<decltype(b), core::Sphere3>::value == gui::CallbackFunctionType::Complex, "");
+static_assert(gui::CallbackFunctionTraits<int, core::Sphere3>::value == gui::CallbackFunctionType::None, "");
 
 void Print(const core::PerspectiveCamera & cam) {
     std::cout << std::setprecision(6) << "======================================" << std::endl;
@@ -71,26 +71,26 @@ void Print(const core::PerspectiveCamera & cam) {
 
 TEST(Visualizer, Interaction){
 
-    using namespace vis;    
+    using namespace gui;    
    
     std::vector<core::Sphere3> ss = { { core::Point3(1, 1, 1), 2.0 }, { core::Point3(-1, -1, -1), 2.0 } };
 
     auto t = core::MakeTriangle(core::Point3(0, 0, 1), core::Point3(1, 0, 0), core::Point3(0, 1, 0));
     
-    vis::ResourceStore::set("texture", cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
+    gui::ResourceStore::set("texture", cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
 
     int clickedCount = 0;
     Visualizer("_1")
-        .begin(ss, [&clickedCount](vis::InteractionID iid, core::Sphere3 & s){
-            if (iid == vis::ClickLeftButton)
+        .begin(ss, [&clickedCount](gui::InteractionID iid, core::Sphere3 & s){
+            if (iid == gui::ClickLeftButton)
                 std::cout << "clicked on the spheres, its center is at " << s.center << std::endl;
             else
                 std::cout << "pressed on the spheres, its center is at " << s.center << std::endl;
             })
             .resource("texture")
-            .shaderSource(vis::PredefinedShaderSource(vis::OpenGLShaderSourceDescriptor::XPanorama))
+            .shaderSource(gui::PredefinedShaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama))
         .end()
-        .renderMode(vis::RenderModeFlag::Lines | vis::RenderModeFlag::Triangles)
+        .renderMode(gui::RenderModeFlag::Lines | gui::RenderModeFlag::Triangles)
         .show();
     
 }

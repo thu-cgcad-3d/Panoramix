@@ -3,7 +3,7 @@
 #include "../core/utilities.hpp"
 
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
         using namespace core;
 
@@ -703,7 +703,7 @@ namespace panoramix {
 
     namespace core {
 
-        Box3 BoundingBox(const vis::SpatialProjectedPolygon & spp){
+        Box3 BoundingBox(const gui::SpatialProjectedPolygon & spp){
             std::vector<Vec3> cs(spp.corners.size());
             for (int i = 0; i < spp.corners.size(); i++){
                 cs[i] = IntersectionOfLineAndPlane(Ray3(spp.projectionCenter, spp.corners[i] - spp.projectionCenter), 

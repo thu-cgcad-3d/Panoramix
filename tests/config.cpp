@@ -24,7 +24,8 @@ int main(int argc, char * argv[], char * envp[]) {
    testing::GTEST_FLAG(catch_exceptions) = false;
    testing::GTEST_FLAG(throw_on_failure) = true;
    //testing::GTEST_FLAG(filter) = "BasicType.Line";
-   testing::GTEST_FLAG(filter) = "Feature.VanishingPointsDetector";
+   //testing::GTEST_FLAG(filter) = " MiscTest.Optional";  
+   //testing::GTEST_FLAG(filter) = "Feature.VanishingPointsDetector";
    //testing::GTEST_FLAG(filter) = "Feature.GeometricContextMatlab";
    //testing::GTEST_FLAG(filter) = "MixedGraph.RebuildOnOnePanorama";
    //testing::GTEST_FLAG(filter) = "Matlab.SparseMatrix";
@@ -32,5 +33,7 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = "ConstraintGraph.Basic";
    //testing::GTEST_FLAG(filter) = "View.OrientationContextPerspective";
    //testing::GTEST_FLAG(filter) = "View.SampleViews:View.LinesGraph:View.OrientationContext";
+   //testing::GTEST_FLAG(filter) = "Serialization.SUNAnnotation";
+   //testing::GTEST_FLAG(filter) = "BasicTest.Move";
    return RUN_ALL_TESTS();
 }

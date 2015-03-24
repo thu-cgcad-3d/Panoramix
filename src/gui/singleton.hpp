@@ -1,12 +1,12 @@
-#ifndef PANORAMIX_VIS_SINGLETON_HPP
-#define PANORAMIX_VIS_SINGLETON_HPP
+#ifndef PANORAMIX_GUI_SINGLETON_HPP
+#define PANORAMIX_GUI_SINGLETON_HPP
 
 class QIcon;
 class QString;
 class QApplication;
 
 namespace panoramix {
-    namespace vis {
+    namespace gui {
 
         struct Singleton {
 
