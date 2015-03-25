@@ -55,5 +55,28 @@ TEST(BasicType, Line) {
 
 }
 
+TEST(BasicType, VecCast) {
+
+    core::Imaged im(100, 100, 0.0);
+    auto imi = core::vec_cast<int>(im);
+
+    for (auto & i : imi){
+        ASSERT_EQ(i, 0);
+    }
+
+    core::Imaged3 im3(100, 100, core::Vec3(1, 2, 3));
+    auto imi3 = core::vec_cast<int>(im3);
+    auto imd3 = core::vec_cast<double>(im3);
+
+    for (auto & i : imi3){
+        ASSERT_TRUE(i == core::Vec3i(1, 2, 3));
+    }
+    for (auto & i : imd3){
+        ASSERT_TRUE(i == core::Vec3(1, 2, 3));
+    }
+
+
+}
+
 
 

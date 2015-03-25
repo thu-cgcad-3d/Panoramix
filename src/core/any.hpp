@@ -82,6 +82,16 @@ namespace panoramix {
             template <class T>
             inline T cast() const { return ref<T>(); }
 
+            // don't keep the data any more
+            template <class T>
+            inline T unwrap() { 
+                assert(_data->type() == typeid(T));
+                T v = std::move(reinterpret_cast<Data<T>*>(_data)->value);
+                delete _data;
+                _data = nullptr;
+                return std::move(v);
+            }
+
             template <class T>
             inline bool is() const { return _data->type() == typeid(T); }
 

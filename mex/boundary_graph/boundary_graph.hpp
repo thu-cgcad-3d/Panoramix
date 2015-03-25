@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_MEX_GRAPH_OBJ_HPP
-#define PANORAMIX_MEX_GRAPH_OBJ_HPP 
+#ifndef PANORAMIX_MEX_BOUNDARY_GRAPH_HPP
+#define PANORAMIX_MEX_BOUNDARY_GRAPH_HPP 
 
 #include "../../src/misc/matlab.hpp"
 #include "../../src/core/generic_topo.hpp"
@@ -20,14 +20,22 @@ namespace mex {
     };
 
     struct Region {
+        std::vector<std::vector<PixelLoc>> contours;
+
         Vec3 meanColor;
+        Imaged colorHist;
         double area;
+        Point2 center;
         double perimeter;
-        Box2 bbox;
+        Vec<double, 7> meanGC;
+
+        Plane3 fittedPlane;
     };
+
     struct Boundary {
         std::vector<std::vector<PixelLoc>> pixels;
-        double strength; //
+
+        double strength; // pb?
         double length;
         double smoothness;
         Vec2 orientation;
@@ -41,15 +49,26 @@ namespace mex {
     using RegionHandle = HandleOfTypeAtLevel<Graph, 0>;
     using BoundaryHandle = HandleOfTypeAtLevel<Graph, 1>;
 
+    using Imaged7 = ImageOfType<Vec<double, 7>>;
 
-        template <class To, class From>
-    inline ImageOfType<To> im_static_cast(const ImageOfType<From> & im){
-        ImageOfType<To> cim(im.size());
-        for (auto it = im.begin(); it != im.end(); ++it){
-            cim(it.pos()) = static_cast<To>(*it);
-        }
-        return cim;
-    }
+    struct BoundaryGraph {
+        Graph graph;
+
+        Image image;
+        Imagei segmentedImage;
+        int segmentsNum;
+        Imaged7 geometricContext;
+        Imaged depth;
+
+        BoundaryGraph(){}
+        BoundaryGraph(const Image & im, const Imaged7 & gc, const Imaged & d = Imaged());
+
+        void print() const;
+
+        Imaged computeFeaturesMat() const;
+        Imaged computeLabelsVec() const;
+        void installLabelsVec(const Imaged & labels);
+    };
 
 }
 

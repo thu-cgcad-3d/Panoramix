@@ -366,6 +366,46 @@ namespace panoramix {
         using Imaged = ImageOfType<double>;
         using Imaged3 = ImageOfType<Vec<double, 3>>;
 
+
+        namespace {
+            template <class To, class From>
+            inline ImageOfType<To> VecCastPrivate(const ImageOfType<From> & im, std::false_type) {
+                ImageOfType<To> cim(im.size());
+                for (auto it = im.begin(); it != im.end(); ++it){
+                    cim(it.pos()) = static_cast<To>(*it);
+                }
+                return cim;
+            }
+            template <class To>
+            inline ImageOfType<To> VecCastPrivate(const ImageOfType<To> & v, std::true_type) {
+                return v.clone();
+            }
+
+            template <class To, class From, int N>
+            inline ImageOfType<Vec<To, N>> VecCastPrivate(const ImageOfType<Vec<From, N>> & im, std::false_type) {
+                ImageOfType<Vec<To, N>> cim(im.size());
+                for (auto it = im.begin(); it != im.end(); ++it){
+                    cim(it.pos()) = vec_cast<To>(*it);
+                }
+                return cim;
+            }
+            template <class To, int N>
+            inline ImageOfType<Vec<To, N>> VecCastPrivate(const ImageOfType<Vec<To, N>> & v, std::true_type) {
+                return v.clone();
+            }
+        }
+
+        template <class To, class From>
+        inline ImageOfType<To> vec_cast(const ImageOfType<From> & v) {
+            return VecCastPrivate<To>(v, std::integral_constant<bool, std::is_same<To, From>::value>());
+        }
+
+        template <class To, class From, int N>
+        inline ImageOfType<Vec<To, N>> vec_cast(const ImageOfType<Vec<From, N>> & v) {
+            return VecCastPrivate<To>(v, std::integral_constant<bool, std::is_same<To, From>::value>());
+        }
+
+
         using PixelLoc = cv::Point;
         template <class T>
         inline Vec<T, 2> vec_cast(const PixelLoc & p) { 

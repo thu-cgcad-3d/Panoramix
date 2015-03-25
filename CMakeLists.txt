@@ -82,5 +82,8 @@ message (STATUS "test data directory: " ${TEST_DATA_DIR})
 # executable
 add_subdirectory (tests tests)
 add_subdirectory (executable executable)
+if (${USE_MATLAB})
+	add_subdirectory(mex mex)
+endif()
 
 
