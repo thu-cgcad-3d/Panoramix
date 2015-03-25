@@ -129,9 +129,7 @@ namespace panoramix {
             return _Engine.buffer();
         }
 
-        bool Matlab::PutVariable(const char * name, CVInputArray mat){
-            if (!_Engine.eng())
-                return false;
+        void * Matlab::PutVariable(CVInputArray mat){
             
             cv::Mat& im = mat.getMat();
 
@@ -172,27 +170,33 @@ namespace panoramix {
             delete[] mxIndices;
             delete[] cvIndices;
 
+            return ma;
+        }
+
+        bool Matlab::PutVariable(const char * name, CVInputArray mat){
+            if (!_Engine.eng())
+                return false;
+            
+            mxArray * ma = static_cast<mxArray*>(PutVariable(mat));
+            if (!ma)
+                return false;
+
             int result = engPutVariable(_Engine.eng(), name, ma);
             mxDestroyArray(ma);
             return result == 0;
         }
 
 
-        bool Matlab::GetVariable(const char * name, CVOutputArray mat, bool lastDimIsChannel){
-            if (!_Engine.eng())
-                return false;
-
+        bool Matlab::GetVariable(const void * mxData, CVOutputArray mat, bool lastDimIsChannel){
             if (!mat.needed())
                 return true;
-            
-            mxArray * ma = engGetVariable(_Engine.eng(), name);
-            if (!ma)
+            if (!mxData)
                 return false;
-
+            const mxArray * ma = static_cast<const mxArray*>(mxData);
             int d = mxGetNumberOfDimensions(ma);
             assert((d >= 2) && "dimension num of the variable must be over 2");
             const mwSize * dimSizes = mxGetDimensions(ma);
-            
+
             // set channels, dims and dimSizes
             int channels = 0;
             int cvDims = 0;
@@ -209,13 +213,12 @@ namespace panoramix {
                 cvDims = d;
                 cvDimSizes = new int[d];
                 std::copy(dimSizes, dimSizes + d, cvDimSizes);
-            }            
-            
-            const size_t szForEachElem = mxGetElementSize(ma);            
+            }
+
+            const size_t szForEachElem = mxGetElementSize(ma);
             int depth = MxClassIDToCVDepth(mxGetClassID(ma));
             if (depth == -1){
                 delete[] cvDimSizes;
-                mxDestroyArray(ma);
                 return false;
             }
 
@@ -242,22 +245,31 @@ namespace panoramix {
                 }
             }
 
-
             delete[] cvDimSizes;
             delete[] mxIndices;
             delete[] cvIndices;
-
-            mxDestroyArray(ma);
             return true;
         }
 
-
-
-
-        bool Matlab::PutVariable(const char * name, const cv::SparseMat & mat){
+        bool Matlab::GetVariable(const char * name, CVOutputArray mat, bool lastDimIsChannel){
             if (!_Engine.eng())
                 return false;
+
+            if (!mat.needed())
+                return true;
             
+            mxArray * ma = engGetVariable(_Engine.eng(), name);
+            if (!ma)
+                return false;
+
+            bool result = GetVariable(ma, mat, lastDimIsChannel);
+            mxDestroyArray(ma);
+            return result;
+        }
+
+
+        void * Matlab::PutVariable(const cv::SparseMat & mat){
+
             auto & im = mat;
 
             // collect all dimensions of im
@@ -269,7 +281,7 @@ namespace panoramix {
             mxArray* ma = mxCreateSparse(im.size(0), im.size(1), nzc, mxREAL);
 
             if (!ma)
-                return false;
+                return nullptr;
 
             std::vector<std::tuple<int, int, double>> triplets; // col - row - val
             triplets.reserve(nzc);
@@ -335,6 +347,18 @@ namespace panoramix {
             for (int j = 1; j < (im.size(1) + 1); j++){
                 jcs[j] += jcs[j - 1];
             }
+
+            return ma;
+
+        }
+
+        bool Matlab::PutVariable(const char * name, const cv::SparseMat & mat){
+            if (!_Engine.eng())
+                return false;
+            
+            mxArray * ma = static_cast<mxArray*>(PutVariable(mat));
+            if (!ma)
+                return false;
 
             int result = engPutVariable(_Engine.eng(), name, ma);
             mxDestroyArray(ma);

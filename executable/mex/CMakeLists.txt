@@ -10,7 +10,10 @@ else ()
 	add_definitions(-DMX_COMPAT_32)
 endif ()
 
-set (MEXNames "mexBoundaryFeas")
+set (MEXNames 
+  "mexGetSegmentationGraph"
+  "mexGetBoundaryLabels" 
+  "mexGetBoundaryFeas")
 
 foreach (CPP_FILE ${MEXNames})
   

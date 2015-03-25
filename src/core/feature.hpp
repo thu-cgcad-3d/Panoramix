@@ -185,6 +185,12 @@ namespace panoramix {
 
 
 
+        void FindContoursOfRegionsAndBoundaries(const Imagei & segRegions, int regionNum,
+            std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryEdges,
+            int connectionExtendSize);
+
+
+
 
         /// geometric context estimator
         enum class SceneClass {
