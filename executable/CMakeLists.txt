@@ -1,2 +1,5 @@
 add_subdirectory ("panolyz")
 add_subdirectory ("panolyz_gui")
+if (${USE_MATLAB})
+	add_subdirectory("mex")
+endif()

@@ -12,3 +12,5 @@ backup
 _backup
 matlab/startup.m
 data/scripts
+matlab/mexBoundaryFeas.lib
+matlab/mexBoundaryFeas.mexw64
