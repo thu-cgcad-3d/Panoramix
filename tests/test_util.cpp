@@ -75,9 +75,9 @@ TEST(MiscTest, Any) {
 
 
 
-TEST(MiscTest, Result){
+TEST(MiscTest, Failable){
 
-    core::Result<std::vector<int>> opt;
+    core::Failable<std::vector<int>> opt;
     ASSERT_TRUE(opt.null());
     opt = core::AsResult(std::vector<int>{1, 2, 3, 4});
     ASSERT_TRUE(!opt.null());

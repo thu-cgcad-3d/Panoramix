@@ -12,29 +12,32 @@ classdef MixedGraph < handle
         
         %% Destructor - Destroy the C++ class instance
         function delete(this)
-            setpath;
             mexMixedGraph('delete', this.objectHandle);
         end
 
-        function varargout = print(this, varargin)
-            setpath;
-            [varargout{1:nargout}] = mexMixedGraph('print', this.objectHandle, varargin{:});
+        function varargout = showROC(this, varargin)
+            [varargout{1:nargout}] = mexMixedGraph('showROC', this.objectHandle, varargin{:});
         end
 
+        function varargout = solve(this, varargin)
+            [varargout{1:nargout}] = mexMixedGraph('solve', this.objectHandle, varargin{:});
+        end
+
+        function varargout = looseC(this, varargin)
+            [varargout{1:nargout}] = mexMixedGraph('looseC', this.objectHandle, varargin{:});
+        end       
+
         function varargout = show(this, varargin)
-            setpath;
             [varargout{1:nargout}] = mexMixedGraph('show', this.objectHandle, varargin{:});
         end
 
-        function varargout = getDepths(this, varargin)
-            setpath;
-            [varargout{1:nargout}] = mexMixedGraph('getDepths', this.objectHandle, varargin{:});
-        end
+        % function varargout = getDepths(this, varargin)
+        %     [varargout{1:nargout}] = mexMixedGraph('getDepths', this.objectHandle, varargin{:});
+        % end
     end
 
     methods (Static)
         function varargout = staticMethod(varargin)
-            setpath;
         end
     end
 end

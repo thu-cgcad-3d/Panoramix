@@ -299,7 +299,7 @@ namespace panoramix {
             };
         }
 
-        View<PerspectiveCamera> CreatePerspectiveView(const Image & perspectiveImage,
+        Failable<PerspectiveView> CreatePerspectiveView(const Image & perspectiveImage,
             const Point3 & eye, const Point3 & center, const Vec3 & up,
             const LineSegmentExtractor & lse, const VanishingPointsDetector & vpd,
             std::vector<Classified<Line3>> * line3sPtr,
@@ -322,7 +322,17 @@ namespace panoramix {
                 }
                 std::tie(vps, focal, lineClasses) = result.unwrap();
             }
-            assert(vps.size() >= 3);
+            if (vps.size() < 3){
+                return nullptr;
+            }
+
+            Point2 principlePoint;
+            std::tie(principlePoint, std::ignore) = 
+                ComputePrinciplePointAndFocalLength(vps[0].value(), vps[1].value(), vps[2].value());
+            
+            if (!Contains(perspectiveImage, ToPixelLoc(principlePoint))){
+                return nullptr;
+            }
 
             // only reserve first 3 vps
             vps.erase(vps.begin() + 3, vps.end());
@@ -330,9 +340,18 @@ namespace panoramix {
                 if (c >= 3) c = -1;
             }
 
+            // crop image using principle point
+            THERE_ARE_BUGS_HERE("we should implement a PerspectiveCamera which supports customized Principle Points");
+            int nhalfw = std::min<int>(principlePoint[0], perspectiveImage.cols - principlePoint[0]);
+            int nhalfh = std::min<int>(principlePoint[1], perspectiveImage.rows - principlePoint[1]);
+            cv::Range xrange(std::max<int>(perspectiveImage.cols / 2.0 - nhalfw, 0),
+                std::min<int>(perspectiveImage.cols / 2.0 + nhalfw, perspectiveImage.cols - 1));
+            cv::Range yrange(std::max<int>(perspectiveImage.rows / 2.0 - nhalfh, 0),
+                std::min<int>(perspectiveImage.rows / 2.0 + nhalfh, perspectiveImage.rows - 1));
+
             View<PerspectiveCamera> view;
-            view.image = perspectiveImage;
-            view.camera = PerspectiveCamera(perspectiveImage.cols, perspectiveImage.rows, focal, eye, center, up);
+            perspectiveImage(yrange, xrange).copyTo(view.image);
+            view.camera = PerspectiveCamera(view.image.cols, view.image.rows, focal, eye, center, up);
                 
             if (line3sPtr){
                 std::vector<Classified<Line3>> line3s(lines.size());
@@ -360,7 +379,7 @@ namespace panoramix {
                 *focalPtr = focal;
             }
 
-            return view;
+            return std::move(view);
 
         }
 

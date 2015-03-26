@@ -65,6 +65,7 @@ namespace panoramix {
 
         private:
             double _screenW, _screenH;
+            //Point2 _principlePoint;
             double _focal;
             double _near, _far;
             Vec3 _eye, _center, _up;
@@ -72,6 +73,7 @@ namespace panoramix {
 
             template <class Archive> inline void serialize(Archive & ar) {
                 ar(_screenW, _screenH);
+                //ar(_principlePoint);
                 ar(_focal, _near, _far);
                 ar(_eye, _center, _up);
                 ar(_viewMatrix, _projectionMatrix, _viewProjectionMatrix/*, _viewProjectionMatrixInv*/);
@@ -292,7 +294,7 @@ namespace panoramix {
             const Vec3 & up = Vec3(0, 0, 1));
 
         // create perspective view
-        PerspectiveView CreatePerspectiveView(const Image & perspectiveImage,
+        Failable<PerspectiveView> CreatePerspectiveView(const Image & perspectiveImage,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, -1),
@@ -305,20 +307,20 @@ namespace panoramix {
 
 
         template <class CameraT, class = std::enable_if_t<IsCamera<CameraT>::value>>
-        View<CameraT> CreateView(const Image & image,
+        Failable<View<CameraT>> CreateView(const Image & image,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, -1));
 
 
         template <>
-        inline View<PanoramicCamera> CreateView(const Image & image,
+        inline Failable<View<PanoramicCamera>> CreateView(const Image & image,
             const Point3 & eye, const Point3 & center, const Vec3 & up){
             return CreatePanoramicView(image, eye, center, up);
         }
 
         template <>
-        inline View<PerspectiveCamera> CreateView(const Image & image,
+        inline Failable<View<PerspectiveCamera>> CreateView(const Image & image,
             const Point3 & eye, const Point3 & center, const Vec3 & up){
             return CreatePerspectiveView(image, eye, center, up);
         }

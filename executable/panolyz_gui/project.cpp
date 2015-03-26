@@ -237,7 +237,7 @@ public:
             double focal;
             core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified);
             view = core::CreatePerspectiveView(cvim, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
-                core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), &line3ds, &lines, &vps, &focal);
+                core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), &line3ds, &lines, &vps, &focal).unwrap();
 
             std::vector<core::Line3> pureLine3ds(line3ds.size());
             for (int i = 0; i < line3ds.size(); i++){

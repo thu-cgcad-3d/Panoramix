@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_RESULT_HPP
-#define PANORAMIX_CORE_RESULT_HPP
+#ifndef PANORAMIX_CORE_FAILABLE_HPP
+#define PANORAMIX_CORE_FAILABLE_HPP
 
 #include <utility>
  
@@ -8,33 +8,33 @@ namespace panoramix {
     
         // failable result
         template <class T>
-        class Result {
+        class Failable {
         public:            
-            Result() : _exist(false) {}
+            Failable() : _exist(false) {}
             
-            Result(nullptr_t) : _exist(false) {}
-            Result & operator = (nullptr_t) {
+            Failable(nullptr_t) : _exist(false) {}
+            Failable & operator = (nullptr_t) {
                 _exist = false;
                 return *this;
             }
             
-            Result(T && v) : _exist(true), _temp(std::move(v)) {}
-            Result & operator = (T && v) {
+            Failable(T && v) : _exist(true), _temp(std::move(v)) {}
+            Failable & operator = (T && v) {
                 _temp = std::move(v);
                 _exist = true;
                 return *this;
             }
 
-            Result(Result && opt) { swap(opt); }
-            Result & operator = (Result && opt) {
+            Failable(Failable && opt) { swap(opt); }
+            Failable & operator = (Failable && opt) {
                 swap(opt);
                 return *this;
             }
 
-            Result(const Result &) = delete;
-            Result & operator = (const Result &) = delete;
+            Failable(const Failable &) = delete;
+            Failable & operator = (const Failable &) = delete;
 
-            inline void swap(Result & opt) {
+            inline void swap(Failable & opt) {
                 std::swap(_exist, opt._exist);
                 std::swap(_temp, opt._temp);
             }
@@ -45,7 +45,7 @@ namespace panoramix {
 
             inline T unwrap() {
                 if (!_exist){
-                    std::cout << "unwrapping a null Result<T>!!!!!!!" << std::endl;
+                    std::cout << "unwrapping a null Failable<T>!!!!!!!" << std::endl;
                 }
                 assert(_exist);
                 _exist = false;
@@ -64,8 +64,8 @@ namespace panoramix {
         };
 
         template <class T, class = std::enable_if_t<!std::is_reference<T>::value>>
-        inline Result<T> AsResult(T && v){
-            return Result<T>(std::move(v));
+        inline Failable<T> AsResult(T && v){
+            return Failable<T>(std::move(v));
         }
 
 
@@ -75,7 +75,7 @@ namespace panoramix {
 namespace std {
 
     template <class T>
-    void swap(panoramix::core::Result<T> & a, panoramix::core::Result<T> & b){
+    void swap(panoramix::core::Failable<T> & a, panoramix::core::Failable<T> & b){
         a.swap(b);
     }
 

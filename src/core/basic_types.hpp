@@ -24,7 +24,7 @@
 #include "serialization.hpp"
 #include "ratio.hpp"
 #include "any.hpp"
-#include "result.hpp"
+#include "failable.hpp"
 
 namespace panoramix {
     namespace core {

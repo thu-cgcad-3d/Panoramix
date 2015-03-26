@@ -359,7 +359,7 @@ namespace panolyz {
 
         core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified);
         view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
-            core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal);
+            core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal).unwrap();
 
         {
             std::vector<core::Classified<core::Ray2>> vpRays;
@@ -468,7 +468,7 @@ namespace panolyz {
 
         core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified);
         view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
-            core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal);
+            core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal).unwrap();
 
         {
             std::vector<core::Classified<core::Ray2>> vpRays;

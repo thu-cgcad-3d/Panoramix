@@ -573,7 +573,7 @@ namespace panoramix {
             }
         }
 
-        Result<std::vector<Vec3>> FindOrthogonalPrinicipleDirections(const std::vector<Vec3> & intersections,
+        Failable<std::vector<Vec3>> FindOrthogonalPrinicipleDirections(const std::vector<Vec3> & intersections,
             int longitudeDivideNum, int latitudeDivideNum, bool allowMoreThan2HorizontalVPs, const Vec3 & verticalSeed) {
 
             std::vector<Vec3> vps(3);
@@ -717,6 +717,40 @@ namespace panoramix {
 
         namespace {
 
+            template <class T>
+            inline Vec<T, 2> PerpendicularDirection(const Vec<T, 2> & d) {
+                return Vec<T, 2>(-d(1), d(0));
+            }
+
+            template <class T>
+            inline Vec<T, 3> PerpendicularRootOfLineEquation(const Vec<T, 3> & lineeq) {
+                auto & a = lineeq[0];
+                auto & b = lineeq[1];
+                auto & c = lineeq[2];
+                return Vec<T, 3>(-a * c, -b * c, a * a + b * b);
+            }
+
+        }
+
+        std::pair<Point2, double> ComputePrinciplePointAndFocalLength(const Point2 & vp1, const Point2 & vp2, const Point2 & vp3) {
+            /* lambda = dot(vp1 - vp3, vp2 - vp3, 2) . / ...
+            ((vp1(:, 1) - vp2(:, 1)).*(vp1(:, 2) - vp3(:, 2)) - ...
+            (vp1(:, 1) - vp3(:, 1)).*(vp1(:, 2) - vp2(:, 2)));
+            principalPoint(infcounts == 0, :) = vp3 + (vp1(:, [2 1]) - vp2(:, [2 1])).*...
+            [-lambda lambda];
+            focalLength(infcounts == 0) = ...
+            sqrt(-dot(vp1 - principalPoint(infcounts == 0, :), ...
+            vp2 - principalPoint(infcounts == 0, :), 2));*/
+            auto lambda = (vp1 - vp3).dot(vp2 - vp3) /
+                ((vp1(0) - vp2(0))*(vp1(1) - vp3(1)) -
+                (vp1(0) - vp3(0))*(vp1(1) - vp2(1)));
+            Point2 pp = vp3 + PerpendicularDirection(vp1 - vp2) * lambda;
+            double focalLength = sqrt(-(vp1 - pp).dot(vp2 - pp));
+            return std::make_pair(pp, focalLength);
+        }
+
+        namespace {
+
             //struct LineVPScoreFunctor {
             //    inline LineVPScoreFunctor(double angleThres = M_PI / 3.0, double s = 0.1) 
             //        : angleThreshold(angleThres), sigma(s) {}
@@ -784,41 +818,6 @@ namespace panoramix {
                     }
                 }
                 return lineClasses;
-            }
-
-
-            template <class T>
-            inline Vec<T, 2> PerpendicularDirection(const Vec<T, 2> & d) {
-                return Vec<T, 2>(-d(1), d(0));
-            }
-
-            template <class T>
-            inline Vec<T, 3> PerpendicularRootOfLineEquation(const Vec<T, 3> & lineeq) {
-                auto & a = lineeq[0];
-                auto & b = lineeq[1];
-                auto & c = lineeq[2];
-                return Vec<T, 3>(-a * c, -b * c, a * a + b * b);
-            }
-
-            std::pair<Point2, double> ComputeProjectionCenterAndFocalLength(const Point2 & vp1, const Point2 & vp2, const Point2 & vp3) {
-                /* lambda = dot(vp1 - vp3, vp2 - vp3, 2) . / ...
-                ((vp1(:, 1) - vp2(:, 1)).*(vp1(:, 2) - vp3(:, 2)) - ...
-                (vp1(:, 1) - vp3(:, 1)).*(vp1(:, 2) - vp2(:, 2)));
-                principalPoint(infcounts == 0, :) = vp3 + (vp1(:, [2 1]) - vp2(:, [2 1])).*...
-                [-lambda lambda];
-                focalLength(infcounts == 0) = ...
-                sqrt(-dot(vp1 - principalPoint(infcounts == 0, :), ...
-                vp2 - principalPoint(infcounts == 0, :), 2));*/
-                auto lambda = (vp1 - vp3).dot(vp2 - vp3) /
-                    ((vp1(0) - vp2(0))*(vp1(1) - vp3(1)) -
-                    (vp1(0) - vp3(0))*(vp1(1) - vp2(1)));
-                Point2 pp = vp3 + PerpendicularDirection(vp1 - vp2) * lambda;
-                double focalLength = sqrt(-(vp1 - pp).dot(vp2 - pp));
-                return std::make_pair(pp, focalLength);
-            }
-
-            std::pair<Point2, double> ComputeProjectionCenterAndFocalLength(const HPoint2 & vp1, const HPoint2 & vp2, const HPoint2 & vp3){
-                NOT_IMPLEMENTED_YET();
             }
 
 
@@ -1172,7 +1171,7 @@ namespace panoramix {
                         double focalLength;
                         Point2 principlePoint;
                         std::tie(principlePoint, focalLength) =
-                            ComputeProjectionCenterAndFocalLength(vp1.value(), vp2cand.value(), vp3cand.value());
+                            ComputePrinciplePointAndFocalLength(vp1.value(), vp2cand.value(), vp3cand.value());
 
                         if (std::isnan(focalLength) || std::isinf(focalLength))
                             continue;
@@ -1337,7 +1336,7 @@ namespace panoramix {
         }
 
 
-        Result<std::tuple<std::vector<HPoint2>, double, std::vector<int>>> VanishingPointsDetector::operator() (
+        Failable<std::tuple<std::vector<HPoint2>, double, std::vector<int>>> VanishingPointsDetector::operator() (
             const std::vector<Line2> & lines, const SizeI & imSize) const {
             
             Point2 projCenter(imSize.width / 2.0, imSize.height / 2.0);
@@ -1535,7 +1534,7 @@ namespace panoramix {
 
                             Point2 pp;
                             double focal;
-                            std::tie(pp, focal) = ComputeProjectionCenterAndFocalLength(
+                            std::tie(pp, focal) = ComputePrinciplePointAndFocalLength(
                                 Vec2(currentVPs[0][0], currentVPs[0][1]) / currentVPs[0][2],
                                 Vec2(currentVPs[1][0], currentVPs[1][1]) / currentVPs[1][2],
                                 Vec2(currentVPs[2][0], currentVPs[2][1]) / currentVPs[2][2]);
@@ -1572,7 +1571,7 @@ namespace panoramix {
 
                         Point2 pp;
                         double focal;
-                        std::tie(pp, focal) = ComputeProjectionCenterAndFocalLength(
+                        std::tie(pp, focal) = ComputePrinciplePointAndFocalLength(
                             Vec2(currentVPs[0][0], currentVPs[0][1]) / currentVPs[0][2],
                             Vec2(currentVPs[1][0], currentVPs[1][1]) / currentVPs[1][2],
                             Vec2(currentVPs[2][0], currentVPs[2][1]) / currentVPs[2][2]);
@@ -1630,7 +1629,7 @@ namespace panoramix {
         }
 
        
-        Result<std::tuple<std::vector<HPoint2>, double>> VanishingPointsDetector::operator() (
+        Failable<std::tuple<std::vector<HPoint2>, double>> VanishingPointsDetector::operator() (
             std::vector<Classified<Line2>> & lines, const SizeI & imSize) const {
             std::vector<HPoint2> vps;
             double focalLength = 0.0;
@@ -1660,7 +1659,7 @@ namespace panoramix {
 
 
 
-        std::pair<Result<double>, Result<double>> ComputeFocalsFromHomography(const Mat3 & H) {
+        std::pair<Failable<double>, Failable<double>> ComputeFocalsFromHomography(const Mat3 & H) {
             /// from OpenCV code
 
             const double* h = reinterpret_cast<const double*>(H.val);
@@ -1669,7 +1668,7 @@ namespace panoramix {
             double v1, v2; // Focal squares value candidates
             double f0 = 0.0, f1 = 0.0;
 
-            std::pair<Result<double>, Result<double>> results;
+            std::pair<Failable<double>, Failable<double>> results;
 
             d1 = h[6] * h[7];
             d2 = (h[7] - h[6]) * (h[7] + h[6]);
