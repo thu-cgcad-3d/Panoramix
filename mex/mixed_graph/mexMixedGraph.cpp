@@ -42,6 +42,11 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
     vps = core::EstimateVanishingPointsAndClassifyLines(view.camera, lines);
     // remove non-manhattan vps
     vps.erase(vps.begin() + 3, vps.end());
+    for (auto & l : lines){
+        if (l.claz >= 3){
+            l.claz = -1;
+        }
+    }
 
     // append lines
     core::AppendLines(mg, lines, view.camera, vps);
@@ -149,12 +154,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
             cv::cvtColor(image, image, CV_BGR2RGB);
 
         plhs[0] = convertPtr2Mat(new MG(CreateMG(image, focal, pp)));
+        printf("MixedGraph created\n");
         return;
     }
     
     if (cmd == "delete") {
         destroyObject<MG>(prhs[1]);
-        printf("BoundaryGraph destroyed\n");
+        printf("MixedGraph destroyed\n");
         return;
     }
     
