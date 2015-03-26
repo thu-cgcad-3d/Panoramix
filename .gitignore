@@ -10,7 +10,8 @@ doc/paperscript/*/*.synctex.gz
 *.state
 backup
 _backup
-matlab/startup.m
+matlab/*.m
 data/scripts
-matlab/mexBoundaryFeas.lib
-matlab/mexBoundaryFeas.mexw64
+matlab/*.lib
+matlab/*.mexw64
+matlab/temp.mat

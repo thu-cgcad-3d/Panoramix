@@ -49,7 +49,7 @@ void VisualizeMesh(const TestMesh & mesh){
     viz.installingOptions.pointSize = 20;
     viz.add(points);
     viz.renderOptions.backgroundColor = gui::ColorTag::White;
-    viz.camera(core::PerspectiveCamera(500, 500, 500,
+    viz.camera(core::PerspectiveCamera(500, 500, core::Point2(250, 250), 500,
         core::Vec3(-3, 0, 0),
         core::Vec3(0.5, 0.5, 0.5)));
     viz.show();

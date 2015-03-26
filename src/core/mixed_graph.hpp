@@ -97,6 +97,8 @@ namespace panoramix {
 
 
         // estimate vanishing points
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const PerspectiveCamera & cams,
+            std::vector<Classified<Line2>> & lineSegments);
         std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
             std::vector<std::vector<Classified<Line2>>> & lineSegments);
 

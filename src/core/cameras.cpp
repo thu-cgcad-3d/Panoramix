@@ -4,17 +4,18 @@
 namespace panoramix {
     namespace core {
 
-        PerspectiveCamera::PerspectiveCamera(int w, int h, double focal, const Vec3 & eye,
+        PerspectiveCamera::PerspectiveCamera(int w, int h, const Point2 & pp, double focal, const Vec3 & eye,
             const Vec3 & center, const Vec3 & up, double near, double far)
-            : _screenW(w), _screenH(h), _focal(focal), _eye(eye), _center(center), _up(up), _near(near), _far(far) {
+            : _screenW(w), _screenH(h), _principlePoint(pp), _focal(focal),
+            _eye(eye), _center(center), _up(up), _near(near), _far(far) {
             updateMatrices();
         }
 
         void PerspectiveCamera::updateMatrices() {
             _viewMatrix = MakeMat4LookAt(_eye, _center, _up);
 
-            double verticalViewAngle = atan(_screenH / 2.0 / _focal) * 2;
-            double aspect = double(_screenW) / double(_screenH);
+            double verticalViewAngle = atan(/*_screenH / 2.0*/ _principlePoint[1] / _focal) * 2;
+            double aspect = /*double(_screenW) / double(_screenH)*/ _principlePoint[0] / _principlePoint[1];
             _projectionMatrix = MakeMat4Perspective(verticalViewAngle, aspect, _near, _far);
 
             _viewProjectionMatrix = _projectionMatrix * _viewMatrix;
@@ -26,8 +27,8 @@ namespace panoramix {
             Vec4 position = _viewProjectionMatrix * p4;
             double xratio = position(0) / position(3) / 2;
             double yratio = position(1) / position(3) / 2;
-            double x = (xratio + 0.5) * _screenW;
-            double y = _screenH - (yratio + 0.5) * _screenH;
+            double x = (xratio + 0.5) * /*_screenW*/ 2.0 * _principlePoint[0];
+            double y = /*_screenH*/ 2.0 * _principlePoint[1] - (yratio + 0.5) * /*_screenH*/  2.0 * _principlePoint[1];
             return Vec2(x, y);
         }
 
@@ -44,14 +45,14 @@ namespace panoramix {
             double yratio = position(1) / 2;
             double zratio = position(3);
 
-            double x = (xratio + 0.5 * zratio) * _screenW;
-            double y = _screenH * zratio - (yratio + 0.5 * zratio) * _screenH;
+            double x = (xratio + 0.5 * zratio) * /*_screenW*/  (2.0 * _principlePoint[0]);
+            double y = /*_screenH*/ (2.0 * _principlePoint[1]) * zratio - (yratio + 0.5 * zratio) * /*_screenH*/ (2.0 * _principlePoint[1]);
             return HPoint2({ x, y }, zratio);
         }
 
         Vec3 PerspectiveCamera::spatialDirection(const Vec2 & p2d) const {
-            double xratio = (p2d(0) / _screenW - 0.5) * 2;
-            double yratio = ((_screenH - p2d(1)) / _screenH - 0.5) * 2;
+            double xratio = (p2d(0) / /*_screenW*/ (2.0 * _principlePoint[0]) - 0.5) * 2;
+            double yratio = ((/*_screenH*/(2.0 * _principlePoint[1]) - p2d(1)) / /*_screenH*/(2.0 * _principlePoint[1]) - 0.5) * 2;
             Vec4 position(xratio, yratio, 1, 1);
             Vec4 realPosition;
             bool solvable = cv::solve(_viewProjectionMatrix, position, realPosition);// _viewProjectionMatrixInv * position;
@@ -64,6 +65,8 @@ namespace panoramix {
         void PerspectiveCamera::resizeScreen(const Size & sz, bool updateMat) {
             if (_screenH == sz.height && _screenW == sz.width)
                 return;
+            auto offset = _principlePoint - Point2(_screenW / 2.0, _screenH / 2.0);
+            _principlePoint = Point2(sz.width / 2.0, sz.height / 2.0) + offset;
             _screenH = sz.height;
             _screenW = sz.width;
             if (updateMat)
@@ -253,7 +256,8 @@ namespace panoramix {
             for (int i = 0; i < num; i++){
                 double angle = M_PI * 2.0 / num * i;
                 Vec3 direction = sin(angle) * x + cos(angle) * y;
-                cams[i] = PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + direction, -panoCam.up(), 0.01, 1e4);
+                cams[i] = PerspectiveCamera(width, height, Point2(width, height)/2.0, focal, 
+                    panoCam.eye(), panoCam.eye() + direction, -panoCam.up(), 0.01, 1e4);
             }
             return cams;
         }
@@ -266,8 +270,8 @@ namespace panoramix {
                 if (AngleBetweenUndirectedVectors(dirs[i], panoCam.up()) < angleThreshold){
                     continue;
                 }
-                cams.emplace_back(width, height, focal, panoCam.eye(), panoCam.eye() + dirs[i], -panoCam.up(), 0.01, 1e4);
-                cams.emplace_back(width, height, focal, panoCam.eye(), panoCam.eye() - dirs[i], -panoCam.up(), 0.01, 1e4);
+                cams.emplace_back(width, height, Point2(width, height) / 2.0, focal, panoCam.eye(), panoCam.eye() + dirs[i], -panoCam.up(), 0.01, 1e4);
+                cams.emplace_back(width, height, Point2(width, height) / 2.0, focal, panoCam.eye(), panoCam.eye() - dirs[i], -panoCam.up(), 0.01, 1e4);
             }
             return cams;
         }
@@ -277,12 +281,12 @@ namespace panoramix {
             Vec3 x, y;
             std::tie(x, y) = ProposeXYDirectionsFromZDirection(-panoCam.up());
             std::vector<core::PerspectiveCamera> cams = {
-                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ 1, 0, 0 },  -panoCam.up()),
-                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, 1, 0 },  -panoCam.up()),
-                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ -1, 0, 0 }, -panoCam.up()),
-                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, -1, 0 }, -panoCam.up()),
-                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, 0, 1 }, x),
-                core::PerspectiveCamera(width, height, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, 0, -1 }, x)
+                core::PerspectiveCamera(width, height, Point2(width, height)/2.0, focal, panoCam.eye(), panoCam.eye() + Vec3{ 1, 0, 0 },  -panoCam.up()),
+                core::PerspectiveCamera(width, height, Point2(width, height)/2.0, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, 1, 0 },  -panoCam.up()),
+                core::PerspectiveCamera(width, height, Point2(width, height)/2.0, focal, panoCam.eye(), panoCam.eye() + Vec3{ -1, 0, 0 }, -panoCam.up()),
+                core::PerspectiveCamera(width, height, Point2(width, height)/2.0, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, -1, 0 }, -panoCam.up()),
+                core::PerspectiveCamera(width, height, Point2(width, height)/2.0, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, 0, 1 }, x),
+                core::PerspectiveCamera(width, height, Point2(width, height)/2.0, focal, panoCam.eye(), panoCam.eye() + Vec3{ 0, 0, -1 }, x)
             };
             return cams;
         }
@@ -341,17 +345,19 @@ namespace panoramix {
             }
 
             // crop image using principle point
-            THERE_ARE_BUGS_HERE("we should implement a PerspectiveCamera which supports customized Principle Points");
+           /* THERE_ARE_BUGS_HERE("we should implement a PerspectiveCamera which supports customized Principle Points");
             int nhalfw = std::min<int>(principlePoint[0], perspectiveImage.cols - principlePoint[0]);
             int nhalfh = std::min<int>(principlePoint[1], perspectiveImage.rows - principlePoint[1]);
             cv::Range xrange(std::max<int>(perspectiveImage.cols / 2.0 - nhalfw, 0),
                 std::min<int>(perspectiveImage.cols / 2.0 + nhalfw, perspectiveImage.cols - 1));
             cv::Range yrange(std::max<int>(perspectiveImage.rows / 2.0 - nhalfh, 0),
-                std::min<int>(perspectiveImage.rows / 2.0 + nhalfh, perspectiveImage.rows - 1));
+                std::min<int>(perspectiveImage.rows / 2.0 + nhalfh, perspectiveImage.rows - 1));*/
 
             View<PerspectiveCamera> view;
-            perspectiveImage(yrange, xrange).copyTo(view.image);
-            view.camera = PerspectiveCamera(view.image.cols, view.image.rows, focal, eye, center, up);
+            //perspectiveImage(yrange, xrange).copyTo(view.image);
+            view.image = perspectiveImage;
+            view.camera = PerspectiveCamera(view.image.cols, view.image.rows, 
+                principlePoint, focal, eye, center, up);
                 
             if (line3sPtr){
                 std::vector<Classified<Line3>> line3s(lines.size());

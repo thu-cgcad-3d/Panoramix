@@ -224,6 +224,49 @@ namespace panoramix {
             return junctionWeight;
         }
 
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const PerspectiveCamera & cam,
+            std::vector<Classified<Line2>> & lineSegments){
+            std::vector<Vec3> lineIntersections;
+
+            int linesNum = 0;
+            std::vector<Line2> pureLines(lineSegments.size());
+            linesNum += lineSegments.size();
+            for (int k = 0; k < pureLines.size(); k++){
+                pureLines[k] = lineSegments[k].component;
+            }
+            auto inters = ComputeLineIntersections(pureLines, nullptr, true, std::numeric_limits<double>::max());
+            // insert line intersections
+            for (auto & p : inters){
+                lineIntersections.push_back(normalize(cam.spatialDirection(p.value())));
+            }
+
+            auto vanishingPoints = FindOrthogonalPrinicipleDirections(lineIntersections, 1000, 500, true).unwrap();
+
+            // project lines to space
+            std::vector<Classified<Line3>> spatialLineSegments;
+            spatialLineSegments.reserve(linesNum);
+            for (const auto & line : lineSegments) {
+                auto & p1 = line.component.first;
+                auto & p2 = line.component.second;
+                auto pp1 = cam.spatialDirection(p1);
+                auto pp2 = cam.spatialDirection(p2);
+                Classified<Line3> cline3;
+                cline3.claz = -1;
+                cline3.component = Line3{ pp1, pp2 };
+                spatialLineSegments.push_back(cline3);
+            }
+
+            // classify lines
+            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
+
+            int ii = 0;
+            for (int j = 0; j < lineSegments.size(); j++){
+                lineSegments[j].claz = spatialLineSegments[ii].claz;
+                ii++;
+            }
+
+            return vanishingPoints;
+        }
 
         std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
             std::vector<std::vector<Classified<Line2>>> & lineSegments){
@@ -3528,7 +3571,7 @@ namespace panoramix {
                     viz.renderOptions.backgroundColor = gui::ColorTag::White;
                     viz.renderOptions.bwColor = 0.5;
                     viz.renderOptions.bwTexColor = 0.5;
-                    viz.camera(core::PerspectiveCamera(1000, 800, 800, Point3(-1, 1, 1), Point3(0, 0, 0)));
+                    viz.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400), 800, Point3(-1, 1, 1), Point3(0, 0, 0)));
                     viz.show(true, false);
 
                     gui::ResourceStore::clear();

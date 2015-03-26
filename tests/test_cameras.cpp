@@ -11,7 +11,7 @@ static_assert(core::IsCamera<core::PanoramicCamera>::value, "");
 static_assert(!core::IsCamera<core::Line3>::value, "");
 
 TEST(Camera, PerspectiveCamera){
-    core::PerspectiveCamera cam(1000, 1000, 500, 
+    core::PerspectiveCamera cam(1000, 1000, core::Point2(500, 500), 500, 
         core::Vec3(0, 0, 0), 
         core::Vec3(1, 0, 0));
 
@@ -29,7 +29,9 @@ TEST(Camera, PerspectiveCamera){
 
 TEST(Camera, PerspectiveCameraRandom){
     for (int k = 0; k < 100; k++) {
-        core::PerspectiveCamera cam(abs(rand()) % 500, abs(rand()) % 400, abs(rand()) % 600,
+        int w = abs(rand()) % 500;
+        int h = abs(rand()) % 400;
+        core::PerspectiveCamera cam(w, h, core::Point2(w, h)/2.0, abs(rand()) % 600,
             core::Vec3(rand(), rand(), rand()),
             core::Vec3(rand(), rand(), rand()));
         for (int i = 0; i < 100; i++){
@@ -78,7 +80,7 @@ TEST(Camera, CameraSampler) {
     };
 
     for (int i = 0; i < 4; i++){
-        core::PerspectiveCamera cam(500, 600, 150,
+        core::PerspectiveCamera cam(500, 600, core::Point2(250, 300), 150,
             core::Vec3(0, 0, 0),
             core::Vec3(camPositions[i][0], camPositions[i][1], camPositions[i][2]),
             core::Vec3(0, 0, -1));

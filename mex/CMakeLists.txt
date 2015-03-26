@@ -10,7 +10,7 @@ else ()
 	add_definitions(-DMX_COMPAT_32)
 endif ()
 
-JOIN("${Fundamental_PATH}" ";" LD_PATH)
+JOIN("${Fundamental_PATH};${Qt_PATH}" ";" LD_PATH)
   configure_file (${CMAKE_CURRENT_SOURCE_DIR}/setpath.m.in ${MATLAB_CODE_DIR}/setpath.m)
 
 macro(panoramix_add_mex MEXNAME MFILE)

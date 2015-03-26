@@ -15,6 +15,10 @@ classdef MixedGraph < handle
             mexMixedGraph('delete', this.objectHandle);
         end
 
+        function varargout = showVPsLines(this, varargin)
+            [varargout{1:nargout}] = mexMixedGraph('showVPsLines', this.objectHandle, varargin{:});
+        end
+        
         function varargout = showROC(this, varargin)
             [varargout{1:nargout}] = mexMixedGraph('showROC', this.objectHandle, varargin{:});
         end

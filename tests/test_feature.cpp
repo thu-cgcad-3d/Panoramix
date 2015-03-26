@@ -171,7 +171,7 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
     //gui::Visualizer2D(im) << gui::manip2d::Show();
 
     core::PanoramicCamera ocam(im.cols / M_PI / 2.0);
-    core::PerspectiveCamera cam(800, 800, ocam.focal(), { 0, 0, 0 }, { -2, 0, -0.5 }, { 0, 0, -1 });
+    core::PerspectiveCamera cam(800, 800, core::Point2(400, 400), ocam.focal(), { 0, 0, 0 }, { -2, 0, -0.5 }, { 0, 0, -1 });
 
     auto pim = core::MakeCameraSampler(cam, ocam)(im);
     //gui::Visualizer2D(pim) << gui::manip2d::Show();

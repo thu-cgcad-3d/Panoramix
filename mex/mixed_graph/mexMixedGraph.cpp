@@ -25,34 +25,23 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
     std::vector<core::Classified<core::Line2>> lines;
     std::vector<core::Vec3> vps;
 
-    double focal;
     core::MixedGraph mg;
 
     core::Imagei segmentedImage;
     core::MixedGraphPropertyTable props;
 
-    core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified);
-    view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
-        core::LineSegmentExtractor(), core::VanishingPointsDetector(vpdParams), nullptr, &lines, &vps, &focal).unwrap();
+    core::LineSegmentExtractor lineExtractor;
+    lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
+    lines = core::ClassifyEachAs(lineExtractor(image, 2), -1);
 
-    {
-        std::vector<core::Classified<core::Ray2>> vpRays;
-        for (int i = 0; i < 3; i++){
-            std::cout << "vp[" << i << "] = " << view.camera.screenProjection(vps[i]) << std::endl;
-            for (double a = 0; a <= M_PI * 2.0; a += 0.1){
-                core::Point2 p = core::Point2(image.cols / 2, image.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
-                vpRays.push_back(core::ClassifyAs(core::Ray2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
-            }
-        }
-        gui::Visualizer2D(image)
-            << gui::manip2d::SetColorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
-            << gui::manip2d::SetThickness(1)
-            << vpRays
-            << gui::manip2d::SetThickness(2)
-            << lines
-            << gui::manip2d::Show(0);
-    }
+    view.camera = core::PerspectiveCamera(image.cols, image.rows, c, f, 
+        core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1));
+    view.image = image;
 
+    // classify lines
+    vps = core::EstimateVanishingPointsAndClassifyLines(view.camera, lines);
+    // remove non-manhattan vps
+    vps.erase(vps.begin() + 3, vps.end());
 
     // append lines
     core::AppendLines(mg, lines, view.camera, vps);
@@ -84,6 +73,24 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
 
 }
 
+
+void ShowVPsAndLines(const MG & g){
+    std::vector<core::Classified<core::Ray2>> vpRays;
+    for (int i = 0; i < 3; i++){
+        std::cout << "vp[" << i << "] = " << g.view.camera.screenProjection(g.vps[i]) << std::endl;
+        for (double a = 0; a <= M_PI * 2.0; a += 0.1){
+            core::Point2 p = core::Point2(g.view.image.cols / 2, g.view.image.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
+            vpRays.push_back(core::ClassifyAs(core::Ray2(p, (g.view.camera.screenProjectionInHPoint(g.vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
+        }
+    }
+    gui::Visualizer2D(g.view.image)
+        << gui::manip2d::SetColorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(g.vps.size() - 3))
+        << gui::manip2d::SetThickness(1)
+        << vpRays
+        << gui::manip2d::SetThickness(2)
+        << g.lines
+        << gui::manip2d::Show(0);
+}
 
 void ShowRegionOrientationConstraints(const MG & g){
     auto & mg = g.g;
@@ -153,6 +160,11 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
     
     // Get the class instance pointer from the second input
     MG & g = *convertMat2Ptr<MG>(prhs[1]);
+
+    if (cmd == "showVPsLines"){
+        ShowVPsAndLines(g);
+        return;
+    }
 
     if (cmd == "showROC"){
         ShowRegionOrientationConstraints(g);

@@ -489,7 +489,8 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
             viz.renderOptions.backgroundColor = gui::ColorTag::White;
             viz.renderOptions.bwColor = 0.0;
             viz.renderOptions.bwTexColor = 1.0;
-            viz.camera(core::PerspectiveCamera(1000, 800, 800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
+            viz.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400), 
+                800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
             _renderOptions = viz.renderOptions;
 
             _scene.lockForWrite();

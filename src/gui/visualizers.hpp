@@ -24,7 +24,8 @@ namespace panoramix {
                 renderOptions.winName = winName;
                 renderOptions.backgroundColor = ColorTag::White;
                 renderOptions.renderMode = RenderModeFlag::All;
-                renderOptions.camera = core::PerspectiveCamera(500, 500, 250, { 1.0, 1.0, 1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 });
+                renderOptions.camera = core::PerspectiveCamera(500, 500, 
+                    core::Point2(250, 250), 250, { 1.0, 1.0, 1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 });
                 renderOptions.bwColor = 0.3;
                 renderOptions.bwTexColor = 0.7;
                 renderOptions.showInside = true;
