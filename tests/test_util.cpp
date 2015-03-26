@@ -440,13 +440,30 @@ TEST(UtilTest, EigenVectorsAndValues) {
             return core::Point3(a, b / 1000.0 + 1.0, c / 1000.0);
         });
         auto result = core::EigenVectorAndValuesFromPoints(pts);
-       /* for (auto & r : result){
+        for (auto & r : result){
             std::cout << "eigen vector: " << r.component << "  value: " << r.score << std::endl;
-        }*/
+        }
 
         std::sort(result.begin(), result.end());
         std::cout << "planarity = " << (result[1].score / result[2].score * result[1].score / result[0].score) << std::endl;
     }
+    
+    core::Plane3 plane(core::Point3(1, 2, 3), core::Vec3(-2, -5, -7));
+    core::Vec3 x, y;
+    std::tie(x, y) = core::ProposeXYDirectionsFromZDirection(plane.normal);
+    std::vector<core::Point3> pts;
+    std::generate_n(std::back_inserter(pts), 10000, [&](){
+        auto a = randf();
+        auto b = randf();
+        auto c = randf();
+        return a * x + b * y + c/1000.0 * plane.normal + plane.anchor;
+    });
+    auto result = core::EigenVectorAndValuesFromPoints(pts);
+    for (auto & r : result){
+        std::cout << "eigen vector: " << core::normalize(r.component) << "  value: " << r.score << std::endl;
+    }
+    std::sort(result.begin(), result.end());
+    std::cout << "planarity = " << (result[1].score / result[2].score * result[1].score / result[0].score) << std::endl;
 }
 
 TEST(ContainerTest, RTreeWrapperLargeData) {

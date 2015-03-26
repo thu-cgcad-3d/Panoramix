@@ -1,6 +1,7 @@
 #include "../class_handle.hpp"
 
 #include "../../src/misc/matlab.hpp"
+#include "../../src/core/utilities.hpp"
 #include "../../src/core/mixed_graph.hpp"
 #include "../../src/gui/visualize2d.hpp"
 
@@ -127,6 +128,19 @@ void ShowRegionOrientationConstraints(const MG & g){
         << gui::manip2d::Show();
 }
 
+Imaged ComputeDepths(const MG & g){
+    Imaged depths(g.view.image.size(), 0.0);
+    for (auto it = depths.begin(); it != depths.end(); ++it){
+        auto p = it.pos();
+        Vec3 dir = g.view.camera.spatialDirection(p);
+        int regionId = g.segmentedImage(p);
+        Plane3 plane = Instance(g.g, g.p, RegionHandle(regionId));
+        double d = norm(IntersectionOfLineAndPlane(Ray3(g.view.camera.eye(), dir), plane).position);
+        *it = d;
+    }
+    return depths;
+}
+
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 
@@ -138,6 +152,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 
     const mxArray ** argv = prhs + 1;
     int argc = nrhs - 1;
+    int outc = nlhs;
+    mxArray ** outv = plhs;
 
     if (cmd == "new") {
         if (argc != 3){
@@ -193,6 +209,21 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 
     if (cmd == "show"){
         core::Visualize(g.view, g.g, g.p);
+        return;
+    }
+
+    if (cmd == "depths"){
+        if (outc == 0){
+            return;
+        }
+        if (outc > 1){
+            mexErrMsgTxt("Too Many Outputs");
+            return;
+        }
+
+        Imaged depths = ComputeDepths(g);
+        mxArray * depthsMXA = static_cast<mxArray*>(misc::Matlab::PutVariable(depths));
+        outv[0] = depthsMXA;
         return;
     }
 
