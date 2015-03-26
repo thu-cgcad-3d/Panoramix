@@ -10,6 +10,9 @@ else ()
 	add_definitions(-DMX_COMPAT_32)
 endif ()
 
+JOIN("${Fundamental_PATH}" ";" LD_PATH)
+  configure_file (${CMAKE_CURRENT_SOURCE_DIR}/setpath.m.in ${MATLAB_CODE_DIR}/setpath.m)
+
 macro(panoramix_add_mex MEXNAME MFILE)
   include_directories (${Fundamental_INCLUDES} ${MATLAB_INCLUDES})
   add_library(${MEXNAME} SHARED ../Matlabdef.def ${ARGN})
@@ -41,3 +44,4 @@ macro(panoramix_add_mex MEXNAME MFILE)
 endmacro()
 
 add_subdirectory (boundary_graph)
+add_subdirectory (mixed_graph)

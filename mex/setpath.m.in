@@ -1,0 +1,3 @@
+function setpath()
+	setenv('path', [getenv('path') ';${LD_PATH};']); 
+end
