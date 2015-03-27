@@ -859,7 +859,7 @@ namespace panoramix {
 
 
             template <class CameraT>
-            void AppendRegionsTemplate(MixedGraph & mg, const Imagei & segmentedRegions, const CameraT & cam,
+            std::vector<RegionHandle> AppendRegionsTemplate(MixedGraph & mg, const Imagei & segmentedRegions, const CameraT & cam,
                 double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
                 int samplerSizeOnBoundary, int samplerSizeOnLine){
 
@@ -948,21 +948,23 @@ namespace panoramix {
                     mg.addConstraint(std::move(rlcd), rlc.first.first, rlc.first.second);
                 }
 
+                return regionHandles;
+
             }
 
 
         }
 
-        void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
+        std::vector<RegionHandle> AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
             int samplerSizeOnBoundary, int samplerSizeOnLine){
-            AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
+            return AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
                 samplerSizeOnBoundary, samplerSizeOnLine);
         }
-        void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
+        std::vector<RegionHandle> AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine,
             int samplerSizeOnBoundary, int samplerSizeOnLine){
-            AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
+            return AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
                 samplerSizeOnBoundary, samplerSizeOnLine);
         }
 

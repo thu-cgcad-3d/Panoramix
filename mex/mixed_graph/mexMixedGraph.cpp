@@ -10,14 +10,27 @@ using namespace panoramix::core;
 
 // returns (fitted plane, inlier ratio)
 std::pair<Plane3, double> FitPlane(const std::vector<Point3> & pcloud){
-    DenseMatd mean;
-    cv::PCA pca(pcloud, mean, CV_PCA_DATA_AS_COL);
+    //DenseMatd mean;
+    //cv::PCA pca(pcloud, mean, CV_PCA_DATA_AS_COL);
 
-    double pToPlaneThres = pca.eigenvalues.at<double>(2);
+    //double pToPlaneThres = pca.eigenvalues.at<double>(2);
+    //int numInliners = 0;
+
+    //Vec3 norm = normalize(pca.eigenvectors.row(2));
+    //Point3 x0 = pca.mean;
+
+
+    auto results = EigenVectorAndValuesFromPoints(pcloud);
+    std::sort(results.begin(), results.end(), std::greater<>());
+    double pToPlaneThres = results[2].score;
     int numInliners = 0;
 
-    Vec3 norm = normalize(pca.eigenvectors.row(2));
-    Point3 x0 = pca.mean;
+    Vec3 norm = normalize(results[2].component);
+    Point3 x0(0, 0, 0);
+    for (auto & p : pcloud){
+        x0 += p;
+    }
+    x0 /= double(pcloud.size());
 
     for (int i = 0; i < pcloud.size(); i++) {
         Vec3 w = pcloud[i] - x0;
@@ -31,7 +44,7 @@ std::pair<Plane3, double> FitPlane(const std::vector<Point3> & pcloud){
 
 
 enum OcclusionType {
-    R1OccludesR2,
+    R1OccludesR2 = 0,
     R2OccludesR1,
     Connected
 };
@@ -46,7 +59,7 @@ struct RegionBoundaryGroundTruthData {
 };
 
 struct MixedGraphGroundTruthTable {
-    Imaged depths;
+    Imagef depths;
     HandledTable<RegionHandle, RegionGroundTruthData> regionGT;
     HandledTable<RegionBoundaryHandle, RegionBoundaryGroundTruthData> boundaryGT;
 
@@ -66,6 +79,7 @@ struct MG {
     std::vector<core::Classified<core::Line2>> lines;
     std::vector<core::Vec3> vps;
     core::Imagei segmentedImage;
+    std::vector<RegionHandle> regionHandles;
 
     MixedGraph g;
     MixedGraphPropertyTable p;
@@ -118,7 +132,7 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
     int segmentsNum = 0;
     std::tie(segmentedImage, segmentsNum) = segmenter(image, pureLines, image.cols / 100.0);
 
-    core::AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001, 3, 1);
+    auto regionHandles = core::AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001, 3, 1);
 
     // attach constraints
     props = core::MakeMixedGraphPropertyTable(mg, vps);
@@ -126,7 +140,10 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
     core::AttachWallConstriants(mg, props, M_PI / 100.0);
     core::ResetVariables(mg, props);
 
-    return MG{ std::move(view), std::move(lines), std::move(vps), std::move(segmentedImage), std::move(mg), std::move(props) };
+    return MG{ std::move(view), std::move(lines), std::move(vps), 
+        std::move(segmentedImage), 
+        std::move(regionHandles), 
+        std::move(mg), std::move(props) };
 
 }
 
@@ -161,12 +178,15 @@ void ShowVPsAndLines(const MG & g){
 void ShowRegionOrientationConstraints(const MG & g){
     auto & mg = g.g;
     auto & props = g.p;
-    std::vector<gui::Color> colors(mg.internalComponents<core::RegionData>().size());
+    std::vector<gui::Color> colors(g.regionHandles.size(), gui::ColorTag::Yellow);
     std::vector<gui::Color> oColors = { gui::ColorTag::Red, gui::ColorTag::Green, gui::ColorTag::Blue };
     std::vector<gui::Color> noColors = { gui::ColorTag::DimGray, gui::ColorTag::Gray, gui::ColorTag::DarkGray };
-    for (auto & r : mg.components<core::RegionData>()){
-        auto & p = props[r.topo.hd];
-        auto & color = colors[r.topo.hd.id];
+    for (int i = 0; i < g.regionHandles.size(); i++){
+        if (g.regionHandles[i].invalid())
+            continue;
+        auto rh = g.regionHandles[i];
+        auto & p = props[rh];
+        auto & color = colors[i];
         if (!p.used){
             color = gui::ColorTag::Black;
         }
@@ -188,8 +208,8 @@ void ShowRegionOrientationConstraints(const MG & g){
         << gui::manip2d::Show();
 }
 
-Imaged ComputeDepths(const MG & g){
-    Imaged depths(g.view.image.size(), 0.0);
+Imagef ComputeDepths(const MG & g){
+    Imagef depths(g.view.image.size(), 0.0);
     for (auto it = depths.begin(); it != depths.end(); ++it){
         auto p = it.pos();
         Vec3 dir = g.view.camera.spatialDirection(p);
@@ -202,7 +222,7 @@ Imaged ComputeDepths(const MG & g){
 }
 
 
-void InstallGT(MG & g, const Imaged & depths){
+void InstallGT(MG & g, const Imagef & depths){
     g.gt = std::make_shared<MixedGraphGroundTruthTable>(g.g);
     auto & gt = *g.gt;
     gt.depths = depths;
@@ -215,7 +235,9 @@ void InstallGT(MG & g, const Imaged & depths){
     auto regionPoints = mg.createComponentTable<RegionData, std::vector<Point3>>();
     for (auto it = segs.begin(); it != segs.end(); ++it){
         double d = depths(it.pos());
-        RegionHandle rh(*it);
+        RegionHandle rh = g.regionHandles[*it];
+        if (rh.invalid())
+            continue;
         regionPoints[rh].push_back(normalize(g.view.camera.spatialDirection(it.pos())) * d);
     }
 
@@ -231,15 +253,58 @@ void InstallGT(MG & g, const Imaged & depths){
         auto & plane1 = gt[rh1].fittedPlane;
         auto & plane2 = gt[rh2].fittedPlane;
         double depthsSum1 = 0.0, depthsSum2 = 0.0;
+        int num = 0;
         for (auto & cs : b.data.normalizedEdges){
             for (auto & c : cs){
-                //double d1 = norm(IntersectionOfLineAndPlane()
-                // todo;
+                double d1 = gt[rh1].inlinerRatio < 0.5 ?
+                    depths(ToPixelLoc(g.view.camera.screenProjection(mg.data(rh1).normalizedCenter))) :
+                    norm(IntersectionOfLineAndPlane(Ray3(g.view.camera.eye(), c), plane1).position);
+                depthsSum1 += d1;
+                double d2 = gt[rh2].inlinerRatio < 0.5 ?
+                    depths(ToPixelLoc(g.view.camera.screenProjection(mg.data(rh2).normalizedCenter))) :
+                    norm(IntersectionOfLineAndPlane(Ray3(g.view.camera.eye(), c), plane2).position);
+                depthsSum2 += d2;
+                num++;
             }
+        }
+        double dmean1 = depthsSum1 / num, dmean2 = depthsSum2 / num;
+        double thres = (depthsSum1 + depthsSum2) / num / 50.0;
+        if (dmean1 - dmean2 > thres){
+            gt[b.topo.hd].ot = R2OccludesR1;
+        }
+        else if (dmean2 - dmean1 > thres){
+            gt[b.topo.hd].ot = R1OccludesR2;
+        }
+        else{
+            gt[b.topo.hd].ot = Connected;
         }
     }
 }
 
+
+void ShowGTOcclusions(const MG & g){
+    auto & mg = g.g;
+    auto & props = g.p;
+    auto & gt = *g.gt;
+
+    // render disconnected boundaries
+    Image im = g.view.image.clone();
+    for (auto & b : mg.constraints<core::RegionBoundaryData>()){
+        if (gt[b.topo.hd].ot == Connected)
+            continue;
+        for (auto & e : b.data.normalizedEdges){
+            if (e.size() <= 1) continue;
+            for (int i = 1; i < e.size(); i++){
+                auto p1 = core::ToPixelLoc(g.view.camera.screenProjection(e[i - 1]));
+                auto p2 = core::ToPixelLoc(g.view.camera.screenProjection(e[i]));
+                cv::clipLine(cv::Rect(0, 0, im.cols, im.rows), p1, p2);
+                cv::line(im, p1, p2, gui::Color(gt[b.topo.hd].ot == R1OccludesR2 ? gui::ColorTag::Blue : gui::ColorTag::Red), 1);
+            }
+        }
+    }
+    cv::imshow("GT Occlusions", im);
+    cv::waitKey();
+}
 
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
@@ -281,6 +346,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
     
     // Get the class instance pointer from the second input
     MG & g = *convertMat2Ptr<MG>(prhs[1]);
+    argc--;
+    argv++;
 
     if (cmd == "showSegs"){
         ShowSegmentations(g);
@@ -325,9 +392,48 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
             return;
         }
 
-        Imaged depths = ComputeDepths(g);
+        Imagef depths = ComputeDepths(g);
         mxArray * depthsMXA = static_cast<mxArray*>(misc::Matlab::PutVariable(depths));
         outv[0] = depthsMXA;
+        return;
+    }
+
+    if (cmd == "depthsGT"){
+        if (outc == 0){
+            return;
+        }
+        if (outc > 1){
+            mexErrMsgTxt("Too Many Outputs");
+            return;
+        }
+        if (!g.gt){
+            mexErrMsgTxt("No GroundTruth depths installed yet");
+            return;
+        }
+        mxArray * depthsMXA = static_cast<mxArray*>(misc::Matlab::PutVariable(g.gt->depths));
+        outv[0] = depthsMXA;
+        return;
+    }
+
+    if (cmd == "installGT"){
+        if (argc != 1){
+            mexErrMsgTxt("Wrong Arguments Num");
+            return;
+        }
+
+        Imagef depths;
+        misc::Matlab::GetVariable(argv[0], depths);
+        InstallGT(g, depths);
+        return;
+    }
+
+    if (cmd == "showOc"){
+        if (!g.gt){
+            mexErrMsgTxt("No GroundTruth depths installed yet");
+            return;
+        }
+
+        ShowGTOcclusions(g);
         return;
     }
 

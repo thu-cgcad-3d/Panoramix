@@ -1,4 +1,5 @@
 #include "../src/core/generic_topo.hpp"
+#include "../src/core/homo_graph.hpp"
 #include "../src/core/iterators.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/gui/visualizers.hpp"

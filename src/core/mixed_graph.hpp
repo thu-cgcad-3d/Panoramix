@@ -115,10 +115,10 @@ namespace panoramix {
 
 
         // add more regions and related constraints to mixed graph
-        void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
+        std::vector<RegionHandle> AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine,
             int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3);
-        void AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
+        std::vector<RegionHandle> AppendRegions(MixedGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
             int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3);
 

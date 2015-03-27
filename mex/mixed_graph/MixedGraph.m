@@ -42,6 +42,18 @@ classdef MixedGraph < handle
         function varargout = depths(this, varargin)
             [varargout{1:nargout}] = mexMixedGraph('depths', this.objectHandle, varargin{:});
         end
+
+        function varargout = installGT(this, varargin)
+            [varargout{1:nargout}] = mexMixedGraph('installGT', this.objectHandle, varargin{:});
+        end
+
+        function varargout = depthsGT(this, varargin)
+            [varargout{1:nargout}] = mexMixedGraph('depthsGT', this.objectHandle, varargin{:});
+        end
+
+        function varargout = showOc(this, varargin)
+            [varargout{1:nargout}] = mexMixedGraph('showOc', this.objectHandle, varargin{:});
+        end
     end
 
     methods (Static)
