@@ -1,6 +1,7 @@
 #include "../class_handle.hpp"
 
 #include "../../src/misc/matlab.hpp"
+#include "../../src/core/utilities.hpp"
 #include "../../src/core/mixed_graph.hpp"
 #include "../../src/gui/visualize2d.hpp"
 
@@ -98,6 +99,11 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
     vps = core::EstimateVanishingPointsAndClassifyLines(view.camera, lines);
     // remove non-manhattan vps
     vps.erase(vps.begin() + 3, vps.end());
+    for (auto & l : lines){
+        if (l.claz >= 3){
+            l.claz = -1;
+        }
+    }
 
     // append lines
     core::AppendLines(mg, lines, view.camera, vps);
@@ -182,6 +188,19 @@ void ShowRegionOrientationConstraints(const MG & g){
         << gui::manip2d::Show();
 }
 
+Imaged ComputeDepths(const MG & g){
+    Imaged depths(g.view.image.size(), 0.0);
+    for (auto it = depths.begin(); it != depths.end(); ++it){
+        auto p = it.pos();
+        Vec3 dir = g.view.camera.spatialDirection(p);
+        int regionId = g.segmentedImage(p);
+        Plane3 plane = Instance(g.g, g.p, RegionHandle(regionId));
+        double d = norm(IntersectionOfLineAndPlane(Ray3(g.view.camera.eye(), dir), plane).position);
+        *it = d;
+    }
+    return depths;
+}
+
 
 void InstallGT(MG & g, const Imaged & depths){
     g.gt = std::make_shared<MixedGraphGroundTruthTable>(g.g);
@@ -233,6 +252,8 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 
     const mxArray ** argv = prhs + 1;
     int argc = nrhs - 1;
+    int outc = nlhs;
+    mxArray ** outv = plhs;
 
     if (cmd == "new") {
         if (argc != 3){
@@ -249,6 +270,7 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
             cv::cvtColor(image, image, CV_BGR2RGB);
 
         plhs[0] = convertPtr2Mat(new MG(CreateMG(image, focal, pp)));
+        printf("MixedGraph created\n");
         return;
     }
     
@@ -291,6 +313,21 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 
     if (cmd == "show"){
         core::Visualize(g.view, g.g, g.p);
+        return;
+    }
+
+    if (cmd == "depths"){
+        if (outc == 0){
+            return;
+        }
+        if (outc > 1){
+            mexErrMsgTxt("Too Many Outputs");
+            return;
+        }
+
+        Imaged depths = ComputeDepths(g);
+        mxArray * depthsMXA = static_cast<mxArray*>(misc::Matlab::PutVariable(depths));
+        outv[0] = depthsMXA;
         return;
     }
 
