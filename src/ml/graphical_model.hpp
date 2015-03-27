@@ -7,17 +7,21 @@
 namespace panoramix {
     namespace ml {
 
-        struct NodeLabel {
-            int labelNum;
-            int finalLabel;
+        struct FactorGraph {
+            using labelnum_t = size_t;
+            using costindex_t = int;
+
+            using Graph = core::HomogeneousGraph0x<labelnum_t, costindex_t>;
+            using VarHandle = core::HandleOfTypeAtLevel<FactorGraph, 0>;
+            using FactorHandle = core::HandleOfTypeAtLevel<FactorGraph, 1>;
+            using ResultTable = core::HandledTable<VarHandle, int>;
+
+            Graph graph;
+            std::vector<core::DenseMatd> costs;
+
+            bool isValid() const;
+            ResultTable solve() const;
         };
-
-        template <class T>
-        using FactorGraph = core::HomogeneousGraph0x<NodeLabel, core::DenseMat<T>>;
-        
-
-        bool IsValid(const FactorGraph<double> & fg);
-        void LoopyBeliefPropagation(FactorGraph<double> & fg);
 
     }
 }
