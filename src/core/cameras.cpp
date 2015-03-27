@@ -73,6 +73,14 @@ namespace panoramix {
                 updateMatrices();
         }
 
+        void PerspectiveCamera::setPrinciplePoint(const Point2 & pp, bool updateMat){
+            if (_principlePoint == pp)
+                return;
+            _principlePoint = pp;
+            if (updateMat)
+                updateMatrices();
+        }
+
         void PerspectiveCamera::setFocal(double f, bool updateMat) {
             if (f == _focal)
                 return;
@@ -344,17 +352,7 @@ namespace panoramix {
                 if (c >= 3) c = -1;
             }
 
-            // crop image using principle point
-           /* THERE_ARE_BUGS_HERE("we should implement a PerspectiveCamera which supports customized Principle Points");
-            int nhalfw = std::min<int>(principlePoint[0], perspectiveImage.cols - principlePoint[0]);
-            int nhalfh = std::min<int>(principlePoint[1], perspectiveImage.rows - principlePoint[1]);
-            cv::Range xrange(std::max<int>(perspectiveImage.cols / 2.0 - nhalfw, 0),
-                std::min<int>(perspectiveImage.cols / 2.0 + nhalfw, perspectiveImage.cols - 1));
-            cv::Range yrange(std::max<int>(perspectiveImage.rows / 2.0 - nhalfh, 0),
-                std::min<int>(perspectiveImage.rows / 2.0 + nhalfh, perspectiveImage.rows - 1));*/
-
             View<PerspectiveCamera> view;
-            //perspectiveImage(yrange, xrange).copyTo(view.image);
             view.image = perspectiveImage;
             view.camera = PerspectiveCamera(view.image.cols, view.image.rows, 
                 principlePoint, focal, eye, center, up);

@@ -24,6 +24,7 @@ int main(int argc, char * argv[], char * envp[]) {
    testing::GTEST_FLAG(catch_exceptions) = false;
    testing::GTEST_FLAG(throw_on_failure) = true;
    //testing::GTEST_FLAG(filter) = "BasicType.Line";
+   testing::GTEST_FLAG(filter) = "BasicType.VecCast";
    //testing::GTEST_FLAG(filter) = " MiscTest.Optional";  
    //testing::GTEST_FLAG(filter) = "Feature.VanishingPointsDetector";
    //testing::GTEST_FLAG(filter) = "Feature.GeometricContextMatlab";

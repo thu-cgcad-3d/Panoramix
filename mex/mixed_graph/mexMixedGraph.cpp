@@ -7,6 +7,58 @@
 using namespace panoramix;
 using namespace panoramix::core;
 
+// returns (fitted plane, inlier ratio)
+std::pair<Plane3, double> FitPlane(const std::vector<Point3> & pcloud){
+    DenseMatd mean;
+    cv::PCA pca(pcloud, mean, CV_PCA_DATA_AS_COL);
+
+    double pToPlaneThres = pca.eigenvalues.at<double>(2);
+    int numInliners = 0;
+
+    Vec3 norm = normalize(pca.eigenvectors.row(2));
+    Point3 x0 = pca.mean;
+
+    for (int i = 0; i < pcloud.size(); i++) {
+        Vec3 w = pcloud[i] - x0;
+        double D = abs(norm.dot(w));
+        if (D < pToPlaneThres)
+            numInliners ++;
+    }
+    return std::make_pair(Plane3(x0, norm), numInliners / double(pcloud.size()));
+}
+
+
+
+enum OcclusionType {
+    R1OccludesR2,
+    R2OccludesR1,
+    Connected
+};
+
+struct RegionGroundTruthData {
+    Plane3 fittedPlane;
+    double inlinerRatio;
+};
+
+struct RegionBoundaryGroundTruthData {
+    OcclusionType ot;
+};
+
+struct MixedGraphGroundTruthTable {
+    Imaged depths;
+    HandledTable<RegionHandle, RegionGroundTruthData> regionGT;
+    HandledTable<RegionBoundaryHandle, RegionBoundaryGroundTruthData> boundaryGT;
+
+    RegionGroundTruthData & operator[](RegionHandle rh) { return regionGT[rh]; }
+    const RegionGroundTruthData & operator[](RegionHandle rh) const { return regionGT[rh]; }
+
+    RegionBoundaryGroundTruthData & operator[](RegionBoundaryHandle bh) { return boundaryGT[bh]; }
+    const RegionBoundaryGroundTruthData & operator[](RegionBoundaryHandle bh) const { return boundaryGT[bh]; }
+
+    explicit MixedGraphGroundTruthTable(const MixedGraph & mg) 
+        : regionGT(mg.internalComponents<RegionData>().size()), 
+        boundaryGT(mg.internalConstraints<RegionBoundaryData>().size()) {}
+};
 
 struct MG {
     core::View<core::PerspectiveCamera> view;
@@ -16,6 +68,10 @@ struct MG {
 
     MixedGraph g;
     MixedGraphPropertyTable p;
+
+    std::shared_ptr<MixedGraphGroundTruthTable> gt;
+
+    ~MG() { printf("BoundaryGraph destroyed\n"); }
 };
 
 
@@ -56,11 +112,6 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
     int segmentsNum = 0;
     std::tie(segmentedImage, segmentsNum) = segmenter(image, pureLines, image.cols / 100.0);
 
-    gui::Visualizer2D::Params vParams;
-    vParams.colorTable = gui::CreateRandomColorTableWithSize(segmentsNum);
-    gui::Visualizer2D(segmentedImage, vParams)
-        << gui::manip2d::Show();
-
     core::AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001, 3, 1);
 
     // attach constraints
@@ -71,6 +122,15 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
 
     return MG{ std::move(view), std::move(lines), std::move(vps), std::move(segmentedImage), std::move(mg), std::move(props) };
 
+}
+
+
+void ShowSegmentations(const MG & g){
+    int segmentsNum = MinMaxValOfImage(g.segmentedImage).second + 1;
+    gui::Visualizer2D::Params vParams;
+    vParams.colorTable = gui::CreateRandomColorTableWithSize(segmentsNum);
+    gui::Visualizer2D(g.segmentedImage, vParams)
+        << gui::manip2d::Show();
 }
 
 
@@ -123,6 +183,46 @@ void ShowRegionOrientationConstraints(const MG & g){
 }
 
 
+void InstallGT(MG & g, const Imaged & depths){
+    g.gt = std::make_shared<MixedGraphGroundTruthTable>(g.g);
+    auto & gt = *g.gt;
+    gt.depths = depths;
+    auto & mg = g.g;
+    auto & segs = g.segmentedImage;
+
+    double maxDepths, minDepths;
+    std::tie(minDepths, maxDepths) = MinMaxValOfImage(depths);
+
+    auto regionPoints = mg.createComponentTable<RegionData, std::vector<Point3>>();
+    for (auto it = segs.begin(); it != segs.end(); ++it){
+        double d = depths(it.pos());
+        RegionHandle rh(*it);
+        regionPoints[rh].push_back(normalize(g.view.camera.spatialDirection(it.pos())) * d);
+    }
+
+    // fit planes
+    for (auto & r : mg.components<core::RegionData>()){
+        auto & rgt = gt[r.topo.hd];
+        std::tie(rgt.fittedPlane, rgt.inlinerRatio) = FitPlane(regionPoints[r.topo.hd]);
+    }
+    // recognize occlusions
+    for (auto & b : mg.constraints<core::RegionBoundaryData>()){
+        auto rh1 = b.topo.component<0>();
+        auto rh2 = b.topo.component<1>();
+        auto & plane1 = gt[rh1].fittedPlane;
+        auto & plane2 = gt[rh2].fittedPlane;
+        double depthsSum1 = 0.0, depthsSum2 = 0.0;
+        for (auto & cs : b.data.normalizedEdges){
+            for (auto & c : cs){
+                //double d1 = norm(IntersectionOfLineAndPlane()
+                // todo;
+            }
+        }
+    }
+}
+
+
+
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
 
     // Get the command string
@@ -154,12 +254,16 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
     
     if (cmd == "delete") {
         destroyObject<MG>(prhs[1]);
-        printf("BoundaryGraph destroyed\n");
         return;
     }
     
     // Get the class instance pointer from the second input
     MG & g = *convertMat2Ptr<MG>(prhs[1]);
+
+    if (cmd == "showSegs"){
+        ShowSegmentations(g);
+        return;
+    }
 
     if (cmd == "showVPsLines"){
         ShowVPsAndLines(g);

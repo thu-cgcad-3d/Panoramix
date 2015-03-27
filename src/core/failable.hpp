@@ -45,7 +45,7 @@ namespace panoramix {
 
             inline T unwrap() {
                 if (!_exist){
-                    std::cout << "unwrapping a null Failable<T>!!!!!!!" << std::endl;
+                    std::cout << "unwrapping a failed Failable<T>!!!!!!!" << std::endl;
                 }
                 assert(_exist);
                 _exist = false;

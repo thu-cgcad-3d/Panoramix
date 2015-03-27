@@ -21,6 +21,7 @@ namespace panoramix {
             inline SizeI screenSize() const { return Size(static_cast<int>(_screenW), static_cast<int>(_screenH)); }
             inline double screenWidth() const { return _screenW; }
             inline double screenHeight() const { return _screenH; }
+            inline const Point2 & principlePoint() const { return _principlePoint; }
             inline double fovRadians() const { return atan(_screenH / 2.0 / _focal) * 2; }
             inline double fovAngles() const { return fovRadians() * 180.0 / M_PI; }
             inline double aspect() const { return double(_screenW) / double(_screenH); }
@@ -43,6 +44,7 @@ namespace panoramix {
 
             // operations
             void resizeScreen(const Size & sz, bool updateMat = true);
+            void setPrinciplePoint(const Point2 & pp, bool updateMat = true);
             void setFocal(double f, bool updateMat = true);
             void setEye(const Vec3 & e, bool updateMat = true);
             void setCenter(const Vec3 & c, bool updateMat = true);
