@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_ML_GRPHICAL_MODEL_HPP
-#define PANORAMIX_ML_GRPHICAL_MODEL_HPP
+#ifndef PANORAMIX_ML_FACTOR_GRAPH_HPP
+#define PANORAMIX_ML_FACTOR_GRAPH_HPP
 
 #include "../core/basic_types.hpp"
 #include "../core/homo_graph.hpp"

@@ -22,6 +22,7 @@ extern "C" {
 #include "containers.hpp"
 #include "utilities.hpp"
 #include "clock.hpp"
+#include "homo_graph.hpp"
 #include "mixed_graph.hpp"
 
 #include "../gui/visualizers.hpp"

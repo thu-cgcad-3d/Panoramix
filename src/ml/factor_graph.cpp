@@ -2,7 +2,7 @@
 #include <Eigen/StdVector>
 
 #include "../core/cons_graph.hpp"
-#include "graphical_model.hpp"
+#include "factor_graph.hpp"
  
 namespace panoramix {
     namespace ml {
