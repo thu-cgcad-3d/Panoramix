@@ -8,16 +8,23 @@ namespace panoramix {
     namespace ml {
 
         struct FactorGraph {
-            using labelnum_t = size_t;
-            using costindex_t = int;
+            struct FactorData {
+                core::DenseMatd costs;
+                double c_alpha;
+            };
+            struct VarData {
+                size_t nlabels;
+                double c_i;
+            };
 
-            using Graph = core::HomogeneousGraph0x<labelnum_t, costindex_t>;
-            using VarHandle = core::HandleOfTypeAtLevel<FactorGraph, 0>;
-            using FactorHandle = core::HandleOfTypeAtLevel<FactorGraph, 1>;
+            using Graph = core::HomogeneousGraph0x<int, int>;
+            using VarHandle = core::HandleOfTypeAtLevel<Graph, 0>;
+            using FactorHandle = core::HandleOfTypeAtLevel<Graph, 1>;
             using ResultTable = core::HandledTable<VarHandle, int>;
 
+            std::vector<VarData> vars;
+            std::vector<FactorData> factors;
             Graph graph;
-            std::vector<core::DenseMatd> costs;
 
             bool isValid() const;
             ResultTable solve() const;
