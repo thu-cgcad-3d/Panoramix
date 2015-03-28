@@ -30,6 +30,9 @@ namespace panoramix {
             ResultTable solve() const;
         };
 
+
+
+
     }
 }
  
