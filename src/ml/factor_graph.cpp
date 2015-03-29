@@ -12,15 +12,15 @@ namespace panoramix {
         bool FactorGraph::valid() const {
             for (auto & v : graph.elements<0>()){
                 auto & vid = v.data;
-                if (vid < 0 || vid >= vars.size())
+                if (vid < 0 || vid >= varCategories.size())
                     return false;
             }
             for (auto & f : graph.elements<1>()){
                 auto & fid = f.data;
                 auto & nhs = f.topo.lowers;
-                if (fid < 0 || fid >= factors.size())
+                if (fid < 0 || fid >= factorCategories.size())
                     return false;
-                auto & costFun = factors[fid].costs;
+                auto & costFun = factorCategories[fid].costs;
                 if (!costFun)
                     return false;
             }
@@ -36,7 +36,7 @@ namespace panoramix {
                 for (int i = 0; i < idx.size(); i++){
                     idx[i] = labels[vhs[i]];
                 }
-                double factorCost = factors[f.data].costs(idx.data());
+                double factorCost = factorCategories[f.data].costs(idx.data());
                 e += factorCost;
             }
             return e;
@@ -88,8 +88,8 @@ namespace panoramix {
                 MGFHandle fh = messages.addComponent(FHandleWrapper{ f.topo.hd });
                 for (auto & lh : f.topo.lowers){
                     MGVHandle vh = vhToMGVH[lh];
-                    messages.addConstraint(V2FMessage{ VectorXd::Zero(vars[graph.data(lh)].nlabels) }, vh, fh);
-                    messages.addConstraint(F2VMessage{ VectorXd::Zero(vars[graph.data(lh)].nlabels) }, fh, vh);
+                    messages.addConstraint(V2FMessage{ VectorXd::Zero(varCategories[graph.data(lh)].nlabels) }, vh, fh);
+                    messages.addConstraint(F2VMessage{ VectorXd::Zero(varCategories[graph.data(lh)].nlabels) }, fh, vh);
                 }
             }
 
@@ -97,9 +97,9 @@ namespace panoramix {
             HandledTable<VarHandle, double> c_i_hats(graph.internalElements<0>().size(), 0.0);
             for (auto & v : graph.elements<0>()){
                 double & c_i_hat = c_i_hats[v.topo.hd];
-                c_i_hat = vars[v.data].c_i;
+                c_i_hat = varCategories[v.data].c_i;
                 for (auto fh : v.topo.uppers){
-                    c_i_hat += factors[graph.data(fh)].c_alpha;
+                    c_i_hat += factorCategories[graph.data(fh)].c_alpha;
                 }
             }
 
@@ -134,7 +134,7 @@ namespace panoramix {
                 }
                 orderedVDims[mgfh].resize(vhs.size());
                 for (int i = 0; i < vhs.size(); i++){
-                    orderedVDims[mgfh][i] = vars[graph.data(vhs[i])].nlabels;
+                    orderedVDims[mgfh][i] = varCategories[graph.data(vhs[i])].nlabels;
                 }
             }
 
@@ -144,7 +144,7 @@ namespace panoramix {
             // initialize marginals
             core::HandledTable<VarHandle, VectorXd> varMarginals(graph.internalElements<0>().size());
             for (auto & v : graph.elements<0>()){
-                varMarginals[v.topo.hd] = VectorXd::Zero(vars[v.data].nlabels);
+                varMarginals[v.topo.hd] = VectorXd::Zero(varCategories[v.data].nlabels);
             }
 
             double lastE = std::numeric_limits<double>::max();
@@ -157,7 +157,7 @@ namespace panoramix {
                         MGVHandle vh = v2f.topo.component<0>();
                         MGFHandle fh = v2f.topo.component<1>();
 
-                        auto & fdata = factors[graph.data(messages.data(fh).h)];
+                        auto & fdata = factorCategories[graph.data(messages.data(fh).h)];
 
                         v2f.data.values.setZero();
                         MGF2VHandle oppose;
@@ -190,7 +190,7 @@ namespace panoramix {
 
                         // dispatch messages from this factor
                         int fid = graph.data(fh);
-                        auto & costFun = factors[fid].costs;
+                        auto & costFun = factorCategories[fid].costs;
                         auto & dims = orderedVDims[mgfh];
                         assert(dims.size() > 0);
                         std::vector<int> idx(dims.size(), 0);
@@ -198,11 +198,11 @@ namespace panoramix {
                         while (true){
                             for (int i = 0; i < dims.size(); i++){
                                 // i: output var
-                                // others: input vars
+                                // others: input varCategories
                                 double & outValue = messages.data(f2vmsghs[i]).values[idx[i]];
                                 // theta
                                 double theta = costFun(idx.data());
-                                // sum of other input vars
+                                // sum of other input varCategories
                                 double sumOfOtherVars = 0.0;
                                 for (int j = 0; j < dims.size(); j++){
                                     if (j == i) continue;

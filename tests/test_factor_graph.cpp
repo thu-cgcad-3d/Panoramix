@@ -10,8 +10,8 @@ using namespace test;
 TEST(FactorGraph, Simple){
 
     ml::FactorGraph fg;
-    fg.vars = { ml::FactorGraph::VarData{ 2, 1.0 } };
-    fg.factors = { ml::FactorGraph::FactorData{
+    fg.varCategories = { ml::FactorGraph::VarCategory{ 2, 1.0 } };
+    fg.factorCategories = { ml::FactorGraph::FactorCategory{
         [](const int * labels) -> double {
             return labels[0] == 0 ? 1.0 : 0.0;
         }, 1.0
@@ -51,14 +51,14 @@ TEST(FactorGraph, Denoise){
     const core::Vec3 foreground = gui::Color(gui::ColorTag::Black);
 
     ml::FactorGraph fg;
-    fg.vars = { ml::FactorGraph::VarData{ 2, 1.0 } };
-    fg.factors.reserve(im.cols * im.rows + 2);
+    fg.varCategories = { ml::FactorGraph::VarCategory{ 2, 1.0 } };
+    fg.factorCategories.reserve(im.cols * im.rows + 2);
     fg.graph.internalElements<0>().reserve(im.cols * im.rows);
     fg.graph.internalElements<1>().reserve(im.cols * im.rows * 4);
 
     std::vector<ml::FactorGraph::VarHandle> vhs(im.cols * im.rows);
     
-    // add vars and data costs
+    // add varCategories and data costs
     for (auto it = noised.begin(); it != noised.end(); ++it){
         // add var node
         ml::FactorGraph::VarHandle vh = fg.graph.add(0);
@@ -66,7 +66,7 @@ TEST(FactorGraph, Denoise){
         vhs[id] = vh;
 
         // append new factor type
-        ml::FactorGraph::FactorData fd;
+        ml::FactorGraph::FactorCategory fd;
         double distToBackground = core::Distance(background, *it);
         double distToForeground = core::Distance(foreground, *it);
         fd.costs = [distToBackground, distToForeground](const int * labels) -> double {
@@ -79,25 +79,25 @@ TEST(FactorGraph, Denoise){
             }
         };
         fd.c_alpha = 1.0;
-        fg.factors.push_back(std::move(fd));
+        fg.factorCategories.push_back(std::move(fd));
 
         // add factor node
-        fg.graph.add<1>({ vh }, fg.factors.size() - 1);
+        fg.graph.add<1>({ vh }, fg.factorCategories.size() - 1);
     }
 
     // append smoothness factor types
-     fg.factors.push_back(ml::FactorGraph::FactorData{
+    fg.factorCategories.push_back(ml::FactorGraph::FactorCategory{
        [](const int * labels) -> double {
             return labels[0] == labels[1] ? 0.0 : 0.5;
         }, 1.0
     });
-    int smoothnessFid1 = fg.factors.size() - 1;
-    fg.factors.push_back(ml::FactorGraph::FactorData{
+    int smoothnessFid1 = fg.factorCategories.size() - 1;
+    fg.factorCategories.push_back(ml::FactorGraph::FactorCategory{
         [](const int * labels) -> double {
             return labels[0] == labels[1] ? 0.0 : 0.3;
         }, 1.0
     });
-    int smoothnessFid2 = fg.factors.size() - 1;
+    int smoothnessFid2 = fg.factorCategories.size() - 1;
 
     // add smoothness factor nodes
     for (int i = 0; i < noised.rows - 1; i++){
@@ -112,8 +112,8 @@ TEST(FactorGraph, Denoise){
         }
     }
 
-    auto results = fg.solve(50, 3, [](int epoch, double e, double de){
-        std::cout << "energy: " << e << std::endl;
+    auto results = fg.solve(100, 3, [](int epoch, double e, double de){
+        std::cout << "#" << epoch << "  energy: " << e << std::endl;
         return true;
     });
     core::Imaged3 recovered(noised.size());
