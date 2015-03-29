@@ -493,6 +493,10 @@ namespace panoramix {
             return index;
         }
 
+        inline int EncodeSubscriptToIndex(const PixelLoc & p, const SizeI & size){
+            return p.x * size.height + p.y;
+        }
+
         namespace {
             template <class T, int N>
             Point<T, N> DecodeIndexToSubscriptPrivate(T index, const Vec<T, N> & dimension, const std::false_type &) {
@@ -520,7 +524,9 @@ namespace panoramix {
             return DecodeIndexToSubscriptPrivate(index, dimension, std::is_integral<T>());
         }
 
-
+        inline PixelLoc DecodeIndexToSubscript(int index, const SizeI & size){
+            return PixelLoc(index / size.height, index % size.height);
+        }
 
 
 

@@ -20,6 +20,7 @@ namespace panoramix {
             static std::string LocalManhattan;
             static std::string MeshSMF;
             static std::string Scripts;
+            static std::string BPTests;
         };
 
     }
