@@ -3,7 +3,7 @@
 
 #include "../../src/core/basic_types.hpp"
 #include "../../src/core/utilities.hpp"
-#include "../../src/core/mixed_graph.hpp"
+#include "../../src/core/rl_graph.hpp"
 #include "../../src/gui/qt_glue.hpp"
 
 #include "stepsdag.hpp"
@@ -118,8 +118,8 @@ public:
             [this](DataOfType<PanoView> & im, DataOfType<LinesAndVPs> & linesVPs, 
             DataOfType<Segmentation> & segs) -> ReconstructionSetup<core::PanoramicCamera> {
         
-            core::MixedGraph mg;
-            core::MixedGraphPropertyTable props;
+            core::RLGraph mg;
+            core::RLGraphPropertyTable props;
 
             im.lockForRead();
             linesVPs.lockForRead();
@@ -141,7 +141,7 @@ public:
             // append regions
             core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
 
-            props = core::MakeMixedGraphPropertyTable(mg, vps);
+            props = core::MakeRLGraphPropertyTable(mg, vps);
 
             im.unlock();
             linesVPs.unlock();
@@ -293,8 +293,8 @@ public:
         int stepReconstructionSetup = _steps->addStep(tr("Reconstruction Setup"),
             [this](DataOfType<LinesAndVPs> & linesVPs, DataOfType<Segmentation> & segs) -> ReconstructionSetup<core::PerspectiveCamera> {
 
-            core::MixedGraph mg;
-            core::MixedGraphPropertyTable props;
+            core::RLGraph mg;
+            core::RLGraphPropertyTable props;
 
             linesVPs.lockForRead();
             segs.lockForRead();
@@ -311,7 +311,7 @@ public:
             // append regions
             core::AppendRegions(mg, segmentedImage, perspectiveViews.front().camera, 0.001, 0.001, 3, 1);
 
-            props = core::MakeMixedGraphPropertyTable(mg, vps);
+            props = core::MakeRLGraphPropertyTable(mg, vps);
 
             linesVPs.unlock();
             segs.unlock();

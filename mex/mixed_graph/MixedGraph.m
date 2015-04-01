@@ -51,9 +51,6 @@ classdef MixedGraph < handle
             [varargout{1:nargout}] = mexMixedGraph('depthsGT', this.objectHandle, varargin{:});
         end
 
-        function varargout = showOc(this, varargin)
-            [varargout{1:nargout}] = mexMixedGraph('showOc', this.objectHandle, varargin{:});
-        end
     end
 
     methods (Static)

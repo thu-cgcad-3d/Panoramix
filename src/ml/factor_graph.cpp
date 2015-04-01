@@ -10,17 +10,17 @@ namespace panoramix {
         using namespace core;
 
         bool FactorGraph::valid() const {
-            for (auto & v : graph.elements<0>()){
+            for (auto & v : _graph.elements<0>()){
                 auto & vid = v.data;
-                if (vid < 0 || vid >= varCategories.size())
+                if (vid < 0 || vid >= _varCategories.size())
                     return false;
             }
-            for (auto & f : graph.elements<1>()){
+            for (auto & f : _graph.elements<1>()){
                 auto & fid = f.data;
                 auto & nhs = f.topo.lowers;
-                if (fid < 0 || fid >= factorCategories.size())
+                if (fid < 0 || fid >= _factorCategories.size())
                     return false;
-                auto & costFun = factorCategories[fid].costs;
+                auto & costFun = _factorCategories[fid].costs;
                 if (!costFun)
                     return false;
             }
@@ -30,13 +30,13 @@ namespace panoramix {
         double FactorGraph::energy(const ResultTable & labels) const{
             assert(valid());            
             double e = 0.0;
-            for (auto & f : graph.elements<1>()){
+            for (auto & f : _graph.elements<1>()){
                 auto & vhs = f.topo.lowers;
                 std::vector<int> idx(vhs.size());
                 for (int i = 0; i < idx.size(); i++){
                     idx[i] = labels[vhs[i]];
                 }
-                double factorCost = factorCategories[f.data].costs(idx.data());
+                double factorCost = _factorCategories[f.data].costs(idx.data());
                 e += factorCost;
             }
             return e;
@@ -63,10 +63,10 @@ namespace panoramix {
                 >
             > messages;
             {
-                messages.internalComponents<VHandleWrapper>().reserve(graph.internalElements<0>().size());
-                messages.internalComponents<FHandleWrapper>().reserve(graph.internalElements<1>().size());
+                messages.internalComponents<VHandleWrapper>().reserve(_graph.internalElements<0>().size());
+                messages.internalComponents<FHandleWrapper>().reserve(_graph.internalElements<1>().size());
                 size_t vfConnectionNum = 0;
-                for (auto & f : graph.elements<1>()){
+                for (auto & f : _graph.elements<1>()){
                     vfConnectionNum += f.topo.lowers.size();
                 }
                 messages.internalConstraints<V2FMessage>().reserve(vfConnectionNum);
@@ -78,40 +78,40 @@ namespace panoramix {
             using MGV2FHandle = ConstraintHandle<V2FMessage>;
             using MGF2VHandle = ConstraintHandle<F2VMessage>;
 
-            // install graph to message graph and initialize messages
-            HandledTable<VarHandle, MGVHandle> vhToMGVH(graph.internalElements<0>().size());
-            for (auto & v : graph.elements<0>()){
+            // install _graph to message _graph and initialize messages
+            HandledTable<VarHandle, MGVHandle> vhToMGVH(_graph.internalElements<0>().size());
+            for (auto & v : _graph.elements<0>()){
                 MGVHandle vh = messages.addComponent(VHandleWrapper{ v.topo.hd });
                 vhToMGVH[v.topo.hd] = vh;
             }
-            for (auto & f : graph.elements<1>()){
+            for (auto & f : _graph.elements<1>()){
                 MGFHandle fh = messages.addComponent(FHandleWrapper{ f.topo.hd });
                 for (auto & lh : f.topo.lowers){
                     MGVHandle vh = vhToMGVH[lh];
-                    messages.addConstraint(V2FMessage{ VectorXd::Zero(varCategories[graph.data(lh)].nlabels) }, vh, fh);
-                    messages.addConstraint(F2VMessage{ VectorXd::Zero(varCategories[graph.data(lh)].nlabels) }, fh, vh);
+                    messages.addConstraint(V2FMessage{ VectorXd::Zero(_varCategories[_graph.data(lh)].nlabels) }, vh, fh);
+                    messages.addConstraint(F2VMessage{ VectorXd::Zero(_varCategories[_graph.data(lh)].nlabels) }, fh, vh);
                 }
             }
 
             // precompute c_i_hats for each var
-            HandledTable<VarHandle, double> c_i_hats(graph.internalElements<0>().size(), 0.0);
-            for (auto & v : graph.elements<0>()){
+            HandledTable<VarHandle, double> c_i_hats(_graph.internalElements<0>().size(), 0.0);
+            for (auto & v : _graph.elements<0>()){
                 double & c_i_hat = c_i_hats[v.topo.hd];
-                c_i_hat = varCategories[v.data].c_i;
+                c_i_hat = _varCategories[v.data].c_i;
                 for (auto fh : v.topo.uppers){
-                    c_i_hat += factorCategories[graph.data(fh)].c_alpha;
+                    c_i_hat += _factorCategories[_graph.data(fh)].c_alpha;
                 }
             }
 
             // store ordered f2v and v2f handles for each factor
-            core::HandledTable<MGFHandle, std::vector<MGF2VHandle>> orderedF2Vmsghs(graph.internalElements<1>().size());
-            core::HandledTable<MGFHandle, std::vector<MGV2FHandle>> orderedV2Fmsghs(graph.internalElements<1>().size());
+            core::HandledTable<MGFHandle, std::vector<MGF2VHandle>> orderedF2Vmsghs(_graph.internalElements<1>().size());
+            core::HandledTable<MGFHandle, std::vector<MGV2FHandle>> orderedV2Fmsghs(_graph.internalElements<1>().size());
             // store var dimensions of each factor
-            core::HandledTable<MGFHandle, std::vector<size_t>> orderedVDims(graph.internalElements<1>().size());
+            core::HandledTable<MGFHandle, std::vector<size_t>> orderedVDims(_graph.internalElements<1>().size());
             for (auto & f : messages.components<FHandleWrapper>()){
                 MGFHandle mgfh = f.topo.hd;
                 FactorHandle fh = f.data.h;
-                auto & vhs = graph.topo(fh).lowers;
+                auto & vhs = _graph.topo(fh).lowers;
                 auto & v2fmsghsSet = messages.topo(mgfh).constraints<V2FMessage>();
                 auto & v2fmsghs = orderedV2Fmsghs[mgfh];
                 v2fmsghs.resize(vhs.size());
@@ -134,7 +134,7 @@ namespace panoramix {
                 }
                 orderedVDims[mgfh].resize(vhs.size());
                 for (int i = 0; i < vhs.size(); i++){
-                    orderedVDims[mgfh][i] = varCategories[graph.data(vhs[i])].nlabels;
+                    orderedVDims[mgfh][i] = _varCategories[_graph.data(vhs[i])].nlabels;
                 }
             }
 
@@ -142,13 +142,13 @@ namespace panoramix {
 
 
             // initialize marginals
-            core::HandledTable<VarHandle, VectorXd> varMarginals(graph.internalElements<0>().size());
-            for (auto & v : graph.elements<0>()){
-                varMarginals[v.topo.hd] = VectorXd::Zero(varCategories[v.data].nlabels);
+            core::HandledTable<VarHandle, VectorXd> varMarginals(_graph.internalElements<0>().size());
+            for (auto & v : _graph.elements<0>()){
+                varMarginals[v.topo.hd] = VectorXd::Zero(_varCategories[v.data].nlabels);
             }
 
             double lastE = std::numeric_limits<double>::max();
-            ResultTable results(graph.internalElements<0>().size());
+            ResultTable results(_graph.internalElements<0>().size());
 
             for (int epoch = 0; epoch < maxEpoch; epoch ++){
                 for (int l = 0; l < innerLoopNum; l++){
@@ -157,7 +157,7 @@ namespace panoramix {
                         MGVHandle vh = v2f.topo.component<0>();
                         MGFHandle fh = v2f.topo.component<1>();
 
-                        auto & fdata = factorCategories[graph.data(messages.data(fh).h)];
+                        auto & fdata = _factorCategories[_graph.data(messages.data(fh).h)];
 
                         v2f.data.values.setZero();
                         MGF2VHandle oppose;
@@ -176,7 +176,7 @@ namespace panoramix {
                     for (auto & f : messages.components<FHandleWrapper>()){
                         MGFHandle mgfh = f.topo.hd;
                         FactorHandle fh = f.data.h;
-                        auto & vhs = graph.topo(fh).lowers;
+                        auto & vhs = _graph.topo(fh).lowers;
 
                         const std::vector<MGV2FHandle> & v2fmsghs = orderedV2Fmsghs[mgfh];
                         const std::vector<MGF2VHandle> & f2vmsghs = orderedF2Vmsghs[mgfh];
@@ -189,8 +189,8 @@ namespace panoramix {
                         }
 
                         // dispatch messages from this factor
-                        int fid = graph.data(fh);
-                        auto & costFun = factorCategories[fid].costs;
+                        int fid = _graph.data(fh);
+                        auto & costFun = _factorCategories[fid].costs;
                         auto & dims = orderedVDims[mgfh];
                         assert(dims.size() > 0);
                         std::vector<int> idx(dims.size(), 0);
@@ -198,11 +198,11 @@ namespace panoramix {
                         while (true){
                             for (int i = 0; i < dims.size(); i++){
                                 // i: output var
-                                // others: input varCategories
+                                // others: input _varCategories
                                 double & outValue = messages.data(f2vmsghs[i]).values[idx[i]];
                                 // theta
                                 double theta = costFun(idx.data());
-                                // sum of other input varCategories
+                                // sum of other input _varCategories
                                 double sumOfOtherVars = 0.0;
                                 for (int j = 0; j < dims.size(); j++){
                                     if (j == i) continue;
@@ -232,7 +232,7 @@ namespace panoramix {
 
                 // marginalize on variables
                 // reset marginals
-                for (auto & v : graph.elements<0>()){
+                for (auto & v : _graph.elements<0>()){
                     varMarginals[v.topo.hd].setZero();
                 }
                 for (auto & f2v : messages.constraints<F2VMessage>()){
@@ -240,7 +240,7 @@ namespace panoramix {
                     varMarginals[messages.data(vh).h] += f2v.data.values;                    
                 }
                 // get result                
-                for (auto & v : graph.elements<0>()){
+                for (auto & v : _graph.elements<0>()){
                     int label = -1;
                     double curCost = std::numeric_limits<double>::max();
                     const VectorXd & marginal = varMarginals[v.topo.hd];

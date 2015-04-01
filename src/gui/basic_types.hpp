@@ -7,7 +7,7 @@ namespace panoramix {
     namespace gui {
 
         // color
-        enum class ColorTag {
+        enum ColorTag {
             Transparent,
 
             White,
@@ -98,7 +98,7 @@ namespace panoramix {
             template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
             inline Color & operator /= (T s) { _rgba /= s; return *this; }
 
-            inline Color blendWith(const Color & c, double alpha) const { return c._rgba * (1 - alpha) + c._rgba * alpha; }
+            inline Color blendWith(const Color & c, double alpha) const { return _rgba * (1.0 - alpha) + c._rgba * alpha; }
 
             template <class Archive> inline void serialize(Archive & ar) { ar(_rgba); }
 

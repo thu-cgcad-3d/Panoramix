@@ -2381,11 +2381,26 @@ namespace panoramix {
 
         }
 
+        bool IsDenseSegmentation(const Imagei & segRegions){
+            int minv, maxv;
+            std::tie(minv, maxv) = MinMaxValOfImage(segRegions);
+            if (minv != 0) return false;
+            std::vector<bool> stored(maxv + 1, false);
+            for (int i : segRegions){
+                stored[i] = true;
+            }
+            for (auto b : stored){
+                if (!b)
+                    return false;
+            }
+            return true;
+        }
 
-        void FindContoursOfRegionsAndBoundaries(const Imagei & segRegions, int regionNum,
-            std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryEdges,
+        std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> FindContoursOfRegionsAndBoundaries(
+            const Imagei & segRegions, int regionNum,
             int connectionExtendSize){
 
+            std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges;
             std::map<std::pair<int, int>, std::set<PixelLoc, ComparePixelLoc>> boundaryPixels;
 
             int width = segRegions.cols;
@@ -2470,7 +2485,12 @@ namespace panoramix {
                     boundaryEdges[MakeOrderedPair(rid1, rid2)] = edges;
                 }
             }
+       
+            return boundaryEdges;
         }
+
+
+
 
 
 

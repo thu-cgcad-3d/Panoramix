@@ -184,10 +184,12 @@ namespace panoramix {
         };
 
 
-
-        void FindContoursOfRegionsAndBoundaries(const Imagei & segRegions, int regionNum,
-            std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryEdges,
+        bool IsDenseSegmentation(const Imagei & segRegions);
+        std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> 
+            FindContoursOfRegionsAndBoundaries(const Imagei & segRegions, int regionNum,
             int connectionExtendSize);
+
+
 
 
 

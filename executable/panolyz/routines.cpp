@@ -1,5 +1,5 @@
 #include "../../src/core/basic_types.hpp"
-#include "../../src/core/mixed_graph.hpp"
+#include "../../src/core/rl_graph.hpp"
 #include "../../src/gui/visualize2d.hpp"
 
 #include "routines.hpp"
@@ -21,8 +21,8 @@ namespace panolyz {
 
         core::Imagei segmentedImage;
 
-        core::MixedGraph mg;
-        core::MixedGraphPropertyTable props;
+        core::RLGraph mg;
+        core::RLGraphPropertyTable props;
 
         if (1){
             view = core::CreatePanoramicView(image);
@@ -115,7 +115,7 @@ namespace panolyz {
 
         // optimize
         if (1){
-            props = core::MakeMixedGraphPropertyTable(mg, vps);
+            props = core::MakeRLGraphPropertyTable(mg, vps);
             core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 30.0);
             core::AttachWallConstriants(mg, props, M_PI / 60.0);
             //core::AttachGeometricContextConstraints(mg, props, gcs, hCams, 2);
@@ -200,8 +200,8 @@ namespace panolyz {
 
         core::Imagei segmentedImage;
 
-        core::MixedGraph mg;
-        core::MixedGraphPropertyTable props;
+        core::RLGraph mg;
+        core::RLGraphPropertyTable props;
 
         if (1){
             view = core::CreatePanoramicView(image);
@@ -286,7 +286,7 @@ namespace panolyz {
 
         // optimize
         if (1){
-            props = core::MakeMixedGraphPropertyTable(mg, vps);
+            props = core::MakeRLGraphPropertyTable(mg, vps);
             core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 15.0);
             core::AttachWallConstriants(mg, props, M_PI / 30.0);
             //core::AttachGeometricContextConstraints(mg, props, gcs, hCams, 2);
@@ -352,10 +352,10 @@ namespace panolyz {
         std::vector<core::Vec3> vps;
 
         double focal;
-        core::MixedGraph mg;
+        core::RLGraph mg;
         
         core::Imagei segmentedImage;
-        core::MixedGraphPropertyTable props;
+        core::RLGraphPropertyTable props;
 
         core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified);
         view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
@@ -401,7 +401,7 @@ namespace panolyz {
         core::AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001, 3, 1);
 
         // optimize
-        props = core::MakeMixedGraphPropertyTable(mg, vps);
+        props = core::MakeRLGraphPropertyTable(mg, vps);
         core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 120.0);
         core::AttachWallConstriants(mg, props, M_PI / 100.0);
 
@@ -461,10 +461,10 @@ namespace panolyz {
         std::vector<core::Vec3> vps;
 
         double focal;
-        core::MixedGraph mg;
+        core::RLGraph mg;
 
         core::Imagei segmentedImage;
-        core::MixedGraphPropertyTable props;
+        core::RLGraphPropertyTable props;
 
         core::VanishingPointsDetector::Params vpdParams(core::VanishingPointsDetector::TardifSimplified);
         view = core::CreatePerspectiveView(image, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1),
@@ -510,7 +510,7 @@ namespace panolyz {
         core::AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001, 3, 1);
 
         // optimize
-        props = core::MakeMixedGraphPropertyTable(mg, vps);
+        props = core::MakeRLGraphPropertyTable(mg, vps);
         //core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 100.0);
         //core::AttachWallConstriants(mg, props, M_PI / 60.0);
 

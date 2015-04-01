@@ -15,7 +15,8 @@ JOIN("${Fundamental_PATH};${Qt_PATH}" ";" LD_PATH)
 
 macro(panoramix_add_mex MEXNAME MFILE)
   include_directories (${Fundamental_INCLUDES} ${MATLAB_INCLUDES})
-  add_library(${MEXNAME} SHARED ../Matlabdef.def ${ARGN})
+  add_library(${MEXNAME} SHARED ../Matlabdef.def ${MFILE} ${ARGN})
+  set_source_files_properties(${MFILE} PROPERTIES HEADER_FILE_ONLY TRUE)
   target_link_libraries(${MEXNAME} 
     ${PROJECT_NAME} 
     ${Fundamental_LIBS} 
@@ -43,5 +44,6 @@ macro(panoramix_add_mex MEXNAME MFILE)
   install(FILES ${MFILE} DESTINATION ${MATLAB_CODE_DIR})
 endmacro()
 
-add_subdirectory (boundary_graph)
+# add_subdirectory (boundary_graph)
 add_subdirectory (mixed_graph)
+add_subdirectory (toolkit)
