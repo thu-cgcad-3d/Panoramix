@@ -40,6 +40,11 @@ file (GLOB MISC_SOURCES ./misc/*.c*)
 
 source_group ("misc" FILES ${MISC_HEADERS} ${MISC_SOURCES})
 
+file (GLOB EXPERIMENTAL_HEADERS ./experimental/*.hpp)
+file (GLOB EXPERIMENTAL_SOURCES ./experimental/*.c*)
+
+source_group ("experimental" FILES ${EXPERIMENTAL_HEADERS} ${EXPERIMENTAL_SOURCES})
+
 
 panoramix_add_library ( ${PROJECT_NAME} 
 	${CORE_SOURCES} 
@@ -52,6 +57,8 @@ panoramix_add_library ( ${PROJECT_NAME}
 	${GUI_UIS}
 	${MISC_HEADERS}
 	${MISC_SOURCES}
+	${EXPERIMENTAL_HEADERS}
+	${EXPERIMENTAL_SOURCES}
 )
 target_link_libraries ( ${PROJECT_NAME} 
 	${Fundamental_LIBS} 

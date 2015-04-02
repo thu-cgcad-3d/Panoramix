@@ -37,6 +37,9 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = "View.SampleViews:View.LinesGraph:View.OrientationContext";
    //testing::GTEST_FLAG(filter) = "Serialization.SUNAnnotation";
    //testing::GTEST_FLAG(filter) = "BasicTest.Move";
-   testing::GTEST_FLAG(filter) = "FactorGraph.Denoise";
+   //testing::GTEST_FLAG(filter) = "FactorGraph.Denoise";
+   //testing::GTEST_FLAG(filter) = "Feature.SegmentationBoundaryJunction";
+   //testing::GTEST_FLAG(filter) = "Serialization.Mex";
+   testing::GTEST_FLAG(filter) = "MixedGraph.Basic";
    return RUN_ALL_TESTS();
 }

@@ -93,7 +93,7 @@ namespace panoramix {
             }
 
             inline Manipulator<ColorTable> SetColorTable(const ColorTableDescriptor & d) {
-                return SetColorTable(PredefinedColorTable(d));
+                return SetColorTable(d);
             }
             
             Manipulator<std::pair<int, bool>> Show(int delay = 0, bool asLabels = false);
@@ -119,6 +119,11 @@ namespace panoramix {
             int x = static_cast<int>(std::round(p[0]));
             int y = static_cast<int>(std::round(p[1]));
             cv::circle(viz.image(), cv::Point(x, y), 1, viz.params.color, viz.params.thickness, viz.params.lineType, viz.params.shift);
+            return viz;
+        }
+
+        inline Visualizer2D operator << (Visualizer2D viz, const PixelLoc & p){
+            cv::circle(viz.image(), p, 1, viz.params.color, viz.params.thickness, viz.params.lineType, viz.params.shift);
             return viz;
         }
 

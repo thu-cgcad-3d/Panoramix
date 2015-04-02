@@ -56,23 +56,6 @@ namespace cv {
         ar(cereal::binary_data(im.data, cols * rows * elemSize));
     }
 
-    // Serialization for cv::Mat_<T>
-    template <class Archive, class T>
-    void save(Archive & ar, Mat_<T> const & im) {
-        ar(im.elemSize(), im.type(), im.cols, im.rows);
-        ar(cereal::binary_data(im.data, im.cols * im.rows * im.elemSize()));
-    }
-
-    // Serialization for cv::Mat_<T>
-    template <class Archive, class T>
-    void load(Archive & ar, Mat_<T> & im) {
-        size_t elemSize;
-        int type, cols, rows;
-        ar(elemSize, type, cols, rows);
-        im.create(rows, cols);
-        ar(cereal::binary_data(im.data, cols * rows * elemSize));
-    }
-
 
     // Serialization for cv::Matx<T, M, N>
     template <class Archive, class T, int M, int N>

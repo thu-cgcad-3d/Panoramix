@@ -97,7 +97,7 @@ public:
             core::SegmentationExtractor segmenter;
             segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
             segmenter.params().useYUVColorSpace = false;
-            segmenter.params().c = 50.0;
+            segmenter.params().c = 100.0;
             int segmentsNum = 0;
 
             std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, M_PI / 36.0);
@@ -177,19 +177,19 @@ public:
             auto & mg = rec.mg;
             auto & props = rec.props;
 
-            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::SolveVariablesUsingInversedDepths(mg, props, false);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
             //core::Visualize(view, mg, props);
             core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02, 0.1);
 
-            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::SolveVariablesUsingInversedDepths(mg, props, false);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
             //core::Visualize(view, mg, props);
             core::AttachFloorAndCeilingConstraints(mg, props, 0.1, 0.6);
 
-            core::SolveVariablesUsingInversedDepths(mg, props);
+            core::SolveVariablesUsingInversedDepths(mg, props, false);
             core::NormalizeVariables(mg, props);
 
             return rec;

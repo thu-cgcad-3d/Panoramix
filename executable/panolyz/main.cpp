@@ -32,14 +32,14 @@ int main(int argc, char ** argv) {
 
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room.png"; // bingo
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room4.jpg"; // bingo
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room7.jpg"; // bingo!!!
+    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room7.jpg"; // bingo!!!
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room10.jpg"; // bingo!
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room12.png"; // bingo!
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room13.jpg"; // bingo
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room14.jpg"; // bingo
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room21.jpg"; // bingo!
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room21.jpg"; // bingo! ?
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room22.jpg"; // bingo
-    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room23.jpg"; // bingo
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room23.jpg"; // bingo
 
 
 

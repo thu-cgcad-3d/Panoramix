@@ -60,6 +60,25 @@ TEST(Feature, SegmentationExtractor) {
 }
 
 
+TEST(Feature, SegmentationBoundaryJunction){
+    core::Image im = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
+    core::ResizeToMakeHeightUnder(im, 800);
+    core::SegmentationExtractor::Params p;
+    auto segs = core::SegmentationExtractor(p)(im, true);
+    auto junctions = core::ExtractBoundaryJunctions(segs.first);
+    std::vector<core::PixelLoc> ps;
+    for (auto & j : junctions){
+        ps.insert(ps.end(), j.second.begin(), j.second.end());
+    }
+    auto ctable = gui::CreateRandomColorTableWithSize(segs.second);
+    core::Image image = ctable(segs.first);
+    gui::Visualizer2D(image)
+        << gui::manip2d::SetColor(gui::Black)
+        << ps
+        << gui::manip2d::Show();
+}
+
+
 TEST(Feature, SegmentationExtractorInPanorama){
     core::Image im = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
     core::ResizeToMakeHeightUnder(im, 800);

@@ -80,9 +80,10 @@ namespace panoramix {
         // region and line
         struct RegionLineConnectionData {
             std::vector<Vec3> normalizedAnchors;
+            bool detachable; // if the line lies on the edge of a region, it may be detachable from the region
             template <class Archiver>
             void serialize(Archiver & ar) {
-                ar(normalizedAnchors);
+                ar(normalizedAnchors, detachable);
             }
         };
         using RegionLineConnectionHandle = ConstraintHandle<RegionLineConnectionData>;
@@ -103,7 +104,7 @@ namespace panoramix {
             std::vector<std::vector<Classified<Line2>>> & lineSegments);
 
 
-        // add lines to mixed graph from classified line segments
+        // add lines to rl graph from classified line segments
         void AppendLines(RLGraph & mg, const std::vector<Classified<Line2>> & lineSegments,
             const PerspectiveCamera & cam,
             const std::vector<Vec3> & vps,
@@ -114,7 +115,7 @@ namespace panoramix {
             double interViewIncidenceAngleVerticalDirectionThreshold = 0.03);
 
 
-        // add more regions and related constraints to mixed graph
+        // add more regions and related constraints to rl graph
         std::vector<RegionHandle> AppendRegions(RLGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine,
             int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3);

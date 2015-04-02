@@ -132,6 +132,15 @@ namespace panoramix {
             void LoadFromDisk(const std::string & filename, sun::Panorama & panoInfo);
             void SaveToDisk(const std::string & filename, const sun::Panorama & panoInfo);
 
+
+            // NYU v2 dataset
+            namespace nyu2 {
+
+                core::Point2 c_rgb();
+                core::Point2 f_rgb();
+
+            }
+
         }
 
 

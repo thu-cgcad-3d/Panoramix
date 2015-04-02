@@ -267,6 +267,29 @@ namespace panoramix {
             return result;
         }
 
+        bool Matlab::GetVariable(const char * name, double & a){
+            if (!_Engine.eng())
+                return false;
+
+            mxArray * ma = engGetVariable(_Engine.eng(), name);
+            if (!ma)
+                return false;
+
+            bool result = GetVariable((const void*)ma, a);
+            mxDestroyArray(ma);
+            return result;
+        }
+
+        bool Matlab::GetVariable(const void * mxData, double & a){
+            if (!mxData)
+                return false;
+            const mxArray * ma = static_cast<const mxArray*>(mxData);
+            if (!ma)
+                return false;
+            a = mxGetScalar(ma);
+            return true;
+        }
+
 
         void * Matlab::PutVariable(const cv::SparseMat & mat){
 

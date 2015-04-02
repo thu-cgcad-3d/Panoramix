@@ -31,7 +31,7 @@ namespace panoramix {
                 renderOptions.showInside = true;
 
                 installingOptions.discretizeOptions.color = ColorTag::Black;
-                installingOptions.discretizeOptions.colorTable = PredefinedColorTable(ColorTableDescriptor::AllColors);
+                installingOptions.discretizeOptions.colorTable = ColorTableDescriptor::AllColors;
                 installingOptions.discretizeOptions.isolatedTriangles = false;
                 installingOptions.discretizeOptions.subdivisionNums[0] = 32;
                 installingOptions.discretizeOptions.subdivisionNums[1] = 64;

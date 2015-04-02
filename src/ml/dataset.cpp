@@ -24,6 +24,13 @@ namespace panoramix {
                 out.close();
             }
 
+            namespace nyu2 {
+
+                core::Point2 c_rgb() { return core::Point2(325.5824, 253.7362); }
+                core::Point2 f_rgb() { return core::Point2(518.8579, 519.4696); }
+
+            }
+
         }
 
     }

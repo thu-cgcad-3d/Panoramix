@@ -109,6 +109,14 @@ TEST(Serialization, FileTime) {
 
 }
 
+TEST(Serialization, Mex){
+    std::string filename = ProjectDataDirStrings::Normal + "/nyu2samples/depths.cereal";
+    core::Image mat;
+    core::LoadFromDisk(filename, mat);
+    
+    ASSERT_EQ(mat.cols, 561);
+    ASSERT_EQ(mat.rows, 427);
+}
 
 TEST(Serialization, SUNAnnotation) {
 

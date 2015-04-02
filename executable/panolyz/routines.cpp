@@ -370,8 +370,9 @@ namespace panolyz {
                     vpRays.push_back(core::ClassifyAs(core::Ray2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
                 }
             }
+            auto ctable = gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3);
             gui::Visualizer2D(image)
-                << gui::manip2d::SetColorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
+                << gui::manip2d::SetColorTable(ctable)
                 << gui::manip2d::SetThickness(1)
                 << vpRays
                 << gui::manip2d::SetThickness(2)

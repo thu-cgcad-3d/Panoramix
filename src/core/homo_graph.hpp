@@ -11,6 +11,7 @@ namespace panoramix {
         template <class Tag, int L, int ChildN>
         struct Topo {
             static const int Level = L;
+            enum { ChildrenNum = ChildN };
             std::array<HandleOfTypeAtLevel<Tag, Level - 1>, ChildN> lowers; // use std::array
             std::set<HandleOfTypeAtLevel<Tag, Level + 1>> uppers;
             HandleOfTypeAtLevel<Tag, Level> hd;
@@ -26,11 +27,16 @@ namespace panoramix {
         template <class Tag, int L>
         struct Topo<Tag, L, Dynamic> {
             static const int Level = L;
+            enum { ChildrenNum = Dynamic };
             std::vector<HandleOfTypeAtLevel<Tag, Level - 1>> lowers; // use std::array
             std::set<HandleOfTypeAtLevel<Tag, Level + 1>> uppers;
             HandleOfTypeAtLevel<Tag, Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
-            explicit inline Topo(int id, std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> ls)
+            //explicit inline Topo(int id, std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> ls)
+            //    : hd(id), lowers(ls) {}
+            explicit inline Topo(int id, std::vector<HandleOfTypeAtLevel<Tag, Level - 1>> && ls)
+                : hd(id), lowers(std::move(ls)) {}
+            explicit inline Topo(int id, const std::vector<HandleOfTypeAtLevel<Tag, Level - 1>> & ls)
                 : hd(id), lowers(ls) {}
             template <class Archive> inline void serialize(Archive & ar) { ar(lowers, uppers, hd); }
         };
@@ -40,6 +46,7 @@ namespace panoramix {
         template <class Tag, int L>
         struct Topo<Tag, L, 0> {
             static const int Level = L;
+            enum { ChildrenNum = 0 };
             std::set<HandleOfTypeAtLevel<Tag, Level + 1>> uppers;
             HandleOfTypeAtLevel<Tag, Level> hd;
             explicit inline Topo(int id = -1) : hd(id){}
@@ -196,6 +203,7 @@ namespace panoramix {
                 }
                 return HandleOfTypeAtLevel<Tag, Level>(id);
             }
+
 
             // add element of the lowest level
             HandleOfTypeAtLevel<Tag, 0> add(const typename LayerContentTypeStruct<0>::type::DataType & d = LayerContentTypeStruct<0>::type::DataType()) {

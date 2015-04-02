@@ -856,7 +856,7 @@ namespace panoramix {
 
                 // add region boundary constraints
                 std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges = 
-                    FindContoursOfRegionsAndBoundaries(segmentedRegions, regionNum, samplerSizeOnBoundary);
+                    FindContoursOfRegionsAndBoundaries(segmentedRegions, samplerSizeOnBoundary);
 
                 for (auto & bep : boundaryEdges) {
                     auto & rids = bep.first;
@@ -897,10 +897,12 @@ namespace panoramix {
 
 
                 // add region-line connections
-                std::map<std::pair<RegionHandle, LineHandle>, std::vector<Vec3>> regionLineConnections;
+                std::map<std::pair<RegionHandle, LineHandle>, RegionLineConnectionData> regionLineConnections;
 
                 for (auto & ld : mg.components<LineData>()){
                     auto & line = ld.data.line;
+                    Line2 line2(cam.screenProjection(line.first), cam.screenProjection(line.second));
+                    Vec2 vertToLineDir = normalize(PerpendicularDirection(line2.direction())); // vertical to this line
                     double spanAngle = AngleBetweenDirections(line.first, line.second);
                     int stepNum = static_cast<int>(std::ceil(spanAngle / samplingStepAngleOnLine));
                     assert(stepNum >= 1);
@@ -909,7 +911,8 @@ namespace panoramix {
                         Vec3 sample = RotateDirection(line.first, line.second, angle);
                         if (!cam.isVisibleOnScreen(sample))
                             continue;
-                        PixelLoc originalP = ToPixelLoc(cam.screenProjection(sample));
+                        Point2 sampleP = cam.screenProjection(sample);
+                        PixelLoc originalP = ToPixelLoc(sampleP);
                         // collect neighbors
                         std::set<int> connectedRegionIds;
                         for (int x = originalP.x - samplerSizeOnLine; x <= originalP.x + samplerSizeOnLine; x++){
@@ -923,17 +926,31 @@ namespace panoramix {
                                     continue;
                                 connectedRegionIds.insert(regionId);
                             }
-                        }                      
+                        }
+                        // collect abit farther neighbors for judging whether it can be detachable!
+                        std::set<int> abitFarLeftRightRegionIds[2];
+                        for (int d = std::min(samplerSizeOnLine, 2); d <= samplerSizeOnLine * 2; d++){
+                            for (int dir : {-d, d}){
+                                PixelLoc p = ToPixelLoc(sampleP + vertToLineDir * dir);
+                                if (!Contains(segmentedRegions, p))
+                                    continue;
+                                int regionId = segmentedRegions(p);
+                                auto rh = regionHandles[regionId];
+                                if (rh.invalid())
+                                    continue;
+                                (dir < 0 ? abitFarLeftRightRegionIds[0] : abitFarLeftRightRegionIds[1]).insert(regionId);
+                            }
+                        }
                         for (int regionId : connectedRegionIds){
-                            regionLineConnections[std::make_pair(regionHandles[regionId], ld.topo.hd)].push_back(normalize(sample));
+                            RegionLineConnectionData & rd = regionLineConnections[std::make_pair(regionHandles[regionId], ld.topo.hd)];
+                            rd.normalizedAnchors.push_back(normalize(sample));
+                            rd.detachable = !(Contains(abitFarLeftRightRegionIds[0], regionId) && Contains(abitFarLeftRightRegionIds[1], regionId));
                         }
                     }
-                }
+                }                
 
                 for (auto & rlc : regionLineConnections){
-                    RegionLineConnectionData rlcd;
-                    rlcd.normalizedAnchors = std::move(rlc.second);
-                    mg.addConstraint(std::move(rlcd), rlc.first.first, rlc.first.second);
+                    mg.addConstraint(std::move(rlc.second), rlc.first.first, rlc.first.second);
                 }
 
                 return regionHandles;

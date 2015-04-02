@@ -114,7 +114,6 @@ namespace panoramix {
         inline Color operator / (const Color & c, T d) { Color cc = c; cc /= d; return cc; }
 
 
-        const std::vector<ColorTag> & AllColorTags();
         std::ostream & operator << (std::ostream & os, ColorTag ct);
         Color ColorFromHSV(double h, double s, double v, double a = 1.0);
         Color RandomColor();
@@ -154,7 +153,7 @@ namespace panoramix {
             inline ColorTable(std::initializer_list<Color> c, const Color & exceptColor = ColorTag::Transparent) 
                 : _colors(c), _exceptionalColor(exceptColor) {}
 
-            ColorTable(std::initializer_list<ColorTag> ctags, ColorTag exceptColor = ColorTag::Transparent);
+            //ColorTable(std::initializer_list<ColorTag> ctags, ColorTag exceptColor = ColorTag::Transparent);
 
             template <class ColorIteratorT, class = std::enable_if_t<std::is_same<std::iterator_traits<ColorIteratorT>::value_type, Color>::value>>
             inline ColorTable(ColorIteratorT begin, ColorIteratorT end, const Color & exceptColor = ColorTag::Transparent)
@@ -194,7 +193,6 @@ namespace panoramix {
             Color _exceptionalColor;
         };
 
-        const ColorTable & PredefinedColorTable(ColorTableDescriptor descriptor);
         ColorTable CreateGreyColorTableWithSize(int sz);
         ColorTable CreateRandomColorTableWithSize(int sz, const Color & exceptColor = ColorTag::Transparent);
 

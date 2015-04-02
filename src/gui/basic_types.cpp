@@ -7,34 +7,32 @@ namespace panoramix {
 
         using namespace core;
 
-        inline Color ColorFromTag(ColorTag t) {
-            switch (t){
-            case ColorTag::Transparent: return Color(0, 0, 0, 0);
+        Color::Color(ColorTag tag) {        
+            switch (tag){
+            case Transparent: _rgba = Vec4i(0, 0, 0, 0); break;
 
-            case ColorTag::White: return Color(255, 255, 255);
-            case ColorTag::Black: return Color(0, 0, 0);
+            case White: _rgba = Vec4i(255, 255, 255); break;
+            case Black: _rgba = Vec4i(0, 0, 0); break;
 
-            case ColorTag::DimGray: return Color(105, 105, 105);
-            case ColorTag::Gray: return Color(128, 128, 128);
-            case ColorTag::DarkGray: return Color(169, 169, 169);
-            case ColorTag::Silver: return Color(192, 192, 192);
-            case ColorTag::LightGray: return Color(211, 211, 211);
+            case DimGray: _rgba = Vec4i(105, 105, 105); break;
+            case Gray: _rgba = Vec4i(128, 128, 128); break;
+            case DarkGray: _rgba = Vec4i(169, 169, 169); break;
+            case Silver: _rgba = Vec4i(192, 192, 192); break;
+            case LightGray: _rgba = Vec4i(211, 211, 211); break;
 
-            case ColorTag::Red: return Color(255, 0, 0);
-            case ColorTag::Green: return Color(0, 255, 0);
-            case ColorTag::Blue: return Color(0, 0, 255);
+            case Red: _rgba = Vec4i(255, 0, 0); break;
+            case Green: _rgba = Vec4i(0, 255, 0); break;
+            case Blue: _rgba = Vec4i(0, 0, 255); break;
 
-            case ColorTag::Yellow: return Color(255, 255, 0);
-            case ColorTag::Magenta: return Color(255, 0, 255);
-            case ColorTag::Cyan: return Color(0, 255, 255);
-            case ColorTag::Orange: return Color(255, 165, 0);
+            case Yellow: _rgba = Vec4i(255, 255, 0); break;
+            case Magenta: _rgba = Vec4i(255, 0, 255); break;
+            case Cyan: _rgba = Vec4i(0, 255, 255); break;
+            case Orange: _rgba = Vec4i(255, 165, 0); break;
             default:
-                return Color(255, 255, 255);
-            }
+                _rgba = Vec4i(255, 255, 255);
+            }        
         }
 
-
-        Color::Color(ColorTag tag) : _rgba(ColorFromTag(tag)._rgba) {}
         Color::Color(const std::uint8_t * data, int cvType) {
             const int16_t * datai16 = (const int16_t*)(data);
             const int32_t * datai32 = (const int32_t*)(data);
@@ -67,21 +65,6 @@ namespace panoramix {
             }
         }
 
-        const std::vector<ColorTag> & AllColorTags() {
-            static const std::vector<ColorTag> _allColorTags = {
-                ColorTag::Transparent,
-                ColorTag::White,
-                ColorTag::Gray,
-                ColorTag::Red,
-                ColorTag::Green,
-                ColorTag::Blue,
-                ColorTag::Yellow,
-                ColorTag::Magenta,
-                ColorTag::Cyan,
-                ColorTag::Orange
-            };
-            return _allColorTags;
-        }
 
         std::ostream & operator << (std::ostream & os, ColorTag ct) {
             switch (ct){
@@ -139,18 +122,149 @@ namespace panoramix {
         }
 
 
+        namespace {
+
+            using ColorTableInit = std::pair<std::vector<Color>, Color>;
+            static const ColorTableInit allColorTable = {
+                {
+                    White,
+                    Black,
+
+                    DimGray,
+                    Gray,
+                    DarkGray,
+                    Silver,
+                    LightGray,
+
+                    Red,
+                    Green,
+                    Blue,
+
+                    Yellow,
+                    Magenta,
+                    Cyan,
+                    Orange
+                },
+                Transparent
+            };
+
+            static const ColorTableInit allColorExcludingWhiteTable = {
+                {
+                    //ColorTag::White,
+                    Black,
+
+                    DimGray,
+                    Gray,
+                    DarkGray,
+                    Silver,
+                    LightGray,
+
+                    Red,
+                    Green,
+                    Blue,
+
+                    Yellow,
+                    Magenta,
+                    Cyan,
+                    Orange
+                },
+                Transparent
+            };
+
+            static const ColorTableInit allColorExcludingBlackTable = {
+                {
+                    White,
+                    //Black,
+
+                    DimGray,
+                    Gray,
+                    DarkGray,
+                    Silver,
+                    LightGray,
+
+                    Red,
+                    Green,
+                    Blue,
+
+                    Yellow,
+                    Magenta,
+                    Cyan,
+                    Orange
+                },
+                Transparent
+            };
+
+            static const ColorTableInit allColorExcludingWhiteAndBlackTable = {
+                {
+                    //White,
+                    //Black,
+
+                    DimGray,
+                    Gray,
+                    DarkGray,
+                    Silver,
+                    LightGray,
+
+                    Red,
+                    Green,
+                    Blue,
+
+                    Yellow,
+                    Magenta,
+                    Cyan,
+                    Orange
+                },
+                Transparent
+            };
+
+            static const ColorTableInit RGBColorTable = {
+                {
+                    Red,
+                    Green,
+                    Blue
+                },
+                White
+            };
+
+            static const ColorTableInit RGBGreysColorTable = {
+                {
+                    Red,
+                    Green,
+                    Blue,
+
+                    DimGray,
+                    Gray,
+                    DarkGray,
+                    Silver,
+                    LightGray
+                },
+                White
+            };
+
+        }
+
+
         ColorTable::ColorTable(ColorTableDescriptor descriptor) {
-            const auto & predefined = PredefinedColorTable(descriptor);
-            _colors = predefined._colors;
-            _exceptionalColor = predefined._exceptionalColor;
-        }
-        ColorTable::ColorTable(std::initializer_list<ColorTag> ctags, ColorTag exceptColor) {
-            _colors.reserve(ctags.size());
-            for (auto ct : ctags) {
-                _colors.push_back(ColorFromTag(ct));
+            const ColorTableInit * data = nullptr;
+            switch (descriptor) {
+            case ColorTableDescriptor::RGB: data = &RGBColorTable; break;
+            case ColorTableDescriptor::AllColorsExcludingBlack: data = &allColorExcludingBlackTable; break;
+            case ColorTableDescriptor::AllColorsExcludingWhite: data = &allColorExcludingWhiteTable; break;
+            case ColorTableDescriptor::AllColorsExcludingWhiteAndBlack: data = &allColorExcludingWhiteAndBlackTable; break;
+            case ColorTableDescriptor::AllColors: data = &allColorTable; break;
+            default: data = &RGBGreysColorTable;
             }
-            _exceptionalColor = ColorFromTag(exceptColor);
+            _colors = data->first;
+            _exceptionalColor = data->second;
         }
+
+        //ColorTable::ColorTable(std::initializer_list<ColorTag> ctags, ColorTag exceptColor) {
+        //    _colors.reserve(ctags.size());
+        //    for (auto ct : ctags) {
+        //        _colors.push_back(ct);
+        //    }
+        //    _exceptionalColor = exceptColor;
+        //}
 
         core::Imageub3 ColorTable::operator()(const core::Imagei & indexIm) const{
             core::Imageub3 im(indexIm.size());
@@ -193,137 +307,9 @@ namespace panoramix {
             return *this;
         }
 
-        const ColorTable & PredefinedColorTable(ColorTableDescriptor descriptor) {
-           
-            static const ColorTable allColorTable = {
-                {
-                    ColorTag::White,
-                    ColorTag::Black,
-
-                    ColorTag::DimGray,
-                    ColorTag::Gray,
-                    ColorTag::DarkGray,
-                    ColorTag::Silver,
-                    ColorTag::LightGray,
-
-                    ColorTag::Red,
-                    ColorTag::Green,
-                    ColorTag::Blue,
-
-                    ColorTag::Yellow,
-                    ColorTag::Magenta,
-                    ColorTag::Cyan,
-                    ColorTag::Orange
-                }, 
-                ColorTag::Transparent
-            };
-
-            static const ColorTable allColorExcludingWhiteTable = {
-                {
-                    //ColorTag::White,
-                    ColorTag::Black,
-
-                    ColorTag::DimGray,
-                    ColorTag::Gray,
-                    ColorTag::DarkGray,
-                    ColorTag::Silver,
-                    ColorTag::LightGray,
-
-                    ColorTag::Red,
-                    ColorTag::Green,
-                    ColorTag::Blue,
-
-                    ColorTag::Yellow,
-                    ColorTag::Magenta,
-                    ColorTag::Cyan,
-                    ColorTag::Orange
-                },
-                ColorTag::Transparent
-            };
-
-            static const ColorTable allColorExcludingBlackTable = {
-                {
-                    ColorTag::White,
-                    //ColorTag::Black,
-
-                    ColorTag::DimGray,
-                    ColorTag::Gray,
-                    ColorTag::DarkGray,
-                    ColorTag::Silver,
-                    ColorTag::LightGray,
-
-                    ColorTag::Red,
-                    ColorTag::Green,
-                    ColorTag::Blue,
-
-                    ColorTag::Yellow,
-                    ColorTag::Magenta,
-                    ColorTag::Cyan,
-                    ColorTag::Orange
-                },
-                ColorTag::Transparent
-            };
-
-            static const ColorTable allColorExcludingWhiteAndBlackTable = {
-                {
-                    //ColorTag::White,
-                    //ColorTag::Black,
-
-                    ColorTag::DimGray,
-                    ColorTag::Gray,
-                    ColorTag::DarkGray,
-                    ColorTag::Silver,
-                    ColorTag::LightGray,
-
-                    ColorTag::Red,
-                    ColorTag::Green,
-                    ColorTag::Blue,
-
-                    ColorTag::Yellow,
-                    ColorTag::Magenta,
-                    ColorTag::Cyan,
-                    ColorTag::Orange
-                },
-                ColorTag::Transparent
-            };
-
-            static const ColorTable RGBColorTable = {
-                {
-                    ColorTag::Red,
-                    ColorTag::Green,
-                    ColorTag::Blue
-                },
-                ColorTag::White
-            };
-
-            static const ColorTable RGBGreysColorTable = {
-                {
-                    ColorTag::Red,
-                    ColorTag::Green,
-                    ColorTag::Blue,
-
-                    ColorTag::DimGray,
-                    ColorTag::Gray,
-                    ColorTag::DarkGray,
-                    ColorTag::Silver,
-                    ColorTag::LightGray
-                },
-                ColorTag::White
-            };
-
-            switch (descriptor) {
-            case ColorTableDescriptor::RGB: return RGBColorTable;
-            case ColorTableDescriptor::AllColorsExcludingBlack: return allColorExcludingBlackTable;
-            case ColorTableDescriptor::AllColorsExcludingWhite: return allColorExcludingWhiteTable;
-            case ColorTableDescriptor::AllColorsExcludingWhiteAndBlack: return allColorExcludingWhiteAndBlackTable;
-            case ColorTableDescriptor::AllColors: return allColorTable;
-            default: return RGBGreysColorTable;
-            }
-            
-        }
 
         ColorTable CreateGreyColorTableWithSize(int sz) {
-            auto exeptColor = ColorFromTag(ColorTag::Blue);
+            auto exeptColor = ColorTag::Blue;
             core::Vec3 full(255, 255, 255);
             std::vector<Color> colors(sz);
             for (int i = 0; i < sz; i++){

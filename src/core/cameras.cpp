@@ -323,7 +323,7 @@ namespace panoramix {
             std::vector<HPoint2> vps;
             double focal;
             std::vector<int> lineClasses;
-            int maxTry = 100;
+            int maxTry = 500;
             while (vps.empty()){
                 auto result = vpd(lines, perspectiveImage.size());
                 if (-- maxTry < 0)
@@ -335,16 +335,13 @@ namespace panoramix {
                 std::tie(vps, focal, lineClasses) = result.unwrap();
             }
             if (vps.size() < 3){
+                std::cerr << "vps.size() < 3!" << std::endl;
                 return nullptr;
             }
 
             Point2 principlePoint;
             std::tie(principlePoint, std::ignore) = 
                 ComputePrinciplePointAndFocalLength(vps[0].value(), vps[1].value(), vps[2].value());
-            
-            if (!Contains(perspectiveImage, ToPixelLoc(principlePoint))){
-                return nullptr;
-            }
 
             // only reserve first 3 vps
             vps.erase(vps.begin() + 3, vps.end());

@@ -718,11 +718,6 @@ namespace panoramix {
         namespace {
 
             template <class T>
-            inline Vec<T, 2> PerpendicularDirection(const Vec<T, 2> & d) {
-                return Vec<T, 2>(-d(1), d(0));
-            }
-
-            template <class T>
             inline Vec<T, 3> PerpendicularRootOfLineEquation(const Vec<T, 3> & lineeq) {
                 auto & a = lineeq[0];
                 auto & b = lineeq[1];
@@ -2397,7 +2392,7 @@ namespace panoramix {
         }
 
         std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> FindContoursOfRegionsAndBoundaries(
-            const Imagei & segRegions, int regionNum,
+            const Imagei & segRegions,
             int connectionExtendSize){
 
             std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges;
@@ -2489,6 +2484,25 @@ namespace panoramix {
             return boundaryEdges;
         }
 
+
+        std::map<std::set<int>, std::vector<PixelLoc>> ExtractBoundaryJunctions(const Imagei & regions){
+            std::map<std::set<int>, std::vector<PixelLoc>> junctions;
+            for (auto it = regions.begin(); it != regions.end(); ++it){
+                auto p = it.pos();
+                if (p.x == regions.cols - 1)
+                    continue;
+                if (p.y == regions.rows - 1)
+                    continue;
+                std::set<int> regionIds = {
+                    regions(p), regions(PixelLoc(p.x + 1, p.y)),
+                    regions(PixelLoc(p.x, p.y + 1)), regions(PixelLoc(p.x + 1, p.y + 1))
+                };
+                if (regionIds.size() >= 3){
+                    junctions[regionIds].push_back(p);
+                }
+            }
+            return junctions;
+        }
 
 
 

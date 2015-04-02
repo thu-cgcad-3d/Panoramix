@@ -11,7 +11,7 @@ using namespace panoramix;
 using namespace test;
 
 
-TEST(MixedGraph, Basic){
+TEST(RLGraph, Basic){
 
     std::vector<core::View<core::PerspectiveCamera>> views;
     core::Image panorama;
@@ -27,7 +27,7 @@ TEST(MixedGraph, Basic){
 #if 0
 
 void VisualizeMixedGraph(const core::Image & panorama,
-    const core::MixedGraph & mg,
+    const core::RLGraph & mg,
     const std::vector<core::MGPatch> & patches,
     const std::vector<core::Vec3> & vps,
     bool doModal){
@@ -111,7 +111,7 @@ void VisualizeMixedGraph(const core::Image & panorama,
 
 template <class UhColorizerFunT = core::ConstantFunctor<gui::Color>>
 void ManuallyOptimizeMixedGraph(const core::Image & panorama,
-    const core::MixedGraph & mg,
+    const core::RLGraph & mg,
     core::MGPatch & patch,
     const std::vector<core::Vec3> & vps,
     UhColorizerFunT uhColorizer = UhColorizerFunT(gui::ColorTag::White),
@@ -201,7 +201,7 @@ void ManuallyOptimizeMixedGraph(const core::Image & panorama,
 }
 
 
-TEST(MixedGraph, Build) {
+TEST(RLGraph, Build) {
 
     std::vector<core::View<core::PerspectiveCamera>> views;
     std::vector<core::RegionsGraph> regionsGraphs;
@@ -224,24 +224,24 @@ TEST(MixedGraph, Build) {
     core::LoadFromDisk("./cache/test_view.View.ConstraintsAcrossViews.lineIncidencesAcrossViews", lineIncidencesAcrossViews);
     core::LoadFromDisk("./cache/test_view.View.RegionLineConnections.regionLineConnectionsArray", regionLineConnectionsArray);
 
-    core::MixedGraph mg = core::BuildMixedGraph(views, regionsGraphs, linesGraphs,
+    core::RLGraph mg = core::BuildMixedGraph(views, regionsGraphs, linesGraphs,
         regionOverlappingsAcrossViews, lineIncidencesAcrossViews, regionLineConnectionsArray, vanishingPoints, 1.0);
 
-    core::SaveToDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::SaveToDisk("./cache/test_view.RLGraph.Build.mg", mg);
 
 }
 
-TEST(MixedGraph, BasicOptimization) {
+TEST(RLGraph, BasicOptimization) {
 
     core::Image panorama;
     std::vector<core::Vec3> vanishingPoints;
 
-    core::MixedGraph mg;
+    core::RLGraph mg;
 
     core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
     core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
 
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.RLGraph.Build.mg", mg);
 
     {
         core::MGBinaryHandle bh(74);
@@ -266,17 +266,17 @@ TEST(MixedGraph, BasicOptimization) {
 }
 
 
-TEST(MixedGraph, NaiveHolisticOptimization) {
+TEST(RLGraph, NaiveHolisticOptimization) {
 
     core::Image panorama;
     std::vector<core::Vec3> vanishingPoints;
 
-    core::MixedGraph mg;
+    core::RLGraph mg;
 
     core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
     core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
 
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.RLGraph.Build.mg", mg);
 
     std::vector<core::MGPatch> naivePatches =
         core::SplitMixedGraphIntoPatches(mg, vanishingPoints);
@@ -300,30 +300,30 @@ TEST(MixedGraph, NaiveHolisticOptimization) {
         VisualizeMixedGraph(panorama, mg, { patch }, vanishingPoints, true);
     }
 
-    core::SaveToDisk("./cache/test_view.MixedGraph.NaiveHolisticOptimization.naivePatches", naivePatches);
+    core::SaveToDisk("./cache/test_view.RLGraph.NaiveHolisticOptimization.naivePatches", naivePatches);
 
 }
 
 
 
-TEST(MixedGraph, LinesOptimization) {
+TEST(RLGraph, LinesOptimization) {
 
     core::Image panorama;
     std::vector<core::Vec3> vanishingPoints;
 
-    core::MixedGraph mg;
+    core::RLGraph mg;
     core::MGUnaryVarTable unaryVars;
     core::MGBinaryVarTable binaryVars;
 
     core::LoadFromDisk("./cache/test_view.View.SampleViews.panorama", panorama);
     core::LoadFromDisk("./cache/test_view.View.LinesGraph.vanishingPoints", vanishingPoints);
 
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.mg", mg);
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.unaryVars", unaryVars);
-    core::LoadFromDisk("./cache/test_view.MixedGraph.Build.binaryVars", binaryVars);
+    core::LoadFromDisk("./cache/test_view.RLGraph.Build.mg", mg);
+    core::LoadFromDisk("./cache/test_view.RLGraph.Build.unaryVars", unaryVars);
+    core::LoadFromDisk("./cache/test_view.RLGraph.Build.binaryVars", binaryVars);
 
     std::vector<core::MGPatch> naivePatches;
-    core::LoadFromDisk("./cache/test_view.MixedGraph.NaiveHolisticOptimization.naivePatches", naivePatches);
+    core::LoadFromDisk("./cache/test_view.RLGraph.NaiveHolisticOptimization.naivePatches", naivePatches);
 
     std::vector<core::MGPatch> linePatches;
     std::vector<core::MGPatch> lineMSTPatches;
@@ -357,20 +357,20 @@ TEST(MixedGraph, LinesOptimization) {
     VisualizeMixedGraph(panorama, mg, linePatches, vanishingPoints, false);
     VisualizeMixedGraph(panorama, mg, lineMSTPatches, vanishingPoints, true);
 
-    core::SaveToDisk("./cache/test_view.MixedGraph.LinesOptimization.linePatches", linePatches);
-    core::SaveToDisk("./cache/test_view.MixedGraph.LinesOptimization.lineMSTPatches", lineMSTPatches);
+    core::SaveToDisk("./cache/test_view.RLGraph.LinesOptimization.linePatches", linePatches);
+    core::SaveToDisk("./cache/test_view.RLGraph.LinesOptimization.lineMSTPatches", lineMSTPatches);
 
 }
 
 
 
-TEST(MixedGraph, RebuildOnOnePanorama){
+TEST(RLGraph, RebuildOnOnePanorama){
 
     core::Image panorama = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
     core::ResizeToMakeHeightUnder(panorama, 800);
     auto panoView = core::CreatePanoramicView(panorama);
     //core::OrientationContext oc = core::ComputeOrientationContext(panoView, core::SceneClass::Outdoor);
-    //core::SaveToDisk("./cache/test_view.MixedGraph.RebuildOnOnePanorama.oc", oc);
+    //core::SaveToDisk("./cache/test_view.RLGraph.RebuildOnOnePanorama.oc", oc);
 
     std::vector<core::PerspectiveCamera> cams = {
         core::PerspectiveCamera(700, 700, 300, { 0, 0, 0 }, { 1, 0, 0 }, { 0, 0, -1 }),
@@ -388,14 +388,14 @@ TEST(MixedGraph, RebuildOnOnePanorama){
         std::vector<core::Vec3> vanishingPoints;
 
         core::MGPatch largestPatch;
-        core::MixedGraph mg;
+        core::RLGraph mg;
         {
             core::Clock clock("view - " + std::to_string(i));
             mg = core::BuildMixedGraph({ views[i] }, vanishingPoints);
 
             core::OrientationContext oc = core::ComputeOrientationContext(views[i], core::SceneClass::Outdoor);
 
-            //core::SaveToDisk("./cache/test_view.MixedGraph.RebuildOneView.mg[" + std::to_string(i) + "]", mg);
+            //core::SaveToDisk("./cache/test_view.RLGraph.RebuildOneView.mg[" + std::to_string(i) + "]", mg);
             std::vector<core::MGPatch> naivePatches =
                 core::SplitMixedGraphIntoPatches(mg, vanishingPoints);
             largestPatch = *std::max_element(naivePatches.begin(), naivePatches.end(),
@@ -416,7 +416,7 @@ TEST(MixedGraph, RebuildOnOnePanorama){
 
 
 
-TEST(MixedGraph, RebuildOneImage){
+TEST(RLGraph, RebuildOneImage){
 
     core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room.png");
     core::ResizeToMakeWidthUnder(im, 800);
@@ -425,11 +425,11 @@ TEST(MixedGraph, RebuildOneImage){
     std::vector<core::Vec3> vanishingPoints;
 
     core::MGPatch largestPatch;
-    core::MixedGraph mg;
+    core::RLGraph mg;
     {
         core::Clock clock("view");
         mg = core::BuildMixedGraph({ view }, vanishingPoints);
-        //core::SaveToDisk("./cache/test_view.MixedGraph.RebuildOneView.mg[" + std::to_string(i) + "]", mg);
+        //core::SaveToDisk("./cache/test_view.RLGraph.RebuildOneView.mg[" + std::to_string(i) + "]", mg);
         std::vector<core::MGPatch> naivePatches =
             core::SplitMixedGraphIntoPatches(mg, vanishingPoints);
         largestPatch = *std::max_element(naivePatches.begin(), naivePatches.end(),

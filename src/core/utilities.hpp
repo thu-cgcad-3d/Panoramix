@@ -533,6 +533,10 @@ namespace panoramix {
 
 
         // for vectors
+        template <class T>
+        inline Vec<T, 2> PerpendicularDirection(const Vec<T, 2> & d){
+            return Vec<T, 2>(-d(1), d(0));
+        }
 
         template <class T>
         inline std::pair<Vec<T, 3>, Vec<T, 3>> ProposeXYDirectionsFromZDirection(const Vec<T, 3> & z) {

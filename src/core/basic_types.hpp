@@ -211,8 +211,8 @@ namespace panoramix {
             };
         }
         template <class T>
-        inline Ray<T, 2> InfiniteLine2FromCoeffs(const Vec<T, 3> & c) {
-            T d = Square(c[0]) + Square(c[1]);
+        inline Ray<T, 2> Ray2FromCoeffs(const Vec<T, 3> & c) {
+            T d = c[0] * c[0] + c[1] * c[1];
             Point<T, 2> anchor(-c[2] * c[0] / d, -c[2] * c[1] / d);
             Vec<T, 2> dir(c[1], -c[0]);
             return Ray<T, 2>(anchor, dir);
