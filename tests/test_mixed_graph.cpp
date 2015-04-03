@@ -44,7 +44,7 @@ TEST(MixedGraph, Basic){
     matlab.GetVariable("image", image, true);
 
     // get gc
-    Imaged7 gc;
+    Image7d gc;
     matlab.GetVariable("gc", gc, true);
 
     // get depth
@@ -58,7 +58,8 @@ TEST(MixedGraph, Basic){
     mg.installOcclusionResponce(indices, occscore);
     mg.installGCResponse(gc);
 
-    mg.showSegmentations();
+    mg.showBoundaryJunctions();
+    mg.showDetachableRegionLineConnections();
     mg.showOcclusionResponse();
     
 }

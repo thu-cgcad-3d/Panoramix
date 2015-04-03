@@ -10,7 +10,7 @@ namespace panoramix {
         using namespace panoramix::core;
 
         using Vec7 = Vec<double, 7>;
-        using Imaged7 = ImageOfType<Vec7>;
+        using Image7d = ImageOfType<Vec7>;
 
 
         struct BoundaryJunction {
@@ -36,13 +36,16 @@ namespace panoramix {
                 const Point2 & cameraCenterPosition, 
                 double cameraFocal);
 
-            void installGCResponse(const Imaged7 & gc);
+            void installGCResponse(const Image7d & gc);
             void installOcclusionResponce(const std::vector<std::vector<PixelLoc>> & edges, 
                 const std::vector<double> & scores);
             void installOcclusionResponce(const std::vector<std::vector<int>> & edges,
                 const std::vector<double> & scores);
             
+            void showGCResponse() const;
             void showOcclusionResponse() const;
+            void showBoundaryJunctions() const;
+            void showDetachableRegionLineConnections() const;
 
             void showSegmentations() const;
             void showVanishingPointsAndLines() const;

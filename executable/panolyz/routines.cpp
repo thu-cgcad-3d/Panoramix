@@ -93,7 +93,7 @@ namespace panolyz {
             gcs[i][core::GeometricContextLabel::Front],
             cv::max(gcs[i][core::GeometricContextLabel::Ceiling],  gcs[i][core::GeometricContextLabel::Floor])
             };
-            core::Image gc = core::Imaged3::zeros(channels.front().size());
+            core::Image gc = core::Image3d::zeros(channels.front().size());
             cv::mixChannels(channels, gc, {0, 0, 1, 1, 2, 2});
             gui::Visualizer2D(gc) << gui::manip2d::Show();
             }*/
@@ -264,7 +264,7 @@ namespace panolyz {
             gcs[i][core::GeometricContextLabel::Front],
             cv::max(gcs[i][core::GeometricContextLabel::Ceiling],  gcs[i][core::GeometricContextLabel::Floor])
             };
-            core::Image gc = core::Imaged3::zeros(channels.front().size());
+            core::Image gc = core::Image3d::zeros(channels.front().size());
             cv::mixChannels(channels, gc, {0, 0, 1, 1, 2, 2});
             gui::Visualizer2D(gc) << gui::manip2d::Show();
             }*/

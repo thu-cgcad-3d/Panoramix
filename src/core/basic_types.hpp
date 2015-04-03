@@ -356,15 +356,15 @@ namespace panoramix {
         using Image = cv::Mat;
         template <class T> using ImageOfType = cv::Mat_<T> ;
         using Imageb = ImageOfType<bool>;
-        using Imageb3 = ImageOfType<Vec<bool, 3>>;
+        using Image3b = ImageOfType<Vec<bool, 3>>;
         using Imageub = ImageOfType<uint8_t>;
-        using Imageub3 = ImageOfType<Vec<uint8_t, 3>>;
+        using Image3ub = ImageOfType<Vec<uint8_t, 3>>;
         using Imagei = ImageOfType<int>;
-        using Imagei3 = ImageOfType<Vec<int, 3>>;
+        using Image3i = ImageOfType<Vec<int, 3>>;
         using Imagef = ImageOfType<float>;
-        using Imagef3 = ImageOfType<Vec<float, 3>>;
+        using Image3f = ImageOfType<Vec<float, 3>>;
         using Imaged = ImageOfType<double>;
-        using Imaged3 = ImageOfType<Vec<double, 3>>;
+        using Image3d = ImageOfType<Vec<double, 3>>;
 
 
         namespace {

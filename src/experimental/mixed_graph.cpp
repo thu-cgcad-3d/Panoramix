@@ -1,3 +1,4 @@
+#include "../core/algorithms.hpp"
 #include "../core/utilities.hpp"
 #include "../core/containers.hpp"
 #include "../ml/factor_graph.hpp"
@@ -15,7 +16,7 @@ namespace panoramix {
 
             core::LineSegmentExtractor lineExtractor;
             lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
-            lines = core::ClassifyEachAs(lineExtractor(image, 2), -1);
+            lines = core::ClassifyEachAs(lineExtractor(image, 1), -1);
 
             view.camera = core::PerspectiveCamera(image.cols, image.rows, cameraCenterPosition, cameraFocal,
                 core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1));
@@ -88,7 +89,7 @@ namespace panoramix {
 
         }
 
-        void MixedGraph::installGCResponse(const Imaged7 & gc){
+        void MixedGraph::installGCResponse(const Image7d & gc){
             assert(gc.size() == regions.size());
             gcResponse = regionLineGraph.createComponentTable<RegionData>(Vec7());
             auto regionAreas = regionLineGraph.createComponentTable<RegionData>(0.0);
@@ -176,6 +177,10 @@ namespace panoramix {
             installOcclusionResponce(pixels, scores);
         }
 
+        void MixedGraph::showGCResponse() const{
+            
+        }
+
         void MixedGraph::showOcclusionResponse() const{
             gui::Visualizer2D vis(view.image);
             for (auto & b : regionLineGraph.constraints<RegionBoundaryData>()){
@@ -193,6 +198,61 @@ namespace panoramix {
             vis << gui::manip2d::Show();
         }
 
+        void MixedGraph::showBoundaryJunctions() const{
+            int regionsNum = MinMaxValOfImage(regions).second + 1;
+            auto ctable = gui::CreateRandomColorTableWithSize(regionsNum);
+            auto segs = ctable(regions);
+            std::vector<Point2> ps;
+            for (auto & j : boundaryJunctions){
+                for (auto & d : j.positions){
+                    ps.push_back(view.camera.screenProjection(d));
+                }
+            }
+            gui::Visualizer2D(segs)
+                << gui::manip2d::SetColor(gui::Blue)
+                << ps
+                << gui::manip2d::Show();
+        }
+
+        void MixedGraph::showDetachableRegionLineConnections() const{
+            int regionsNum = MinMaxValOfImage(regions).second + 1;
+            auto ctable = gui::CreateRandomColorTableWithSize(regionsNum);
+            auto segs = ctable(regions);
+            std::vector<Line2> lines;
+            lines.reserve(regionLineGraph.internalComponents<LineData>().size());
+            for (auto & l : regionLineGraph.components<LineData>()){
+                Line2 line(view.camera.screenProjection(l.data.line.first), view.camera.screenProjection(l.data.line.second));
+                lines.push_back(line);
+            }
+            std::vector<Line2> detachableConnections, undetachableConnections;
+            for (auto & rl : regionLineGraph.constraints<RegionLineConnectionData>()){
+                auto rh = regionLineGraph.topo(rl.topo.hd).component<0>();
+                auto lh = regionLineGraph.topo(rl.topo.hd).component<1>();
+                auto & rcenter = regionLineGraph.data(rh).normalizedCenter;
+                Point2 rcenterProj = view.camera.screenProjection(rcenter);
+                std::vector<Point2> anchorProjs;
+                anchorProjs.reserve(rl.data.normalizedAnchors.size());
+                for (auto & a : rl.data.normalizedAnchors){
+                    anchorProjs.push_back(view.camera.screenProjection(a));
+                }
+                Point2 last = anchorProjs.front();
+                for (int i = 1; i < anchorProjs.size(); i++){
+                    double dist = core::Distance(last, anchorProjs[i]);
+                    if (dist < 5) {
+                        continue;
+                    }
+                    (rl.data.detachable ? detachableConnections : undetachableConnections).emplace_back(rcenterProj, anchorProjs[i]);
+                    last = anchorProjs[i];
+                }
+            }
+            gui::Visualizer2D(segs)               
+                << gui::manip2d::SetThickness(1) << gui::manip2d::SetColor(gui::Black) << detachableConnections
+                << gui::manip2d::SetColor(gui::White) << undetachableConnections
+                << gui::manip2d::SetThickness(1) << gui::manip2d::SetColor(gui::Yellow) << lines
+                << gui::manip2d::Show();
+        }
+
+
         void MixedGraph::showSegmentations() const{
             int regionsNum = MinMaxValOfImage(regions).second + 1;
             auto ctable = gui::CreateRandomColorTableWithSize(regionsNum);
@@ -208,14 +268,289 @@ namespace panoramix {
 
         }
 
-        HandledTable<RegionHandle, Plane3> MixedGraph::solve() const {
+        namespace {
 
-            HandledTable<RegionHandle, Plane3> results;
+            //int ToRegionOrientationFlag(int orientationClaz, int orientatinNotClaz, int vpnum, int vertVPId){
+            //    assert(orientationClaz >= -1 && orientationClaz < vpnum);
+            //    assert(orientatinNotClaz >= -1 && orientatinNotClaz < vpnum);
+            //    if (orientationClaz != -1){
+            //        return orientationClaz;
+            //    }
+            //    else if(orientatinNotClaz != -1){
+            //        assert(orientatinNotClaz == vertVPid); 
+            //        IMPROVABLE_HERE("donnot support constraints that are along other directions crrently");
+            //        return vpnum;
+            //    }
+            //    else{
+            //        return vpnum + 1;
+            //    }
+            //}
+
+            //void FromRegionOrientationFlag(int flag, int & orientationClaz, int & orientatinNotClaz, int vpnum, int vertVPId) {
+            //    assert(flag >= 0 && flag <= vpnum + 1);
+            //    if (flag < vpnum){
+            //        orientationClaz = flag;
+            //        orientatinNotClaz = -1;
+            //    }
+            //    else if (flag == vpnum){
+            //        orientationClaz = -1;
+            //        orientatinNotClaz = vertVPId;
+            //    }
+            //    else if (flag == vpnum + 1){
+            //        orientationClaz = orientatinNotClaz = -1;
+            //    }
+            //}
+
+            //inline int ToLineOrientationFlag(int orientationClaz){
+            //    return orientationClaz + 1;
+            //}
+
+            //inline void FromLineOrientationFlag(int flag, int & orientationClaz){
+            //    orientationClaz = flag - 1;
+            //}
+
+        }
+
+        HandledTable<RegionHandle, Plane3> MixedGraph::solve() const {           
+            RLGraphPropertyTable props = core::MakeRLGraphPropertyTable(regionLineGraph, vps);
+
+            size_t vpnum = vps.size();
+            int vertVPId = GetVerticalDirectionId(vps);            
+
+            // some precalculated data
+            auto regionIntersectWithVPs = regionLineGraph.createComponentTable<RegionData, int>(-1);
+            for (int i = 0; i < vpnum; i++){
+                for (auto & p : { view.camera.screenProjection(vps[i]), view.camera.screenProjection(-vps[i]) }){
+                    PixelLoc pixel = ToPixelLoc(p);
+                    int s = 1;
+                    for (int x = -s; x <= s; x++){
+                        for (int y = -s; y <= s; y++){
+                            PixelLoc pp(pixel.x + x, pixel.y + y);
+                            if (Contains(regions, pixel)){
+                                regionIntersectWithVPs[regionIds2Handles[regions(pp)]] = i;
+                            }
+                        }
+                    }                   
+                }
+            }
+            auto regionIntersectWithHorizon = regionLineGraph.createComponentTable<RegionData, bool>(false);
+            for (auto & r : regionLineGraph.components<RegionData>()){
+                auto h = r.topo.hd;
+                auto & contours = r.data.normalizedContours;
+                bool intersected = false;
+                for (auto & cs : r.data.normalizedContours){
+                    if (intersected)
+                        break;
+                    for (auto & c : cs){
+                        double angle = M_PI_2 - AngleBetweenUndirectedVectors(c, vps[vertVPId]);
+                        if (angle <= M_PI / 100.0){
+                            intersected = true;
+                            break;
+                        }
+                    }
+                }
+                if (intersected){
+                    regionIntersectWithHorizon[h] = true;
+                }
+            }
 
 
 
+            size_t regionNum = regionLineGraph.internalComponents<RegionData>().size();
+            size_t lineNum = regionLineGraph.internalComponents<LineData>().size();
+            size_t boundaryNum = regionLineGraph.internalConstraints<RegionBoundaryData>().size();
+            size_t rlConNum = regionLineGraph.internalConstraints<RegionLineConnectionData>().size();
+            size_t llConNum = regionLineGraph.internalConstraints<LineRelationData>().size();
+            size_t bjuncNum = boundaryJunctions.size();
+
+            // create factor graph
+            ml::FactorGraph fg;
+            fg.reserveVarCategories(5);
+            fg.reserveVars(regionNum + lineNum + boundaryNum + rlConNum + llConNum);
+
+            /// add vars
+
+            // add region orientation constraint flags
+            auto regionOrientationVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 3, 0.5 }); // 3: {no constraints, vertical, horizontal}
+            auto regionVhs = regionLineGraph.createComponentTable<RegionData, ml::FactorGraph::VarHandle>();
+            for (auto & r : regionLineGraph.components<RegionData>()){
+                regionVhs[r.topo.hd] = fg.addVar(regionOrientationVc);
+            }
+
+            // add line orientation constraint flags
+            auto lineOrientationVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 }); // 2: {no constraints, oriented}
+            auto lineVhs = regionLineGraph.createComponentTable<LineData, ml::FactorGraph::VarHandle>();
+            for (auto & l : regionLineGraph.components<LineData>()){
+                lineVhs[l.topo.hd] = fg.addVar(lineOrientationVc);
+            }
+            
+            // add boundary flags
+            auto boundaryOcclusionVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 });
+            auto boundaryVhs = regionLineGraph.createConstraintTable<RegionBoundaryData, ml::FactorGraph::VarHandle>();
+            for (auto & b : regionLineGraph.constraints<RegionBoundaryData>()){
+                boundaryVhs[b.topo.hd] = fg.addVar(boundaryOcclusionVc);
+            }
+
+            // add rl connection flags
+            auto rlConVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 });
+            auto rlConVhs = regionLineGraph.createConstraintTable<RegionLineConnectionData, ml::FactorGraph::VarHandle>();
+            for (auto & c : regionLineGraph.constraints<RegionLineConnectionData>()){
+                rlConVhs[c.topo.hd] = fg.addVar(rlConVc);
+            }
+
+            // add ll connection flags
+            auto llConVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 });
+            auto llConVhs = regionLineGraph.createConstraintTable<LineRelationData, ml::FactorGraph::VarHandle>();
+            for (auto & r : regionLineGraph.constraints<LineRelationData>()){
+                llConVhs[r.topo.hd] = fg.addVar(llConVc);
+            }
+
+            /// add factors
+
+            // add region orientation unary cost
+            for (auto & r : regionLineGraph.components<RegionData>()){
+                auto rh = r.topo.hd;
+                bool intersectWithHorizon = regionIntersectWithHorizon[rh];
+                bool intersectWithVertical = regionIntersectWithVPs[rh] == vertVPId;
+                auto regionOrientationFc =
+                    fg.addFactorCategory(
+                    ml::FactorGraph::FactorCategory{ [this, rh, &props, vertVPId,
+                    intersectWithHorizon, intersectWithVertical](const int * labels) -> double {
+
+                    int rolabel = labels[0];
+                    
+                    // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
+                    const Vec7 & gcResp = gcResponse[rh]; 
+
+                    double gcVertResp = std::max({ gcResp[0], gcResp[1], gcResp[2] });
+                    double gcHoriResp = std::max({ gcResp[3], gcResp[4] });
+                    assert(IsBetween(gcVertResp, 0.0, 1.1));
+                    assert(IsBetween(gcHoriResp, 0.0, 1.1));
+                    
+                    if (rolabel == 0){ // no constraints
+                        return 0.5;
+                    }
+                    else if (rolabel == 1){ // vertical
+                        // consistency with gcVertResp
+                        // intersect horizon ?
+                        // consistency with current props
+                        Plane3 plane = Instance(regionLineGraph, props, rh);
+                        bool maybeVertical = M_PI_2 - AngleBetweenUndirectedVectors(plane.normal, vps[vertVPId]) < M_PI_4;
+                        // todo
+                        return (1.0 - gcVertResp) * (intersectWithHorizon ? 0.1 : 1.0) * (maybeVertical ? 1.0 : 2.0);
+                    }
+                    else if (rolabel == 2){ // horizontal
+                        // consistency with gcHoriResp
+                        // todo
+                        Plane3 plane = Instance(regionLineGraph, props, rh);
+                        bool maybeHorizontal = AngleBetweenUndirectedVectors(plane.normal, vps[vertVPId]) < M_PI_4;
+                        // todo
+                        return (1.0 - gcHoriResp) * (intersectWithVertical ? 0.1 : 1.0) * (maybeHorizontal ? 1.0 : 2.0);
+                    }
+
+                    return 1e5;
+                }, 0.5 });
+                fg.addFactor({ regionVhs[rh] }, regionOrientationFc);
+            }
+
+            // add line orientation unary cost
+            for (auto & l : regionLineGraph.components<LineData>()){
+                auto lh = l.topo.hd;
+                auto lineOrientationFc = fg.addFactorCategory(
+                    ml::FactorGraph::FactorCategory{ [this, lh, &props](const int * labels) -> double{
+                    int lolabel = labels[0];
+                    
+                    auto & ld = regionLineGraph.data(lh);
+                    
+                    if (lolabel == 0){ // no constraints
+                        // todo
+                    }
+                    else if (lolabel == 1){ // abey the orientation class
+                        // todo
+                    }
+
+                    return 1e5;
+                }, 0.5 });
+                fg.addFactor({ lineVhs[lh] }, lineOrientationFc);
+            }
+
+            // add boundary flag unary cost
+            for (auto & b : regionLineGraph.constraints<RegionBoundaryData>()){
+                auto bh = b.topo.hd;
+                auto boundaryFlagFc = fg.addFactorCategory(
+                    ml::FactorGraph::FactorCategory{ [this, bh](const int * labels) -> double{
+                    const auto & occResp = occlusionResponse[bh];
+                    // todo
+                    return 0.0;
+                }, 0.5 });
+                fg.addFactor({ boundaryVhs[bh] }, boundaryFlagFc);
+            }
 
 
+            // add rl connection flag unary cost
+            for (auto & c : regionLineGraph.constraints<RegionLineConnectionData>()){
+                auto ch = c.topo.hd;
+                auto rlConFlagFc = fg.addFactorCategory(
+                    ml::FactorGraph::FactorCategory{ [this, ch](const int * labels) -> double{
+                    // todo
+                    return 0.0;
+                }, 0.5 });
+                fg.addFactor({ rlConVhs[ch] }, rlConFlagFc);
+            }
+
+            // add line-line connection flag unary cost
+            for (auto & r : regionLineGraph.constraints<LineRelationData>()){
+                auto rh = r.topo.hd;
+                auto linelineRelFlagFc = fg.addFactorCategory(
+                    ml::FactorGraph::FactorCategory{ [this, rh](const int * labels) -> double{
+                    const auto & rd = regionLineGraph.data(rh);
+                    // junctionweight, type ...
+                    // todo
+                    return 0.0;
+                }, 0.5 });
+                fg.addFactor({ llConVhs[rh] }, linelineRelFlagFc);
+            }
+
+
+            // add lineOrientation-regionOrientation-lineRegionConnectionFlag consistency cost
+            auto loRoLRCConsistencyCostFc = fg.addFactorCategory(
+                ml::FactorGraph::FactorCategory{ [](const int * labels) -> double{
+
+                // todo
+                return 0.0;
+            }, 0.5 });
+            for (auto & c : regionLineGraph.constraints<RegionLineConnectionData>()){
+                auto ch = c.topo.hd;
+                RegionHandle rh = regionLineGraph.topo(ch).component<0>();
+                LineHandle lh = regionLineGraph.topo(ch).component<1>();
+                fg.addFactor({ regionVhs[rh], lineVhs[lh], rlConVhs[ch] }, loRoLRCConsistencyCostFc);
+            }
+
+
+            // add boundary junction consistency cost
+            auto boundaryJunctionConsistencyCostFc = fg.addFactorCategory(
+                ml::FactorGraph::FactorCategory{ [](const int * labels) -> double{
+                
+                // todo
+                return 0.0;
+            }, 0.5 });
+            for (auto & bj : boundaryJunctions){
+                assert(bj.bhs.size() >= 3);
+                std::vector<RegionBoundaryHandle> bhs(bj.bhs.begin(), bj.bhs.end());
+                for (int i = 0; i < bhs.size(); i++){
+                    for (int j = i + 1; j < bhs.size(); j++){
+                        for (int k = j + 1; k < bhs.size(); k++){
+                            fg.addFactor({ boundaryVhs[bhs[i]], boundaryVhs[bhs[j]], boundaryVhs[bhs[k]] },
+                                boundaryJunctionConsistencyCostFc);
+                        }
+                    }
+                }
+            }
+
+            
+
+
+            auto results = regionLineGraph.createComponentTable<RegionData, Plane3>();
             return results;
 
         }

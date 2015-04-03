@@ -29,6 +29,25 @@ namespace panoramix {
             : IsIteratorOfType<decltype(std::begin(std::declval<ContainerT>())), T> {
         };
 
+
+        // range
+        template <class IteratorT>
+        struct Range {
+            IteratorT b, e;
+            Range(IteratorT bb, IteratorT ee) : b(bb), e(ee) {}
+            IteratorT begin() const { return b; }
+            IteratorT end() const { return e; }
+            
+            template <class FunT>
+            inline void foreach(FunT && fun) const {
+                IteratorT i = b;
+                while (i != e){
+                    fun(*i);
+                    ++i;
+                }
+            }
+        };
+
  
         // element of container MUST support PredT(ele) -> bool
         // ConditionalIterator will automatically skip elements which DO NOT satisfy PredT in iteration

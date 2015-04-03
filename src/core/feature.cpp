@@ -708,7 +708,19 @@ namespace panoramix {
 
         }
 
-
+        int GetVerticalDirectionId(const std::vector<Vec3> & directions,
+            const Vec3 & verticalSeed){
+            int vid = -1;
+            double minAngle = M_PI;
+            for (int i = 0; i < directions.size(); i++){
+                double angle = AngleBetweenUndirectedVectors(directions[i], verticalSeed);
+                if (angle < minAngle){
+                    vid = i;
+                    minAngle = angle;
+                }
+            }
+            return vid;
+        }
 
 
 

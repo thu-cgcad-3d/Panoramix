@@ -85,6 +85,9 @@ namespace panoramix {
             int longitudeDivideNum = 1000, int latitudeDivideNum = 500, 
             bool allowMoreThan2HorizontalVPs = false, const Vec3 & verticalSeed = Vec3(0, 0, 1));
 
+        int GetVerticalDirectionId(const std::vector<Vec3> & directions,
+            const Vec3 & verticalSeed = Vec3(0, 0, 1));
+
         // compute pp and focal from 3 orthogonal vps
         std::pair<Point2, double> ComputePrinciplePointAndFocalLength(const Point2 & vp1, const Point2 & vp2, const Point2 & vp3);
 

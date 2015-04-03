@@ -174,7 +174,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Segmentation> & s
     return CreateImageViewer(&segs, [](DataOfType<Segmentation> & segs){        
         segs.lockForRead();
         auto colorTable = gui::CreateRandomColorTableWithSize(segs.content.segmentsNum);
-        core::Imageub3 im = colorTable(segs.content.segmentation);
+        core::Image3ub im = colorTable(segs.content.segmentation);
         segs.unlock();
         return gui::MakeQImage(im);    
     }, parent);
@@ -294,7 +294,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
             }
 
             // render
-            core::Imageub3 rendered = core::Imageub3::zeros(rec.content.segmentation.size());
+            core::Image3ub rendered = core::Image3ub::zeros(rec.content.segmentation.size());
             gui::ColorTable rgb = { gui::ColorTag::Red, gui::ColorTag::Green, gui::ColorTag::Blue };
             gui::ColorTable ymc = { gui::ColorTag::Yellow, gui::ColorTag::Magenta, gui::ColorTag::Cyan };
             double alpha = 0.3;

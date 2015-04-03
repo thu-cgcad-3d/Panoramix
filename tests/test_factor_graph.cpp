@@ -34,7 +34,7 @@ TEST(FactorGraph, Denoise){
 
     auto im = cv::imread(ProjectDataDirStrings::BPTests + "/horse.jpg");
     core::ResizeToMakeHeightUnder(im, 200);
-    core::Imaged3 noised(im.size(), core::Vec3());
+    core::Image3d noised(im.size(), core::Vec3());
     for (auto it = noised.begin(); it != noised.end(); ++it){
         gui::Color color = gui::ColorFromImage(im, it.pos());
         core::Vec3 noise;
@@ -114,7 +114,7 @@ TEST(FactorGraph, Denoise){
         std::cout << "#" << epoch << "  energy: " << e << std::endl;
         return true;
     });
-    core::Imaged3 recovered(noised.size());
+    core::Image3d recovered(noised.size());
     for (auto it = recovered.begin(); it != recovered.end(); ++it){
         auto vh = vhs[core::EncodeSubscriptToIndex(it.pos(), noised.size())];
         int label = results[vh];

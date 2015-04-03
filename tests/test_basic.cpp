@@ -64,7 +64,7 @@ TEST(BasicType, VecCast) {
         ASSERT_EQ(i, 0);
     }
 
-    core::Imaged3 im3(100, 100, core::Vec3(1, 2, 3));
+    core::Image3d im3(100, 100, core::Vec3(1, 2, 3));
     auto imi3 = core::vec_cast<int>(im3);
     auto imd3 = core::vec_cast<double>(im3);
 

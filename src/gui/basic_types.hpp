@@ -118,6 +118,7 @@ namespace panoramix {
         Color ColorFromHSV(double h, double s, double v, double a = 1.0);
         Color RandomColor();
         inline Color ColorFromImage(const core::Image & im, core::PixelLoc p) { return Color(im.ptr(p.y, p.x), im.type()); }
+
         
 
         // line style
@@ -178,7 +179,7 @@ namespace panoramix {
             Color & operator[](int claz) { return claz < 0 ? _exceptionalColor : _colors[claz]; }
             bool empty() const { return _colors.empty(); }
 
-            core::Imageub3 operator()(const core::Imagei & indexIm) const;
+            core::Image3ub operator()(const core::Imagei & indexIm) const;
 
             const Color & roundedAt(int claz) const { return claz < 0 ? _exceptionalColor : _colors[claz % _colors.size()]; }
 

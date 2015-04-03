@@ -122,6 +122,8 @@ namespace panoramix {
         }
 
 
+
+
         namespace {
 
             using ColorTableInit = std::pair<std::vector<Color>, Color>;
@@ -266,8 +268,8 @@ namespace panoramix {
         //    _exceptionalColor = exceptColor;
         //}
 
-        core::Imageub3 ColorTable::operator()(const core::Imagei & indexIm) const{
-            core::Imageub3 im(indexIm.size());
+        core::Image3ub ColorTable::operator()(const core::Imagei & indexIm) const{
+            core::Image3ub im(indexIm.size());
             for (auto i = indexIm.begin(); i != indexIm.end(); ++i){
                 core::Vec3b color = (*this)[*i];
                 im(i.pos()) = color;
