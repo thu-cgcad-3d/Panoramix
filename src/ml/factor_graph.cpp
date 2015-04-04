@@ -1,6 +1,7 @@
 #include <Eigen/Dense>
 #include <Eigen/StdVector>
 
+#include "../core/utilities.hpp"
 #include "../core/cons_graph.hpp"
 #include "factor_graph.hpp"
  
@@ -170,6 +171,7 @@ namespace panoramix {
                         assert(oppose.valid());
                         v2f.data.values = v2f.data.values * fdata.c_alpha / c_i_hats[messages.data(vh).h]
                             - messages.data(oppose).values;
+                        assert(!v2f.data.values.hasNaN());
                     }
 
                     // factor -> var
@@ -202,19 +204,24 @@ namespace panoramix {
                                 double & outValue = messages.data(f2vmsghs[i]).values[idx[i]];
                                 // theta
                                 double theta = costFun(idx.data(), idx.size());
+                                assert(!IsInfOrNaN(theta));
+                                assert(theta >= 0);
+
                                 // sum of other input _varCategories
                                 double sumOfOtherVars = 0.0;
                                 for (int j = 0; j < dims.size(); j++){
                                     if (j == i) continue;
                                     sumOfOtherVars += messages.data(v2fmsghs[j]).values[idx[j]];
                                 }
-
+                                assert(!IsInfOrNaN(sumOfOtherVars));
                                 double score = theta + sumOfOtherVars;
+                                assert(!IsInfOrNaN(score));
+                                assert(score < std::numeric_limits<double>::max());
                                 if (score < outValue){
                                     outValue = score;
                                 }
                             }
-
+                           
                             // add idx
                             idx[0]++;
                             int k = 0;
@@ -227,6 +234,10 @@ namespace panoramix {
                                 break;
                             }
                         }
+                        
+                        for (auto & f2v : f2vmsghs){
+                            assert(messages.data(f2v).values.maxCoeff() < std::numeric_limits<double>::max());
+                        }
                     }
                 }
 
@@ -237,7 +248,8 @@ namespace panoramix {
                 }
                 for (auto & f2v : messages.constraints<F2VMessage>()){
                     MGVHandle vh = f2v.topo.component<1>();
-                    varMarginals[messages.data(vh).h] += f2v.data.values;                    
+                    varMarginals[messages.data(vh).h] += f2v.data.values; 
+                    assert(varMarginals[messages.data(vh).h].maxCoeff() < std::numeric_limits<double>::max());
                 }
                 // get result                
                 for (auto & v : _graph.elements<0>()){
@@ -245,16 +257,18 @@ namespace panoramix {
                     double curCost = std::numeric_limits<double>::max();
                     const VectorXd & marginal = varMarginals[v.topo.hd];
                     for (int i = 0; i < marginal.size(); i++){
+                        assert(!core::IsInfOrNaN(marginal[i]));
                         if (marginal[i] < curCost){
                             label = i;
                             curCost = marginal[i];
                         }
                     }
+                    assert(label != -1);
                     results[v.topo.hd] = label;
                 }
 
                 double e = energy(results);
-                if (callback && !callback(epoch, e, e - lastE)){
+                if (callback && !callback(epoch, e, e - lastE, results)){
                     break;
                 }
                 lastE = e;
@@ -263,6 +277,12 @@ namespace panoramix {
             return results;
         }
 
+
+        FactorGraph::ResultTable FactorGraph::solveWithSimpleCallback(int maxEpoch, int innerLoopNum, const SimpleCallbackFunction & callback) const {
+            return solve(maxEpoch, innerLoopNum, [&callback](int epoch, double energy, double denergy, const ResultTable & results) -> bool {
+                return callback(epoch, energy);
+            });
+        }
 
     }
 }

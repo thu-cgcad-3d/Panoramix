@@ -20,9 +20,9 @@ TEST(FactorGraph, Simple){
     auto vh = fg.addVar(vcid);
     auto fh = fg.addFactor({ vh }, fcid);
 
-    auto results = fg.solve(50, 10, [](int epoch, double energy, double denergy){
+    auto results = fg.solveWithSimpleCallback(50, 10, [](int epoch, double energy){
         std::cout << "energy: " << energy << std::endl; 
-        return denergy > - 1e-5; 
+        return true; 
     });
 
     ASSERT(results[vh] == 1);
@@ -110,7 +110,7 @@ TEST(FactorGraph, Denoise){
         }
     }
 
-    auto results = fg.solve(100, 3, [](int epoch, double e, double de){
+    auto results = fg.solveWithSimpleCallback(100, 3, [](int epoch, double e){
         std::cout << "#" << epoch << "  energy: " << e << std::endl;
         return true;
     });

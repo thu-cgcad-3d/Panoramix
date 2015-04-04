@@ -60,8 +60,10 @@ TEST(MixedGraph, Basic){
     mg.installOcclusionResponce(indices, occscore);
     mg.installGCResponse(gc);
 
-    mg.showBoundaryJunctions();
-    mg.showDetachableRegionLineConnections();
-    mg.showOcclusionResponse();
+    //mg.showBoundaryJunctions();
+    //mg.showDetachableRegionLineConnections();
+    //mg.showOcclusionResponse();
+
+    mg.solve();
     
 }

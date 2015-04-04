@@ -2,6 +2,10 @@
 #define PANORAMIX_CORE_META_HPP
  
 #include <tuple>
+#include <array>
+#include <utility>
+#include <vector>
+#include <deque>
 
 namespace panoramix {
     namespace core {
@@ -138,7 +142,37 @@ namespace panoramix {
 
 
 
+        template <class T>
+        struct IsLikeTuple : no {};
 
+        template <class ...T>
+        struct IsLikeTuple<std::tuple<T...>> : yes{};
+
+        template <class T, size_t N>
+        struct IsLikeTuple<std::array<T, N>> : yes{};
+
+        template <class T1, class T2>
+        struct IsLikeTuple<std::pair<T1, T2>> : yes{};
+
+        template <size_t I, class TupleLikeT, class = std::enable_if_t<IsLikeTuple<std::decay_t<TupleLikeT>>::value>>
+        inline auto Get(TupleLikeT && t) -> decltype(std::get<I>(t)) {
+            return std::get<I>(t);
+        }
+
+        template <size_t I, class T, class AllocT>
+        inline T & Get(std::vector<T, AllocT> & v) { return v[I]; }
+
+        template <size_t I, class T, class AllocT>
+        inline const T & Get(const std::vector<T, AllocT> & v) { return v[I]; }
+
+        template <size_t I, class T, class AllocT>
+        inline T & Get(std::deque<T, AllocT> & v) { return v[I]; }
+
+        template <size_t I, class T, class AllocT>
+        inline const T & Get(const std::deque<T, AllocT> & v) { return v[I]; }
+
+        template <size_t I, class T>
+        inline const T & Get(std::initializer_list<T> & v) { return *(v.begin() + I); }
 
 
         // determine whether T is a container
@@ -159,6 +193,7 @@ namespace panoramix {
 
         template <class T>
         struct IsContainer : std::integral_constant<bool, IsContainerImp<T>::value> {};
+
 
         // determine whether T can accepts ArgTs as arguments
         namespace {

@@ -167,6 +167,30 @@ namespace panoramix {
             return abs(x) <= sigma ? Square(x / sigma) : 1;
         }
 
+        namespace {
+            template <class T, class ... PairTs>
+            T PiecewiseLinearWithTuple(T x, PairTs... corners);
+            template <class T, class PairT1, class PairT2>
+            inline T PiecewiseLinearWithTuple(T x, PairT1 c1, PairT2 c2){
+                if (x < Get<0>(c1)){
+                    return Get<1>(c1);
+                }
+                else if (x < Get<0>(c2)){
+                    return (Get<1>(c2) -Get<1>(c1)) *
+                        (x - Get<0>(c1)) / (Get<0>(c2) -Get<0>(c1)) +
+                        Get<1>(c1);
+                }
+                else{
+                    return Get<1>(c2);
+                }
+            }
+            template <class T, class PairT, class ... PairTs>
+            inline T PiecewiseLinearWithTuple(T x, PairT c, PairTs ... cs){
+                NOT_IMPLEMENTED_YET();
+            }
+        }
+
+
         // entropy [-factor, 0]
         template <class IteratorT, class T = double>
         inline T EntropyOfRange(IteratorT begin, IteratorT end, const T & factor = 1.0){

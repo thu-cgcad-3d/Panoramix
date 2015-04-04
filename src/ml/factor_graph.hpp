@@ -13,7 +13,6 @@ namespace panoramix {
         class FactorGraph {
         public:
             using CostFunction = std::function<double(const int * varlabels, size_t nvar)>;
-            using CallbackFunction = std::function<bool(int epoch, double energy, double denergy)>;
 
             struct FactorCategory {
                 CostFunction costs;
@@ -30,6 +29,9 @@ namespace panoramix {
             using VarHandle = core::HandleOfTypeAtLevel<Topology, 0>;
             using FactorHandle = core::HandleOfTypeAtLevel<Topology, 1>;
             using ResultTable = core::HandledTable<VarHandle, int>;
+
+            using SimpleCallbackFunction = std::function<bool(int epoch, double energy)>;
+            using CallbackFunction = std::function<bool(int epoch, double energy, double denergy, const ResultTable & results)>;
 
         public:
             void reserveVarCategories(size_t cap) { _varCategories.reserve(cap); }
@@ -65,8 +67,10 @@ namespace panoramix {
             double energy(const ResultTable & labels) const;
 
             // convex belief propagation
-            ResultTable solve(int maxEpoch = 100, int innerLoopNum = 10, 
+            ResultTable solve(int maxEpoch, int innerLoopNum = 10, 
                 const CallbackFunction & callback = nullptr) const;
+            ResultTable solveWithSimpleCallback(int maxEpoch, int innerLoopNum,
+                const SimpleCallbackFunction & callback) const;
 
         private:
             std::vector<VarCategory> _varCategories;
