@@ -31,6 +31,8 @@ namespace panoramix {
             HandledTable<RegionHandle, Vec7> gcResponse;
             HandledTable<RegionBoundaryHandle, double> occlusionResponse;
 
+            std::vector<Imagef> depthCandidates;
+
             MixedGraph() {}
             MixedGraph(const Image & image,
                 const Point2 & cameraCenterPosition, 
