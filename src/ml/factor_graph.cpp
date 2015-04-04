@@ -36,7 +36,7 @@ namespace panoramix {
                 for (int i = 0; i < idx.size(); i++){
                     idx[i] = labels[vhs[i]];
                 }
-                double factorCost = _factorCategories[f.data].costs(idx.data());
+                double factorCost = _factorCategories[f.data].costs(idx.data(), idx.size());
                 e += factorCost;
             }
             return e;
@@ -201,7 +201,7 @@ namespace panoramix {
                                 // others: input _varCategories
                                 double & outValue = messages.data(f2vmsghs[i]).values[idx[i]];
                                 // theta
-                                double theta = costFun(idx.data());
+                                double theta = costFun(idx.data(), idx.size());
                                 // sum of other input _varCategories
                                 double sumOfOtherVars = 0.0;
                                 for (int j = 0; j < dims.size(); j++){

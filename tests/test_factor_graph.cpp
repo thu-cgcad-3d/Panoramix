@@ -12,7 +12,7 @@ TEST(FactorGraph, Simple){
     ml::FactorGraph fg;
     auto vcid = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 1.0 });
     auto fcid = fg.addFactorCategory(ml::FactorGraph::FactorCategory{
-        [](const int * labels) -> double {
+        [](const int * labels, size_t nvars) -> double {
             return labels[0] == 0 ? 1.0 : 0.0;
         }, 1.0
     });
@@ -69,7 +69,7 @@ TEST(FactorGraph, Denoise){
         ml::FactorGraph::FactorCategory fd;
         double distToBackground = core::Distance(background, *it);
         double distToForeground = core::Distance(foreground, *it);
-        fd.costs = [distToBackground, distToForeground](const int * labels) -> double {
+        fd.costs = [distToBackground, distToForeground](const int * labels, size_t nvars) -> double {
             int label = labels[0];
             if (label == 0){ // judge as background
                 return distToBackground;
@@ -87,12 +87,12 @@ TEST(FactorGraph, Denoise){
 
     // append smoothness factor types
     auto smoothnessfcid1 = fg.addFactorCategory(ml::FactorGraph::FactorCategory{
-       [](const int * labels) -> double {
+       [](const int * labels, size_t nvars) -> double {
             return labels[0] == labels[1] ? 0.0 : 0.5;
         }, 1.0
     });
     auto smoothnessfcid2 = fg.addFactorCategory(ml::FactorGraph::FactorCategory{
-        [](const int * labels) -> double {
+        [](const int * labels, size_t nvars) -> double {
             return labels[0] == labels[1] ? 0.0 : 0.3;
         }, 1.0
     });

@@ -1,7 +1,7 @@
 #include "../src/core/basic_types.hpp"
 #include "../src/core/generic_topo.hpp"
 #include "../src/core/homo_graph.hpp"
-#include "../src/ml/dataset.hpp"
+#include "../src/ml/data_set.hpp"
 
 #include <random>
 

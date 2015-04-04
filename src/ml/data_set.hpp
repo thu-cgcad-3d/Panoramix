@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_ML_DATASET_HPP
-#define PANORAMIX_ML_DATASET_HPP
+#ifndef PANORAMIX_ML_DATA_SET_HPP
+#define PANORAMIX_ML_DATA_SET_HPP
 
 #include "../core/basic_types.hpp"
  

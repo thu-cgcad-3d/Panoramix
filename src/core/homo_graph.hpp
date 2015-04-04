@@ -12,9 +12,11 @@ namespace panoramix {
         struct Topo {
             static const int Level = L;
             enum { ChildrenNum = ChildN };
+
             std::array<HandleOfTypeAtLevel<Tag, Level - 1>, ChildN> lowers; // use std::array
             std::set<HandleOfTypeAtLevel<Tag, Level + 1>> uppers;
             HandleOfTypeAtLevel<Tag, Level> hd;
+
             explicit inline Topo(int id = -1) : hd(id){}
             explicit inline Topo(int id, std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> ls) : hd(id) {
                 assert(ls.size() == lowers.size());
@@ -23,21 +25,25 @@ namespace panoramix {
             template <class Archive> inline void serialize(Archive & ar) { ar(lowers, uppers, hd); }
         };
 
+
         // dynamic sized
         template <class Tag, int L>
         struct Topo<Tag, L, Dynamic> {
             static const int Level = L;
             enum { ChildrenNum = Dynamic };
+
             std::vector<HandleOfTypeAtLevel<Tag, Level - 1>> lowers; // use std::array
             std::set<HandleOfTypeAtLevel<Tag, Level + 1>> uppers;
             HandleOfTypeAtLevel<Tag, Level> hd;
+
             explicit inline Topo(int id = -1) : hd(id){}
-            //explicit inline Topo(int id, std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> ls)
-            //    : hd(id), lowers(ls) {}
-            explicit inline Topo(int id, std::vector<HandleOfTypeAtLevel<Tag, Level - 1>> && ls)
-                : hd(id), lowers(std::move(ls)) {}
-            explicit inline Topo(int id, const std::vector<HandleOfTypeAtLevel<Tag, Level - 1>> & ls)
+            explicit inline Topo(int id, std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> ls)
                 : hd(id), lowers(ls) {}
+
+            template <class IteratorT>
+            explicit inline Topo(int id, IteratorT lsBegin, IteratorT lsEnd)
+                : hd(id), lowers(lsBegin, lsEnd) {}
+
             template <class Archive> inline void serialize(Archive & ar) { ar(lowers, uppers, hd); }
         };
 
@@ -47,8 +53,10 @@ namespace panoramix {
         struct Topo<Tag, L, 0> {
             static const int Level = L;
             enum { ChildrenNum = 0 };
+
             std::set<HandleOfTypeAtLevel<Tag, Level + 1>> uppers;
             HandleOfTypeAtLevel<Tag, Level> hd;
+
             explicit inline Topo(int id = -1) : hd(id){}
             explicit inline Topo(int id, std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> ls)
                 : hd(id) {
@@ -196,10 +204,33 @@ namespace panoramix {
             HandleOfTypeAtLevel<Tag, Level> add(std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> depends,
                 typename LayerContentTypeStruct<Level>::type::DataType && d) {
                 int id = static_cast<int>(internalElements<Level>().size());
-                internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, depends),
-                    std::forward<typename LayerContentTypeStruct<Level>::type::DataType>(d), true);
+                internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, depends), std::move(d), true);
                 for (const HandleOfTypeAtLevel<Tag, Level - 1> & lowh : depends) {
                     topo(lowh).uppers.insert(HandleOfTypeAtLevel<Tag, Level>(id));
+                }
+                return HandleOfTypeAtLevel<Tag, Level>(id);
+            }
+
+            template <int Level, class IteratorT>
+            HandleOfTypeAtLevel<Tag, Level> add(IteratorT dependsBegin, IteratorT dependsEnd,
+                const typename LayerContentTypeStruct<Level>::type::DataType & d){
+                int id = static_cast<int>(internalElements<Level>().size());
+                internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, dependsBegin, dependsEnd), d, true);
+                while (dependsBegin != dependsEnd){
+                    topo(*dependsBegin).uppers.insert(HandleOfTypeAtLevel<Tag, Level>(id));
+                    ++dependsBegin;
+                }
+                return HandleOfTypeAtLevel<Tag, Level>(id);
+            }
+
+            template <int Level, class IteratorT>
+            HandleOfTypeAtLevel<Tag, Level> add(IteratorT dependsBegin, IteratorT dependsEnd,
+                typename LayerContentTypeStruct<Level>::type::DataType && d){
+                int id = static_cast<int>(internalElements<Level>().size());
+                internalElements<Level>().emplace_back(typename LayerContentTypeStruct<Level>::type::TopoType(id, dependsBegin, dependsEnd), std::move(d), true);
+                while (dependsBegin != dependsEnd){
+                    topo(*dependsBegin).uppers.insert(HandleOfTypeAtLevel<Tag, Level>(id));
+                    ++dependsBegin;
                 }
                 return HandleOfTypeAtLevel<Tag, Level>(id);
             }

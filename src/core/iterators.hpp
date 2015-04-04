@@ -39,7 +39,7 @@ namespace panoramix {
             IteratorT end() const { return e; }
             
             template <class FunT>
-            inline void foreach(FunT && fun) const {
+            inline void forEach(FunT && fun) const {
                 IteratorT i = b;
                 while (i != e){
                     fun(*i);

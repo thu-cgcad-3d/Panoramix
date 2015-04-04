@@ -1,7 +1,7 @@
 #include "../src/core/feature.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/core/algorithms.hpp"
-#include "../src/ml/dataset.hpp"
+#include "../src/ml/data_set.hpp"
 #include "../src/misc/matlab.hpp"
 #include "../src/experimental/mixed_graph.hpp"
 
@@ -15,6 +15,8 @@ using namespace experimental;
 std::string nyu2dir = "F:\\DataSets\\NYU2\\tinyworkspace\\";
 
 TEST(MixedGraph, Basic){
+
+    static_assert(core::IsIteratorOfType<int*, int>::value, "");
 
     // load test data
     misc::Matlab::CDAndAddAllSubfolders(nyu2dir);
