@@ -3,7 +3,7 @@
 
 #include "../../src/core/basic_types.hpp"
 #include "../../src/core/utilities.hpp"
-#include "../../src/core/rl_graph.hpp"
+#include "../../src/experimental/rl_graph.hpp"
 #include "../../src/gui/qt_glue.hpp"
 
 #include "stepsdag.hpp"
@@ -12,6 +12,12 @@
 
 using namespace panoramix;
 using PanoView = core::View<core::PanoramicCamera>;
+
+namespace panoramix {
+    namespace core{
+        using namespace experimental;
+    }
+}
 
 class PanoRecProject : public Project {
 public:
@@ -148,7 +154,8 @@ public:
             segs.unlock();
 
             core::AttachWallConstriants(mg, props, conf("wall constraints angle").value<double>());
-            core::AttachPrincipleDirectionConstraints(mg, props, conf("principle direction constraints angle").value<double>());            
+            core::AttachPrincipleDirectionConstraints(mg, props, conf("principle direction constraints angle").value<double>());   
+            AttachAnchorToCenterOfLargestRegion(mg, props, 1.0, 10.0);
 
             _confLock.unlock();
 
@@ -177,19 +184,19 @@ public:
             auto & mg = rec.mg;
             auto & props = rec.props;
 
-            core::SolveVariablesUsingInversedDepths(mg, props, false);
+            core::SolveVariablesUsingInversedDepths(mg, props);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
             //core::Visualize(view, mg, props);
             core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02, 0.1);
 
-            core::SolveVariablesUsingInversedDepths(mg, props, false);
+            core::SolveVariablesUsingInversedDepths(mg, props);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
             //core::Visualize(view, mg, props);
             core::AttachFloorAndCeilingConstraints(mg, props, 0.1, 0.6);
 
-            core::SolveVariablesUsingInversedDepths(mg, props, false);
+            core::SolveVariablesUsingInversedDepths(mg, props);
             core::NormalizeVariables(mg, props);
 
             return rec;
@@ -318,6 +325,7 @@ public:
 
             core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 120.0);
             core::AttachWallConstriants(mg, props, M_PI / 100.0);
+            AttachAnchorToCenterOfLargestRegion(mg, props, 1.0, 10.0);
 
             return ReconstructionSetup<core::PerspectiveCamera>{ 
                 perspectiveViews.front(), 

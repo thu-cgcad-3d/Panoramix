@@ -9,10 +9,11 @@ namespace panoramix {
 
         
         // perspective camera
-        class PerspectiveCamera {
+        class GeneralPerspectiveCamera {
         public:
-            explicit PerspectiveCamera(int w = 500, int h = 500,
-                const Point2 & pp = Point2(250, 250), double focal = 250,
+            GeneralPerspectiveCamera() {}
+            explicit GeneralPerspectiveCamera(int w, int h,
+                const Point2 & pp, const Vec2 & focalxy,
                 const Vec3 & eye = Vec3(0, 0, 0),
                 const Vec3 & center = Vec3(1, 0, 0),
                 const Vec3 & up = Vec3(0, 0, -1),
@@ -22,10 +23,9 @@ namespace panoramix {
             inline double screenWidth() const { return _screenW; }
             inline double screenHeight() const { return _screenH; }
             inline const Point2 & principlePoint() const { return _principlePoint; }
-            inline double fovRadians() const { return atan(_screenH / 2.0 / _focal) * 2; }
-            inline double fovAngles() const { return fovRadians() * 180.0 / M_PI; }
             inline double aspect() const { return double(_screenW) / double(_screenH); }
-            inline double focal() const { return _focal; }
+            inline double focalX() const { return _focalxy[0]; }
+            inline double focalY() const { return _focalxy[1]; }
             inline const Vec3 & eye() const { return _eye; }
             inline const Vec3 & center() const { return _center; }
             inline const Vec3 & up() const { return _up; }
@@ -40,12 +40,12 @@ namespace panoramix {
             inline const Mat4 & viewMatrix() const { return _viewMatrix; }
             inline const Mat4 & projectionMatrix() const { return _projectionMatrix; }
             inline const Mat4 & viewProjectionMatrix() const { return _viewProjectionMatrix; }
-            //inline const Mat4 & viewProjectionMatrixInv() const { return _viewProjectionMatrixInv; }
 
             // operations
             void resizeScreen(const Size & sz, bool updateMat = true);
             void setPrinciplePoint(const Point2 & pp, bool updateMat = true);
-            void setFocal(double f, bool updateMat = true);
+            void setFocalX(double fx, bool updateMat = true);
+            void setFocalY(double fy, bool updateMat = true);
             void setEye(const Vec3 & e, bool updateMat = true);
             void setCenter(const Vec3 & c, bool updateMat = true);
             void setUp(const Vec3 & up, bool updateMat = true);
@@ -63,26 +63,43 @@ namespace panoramix {
             void translate(const Vec3 & t, const Sphere3 & target, bool updateMat = true);
             void moveEyeWithCenterFixed(const Vec3 & t, const Sphere3 & target, bool distanceFixed = false, bool updateMat = true);
 
-        private:
+        protected:
             void updateMatrices();
 
-        private:
+        protected:
             double _screenW, _screenH;
             Point2 _principlePoint;
-            double _focal;
+            Vec2 _focalxy;
             double _near, _far;
             Vec3 _eye, _center, _up;
-            Mat4 _viewMatrix, _projectionMatrix, _viewProjectionMatrix/*, _viewProjectionMatrixInv*/;
+            Mat4 _viewMatrix, _projectionMatrix, _viewProjectionMatrix;
 
             template <class Archive> inline void serialize(Archive & ar) {
                 ar(_screenW, _screenH);
                 ar(_principlePoint);
-                ar(_focal, _near, _far);
+                ar(_focalxy, _near, _far);
                 ar(_eye, _center, _up);
-                ar(_viewMatrix, _projectionMatrix, _viewProjectionMatrix/*, _viewProjectionMatrixInv*/);
+                ar(_viewMatrix, _projectionMatrix, _viewProjectionMatrix);
             }
             friend class cereal::access;
         };
+
+
+        class PerspectiveCamera : public GeneralPerspectiveCamera {
+        public:
+            explicit PerspectiveCamera(int w = 500, int h = 500,
+                const Point2 & pp = Point2(250, 250), double focal = 250,
+                const Vec3 & eye = Vec3(0, 0, 0),
+                const Vec3 & center = Vec3(1, 0, 0),
+                const Vec3 & up = Vec3(0, 0, -1),
+                double nearPlane = 0.01, double farPlane = 1e4);
+
+        public:
+            inline double focal() const { return focalX(); }
+            inline void setFocal(double f) { setFocalX(f, false); setFocalY(f, false); updateMatrices(); }
+        };
+
+
 
         // panoramic camera
         class PanoramicCamera {

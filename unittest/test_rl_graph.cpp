@@ -1,7 +1,7 @@
 #include "../src/core/feature.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/core/algorithms.hpp"
-#include "../src/core/rl_graph.hpp"
+#include "../src/experimental/rl_graph.hpp"
 #include "../src/gui/visualize2d.hpp"
 #include "../src/gui/visualizers.hpp"
 

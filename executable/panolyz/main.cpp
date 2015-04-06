@@ -10,7 +10,7 @@ int main(int argc, char ** argv) {
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
+    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";// too small
@@ -32,7 +32,7 @@ int main(int argc, char ** argv) {
 
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room.png"; // bingo
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room4.jpg"; // bingo
-    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room7.jpg"; // bingo!!!
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room7.jpg"; // bingo!!!
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room10.jpg"; // bingo!
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room12.png"; // bingo!
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room13.jpg"; // bingo
@@ -59,7 +59,7 @@ int main(int argc, char ** argv) {
 
     misc::CmdOptions cmdOptions = {
         {"f", defaultFileName, "input image file path"},
-        {"p", false, "whether the input image is a panorama"},
+        {"p", true, "whether the input image is a panorama"},
         {"i", true, "whether the scene is indoor"}
     };
     

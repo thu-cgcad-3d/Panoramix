@@ -41,6 +41,9 @@ namespace panoramix {
     FUNCTION_LINE_FILE_STRING + "This feature should never be instanciated by compiler! \n")
 
 
+#define LOG(...) std::cout << "[Log] #######" << (std::string("  ") + __VA_ARGS__) << " #######"<< std::endl
+#define WARNNING(...) std::cout << "[WARNNING!] #######" << (std::string("  ") + __VA_ARGS__) << " #######"<< std::endl
+
 
     }
 }

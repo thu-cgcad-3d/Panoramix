@@ -7,6 +7,11 @@
 
 using namespace panoramix;
 
+namespace panoramix {
+    namespace core{
+        using namespace experimental;
+    }
+}
 
 
 template <class ContentT, class WidgetT>

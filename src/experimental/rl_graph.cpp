@@ -18,11 +18,11 @@ extern "C" {
 #include "../misc/matlab.hpp"
 
 //
-#include "algorithms.hpp"
-#include "containers.hpp"
-#include "utilities.hpp"
-#include "clock.hpp"
-#include "homo_graph.hpp"
+#include "../core/algorithms.hpp"
+#include "../core/containers.hpp"
+#include "../core/utilities.hpp"
+#include "../core/clock.hpp"
+#include "../core/homo_graph.hpp"
 #include "rl_graph.hpp"
 
 #include "../gui/visualizers.hpp"
@@ -30,7 +30,7 @@ extern "C" {
 
 
 namespace panoramix {
-    namespace core{
+    namespace experimental {
 
         template <class FunT>
         inline void ForeachRLGraphComponentHandle(const RLGraph & mg, FunT && fun){
@@ -71,6 +71,27 @@ namespace panoramix {
                 }
                 return n;
             }
+
+            template <class T>
+            inline double ChainLength(const std::vector<T> & v){
+                double len = 0;
+                for (int i = 1; i < v.size(); i++){
+                    len += Distance(v[i - 1], v[i]);
+                }
+                return len;
+            }
+
+            template <class T>
+            inline double ChainLength(const std::vector<std::vector<T>> & v){
+                double len = 0;
+                for (const auto & vv : v){
+                    for (int i = 1; i < vv.size(); i++){
+                        len += Distance(vv[i - 1], vv[i]);
+                    }
+                }
+                return len;
+            }
+
 
             struct ComparePixelLoc {
                 inline bool operator ()(const PixelLoc & a, const PixelLoc & b) const {
@@ -1096,9 +1117,41 @@ namespace panoramix {
                     d.used = true;
                 }
             }
+
             RLGraphPropertyTable props{ vps, std::move(compProps), std::move(consProps) };
             ForeachRLGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+            ResetWeights(mg, props);
             return props;
+        }
+
+
+        void ResetWeights(const RLGraph & mg, RLGraphPropertyTable & props){
+            auto & consProps = props.constraintProperties;
+            double maxChainLen = 0;
+            for (auto & b : mg.internalConstraints<RegionBoundaryData>()){
+                maxChainLen = std::max(ChainLength(b.data.normalizedSampledPoints), maxChainLen);
+            }
+            for (auto & c : mg.internalConstraints<RegionLineConnectionData>()){
+                maxChainLen = std::max(ChainLength(c.data.normalizedAnchors), maxChainLen);
+            }
+
+            for (auto & b : mg.internalConstraints<RegionBoundaryData>()){
+                consProps[b.topo.hd].weight = 1.0 * ChainLength(b.data.normalizedSampledPoints) / maxChainLen;
+            }
+            for (auto & c : mg.internalConstraints<RegionLineConnectionData>()){
+                consProps[c.topo.hd].weight = 1.0 * ChainLength(c.data.normalizedAnchors) / maxChainLen;
+            }
+            for (auto & ll : mg.internalConstraints<LineRelationData>()){
+                consProps[ll.topo.hd].weight = 1.0;
+            }
+            auto & compProps = props.componentProperties;
+            for (auto & t : compProps.data){
+                for (auto & prop : t){
+                    for (auto & wa : prop.weightedAnchors){
+                        wa.score = 1.0;
+                    }
+                }
+            }
         }
 
 
@@ -1471,14 +1524,13 @@ namespace panoramix {
 
 
 
-            std::vector<Vec3> NecessaryAnchorsForBinary(const RLGraph & mg, RegionBoundaryHandle bh, double & weightForEachAnchor){
+            std::vector<Vec3> NecessaryAnchorsForBinary(const RLGraph & mg, RegionBoundaryHandle bh){
                 size_t n = ElementsNum(mg.data(bh).normalizedSampledPoints);
 
                 assert(n > 0);
                 const auto & points = mg.data(bh).normalizedSampledPoints;
 
                 if (n == 1){
-                    weightForEachAnchor = 1.0;
                     return{ points.front().front() };
                 }
 
@@ -1505,7 +1557,6 @@ namespace panoramix {
                 auto & p2 = *pp2;
 
                 if (n == 2){
-                    weightForEachAnchor = 1.0;
                     return{ p1, p2 };
                 }
                 
@@ -1519,27 +1570,24 @@ namespace panoramix {
                     }
                 }
                 auto & p3 = *pp3;
-                weightForEachAnchor = n / 3.0;
                 IMPROVABLE_HERE(?);
                 return{ p1, p2, p3 };
             }
 
-            inline std::vector<Vec3> NecessaryAnchorsForBinary(const RLGraph & mg, LineRelationHandle bh, double & weightForEachAnchor){
-                weightForEachAnchor = mg.data(bh).junctionWeight * 2;
+            inline std::vector<Vec3> NecessaryAnchorsForBinary(const RLGraph & mg, LineRelationHandle bh){
                 return{ mg.data(bh).normalizedRelationCenter };
             }
 
-            inline std::vector<Vec3> NecessaryAnchorsForBinary(const RLGraph & mg, RegionLineConnectionHandle bh, double & weightForEachAnchor){
-                weightForEachAnchor = mg.data(bh).normalizedAnchors.size() / 2.0;
+            inline std::vector<Vec3> NecessaryAnchorsForBinary(const RLGraph & mg, RegionLineConnectionHandle bh){
                 return{ mg.data(bh).normalizedAnchors.front(), mg.data(bh).normalizedAnchors.back() };
             }
 
 
             template <class DataT, class SparseMatElementT>
-            inline void RegisterConstraintEquations(int & eid, const RLGraph & mg, RLGraphPropertyTable & props,
-                ComponentHandledTableFromConstraintGraph<int, RLGraph>::type & uh2varStartPosition,
-                ConstraintHandledTableFromConstraintGraph<std::vector<Vec3>, RLGraph>::type & appliedBinaryAnchors,
-                ConstraintHandledTableFromConstraintGraph<double, RLGraph>::type & weightsForEachAppliedBinaryAnchor,
+            inline void RegisterConstraintEquations(int & eid, const RLGraph & mg, const RLGraphPropertyTable & props,
+                const ComponentHandledTableFromConstraintGraph<int, RLGraph>::type & uh2varStartPosition,
+                const ConstraintHandledTableFromConstraintGraph<std::vector<Vec3>, RLGraph>::type & appliedBinaryAnchors,
+                const ConstraintHandledTableFromConstraintGraph<double, RLGraph>::type & weightsForEachAppliedBinaryAnchor,
                 std::vector<SparseMatElementT> & Atriplets,
                 std::vector<SparseMatElementT> & Wtriplets,
                 std::vector<double> & B) {
@@ -1584,6 +1632,37 @@ namespace panoramix {
                 }
             }
 
+            template <class DataT, class SparseMatElementT>
+            inline void RegisterComponentAnchorEquations(int & eid, const RLGraph & mg, const RLGraphPropertyTable & props,
+                const ComponentHandledTableFromConstraintGraph<int, RLGraph>::type & uh2varStartPosition,
+                std::vector<SparseMatElementT> & Atriplets,
+                std::vector<SparseMatElementT> & Wtriplets,
+                std::vector<double> & B){
+                // add anchors on components
+                for (auto & c : mg.components<DataT>()){
+                    if (!props[c.topo.hd].used)
+                        continue;
+                    auto uh = c.topo.hd;
+                    auto & prop = props[uh];
+                    int uhVarNum = prop.variables.size();
+                    int uhVarStartPosition = uh2varStartPosition.at(uh);
+                    for (auto & wa : props[c.topo.hd].weightedAnchors){
+                        const Point3 & anchor = wa.component;
+                        double weight = wa.score;
+                        auto uhVarCoeffsAtAnchorDirection = VariableCoefficientsForInverseDepthAtDirection(mg, props, anchor, uh);
+                        assert(uhVarCoeffsAtAnchorDirection.size() == uhVarNum);
+                        for (int i = 0; i < uhVarCoeffsAtAnchorDirection.size(); i++){
+                            //A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
+                            Atriplets.emplace_back(eid, uhVarStartPosition + i, uhVarCoeffsAtAnchorDirection[i]);
+                        }
+                        B[eid] = 1.0 / norm(anchor);
+                        Wtriplets.emplace_back(eid, eid, weight);
+                        eid++;
+                    }
+                }
+
+            }
+
 
             template <class SparseMatElementT>
             void FormulateComponentsAndConstraintsAsMatricesForInverseDepthSolution(const RLGraph & mg, RLGraphPropertyTable & props,
@@ -1595,8 +1674,15 @@ namespace panoramix {
                 std::vector<SparseMatElementT> & Atriplets,
                 std::vector<SparseMatElementT> & Wtriplets,
                 std::vector<double> & X,
-                std::vector<double> & B,
-                bool addAnchor = true){
+                std::vector<double> & B){
+
+                int nanchor = 0;
+                for (auto & table : props.componentProperties.data){
+                    for (auto & compProp : table){
+                        nanchor += compProp.weightedAnchors.size();
+                    }
+                }
+                assert(nanchor > 0);
 
                 SetClock();
 
@@ -1634,17 +1720,14 @@ namespace panoramix {
 
 
                 consNum = 0;
-
-                if (addAnchor){
-                    consNum++;
-                }
+                consNum += nanchor;
                 for (auto & c : mg.constraints<RegionBoundaryData>()){
                     if (!props[c.topo.hd].used)
                         continue;
                     assert(props[c.topo.component<0>()].used && props[c.topo.component<1>()].used);
                     bh2consStartPosition[c.topo.hd] = consNum;
-                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd, 
-                        weightsForEachAppliedBinaryAnchor[c.topo.hd]);
+                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd);
+                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = props[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
                     consNum += appliedBinaryAnchors[c.topo.hd].size();
                 }
                 for (auto & c : mg.constraints<LineRelationData>()){
@@ -1652,8 +1735,8 @@ namespace panoramix {
                         continue;
                     assert(props[c.topo.component<0>()].used && props[c.topo.component<1>()].used);
                     bh2consStartPosition[c.topo.hd] = consNum;
-                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
-                        weightsForEachAppliedBinaryAnchor[c.topo.hd]);
+                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd);
+                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = props[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
                     consNum += appliedBinaryAnchors[c.topo.hd].size();
                 }
                 for (auto & c : mg.constraints<RegionLineConnectionData>()){
@@ -1661,10 +1744,11 @@ namespace panoramix {
                         continue;
                     assert(props[c.topo.component<0>()].used && props[c.topo.component<1>()].used);
                     bh2consStartPosition[c.topo.hd] = consNum;
-                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
-                        weightsForEachAppliedBinaryAnchor[c.topo.hd]);
+                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd);
+                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = props[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
                     consNum += appliedBinaryAnchors[c.topo.hd].size();
                 }
+
 
                 B.resize(consNum);
 
@@ -1673,36 +1757,11 @@ namespace panoramix {
 
                 // write equations
                 int eid = 0;
-                if (addAnchor){ // the anchor constraint
-                    IMPROVABLE_HERE("find a most connected component to set the anchor");
 
-                    // largest plane
-                    double maxArea = 0.0;
-                    RegionHandle rhAnchored;
-                    for (auto & c : mg.components<RegionData>()){
-                        if (!props[c.topo.hd].used)
-                            continue;
-                        if (c.data.area > maxArea){
-                            rhAnchored = c.topo.hd;
-                            maxArea = c.data.area;
-                        }
-                    }
-
-                    int uhVarNum = props[rhAnchored].variables.size();
-                    Vec3 uhCenter = mg.data(rhAnchored).normalizedCenter;
-                    auto uhVarCoeffsAtCenter = VariableCoefficientsForInverseDepthAtDirection(mg, props, uhCenter, rhAnchored);
-                    assert(uhVarCoeffsAtCenter.size() == uhVarNum);
-                    int uhVarStartPosition = uh2varStartPosition.at(rhAnchored);
-                    for (int i = 0; i < uhVarCoeffsAtCenter.size(); i++){
-                        //A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
-                        Atriplets.emplace_back(eid, uhVarStartPosition + i, uhVarCoeffsAtCenter[i]);
-                    }
-                    B[eid] = 1.0;
-                    //W.insert(eid, eid) = 1.0;
-                    Wtriplets.emplace_back(eid, eid, 10.0);
-                    eid++;
-                }
-
+                RegisterComponentAnchorEquations<RegionData>(eid, mg, props, uh2varStartPosition, 
+                    Atriplets, Wtriplets, B);
+                RegisterComponentAnchorEquations<LineData>(eid, mg, props, uh2varStartPosition,
+                    Atriplets, Wtriplets, B);
 
                 RegisterConstraintEquations<RegionBoundaryData>(eid, mg, props, uh2varStartPosition,
                     appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, B);
@@ -1717,6 +1776,18 @@ namespace panoramix {
 
         }
 
+        void AttachAnchorToCenterOfLargestRegion(const RLGraph & mg, RLGraphPropertyTable & props, double depth, double weight){
+            RegionHandle largest;
+            double maxArea = 0.0;
+            for (auto & r : mg.components<RegionData>()){
+                if (r.data.area > maxArea){
+                    largest = r.topo.hd;
+                    maxArea = r.data.area;
+                }
+            }
+            assert(largest.valid());
+            props[largest].weightedAnchors.push_back(ScoreAs(mg.data(largest).normalizedCenter * depth, weight));
+        }
 
 
         void SolveVariablesUsingInversedDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights){
@@ -1752,7 +1823,7 @@ namespace panoramix {
 
             Eigen::SparseMatrix<double> WA;
             Eigen::VectorXd WB;
-            if(useWeights) {
+            if (useWeights){
                 Clock clock("form matrix WA");
                 Eigen::SparseMatrix<double> W;
                 W.resize(consNum, consNum);
@@ -1792,7 +1863,6 @@ namespace panoramix {
                 Clock clock("solve equations using Eigen::SPQR");
 
                 Eigen::SPQR<Eigen::SparseMatrix<double, Eigen::ColMajor>> solver;
-                solver.cholmodCommon()->useGPU = 1;
                 solver.compute(useWeights ? WA : A);
 
                 if (solver.info() != Eigen::Success) {
@@ -1833,248 +1903,248 @@ namespace panoramix {
         
 
 
-        namespace {
+        //namespace {
 
-            // Generic functor
-            template <class InternalFunctorT, class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic>
-            struct GenericFunctor {
-                typedef T Scalar;
-                enum {
-                    InputsAtCompileTime = NX,
-                    ValuesAtCompileTime = NY
-                };
-                typedef Eigen::Matrix<Scalar, InputsAtCompileTime, 1> InputType;
-                typedef Eigen::Matrix<Scalar, ValuesAtCompileTime, 1> ValueType;
-                typedef Eigen::Matrix<Scalar, ValuesAtCompileTime, InputsAtCompileTime> JacobianType;
+        //    // Generic functor
+        //    template <class InternalFunctorT, class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic>
+        //    struct GenericFunctor {
+        //        typedef T Scalar;
+        //        enum {
+        //            InputsAtCompileTime = NX,
+        //            ValuesAtCompileTime = NY
+        //        };
+        //        typedef Eigen::Matrix<Scalar, InputsAtCompileTime, 1> InputType;
+        //        typedef Eigen::Matrix<Scalar, ValuesAtCompileTime, 1> ValueType;
+        //        typedef Eigen::Matrix<Scalar, ValuesAtCompileTime, InputsAtCompileTime> JacobianType;
 
-                const int m_inputs, m_values;
-                InternalFunctorT m_fun;
-                GenericFunctor(const InternalFunctorT & fun) : m_fun(fun), m_inputs(InputsAtCompileTime), m_values(ValuesAtCompileTime) {}
-                GenericFunctor(const InternalFunctorT & fun, int inputs, int values) : m_fun(fun), m_inputs(inputs), m_values(values) {}
+        //        const int m_inputs, m_values;
+        //        InternalFunctorT m_fun;
+        //        GenericFunctor(const InternalFunctorT & fun) : m_fun(fun), m_inputs(InputsAtCompileTime), m_values(ValuesAtCompileTime) {}
+        //        GenericFunctor(const InternalFunctorT & fun, int inputs, int values) : m_fun(fun), m_inputs(inputs), m_values(values) {}
 
-                int inputs() const { return m_inputs; }
-                int values() const { return m_values; }
+        //        int inputs() const { return m_inputs; }
+        //        int values() const { return m_values; }
 
-                // you should define that in the subclass :
-                inline int operator() (const InputType& x, ValueType & v) const{
-                    m_fun(x, v);
-                    return 0;
-                }
-            };
+        //        // you should define that in the subclass :
+        //        inline int operator() (const InputType& x, ValueType & v) const{
+        //            m_fun(x, v);
+        //            return 0;
+        //        }
+        //    };
 
-            template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-            GenericFunctor<InternalFunctorT, T, NX, NY> MakeGenericFunctor(const InternalFunctorT & fun){
-                return GenericFunctor<InternalFunctorT, T, NX, NY>(fun);
-            }
+        //    template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
+        //    GenericFunctor<InternalFunctorT, T, NX, NY> MakeGenericFunctor(const InternalFunctorT & fun){
+        //        return GenericFunctor<InternalFunctorT, T, NX, NY>(fun);
+        //    }
 
-            template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-            GenericFunctor<InternalFunctorT, T, NX, NY> MakeGenericFunctor(const InternalFunctorT & fun, int inputs, int values){
-                return GenericFunctor<InternalFunctorT, T, NX, NY>(fun, inputs, values);
-            }
+        //    template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
+        //    GenericFunctor<InternalFunctorT, T, NX, NY> MakeGenericFunctor(const InternalFunctorT & fun, int inputs, int values){
+        //        return GenericFunctor<InternalFunctorT, T, NX, NY>(fun, inputs, values);
+        //    }
 
-            template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-            Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>> MakeGenericNumericDiffFunctor(const InternalFunctorT & fun){
-                return Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>>(GenericFunctor<InternalFunctorT, T, NX, NY>(fun));
-            }
+        //    template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
+        //    Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>> MakeGenericNumericDiffFunctor(const InternalFunctorT & fun){
+        //        return Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>>(GenericFunctor<InternalFunctorT, T, NX, NY>(fun));
+        //    }
 
-            template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-            Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>> MakeGenericNumericDiffFunctor(const InternalFunctorT & fun, int inputs, int values){
-                return Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>>(GenericFunctor<InternalFunctorT, T, NX, NY>(fun, inputs, values));
-            }
-
-
-
-        }
-
-        
-        void SolveVariablesUsingNormalDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights){
-
-            THERE_ARE_BUGS_HERE("weights not used yet");
-
-            using namespace Eigen;
-
-            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
-            auto bh2consStartPosition = MakeHandledTableForAllConstraints<int>(mg);
-            auto appliedBinaryAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
-            auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForAllConstraints<double>(mg);
-
-            // initialize vectors
-            int varNum, consNum;
-            static const bool addAnchor = true;
-
-            varNum = 0;
-            for (auto & c : mg.components<LineData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                uh2varStartPosition[c.topo.hd] = varNum;
-                varNum += props[c.topo.hd].variables.size();
-            }
-            for (auto & c : mg.components<RegionData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                uh2varStartPosition[c.topo.hd] = varNum;
-                varNum += props[c.topo.hd].variables.size();
-            }
-
-            VectorXd X;
-            X.resize(varNum);
-            for (auto & c : mg.components<LineData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
-                }
-            }
-            for (auto & c : mg.components<RegionData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
-                }
-            }
-
-            RegionHandle rhAnchored;
-
-            consNum = 0;
-            if (addAnchor){
-                consNum++;
-
-                //IMPROVABLE_HERE("find a most connected component to set the anchor");
-
-                // largest plane
-                double maxArea = 0.0;
-                for (auto & c : mg.components<RegionData>()){
-                    if (!props[c.topo.hd].used)
-                        continue;
-                    if (c.data.area > maxArea){
-                        rhAnchored = c.topo.hd;
-                        maxArea = c.data.area;
-                    }
-                }
-            }
-            for (auto & c : mg.constraints<RegionBoundaryData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                bh2consStartPosition[c.topo.hd] = consNum;
-                appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd]);
-                consNum += appliedBinaryAnchors[c.topo.hd].size();
-            }
-            for (auto & c : mg.constraints<LineRelationData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                bh2consStartPosition[c.topo.hd] = consNum;
-                appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd]);
-                consNum += appliedBinaryAnchors[c.topo.hd].size();
-            }
-            for (auto & c : mg.constraints<RegionLineConnectionData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                bh2consStartPosition[c.topo.hd] = consNum;
-                appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd]);
-                consNum += appliedBinaryAnchors[c.topo.hd].size();
-            }         
-
-            auto computeDistanceAtAnchors = [consNum, &mg, &props, &uh2varStartPosition, &bh2consStartPosition, 
-                &appliedBinaryAnchors, &weightsForEachAppliedBinaryAnchor, rhAnchored](
-                const VectorXd & variables, VectorXd & distances){
-                
-                //std::unordered_set<int> filled;
-                if (addAnchor){
-                    int varStartPos = uh2varStartPosition.at(rhAnchored);
-                    distances(0) = abs(DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos, props, 
-                        mg.data(rhAnchored).normalizedCenter, rhAnchored) - 1.0);
-                    //filled.insert(0);
-                }
-
-                for (auto & c : mg.constraints<RegionBoundaryData>()){
-                    if (!props[c.topo.hd].used)
-                        continue;
-                    int consStartPos = bh2consStartPosition.at(c.topo.hd);
-                    auto & anchors = appliedBinaryAnchors.at(c.topo.hd);
-                    auto uh1 = c.topo.component<0>();
-                    auto uh2 = c.topo.component<1>();
-                    int varStartPos1 = uh2varStartPosition.at(uh1);
-                    int varStartPos2 = uh2varStartPosition.at(uh2);
-                    for (int i = 0; i < anchors.size(); i++){
-                        double depth1 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos1, props, anchors[i], uh1);
-                        double depth2 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos2, props, anchors[i], uh2);
-                        distances(consStartPos + i) = abs(depth1 - depth2);
-                        //filled.insert(consStartPos + i);
-                    }
-                }
-
-                for (auto & c : mg.constraints<RegionLineConnectionData>()){
-                    if (!props[c.topo.hd].used)
-                        continue;
-                    int consStartPos = bh2consStartPosition.at(c.topo.hd);
-                    auto & anchors = appliedBinaryAnchors.at(c.topo.hd);
-                    auto uh1 = c.topo.component<0>();
-                    auto uh2 = c.topo.component<1>();
-                    int varStartPos1 = uh2varStartPosition.at(uh1);
-                    int varStartPos2 = uh2varStartPosition.at(uh2);
-                    for (int i = 0; i < anchors.size(); i++){
-                        double depth1 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos1, props, anchors[i], uh1);
-                        double depth2 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos2, props, anchors[i], uh2);
-                        distances(consStartPos + i) = abs(depth1 - depth2);
-                        //filled.insert(consStartPos + i);
-                    }
-                }
-
-                for (auto & c : mg.constraints<LineRelationData>()){
-                    if (!props[c.topo.hd].used)
-                        continue;
-                    int consStartPos = bh2consStartPosition.at(c.topo.hd);
-                    auto & anchors = appliedBinaryAnchors.at(c.topo.hd);
-                    auto uh1 = c.topo.component<0>();
-                    auto uh2 = c.topo.component<1>();
-                    int varStartPos1 = uh2varStartPosition.at(uh1);
-                    int varStartPos2 = uh2varStartPosition.at(uh2);
-                    for (int i = 0; i < anchors.size(); i++){
-                        double depth1 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos1, props, anchors[i], uh1);
-                        double depth2 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos2, props, anchors[i], uh2);
-                        distances(consStartPos + i) = abs(depth1 - depth2);
-                        //filled.insert(consStartPos + i);
-                    }
-                }
-
-                //for (int i = 0; i < consNum; i++){
-                //    assert(Contains(filled, i));
-                //}
-
-                distances *= 10000.0;
-
-                std::cout << '.';
-
-            };
+        //    template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
+        //    Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>> MakeGenericNumericDiffFunctor(const InternalFunctorT & fun, int inputs, int values){
+        //        return Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>>(GenericFunctor<InternalFunctorT, T, NX, NY>(fun, inputs, values));
+        //    }
 
 
-            auto functor = MakeGenericNumericDiffFunctor<double>(computeDistanceAtAnchors, varNum, consNum);
-            LevenbergMarquardt<decltype(functor)> lm(functor);
-            lm.parameters.maxfev = 5000;
-            lm.minimize(X);
 
-            // install X
-            for (auto & c : mg.components<RegionData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    props[c.topo.hd].variables[i] = X(uhStartPosition + i);
-                }
-            }
-            for (auto & c : mg.components<LineData>()){
-                if (!props[c.topo.hd].used)
-                    continue;
-                int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    props[c.topo.hd].variables[i] = X(uhStartPosition + i);
-                }
-            }
+        //}
 
-        }
+        //
+        //void SolveVariablesUsingNormalDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights){
+
+        //    THERE_ARE_BUGS_HERE("weights not used yet");
+
+        //    using namespace Eigen;
+
+        //    auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+        //    auto bh2consStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+        //    auto appliedBinaryAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
+        //    auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForAllConstraints<double>(mg);
+
+        //    // initialize vectors
+        //    int varNum, consNum;
+        //    static const bool addAnchor = true;
+
+        //    varNum = 0;
+        //    for (auto & c : mg.components<LineData>()){
+        //        if (!props[c.topo.hd].used)
+        //            continue;
+        //        uh2varStartPosition[c.topo.hd] = varNum;
+        //        varNum += props[c.topo.hd].variables.size();
+        //    }
+        //    for (auto & c : mg.components<RegionData>()){
+        //        if (!props[c.topo.hd].used)
+        //            continue;
+        //        uh2varStartPosition[c.topo.hd] = varNum;
+        //        varNum += props[c.topo.hd].variables.size();
+        //    }
+
+        //    VectorXd X;
+        //    X.resize(varNum);
+        //    for (auto & c : mg.components<LineData>()){
+        //        if (!props[c.topo.hd].used)
+        //            continue;
+        //        for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+        //            X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
+        //        }
+        //    }
+        //    for (auto & c : mg.components<RegionData>()){
+        //        if (!props[c.topo.hd].used)
+        //            continue;
+        //        for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+        //            X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
+        //        }
+        //    }
+
+        //    RegionHandle rhAnchored;
+
+        //    consNum = 0;
+        //    if (addAnchor){
+        //        consNum++;
+
+        //        //IMPROVABLE_HERE("find a most connected component to set the anchor");
+
+        //        // largest plane
+        //        double maxArea = 0.0;
+        //        for (auto & c : mg.components<RegionData>()){
+        //            if (!props[c.topo.hd].used)
+        //                continue;
+        //            if (c.data.area > maxArea){
+        //                rhAnchored = c.topo.hd;
+        //                maxArea = c.data.area;
+        //            }
+        //        }
+        //    }
+        //    for (auto & c : mg.constraints<RegionBoundaryData>()){
+        //        if (!props[c.topo.hd].used)
+        //            continue;
+        //        bh2consStartPosition[c.topo.hd] = consNum;
+        //        appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
+        //            weightsForEachAppliedBinaryAnchor[c.topo.hd]);
+        //        consNum += appliedBinaryAnchors[c.topo.hd].size();
+        //    }
+        //    for (auto & c : mg.constraints<LineRelationData>()){
+        //        if (!props[c.topo.hd].used)
+        //            continue;
+        //        bh2consStartPosition[c.topo.hd] = consNum;
+        //        appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
+        //            weightsForEachAppliedBinaryAnchor[c.topo.hd]);
+        //        consNum += appliedBinaryAnchors[c.topo.hd].size();
+        //    }
+        //    for (auto & c : mg.constraints<RegionLineConnectionData>()){
+        //        if (!props[c.topo.hd].used)
+        //            continue;
+        //        bh2consStartPosition[c.topo.hd] = consNum;
+        //        appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
+        //            weightsForEachAppliedBinaryAnchor[c.topo.hd]);
+        //        consNum += appliedBinaryAnchors[c.topo.hd].size();
+        //    }         
+
+        //    auto computeDistanceAtAnchors = [consNum, &mg, &props, &uh2varStartPosition, &bh2consStartPosition, 
+        //        &appliedBinaryAnchors, &weightsForEachAppliedBinaryAnchor, rhAnchored](
+        //        const VectorXd & variables, VectorXd & distances){
+        //        
+        //        //std::unordered_set<int> filled;
+        //        if (addAnchor){
+        //            int varStartPos = uh2varStartPosition.at(rhAnchored);
+        //            distances(0) = abs(DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos, props, 
+        //                mg.data(rhAnchored).normalizedCenter, rhAnchored) - 1.0);
+        //            //filled.insert(0);
+        //        }
+
+        //        for (auto & c : mg.constraints<RegionBoundaryData>()){
+        //            if (!props[c.topo.hd].used)
+        //                continue;
+        //            int consStartPos = bh2consStartPosition.at(c.topo.hd);
+        //            auto & anchors = appliedBinaryAnchors.at(c.topo.hd);
+        //            auto uh1 = c.topo.component<0>();
+        //            auto uh2 = c.topo.component<1>();
+        //            int varStartPos1 = uh2varStartPosition.at(uh1);
+        //            int varStartPos2 = uh2varStartPosition.at(uh2);
+        //            for (int i = 0; i < anchors.size(); i++){
+        //                double depth1 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos1, props, anchors[i], uh1);
+        //                double depth2 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos2, props, anchors[i], uh2);
+        //                distances(consStartPos + i) = abs(depth1 - depth2);
+        //                //filled.insert(consStartPos + i);
+        //            }
+        //        }
+
+        //        for (auto & c : mg.constraints<RegionLineConnectionData>()){
+        //            if (!props[c.topo.hd].used)
+        //                continue;
+        //            int consStartPos = bh2consStartPosition.at(c.topo.hd);
+        //            auto & anchors = appliedBinaryAnchors.at(c.topo.hd);
+        //            auto uh1 = c.topo.component<0>();
+        //            auto uh2 = c.topo.component<1>();
+        //            int varStartPos1 = uh2varStartPosition.at(uh1);
+        //            int varStartPos2 = uh2varStartPosition.at(uh2);
+        //            for (int i = 0; i < anchors.size(); i++){
+        //                double depth1 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos1, props, anchors[i], uh1);
+        //                double depth2 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos2, props, anchors[i], uh2);
+        //                distances(consStartPos + i) = abs(depth1 - depth2);
+        //                //filled.insert(consStartPos + i);
+        //            }
+        //        }
+
+        //        for (auto & c : mg.constraints<LineRelationData>()){
+        //            if (!props[c.topo.hd].used)
+        //                continue;
+        //            int consStartPos = bh2consStartPosition.at(c.topo.hd);
+        //            auto & anchors = appliedBinaryAnchors.at(c.topo.hd);
+        //            auto uh1 = c.topo.component<0>();
+        //            auto uh2 = c.topo.component<1>();
+        //            int varStartPos1 = uh2varStartPosition.at(uh1);
+        //            int varStartPos2 = uh2varStartPosition.at(uh2);
+        //            for (int i = 0; i < anchors.size(); i++){
+        //                double depth1 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos1, props, anchors[i], uh1);
+        //                double depth2 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos2, props, anchors[i], uh2);
+        //                distances(consStartPos + i) = abs(depth1 - depth2);
+        //                //filled.insert(consStartPos + i);
+        //            }
+        //        }
+
+        //        //for (int i = 0; i < consNum; i++){
+        //        //    assert(Contains(filled, i));
+        //        //}
+
+        //        distances *= 10000.0;
+
+        //        std::cout << '.';
+
+        //    };
+
+
+        //    auto functor = MakeGenericNumericDiffFunctor<double>(computeDistanceAtAnchors, varNum, consNum);
+        //    LevenbergMarquardt<decltype(functor)> lm(functor);
+        //    lm.parameters.maxfev = 5000;
+        //    lm.minimize(X);
+
+        //    // install X
+        //    for (auto & c : mg.components<RegionData>()){
+        //        if (!props[c.topo.hd].used)
+        //            continue;
+        //        int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+        //        for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+        //            props[c.topo.hd].variables[i] = X(uhStartPosition + i);
+        //        }
+        //    }
+        //    for (auto & c : mg.components<LineData>()){
+        //        if (!props[c.topo.hd].used)
+        //            continue;
+        //        int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+        //        for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
+        //            props[c.topo.hd].variables[i] = X(uhStartPosition + i);
+        //        }
+        //    }
+
+        //}
 
 
         double ComponentMedianCenterDepth(const RLGraph & mg, const RLGraphPropertyTable & props){

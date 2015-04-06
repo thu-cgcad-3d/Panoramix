@@ -2,12 +2,12 @@
 #define PANORAMIX_MEX_MIXED_GRAPH_HPP 
 
 #include "../core/homo_graph.hpp"
-#include "../core/rl_graph.hpp"
+#include "rl_graph.hpp"
 
 namespace panoramix {
     namespace experimental {
 
-        using namespace panoramix::core;
+        using namespace core;
 
         using Vec7 = Vec<double, 7>;
         using Image7d = ImageOfType<Vec7>;
@@ -20,6 +20,7 @@ namespace panoramix {
 
         struct MixedGraph {
             View<PerspectiveCamera> view;
+
             std::vector<Classified<core::Line2>> lines;
             std::vector<Vec3> vps;
             Imagei regions;
@@ -53,7 +54,7 @@ namespace panoramix {
             void showVanishingPointsAndLines() const;
             void showRegionOrientationConstriants() const;
 
-            HandledTable<RegionHandle, Plane3> solve() const;
+            HandledTable<RegionHandle, core::Plane3> solve() const;
         };
 
 

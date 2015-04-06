@@ -2,13 +2,15 @@
 #define PANORAMIX_CORE_RL_GRAPH_HPP
 
 
-#include "basic_types.hpp"
-#include "generic_topo.hpp"
-#include "cons_graph.hpp"
-#include "cameras.hpp"
+#include "../core/basic_types.hpp"
+#include "../core/generic_topo.hpp"
+#include "../core/cons_graph.hpp"
+#include "../core/cameras.hpp"
 
 namespace panoramix {
-    namespace core {
+    namespace experimental {
+
+        using namespace core;
 
         // the mixe region-line graph definition
         struct RegionData;
@@ -131,17 +133,19 @@ namespace panoramix {
             bool used; // not used for void/non-planar areas
             int orientationClaz;
             int orientationNotClaz; // if region is tangential with some vp ?
+            std::vector<Scored<Point3>> weightedAnchors;
             std::vector<double> variables;
             template <class Archiver>
             inline void serialize(Archiver & ar) {
-                ar(used, orientationClaz, orientationNotClaz, variables);
+                ar(used, orientationClaz, orientationNotClaz, weightedAnchors, variables);
             }
         };
         struct RLGraphConstraintProperty {
             bool used;
+            double weight;
             template <class Archiver>
             inline void serialize(Archiver & ar) { 
-                ar(used);
+                ar(used, weight);
             }
         };
         
@@ -153,8 +157,10 @@ namespace panoramix {
         // property table
         struct RLGraphPropertyTable {
             std::vector<Vec3> vanishingPoints;
+            
             RLGraphComponentPropertyTable componentProperties;
             RLGraphConstraintPropertyTable constraintProperties;
+
             template <class DataT> 
             inline RLGraphComponentProperty & operator[](ComponentHandle<DataT> h) { 
                 return componentProperties[h]; 
@@ -181,6 +187,9 @@ namespace panoramix {
         // make property table
         RLGraphPropertyTable MakeRLGraphPropertyTable(const RLGraph & mg, const std::vector<Vec3> & vps);
 
+        // reset weights
+        void ResetWeights(const RLGraph & mg, RLGraphPropertyTable & props);
+
         // reset variables
         void ResetVariables(const RLGraph & mg, RLGraphPropertyTable & props);
 
@@ -195,8 +204,10 @@ namespace panoramix {
 
 
         // solve equations
-        void SolveVariablesUsingInversedDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights = true);
-        void SolveVariablesUsingNormalDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights = true);
+        void AttachAnchorToCenterOfLargestRegion(const RLGraph & mg, RLGraphPropertyTable & props, 
+            double depth = 1.0, double weight = 20.0);
+        void SolveVariablesUsingInversedDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights = false);
+        //void SolveVariablesUsingNormalDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights = true);
         
         // model properties
         double ComponentMedianCenterDepth(const RLGraph & mg, const RLGraphPropertyTable & props);

@@ -3,7 +3,7 @@
 
 #include "../../src/core/basic_types.hpp"
 #include "../../src/core/cameras.hpp"
-#include "../../src/core/rl_graph.hpp"
+#include "../../src/experimental/rl_graph.hpp"
 
 #include "stepsdag.hpp"
 
@@ -39,8 +39,8 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
 template <class CameraT>
 struct ReconstructionSetup {
     panoramix::core::View<CameraT> view;
-    panoramix::core::RLGraph mg;
-    panoramix::core::RLGraphPropertyTable props;
+    panoramix::experimental::RLGraph mg;
+    panoramix::experimental::RLGraphPropertyTable props;
     panoramix::core::Imagei segmentation;
 };
 
@@ -56,8 +56,8 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
 template <class CameraT>
 struct Reconstruction {
     panoramix::core::View<CameraT> view;
-    panoramix::core::RLGraph mg;
-    panoramix::core::RLGraphPropertyTable props;
+    panoramix::experimental::RLGraph mg;
+    panoramix::experimental::RLGraphPropertyTable props;
 };
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
@@ -72,8 +72,8 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
 
 struct ReconstructionRefinement {
     panoramix::core::View<panoramix::core::PanoramicCamera> view;
-    panoramix::core::RLGraph mg;
-    panoramix::core::RLGraphPropertyTable props;
+    panoramix::experimental::RLGraph mg;
+    panoramix::experimental::RLGraphPropertyTable props;
     
 };
 

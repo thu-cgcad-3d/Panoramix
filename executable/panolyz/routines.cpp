@@ -1,8 +1,14 @@
 #include "../../src/core/basic_types.hpp"
-#include "../../src/core/rl_graph.hpp"
+#include "../../src/experimental/rl_graph.hpp"
 #include "../../src/gui/visualize2d.hpp"
 
 #include "routines.hpp"
+
+namespace panoramix {
+    namespace core{
+        using namespace experimental;
+    }
+}
 
 namespace panolyz {
 
@@ -119,6 +125,7 @@ namespace panolyz {
             core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 30.0);
             core::AttachWallConstriants(mg, props, M_PI / 60.0);
             //core::AttachGeometricContextConstraints(mg, props, gcs, hCams, 2);
+            AttachAnchorToCenterOfLargestRegion(mg, props);
 
             for (int i = 0; i < 2; i++){
 
@@ -290,6 +297,7 @@ namespace panolyz {
             core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 15.0);
             core::AttachWallConstriants(mg, props, M_PI / 30.0);
             //core::AttachGeometricContextConstraints(mg, props, gcs, hCams, 2);
+            AttachAnchorToCenterOfLargestRegion(mg, props);
 
             for (int i = 0; i < 10; i++){
 
@@ -405,6 +413,7 @@ namespace panolyz {
         props = core::MakeRLGraphPropertyTable(mg, vps);
         core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 120.0);
         core::AttachWallConstriants(mg, props, M_PI / 100.0);
+        AttachAnchorToCenterOfLargestRegion(mg, props);
 
         for (int i = 0; i < 10; i++){
 
@@ -439,13 +448,13 @@ namespace panolyz {
                     << gui::manip2d::Show();
             }
 
-            core::SolveVariablesUsingInversedDepths(mg, props, false);
+            core::SolveVariablesUsingInversedDepths(mg, props);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
             core::Visualize(view, mg, props);
             core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0, 0.05);
 
-            core::SolveVariablesUsingInversedDepths(mg, props, false);
+            core::SolveVariablesUsingInversedDepths(mg, props);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
             core::Visualize(view, mg, props);
@@ -512,6 +521,7 @@ namespace panolyz {
 
         // optimize
         props = core::MakeRLGraphPropertyTable(mg, vps);
+        AttachAnchorToCenterOfLargestRegion(mg, props);
         //core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 100.0);
         //core::AttachWallConstriants(mg, props, M_PI / 60.0);
 

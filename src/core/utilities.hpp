@@ -140,6 +140,11 @@ namespace panoramix {
             return AllSameInRange(std::begin(c), std::end(c), eq);
         }
 
+        template <class T, class EqualT = std::equal_to<void>>
+        inline bool AllSameInContainer(std::initializer_list<T> ilist, EqualT eq = EqualT()){
+            return AllSameInRange(ilist.begin(), ilist.end(), eq);
+        }
+
 
 
         // zero
@@ -148,6 +153,11 @@ namespace panoramix {
             return t < epsilon && t > -epsilon;
         }
 
+        // a safer mean
+        template <class T>
+        inline T Mean(T a, T b){
+            return a + (b - a) / 2;
+        }
 
         // squared
         template <class T>
@@ -874,6 +884,18 @@ namespace panoramix {
             Mat<T, 4, 4> m(
                 cotan / aspect, 0, 0, 0,
                 0, cotan, 0, 0,
+                0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
+                0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0);
+            return m.t();
+        }
+
+        template <class T>
+        Mat<T, 4, 4> MakeMat4Perspective(const T & fx, const T & fy,
+            const T & cx, const T & cy,
+            const T & nearZ, const T & farZ) {
+            Mat<T, 4, 4> m(
+                fx / cx, 0, 0, 0,
+                0, fy / cy, 0, 0,
                 0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
                 0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0);
             return m.t();

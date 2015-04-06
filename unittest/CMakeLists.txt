@@ -1,5 +1,5 @@
 
-# tests
+# UnitTest
 file (GLOB SOURCES "." *.cpp *.hpp)
 
 # google test
@@ -28,13 +28,13 @@ set_property(GLOBAL PROPERTY USE_FOLDERS On)
 
 # build test project
 include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES})
-panoramix_add_executable (Tests ${SOURCES})
-target_link_libraries (Tests ${PROJECT_NAME} ${Qt_LIBS})
-target_link_libraries (Tests optimized ${GTEST_LIBRARY})
-target_link_libraries (Tests optimized ${GTEST_MAIN_LIBRARY})
-target_link_libraries (Tests debug ${GTEST_LIBRARY_DEBUG})
-target_link_libraries (Tests debug ${GTEST_MAIN_LIBRARY_DEBUG})
+panoramix_add_executable (UnitTest ${SOURCES})
+target_link_libraries (UnitTest ${PROJECT_NAME} ${Qt_LIBS})
+target_link_libraries (UnitTest optimized ${GTEST_LIBRARY})
+target_link_libraries (UnitTest optimized ${GTEST_MAIN_LIBRARY})
+target_link_libraries (UnitTest debug ${GTEST_LIBRARY_DEBUG})
+target_link_libraries (UnitTest debug ${GTEST_MAIN_LIBRARY_DEBUG})
 
-add_test (NAME Tests COMMAND Tests)
-set_tests_properties (Tests PROPERTIES ENVI`RONMENT "${LD_VARNAME}=${LD_PATH}" )
-set_property(TARGET Tests PROPERTY FOLDER "${PROJECT_NAME}.Executable")
+add_test (NAME UnitTest COMMAND UnitTest)
+set_tests_properties (UnitTest PROPERTIES ENVI`RONMENT "${LD_VARNAME}=${LD_PATH}" )
+set_property(TARGET UnitTest PROPERTY FOLDER "${PROJECT_NAME}.Executable")
