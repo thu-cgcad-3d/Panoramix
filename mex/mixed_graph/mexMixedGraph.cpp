@@ -3,12 +3,19 @@
 #include "../../src/misc/matlab.hpp"
 #include "../../src/core/algorithms.hpp"
 #include "../../src/core/utilities.hpp"
-#include "../../src/core/rl_graph.hpp"
+#include "../../src/experimental/rl_graph.hpp"
 #include "../../src/gui/visualize2d.hpp"
 #include "../../src/gui/visualizers.hpp"
 
 using namespace panoramix;
 using namespace panoramix::core;
+using namespace panoramix::experimental;
+
+namespace panoramix {
+    namespace core{
+        using namespace experimental;
+    }
+}
 
 // returns (fitted plane, inlier ratio)
 std::pair<Plane3, double> FitPlane(const std::vector<Point3> & pcloud){
@@ -99,10 +106,10 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
     std::vector<core::Classified<core::Line2>> lines;
     std::vector<core::Vec3> vps;
 
-    core::RLGraph mg;
+    RLGraph mg;
 
     core::Imagei segmentedImage;
-    core::RLGraphPropertyTable props;
+    RLGraphPropertyTable props;
 
     core::LineSegmentExtractor lineExtractor;
     lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
@@ -113,7 +120,7 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
     view.image = image;
 
     // classify lines
-    vps = core::EstimateVanishingPointsAndClassifyLines(view.camera, lines);
+    vps = EstimateVanishingPointsAndClassifyLines(view.camera, lines);
     // remove non-manhattan vps
     vps.erase(vps.begin() + 3, vps.end());
     for (auto & l : lines){
@@ -123,7 +130,7 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
     }
 
     // append lines
-    core::AppendLines(mg, lines, view.camera, vps);
+    AppendLines(mg, lines, view.camera, vps);
 
     // append regions
     core::SegmentationExtractor segmenter;
@@ -135,13 +142,13 @@ MG CreateMG(const Image & image, double f, const Point2 & c) {
     int segmentsNum = 0;
     std::tie(segmentedImage, segmentsNum) = segmenter(image, pureLines, image.cols / 100.0);
 
-    auto regionHandles = core::AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001, 3, 1);
+    auto regionHandles = AppendRegions(mg, segmentedImage, view.camera, 0.001, 0.001, 3, 1);
 
     // attach constraints
-    props = core::MakeRLGraphPropertyTable(mg, vps);
-    core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 120.0);
-    core::AttachWallConstriants(mg, props, M_PI / 100.0);
-    core::ResetVariables(mg, props);
+    props = MakeRLGraphPropertyTable(mg, vps);
+    AttachPrincipleDirectionConstraints(mg, props, M_PI / 120.0);
+    AttachWallConstriants(mg, props, M_PI / 100.0);
+    ResetVariables(mg, props);
 
     return MG{ std::move(view), std::move(lines), std::move(vps), 
         std::move(segmentedImage), 

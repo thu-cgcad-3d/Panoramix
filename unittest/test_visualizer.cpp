@@ -35,6 +35,7 @@ static_assert(gui::IsDiscretizable<core::Point3>::value, "Point3 is not renderab
 static_assert(gui::IsDiscretizable<core::Classified<core::Line3>>::value, "Classified<Line3> is not renderable!");
 static_assert(gui::IsDiscretizable<std::vector<core::Classified<core::Line3>>>::value, 
     "std::vector<core::Classified<core::Line3>> is not renderable!");
+static_assert(gui::IsDiscretizable<core::LayeredShape3>::value, "");
 static_assert(!gui::IsDiscretizable<int>::value, "");
 
 static auto a = [](gui::InteractionID iid, core::Sphere3 & s){
@@ -67,6 +68,27 @@ void Print(const core::PerspectiveCamera & cam) {
     std::cout << std::setprecision(6) << "projectMat:\t" << std::endl << cam.projectionMatrix() << std::endl;
     std::cout << std::setprecision(6) << "viewProjMat:\t" << std::endl << cam.viewProjectionMatrix() << std::endl;
     std::cout << std::setprecision(6) << "======================================" << std::endl;
+}
+
+TEST(Visualizer, LayeredShape3){
+
+    using namespace core;
+    using namespace gui;
+
+    core::LayeredShape3 ls;
+    ls.layers = {
+        { Point3(0, 0, 0), Point3(1, 0, 0), Point3(1, 1, 0), Point3(0, 1, 0) },
+        { Point3(0, 0, 0.5), Point3(1, 0, 0.5), Point3(1, 1, 0.5), Point3(0, 1, 0.5) },
+        { Point3(0, 0, 1)/*, Point3(1, 0, 1)*/, Point3(1, 1, 1), Point3(0, 1, 1) }
+    };
+    ls.normal = Vec3(0, 0, 1);
+    
+    gui::ResourceStore::set("texture", cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
+    Visualizer("_").begin(ls)
+        .resource("texture").shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
+        .end().renderMode(gui::RenderModeFlag::Lines | gui::RenderModeFlag::Triangles)
+        .show();
+
 }
 
 TEST(Visualizer, Interaction){

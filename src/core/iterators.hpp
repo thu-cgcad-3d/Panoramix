@@ -35,6 +35,8 @@ namespace panoramix {
         struct Range {
             IteratorT b, e;
             Range(IteratorT bb, IteratorT ee) : b(bb), e(ee) {}
+            template <class ContainerT>
+            explicit Range(ContainerT && cont) : b(std::begin(cont)), e(std::end(cont)) {}
             IteratorT begin() const { return b; }
             IteratorT end() const { return e; }
             

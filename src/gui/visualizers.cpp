@@ -43,40 +43,14 @@ namespace panoramix {
             void paintGL() {
                 QPainter painter;
                 painter.begin(this);
-
                 painter.beginNativePainting();
                 qglClearColor(MakeQColor(options.backgroundColor));
-
                 glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-                glFrontFace(GL_CCW); // face direction set to clockwise
-                glEnable(GL_MULTISAMPLE);
-                glEnable(GL_DEPTH_TEST);
-                glEnable(GL_STENCIL_TEST);
-
-                glEnable(GL_ALPHA_TEST);
-                if (options.showInside){
-                    glEnable(GL_CULL_FACE);
-                }
-                else{
-                    glDisable(GL_CULL_FACE);
-                }
-
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-                glEnable(GL_PROGRAM_POINT_SIZE);
-                glEnable(GL_POINT_SPRITE);
 
                 core::PerspectiveCamera & camera = options.camera;
                 camera.resizeScreen(core::Size(width(), height()));
 
                 scene.render(options);
-
-                glDisable(GL_DEPTH_TEST);
-                if (options.showInside){
-                    glDisable(GL_CULL_FACE);
-                }
 
                 painter.endNativePainting();
                 swapBuffers();
@@ -226,14 +200,16 @@ namespace panoramix {
         void PopUpGui(RenderOptions & options, QWidget * widget = nullptr){
             core::Noted<float> bwColor = core::NoteAs(options.bwColor, "Blend Weight of Color");
             core::Noted<float> bwTexColor = core::NoteAs(options.bwTexColor, "Blend Weight of Texture Color");
-            core::Noted<bool> showInside = core::NoteAs(options.showInside, "Show Inside");
+            core::Noted<bool> cullFrontFace = core::NoteAs(options.cullFrontFace, "Cull Front Face");
+            core::Noted<bool> cullBackFace = core::NoteAs(options.cullBackFace, "Cull Back Face");
             core::Noted<bool> showPoints = core::NoteAs<bool>(options.renderMode & RenderModeFlag::Points, "Show Points");
             core::Noted<bool> showLines = core::NoteAs<bool>(options.renderMode & RenderModeFlag::Lines, "Show Lines");
             core::Noted<bool> showFaces = core::NoteAs<bool>(options.renderMode & RenderModeFlag::Triangles, "Show Faces");
-            PopUpDialog(widget, bwColor, bwTexColor, showInside, showPoints, showLines, showFaces);
+            PopUpDialog(widget, bwColor, bwTexColor, cullFrontFace, cullBackFace, showPoints, showLines, showFaces);
             options.bwColor = bwColor.component;
             options.bwTexColor = bwTexColor.component;
-            options.showInside = showInside.component;
+            options.cullFrontFace = cullFrontFace.component;
+            options.cullBackFace = cullBackFace.component;
             options.renderMode = (showPoints.component ? RenderModeFlag::Points : RenderModeFlag::None)
                 | (showLines.component ? RenderModeFlag::Lines : RenderModeFlag::None)
                 | (showFaces.component ? RenderModeFlag::Triangles : RenderModeFlag::None);

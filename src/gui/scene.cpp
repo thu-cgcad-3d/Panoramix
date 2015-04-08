@@ -372,11 +372,40 @@ namespace panoramix {
         }
 
         void VisualObjectScene::render(const RenderOptions & options) const {
+            glFrontFace(GL_CCW); // face direction set to clockwise
+            glEnable(GL_MULTISAMPLE);
+            glEnable(GL_DEPTH_TEST);
+            glEnable(GL_STENCIL_TEST);
+
+            glEnable(GL_ALPHA_TEST);
+
+            if (options.cullFrontFace || options.cullBackFace){
+                glEnable(GL_CULL_FACE);
+                if (options.cullFrontFace && !options.cullBackFace)
+                    glCullFace(GL_FRONT);
+                else if (!options.cullFrontFace && options.cullBackFace)
+                    glCullFace(GL_BACK);
+                else
+                    glCullFace(GL_FRONT_AND_BACK);
+            }
+            else{
+                glDisable(GL_CULL_FACE);
+            }
+
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            glEnable(GL_PROGRAM_POINT_SIZE);
+            glEnable(GL_POINT_SPRITE);
+
             for (auto & n : _tree.nodes()){
                 if (n.exists){
                     _tree.data(n.topo.hd)->render(options, _internal->calculatedModelMatrices.at(n.topo.hd));
                 }
             }
+
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
         }
 
         inline Point3f ToAffinePoint(const Vec4f & p){

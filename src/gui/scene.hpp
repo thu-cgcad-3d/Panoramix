@@ -93,7 +93,7 @@ namespace panoramix {
             core::PerspectiveCamera camera;
             float bwColor;
             float bwTexColor;
-            bool showInside;
+            bool cullFrontFace, cullBackFace;
         };
 
         class VisualObjectInternal;

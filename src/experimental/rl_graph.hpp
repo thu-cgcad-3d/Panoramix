@@ -126,8 +126,6 @@ namespace panoramix {
             int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3);
 
 
-
-
         // mixed grpah property
         struct RLGraphComponentProperty {
             bool used; // not used for void/non-planar areas
@@ -197,14 +195,44 @@ namespace panoramix {
         void UpdateConstraintUsabilities(const RLGraph & mg, RLGraphPropertyTable & props,
             bool enableDisabledConstraints = true);
 
-        // get component instances
+
+
+        // component instances and related tools
         Line3 Instance(const RLGraph & mg, const RLGraphPropertyTable & props, const LineHandle & lh);
         Plane3 Instance(const RLGraph & mg, const RLGraphPropertyTable & props, const RegionHandle & rh);
+
+        template <class ComponentT>
+        using InstanceType = decltype(Instance(std::declval<RLGraph>(), 
+            std::declval<RLGraphPropertyTable>(), std::declval<ComponentHandle<ComponentT>>()));
+
+        template <class ComponentT>
+        inline HandledTable<ComponentHandle<ComponentT>, InstanceType<ComponentT>> Instances(
+            const RLGraph & mg, const RLGraphPropertyTable & props) {
+            auto instances = mg.createComponentTable<ComponentT, InstanceType<ComponentT>>();
+            for (auto & c : mg.components<ComponentT>()){
+                if (props[c.topo.hd].used)
+                    instances[c.topo.hd] = Instance(mg, props, c.topo.hd);
+            }
+            return instances;
+        }
+
+        inline double DepthAt(const Vec3 & direction, const Plane3 & plane, const Point3 & eye = Point3(0, 0, 0)){
+           return norm(IntersectionOfLineAndPlane(Ray3(eye, direction), plane).position);
+        }
+        inline double DepthAt(const Vec3 & direction, const Line3 & line, const Point3 & eye = Point3(0, 0, 0)){
+            return norm(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), direction), line.infiniteLine()).second.first);
+        }
+
+        template <class InstanceT>
+        inline Point3 PointAt(const Vec3 & direction, const InstanceT & inst, const Point3 & eye = Point3(0, 0, 0)){
+            return normalize(direction) * DepthAt(direction, inst, eye);
+        }
+
 
 
 
         // solve equations
-        void AttachAnchorToCenterOfLargestRegion(const RLGraph & mg, RLGraphPropertyTable & props, 
+        void AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg, RLGraphPropertyTable & props, 
             double depth = 1.0, double weight = 20.0);
         void SolveVariablesUsingInversedDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights = false);
         //void SolveVariablesUsingNormalDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights = true);
@@ -214,8 +242,6 @@ namespace panoramix {
         double ComputeScore(const RLGraph & mg, const RLGraphPropertyTable & props);
 
         void NormalizeVariables(const RLGraph & mg, RLGraphPropertyTable & props);
-
-
 
 
 
@@ -238,9 +264,32 @@ namespace panoramix {
             double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05, double distThresRatio = 0.12);
 
 
-        void LooseMaybeOcclusionBoundaryConstraints(const RLGraph & mg, RLGraphPropertyTable & props);
 
 
+        
+        // region polygons
+        HandledTable<RegionHandle, std::vector<Polygon3>> RegionPolygons(const RLGraph & mg,
+            const RLGraphPropertyTable & props);
+
+        // cut loop
+        struct RegionLoopSegment{
+            RegionHandle rh;
+            std::pair<Point3, Point3> range;
+        };
+        std::vector<RegionLoopSegment> CutRegionLoopAt(
+            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
+            const Plane3 & cutplane);
+        Chain3 MakeChain(const std::vector<RegionLoopSegment> & loop);
+        inline double Area(const std::vector<RegionLoopSegment> & loop) { return Area(Polygon3(MakeChain(loop))); }
+
+
+        // estimate 
+        std::pair<double, double> EstimateEffectiveRangeAlongDirection(
+            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
+            const Vec3 & direction, double stepLen, double minEffectiveAreaRatio = 0.6, 
+            double gamma1 = 0.05, double gamma2 = 0.05);
+       
+        
 
 
 

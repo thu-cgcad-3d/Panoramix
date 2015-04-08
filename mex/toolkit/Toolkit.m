@@ -10,5 +10,11 @@ classdef Toolkit < handle
 		function varargout = loadMatFromPanoramix(varargin)
              [varargout{1:nargout}] = mexToolkit('loadMatFromPanoramix', varargin{:});
         end
+		function varargout = segmentGraphCut(varargin)
+             [varargout{1:nargout}] = mexToolkit('segmentGraphCut', varargin{:});
+        end
+		function varargout = segmentSLIC(varargin)
+             [varargout{1:nargout}] = mexToolkit('segmentGraphCut', varargin{:});
+        end
     end
 end

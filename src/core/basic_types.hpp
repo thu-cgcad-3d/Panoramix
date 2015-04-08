@@ -351,6 +351,43 @@ namespace panoramix {
         using HLine3 = HLine<double, 3>;
 
 
+        // chain
+        template <class T, int N>
+        struct Chain {
+            std::vector<Point<T, N>> points;
+            bool closed;
+            
+            const Point<T, N> & operator[](size_t i) const { return points[i]; }
+            Point<T, N> & operator[](size_t i) { return points[i]; }
+            size_t size() const { return points.size(); }
+            bool empty() const { return points.empty(); }
+
+            T length() const {
+                if (points.empty())
+                    return 0;
+                T len = 0;
+                for (int i = 0; i + 1 < points.size(); i++){
+                    len += norm(points[i], points[i + 1]);
+                }
+                if (closed){
+                    len += norm(points.front(), points.back());
+                }
+                return len;
+            }
+        };
+
+        template <class T, int N>
+        inline bool operator ==  (const Chain<T, N> & a, const Chain<T, N> & b) {
+            return a.points == b.points && a.closed == b.closed;
+        }
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, Chain<T, N> & l) {
+            ar(l.points, l.closed);
+        }
+        using Chain2 = Chain<double, 2>;
+        using Chain3 = Chain<double, 3>;
+
+
 
         // image
         using Image = cv::Mat;
@@ -412,7 +449,7 @@ namespace panoramix {
             return Vec<T, 2>(static_cast<T>(p.x), static_cast<T>(p.y)); 
         }
 
-        inline int AreaOfImage(const Image & im) { return im.cols * im.rows; }
+        inline int Area(const Image & im) { return im.cols * im.rows; }
         void ResizeToWidth(Image & im, int width);
         void ResizeToHeight(Image & im, int height);
 		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);
@@ -513,6 +550,7 @@ namespace panoramix {
                 : minCorner(MakeMin(c1, c2)), maxCorner(MakeMax(c1, c2)), isNull(false) {}
 
             inline Vec<T, N> size() const { return maxCorner - minCorner; }
+            inline T size(size_t i) const { return maxCorner[i] - minCorner[i]; }
             inline Point<T, N> center() const { return (maxCorner + minCorner) * (0.5); }
             inline Sphere<T, N> outerSphere() const { 
                 return Sphere<T, N>{center(), static_cast<T>(norm(maxCorner - minCorner) / 2.0)}; 
@@ -576,9 +614,14 @@ namespace panoramix {
         // polygon
         template <class T, int N>
         struct Polygon {
-            std::vector<core::Point<T, N>> corners;
-            core::Vec<T, N> normal;
+            std::vector<Point<T, N>> corners;
+            Vec<T, N> normal;
+            Polygon() {}
+            Polygon(const std::vector<Point<T, N>> & cs, const Vec<T, N> & n) : corners(cs), normal(n){}
+            Polygon(const Chain<T, N> & c) : corners(c.points), normal(normalize(corners.at(0).cross(corners.at(1)))) {}
+            Polygon(Chain<T, N> && c) : corners(std::move(c.points)), normal(normalize(corners.at(0).cross(corners.at(1)))) {}
             inline Plane<T, N> plane() const { return Plane<T, N>(corners.front(), normal); }
+            inline Chain<T, N> boundary() const { return Chain<T, N>{corners, true}; }
         };
 
         template <class Archive, class T, int N>
@@ -593,8 +636,24 @@ namespace panoramix {
         inline Polygon<T, 3> MakeTriangle(const Point<T, 3> & p1, const Point<T, 3> & p2, const Point<T, 3> & p3){
             return Polygon<T, 3>{{ p1, p2, p3 }, (p2 - p1).cross(p3 - p1)};
         }
+        double Area(const Polygon3 & polygon);
+        float Area(const Polygon3f & polygon);
 
 
+        // layered polygons
+        template <class T, int N>
+        struct LayeredShape {
+            std::vector<std::vector<Point<T, N>>> layers;
+            Vec<T, N> normal;
+            inline Polygon<T, N> layer(size_t i) const { return Polygon<T, N>(layers.at(i), normal); }
+            inline size_t size() const { return layers.size(); }
+            inline bool empty() const { return layers.empty(); }
+        };
+        template <class Archive, class T, int N>
+        inline void serialize(Archive & ar, LayeredShape<T, N> & p) {
+            ar(p.layers, p.normal);
+        }
+        using LayeredShape3 = LayeredShape<double, 3>;
 
 
 

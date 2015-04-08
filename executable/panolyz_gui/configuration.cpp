@@ -194,7 +194,23 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Segmentation> & s
 StepWidgetInterface * CreateBindingWidgetAndActions(
     DataOfType<LinesAndVPs> & linesAndVPs,
     QList<QAction*> & actions, QWidget * parent){
-    return nullptr;
+    return CreateImageViewer(&linesAndVPs, [](DataOfType<LinesAndVPs> & linesAndVPs){
+        linesAndVPs.lockForRead();
+        auto & pviews = linesAndVPs.content.perspectiveViews;
+        std::vector<core::Image> ims(pviews.size());
+        gui::ColorTable ctable = gui::ColorTableDescriptor::RGBGreys;
+        for (int i = 0; i < pviews.size(); i++){
+            const std::vector<core::Classified<core::Line2>> & lines = linesAndVPs.content.lines[i];
+            ims[i] = pviews[i].image.clone();
+            for (auto & line : lines){
+                cv::line(ims[i], core::ToPixelLoc(line.component.first), core::ToPixelLoc(line.component.second), ctable[line.claz]);
+            }
+        }
+        core::Image concated;
+        cv::hconcat(ims, concated);
+        linesAndVPs.unlock();
+        return gui::MakeQImage(concated);
+    }, parent);
 }
 
 
@@ -404,7 +420,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
 
 core::Image ImageForTexture(const core::PanoramicView & view) { return view.image; }
 core::Image ImageForTexture(const core::PerspectiveView & view) { 
-    return view.sampled(core::PanoramicCamera(250, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Vec3(0, 0, 1))).image; 
+    return view.sampled(core::PanoramicCamera(2000, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Vec3(0, 0, 1))).image; 
 }
 
 template <class CameraT>
@@ -423,6 +439,9 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
         }
 
         virtual void refreshDataAsync() override {
+
+            using namespace core;
+
             if (noData()){
                 _scene.lockForWrite();
                 _scene.component.clear();
@@ -434,6 +453,8 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                 int handleID;
                 bool isRegion;
             };
+
+            gui::ColorTable rgbctable = gui::ColorTableDescriptor::RGBGreys;
 
             gui::Visualizer viz("mixed graph optimizable");
             viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
@@ -461,6 +482,9 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
 
                 spp.projectionCenter = core::Point3(0, 0, 0);
                 spp.plane = Instance(mg, props, uh);
+                if (core::HasValue(spp.plane, core::IsInfOrNaN<double>)){
+                    continue;
+                }
                 assert(!core::HasValue(spp.plane, core::IsInfOrNaN<double>));
                 spps.emplace_back(ComponentID{ uh.id, true }, std::move(gui::ColorAs(spp, gui::ColorTag::Black)));
             }
@@ -470,8 +494,63 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                     continue;
                 auto uh = c.topo.hd;
                 auto & line = c.data;
+                if (core::HasValue(line.line, core::IsInfOrNaN<double>)){
+                    continue;
+                }
                 lines.push_back(gui::ColorAs(Instance(mg, props, uh), gui::ColorTag::Black));
             }
+            
+            assert(props.vanishingPoints.size() >= 3);
+
+            auto polygons = RegionPolygons(mg, props);
+
+            int vertVPId = core::GetVerticalDirectionId(props.vanishingPoints);
+            double medianDepth = core::ComponentMedianCenterDepth(mg, props);
+            Vec3 vertDir = normalize(props.vanishingPoints[vertVPId]);
+            auto range = experimental::EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.02, 0.7, -1e5, -1e5);
+
+            std::vector<Chain3> chains;
+            for (double x = range.first; x <= range.second; x += medianDepth * 0.02){
+                Plane3 cutplane(vertDir * x, vertDir);
+                auto loop = experimental::CutRegionLoopAt(polygons, cutplane);
+                if (loop.empty())
+                    continue;
+                chains.push_back(experimental::MakeChain(loop));
+            }
+
+            LayeredShape3 ls;
+            ls.layers.resize(chains.size());
+            for (int i = 0; i < chains.size(); i++){
+                ls.layers[i] = std::move(chains[i].points);
+            }
+            ls.normal = vertDir;
+
+            //if(false){
+            //    Box3 alignedBox;
+            //    for (auto & ps : polygons){
+            //        for (auto & p : ps){
+            //            for (auto & c : p.corners){
+            //                alignedBox |= BoundingBox(TransformCoordinate<3>(c, props.vanishingPoints));
+            //            }
+            //        }
+            //    }
+
+            //    double medianDepth = experimental::ComponentMedianCenterDepth(mg, props);
+            //    double stepLen = medianDepth / 20.0;
+            //    std::vector<core::Classified<std::vector<Chain3>>> chains(3);
+            //    for (int i = 0; i < 3; i++){
+            //        Vec3 vp = normalize(props.vanishingPoints[i]);
+            //        chains[i].claz = i;
+            //        for (double x = 0.0; x <= alignedBox.size(i); x += stepLen){
+            //            Plane3 cutplane((alignedBox.minCorner(i) + x) * vp, vp);
+            //            auto loop = experimental::CutRegionLoopAt(polygons, cutplane);
+            //            chains[i].component.push_back(experimental::MakeChain(loop));
+            //        }
+            //    }
+            //}
+
+
+
             unlock();
 
 
@@ -480,20 +559,25 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
             unlock();
 
             qDebug() << "loading texture";
-            viz.begin(spps).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+            viz.begin(ls).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
             qDebug() << "texture loaded";
 
             viz.installingOptions.discretizeOptions.color = gui::ColorTag::DarkGray;
             viz.installingOptions.lineWidth = 5.0;
-            viz.add(lines);
+            //viz.add(lines);
 
             viz.installingOptions.discretizeOptions.color = gui::ColorTag::Black;
             viz.installingOptions.lineWidth = 1.0;
+            viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGBGreys;
+            viz.add(chains);
 
-            viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles /*| gui::RenderModeFlag::Lines*/;
+            viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines;
             viz.renderOptions.backgroundColor = gui::ColorTag::White;
             viz.renderOptions.bwColor = 0.0;
             viz.renderOptions.bwTexColor = 1.0;
+            viz.renderOptions.cullBackFace = false;
+            viz.renderOptions.cullFrontFace = true;
+            //viz.renderOptions.showInside = false;
             viz.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400), 
                 800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
             _renderOptions = viz.renderOptions;
@@ -557,36 +641,12 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            glFrontFace(GL_CCW); // face direction set to clockwise
-            glEnable(GL_MULTISAMPLE);
-            glEnable(GL_DEPTH_TEST);
-            glEnable(GL_STENCIL_TEST);
-
-            glEnable(GL_ALPHA_TEST);
-            if (_renderOptions.showInside){
-                glEnable(GL_CULL_FACE);
-            }
-            else{
-                glDisable(GL_CULL_FACE);
-            }
-
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-            glEnable(GL_PROGRAM_POINT_SIZE);
-            glEnable(GL_POINT_SPRITE);
-
             core::PerspectiveCamera & camera = _renderOptions.camera;
             camera.resizeScreen(core::Size(width(), height()));
 
             _scene.lockForRead();
             _scene.component.render(_renderOptions);
             _scene.unlock();
-
-            glDisable(GL_DEPTH_TEST);
-            if (_renderOptions.showInside){
-                glDisable(GL_CULL_FACE);
-            }
 
             painter.endNativePainting();
             swapBuffers();
@@ -684,6 +744,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
             }
         }
 
+
     private:
         QPointF _lastPos;
         LockableType<bool> _needsInitialization;
@@ -709,7 +770,11 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
 }
 
 
-
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<ReconstructionRefinement<panoramix::core::PanoramicCamera>> & rec,
+    QList<QAction*> & actions, QWidget * parent){
+    return nullptr;
+}
 
 
 

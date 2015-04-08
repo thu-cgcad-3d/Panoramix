@@ -7,6 +7,20 @@
 namespace panoramix {
     namespace gui {
  
+        // discretize options
+        struct DiscretizeOptions {
+            inline DiscretizeOptions()
+            : color(0, 0, 0, 1), index(0), isolatedTriangles(false) {
+                subdivisionNums[0] = 32;
+                subdivisionNums[1] = 64;
+            }
+            Color color;
+            ColorTable colorTable;
+            int index;
+            bool isolatedTriangles;
+            int subdivisionNums[2];
+        };
+
 
         // triangular mesh
         struct TriMesh {
@@ -30,8 +44,12 @@ namespace panoramix {
             std::vector<LineHandle> iLines;
             std::vector<TriangleHandle> iTriangles;
 
+            const Vertex & vertex(VertHandle vh) const { return vertices[vh]; }
+            Vertex & vertex(VertHandle vh) { return vertices[vh]; }
 
             VertHandle addVertex(const Vertex & v);
+            VertHandle addVertex(const core::Point3 & p, const DiscretizeOptions & o);
+            VertHandle addVertex(const core::Point3 & p, const core::Vec3 & normal, const DiscretizeOptions & o);
 
             LineHandle addLine(VertHandle v1, VertHandle v2);
             LineHandle addIsolatedLine(const Vertex & v1, const Vertex & v2);
@@ -61,18 +79,6 @@ namespace panoramix {
 
 
         // discretization
-        struct DiscretizeOptions {
-            inline DiscretizeOptions()
-            : color(0, 0, 0, 1), index(0), isolatedTriangles(false) {
-                subdivisionNums[0] = 32;
-                subdivisionNums[1] = 64;
-            }
-            Color color;
-            ColorTable colorTable;
-            int index;
-            bool isolatedTriangles;
-            int subdivisionNums[2];
-        };
 
         template <class T>
         inline void Discretize(TriMesh & mesh, const core::Point<T, 3> & p, const DiscretizeOptions & o){
@@ -95,6 +101,27 @@ namespace panoramix {
             mesh.addIsolatedLine(v1, v2);
         }
 
+        template <class T>
+        inline void Discretize(TriMesh & mesh, const core::Chain<T, 3> & c, const DiscretizeOptions & o){
+            if (c.size() == 0)
+                return;
+            std::vector<TriMesh::VertHandle> vhandles(c.size());
+            for (int i = 0; i < c.size(); i++){
+                TriMesh::Vertex v;
+                v.position = core::Vec4f(c.points[i][0], c.points[i][1], c.points[i][2], 1.0);
+                v.color = o.color;
+                v.entityIndex = o.index;
+                vhandles[i] = mesh.addVertex(v);
+            }
+            for (int i = 0; i + 1 < c.size(); i++){
+                mesh.addLine(vhandles[i], vhandles[i + 1]);
+            }
+            if (c.closed){
+                mesh.addLine(vhandles.back(), vhandles.front());
+            }
+        }
+
+        void Discretize(TriMesh & mesh, const core::LayeredShape3 & m, const DiscretizeOptions & o);
         void Discretize(TriMesh & mesh, const core::Sphere3 & s, const DiscretizeOptions & o);
 
         template <class T>

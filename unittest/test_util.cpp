@@ -299,6 +299,25 @@ TEST(UtilTest, DistanceFromPointToLine) {
     }
 }
 
+TEST(UtilTest, PlaneIntersection){
+    int testednum = 0;
+    for (int i = 0; i < 10000; i++){
+        core::Ray3 ray(core::Point3(randf(), randf(), randf()), core::Vec3(randf(), randf(), randf()));
+        core::Point3 p1(randf(), randf(), randf()), p2(randf(), randf(), randf());
+        core::Plane3 plane1(ray.anchor, ray.direction.cross(p1 - ray.anchor));
+        core::Plane3 plane2(ray.anchor, ray.direction.cross(p2 - ray.anchor));
+        if (core::IsFuzzyParallel(plane1.normal, plane2.normal)){
+            continue;
+        }
+        testednum++;
+        core::Ray3 r = core::IntersectionOfPlaneAndPlane(plane1, plane2).unwrap();
+        ASSERT_TRUE(core::IsFuzzyParallel(ray.anchor - r.anchor, r.direction));
+        ASSERT_TRUE(core::IsFuzzyParallel(ray.direction, r.direction));
+    }
+    std::cout << testednum << "/10000 are tested" << std::endl;
+}
+
+
 TEST(UtilTest, DistanceBetweenTwoLines) {
     core::Line3 l1 = { { 1, 0, 0 }, { -1, 0, 0 } };
     core::Line3 l2 = { { 0, 1, 1 }, { 0, -1, 1 } };

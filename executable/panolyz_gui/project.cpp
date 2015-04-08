@@ -155,7 +155,7 @@ public:
 
             core::AttachWallConstriants(mg, props, conf("wall constraints angle").value<double>());
             core::AttachPrincipleDirectionConstraints(mg, props, conf("principle direction constraints angle").value<double>());   
-            AttachAnchorToCenterOfLargestRegion(mg, props, 1.0, 10.0);
+            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
 
             _confLock.unlock();
 
@@ -184,12 +184,14 @@ public:
             auto & mg = rec.mg;
             auto & props = rec.props;
 
+            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
             core::SolveVariablesUsingInversedDepths(mg, props);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
             //core::Visualize(view, mg, props);
             core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02, 0.1);
 
+            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
             core::SolveVariablesUsingInversedDepths(mg, props);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
@@ -325,7 +327,7 @@ public:
 
             core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 120.0);
             core::AttachWallConstriants(mg, props, M_PI / 100.0);
-            AttachAnchorToCenterOfLargestRegion(mg, props, 1.0, 10.0);
+            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
 
             return ReconstructionSetup<core::PerspectiveCamera>{ 
                 perspectiveViews.front(), 
@@ -355,12 +357,14 @@ public:
             auto & mg = rec.mg;
             auto & props = rec.props;
 
+            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
             core::SolveVariablesUsingInversedDepths(mg, props);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
             //core::Visualize(view, mg, props);
             core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0, 0.05);
 
+            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
             core::SolveVariablesUsingInversedDepths(mg, props);
             core::NormalizeVariables(mg, props);
             std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;

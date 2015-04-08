@@ -762,6 +762,21 @@ namespace panoramix {
             return PositionOnLine<T, N>(line, lambda);
         }
 
+        template <class T>
+        Failable<Ray<T, 3>> IntersectionOfPlaneAndPlane(const Plane<T, 3> & p1, const Plane<T, 3> & p2){
+            Vec<T, 3> dir = p1.normal.cross(p2.normal);
+            Mat<T, 3, 3> mat(
+                p1.normal[0], p1.normal[1], p1.normal[2],
+                p2.normal[0], p2.normal[1], p2.normal[2],
+                dir[0], dir[1], dir[2]
+            );
+            Point3 anchor;
+            bool success = cv::solve(mat, Vec3(p1.anchor.dot(p1.normal), p2.anchor.dot(p2.normal), 0), anchor);
+            if (!success)
+                return nullptr;
+            return Ray<T, 3>(anchor, dir);
+        }
+
         // distance from point to plane
         template <class T, int N>
         inline std::pair<T, Point<T, N>> DistanceFromPointToPlane(const Point<T, N> & p, const Plane<T, N> & plane) {
@@ -849,6 +864,18 @@ namespace panoramix {
             return tmp1 - tmp2 + tmp3 > 0;
         }
 
+        // area of triangle
+        template <class T>
+        inline T AreaOfTriangle(const T & a, const T & b, const T & c){
+            T p = (a + b + c) / 2.0;
+            return sqrt(p * (p - a) * (p - b) * (p - c));
+        }
+
+        template <class T, int N>
+        inline T AreaOfTriangle(const Point<T, N> & a, const Point<T, N> & b, const Point<T, N> & c){
+            return AreaOfTriangle<T>(Distance(a, b), Distance(b, c), Distance(c, a));
+        }
+
         // in triangle
         template <class T>
         inline bool IsInTriangle(const Point<T, 2> & p, const Point<T, 2> & a, const Point<T, 2> & b, const Point<T, 2> & c){
@@ -857,6 +884,17 @@ namespace panoramix {
             bool lca = IsOnLeftSide(p, c, a);
             return lab == lbc && lbc == lca;
         }
+
+        template <int N, class T, int M>
+        inline Vec<T, N> TransformCoordinate(const Point<T, M> & p, const std::vector<Vec<T, M>> & axis,
+            const Point<T, M> & origin = Point<T, M>()){
+            assert(axis.size() >= N);
+            Vec<T, N> c;
+            for (int i = 0; i < N; i++)
+                c[i] = (p - origin).dot(normalize(axis.at(i)));
+            return c;
+        }
+
 
 
 

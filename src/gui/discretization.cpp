@@ -32,6 +32,23 @@ namespace panoramix {
             return iPoints.back();
         }
 
+        TriMesh::VertHandle TriMesh::addVertex(const core::Point3 & p, const DiscretizeOptions & o){
+            TriMesh::Vertex v;
+            v.position = Concat(p, 1.0);
+            v.color = o.color;
+            v.entityIndex = o.index;
+            return addVertex(v);
+        }
+
+        TriMesh::VertHandle TriMesh::addVertex(const core::Point3 & p, const core::Vec3 & normal, const DiscretizeOptions & o){
+            TriMesh::Vertex v;
+            v.position = Concat(p, 1.0);
+            v.normal = normal;
+            v.color = o.color;
+            v.entityIndex = o.index;
+            return addVertex(v);
+        }
+
         TriMesh::LineHandle TriMesh::addLine(TriMesh::VertHandle v1, TriMesh::VertHandle v2) {
             iLines.push_back(v1);
             iLines.push_back(v2);
@@ -128,7 +145,82 @@ namespace panoramix {
 
 
 
+        void Discretize(TriMesh & mesh, const core::LayeredShape3 & m, const DiscretizeOptions & o){
+            if (m.empty())
+                return;
+            Vec3 x, y, z, origin = Vec3(0, 0, 0);
+            // set origin to the gravity center of all corners
+            double cnum = 0;
+            for (auto & cs : m.layers){
+                for (auto & c : cs){
+                    origin += c;
+                    cnum++;
+                }
+            }
+            origin /= cnum;
 
+            std::tie(x, y) = ProposeXYDirectionsFromZDirection(m.normal);
+            z = normalize(m.normal);
+
+            // add verts
+            std::vector<std::vector<TriMesh::VertHandle>> vhs(m.size());
+            std::vector<std::vector<double>> projAngles(m.size());
+            std::vector<std::vector<int>> ids(m.size());
+            for (int i = 0; i < m.size(); i++){
+                for (auto & p : m.layers[i]){
+                    auto n = (p - origin);
+                    vhs[i].push_back(mesh.addVertex(p, n, o));
+                    Vec2 proj((p - origin).dot(x), (p - origin).dot(y));
+                    projAngles[i].push_back(SignedAngleBetweenDirections(Vec2(1, 0), proj));
+                }
+                ids[i].resize(m.layers[i].size());
+                std::iota(ids[i].begin(), ids[i].end(), 0);
+                auto & angles = projAngles[i];
+                std::sort(ids[i].begin(), ids[i].end(), [&angles](int a, int b){return angles[a] < angles[b]; });
+            }
+
+
+            mesh.addPolygon(vhs.front());
+            for (int i = 1; i < m.size(); i++){
+                // find nearest two vertices in last layer
+                if (vhs[i].empty()){
+                    continue;
+                }
+                auto & lastVhs = vhs[i - 1];
+                auto & lastAngles = projAngles[i - 1];
+                auto & lastids = ids[i - 1];
+                auto & thisVhs = vhs[i];
+                auto & thisAngles = projAngles[i];
+                auto & thisids = ids[i];
+                int a = 0, b = 0;
+                double anglea = lastAngles[lastids[a]], angleb = thisAngles[thisids[b]];
+                for (int k = 0; k < lastids.size() + thisids.size(); k++){
+                    if (anglea < angleb){
+                        int newa = (a + 1) % lastids.size();
+                        mesh.addTriangle(lastVhs[lastids[a]], thisVhs[thisids[b]], lastVhs[lastids[newa]]);
+                        a = newa;
+                        double newanglea = lastAngles[lastids[newa]];
+                        if (newanglea < anglea){
+                            newanglea += M_PI * 2;
+                        }
+                        anglea = newanglea;
+                    }
+                    else{
+                        int newb = (b + 1) % thisids.size();
+                        mesh.addTriangle(thisVhs[thisids[b]], thisVhs[thisids[newb]], lastVhs[lastids[a]]);
+                        b = newb;
+                        double newangleb = thisAngles[thisids[newb]];
+                        if (newangleb < angleb){
+                            newangleb += M_PI * 2;
+                        }
+                        angleb = newangleb;
+                    }
+                }
+            }
+
+            std::reverse(vhs.back().begin(), vhs.back().end());
+            mesh.addPolygon(vhs.back());
+        }
 
 
 

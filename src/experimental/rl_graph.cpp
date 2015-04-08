@@ -1512,17 +1512,6 @@ namespace panoramix {
 
         namespace {
 
-            inline double DepthAt(const Vec3 & direction, const Plane3 & plane){
-                Ray3 ray(Point3(0, 0, 0), direction);
-                return norm(IntersectionOfLineAndPlane(ray, plane).position);
-            }
-
-            inline double DepthAt(const Vec3 & direction, const Line3 & line){
-                Ray3 ray(Point3(0, 0, 0), direction);
-                return norm(DistanceBetweenTwoLines(ray, line.infiniteLine()).second.first);
-            }
-
-
 
             std::vector<Vec3> NecessaryAnchorsForBinary(const RLGraph & mg, RegionBoundaryHandle bh){
                 size_t n = ElementsNum(mg.data(bh).normalizedSampledPoints);
@@ -1679,6 +1668,8 @@ namespace panoramix {
                 int nanchor = 0;
                 for (auto & table : props.componentProperties.data){
                     for (auto & compProp : table){
+                        if (!compProp.used)
+                            continue;
                         nanchor += compProp.weightedAnchors.size();
                     }
                 }
@@ -1776,10 +1767,14 @@ namespace panoramix {
 
         }
 
-        void AttachAnchorToCenterOfLargestRegion(const RLGraph & mg, RLGraphPropertyTable & props, double depth, double weight){
+        void AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg, RLGraphPropertyTable & props, double depth, double weight){
             RegionHandle largest;
             double maxArea = 0.0;
             for (auto & r : mg.components<RegionData>()){
+                if (!props[r.topo.hd].used)
+                    continue;
+                if (props[r.topo.hd].weightedAnchors.size() > 0)
+                    return;
                 if (r.data.area > maxArea){
                     largest = r.topo.hd;
                     maxArea = r.data.area;
@@ -1791,6 +1786,8 @@ namespace panoramix {
 
 
         void SolveVariablesUsingInversedDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights){
+
+            ResetVariables(mg, props);
 
             SetClock();
 
@@ -2172,7 +2169,7 @@ namespace panoramix {
                 if (!IsInfOrNaN(d)){
                     centerDepths.push_back(d);
                 }
-                assert(!IsInfOrNaN(centerDepths.back()));
+                //assert(!IsInfOrNaN(centerDepths.back()));
             }
             for (auto & c : mg.components<LineData>()){
                 if (!props[c.topo.hd].used)
@@ -2181,7 +2178,7 @@ namespace panoramix {
                 if (!IsInfOrNaN(d)){
                     centerDepths.push_back(d);
                 }
-                assert(!IsInfOrNaN(centerDepths.back()));
+                //assert(!IsInfOrNaN(centerDepths.back()));
             }
             std::nth_element(centerDepths.begin(), centerDepths.begin() + centerDepths.size() / 2, centerDepths.end());
             double medianCenterDepth = centerDepths[centerDepths.size() / 2];
@@ -2297,6 +2294,10 @@ namespace panoramix {
                     for (auto & s : ss){
                         double d1 = DepthAt(s, plane1);
                         double d2 = DepthAt(s, plane2);
+                        if (IsInfOrNaN(d1) || IsInfOrNaN(d2)){
+                            std::cout << "nan/inf plane!" << std::endl;
+                            continue;
+                        }
                         assert(d1 >= 0 && d2 >= 0);
                         
                         double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
@@ -2324,6 +2325,10 @@ namespace panoramix {
                 auto & line2 = lines[c.topo.component<1>()];
                 double d1 = DepthAt(c.data.normalizedRelationCenter, line1);
                 double d2 = DepthAt(c.data.normalizedRelationCenter, line2);
+                if (IsInfOrNaN(d1) || IsInfOrNaN(d2)){
+                    std::cout << "nan/inf line!" << std::endl;
+                    continue;
+                }
 
                 double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
                 double weight = typeWeight;
@@ -2343,6 +2348,10 @@ namespace panoramix {
                 for (auto & a : c.data.normalizedAnchors){
                     double d1 = DepthAt(a, plane);
                     double d2 = DepthAt(a, line);
+                    if (IsInfOrNaN(d1) || IsInfOrNaN(d2)){
+                        std::cout << "nan/inf regionline!" << std::endl;
+                        continue;
+                    }
                     assert(d1 >= 0 && d2 >= 0);
 
                     double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
@@ -2393,6 +2402,273 @@ namespace panoramix {
 
 
 
+
+        HandledTable<RegionHandle, std::vector<Polygon3>> RegionPolygons(const RLGraph & mg,
+            const RLGraphPropertyTable & props){
+
+            auto polygons = mg.createComponentTable<RegionData, std::vector<Polygon3>>();
+            for (auto & r : mg.components<RegionData>()){
+                if (!props[r.topo.hd].used)
+                    continue;
+                Plane3 plane = Instance(mg, props, r.topo.hd);
+                for (auto & contour : r.data.normalizedContours){
+                    Polygon3 polygon;
+                    polygon.corners.reserve(contour.size());
+                    for (auto & c : contour){
+                        polygon.corners.push_back(PointAt(c, plane));
+                    }
+                    polygon.normal = plane.normal;
+                    polygons[r.topo.hd].push_back(std::move(polygon));
+                }
+            }
+
+            return polygons;
+
+        }
+
+
+        std::vector<RegionLoopSegment> CutRegionLoopAt(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
+            const Plane3 & cutplane){
+
+            std::vector<RegionLoopSegment> segments;
+            std::vector<double> startAngles;
+
+            Vec3 x, y;
+            std::tie(x, y) = ProposeXYDirectionsFromZDirection(cutplane.normal);
+            Point3 original = cutplane.root();
+
+            for (auto it = polygons.begin(); it != polygons.end(); ++ it){
+                RegionHandle rh = it.hd();
+
+                for (const Polygon3 & polygon : *it){
+                    if (polygon.corners.size() <= 2)
+                        continue;
+
+                    auto plane = polygon.plane();
+
+                    if (core::IsFuzzyParallel(plane.normal, cutplane.normal, 0.01))
+                        continue;
+
+                    Vec3 along = normalize(cutplane.normal.cross(plane.normal));
+                    std::vector<Scored<std::pair<Point3, Point2>>> cutpoints;
+
+                    for (int i = 1; i <= polygon.corners.size(); i++){
+                        auto & lastP = polygon.corners[i-1];
+                        auto & p = polygon.corners[i % polygon.corners.size()];
+                        double lastDist = cutplane.signedDistanceTo(lastP);
+                        double dist = cutplane.signedDistanceTo(p);
+
+                        if (lastDist < 0 && dist > 0 || lastDist > 0 && dist < 0){
+                            Point3 intersection = (lastP * abs(dist) + p * abs(lastDist)) / (abs(dist) + abs(lastDist));
+                            double order = intersection.dot(along);
+                            Point2 projOnCutPlane((intersection - original).dot(x), (intersection - original).dot(y));
+                            cutpoints.push_back(ScoreAs(std::make_pair(intersection, projOnCutPlane), order));
+                        }
+                    }
+
+                    if (cutpoints.empty()){
+                        continue;
+                    }
+                    assert(cutpoints.size() % 2 == 0);
+                    if (cutpoints.size() % 2 != 0){
+                        std::cout << "ODD cutpoints num!!!" << std::endl;
+                    }
+
+                    // chain the segments
+                    std::sort(cutpoints.begin(), cutpoints.end());
+                    for (int i = 0; i < cutpoints.size(); i += 2){
+                        RegionLoopSegment segment;
+                        segment.rh = rh;
+                        segment.range.first = cutpoints[i].component.first;
+                        segment.range.second = cutpoints[i + 1].component.first;
+                        segments.push_back(segment);
+                        startAngles.push_back(SignedAngleBetweenDirections(Vec2(1, 0), cutpoints[i].component.second));
+                    }
+                }
+            }
+
+            if (segments.empty())
+                return segments;
+
+            std::vector<int> ids(segments.size());
+            std::iota(ids.begin(), ids.end(), 0);
+            std::sort(ids.begin(), ids.end(), [&startAngles](int id1, int id2){return startAngles[id1] < startAngles[id2]; });
+
+            std::vector<RegionLoopSegment> segs;
+            segs.reserve(segments.size());
+            for (int id : ids){
+                segs.push_back(std::move(segments[id]));
+            }
+            return segs;
+        }
+
+
+        std::vector<RegionLoopSegment> CutRegionLoopAt(const RLGraph & mg,
+            const RLGraphPropertyTable & props, const Plane3 & cutplane){
+
+            std::vector<RegionLoopSegment> segments;
+            std::vector<double> startAngles;
+
+            Vec3 x, y;
+            std::tie(x, y) = ProposeXYDirectionsFromZDirection(cutplane.normal);
+            Point3 original = cutplane.root();
+
+            auto planes = Instances<RegionData>(mg, props);
+            for (auto & r : mg.components<RegionData>()){
+                if (!props[r.topo.hd].used)
+                    continue;
+                auto & plane = planes[r.topo.hd];
+
+                if (core::IsFuzzyParallel(plane.normal, cutplane.normal, 0.01))
+                    continue;
+                
+                Vec3 along = normalize(cutplane.normal.cross(plane.normal));
+                std::vector<Scored<std::pair<Point3, Point2>>> cutpoints;
+
+                for (auto & cs : r.data.normalizedContours){
+                    if (cs.size() <= 2){
+                        continue;
+                    }                    
+                    for (int i = 1; i <= cs.size(); i++){
+                        Point3 lastP = PointAt(cs[i - 1], plane);
+                        Point3 p = PointAt(cs[i % cs.size()], plane);
+                        double lastDist = cutplane.signedDistanceTo(lastP);
+                        double dist = cutplane.signedDistanceTo(p);
+
+                        if (lastDist < 0 && dist > 0 || lastDist > 0 && dist < 0){
+                            Point3 intersection = (lastP * abs(dist) + p * abs(lastDist)) / (abs(dist) + abs(lastDist));
+                            double order = intersection.dot(along);
+                            Point2 projOnCutPlane((intersection - original).dot(x), (intersection - original).dot(y));
+                            cutpoints.push_back(ScoreAs(std::make_pair(intersection, projOnCutPlane), order));
+                        }
+                    }
+                }
+
+                if (cutpoints.empty()){
+                    continue;
+                }
+                assert(cutpoints.size() % 2 == 0);
+                if (cutpoints.size() % 2 != 0){
+                    std::cout << "ODD cutpoints num!!!" << std::endl;
+                }
+
+                // chain the segments
+                std::sort(cutpoints.begin(), cutpoints.end());
+                for (int i = 0; i < cutpoints.size(); i += 2){
+                    RegionLoopSegment segment;
+                    segment.rh = r.topo.hd;
+                    segment.range.first = cutpoints[i].component.first;
+                    segment.range.second = cutpoints[i + 1].component.first;
+                    segments.push_back(segment);
+                    startAngles.push_back(SignedAngleBetweenDirections(Vec2(1, 0), cutpoints[i].component.second));
+                }
+
+            }
+            
+            if (segments.empty())
+                return segments;
+
+            std::vector<int> ids(segments.size());
+            std::iota(ids.begin(), ids.end(), 0);
+            std::sort(ids.begin(), ids.end(), [&startAngles](int id1, int id2){return startAngles[id1] < startAngles[id2]; });
+
+            std::vector<RegionLoopSegment> segs;
+            segs.reserve(segments.size());
+            for (int id : ids){
+                segs.push_back(std::move(segments[id]));
+            }
+            return segs;
+
+        }
+
+
+        Chain3 MakeChain(const std::vector<RegionLoopSegment> & loop){
+            Chain3 chain;
+            chain.closed = true;
+            chain.points.reserve(loop.size() * 2);
+            for (auto & seg : loop){
+                chain.points.push_back(seg.range.first);
+                chain.points.push_back(seg.range.second);
+            }
+            return chain;
+        }
+
+
+
+        std::pair<double, double> EstimateEffectiveRangeAlongDirection(
+            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
+            const Vec3 & direction, double stepLen, double minEffectiveAreaRatio,
+            double gamma1, double gamma2){
+
+            double minv = std::numeric_limits<double>::max();
+            double maxv = std::numeric_limits<double>::lowest();
+
+            auto ndir = normalize(direction);
+            for (auto it = polygons.begin(); it != polygons.end(); ++it){
+                for (auto & ply : *it){
+                    for (auto & p : ply.corners){
+                        double pos = p.dot(ndir);
+                        if (minv > pos) minv = pos;
+                        if (maxv < pos) maxv = pos;
+                    }
+                }
+            }
+            
+            assert(maxv - minv > 0);
+
+            std::vector<double> areas;
+            std::vector<double> dareas;
+            for (double x = minv; x <= maxv; x += stepLen){
+                Plane3 cutplane(ndir * x, ndir);
+                auto chain = MakeChain(CutRegionLoopAt(polygons, cutplane));
+                double area = chain.size() < 3 ? 0.0 : Area(chain);
+                assert(area >= 0.0);
+                dareas.push_back(area - (areas.empty() ? 0.0 : areas.back()));
+                areas.push_back(area);
+            }
+
+            std::pair<double, double> range(0, 0);
+            if (areas.size() < 2){
+                return range;
+            }
+            dareas[0] = dareas[1];
+
+            size_t maxCutAreaId = std::max_element(areas.begin(), areas.end()) - areas.begin();
+            double maxCutArea = areas[maxCutAreaId];
+
+            int start = 0;
+            while (start < areas.size() && areas[start] < minEffectiveAreaRatio * maxCutArea) ++start;
+            int end = areas.size() - 1;
+            while (end >= 0 && areas[end] < minEffectiveAreaRatio * maxCutArea) --end;
+
+            std::cout << "all: " << areas.size() << std::endl;
+            std::cout << "start: " << start << std::endl;
+            std::cout << "end: " << end << std::endl;
+
+            if (start >= end)
+                return range;
+            if (start > maxCutAreaId || end < maxCutAreaId)
+                return range;
+            
+            range.first = start * stepLen + minv;
+            range.second = end * stepLen + minv;
+            //for (int i = start; i < maxCutAreaId; i++){
+            //    if (i != 0 && (dareas[i] - dareas[i - 1]) / maxCutArea * ((maxv - minv) / stepLen) < -gamma1){
+            //        range.first = i * stepLen + minv;
+            //        break;
+            //    }
+            //}
+
+            //for (int i = end; i > maxCutAreaId; i--){
+            //    if (i != areas.size() - 1 && (dareas[i] - dareas[i + 1]) / maxCutArea * ((maxv - minv) / stepLen) < -gamma2){
+            //        range.second = i * stepLen + minv;
+            //        break;
+            //    }
+            //}
+
+            return range;
+
+        }
 
 
 
@@ -3521,11 +3797,6 @@ namespace panoramix {
 
 
 
-        void LooseMaybeOcclusionBoundaryConstraints(const RLGraph & mg, RLGraphPropertyTable & props){
-
-            NOT_IMPLEMENTED_YET();
-
-        }
 
 
 

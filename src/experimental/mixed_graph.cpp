@@ -37,16 +37,16 @@ namespace panoramix {
 
             // append regions
             SegmentationExtractor segmenter;
-            segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
+            segmenter.params().algorithm = core::SegmentationExtractor::SLIC;
             segmenter.params().sigma = 0.5;
             segmenter.params().c = 30.0;
             segmenter.params().superpixelSizeSuggestion = -1;
-            segmenter.params().superpixelNumberSuggestion = 500;
+            segmenter.params().superpixelNumberSuggestion = 1000;
             std::vector<core::Line2> pureLines(lines.size());
             for (int i = 0; i < lines.size(); i++)
                 pureLines[i] = lines[i].component;
             int segmentsNum = 0;
-            std::tie(regions, segmentsNum) = segmenter(image, pureLines, image.cols / 100.0);
+            std::tie(regions, segmentsNum) = segmenter(image/*, pureLines, image.cols / 100.0*/);
 
             regionIds2Handles = AppendRegions(regionLineGraph, regions, view.camera, 0.001, 0.001, 3, 1);
             
@@ -294,17 +294,6 @@ namespace panoramix {
             }
 
 
-            inline double DepthAt(const Vec3 & direction, const Plane3 & plane){
-                Ray3 ray(Point3(0, 0, 0), direction);
-                return norm(IntersectionOfLineAndPlane(ray, plane).position);
-            }
-
-            inline double DepthAt(const Vec3 & direction, const Line3 & line){
-                Ray3 ray(Point3(0, 0, 0), direction);
-                return norm(DistanceBetweenTwoLines(ray, line.infiniteLine()).second.first);
-            }
-
-
         }
 
 
@@ -477,36 +466,40 @@ namespace panoramix {
             /// add vars
 
             // add region orientation constraint flags
-            auto regionOrientationVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 5, 0.5 }); // 3: {no constraints, vertical, tofront, ceilingfloor, side}
+            // 3: {no constraints, vertical, tofront, ceilingfloor, side}
+            auto regionOrientationVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 5, 0.5 });
             auto regionVhs = regionLineGraph.createComponentTable<RegionData, ml::FactorGraph::VarHandle>();
             for (auto & r : regionLineGraph.components<RegionData>()){
                 regionVhs[r.topo.hd] = fg.addVar(regionOrientationVc);
             }
 
             // add line orientation constraint flags
-            auto lineOrientationVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ vpnum + 1, 0.5 }); // 2: {no constraints, vp0, vp1, ...}
+            // 2: {no constraints, vp0, vp1, ...}
+            auto lineOrientationVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ vpnum + 1, 0.5 }); 
             auto lineVhs = regionLineGraph.createComponentTable<LineData, ml::FactorGraph::VarHandle>();
             for (auto & l : regionLineGraph.components<LineData>()){
                 lineVhs[l.topo.hd] = fg.addVar(lineOrientationVc);
             }
             
             // add boundary flags
-            auto boundaryOcclusionVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 }); // 2: {not connected, connected}
+            // 2: {not connected, connected}
+            auto boundaryOcclusionVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 });
             auto boundaryVhs = regionLineGraph.createConstraintTable<RegionBoundaryData, ml::FactorGraph::VarHandle>();
             for (auto & b : regionLineGraph.constraints<RegionBoundaryData>()){
                 boundaryVhs[b.topo.hd] = fg.addVar(boundaryOcclusionVc);
             }
 
             // add line connection flags
-            // 2: {this line connected with left side, connect with right side}
-            auto lineConnectionSidesVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 3, 0.5 }); // 3 : {both, left, right}
+            // 3 : {both, left, right}
+            auto lineConnectionSidesVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 3, 0.5 }); 
             auto lineConnectionSidesVhs = regionLineGraph.createComponentTable<LineData, ml::FactorGraph::VarHandle>();
             for (auto & l : regionLineGraph.components<LineData>()){
                 lineConnectionSidesVhs[l.topo.hd] = fg.addVar(lineConnectionSidesVc);
             }
 
             // add ll connection flags
-            auto llConVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 }); // 2: {not connected, connected}
+            // 2: {not connected, connected}
+            auto llConVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 });
             auto llConVhs = regionLineGraph.createConstraintTable<LineRelationData, ml::FactorGraph::VarHandle>();
             for (auto & r : regionLineGraph.constraints<LineRelationData>()){
                 llConVhs[r.topo.hd] = fg.addVar(llConVc);
@@ -708,7 +701,7 @@ namespace panoramix {
             LOG("initialize");
             AttachPrincipleDirectionConstraints(regionLineGraph, props, M_PI / 50.0);
             AttachWallConstriants(regionLineGraph, props, M_PI / 80.0);
-            AttachAnchorToCenterOfLargestRegion(regionLineGraph, props);
+            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(regionLineGraph, props);
 
             const auto defaultProps = props;
 

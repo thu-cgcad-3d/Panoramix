@@ -69,15 +69,17 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
     QList<QAction*> & actions, QWidget * parent);
 
 
-
+template <class CameraT>
 struct ReconstructionRefinement {
-    panoramix::core::View<panoramix::core::PanoramicCamera> view;
+    panoramix::core::View<CameraT> view;
     panoramix::experimental::RLGraph mg;
     panoramix::experimental::RLGraphPropertyTable props;
     
 };
 
-
+StepWidgetInterface * CreateBindingWidgetAndActions(
+    DataOfType<ReconstructionRefinement<panoramix::core::PanoramicCamera>> & rec,
+    QList<QAction*> & actions, QWidget * parent);
 
 
 #endif

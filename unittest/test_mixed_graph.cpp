@@ -196,8 +196,8 @@ TEST(MixedGraph, Batch){
     ForEachCase([](int id, const std::vector<std::vector<int32_t>> & indices, const std::vector<double> & occscore,
         const Image & image, const Image7d & gc, const Imagef & depth, const CameraParams & cameraParams){
         
-        if (id < 5)
-            return;
+        //if (id < 4)
+        //    return;
        
         core::GeneralPerspectiveCamera cam_rgb(640, 480, cameraParams.c_rgb, cameraParams.f_rgb);
         core::GeneralPerspectiveCamera cam_d(640, 480, cameraParams.c_d, cameraParams.f_d);
@@ -221,6 +221,8 @@ TEST(MixedGraph, Batch){
         mg.installOcclusionResponce(indices, occscore);
         mg.installGCResponse(gc);
         mg.depthCandidates.push_back(depth);
+
+        mg.showSegmentations();
 
         mg.solve();
 

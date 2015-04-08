@@ -97,17 +97,34 @@ namespace panoramix {
 
             void resize(size_t sz) { data.resize(sz); }
             const DataT & operator[](HandleT h) const { return data[h.id]; }
-            const DataT & at(HandleT h) const { return data[h.id]; }
+            const DataT & at(HandleT h) const { return data.at(h.id); }
             DataT & operator[](HandleT h) { return data[h.id]; }
 
-            using iterator = typename ContainerT::iterator;
-            using const_iterator = typename ContainerT::const_iterator;
             using value_type = typename ContainerT::value_type;
+            struct iterator {
+                ContainerT & cont;
+                typename ContainerT::iterator i;
+                HandleT hd() const { return HandleT(std::distance(std::begin(cont), i)); }
+                value_type & operator * () const { return *i; }
+                iterator & operator ++ () { ++i; return *this; }
+                bool operator == (iterator it) const { return i == it.i; }
+                bool operator != (iterator it) const { return i != it.i; }
+            };
+
+            struct const_iterator {
+                const ContainerT & cont;
+                typename ContainerT::const_iterator i;
+                HandleT hd() const { return HandleT(std::distance(std::begin(cont), i)); }
+                const value_type & operator * () const { return *i; }
+                const_iterator & operator ++ () { ++i; return *this; }
+                bool operator == (const_iterator it) const { return i == it.i; }
+                bool operator != (const_iterator it) const { return i != it.i; }
+            };
             
-            inline iterator begin() { return data.begin(); }
-            inline iterator end() { return data.end(); }
-            inline const_iterator begin() const { return data.begin(); }
-            inline const_iterator end() const { return data.end(); }
+            inline iterator begin() { return iterator{ data, data.begin() }; }
+            inline iterator end() { return iterator{ data, data.end() }; }
+            inline const_iterator begin() const { return const_iterator{ data, data.begin() }; }
+            inline const_iterator end() const { return const_iterator{ data, data.end() }; }
 
             template <class Archive> inline void serialize(Archive & ar) { ar(data); }
             ContainerT data;

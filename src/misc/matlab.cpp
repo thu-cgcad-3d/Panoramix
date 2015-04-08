@@ -2,6 +2,7 @@
 #include <engine.h>
 #endif
 
+#include "matlab_tools.hpp"
 #include "matlab.hpp"
 
 namespace panoramix {
