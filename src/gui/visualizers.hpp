@@ -28,7 +28,8 @@ namespace panoramix {
                     core::Point2(250, 250), 250, { 1.0, 1.0, 1.0 }, { 0.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 });
                 renderOptions.bwColor = 0.3;
                 renderOptions.bwTexColor = 0.7;
-                renderOptions.showInside = true;
+                renderOptions.cullFrontFace = true;
+                renderOptions.cullBackFace = false;
 
                 installingOptions.discretizeOptions.color = ColorTag::Black;
                 installingOptions.discretizeOptions.colorTable = ColorTableDescriptor::AllColors;

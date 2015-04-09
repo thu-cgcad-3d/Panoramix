@@ -1,5 +1,4 @@
-#ifndef PROJECT_HPP
-#define PROJECT_HPP
+#pragma once
  
 #include <memory>
 #include <QtCore>
@@ -44,6 +43,3 @@ protected:
     QReadWriteLock _confLock;
 };
 
-
- 
-#endif

@@ -3,6 +3,7 @@
 
 
 #include "../core/basic_types.hpp"
+#include "../core/utilities.hpp"
 #include "../core/generic_topo.hpp"
 #include "../core/cons_graph.hpp"
 #include "../core/cameras.hpp"
@@ -27,6 +28,11 @@ namespace panoramix {
             ConstraintConfig<RegionLineConnectionData, RegionData, LineData>
             >
         >;   
+
+        template <class T>
+        using RLGraphComponentTable = typename ComponentHandledTableFromConstraintGraph<T, RLGraph>::type;
+        template <class T>
+        using RLGraphConstraintTable = typename ConstraintHandledTableFromConstraintGraph<T, RLGraph>::type;
 
 
 
@@ -82,10 +88,11 @@ namespace panoramix {
         // region and line
         struct RegionLineConnectionData {
             std::vector<Vec3> normalizedAnchors;
+            double length;
             bool detachable; // if the line lies on the edge of a region, it may be detachable from the region
             template <class Archiver>
             void serialize(Archiver & ar) {
-                ar(normalizedAnchors, detachable);
+                ar(normalizedAnchors, length, detachable);
             }
         };
         using RegionLineConnectionHandle = ConstraintHandle<RegionLineConnectionData>;
@@ -94,8 +101,10 @@ namespace panoramix {
 
 
         // junction weight 
+        // 7.0, 10.0
         float IncidenceJunctionWeight(bool acrossViews);
         float OutsiderIntersectionJunctionWeight();
+        // [0.0 ~ 5.0]
         float ComputeIntersectionJunctionWeightWithLinesVotes(const Mat<float, 3, 2> & votes);
 
 
@@ -126,92 +135,150 @@ namespace panoramix {
             int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3);
 
 
-        // mixed grpah property
-        struct RLGraphComponentProperty {
+        // get a perfect mask view for a region
+        View<PartialPanoramicCamera, Imageub> PerfectRegionMaskView(const RLGraph & mg, RegionHandle rh, double focal = 100.0);
+
+
+        // connected component ids
+        int ConnectedComponents(const RLGraph & mg, RLGraphComponentTable<int> & ccids);
+        std::vector<RLGraph> Decompose(const RLGraph & mg, const RLGraphComponentTable<int> & ccids, int ccnum);
+
+        
+        // rl graph controlers
+        struct RLGraphComponentControl {
             bool used; // not used for void/non-planar areas
             int orientationClaz;
             int orientationNotClaz; // if region is tangential with some vp ?
-            std::vector<Scored<Point3>> weightedAnchors;
-            std::vector<double> variables;
+            std::vector<Weighted<Point3>> weightedAnchors;
             template <class Archiver>
             inline void serialize(Archiver & ar) {
-                ar(used, orientationClaz, orientationNotClaz, weightedAnchors, variables);
+                ar(used, orientationClaz, orientationNotClaz, weightedAnchors);
             }
         };
-        struct RLGraphConstraintProperty {
+        using RLGraphComponentControls = RLGraphComponentTable<RLGraphComponentControl>;
+
+        struct RLGraphConstraintControl {
             bool used;
             double weight;
             template <class Archiver>
-            inline void serialize(Archiver & ar) { 
+            inline void serialize(Archiver & ar) {
                 ar(used, weight);
             }
         };
-        
-        using RLGraphComponentPropertyTable = 
-            ComponentHandledTableFromConstraintGraph<RLGraphComponentProperty, RLGraph>::type;
-        using RLGraphConstraintPropertyTable =
-            ConstraintHandledTableFromConstraintGraph<RLGraphConstraintProperty, RLGraph>::type;
-        
-        // property table
-        struct RLGraphPropertyTable {
-            std::vector<Vec3> vanishingPoints;
-            
-            RLGraphComponentPropertyTable componentProperties;
-            RLGraphConstraintPropertyTable constraintProperties;
+        using RLGraphConstraintControls = RLGraphConstraintTable<RLGraphConstraintControl>;
 
-            template <class DataT> 
-            inline RLGraphComponentProperty & operator[](ComponentHandle<DataT> h) { 
-                return componentProperties[h]; 
+
+        struct RLGraphControls {
+            std::vector<Vec3> vanishingPoints;
+            RLGraphComponentControls componentControls;
+            RLGraphConstraintControls constraintControls;
+
+            template <class DataT>
+            inline RLGraphComponentControl & operator[](ComponentHandle<DataT> h) {
+                return componentControls[h];
             }
             template <class DataT>
-            inline const RLGraphComponentProperty & operator[](ComponentHandle<DataT> h) const {
-                return componentProperties[h]; 
+            inline const RLGraphComponentControl & operator[](ComponentHandle<DataT> h) const {
+                return componentControls[h];
             }
             template <class DataT>
-            inline RLGraphConstraintProperty & operator[](ConstraintHandle<DataT> h) {
-                return constraintProperties[h]; 
+            inline RLGraphConstraintControl & operator[](ConstraintHandle<DataT> h) {
+                return constraintControls[h];
             }
             template <class DataT>
-            inline const RLGraphConstraintProperty & operator[](ConstraintHandle<DataT> h) const {
-                return constraintProperties[h]; 
+            inline const RLGraphConstraintControl & operator[](ConstraintHandle<DataT> h) const {
+                return constraintControls[h];
             }
+
+            void disable(RegionHandle h, const RLGraph & mg);
+            void disable(LineHandle h, const RLGraph & mg);
+            void enable(RegionHandle h, const RLGraph & mg);
+            void enable(LineHandle h, const RLGraph & mg);
+            
+            template <class DataT>
+            void disable(ConstraintHandle<DataT> h, const RLGraph & mg) { constraintControls[h].used = false; }
+            template <class DataT>
+            bool enable(ConstraintHandle<DataT> h, const RLGraph & mg) {
+                constraintControls[h].used = componentControls[mg.topo(h).constraint<0>()].used &&
+                    componentControls[mg.topo(h).constraint<1>()].used;
+                return constraintControls[h].used;
+            }
+
+            void disableAllInvalidConstraints(const RLGraph & mg);
+            void enableAll();
 
             template <class Archiver>
             inline void serialize(Archiver & ar) {
-                ar(vanishingPoints, componentProperties, constraintProperties); 
+                ar(vanishingPoints, componentControls, constraintControls);
             }
         };
 
-        // make property table
-        RLGraphPropertyTable MakeRLGraphPropertyTable(const RLGraph & mg, const std::vector<Vec3> & vps);
+
+        struct RLGraphVar {
+            std::vector<double> variables;
+            template <class Archiver>
+            inline void serialize(Archiver & ar) {
+                ar(variables);
+            }
+        };
+        using RLGraphVars = RLGraphComponentTable<RLGraphVar>;
+
+
+        // make controls
+        RLGraphControls MakeControls(const RLGraph & mg, const std::vector<Vec3> & vps);
+
+
+
+        int ConnectedComponents(const RLGraph & mg, const RLGraphControls & controls,
+            RLGraphComponentTable<int> & ccids,
+            const std::function<bool(const RLGraphConstraintControl &)> & constraintAsConnected = nullptr);
+        std::vector<RLGraphControls> Decompose(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphComponentTable<int> & ccids, int ccnum);
+
 
         // reset weights
-        void ResetWeights(const RLGraph & mg, RLGraphPropertyTable & props);
+        void ResetWeights(const RLGraph & mg, RLGraphControls & controls);
+
+        template <class ConstraintDataT, class FunT>
+        inline void SetConstraintWeights(RLGraphControls & controls, FunT && fun){
+            auto & data = controls.constraintControls.dataOfType<ConstraintHandle<ConstraintDataT>>();
+            for (int i = 0; i < data.size(); i++){
+                data[i].weight = fun(ConstraintHandle<ConstraintDataT>(i));
+            }
+        }
+
+        template <class ComponentDataT, class FunT>
+        inline void SetComponentControl(RLGraphControls & controls, FunT && fun){
+            auto & data = controls.componentControls.dataOfType<ComponentHandle<ComponentDataT>>();
+            for (int i = 0; i < data.size(); i++){
+                fun(ComponentHandle<ComponentDataT>(i), data[i]);
+            }
+        }
 
         // reset variables
-        void ResetVariables(const RLGraph & mg, RLGraphPropertyTable & props);
-
-        // make dangling constraints unused
-        void UpdateConstraintUsabilities(const RLGraph & mg, RLGraphPropertyTable & props,
-            bool enableDisabledConstraints = true);
+        RLGraphVars MakeVariables(const RLGraph & mg, const RLGraphControls & controls);
 
 
 
         // component instances and related tools
-        Line3 Instance(const RLGraph & mg, const RLGraphPropertyTable & props, const LineHandle & lh);
-        Plane3 Instance(const RLGraph & mg, const RLGraphPropertyTable & props, const RegionHandle & rh);
+        Line3 Instance(const RLGraph & mg, const RLGraphControls & controls, 
+            const RLGraphVars & vars, const LineHandle & lh);
+        Plane3 Instance(const RLGraph & mg, const RLGraphControls & controls, 
+            const RLGraphVars & vars, const RegionHandle & rh);
+
 
         template <class ComponentT>
-        using InstanceType = decltype(Instance(std::declval<RLGraph>(), 
-            std::declval<RLGraphPropertyTable>(), std::declval<ComponentHandle<ComponentT>>()));
+        using InstanceType = decltype(Instance(std::declval<RLGraph>(), std::declval<RLGraphControls>(),
+            std::declval<RLGraphVars>(), std::declval<ComponentHandle<ComponentT>>()));
 
         template <class ComponentT>
         inline HandledTable<ComponentHandle<ComponentT>, InstanceType<ComponentT>> Instances(
-            const RLGraph & mg, const RLGraphPropertyTable & props) {
+            const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars) {
             auto instances = mg.createComponentTable<ComponentT, InstanceType<ComponentT>>();
             for (auto & c : mg.components<ComponentT>()){
-                if (props[c.topo.hd].used)
-                    instances[c.topo.hd] = Instance(mg, props, c.topo.hd);
+                if (controls[c.topo.hd].used)
+                    instances[c.topo.hd] = Instance(mg, controls, vars, c.topo.hd);
             }
             return instances;
         }
@@ -228,82 +295,104 @@ namespace panoramix {
             return normalize(direction) * DepthAt(direction, inst, eye);
         }
 
+        // region polygons
+        std::vector<Polygon3> RegionPolygon(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars, RegionHandle rh);
+        HandledTable<RegionHandle, std::vector<Polygon3>> RegionPolygons(const RLGraph & mg, 
+            const RLGraphControls & controls,
+            const RLGraphVars & vars);
+
 
 
 
         // solve equations
-        void AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg, RLGraphPropertyTable & props, 
+        bool AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg,
+            RLGraphControls & controls,
             double depth = 1.0, double weight = 20.0);
-        void SolveVariablesUsingInversedDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights = false);
-        //void SolveVariablesUsingNormalDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights = true);
+        bool AttachAnchorToCenterOfLargestLineIfNoAnchorExists(const RLGraph & mg,
+            RLGraphControls & controls,
+            double depth = 1.0, double weight = 20.0);
+
+        RLGraphVars SolveVariables(const RLGraph & mg, 
+            const RLGraphControls & controls, bool useWeights = false);
         
         // model properties
-        double ComponentMedianCenterDepth(const RLGraph & mg, const RLGraphPropertyTable & props);
-        double ComputeScore(const RLGraph & mg, const RLGraphPropertyTable & props);
+        double MedianCenterDepth(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars);
+        double Score(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars);
 
-        void NormalizeVariables(const RLGraph & mg, RLGraphPropertyTable & props);
+
+        void NormalizeVariables(const RLGraph & mg, const RLGraphControls & controls,
+            RLGraphVars & vars);
+
+     
+
 
 
 
         // adjust constraints
-        void AttachPrincipleDirectionConstraints(const RLGraph & mg, RLGraphPropertyTable & props, 
-            double rangeAngle = M_PI / 100.0, bool avoidLineConflictions = true);
-        void AttachWallConstriants(const RLGraph & mg, RLGraphPropertyTable & props,
-            double rangeAngle = M_PI / 100.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
-        void AttachFloorAndCeilingConstraints(const RLGraph & mg, RLGraphPropertyTable & props,
+        void AttachPrincipleDirectionConstraints(const RLGraph & mg, RLGraphControls & controls,
+            double rangeAngle = M_PI / 30.0, bool avoidLineConflictions = true);
+        void AttachWallConstriants(const RLGraph & mg, RLGraphControls & controls,
+            double rangeAngle = M_PI / 60.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
+        void AttachFloorAndCeilingConstraints(const RLGraph & mg, 
+            RLGraphControls & controls, const RLGraphVars & vars,
             double eyeHeightRatioLowerBound = 0.1, double eyeHeightRatioUpperBound = 0.6,
             double angleThreshold = M_PI / 100.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
 
-        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphPropertyTable & props, 
-            const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
-            const std::vector<PerspectiveCamera> & gcCameras,
-            int shrinkRegionOrientationIteration = 1, bool considerGCVerticalConstraint = false);
+
+        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
+            const PanoramicCamera & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes, 
+            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun = nullptr);
 
 
-        void LooseOrientationConstraintsOnComponents(const RLGraph & mg, RLGraphPropertyTable & props,
-            double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05, double distThresRatio = 0.12);
+        void LooseOrientationConstraintsOnComponents(const RLGraph & mg, 
+            RLGraphControls & controls, const RLGraphVars & vars,
+            double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05, 
+            double distThresRatio = 0.12);
+
+
+
+
 
 
 
 
         
-        // region polygons
-        HandledTable<RegionHandle, std::vector<Polygon3>> RegionPolygons(const RLGraph & mg,
-            const RLGraphPropertyTable & props);
-
         // cut loop
-        struct RegionLoopSegment{
+        struct SectionalPiece {
             RegionHandle rh;
             std::pair<Point3, Point3> range;
         };
-        std::vector<RegionLoopSegment> CutRegionLoopAt(
-            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
+        using SectionalLoop = std::vector<SectionalPiece>;
+        SectionalLoop CutRegionLoopAt(
+            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
             const Plane3 & cutplane);
-        Chain3 MakeChain(const std::vector<RegionLoopSegment> & loop);
-        inline double Area(const std::vector<RegionLoopSegment> & loop) { return Area(Polygon3(MakeChain(loop))); }
+        Chain3 MakeChain(const SectionalLoop & loop);
+        inline double Area(const SectionalLoop & loop) { return Area(Polygon3(MakeChain(loop))); }
+
 
 
         // estimate 
         std::pair<double, double> EstimateEffectiveRangeAlongDirection(
-            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
-            const Vec3 & direction, double stepLen, double minEffectiveAreaRatio = 0.6, 
+            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
+            const Vec3 & direction, double stepLen, double minEffectiveAreaRatio = 0.6,
             double gamma1 = 0.05, double gamma2 = 0.05);
-       
         
+       
+
 
 
 
         // visualize current mixed graph
         void Visualize(const View<PanoramicCamera> & texture, 
-            const RLGraph & mg, RLGraphPropertyTable & props);
+            const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars);
         void Visualize(const View<PerspectiveCamera> & texture,
-            const RLGraph & mg, RLGraphPropertyTable & props);
+            const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars);
 
 
 
-
-        // refine the mixed graph variables to a structure
-        HandledTable<RegionHandle, int> ClusterRegions(const RLGraph & mg, const RLGraphPropertyTable & props);
 
 
 

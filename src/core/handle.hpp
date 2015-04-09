@@ -134,9 +134,27 @@ namespace panoramix {
         // mixed handled table
         template <class DataT, class ... HandleTs>
         struct MixedHandledTable {
+            static const int HandlesNum = sizeof...(HandleTs);
             using HandleTupleType = std::tuple<HandleTs...>;
-            template <class ... IntTs>
-            explicit MixedHandledTable(IntTs ... maxSizes) : data({ { std::vector<DataT>(maxSizes)... } }) {}
+
+            MixedHandledTable() {}
+
+            explicit MixedHandledTable(std::initializer_list<size_t> maxSizes) {
+                assert(maxSizes.size() <= HandlesNum);
+                int i = 0;
+                for (size_t sz : maxSizes){
+                    data[i++] = std::vector<DataT>(sz);
+                }
+            }
+
+            MixedHandledTable(std::initializer_list<size_t> maxSizes, const DataT & d) {
+                assert(maxSizes.size() <= HandlesNum);
+                int i = 0;
+                for (size_t sz : maxSizes){
+                    data[i++] = std::vector<DataT>(sz, d);
+                }
+            }
+
             template <class ... IntTs>
             explicit MixedHandledTable(const std::tuple<IntTs...> & maxSizes)
                 : data({ { std::vector<DataT>(std::get<TypeFirstLocationInTuple<HandleTs, HandleTupleType>::value>(maxSizes)) } }) {}
@@ -166,6 +184,8 @@ namespace panoramix {
             std::vector<DataT> & dataOfType() {
                 return data[TypeFirstLocationInTuple<HandleT, HandleTupleType>::value];
             }
+
+
             template <class Archive> inline void serialize(Archive & ar) { ar(data); }
             std::array<std::vector<DataT>, sizeof...(HandleTs)> data;
         };

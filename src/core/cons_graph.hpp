@@ -443,6 +443,8 @@ namespace panoramix {
                 mergeConstraintsUsingSequence(cg, thisComponentSizes, thisConstraintSizes, SequenceGenerator<ConstraintDataTypeNum>::type());
             }
 
+            inline size_t allComponentsNum() const { return allComponentsNumUsingSequence(SequenceGenerator<ComponentDataTypeNum>::type()); }
+            inline size_t allConstraintsNum() const { return allConstraintsNumUsingSequence(SequenceGenerator<ConstraintDataTypeNum>::type()); }
 
             template <class Archiver> inline void serialize(Archiver & ar) { ar(_components, _constraints); }
         
@@ -610,6 +612,18 @@ namespace panoramix {
                 return 0;
             }
 
+            template <int ... CompIds>
+            size_t allComponentsNumUsingSequence(Sequence<CompIds...>) const {
+                size_t szs[] = { std::get<CompIds>(_components).size() ... };
+                return std::accumulate(std::begin(szs), std::end(szs), 0ull);
+            }
+
+            template <int ... ConsIds>
+            size_t allConstraintsNumUsingSequence(Sequence<ConsIds...>) const {
+                size_t szs[] = { std::get<ConsIds>(_constraints).size() ... };
+                return std::accumulate(std::begin(szs), std::end(szs), 0ull);
+            }
+
         
         private:
             ComponentsTripletArrayTuple _components;
@@ -650,16 +664,18 @@ namespace panoramix {
 
         template <class DataT, class ... ComponentTs, class ConstraintConfigTupleT>
         inline MixedHandledTable<DataT, ComponentHandle<ComponentTs>...> MakeHandledTableForAllComponents(
-            const ConstraintGraph<std::tuple<ComponentTs ...>, ConstraintConfigTupleT> & cg) {
-            return MixedHandledTable<DataT, ComponentHandle<ComponentTs>...>(cg.internalComponents<ComponentTs>().size() ...);
+            const ConstraintGraph<std::tuple<ComponentTs ...>, ConstraintConfigTupleT> & cg, const DataT & d = DataT()) {
+            return MixedHandledTable<DataT, ComponentHandle<ComponentTs>...>({ cg.internalComponents<ComponentTs>().size() ... }, d);
         }
 
         template <class DataT, class ComponentDataTupleT, class ... ConstraintConfigTs>
         inline MixedHandledTable<DataT, ConstraintHandle<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>...> 
             MakeHandledTableForAllConstraints(
-            const ConstraintGraph<ComponentDataTupleT, std::tuple<ConstraintConfigTs...>> & cg){
-            return MixedHandledTable<DataT, ConstraintHandle<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>...>(
-                cg.internalConstraints<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>().size() ...);
+            const ConstraintGraph<ComponentDataTupleT, std::tuple<ConstraintConfigTs...>> & cg,
+            const DataT & d = DataT()){
+            return MixedHandledTable<DataT, ConstraintHandle<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>...>({ 
+                cg.internalConstraints<typename MemberTypesOfConstraintConfig<ConstraintConfigTs>::ConstraintData>().size() ... 
+            }, d);
         }
     	
     }

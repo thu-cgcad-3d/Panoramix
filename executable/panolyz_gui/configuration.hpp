@@ -1,5 +1,4 @@
-#ifndef CONFIGURATION_HPP
-#define CONFIGURATION_HPP
+#pragma once
 
 #include "../../src/core/basic_types.hpp"
 #include "../../src/core/cameras.hpp"
@@ -7,6 +6,7 @@
 
 #include "stepsdag.hpp"
 
+using namespace panoramix;
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
     DataOfType<panoramix::core::PanoramicView> & pv,
@@ -40,8 +40,9 @@ template <class CameraT>
 struct ReconstructionSetup {
     panoramix::core::View<CameraT> view;
     panoramix::experimental::RLGraph mg;
-    panoramix::experimental::RLGraphPropertyTable props;
+    panoramix::experimental::RLGraphControls controls;
     panoramix::core::Imagei segmentation;
+    std::vector<panoramix::experimental::RegionHandle> segId2RegionHandles;
 };
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
@@ -53,11 +54,16 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
     QList<QAction*> & actions, QWidget * parent);
 
 
+struct RLGraphAndControl {
+    panoramix::experimental::RLGraph mg;
+    panoramix::experimental::RLGraphControls controls;
+    panoramix::experimental::RLGraphVars vars;
+};
+
 template <class CameraT>
 struct Reconstruction {
     panoramix::core::View<CameraT> view;
-    panoramix::experimental::RLGraph mg;
-    panoramix::experimental::RLGraphPropertyTable props;
+    std::vector<RLGraphAndControl> gs;
 };
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
@@ -72,14 +78,10 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
 template <class CameraT>
 struct ReconstructionRefinement {
     panoramix::core::View<CameraT> view;
-    panoramix::experimental::RLGraph mg;
-    panoramix::experimental::RLGraphPropertyTable props;
-    
+    std::vector<panoramix::core::LayeredShape3> shapes;
 };
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
     DataOfType<ReconstructionRefinement<panoramix::core::PanoramicCamera>> & rec,
     QList<QAction*> & actions, QWidget * parent);
 
-
-#endif

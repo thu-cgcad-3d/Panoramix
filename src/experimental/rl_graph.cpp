@@ -375,7 +375,7 @@ namespace panoramix {
                 double incidenceDistanceAlongDirectionThreshold,
                 double incidenceDistanceVerticalDirectionThreshold,
                 bool includeIncidencesBetweenUnclassifiedLines = false,
-                bool computeJunctionWeights = false){
+                bool computeJunctionWeights = true){
 
                 /// TODO include all line relations is NOT STABLE!
 
@@ -598,7 +598,7 @@ namespace panoramix {
             LinesGraph2D graph2d = CreateLinesGraph2D(lineSegments, vps2d, 
                 cam.focal() * intersectionAngleThreshold,
                 cam.focal() * incidenceAngleAlongDirectionThreshold,
-                cam.focal() * incidenceAngleVerticalDirectionThreshold);
+                cam.focal() * incidenceAngleVerticalDirectionThreshold, false, true);
 
             mg.internalComponents<LineData>().reserve(mg.internalComponents<LineData>().size() + 
                 graph2d.internalElements<0>().size());
@@ -971,6 +971,8 @@ namespace panoramix {
                 }                
 
                 for (auto & rlc : regionLineConnections){
+                    // compute length;
+                    rlc.second.length = AngleBetweenDirections(rlc.second.normalizedAnchors.front(), rlc.second.normalizedAnchors.back());
                     mg.addConstraint(std::move(rlc.second), rlc.first.first, rlc.first.second);
                 }
 
@@ -992,6 +994,321 @@ namespace panoramix {
             int samplerSizeOnBoundary, int samplerSizeOnLine){
             return AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
                 samplerSizeOnBoundary, samplerSizeOnLine);
+        }
+
+
+
+
+        View<PartialPanoramicCamera, Imageub> PerfectRegionMaskView(const RLGraph & mg, RegionHandle rh, double focal){
+            auto h = rh;
+            auto & contours = mg.data(rh).normalizedContours;
+            double radiusAngle = 0.0;
+            for (auto & cs : contours){
+                for (auto & c : cs){
+                    double angle = AngleBetweenDirections(mg.data(rh).normalizedCenter, c);
+                    if (angle > radiusAngle){
+                        radiusAngle = angle;
+                    }
+                }
+            }
+            int ppcSize = std::ceil(2 * radiusAngle * focal);
+            Vec3 x;
+            std::tie(x, std::ignore) = ProposeXYDirectionsFromZDirection(mg.data(rh).normalizedCenter);
+            PartialPanoramicCamera ppc(ppcSize, ppcSize, focal, Point3(0, 0, 0), mg.data(rh).normalizedCenter, x);
+            Imageub mask = Imageub::zeros(ppc.screenSize());
+
+            // project contours to ppc
+            std::vector<std::vector<Point2i>> contourProjs(contours.size());
+            for (int k = 0; k < contours.size(); k++){
+                auto & contourProj = contourProjs[k];
+                contourProj.reserve(contours[k].size());
+                for (auto & d : contours[k]){
+                    contourProj.push_back(vec_cast<int>(ppc.screenProjection(d)));
+                }
+            }
+            cv::fillPoly(mask, contourProjs, (uint8_t)1);
+            return View<PartialPanoramicCamera, Imageub>{mask, ppc};
+        }
+
+
+
+
+
+        int ConnectedComponents(const RLGraph & mg, RLGraphComponentTable<int> & ccIds) {
+            std::vector<RLGraph> ccs;
+
+            struct HComp {
+                enum Type { Region, Line };
+                Type type;
+                int id;
+            };
+            struct HCons {
+                enum Type { RegionBoundary, LineRelation, RegionLine };
+                Type type;
+                int id;
+            };
+
+            std::vector<HComp> comps;
+            std::vector<HCons> conss;
+            comps.reserve(mg.allComponentsNum());
+            conss.reserve(mg.allConstraintsNum());
+
+            auto comp2htable = MakeHandledTableForAllComponents<size_t>(mg);
+            auto cons2htable = MakeHandledTableForAllConstraints<size_t>(mg);
+
+            for (auto & r : mg.components<RegionData>()){
+                comp2htable[r.topo.hd] = comps.size();
+                comps.push_back({ HComp::Region, r.topo.hd.id });
+            }
+            for (auto & l : mg.components<LineData>()){
+                comp2htable[l.topo.hd] = comps.size();
+                comps.push_back({ HComp::Line, l.topo.hd.id });
+            }
+
+            for (auto & c : mg.constraints<RegionBoundaryData>()){
+                cons2htable[c.topo.hd] = conss.size();
+                conss.push_back({ HCons::RegionBoundary, c.topo.hd.id });
+            }
+            for (auto & c : mg.constraints<LineRelationData>()){
+                cons2htable[c.topo.hd] = conss.size();
+                conss.push_back({ HCons::LineRelation, c.topo.hd.id });
+            }
+            for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                cons2htable[c.topo.hd] = conss.size();
+                conss.push_back({ HCons::RegionLine, c.topo.hd.id });
+            }
+
+            std::vector<size_t> compIds(comps.size());
+            std::iota(compIds.begin(), compIds.end(), 0ull);
+
+            auto getNeighborComps = [&comps, &mg, &comp2htable](size_t compId){
+                auto & comp = comps[compId];
+                std::vector<size_t> neighbors;
+                if (comp.type == HComp::Region){
+                    RegionHandle rh(comp.id);
+                    for (auto & h : mg.topo(rh).constraints<RegionBoundaryData>()){
+                        auto another = mg.topo(h).component<0>();
+                        if (another == rh){
+                            another = mg.topo(h).component<1>();
+                        }
+                        neighbors.push_back(comp2htable[another]);
+                    }
+                    for (auto & h : mg.topo(rh).constraints<RegionLineConnectionData>()){
+                        LineHandle another = mg.topo(h).component<1>();
+                        neighbors.push_back(comp2htable[another]);
+                    }
+                }
+                else{
+                    LineHandle lh(comp.id);
+                    for (auto & h : mg.topo(lh).constraints<LineRelationData>()){
+                        auto another = mg.topo(h).component<0>();
+                        if (another == lh){
+                            another = mg.topo(h).component<1>();
+                        }
+                        neighbors.push_back(comp2htable[another]);
+                    }
+                    for (auto & h : mg.topo(lh).constraints<RegionLineConnectionData>()){
+                        RegionHandle another = mg.topo(h).component<0>();
+                        neighbors.push_back(comp2htable[another]);
+                    }
+                }
+                return neighbors;
+            };
+
+            return core::ConnectedComponents(compIds.begin(), compIds.end(), std::move(getNeighborComps),
+                [&ccIds, &comps](size_t v, int ccid){
+                const HComp & hcomp = comps[v];
+                if (hcomp.type == HComp::Line){
+                    ccIds[LineHandle(hcomp.id)] = ccid;
+                }
+                else{
+                    ccIds[RegionHandle(hcomp.id)] = ccid;
+                }
+            });
+        }
+
+        int ConnectedComponents(const RLGraph & mg, const RLGraphControls & controls, 
+            RLGraphComponentTable<int> & ccIds,
+            const std::function<bool(const RLGraphConstraintControl &)> & constraintAsConnected) {
+            std::vector<RLGraph> ccs;
+            
+            struct HComp {
+                enum Type { Region, Line };
+                Type type;
+                int id;
+            };
+            struct HCons {
+                enum Type { RegionBoundary, LineRelation, RegionLine };
+                Type type;
+                int id;
+            };
+
+            std::vector<HComp> comps;
+            std::vector<HCons> conss;
+            comps.reserve(mg.allComponentsNum());
+            conss.reserve(mg.allConstraintsNum());
+
+            auto comp2htable = MakeHandledTableForAllComponents<size_t>(mg);
+            auto cons2htable = MakeHandledTableForAllConstraints<size_t>(mg);
+
+            for (auto & r : mg.components<RegionData>()){
+                comp2htable[r.topo.hd] = comps.size();
+                comps.push_back({ HComp::Region, r.topo.hd.id });
+            }
+            for (auto & l : mg.components<LineData>()){
+                comp2htable[l.topo.hd] = comps.size();
+                comps.push_back({ HComp::Line, l.topo.hd.id });
+            }
+
+            for (auto & c : mg.constraints<RegionBoundaryData>()){
+                cons2htable[c.topo.hd] = conss.size();
+                conss.push_back({ HCons::RegionBoundary, c.topo.hd.id });
+            }
+            for (auto & c : mg.constraints<LineRelationData>()){
+                cons2htable[c.topo.hd] = conss.size();
+                conss.push_back({ HCons::LineRelation, c.topo.hd.id });
+            }
+            for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                cons2htable[c.topo.hd] = conss.size();
+                conss.push_back({ HCons::RegionLine, c.topo.hd.id });
+            }
+
+            std::vector<size_t> compIds(comps.size());
+            std::iota(compIds.begin(), compIds.end(), 0ull);
+
+            auto getNeighborComps = [&comps, &mg, &comp2htable, &constraintAsConnected, &controls](size_t compId){
+                auto & comp = comps[compId];
+                std::vector<size_t> neighbors;
+                if (comp.type == HComp::Region){
+                    RegionHandle rh(comp.id);
+                    for (auto & h : mg.topo(rh).constraints<RegionBoundaryData>()){
+                        auto & consControl = controls[h];
+                        if (!constraintAsConnected){
+                            if (!consControl.used || consControl.weight == 0.0)
+                                continue;
+                        }
+                        else{
+                            if (!constraintAsConnected(consControl))
+                                continue;
+                        }
+                        auto another = mg.topo(h).component<0>();
+                        if (another == rh){
+                            another = mg.topo(h).component<1>();
+                        }
+                        neighbors.push_back(comp2htable[another]);
+                    }
+                    for (auto & h : mg.topo(rh).constraints<RegionLineConnectionData>()){
+                        auto & consControl = controls[h];
+                        if (!constraintAsConnected){
+                            if (!consControl.used || consControl.weight == 0.0)
+                                continue;
+                        }
+                        else{
+                            if (!constraintAsConnected(consControl))
+                                continue;
+                        }
+                        LineHandle another = mg.topo(h).component<1>();
+                        neighbors.push_back(comp2htable[another]);
+                    }
+                }
+                else{
+                    LineHandle lh(comp.id);
+                    for (auto & h : mg.topo(lh).constraints<LineRelationData>()){
+                        auto & consControl = controls[h];
+                        if (!constraintAsConnected){
+                            if (!consControl.used || consControl.weight == 0.0)
+                                continue;
+                        }
+                        else{
+                            if (!constraintAsConnected(consControl))
+                                continue;
+                        }
+                        auto another = mg.topo(h).component<0>();
+                        if (another == lh){
+                            another = mg.topo(h).component<1>();
+                        }
+                        neighbors.push_back(comp2htable[another]);
+                    }
+                    for (auto & h : mg.topo(lh).constraints<RegionLineConnectionData>()){
+                        auto & consControl = controls[h];
+                        if (!constraintAsConnected){
+                            if (!consControl.used || consControl.weight == 0.0)
+                                continue;
+                        }
+                        else{
+                            if (!constraintAsConnected(consControl))
+                                continue;
+                        }
+                        RegionHandle another = mg.topo(h).component<0>();
+                        neighbors.push_back(comp2htable[another]);
+                    }
+                }
+                return neighbors;
+            };
+
+            return core::ConnectedComponents(compIds.begin(), compIds.end(), std::move(getNeighborComps),
+                [&ccIds, &comps](size_t v, int ccid){
+                const HComp & hcomp = comps[v];
+                if (hcomp.type == HComp::Line){
+                    ccIds[LineHandle(hcomp.id)] = ccid;
+                }
+                else{
+                    ccIds[RegionHandle(hcomp.id)] = ccid;
+                }
+            });
+        }
+
+
+
+
+        std::vector<RLGraph> Decompose(const RLGraph & mg, const RLGraphComponentTable<int> & ccids, int ccnum){
+            std::vector<RLGraph> ccs(ccnum);
+
+            RLGraphComponentTable<int> newCompIds = MakeHandledTableForAllComponents<int>(mg);
+            for (auto & c : mg.components<RegionData>()){
+                int ccid = ccids[c.topo.hd];
+                newCompIds[c.topo.hd] = ccs[ccid].addComponent(c.data).id;
+            }
+            for (auto & c : mg.components<LineData>()){
+                int ccid = ccids[c.topo.hd];
+                newCompIds[c.topo.hd] = ccs[ccid].addComponent(c.data).id;
+            }
+
+            for (auto & c : mg.constraints<RegionBoundaryData>()){
+                int ccid1 = ccids[c.topo.component<0>()];
+                int ccid2 = ccids[c.topo.component<1>()];
+                if (ccid1 != ccid2){
+                    continue;
+                }
+                int ccid = ccid1;
+                ccs[ccid].addConstraint(c.data, 
+                    RegionHandle(newCompIds[c.topo.component<0>()]),
+                    RegionHandle(newCompIds[c.topo.component<1>()]));
+            }
+            for (auto & c : mg.constraints<LineRelationData>()){
+                int ccid1 = ccids[c.topo.component<0>()];
+                int ccid2 = ccids[c.topo.component<1>()];
+                if (ccid1 != ccid2){
+                    continue;
+                }
+                int ccid = ccid1;
+                ccs[ccid].addConstraint(c.data,
+                    LineHandle(newCompIds[c.topo.component<0>()]),
+                    LineHandle(newCompIds[c.topo.component<1>()]));
+            }
+            for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                int ccid1 = ccids[c.topo.component<0>()];
+                int ccid2 = ccids[c.topo.component<1>()];
+                if (ccid1 != ccid2){
+                    continue;
+                }
+                int ccid = ccid1;
+                ccs[ccid].addConstraint(c.data,
+                    RegionHandle(newCompIds[c.topo.component<0>()]),
+                    LineHandle(newCompIds[c.topo.component<1>()]));
+            }
+
+            return ccs;
         }
 
 
@@ -1040,48 +1357,51 @@ namespace panoramix {
 
                 struct InitializeVariablesForEachHandle {
                     const RLGraph & mg;
-                    RLGraphPropertyTable & props;
+                    const RLGraphControls & controls;
+                    RLGraphVars & vars;
 
                     void operator()(const LineHandle & lh) const {
-                        auto & lp = props.componentProperties[lh];
+                        auto & lp = controls[lh];
+                        auto & v = vars[lh];
                         if (!lp.used){
-                            lp.variables = {};
+                            v.variables = {};
                             return;
                         }
                         if (lp.orientationClaz == -1){
                             // (1/cornerDepth1, 1/cornerDepth2) for LineFree
-                            lp.variables = { 1.0, 1.0 };
+                            v.variables = { 1.0, 1.0 };
                         }
                         else{
                             // 1/centerDepth for LineOriented,
-                            lp.variables = { 1.0 };
+                            v.variables = { 1.0 };
                         }
                     }
 
                     void operator()(const RegionHandle & rh) const {
                         auto & rd = mg.data(rh);
-                        auto & rp = props.componentProperties[rh];
+                        auto & rp = controls[rh];
+                        auto & v = vars[rh];
                         if (!rp.used){
-                            rp.variables = {};
+                            v.variables = {};
                             return;
                         }
                         if (rp.orientationClaz == -1 && rp.orientationNotClaz == -1){
                             // (a, b, c) for RegionFree ax+by+c=1, 
-                            rp.variables = { rd.normalizedCenter[0], rd.normalizedCenter[1], rd.normalizedCenter[2] };
+                            v.variables = { rd.normalizedCenter[0], rd.normalizedCenter[1], rd.normalizedCenter[2] };
                         }
                         else if (rp.orientationClaz == -1 && rp.orientationNotClaz >= 0){
                             // (a, b), {or (b, c) or (a, c)} for RegionAlongFixedAxis  ax+by+c=1,
-                            Vec3 anotherAxis = rd.normalizedCenter.cross(normalize(props.vanishingPoints[rp.orientationNotClaz]));
-                            Vec3 trueNormal = props.vanishingPoints[rp.orientationNotClaz].cross(anotherAxis);
+                            Vec3 anotherAxis = rd.normalizedCenter.cross(normalize(controls.vanishingPoints[rp.orientationNotClaz]));
+                            Vec3 trueNormal = controls.vanishingPoints[rp.orientationNotClaz].cross(anotherAxis);
                             Plane3 plane(rd.normalizedCenter, trueNormal);
                             auto eq = Plane3ToEquation(plane);
-                            int c = SwappedComponent(normalize(props.vanishingPoints[rp.orientationNotClaz]));
+                            int c = SwappedComponent(normalize(controls.vanishingPoints[rp.orientationNotClaz]));
                             std::swap(eq[c], eq[2]);
-                            rp.variables = { eq[0], eq[1] };
+                            v.variables = { eq[0], eq[1] };
                         }
                         else {
                             // 1/centerDepth for RegionWithFixedNormal
-                            rp.variables = { 1.0 };
+                            v.variables = { 1.0 };
                         }
                     }
                 };
@@ -1097,9 +1417,74 @@ namespace panoramix {
 
 
 
-        RLGraphPropertyTable MakeRLGraphPropertyTable(const RLGraph & mg, const std::vector<Vec3> & vps) {
-            auto compProps = MakeHandledTableForAllComponents<RLGraphComponentProperty>(mg);
-            auto consProps = MakeHandledTableForAllConstraints<RLGraphConstraintProperty>(mg);
+        void RLGraphControls::disable(RegionHandle h, const RLGraph & mg){
+            componentControls[h].used = false;
+            for (auto ch : mg.topo(h).constraints<RegionBoundaryData>()){
+                constraintControls[ch].used = false;
+            }
+            for (auto ch : mg.topo(h).constraints<RegionLineConnectionData>()){
+                constraintControls[ch].used = false;
+            }
+        }
+
+        void RLGraphControls::disable(LineHandle h, const RLGraph & mg){
+            componentControls[h].used = false;
+            for (auto ch : mg.topo(h).constraints<LineRelationData>()){
+                constraintControls[ch].used = false;
+            }
+            for (auto ch : mg.topo(h).constraints<RegionLineConnectionData>()){
+                constraintControls[ch].used = false;
+            }
+        }
+
+        void RLGraphControls::enable(RegionHandle h, const RLGraph & mg){
+            componentControls[h].used = true;
+        }
+
+        void RLGraphControls::enable(LineHandle h, const RLGraph & mg){
+            componentControls[h].used = true;
+        }
+
+
+        void RLGraphControls::disableAllInvalidConstraints(const RLGraph & mg){
+            for (auto & c : mg.constraints<RegionBoundaryData>()){
+                if (!componentControls[c.topo.component<0>()].used ||
+                    !componentControls[c.topo.component<1>()].used){
+                    constraintControls[c.topo.hd].used = false;
+                }                
+            }
+            for (auto & c : mg.constraints<LineRelationData>()){
+                if (!componentControls[c.topo.component<0>()].used ||
+                    !componentControls[c.topo.component<1>()].used){
+                    constraintControls[c.topo.hd].used = false;
+                }
+            }
+            for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                if (!componentControls[c.topo.component<0>()].used ||
+                    !componentControls[c.topo.component<1>()].used){
+                    constraintControls[c.topo.hd].used = false;
+                }
+            }
+        }
+
+
+        void RLGraphControls::enableAll(){
+            for (auto & ct : componentControls.data){
+                for (auto & c : ct){
+                    c.used = true;
+                }
+            }
+            for (auto & ct : constraintControls.data){
+                for (auto & c : ct){
+                    c.used = true;
+                }
+            }
+        }
+
+
+        RLGraphControls MakeControls(const RLGraph & mg, const std::vector<Vec3> & vps) {
+            auto compProps = MakeHandledTableForAllComponents<RLGraphComponentControl>(mg);
+            auto consProps = MakeHandledTableForAllConstraints<RLGraphConstraintControl>(mg);
             for (auto & l : mg.internalComponents<LineData>()){
                 compProps[l.topo.hd].orientationClaz = l.data.initialClaz;
                 compProps[l.topo.hd].orientationNotClaz = -1;
@@ -1115,18 +1500,76 @@ namespace panoramix {
             for (auto & dtable : consProps.data){
                 for (auto & d : dtable){
                     d.used = true;
+                    d.weight = 1.0;
                 }
             }
 
-            RLGraphPropertyTable props{ vps, std::move(compProps), std::move(consProps) };
-            ForeachRLGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
-            ResetWeights(mg, props);
-            return props;
+            RLGraphControls controls{ vps, std::move(compProps), std::move(consProps) };
+            ResetWeights(mg, controls);
+            return controls;
         }
 
 
-        void ResetWeights(const RLGraph & mg, RLGraphPropertyTable & props){
-            auto & consProps = props.constraintProperties;
+
+        std::vector<RLGraphControls> Decompose(const RLGraph & mg,
+            const RLGraphControls & controls, const RLGraphComponentTable<int> & ccids, int ccnum){
+            std::vector<RLGraphControls> ccs(ccnum);
+            RLGraphComponentTable<int> newCompIds = MakeHandledTableForAllComponents<int>(mg);
+            for (auto & cc : ccs){
+                cc.vanishingPoints = controls.vanishingPoints;
+            }
+            for (auto & c : mg.components<RegionData>()){
+                int ccid = ccids[c.topo.hd];
+                auto & regionControls = ccs[ccid].componentControls.dataOfType<RegionHandle>();
+                newCompIds[c.topo.hd] = regionControls.size();
+                regionControls.push_back(controls[c.topo.hd]);
+            }
+            for (auto & c : mg.components<LineData>()){
+                int ccid = ccids[c.topo.hd];
+                auto & lineControls = ccs[ccid].componentControls.dataOfType<LineHandle>();
+                newCompIds[c.topo.hd] = lineControls.size();
+                lineControls.push_back(controls[c.topo.hd]);
+            }
+            for (auto & c : mg.constraints<RegionBoundaryData>()){
+                int ccid1 = ccids[c.topo.component<0>()];
+                int ccid2 = ccids[c.topo.component<1>()];
+                if (ccid1 != ccid2){
+                    continue;
+                }
+                int ccid = ccid1;
+                auto & ccontrols = ccs[ccid].constraintControls.dataOfType<RegionBoundaryHandle>();
+                ccontrols.push_back(controls[c.topo.hd]);
+            }
+            for (auto & c : mg.constraints<LineRelationData>()){
+                int ccid1 = ccids[c.topo.component<0>()];
+                int ccid2 = ccids[c.topo.component<1>()];
+                if (ccid1 != ccid2){
+                    continue;
+                }
+                int ccid = ccid1;
+                auto & ccontrols = ccs[ccid].constraintControls.dataOfType<LineRelationHandle>();
+                ccontrols.push_back(controls[c.topo.hd]);
+            }
+            for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                int ccid1 = ccids[c.topo.component<0>()];
+                int ccid2 = ccids[c.topo.component<1>()];
+                if (ccid1 != ccid2){
+                    continue;
+                }
+                int ccid = ccid1;
+                auto & ccontrols = ccs[ccid].constraintControls.dataOfType<RegionLineConnectionHandle>();
+                ccontrols.push_back(controls[c.topo.hd]);
+            }
+            return ccs;
+        }
+
+
+
+
+
+
+        void ResetWeights(const RLGraph & mg, RLGraphControls & controls){
+            auto & consProps = controls.constraintControls;
             double maxChainLen = 0;
             for (auto & b : mg.internalConstraints<RegionBoundaryData>()){
                 maxChainLen = std::max(ChainLength(b.data.normalizedSampledPoints), maxChainLen);
@@ -1144,7 +1587,7 @@ namespace panoramix {
             for (auto & ll : mg.internalConstraints<LineRelationData>()){
                 consProps[ll.topo.hd].weight = 1.0;
             }
-            auto & compProps = props.componentProperties;
+            auto & compProps = controls.componentControls;
             for (auto & t : compProps.data){
                 for (auto & prop : t){
                     for (auto & wa : prop.weightedAnchors){
@@ -1270,40 +1713,13 @@ namespace panoramix {
                 }
             }
 
-            struct ConstraintUsableFlagUpdater {
-                const RLGraph & mg;
-                RLGraphPropertyTable & props;
-                template <class T>
-                inline void operator()(ConstraintHandle<T> h) const {
-                    props[h].used = props[mg.topo(h).component<0>()].used && props[mg.topo(h).component<1>()].used;
-                }
-            };
-
-            struct DanglingConstraintsDisabler {
-                const RLGraph & mg;
-                RLGraphPropertyTable & props;
-                template <class T>
-                inline void operator()(ConstraintHandle<T> h) const {
-                    auto allEndsUsable = props[mg.topo(h).component<0>()].used && props[mg.topo(h).component<1>()].used;
-                    if (!allEndsUsable)
-                        props[h].used = false;
-                }
-            };
-
         }
 
 
-        void ResetVariables(const RLGraph & mg, RLGraphPropertyTable & props){
-            ForeachRLGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
-        }
-
-        void UpdateConstraintUsabilities(const RLGraph & mg, RLGraphPropertyTable & props, bool enableDisabledConstraints){
-            if (!enableDisabledConstraints){
-                ForeachRLGraphConstraintHandle(mg, DanglingConstraintsDisabler{ mg, props });
-            }
-            else{
-                ForeachRLGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
-            }            
+        RLGraphVars MakeVariables(const RLGraph & mg, const RLGraphControls & controls) {
+            RLGraphVars vars = MakeHandledTableForAllComponents<RLGraphVar>(mg);
+            ForeachRLGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, controls, vars });
+            return vars;
         }
 
 
@@ -1315,45 +1731,47 @@ namespace panoramix {
 
         }
 
-        Line3 Instance(const RLGraph & mg, const RLGraphPropertyTable & props, const LineHandle & lh){
+        Line3 Instance(const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars, const LineHandle & lh) {
             auto & ld = mg.data(lh);
-            auto & lp = props[lh];
+            auto & c = controls[lh];
+            auto & v = vars[lh];
             //if (!lp.used)
             //    return Line3();
-            if (lp.orientationClaz >= 0){
-                assert(lp.variables.size() == 1);
-                Ray3 infLine(normalize(ld.line.center()) / NonZeroize(lp.variables[0]), props.vanishingPoints[lp.orientationClaz]);
+            if (c.orientationClaz >= 0){
+                assert(v.variables.size() == 1);
+                Ray3 infLine(normalize(ld.line.center()) / NonZeroize(v.variables[0]), controls.vanishingPoints[c.orientationClaz]);
                 return Line3(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(ld.line.first)), infLine).second.second,
                     DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(ld.line.second)), infLine).second.second);
             }
             else /*if (line.type == MGUnary::LineFree)*/{
-                assert(lp.variables.size() == 2);
+                assert(v.variables.size() == 2);
                 /*           | sin(theta) | | p | | q |
                 len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
                 | p sin(phi) - q sin(phi - theta) |
                 */
                 // variables[0] -> 1/p
                 // variables[1] -> 1/q
-                return Line3(normalize(ld.line.first) / NonZeroize(lp.variables[0]), normalize(ld.line.second) / NonZeroize(lp.variables[1]));
+                return Line3(normalize(ld.line.first) / NonZeroize(v.variables[0]), normalize(ld.line.second) / NonZeroize(v.variables[1]));
             }
         }
 
 
 
-        Plane3 Instance(const RLGraph & mg, const RLGraphPropertyTable & props, const RegionHandle & rh){
+        Plane3 Instance(const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars, const RegionHandle & rh){
             auto & rd = mg.data(rh);
-            auto & rp = props[rh];
+            auto & c = controls[rh];
+            auto & v = vars[rh];
             /*if (!rp.used)
                 return Plane3();*/
-            if (rp.orientationClaz >= 0){
-                assert(rp.variables.size() == 1);
-                return Plane3(rd.normalizedCenter / NonZeroize(rp.variables[0]), props.vanishingPoints[rp.orientationClaz]);
+            if (c.orientationClaz >= 0){
+                assert(v.variables.size() == 1);
+                return Plane3(rd.normalizedCenter / NonZeroize(v.variables[0]), controls.vanishingPoints[c.orientationClaz]);
             }
-            else if (rp.orientationClaz == -1 && rp.orientationNotClaz >= 0){
-                assert(rp.variables.size() == 2);
-                double vs[] = { rp.variables[0], rp.variables[1], 0.0 }; // fake vs
+            else if (c.orientationClaz == -1 && c.orientationNotClaz >= 0){
+                assert(v.variables.size() == 2);
+                double vs[] = { v.variables[0], v.variables[1], 0.0 }; // fake vs
                 // v1 * o1 + v2 * o2 + v3 * o3 = 0, since region.orientation is orthogonal to normal
-                auto orientation = normalize(props.vanishingPoints[rp.orientationNotClaz]);
+                auto orientation = normalize(controls.vanishingPoints[c.orientationNotClaz]);
                 int c = SwappedComponent(orientation);
                 std::swap(orientation[c], orientation[2]); // now fake orientation
                 vs[2] = (-vs[0] * orientation[0] - vs[1] * orientation[1])
@@ -1362,20 +1780,55 @@ namespace panoramix {
                 return Plane3FromEquation(vs[0], vs[1], vs[2]);
             }
             else /*if (region.type == MGUnary::RegionWithFixedNormal)*/{
-                assert(rp.variables.size() == 3);
-                return Plane3FromEquation(rp.variables[0], rp.variables[1], rp.variables[2]);
+                assert(v.variables.size() == 3);
+                return Plane3FromEquation(v.variables[0], v.variables[1], v.variables[2]);
             }
         }
 
 
 
+
+        std::vector<Polygon3> RegionPolygon(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars, RegionHandle rh) {
+            std::vector<Polygon3> ps;
+            Plane3 plane = Instance(mg, controls, vars, rh);
+            for (auto & contour : mg.data(rh).normalizedContours){
+                Polygon3 polygon;
+                polygon.corners.reserve(contour.size());
+                for (auto & c : contour){
+                    polygon.corners.push_back(PointAt(c, plane));
+                }
+                polygon.normal = plane.normal;
+                ps.push_back(std::move(polygon));
+            }
+            return ps;
+        }
+
+        HandledTable<RegionHandle, std::vector<Polygon3>> RegionPolygons(const RLGraph & mg,
+            const RLGraphControls & controls,
+            const RLGraphVars & vars) {
+
+            auto polygons = mg.createComponentTable<RegionData, std::vector<Polygon3>>();
+            for (auto & r : mg.components<RegionData>()){
+                if (!controls[r.topo.hd].used)
+                    continue;
+                polygons[r.topo.hd] = RegionPolygon(mg, controls, vars, r.topo.hd);
+            }
+            return polygons;
+        }
+
+
+
+
+
         std::vector<double> VariableCoefficientsForInverseDepthAtDirection(const RLGraph & mg,
-            const RLGraphPropertyTable & props, const Vec3 & direction, const LineHandle & lh){
+            const RLGraphControls & controls, const RLGraphVars & vars, const Vec3 & direction, const LineHandle & lh){
             auto & ld = mg.data(lh);
-            auto & lp = props.componentProperties.at(lh);
-            if (lp.orientationClaz >= 0){
-                assert(lp.variables.size() == 1);
-                Ray3 infLine(normalize(ld.line.center()), props.vanishingPoints[lp.orientationClaz]);
+            auto & c = controls[lh];
+            auto & v = vars[lh];
+            if (c.orientationClaz >= 0){
+                assert(v.variables.size() == 1);
+                Ray3 infLine(normalize(ld.line.center()), controls.vanishingPoints[c.orientationClaz]);
                  // variable is 1.0/centerDepth
                  // corresponding coeff is 1.0/depthRatio
                  // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
@@ -1383,7 +1836,7 @@ namespace panoramix {
                  return std::vector<double>{1.0 / depthRatio};
              }
              else /*if(u.type == MGUnary::LineFree)*/{
-                 assert(lp.variables.size() == 2);
+                 assert(v.variables.size() == 2);
                  double theta = AngleBetweenDirections(normalize(ld.line.first), normalize(ld.line.second));
                  double phi = AngleBetweenDirections(normalize(ld.line.first), direction);
                  /*           | sin(theta) | | p | | q |
@@ -1401,36 +1854,37 @@ namespace panoramix {
 
 
         std::vector<double> VariableCoefficientsForInverseDepthAtDirection(const RLGraph & mg,
-            const RLGraphPropertyTable & props, const Vec3 & direction, const RegionHandle & rh){
+            const RLGraphControls & controls, const RLGraphVars & vars, const Vec3 & direction, const RegionHandle & rh){
             auto & rd = mg.data(rh);
-            auto & rp = props.componentProperties.at(rh);
-            if (rp.orientationClaz >= 0){
-                assert(rp.variables.size() == 1);
-                Plane3 plane(rd.normalizedCenter, props.vanishingPoints[rp.orientationClaz]);
+            auto & c = controls[rh];
+            auto & v = vars[rh];
+            if (c.orientationClaz >= 0){
+                assert(v.variables.size() == 1);
+                Plane3 plane(rd.normalizedCenter, controls.vanishingPoints[c.orientationClaz]);
                 // variable is 1.0/centerDepth
                 // corresponding coeff is 1.0/depthRatio
                 // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
                 double depthRatio = norm(IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), direction), plane).position);
                 return std::vector<double>{1.0 / depthRatio};
             }
-            else if (rp.orientationClaz == -1 && rp.orientationNotClaz >= 0){
-                assert(rp.variables.size() == 2);
+            else if (c.orientationClaz == -1 && c.orientationNotClaz >= 0){
+                assert(v.variables.size() == 2);
                 // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
                 // -> 1.0/depth = ax + by + cz
                 // -> 1.0/depth = ax + by + (- o1a - o2b)/o3 * z = a(x-o1*z/o3) + b(y-o2*z/o3)
-                auto orientation = normalize(props.vanishingPoints[rp.orientationNotClaz]);
-                int c = SwappedComponent(orientation);
+                auto orientation = normalize(controls.vanishingPoints[c.orientationNotClaz]);
+                int sc = SwappedComponent(orientation);
                 Vec3 forientation = orientation;
-                std::swap(forientation[c], forientation[2]);
+                std::swap(forientation[sc], forientation[2]);
                 Vec3 fdirection = direction;
-                std::swap(fdirection[c], fdirection[2]);
+                std::swap(fdirection[sc], fdirection[2]);
                 return std::vector<double>{
                     fdirection[0] - forientation[0] * fdirection[2] / forientation[2],
                         fdirection[1] - forientation[1] * fdirection[2] / forientation[2]
                 };
             }
             else{
-                assert(rp.variables.size() == 3);
+                assert(v.variables.size() == 3);
                 // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
                 // -> 1.0/depth = ax + by + cz
                 return std::vector<double>{direction[0], direction[1], direction[2]};
@@ -1439,12 +1893,12 @@ namespace panoramix {
 
 
         double DepthAtDirectionGivenVariables(const RLGraph & mg, const double * variables,
-            const RLGraphPropertyTable & props, const Vec3 & direction, const LineHandle & lh){
+            const RLGraphControls & controls, const Vec3 & direction, const LineHandle & lh){
             auto & ld = mg.data(lh);
-            auto & lp = props.componentProperties.at(lh);
+            auto & lp = controls[lh];
             if (lp.orientationClaz >= 0){
                 //assert(lp.variables.size() == 1);
-                Ray3 infLine(normalize(ld.line.center()), props.vanishingPoints[lp.orientationClaz]);
+                Ray3 infLine(normalize(ld.line.center()), controls.vanishingPoints[lp.orientationClaz]);
                 // variable is 1.0/centerDepth
                 // depths = depthRatio * centerDepth
                 double depthRatio = norm(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), direction), infLine).second.first);
@@ -1467,12 +1921,12 @@ namespace panoramix {
 
 
         double DepthAtDirectionGivenVariables(const RLGraph & mg, const double * variables,
-            const RLGraphPropertyTable & props, const Vec3 & direction, const RegionHandle & rh){
+            const RLGraphControls & controls, const Vec3 & direction, const RegionHandle & rh){
             auto & rd = mg.data(rh);
-            auto & rp = props.componentProperties.at(rh);
+            auto & rp = controls[rh];
             if (rp.orientationClaz >= 0){
                 //assert(rp.variables.size() == 1);
-                Plane3 plane(rd.normalizedCenter, props.vanishingPoints[rp.orientationClaz]);
+                Plane3 plane(rd.normalizedCenter, controls.vanishingPoints[rp.orientationClaz]);
                 // variable is 1.0/centerDepth
                 // depths = depthRatio * centerDepth
                 double depthRatio = norm(IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), direction), plane).position);
@@ -1484,7 +1938,7 @@ namespace panoramix {
                 // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
                 // -> 1.0/depth = ax + by + cz
                 // -> 1.0/depth = ax + by + (- o1a - o2b)/o3 * z = a(x-o1*z/o3) + b(y-o2*z/o3)
-                auto orientation = normalize(props.vanishingPoints[rp.orientationNotClaz]);
+                auto orientation = normalize(controls.vanishingPoints[rp.orientationNotClaz]);
                 int c = SwappedComponent(orientation);
                 Vec3 forientation = orientation;
                 std::swap(forientation[c], forientation[2]);
@@ -1500,13 +1954,54 @@ namespace panoramix {
                     b * (fdirection[1] * forientation[2] - forientation[1] * fdirection[2]));
             }
             else{
-                assert(rp.variables.size() == 3);
                 // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
                 // -> 1.0/depth = ax + by + cz
                 return 1.0 / (direction[0] * variables[0] + direction[1] * variables[1] + direction[2] * variables[2]);
             }
         }
 
+
+
+
+        bool AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg,
+            RLGraphControls & controls,
+            double depth, double weight){
+            RegionHandle largest;
+            double maxArea = 0.0;
+            for (auto & r : mg.components<RegionData>()){
+                if (!controls[r.topo.hd].used)
+                    continue;
+                if (controls[r.topo.hd].weightedAnchors.size() > 0)
+                    return true;
+                if (r.data.area > maxArea){
+                    largest = r.topo.hd;
+                    maxArea = r.data.area;
+                }
+            }
+            if(largest.valid())
+                controls[largest].weightedAnchors.push_back(ScoreAs(mg.data(largest).normalizedCenter * depth, weight));
+            return largest.valid();
+        }
+
+        bool AttachAnchorToCenterOfLargestLineIfNoAnchorExists(const RLGraph & mg,
+            RLGraphControls & controls,
+            double depth, double weight){
+            LineHandle largest;
+            double maxArea = 0.0;
+            for (auto & r : mg.components<LineData>()){
+                if (!controls[r.topo.hd].used)
+                    continue;
+                if (controls[r.topo.hd].weightedAnchors.size() > 0)
+                    return true;
+                if (r.data.line.length() > maxArea){
+                    largest = r.topo.hd;
+                    maxArea = r.data.line.length();
+                }
+            }
+            if(largest.valid())
+                controls[largest].weightedAnchors.push_back(ScoreAs(normalize(mg.data(largest).line.center()) * depth, weight));
+            return largest.valid();
+        }
 
 
 
@@ -1572,8 +2067,10 @@ namespace panoramix {
             }
 
 
-            template <class DataT, class SparseMatElementT>
-            inline void RegisterConstraintEquations(int & eid, const RLGraph & mg, const RLGraphPropertyTable & props,
+            template <class ConstraintDataT, class SparseMatElementT>
+            inline void RegisterConstraintEquations(int & eid, const RLGraph & mg, 
+                const RLGraphControls & controls,
+                const RLGraphVars & vars,
                 const ComponentHandledTableFromConstraintGraph<int, RLGraph>::type & uh2varStartPosition,
                 const ConstraintHandledTableFromConstraintGraph<std::vector<Vec3>, RLGraph>::type & appliedBinaryAnchors,
                 const ConstraintHandledTableFromConstraintGraph<double, RLGraph>::type & weightsForEachAppliedBinaryAnchor,
@@ -1581,27 +2078,27 @@ namespace panoramix {
                 std::vector<SparseMatElementT> & Wtriplets,
                 std::vector<double> & B) {
 
-                for (auto & c : mg.constraints<DataT>()){
-                    if (!props[c.topo.hd].used)
+                for (auto & c : mg.constraints<ConstraintDataT>()){
+                    if (!controls[c.topo.hd].used)
                         continue;
                     auto bh = c.topo.hd;
                     auto uh1 = mg.topo(bh).component<0>();
                     auto uh2 = mg.topo(bh).component<1>();
-                    assert(props[uh1].used || props[uh2].used);
+                    assert(controls[uh1].used || controls[uh2].used);
                     auto & u1 = mg.data(uh1);
                     auto & u2 = mg.data(uh2);
 
                     int u1VarStartPosition = uh2varStartPosition.at(uh1);
-                    int u1VarNum = props[uh1].variables.size();
+                    int u1VarNum = vars[uh1].variables.size();
 
                     int u2VarStartPosition = uh2varStartPosition.at(uh2);
-                    int u2VarNum = props[uh2].variables.size();
+                    int u2VarNum = vars[uh2].variables.size();
 
                     for (auto & a : appliedBinaryAnchors.at(bh)){
                         B[eid] = 0.0;
                         Wtriplets.emplace_back(eid, eid, weightsForEachAppliedBinaryAnchor.at(bh));
                         {
-                            auto u1VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, props, a, uh1);
+                            auto u1VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, a, uh1);
                             assert(u1VarCoeffs.size() == u1VarNum);
                             for (int i = 0; i < u1VarCoeffs.size(); i++){
                                 //A.insert(eid, u1VarStartPosition + i) = u1VarCoeffs[i]; // pos
@@ -1609,7 +2106,7 @@ namespace panoramix {
                             }
                         }
                         {
-                            auto u2VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, props, a, uh2);
+                            auto u2VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, a, uh2);
                             assert(u2VarCoeffs.size() == u2VarNum);
                             for (int i = 0; i < u2VarCoeffs.size(); i++){
                                 //A.insert(eid, u2VarStartPosition + i) = -u2VarCoeffs[i]; // neg
@@ -1621,24 +2118,25 @@ namespace panoramix {
                 }
             }
 
-            template <class DataT, class SparseMatElementT>
-            inline void RegisterComponentAnchorEquations(int & eid, const RLGraph & mg, const RLGraphPropertyTable & props,
+            template <class ComponentDataT, class SparseMatElementT>
+            inline void RegisterComponentAnchorEquations(int & eid, const RLGraph & mg, 
+                const RLGraphControls & controls,
+                const RLGraphVars & vars,
                 const ComponentHandledTableFromConstraintGraph<int, RLGraph>::type & uh2varStartPosition,
                 std::vector<SparseMatElementT> & Atriplets,
                 std::vector<SparseMatElementT> & Wtriplets,
                 std::vector<double> & B){
                 // add anchors on components
-                for (auto & c : mg.components<DataT>()){
-                    if (!props[c.topo.hd].used)
+                for (auto & c : mg.components<ComponentDataT>()){
+                    if (!controls[c.topo.hd].used)
                         continue;
                     auto uh = c.topo.hd;
-                    auto & prop = props[uh];
-                    int uhVarNum = prop.variables.size();
+                    int uhVarNum = vars[uh].variables.size();
                     int uhVarStartPosition = uh2varStartPosition.at(uh);
-                    for (auto & wa : props[c.topo.hd].weightedAnchors){
+                    for (auto & wa : controls[c.topo.hd].weightedAnchors){
                         const Point3 & anchor = wa.component;
                         double weight = wa.score;
-                        auto uhVarCoeffsAtAnchorDirection = VariableCoefficientsForInverseDepthAtDirection(mg, props, anchor, uh);
+                        auto uhVarCoeffsAtAnchorDirection = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, anchor, uh);
                         assert(uhVarCoeffsAtAnchorDirection.size() == uhVarNum);
                         for (int i = 0; i < uhVarCoeffsAtAnchorDirection.size(); i++){
                             //A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
@@ -1654,7 +2152,9 @@ namespace panoramix {
 
 
             template <class SparseMatElementT>
-            void FormulateComponentsAndConstraintsAsMatricesForInverseDepthSolution(const RLGraph & mg, RLGraphPropertyTable & props,
+            void FormulateComponentsAndConstraintsAsMatricesForInverseDepthSolution(const RLGraph & mg, 
+                const RLGraphControls & controls,
+                const RLGraphVars & vars,
                 ComponentHandledTableFromConstraintGraph<int, RLGraph>::type & uh2varStartPosition,
                 ConstraintHandledTableFromConstraintGraph<int, RLGraph>::type & bh2consStartPosition,
                 ConstraintHandledTableFromConstraintGraph<std::vector<Vec3>, RLGraph>::type & appliedBinaryAnchors,
@@ -1666,7 +2166,7 @@ namespace panoramix {
                 std::vector<double> & B){
 
                 int nanchor = 0;
-                for (auto & table : props.componentProperties.data){
+                for (auto & table : controls.componentControls.data){
                     for (auto & compProp : table){
                         if (!compProp.used)
                             continue;
@@ -1677,35 +2177,35 @@ namespace panoramix {
 
                 SetClock();
 
-                THERE_ARE_BUGS_HERE("make sure mg is single connected");
+                //THERE_ARE_BUGS_HERE("make sure mg is single connected");
 
                 varNum = 0;
                 for (auto & c : mg.components<LineData>()){
-                    if (!props[c.topo.hd].used)
+                    if (!controls[c.topo.hd].used)
                         continue;
                     uh2varStartPosition[c.topo.hd] = varNum;
-                    varNum += props[c.topo.hd].variables.size();
+                    varNum += vars[c.topo.hd].variables.size();
                 }
                 for (auto & c : mg.components<RegionData>()){
-                    if (!props[c.topo.hd].used)
+                    if (!controls[c.topo.hd].used)
                         continue;
                     uh2varStartPosition[c.topo.hd] = varNum;
-                    varNum += props[c.topo.hd].variables.size();
+                    varNum += vars[c.topo.hd].variables.size();
                 }
 
                 X.resize(varNum);
                 for (auto & c : mg.components<LineData>()){
-                    if (!props[c.topo.hd].used)
+                    if (!controls[c.topo.hd].used)
                         continue;
-                    for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                        X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        X[uh2varStartPosition.at(c.topo.hd) + i] = vars[c.topo.hd].variables.at(i);
                     }
                 }
                 for (auto & c : mg.components<RegionData>()){
-                    if (!props[c.topo.hd].used)
+                    if (!controls[c.topo.hd].used)
                         continue;
-                    for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                        X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        X[uh2varStartPosition.at(c.topo.hd) + i] = vars[c.topo.hd].variables.at(i);
                     }
                 }
 
@@ -1713,30 +2213,33 @@ namespace panoramix {
                 consNum = 0;
                 consNum += nanchor;
                 for (auto & c : mg.constraints<RegionBoundaryData>()){
-                    if (!props[c.topo.hd].used)
+                    if (!controls[c.topo.hd].used)
                         continue;
-                    assert(props[c.topo.component<0>()].used && props[c.topo.component<1>()].used);
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
                     bh2consStartPosition[c.topo.hd] = consNum;
                     appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd);
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = props[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
+                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
                     consNum += appliedBinaryAnchors[c.topo.hd].size();
                 }
                 for (auto & c : mg.constraints<LineRelationData>()){
-                    if (!props[c.topo.hd].used)
+                    if (!controls[c.topo.hd].used)
                         continue;
-                    assert(props[c.topo.component<0>()].used && props[c.topo.component<1>()].used);
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
                     bh2consStartPosition[c.topo.hd] = consNum;
                     appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd);
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = props[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
+                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
                     consNum += appliedBinaryAnchors[c.topo.hd].size();
                 }
                 for (auto & c : mg.constraints<RegionLineConnectionData>()){
-                    if (!props[c.topo.hd].used)
+                    if (!controls[c.topo.hd].used)
                         continue;
-                    assert(props[c.topo.component<0>()].used && props[c.topo.component<1>()].used);
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
                     bh2consStartPosition[c.topo.hd] = consNum;
                     appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd);
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = props[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
+                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
                     consNum += appliedBinaryAnchors[c.topo.hd].size();
                 }
 
@@ -1749,16 +2252,16 @@ namespace panoramix {
                 // write equations
                 int eid = 0;
 
-                RegisterComponentAnchorEquations<RegionData>(eid, mg, props, uh2varStartPosition, 
+                RegisterComponentAnchorEquations<RegionData>(eid, mg, controls, vars, uh2varStartPosition, 
                     Atriplets, Wtriplets, B);
-                RegisterComponentAnchorEquations<LineData>(eid, mg, props, uh2varStartPosition,
+                RegisterComponentAnchorEquations<LineData>(eid, mg, controls, vars, uh2varStartPosition,
                     Atriplets, Wtriplets, B);
 
-                RegisterConstraintEquations<RegionBoundaryData>(eid, mg, props, uh2varStartPosition,
+                RegisterConstraintEquations<RegionBoundaryData>(eid, mg, controls, vars, uh2varStartPosition,
                     appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, B);
-                RegisterConstraintEquations<LineRelationData>(eid, mg, props, uh2varStartPosition,
+                RegisterConstraintEquations<LineRelationData>(eid, mg, controls, vars, uh2varStartPosition,
                     appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, B);
-                RegisterConstraintEquations<RegionLineConnectionData>(eid, mg, props, uh2varStartPosition,
+                RegisterConstraintEquations<RegionLineConnectionData>(eid, mg, controls, vars, uh2varStartPosition,
                     appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, B);
 
                 assert(eid == consNum);
@@ -1767,27 +2270,9 @@ namespace panoramix {
 
         }
 
-        void AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg, RLGraphPropertyTable & props, double depth, double weight){
-            RegionHandle largest;
-            double maxArea = 0.0;
-            for (auto & r : mg.components<RegionData>()){
-                if (!props[r.topo.hd].used)
-                    continue;
-                if (props[r.topo.hd].weightedAnchors.size() > 0)
-                    return;
-                if (r.data.area > maxArea){
-                    largest = r.topo.hd;
-                    maxArea = r.data.area;
-                }
-            }
-            assert(largest.valid());
-            props[largest].weightedAnchors.push_back(ScoreAs(mg.data(largest).normalizedCenter * depth, weight));
-        }
 
-
-        void SolveVariablesUsingInversedDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights){
-
-            ResetVariables(mg, props);
+        RLGraphVars SolveVariables(const RLGraph & mg, const RLGraphControls & controls, bool useWeights) {
+            RLGraphVars vars = MakeVariables(mg, controls);
 
             SetClock();
 
@@ -1803,7 +2288,7 @@ namespace panoramix {
             std::vector<double> Xdata;
             std::vector<double> Bdata;
 
-            FormulateComponentsAndConstraintsAsMatricesForInverseDepthSolution(mg, props, 
+            FormulateComponentsAndConstraintsAsMatricesForInverseDepthSolution(mg, controls, vars, 
                 uh2varStartPosition, bh2consStartPosition,
                 appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, 
                 varNum, consNum, Atriplets, Wtriplets, Xdata, Bdata);
@@ -1846,14 +2331,14 @@ namespace panoramix {
                 if (solver.info() != Eigen::Success) {
                     assert(0);
                     std::cout << "computation error" << std::endl;
-                    return;
+                    SHOULD_NEVER_BE_CALLED();
                 }
 
                 X = solver.solve(useWeights ? WB : B);
                 if (solver.info() != Eigen::Success) {
                     assert(0);
                     std::cout << "solving error" << std::endl;
-                    return;
+                    SHOULD_NEVER_BE_CALLED();
                 }
             }
             else{
@@ -1865,36 +2350,38 @@ namespace panoramix {
                 if (solver.info() != Eigen::Success) {
                     assert(0);
                     std::cout << "computation error" << std::endl;
-                    return;
+                    SHOULD_NEVER_BE_CALLED();
                 }
 
                 X = solver.solve(useWeights ? WB : B);
                 if (solver.info() != Eigen::Success) {
                     assert(0);
                     std::cout << "solving error" << std::endl;
-                    return;
+                    SHOULD_NEVER_BE_CALLED();
                 }
             }
 
             {
                 Clock clock("install solved variables");
                 for (auto & c : mg.components<RegionData>()){
-                    if (!props[c.topo.hd].used)
+                    if (!controls[c.topo.hd].used)
                         continue;
                     int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-                    for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                        props[c.topo.hd].variables[i] = X(uhStartPosition + i);
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        vars[c.topo.hd].variables[i] = X(uhStartPosition + i);
                     }
                 }
                 for (auto & c : mg.components<LineData>()){
-                    if (!props[c.topo.hd].used)
+                    if (!controls[c.topo.hd].used)
                         continue;
                     int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-                    for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                        props[c.topo.hd].variables[i] = X(uhStartPosition + i);
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        vars[c.topo.hd].variables[i] = X(uhStartPosition + i);
                     }
                 }
             }
+
+            return vars;
         }
 
         
@@ -2144,18 +2631,19 @@ namespace panoramix {
         //}
 
 
-        double ComponentMedianCenterDepth(const RLGraph & mg, const RLGraphPropertyTable & props){
+        double MedianCenterDepth(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars){
             for (auto & c : mg.components<RegionData>()){
-                if (!props[c.topo.hd].used)
+                if (!controls[c.topo.hd].used)
                     continue;
-                for (auto & v : props[c.topo.hd].variables){
+                for (auto & v : vars[c.topo.hd].variables){
                     assert(!IsInfOrNaN(v));
                 }
             }
             for (auto & c : mg.components<LineData>()){
-                if (!props[c.topo.hd].used)
+                if (!controls[c.topo.hd].used)
                     continue;
-                for (auto & v : props[c.topo.hd].variables){
+                for (auto & v : vars[c.topo.hd].variables){
                     assert(!IsInfOrNaN(v));
                 }
             }
@@ -2163,18 +2651,18 @@ namespace panoramix {
             std::vector<double> centerDepths;
             centerDepths.reserve(mg.internalComponents<RegionData>().size() + mg.internalComponents<LineData>().size());
             for (auto & c : mg.components<RegionData>()){
-                if (!props[c.topo.hd].used)
+                if (!controls[c.topo.hd].used)
                     continue;
-                double d = DepthAt(c.data.normalizedCenter, Instance(mg, props, c.topo.hd));
+                double d = DepthAt(c.data.normalizedCenter, Instance(mg, controls, vars, c.topo.hd));
                 if (!IsInfOrNaN(d)){
                     centerDepths.push_back(d);
                 }
                 //assert(!IsInfOrNaN(centerDepths.back()));
             }
             for (auto & c : mg.components<LineData>()){
-                if (!props[c.topo.hd].used)
+                if (!controls[c.topo.hd].used)
                     continue;
-                double d = DepthAt(normalize(c.data.line.center()), Instance(mg, props, c.topo.hd));
+                double d = DepthAt(normalize(c.data.line.center()), Instance(mg, controls, vars, c.topo.hd));
                 if (!IsInfOrNaN(d)){
                     centerDepths.push_back(d);
                 }
@@ -2186,7 +2674,8 @@ namespace panoramix {
         }
 
 
-        double ComputeScore(const RLGraph & mg, const RLGraphPropertyTable & props){
+        double Score(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars){
 
             // manhattan fitness
             double sumOfComponentWeightedFitness = 0.0;
@@ -2195,7 +2684,7 @@ namespace panoramix {
             // lines
             double maxLineSpanAngle = 0.0;
             for (auto & l : mg.components<LineData>()){
-                if (!props[l.topo.hd].used)
+                if (!controls[l.topo.hd].used)
                     continue;
                 double lineSpanAngle = AngleBetweenDirections(l.data.line.first, l.data.line.second);
                 if (lineSpanAngle > maxLineSpanAngle)
@@ -2206,14 +2695,14 @@ namespace panoramix {
             HandledTable<RegionHandle, Plane3> planes(mg.internalComponents<RegionData>().size());
 
             for (auto & l : mg.components<LineData>()){
-                if (!props[l.topo.hd].used)
+                if (!controls[l.topo.hd].used)
                     continue;
-                lines[l.topo.hd] = Instance(mg, props, l.topo.hd);
+                lines[l.topo.hd] = Instance(mg, controls, vars, l.topo.hd);
 
                 double fitness = 0.0;
                 double weight = 0.0;
                 double lineSpanAngle = AngleBetweenDirections(l.data.line.first, l.data.line.second);
-                auto & prop = props.componentProperties[l.topo.hd];
+                auto & prop = controls[l.topo.hd];
                 if (prop.orientationClaz >= 0){
                     fitness = 1.0;
                     weight = lineSpanAngle / maxLineSpanAngle;
@@ -2222,8 +2711,8 @@ namespace panoramix {
                     static const double angleThreshold = DegreesToRadians(10);
                     double minAngle = angleThreshold;
                     int bestVPId = -1;
-                    for (int i = 0; i < props.vanishingPoints.size(); i++){
-                        double angle = AngleBetweenUndirectedVectors(props.vanishingPoints[i], lines[l.topo.hd].direction());
+                    for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                        double angle = AngleBetweenUndirectedVectors(controls.vanishingPoints[i], lines[l.topo.hd].direction());
                         if (angle < minAngle){
                             minAngle = angle;
                             bestVPId = i;
@@ -2239,7 +2728,7 @@ namespace panoramix {
             // regions
             double maxRegionArea = 0.0;
             for (auto & r : mg.components<RegionData>()){
-                if (!props[r.topo.hd].used)
+                if (!controls[r.topo.hd].used)
                     continue;
                 if (r.data.area > maxRegionArea){
                     maxRegionArea = r.data.area;
@@ -2247,13 +2736,13 @@ namespace panoramix {
             }
 
             for (auto & r : mg.components<RegionData>()){
-                if (!props[r.topo.hd].used)
+                if (!controls[r.topo.hd].used)
                     continue;
-                planes[r.topo.hd] = Instance(mg, props, r.topo.hd);
+                planes[r.topo.hd] = Instance(mg, controls, vars, r.topo.hd);
 
                 double fitness = 0.0;
                 double weight = 1.0;
-                auto & prop = props.componentProperties[r.topo.hd];
+                auto & prop = controls[r.topo.hd];
                 if (prop.orientationClaz >= 0){
                     fitness = 1.0;
                     weight = r.data.area / maxRegionArea;
@@ -2262,8 +2751,8 @@ namespace panoramix {
                     static const double angleThreshold = DegreesToRadians(10);
                     double minAngle = angleThreshold;
                     int bestVPId = -1;
-                    for (int i = 0; i < props.vanishingPoints.size(); i++){
-                        double angle = AngleBetweenUndirectedVectors(props.vanishingPoints[i], planes[r.topo.hd].normal);
+                    for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                        double angle = AngleBetweenUndirectedVectors(controls.vanishingPoints[i], planes[r.topo.hd].normal);
                         if (angle < minAngle){
                             minAngle = angle;
                             bestVPId = i;
@@ -2283,7 +2772,7 @@ namespace panoramix {
             double sumOfNotUsedConstraintWeights = 0.0;
             for (auto & c : mg.constraints<RegionBoundaryData>()){
                 static const double typeWeight = 1.0;
-                if (!props[c.topo.hd].used){
+                if (!controls[c.topo.hd].used){
                     sumOfNotUsedConstraintWeights += ElementsNum(c.data.normalizedSampledPoints) * typeWeight;
                     continue;
                 }
@@ -2316,7 +2805,7 @@ namespace panoramix {
             //}
             for (auto & c : mg.constraints<LineRelationData>()){
                 static const double typeWeight = 8.0;
-                if (!props[c.topo.hd].used){
+                if (!controls[c.topo.hd].used){
                     sumOfNotUsedConstraintWeights += /* c.data.junctionWeight / maxJunctionWeight **/ typeWeight;
                     continue;
                 }
@@ -2338,7 +2827,7 @@ namespace panoramix {
             }
             for (auto & c : mg.constraints<RegionLineConnectionData>()){
                 static const double typeWeight = 1.0;
-                if (!props[c.topo.hd].used){
+                if (!controls[c.topo.hd].used){
                     sumOfNotUsedConstraintWeights += ElementsNum(c.data.normalizedAnchors) * typeWeight;
                     continue;
                 }
@@ -2373,8 +2862,9 @@ namespace panoramix {
 
 
 
-        void NormalizeVariables(const RLGraph & mg, RLGraphPropertyTable & props){
-            double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
+        void NormalizeVariables(const RLGraph & mg, const RLGraphControls & controls,
+            RLGraphVars & vars){
+            double medianCenterDepth = MedianCenterDepth(mg, controls, vars);
             
             SetClock();
 
@@ -2384,17 +2874,17 @@ namespace panoramix {
 
             // normalize variables
             for (auto & c : mg.components<RegionData>()){
-                if (!props[c.topo.hd].used)
+                if (!controls[c.topo.hd].used)
                     continue;
-                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    props[c.topo.hd].variables[i] *= medianCenterDepth;
+                for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                    vars[c.topo.hd].variables[i] *= medianCenterDepth;
                 }
             }
             for (auto & c : mg.components<LineData>()){
-                if (!props[c.topo.hd].used)
+                if (!controls[c.topo.hd].used)
                     continue;
-                for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-                    props[c.topo.hd].variables[i] *= medianCenterDepth;
+                for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                    vars[c.topo.hd].variables[i] *= medianCenterDepth;
                 }
             }
         }
@@ -2403,34 +2893,10 @@ namespace panoramix {
 
 
 
-        HandledTable<RegionHandle, std::vector<Polygon3>> RegionPolygons(const RLGraph & mg,
-            const RLGraphPropertyTable & props){
-
-            auto polygons = mg.createComponentTable<RegionData, std::vector<Polygon3>>();
-            for (auto & r : mg.components<RegionData>()){
-                if (!props[r.topo.hd].used)
-                    continue;
-                Plane3 plane = Instance(mg, props, r.topo.hd);
-                for (auto & contour : r.data.normalizedContours){
-                    Polygon3 polygon;
-                    polygon.corners.reserve(contour.size());
-                    for (auto & c : contour){
-                        polygon.corners.push_back(PointAt(c, plane));
-                    }
-                    polygon.normal = plane.normal;
-                    polygons[r.topo.hd].push_back(std::move(polygon));
-                }
-            }
-
-            return polygons;
-
-        }
-
-
-        std::vector<RegionLoopSegment> CutRegionLoopAt(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
+        SectionalLoop CutRegionLoopAt(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
             const Plane3 & cutplane){
 
-            std::vector<RegionLoopSegment> segments;
+            std::vector<SectionalPiece> segments;
             std::vector<double> startAngles;
 
             Vec3 x, y;
@@ -2477,7 +2943,7 @@ namespace panoramix {
                     // chain the segments
                     std::sort(cutpoints.begin(), cutpoints.end());
                     for (int i = 0; i < cutpoints.size(); i += 2){
-                        RegionLoopSegment segment;
+                        SectionalPiece segment;
                         segment.rh = rh;
                         segment.range.first = cutpoints[i].component.first;
                         segment.range.second = cutpoints[i + 1].component.first;
@@ -2494,7 +2960,7 @@ namespace panoramix {
             std::iota(ids.begin(), ids.end(), 0);
             std::sort(ids.begin(), ids.end(), [&startAngles](int id1, int id2){return startAngles[id1] < startAngles[id2]; });
 
-            std::vector<RegionLoopSegment> segs;
+            std::vector<SectionalPiece> segs;
             segs.reserve(segments.size());
             for (int id : ids){
                 segs.push_back(std::move(segments[id]));
@@ -2503,86 +2969,8 @@ namespace panoramix {
         }
 
 
-        std::vector<RegionLoopSegment> CutRegionLoopAt(const RLGraph & mg,
-            const RLGraphPropertyTable & props, const Plane3 & cutplane){
 
-            std::vector<RegionLoopSegment> segments;
-            std::vector<double> startAngles;
-
-            Vec3 x, y;
-            std::tie(x, y) = ProposeXYDirectionsFromZDirection(cutplane.normal);
-            Point3 original = cutplane.root();
-
-            auto planes = Instances<RegionData>(mg, props);
-            for (auto & r : mg.components<RegionData>()){
-                if (!props[r.topo.hd].used)
-                    continue;
-                auto & plane = planes[r.topo.hd];
-
-                if (core::IsFuzzyParallel(plane.normal, cutplane.normal, 0.01))
-                    continue;
-                
-                Vec3 along = normalize(cutplane.normal.cross(plane.normal));
-                std::vector<Scored<std::pair<Point3, Point2>>> cutpoints;
-
-                for (auto & cs : r.data.normalizedContours){
-                    if (cs.size() <= 2){
-                        continue;
-                    }                    
-                    for (int i = 1; i <= cs.size(); i++){
-                        Point3 lastP = PointAt(cs[i - 1], plane);
-                        Point3 p = PointAt(cs[i % cs.size()], plane);
-                        double lastDist = cutplane.signedDistanceTo(lastP);
-                        double dist = cutplane.signedDistanceTo(p);
-
-                        if (lastDist < 0 && dist > 0 || lastDist > 0 && dist < 0){
-                            Point3 intersection = (lastP * abs(dist) + p * abs(lastDist)) / (abs(dist) + abs(lastDist));
-                            double order = intersection.dot(along);
-                            Point2 projOnCutPlane((intersection - original).dot(x), (intersection - original).dot(y));
-                            cutpoints.push_back(ScoreAs(std::make_pair(intersection, projOnCutPlane), order));
-                        }
-                    }
-                }
-
-                if (cutpoints.empty()){
-                    continue;
-                }
-                assert(cutpoints.size() % 2 == 0);
-                if (cutpoints.size() % 2 != 0){
-                    std::cout << "ODD cutpoints num!!!" << std::endl;
-                }
-
-                // chain the segments
-                std::sort(cutpoints.begin(), cutpoints.end());
-                for (int i = 0; i < cutpoints.size(); i += 2){
-                    RegionLoopSegment segment;
-                    segment.rh = r.topo.hd;
-                    segment.range.first = cutpoints[i].component.first;
-                    segment.range.second = cutpoints[i + 1].component.first;
-                    segments.push_back(segment);
-                    startAngles.push_back(SignedAngleBetweenDirections(Vec2(1, 0), cutpoints[i].component.second));
-                }
-
-            }
-            
-            if (segments.empty())
-                return segments;
-
-            std::vector<int> ids(segments.size());
-            std::iota(ids.begin(), ids.end(), 0);
-            std::sort(ids.begin(), ids.end(), [&startAngles](int id1, int id2){return startAngles[id1] < startAngles[id2]; });
-
-            std::vector<RegionLoopSegment> segs;
-            segs.reserve(segments.size());
-            for (int id : ids){
-                segs.push_back(std::move(segments[id]));
-            }
-            return segs;
-
-        }
-
-
-        Chain3 MakeChain(const std::vector<RegionLoopSegment> & loop){
+        Chain3 MakeChain(const SectionalLoop & loop){
             Chain3 chain;
             chain.closed = true;
             chain.points.reserve(loop.size() * 2);
@@ -2592,6 +2980,9 @@ namespace panoramix {
             }
             return chain;
         }
+
+
+
 
 
 
@@ -2677,8 +3068,8 @@ namespace panoramix {
         namespace {
             
             // returns false if confliction occurs
-            bool MakeRegionPlaneUsable(RegionHandle rh, bool usable, RLGraphPropertyTable & props) {
-                auto & p = props[rh];
+            bool MakeRegionPlaneUsable(RegionHandle rh, bool usable, RLGraphControls & controls) {
+                auto & p = controls[rh];
                 if (p.used == usable)
                     return true;
                 if (p.used && !usable){
@@ -2692,8 +3083,8 @@ namespace panoramix {
 
 
             // returns false if confliction occurs
-            bool MakeRegionPlaneToward(RegionHandle rh, int normalVPId, RLGraphPropertyTable & props){
-                auto & p = props[rh];
+            bool MakeRegionPlaneToward(RegionHandle rh, int normalVPId, RLGraphControls & controls){
+                auto & p = controls[rh];
                 if (!p.used)
                     return true;
                 assert(normalVPId != -1);
@@ -2706,8 +3097,8 @@ namespace panoramix {
                     p.orientationClaz = normalVPId;
                     return true;
                 }
-                auto & dir = props.vanishingPoints[p.orientationNotClaz];
-                if (IsFuzzyPerpendicular(props.vanishingPoints[normalVPId], dir)){
+                auto & dir = controls.vanishingPoints[p.orientationNotClaz];
+                if (IsFuzzyPerpendicular(controls.vanishingPoints[normalVPId], dir)){
                     p.orientationClaz = normalVPId;
                     p.orientationNotClaz = -1;
                     return true;
@@ -2716,14 +3107,14 @@ namespace panoramix {
             }
 
             // returns false if confliction occurs
-            bool MakeRegionPlaneAlsoAlong(RegionHandle rh, int alongVPId, RLGraphPropertyTable & props){
-                auto & p = props[rh];
+            bool MakeRegionPlaneAlsoAlong(RegionHandle rh, int alongVPId, RLGraphControls & controls){
+                auto & p = controls[rh];
                 if (!p.used)
                     return true;
                 assert(alongVPId != -1);
-                auto & dir = props.vanishingPoints[alongVPId];
+                auto & dir = controls.vanishingPoints[alongVPId];
                 if (p.orientationClaz != -1){
-                    auto & normal = props.vanishingPoints[p.orientationClaz];
+                    auto & normal = controls.vanishingPoints[p.orientationClaz];
                     return IsFuzzyPerpendicular(normal, dir);
                 }
                 if (p.orientationNotClaz == -1){
@@ -2733,10 +3124,10 @@ namespace panoramix {
                 if (p.orientationNotClaz == alongVPId)
                     return true;
 
-                auto newNormal = dir.cross(props.vanishingPoints[p.orientationNotClaz]);
+                auto newNormal = dir.cross(controls.vanishingPoints[p.orientationNotClaz]);
                 double minAngle = M_PI;
-                for (int i = 0; i < props.vanishingPoints.size(); i++){
-                    double angle = AngleBetweenUndirectedVectors(props.vanishingPoints[i], newNormal);
+                for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                    double angle = AngleBetweenUndirectedVectors(controls.vanishingPoints[i], newNormal);
                     if (angle < minAngle){
                         p.orientationClaz = i;
                         minAngle = angle;
@@ -2754,16 +3145,16 @@ namespace panoramix {
 
         static const int regionLineRelatedThreshold = 2;
 
-        void AttachPrincipleDirectionConstraints(const RLGraph & mg, RLGraphPropertyTable & props,
+        void AttachPrincipleDirectionConstraints(const RLGraph & mg, RLGraphControls & controls,
             double rangeAngle, bool avoidLineConflictions){
 
             SetClock();
 
             // find peaky regions
-            std::vector<std::vector<RegionHandle>> peakyRegionHandles(props.vanishingPoints.size());
+            std::vector<std::vector<RegionHandle>> peakyRegionHandles(controls.vanishingPoints.size());
             for (auto & r : mg.components<RegionData>()){
                 auto h = r.topo.hd;
-                if (!props[h].used)
+                if (!controls[h].used)
                     continue;
 
                 auto & contours = r.data.normalizedContours;
@@ -2778,7 +3169,7 @@ namespace panoramix {
                 }
 
                 bool mayCrossAnyVP = false;
-                for (auto & vp : props.vanishingPoints){
+                for (auto & vp : controls.vanishingPoints){
                     double angle = AngleBetweenUndirectedVectors(vp, r.data.normalizedCenter);
                     if (angle < radiusAngle){
                         mayCrossAnyVP = true;
@@ -2809,9 +3200,9 @@ namespace panoramix {
                 cv::fillPoly(mask, contourProjs, (uint8_t)1);
                 
                 // intersection test
-                for (int i = 0; i < props.vanishingPoints.size(); i++){
-                    auto p1 = ToPixelLoc(ppc.screenProjection(props.vanishingPoints[i]));
-                    auto p2 = ToPixelLoc(ppc.screenProjection(-props.vanishingPoints[i]));
+                for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                    auto p1 = ToPixelLoc(ppc.screenProjection(controls.vanishingPoints[i]));
+                    auto p2 = ToPixelLoc(ppc.screenProjection(-controls.vanishingPoints[i]));
                     
                     int dilateSize = ppcFocal * rangeAngle;
                     bool intersected = false;
@@ -2836,8 +3227,8 @@ namespace panoramix {
                 }
             }
        
-            for (int i = 0; i < props.vanishingPoints.size(); i++){
-                auto & vp = props.vanishingPoints[i];
+            for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                auto & vp = controls.vanishingPoints[i];
                 auto & rhs = peakyRegionHandles[i];
                 for (auto rh : rhs){
                     if (avoidLineConflictions){
@@ -2846,22 +3237,22 @@ namespace panoramix {
                             if (mg.data(conh).normalizedAnchors.size() < regionLineRelatedThreshold)
                                 continue;
                             LineHandle lh = mg.topo(conh).component<1>();
-                            auto & lprop = props[lh];
+                            auto & lprop = controls[lh];
                             if (lprop.orientationClaz == i){
                                 hasLineConflictions = true;
                                 break;
                             }
                         }
                         if (!hasLineConflictions)
-                            MakeRegionPlaneToward(rh, i, props);
+                            MakeRegionPlaneToward(rh, i, controls);
                     }
                     else {
-                        MakeRegionPlaneToward(rh, i, props);
+                        MakeRegionPlaneToward(rh, i, controls);
                         for (auto conh : mg.topo(rh).constraints<RegionLineConnectionData>()){
                             if (mg.data(conh).normalizedAnchors.size() < regionLineRelatedThreshold)
                                 continue;
                             LineHandle lh = mg.topo(conh).component<1>();
-                            auto & lprop = props[lh];
+                            auto & lprop = controls[lh];
                             if (lprop.orientationClaz == i){
                                 lprop.orientationClaz = -1;
                             }
@@ -2870,33 +3261,32 @@ namespace panoramix {
                 }
             }
 
-            ForeachRLGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
-            ForeachRLGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+            controls.disableAllInvalidConstraints(mg);
 
         }
 
 
-        void AttachWallConstriants(const RLGraph & mg, RLGraphPropertyTable & props,
+        void AttachWallConstriants(const RLGraph & mg, RLGraphControls & controls,
             double rangeAngle, const Vec3 & verticalSeed){
 
             SetClock();
 
             int vertVPId = -1;
             double minAngle = M_PI;
-            for (int i = 0; i < props.vanishingPoints.size(); i++){
-                double angle = AngleBetweenUndirectedVectors(verticalSeed, props.vanishingPoints[i]);
+            for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                double angle = AngleBetweenUndirectedVectors(verticalSeed, controls.vanishingPoints[i]);
                 if (angle < minAngle){
                     minAngle = angle;
                     vertVPId = i;
                 }
             }
             assert(vertVPId != -1);
-            auto & vertical = props.vanishingPoints[vertVPId];
+            auto & vertical = controls.vanishingPoints[vertVPId];
 
             std::vector<RegionHandle> horizontalRegionHandles;
             for (auto & r : mg.components<RegionData>()){
                 auto h = r.topo.hd;
-                if (!props[h].used)
+                if (!controls[h].used)
                     continue;
                 auto & contours = r.data.normalizedContours;
                 bool intersected = false;
@@ -2918,16 +3308,16 @@ namespace panoramix {
             }
 
             for (auto h : horizontalRegionHandles){
-                MakeRegionPlaneAlsoAlong(h, vertVPId, props);
+                MakeRegionPlaneAlsoAlong(h, vertVPId, controls);
             }
 
-            ForeachRLGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
-            ForeachRLGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+            controls.disableAllInvalidConstraints(mg);
         }
 
 
 
-        void AttachFloorAndCeilingConstraints(const RLGraph & mg, RLGraphPropertyTable & props,
+        void AttachFloorAndCeilingConstraints(const RLGraph & mg, 
+            RLGraphControls & controls, const RLGraphVars & vars,
             double eyeHeightRatioLowerBound, double eyeHeightRatioUpperBound,
             double angleThreshold, const Vec3 & verticalSeed){
 
@@ -2937,27 +3327,27 @@ namespace panoramix {
 
             int vertVPId = -1;
             double minAngle = M_PI;
-            for (int i = 0; i < props.vanishingPoints.size(); i++){
-                double angle = AngleBetweenUndirectedVectors(verticalSeed, props.vanishingPoints[i]);
+            for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                double angle = AngleBetweenUndirectedVectors(verticalSeed, controls.vanishingPoints[i]);
                 if (angle < minAngle){
                     minAngle = angle;
                     vertVPId = i;
                 }
             }
             assert(vertVPId != -1);
-            auto & vertical = props.vanishingPoints[vertVPId];
+            auto & vertical = controls.vanishingPoints[vertVPId];
 
             int horizVPId = -1;
             double maxAngle = 0;
-            for (int i = 0; i < props.vanishingPoints.size(); i++){
-                double angle = AngleBetweenUndirectedVectors(vertical, props.vanishingPoints[i]);
+            for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                double angle = AngleBetweenUndirectedVectors(vertical, controls.vanishingPoints[i]);
                 if (angle > maxAngle){
                     maxAngle = angle;
                     horizVPId = i;
                 }
             }
             assert(horizVPId != -1);
-            auto xDir = normalize(props.vanishingPoints[horizVPId]);
+            auto xDir = normalize(controls.vanishingPoints[horizVPId]);
             auto yDir = normalize(vertical.cross(xDir));
 
             // compute horizontal bounding range of may-be ceilings and floors
@@ -2968,10 +3358,10 @@ namespace panoramix {
 
             auto regionPlanes = MakeHandledTableForComponents<Plane3, RegionData>(mg);
             for (auto & r : mg.components<RegionData>()){
-                if (!props[r.topo.hd].used)
+                if (!controls[r.topo.hd].used)
                     continue;
 
-                auto plane = Instance(mg, props, r.topo.hd);
+                auto plane = Instance(mg, controls, vars, r.topo.hd);
                 regionPlanes[r.topo.hd] = plane;
                 double angleToVert = AngleBetweenUndirectedVectors(plane.normal, vertical);
                 if (angleToVert < angleThreshold){
@@ -2996,7 +3386,7 @@ namespace panoramix {
                 return;
 
             // estimate height or ceiling/floor, remove non-ceiling/floor horizontal regions
-            double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
+            double medianCenterDepth = MedianCenterDepth(mg, controls, vars);
             static const double heightAffectRange = medianCenterDepth * 0.01;
             for (int i = 0; i < 2; i++){
                 auto & rhsWithHeights = maybeCeilinsOrFloors[i];
@@ -3055,7 +3445,7 @@ namespace panoramix {
                 Imagei(cv::Size(width, height), -1)
             };
             for (auto & r : mg.components<RegionData>()){
-                const auto & prop = props[r.topo.hd];
+                const auto & prop = controls[r.topo.hd];
                 if (!prop.used)
                     continue;
                 if (prop.orientationClaz != -1) // already strongly constrained
@@ -3123,19 +3513,17 @@ namespace panoramix {
                     regionAffectedCounts[regionHandle] ++;
                     // add horizontal constraint
                     if (regionAffectedCounts[regionHandle] > Square(imSize * 0.02)){
-                        MakeRegionPlaneToward(regionHandle, vertVPId, props);
+                        MakeRegionPlaneToward(regionHandle, vertVPId, controls);
                     }
                 }
             }
 
-            ForeachRLGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
-            ForeachRLGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
-
+            controls.disableAllInvalidConstraints(mg);
         }
 
 
 
-        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphPropertyTable & props,
+        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
             const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
             const std::vector<PerspectiveCamera> & gcCameras,
             int shrinkRegionOrientationIteration, bool considerGCVerticalConstraint){
@@ -3259,8 +3647,8 @@ namespace panoramix {
             // get the most vertical vp id
             int vVPId = -1;
             double angleToVert = std::numeric_limits<double>::max();
-            for (int i = 0; i < props.vanishingPoints.size(); i++){
-                double a = AngleBetweenUndirectedVectors(props.vanishingPoints[i], Vec3(0, 0, 1));
+            for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                double a = AngleBetweenUndirectedVectors(controls.vanishingPoints[i], Vec3(0, 0, 1));
                 if (a < angleToVert){
                     vVPId = i;
                     angleToVert = a;
@@ -3300,34 +3688,34 @@ namespace panoramix {
                 OrientationHint oh = regionOrientations[r.topo.hd];
                 switch (oh) {
                 case OrientationHint::Void:
-                    /*props[r.topo.hd].used = false;
-                    props[r.topo.hd].orientationClaz = -1;
-                    props[r.topo.hd].orientationNotClaz = -1;*/
-                    MakeRegionPlaneUsable(r.topo.hd, false, props);
+                    /*controls[r.topo.hd].used = false;
+                    controls[r.topo.hd].orientationClaz = -1;
+                    controls[r.topo.hd].orientationNotClaz = -1;*/
+                    MakeRegionPlaneUsable(r.topo.hd, false, controls);
                     break;
                 case OrientationHint::Horizontal:
-                    /*props[r.topo.hd].used = true;
-                    props[r.topo.hd].orientationClaz = vVPId;
-                    props[r.topo.hd].orientationNotClaz = -1;*/
-                    MakeRegionPlaneToward(r.topo.hd, vVPId, props);
+                    /*controls[r.topo.hd].used = true;
+                    controls[r.topo.hd].orientationClaz = vVPId;
+                    controls[r.topo.hd].orientationNotClaz = -1;*/
+                    MakeRegionPlaneToward(r.topo.hd, vVPId, controls);
                     break;
                 case OrientationHint::Vertical:
-                    //props[r.topo.hd].used = true;
-                    //props[r.topo.hd].orientationClaz = -1;
-                    //props[r.topo.hd].orientationNotClaz = vVPId;
-                    MakeRegionPlaneAlsoAlong(r.topo.hd, vVPId, props);
+                    //controls[r.topo.hd].used = true;
+                    //controls[r.topo.hd].orientationClaz = -1;
+                    //controls[r.topo.hd].orientationNotClaz = vVPId;
+                    MakeRegionPlaneAlsoAlong(r.topo.hd, vVPId, controls);
                     break;
                 case OrientationHint::OtherPlanar:
-                    /*props[r.topo.hd].used = true;
-                    props[r.topo.hd].orientationClaz = -1;
-                    props[r.topo.hd].orientationNotClaz = -1;*/
-                    //MakeRegionPlaneUsable(r.topo.hd, true, props);
+                    /*controls[r.topo.hd].used = true;
+                    controls[r.topo.hd].orientationClaz = -1;
+                    controls[r.topo.hd].orientationNotClaz = -1;*/
+                    //MakeRegionPlaneUsable(r.topo.hd, true, controls);
                     break;
                 case OrientationHint::NonPlanar:
-                    /*props[r.topo.hd].used = false;
-                    props[r.topo.hd].orientationClaz = -1;
-                    props[r.topo.hd].orientationNotClaz = -1;*/
-                    MakeRegionPlaneUsable(r.topo.hd, false, props);
+                    /*controls[r.topo.hd].used = false;
+                    controls[r.topo.hd].orientationClaz = -1;
+                    controls[r.topo.hd].orientationNotClaz = -1;*/
+                    MakeRegionPlaneUsable(r.topo.hd, false, controls);
                     break;
                 default:
                     assert(0);
@@ -3471,9 +3859,8 @@ namespace panoramix {
             //    props[l.topo.hd].orientationClaz = l.data.initialClaz;
             //    props[l.topo.hd].orientationNotClaz = -1;
             //}
-
-            ForeachRLGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
-            ForeachRLGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, props });
+            
+            controls.disableAllInvalidConstraints(mg);
 
         }
 
@@ -3484,8 +3871,63 @@ namespace panoramix {
 
 
 
+        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
+            const PanoramicCamera & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes,
+            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
 
-        void LooseOrientationConstraintsOnComponents(const RLGraph & mg, RLGraphPropertyTable & props,
+            SetClock();
+
+            // set component orientations
+            // use geometric context!
+            SetComponentControl<RegionData>(controls,
+                [&mg, &gc, &gcVotes, &pcam, &fun](RegionHandle rh, RLGraphComponentControl & c){
+                auto regionMaskView = PerfectRegionMaskView(mg, rh);
+                auto sampler = core::MakeCameraSampler(regionMaskView.camera, pcam);
+                auto gcOnRegion = sampler(gc);
+                auto gcVotesOnRegion = sampler(gcVotes);
+                int votes = 0;
+                core::Vec<double, 5> gcSum;
+                for (auto it = regionMaskView.image.begin(); it != regionMaskView.image.end(); ++it){
+                    if (!*it){
+                        continue;
+                    }
+                    gcSum += gcOnRegion(it.pos());
+                    votes += gcVotesOnRegion(it.pos());
+                }
+                auto gcMean = gcSum / std::max(votes, 1);
+                auto gcMean2 = gcMean;
+                std::sort(std::begin(gcMean2.val), std::end(gcMean2.val), std::greater<>());
+                double significancy = gcMean2[0] / std::max(gcMean2[1], 1e-5);
+                if (!fun){
+                    if (significancy > 2){
+                        int label = std::max_element(std::begin(gcMean.val), std::end(gcMean.val)) - gcMean.val;
+                        // label: vp1 vp2 vp3 clutter other
+                        if (label < 3){ // vp
+                            c.orientationClaz = label;
+                            c.orientationNotClaz = -1;
+                        }
+                        else{
+                            c.used = false;
+                            //c.orientationClaz = c.orientationNotClaz = -1;
+                        }
+                    }
+                }
+                else{
+                    fun(c, gcMean, significancy);
+                }
+            });
+
+            controls.disableAllInvalidConstraints(mg);
+        }
+
+
+
+
+
+
+
+        void LooseOrientationConstraintsOnComponents(const RLGraph & mg,
+            RLGraphControls & controls, const RLGraphVars & vars,
             double linesLoosableRatio, double regionsLoosableRatio, double distThresRatio){
 
             SetClock();
@@ -3493,7 +3935,7 @@ namespace panoramix {
             if (linesLoosableRatio <= 0.0 && regionsLoosableRatio <= 0.0)
                 return;
             
-            double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
+            double medianCenterDepth = MedianCenterDepth(mg, controls, vars);
             double distThres = medianCenterDepth * distThresRatio;
             double nnSearchRange = distThres;
 
@@ -3505,14 +3947,14 @@ namespace panoramix {
                 HandledTable<RegionHandle, Plane3> planes(mg.internalComponents<RegionData>().size());
 
                 for (auto & r : mg.components<RegionData>()){
-                    if (!props[r.topo.hd].used)
+                    if (!controls[r.topo.hd].used)
                         continue;
-                    planes[r.topo.hd] = Instance(mg, props, r.topo.hd);
+                    planes[r.topo.hd] = Instance(mg, controls, vars, r.topo.hd);
                 }
                 for (auto & l : mg.components<LineData>()){
-                    if (!props[l.topo.hd].used)
+                    if (!controls[l.topo.hd].used)
                         continue;
-                    lines[l.topo.hd] = Instance(mg, props, l.topo.hd);
+                    lines[l.topo.hd] = Instance(mg, controls, vars, l.topo.hd);
                 }
 
                 if (linesLoosableRatio > 0.0){
@@ -3520,7 +3962,7 @@ namespace panoramix {
                     usableLineHandles.reserve(mg.internalComponents<LineData>().size());
                     auto distanceToNearestRegions = mg.createComponentTable<LineData>(0.0);
                     for (auto & l : mg.components<LineData>()){
-                        if (!props[l.topo.hd].used)
+                        if (!controls[l.topo.hd].used)
                             continue;
                         usableLineHandles.push_back(l.topo.hd);
 
@@ -3555,16 +3997,14 @@ namespace panoramix {
                         double maxCornerDist = distanceToNearestRegions[usableLineHandles[i]];
                         if (maxCornerDist < distThres)
                             continue;
-                        auto & lp = props[usableLineHandles[i]];
+                        auto & lp = controls[usableLineHandles[i]];
                         assert(lp.used);
                         if (lp.orientationClaz >= 0){
                             lp.orientationClaz = -1;
-                            lp.variables = { 1.0, 1.0 };
                         }
                         assert(lp.orientationNotClaz == -1);
                         if (lp.orientationClaz == -1){
                             lp.used = false; // disable this line!!!!!!!!!
-                            lp.variables.clear();
                         }
                     }
                 }
@@ -3575,7 +4015,7 @@ namespace panoramix {
                     auto maxDistanceToNearestComponents = mg.createComponentTable<RegionData>(0.0);
 
                     for (auto & r : mg.components<RegionData>()){
-                        if (!props[r.topo.hd].used)
+                        if (!controls[r.topo.hd].used)
                             continue;
                         usableRegionHandles.push_back(r.topo.hd);
                         Plane3 & thisPlane = planes[r.topo.hd];
@@ -3625,13 +4065,9 @@ namespace panoramix {
                         double maxCornerDist = maxDistanceToNearestComponents[usableRegionHandles[i]];
                         if (maxCornerDist < distThres)
                             continue;
-                        auto & rp = props[usableRegionHandles[i]];
+                        auto & rp = controls[usableRegionHandles[i]];
                         assert(rp.used);
                         rp.orientationClaz = rp.orientationNotClaz = -1;
-                        rp.variables = { 1.0, 1.0, 1.0 };
-                        //if (lp.orientationClaz == -1){
-                        //    lp.used = false; // disable this line!!!!!!!!!
-                        //}
                     }
                 }
             }
@@ -3657,9 +4093,9 @@ namespace panoramix {
 
                 // keypoints on regions
                 for (auto & r : mg.components<RegionData>()){
-                    if (!props[r.topo.hd].used)
+                    if (!controls[r.topo.hd].used)
                         continue;
-                    auto plane = Instance(mg, props, r.topo.hd);
+                    auto plane = Instance(mg, controls, vars, r.topo.hd);
                     planes[r.topo.hd] = plane;
                     for (auto & cs : r.data.normalizedContours){
                         for (auto & c : cs){
@@ -3670,9 +4106,9 @@ namespace panoramix {
                 }
                 // keypoints on lines
                 for (auto & l : mg.components<LineData>()){
-                    if (!props[l.topo.hd].used)
+                    if (!controls[l.topo.hd].used)
                         continue;
-                    auto line = Instance(mg, props, l.topo.hd);
+                    auto line = Instance(mg, controls, vars, l.topo.hd);
                     lines[l.topo.hd] = line;
                     keyPointsRTree.insert(ComponentKeyPoint(line.first, l.topo.hd));
                     keyPointsRTree.insert(ComponentKeyPoint(line.second, l.topo.hd));
@@ -3684,7 +4120,7 @@ namespace panoramix {
                     auto lineMaxCornerNNDistances = mg.createComponentTable<LineData, double>();
                     std::vector<LineHandle> usableLineHandles;
                     for (auto & l : mg.components<LineData>()){
-                        if (!props[l.topo.hd].used)
+                        if (!controls[l.topo.hd].used)
                             continue;
                         usableLineHandles.push_back(l.topo.hd);
                         auto & line = lines[l.topo.hd];
@@ -3717,16 +4153,14 @@ namespace panoramix {
                         double maxCornerDist = lineMaxCornerNNDistances[usableLineHandles[i]];
                         if (maxCornerDist < distThres)
                             continue;
-                        auto & lp = props[usableLineHandles[i]];
+                        auto & lp = controls[usableLineHandles[i]];
                         assert(lp.used);
                         if (lp.orientationClaz >= 0){
                             lp.orientationClaz = -1;
-                            lp.variables = { 1.0, 1.0 };
                         }
                         assert(lp.orientationNotClaz == -1);
                         if (lp.orientationClaz == -1){
                             lp.used = false; // disable this line!!!!!!!!!
-                            lp.variables.clear();
                         }
                     }
                 }
@@ -3737,7 +4171,7 @@ namespace panoramix {
                     auto regionMaxCornerNNDistances = mg.createComponentTable<RegionData, double>();
                     std::vector<RegionHandle> usableRegionHandles;
                     for (auto & r : mg.components<RegionData>()){
-                        if (!props[r.topo.hd].used)
+                        if (!controls[r.topo.hd].used)
                             continue;
                         usableRegionHandles.push_back(r.topo.hd);
                         auto & plane = planes[r.topo.hd];
@@ -3774,18 +4208,19 @@ namespace panoramix {
                         double maxCornerDist = regionMaxCornerNNDistances[usableRegionHandles[i]];
                         if (maxCornerDist < distThres)
                             continue;
-                        auto & rp = props[usableRegionHandles[i]];
+                        auto & rp = controls[usableRegionHandles[i]];
                         assert(rp.used);
                         rp.orientationClaz = rp.orientationNotClaz = -1;
-                        rp.variables = { 1.0, 1.0, 1.0 };
                         //if (lp.orientationClaz == -1){
                         //    lp.used = false; // disable this line!!!!!!!!!
                         //}
                     }
                 }
+
+
             }
 
-            ForeachRLGraphConstraintHandle(mg, ConstraintUsableFlagUpdater{ mg, props });
+            controls.disableAllInvalidConstraints(mg);
 
         }
 
@@ -3811,119 +4246,109 @@ namespace panoramix {
             template <class UhClickHandlerFunT, class UhColorizerFunT = core::ConstantFunctor<gui::Color>>
             void ManuallyOptimizeRLGraph(const core::Image & panorama,
                 const RLGraph & mg,
-                RLGraphPropertyTable & props,
+                const RLGraphControls & controls, const RLGraphVars & vars,
                 UhClickHandlerFunT && uhClicked,
                 UhColorizerFunT && uhColorizer = UhColorizerFunT(gui::ColorTag::White),
                 bool optimizeInEachIteration = false) {
-
-                bool modified = true;
 
                 struct ComponentID {
                     int handleID;
                     bool isRegion;
                 };
 
-                auto sppCallbackFun = [&props, &mg, &modified, &uhClicked](gui::InteractionID iid,
+                auto sppCallbackFun = [&controls, &mg, &uhClicked](gui::InteractionID iid,
                     const std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>> & spp) {
                     std::cout << (spp.first.isRegion ? "Region" : "Line") << spp.first.handleID << std::endl;
                     if (spp.first.isRegion){
-                        modified = uhClicked(RegionHandle(spp.first.handleID));
+                        uhClicked(RegionHandle(spp.first.handleID));
                     }
                     else {
-                        modified = uhClicked(LineHandle(spp.first.handleID));
+                        uhClicked(LineHandle(spp.first.handleID));
                     }
                 };
 
-                while (modified){
+                gui::ResourceStore::set("texture", panorama);
 
-                    gui::ResourceStore::set("texture", panorama);
+                gui::Visualizer viz("mixed graph optimizable");
+                viz.renderOptions.bwColor = 1.0;
+                viz.renderOptions.bwTexColor = 0.0;
+                viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
+                std::vector<std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>>> spps;
+                std::vector<gui::Colored<core::Line3>> lines;
 
-                    modified = false;
-                    if (optimizeInEachIteration){
-                        SolveVariablesUsingInversedDepths(mg, props);
-                    }
+                for (auto & c : mg.components<RegionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    auto uh = c.topo.hd;
+                    auto & region = c.data;
+                    gui::SpatialProjectedPolygon spp;
+                    // filter corners
+                    core::ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
+                        std::back_inserter(spp.corners),
+                        [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
+                        return core::AngleBetweenDirections(a, b) > M_PI / 1000.0;
+                    });
+                    if (spp.corners.size() < 3)
+                        continue;
 
-                    gui::Visualizer viz("mixed graph optimizable");
-                    viz.renderOptions.bwColor = 1.0;
-                    viz.renderOptions.bwTexColor = 0.0;
-                    viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
-                    std::vector<std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>>> spps;
-                    std::vector<gui::Colored<core::Line3>> lines;
+                    spp.projectionCenter = core::Point3(0, 0, 0);
+                    spp.plane = Instance(mg, controls, vars, uh);
+                    assert(!HasValue(spp.plane, IsInfOrNaN<double>));
+                    spps.emplace_back(ComponentID{ uh.id, true }, std::move(gui::ColorAs(spp, uhColorizer(uh))));
+                }
 
-                    for (auto & c : mg.components<RegionData>()){
-                        if (!props[c.topo.hd].used)
-                            continue;
-                        auto uh = c.topo.hd;
-                        auto & region = c.data;
-                        gui::SpatialProjectedPolygon spp;
-                        // filter corners
-                        core::ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
-                            std::back_inserter(spp.corners),
-                            [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
-                            return core::AngleBetweenDirections(a, b) > M_PI / 1000.0;
-                        });
-                        if (spp.corners.size() < 3)
-                            continue;
+                for (auto & c : mg.components<LineData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    auto uh = c.topo.hd;
+                    auto & line = c.data;
+                    lines.push_back(gui::ColorAs(Instance(mg, controls, vars, uh), uhColorizer(uh)));
+                }
 
-                        spp.projectionCenter = core::Point3(0, 0, 0);
-                        spp.plane = Instance(mg, props, uh);
-                        assert(!HasValue(spp.plane, IsInfOrNaN<double>));
-                        spps.emplace_back(ComponentID{ uh.id, true }, std::move(gui::ColorAs(spp, uhColorizer(uh))));
-                    }
+                viz.begin(spps, sppCallbackFun).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+                viz.installingOptions.discretizeOptions.color = gui::ColorTag::DarkGray;
+                viz.installingOptions.lineWidth = 5.0;
+                viz.add(lines);
 
-                    for (auto & c : mg.components<LineData>()){
-                        if (!props[c.topo.hd].used)
-                            continue;
-                        auto uh = c.topo.hd;
-                        auto & line = c.data;
-                        lines.push_back(gui::ColorAs(Instance(mg, props, uh), uhColorizer(uh)));
-                    }
-
-                    viz.begin(spps, sppCallbackFun).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
-                    viz.installingOptions.discretizeOptions.color = gui::ColorTag::DarkGray;
-                    viz.installingOptions.lineWidth = 5.0;
-                    viz.add(lines);
-
-                    std::vector<core::Line3> connectionLines;
-                    for (auto & c : mg.constraints<RegionBoundaryData>()){
-                        if (!props[c.topo.hd].used)
-                            continue;
-                        auto & samples = c.data.normalizedSampledPoints;
-                        auto inst1 = Instance(mg, props, c.topo.component<0>());
-                        auto inst2 = Instance(mg, props, c.topo.component<1>());
-                        for (auto & ss : samples){
-                            for (auto & s : ss){
-                                double d1 = DepthAt(s, inst1);
-                                double d2 = DepthAt(s, inst2);
-                                connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
-                            }
-                        }
-                    }
-                    for (auto & c : mg.constraints<RegionLineConnectionData>()){
-                        if (!props[c.topo.hd].used)
-                            continue;
-                        auto inst1 = Instance(mg, props, c.topo.component<0>());
-                        auto inst2 = Instance(mg, props, c.topo.component<1>());
-                        for (auto & s : c.data.normalizedAnchors){
+                std::vector<core::Line3> connectionLines;
+                for (auto & c : mg.constraints<RegionBoundaryData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    auto & samples = c.data.normalizedSampledPoints;
+                    auto inst1 = Instance(mg, controls, vars, c.topo.component<0>());
+                    auto inst2 = Instance(mg, controls, vars, c.topo.component<1>());
+                    for (auto & ss : samples){
+                        for (auto & s : ss){
                             double d1 = DepthAt(s, inst1);
                             double d2 = DepthAt(s, inst2);
                             connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
                         }
                     }
-
-                    viz.installingOptions.discretizeOptions.color = gui::ColorTag::Black;
-                    viz.installingOptions.lineWidth = 1.0;
-                    viz.add(connectionLines);
-
-                    viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines;
-                    viz.renderOptions.backgroundColor = gui::ColorTag::White;
-                    viz.renderOptions.bwColor = 0.5;
-                    viz.renderOptions.bwTexColor = 0.5;
-                    viz.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400), 800, Point3(-1, 1, 1), Point3(0, 0, 0)));
-                    viz.show(true, false);
-
-                    gui::ResourceStore::clear();
                 }
+                for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    auto inst1 = Instance(mg, controls, vars, c.topo.component<0>());
+                    auto inst2 = Instance(mg, controls, vars, c.topo.component<1>());
+                    for (auto & s : c.data.normalizedAnchors){
+                        double d1 = DepthAt(s, inst1);
+                        double d2 = DepthAt(s, inst2);
+                        connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
+                    }
+                }
+
+                viz.installingOptions.discretizeOptions.color = gui::ColorTag::Black;
+                viz.installingOptions.lineWidth = 1.0;
+                viz.add(connectionLines);
+
+                viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines;
+                viz.renderOptions.backgroundColor = gui::ColorTag::White;
+                viz.renderOptions.bwColor = 0.5;
+                viz.renderOptions.bwTexColor = 0.5;
+                viz.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400), 800, Point3(-1, 1, 1), Point3(0, 0, 0)));
+                viz.show(true, false);
+
+                gui::ResourceStore::clear();
 
             }
 
@@ -3933,26 +4358,19 @@ namespace panoramix {
 
         struct ComponentHandleColorizer {
             const RLGraph & mg;
-            const RLGraphPropertyTable & props;
+            const RLGraphControls & controls;
+            const RLGraphVars & vars;
             gui::ColorTable colorTableForVPs;
             gui::ColorTable colorTableForRegionAlongOrientations;
-            ComponentHandleColorizer(const RLGraph & g, const RLGraphPropertyTable & p) : mg(g), props(p) {
+            ComponentHandleColorizer(const RLGraph & g, const RLGraphControls & c, const RLGraphVars & v)
+                : mg(g), controls(c), vars(v) {
                 colorTableForVPs = gui::ColorTable(gui::ColorTableDescriptor::RGB)
-                    .appendRandomizedColors(props.vanishingPoints.size()-3);
-                colorTableForRegionAlongOrientations = gui::CreateGreyColorTableWithSize(props.vanishingPoints.size());
+                    .appendRandomizedColors(controls.vanishingPoints.size() - 3);
+                colorTableForRegionAlongOrientations = gui::CreateGreyColorTableWithSize(controls.vanishingPoints.size());
             }
 
             inline gui::Color operator()(ComponentHandle<RegionData> rh) const{
-                /*double maxPlaneDist = 0.0;
-                for (auto & r : mg.components<RegionData>()){
-                    if (!props[r.topo.hd].used)
-                        continue;
-                    double pdist = Instance(mg, props, r.topo.hd).distanceTo(Point3(0, 0, 0));
-                    if (pdist > maxPlaneDist)
-                        maxPlaneDist = pdist;
-                }
-                return gui::ColorFromHSV(Instance(mg, props, rh).distanceTo(Point3(0, 0, 0)) / maxPlaneDist, 0.5, 0.8);*/
-                auto & prop = props[rh];
+                auto & prop = controls[rh];
                 if (!prop.used)
                     return gui::ColorTag::Yellow;
                 if (prop.orientationClaz >= 0)
@@ -3962,13 +4380,14 @@ namespace panoramix {
                 return gui::ColorTag::Yellow;
             }
             inline gui::Color operator()(ComponentHandle<LineData> rh) const {
-                return colorTableForVPs[props[rh].orientationClaz];
+                return colorTableForVPs[controls[rh].orientationClaz];
             }
         };
 
         struct ComponentHandleClickHandler {
             const RLGraph & mg;
-            const RLGraphPropertyTable & props;
+            const RLGraphControls & controls;
+            const RLGraphVars & vars;
             inline bool operator()(ComponentHandle<RegionData> rh) const{
                 std::cout << "area: " << mg.data(rh).area
                     << " connected regions: " << mg.topo(rh).constraints<RegionBoundaryData>().size()
@@ -3990,167 +4409,21 @@ namespace panoramix {
 
 
         void Visualize(const View<PanoramicCamera> & texture,
-            const RLGraph & mg, RLGraphPropertyTable & props){
-            ManuallyOptimizeRLGraph(texture.image, mg, props, 
-                ComponentHandleClickHandler{ mg, props }, 
-                ComponentHandleColorizer{ mg, props });
+            const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars){
+            ManuallyOptimizeRLGraph(texture.image, mg, controls, vars, 
+                ComponentHandleClickHandler{ mg, controls, vars }, 
+                ComponentHandleColorizer{ mg, controls, vars });
         }
         
         void Visualize(const View<PerspectiveCamera> & texture,
-            const RLGraph & mg, RLGraphPropertyTable & props) {
+            const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars) {
             ManuallyOptimizeRLGraph(texture.sampled(PanoramicCamera(250, Point3(0, 0, 0), Point3(1, 0, 0), Vec3(0, 0, 1))).image, 
-                mg, props, ComponentHandleClickHandler{ mg, props },
-                ComponentHandleColorizer{ mg, props });
+                mg, controls, vars, ComponentHandleClickHandler{ mg, controls, vars },
+                ComponentHandleColorizer{ mg, controls, vars });
         }
 
 
 
-        namespace {
-
-            // graph data
-            class Universe {
-            public:
-                struct Element {
-                    int rank;
-                    int p; // parent
-                    float size;
-                };
-                explicit Universe(const std::vector<float> & eleSizes)
-                    : elements(eleSizes.size()), num(eleSizes.size()) {
-                    for (int i = 0; i < eleSizes.size(); i++){
-                        elements[i].rank = 0;
-                        elements[i].size = eleSizes[i];
-                        elements[i].p = i;
-                    }
-                }
-                int find(int x) {
-                    int y = x;
-                    while (y != elements[y].p)
-                        y = elements[y].p;
-                    elements[x].p = y;
-                    return y;
-                }
-                void join(int x, int y) {
-                    if (elements[x].rank > elements[y].rank) {
-                        elements[y].p = x;
-                        elements[x].size += elements[y].size;
-                    }
-                    else {
-                        elements[x].p = y;
-                        elements[y].size += elements[x].size;
-                        if (elements[x].rank == elements[y].rank)
-                            elements[y].rank++;
-                    }
-                    num--;
-                }
-                float size(int x) const { return elements[x].size; }
-                int numSets() const { return num; }
-            private:
-                int num;
-                std::vector<Element> elements;
-            };
-
-        }
-
-
-
-        HandledTable<RegionHandle, int> ClusterRegions(const RLGraph & mg, const RLGraphPropertyTable & props){
-
-            const double medianCenterDepth = ComponentMedianCenterDepth(mg, props);
-
-            auto planes = mg.createComponentTable<RegionData, Plane3>();
-            auto regionAreas = mg.createComponentTable<RegionData>(0.0f);
-            for (auto & r : mg.components<RegionData>()){
-                planes[r.topo.hd] = Instance(mg, props, r.topo.hd);
-                regionAreas[r.topo.hd] = r.data.area;
-            }
-
-            // graph cut
-            std::vector<Scored<RegionBoundaryHandle>> bhs;
-            bhs.reserve(mg.internalConstraints<RegionBoundaryData>().size());
-            for (auto & b : mg.constraints<RegionBoundaryData>()){
-                if (!props[b.topo.hd].used){
-                    continue;
-                }
-                auto rh1 = mg.topo(b.topo.hd).component<0>();
-                auto rh2 = mg.topo(b.topo.hd).component<1>();
-                assert(props[rh1].used && props[rh2].used);
-                
-                auto & plane1 = planes[rh1];
-                auto & plane2 = planes[rh2];
-                double angle = AngleBetweenUndirectedVectors(plane1.normal, plane2.normal);
-                double distance = 0.0;
-                for (auto & ps : b.data.normalizedSampledPoints){
-                    for (auto & p : ps){
-                        double d1 = DepthAt(p, plane1);
-                        double d2 = DepthAt(p, plane2);
-                        distance += abs(d1 - d2);
-                    }
-                }
-                distance /= ElementsNum(b.data.normalizedSampledPoints);
-                double weight = angle + distance / medianCenterDepth / 2.0;
-                bhs.push_back(ScoreAs(b.topo.hd, weight));
-            }
-
-            std::sort(bhs.begin(), bhs.end());
-
-
-            // segmentation
-            //auto regionOnes = mg.createComponentTable<RegionData>(1.0f);
-            Universe u(regionAreas.data);
-            static const float c = 30.f;
-            std::vector<float> threshold(regionAreas.data.size(), c);
-
-            for (auto & bhs : bhs){
-                auto bh = bhs.component;
-                double weight = bhs.score;
-                if (!props[bh].used){
-                    continue;
-                }
-
-                // components conected by this edge
-                auto rh1 = mg.topo(bh).component<0>();
-                auto rh2 = mg.topo(bh).component<1>();
-                assert(props[rh1].used && props[rh2].used);
-
-                int a = u.find(rh1.id);
-                int b = u.find(rh2.id);
-                if (a != b){
-                    if (weight <= threshold[a] && weight <= threshold[b]){
-                        u.join(a, b);
-                        a = u.find(a);
-                        threshold[a] = weight + c / u.size(a);
-                    }
-                }
-            }
-
-            // merge too small regions?
-            double minSize = 0;
-            if (minSize > 0){
-                for (auto & bhs : bhs) {
-                    auto bh = bhs.component;
-                    if (!props[bh].used){
-                        continue;
-                    }
-                    auto rh1 = mg.topo(bh).component<0>();
-                    auto rh2 = mg.topo(bh).component<1>();
-                    assert(props[rh1].used && props[rh2].used);
-
-                    int a = u.find(rh1.id);
-                    int b = u.find(rh2.id);
-                    if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize)))
-                        u.join(a, b);
-                }
-            }
-
-            // classify regions
-            auto planeIds = mg.createComponentTable<RegionData>(-1);
-            for (auto & r : mg.components<RegionData>()){
-                planeIds[r.topo.hd] = props[r.topo.hd].used ? u.find(r.topo.hd.id) : -1;
-            }
-
-            return planeIds;
-        }
 
 
     }

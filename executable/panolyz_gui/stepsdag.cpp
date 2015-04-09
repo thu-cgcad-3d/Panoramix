@@ -24,7 +24,7 @@ void StepsDAG::updateAll(UpdateCallback const * callback, bool forceSourceStepUp
             emit messageUpdated(tr("Updating ") + _names[i]);
             if (callback)
                 callback->beforeUpdate(i);
-            std::vector<Data *> deps(_dependencies[i].size());
+            std::vector<StepData *> deps(_dependencies[i].size());
             for (int k = 0; k < deps.size(); k++){
                 deps[k] = _steps[_dependencies[i][k]]->data.get();
             }

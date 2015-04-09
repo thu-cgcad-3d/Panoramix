@@ -1,4 +1,5 @@
 #include "../../src/misc/cmd_tools.hpp"
+#include "../../src/misc/tools.hpp"
 #include "routines.hpp"
 
 using namespace panoramix;
@@ -8,9 +9,9 @@ int main(int argc, char ** argv) {
     
     std::string defaultFileName;
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
-    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
+    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
-    defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
+    //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
     //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";// too small
@@ -67,23 +68,26 @@ int main(int argc, char ** argv) {
         return 0;
     }
 
-    core::Image image = cv::imread(cmdOptions.value<std::string>("f"));
+    std::string path = cmdOptions.value<std::string>("f");
+    auto tag = misc::Tagify(path);
+    
+    core::Image image = cv::imread(path);
     core::ResizeToHeight(image, cmdOptions.value<bool>("p") ? 700 : 400);
 
     if (cmdOptions.value<bool>("i")){
         if (cmdOptions.value<bool>("p")){
-            Routine<PanoramaIndoor_v1>(image);
+            Routine<PanoramaIndoor_v1>(image, tag);
         }
         else {
-            Routine<NormalIndoor_v1>(image);
+            //Routine<NormalIndoor_v1>(image);
         }
     }
     else{
         if (cmdOptions.value<bool>("p")){
-            Routine<PanoramaOutdoor_v1>(image);
+            //Routine<PanoramaOutdoor_v1>(image);
         }
         else {
-            Routine<NormalOutdoor_v1>(image);
+           // Routine<NormalOutdoor_v1>(image);
         }
     }
 

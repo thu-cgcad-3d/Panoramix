@@ -54,6 +54,9 @@ namespace panoramix {
         using Point3i = Point<int, 3>;
         using Point4i = Point<int, 4>;
 
+        using Vec7 = Vec<double, 7>;
+        using Vec7f = Vec<float, 7>;
+
         template <class T> struct IsVecOrPoint : std::false_type {};
         template <class T, int N> struct IsVecOrPoint<Point<T, N>> : std::true_type{};
 
@@ -404,6 +407,7 @@ namespace panoramix {
         using Image3d = ImageOfType<Vec<double, 3>>;
 
 
+
         namespace {
             template <class To, class From>
             inline ImageOfType<To> VecCastPrivate(const ImageOfType<From> & im, std::false_type) {
@@ -716,11 +720,20 @@ namespace panoramix {
         struct Scored {
             S score;
             T component;
+            const S & weight() const { return score; }
         };
+        template <class T, class S = double>
+        using Weighted = Scored<T, S>;
+
         template <class T, class S>
         inline Scored<std::decay_t<T>, std::decay_t<S>> ScoreAs(T && comp, S && score){
             return Scored<std::decay_t<T>, std::decay_t<S>>{std::forward<S>(score), std::forward<T>(comp)};
         }
+        template <class T, class S>
+        inline Scored<std::decay_t<T>, std::decay_t<S>> WeightAs(T && comp, S && score){
+            return Scored<std::decay_t<T>, std::decay_t<S>>{std::forward<S>(score), std::forward<T>(comp)};
+        }
+
         // note this!!!
         template <class T, class S>
         inline bool operator == (const Scored<T, S> & a, const Scored<T, S> & b) {
@@ -748,6 +761,7 @@ namespace panoramix {
         inline void serialize(Archive & ar, Scored<T, S> & c) {
             ar(c.score, c.component);
         }
+
 
 
         // something enabled

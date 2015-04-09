@@ -211,11 +211,29 @@ namespace panoramix {
             template <class T>
             ImageOfType<T> operator() (const ImageOfType<T> & inputIm,
                 int borderMode = cv::BORDER_REPLICATE,
-                const T & borderValue = 0) const {
+                const T & borderValue = T()) const {
                 ImageOfType<T> outputIm;
                 cv::remap(inputIm, outputIm, _mapx, _mapy,
                     cv::INTER_NEAREST, borderMode, borderValue);
                 return outputIm;
+            }
+
+            template <
+                class T, int N, 
+                class = std::enable_if_t<(N > 4)>
+            >
+            ImageOfType<Vec<T, N>> operator()(const ImageOfType<Vec<T, N>> & inputIm,
+                int borderMode = cv::BORDER_REPLICATE,
+                const Vec<T, N> & borderValue = Vec<T, N>()) const {
+                std::vector<Image> channels;
+                cv::split(inputIm, channels);
+                for (int i = 0; i < N; i++){
+                    auto & c = channels[i];
+                    cv::remap(c, c, _mapx, _mapy, cv::INTER_NEAREST, borderMode, borderValue[i]);
+                }
+                ImageOfType<Vec<T, N>> result;
+                cv::merge(channels, result);
+                return result;
             }
 
         private:

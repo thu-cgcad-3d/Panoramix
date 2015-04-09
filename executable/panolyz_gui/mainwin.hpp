@@ -1,5 +1,4 @@
-#ifndef MAINWIN_HPP
-#define MAINWIN_HPP
+#pragma once
 
 #include <functional>
 #include <QtWidgets>
@@ -31,4 +30,3 @@ private:
     ThreadPool * _threadPool;
 };
  
-#endif

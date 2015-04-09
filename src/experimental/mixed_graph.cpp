@@ -298,7 +298,7 @@ namespace panoramix {
 
 
         HandledTable<RegionHandle, Plane3> MixedGraph::solve() const {           
-            RLGraphPropertyTable props = MakeRLGraphPropertyTable(regionLineGraph, vps);
+            auto controls = MakeControls(regionLineGraph, vps);
 
             size_t vpnum = vps.size();
             int vertVPId = -1, frontVPId = -1, sideVPId = -1;
@@ -406,13 +406,13 @@ namespace panoramix {
                 double & operator[](RegionLineConnectionHandle bh) { return rlDistances[bh]; }
                 double & operator[](LineRelationHandle bh) { return llDistances[bh]; }
 
-                void update(const RLGraph & mg, const RLGraphPropertyTable & p){
+                void update(const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars){
                     // update continuous cache
                     for (auto & r : mg.components<RegionData>()){
-                        (*this)[r.topo.hd] = Instance(mg, p, r.topo.hd);
+                        (*this)[r.topo.hd] = Instance(mg, controls, vars, r.topo.hd);
                     }
                     for (auto & l : mg.components<LineData>()){
-                        (*this)[l.topo.hd] = Instance(mg, p, l.topo.hd);
+                        (*this)[l.topo.hd] = Instance(mg, controls, vars, l.topo.hd);
                     }
 
                     for (auto & c : mg.constraints<RegionBoundaryData>()){
@@ -699,19 +699,18 @@ namespace panoramix {
 
             // initialize
             LOG("initialize");
-            AttachPrincipleDirectionConstraints(regionLineGraph, props, M_PI / 50.0);
-            AttachWallConstriants(regionLineGraph, props, M_PI / 80.0);
-            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(regionLineGraph, props);
+            AttachPrincipleDirectionConstraints(regionLineGraph, controls, M_PI / 50.0);
+            AttachWallConstriants(regionLineGraph, controls, M_PI / 80.0);
+            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(regionLineGraph, controls);
 
-            const auto defaultProps = props;
+            const auto defaultControls = controls;
 
             // solve continuous vars
-            ResetVariables(regionLineGraph, props);
-            SolveVariablesUsingInversedDepths(regionLineGraph, props);
-            NormalizeVariables(regionLineGraph, props);
-            cache.update(regionLineGraph, props);
+            auto vars = SolveVariables(regionLineGraph, controls);
+            NormalizeVariables(regionLineGraph, controls, vars);
+            cache.update(regionLineGraph, controls, vars);
 
-            Visualize(view, regionLineGraph, props);
+            Visualize(view, regionLineGraph, controls, vars);
 
             for(int epoch = 0; epoch < 1; epoch ++){
 
@@ -728,7 +727,7 @@ namespace panoramix {
                 // region orientation
                 for (auto & r : regionLineGraph.components<RegionData>()){
                     int rolabel = results[regionVhs[r.topo.hd]];
-                    auto & prop = props[r.topo.hd];
+                    auto & prop = controls[r.topo.hd];
                     if (rolabel == 0){
                         prop.orientationClaz = prop.orientationNotClaz = -1;
                     }
@@ -752,7 +751,7 @@ namespace panoramix {
                 // line orientation
                 for (auto & l : regionLineGraph.components<LineData>()){
                     int lolabel = results[lineVhs[l.topo.hd]];
-                    auto & prop = props[l.topo.hd];
+                    auto & prop = controls[l.topo.hd];
                     if (lolabel == 0){
                         prop.orientationClaz = prop.orientationNotClaz = -1;
                     }
@@ -765,8 +764,7 @@ namespace panoramix {
 
                 // boundary occlusion
                 for (auto & b : regionLineGraph.constraints<RegionBoundaryData>()){
-                    props[b.topo.hd].used = true;
-                    props[b.topo.hd].weight = results[boundaryVhs[b.topo.hd]] == 1 ? defaultProps[b.topo.hd].weight : 1e-3;
+                    controls[b.topo.hd].weight = results[boundaryVhs[b.topo.hd]] == 1 ? defaultControls[b.topo.hd].weight : 1e-3;
                 }
 
                 std::array<int, 3> lineConnectionSideLabels = { { 0, 0, 0 } };
@@ -774,9 +772,8 @@ namespace panoramix {
                     int label = results[lineConnectionSidesVhs[l.topo.hd]];
                     lineConnectionSideLabels[label] ++;
                     for (RegionLineConnectionHandle leftConH : lineLeftRegionConnections[l.topo.hd]){
-                        auto & prop = props[leftConH];
-                        auto & defaultProp = defaultProps[leftConH];
-                        prop.used = true;
+                        auto & prop = controls[leftConH];
+                        auto & defaultProp = defaultControls[leftConH];
                         /*if (!regionLineGraph.data(leftConH).detachable){
                             prop.weight = defaultProp.weight;
                             continue;
@@ -784,9 +781,8 @@ namespace panoramix {
                         prop.weight = (label == 0 || label == 1) ? defaultProp.weight : 1e-3;
                     }
                     for (RegionLineConnectionHandle rightConH : lineRightRegionConnections[l.topo.hd]){
-                        auto & prop = props[rightConH];
-                        auto & defaultProp = defaultProps[rightConH];
-                        prop.used = true;
+                        auto & prop = controls[rightConH];
+                        auto & defaultProp = defaultControls[rightConH];
                         /*if (!regionLineGraph.data(rightConH).detachable){
                             prop.weight = defaultProp.weight;
                             continue;
@@ -796,17 +792,15 @@ namespace panoramix {
                 }
 
                 for (auto & r : regionLineGraph.constraints<LineRelationData>()) {
-                    props[r.topo.hd].used = true;
-                    props[r.topo.hd].weight = results[llConVhs[r.topo.hd]] == 1 ? defaultProps[r.topo.hd].weight : 1e-3;
+                    controls[r.topo.hd].weight = results[llConVhs[r.topo.hd]] == 1 ? defaultControls[r.topo.hd].weight : 1e-3;
                 }
 
                 // solve continuous vars
-                ResetVariables(regionLineGraph, props);
-                SolveVariablesUsingInversedDepths(regionLineGraph, props);
-                NormalizeVariables(regionLineGraph, props);
-                cache.update(regionLineGraph, props);
+                vars = SolveVariables(regionLineGraph, controls);
+                NormalizeVariables(regionLineGraph, controls, vars);
+                cache.update(regionLineGraph, controls, vars);
 
-                Visualize(view, regionLineGraph, props);
+                Visualize(view, regionLineGraph, controls, vars);
             }
 
             return std::move(cache.regionPlanes);

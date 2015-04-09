@@ -231,24 +231,13 @@ namespace panoramix {
             Params _params;
         };
 
-        
 
 
-
-        // scene classifier
-        class SceneClassifier {
+        class IndoorGeometricContextEstimator {
         public:
-            struct Params {
-                Params();
-                bool useMatlab;
-            };
-
-        public:
-            inline explicit SceneClassifier(const Params & params = Params()) : _params(params) {}
-            std::map<SceneClass, double> operator() (const Image & im) const;
-
-        private:
-            Params _params;
+            ImageOfType<Vec<double, 7>> operator() (const Image & im) const;
+            std::pair<ImageOfType<Vec<double, 5>>, Imagei> operator() (const Image & pim, 
+                const PanoramicCamera & cam, const std::vector<Vec3> & vps) const;
         };
 
 

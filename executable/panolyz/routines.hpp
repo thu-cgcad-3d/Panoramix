@@ -13,21 +13,21 @@ namespace panolyz {
     };
 
     template <PanolyzAlgorithm Algo>
-    void Routine(const panoramix::core::Image & image,
+    void Routine(const panoramix::core::Image & image, const std::string & tag, 
         std::integral_constant<PanolyzAlgorithm, Algo> = {});
 
 #define ROUTINE_FOR_ALGORITHM(Algo) \
     template <> \
-    void Routine(const panoramix::core::Image & image, \
+    void Routine(const panoramix::core::Image & image, const std::string & tag, \
     std::integral_constant<PanolyzAlgorithm, Algo>)
 
 
     // declare routines
 
     ROUTINE_FOR_ALGORITHM(PanoramaIndoor_v1);
-    ROUTINE_FOR_ALGORITHM(NormalIndoor_v1);
+    /*ROUTINE_FOR_ALGORITHM(NormalIndoor_v1);
     ROUTINE_FOR_ALGORITHM(PanoramaOutdoor_v1);
-    ROUTINE_FOR_ALGORITHM(NormalOutdoor_v1);
+    ROUTINE_FOR_ALGORITHM(NormalOutdoor_v1);*/
 
 }
 

@@ -168,7 +168,7 @@ namespace panoramix {
             std::vector<std::vector<int>> ids(m.size());
             for (int i = 0; i < m.size(); i++){
                 for (auto & p : m.layers[i]){
-                    auto n = (p - origin);
+                    auto n = normalize(p - origin);
                     vhs[i].push_back(mesh.addVertex(p, n, o));
                     Vec2 proj((p - origin).dot(x), (p - origin).dot(y));
                     projAngles[i].push_back(SignedAngleBetweenDirections(Vec2(1, 0), proj));

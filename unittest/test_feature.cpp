@@ -296,6 +296,14 @@ TEST(Feature, GeometricContextMatlab) {
     core::GeometricContextEstimator gcEstimator;
     gcEstimator.params().useMatlab = true;
 
-    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room1.jpg");
+    core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/room18.jpg");
     auto gc = gcEstimator(im, core::SceneClass::Indoor);
+}
+
+TEST(Feature, IndoorGeometricContextMatlab) {
+    core::IndoorGeometricContextEstimator gcEstimator;
+    core::Image im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
+   
+    
+
 }

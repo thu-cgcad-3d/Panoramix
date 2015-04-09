@@ -2567,21 +2567,60 @@ namespace panoramix {
         }
 
 
-        SceneClassifier::Params::Params()
-            : useMatlab(true) {
+        ImageOfType<Vec<double, 7>> IndoorGeometricContextEstimator::operator() (const Image & im) const{
+            Matlab matlab;
+            matlab.PutVariable("im", im);
+            matlab << "[~, ~, slabelConfMap] = calcGC(im);";
+            ImageOfType<Vec<double, 7>> gc;
+            matlab.GetVariable("slabelConfMap", gc);
+            assert(gc.channels() == 7);
+            assert(gc.size() == im.size());
+            return gc;
         }
 
-        std::map<SceneClass, double> SceneClassifier::operator() (const Image & im) const{
-            if (_params.useMatlab && Matlab::IsUsable()){
-                Matlab::PutVariable("inputIm", im);
-                Matlab matlab;
-                
+        std::pair<ImageOfType<Vec<double, 5>>, Imagei> IndoorGeometricContextEstimator::operator() (const Image & image,
+            const PanoramicCamera & camera, const std::vector<Vec3> & allvps) const {
 
-                NOT_IMPLEMENTED_YET();
+            ImageOfType<Vec<double, 5>> result = ImageOfType<Vec<double, 7>>::zeros(image.size());
+            Imagei votes = Imagei::zeros(image.size());
+
+            assert(allvps.size() >= 3);
+            std::vector<Vec3> vps = { allvps[0], allvps[1], allvps[2] };
+
+            int vertVPid = GetVerticalDirectionId(vps, camera.up());
+            std::vector<PerspectiveCamera> hcams;
+            for (int i = -1; i <= 1; i++){
+                std::vector<Vec3> vvps = vps;
+                for (auto & d : vvps){
+                    d += normalize(camera.up()) * i * 0.5;
+                }
+                auto cs = CreateHorizontalPerspectiveCameras(camera, vvps, 600, 400, 200);
+                hcams.insert(hcams.end(), cs.begin(), cs.end());
             }
-            else{
-                NOT_IMPLEMENTED_YET();
+            // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
+            for (int i = 0; i < hcams.size(); i++){
+                auto gc = (*this)(PanoramicView{image, camera}.sampled(hcams[i]).image);
+                int frontVPid = GetVerticalDirectionId(vps, hcams[i].forward());
+                int sideVPid = GetVerticalDirectionId(vps, hcams[i].leftward());
+
+                for (auto it = result.begin(); it != result.end(); ++it){
+                    auto gcPos = ToPixelLoc(hcams[i].screenProjection(camera.spatialDirection(it.pos())));
+                    if (!Contains(gc, gcPos))
+                        continue;
+                    auto & resultv = *it;
+                    auto & p = gc(gcPos);
+                    resultv[frontVPid] += p[0];
+                    resultv[sideVPid] += p[1];
+                    resultv[sideVPid] += p[2];
+                    resultv[vertVPid] += p[3];
+                    resultv[vertVPid] += p[4];
+                    resultv[3] += p[5];
+                    resultv[4] += p[6];
+                    votes(it.pos())++;                    
+                }
             }
+
+            return std::make_pair(result, votes);
         }
 
 

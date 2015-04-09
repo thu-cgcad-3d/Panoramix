@@ -1,5 +1,4 @@
-#ifndef STEPSDAG_HPP
-#define STEPSDAG_HPP
+#pragma once
  
 #include <QtWidgets>
 
@@ -29,17 +28,17 @@ struct LockableType : Lockable {
 };
 
 
-struct Data : Lockable {
+struct StepData : Lockable {
     panoramix::core::TimeStamp timeStamp;
     inline void setModified() { timeStamp = panoramix::core::CurrentTime(); }
-    inline bool isOlderThan(const Data & d) const { return timeStamp < d.timeStamp; }
+    inline bool isOlderThan(const StepData & d) const { return timeStamp < d.timeStamp; }
     virtual StepWidgetInterface * createBindingWidgetAndActions(
         QList<QAction*> & actions, QWidget * parent = nullptr) {
         return nullptr;
     }
 };
 
-using DataPtr = std::shared_ptr<Data>;
+using DataPtr = std::shared_ptr<StepData>;
 
 template <class T> struct DataOfType;
 
@@ -61,7 +60,7 @@ struct HasBindingWidgetAndActions : std::integral_constant<bool, HasBindingWidge
 
 
 template <class T>
-struct DataOfType : Data {
+struct DataOfType : StepData {
     T content;
     DataOfType() {}
     DataOfType(const T & c) : content(c) {}
@@ -92,7 +91,7 @@ template <class ResultT> struct StepWithTypedResult;
 
 struct Step {
     DataPtr data;
-    virtual void update(const std::vector<Data *> & dependencies) = 0;
+    virtual void update(const std::vector<StepData *> & dependencies) = 0;
     inline bool null() const { return !data; }
 
     template <class T>
@@ -118,15 +117,15 @@ struct StepWithTypedUpdater : Step {
         data = std::make_shared<ResultDataType>();
     }
 
-    virtual void update(const std::vector<Data *> & dependencies) override {
+    virtual void update(const std::vector<StepData *> & dependencies) override {
         assert(panoramix::core::FunctionTraits<UpdateFunctionT>::ArgumentsNum == dependencies.size());
         updateUsingSequence(dependencies,
             typename panoramix::core::SequenceGenerator<panoramix::core::FunctionTraits<UpdateFunctionT>::ArgumentsNum>::type());
     }
     template <int ...Idx>
-    void updateUsingSequence(const std::vector<Data *> & dependencies, panoramix::core::Sequence<Idx...>){
-        static_assert(panoramix::core::Sequence<std::is_base_of<Data, std::decay_t<typename std::tuple_element<Idx, ArgumentsTupleType>::type>>::value ...>::All,
-            "all input types must be derived from Data");
+    void updateUsingSequence(const std::vector<StepData *> & dependencies, panoramix::core::Sequence<Idx...>){
+        static_assert(panoramix::core::Sequence<std::is_base_of<StepData, std::decay_t<typename std::tuple_element<Idx, ArgumentsTupleType>::type>>::value ...>::All,
+            "all input types must be derived from StepData");
         ResultContentType d =
             updater(*dynamic_cast<std::decay_t<typename std::tuple_element<Idx, ArgumentsTupleType>::type>*>(dependencies.at(Idx)) ...);
         data->lock.lockForWrite();
@@ -199,7 +198,3 @@ private:
     QList<std::vector<int>> _dependencies;
     QHash<Step const *, int> _stepIds;
 };
-
-
- 
-#endif

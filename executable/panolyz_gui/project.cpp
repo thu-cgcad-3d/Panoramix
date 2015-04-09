@@ -103,10 +103,11 @@ public:
             core::SegmentationExtractor segmenter;
             segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
             segmenter.params().useYUVColorSpace = false;
-            segmenter.params().c = 100.0;
+            segmenter.params().c = 30.0;
+            segmenter.params().superpixelSizeSuggestion = 2000;
             int segmentsNum = 0;
 
-            std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, M_PI / 36.0);
+            std::tie(segmentedImage, segmentsNum) = segmenter(view.image ,line3ds, view.camera, M_PI / 36.0);
             linesVPs.unlock();
             im.unlock();
 
@@ -114,6 +115,40 @@ public:
 
         }, { stepLoad, stepLinesVPs });
 
+
+
+        //// reconstruct lines
+        //int stepReconstructLines = _steps->addStep("Reconstruct Lines",
+        //    [this](DataOfType<PanoView> & im, DataOfType<LinesAndVPs> & linesVPs){
+
+        //    im.lockForRead();
+        //    linesVPs.lockForRead();
+
+        //    auto & view = im.content;
+        //    auto & lines = linesVPs.content.lines;
+        //    auto & perspectiveViews = linesVPs.content.perspectiveViews;
+        //    auto & vps = linesVPs.content.vps;
+
+        //    // append lines
+        //    core::RLGraph mg;
+        //    for (int i = 0; i < perspectiveViews.size(); i++){
+        //        core::AppendLines(mg, lines[i], perspectiveViews[i].camera, vps);
+        //    }
+        //    
+        //    // CC
+        //    auto ccids = core::MakeHandledTableForAllComponents<int>(mg);
+        //    int ccnum = experimental::ConnectedComponents(mg, ccids);
+
+
+        //    //props = core::MakeRLGraphPropertyTable(mg, vps);
+
+        //    im.unlock();
+        //    linesVPs.unlock();
+
+
+
+
+        //}, { stepLoad, stepLinesVPs });
 
 
 
@@ -124,8 +159,11 @@ public:
             [this](DataOfType<PanoView> & im, DataOfType<LinesAndVPs> & linesVPs, 
             DataOfType<Segmentation> & segs) -> ReconstructionSetup<core::PanoramicCamera> {
         
-            core::RLGraph mg;
-            core::RLGraphPropertyTable props;
+            using namespace experimental;
+
+            RLGraph mg;
+            RLGraphControls controls;
+            RLGraphVars vars;
 
             im.lockForRead();
             linesVPs.lockForRead();
@@ -145,31 +183,27 @@ public:
             _confLock.lockForRead();
 
             // append regions
-            core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
+            auto segId2Rhs = core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
 
-            props = core::MakeRLGraphPropertyTable(mg, vps);
+            controls = core::MakeControls(mg, vps);
 
             im.unlock();
             linesVPs.unlock();
             segs.unlock();
 
-            core::AttachWallConstriants(mg, props, conf("wall constraints angle").value<double>());
-            core::AttachPrincipleDirectionConstraints(mg, props, conf("principle direction constraints angle").value<double>());   
-            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
+            core::AttachWallConstriants(mg, controls, conf("wall constraints angle").value<double>());
+            core::AttachPrincipleDirectionConstraints(mg, controls, conf("principle direction constraints angle").value<double>());   
 
             _confLock.unlock();
 
             return ReconstructionSetup<core::PanoramicCamera>{ 
                 view, 
-                    std::move(mg), std::move(props), 
-                    std::move(segmentedImage) 
+                    std::move(mg), std::move(controls),
+                    std::move(segmentedImage), std::move(segId2Rhs)
             };
 
         }, { stepLoad, stepLinesVPs, stepSegmentation });
-
-
-
-
+        
 
 
         
@@ -177,32 +211,106 @@ public:
         int stepReconstruction = _steps->addStep("Reconstruction",
             [this](DataOfType<ReconstructionSetup<core::PanoramicCamera>> & lastRec){
 
+            using namespace experimental;
+
             lastRec.lockForRead();
-            Reconstruction<core::PanoramicCamera> rec = { lastRec.content.view, lastRec.content.mg, lastRec.content.props };
+
+            auto ccids = MakeHandledTableForAllComponents(lastRec.content.mg, -1);
+            int ccnum = ConnectedComponents(lastRec.content.mg, ccids);
+            std::vector<RLGraph> mgs = Decompose(lastRec.content.mg, ccids, ccnum);
+            std::vector<RLGraphControls> cs = Decompose(lastRec.content.mg, lastRec.content.controls, ccids, ccnum);
+            assert(cs.size() == mgs.size());
+
+            Reconstruction<core::PanoramicCamera> rec;
+            rec.view = lastRec.content.view;
+            rec.gs.resize(mgs.size());
+
             lastRec.unlock();
 
-            auto & mg = rec.mg;
-            auto & props = rec.props;
+            for (int i = 0; i < rec.gs.size(); i++){
 
-            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
-            core::SolveVariablesUsingInversedDepths(mg, props);
-            core::NormalizeVariables(mg, props);
-            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-            //core::Visualize(view, mg, props);
-            core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0.02, 0.1);
+                auto & mg = rec.gs[i].mg;
+                auto & controls = rec.gs[i].controls;
+                auto & vars = rec.gs[i].vars;
 
-            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
-            core::SolveVariablesUsingInversedDepths(mg, props);
-            core::NormalizeVariables(mg, props);
-            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-            //core::Visualize(view, mg, props);
-            core::AttachFloorAndCeilingConstraints(mg, props, 0.1, 0.6);
+                mg = std::move(mgs[i]);
+                controls = std::move(cs[i]);
 
-            core::SolveVariablesUsingInversedDepths(mg, props);
-            core::NormalizeVariables(mg, props);
+                if (!core::AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls, 1.0, 1.0) &&
+                    !core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls, 1.0, 1.0))
+                    continue;
+
+                vars = core::SolveVariables(mg, controls, false);
+                core::NormalizeVariables(mg, controls, vars);
+                std::cout << "score = " << core::Score(mg, controls, vars) << std::endl;
+
+                core::LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
+                if (!core::AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls) &&
+                    !core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                    continue;
+
+                vars = core::SolveVariables(mg, controls);
+                core::NormalizeVariables(mg, controls, vars);
+
+                core::AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
+
+                if (!core::AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls) &&
+                    !core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                    continue;
+                vars = core::SolveVariables(mg, controls);
+                core::NormalizeVariables(mg, controls, vars);
+            }
 
             return rec;
         }, { stepReconstructionSetup });
+
+
+
+        // reconstruction refinement
+        int stepReconstructionRefinement = _steps->addStep("Reconstruction Refinement",
+            [this](DataOfType<Reconstruction<core::PanoramicCamera>> & rec){
+            
+            using namespace experimental;
+
+            ReconstructionRefinement<core::PanoramicCamera> refinement;
+            refinement.shapes.reserve(rec.content.gs.size());
+
+            for (auto & g : rec.content.gs){
+                auto & mg = g.mg;
+                auto & controls = g.controls;
+                auto & vars = g.vars;
+
+                rec.lockForRead();
+                refinement.view = rec.content.view;
+                auto polygons = RegionPolygons(mg, controls, vars);
+                int vertVPId = core::GetVerticalDirectionId(controls.vanishingPoints);
+                double medianDepth = MedianCenterDepth(mg, controls, vars);
+                core::Vec3 vertDir = normalize(controls.vanishingPoints[vertVPId]);
+                rec.unlock();
+
+                auto range = experimental::EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.02, 0.7, -1e5, -1e5);
+
+                std::vector<core::Chain3> chains;
+                for (double x = range.first; x <= range.second; x += medianDepth * 0.02){
+                    core::Plane3 cutplane(vertDir * x, vertDir);
+                    auto loop = experimental::CutRegionLoopAt(polygons, cutplane);
+                    if (loop.empty())
+                        continue;
+                    chains.push_back(experimental::MakeChain(loop));
+                }
+
+                LayeredShape3 shape;
+                for (int i = 0; i < chains.size(); i++){
+                    shape.layers.push_back(std::move(chains[i].points));
+                }
+                shape.normal = vertDir;
+                refinement.shapes.push_back(std::move(shape));
+            }
+
+            return refinement;
+
+        }, { stepReconstruction });
+
 
         
         // add widgets and actions
@@ -225,6 +333,7 @@ private:
 
 using PerspView = panoramix::core::View<panoramix::core::PerspectiveCamera>;
 
+/*
 class NormalRecProject : public Project {
 public:
     explicit NormalRecProject(const QString & normalIm, QObject * parent) 
@@ -349,13 +458,11 @@ public:
             [this](DataOfType<ReconstructionSetup<core::PerspectiveCamera>> & lastRec){
 
             lastRec.lockForRead();
-            Reconstruction<core::PerspectiveCamera> rec = { 
-                lastRec.content.view, lastRec.content.mg, lastRec.content.props
-            };
+            Reconstruction<core::PerspectiveCamera> rec = { lastRec.content.view, { { lastRec.content.mg, lastRec.content.props } } };
             lastRec.unlock();
 
-            auto & mg = rec.mg;
-            auto & props = rec.props;
+            auto & mg = rec.gs.front().mg;
+            auto & props = rec.gs.front().props;
 
             AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
             core::SolveVariablesUsingInversedDepths(mg, props);
@@ -393,6 +500,7 @@ public:
 private:
     QFileInfo _imFileInfo;
 };
+*/
 
 static int UnnamedProjectId = 1;
 Project::Project(QObject * parent) 
@@ -432,8 +540,9 @@ Project * Project::createProjectFromImage(const QString & image, bool isPano, QO
         return proj;
     }
     else {
-        Project * proj = new NormalRecProject(image, parent);
-        return proj;
+        //Project * proj = new NormalRecProject(image, parent);
+        //return proj;
+        return nullptr;
     }
 
     NOT_IMPLEMENTED_YET();
