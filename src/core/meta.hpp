@@ -434,6 +434,52 @@ namespace panoramix {
 
 
 
+
+        template <template<class> class MetaContainerT, class ...EntryTs>
+        struct MetaBind {
+            using ContainerTuple = std::tuple<MetaContainerT<EntryTs>...>;
+            ContainerTuple containers;
+            using EntryTuple = std::tuple<EntryTs...>;
+            template <class EntryT>
+            struct EntryProperty {
+                using EntryType = EntryT;
+                using ContainerType = MetaContainerT<EntryT>;
+                static const int Location = TypeFirstLocationInTuple<EntryT, EntryTuple>::value;
+            };
+            template <class EntryT>
+            inline const typename EntryProperty<EntryT>::ContainerType & container() const {
+                return std::get<EntryProperty<EntryT>::Location>(containers);
+            }
+            template <class EntryT>
+            inline typename EntryProperty<EntryT>::ContainerType & container() {
+                return std::get<EntryProperty<EntryT>::Location>(containers);
+            }
+
+            // conditionaly supported
+            // .at(Entry)
+            template <class EntryT>
+            struct EntryPropertyForAtOp : EntryProperty<EntryT> {
+                using ResultType = std::decay_t<decltype(std::declval<ContainerType>().at(std::declval<EntryT>()))>;
+            };
+            template <class EntryT>
+            inline const typename EntryPropertyForAtOp<EntryT>::ResultType & at(const EntryT & entry) const {
+                return container<EntryT>().at(entry);
+            }
+            // [Entry]
+            template <class EntryT>
+            struct EntryPropertyForBracketOp : EntryProperty<EntryT> {
+                using ResultType = std::decay_t<decltype(std::declval<ContainerType>()[std::declval<EntryT>()])>;
+            };
+            template <class EntryT>
+            inline const typename EntryPropertyForBracketOp<EntryT>::ResultType & operator[](const EntryT & entry) const {
+                return container<EntryT>()[entry];
+            }
+            template <class EntryT>
+            inline typename EntryPropertyForBracketOp<EntryT>::ResultType & operator[](const EntryT & entry) {
+                return container<EntryT>()[entry];
+            }
+        };
+
     }
 }
  

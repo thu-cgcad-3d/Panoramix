@@ -11,25 +11,25 @@ namespace panoramix {
             switch (tag){
             case Transparent: _rgba = Vec4i(0, 0, 0, 0); break;
 
-            case White: _rgba = Vec4i(255, 255, 255); break;
-            case Black: _rgba = Vec4i(0, 0, 0); break;
+            case White: _rgba = Vec4i(255, 255, 255, 255); break;
+            case Black: _rgba = Vec4i(0, 0, 0, 255); break;
 
-            case DimGray: _rgba = Vec4i(105, 105, 105); break;
-            case Gray: _rgba = Vec4i(128, 128, 128); break;
-            case DarkGray: _rgba = Vec4i(169, 169, 169); break;
-            case Silver: _rgba = Vec4i(192, 192, 192); break;
-            case LightGray: _rgba = Vec4i(211, 211, 211); break;
+            case DimGray: _rgba = Vec4i(105, 105, 105, 255); break;
+            case Gray: _rgba = Vec4i(128, 128, 128, 255); break;
+            case DarkGray: _rgba = Vec4i(169, 169, 169, 255); break;
+            case Silver: _rgba = Vec4i(192, 192, 192, 255); break;
+            case LightGray: _rgba = Vec4i(211, 211, 211, 255); break;
 
-            case Red: _rgba = Vec4i(255, 0, 0); break;
-            case Green: _rgba = Vec4i(0, 255, 0); break;
-            case Blue: _rgba = Vec4i(0, 0, 255); break;
+            case Red: _rgba = Vec4i(255, 0, 0, 255); break;
+            case Green: _rgba = Vec4i(0, 255, 0, 255); break;
+            case Blue: _rgba = Vec4i(0, 0, 255, 255); break;
 
-            case Yellow: _rgba = Vec4i(255, 255, 0); break;
-            case Magenta: _rgba = Vec4i(255, 0, 255); break;
-            case Cyan: _rgba = Vec4i(0, 255, 255); break;
-            case Orange: _rgba = Vec4i(255, 165, 0); break;
+            case Yellow: _rgba = Vec4i(255, 255, 0, 255); break;
+            case Magenta: _rgba = Vec4i(255, 0, 255, 255); break;
+            case Cyan: _rgba = Vec4i(0, 255, 255, 255); break;
+            case Orange: _rgba = Vec4i(255, 165, 0, 255); break;
             default:
-                _rgba = Vec4i(255, 255, 255);
+                _rgba = Vec4i(255, 255, 255, 255);
             }        
         }
 

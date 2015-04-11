@@ -47,6 +47,7 @@ source_group ("experimental" FILES ${EXPERIMENTAL_HEADERS} ${EXPERIMENTAL_SOURCE
 
 
 panoramix_add_library ( ${PROJECT_NAME} 
+	"panoramix.hpp"
 	${CORE_SOURCES} 
 	${CORE_HEADERS}
 	${ML_HEADERS} 

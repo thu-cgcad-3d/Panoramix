@@ -337,7 +337,7 @@ private:
 
 private:
     gui::RenderOptions _renderOptions;
-    LockableType<gui::VisualObjectScene> _scene;
+    LockableType<gui::Scene> _scene;
     SceneConstructorT _makeScene;
 };
 

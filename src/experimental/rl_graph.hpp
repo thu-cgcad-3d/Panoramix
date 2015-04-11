@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_RL_GRAPH_HPP
-#define PANORAMIX_CORE_RL_GRAPH_HPP
+#ifndef PANORAMIX_EXPERIMENTAL_RL_GRAPH_HPP
+#define PANORAMIX_EXPERIMENTAL_RL_GRAPH_HPP
 
 
 #include "../core/basic_types.hpp"
@@ -139,9 +139,37 @@ namespace panoramix {
         View<PartialPanoramicCamera, Imageub> PerfectRegionMaskView(const RLGraph & mg, RegionHandle rh, double focal = 100.0);
 
 
+
+
+
+
+
+
+        template <class HandleT> using Decomposed = std::pair<int, HandleT>;
+        template <class T> struct Original_ {};
+        template <class HandleT> struct Original_<Decomposed<HandleT>> { using type = HandleT; };
+        template <class T> using Original = typename Original_<T>::type;
+
+        template <class T> using HandleMapOldToNew = std::map<T, Decomposed<T>>;
+        using RLGraphOldToNew = MetaBind<HandleMapOldToNew, 
+            RegionHandle, 
+            LineHandle,
+            RegionBoundaryHandle, 
+            LineRelationHandle, 
+            RegionLineConnectionHandle>;
+        template <class T> using HandleMapNewToOld = std::map<T, Original<T>>;
+        using RLGraphNewToOld = MetaBind<HandleMapNewToOld, 
+            Decomposed<RegionHandle>, 
+            Decomposed<LineHandle>,
+            Decomposed<RegionBoundaryHandle>, 
+            Decomposed<LineRelationHandle>, 
+            Decomposed<RegionLineConnectionHandle>>;
+
         // connected component ids
         int ConnectedComponents(const RLGraph & mg, RLGraphComponentTable<int> & ccids);
-        std::vector<RLGraph> Decompose(const RLGraph & mg, const RLGraphComponentTable<int> & ccids, int ccnum);
+        std::vector<RLGraph> Decompose(const RLGraph & mg, const RLGraphComponentTable<int> & ccids, int ccnum,
+            RLGraphOldToNew * old2new = nullptr,
+            RLGraphNewToOld * new2old = nullptr);
 
         
         // rl graph controlers
@@ -306,12 +334,9 @@ namespace panoramix {
 
 
         // solve equations
-        bool AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg,
-            RLGraphControls & controls,
-            double depth = 1.0, double weight = 20.0);
         bool AttachAnchorToCenterOfLargestLineIfNoAnchorExists(const RLGraph & mg,
             RLGraphControls & controls,
-            double depth = 1.0, double weight = 20.0);
+            double depth = 1.0, double weight = 1.0, bool orientedOnly = true);
 
         RLGraphVars SolveVariables(const RLGraph & mg, 
             const RLGraphControls & controls, bool useWeights = false);
@@ -345,13 +370,17 @@ namespace panoramix {
         void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
             const PanoramicCamera & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes, 
             const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun = nullptr);
+        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
+            const PerspectiveCamera & pcam, const ImageOfType<Vec<double, 5>> & gc,
+            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun = nullptr);
 
 
         void LooseOrientationConstraintsOnComponents(const RLGraph & mg, 
             RLGraphControls & controls, const RLGraphVars & vars,
             double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05, 
             double distThresRatio = 0.12);
-
+        std::vector<RegionHandle> DetectAnormalyPeakyRegions(const RLGraph & mg,
+            const RLGraphControls & controls, const RLGraphVars & vars);
 
 
 
@@ -365,12 +394,11 @@ namespace panoramix {
             RegionHandle rh;
             std::pair<Point3, Point3> range;
         };
-        using SectionalLoop = std::vector<SectionalPiece>;
-        SectionalLoop CutRegionLoopAt(
-            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
+        std::vector<SectionalPiece> MakeSectionalPieces(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
             const Plane3 & cutplane);
-        Chain3 MakeChain(const SectionalLoop & loop);
-        inline double Area(const SectionalLoop & loop) { return Area(Polygon3(MakeChain(loop))); }
+
+        Chain3 MakeChain(const std::vector<SectionalPiece> & pieces, bool closed = true);
+        inline double Area(const std::vector<SectionalPiece> & loop) { return Area(Polygon3(MakeChain(loop))); }
 
 
 
@@ -382,14 +410,6 @@ namespace panoramix {
         
        
 
-
-
-
-        // visualize current mixed graph
-        void Visualize(const View<PanoramicCamera> & texture, 
-            const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars);
-        void Visualize(const View<PerspectiveCamera> & texture,
-            const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars);
 
 
 

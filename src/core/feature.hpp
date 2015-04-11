@@ -235,9 +235,13 @@ namespace panoramix {
 
         class IndoorGeometricContextEstimator {
         public:
-            ImageOfType<Vec<double, 7>> operator() (const Image & im) const;
+            ImageOfType<Vec<double, 5>> postProcess(const ImageOfType<Vec<double, 7>> & rawgc,
+                SceneClass sceneClass = SceneClass::Indoor) const;
+            ImageOfType<Vec<double, 5>> operator() (const Image & im, 
+                SceneClass sceneClass = SceneClass::Indoor) const;
             std::pair<ImageOfType<Vec<double, 5>>, Imagei> operator() (const Image & pim, 
-                const PanoramicCamera & cam, const std::vector<Vec3> & vps) const;
+                const PanoramicCamera & cam, const std::vector<Vec3> & vps,
+                SceneClass sceneClass = SceneClass::Indoor) const;
         };
 
 

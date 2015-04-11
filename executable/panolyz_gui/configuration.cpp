@@ -204,15 +204,13 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
             }
             // render disconnected boundaries
             for (auto & b : rec.content.mg.constraints<core::RegionBoundaryData>()){
-                if (!rec.content.controls[b.topo.hd].used)
-                    continue;
                 for (auto & e : b.data.normalizedEdges){
                     if (e.size() <= 1) continue;
                     for (int i = 1; i < e.size(); i++){
                         auto p1 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i - 1]));
                         auto p2 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i]));
                         cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
-                        cv::line(rendered, p1, p2, gui::Color(gui::ColorTag::Black), 3);
+                        cv::line(rendered, p1, p2, gui::Color(rec.content.controls[b.topo.hd].used ? gui::White : gui::Black), 1);
                     }
                 }
             }
@@ -369,8 +367,8 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
         viz.renderOptions.backgroundColor = gui::ColorTag::White;
         viz.renderOptions.bwColor = 0.0;
         viz.renderOptions.bwTexColor = 1.0;
-        viz.renderOptions.cullBackFace = false;
-        viz.renderOptions.cullFrontFace = true;
+        viz.renderOptions.cullBackFace = true;
+        viz.renderOptions.cullFrontFace = false;
         viz.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400),
             800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
 

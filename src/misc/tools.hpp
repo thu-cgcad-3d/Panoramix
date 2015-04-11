@@ -7,15 +7,26 @@
 namespace panoramix {
     namespace misc {
 
-        inline std::string Tagify(const std::string & path){
-            auto tag = path;
-            std::replace(tag.begin(), tag.end(), '.', '_');
-            std::replace(tag.begin(), tag.end(), '\\', '.');
-            std::replace(tag.begin(), tag.end(), '/', '.');
-            std::replace(tag.begin(), tag.end(), ':', '.');
-            return tag;
-        }
 
+
+        
+        namespace dataset {
+
+            namespace YorkUrbanDB {
+               
+
+                struct GroundTruth {
+                    //std::vector<core::Line2> lines;
+                    //std::vector<int> vp_association;
+                    std::vector<core::Vec3> vp_orthogonal;
+                };
+
+                GroundTruth LoadGroundTruth(const std::string & camParams);
+            }
+
+
+
+        }
     }
 }
 

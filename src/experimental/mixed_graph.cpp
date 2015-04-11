@@ -701,7 +701,7 @@ namespace panoramix {
             LOG("initialize");
             AttachPrincipleDirectionConstraints(regionLineGraph, controls, M_PI / 50.0);
             AttachWallConstriants(regionLineGraph, controls, M_PI / 80.0);
-            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(regionLineGraph, controls);
+            AttachAnchorToCenterOfLargestLineIfNoAnchorExists(regionLineGraph, controls);
 
             const auto defaultControls = controls;
 
@@ -710,7 +710,7 @@ namespace panoramix {
             NormalizeVariables(regionLineGraph, controls, vars);
             cache.update(regionLineGraph, controls, vars);
 
-            Visualize(view, regionLineGraph, controls, vars);
+            //Visualize(view, regionLineGraph, controls, vars);
 
             for(int epoch = 0; epoch < 1; epoch ++){
 
@@ -800,7 +800,7 @@ namespace panoramix {
                 NormalizeVariables(regionLineGraph, controls, vars);
                 cache.update(regionLineGraph, controls, vars);
 
-                Visualize(view, regionLineGraph, controls, vars);
+                //Visualize(view, regionLineGraph, controls, vars);
             }
 
             return std::move(cache.regionPlanes);

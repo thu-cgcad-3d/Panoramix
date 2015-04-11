@@ -255,16 +255,16 @@ namespace panoramix {
 
 
 
-        class VisualObjectSceneInternal {
+        class SceneInternal {
             struct VisualObjectMeshTriangleBoundingBoxFunctor {
-                inline VisualObjectMeshTriangleBoundingBoxFunctor(VisualObjectSceneInternal * const s) : self(s) {}
+                inline VisualObjectMeshTriangleBoundingBoxFunctor(SceneInternal * const s) : self(s) {}
                 core::Box3 operator()(const VisualObjectMeshTriangle & mti) const {
                     return self->calculatedBoundingBoxesOfMeshTriangles.at(mti);
                 }
-                VisualObjectSceneInternal * const self;
+                SceneInternal * const self;
             };
         public:
-            inline VisualObjectSceneInternal()
+            inline SceneInternal()
                 : rtree(VisualObjectMeshTriangleBoundingBoxFunctor(this))
             {}
 
@@ -275,17 +275,17 @@ namespace panoramix {
             core::Box3 boundingBox;
         };
 
-        VisualObjectScene::VisualObjectScene() : _internal(new VisualObjectSceneInternal()) {}
+        Scene::Scene() : _internal(new SceneInternal()) {}
 
-        VisualObjectScene::VisualObjectScene(const VisualObjectTree & tree) : _internal(new VisualObjectSceneInternal()) {
+        Scene::Scene(const VisualObjectTree & tree) : _internal(new SceneInternal()) {
             install(tree);
         }
 
-        VisualObjectScene::~VisualObjectScene() {
+        Scene::~Scene() {
             delete _internal;
         }
 
-        void VisualObjectScene::update(){
+        void Scene::update(){
             clear();
             std::unordered_set<VisualObjectHandle> visited;
 
@@ -343,7 +343,7 @@ namespace panoramix {
 
         }
 
-        void VisualObjectScene::clear() {
+        void Scene::clear() {
             _internal->calculatedModelMatrices.clear();
             _internal->calculatedBoundingBoxesOfMeshTriangles.clear();
             _internal->calculatedBoundingBoxes.clear();
@@ -351,19 +351,19 @@ namespace panoramix {
         }
 
 
-        const Box3 & VisualObjectScene::boundingBox() const {
+        const Box3 & Scene::boundingBox() const {
             return _internal->boundingBox;
         }
 
-        Box3 VisualObjectScene::boundingBoxOfObject(VisualObjectHandle h) const {
+        Box3 Scene::boundingBoxOfObject(VisualObjectHandle h) const {
             return _internal->calculatedBoundingBoxes.at(h);
         }
 
-        core::Box3 VisualObjectScene::boundingBoxOfTriangleInObjectMesh(const VisualObjectMeshTriangle & omt) const{
+        core::Box3 Scene::boundingBoxOfTriangleInObjectMesh(const VisualObjectMeshTriangle & omt) const{
             return _internal->calculatedBoundingBoxesOfMeshTriangles.at(omt);
         }
 
-        void VisualObjectScene::initialize() const {
+        void Scene::initialize() const {
             for (auto & n : _tree.nodes()){
                 if (n.exists){
                     _tree.data(n.topo.hd)->initialize();
@@ -371,7 +371,7 @@ namespace panoramix {
             }
         }
 
-        void VisualObjectScene::render(const RenderOptions & options) const {
+        void Scene::render(const RenderOptions & options) const {
             glFrontFace(GL_CCW); // face direction set to clockwise
             glEnable(GL_MULTISAMPLE);
             glEnable(GL_DEPTH_TEST);
@@ -467,7 +467,7 @@ namespace panoramix {
 
         static const bool g_UseBruteForce = false;
 
-        VisualObjectMeshTriangle VisualObjectScene::pickOnScreen(const RenderOptions & options,
+        VisualObjectMeshTriangle Scene::pickOnScreen(const RenderOptions & options,
             const core::Point2 & pOnScreen) const {
 
             Ray3 centerRay(options.camera.eye(), normalize(options.camera.spatialDirection(pOnScreen)));
@@ -561,7 +561,14 @@ namespace panoramix {
 
 
 
-
+        PerspectiveCamera Scene::perfectView(int width, int height, const Vec3 & up) const{
+            PerspectiveCamera camera;
+            auto sphere = boundingBox().outerSphere();
+            camera.setUp(up, false);
+            camera.resizeScreen(core::Size(width, height), false);
+            camera.focusOn(sphere, true);
+            return camera;
+        }
 
  
     }

@@ -1,64 +1,78 @@
 #include "../../src/core/basic_types.hpp"
 #include "../../src/experimental/rl_graph.hpp"
+#include "../../src/experimental/tools.hpp"
 #include "../../src/gui/visualize2d.hpp"
 #include "../../src/gui/visualizers.hpp"
 
 #include "routines.hpp"
 
-namespace panoramix {
-    namespace core{
-        using namespace experimental;
-    }
-}
-
 
 namespace panolyz {
 
-    using namespace panoramix;
+    ROUTINE_FOR_ALGORITHM(PanoramaIndoor){
 
-    template <class StringT, class ... Ts>
-    inline void Save(const std::string & tag, StringT && s, Ts && ... ts){
-        core::SaveToDisk("./cache/" + tag + "_" + s, ts...);
-    }
+        std::string path;
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";// too small
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/yard.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (11).jpg"; // too small
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (10).jpg"; // too small
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab2.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab3.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (2).jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x5.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x6.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x7.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x8.jpg";
+        //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x9.jpg";
+        path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/google_chinese.png";
 
-    template <class StringT, class ... Ts>
-    inline void Load(const std::string & tag, StringT && s, Ts & ... ts){
-        core::LoadFromDisk("./cache/" + tag + "_" + s, ts...);
-    }
 
-    ROUTINE_FOR_ALGORITHM(PanoramaIndoor_v1){
+        using namespace panoramix;
+        using namespace core;
+        using namespace experimental;
 
-        core::View<core::PanoramicCamera> view;
+        Image image = cv::imread(path);
+        ResizeToHeight(image, 700);
 
-        std::vector<core::PerspectiveCamera> cams;
-        std::vector<std::vector<core::Classified<core::Line2>>> lines;
-        std::vector<core::Vec3> vps;
+        View<PanoramicCamera> view;
+
+        std::vector<PerspectiveCamera> cams;
+        std::vector<std::vector<Classified<Line2>>> lines;
+        std::vector<Vec3> vps;
 
         // vp1 vp2 vp3 clutter unknown
-        core::ImageOfType<core::Vec<double, 5>> gc;
-        core::Imagei gcVotes;
+        ImageOfType<Vec<double, 5>> gc;
+        Imagei gcVotes;
 
-        core::Imagei segmentedImage;
+        Imagei segmentedImage;
 
         if (0){
-            view = core::CreatePanoramicView(image);
+            view = CreatePanoramicView(image);
 
             // collect lines in each view
-            cams = core::CreateCubicFacedCameras(view.camera, image.rows, image.rows, image.rows * 0.4);
+            cams = CreateCubicFacedCameras(view.camera, image.rows, image.rows, image.rows * 0.4);
             lines.resize(cams.size());
             for (int i = 0; i < cams.size(); i++){
                 auto pim = view.sampled(cams[i]).image;
-                core::LineSegmentExtractor lineExtractor;
-                lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
+                LineSegmentExtractor lineExtractor;
+                lineExtractor.params().algorithm = LineSegmentExtractor::LSD;
                 auto ls = lineExtractor(pim, 2, 300); // use pyramid
                 lines[i].reserve(ls.size());
                 for (auto & l : ls){
-                    lines[i].push_back(core::ClassifyAs(l, -1));
+                    lines[i].push_back(ClassifyAs(l, -1));
                 }
             }
 
             // estimate vp
-            vps = core::EstimateVanishingPointsAndClassifyLines(cams, lines);
+            vps = EstimateVanishingPointsAndClassifyLines(cams, lines);
             if (0){
                 auto ctable = gui::CreateRandomColorTableWithSize(vps.size());
                 for (int i = 0; i < cams.size(); i++){
@@ -72,15 +86,15 @@ namespace panolyz {
 
             // extract lines from segmentated region boundaries and classify them using estimated vps
             // make 3d lines
-            std::vector<core::Line3> line3ds;
+            std::vector<Line3> line3ds;
             for (int i = 0; i < cams.size(); i++){
                 for (auto & l : lines[i]){
                     line3ds.emplace_back(normalize(cams[i].spatialDirection(l.component.first)),
                         normalize(cams[i].spatialDirection(l.component.second)));
                 }
             }
-            core::SegmentationExtractor segmenter;
-            segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
+            SegmentationExtractor segmenter;
+            segmenter.params().algorithm = SegmentationExtractor::GraphCut;
             segmenter.params().sigma = 10.0;
             segmenter.params().c = 1.0;
             segmenter.params().superpixelSizeSuggestion = 2000;
@@ -94,136 +108,145 @@ namespace panolyz {
             }
 
             // extract gcs
-            core::IndoorGeometricContextEstimator gcEstimator;
+            IndoorGeometricContextEstimator gcEstimator;
             std::tie(gc, gcVotes) = gcEstimator(view.image, view.camera, vps);
 
-            Save(tag, "all", view, cams, lines, vps, gc, gcVotes, segmentedImage);
+            Save(path, "all", view, cams, lines, vps, gc, gcVotes, segmentedImage);
         }
         else{
-            Load(tag, "all", view, cams, lines, vps, gc, gcVotes, segmentedImage);
+            Load(path, "all", view, cams, lines, vps, gc, gcVotes, segmentedImage);
         }
+
+
+
+
+
 
 
         // consider only lines
         if (0){
 
-            core::RLGraph mg;
-            core::RLGraphControls controls;
-            core::RLGraphVars vars;
+            RLGraph mg;
+            RLGraphControls controls;
+            RLGraphVars vars;
 
-            for(int i = 0; i < cams.size(); i++){
-                core::AppendLines(mg, lines[i], cams[i], vps);
+            for (int i = 0; i < cams.size(); i++){
+                AppendLines(mg, lines[i], cams[i], vps);
             }
 
-            controls = core::MakeControls(mg, vps);
-            core::SetConstraintWeights<core::LineRelationData>(controls, [&mg](core::LineRelationHandle h){
+            controls = MakeControls(mg, vps);
+            SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
                 return std::max(mg.data(h).junctionWeight, 1e-1f);
             });
 
-            auto ccids = core::MakeHandledTableForAllComponents(mg, -1);
-            int ccnum = core::ConnectedComponents(mg, controls, ccids, [](const core::RLGraphConstraintControl & c){
+            auto ccids = MakeHandledTableForAllComponents(mg, -1);
+            int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
                 return c.used && c.weight > 0;
             });
-            auto mgs = core::Decompose(mg, ccids, ccnum);
-            auto cs = core::Decompose(mg, controls, ccids, ccnum);
+            auto mgs = Decompose(mg, ccids, ccnum);
+            auto cs = Decompose(mg, controls, ccids, ccnum);
             assert(mgs.size() == cs.size());
 
             for (int i = 0; i < ccnum; i++){
                 auto & mg = mgs[i];
                 auto & controls = cs[i];
-                core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls);
-                auto vars = core::SolveVariables(mgs[i], controls, true);
-                core::NormalizeVariables(mg, controls, vars);
-                core::Visualize(view, mg, controls, vars);
+                AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls);
+                auto vars = SolveVariables(mgs[i], controls, true);
+                NormalizeVariables(mg, controls, vars);
+
+                gui::Visualizer vis;
+                Visualize(vis, view, mg, controls, vars);
+                vis.camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0)));
+                vis.show(true, false);
             }
 
         }
 
 
-        core::RLGraph mg;
-        core::RLGraphControls controls;
-        core::RLGraphVars vars;
-        std::vector<core::RegionHandle> rhs;
+        RLGraph mg;
+        RLGraphControls controls;
+        RLGraphVars vars;
+        std::vector<RegionHandle> rhs;
 
 
         // consider both lines and regions
         if (1){
 
             for (int i = 0; i < cams.size(); i++){
-                core::AppendLines(mg, lines[i], cams[i], vps);
+                AppendLines(mg, lines[i], cams[i], vps);
             }
-            rhs = core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
+            rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
 
-            controls = core::MakeControls(mg, vps);
-            core::AttachPrincipleDirectionConstraints(mg, controls);
-            core::AttachWallConstriants(mg, controls);
-            core::AttachGeometricContextConstraints(mg, controls, view.camera, gc, gcVotes);
+            controls = MakeControls(mg, vps);
+            AttachPrincipleDirectionConstraints(mg, controls);
+            AttachWallConstriants(mg, controls);
+            AttachGeometricContextConstraints(mg, controls, view.camera, gc, gcVotes);
 
             // set constraint weights
-            core::SetConstraintWeights<core::LineRelationData>(controls, [&mg](core::LineRelationHandle h){
+            SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
                 return 1.0;// std::max(mg.data(h).junctionWeight, 3.0f);
             });
-            core::SetConstraintWeights<core::RegionBoundaryData>(controls, [&mg](core::RegionBoundaryHandle h){
+            SetConstraintWeights<RegionBoundaryData>(controls, [&mg](RegionBoundaryHandle h){
                 return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
             });
-            core::SetConstraintWeights<core::RegionLineConnectionData>(controls, [&mg](core::RegionLineConnectionHandle h){
+            SetConstraintWeights<RegionLineConnectionData>(controls, [&mg](RegionLineConnectionHandle h){
                 return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
             });
 
             // cc decompose
-            auto ccids = core::MakeHandledTableForAllComponents(mg, -1);
-            int ccnum = core::ConnectedComponents(mg, controls, ccids, [](const core::RLGraphConstraintControl & c){
+            auto ccids = MakeHandledTableForAllComponents(mg, -1);
+            int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
                 return c.used && c.weight > 0;
             });
-            auto mgs = core::Decompose(mg, ccids, ccnum);
-            auto cs = core::Decompose(mg, controls, ccids, ccnum);
+            auto mgs = Decompose(mg, ccids, ccnum);
+            auto cs = Decompose(mg, controls, ccids, ccnum);
             assert(mgs.size() == cs.size());
 
 
             for (int i = 0; i < ccnum; i++){
                 auto & mg = mgs[i];
                 auto & controls = cs[i];
-                core::RLGraphVars vars;
+                RLGraphVars vars;
 
-                if (!core::AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls) &&
-                    !core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
                     continue;
 
-                vars = core::SolveVariables(mg, controls, false);
-                core::NormalizeVariables(mg, controls, vars);
-                std::cout << "score = " << core::Score(mg, controls, vars) << std::endl;
+                vars = SolveVariables(mg, controls, false);
+                NormalizeVariables(mg, controls, vars);
+                std::cout << "score = " << Score(mg, controls, vars) << std::endl;
 
-                core::LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
-                if (!core::AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls) &&
-                    !core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
+                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
                     continue;
 
-                vars = core::SolveVariables(mg, controls);
-                core::NormalizeVariables(mg, controls, vars);
+                vars = SolveVariables(mg, controls);
+                NormalizeVariables(mg, controls, vars);
 
-                core::AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
+                AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
 
-                if (!core::AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls) &&
-                    !core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
                     continue;
-                vars = core::SolveVariables(mg, controls);
-                core::NormalizeVariables(mg, controls, vars);
+                vars = SolveVariables(mg, controls);
+                NormalizeVariables(mg, controls, vars);
 
-                core::Visualize(view, mg, controls, vars);
+                gui::Visualizer vis;
+                Visualize(vis, view, mg, controls, vars);
+                vis.camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0)));
+                vis.show(true, false);
 
                 {
-                    core::LayeredShape3 shape;
+                    LayeredShape3 shape;
                     auto polygons = RegionPolygons(mg, controls, vars);
-                    int vertVPId = core::GetVerticalDirectionId(controls.vanishingPoints);
+                    int vertVPId = GetVerticalDirectionId(controls.vanishingPoints);
                     double medianDepth = MedianCenterDepth(mg, controls, vars);
-                    core::Vec3 vertDir = normalize(controls.vanishingPoints[vertVPId]);
+                    Vec3 vertDir = normalize(controls.vanishingPoints[vertVPId]);
 
                     auto range = experimental::EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.02, 0.7, -1e5, -1e5);
 
-                    std::vector<core::Chain3> chains;
+                    std::vector<Chain3> chains;
                     for (double x = range.first; x <= range.second; x += medianDepth * 0.02){
-                        core::Plane3 cutplane(vertDir * x, vertDir);
-                        auto loop = experimental::CutRegionLoopAt(polygons, cutplane);
+                        Plane3 cutplane(vertDir * x, vertDir);
+                        auto loop = experimental::MakeSectionalPieces(polygons, cutplane);
                         if (loop.empty())
                             continue;
                         chains.push_back(experimental::MakeChain(loop));
@@ -245,16 +268,19 @@ namespace panolyz {
                     viz.renderOptions.bwTexColor = 1.0;
                     viz.renderOptions.cullBackFace = false;
                     viz.renderOptions.cullFrontFace = true;
-                    viz.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400),
-                        800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
+                    viz.camera(PerspectiveCamera(1000, 800, Point2(500, 400),
+                        800, Point3(-1, 1, 1), Point3(0, 0, 0)));
 
                     viz.show(true, false);
                 }
             }
 
-            //core::SaveToDisk("./cache/mgp", mg, controls, vars);
+            //SaveToDisk("./cache/mgp", mg, controls, vars);
         }
         else{
-            //core::LoadFromDisk("./cache/mgp", mg, controls, vars);
+            //LoadFromDisk("./cache/mgp", mg, controls, vars);
         }
+
+
+    }
 }

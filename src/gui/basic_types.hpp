@@ -72,6 +72,8 @@ namespace panoramix {
             inline float bluef() const { return _rgba[2] / 255.0f; }
             inline float alphaf() const { return _rgba[3] / 255.0f; }
 
+            inline bool isTransparent() const { return _rgba[3] == 0; }
+
             // to cv::Scalar (bgra)
             inline operator cv::Scalar() const { return cv::Scalar(_rgba[2], _rgba[1], _rgba[0], _rgba[3]); }
             

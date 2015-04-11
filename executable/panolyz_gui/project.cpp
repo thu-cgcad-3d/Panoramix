@@ -163,7 +163,6 @@ public:
 
             RLGraph mg;
             RLGraphControls controls;
-            RLGraphVars vars;
 
             im.lockForRead();
             linesVPs.lockForRead();
@@ -184,7 +183,6 @@ public:
 
             // append regions
             auto segId2Rhs = core::AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
-
             controls = core::MakeControls(mg, vps);
 
             im.unlock();
@@ -236,8 +234,7 @@ public:
                 mg = std::move(mgs[i]);
                 controls = std::move(cs[i]);
 
-                if (!core::AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls, 1.0, 1.0) &&
-                    !core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls, 1.0, 1.0))
+                if (!core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls, 1.0, 1.0))
                     continue;
 
                 vars = core::SolveVariables(mg, controls, false);
@@ -293,7 +290,7 @@ public:
                 std::vector<core::Chain3> chains;
                 for (double x = range.first; x <= range.second; x += medianDepth * 0.02){
                     core::Plane3 cutplane(vertDir * x, vertDir);
-                    auto loop = experimental::CutRegionLoopAt(polygons, cutplane);
+                    auto loop = experimental::MakeSectionalPieces(polygons, cutplane);
                     if (loop.empty())
                         continue;
                     chains.push_back(experimental::MakeChain(loop));
@@ -333,7 +330,8 @@ private:
 
 using PerspView = panoramix::core::View<panoramix::core::PerspectiveCamera>;
 
-/*
+
+
 class NormalRecProject : public Project {
 public:
     explicit NormalRecProject(const QString & normalIm, QObject * parent) 
@@ -368,12 +366,6 @@ public:
             result.line3ds = std::move(pureLine3ds);
             result.vps = std::move(vps);
             return result;
-            //return LinesAndVPs{ 
-            //    std::vector<core::PerspectiveView>{ std::move(view) },
-            //    std::vector<std::vector<core::Classified<core::Line2>>>{ std::move(lines) },
-            //    std::move(pureLine3ds),
-            //    std::move(vps) 
-            //};
         });
 
         // segmentation
@@ -409,10 +401,11 @@ public:
 
         // reconstruction setup
         int stepReconstructionSetup = _steps->addStep(tr("Reconstruction Setup"),
-            [this](DataOfType<LinesAndVPs> & linesVPs, DataOfType<Segmentation> & segs) -> ReconstructionSetup<core::PerspectiveCamera> {
+            [this](DataOfType<LinesAndVPs> & linesVPs, 
+            DataOfType<Segmentation> & segs) -> ReconstructionSetup<core::PerspectiveCamera> {
 
             core::RLGraph mg;
-            core::RLGraphPropertyTable props;
+            core::RLGraphControls controls;
 
             linesVPs.lockForRead();
             segs.lockForRead();
@@ -426,28 +419,29 @@ public:
             for (int i = 0; i < perspectiveViews.size(); i++)
                 core::AppendLines(mg, lines[i], perspectiveViews[i].camera, vps);
 
-            // append regions
-            core::AppendRegions(mg, segmentedImage, perspectiveViews.front().camera, 0.001, 0.001, 3, 1);
+            _confLock.lockForRead();
 
-            props = core::MakeRLGraphPropertyTable(mg, vps);
+            // append regions
+            auto segId2Rhs = core::AppendRegions(mg, segmentedImage, perspectiveViews.front().camera, 0.01, 0.01, 3, 2);
+            controls = core::MakeControls(mg, vps);
+
 
             linesVPs.unlock();
             segs.unlock();
 
-            core::AttachPrincipleDirectionConstraints(mg, props, M_PI / 120.0);
-            core::AttachWallConstriants(mg, props, M_PI / 100.0);
-            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
+            core::AttachPrincipleDirectionConstraints(mg, controls, M_PI / 120.0);
+            core::AttachWallConstriants(mg, controls, M_PI / 100.0);
+
+            _confLock.unlock();
 
             return ReconstructionSetup<core::PerspectiveCamera>{ 
-                perspectiveViews.front(), 
-                    std::move(mg), 
-                    std::move(props), 
-                    std::move(segmentedImage)
+                perspectiveViews.front(),
+                    std::move(mg),
+                    std::move(controls),
+                    std::move(segmentedImage), std::move(segId2Rhs)
             };
 
         }, { stepLoad, stepSegmentation });
-
-
 
 
 
@@ -457,29 +451,54 @@ public:
         int stepReconstruction = _steps->addStep("Reconstruction",
             [this](DataOfType<ReconstructionSetup<core::PerspectiveCamera>> & lastRec){
 
-            lastRec.lockForRead();
-            Reconstruction<core::PerspectiveCamera> rec = { lastRec.content.view, { { lastRec.content.mg, lastRec.content.props } } };
+            using namespace panoramix;
+            using namespace experimental;
+
+            auto ccids = MakeHandledTableForAllComponents(lastRec.content.mg, -1);
+            int ccnum = ConnectedComponents(lastRec.content.mg, ccids);
+            std::vector<RLGraph> mgs = Decompose(lastRec.content.mg, ccids, ccnum);
+            std::vector<RLGraphControls> cs = Decompose(lastRec.content.mg, lastRec.content.controls, ccids, ccnum);
+            assert(cs.size() == mgs.size());
+
+            Reconstruction<core::PerspectiveCamera> rec;
+            rec.view = lastRec.content.view;
+            rec.gs.resize(mgs.size());
+
             lastRec.unlock();
 
-            auto & mg = rec.gs.front().mg;
-            auto & props = rec.gs.front().props;
+            for (int i = 0; i < rec.gs.size(); i++){
 
-            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
-            core::SolveVariablesUsingInversedDepths(mg, props);
-            core::NormalizeVariables(mg, props);
-            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-            //core::Visualize(view, mg, props);
-            core::LooseOrientationConstraintsOnComponents(mg, props, 0.2, 0, 0.05);
+                auto & mg = rec.gs[i].mg;
+                auto & controls = rec.gs[i].controls;
+                auto & vars = rec.gs[i].vars;
 
-            AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, props, 1.0, 10.0);
-            core::SolveVariablesUsingInversedDepths(mg, props);
-            core::NormalizeVariables(mg, props);
-            std::cout << "score = " << core::ComputeScore(mg, props) << std::endl;
-            //core::Visualize(view, mg, props);
-            core::AttachFloorAndCeilingConstraints(mg, props, 0.1, 0.6);
+                mg = std::move(mgs[i]);
+                controls = std::move(cs[i]);
 
-            core::SolveVariablesUsingInversedDepths(mg, props);
-            core::NormalizeVariables(mg, props);
+                if (!core::AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls, 1.0, 1.0) &&
+                    !core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls, 1.0, 1.0))
+                    continue;
+
+                vars = core::SolveVariables(mg, controls, false);
+                core::NormalizeVariables(mg, controls, vars);
+                std::cout << "score = " << core::Score(mg, controls, vars) << std::endl;
+
+                core::LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.2, 0.1);
+                if (!core::AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls) &&
+                    !core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                    continue;
+
+                vars = core::SolveVariables(mg, controls);
+                core::NormalizeVariables(mg, controls, vars);
+
+                core::AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
+
+                if (!core::AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls) &&
+                    !core::AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                    continue;
+                vars = core::SolveVariables(mg, controls);
+                core::NormalizeVariables(mg, controls, vars);
+            }
 
             return rec;
         }, { stepReconstructionSetup });
@@ -500,7 +519,7 @@ public:
 private:
     QFileInfo _imFileInfo;
 };
-*/
+
 
 static int UnnamedProjectId = 1;
 Project::Project(QObject * parent) 
@@ -540,9 +559,8 @@ Project * Project::createProjectFromImage(const QString & image, bool isPano, QO
         return proj;
     }
     else {
-        //Project * proj = new NormalRecProject(image, parent);
-        //return proj;
-        return nullptr;
+        Project * proj = new NormalRecProject(image, parent);
+        return proj;
     }
 
     NOT_IMPLEMENTED_YET();

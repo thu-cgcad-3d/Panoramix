@@ -18,7 +18,7 @@ namespace panoramix {
         class VisualizerWidget : public QGLWidget {
         public:
             RenderOptions options;
-            VisualObjectScene scene;
+            Scene scene;
 
             VisualizerWidget(const Visualizer & v, QWidget * parent = nullptr) 
                 : QGLWidget(parent), options(v.renderOptions), scene(v.tree()) {

@@ -24,6 +24,9 @@ namespace panoramix {
             static inline bool CDAndAddAllSubfolders(const std::string & dir){
                 return RunScript("cd " + dir) && RunScript("addpath(genpath('.'));");
             }
+            static inline bool Load(const std::string & matfile){
+                return RunScript("load('" + matfile + "');");
+            }
 
             static bool PutVariable(const char * name, CVInputArray a);
             static void * PutVariable(CVInputArray a);
@@ -31,6 +34,8 @@ namespace panoramix {
             static bool GetVariable(const void * mxa, CVOutputArray a, bool lastDimIsChannel = true);
             static bool GetVariable(const char * name, double & a);
             static bool GetVariable(const void * mxa, double & a);
+            static bool GetVariable(const char * name, std::string & t);
+            static bool GetVariable(const void * mxa, std::string & t);
 
             static bool PutVariable(const char * name, const cv::SparseMat & mat);
             static void * PutVariable(const cv::SparseMat & mat);

@@ -2567,10 +2567,17 @@ namespace panoramix {
         }
 
 
-        ImageOfType<Vec<double, 7>> IndoorGeometricContextEstimator::operator() (const Image & im) const{
+
+
+        ImageOfType<Vec<double, 7>> ComputeGeometricContext(const Image & im, SceneClass sceneClass){
             Matlab matlab;
             matlab.PutVariable("im", im);
-            matlab << "[~, ~, slabelConfMap] = calcGC(im);";
+            if (sceneClass == SceneClass::Indoor){
+                matlab << "[~, ~, slabelConfMap] = calcGC(im);";
+            }
+            else{
+                matlab << "slabelConfMap = panoramix_wrapper_gc(im, true);";
+            }
             ImageOfType<Vec<double, 7>> gc;
             matlab.GetVariable("slabelConfMap", gc);
             assert(gc.channels() == 7);
@@ -2578,8 +2585,44 @@ namespace panoramix {
             return gc;
         }
 
+        ImageOfType<Vec<double, 5>> IndoorGeometricContextEstimator::postProcess(const ImageOfType<Vec<double, 7>> & rawgc,
+            SceneClass sceneClass) const{
+            ImageOfType<Vec<double, 5>> result(rawgc.size(), Vec<double, 5>());
+            for (auto it = result.begin(); it != result.end(); ++it){
+                auto & p = rawgc(it.pos());
+                auto & resultv = *it;
+                if (sceneClass == SceneClass::Indoor){
+                    // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
+                    resultv[0] += p[0];
+                    resultv[1] += p[1];
+                    resultv[1] += p[2];
+                    resultv[2] += p[3];
+                    resultv[2] += p[4];
+                    resultv[3] += p[5];
+                    resultv[4] += p[6];
+                }
+                else{
+                    // 0: ground, 1,2,3: vertical, 4:clutter, 5:poros, 6: sky
+                    resultv[0] += p[0];
+                    resultv[1] += p[1];
+                    resultv[1] += p[2];
+                    resultv[1] += p[3];
+                    resultv[2] += p[4];
+                    resultv[3] += p[5];
+                    resultv[4] += p[6];
+                }
+            }
+            return result;
+        }
+
+
+        ImageOfType<Vec<double, 5>> IndoorGeometricContextEstimator::operator() (const Image & im, SceneClass sceneClass) const{
+            auto gc = ComputeGeometricContext(im, sceneClass);
+            return postProcess(gc, sceneClass);
+        }
+
         std::pair<ImageOfType<Vec<double, 5>>, Imagei> IndoorGeometricContextEstimator::operator() (const Image & image,
-            const PanoramicCamera & camera, const std::vector<Vec3> & allvps) const {
+            const PanoramicCamera & camera, const std::vector<Vec3> & allvps, SceneClass sceneClass) const {
 
             ImageOfType<Vec<double, 5>> result = ImageOfType<Vec<double, 7>>::zeros(image.size());
             Imagei votes = Imagei::zeros(image.size());
@@ -2599,7 +2642,7 @@ namespace panoramix {
             }
             // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
             for (int i = 0; i < hcams.size(); i++){
-                auto gc = (*this)(PanoramicView{image, camera}.sampled(hcams[i]).image);
+                auto gc = ComputeGeometricContext(PanoramicView{ image, camera }.sampled(hcams[i]).image, sceneClass);
                 int frontVPid = GetVerticalDirectionId(vps, hcams[i].forward());
                 int sideVPid = GetVerticalDirectionId(vps, hcams[i].leftward());
 
@@ -2609,14 +2652,27 @@ namespace panoramix {
                         continue;
                     auto & resultv = *it;
                     auto & p = gc(gcPos);
-                    resultv[frontVPid] += p[0];
-                    resultv[sideVPid] += p[1];
-                    resultv[sideVPid] += p[2];
-                    resultv[vertVPid] += p[3];
-                    resultv[vertVPid] += p[4];
-                    resultv[3] += p[5];
-                    resultv[4] += p[6];
-                    votes(it.pos())++;                    
+
+                    if (sceneClass == SceneClass::Indoor){
+                        resultv[frontVPid] += p[0];
+                        resultv[sideVPid] += p[1];
+                        resultv[sideVPid] += p[2];
+                        resultv[vertVPid] += p[3];
+                        resultv[vertVPid] += p[4];
+                        resultv[3] += p[5];
+                        resultv[4] += p[6];
+                    }
+                    else{
+                        // 0: ground, 1,2,3: vertical, 4:clutter, 5:poros, 6: sky
+                        resultv[0] += p[0];
+                        resultv[1] += p[1];
+                        resultv[1] += p[2];
+                        resultv[1] += p[3];
+                        resultv[2] += p[4];
+                        resultv[3] += p[5];
+                        resultv[4] += p[6];
+                    }
+                    votes(it.pos())++;
                 }
             }
 

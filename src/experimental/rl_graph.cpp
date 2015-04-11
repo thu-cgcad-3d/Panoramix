@@ -1131,7 +1131,8 @@ namespace panoramix {
             RLGraphComponentTable<int> & ccIds,
             const std::function<bool(const RLGraphConstraintControl &)> & constraintAsConnected) {
             std::vector<RLGraph> ccs;
-            
+
+
             struct HComp {
                 enum Type { Region, Line };
                 Type type;
@@ -1259,19 +1260,39 @@ namespace panoramix {
         }
 
 
+        template <class T1, class T2>
+        std::pair<T2, T1> Inversed(const std::pair<T1, T2> & p){
+            return std::make_pair(p.second, p.first);
+        }
 
-
-        std::vector<RLGraph> Decompose(const RLGraph & mg, const RLGraphComponentTable<int> & ccids, int ccnum){
+        std::vector<RLGraph> Decompose(const RLGraph & mg, const RLGraphComponentTable<int> & ccids, int ccnum, 
+            RLGraphOldToNew * old2new, RLGraphNewToOld * new2old){
             std::vector<RLGraph> ccs(ccnum);
 
             RLGraphComponentTable<int> newCompIds = MakeHandledTableForAllComponents<int>(mg);
             for (auto & c : mg.components<RegionData>()){
                 int ccid = ccids[c.topo.hd];
-                newCompIds[c.topo.hd] = ccs[ccid].addComponent(c.data).id;
+                auto h = ccs[ccid].addComponent(c.data);
+                newCompIds[c.topo.hd] = h.id;
+                auto pair = std::make_pair(c.topo.hd, std::make_pair(ccid, h));
+                if (old2new){
+                    (*old2new)[pair.first] = pair.second;
+                }
+                if (new2old){
+                    (*new2old)[pair.second] = pair.first;
+                }
             }
             for (auto & c : mg.components<LineData>()){
                 int ccid = ccids[c.topo.hd];
-                newCompIds[c.topo.hd] = ccs[ccid].addComponent(c.data).id;
+                auto h = ccs[ccid].addComponent(c.data);
+                newCompIds[c.topo.hd] = h.id;
+                auto pair = std::make_pair(c.topo.hd, std::make_pair(ccid, h));
+                if (old2new){
+                    (*old2new)[pair.first] = pair.second;
+                }
+                if (new2old){
+                    (*new2old)[pair.second] = pair.first;
+                }
             }
 
             for (auto & c : mg.constraints<RegionBoundaryData>()){
@@ -1281,9 +1302,16 @@ namespace panoramix {
                     continue;
                 }
                 int ccid = ccid1;
-                ccs[ccid].addConstraint(c.data, 
+                auto h = ccs[ccid].addConstraint(c.data, 
                     RegionHandle(newCompIds[c.topo.component<0>()]),
                     RegionHandle(newCompIds[c.topo.component<1>()]));
+                auto pair = std::make_pair(c.topo.hd, std::make_pair(ccid, h));
+                if (old2new){
+                    (*old2new)[pair.first] = pair.second;
+                }
+                if (new2old){
+                    (*new2old)[pair.second] = pair.first;
+                }
             }
             for (auto & c : mg.constraints<LineRelationData>()){
                 int ccid1 = ccids[c.topo.component<0>()];
@@ -1292,9 +1320,16 @@ namespace panoramix {
                     continue;
                 }
                 int ccid = ccid1;
-                ccs[ccid].addConstraint(c.data,
+                auto h = ccs[ccid].addConstraint(c.data,
                     LineHandle(newCompIds[c.topo.component<0>()]),
                     LineHandle(newCompIds[c.topo.component<1>()]));
+                auto pair = std::make_pair(c.topo.hd, std::make_pair(ccid, h));
+                if (old2new){
+                    (*old2new)[pair.first] = pair.second;
+                }
+                if (new2old){
+                    (*new2old)[pair.second] = pair.first;
+                }
             }
             for (auto & c : mg.constraints<RegionLineConnectionData>()){
                 int ccid1 = ccids[c.topo.component<0>()];
@@ -1303,9 +1338,16 @@ namespace panoramix {
                     continue;
                 }
                 int ccid = ccid1;
-                ccs[ccid].addConstraint(c.data,
+                auto h = ccs[ccid].addConstraint(c.data,
                     RegionHandle(newCompIds[c.topo.component<0>()]),
                     LineHandle(newCompIds[c.topo.component<1>()]));
+                auto pair = std::make_pair(c.topo.hd, std::make_pair(ccid, h));
+                if (old2new){
+                    (*old2new)[pair.first] = pair.second;
+                }
+                if (new2old){
+                    (*new2old)[pair.second] = pair.first;
+                }
             }
 
             return ccs;
@@ -1790,6 +1832,8 @@ namespace panoramix {
 
         std::vector<Polygon3> RegionPolygon(const RLGraph & mg, const RLGraphControls & controls,
             const RLGraphVars & vars, RegionHandle rh) {
+            if (!controls[rh].used)
+                return std::vector<Polygon3>();
             std::vector<Polygon3> ps;
             Plane3 plane = Instance(mg, controls, vars, rh);
             for (auto & contour : mg.data(rh).normalizedContours){
@@ -1966,6 +2010,7 @@ namespace panoramix {
         bool AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg,
             RLGraphControls & controls,
             double depth, double weight){
+            std::cout << "calling this feature may cause EYE SKEW!" << std::endl;
             RegionHandle largest;
             double maxArea = 0.0;
             for (auto & r : mg.components<RegionData>()){
@@ -1985,11 +2030,13 @@ namespace panoramix {
 
         bool AttachAnchorToCenterOfLargestLineIfNoAnchorExists(const RLGraph & mg,
             RLGraphControls & controls,
-            double depth, double weight){
+            double depth, double weight, bool orientedOnly){
             LineHandle largest;
             double maxArea = 0.0;
             for (auto & r : mg.components<LineData>()){
                 if (!controls[r.topo.hd].used)
+                    continue;
+                if (controls[r.topo.hd].orientationClaz == -1)
                     continue;
                 if (controls[r.topo.hd].weightedAnchors.size() > 0)
                     return true;
@@ -2893,7 +2940,7 @@ namespace panoramix {
 
 
 
-        SectionalLoop CutRegionLoopAt(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
+        std::vector<SectionalPiece> MakeSectionalPieces(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
             const Plane3 & cutplane){
 
             std::vector<SectionalPiece> segments;
@@ -2970,14 +3017,19 @@ namespace panoramix {
 
 
 
-        Chain3 MakeChain(const SectionalLoop & loop){
+        Chain3 MakeChain(const std::vector<SectionalPiece> & pieces, bool closed){
             Chain3 chain;
-            chain.closed = true;
-            chain.points.reserve(loop.size() * 2);
-            for (auto & seg : loop){
+            chain.closed = closed;
+            chain.points.reserve(pieces.size() * 2);
+            for (auto & seg : pieces){
                 chain.points.push_back(seg.range.first);
                 chain.points.push_back(seg.range.second);
             }
+
+            if (!closed){
+
+            }
+
             return chain;
         }
 
@@ -3011,7 +3063,7 @@ namespace panoramix {
             std::vector<double> dareas;
             for (double x = minv; x <= maxv; x += stepLen){
                 Plane3 cutplane(ndir * x, ndir);
-                auto chain = MakeChain(CutRegionLoopAt(polygons, cutplane));
+                auto chain = MakeChain(MakeSectionalPieces(polygons, cutplane));
                 double area = chain.size() < 3 ? 0.0 : Area(chain);
                 assert(area >= 0.0);
                 dareas.push_back(area - (areas.empty() ? 0.0 : areas.back()));
@@ -3870,9 +3922,9 @@ namespace panoramix {
 
 
 
-
-        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
-            const PanoramicCamera & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes,
+        template <class CameraT>
+        void AttachGeometricContextConstraintsTemplated(const RLGraph & mg, RLGraphControls & controls,
+            const CameraT & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes,
             const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
 
             SetClock();
@@ -3922,7 +3974,16 @@ namespace panoramix {
 
 
 
-
+        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
+            const PanoramicCamera & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes,
+            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
+            AttachGeometricContextConstraintsTemplated(mg, controls, pcam, gc, gcVotes, fun);
+        }
+        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
+            const PerspectiveCamera & pcam, const ImageOfType<Vec<double, 5>> & gc,
+            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
+            AttachGeometricContextConstraintsTemplated(mg, controls, pcam, gc, Imagei::ones(gc.size()), fun);
+        }
 
 
 
@@ -4229,198 +4290,21 @@ namespace panoramix {
 
 
 
+        std::vector<RegionHandle> DetectAnormalyPeakyRegions(const RLGraph & mg,
+            const RLGraphControls & controls, const RLGraphVars & vars){
 
-
-
-
-
-
-
-
-
-
-
-
-        namespace {
-
-            template <class UhClickHandlerFunT, class UhColorizerFunT = core::ConstantFunctor<gui::Color>>
-            void ManuallyOptimizeRLGraph(const core::Image & panorama,
-                const RLGraph & mg,
-                const RLGraphControls & controls, const RLGraphVars & vars,
-                UhClickHandlerFunT && uhClicked,
-                UhColorizerFunT && uhColorizer = UhColorizerFunT(gui::ColorTag::White),
-                bool optimizeInEachIteration = false) {
-
-                struct ComponentID {
-                    int handleID;
-                    bool isRegion;
-                };
-
-                auto sppCallbackFun = [&controls, &mg, &uhClicked](gui::InteractionID iid,
-                    const std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>> & spp) {
-                    std::cout << (spp.first.isRegion ? "Region" : "Line") << spp.first.handleID << std::endl;
-                    if (spp.first.isRegion){
-                        uhClicked(RegionHandle(spp.first.handleID));
-                    }
-                    else {
-                        uhClicked(LineHandle(spp.first.handleID));
-                    }
-                };
-
-                gui::ResourceStore::set("texture", panorama);
-
-                gui::Visualizer viz("mixed graph optimizable");
-                viz.renderOptions.bwColor = 1.0;
-                viz.renderOptions.bwTexColor = 0.0;
-                viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
-                std::vector<std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>>> spps;
-                std::vector<gui::Colored<core::Line3>> lines;
-
-                for (auto & c : mg.components<RegionData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    auto uh = c.topo.hd;
-                    auto & region = c.data;
-                    gui::SpatialProjectedPolygon spp;
-                    // filter corners
-                    core::ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
-                        std::back_inserter(spp.corners),
-                        [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
-                        return core::AngleBetweenDirections(a, b) > M_PI / 1000.0;
-                    });
-                    if (spp.corners.size() < 3)
-                        continue;
-
-                    spp.projectionCenter = core::Point3(0, 0, 0);
-                    spp.plane = Instance(mg, controls, vars, uh);
-                    assert(!HasValue(spp.plane, IsInfOrNaN<double>));
-                    spps.emplace_back(ComponentID{ uh.id, true }, std::move(gui::ColorAs(spp, uhColorizer(uh))));
-                }
-
-                for (auto & c : mg.components<LineData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    auto uh = c.topo.hd;
-                    auto & line = c.data;
-                    lines.push_back(gui::ColorAs(Instance(mg, controls, vars, uh), uhColorizer(uh)));
-                }
-
-                viz.begin(spps, sppCallbackFun).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
-                viz.installingOptions.discretizeOptions.color = gui::ColorTag::DarkGray;
-                viz.installingOptions.lineWidth = 5.0;
-                viz.add(lines);
-
-                std::vector<core::Line3> connectionLines;
-                for (auto & c : mg.constraints<RegionBoundaryData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    auto & samples = c.data.normalizedSampledPoints;
-                    auto inst1 = Instance(mg, controls, vars, c.topo.component<0>());
-                    auto inst2 = Instance(mg, controls, vars, c.topo.component<1>());
-                    for (auto & ss : samples){
-                        for (auto & s : ss){
-                            double d1 = DepthAt(s, inst1);
-                            double d2 = DepthAt(s, inst2);
-                            connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
-                        }
-                    }
-                }
-                for (auto & c : mg.constraints<RegionLineConnectionData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    auto inst1 = Instance(mg, controls, vars, c.topo.component<0>());
-                    auto inst2 = Instance(mg, controls, vars, c.topo.component<1>());
-                    for (auto & s : c.data.normalizedAnchors){
-                        double d1 = DepthAt(s, inst1);
-                        double d2 = DepthAt(s, inst2);
-                        connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
-                    }
-                }
-
-                viz.installingOptions.discretizeOptions.color = gui::ColorTag::Black;
-                viz.installingOptions.lineWidth = 1.0;
-                viz.add(connectionLines);
-
-                viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines;
-                viz.renderOptions.backgroundColor = gui::ColorTag::White;
-                viz.renderOptions.bwColor = 0.5;
-                viz.renderOptions.bwTexColor = 0.5;
-                viz.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400), 800, Point3(-1, 1, 1), Point3(0, 0, 0)));
-                viz.show(true, false);
-
-                gui::ResourceStore::clear();
-
-            }
+            NOT_IMPLEMENTED_YET();
 
 
         }
 
 
-        struct ComponentHandleColorizer {
-            const RLGraph & mg;
-            const RLGraphControls & controls;
-            const RLGraphVars & vars;
-            gui::ColorTable colorTableForVPs;
-            gui::ColorTable colorTableForRegionAlongOrientations;
-            ComponentHandleColorizer(const RLGraph & g, const RLGraphControls & c, const RLGraphVars & v)
-                : mg(g), controls(c), vars(v) {
-                colorTableForVPs = gui::ColorTable(gui::ColorTableDescriptor::RGB)
-                    .appendRandomizedColors(controls.vanishingPoints.size() - 3);
-                colorTableForRegionAlongOrientations = gui::CreateGreyColorTableWithSize(controls.vanishingPoints.size());
-            }
-
-            inline gui::Color operator()(ComponentHandle<RegionData> rh) const{
-                auto & prop = controls[rh];
-                if (!prop.used)
-                    return gui::ColorTag::Yellow;
-                if (prop.orientationClaz >= 0)
-                    return colorTableForVPs[prop.orientationClaz];
-                if (prop.orientationNotClaz >= 0)
-                    return colorTableForRegionAlongOrientations[prop.orientationNotClaz];
-                return gui::ColorTag::Yellow;
-            }
-            inline gui::Color operator()(ComponentHandle<LineData> rh) const {
-                return colorTableForVPs[controls[rh].orientationClaz];
-            }
-        };
-
-        struct ComponentHandleClickHandler {
-            const RLGraph & mg;
-            const RLGraphControls & controls;
-            const RLGraphVars & vars;
-            inline bool operator()(ComponentHandle<RegionData> rh) const{
-                std::cout << "area: " << mg.data(rh).area
-                    << " connected regions: " << mg.topo(rh).constraints<RegionBoundaryData>().size()
-                    << " connected lines: " << mg.topo(rh).constraints<RegionLineConnectionData>().size() << std::endl;
-                std::cout << "==connected regions info==" << std::endl;
-                for (auto & h : mg.topo(rh).constraints<RegionBoundaryData>()){
-                    std::cout << "  sample points num: " << ElementsNum(mg.data(h).normalizedSampledPoints) << std::endl;
-                }
-                std::cout << "==connected lines info==" << std::endl;
-                for (auto & h : mg.topo(rh).constraints<RegionLineConnectionData>()){
-                    std::cout << "  anchors num: " << ElementsNum(mg.data(h).normalizedAnchors) << std::endl;
-                }
-                return false;
-            }
-            inline bool operator()(ComponentHandle<LineData> rh) const {               
-                return false;
-            }
-        };
 
 
-        void Visualize(const View<PanoramicCamera> & texture,
-            const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars){
-            ManuallyOptimizeRLGraph(texture.image, mg, controls, vars, 
-                ComponentHandleClickHandler{ mg, controls, vars }, 
-                ComponentHandleColorizer{ mg, controls, vars });
-        }
-        
-        void Visualize(const View<PerspectiveCamera> & texture,
-            const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars) {
-            ManuallyOptimizeRLGraph(texture.sampled(PanoramicCamera(250, Point3(0, 0, 0), Point3(1, 0, 0), Vec3(0, 0, 1))).image, 
-                mg, controls, vars, ComponentHandleClickHandler{ mg, controls, vars },
-                ComponentHandleColorizer{ mg, controls, vars });
-        }
+
+
+
+
 
 
 

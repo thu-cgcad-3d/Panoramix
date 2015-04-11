@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_MEX_MIXED_GRAPH_HPP
-#define PANORAMIX_MEX_MIXED_GRAPH_HPP 
+#ifndef PANORAMIX_EXPERIMENTAL_MIXED_GRAPH_HPP
+#define PANORAMIX_EXPERIMENTAL_MIXED_GRAPH_HPP 
 
 #include "../core/homo_graph.hpp"
 #include "rl_graph.hpp"

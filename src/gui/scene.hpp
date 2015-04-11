@@ -310,12 +310,12 @@ namespace panoramix {
 
 
 
-        class VisualObjectSceneInternal;
-        class VisualObjectScene {
+        class SceneInternal;
+        class Scene {
         public:
-            VisualObjectScene();
-            explicit VisualObjectScene(const VisualObjectTree & tree);
-            ~VisualObjectScene();
+            Scene();
+            explicit Scene(const VisualObjectTree & tree);
+            ~Scene();
 
             inline void install(const VisualObjectTree & tree) {
                 _tree = tree;
@@ -349,8 +349,10 @@ namespace panoramix {
             VisualObjectMeshTriangle pickOnScreen(const RenderOptions & options,
                 const core::Point2 & pOnScreen) const;
 
+            core::PerspectiveCamera perfectView(int width, int height, const core::Vec3 & up = core::Vec3(0, 0, 1)) const;
+
         private:
-            VisualObjectSceneInternal * _internal;
+            SceneInternal * _internal;
             VisualObjectTree _tree;
         };
 
