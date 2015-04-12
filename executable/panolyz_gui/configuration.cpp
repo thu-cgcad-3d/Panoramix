@@ -3,21 +3,18 @@
 #include "../../src/core/algorithms.hpp"
 #include "../../src/gui/qt_glue.hpp"
 #include "../../src/gui/visualizers.hpp"
+#include "../../src/experimental/tools.hpp"
+
 #include "configuration.hpp"
 #include "widgets.hpp"
 
 using namespace panoramix;
-
-namespace panoramix {
-    namespace core{
-        using namespace experimental;
-    }
-}
+using namespace core;
+using namespace experimental;
 
 
-
-using PanoView = panoramix::core::View<panoramix::core::PanoramicCamera>;
-using PerspView = panoramix::core::View<panoramix::core::PerspectiveCamera>;
+using PanoView = View<PanoramicCamera>;
+using PerspView = View<PerspectiveCamera>;
 
 
 StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<PanoView> & pv,
@@ -42,7 +39,7 @@ StepWidgetInterface * CreateBindingWidgetAndActions(DataOfType<Segmentation> & s
     return CreateImageViewer(&segs, [](DataOfType<Segmentation> & segs){        
         segs.lockForRead();
         auto colorTable = gui::CreateRandomColorTableWithSize(segs.content.segmentsNum);
-        core::Image3ub im = colorTable(segs.content.segmentation);
+        Image3ub im = colorTable(segs.content.segmentation);
         segs.unlock();
         return gui::MakeQImage(im);    
     }, parent);
@@ -60,16 +57,16 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
     return CreateImageViewer(&linesAndVPs, [](DataOfType<LinesAndVPs> & linesAndVPs){
         linesAndVPs.lockForRead();
         auto & pviews = linesAndVPs.content.perspectiveViews;
-        std::vector<core::Image> ims(pviews.size());
+        std::vector<Image> ims(pviews.size());
         gui::ColorTable ctable = gui::ColorTableDescriptor::RGBGreys;
         for (int i = 0; i < pviews.size(); i++){
-            const std::vector<core::Classified<core::Line2>> & lines = linesAndVPs.content.lines[i];
+            const std::vector<Classified<Line2>> & lines = linesAndVPs.content.lines[i];
             ims[i] = pviews[i].image.clone();
             for (auto & line : lines){
-                cv::line(ims[i], core::ToPixelLoc(line.component.first), core::ToPixelLoc(line.component.second), ctable[line.claz]);
+                cv::line(ims[i], ToPixelLoc(line.component.first), ToPixelLoc(line.component.second), ctable[line.claz]);
             }
         }
-        core::Image concated;
+        Image concated;
         cv::hconcat(ims, concated);
         linesAndVPs.unlock();
         return gui::MakeQImage(concated);
@@ -100,11 +97,11 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                     int sz = strokeSize;
                     for (int dx = -sz; dx <= sz; dx++){
                         for (int dy = -sz; dy <= sz; dy++){
-                            core::PixelLoc pp(p.x() + dx, p.y() + dy);
-                            if (!core::Contains(recSetup.content.segmentation, pp))
+                            PixelLoc pp(p.x() + dx, p.y() + dy);
+                            if (!Contains(recSetup.content.segmentation, pp))
                                 continue;
                             int segId = recSetup.content.segmentation(pp);
-                            core::RegionHandle rh(segId);
+                            RegionHandle rh(segId);
                             auto & prop = recSetup.content.controls[rh];
                             if (prop.used == regionPropUsed && 
                                 prop.orientationClaz == regionPropOrientationClaz && 
@@ -118,7 +115,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                     }
                 }   
                 if (changed){
-                    //core::ResetVariables(recSetup.content.mg, recSetup.content.controls);
+                    //ResetVariables(recSetup.content.mg, recSetup.content.controls);
                 }
                 recSetup.unlock();
                 return changed;
@@ -177,10 +174,10 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
             }
 
             // render
-            core::Image3ub rendered = core::Image3ub::zeros(rec.content.segmentation.size());
+            Image3ub rendered = Image3ub::zeros(rec.content.segmentation.size());
             gui::ColorTable rgb = { gui::ColorTag::Red, gui::ColorTag::Green, gui::ColorTag::Blue };
             gui::ColorTable ymc = { gui::ColorTag::Yellow, gui::ColorTag::Magenta, gui::ColorTag::Cyan };
-            double alpha = 0.3;
+            double alpha = 0.5;
             for (auto it = rendered.begin(); it != rendered.end(); ++it){
                 panoramix::experimental::RegionHandle rh = rec.content.segId2RegionHandles[rec.content.segmentation(it.pos())];
                 if (rh.invalid())
@@ -188,7 +185,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                 auto & prop = rec.content.controls[rh];
                 if (!prop.used){
                     QRgb transPixel = transparentBg.pixel(it.pos().x, it.pos().y);
-                    *it = core::Vec3b(qRed(transPixel), qGreen(transPixel), qBlue(transPixel));
+                    *it = Vec3b(qRed(transPixel), qGreen(transPixel), qBlue(transPixel));
                     continue;
                 }
                 gui::Color imColor = gui::ColorFromImage(rec.content.view.image, it.pos());
@@ -203,17 +200,18 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                 }
             }
             // render disconnected boundaries
-            for (auto & b : rec.content.mg.constraints<core::RegionBoundaryData>()){
+            for (auto & b : rec.content.mg.constraints<RegionBoundaryData>()){
                 for (auto & e : b.data.normalizedEdges){
                     if (e.size() <= 1) continue;
                     for (int i = 1; i < e.size(); i++){
-                        auto p1 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i - 1]));
-                        auto p2 = core::ToPixelLoc(rec.content.view.camera.screenProjection(e[i]));
+                        auto p1 = ToPixelLoc(rec.content.view.camera.screenProjection(e[i - 1]));
+                        auto p2 = ToPixelLoc(rec.content.view.camera.screenProjection(e[i]));
                         cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
                         cv::line(rendered, p1, p2, gui::Color(rec.content.controls[b.topo.hd].used ? gui::White : gui::Black), 1);
                     }
                 }
-            }
+            }            
+            
             rec.unlock();
             _imageLock.lockForWrite();
             _image = gui::MakeQImage(rendered);
@@ -267,30 +265,28 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
 }
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
-    DataOfType<ReconstructionSetup<panoramix::core::PanoramicCamera>> & rec,
+    DataOfType<ReconstructionSetup<PanoramicCamera>> & rec,
     QList<QAction*> & actions, QWidget * parent){
     return CreateBindingWidgetAndActionsTemplated(rec, actions, parent);
 }
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
-    DataOfType<ReconstructionSetup<panoramix::core::PerspectiveCamera>> & rec,
+    DataOfType<ReconstructionSetup<PerspectiveCamera>> & rec,
     QList<QAction*> & actions, QWidget * parent){
     return CreateBindingWidgetAndActionsTemplated(rec, actions, parent);
 }
 
 
-core::Image ImageForTexture(const core::PanoramicView & view) { return view.image; }
-core::Image ImageForTexture(const core::PerspectiveView & view) { 
-    return view.sampled(core::PanoramicCamera(2000, core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Vec3(0, 0, 1))).image; 
+Image ImageForTexture(const PanoramicView & view) { return view.image; }
+Image ImageForTexture(const PerspectiveView & view) { 
+    return view.sampled(PanoramicCamera(2000, Point3(0, 0, 0), Point3(1, 0, 0), Vec3(0, 0, 1))).image; 
 }
 
 template <class CameraT>
 StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstruction<CameraT>> & rec,
     QList<QAction*> & actions, QWidget * parent) {
 
-    return CreateSceneViewer(&rec, [](DataOfType<Reconstruction<CameraT>> & data, panoramix::gui::Visualizer & viz){
-
-        using namespace panoramix::core;
+    return CreateSceneViewer(&rec, [](DataOfType<Reconstruction<CameraT>> & data, panoramix::gui::Visualizer & viz){ 
 
         struct ComponentID {
             int handleID;
@@ -301,7 +297,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
 
         viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
         std::vector<std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>>> spps;
-        std::vector<gui::Colored<core::Line3>> lines;
+        std::vector<gui::Colored<Line3>> lines;
 
         for (auto & g : data.content.gs){
             auto & mg = g.mg;
@@ -309,36 +305,36 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
             auto & vars = g.vars;
 
             data.lockForRead();
-            for (auto & c : mg.components<core::RegionData>()){
+            for (auto & c : mg.components<RegionData>()){
                 if (!controls[c.topo.hd].used)
                     continue;
                 auto uh = c.topo.hd;
                 auto & region = c.data;
                 gui::SpatialProjectedPolygon spp;
                 // filter corners
-                core::ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
+                ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
                     std::back_inserter(spp.corners),
-                    [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
-                    return core::AngleBetweenDirections(a, b) > M_PI / 1000.0;
+                    [](const Vec3 & a, const Vec3 & b) -> bool {
+                    return AngleBetweenDirections(a, b) > M_PI / 1000.0;
                 });
                 if (spp.corners.size() < 3)
                     continue;
 
-                spp.projectionCenter = core::Point3(0, 0, 0);
+                spp.projectionCenter = Point3(0, 0, 0);
                 spp.plane = Instance(mg, controls, vars, uh);
-                if (core::HasValue(spp.plane, core::IsInfOrNaN<double>)){
+                if (HasValue(spp.plane, IsInfOrNaN<double>)){
                     continue;
                 }
-                assert(!core::HasValue(spp.plane, core::IsInfOrNaN<double>));
+                assert(!HasValue(spp.plane, IsInfOrNaN<double>));
                 spps.emplace_back(ComponentID{ uh.id, true }, std::move(gui::ColorAs(spp, gui::ColorTag::Black)));
             }
 
-            for (auto & c : mg.components<core::LineData>()){
+            for (auto & c : mg.components<LineData>()){
                 if (!controls[c.topo.hd].used)
                     continue;
                 auto uh = c.topo.hd;
                 auto & line = c.data;
-                if (core::HasValue(line.line, core::IsInfOrNaN<double>)){
+                if (HasValue(line.line, IsInfOrNaN<double>)){
                     continue;
                 }
                 lines.push_back(gui::ColorAs(Instance(mg, controls, vars, uh), gui::ColorTag::Black));
@@ -369,8 +365,8 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
         viz.renderOptions.bwTexColor = 1.0;
         viz.renderOptions.cullBackFace = true;
         viz.renderOptions.cullFrontFace = false;
-        viz.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400),
-            800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
+        viz.camera(PerspectiveCamera(1000, 800, Point2(500, 400),
+            800, Point3(-1, 1, 1), Point3(0, 0, 0)));
 
     }, parent);
 
@@ -379,13 +375,13 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
 
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
-    DataOfType<Reconstruction<panoramix::core::PanoramicCamera>> & rec,
+    DataOfType<Reconstruction<PanoramicCamera>> & rec,
     QList<QAction*> & actions, QWidget * parent){
     return CreateBindingWidgetAndActionsTemplated(rec, actions, parent);
 }
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
-    DataOfType<Reconstruction<panoramix::core::PerspectiveCamera>> & rec,
+    DataOfType<Reconstruction<PerspectiveCamera>> & rec,
     QList<QAction*> & actions, QWidget * parent){
     return CreateBindingWidgetAndActionsTemplated(rec, actions, parent);
 }
@@ -396,12 +392,10 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
 
 
 StepWidgetInterface * CreateBindingWidgetAndActions(
-    DataOfType<ReconstructionRefinement<panoramix::core::PanoramicCamera>> & rec,
+    DataOfType<ReconstructionRefinement<PanoramicCamera>> & rec,
     QList<QAction*> & actions, QWidget * parent){
     return CreateSceneViewer(&rec, 
-        [](DataOfType<ReconstructionRefinement<panoramix::core::PanoramicCamera>> & data, panoramix::gui::Visualizer & viz){
-        
-        using namespace panoramix::core;
+        [](DataOfType<ReconstructionRefinement<PanoramicCamera>> & data, panoramix::gui::Visualizer & viz){
 
         data.lockForRead();
         gui::ResourceStore::set("texture", ImageForTexture(data.content.view));
@@ -414,8 +408,8 @@ StepWidgetInterface * CreateBindingWidgetAndActions(
         viz.renderOptions.bwTexColor = 1.0;
         viz.renderOptions.cullBackFace = false;
         viz.renderOptions.cullFrontFace = true;
-        viz.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400),
-            800, core::Point3(-1, 1, 1), core::Point3(0, 0, 0)));
+        viz.camera(PerspectiveCamera(1000, 800, Point2(500, 400),
+            800, Point3(-1, 1, 1), Point3(0, 0, 0)));
 
     }, parent);
 }

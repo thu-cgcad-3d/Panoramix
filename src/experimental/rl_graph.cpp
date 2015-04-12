@@ -3,19 +3,13 @@ extern "C" {
     #include <gpc.h>
 //    #include <mosek.h>
 }
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
-
-#include <Eigen/SPQRSupport>
-
-#include <unsupported/Eigen/NonLinearOptimization>
-#include <unsupported/Eigen/NumericalDiff>
 
 //
 #include <GCoptimization.h>
 
 
 #include "../misc/matlab.hpp"
+#include "../misc/eigen.hpp"
 
 //
 #include "../core/algorithms.hpp"
@@ -23,10 +17,11 @@ extern "C" {
 #include "../core/utilities.hpp"
 #include "../core/clock.hpp"
 #include "../core/homo_graph.hpp"
+
+#include "tools.hpp"
 #include "rl_graph.hpp"
 
 #include "../gui/visualizers.hpp"
-//#include "matlab.hpp"
 
 
 namespace panoramix {
@@ -870,7 +865,7 @@ namespace panoramix {
             template <class CameraT>
             std::vector<RegionHandle> AppendRegionsTemplate(RLGraph & mg, const Imagei & segmentedRegions, const CameraT & cam,
                 double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
-                int samplerSizeOnBoundary, int samplerSizeOnLine){
+                int samplerSizeOnBoundary, int samplerSizeOnLine, bool noBoundaryUnderLines){
 
                 auto regionHandles = CollectRegionsFromSegmentation(mg, segmentedRegions, cam);
                 int regionNum = regionHandles.size();
@@ -985,15 +980,15 @@ namespace panoramix {
 
         std::vector<RegionHandle> AppendRegions(RLGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
-            int samplerSizeOnBoundary, int samplerSizeOnLine){
+            int samplerSizeOnBoundary, int samplerSizeOnLine, bool noBoundaryUnderLines){
             return AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
-                samplerSizeOnBoundary, samplerSizeOnLine);
+                samplerSizeOnBoundary, samplerSizeOnLine, noBoundaryUnderLines);
         }
         std::vector<RegionHandle> AppendRegions(RLGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine,
-            int samplerSizeOnBoundary, int samplerSizeOnLine){
+            int samplerSizeOnBoundary, int samplerSizeOnLine, bool noBoundaryUnderLines){
             return AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
-                samplerSizeOnBoundary, samplerSizeOnLine);
+                samplerSizeOnBoundary, samplerSizeOnLine, noBoundaryUnderLines);
         }
 
 
@@ -1726,41 +1721,50 @@ namespace panoramix {
 
 
 
-            enum class OrientationHint {
-                Void,
-                Horizontal,
-                Vertical,
-                OtherPlanar,
-                NonPlanar,
-                Count
-            };
+            //enum class OrientationHint {
+            //    Void,
+            //    Horizontal,
+            //    Vertical,
+            //    OtherPlanar,
+            //    NonPlanar,
+            //    Count
+            //};
 
-            inline OrientationHint ToOrientationHint(GeometricContextLabel label, bool leftFrontRightAsVertical){
-                //THERE_ARE_BUGS_HERE("Only OtherPlanar is returned!");
-                //return OrientationHint::OtherPlanar;
-                switch (label){
-                case GeometricContextLabel::Ceiling: return OrientationHint::Horizontal;
-                case GeometricContextLabel::Floor: return OrientationHint::Horizontal;
-                case GeometricContextLabel::Front:
-                case GeometricContextLabel::Left:
-                case GeometricContextLabel::Right:
-                    return leftFrontRightAsVertical ? OrientationHint::Vertical : OrientationHint::OtherPlanar;
-                case GeometricContextLabel::Furniture: return OrientationHint::Void;
-                case GeometricContextLabel::Ground: return OrientationHint::Horizontal;
-                case GeometricContextLabel::Sky: return OrientationHint::Void;
-                case GeometricContextLabel::Vertical: return OrientationHint::OtherPlanar;
-                case GeometricContextLabel::NotPlanar: return OrientationHint::NonPlanar;
-                default:
-                    return OrientationHint::Void;
-                }
-            }
+            //inline OrientationHint ToOrientationHint(GeometricContextLabel label, bool leftFrontRightAsVertical){
+            //    //THERE_ARE_BUGS_HERE("Only OtherPlanar is returned!");
+            //    //return OrientationHint::OtherPlanar;
+            //    switch (label){
+            //    case GeometricContextLabel::Ceiling: return OrientationHint::Horizontal;
+            //    case GeometricContextLabel::Floor: return OrientationHint::Horizontal;
+            //    case GeometricContextLabel::Front:
+            //    case GeometricContextLabel::Left:
+            //    case GeometricContextLabel::Right:
+            //        return leftFrontRightAsVertical ? OrientationHint::Vertical : OrientationHint::OtherPlanar;
+            //    case GeometricContextLabel::Furniture: return OrientationHint::Void;
+            //    case GeometricContextLabel::Ground: return OrientationHint::Horizontal;
+            //    case GeometricContextLabel::Sky: return OrientationHint::Void;
+            //    case GeometricContextLabel::Vertical: return OrientationHint::OtherPlanar;
+            //    case GeometricContextLabel::NotPlanar: return OrientationHint::NonPlanar;
+            //    default:
+            //        return OrientationHint::Void;
+            //    }
+            //}
 
         }
 
 
-        RLGraphVars MakeVariables(const RLGraph & mg, const RLGraphControls & controls) {
+        RLGraphVars MakeVariables(const RLGraph & mg, const RLGraphControls & controls, bool randomized) {
             RLGraphVars vars = MakeHandledTableForAllComponents<RLGraphVar>(mg);
             ForeachRLGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, controls, vars });
+            if (randomized){
+                for (auto & t : vars.data){
+                    for (auto & vv : t){
+                        for (auto & v : vv.variables){
+                            v = ((size_t)std::rand() % 1000 + 1) / 5000.0 + 1.0;
+                        }
+                    }
+                }
+            }
             return vars;
         }
 
@@ -1773,45 +1777,44 @@ namespace panoramix {
 
         }
 
-        Line3 Instance(const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars, const LineHandle & lh) {
+
+
+
+
+        Line3 InstanceGivenVariables(const RLGraph & mg, const double * variables,
+            const RLGraphControls & controls, const LineHandle & lh) {
             auto & ld = mg.data(lh);
             auto & c = controls[lh];
-            auto & v = vars[lh];
             //if (!lp.used)
             //    return Line3();
             if (c.orientationClaz >= 0){
-                assert(v.variables.size() == 1);
-                Ray3 infLine(normalize(ld.line.center()) / NonZeroize(v.variables[0]), controls.vanishingPoints[c.orientationClaz]);
+                Ray3 infLine(normalize(ld.line.center()) / NonZeroize(variables[0]), controls.vanishingPoints[c.orientationClaz]);
                 return Line3(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(ld.line.first)), infLine).second.second,
                     DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(ld.line.second)), infLine).second.second);
             }
             else /*if (line.type == MGUnary::LineFree)*/{
-                assert(v.variables.size() == 2);
                 /*           | sin(theta) | | p | | q |
                 len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
                 | p sin(phi) - q sin(phi - theta) |
                 */
                 // variables[0] -> 1/p
                 // variables[1] -> 1/q
-                return Line3(normalize(ld.line.first) / NonZeroize(v.variables[0]), normalize(ld.line.second) / NonZeroize(v.variables[1]));
+                return Line3(normalize(ld.line.first) / NonZeroize(variables[0]), normalize(ld.line.second) / NonZeroize(variables[1]));
             }
         }
 
 
-
-        Plane3 Instance(const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars, const RegionHandle & rh){
+        Plane3 InstanceGivenVariables(const RLGraph & mg, const double * variables,
+            const RLGraphControls & controls, const RegionHandle & rh){
             auto & rd = mg.data(rh);
             auto & c = controls[rh];
-            auto & v = vars[rh];
             /*if (!rp.used)
-                return Plane3();*/
+            return Plane3();*/
             if (c.orientationClaz >= 0){
-                assert(v.variables.size() == 1);
-                return Plane3(rd.normalizedCenter / NonZeroize(v.variables[0]), controls.vanishingPoints[c.orientationClaz]);
+                return Plane3(rd.normalizedCenter / NonZeroize(variables[0]), controls.vanishingPoints[c.orientationClaz]);
             }
             else if (c.orientationClaz == -1 && c.orientationNotClaz >= 0){
-                assert(v.variables.size() == 2);
-                double vs[] = { v.variables[0], v.variables[1], 0.0 }; // fake vs
+                double vs[] = { variables[0], variables[1], 0.0 }; // fake vs
                 // v1 * o1 + v2 * o2 + v3 * o3 = 0, since region.orientation is orthogonal to normal
                 auto orientation = normalize(controls.vanishingPoints[c.orientationNotClaz]);
                 int c = SwappedComponent(orientation);
@@ -1822,9 +1825,65 @@ namespace panoramix {
                 return Plane3FromEquation(vs[0], vs[1], vs[2]);
             }
             else /*if (region.type == MGUnary::RegionWithFixedNormal)*/{
-                assert(v.variables.size() == 3);
-                return Plane3FromEquation(v.variables[0], v.variables[1], v.variables[2]);
+                return Plane3FromEquation(variables[0], variables[1], variables[2]);
             }
+        }
+
+
+        Line3 Instance(const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars, const LineHandle & lh) {
+            //auto & ld = mg.data(lh);
+            //auto & c = controls[lh];
+            //auto & v = vars[lh];
+            ////if (!lp.used)
+            ////    return Line3();
+            //if (c.orientationClaz >= 0){
+            //    assert(v.variables.size() == 1);
+            //    Ray3 infLine(normalize(ld.line.center()) / NonZeroize(v.variables[0]), controls.vanishingPoints[c.orientationClaz]);
+            //    return Line3(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(ld.line.first)), infLine).second.second,
+            //        DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(ld.line.second)), infLine).second.second);
+            //}
+            //else /*if (line.type == MGUnary::LineFree)*/{
+            //    assert(v.variables.size() == 2);
+            //    /*           | sin(theta) | | p | | q |
+            //    len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+            //    | p sin(phi) - q sin(phi - theta) |
+            //    */
+            //    // variables[0] -> 1/p
+            //    // variables[1] -> 1/q
+            //    return Line3(normalize(ld.line.first) / NonZeroize(v.variables[0]), normalize(ld.line.second) / NonZeroize(v.variables[1]));
+            //}
+            return InstanceGivenVariables(mg, vars.at(lh).variables.data(), controls, lh);
+        }
+
+
+
+        Plane3 Instance(const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars, const RegionHandle & rh){
+            //auto & rd = mg.data(rh);
+            //auto & c = controls[rh];
+            //auto & v = vars[rh];
+            ///*if (!rp.used)
+            //    return Plane3();*/
+            //if (c.orientationClaz >= 0){
+            //    assert(v.variables.size() == 1);
+            //    return Plane3(rd.normalizedCenter / NonZeroize(v.variables[0]), controls.vanishingPoints[c.orientationClaz]);
+            //}
+            //else if (c.orientationClaz == -1 && c.orientationNotClaz >= 0){
+            //    assert(v.variables.size() == 2);
+            //    double vs[] = { v.variables[0], v.variables[1], 0.0 }; // fake vs
+            //    // v1 * o1 + v2 * o2 + v3 * o3 = 0, since region.orientation is orthogonal to normal
+            //    auto orientation = normalize(controls.vanishingPoints[c.orientationNotClaz]);
+            //    int c = SwappedComponent(orientation);
+            //    std::swap(orientation[c], orientation[2]); // now fake orientation
+            //    vs[2] = (-vs[0] * orientation[0] - vs[1] * orientation[1])
+            //        / orientation[2];
+            //    std::swap(vs[c], vs[2]); // now real vs
+            //    return Plane3FromEquation(vs[0], vs[1], vs[2]);
+            //}
+            //else /*if (region.type == MGUnary::RegionWithFixedNormal)*/{
+            //    assert(v.variables.size() == 3);
+            //    return Plane3FromEquation(v.variables[0], v.variables[1], v.variables[2]);
+            //}
+            return InstanceGivenVariables(mg, vars.at(rh).variables.data(), controls, rh);
         }
 
 
@@ -1936,6 +1995,9 @@ namespace panoramix {
         }
 
 
+
+
+
         double DepthAtDirectionGivenVariables(const RLGraph & mg, const double * variables,
             const RLGraphControls & controls, const Vec3 & direction, const LineHandle & lh){
             auto & ld = mg.data(lh);
@@ -2028,6 +2090,19 @@ namespace panoramix {
             return largest.valid();
         }
 
+
+        int NumberOfAnchors(const RLGraphControls & controls){
+            int nanchor = 0;
+            for (auto & table : controls.componentControls.data){
+                for (auto & compProp : table){
+                    if (!compProp.used)
+                        continue;
+                    nanchor += compProp.weightedAnchors.size();
+                }
+            }
+            return nanchor;
+        }
+
         bool AttachAnchorToCenterOfLargestLineIfNoAnchorExists(const RLGraph & mg,
             RLGraphControls & controls,
             double depth, double weight, bool orientedOnly){
@@ -2036,7 +2111,7 @@ namespace panoramix {
             for (auto & r : mg.components<LineData>()){
                 if (!controls[r.topo.hd].used)
                     continue;
-                if (controls[r.topo.hd].orientationClaz == -1)
+                if (controls[r.topo.hd].orientationClaz == -1 && orientedOnly)
                     continue;
                 if (controls[r.topo.hd].weightedAnchors.size() > 0)
                     return true;
@@ -2050,77 +2125,267 @@ namespace panoramix {
             return largest.valid();
         }
 
+        bool AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg,
+            RLGraphControls & controls,
+            double depth, double weight, bool orientedOnly){
+            RegionHandle largest;
+            double maxArea = 0.0;
+            for (auto & r : mg.components<RegionData>()){
+                if (!controls[r.topo.hd].used)
+                    continue;
+                if (controls[r.topo.hd].orientationClaz == -1 && orientedOnly)
+                    continue;
+                if (controls[r.topo.hd].weightedAnchors.size() > 0)
+                    return true;
+                if (r.data.area > maxArea){
+                    largest = r.topo.hd;
+                    maxArea = r.data.area;
+                }
+            }
+            if (largest.valid())
+                controls[largest].weightedAnchors.push_back(ScoreAs(normalize(mg.data(largest).normalizedCenter) * depth, weight));
+            return largest.valid();
+        }
+
+
+        void ClearAllComponentAnchors(RLGraphControls & controls){
+            for (auto & table : controls.componentControls.data){
+                for (auto & compProp : table){
+                    compProp.weightedAnchors.clear();
+                }
+            }
+        }
+
 
 
         namespace {
 
-
-            std::vector<Vec3> NecessaryAnchorsForBinary(const RLGraph & mg, RegionBoundaryHandle bh){
-                size_t n = ElementsNum(mg.data(bh).normalizedSampledPoints);
-
-                assert(n > 0);
-                const auto & points = mg.data(bh).normalizedSampledPoints;
-
-                if (n == 1){
-                    return{ points.front().front() };
+            int RegisterVariablePositions(const RLGraph & mg,
+                const RLGraphControls & controls, const RLGraphVars & vars,
+                RLGraphComponentTable<int> & uh2varStartPosition){
+                int varNum = 0;
+                for (auto & c : mg.components<LineData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    uh2varStartPosition[c.topo.hd] = varNum;
+                    varNum += vars[c.topo.hd].variables.size();
                 }
+                for (auto & c : mg.components<RegionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    uh2varStartPosition[c.topo.hd] = varNum;
+                    varNum += vars[c.topo.hd].variables.size();
+                }
+                return varNum;
+            }
 
-                const Vec3 * pp1 = nullptr;
-                const Vec3 * pp2 = nullptr;
-                double maxAngle = 0.0;
-                for (int i = 0; i < points.size(); i++){
-                    for (int ii = 0; ii < points[i].size(); ii++){
-                        for (int j = i; j < points.size(); j++){
-                            for (int jj = 0; jj < points[j].size(); jj++){
-                                if (std::tie(i, ii) >= std::tie(j, jj))
-                                    continue;
-                                double angle = AngleBetweenDirections(points[i][ii], points[j][jj]);
-                                if (angle > maxAngle){
-                                    maxAngle = angle;
-                                    pp1 = &points[i][ii];
-                                    pp2 = &points[j][jj];
+
+            void RegisterVariableValues(const RLGraph & mg,
+                const RLGraphControls & controls, const RLGraphVars & vars,
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                std::vector<double> & X){
+                for (auto & c : mg.components<LineData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        X[uh2varStartPosition.at(c.topo.hd) + i] = vars[c.topo.hd].variables.at(i);
+                    }
+                }
+                for (auto & c : mg.components<RegionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        X[uh2varStartPosition.at(c.topo.hd) + i] = vars[c.topo.hd].variables.at(i);
+                    }
+                }
+            }
+
+
+
+            struct ExtractNecessaryAnchorsForBinary {
+                std::vector<Vec3> operator()(const RLGraph & mg, RegionBoundaryHandle bh) const {
+                    size_t n = ElementsNum(mg.data(bh).normalizedSampledPoints);
+
+                    assert(n > 0);
+                    const auto & points = mg.data(bh).normalizedSampledPoints;
+
+                    if (n == 1){
+                        return{ points.front().front() };
+                    }
+
+                    const Vec3 * pp1 = nullptr;
+                    const Vec3 * pp2 = nullptr;
+                    double maxAngle = 0.0;
+                    for (int i = 0; i < points.size(); i++){
+                        for (int ii = 0; ii < points[i].size(); ii++){
+                            for (int j = i; j < points.size(); j++){
+                                for (int jj = 0; jj < points[j].size(); jj++){
+                                    if (std::tie(i, ii) >= std::tie(j, jj))
+                                        continue;
+                                    double angle = AngleBetweenDirections(points[i][ii], points[j][jj]);
+                                    if (angle > maxAngle){
+                                        maxAngle = angle;
+                                        pp1 = &points[i][ii];
+                                        pp2 = &points[j][jj];
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                auto & p1 = *pp1;
-                auto & p2 = *pp2;
+                    auto & p1 = *pp1;
+                    auto & p2 = *pp2;
 
-                if (n == 2){
-                    return{ p1, p2 };
-                }
-                
-                auto normal12 = p1.cross(p2);
-                auto pp3 = &p1;
-                for (auto & ps : points){
-                    for (auto & p : ps){
-                        if (abs(p.dot(normal12)) > abs(pp3->dot(normal12))){
-                            pp3 = &p;
+                    if (n == 2){
+                        return{ p1, p2 };
+                    }
+
+                    auto normal12 = p1.cross(p2);
+                    auto pp3 = &p1;
+                    for (auto & ps : points){
+                        for (auto & p : ps){
+                            if (abs(p.dot(normal12)) > abs(pp3->dot(normal12))){
+                                pp3 = &p;
+                            }
                         }
                     }
+                    auto & p3 = *pp3;
+                    IMPROVABLE_HERE(? );
+                    return{ p1, p2, p3 };
                 }
-                auto & p3 = *pp3;
-                IMPROVABLE_HERE(?);
-                return{ p1, p2, p3 };
+
+                inline std::vector<Vec3> operator()(const RLGraph & mg, LineRelationHandle bh) const {
+                    return{ mg.data(bh).normalizedRelationCenter };
+                }
+
+                inline std::vector<Vec3> operator()(const RLGraph & mg, RegionLineConnectionHandle bh) const {
+                    return{ mg.data(bh).normalizedAnchors.front(), mg.data(bh).normalizedAnchors.back() };
+                }
+            };
+
+            struct ExtractAllAnchorsForBinary {
+                std::vector<Vec3> operator()(const RLGraph & mg, RegionBoundaryHandle bh) const{
+                    std::vector<Vec3> anchors;
+                    anchors.reserve(ElementsNum(mg.data(bh).normalizedSampledPoints));
+                    for (auto & ps : mg.data(bh).normalizedSampledPoints){
+                        for (auto & p : ps){
+                            anchors.push_back(p);
+                        }
+                    }
+                    return anchors;
+                }
+                inline std::vector<Vec3> operator()(const RLGraph & mg, LineRelationHandle bh) const {
+                    return{ mg.data(bh).normalizedRelationCenter };
+                }
+                inline std::vector<Vec3> operator()(const RLGraph & mg, RegionLineConnectionHandle bh) const {
+                    return mg.data(bh).normalizedAnchors;
+                }
+            };
+
+
+
+            template <class BinaryAnchorExtractorT>
+            int RegisterConstraintPositions(const RLGraph & mg,
+                const RLGraphControls & controls, 
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                RLGraphComponentTable<int> & uh2anchorConsStartPosition,
+                RLGraphConstraintTable<int> & bh2consStartPosition,
+                RLGraphConstraintTable<std::vector<Vec3>> & appliedBinaryAnchors,
+                RLGraphConstraintTable<double> & weightsForEachAppliedBinaryAnchor,
+                BinaryAnchorExtractorT && extractBinaryAnchors){
+
+                int consNum = 0;
+                // register anchor constraint positions
+                for (auto & c : mg.components<RegionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    uh2anchorConsStartPosition[c.topo.hd] = consNum;
+                    consNum += controls[c.topo.hd].weightedAnchors.size();
+                }
+                for (auto & c : mg.components<LineData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    uh2anchorConsStartPosition[c.topo.hd] = consNum;
+                    consNum += controls[c.topo.hd].weightedAnchors.size();
+                }
+                // register constraint positions
+                for (auto & c : mg.constraints<RegionBoundaryData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
+                    bh2consStartPosition[c.topo.hd] = consNum;
+                    appliedBinaryAnchors[c.topo.hd] = extractBinaryAnchors(mg, c.topo.hd);
+                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
+                    consNum += appliedBinaryAnchors[c.topo.hd].size();
+                }
+                for (auto & c : mg.constraints<LineRelationData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
+                    bh2consStartPosition[c.topo.hd] = consNum;
+                    appliedBinaryAnchors[c.topo.hd] = extractBinaryAnchors(mg, c.topo.hd);
+                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
+                    consNum += appliedBinaryAnchors[c.topo.hd].size();
+                }
+                for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
+                    bh2consStartPosition[c.topo.hd] = consNum;
+                    appliedBinaryAnchors[c.topo.hd] = extractBinaryAnchors(mg, c.topo.hd);
+                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
+                    consNum += appliedBinaryAnchors[c.topo.hd].size();
+                }
+                return consNum;
             }
 
-            inline std::vector<Vec3> NecessaryAnchorsForBinary(const RLGraph & mg, LineRelationHandle bh){
-                return{ mg.data(bh).normalizedRelationCenter };
-            }
-
-            inline std::vector<Vec3> NecessaryAnchorsForBinary(const RLGraph & mg, RegionLineConnectionHandle bh){
-                return{ mg.data(bh).normalizedAnchors.front(), mg.data(bh).normalizedAnchors.back() };
-            }
 
 
-            template <class ConstraintDataT, class SparseMatElementT>
-            inline void RegisterConstraintEquations(int & eid, const RLGraph & mg, 
+
+            template <class ComponentDataT, class SparseMatElementT>
+            inline void RegisterComponentAnchorEquations(const RLGraph & mg,
                 const RLGraphControls & controls,
                 const RLGraphVars & vars,
-                const ComponentHandledTableFromConstraintGraph<int, RLGraph>::type & uh2varStartPosition,
-                const ConstraintHandledTableFromConstraintGraph<std::vector<Vec3>, RLGraph>::type & appliedBinaryAnchors,
-                const ConstraintHandledTableFromConstraintGraph<double, RLGraph>::type & weightsForEachAppliedBinaryAnchor,
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                const RLGraphComponentTable<int> & uh2anchorConsStartPosition,
+                std::vector<SparseMatElementT> & Atriplets,
+                std::vector<SparseMatElementT> & Wtriplets,
+                std::vector<double> & B){
+                // add anchors on components
+                for (auto & c : mg.components<ComponentDataT>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    auto uh = c.topo.hd;
+                    int uhVarNum = vars[uh].variables.size();
+                    int uhVarStartPosition = uh2varStartPosition.at(uh);
+                    int eid = uh2anchorConsStartPosition[uh];
+                    for (auto & wa : controls[c.topo.hd].weightedAnchors){
+                        const Point3 & anchor = wa.component;
+                        double weight = wa.score;
+                        auto uhVarCoeffsAtAnchorDirection = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, anchor, uh);
+                        assert(uhVarCoeffsAtAnchorDirection.size() == uhVarNum);
+                        for (int i = 0; i < uhVarCoeffsAtAnchorDirection.size(); i++){
+                            //A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
+                            Atriplets.emplace_back(eid, uhVarStartPosition + i, uhVarCoeffsAtAnchorDirection[i]);
+                        }
+                        B[eid] = 1.0 / norm(anchor);
+                        Wtriplets.emplace_back(eid, eid, weight);
+                        eid++;
+                    }
+                }
+
+            }
+
+            template <class ConstraintDataT, class SparseMatElementT>
+            inline void RegisterConstraintEquations(const RLGraph & mg, 
+                const RLGraphControls & controls,
+                const RLGraphVars & vars,
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                const RLGraphConstraintTable<int> & bh2consStartPosition,
+                const RLGraphConstraintTable<std::vector<Vec3>> & appliedBinaryAnchors,
+                const RLGraphConstraintTable<double> & weightsForEachAppliedBinaryAnchor,
                 std::vector<SparseMatElementT> & Atriplets,
                 std::vector<SparseMatElementT> & Wtriplets,
                 std::vector<double> & B) {
@@ -2140,6 +2405,8 @@ namespace panoramix {
 
                     int u2VarStartPosition = uh2varStartPosition.at(uh2);
                     int u2VarNum = vars[uh2].variables.size();
+
+                    int eid = bh2consStartPosition[bh];
 
                     for (auto & a : appliedBinaryAnchors.at(bh)){
                         B[eid] = 0.0;
@@ -2165,182 +2432,85 @@ namespace panoramix {
                 }
             }
 
-            template <class ComponentDataT, class SparseMatElementT>
-            inline void RegisterComponentAnchorEquations(int & eid, const RLGraph & mg, 
-                const RLGraphControls & controls,
-                const RLGraphVars & vars,
-                const ComponentHandledTableFromConstraintGraph<int, RLGraph>::type & uh2varStartPosition,
-                std::vector<SparseMatElementT> & Atriplets,
-                std::vector<SparseMatElementT> & Wtriplets,
-                std::vector<double> & B){
-                // add anchors on components
-                for (auto & c : mg.components<ComponentDataT>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    auto uh = c.topo.hd;
-                    int uhVarNum = vars[uh].variables.size();
-                    int uhVarStartPosition = uh2varStartPosition.at(uh);
-                    for (auto & wa : controls[c.topo.hd].weightedAnchors){
-                        const Point3 & anchor = wa.component;
-                        double weight = wa.score;
-                        auto uhVarCoeffsAtAnchorDirection = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, anchor, uh);
-                        assert(uhVarCoeffsAtAnchorDirection.size() == uhVarNum);
-                        for (int i = 0; i < uhVarCoeffsAtAnchorDirection.size(); i++){
-                            //A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
-                            Atriplets.emplace_back(eid, uhVarStartPosition + i, uhVarCoeffsAtAnchorDirection[i]);
-                        }
-                        B[eid] = 1.0 / norm(anchor);
-                        Wtriplets.emplace_back(eid, eid, weight);
-                        eid++;
-                    }
-                }
+        
 
-            }
-
-
-            template <class SparseMatElementT>
-            void FormulateComponentsAndConstraintsAsMatricesForInverseDepthSolution(const RLGraph & mg, 
-                const RLGraphControls & controls,
-                const RLGraphVars & vars,
-                ComponentHandledTableFromConstraintGraph<int, RLGraph>::type & uh2varStartPosition,
-                ConstraintHandledTableFromConstraintGraph<int, RLGraph>::type & bh2consStartPosition,
-                ConstraintHandledTableFromConstraintGraph<std::vector<Vec3>, RLGraph>::type & appliedBinaryAnchors,
-                ConstraintHandledTableFromConstraintGraph<double, RLGraph>::type & weightsForEachAppliedBinaryAnchor,
-                int & varNum, int & consNum,
-                std::vector<SparseMatElementT> & Atriplets,
-                std::vector<SparseMatElementT> & Wtriplets,
-                std::vector<double> & X,
-                std::vector<double> & B){
-
-                int nanchor = 0;
-                for (auto & table : controls.componentControls.data){
-                    for (auto & compProp : table){
-                        if (!compProp.used)
-                            continue;
-                        nanchor += compProp.weightedAnchors.size();
-                    }
-                }
-                assert(nanchor > 0);
-
-                SetClock();
-
-                //THERE_ARE_BUGS_HERE("make sure mg is single connected");
-
-                varNum = 0;
-                for (auto & c : mg.components<LineData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    uh2varStartPosition[c.topo.hd] = varNum;
-                    varNum += vars[c.topo.hd].variables.size();
-                }
+            template <class VectorT>
+            void InstallVariables(const RLGraph & mg, const RLGraphControls & controls,
+                const RLGraphComponentTable<int> & uh2varStartPosition, const VectorT & X,
+                RLGraphVars & vars){
                 for (auto & c : mg.components<RegionData>()){
                     if (!controls[c.topo.hd].used)
                         continue;
-                    uh2varStartPosition[c.topo.hd] = varNum;
-                    varNum += vars[c.topo.hd].variables.size();
+                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        vars[c.topo.hd].variables[i] = X[uhStartPosition + i];
+                    }
                 }
-
-                X.resize(varNum);
                 for (auto & c : mg.components<LineData>()){
                     if (!controls[c.topo.hd].used)
                         continue;
+                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
                     for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                        X[uh2varStartPosition.at(c.topo.hd) + i] = vars[c.topo.hd].variables.at(i);
+                        vars[c.topo.hd].variables[i] = X[uhStartPosition + i];
                     }
                 }
-                for (auto & c : mg.components<RegionData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                        X[uh2varStartPosition.at(c.topo.hd) + i] = vars[c.topo.hd].variables.at(i);
-                    }
-                }
-
-
-                consNum = 0;
-                consNum += nanchor;
-                for (auto & c : mg.constraints<RegionBoundaryData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
-                        continue;
-                    bh2consStartPosition[c.topo.hd] = consNum;
-                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd);
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
-                    consNum += appliedBinaryAnchors[c.topo.hd].size();
-                }
-                for (auto & c : mg.constraints<LineRelationData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
-                        continue;
-                    bh2consStartPosition[c.topo.hd] = consNum;
-                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd);
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
-                    consNum += appliedBinaryAnchors[c.topo.hd].size();
-                }
-                for (auto & c : mg.constraints<RegionLineConnectionData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
-                        continue;
-                    bh2consStartPosition[c.topo.hd] = consNum;
-                    appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd);
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
-                    consNum += appliedBinaryAnchors[c.topo.hd].size();
-                }
-
-
-                B.resize(consNum);
-
-                Atriplets.reserve(consNum * 6);
-                Wtriplets.reserve(consNum);
-
-                // write equations
-                int eid = 0;
-
-                RegisterComponentAnchorEquations<RegionData>(eid, mg, controls, vars, uh2varStartPosition, 
-                    Atriplets, Wtriplets, B);
-                RegisterComponentAnchorEquations<LineData>(eid, mg, controls, vars, uh2varStartPosition,
-                    Atriplets, Wtriplets, B);
-
-                RegisterConstraintEquations<RegionBoundaryData>(eid, mg, controls, vars, uh2varStartPosition,
-                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, B);
-                RegisterConstraintEquations<LineRelationData>(eid, mg, controls, vars, uh2varStartPosition,
-                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, B);
-                RegisterConstraintEquations<RegionLineConnectionData>(eid, mg, controls, vars, uh2varStartPosition,
-                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, B);
-
-                assert(eid == consNum);
-
             }
 
         }
 
-
-        RLGraphVars SolveVariables(const RLGraph & mg, const RLGraphControls & controls, bool useWeights) {
+        // inverse depth optimization
+        RLGraphVars SolveVariables(const RLGraph & mg, const RLGraphControls & controls, bool useWeights, bool useAllAnchors) {
             RLGraphVars vars = MakeVariables(mg, controls);
+
+            int nanchor = NumberOfAnchors(controls);
+            if (nanchor == 0){
+                WARNNING("no anchor is given! will ouput very very poor results!!!");
+            }
+            assert(nanchor > 0);
 
             SetClock();
 
             auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto uh2anchorConsStartPosition = MakeHandledTableForAllComponents<int>(mg);
             auto bh2consStartPosition = MakeHandledTableForAllConstraints<int>(mg);
             auto appliedBinaryAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
             auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForAllConstraints<double>(mg);
 
-            int varNum = 0;
-            int consNum = 0;
+            // register vars
+            int varNum = RegisterVariablePositions(mg, controls, vars, uh2varStartPosition);
+            std::vector<double> Xdata(varNum, 1.0);
+            RegisterVariableValues(mg, controls, vars, uh2varStartPosition, Xdata);
+
+            // register cons
+            int consNum = useAllAnchors 
+                ? 
+                RegisterConstraintPositions(mg, controls, uh2varStartPosition,
+                uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
+                weightsForEachAppliedBinaryAnchor, ExtractAllAnchorsForBinary())
+                :
+                RegisterConstraintPositions(mg, controls, uh2varStartPosition,
+                uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
+                weightsForEachAppliedBinaryAnchor, ExtractNecessaryAnchorsForBinary());
+
+            std::vector<double> Bdata(consNum, 0.0);
             std::vector<Eigen::Triplet<double>> Atriplets;
             std::vector<Eigen::Triplet<double>> Wtriplets;
-            std::vector<double> Xdata;
-            std::vector<double> Bdata;
+            Atriplets.reserve(consNum * 6);
+            Wtriplets.reserve(consNum);
 
-            FormulateComponentsAndConstraintsAsMatricesForInverseDepthSolution(mg, controls, vars, 
-                uh2varStartPosition, bh2consStartPosition,
-                appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, 
-                varNum, consNum, Atriplets, Wtriplets, Xdata, Bdata);
-            
+            RegisterComponentAnchorEquations<RegionData>(mg, controls, vars, uh2varStartPosition, uh2anchorConsStartPosition,
+                Atriplets, Wtriplets, Bdata);
+            RegisterComponentAnchorEquations<LineData>(mg, controls, vars, uh2varStartPosition, uh2anchorConsStartPosition,
+                Atriplets, Wtriplets, Bdata);
 
+            RegisterConstraintEquations<RegionBoundaryData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
+                appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
+            RegisterConstraintEquations<LineRelationData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
+                appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
+            RegisterConstraintEquations<RegionLineConnectionData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
+                appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
+
+            // matrices
             Eigen::SparseMatrix<double> A;
             {
                 Clock clock("form matrix A");
@@ -2410,22 +2580,7 @@ namespace panoramix {
 
             {
                 Clock clock("install solved variables");
-                for (auto & c : mg.components<RegionData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                        vars[c.topo.hd].variables[i] = X(uhStartPosition + i);
-                    }
-                }
-                for (auto & c : mg.components<LineData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                        vars[c.topo.hd].variables[i] = X(uhStartPosition + i);
-                    }
-                }
+                InstallVariables(mg, controls, uh2varStartPosition, X, vars);
             }
 
             return vars;
@@ -2434,248 +2589,193 @@ namespace panoramix {
         
 
 
-        //namespace {
+        namespace {
 
-        //    // Generic functor
-        //    template <class InternalFunctorT, class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic>
-        //    struct GenericFunctor {
-        //        typedef T Scalar;
-        //        enum {
-        //            InputsAtCompileTime = NX,
-        //            ValuesAtCompileTime = NY
-        //        };
-        //        typedef Eigen::Matrix<Scalar, InputsAtCompileTime, 1> InputType;
-        //        typedef Eigen::Matrix<Scalar, ValuesAtCompileTime, 1> ValueType;
-        //        typedef Eigen::Matrix<Scalar, ValuesAtCompileTime, InputsAtCompileTime> JacobianType;
+            
+            template <class T>
+            struct InstanceTableByHandle_ {};
+            template <>
+            struct InstanceTableByHandle_<RegionHandle> {
+                using type = HandledTable<RegionHandle, Plane3>;
+            };
+            template <>
+            struct InstanceTableByHandle_<LineHandle> {
+                using type = HandledTable<LineHandle, Line3>;
+            };
+            template <class T>
+            using InstanceTableByHandle = typename InstanceTableByHandle_<T>::type;
 
-        //        const int m_inputs, m_values;
-        //        InternalFunctorT m_fun;
-        //        GenericFunctor(const InternalFunctorT & fun) : m_fun(fun), m_inputs(InputsAtCompileTime), m_values(ValuesAtCompileTime) {}
-        //        GenericFunctor(const InternalFunctorT & fun, int inputs, int values) : m_fun(fun), m_inputs(inputs), m_values(values) {}
-
-        //        int inputs() const { return m_inputs; }
-        //        int values() const { return m_values; }
-
-        //        // you should define that in the subclass :
-        //        inline int operator() (const InputType& x, ValueType & v) const{
-        //            m_fun(x, v);
-        //            return 0;
-        //        }
-        //    };
-
-        //    template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-        //    GenericFunctor<InternalFunctorT, T, NX, NY> MakeGenericFunctor(const InternalFunctorT & fun){
-        //        return GenericFunctor<InternalFunctorT, T, NX, NY>(fun);
-        //    }
-
-        //    template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-        //    GenericFunctor<InternalFunctorT, T, NX, NY> MakeGenericFunctor(const InternalFunctorT & fun, int inputs, int values){
-        //        return GenericFunctor<InternalFunctorT, T, NX, NY>(fun, inputs, values);
-        //    }
-
-        //    template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-        //    Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>> MakeGenericNumericDiffFunctor(const InternalFunctorT & fun){
-        //        return Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>>(GenericFunctor<InternalFunctorT, T, NX, NY>(fun));
-        //    }
-
-        //    template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-        //    Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>> MakeGenericNumericDiffFunctor(const InternalFunctorT & fun, int inputs, int values){
-        //        return Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>>(GenericFunctor<InternalFunctorT, T, NX, NY>(fun, inputs, values));
-        //    }
+            using RLGraphInstanceTable = MetaBind<InstanceTableByHandle, RegionHandle, LineHandle>;
 
 
-
-        //}
-
-        //
-        //void SolveVariablesUsingNormalDepths(const RLGraph & mg, RLGraphPropertyTable & props, bool useWeights){
-
-        //    THERE_ARE_BUGS_HERE("weights not used yet");
-
-        //    using namespace Eigen;
-
-        //    auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
-        //    auto bh2consStartPosition = MakeHandledTableForAllConstraints<int>(mg);
-        //    auto appliedBinaryAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
-        //    auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForAllConstraints<double>(mg);
-
-        //    // initialize vectors
-        //    int varNum, consNum;
-        //    static const bool addAnchor = true;
-
-        //    varNum = 0;
-        //    for (auto & c : mg.components<LineData>()){
-        //        if (!props[c.topo.hd].used)
-        //            continue;
-        //        uh2varStartPosition[c.topo.hd] = varNum;
-        //        varNum += props[c.topo.hd].variables.size();
-        //    }
-        //    for (auto & c : mg.components<RegionData>()){
-        //        if (!props[c.topo.hd].used)
-        //            continue;
-        //        uh2varStartPosition[c.topo.hd] = varNum;
-        //        varNum += props[c.topo.hd].variables.size();
-        //    }
-
-        //    VectorXd X;
-        //    X.resize(varNum);
-        //    for (auto & c : mg.components<LineData>()){
-        //        if (!props[c.topo.hd].used)
-        //            continue;
-        //        for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-        //            X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
-        //        }
-        //    }
-        //    for (auto & c : mg.components<RegionData>()){
-        //        if (!props[c.topo.hd].used)
-        //            continue;
-        //        for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-        //            X[uh2varStartPosition.at(c.topo.hd) + i] = props[c.topo.hd].variables.at(i);
-        //        }
-        //    }
-
-        //    RegionHandle rhAnchored;
-
-        //    consNum = 0;
-        //    if (addAnchor){
-        //        consNum++;
-
-        //        //IMPROVABLE_HERE("find a most connected component to set the anchor");
-
-        //        // largest plane
-        //        double maxArea = 0.0;
-        //        for (auto & c : mg.components<RegionData>()){
-        //            if (!props[c.topo.hd].used)
-        //                continue;
-        //            if (c.data.area > maxArea){
-        //                rhAnchored = c.topo.hd;
-        //                maxArea = c.data.area;
-        //            }
-        //        }
-        //    }
-        //    for (auto & c : mg.constraints<RegionBoundaryData>()){
-        //        if (!props[c.topo.hd].used)
-        //            continue;
-        //        bh2consStartPosition[c.topo.hd] = consNum;
-        //        appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
-        //            weightsForEachAppliedBinaryAnchor[c.topo.hd]);
-        //        consNum += appliedBinaryAnchors[c.topo.hd].size();
-        //    }
-        //    for (auto & c : mg.constraints<LineRelationData>()){
-        //        if (!props[c.topo.hd].used)
-        //            continue;
-        //        bh2consStartPosition[c.topo.hd] = consNum;
-        //        appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
-        //            weightsForEachAppliedBinaryAnchor[c.topo.hd]);
-        //        consNum += appliedBinaryAnchors[c.topo.hd].size();
-        //    }
-        //    for (auto & c : mg.constraints<RegionLineConnectionData>()){
-        //        if (!props[c.topo.hd].used)
-        //            continue;
-        //        bh2consStartPosition[c.topo.hd] = consNum;
-        //        appliedBinaryAnchors[c.topo.hd] = NecessaryAnchorsForBinary(mg, c.topo.hd,
-        //            weightsForEachAppliedBinaryAnchor[c.topo.hd]);
-        //        consNum += appliedBinaryAnchors[c.topo.hd].size();
-        //    }         
-
-        //    auto computeDistanceAtAnchors = [consNum, &mg, &props, &uh2varStartPosition, &bh2consStartPosition, 
-        //        &appliedBinaryAnchors, &weightsForEachAppliedBinaryAnchor, rhAnchored](
-        //        const VectorXd & variables, VectorXd & distances){
-        //        
-        //        //std::unordered_set<int> filled;
-        //        if (addAnchor){
-        //            int varStartPos = uh2varStartPosition.at(rhAnchored);
-        //            distances(0) = abs(DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos, props, 
-        //                mg.data(rhAnchored).normalizedCenter, rhAnchored) - 1.0);
-        //            //filled.insert(0);
-        //        }
-
-        //        for (auto & c : mg.constraints<RegionBoundaryData>()){
-        //            if (!props[c.topo.hd].used)
-        //                continue;
-        //            int consStartPos = bh2consStartPosition.at(c.topo.hd);
-        //            auto & anchors = appliedBinaryAnchors.at(c.topo.hd);
-        //            auto uh1 = c.topo.component<0>();
-        //            auto uh2 = c.topo.component<1>();
-        //            int varStartPos1 = uh2varStartPosition.at(uh1);
-        //            int varStartPos2 = uh2varStartPosition.at(uh2);
-        //            for (int i = 0; i < anchors.size(); i++){
-        //                double depth1 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos1, props, anchors[i], uh1);
-        //                double depth2 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos2, props, anchors[i], uh2);
-        //                distances(consStartPos + i) = abs(depth1 - depth2);
-        //                //filled.insert(consStartPos + i);
-        //            }
-        //        }
-
-        //        for (auto & c : mg.constraints<RegionLineConnectionData>()){
-        //            if (!props[c.topo.hd].used)
-        //                continue;
-        //            int consStartPos = bh2consStartPosition.at(c.topo.hd);
-        //            auto & anchors = appliedBinaryAnchors.at(c.topo.hd);
-        //            auto uh1 = c.topo.component<0>();
-        //            auto uh2 = c.topo.component<1>();
-        //            int varStartPos1 = uh2varStartPosition.at(uh1);
-        //            int varStartPos2 = uh2varStartPosition.at(uh2);
-        //            for (int i = 0; i < anchors.size(); i++){
-        //                double depth1 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos1, props, anchors[i], uh1);
-        //                double depth2 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos2, props, anchors[i], uh2);
-        //                distances(consStartPos + i) = abs(depth1 - depth2);
-        //                //filled.insert(consStartPos + i);
-        //            }
-        //        }
-
-        //        for (auto & c : mg.constraints<LineRelationData>()){
-        //            if (!props[c.topo.hd].used)
-        //                continue;
-        //            int consStartPos = bh2consStartPosition.at(c.topo.hd);
-        //            auto & anchors = appliedBinaryAnchors.at(c.topo.hd);
-        //            auto uh1 = c.topo.component<0>();
-        //            auto uh2 = c.topo.component<1>();
-        //            int varStartPos1 = uh2varStartPosition.at(uh1);
-        //            int varStartPos2 = uh2varStartPosition.at(uh2);
-        //            for (int i = 0; i < anchors.size(); i++){
-        //                double depth1 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos1, props, anchors[i], uh1);
-        //                double depth2 = DepthAtDirectionGivenVariables(mg, variables.data() + varStartPos2, props, anchors[i], uh2);
-        //                distances(consStartPos + i) = abs(depth1 - depth2);
-        //                //filled.insert(consStartPos + i);
-        //            }
-        //        }
-
-        //        //for (int i = 0; i < consNum; i++){
-        //        //    assert(Contains(filled, i));
-        //        //}
-
-        //        distances *= 10000.0;
-
-        //        std::cout << '.';
-
-        //    };
+            double DistanceToInstance(const Point3 & p, const Plane3 & plane){
+                return plane.distanceTo(p);
+            }
+            double DistanceToInstance(const Point3 & p, const Line3 & line){
+                return DistanceFromPointToLine(p, line).first;
+            }
 
 
-        //    auto functor = MakeGenericNumericDiffFunctor<double>(computeDistanceAtAnchors, varNum, consNum);
-        //    LevenbergMarquardt<decltype(functor)> lm(functor);
-        //    lm.parameters.maxfev = 5000;
-        //    lm.minimize(X);
+            template <class ComponentDataT>
+            void SetComponentAnchorCosts(const Eigen::VectorXd & variables, Eigen::VectorXd & costs,
+                const RLGraph & mg, const RLGraphControls & controls,
+                const RLGraphComponentTable<int> & compAnchorConsStartPosition,
+                const RLGraphInstanceTable & insts,
+                bool useWeights){
+                for (auto & c : mg.components<ComponentDataT>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    int anchorStartPosition = compAnchorConsStartPosition[c.topo.hd];
+                    const auto & inst = insts[c.topo.hd];
+                    int i = 0;
+                    for (auto & wa : controls[c.topo.hd].weightedAnchors){
+                        const Point3 & anchor = wa.component;
+                        double weight = wa.score;
+                        double dist = DistanceToInstance(anchor, inst);
+                        costs[anchorStartPosition + i] = dist * (useWeights ? weight : 1.0);
+                        i++;
+                    }
+                }
+            }
 
-        //    // install X
-        //    for (auto & c : mg.components<RegionData>()){
-        //        if (!props[c.topo.hd].used)
-        //            continue;
-        //        int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-        //        for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-        //            props[c.topo.hd].variables[i] = X(uhStartPosition + i);
-        //        }
-        //    }
-        //    for (auto & c : mg.components<LineData>()){
-        //        if (!props[c.topo.hd].used)
-        //            continue;
-        //        int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-        //        for (int i = 0; i < props[c.topo.hd].variables.size(); i++){
-        //            props[c.topo.hd].variables[i] = X(uhStartPosition + i);
-        //        }
-        //    }
+            template <class ConstarintDataT>
+            void SetConstraintAnchorCosts(const Eigen::VectorXd & variables, Eigen::VectorXd & costs,
+                const RLGraph & mg, const RLGraphControls & controls,
+                const RLGraphConstraintTable<int> & consAnchorConsStartPosition,
+                const RLGraphConstraintTable<std::vector<Vec3>> & appliedConsAnchors,
+                const RLGraphInstanceTable & insts,
+                bool useWeights){
+                for (auto & c : mg.constraints<ConstarintDataT>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    // constraint anchors
+                    int anchorStartPosition = consAnchorConsStartPosition[c.topo.hd];
+                    auto & anchors = appliedConsAnchors.at(c.topo.hd);
+                    auto uh1 = c.topo.component<0>();
+                    auto uh2 = c.topo.component<1>();
+                    auto & inst1 = insts[uh1];
+                    auto & inst2 = insts[uh2];
+                    for (int i = 0; i < anchors.size(); i++){
+                        double depth1 = DepthAt(anchors[i], inst1);
+                        double depth2 = DepthAt(anchors[i], inst2);
+                        costs(anchorStartPosition + i) = abs(depth1 - depth2) *
+                            (useWeights ? (controls[c.topo.hd].weight / sqrt(anchors.size())) : 1.0);
+                    }
+                }
+            }
 
-        //}
+        }
+
+
+
+        void OptimizeVariables(const RLGraph & mg, const RLGraphControls & controls, RLGraphVars & vars, 
+            bool useWeights, bool useAllAnchors, 
+            const std::function<bool(const RLGraphVars &)> & callback){
+
+            SetClock();
+
+            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+
+            // register vars
+            int varNum = RegisterVariablePositions(mg, controls, vars, uh2varStartPosition);
+            std::vector<double> Xdata(varNum, 1.0);
+            RegisterVariableValues(mg, controls, vars, uh2varStartPosition, Xdata);
+
+
+            auto compAnchorConsStartPosition = MakeHandledTableForAllComponents<int>(mg);
+
+            auto appliedConsAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
+            auto weightsForEachAppliedConsAnchor = MakeHandledTableForAllConstraints<double>(mg);
+            auto consAnchorConsStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+            
+            //auto regionBoundaryNormalConsStartPosition = MakeHandledTableForConstraints<int, RegionBoundaryData>(mg);
+
+
+            // register cons
+            int consNum = 0;
+            // register comp anchors and cons anchors
+            consNum += useAllAnchors ?
+                RegisterConstraintPositions(mg, controls, uh2varStartPosition, compAnchorConsStartPosition,
+                consAnchorConsStartPosition, appliedConsAnchors, weightsForEachAppliedConsAnchor,
+                ExtractAllAnchorsForBinary())
+                :
+                RegisterConstraintPositions(mg, controls, uh2varStartPosition, compAnchorConsStartPosition,
+                consAnchorConsStartPosition, appliedConsAnchors, weightsForEachAppliedConsAnchor,
+                ExtractNecessaryAnchorsForBinary());
+            //// register region boundary normal consistencies
+            //for (auto & b : mg.constraints<RegionBoundaryData>()){
+            //    regionBoundaryNormalConsStartPosition[b.topo.hd] = consNum;
+            //    consNum++;
+            //}
+
+            auto costFunctor = misc::MakeGenericNumericDiffFunctor<double>(
+                [&](const Eigen::VectorXd & v, Eigen::VectorXd & costs){
+
+                Eigen::VectorXd variables = v/*.normalized()*/;
+
+                // compute current planes and lines
+                RLGraphInstanceTable insts;
+                insts.container<RegionHandle>() = mg.createComponentTable<RegionData, Plane3>();
+                insts.container<LineHandle>() = mg.createComponentTable<LineData, Line3>();
+                for (auto & c : mg.components<RegionData>()){
+                    insts[c.topo.hd] = InstanceGivenVariables(mg,
+                        variables.data() + uh2varStartPosition.at(c.topo.hd), controls, c.topo.hd);
+                }
+                for (auto & c : mg.components<LineData>()){
+                    insts[c.topo.hd] = InstanceGivenVariables(mg,
+                        variables.data() + uh2varStartPosition.at(c.topo.hd), controls, c.topo.hd);
+                }
+                
+                SetComponentAnchorCosts<RegionData>(variables, costs, mg, controls, compAnchorConsStartPosition, insts, useWeights);
+                SetComponentAnchorCosts<LineData>(variables, costs, mg, controls, compAnchorConsStartPosition, insts, useWeights);
+
+                SetConstraintAnchorCosts<RegionBoundaryData>(variables, costs, mg, controls, 
+                    consAnchorConsStartPosition, appliedConsAnchors, insts, useWeights);
+                SetConstraintAnchorCosts<LineRelationData>(variables, costs, mg, controls,
+                    consAnchorConsStartPosition, appliedConsAnchors, insts, useWeights);
+                SetConstraintAnchorCosts<RegionLineConnectionData>(variables, costs, mg, controls,
+                    consAnchorConsStartPosition, appliedConsAnchors, insts, useWeights);
+
+                //for (auto & c : mg.constraints<RegionBoundaryData>()){
+                //    if (!controls[c.topo.hd].used)
+                //        continue;
+                //    // constraint anchors
+                //    int anchorStartPosition = consAnchorConsStartPosition[c.topo.hd];
+                //    auto & anchors = appliedConsAnchors.at(c.topo.hd);
+                //    auto uh1 = c.topo.component<0>();
+                //    auto uh2 = c.topo.component<1>();
+                //    const Plane3 & inst1 = insts[uh1];
+                //    const Plane3 & inst2 = insts[uh2];
+                //    // region boundary normal consistency
+                //    costs(regionBoundaryNormalConsStartPosition[c.topo.hd]) = 
+                //        AngleBetweenUndirectedVectors(inst1.normal, inst2.normal) / 10.0 * c.data.length;
+                //}
+            }, varNum, consNum);
+
+
+            Eigen::VectorXd X = Eigen::Map<const Eigen::VectorXd>(Xdata.data(), Xdata.size());
+            Eigen::LevenbergMarquardt<decltype(costFunctor)> lm(costFunctor);
+            lm.parameters.maxfev = 5000;
+            //auto status = lm.minimize(X);
+            Eigen::LevenbergMarquardtSpace::Status status = lm.minimizeInit(X);
+            assert(status != Eigen::LevenbergMarquardtSpace::ImproperInputParameters);
+            do {
+                status = lm.minimizeOneStep(X);                
+                std::cout << "iter: " << lm.iter << "\t\t lm.fnorm = " << lm.fnorm << std::endl;                
+                if (callback){
+                    InstallVariables(mg, controls, uh2varStartPosition, X, vars);
+                    if (!callback(vars))
+                        break;
+                }
+            } while (status == Eigen::LevenbergMarquardtSpace::Running);
+
+
+            // install X
+            X.normalize();
+            InstallVariables(mg, controls, uh2varStartPosition, X, vars);
+
+        }
+
 
 
         double MedianCenterDepth(const RLGraph & mg, const RLGraphControls & controls,
@@ -3575,346 +3675,346 @@ namespace panoramix {
 
 
 
-        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
-            const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
-            const std::vector<PerspectiveCamera> & gcCameras,
-            int shrinkRegionOrientationIteration, bool considerGCVerticalConstraint){
+        //void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
+        //    const std::vector<GeometricContextEstimator::Feature> & perspectiveGCs,
+        //    const std::vector<PerspectiveCamera> & gcCameras,
+        //    int shrinkRegionOrientationIteration, bool considerGCVerticalConstraint){
 
-            auto orientationVotes = mg.createComponentTable<RegionData, std::unordered_map<OrientationHint, double>>(
-                std::unordered_map<OrientationHint, double>((size_t)OrientationHint::Count));
+        //    auto orientationVotes = mg.createComponentTable<RegionData, std::unordered_map<OrientationHint, double>>(
+        //        std::unordered_map<OrientationHint, double>((size_t)OrientationHint::Count));
 
-            assert(perspectiveGCs.size() == gcCameras.size());
+        //    assert(perspectiveGCs.size() == gcCameras.size());
 
-            // region views
-            auto regionMaskViews = mg.createComponentTable<RegionData, View<PartialPanoramicCamera, Imageub>>();
-            for (auto & r : mg.components<RegionData>()){
-                auto h = r.topo.hd;
-                auto & contours = r.data.normalizedContours;
-                double radiusAngle = 0.0;
-                for (auto & cs : r.data.normalizedContours){
-                    for (auto & c : cs){
-                        double angle = AngleBetweenDirections(r.data.normalizedCenter, c);
-                        if (angle > radiusAngle){
-                            radiusAngle = angle;
-                        }
-                    }
-                }
-                float ppcFocal = 100.0f;
-                int ppcSize = 2 * radiusAngle * ppcFocal;
-                Vec3 x;
-                std::tie(x, std::ignore) = ProposeXYDirectionsFromZDirection(r.data.normalizedCenter);
-                PartialPanoramicCamera ppc(ppcSize, ppcSize, ppcFocal, Point3(0, 0, 0), r.data.normalizedCenter, x);
-                Imageub mask = Imageub::zeros(ppc.screenSize());
+        //    // region views
+        //    auto regionMaskViews = mg.createComponentTable<RegionData, View<PartialPanoramicCamera, Imageub>>();
+        //    for (auto & r : mg.components<RegionData>()){
+        //        auto h = r.topo.hd;
+        //        auto & contours = r.data.normalizedContours;
+        //        double radiusAngle = 0.0;
+        //        for (auto & cs : r.data.normalizedContours){
+        //            for (auto & c : cs){
+        //                double angle = AngleBetweenDirections(r.data.normalizedCenter, c);
+        //                if (angle > radiusAngle){
+        //                    radiusAngle = angle;
+        //                }
+        //            }
+        //        }
+        //        float ppcFocal = 100.0f;
+        //        int ppcSize = 2 * radiusAngle * ppcFocal;
+        //        Vec3 x;
+        //        std::tie(x, std::ignore) = ProposeXYDirectionsFromZDirection(r.data.normalizedCenter);
+        //        PartialPanoramicCamera ppc(ppcSize, ppcSize, ppcFocal, Point3(0, 0, 0), r.data.normalizedCenter, x);
+        //        Imageub mask = Imageub::zeros(ppc.screenSize());
 
-                // project contours to ppc
-                std::vector<std::vector<Point2i>> contourProjs(contours.size());
-                for (int k = 0; k < contours.size(); k++){
-                    auto & contourProj = contourProjs[k];
-                    contourProj.reserve(contours[k].size());
-                    for (auto & d : contours[k]){
-                        contourProj.push_back(vec_cast<int>(ppc.screenProjection(d)));
-                    }
-                }
-                cv::fillPoly(mask, contourProjs, (uint8_t)1);
-                regionMaskViews[h].camera = ppc;
-                regionMaskViews[h].image = mask;
-            }
+        //        // project contours to ppc
+        //        std::vector<std::vector<Point2i>> contourProjs(contours.size());
+        //        for (int k = 0; k < contours.size(); k++){
+        //            auto & contourProj = contourProjs[k];
+        //            contourProj.reserve(contours[k].size());
+        //            for (auto & d : contours[k]){
+        //                contourProj.push_back(vec_cast<int>(ppc.screenProjection(d)));
+        //            }
+        //        }
+        //        cv::fillPoly(mask, contourProjs, (uint8_t)1);
+        //        regionMaskViews[h].camera = ppc;
+        //        regionMaskViews[h].image = mask;
+        //    }
 
-            auto regionAreas = mg.createComponentTable<RegionData, double>(0.0);
-            for (auto & r : mg.components<RegionData>()){
-                auto h = r.topo.hd;
-                auto & ppMask = regionMaskViews[h];
-                double area = cv::sum(ppMask.image).val[0];
-                regionAreas[h] = area;
-                for (int i = 0; i < perspectiveGCs.size(); i++){
-                    auto sampler = MakeCameraSampler(ppMask.camera, gcCameras[i]);
-                    auto occupation = sampler(Imageub::ones(gcCameras[i].screenSize()), cv::BORDER_CONSTANT, 0.0);
-                    double areaOccupied = cv::sum(ppMask.image & occupation).val[0];
-                    double ratio = areaOccupied / area;
-                    assert(ratio <= 1.01);
-                    GeometricContextLabel maxLabel = GeometricContextLabel::None;
-                    double maxScore = 0.0;
-                    for (auto & gcc : perspectiveGCs[i]){
-                        auto label = gcc.first;
-                        Imaged ppGC = sampler(gcc.second);
-                        double score = cv::mean(ppGC, ppMask.image).val[0];
-                        if (score > maxScore){
-                            maxScore = score;
-                            maxLabel = label;
-                        }
-                    }
-                    if (maxLabel != GeometricContextLabel::None){
-                        auto & v = orientationVotes[r.topo.hd][ToOrientationHint(maxLabel, considerGCVerticalConstraint)];
-                        v = std::max(v, ratio);
-                    }
-                }
-            }
+        //    auto regionAreas = mg.createComponentTable<RegionData, double>(0.0);
+        //    for (auto & r : mg.components<RegionData>()){
+        //        auto h = r.topo.hd;
+        //        auto & ppMask = regionMaskViews[h];
+        //        double area = cv::sum(ppMask.image).val[0];
+        //        regionAreas[h] = area;
+        //        for (int i = 0; i < perspectiveGCs.size(); i++){
+        //            auto sampler = MakeCameraSampler(ppMask.camera, gcCameras[i]);
+        //            auto occupation = sampler(Imageub::ones(gcCameras[i].screenSize()), cv::BORDER_CONSTANT, 0.0);
+        //            double areaOccupied = cv::sum(ppMask.image & occupation).val[0];
+        //            double ratio = areaOccupied / area;
+        //            assert(ratio <= 1.01);
+        //            GeometricContextLabel maxLabel = GeometricContextLabel::None;
+        //            double maxScore = 0.0;
+        //            for (auto & gcc : perspectiveGCs[i]){
+        //                auto label = gcc.first;
+        //                Imaged ppGC = sampler(gcc.second);
+        //                double score = cv::mean(ppGC, ppMask.image).val[0];
+        //                if (score > maxScore){
+        //                    maxScore = score;
+        //                    maxLabel = label;
+        //                }
+        //            }
+        //            if (maxLabel != GeometricContextLabel::None){
+        //                auto & v = orientationVotes[r.topo.hd][ToOrientationHint(maxLabel, considerGCVerticalConstraint)];
+        //                v = std::max(v, ratio);
+        //            }
+        //        }
+        //    }
 
-            // optimize
-            GCoptimizationGeneralGraph graph(mg.internalComponents<RegionData>().size(), (int)OrientationHint::Count);
+        //    // optimize
+        //    GCoptimizationGeneralGraph graph(mg.internalComponents<RegionData>().size(), (int)OrientationHint::Count);
 
-            double maxBoundaryLength = 0;
-            for (auto & b : mg.constraints<RegionBoundaryData>()){
-                maxBoundaryLength = std::max(maxBoundaryLength, b.data.length);
-            }
-            for (auto & b : mg.constraints<RegionBoundaryData>()){
-                graph.setNeighbors(b.topo.component<0>().id, b.topo.component<1>().id,
-                    100 * b.data.length / maxBoundaryLength);
-            }
-            for (auto & r : mg.components<RegionData>()){
-                auto & orientationVote = orientationVotes[r.topo.hd];
-                // normalize votes
-                double votesSum = 0.0;
-                for (auto & v : orientationVote){
-                    votesSum += v.second;
-                }
-                assert(votesSum >= 0.0);
-                if (votesSum > 0.0){
-                    for (auto & v : orientationVote){
-                        assert(v.second >= 0.0);
-                        v.second /= votesSum;
-                    }
-                }
-                for (int label = 0; label < (int)OrientationHint::Count; label++){
-                    double vote = Contains(orientationVote, (OrientationHint)label) ?
-                        orientationVote.at((OrientationHint)label) : 0.0;
-                    graph.setDataCost(r.topo.hd.id, label,
-                        votesSum == 0.0 ? 0 : (10000 * (1.0 - vote)));
-                }
-            }
-            for (int label1 = 0; label1 < (int)OrientationHint::Count; label1++){
-                for (int label2 = 0; label2 < (int)OrientationHint::Count; label2++){
-                    if (label1 == label2){
-                        graph.setSmoothCost(label1, label2, 0);
-                    }
-                    else{
-                        graph.setSmoothCost(label1, label2, 1);
-                    }
-                }
-            }
+        //    double maxBoundaryLength = 0;
+        //    for (auto & b : mg.constraints<RegionBoundaryData>()){
+        //        maxBoundaryLength = std::max(maxBoundaryLength, b.data.length);
+        //    }
+        //    for (auto & b : mg.constraints<RegionBoundaryData>()){
+        //        graph.setNeighbors(b.topo.component<0>().id, b.topo.component<1>().id,
+        //            100 * b.data.length / maxBoundaryLength);
+        //    }
+        //    for (auto & r : mg.components<RegionData>()){
+        //        auto & orientationVote = orientationVotes[r.topo.hd];
+        //        // normalize votes
+        //        double votesSum = 0.0;
+        //        for (auto & v : orientationVote){
+        //            votesSum += v.second;
+        //        }
+        //        assert(votesSum >= 0.0);
+        //        if (votesSum > 0.0){
+        //            for (auto & v : orientationVote){
+        //                assert(v.second >= 0.0);
+        //                v.second /= votesSum;
+        //            }
+        //        }
+        //        for (int label = 0; label < (int)OrientationHint::Count; label++){
+        //            double vote = Contains(orientationVote, (OrientationHint)label) ?
+        //                orientationVote.at((OrientationHint)label) : 0.0;
+        //            graph.setDataCost(r.topo.hd.id, label,
+        //                votesSum == 0.0 ? 0 : (10000 * (1.0 - vote)));
+        //        }
+        //    }
+        //    for (int label1 = 0; label1 < (int)OrientationHint::Count; label1++){
+        //        for (int label2 = 0; label2 < (int)OrientationHint::Count; label2++){
+        //            if (label1 == label2){
+        //                graph.setSmoothCost(label1, label2, 0);
+        //            }
+        //            else{
+        //                graph.setSmoothCost(label1, label2, 1);
+        //            }
+        //        }
+        //    }
 
-            graph.expansion();
-            graph.swap();
+        //    graph.expansion();
+        //    graph.swap();
 
-            // get the most vertical vp id
-            int vVPId = -1;
-            double angleToVert = std::numeric_limits<double>::max();
-            for (int i = 0; i < controls.vanishingPoints.size(); i++){
-                double a = AngleBetweenUndirectedVectors(controls.vanishingPoints[i], Vec3(0, 0, 1));
-                if (a < angleToVert){
-                    vVPId = i;
-                    angleToVert = a;
-                }
-            }
-            assert(vVPId != -1);
+        //    // get the most vertical vp id
+        //    int vVPId = -1;
+        //    double angleToVert = std::numeric_limits<double>::max();
+        //    for (int i = 0; i < controls.vanishingPoints.size(); i++){
+        //        double a = AngleBetweenUndirectedVectors(controls.vanishingPoints[i], Vec3(0, 0, 1));
+        //        if (a < angleToVert){
+        //            vVPId = i;
+        //            angleToVert = a;
+        //        }
+        //    }
+        //    assert(vVPId != -1);
 
-            // disorient outsided oriented gc labels
-            auto regionOrientations = mg.createComponentTable<RegionData, OrientationHint>(OrientationHint::Void);
-            for (auto & r : mg.components<RegionData>()){
-                regionOrientations[r.topo.hd] = (OrientationHint)(graph.whatLabel(r.topo.hd.id));
-            }
+        //    // disorient outsided oriented gc labels
+        //    auto regionOrientations = mg.createComponentTable<RegionData, OrientationHint>(OrientationHint::Void);
+        //    for (auto & r : mg.components<RegionData>()){
+        //        regionOrientations[r.topo.hd] = (OrientationHint)(graph.whatLabel(r.topo.hd.id));
+        //    }
 
-            for (int i = 0; i < shrinkRegionOrientationIteration; i++){
-                auto shrinked = regionOrientations;
-                for (auto & b : mg.constraints<RegionBoundaryData>()){
-                    auto l1 = regionOrientations[b.topo.component<0>()];
-                    auto l2 = regionOrientations[b.topo.component<1>()];
-                    if (l1 == OrientationHint::Horizontal && l2 != OrientationHint::Horizontal){
-                        shrinked[b.topo.component<0>()] = OrientationHint::OtherPlanar;
-                    }
-                    else if (l1 != OrientationHint::Horizontal && l2 == OrientationHint::Horizontal){
-                        shrinked[b.topo.component<1>()] = OrientationHint::OtherPlanar;
-                    }
-                    if (l1 == OrientationHint::Vertical && l2 != OrientationHint::Vertical){
-                        shrinked[b.topo.component<0>()] = OrientationHint::OtherPlanar;
-                    }
-                    else if (l1 != OrientationHint::Vertical && l2 == OrientationHint::Vertical){
-                        shrinked[b.topo.component<1>()] = OrientationHint::OtherPlanar;
-                    }
-                }
-                regionOrientations = std::move(shrinked);
-            }
+        //    for (int i = 0; i < shrinkRegionOrientationIteration; i++){
+        //        auto shrinked = regionOrientations;
+        //        for (auto & b : mg.constraints<RegionBoundaryData>()){
+        //            auto l1 = regionOrientations[b.topo.component<0>()];
+        //            auto l2 = regionOrientations[b.topo.component<1>()];
+        //            if (l1 == OrientationHint::Horizontal && l2 != OrientationHint::Horizontal){
+        //                shrinked[b.topo.component<0>()] = OrientationHint::OtherPlanar;
+        //            }
+        //            else if (l1 != OrientationHint::Horizontal && l2 == OrientationHint::Horizontal){
+        //                shrinked[b.topo.component<1>()] = OrientationHint::OtherPlanar;
+        //            }
+        //            if (l1 == OrientationHint::Vertical && l2 != OrientationHint::Vertical){
+        //                shrinked[b.topo.component<0>()] = OrientationHint::OtherPlanar;
+        //            }
+        //            else if (l1 != OrientationHint::Vertical && l2 == OrientationHint::Vertical){
+        //                shrinked[b.topo.component<1>()] = OrientationHint::OtherPlanar;
+        //            }
+        //        }
+        //        regionOrientations = std::move(shrinked);
+        //    }
 
-            // install gc labels
-            for (auto & r : mg.components<RegionData>()){
-                OrientationHint oh = regionOrientations[r.topo.hd];
-                switch (oh) {
-                case OrientationHint::Void:
-                    /*controls[r.topo.hd].used = false;
-                    controls[r.topo.hd].orientationClaz = -1;
-                    controls[r.topo.hd].orientationNotClaz = -1;*/
-                    MakeRegionPlaneUsable(r.topo.hd, false, controls);
-                    break;
-                case OrientationHint::Horizontal:
-                    /*controls[r.topo.hd].used = true;
-                    controls[r.topo.hd].orientationClaz = vVPId;
-                    controls[r.topo.hd].orientationNotClaz = -1;*/
-                    MakeRegionPlaneToward(r.topo.hd, vVPId, controls);
-                    break;
-                case OrientationHint::Vertical:
-                    //controls[r.topo.hd].used = true;
-                    //controls[r.topo.hd].orientationClaz = -1;
-                    //controls[r.topo.hd].orientationNotClaz = vVPId;
-                    MakeRegionPlaneAlsoAlong(r.topo.hd, vVPId, controls);
-                    break;
-                case OrientationHint::OtherPlanar:
-                    /*controls[r.topo.hd].used = true;
-                    controls[r.topo.hd].orientationClaz = -1;
-                    controls[r.topo.hd].orientationNotClaz = -1;*/
-                    //MakeRegionPlaneUsable(r.topo.hd, true, controls);
-                    break;
-                case OrientationHint::NonPlanar:
-                    /*controls[r.topo.hd].used = false;
-                    controls[r.topo.hd].orientationClaz = -1;
-                    controls[r.topo.hd].orientationNotClaz = -1;*/
-                    MakeRegionPlaneUsable(r.topo.hd, false, controls);
-                    break;
-                default:
-                    assert(0);
-                    break;
-                }
-            }
+        //    // install gc labels
+        //    for (auto & r : mg.components<RegionData>()){
+        //        OrientationHint oh = regionOrientations[r.topo.hd];
+        //        switch (oh) {
+        //        case OrientationHint::Void:
+        //            /*controls[r.topo.hd].used = false;
+        //            controls[r.topo.hd].orientationClaz = -1;
+        //            controls[r.topo.hd].orientationNotClaz = -1;*/
+        //            MakeRegionPlaneUsable(r.topo.hd, false, controls);
+        //            break;
+        //        case OrientationHint::Horizontal:
+        //            /*controls[r.topo.hd].used = true;
+        //            controls[r.topo.hd].orientationClaz = vVPId;
+        //            controls[r.topo.hd].orientationNotClaz = -1;*/
+        //            MakeRegionPlaneToward(r.topo.hd, vVPId, controls);
+        //            break;
+        //        case OrientationHint::Vertical:
+        //            //controls[r.topo.hd].used = true;
+        //            //controls[r.topo.hd].orientationClaz = -1;
+        //            //controls[r.topo.hd].orientationNotClaz = vVPId;
+        //            MakeRegionPlaneAlsoAlong(r.topo.hd, vVPId, controls);
+        //            break;
+        //        case OrientationHint::OtherPlanar:
+        //            /*controls[r.topo.hd].used = true;
+        //            controls[r.topo.hd].orientationClaz = -1;
+        //            controls[r.topo.hd].orientationNotClaz = -1;*/
+        //            //MakeRegionPlaneUsable(r.topo.hd, true, controls);
+        //            break;
+        //        case OrientationHint::NonPlanar:
+        //            /*controls[r.topo.hd].used = false;
+        //            controls[r.topo.hd].orientationClaz = -1;
+        //            controls[r.topo.hd].orientationNotClaz = -1;*/
+        //            MakeRegionPlaneUsable(r.topo.hd, false, controls);
+        //            break;
+        //        default:
+        //            assert(0);
+        //            break;
+        //        }
+        //    }
 
-            /*
-            // detect big aligned rectangular regions and orient them
-            double regionAreaSum = std::accumulate(regionAreas.begin(), regionAreas.end(), 0.0);
-            assert(regionAreaSum > 0);
+        //    /*
+        //    // detect big aligned rectangular regions and orient them
+        //    double regionAreaSum = std::accumulate(regionAreas.begin(), regionAreas.end(), 0.0);
+        //    assert(regionAreaSum > 0);
 
-            static const double dotThreshold = 0.001;
-            static const double spanAngleThreshold = DegreesToRadians(10);
-            static const double wholeDotThreshold = 0.01;
-            static const double wholeSpanAngleThreshold = DegreesToRadians(10);
+        //    static const double dotThreshold = 0.001;
+        //    static const double spanAngleThreshold = DegreesToRadians(10);
+        //    static const double wholeDotThreshold = 0.01;
+        //    static const double wholeSpanAngleThreshold = DegreesToRadians(10);
 
-            HandledTable<RegionBoundaryHandle, std::vector<double>> boundaryMaxSpanAnglesForVPs(mg.internalConstraints<RegionBoundaryData>().size());
-            for (auto & b : mg.constraints<RegionBoundaryData>()){
-            auto & edges = b.data.normalizedEdges;
-            std::vector<double> maxSpanAngleForVPs(props.vanishingPoints.size(), 0.0);
-            if (b.topo.hd.id == 849){
-            std::cout << std::endl;
-            }
+        //    HandledTable<RegionBoundaryHandle, std::vector<double>> boundaryMaxSpanAnglesForVPs(mg.internalConstraints<RegionBoundaryData>().size());
+        //    for (auto & b : mg.constraints<RegionBoundaryData>()){
+        //    auto & edges = b.data.normalizedEdges;
+        //    std::vector<double> maxSpanAngleForVPs(props.vanishingPoints.size(), 0.0);
+        //    if (b.topo.hd.id == 849){
+        //    std::cout << std::endl;
+        //    }
 
-            for (auto & edge : edges){
-            std::vector<std::vector<bool>> edgeVPFlags(props.vanishingPoints.size(),
-            std::vector<bool>(edge.size() - 1, false));
-            for (int i = 0; i < edge.size() - 1; i++){
-            Vec3 n = normalize(edge[i].cross(edge[i + 1]));
-            for (int k = 0; k < props.vanishingPoints.size(); k++){
-            auto vp = normalize(props.vanishingPoints[k]);
-            double dotv = abs(vp.dot(n));
-            if (dotv <= dotThreshold){
-            edgeVPFlags[k][i] = true;
-            }
-            }
-            }
-            // detect aligned longest line spanAngles from edge
-            for (int k = 0; k < props.vanishingPoints.size(); k++){
-            auto vp = normalize(props.vanishingPoints[k]);
-            auto & edgeFlags = edgeVPFlags[k];
-            int lastHead = -1, lastTail = -1;
-            bool inChain = false;
+        //    for (auto & edge : edges){
+        //    std::vector<std::vector<bool>> edgeVPFlags(props.vanishingPoints.size(),
+        //    std::vector<bool>(edge.size() - 1, false));
+        //    for (int i = 0; i < edge.size() - 1; i++){
+        //    Vec3 n = normalize(edge[i].cross(edge[i + 1]));
+        //    for (int k = 0; k < props.vanishingPoints.size(); k++){
+        //    auto vp = normalize(props.vanishingPoints[k]);
+        //    double dotv = abs(vp.dot(n));
+        //    if (dotv <= dotThreshold){
+        //    edgeVPFlags[k][i] = true;
+        //    }
+        //    }
+        //    }
+        //    // detect aligned longest line spanAngles from edge
+        //    for (int k = 0; k < props.vanishingPoints.size(); k++){
+        //    auto vp = normalize(props.vanishingPoints[k]);
+        //    auto & edgeFlags = edgeVPFlags[k];
+        //    int lastHead = -1, lastTail = -1;
+        //    bool inChain = false;
 
-            double & maxSpanAngle = maxSpanAngleForVPs[k];
-            for (int j = 0; j <= edgeFlags.size(); j++){
-            if (!inChain && j < edgeFlags.size() && edgeFlags[j]){
-            lastHead = j;
-            inChain = true;
-            }
-            else if (inChain && (j == edgeFlags.size() || !edgeFlags[j])){
-            lastTail = j;
-            inChain = false;
-            // examine current chain
-            assert(lastHead != -1);
-            // compute full span angle
-            double spanAngle = 0.0;
-            for (int i = lastHead; i < lastTail; i++){
-            spanAngle += AngleBetweenDirections(edge[i], edge[i + 1]);
-            }
-            if (spanAngle < spanAngleThreshold){
-            continue;
-            }
-            // fit line
-            const Vec3 & midCorner = edge[(lastHead + lastTail) / 2];
-            Vec3 commonNormal = normalize(midCorner.cross(vp));
-            std::vector<double> dotsToCommonNormal(lastTail - lastHead + 1, 0.0);
-            for (int i = lastHead; i <= lastTail; i++){
-            dotsToCommonNormal[i - lastHead] = abs(edge[i].dot(commonNormal));
-            }
-            if (*std::max_element(dotsToCommonNormal.begin(), dotsToCommonNormal.end()) <= wholeDotThreshold){
-            // acceptable!
-            if (spanAngle > maxSpanAngle){
-            maxSpanAngle = spanAngle;
-            }
-            }
-            }
-            }
-            }
-            }
-            if ((b.topo.component<0>().id == 355 || b.topo.component<1>().id == 355) && std::accumulate(maxSpanAngleForVPs.begin(), maxSpanAngleForVPs.end(), 0.0) > 0){
-            std::cout << std::endl;
-            }
-            boundaryMaxSpanAnglesForVPs[b.topo.hd] = std::move(maxSpanAngleForVPs);
-            }
-            for (auto & r : mg.components<RegionData>()){
-            if (!props[r.topo.hd].used)
-            continue;
-            if (props[r.topo.hd].orientationClaz != -1 || props[r.topo.hd].orientationNotClaz != -1)
-            continue;
+        //    double & maxSpanAngle = maxSpanAngleForVPs[k];
+        //    for (int j = 0; j <= edgeFlags.size(); j++){
+        //    if (!inChain && j < edgeFlags.size() && edgeFlags[j]){
+        //    lastHead = j;
+        //    inChain = true;
+        //    }
+        //    else if (inChain && (j == edgeFlags.size() || !edgeFlags[j])){
+        //    lastTail = j;
+        //    inChain = false;
+        //    // examine current chain
+        //    assert(lastHead != -1);
+        //    // compute full span angle
+        //    double spanAngle = 0.0;
+        //    for (int i = lastHead; i < lastTail; i++){
+        //    spanAngle += AngleBetweenDirections(edge[i], edge[i + 1]);
+        //    }
+        //    if (spanAngle < spanAngleThreshold){
+        //    continue;
+        //    }
+        //    // fit line
+        //    const Vec3 & midCorner = edge[(lastHead + lastTail) / 2];
+        //    Vec3 commonNormal = normalize(midCorner.cross(vp));
+        //    std::vector<double> dotsToCommonNormal(lastTail - lastHead + 1, 0.0);
+        //    for (int i = lastHead; i <= lastTail; i++){
+        //    dotsToCommonNormal[i - lastHead] = abs(edge[i].dot(commonNormal));
+        //    }
+        //    if (*std::max_element(dotsToCommonNormal.begin(), dotsToCommonNormal.end()) <= wholeDotThreshold){
+        //    // acceptable!
+        //    if (spanAngle > maxSpanAngle){
+        //    maxSpanAngle = spanAngle;
+        //    }
+        //    }
+        //    }
+        //    }
+        //    }
+        //    }
+        //    if ((b.topo.component<0>().id == 355 || b.topo.component<1>().id == 355) && std::accumulate(maxSpanAngleForVPs.begin(), maxSpanAngleForVPs.end(), 0.0) > 0){
+        //    std::cout << std::endl;
+        //    }
+        //    boundaryMaxSpanAnglesForVPs[b.topo.hd] = std::move(maxSpanAngleForVPs);
+        //    }
+        //    for (auto & r : mg.components<RegionData>()){
+        //    if (!props[r.topo.hd].used)
+        //    continue;
+        //    if (props[r.topo.hd].orientationClaz != -1 || props[r.topo.hd].orientationNotClaz != -1)
+        //    continue;
 
-            if (r.topo.hd.id == 355){
-            std::cout << std::endl;
-            }
+        //    if (r.topo.hd.id == 355){
+        //    std::cout << std::endl;
+        //    }
 
-            double area = regionAreas[r.topo.hd];
-            if (area / regionAreaSum < 0.005){
-            continue;
-            }
-            std::vector<double> spanAngleSumsForVPs(props.vanishingPoints.size(), 0.0);
-            for (auto & h : r.topo.constraints<RegionBoundaryData>()){
-            for (int i = 0; i < props.vanishingPoints.size(); i++){
-            spanAngleSumsForVPs[i] += boundaryMaxSpanAnglesForVPs[h][i];
-            }
-            }
-            auto maxIter = std::max_element(spanAngleSumsForVPs.begin(), spanAngleSumsForVPs.end());
-            int firstMaxVPId = std::distance(spanAngleSumsForVPs.begin(), maxIter);
-            double firstMaxSpanAngle = *maxIter;
-            *maxIter = -1.0;
-            maxIter = std::max_element(spanAngleSumsForVPs.begin(), spanAngleSumsForVPs.end());
-            int secondMaxVPId = std::distance(spanAngleSumsForVPs.begin(), maxIter);
-            double secondMaxSpanAngle = *maxIter;
-            if (secondMaxSpanAngle >= wholeSpanAngleThreshold){
-            assert(firstMaxVPId != secondMaxVPId);
-            Vec3 normal = props.vanishingPoints[firstMaxVPId].cross(props.vanishingPoints[secondMaxVPId]);
-            double minAngle = 0.1;
-            int bestMatchedVPId = -1;
-            for (int i = 0; i < props.vanishingPoints.size(); i++){
-            double angle = AngleBetweenUndirectedVectors(normal, props.vanishingPoints[i]);
-            if (angle < minAngle){
-            minAngle = angle;
-            bestMatchedVPId = i;
-            }
-            }
-            if (bestMatchedVPId != -1){
-            std::cout << "vpid:::: " << bestMatchedVPId << std::endl;
-            props[r.topo.hd].orientationClaz = bestMatchedVPId;
-            props[r.topo.hd].orientationNotClaz = -1;
-            }
-            }
-            else if (firstMaxSpanAngle >= wholeSpanAngleThreshold){
-            std::cout << "vpid-along:::: " << firstMaxVPId << std::endl;
-            props[r.topo.hd].orientationClaz = -1;
-            props[r.topo.hd].orientationNotClaz = firstMaxVPId;
-            }
-            }*/
+        //    double area = regionAreas[r.topo.hd];
+        //    if (area / regionAreaSum < 0.005){
+        //    continue;
+        //    }
+        //    std::vector<double> spanAngleSumsForVPs(props.vanishingPoints.size(), 0.0);
+        //    for (auto & h : r.topo.constraints<RegionBoundaryData>()){
+        //    for (int i = 0; i < props.vanishingPoints.size(); i++){
+        //    spanAngleSumsForVPs[i] += boundaryMaxSpanAnglesForVPs[h][i];
+        //    }
+        //    }
+        //    auto maxIter = std::max_element(spanAngleSumsForVPs.begin(), spanAngleSumsForVPs.end());
+        //    int firstMaxVPId = std::distance(spanAngleSumsForVPs.begin(), maxIter);
+        //    double firstMaxSpanAngle = *maxIter;
+        //    *maxIter = -1.0;
+        //    maxIter = std::max_element(spanAngleSumsForVPs.begin(), spanAngleSumsForVPs.end());
+        //    int secondMaxVPId = std::distance(spanAngleSumsForVPs.begin(), maxIter);
+        //    double secondMaxSpanAngle = *maxIter;
+        //    if (secondMaxSpanAngle >= wholeSpanAngleThreshold){
+        //    assert(firstMaxVPId != secondMaxVPId);
+        //    Vec3 normal = props.vanishingPoints[firstMaxVPId].cross(props.vanishingPoints[secondMaxVPId]);
+        //    double minAngle = 0.1;
+        //    int bestMatchedVPId = -1;
+        //    for (int i = 0; i < props.vanishingPoints.size(); i++){
+        //    double angle = AngleBetweenUndirectedVectors(normal, props.vanishingPoints[i]);
+        //    if (angle < minAngle){
+        //    minAngle = angle;
+        //    bestMatchedVPId = i;
+        //    }
+        //    }
+        //    if (bestMatchedVPId != -1){
+        //    std::cout << "vpid:::: " << bestMatchedVPId << std::endl;
+        //    props[r.topo.hd].orientationClaz = bestMatchedVPId;
+        //    props[r.topo.hd].orientationNotClaz = -1;
+        //    }
+        //    }
+        //    else if (firstMaxSpanAngle >= wholeSpanAngleThreshold){
+        //    std::cout << "vpid-along:::: " << firstMaxVPId << std::endl;
+        //    props[r.topo.hd].orientationClaz = -1;
+        //    props[r.topo.hd].orientationNotClaz = firstMaxVPId;
+        //    }
+        //    }*/
 
-            //for (auto & l : mg.internalComponents<LineData>()){
-            //    props[l.topo.hd].used = true;
-            //    props[l.topo.hd].orientationClaz = l.data.initialClaz;
-            //    props[l.topo.hd].orientationNotClaz = -1;
-            //}
-            
-            controls.disableAllInvalidConstraints(mg);
+        //    //for (auto & l : mg.internalComponents<LineData>()){
+        //    //    props[l.topo.hd].used = true;
+        //    //    props[l.topo.hd].orientationClaz = l.data.initialClaz;
+        //    //    props[l.topo.hd].orientationNotClaz = -1;
+        //    //}
+        //    
+        //    controls.disableAllInvalidConstraints(mg);
 
-        }
+        //}
 
 
 

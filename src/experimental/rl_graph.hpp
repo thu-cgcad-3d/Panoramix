@@ -129,10 +129,17 @@ namespace panoramix {
         // add more regions and related constraints to rl graph
         std::vector<RegionHandle> AppendRegions(RLGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine,
-            int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3);
+            int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3, bool noBoundaryUnderLines = false);
         std::vector<RegionHandle> AppendRegions(RLGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
-            int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3);
+            int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3, bool noBoundaryUnderLines = false);
+
+
+       /* std::vector<RegionHandle> AppendRegionsWithFarConnections(RLGraph & mg, 
+            const Imagei & segmentedRegions, const PerspectiveCamera & cam,
+            double maxConnectionLength, 
+            const std::function<double(int rid1, int rid2)> & mayConnect)*/
+
 
 
         // get a perfect mask view for a region
@@ -283,9 +290,6 @@ namespace panoramix {
             }
         }
 
-        // reset variables
-        RLGraphVars MakeVariables(const RLGraph & mg, const RLGraphControls & controls);
-
 
 
         // component instances and related tools
@@ -298,9 +302,11 @@ namespace panoramix {
         template <class ComponentT>
         using InstanceType = decltype(Instance(std::declval<RLGraph>(), std::declval<RLGraphControls>(),
             std::declval<RLGraphVars>(), std::declval<ComponentHandle<ComponentT>>()));
+        template <class ComponentT>
+        using InstanceTable = HandledTable<ComponentHandle<ComponentT>, InstanceType<ComponentT>>;
 
         template <class ComponentT>
-        inline HandledTable<ComponentHandle<ComponentT>, InstanceType<ComponentT>> Instances(
+        inline InstanceTable<ComponentT> Instances(
             const RLGraph & mg, const RLGraphControls & controls,
             const RLGraphVars & vars) {
             auto instances = mg.createComponentTable<ComponentT, InstanceType<ComponentT>>();
@@ -334,12 +340,26 @@ namespace panoramix {
 
 
         // solve equations
+        int NumberOfAnchors(const RLGraphControls & controls);
         bool AttachAnchorToCenterOfLargestLineIfNoAnchorExists(const RLGraph & mg,
             RLGraphControls & controls,
             double depth = 1.0, double weight = 1.0, bool orientedOnly = true);
+        bool AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg,
+            RLGraphControls & controls,
+            double depth = 1.0, double weight = 1.0, bool orientedOnly = true);
+        void ClearAllComponentAnchors(RLGraphControls & controls);
 
+        RLGraphVars MakeVariables(const RLGraph & mg, const RLGraphControls & controls, bool randomized = false);
         RLGraphVars SolveVariables(const RLGraph & mg, 
-            const RLGraphControls & controls, bool useWeights = false);
+            const RLGraphControls & controls, 
+            bool useWeights = false, bool useAllAnchors = false);
+        void OptimizeVariables(const RLGraph & mg,
+            const RLGraphControls & controls, RLGraphVars & vars, 
+            bool useWeights = true, bool useAllAnchors = false,
+            const std::function<bool(const RLGraphVars &)> & callback = nullptr);
+
+
+
         
         // model properties
         double MedianCenterDepth(const RLGraph & mg, const RLGraphControls & controls,

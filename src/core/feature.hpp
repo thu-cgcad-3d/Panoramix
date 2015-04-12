@@ -85,7 +85,7 @@ namespace panoramix {
             int longitudeDivideNum = 1000, int latitudeDivideNum = 500, 
             bool allowMoreThan2HorizontalVPs = false, const Vec3 & verticalSeed = Vec3(0, 0, 1));
 
-        int GetVerticalDirectionId(const std::vector<Vec3> & directions,
+        int NearestDirectionId(const std::vector<Vec3> & directions,
             const Vec3 & verticalSeed = Vec3(0, 0, 1));
 
         // compute pp and focal from 3 orthogonal vps
@@ -200,42 +200,27 @@ namespace panoramix {
             Indoor,
             Outdoor
         };
-        enum class GeometricContextLabel {
-            None = -1,
-            // for indoor scenes
-            Front, Left, Right,
-            Floor, Ceiling,
-            Furniture,
-            // for outdoor scenes
-            Ground, Sky, Vertical, NotPlanar,
-            Other
-        };
-
 
         class GeometricContextEstimator {
         public:
-            struct Params {
-                Params();
-                bool useMatlab;
-            };           
+            enum IndoorIndex : size_t {
+                II_FrontVerticalPlanarFace = 0,
+                II_SideVerticalPlanarFace = 1,
+                II_HorizontalPlanarFace = 2,
+                II_Clutter = 3,
+                II_Other = 4
+            };
 
-            using Feature = std::map<GeometricContextLabel, Imaged>;
+            enum OutdoorIndex : size_t{
+                OI_Ground = 0,
+                OI_VerticalPlanarFace = 1,
+                OI_Clutter = 2,
+                OI_Porous = 3,
+                OI_Sky = 4
+            };
 
         public:
-            inline explicit GeometricContextEstimator(const Params & params = Params()) : _params(params) {}
-            const Params & params() const { return _params; }
-            Params & params() { return _params; }
-            Feature operator() (const Image & im, SceneClass sceneClass) const;
-
-        private:
-            Params _params;
-        };
-
-
-
-        class IndoorGeometricContextEstimator {
-        public:
-            ImageOfType<Vec<double, 5>> postProcess(const ImageOfType<Vec<double, 7>> & rawgc,
+            ImageOfType<Vec<double, 5>> operator()(const ImageOfType<Vec<double, 7>> & rawgc,
                 SceneClass sceneClass = SceneClass::Indoor) const;
             ImageOfType<Vec<double, 5>> operator() (const Image & im, 
                 SceneClass sceneClass = SceneClass::Indoor) const;

@@ -5,6 +5,12 @@
 
 #include "routines.hpp"
 
+namespace panolyz {
+    namespace NormalIndoor {
+
+    }
+}
+
 
 //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room.png"; // bingo
 //defaultFileName = PROJECT_TEST_DATA_DIR_STR"/normal/room4.jpg"; // bingo

@@ -9,7 +9,7 @@
 
 namespace panolyz {
 
-    namespace YorkUrbanDB {
+    namespace YorkUrbanDB2 {
 
         using namespace panoramix;
         using namespace core;
@@ -145,10 +145,10 @@ namespace panolyz {
                         << gui::manip2d::Show();
                 }
 
-                Save(path, "pre", view, lines, vps, segmentedImage, segmentsNum);
+                //Save(path, "pre", view, lines, vps, segmentedImage, segmentsNum, gc, outdoor);
             }
             else{
-                Load(path, "pre", view, lines, vps, segmentedImage, segmentsNum);
+                //Load(path, "pre", view, lines, vps, segmentedImage, segmentsNum, gc, outdoor);
             }
 
 
@@ -196,36 +196,51 @@ namespace panolyz {
 
             if (1){
                 int vertVPId = NearestDirectionId(vps, view.camera.upward());
-                AppendLines(mg, lines, view.camera, vps);
-                rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
+                AppendLines(mg, lines, view.camera, vps, 40.0 / view.camera.focal(), 100.0 / view.camera.focal());
+                rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 3, 3);
 
                 controls = MakeControls(mg, vps);
 
                 AttachGeometricContextConstraints(mg, controls, view.camera, gc,
                     [outdoor, vertVPId](RLGraphComponentControl & c, const Vec<double, 5> & v, double s){
                     int maxlabel = std::max_element(v.val, v.val + 5) - v.val;
-                    if (s > 2){
-                        if (outdoor){
-                            if (maxlabel == 0){ // ground
-                                c.orientationClaz = vertVPId;
-                            }
-                            else if (maxlabel == 1){ // vertical
-                                c.orientationClaz = -1;
-                                c.orientationNotClaz = vertVPId;
-                            }
-                            else if (maxlabel == 2){ // clutter
-                                c.orientationClaz = -1;
-                                c.orientationNotClaz = -1;
-                            }
-                            else if (maxlabel == 3){ // poros
-                                c.used = false;
-                            }
-                            else if (maxlabel == 4){ // sky
-                                c.used = false;
-                            }
+                    if (outdoor && s > 2){
+                        switch (maxlabel){
+                        case GeometricContextEstimator::OI_Ground:
+                            c.orientationClaz = vertVPId;
+                            c.orientationNotClaz = -1;
+                            break;
+                        case GeometricContextEstimator::OI_VerticalPlanarFace:
+                            c.orientationClaz = -1;
+                            c.orientationNotClaz = vertVPId;
+                            break;
+                        case GeometricContextEstimator::OI_Clutter:
+                            c.orientationClaz = -1;
+                            c.orientationNotClaz = -1;
+                            break;
+                        case GeometricContextEstimator::OI_Porous:
+                        case GeometricContextEstimator::OI_Sky:
+                            c.used = false;
+                            break;
+                        default:
+                            break;
                         }
-                        else{
-
+                    }
+                    else if (!outdoor && s > 4){
+                        switch (maxlabel){
+                        case GeometricContextEstimator::II_FrontVerticalPlanarFace:
+                        case GeometricContextEstimator::II_SideVerticalPlanarFace:
+                            c.orientationClaz = -1;
+                            c.orientationNotClaz = vertVPId;
+                            break;
+                        case GeometricContextEstimator::II_HorizontalPlanarFace:
+                            c.orientationClaz = vertVPId;
+                            break;
+                        case GeometricContextEstimator::II_Clutter:
+                            c.orientationClaz = c.orientationNotClaz = -1;
+                            break;
+                        default:
+                            break;
                         }
                     }
                 });
@@ -235,13 +250,13 @@ namespace panolyz {
 
                 // set constraint weights
                 SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
-                    return std::max(mg.data(h).junctionWeight, 3.0f);
+                    return std::max(mg.data(h).junctionWeight * 2, 6.0f);
                 });
                 SetConstraintWeights<RegionBoundaryData>(controls, [&mg](RegionBoundaryHandle h){
-                    return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
+                    return std::max(mg.data(h).length / M_PI * 20.0, 1.0);
                 });
                 SetConstraintWeights<RegionLineConnectionData>(controls, [&mg](RegionLineConnectionHandle h){
-                    return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
+                    return std::max(mg.data(h).length / M_PI * 20.0, 1.0);
                 });
 
                 // cc decompose
@@ -311,16 +326,51 @@ namespace panolyz {
                         cv::waitKey();
                     }
 
-                    vars = SolveVariables(mg, controls, true);
-                    NormalizeVariables(mg, controls, vars);
-                    std::cout << "score = " << Score(mg, controls, vars) << std::endl;
+                    { // with inversed depth setup
+                        vars = SolveVariables(mg, controls, true, false);
+                        NormalizeVariables(mg, controls, vars);
+                        if (1){
+                            gui::Visualizer vis("inversed depth setup");
+                            Visualize(vis, view, mg, controls, vars);
+                            vis.camera(view.camera);
+                            vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
+                            vis.show(false, true);
+                        }
+                        OptimizeVariables(mg, controls, vars, true, false);
+                        NormalizeVariables(mg, controls, vars);
+                        if (1){
+                            gui::Visualizer vis("inversed depth setup -> optimized");
+                            Visualize(vis, view, mg, controls, vars);
+                            vis.camera(view.camera);
+                            vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
+                            vis.show(false, true);
+                        }
+                    }
 
-                    LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
-                    if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
-                        continue;
+                    {  // without inversed depth setup
+                        vars = MakeVariables(mg, controls);
+                        OptimizeVariables(mg, controls, vars, true, true);
+                        NormalizeVariables(mg, controls, vars);
+                        if (1){
+                            gui::Visualizer vis("randomized -> optimized");
+                            Visualize(vis, view, mg, controls, vars);
+                            vis.camera(view.camera);
+                            vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
+                            vis.show(true, true);
+                        }
+                    }
+                   
 
-                    vars = SolveVariables(mg, controls);
-                    NormalizeVariables(mg, controls, vars);
+                    /* NormalizeVariables(mg, controls, vars);
+                     std::cout << "score = " << Score(mg, controls, vars) << std::endl;
+
+                     LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
+                     if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                     continue;
+
+                     vars = SolveVariables(mg, controls, true, true);
+                     NormalizeVariables(mg, controls, vars);*/
+
                     /*
                     AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
 
@@ -330,12 +380,13 @@ namespace panolyz {
                     vars = SolveVariables(mg, controls);
                     NormalizeVariables(mg, controls, vars);*/
 
-                    gui::Visualizer vis;
-                    Visualize(vis, view, mg, controls, vars);
-                    vis.camera(view.camera);
-                    vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
-                    vis.show(true, true);
-
+                    {
+                        gui::Visualizer vis;
+                        Visualize(vis, view, mg, controls, vars);
+                        vis.camera(view.camera);
+                        vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
+                        vis.show(true, true);
+                    }
                     if (0){
                         LayeredShape3 shape;
                         auto polygons = RegionPolygons(mg, controls, vars);
@@ -386,13 +437,6 @@ namespace panolyz {
 
 
 
-        void OutputOrientationMap(const Image & image, const RLGraph & mg,
-            const RLGraphControls & controls, const RLGraphVars & vars){
-            auto planes = Instances<RegionData>(mg, controls, vars);
-
-        }
-
-
         void Run(){
 
             std::string name;
@@ -405,7 +449,7 @@ namespace panolyz {
             matlab.GetVariable("num", dnum);
             int num = dnum;
 
-            for (int i = 0; i < num; i++){
+            for (int i = 7; i < num; i++){
                 matlab << ("name = names{" + std::to_string(i + 1) + "};");
                 std::string name;
                 matlab.GetVariable("name", name);
@@ -414,6 +458,6 @@ namespace panolyz {
             }
 
         }
-
     }
+
 }

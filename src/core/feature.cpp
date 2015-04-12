@@ -2,11 +2,6 @@
 #include <unordered_map>
 #include <thread>
 
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
-#include <unsupported/Eigen/NonLinearOptimization>
-#include <unsupported/Eigen/NumericalDiff>
-
 extern "C" {
     #include <lsd.h>
 }
@@ -26,6 +21,7 @@ extern "C" {
 #include "clock.hpp"
 
 #include "../misc/matlab.hpp"
+#include "../misc/eigen.hpp"
 
 
 
@@ -708,7 +704,7 @@ namespace panoramix {
 
         }
 
-        int GetVerticalDirectionId(const std::vector<Vec3> & directions,
+        int NearestDirectionId(const std::vector<Vec3> & directions,
             const Vec3 & verticalSeed){
             int vid = -1;
             double minAngle = M_PI;
@@ -1228,52 +1224,7 @@ namespace panoramix {
 
         namespace {
 
-            // Generic functor
-            template <class InternalFunctorT, class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic>
-            struct GenericFunctor {
-                typedef T Scalar;
-                enum {
-                    InputsAtCompileTime = NX,
-                    ValuesAtCompileTime = NY
-                };
-                typedef Eigen::Matrix<Scalar, InputsAtCompileTime, 1> InputType;
-                typedef Eigen::Matrix<Scalar, ValuesAtCompileTime, 1> ValueType;
-                typedef Eigen::Matrix<Scalar, ValuesAtCompileTime, InputsAtCompileTime> JacobianType;
 
-                const int m_inputs, m_values;
-                InternalFunctorT m_fun;
-                GenericFunctor(const InternalFunctorT & fun) : m_fun(fun), m_inputs(InputsAtCompileTime), m_values(ValuesAtCompileTime) {}
-                GenericFunctor(const InternalFunctorT & fun, int inputs, int values) : m_fun(fun), m_inputs(inputs), m_values(values) {}
-
-                int inputs() const { return m_inputs; }
-                int values() const { return m_values; }
-
-                // you should define that in the subclass :
-                inline int operator() (const InputType& x, ValueType & v) const{
-                    m_fun(x, v);
-                    return 0;
-                }
-            };
-
-            template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-            GenericFunctor<InternalFunctorT, T, NX, NY> MakeGenericFunctor(const InternalFunctorT & fun){
-                return GenericFunctor<InternalFunctorT, T, NX, NY>(fun);
-            }
-
-            template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-            GenericFunctor<InternalFunctorT, T, NX, NY> MakeGenericFunctor(const InternalFunctorT & fun, int inputs, int values){
-                return GenericFunctor<InternalFunctorT, T, NX, NY>(fun, inputs, values);
-            }
-
-            template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-            Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>> MakeGenericNumericDiffFunctor(const InternalFunctorT & fun){
-                return Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>>(GenericFunctor<InternalFunctorT, T, NX, NY>(fun));
-            }
-
-            template <class T, int NX = Eigen::Dynamic, int NY = Eigen::Dynamic, class InternalFunctorT>
-            Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>> MakeGenericNumericDiffFunctor(const InternalFunctorT & fun, int inputs, int values){
-                return Eigen::NumericalDiff<GenericFunctor<InternalFunctorT, T, NX, NY>>(GenericFunctor<InternalFunctorT, T, NX, NY>(fun, inputs, values));
-            }
 
 
             // estimate vanishing points using classified lines
@@ -1319,7 +1270,7 @@ namespace panoramix {
                     v = (top / bottom).matrix().transpose();
                 };
 
-                auto functor = MakeGenericNumericDiffFunctor<double>(costFunction, 2, lineNum);
+                auto functor = misc::MakeGenericNumericDiffFunctor<double>(costFunction, 2, lineNum);
                 LevenbergMarquardt<decltype(functor)> lm(std::move(functor));
 
                 // calc initial vp
@@ -1560,7 +1511,7 @@ namespace panoramix {
                             }
                         };
 
-                        auto functor = MakeGenericNumericDiffFunctor<double>(costFunction, 6, lineMat1.cols() + lineMat2.cols() + lineMat3.cols());
+                        auto functor = misc::MakeGenericNumericDiffFunctor<double>(costFunction, 6, lineMat1.cols() + lineMat2.cols() + lineMat3.cols());
                         LevenbergMarquardt<decltype(functor)> lm(functor);
 
                     
@@ -2525,46 +2476,46 @@ namespace panoramix {
 
 
 
-        GeometricContextEstimator::Params::Params() 
-            : useMatlab(true) {
-        }
+        //GeometricContextEstimator::Params::Params() 
+        //    : useMatlab(true) {
+        //}
 
 
-        GeometricContextEstimator::Feature GeometricContextEstimator::operator() (const Image & im, SceneClass sceneClaz) const{
-            if (_params.useMatlab && Matlab::IsUsable()){
-                Matlab::PutVariable("inputIm", im);
-                Matlab::PutVariable("isOutdoor", sceneClaz == SceneClass::Outdoor);
-                Matlab matlab;
-                
-                matlab
-                    << "slabelConfMap = panoramix_wrapper_gc(inputIm, isOutdoor);"
-                    << "save temp;";
-                
-                Image slabelConfMap;
-                Matlab::GetVariable("slabelConfMap", slabelConfMap, true);
-                assert(!slabelConfMap.empty());
-                std::vector<Imaged> result;
-                cv::split(slabelConfMap, result);
-                assert(result.size() == 7);
-                return sceneClaz == SceneClass::Indoor ? std::map<GeometricContextLabel, Imaged>{
-                    { GeometricContextLabel::Floor, result[0] }, 
-                    { GeometricContextLabel::Right, result[1] },
-                    { GeometricContextLabel::Front, result[2] },
-                    { GeometricContextLabel::Left, result[3] }, 
-                    { GeometricContextLabel::NotPlanar, result[4] },
-                    { GeometricContextLabel::Furniture, result[5] }, 
-                    { GeometricContextLabel::Ceiling, result[6] }
-                } : std::map<GeometricContextLabel, Imaged>{
-                    { GeometricContextLabel::Ground, result[0] },
-                    { GeometricContextLabel::Sky, result[6] },
-                    { GeometricContextLabel::NotPlanar, result[4] },
-                    { GeometricContextLabel::Vertical, result[3] + result[2] + result[1] }
-                };
-            }
-            else{
-                NOT_IMPLEMENTED_YET();
-            }
-        }
+        //GeometricContextEstimator::Feature GeometricContextEstimator::operator() (const Image & im, SceneClass sceneClaz) const{
+        //    if (_params.useMatlab && Matlab::IsUsable()){
+        //        Matlab::PutVariable("inputIm", im);
+        //        Matlab::PutVariable("isOutdoor", sceneClaz == SceneClass::Outdoor);
+        //        Matlab matlab;
+        //        
+        //        matlab
+        //            << "slabelConfMap = panoramix_wrapper_gc(inputIm, isOutdoor);"
+        //            << "save temp;";
+        //        
+        //        Image slabelConfMap;
+        //        Matlab::GetVariable("slabelConfMap", slabelConfMap, true);
+        //        assert(!slabelConfMap.empty());
+        //        std::vector<Imaged> result;
+        //        cv::split(slabelConfMap, result);
+        //        assert(result.size() == 7);
+        //        return sceneClaz == SceneClass::Indoor ? std::map<GeometricContextLabel, Imaged>{
+        //            { GeometricContextLabel::Floor, result[0] }, 
+        //            { GeometricContextLabel::Right, result[1] },
+        //            { GeometricContextLabel::Front, result[2] },
+        //            { GeometricContextLabel::Left, result[3] }, 
+        //            { GeometricContextLabel::NotPlanar, result[4] },
+        //            { GeometricContextLabel::Furniture, result[5] }, 
+        //            { GeometricContextLabel::Ceiling, result[6] }
+        //        } : std::map<GeometricContextLabel, Imaged>{
+        //            { GeometricContextLabel::Ground, result[0] },
+        //            { GeometricContextLabel::Sky, result[6] },
+        //            { GeometricContextLabel::NotPlanar, result[4] },
+        //            { GeometricContextLabel::Vertical, result[3] + result[2] + result[1] }
+        //        };
+        //    }
+        //    else{
+        //        NOT_IMPLEMENTED_YET();
+        //    }
+        //}
 
 
 
@@ -2585,7 +2536,7 @@ namespace panoramix {
             return gc;
         }
 
-        ImageOfType<Vec<double, 5>> IndoorGeometricContextEstimator::postProcess(const ImageOfType<Vec<double, 7>> & rawgc,
+        ImageOfType<Vec<double, 5>> GeometricContextEstimator::operator()(const ImageOfType<Vec<double, 7>> & rawgc,
             SceneClass sceneClass) const{
             ImageOfType<Vec<double, 5>> result(rawgc.size(), Vec<double, 5>());
             for (auto it = result.begin(); it != result.end(); ++it){
@@ -2593,35 +2544,37 @@ namespace panoramix {
                 auto & resultv = *it;
                 if (sceneClass == SceneClass::Indoor){
                     // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
-                    resultv[0] += p[0];
-                    resultv[1] += p[1];
-                    resultv[1] += p[2];
-                    resultv[2] += p[3];
-                    resultv[2] += p[4];
-                    resultv[3] += p[5];
-                    resultv[4] += p[6];
+                    resultv[II_FrontVerticalPlanarFace] += p[0];
+                    resultv[II_SideVerticalPlanarFace] += p[1];
+                    resultv[II_SideVerticalPlanarFace] += p[2];
+                    resultv[II_HorizontalPlanarFace] += p[3];
+                    resultv[II_HorizontalPlanarFace] += p[4];
+                    resultv[II_Clutter] += p[5];
+                    resultv[II_Other] += p[6];
                 }
                 else{
                     // 0: ground, 1,2,3: vertical, 4:clutter, 5:poros, 6: sky
-                    resultv[0] += p[0];
-                    resultv[1] += p[1];
-                    resultv[1] += p[2];
-                    resultv[1] += p[3];
-                    resultv[2] += p[4];
-                    resultv[3] += p[5];
-                    resultv[4] += p[6];
+                    resultv[OI_Ground] += p[0];
+                    resultv[OI_VerticalPlanarFace] += p[1];
+                    resultv[OI_VerticalPlanarFace] += p[2];
+                    resultv[OI_VerticalPlanarFace] += p[3];
+                    resultv[OI_Clutter] += p[4];
+                    resultv[OI_Porous] += p[5];
+                    resultv[OI_Sky] += p[6];
                 }
             }
             return result;
         }
 
-
-        ImageOfType<Vec<double, 5>> IndoorGeometricContextEstimator::operator() (const Image & im, SceneClass sceneClass) const{
-            auto gc = ComputeGeometricContext(im, sceneClass);
-            return postProcess(gc, sceneClass);
+        ImageOfType<Vec<double, 5>> GeometricContextEstimator::operator() (const Image & im, SceneClass sceneClass) const{
+            if (im.channels() == 7){
+                return (*this)((const ImageOfType<Vec<double, 7>>&)im, sceneClass);
+            }
+            ImageOfType<Vec<double, 7>> gc = ComputeGeometricContext(im, sceneClass);
+            return (*this)(gc, sceneClass);
         }
 
-        std::pair<ImageOfType<Vec<double, 5>>, Imagei> IndoorGeometricContextEstimator::operator() (const Image & image,
+        std::pair<ImageOfType<Vec<double, 5>>, Imagei> GeometricContextEstimator::operator() (const Image & image,
             const PanoramicCamera & camera, const std::vector<Vec3> & allvps, SceneClass sceneClass) const {
 
             ImageOfType<Vec<double, 5>> result = ImageOfType<Vec<double, 7>>::zeros(image.size());
@@ -2630,7 +2583,7 @@ namespace panoramix {
             assert(allvps.size() >= 3);
             std::vector<Vec3> vps = { allvps[0], allvps[1], allvps[2] };
 
-            int vertVPid = GetVerticalDirectionId(vps, camera.up());
+            int vertVPid = NearestDirectionId(vps, camera.up());
             std::vector<PerspectiveCamera> hcams;
             for (int i = -1; i <= 1; i++){
                 std::vector<Vec3> vvps = vps;
@@ -2643,8 +2596,8 @@ namespace panoramix {
             // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
             for (int i = 0; i < hcams.size(); i++){
                 auto gc = ComputeGeometricContext(PanoramicView{ image, camera }.sampled(hcams[i]).image, sceneClass);
-                int frontVPid = GetVerticalDirectionId(vps, hcams[i].forward());
-                int sideVPid = GetVerticalDirectionId(vps, hcams[i].leftward());
+                int frontVPid = NearestDirectionId(vps, hcams[i].forward());
+                int sideVPid = NearestDirectionId(vps, hcams[i].leftward());
 
                 for (auto it = result.begin(); it != result.end(); ++it){
                     auto gcPos = ToPixelLoc(hcams[i].screenProjection(camera.spatialDirection(it.pos())));

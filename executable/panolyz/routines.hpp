@@ -5,25 +5,12 @@
 
 namespace panolyz {
 
-    enum PanolyzAlgorithm {
-        PanoramaIndoor,
-        YorkUrbanDB,
-        PanoContext
-    };
-
-    template <PanolyzAlgorithm Algo>
-    void Routine(std::integral_constant<PanolyzAlgorithm, Algo> = {});
-
-#define ROUTINE_FOR_ALGORITHM(Algo) \
-    template <> \
-    void Routine(std::integral_constant<PanolyzAlgorithm, Algo>)
-
+#define DECL_ALGO(T) namespace T {void Run();}
 
     // declare routines
-
-    ROUTINE_FOR_ALGORITHM(PanoramaIndoor, path);
-    ROUTINE_FOR_ALGORITHM(YorkUrbanDB, path);
-    ROUTINE_FOR_ALGORITHM(PanoContext, path);
+    DECL_ALGO(PanoramaIndoor);
+    DECL_ALGO(YorkUrbanDB);
+    DECL_ALGO(YorkUrbanDB2);
 
 
     inline std::string Tagify(const std::string & path){
@@ -38,12 +25,12 @@ namespace panolyz {
 
     template <class StringT, class ... Ts>
     inline void Save(const std::string & path, StringT && s, Ts && ... ts){
-        SaveToDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
+        panoramix::core::SaveToDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
     }
 
     template <class StringT, class ... Ts>
     inline void Load(const std::string & path, StringT && s, Ts & ... ts){
-        LoadFromDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
+        panoramix::core::LoadFromDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
     }
 
 

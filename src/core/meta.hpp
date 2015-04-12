@@ -478,6 +478,16 @@ namespace panoramix {
             inline typename EntryPropertyForBracketOp<EntryT>::ResultType & operator[](const EntryT & entry) {
                 return container<EntryT>()[entry];
             }
+            // .push_back(Entry)
+            template <class EntryT>
+            inline void push_back(EntryT && entry) {
+                container<std::decay_t<EntryT>>().push_back(std::forward<EntryT>(entry));
+            }
+            // .insert(Entry)
+            template <class EntryT>
+            inline void insert(EntryT && entry) {
+                container<std::decay_t<EntryT>>().insert(std::forward<EntryT>(entry));
+            }
         };
 
     }

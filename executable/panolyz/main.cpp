@@ -7,7 +7,8 @@ using namespace panolyz;
 int main(int argc, char ** argv) {
 
     //Routine<PanoramaIndoor>();
-    Routine<YorkUrbanDB>();
+    YorkUrbanDB2::Run();
+    //PanoramaIndoor::Run();
 
     return 0;
 }

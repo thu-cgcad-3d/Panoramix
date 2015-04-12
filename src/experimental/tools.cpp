@@ -49,7 +49,7 @@ namespace panoramix {
                     core::ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
                         std::back_inserter(spp.corners),
                         [](const core::Vec3 & a, const core::Vec3 & b) -> bool {
-                        return core::AngleBetweenDirections(a, b) > M_PI / 1000.0;
+                        return core::AngleBetweenDirections(a, b) > 0.0;
                     });
                     if (spp.corners.size() < 3)
                         continue;
