@@ -189,7 +189,7 @@ namespace panoramix {
 
         bool IsDenseSegmentation(const Imagei & segRegions);
         std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> FindContoursOfRegionsAndBoundaries(
-            const Imagei & segRegions, int connectionExtendSize);
+            const Imagei & segRegions, int connectionExtendSize, bool simplifyStraightEdgePixels = true);
         std::map<std::set<int>, std::vector<PixelLoc>> ExtractBoundaryJunctions(const Imagei & regions);
 
 

@@ -1,5 +1,6 @@
 #include "../../src/core/basic_types.hpp"
 #include "../../src/experimental/rl_graph.hpp"
+#include "../../src/experimental/rl_graph_occlusion.hpp"
 #include "../../src/experimental/tools.hpp"
 #include "../../src/gui/visualize2d.hpp"
 #include "../../src/gui/visualizers.hpp"
@@ -81,8 +82,18 @@ namespace panolyz {
         };
 
 
+        struct Preparation {
+            View<PerspectiveCamera> view;
+            std::vector<Classified<Line2>> lines;
+            std::vector<Vec3> vps;
+            Imagei segmentedImage;
+            int segmentsNum;
+            ImageOfType<Vec<double, 5>> gc;
 
-        void Test(const std::string & name){
+            bool outdoor;
+        };
+
+        Preparation Prepare(const std::string & name){
             auto path = "F:\\DataSets\\YorkUrbanDB\\data\\" + name + "\\" + name + ".jpg";
 
             View<PerspectiveCamera> view;
@@ -94,98 +105,64 @@ namespace panolyz {
 
             bool outdoor;
 
-            if (1){
-                auto image = cv::imread(path);
-                assert(!image.empty());
-                view.image = image;
 
-                // load gt            
-                auto data = gt::LoadVPs(path);
-                lines = std::move(data.lines);
-                vps = std::move(data.vps);
-                outdoor = data.isOutdoor;
-                GeometricContextEstimator gcEstimator;
-                gc = gcEstimator(outdoor ? data.gcOutdoor : data.gcIndoor2,
-                    outdoor ? SceneClass::Outdoor : SceneClass::Indoor);
+            auto image = cv::imread(path);
+            assert(!image.empty());
+            view.image = image;
 
-                view.camera = core::PerspectiveCamera(view.image.cols, view.image.rows, gt::pp, gt::focalReal,
-                    core::Point3(0, 0, 0), core::Point3(0, 0, -1), core::Point3(0, -1, 0));
+            // load gt            
+            auto data = gt::LoadVPs(path);
+            lines = std::move(data.lines);
+            vps = std::move(data.vps);
+            outdoor = data.isOutdoor;
+            GeometricContextEstimator gcEstimator;
+            gc = gcEstimator(outdoor ? data.gcOutdoor : data.gcIndoor2,
+                outdoor ? SceneClass::Outdoor : SceneClass::Indoor);
 
-                if (1) {
-                    std::vector<core::Classified<core::Ray2>> vpRays;
-                    for (int i = 0; i < 3; i++){
-                        std::cout << "vp[" << i << "] = " << view.camera.screenProjection(vps[i]) << std::endl;
-                        for (double a = 0; a <= M_PI * 2.0; a += 0.1){
-                            core::Point2 p = core::Point2(image.cols / 2, image.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
-                            vpRays.push_back(core::ClassifyAs(core::Ray2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
-                        }
+            view.camera = core::PerspectiveCamera(view.image.cols, view.image.rows, gt::pp, gt::focalReal,
+                core::Point3(0, 0, 0), core::Point3(0, 0, -1), core::Point3(0, -1, 0));
+
+            if (0) {
+                std::vector<core::Classified<core::Ray2>> vpRays;
+                for (int i = 0; i < 3; i++){
+                    std::cout << "vp[" << i << "] = " << view.camera.screenProjection(vps[i]) << std::endl;
+                    for (double a = 0; a <= M_PI * 2.0; a += 0.1){
+                        core::Point2 p = core::Point2(image.cols / 2, image.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
+                        vpRays.push_back(core::ClassifyAs(core::Ray2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
                     }
-                    gui::Visualizer2D(image)
-                        << gui::manip2d::SetColorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
-                        << gui::manip2d::SetThickness(1)
-                        << vpRays
-                        << gui::manip2d::SetThickness(2)
-                        << lines
-                        << gui::manip2d::Show(0);
                 }
-
-                // append regions
-                SegmentationExtractor segmenter;
-                segmenter.params().algorithm = SegmentationExtractor::GraphCut;
-                segmenter.params().c = 100.0;
-                std::vector<Line2> pureLines(lines.size());
-                for (int i = 0; i < lines.size(); i++)
-                    pureLines[i] = lines[i].component;
-                std::tie(segmentedImage, segmentsNum) = segmenter(view.image, pureLines, view.image.cols / 100.0);
-
-                if (1){
-                    gui::Visualizer2D::Params vParams;
-                    vParams.colorTable = gui::CreateRandomColorTableWithSize(segmentsNum);
-                    gui::Visualizer2D(segmentedImage, vParams)
-                        << gui::manip2d::Show();
-                }
-
-                //Save(path, "pre", view, lines, vps, segmentedImage, segmentsNum, gc, outdoor);
-            }
-            else{
-                //Load(path, "pre", view, lines, vps, segmentedImage, segmentsNum, gc, outdoor);
+                gui::Visualizer2D(image)
+                    << gui::manip2d::SetColorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
+                    << gui::manip2d::SetThickness(1)
+                    << vpRays
+                    << gui::manip2d::SetThickness(2)
+                    << lines
+                    << gui::manip2d::Show(0);
             }
 
+            // append regions
+            SegmentationExtractor segmenter;
+            segmenter.params().algorithm = SegmentationExtractor::GraphCut;
+            segmenter.params().c = 100.0;
+            std::vector<Line2> pureLines(lines.size());
+            for (int i = 0; i < lines.size(); i++)
+                pureLines[i] = lines[i].component;
+            std::tie(segmentedImage, segmentsNum) = segmenter(view.image, pureLines, view.image.cols / 100.0);
 
-            if (0){
-                // consider only lines
-                RLGraph mg;
-                RLGraphControls controls;
-                RLGraphVars vars;
+            return{ view, lines, vps, segmentedImage, segmentsNum, gc, outdoor };
+        }
 
-                AppendLines(mg, lines, view.camera, vps, 40.0 / gt::focalReal, 100.0 / gt::focalReal);
 
-                controls = MakeControls(mg, vps);
-                SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
-                    return std::max(mg.data(h).junctionWeight, 1e-1f);
-                });
+        void DepthOrdering(const Preparation & p){
+            auto & view = p.view;
+            auto & lines = p.lines;
+            auto & vps = p.vps;
+            auto & segmentedImage = p.segmentedImage;
+            int segmentsNum = p.segmentsNum;
+            auto & gc = p.gc;
+            bool outdoor = p.outdoor;
 
-                auto ccids = MakeHandledTableForAllComponents(mg, -1);
-                int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                    return c.used && c.weight > 0;
-                });
-                auto mgs = Decompose(mg, ccids, ccnum);
-                auto cs = Decompose(mg, controls, ccids, ccnum);
-                assert(mgs.size() == cs.size());
-
-                for (int i = 0; i < ccnum; i++){
-                    auto & mg = mgs[i];
-                    auto & controls = cs[i];
-                    AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls);
-                    auto vars = SolveVariables(mgs[i], controls, true);
-                    NormalizeVariables(mg, controls, vars);
-
-                    gui::Visualizer vis;
-                    Visualize(vis, view, mg, controls, vars);
-                    vis.camera(view.camera);
-                    vis.show(true, true);
-                }
-            }
+            //auto edges = FindContoursOfRegionsAndBoundaries()
 
 
             RLGraph mg;
@@ -193,245 +170,309 @@ namespace panolyz {
             RLGraphVars vars;
             std::vector<RegionHandle> rhs;
 
+            int vertVPId = NearestDirectionId(vps, view.camera.upward());
+            AppendLines(mg, lines, view.camera, vps, 40.0 / view.camera.focal(), 100.0 / view.camera.focal());
+            rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 1, 2, true);
 
             if (1){
-                int vertVPId = NearestDirectionId(vps, view.camera.upward());
-                AppendLines(mg, lines, view.camera, vps, 40.0 / view.camera.focal(), 100.0 / view.camera.focal());
-                rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 3, 3);
-
-                controls = MakeControls(mg, vps);
-
-                AttachGeometricContextConstraints(mg, controls, view.camera, gc,
-                    [outdoor, vertVPId](RLGraphComponentControl & c, const Vec<double, 5> & v, double s){
-                    int maxlabel = std::max_element(v.val, v.val + 5) - v.val;
-                    if (outdoor && s > 2){
-                        switch (maxlabel){
-                        case GeometricContextEstimator::OI_Ground:
-                            c.orientationClaz = vertVPId;
-                            c.orientationNotClaz = -1;
-                            break;
-                        case GeometricContextEstimator::OI_VerticalPlanarFace:
-                            c.orientationClaz = -1;
-                            c.orientationNotClaz = vertVPId;
-                            break;
-                        case GeometricContextEstimator::OI_Clutter:
-                            c.orientationClaz = -1;
-                            c.orientationNotClaz = -1;
-                            break;
-                        case GeometricContextEstimator::OI_Porous:
-                        case GeometricContextEstimator::OI_Sky:
-                            c.used = false;
-                            break;
-                        default:
-                            break;
-                        }
+                // show line and boundary connections
+                auto ctable = gui::CreateRandomColorTableWithSize(mg.internalComponents<RegionData>().size());
+                auto rlim = Print(mg, segmentedImage, view.camera, rhs, [&ctable](RegionHandle rh){
+                    return ctable[rh.id];
+                }, [](LineHandle lh){
+                    return gui::White;
+                }, [](RegionBoundaryHandle bh){
+                    return gui::Black;
+                }, 1, 2);
+                for (auto & rl : mg.constraints<RegionLineConnectionData>()){
+                    RegionHandle rh = rl.topo.component<0>();
+                    LineHandle lh = rl.topo.component<1>();
+                    auto rc = view.camera.screenProjection(mg.data(rh).normalizedCenter);
+                    for (auto & a : { rl.data.normalizedAnchors.front(), rl.data.normalizedAnchors.back() }){
+                        auto p = ToPixelLoc(view.camera.screenProjection(a));
+                        cv::line(rlim, ToPixelLoc(rc), p, gui::Color(gui::Gray));
                     }
-                    else if (!outdoor && s > 4){
-                        switch (maxlabel){
-                        case GeometricContextEstimator::II_FrontVerticalPlanarFace:
-                        case GeometricContextEstimator::II_SideVerticalPlanarFace:
-                            c.orientationClaz = -1;
-                            c.orientationNotClaz = vertVPId;
-                            break;
-                        case GeometricContextEstimator::II_HorizontalPlanarFace:
-                            c.orientationClaz = vertVPId;
-                            break;
-                        case GeometricContextEstimator::II_Clutter:
-                            c.orientationClaz = c.orientationNotClaz = -1;
-                            break;
-                        default:
-                            break;
-                        }
-                    }
-                });
-
-                //AttachPrincipleDirectionConstraints(mg, controls);
-                //AttachWallConstriants(mg, controls);
-
-                // set constraint weights
-                SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
-                    return std::max(mg.data(h).junctionWeight * 2, 6.0f);
-                });
-                SetConstraintWeights<RegionBoundaryData>(controls, [&mg](RegionBoundaryHandle h){
-                    return std::max(mg.data(h).length / M_PI * 20.0, 1.0);
-                });
-                SetConstraintWeights<RegionLineConnectionData>(controls, [&mg](RegionLineConnectionHandle h){
-                    return std::max(mg.data(h).length / M_PI * 20.0, 1.0);
-                });
-
-                // cc decompose
-                auto ccids = MakeHandledTableForAllComponents(mg, -1);
-                int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                    return c.used && c.weight > 0;
-                });
-                RLGraphOldToNew old2new;
-                auto mgs = Decompose(mg, ccids, ccnum, &old2new);
-                for (auto & o2n : old2new.container<RegionHandle>()){
-                    auto nrh = o2n.second.second;
-                    int ccid = o2n.second.first;
-                    assert(!nrh.invalid());
-                    assert(nrh.id < mgs[ccid].internalComponents<RegionData>().size());
                 }
-                auto cs = Decompose(mg, controls, ccids, ccnum);
-                assert(mgs.size() == cs.size());
+                cv::imshow("", rlim);
+                cv::waitKey();
+            }
 
+            if(1){
+                auto ctable = gui::CreateGreyColorTableWithSize(mg.internalComponents<LineData>().size());
+                Image3i im = Image3i::zeros(view.image.size());
+                for (auto & l : mg.components<LineData>()){
+                    auto p1 = view.camera.screenProjection(l.data.line.first);
+                    auto p2 = view.camera.screenProjection(l.data.line.second);
+                    cv::line(im, ToPixelLoc(p1), ToPixelLoc(p2), ctable[l.topo.hd.id]);
+                }
 
-                for (int i = 0; i < ccnum; i++){
-                    auto & mg = mgs[i];
-                    auto & controls = cs[i];
-                    RLGraphVars vars;
-
-                    if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                auto ldr = GuessLineDepthRelation(mg, 450 / view.camera.focal());
+                for (auto & lr : mg.constraints<LineRelationData>()){
+                    auto & lh1 = lr.topo.component<0>();
+                    auto & lh2 = lr.topo.component<1>();
+                    auto & ld1 = mg.data(lh1);
+                    auto & ld2 = mg.data(lh2);
+                    Vec3 eq1 = ld1.line.first.cross(ld1.line.second);
+                    Vec3 eq2 = ld2.line.first.cross(ld2.line.second);
+                    Vec3 inter = normalize(eq1.cross(eq2));
+                    if (ld1.initialClaz == -1 && ld2.initialClaz == -1){
                         continue;
-
-                    std::vector<RegionHandle> newrhs = rhs;
-                    for (auto & rh : newrhs){
-                        if (rh.invalid()){
-                            continue;
-                        }
-                        auto newrh = old2new.at(rh);
-                        if (newrh.first == i){
-                            rh = newrh.second;
-                        }
-                        else{
-                            rh.reset();
-                        }
                     }
-
-                    // show who is anchored?
-                    if (1){
-                        auto printed = Print(mg, segmentedImage, view.camera, newrhs, [&controls](RegionHandle rh){
-                            if (!controls[rh].used){
-                                return gui::Transparent;
-                            }
-                            if (controls[rh].weightedAnchors.size() > 0){
-                                return gui::Blue;
-                            }
-                            return gui::Red;
-                        }, [&controls](LineHandle rh){
-                            if (!controls[rh].used){
-                                return gui::Transparent;
-                            }
-                            if (controls[rh].weightedAnchors.size() > 0){
-                                return gui::Black;
-                            }
-                            return gui::White;
-                        }, [&controls](RegionBoundaryHandle bh){
-                            if (!controls[bh].used){
-                                return gui::Transparent;
-                            }
-                            return gui::Yellow;
-                        });
-                        cv::imshow("who is anchored?", printed);
-                        cv::waitKey();
+                    auto p = ToPixelLoc(view.camera.screenProjection(inter));
+                    auto r = ldr[lr.topo.hd];
+                    switch (r) {
+                    case panoramix::experimental::DepthRelationGuess::FirstMaybeCloser:
+                        cv::circle(im, p, 2, cv::Scalar(255, 0, 0), 3);
+                        break;
+                    case panoramix::experimental::DepthRelationGuess::SecondMaybeCloser:
+                        cv::circle(im, p, 2, cv::Scalar(0, 0, 255), 3);
+                        break;
+                    default:
+                        break;
                     }
+                }
 
-                    { // with inversed depth setup
-                        vars = SolveVariables(mg, controls, true, false);
-                        NormalizeVariables(mg, controls, vars);
-                        if (1){
-                            gui::Visualizer vis("inversed depth setup");
-                            Visualize(vis, view, mg, controls, vars);
-                            vis.camera(view.camera);
-                            vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
-                            vis.show(false, true);
-                        }
-                        OptimizeVariables(mg, controls, vars, true, false);
-                        NormalizeVariables(mg, controls, vars);
-                        if (1){
-                            gui::Visualizer vis("inversed depth setup -> optimized");
-                            Visualize(vis, view, mg, controls, vars);
-                            vis.camera(view.camera);
-                            vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
-                            vis.show(false, true);
-                        }
+                cv::imshow("first closer", im * 255);
+                cv::waitKey();
+             }
+
+
+
+
+        }
+        
+        void ReconstructLines(const Preparation & p){
+            auto & view = p.view;
+            auto & lines = p.lines;
+            auto & vps = p.vps;
+            auto & segmentedImage = p.segmentedImage;
+            int segmentsNum = p.segmentsNum;
+            auto & gc = p.gc;
+
+            bool outdoor = p.outdoor;
+
+            // consider only lines
+            RLGraph mg;
+            RLGraphControls controls;
+            RLGraphVars vars;
+
+            AppendLines(mg, lines, view.camera, vps, 40.0 / gt::focalReal, 100.0 / gt::focalReal);
+
+            controls = MakeControls(mg, vps);
+            SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
+                return std::max(mg.data(h).junctionWeight, 1e-1f);
+            });
+
+            auto ccids = MakeHandledTableForAllComponents(mg, -1);
+            int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
+                return c.used && c.weight > 0;
+            });
+            auto mgs = Decompose(mg, ccids, ccnum);
+            auto cs = Decompose(mg, controls, ccids, ccnum);
+            assert(mgs.size() == cs.size());
+
+            for (int i = 0; i < ccnum; i++){
+                auto & mg = mgs[i];
+                auto & controls = cs[i];
+                AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls);
+                auto vars = SolveVariables(mgs[i], controls, true);
+                NormalizeVariables(mg, controls, vars);
+
+                gui::Visualizer vis;
+                Visualize(vis, view, mg, controls, vars);
+                vis.camera(view.camera);
+                vis.show(true, true);
+            }
+
+        }
+
+        void ReconstructModel(const Preparation & p){
+            auto & view = p.view;
+            auto & lines = p.lines;
+            auto & vps = p.vps;
+            auto & segmentedImage = p.segmentedImage;
+            int segmentsNum = p.segmentsNum;
+            auto & gc = p.gc;
+
+            bool outdoor = p.outdoor;
+
+            RLGraph mg;
+            RLGraphControls controls;
+            RLGraphVars vars;
+            std::vector<RegionHandle> rhs;
+
+            int vertVPId = NearestDirectionId(vps, view.camera.upward());
+            AppendLines(mg, lines, view.camera, vps, 40.0 / view.camera.focal(), 100.0 / view.camera.focal());
+            rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 1, 3, true);
+
+            controls = MakeControls(mg, vps);
+
+            AttachGeometricContextConstraints(mg, controls, view.camera, gc,
+                [outdoor, vertVPId](RLGraphComponentControl & c, const Vec<double, 5> & v, double s){
+                int maxlabel = std::max_element(v.val, v.val + 5) - v.val;
+                if (outdoor && s > 2){
+                    switch (maxlabel){
+                    case GeometricContextEstimator::OI_Ground:
+                        c.orientationClaz = vertVPId;
+                        c.orientationNotClaz = -1;
+                        break;
+                    case GeometricContextEstimator::OI_VerticalPlanarFace:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::OI_Clutter:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = -1;
+                        break;
+                    case GeometricContextEstimator::OI_Porous:
+                    case GeometricContextEstimator::OI_Sky:
+                        c.used = false;
+                        break;
+                    default:
+                        break;
                     }
-
-                    {  // without inversed depth setup
-                        vars = MakeVariables(mg, controls);
-                        OptimizeVariables(mg, controls, vars, true, true);
-                        NormalizeVariables(mg, controls, vars);
-                        if (1){
-                            gui::Visualizer vis("randomized -> optimized");
-                            Visualize(vis, view, mg, controls, vars);
-                            vis.camera(view.camera);
-                            vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
-                            vis.show(true, true);
-                        }
+                }
+                else if (!outdoor && s > 4){
+                    switch (maxlabel){
+                    case GeometricContextEstimator::II_FrontVerticalPlanarFace:
+                    case GeometricContextEstimator::II_SideVerticalPlanarFace:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::II_HorizontalPlanarFace:
+                        c.orientationClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::II_Clutter:
+                        c.orientationClaz = c.orientationNotClaz = -1;
+                        break;
+                    default:
+                        break;
                     }
-                   
+                }
+            });
 
-                    /* NormalizeVariables(mg, controls, vars);
-                     std::cout << "score = " << Score(mg, controls, vars) << std::endl;
+            //AttachPrincipleDirectionConstraints(mg, controls);
+            //AttachWallConstriants(mg, controls);
 
-                     LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
-                     if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
-                     continue;
+            // set constraint weights
+            SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
+                return std::max(mg.data(h).junctionWeight * 5, 6.0f);
+            });
+            SetConstraintWeights<RegionBoundaryData>(controls, [&mg](RegionBoundaryHandle h){
+                return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
+            });
+            SetConstraintWeights<RegionLineConnectionData>(controls, [&mg](RegionLineConnectionHandle h){
+                return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
+            });
 
-                     vars = SolveVariables(mg, controls, true, true);
-                     NormalizeVariables(mg, controls, vars);*/
+            // cc decompose
+            auto ccids = MakeHandledTableForAllComponents(mg, -1);
+            int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
+                return c.used && c.weight > 0;
+            });
+            RLGraphOldToNew old2new;
+            auto mgs = Decompose(mg, ccids, ccnum, &old2new);
+            for (auto & o2n : old2new.container<RegionHandle>()){
+                auto nrh = o2n.second.second;
+                int ccid = o2n.second.first;
+                assert(!nrh.invalid());
+                assert(nrh.id < mgs[ccid].internalComponents<RegionData>().size());
+            }
+            auto cs = Decompose(mg, controls, ccids, ccnum);
+            assert(mgs.size() == cs.size());
 
-                    /*
-                    AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
 
-                    if (!AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls) &&
-                    !AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+            for (int i = 0; i < ccnum; i++){
+                auto & mg = mgs[i];
+                auto & controls = cs[i];
+                RLGraphVars vars;
+
+                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
                     continue;
-                    vars = SolveVariables(mg, controls);
-                    NormalizeVariables(mg, controls, vars);*/
 
-                    {
-                        gui::Visualizer vis;
+                std::vector<RegionHandle> newrhs = rhs;
+                for (auto & rh : newrhs){
+                    if (rh.invalid()){
+                        continue;
+                    }
+                    auto newrh = old2new.at(rh);
+                    if (newrh.first == i){
+                        rh = newrh.second;
+                    }
+                    else{
+                        rh.reset();
+                    }
+                }
+
+                // show who is anchored?
+                if (0){
+                    auto printed = Print(mg, segmentedImage, view.camera, newrhs, [&controls](RegionHandle rh){
+                        if (!controls[rh].used){
+                            return gui::Transparent;
+                        }
+                        if (controls[rh].weightedAnchors.size() > 0){
+                            return gui::Blue;
+                        }
+                        return gui::Red;
+                    }, [&controls](LineHandle rh){
+                        if (!controls[rh].used){
+                            return gui::Transparent;
+                        }
+                        if (controls[rh].weightedAnchors.size() > 0){
+                            return gui::Black;
+                        }
+                        return gui::White;
+                    }, [&controls](RegionBoundaryHandle bh){
+                        if (!controls[bh].used){
+                            return gui::Transparent;
+                        }
+                        return gui::Yellow;
+                    });
+                    cv::imshow("who is anchored?", printed);
+                    cv::waitKey();
+                }
+
+                { // with inversed depth setup
+                    vars = SolveVariables(mg, controls, false, true);
+                    NormalizeVariables(mg, controls, vars);
+                    LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.0, 0.1);
+                    vars = SolveVariables(mg, controls, false, true);
+                    NormalizeVariables(mg, controls, vars);
+                    if (1){
+                        gui::Visualizer vis("inversed depth setup");
                         Visualize(vis, view, mg, controls, vars);
                         vis.camera(view.camera);
                         vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
                         vis.show(true, true);
                     }
-                    if (0){
-                        LayeredShape3 shape;
-                        auto polygons = RegionPolygons(mg, controls, vars);
-                        int vertVPId = NearestDirectionId(controls.vanishingPoints);
-                        double medianDepth = MedianCenterDepth(mg, controls, vars);
-                        Vec3 vertDir = normalize(controls.vanishingPoints[vertVPId]);
+                    
+                    return;
 
-                        auto range = experimental::EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.02, 0.7, -1e5, -1e5);
-
-                        std::vector<Chain3> chains;
-                        for (double x = range.first; x <= range.second; x += medianDepth * 0.02){
-                            Plane3 cutplane(vertDir * x, vertDir);
-                            auto loop = experimental::MakeSectionalPieces(polygons, cutplane);
-                            if (loop.empty())
-                                continue;
-                            chains.push_back(experimental::MakeChain(loop));
-                        }
-
-                        for (int i = 0; i < chains.size(); i++){
-                            shape.layers.push_back(std::move(chains[i].points));
-                        }
-                        shape.normal = vertDir;
-
-                        gui::ResourceStore::set("texture", view.image);
-
-                        gui::Visualizer viz;
-                        viz.begin(shape).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
-
-                        viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines;
-                        viz.renderOptions.backgroundColor = gui::ColorTag::White;
-                        viz.renderOptions.bwColor = 0.0;
-                        viz.renderOptions.bwTexColor = 1.0;
-                        viz.renderOptions.cullBackFace = false;
-                        viz.renderOptions.cullFrontFace = false;
-                        viz.camera(PerspectiveCamera(1000, 800, Point2(500, 400),
-                            800, Point3(-1, 1, 1), Point3(0, 0, 0), Vec3(0, -1, 0)));
-
-                        viz.show(true, true);
+                    ClearAllComponentAnchors(controls);
+                    OptimizeVariables(mg, controls, vars, true, false);
+                    NormalizeVariables(mg, controls, vars);
+                    if (1){
+                        gui::Visualizer vis("inversed depth setup -> optimized");
+                        Visualize(vis, view, mg, controls, vars);
+                        vis.camera(view.camera);
+                        vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
+                        vis.show(true, true);
                     }
                 }
 
-                //SaveToDisk("./cache/mgp", mg, controls, vars);
-            }
-            else{
-                //LoadFromDisk("./cache/mgp", mg, controls, vars);
+                {  // without inversed depth setup
+                    vars = MakeVariables(mg, controls);
+                    OptimizeVariables(mg, controls, vars, true, true);
+                    NormalizeVariables(mg, controls, vars);
+                    if (1){
+                        gui::Visualizer vis("directly optimized");
+                        Visualize(vis, view, mg, controls, vars);
+                        vis.camera(view.camera);
+                        vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
+                        vis.show(true, true);
+                    }
+                }
+
             }
         }
 
@@ -449,12 +490,17 @@ namespace panolyz {
             matlab.GetVariable("num", dnum);
             int num = dnum;
 
-            for (int i = 7; i < num; i++){
+            for (int i = 19; i < num; i++){
                 matlab << ("name = names{" + std::to_string(i + 1) + "};");
                 std::string name;
                 matlab.GetVariable("name", name);
                 std::cout << "processing " << name << std::endl;
-                Test(name);
+
+                auto p = Prepare(name);
+                
+                //DepthOrdering(p);
+                //ReconstructLines(p);
+                ReconstructModel(p);
             }
 
         }

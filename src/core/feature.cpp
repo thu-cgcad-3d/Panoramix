@@ -2355,8 +2355,7 @@ namespace panoramix {
         }
 
         std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> FindContoursOfRegionsAndBoundaries(
-            const Imagei & segRegions,
-            int connectionExtendSize){
+            const Imagei & segRegions, int connectionExtendSize, bool simplifyStraightEdgePixels){
 
             std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges;
             std::map<std::pair<int, int>, std::set<PixelLoc, ComparePixelLoc>> boundaryPixels;
@@ -2422,8 +2421,10 @@ namespace panoramix {
                             edges.pop_back();
                         }
                         else {
-                            bool closed = Distance(edges.back().front(), edges.back().back()) <= 1.5;
-                            cv::approxPolyDP(edges.back(), edges.back(), 2, closed);
+                            if (simplifyStraightEdgePixels){
+                                bool closed = Distance(edges.back().front(), edges.back().back()) <= 1.5;
+                                cv::approxPolyDP(edges.back(), edges.back(), 2, closed);
+                            }
                             if (edges.back().size() <= 1)
                                 edges.pop_back();
                         }

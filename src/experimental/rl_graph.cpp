@@ -870,16 +870,150 @@ namespace panoramix {
                 auto regionHandles = CollectRegionsFromSegmentation(mg, segmentedRegions, cam);
                 int regionNum = regionHandles.size();
 
+
+                // add region-line connections
+                std::map<std::pair<RegionHandle, LineHandle>, RegionLineConnectionData> regionLineConnections;
+
+                for (auto & ld : mg.components<LineData>()){
+                    auto & line = ld.data.line;
+                    Line2 line2(cam.screenProjection(line.first), cam.screenProjection(line.second));
+                    Vec2 vertToLineDir = normalize(PerpendicularDirection(line2.direction())); // vertical to this line
+                    double stepOnImage = std::max(cam.focal() * samplingStepAngleOnLine, 0.5);
+                    if (1){
+                        for (double stepLen = 0.0; stepLen <= line2.length(); stepLen += stepOnImage){
+                            Point2 sampleP = line2.first + normalize(line2.second - line2.first) * stepLen;
+                            PixelLoc originalP = ToPixelLoc(sampleP);
+                            std::set<int> connectedRegionIds;
+                            for (int x = originalP.x - samplerSizeOnLine; x <= originalP.x + samplerSizeOnLine; x++){
+                                for (int y = originalP.y - samplerSizeOnLine; y <= originalP.y + samplerSizeOnLine; y++){
+                                    PixelLoc p(x, y);
+                                    if (!Contains(segmentedRegions, p))
+                                        continue;
+                                    int regionId = segmentedRegions(p);
+                                    auto rh = regionHandles[regionId];
+                                    if (rh.invalid())
+                                        continue;
+                                    connectedRegionIds.insert(regionId);
+                                }
+                            }
+                            // collect abit farther neighbors for judging whether it can be detachable!
+                            std::set<int> abitFarLeftRightRegionIds[2];
+                            for (int d = std::min(samplerSizeOnLine, 2); d <= samplerSizeOnLine * 2; d++){
+                                for (int dir : {-d, d}){
+                                    PixelLoc p = ToPixelLoc(sampleP + vertToLineDir * dir);
+                                    if (!Contains(segmentedRegions, p))
+                                        continue;
+                                    int regionId = segmentedRegions(p);
+                                    auto rh = regionHandles[regionId];
+                                    if (rh.invalid())
+                                        continue;
+                                    (dir < 0 ? abitFarLeftRightRegionIds[0] : abitFarLeftRightRegionIds[1]).insert(regionId);
+                                }
+                            }
+                            for (int regionId : connectedRegionIds){
+                                RegionLineConnectionData & rd = regionLineConnections[std::make_pair(regionHandles[regionId], ld.topo.hd)];
+                                rd.normalizedAnchors.push_back(normalize(cam.spatialDirection(sampleP)));
+                                rd.detachable = !(Contains(abitFarLeftRightRegionIds[0], regionId) && Contains(abitFarLeftRightRegionIds[1], regionId));
+                            }
+                        }
+                    }else{
+                        double spanAngle = AngleBetweenDirections(line.first, line.second);
+                        int stepNum = static_cast<int>(std::ceil(spanAngle / samplingStepAngleOnLine));
+                        assert(stepNum >= 1);
+                        for (int step = 0; step <= stepNum; step++){
+                            double angle = step * samplingStepAngleOnLine;
+                            Vec3 sample = RotateDirection(line.first, line.second, angle);
+                            if (!cam.isVisibleOnScreen(sample))
+                                continue;
+                            Point2 sampleP = cam.screenProjection(sample);
+                            PixelLoc originalP = ToPixelLoc(sampleP);
+                            // collect neighbors
+                            std::set<int> connectedRegionIds;
+                            for (int x = originalP.x - samplerSizeOnLine; x <= originalP.x + samplerSizeOnLine; x++){
+                                for (int y = originalP.y - samplerSizeOnLine; y <= originalP.y + samplerSizeOnLine; y++){
+                                    PixelLoc p(x, y);
+                                    if (!Contains(segmentedRegions, p))
+                                        continue;
+                                    int regionId = segmentedRegions(p);
+                                    auto rh = regionHandles[regionId];
+                                    if (rh.invalid())
+                                        continue;
+                                    connectedRegionIds.insert(regionId);
+                                }
+                            }
+                            // collect abit farther neighbors for judging whether it can be detachable!
+                            std::set<int> abitFarLeftRightRegionIds[2];
+                            for (int d = std::min(samplerSizeOnLine, 2); d <= samplerSizeOnLine * 2; d++){
+                                for (int dir : {-d, d}){
+                                    PixelLoc p = ToPixelLoc(sampleP + vertToLineDir * dir);
+                                    if (!Contains(segmentedRegions, p))
+                                        continue;
+                                    int regionId = segmentedRegions(p);
+                                    auto rh = regionHandles[regionId];
+                                    if (rh.invalid())
+                                        continue;
+                                    (dir < 0 ? abitFarLeftRightRegionIds[0] : abitFarLeftRightRegionIds[1]).insert(regionId);
+                                }
+                            }
+                            for (int regionId : connectedRegionIds){
+                                RegionLineConnectionData & rd = regionLineConnections[std::make_pair(regionHandles[regionId], ld.topo.hd)];
+                                rd.normalizedAnchors.push_back(normalize(sample));
+                                rd.detachable = !(Contains(abitFarLeftRightRegionIds[0], regionId) && Contains(abitFarLeftRightRegionIds[1], regionId));
+                            }
+                        }
+                    }
+                }                
+
+                for (auto & rlc : regionLineConnections){
+                    // compute length;
+                    rlc.second.length = AngleBetweenDirections(rlc.second.normalizedAnchors.front(), rlc.second.normalizedAnchors.back());
+                    mg.addConstraint(std::move(rlc.second), rlc.first.first, rlc.first.second);
+                }
+
+
                 // add region boundary constraints
-                std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges = 
-                    FindContoursOfRegionsAndBoundaries(segmentedRegions, samplerSizeOnBoundary);
+                std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges =
+                    FindContoursOfRegionsAndBoundaries(segmentedRegions, samplerSizeOnBoundary, false);
 
                 for (auto & bep : boundaryEdges) {
                     auto & rids = bep.first;
-                    auto & edges = bep.second;
+                    auto edges = bep.second;
 
                     if (regionHandles[rids.first].invalid() || regionHandles[rids.second].invalid())
                         continue;
+
+                    auto rh = regionHandles[rids.first];
+                    if (noBoundaryUnderLines){
+                        std::vector<std::vector<PixelLoc>> filteredBoundaryPixels;
+                        for (auto & e : edges){
+                            std::vector<PixelLoc> filteredEdge;
+                            for (PixelLoc p : e){
+                                bool coveredByLine = false;
+                                for (RegionLineConnectionHandle rlcon : mg.topo(rh).constraints<RegionLineConnectionData>()){
+                                    LineHandle lh = mg.topo(rlcon).component<1>();
+                                    const Line3 & line = mg.data(lh).line;
+                                    Line2 line2(cam.screenProjection(line.first), cam.screenProjection(line.second));
+                                    double d = DistanceFromPointToLine(vec_cast<double>(p), line2).first;
+                                    if (d < samplerSizeOnLine || d < samplerSizeOnBoundary){
+                                        coveredByLine = true;
+                                        break;
+                                    }
+                                }
+                                if (!coveredByLine){
+                                    filteredEdge.push_back(p);
+                                }
+                            }
+                            if (filteredEdge.size() > 2){
+                                filteredBoundaryPixels.push_back(std::move(filteredEdge));
+                            }
+                        }
+                        if (filteredBoundaryPixels.size() > 0){
+                            edges = std::move(filteredBoundaryPixels);
+                        }
+                        else{
+                            continue;
+                        }
+                    }
 
                     RegionBoundaryData bd;
                     bd.normalizedEdges.resize(edges.size());
@@ -901,75 +1035,24 @@ namespace panoramix {
 
                     bd.normalizedSampledPoints.resize(bd.normalizedEdges.size());
                     for (int k = 0; k < bd.normalizedEdges.size(); k++){
-                        ForeachCompatibleWithLastElement(bd.normalizedEdges[k].begin(), bd.normalizedEdges[k].end(),
-                            std::back_inserter(bd.normalizedSampledPoints[k]),
-                            [samplingStepAngleOnBoundary](const Vec3 & a, const Vec3 & b){
-                            return AngleBetweenDirections(a, b) >= samplingStepAngleOnBoundary;
-                        });
+                        auto & edge = bd.normalizedEdges[k];
+                        if (edge.empty()){
+                            continue;
+                        }
+                        std::vector<Vec3> points = { edge.front() };
+                        for (auto & edgeP : edge){
+                            double remainedAngle = AngleBetweenDirections(points.back(), edgeP);
+                            while (remainedAngle >= samplingStepAngleOnBoundary){
+                                points.push_back(normalize(RotateDirection(points.back(), edgeP, samplingStepAngleOnBoundary)));
+                                remainedAngle -= samplingStepAngleOnBoundary;
+                            }
+                        }
+                        bd.normalizedSampledPoints[k] = std::move(points);
                     }
 
                     mg.addConstraint(std::move(bd), regionHandles[rids.first], regionHandles[rids.second]);
                 }
 
-
-                // add region-line connections
-                std::map<std::pair<RegionHandle, LineHandle>, RegionLineConnectionData> regionLineConnections;
-
-                for (auto & ld : mg.components<LineData>()){
-                    auto & line = ld.data.line;
-                    Line2 line2(cam.screenProjection(line.first), cam.screenProjection(line.second));
-                    Vec2 vertToLineDir = normalize(PerpendicularDirection(line2.direction())); // vertical to this line
-                    double spanAngle = AngleBetweenDirections(line.first, line.second);
-                    int stepNum = static_cast<int>(std::ceil(spanAngle / samplingStepAngleOnLine));
-                    assert(stepNum >= 1);
-                    for (int step = 0; step <= stepNum; step ++){
-                        double angle = step * samplingStepAngleOnLine;
-                        Vec3 sample = RotateDirection(line.first, line.second, angle);
-                        if (!cam.isVisibleOnScreen(sample))
-                            continue;
-                        Point2 sampleP = cam.screenProjection(sample);
-                        PixelLoc originalP = ToPixelLoc(sampleP);
-                        // collect neighbors
-                        std::set<int> connectedRegionIds;
-                        for (int x = originalP.x - samplerSizeOnLine; x <= originalP.x + samplerSizeOnLine; x++){
-                            for (int y = originalP.y - samplerSizeOnLine; y <= originalP.y + samplerSizeOnLine; y++){
-                                PixelLoc p(x, y);
-                                if (p.x < 0 || p.x >= segmentedRegions.cols || p.y < 0 || p.y >= segmentedRegions.rows)
-                                    continue;
-                                int regionId = segmentedRegions(p);
-                                auto rh = regionHandles[regionId];
-                                if (rh.invalid())
-                                    continue;
-                                connectedRegionIds.insert(regionId);
-                            }
-                        }
-                        // collect abit farther neighbors for judging whether it can be detachable!
-                        std::set<int> abitFarLeftRightRegionIds[2];
-                        for (int d = std::min(samplerSizeOnLine, 2); d <= samplerSizeOnLine * 2; d++){
-                            for (int dir : {-d, d}){
-                                PixelLoc p = ToPixelLoc(sampleP + vertToLineDir * dir);
-                                if (!Contains(segmentedRegions, p))
-                                    continue;
-                                int regionId = segmentedRegions(p);
-                                auto rh = regionHandles[regionId];
-                                if (rh.invalid())
-                                    continue;
-                                (dir < 0 ? abitFarLeftRightRegionIds[0] : abitFarLeftRightRegionIds[1]).insert(regionId);
-                            }
-                        }
-                        for (int regionId : connectedRegionIds){
-                            RegionLineConnectionData & rd = regionLineConnections[std::make_pair(regionHandles[regionId], ld.topo.hd)];
-                            rd.normalizedAnchors.push_back(normalize(sample));
-                            rd.detachable = !(Contains(abitFarLeftRightRegionIds[0], regionId) && Contains(abitFarLeftRightRegionIds[1], regionId));
-                        }
-                    }
-                }                
-
-                for (auto & rlc : regionLineConnections){
-                    // compute length;
-                    rlc.second.length = AngleBetweenDirections(rlc.second.normalizedAnchors.front(), rlc.second.normalizedAnchors.back());
-                    mg.addConstraint(std::move(rlc.second), rlc.first.first, rlc.first.second);
-                }
 
                 return regionHandles;
 
@@ -2711,7 +2794,7 @@ namespace panoramix {
             auto costFunctor = misc::MakeGenericNumericDiffFunctor<double>(
                 [&](const Eigen::VectorXd & v, Eigen::VectorXd & costs){
 
-                Eigen::VectorXd variables = v/*.normalized()*/;
+                Eigen::VectorXd variables = v;
 
                 // compute current planes and lines
                 RLGraphInstanceTable insts;
@@ -2761,7 +2844,22 @@ namespace panoramix {
             assert(status != Eigen::LevenbergMarquardtSpace::ImproperInputParameters);
             do {
                 status = lm.minimizeOneStep(X);                
-                std::cout << "iter: " << lm.iter << "\t\t lm.fnorm = " << lm.fnorm << std::endl;                
+                std::cout << "iter: " << lm.iter << "\t\t lm.fnorm = " << lm.fnorm << std::endl;
+
+                // test
+                if(0){
+                    Eigen::VectorXd costs = Eigen::VectorXd::Zero(consNum);
+                    costFunctor(X, costs);
+                    std::cout << "norm(costFunctor(X)) = " << costs.norm() << std::endl;
+                    costFunctor(X * 2, costs);
+                    std::cout << "norm(costFunctor(X * 2)) = " << costs.norm() << std::endl;
+                    costFunctor(X * 3, costs);
+                    std::cout << "norm(costFunctor(X * 3)) = " << costs.norm() << std::endl;
+                    costFunctor(X * 4, costs);
+                    std::cout << "norm(costFunctor(X * 4)) = " << costs.norm() << std::endl;
+                }
+
+                X.normalize();
                 if (callback){
                     InstallVariables(mg, controls, uh2varStartPosition, X, vars);
                     if (!callback(vars))
@@ -3040,178 +3138,6 @@ namespace panoramix {
 
 
 
-        std::vector<SectionalPiece> MakeSectionalPieces(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
-            const Plane3 & cutplane){
-
-            std::vector<SectionalPiece> segments;
-            std::vector<double> startAngles;
-
-            Vec3 x, y;
-            std::tie(x, y) = ProposeXYDirectionsFromZDirection(cutplane.normal);
-            Point3 original = cutplane.root();
-
-            for (auto it = polygons.begin(); it != polygons.end(); ++ it){
-                RegionHandle rh = it.hd();
-
-                for (const Polygon3 & polygon : *it){
-                    if (polygon.corners.size() <= 2)
-                        continue;
-
-                    auto plane = polygon.plane();
-
-                    if (core::IsFuzzyParallel(plane.normal, cutplane.normal, 0.01))
-                        continue;
-
-                    Vec3 along = normalize(cutplane.normal.cross(plane.normal));
-                    std::vector<Scored<std::pair<Point3, Point2>>> cutpoints;
-
-                    for (int i = 1; i <= polygon.corners.size(); i++){
-                        auto & lastP = polygon.corners[i-1];
-                        auto & p = polygon.corners[i % polygon.corners.size()];
-                        double lastDist = cutplane.signedDistanceTo(lastP);
-                        double dist = cutplane.signedDistanceTo(p);
-
-                        if (lastDist < 0 && dist > 0 || lastDist > 0 && dist < 0){
-                            Point3 intersection = (lastP * abs(dist) + p * abs(lastDist)) / (abs(dist) + abs(lastDist));
-                            double order = intersection.dot(along);
-                            Point2 projOnCutPlane((intersection - original).dot(x), (intersection - original).dot(y));
-                            cutpoints.push_back(ScoreAs(std::make_pair(intersection, projOnCutPlane), order));
-                        }
-                    }
-
-                    if (cutpoints.empty()){
-                        continue;
-                    }
-                    assert(cutpoints.size() % 2 == 0);
-                    if (cutpoints.size() % 2 != 0){
-                        std::cout << "ODD cutpoints num!!!" << std::endl;
-                    }
-
-                    // chain the segments
-                    std::sort(cutpoints.begin(), cutpoints.end());
-                    for (int i = 0; i < cutpoints.size(); i += 2){
-                        SectionalPiece segment;
-                        segment.rh = rh;
-                        segment.range.first = cutpoints[i].component.first;
-                        segment.range.second = cutpoints[i + 1].component.first;
-                        segments.push_back(segment);
-                        startAngles.push_back(SignedAngleBetweenDirections(Vec2(1, 0), cutpoints[i].component.second));
-                    }
-                }
-            }
-
-            if (segments.empty())
-                return segments;
-
-            std::vector<int> ids(segments.size());
-            std::iota(ids.begin(), ids.end(), 0);
-            std::sort(ids.begin(), ids.end(), [&startAngles](int id1, int id2){return startAngles[id1] < startAngles[id2]; });
-
-            std::vector<SectionalPiece> segs;
-            segs.reserve(segments.size());
-            for (int id : ids){
-                segs.push_back(std::move(segments[id]));
-            }
-            return segs;
-        }
-
-
-
-        Chain3 MakeChain(const std::vector<SectionalPiece> & pieces, bool closed){
-            Chain3 chain;
-            chain.closed = closed;
-            chain.points.reserve(pieces.size() * 2);
-            for (auto & seg : pieces){
-                chain.points.push_back(seg.range.first);
-                chain.points.push_back(seg.range.second);
-            }
-
-            if (!closed){
-
-            }
-
-            return chain;
-        }
-
-
-
-
-
-
-        std::pair<double, double> EstimateEffectiveRangeAlongDirection(
-            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
-            const Vec3 & direction, double stepLen, double minEffectiveAreaRatio,
-            double gamma1, double gamma2){
-
-            double minv = std::numeric_limits<double>::max();
-            double maxv = std::numeric_limits<double>::lowest();
-
-            auto ndir = normalize(direction);
-            for (auto it = polygons.begin(); it != polygons.end(); ++it){
-                for (auto & ply : *it){
-                    for (auto & p : ply.corners){
-                        double pos = p.dot(ndir);
-                        if (minv > pos) minv = pos;
-                        if (maxv < pos) maxv = pos;
-                    }
-                }
-            }
-            
-            assert(maxv - minv > 0);
-
-            std::vector<double> areas;
-            std::vector<double> dareas;
-            for (double x = minv; x <= maxv; x += stepLen){
-                Plane3 cutplane(ndir * x, ndir);
-                auto chain = MakeChain(MakeSectionalPieces(polygons, cutplane));
-                double area = chain.size() < 3 ? 0.0 : Area(chain);
-                assert(area >= 0.0);
-                dareas.push_back(area - (areas.empty() ? 0.0 : areas.back()));
-                areas.push_back(area);
-            }
-
-            std::pair<double, double> range(0, 0);
-            if (areas.size() < 2){
-                return range;
-            }
-            dareas[0] = dareas[1];
-
-            size_t maxCutAreaId = std::max_element(areas.begin(), areas.end()) - areas.begin();
-            double maxCutArea = areas[maxCutAreaId];
-
-            int start = 0;
-            while (start < areas.size() && areas[start] < minEffectiveAreaRatio * maxCutArea) ++start;
-            int end = areas.size() - 1;
-            while (end >= 0 && areas[end] < minEffectiveAreaRatio * maxCutArea) --end;
-
-            std::cout << "all: " << areas.size() << std::endl;
-            std::cout << "start: " << start << std::endl;
-            std::cout << "end: " << end << std::endl;
-
-            if (start >= end)
-                return range;
-            if (start > maxCutAreaId || end < maxCutAreaId)
-                return range;
-            
-            range.first = start * stepLen + minv;
-            range.second = end * stepLen + minv;
-            //for (int i = start; i < maxCutAreaId; i++){
-            //    if (i != 0 && (dareas[i] - dareas[i - 1]) / maxCutArea * ((maxv - minv) / stepLen) < -gamma1){
-            //        range.first = i * stepLen + minv;
-            //        break;
-            //    }
-            //}
-
-            //for (int i = end; i > maxCutAreaId; i--){
-            //    if (i != areas.size() - 1 && (dareas[i] - dareas[i + 1]) / maxCutArea * ((maxv - minv) / stepLen) < -gamma2){
-            //        range.second = i * stepLen + minv;
-            //        break;
-            //    }
-            //}
-
-            return range;
-
-        }
 
 
 
@@ -4228,7 +4154,12 @@ namespace panoramix {
                             continue;
                         auto & rp = controls[usableRegionHandles[i]];
                         assert(rp.used);
-                        rp.orientationClaz = rp.orientationNotClaz = -1;
+                        if (rp.orientationClaz == -1 && rp.orientationNotClaz == -1){
+                            rp.used = false;
+                        }
+                        else{
+                            rp.orientationClaz = rp.orientationNotClaz = -1;
+                        }
                     }
                 }
             }
@@ -4384,20 +4315,6 @@ namespace panoramix {
             controls.disableAllInvalidConstraints(mg);
 
         }
-
-
-
-
-
-
-        std::vector<RegionHandle> DetectAnormalyPeakyRegions(const RLGraph & mg,
-            const RLGraphControls & controls, const RLGraphVars & vars){
-
-            NOT_IMPLEMENTED_YET();
-
-
-        }
-
 
 
 

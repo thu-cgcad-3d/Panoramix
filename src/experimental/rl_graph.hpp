@@ -135,12 +135,6 @@ namespace panoramix {
             int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3, bool noBoundaryUnderLines = false);
 
 
-       /* std::vector<RegionHandle> AppendRegionsWithFarConnections(RLGraph & mg, 
-            const Imagei & segmentedRegions, const PerspectiveCamera & cam,
-            double maxConnectionLength, 
-            const std::function<double(int rid1, int rid2)> & mayConnect)*/
-
-
 
         // get a perfect mask view for a region
         View<PartialPanoramicCamera, Imageub> PerfectRegionMaskView(const RLGraph & mg, RegionHandle rh, double focal = 100.0);
@@ -151,12 +145,12 @@ namespace panoramix {
 
 
 
-
-        template <class HandleT> using Decomposed = std::pair<int, HandleT>;
-        template <class T> struct Original_ {};
-        template <class HandleT> struct Original_<Decomposed<HandleT>> { using type = HandleT; };
-        template <class T> using Original = typename Original_<T>::type;
-
+        namespace {
+            template <class HandleT> using Decomposed = std::pair<int, HandleT>;
+            template <class T> struct Original_ {};
+            template <class HandleT> struct Original_<Decomposed<HandleT>> { using type = HandleT; };
+            template <class T> using Original = typename Original_<T>::type;
+        }
         template <class T> using HandleMapOldToNew = std::map<T, Decomposed<T>>;
         using RLGraphOldToNew = MetaBind<HandleMapOldToNew, 
             RegionHandle, 
@@ -263,7 +257,7 @@ namespace panoramix {
         RLGraphControls MakeControls(const RLGraph & mg, const std::vector<Vec3> & vps);
 
 
-
+        // connected components
         int ConnectedComponents(const RLGraph & mg, const RLGraphControls & controls,
             RLGraphComponentTable<int> & ccids,
             const std::function<bool(const RLGraphConstraintControl &)> & constraintAsConnected = nullptr);
@@ -271,7 +265,9 @@ namespace panoramix {
             const RLGraphComponentTable<int> & ccids, int ccnum);
 
 
-        // reset weights
+
+
+        // weights
         void ResetWeights(const RLGraph & mg, RLGraphControls & controls);
 
         template <class ConstraintDataT, class FunT>
@@ -329,13 +325,18 @@ namespace panoramix {
             return normalize(direction) * DepthAt(direction, inst, eye);
         }
 
+
+
         // region polygons
         std::vector<Polygon3> RegionPolygon(const RLGraph & mg, const RLGraphControls & controls,
             const RLGraphVars & vars, RegionHandle rh);
         HandledTable<RegionHandle, std::vector<Polygon3>> RegionPolygons(const RLGraph & mg, 
             const RLGraphControls & controls,
             const RLGraphVars & vars);
-
+        double MedianCenterDepth(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars);
+        double Score(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars);
 
 
 
@@ -357,16 +358,6 @@ namespace panoramix {
             const RLGraphControls & controls, RLGraphVars & vars, 
             bool useWeights = true, bool useAllAnchors = false,
             const std::function<bool(const RLGraphVars &)> & callback = nullptr);
-
-
-
-        
-        // model properties
-        double MedianCenterDepth(const RLGraph & mg, const RLGraphControls & controls,
-            const RLGraphVars & vars);
-        double Score(const RLGraph & mg, const RLGraphControls & controls,
-            const RLGraphVars & vars);
-
 
         void NormalizeVariables(const RLGraph & mg, const RLGraphControls & controls,
             RLGraphVars & vars);
@@ -399,36 +390,6 @@ namespace panoramix {
             RLGraphControls & controls, const RLGraphVars & vars,
             double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05, 
             double distThresRatio = 0.12);
-        std::vector<RegionHandle> DetectAnormalyPeakyRegions(const RLGraph & mg,
-            const RLGraphControls & controls, const RLGraphVars & vars);
-
-
-
-
-
-
-
-        
-        // cut loop
-        struct SectionalPiece {
-            RegionHandle rh;
-            std::pair<Point3, Point3> range;
-        };
-        std::vector<SectionalPiece> MakeSectionalPieces(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons, 
-            const Plane3 & cutplane);
-
-        Chain3 MakeChain(const std::vector<SectionalPiece> & pieces, bool closed = true);
-        inline double Area(const std::vector<SectionalPiece> & loop) { return Area(Polygon3(MakeChain(loop))); }
-
-
-
-        // estimate 
-        std::pair<double, double> EstimateEffectiveRangeAlongDirection(
-            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
-            const Vec3 & direction, double stepLen, double minEffectiveAreaRatio = 0.6,
-            double gamma1 = 0.05, double gamma2 = 0.05);
-        
-       
 
 
 

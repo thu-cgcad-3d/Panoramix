@@ -433,6 +433,11 @@ namespace panoramix {
         };
 
 
+        template <class T>
+        inline std::underlying_type_t<T> ToUnderlying(T t){
+            return static_cast<std::underlying_type_t<T>>(t);
+        }
+
 
 
         template <template<class> class MetaContainerT, class ...EntryTs>

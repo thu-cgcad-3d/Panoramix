@@ -312,7 +312,7 @@ namespace panoramix {
 
         ColorTable CreateGreyColorTableWithSize(int sz) {
             auto exeptColor = ColorTag::Blue;
-            core::Vec3 full(255, 255, 255);
+            core::Vec3 full(1, 1, 1);
             std::vector<Color> colors(sz);
             for (int i = 0; i < sz; i++){
                 colors[i] = Color(double(i) * full / double(sz));
