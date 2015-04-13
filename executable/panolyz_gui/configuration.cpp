@@ -315,7 +315,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
                 ForeachCompatibleWithLastElement(c.data.normalizedContours.front().begin(), c.data.normalizedContours.front().end(),
                     std::back_inserter(spp.corners),
                     [](const Vec3 & a, const Vec3 & b) -> bool {
-                    return AngleBetweenDirections(a, b) > M_PI / 1000.0;
+                    return AngleBetweenDirections(a, b) > 0.0;
                 });
                 if (spp.corners.size() < 3)
                     continue;
@@ -363,7 +363,7 @@ StepWidgetInterface * CreateBindingWidgetAndActionsTemplated(DataOfType<Reconstr
         viz.renderOptions.backgroundColor = gui::ColorTag::White;
         viz.renderOptions.bwColor = 0.0;
         viz.renderOptions.bwTexColor = 1.0;
-        viz.renderOptions.cullBackFace = true;
+        viz.renderOptions.cullBackFace = false;
         viz.renderOptions.cullFrontFace = false;
         viz.camera(PerspectiveCamera(1000, 800, Point2(500, 400),
             800, Point3(-1, 1, 1), Point3(0, 0, 0)));

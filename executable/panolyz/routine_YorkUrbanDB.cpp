@@ -1,5 +1,6 @@
 #include "../../src/core/basic_types.hpp"
 #include "../../src/experimental/rl_graph.hpp"
+#include "../../src/experimental/rl_graph_occlusion.hpp"
 #include "../../src/experimental/tools.hpp"
 #include "../../src/gui/visualize2d.hpp"
 #include "../../src/gui/visualizers.hpp"
@@ -160,7 +161,7 @@ namespace panolyz {
 
                 AppendLines(mg, lines, view.camera, vps, 40.0 / gt::focalReal, 100.0 / gt::focalReal);
 
-                controls = MakeControls(mg, vps);
+                controls = RLGraphControls(mg, vps);
                 SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
                     return std::max(mg.data(h).junctionWeight, 1e-1f);
                 });
@@ -199,7 +200,7 @@ namespace panolyz {
                 AppendLines(mg, lines, view.camera, vps);
                 rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
 
-                controls = MakeControls(mg, vps);
+                controls = RLGraphControls(mg, vps);
 
                 AttachGeometricContextConstraints(mg, controls, view.camera, gc,
                     [outdoor, vertVPId](RLGraphComponentControl & c, const Vec<double, 5> & v, double s){

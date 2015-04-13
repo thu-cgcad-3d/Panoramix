@@ -78,5 +78,81 @@ namespace panoramix {
 
 
 
+
+
+
+
+        template <class CameraT, class CallbackFunT>
+        void AttachGeometricContextConstraintsTemplated(const RLGraph & mg, RLGraphControls & controls,
+            const CameraT & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes,
+            CallbackFunT && fun){
+
+
+            // set component orientations
+            // use geometric context!
+            SetComponentControl<RegionData>(controls,
+                [&mg, &gc, &gcVotes, &pcam, &fun](RegionHandle rh, RLGraphComponentControl & c){
+                auto regionMaskView = PerfectRegionMaskView(mg, rh);
+                auto sampler = core::MakeCameraSampler(regionMaskView.camera, pcam);
+                auto gcOnRegion = sampler(gc);
+                auto gcVotesOnRegion = sampler(gcVotes);
+                int votes = 0;
+                core::Vec<double, 5> gcSum;
+                for (auto it = regionMaskView.image.begin(); it != regionMaskView.image.end(); ++it){
+                    if (!*it){
+                        continue;
+                    }
+                    gcSum += gcOnRegion(it.pos());
+                    votes += gcVotesOnRegion(it.pos());
+                }
+                auto gcMean = gcSum / std::max(votes, 1);
+                auto gcMean2 = gcMean;
+                std::sort(std::begin(gcMean2.val), std::end(gcMean2.val), std::greater<>());
+                double significancy = gcMean2[0] / std::max(gcMean2[1], 1e-5);
+                if (!fun){
+                    if (significancy > 2){
+                        int label = std::max_element(std::begin(gcMean.val), std::end(gcMean.val)) - gcMean.val;
+                        // label: vp1 vp2 vp3 clutter other
+                        if (label < 3){ // vp
+                            c.orientationClaz = label;
+                            c.orientationNotClaz = -1;
+                        }
+                        else{
+                            c.used = false;
+                            //c.orientationClaz = c.orientationNotClaz = -1;
+                        }
+                    }
+                }
+                else{
+                    fun(c, gcMean, significancy);
+                }
+            });
+
+            controls.disableAllInvalidConstraints(mg);
+        }
+
+
+
+        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
+            const PanoramicCamera & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes,
+            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
+            AttachGeometricContextConstraintsTemplated(mg, controls, pcam, gc, gcVotes, fun);
+        }
+        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
+            const PerspectiveCamera & pcam, const ImageOfType<Vec<double, 5>> & gc,
+            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
+            AttachGeometricContextConstraintsTemplated(mg, controls, pcam, gc, Imagei::ones(gc.size()), fun);
+        }
+
+
+
+
+        void AttachGeometricContextConstraintsSmarter(const RLGraph & mg, RLGraphControls & controls,
+            const PerspectiveCamera & pcam, const ImageOfType<Vec<double, 5>> & gc){
+
+
+
+        }
+
     }
 }

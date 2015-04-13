@@ -5,7 +5,9 @@
 #include "../../src/gui/visualize2d.hpp"
 #include "../../src/gui/visualizers.hpp"
 #include "../../src/misc/matlab.hpp"
+#include "../../src/gui/singleton.hpp"
 
+#include "tools.hpp"
 #include "routines.hpp"
 
 namespace panolyz {
@@ -91,6 +93,24 @@ namespace panolyz {
             ImageOfType<Vec<double, 5>> gc;
 
             bool outdoor;
+
+            void showVPLines() const {
+                std::vector<core::Classified<core::Ray2>> vpRays;
+                for (int i = 0; i < 3; i++){
+                    std::cout << "vp[" << i << "] = " << view.camera.screenProjection(vps[i]) << std::endl;
+                    for (double a = 0; a <= M_PI * 2.0; a += 0.1){
+                        core::Point2 p = core::Point2(view.image.cols / 2, view.image.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
+                        vpRays.push_back(core::ClassifyAs(core::Ray2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
+                    }
+                }
+                gui::Visualizer2D(view.image)
+                    << gui::manip2d::SetColorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
+                    << gui::manip2d::SetThickness(1)
+                    << vpRays
+                    << gui::manip2d::SetThickness(2)
+                    << lines
+                    << gui::manip2d::Show();
+            }
         };
 
         Preparation Prepare(const std::string & name){
@@ -137,7 +157,7 @@ namespace panolyz {
                     << vpRays
                     << gui::manip2d::SetThickness(2)
                     << lines
-                    << gui::manip2d::Show(0);
+                    << gui::manip2d::Show();
             }
 
             // append regions
@@ -258,7 +278,7 @@ namespace panolyz {
 
             AppendLines(mg, lines, view.camera, vps, 40.0 / gt::focalReal, 100.0 / gt::focalReal);
 
-            controls = MakeControls(mg, vps);
+            controls = RLGraphControls(mg, vps);
             SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
                 return std::max(mg.data(h).junctionWeight, 1e-1f);
             });
@@ -305,7 +325,7 @@ namespace panolyz {
             AppendLines(mg, lines, view.camera, vps, 40.0 / view.camera.focal(), 100.0 / view.camera.focal());
             rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 1, 3, true);
 
-            controls = MakeControls(mg, vps);
+            controls = RLGraphControls(mg, vps);
 
             AttachGeometricContextConstraints(mg, controls, view.camera, gc,
                 [outdoor, vertVPId](RLGraphComponentControl & c, const Vec<double, 5> & v, double s){
@@ -356,7 +376,7 @@ namespace panolyz {
 
             // set constraint weights
             SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
-                return std::max(mg.data(h).junctionWeight * 5, 6.0f);
+                return std::max(mg.data(h).junctionWeight * 10, 1.0f);
             });
             SetConstraintWeights<RegionBoundaryData>(controls, [&mg](RegionBoundaryHandle h){
                 return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
@@ -381,7 +401,7 @@ namespace panolyz {
             auto cs = Decompose(mg, controls, ccids, ccnum);
             assert(mgs.size() == cs.size());
 
-
+            // for each cc
             for (int i = 0; i < ccnum; i++){
                 auto & mg = mgs[i];
                 auto & controls = cs[i];
@@ -433,10 +453,10 @@ namespace panolyz {
                 }
 
                 { // with inversed depth setup
-                    vars = SolveVariables(mg, controls, false, true);
+                    vars = SolveVariables(mg, controls, true, true);
                     NormalizeVariables(mg, controls, vars);
                     LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.0, 0.1);
-                    vars = SolveVariables(mg, controls, false, true);
+                    vars = SolveVariables(mg, controls, true, true);
                     NormalizeVariables(mg, controls, vars);
                     if (1){
                         gui::Visualizer vis("inversed depth setup");
@@ -477,6 +497,279 @@ namespace panolyz {
         }
 
 
+        
+
+        void Show(const Preparation & p, const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars){
+            gui::Visualizer vis("inversed depth setup");
+            Visualize(vis, p.view, mg, controls, vars);
+            vis.camera(p.view.camera);
+            vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
+            vis.show(true, true);
+        }
+
+
+        void LabelGT(const Preparation & p){
+            auto & view = p.view;
+            auto & lines = p.lines;
+            auto & vps = p.vps;
+            auto & segmentedImage = p.segmentedImage;
+            int segmentsNum = p.segmentsNum;
+            auto & gc = p.gc;
+
+            auto bps = FindContoursOfRegionsAndBoundaries(segmentedImage, 1, false);
+            std::vector<std::string> regionLabelNames = {
+                "Free Plane",
+                "Toward VP1",
+                "Toward VP2",
+                "Toward VP3",
+                "Along VP1",
+                "Along VP2",
+                "Along VP3",
+                "Void"
+            };
+            std::vector<gui::Color> regionLabelColors = {
+                gui::LightGray,
+                gui::Red,
+                gui::Yellow,
+                gui::Blue,
+                gui::Magenta,
+                gui::Cyan,
+                gui::Orange,
+                gui::DarkGray
+            };
+            std::vector<std::string> boundaryLabelNames = {
+                "Connected",
+                "Disconnected"
+            };
+            std::vector<gui::Color> boundaryLabelColors = {
+                gui::White,
+                gui::Black
+            };
+
+            RLGraph mg;
+            RLGraphControls controls;
+            RLGraphVars vars;
+            std::vector<RegionHandle> rhs;
+
+            int vertVPId = NearestDirectionId(vps, view.camera.upward());
+            AppendLines(mg, lines, view.camera, vps, 40.0 / view.camera.focal(), 100.0 / view.camera.focal());
+            rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 1, 3, true);
+
+            controls = RLGraphControls(mg, vps);
+
+            p.showVPLines();
+
+            Labels labels;
+
+            while (true){
+                LabelIt(labels, view.image, segmentedImage, bps, 
+                    regionLabelNames, boundaryLabelNames, regionLabelColors, boundaryLabelColors);
+
+                // apply labels to controls
+                // regions
+                for (int i = 0; i < labels.regionLabels.size(); i++){
+                    RegionHandle rh = rhs[i];
+                    auto & control = controls[rh];
+                    switch (labels.regionLabels[i]){
+                    case 0: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = -1; break;
+                    case 1: control.used = true; control.orientationClaz = 0; control.orientationNotClaz = -1; break;
+                    case 2: control.used = true; control.orientationClaz = 1; control.orientationNotClaz = -1; break;
+                    case 3: control.used = true; control.orientationClaz = 2; control.orientationNotClaz = -1; break;
+                    case 4: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = 0; break;
+                    case 5: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = 1; break;
+                    case 6: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = 2; break;
+                    case 7: control.used = false; control.orientationClaz = -1; control.orientationNotClaz = -1; break;
+                    }
+                }
+                // boundaries, line-region relations
+                // todo
+
+                controls.disableAllInvalidConstraints(mg);
+
+                // cc decompose
+                auto ccids = MakeHandledTableForAllComponents(mg, -1);
+                int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
+                    return c.used && c.weight > 0;
+                });
+                RLGraphOldToNew old2new;
+                auto mgs = Decompose(mg, ccids, ccnum, &old2new);
+                for (auto & o2n : old2new.container<RegionHandle>()){
+                    auto nrh = o2n.second.second;
+                    int ccid = o2n.second.first;
+                    assert(!nrh.invalid());
+                    assert(nrh.id < mgs[ccid].internalComponents<RegionData>().size());
+                }
+                auto cs = Decompose(mg, controls, ccids, ccnum);
+                assert(mgs.size() == cs.size());
+
+                // for each cc
+                for (int i = 0; i < ccnum; i++){
+                    auto & mg = mgs[i];
+                    auto & controls = cs[i];
+                    RLGraphVars vars;
+
+                    if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                        continue;
+
+                    std::vector<RegionHandle> newrhs = rhs;
+                    for (auto & rh : newrhs){
+                        if (rh.invalid()){
+                            continue;
+                        }
+                        auto newrh = old2new.at(rh);
+                        if (newrh.first == i){
+                            rh = newrh.second;
+                        }
+                        else{
+                            rh.reset();
+                        }
+                    }
+
+
+                    // initial status
+                    vars = SolveVariables(mg, controls, false, true);
+                    NormalizeVariables(mg, controls, vars);
+                    if (1){
+                        Show(p, mg, controls, vars);
+                    }
+                }
+
+            }
+
+        }
+
+
+        void ExhausticReconstruct(const Preparation & p) {
+
+            auto & view = p.view;
+            auto & lines = p.lines;
+            auto & vps = p.vps;
+            auto & segmentedImage = p.segmentedImage;
+            int segmentsNum = p.segmentsNum;
+            auto & gc = p.gc;
+
+            bool outdoor = p.outdoor;
+
+            RLGraph mg;
+            RLGraphControls controls;
+            RLGraphVars vars;
+            std::vector<RegionHandle> rhs;
+
+            int vertVPId = NearestDirectionId(vps, view.camera.upward());
+            AppendLines(mg, lines, view.camera, vps, 40.0 / view.camera.focal(), 100.0 / view.camera.focal());
+            rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 1, 3, true);
+
+            controls = RLGraphControls(mg, vps);
+
+            AttachGeometricContextConstraints(mg, controls, view.camera, gc,
+                [outdoor, vertVPId](RLGraphComponentControl & c, const Vec<double, 5> & v, double s){
+                int maxlabel = std::max_element(v.val, v.val + 5) - v.val;
+                if (outdoor && s > 2){
+                    switch (maxlabel){
+                    case GeometricContextEstimator::OI_Ground:
+                        c.orientationClaz = vertVPId;
+                        c.orientationNotClaz = -1;
+                        break;
+                    case GeometricContextEstimator::OI_VerticalPlanarFace:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::OI_Clutter:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = -1;
+                        break;
+                    case GeometricContextEstimator::OI_Porous:
+                    case GeometricContextEstimator::OI_Sky:
+                        c.used = false;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                else if (!outdoor && s > 4){
+                    switch (maxlabel){
+                    case GeometricContextEstimator::II_FrontVerticalPlanarFace:
+                    case GeometricContextEstimator::II_SideVerticalPlanarFace:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::II_HorizontalPlanarFace:
+                        c.orientationClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::II_Clutter:
+                        c.orientationClaz = c.orientationNotClaz = -1;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            });
+
+
+            // cc decompose
+            auto ccids = MakeHandledTableForAllComponents(mg, -1);
+            int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
+                return c.used && c.weight > 0;
+            });
+            RLGraphOldToNew old2new;
+            auto mgs = Decompose(mg, ccids, ccnum, &old2new);
+            for (auto & o2n : old2new.container<RegionHandle>()){
+                auto nrh = o2n.second.second;
+                int ccid = o2n.second.first;
+                assert(!nrh.invalid());
+                assert(nrh.id < mgs[ccid].internalComponents<RegionData>().size());
+            }
+            auto cs = Decompose(mg, controls, ccids, ccnum);
+            assert(mgs.size() == cs.size());
+
+
+            // for each cc
+            for (int i = 0; i < ccnum; i++){
+                auto & mg = mgs[i];
+                auto & controls = cs[i];
+                RLGraphVars vars;
+
+                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                    continue;
+
+                std::vector<RegionHandle> newrhs = rhs;
+                for (auto & rh : newrhs){
+                    if (rh.invalid()){
+                        continue;
+                    }
+                    auto newrh = old2new.at(rh);
+                    if (newrh.first == i){
+                        rh = newrh.second;
+                    }
+                    else{
+                        rh.reset();
+                    }
+                }
+
+
+                // initial status
+                vars = SolveVariables(mg, controls, false, true);
+                NormalizeVariables(mg, controls, vars);
+                if (1){
+                    Show(p, mg, controls, vars);
+                }
+
+
+                //
+                while (true){
+                    std::queue<RLGraphControls> Q;
+                    Q.push(controls);
+
+                    auto & bestControls = Q.front();
+                    
+                    // search in branches
+                    break;
+
+                }
+                
+            }
+        }
+
 
         void Run(){
 
@@ -490,17 +783,24 @@ namespace panolyz {
             matlab.GetVariable("num", dnum);
             int num = dnum;
 
-            for (int i = 19; i < num; i++){
+            for (int i = 0; i < num; i++){
                 matlab << ("name = names{" + std::to_string(i + 1) + "};");
                 std::string name;
                 matlab.GetVariable("name", name);
                 std::cout << "processing " << name << std::endl;
 
+                if (name != "p1080104"){
+                    continue;
+                }
+
                 auto p = Prepare(name);
                 
+                LabelGT(p);
+
                 //DepthOrdering(p);
                 //ReconstructLines(p);
-                ReconstructModel(p);
+                //ReconstructModel(p);
+                //ExhausticReconstruct(p);
             }
 
         }

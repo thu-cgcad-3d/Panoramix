@@ -4,6 +4,8 @@
 #include "../../src/core/basic_types.hpp"
 #include "../../src/core/utilities.hpp"
 #include "../../src/experimental/rl_graph.hpp"
+#include "../../src/experimental/rl_graph_occlusion.hpp"
+#include "../../src/experimental/tools.hpp"
 #include "../../src/gui/qt_glue.hpp"
 
 #include "stepsdag.hpp"
@@ -134,7 +136,7 @@ public:
         //    
         //    // CC
         //    auto ccids = MakeHandledTableForAllComponents<int>(mg);
-        //    int ccnum = experimental::ConnectedComponents(mg, ccids);
+        //    int ccnum = ConnectedComponents(mg, ccids);
 
 
         //    //props = MakeRLGraphPropertyTable(mg, vps);
@@ -178,7 +180,7 @@ public:
 
             // append regions
             auto segId2Rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
-            controls = MakeControls(mg, vps);
+            controls = RLGraphControls(mg, vps);
 
             im.unlock();
             linesVPs.unlock();
@@ -257,8 +259,6 @@ public:
         // reconstruction refinement
         int stepReconstructionRefinement = _steps->addStep("Reconstruction Refinement",
             [this](DataOfType<Reconstruction<PanoramicCamera>> & rec){
-            
-            using namespace experimental;
 
             ReconstructionRefinement<PanoramicCamera> refinement;
             refinement.shapes.reserve(rec.content.gs.size());
@@ -276,15 +276,15 @@ public:
                 Vec3 vertDir = normalize(controls.vanishingPoints[vertVPId]);
                 rec.unlock();
 
-                auto range = experimental::EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.02, 0.7, -1e5, -1e5);
+                auto range = EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.02, 0.7, -1e5, -1e5);
 
                 std::vector<Chain3> chains;
                 for (double x = range.first; x <= range.second; x += medianDepth * 0.02){
                     Plane3 cutplane(vertDir * x, vertDir);
-                    auto loop = experimental::MakeSectionalPieces(polygons, cutplane);
+                    auto loop = MakeSectionalPieces(polygons, cutplane);
                     if (loop.empty())
                         continue;
-                    chains.push_back(experimental::MakeChain(loop));
+                    chains.push_back(MakeChain(loop));
                 }
 
                 LayeredShape3 shape;
@@ -408,20 +408,21 @@ public:
 
             // append lines
             for (int i = 0; i < perspectiveViews.size(); i++)
-                AppendLines(mg, lines[i], perspectiveViews[i].camera, vps);
+                AppendLines(mg, lines[i], perspectiveViews[i].camera, vps, 
+                40.0 / 500.0, 
+                100.0 / 500.0);
 
             _confLock.lockForRead();
 
             // append regions
-            auto segId2Rhs = AppendRegions(mg, segmentedImage, perspectiveViews.front().camera, 0.01, 0.01, 3, 2);
-            controls = MakeControls(mg, vps);
-
+            auto segId2Rhs = AppendRegions(mg, segmentedImage, perspectiveViews.front().camera, 0.01, 0.001, 1, 3, true);
+            controls = RLGraphControls(mg, vps);
 
             linesVPs.unlock();
             segs.unlock();
 
-            AttachPrincipleDirectionConstraints(mg, controls, M_PI / 120.0);
-            AttachWallConstriants(mg, controls, M_PI / 100.0);
+            //AttachPrincipleDirectionConstraints(mg, controls, M_PI / 120.0);
+            //AttachWallConstriants(mg, controls, M_PI / 100.0);
 
             _confLock.unlock();
 
@@ -442,14 +443,23 @@ public:
         int stepReconstruction = _steps->addStep("Reconstruction",
             [this](DataOfType<ReconstructionSetup<PerspectiveCamera>> & lastRec){
 
-            using namespace panoramix;
-            using namespace experimental;
+            auto & mg = lastRec.content.mg;
+            auto & controls = lastRec.content.controls;
 
-            auto ccids = MakeHandledTableForAllComponents(lastRec.content.mg, -1);
-            int ccnum = ConnectedComponents(lastRec.content.mg, ccids);
-            std::vector<RLGraph> mgs = Decompose(lastRec.content.mg, ccids, ccnum);
-            std::vector<RLGraphControls> cs = Decompose(lastRec.content.mg, lastRec.content.controls, ccids, ccnum);
-            assert(cs.size() == mgs.size());
+            auto ccids = MakeHandledTableForAllComponents(mg, -1);
+            int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
+                return c.used && c.weight > 0;
+            });
+            RLGraphOldToNew old2new;
+            auto mgs = Decompose(mg, ccids, ccnum, &old2new);
+            for (auto & o2n : old2new.container<RegionHandle>()){
+                auto nrh = o2n.second.second;
+                int ccid = o2n.second.first;
+                assert(!nrh.invalid());
+                assert(nrh.id < mgs[ccid].internalComponents<RegionData>().size());
+            }
+            auto cs = Decompose(mg, controls, ccids, ccnum);
+            assert(mgs.size() == cs.size());
 
             Reconstruction<PerspectiveCamera> rec;
             rec.view = lastRec.content.view;
@@ -472,20 +482,6 @@ public:
                 vars = SolveVariables(mg, controls, false);
                 NormalizeVariables(mg, controls, vars);
                 std::cout << "score = " << Score(mg, controls, vars) << std::endl;
-
-                LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.2, 0.1);
-                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
-                    continue;
-
-                vars = SolveVariables(mg, controls);
-                NormalizeVariables(mg, controls, vars);
-
-                AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
-
-                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
-                    continue;
-                vars = SolveVariables(mg, controls);
-                NormalizeVariables(mg, controls, vars);
             }
 
             return rec;

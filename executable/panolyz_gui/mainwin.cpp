@@ -203,7 +203,7 @@ MainWin::MainWin(QWidget *parent) : QMainWindow(parent) {
     auto actionNewProjNormal = menuFile->addAction(tr("Create A &New Panolyz Project from Normal Photo ..."));
     connect(actionNewProjNormal, &QAction::triggered, [this](){
         QStringList filenames = QFileDialog::getOpenFileNames(this, tr("Select a Normal Image File"),
-            tr(PROJECT_TEST_DATA_DIR_STR),
+            tr("F:\\DataSets\\YorkUrbanDB\\data"),
             tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
         for (auto & filename : filenames)
             installProject(Project::createProjectFromImage(filename, false, this));

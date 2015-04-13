@@ -202,6 +202,20 @@ namespace panoramix {
             RLGraphComponentControls componentControls;
             RLGraphConstraintControls constraintControls;
 
+            RLGraphControls(){}
+            RLGraphControls(const RLGraph & mg, const std::vector<Vec3> & vps);
+            RLGraphControls(RLGraphControls && c)
+                : vanishingPoints(std::move(c.vanishingPoints)),
+                componentControls(std::move(c.componentControls)),
+                constraintControls(std::move(c.constraintControls)){
+            }
+            RLGraphControls & operator = (RLGraphControls && c){
+                std::swap(vanishingPoints, c.vanishingPoints);
+                std::swap(componentControls, c.componentControls);
+                std::swap(constraintControls, c.constraintControls);
+                return *this;
+            }
+
             template <class DataT>
             inline RLGraphComponentControl & operator[](ComponentHandle<DataT> h) {
                 return componentControls[h];
@@ -252,9 +266,6 @@ namespace panoramix {
         };
         using RLGraphVars = RLGraphComponentTable<RLGraphVar>;
 
-
-        // make controls
-        RLGraphControls MakeControls(const RLGraph & mg, const std::vector<Vec3> & vps);
 
 
         // connected components
@@ -378,12 +389,6 @@ namespace panoramix {
             double angleThreshold = M_PI / 100.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
 
 
-        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
-            const PanoramicCamera & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes, 
-            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun = nullptr);
-        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
-            const PerspectiveCamera & pcam, const ImageOfType<Vec<double, 5>> & gc,
-            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun = nullptr);
 
 
         void LooseOrientationConstraintsOnComponents(const RLGraph & mg, 

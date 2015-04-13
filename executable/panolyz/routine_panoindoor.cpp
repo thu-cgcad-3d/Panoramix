@@ -14,7 +14,7 @@ namespace panolyz {
         void Run(){
 
             std::string path;
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+            path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
@@ -27,7 +27,7 @@ namespace panolyz {
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab2.jpg";
-            path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab3.jpg";
+            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab3.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (2).jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x5.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x6.jpg";
@@ -139,7 +139,7 @@ namespace panolyz {
                     AppendLines(mg, lines[i], cams[i], vps);
                 }
 
-                controls = MakeControls(mg, vps);
+                controls = RLGraphControls(mg, vps);
                 SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
                     return std::max(mg.data(h).junctionWeight, 1e-1f);
                 });
@@ -180,22 +180,22 @@ namespace panolyz {
                 for (int i = 0; i < cams.size(); i++){
                     AppendLines(mg, lines[i], cams[i], vps);
                 }
-                rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
+                rhs = AppendRegions(mg, segmentedImage, view.camera, 0.03, 0.02, 4, 4, false);
 
-                controls = MakeControls(mg, vps);
+                controls = RLGraphControls(mg, vps);
                 AttachPrincipleDirectionConstraints(mg, controls, M_PI / 20.0);
                 AttachWallConstriants(mg, controls, M_PI / 20);
                 //AttachGeometricContextConstraints(mg, controls, view.camera, gc, gcVotes);
 
                 // set constraint weights
                 SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
-                    return std::max(mg.data(h).junctionWeight * 3.0f, 1.0f);
+                    return std::max(mg.data(h).junctionWeight * 10.0f, 1.0f);
                 });
                 SetConstraintWeights<RegionBoundaryData>(controls, [&mg](RegionBoundaryHandle h){
-                    return std::max(mg.data(h).length / M_PI * 20.0, 1.0);
+                    return std::max(mg.data(h).length / M_PI / 10.0, 0.0);
                 });
                 SetConstraintWeights<RegionLineConnectionData>(controls, [&mg](RegionLineConnectionHandle h){
-                    return std::max(mg.data(h).length / M_PI * 20.0, 1.0);
+                    return std::max(mg.data(h).length / M_PI / 10.0, 0.0);
                 });
 
                 // cc decompose
@@ -218,22 +218,22 @@ namespace panolyz {
 
                     vars = SolveVariables(mg, controls, false, false);
                     NormalizeVariables(mg, controls, vars);
-                    OptimizeVariables(mg, controls, vars);
+                    //OptimizeVariables(mg, controls, vars);
                     std::cout << "score = " << Score(mg, controls, vars) << std::endl;
 
-                    LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
+                    //LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
+                    //if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                    //    continue;
+
+                    //vars = SolveVariables(mg, controls, true, false);
+                    //NormalizeVariables(mg, controls, vars);
+
+                  /*  AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
+
                     if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
                         continue;
-
-                    vars = SolveVariables(mg, controls, false, false);
-                    NormalizeVariables(mg, controls, vars);
-
-                    AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
-
-                    if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
-                        continue;
-                    vars = SolveVariables(mg, controls, false, false);
-                    NormalizeVariables(mg, controls, vars);
+                    vars = SolveVariables(mg, controls, false, true);
+                    NormalizeVariables(mg, controls, vars);*/
 
                     gui::Visualizer vis;
                     Visualize(vis, view, mg, controls, vars);

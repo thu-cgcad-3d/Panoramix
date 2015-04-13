@@ -298,7 +298,7 @@ namespace panoramix {
 
 
         HandledTable<RegionHandle, Plane3> MixedGraph::solve() const {           
-            auto controls = MakeControls(regionLineGraph, vps);
+            RLGraphControls controls(regionLineGraph, vps);
 
             size_t vpnum = vps.size();
             int vertVPId = -1, frontVPId = -1, sideVPId = -1;

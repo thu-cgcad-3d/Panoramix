@@ -862,7 +862,7 @@ namespace panoramix {
             }
 
 
-            template <class CameraT>
+            template <class CameraT, bool SampleLineOnImage>
             std::vector<RegionHandle> AppendRegionsTemplate(RLGraph & mg, const Imagei & segmentedRegions, const CameraT & cam,
                 double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
                 int samplerSizeOnBoundary, int samplerSizeOnLine, bool noBoundaryUnderLines){
@@ -879,7 +879,7 @@ namespace panoramix {
                     Line2 line2(cam.screenProjection(line.first), cam.screenProjection(line.second));
                     Vec2 vertToLineDir = normalize(PerpendicularDirection(line2.direction())); // vertical to this line
                     double stepOnImage = std::max(cam.focal() * samplingStepAngleOnLine, 0.5);
-                    if (1){
+                    if (SampleLineOnImage){
                         for (double stepLen = 0.0; stepLen <= line2.length(); stepLen += stepOnImage){
                             Point2 sampleP = line2.first + normalize(line2.second - line2.first) * stepLen;
                             PixelLoc originalP = ToPixelLoc(sampleP);
@@ -1064,13 +1064,13 @@ namespace panoramix {
         std::vector<RegionHandle> AppendRegions(RLGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine, 
             int samplerSizeOnBoundary, int samplerSizeOnLine, bool noBoundaryUnderLines){
-            return AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
+            return AppendRegionsTemplate<PerspectiveCamera, true>(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
                 samplerSizeOnBoundary, samplerSizeOnLine, noBoundaryUnderLines);
         }
         std::vector<RegionHandle> AppendRegions(RLGraph & mg, const Imagei & segmentedRegions, const PanoramicCamera & cam,
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine,
             int samplerSizeOnBoundary, int samplerSizeOnLine, bool noBoundaryUnderLines){
-            return AppendRegionsTemplate(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
+            return AppendRegionsTemplate<PanoramicCamera, false>(mg, segmentedRegions, cam, samplingStepAngleOnBoundary, samplingStepAngleOnLine, 
                 samplerSizeOnBoundary, samplerSizeOnLine, noBoundaryUnderLines);
         }
 
@@ -1602,31 +1602,28 @@ namespace panoramix {
         }
 
 
-        RLGraphControls MakeControls(const RLGraph & mg, const std::vector<Vec3> & vps) {
-            auto compProps = MakeHandledTableForAllComponents<RLGraphComponentControl>(mg);
-            auto consProps = MakeHandledTableForAllConstraints<RLGraphConstraintControl>(mg);
+        RLGraphControls::RLGraphControls(const RLGraph & mg, const std::vector<Vec3> & vps) : vanishingPoints(vps) {
+            componentControls = MakeHandledTableForAllComponents<RLGraphComponentControl>(mg);
+            constraintControls = MakeHandledTableForAllConstraints<RLGraphConstraintControl>(mg);
             for (auto & l : mg.internalComponents<LineData>()){
-                compProps[l.topo.hd].orientationClaz = l.data.initialClaz;
-                compProps[l.topo.hd].orientationNotClaz = -1;
+                componentControls[l.topo.hd].orientationClaz = l.data.initialClaz;
+                componentControls[l.topo.hd].orientationNotClaz = -1;
             }
             for (auto & r : mg.internalComponents<RegionData>()){
-                compProps[r.topo.hd].orientationClaz = compProps[r.topo.hd].orientationNotClaz = -1;
+                componentControls[r.topo.hd].orientationClaz = componentControls[r.topo.hd].orientationNotClaz = -1;
             }
-            for (auto & dtable : compProps.data){
+            for (auto & dtable : componentControls.data){
                 for (auto & d : dtable){
                     d.used = true;
                 }
             }
-            for (auto & dtable : consProps.data){
+            for (auto & dtable : constraintControls.data){
                 for (auto & d : dtable){
                     d.used = true;
                     d.weight = 1.0;
                 }
             }
-
-            RLGraphControls controls{ vps, std::move(compProps), std::move(consProps) };
-            ResetWeights(mg, controls);
-            return controls;
+            ResetWeights(mg, *this);
         }
 
 
@@ -3945,71 +3942,6 @@ namespace panoramix {
 
 
 
-
-
-
-        template <class CameraT>
-        void AttachGeometricContextConstraintsTemplated(const RLGraph & mg, RLGraphControls & controls,
-            const CameraT & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes,
-            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
-
-            SetClock();
-
-            // set component orientations
-            // use geometric context!
-            SetComponentControl<RegionData>(controls,
-                [&mg, &gc, &gcVotes, &pcam, &fun](RegionHandle rh, RLGraphComponentControl & c){
-                auto regionMaskView = PerfectRegionMaskView(mg, rh);
-                auto sampler = core::MakeCameraSampler(regionMaskView.camera, pcam);
-                auto gcOnRegion = sampler(gc);
-                auto gcVotesOnRegion = sampler(gcVotes);
-                int votes = 0;
-                core::Vec<double, 5> gcSum;
-                for (auto it = regionMaskView.image.begin(); it != regionMaskView.image.end(); ++it){
-                    if (!*it){
-                        continue;
-                    }
-                    gcSum += gcOnRegion(it.pos());
-                    votes += gcVotesOnRegion(it.pos());
-                }
-                auto gcMean = gcSum / std::max(votes, 1);
-                auto gcMean2 = gcMean;
-                std::sort(std::begin(gcMean2.val), std::end(gcMean2.val), std::greater<>());
-                double significancy = gcMean2[0] / std::max(gcMean2[1], 1e-5);
-                if (!fun){
-                    if (significancy > 2){
-                        int label = std::max_element(std::begin(gcMean.val), std::end(gcMean.val)) - gcMean.val;
-                        // label: vp1 vp2 vp3 clutter other
-                        if (label < 3){ // vp
-                            c.orientationClaz = label;
-                            c.orientationNotClaz = -1;
-                        }
-                        else{
-                            c.used = false;
-                            //c.orientationClaz = c.orientationNotClaz = -1;
-                        }
-                    }
-                }
-                else{
-                    fun(c, gcMean, significancy);
-                }
-            });
-
-            controls.disableAllInvalidConstraints(mg);
-        }
-
-
-
-        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
-            const PanoramicCamera & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes,
-            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
-            AttachGeometricContextConstraintsTemplated(mg, controls, pcam, gc, gcVotes, fun);
-        }
-        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
-            const PerspectiveCamera & pcam, const ImageOfType<Vec<double, 5>> & gc,
-            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
-            AttachGeometricContextConstraintsTemplated(mg, controls, pcam, gc, Imagei::ones(gc.size()), fun);
-        }
 
 
 
