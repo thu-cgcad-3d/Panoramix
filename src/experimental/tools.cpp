@@ -364,6 +364,12 @@ namespace panoramix {
         }
 
 
+        void SmoothInstances(const RLGraph & mg, const InstanceTable<RegionData> & planes, const InstanceTable<LineData> & lines){
+
+
+
+        }
+
 
     }
 

@@ -401,6 +401,23 @@ namespace panoramix {
         }
 
 
+        PerspectiveView CreatePerspectiveView(const Image & perspectiveImage, 
+            const std::vector<HPoint2> & vps,
+            const Point3 & eye, const Point3 & center, const Vec3 & up){
+
+            double focal;
+            Point2 principlePoint;
+            std::tie(principlePoint, focal) =
+                ComputePrinciplePointAndFocalLength(vps[0].value(), vps[1].value(), vps[2].value());
+
+            View<PerspectiveCamera> view;
+            view.image = perspectiveImage;
+            view.camera = PerspectiveCamera(view.image.cols, view.image.rows,
+                principlePoint, focal, eye, center, up);
+
+            return view;
+        }
+
 
     }
 }

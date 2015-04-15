@@ -748,7 +748,7 @@ namespace panoramix {
                 ((vp1(0) - vp2(0))*(vp1(1) - vp3(1)) -
                 (vp1(0) - vp3(0))*(vp1(1) - vp2(1)));
             Point2 pp = vp3 + PerpendicularDirection(vp1 - vp2) * lambda;
-            double focalLength = sqrt(-(vp1 - pp).dot(vp2 - pp));
+            double focalLength = sqrt(abs(-(vp1 - pp).dot(vp2 - pp)));
             return std::make_pair(pp, focalLength);
         }
 
@@ -2545,11 +2545,18 @@ namespace panoramix {
                 auto & resultv = *it;
                 if (sceneClass == SceneClass::Indoor){
                     // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
-                    resultv[II_FrontVerticalPlanarFace] += p[0];
+                    /*resultv[II_FrontVerticalPlanarFace] += p[0];
                     resultv[II_SideVerticalPlanarFace] += p[1];
                     resultv[II_SideVerticalPlanarFace] += p[2];
                     resultv[II_HorizontalPlanarFace] += p[3];
                     resultv[II_HorizontalPlanarFace] += p[4];
+                    resultv[II_Clutter] += p[5];
+                    resultv[II_Other] += p[6];*/
+                    resultv[II_HorizontalPlanarFace] += p[3];
+                    resultv[II_HorizontalPlanarFace] += p[4];
+                    resultv[II_VerticalPlanarFace] += p[0];
+                    resultv[II_VerticalPlanarFace] += p[1];
+                    resultv[II_VerticalPlanarFace] += p[2];
                     resultv[II_Clutter] += p[5];
                     resultv[II_Other] += p[6];
                 }
@@ -2577,6 +2584,8 @@ namespace panoramix {
 
         std::pair<ImageOfType<Vec<double, 5>>, Imagei> GeometricContextEstimator::operator() (const Image & image,
             const PanoramicCamera & camera, const std::vector<Vec3> & allvps, SceneClass sceneClass) const {
+
+            NOT_IMPLEMENTED_YET(); 
 
             ImageOfType<Vec<double, 5>> result = ImageOfType<Vec<double, 7>>::zeros(image.size());
             Imagei votes = Imagei::zeros(image.size());
@@ -2608,23 +2617,30 @@ namespace panoramix {
                     auto & p = gc(gcPos);
 
                     if (sceneClass == SceneClass::Indoor){
-                        resultv[frontVPid] += p[0];
+                       /* resultv[frontVPid] += p[0];
                         resultv[sideVPid] += p[1];
                         resultv[sideVPid] += p[2];
                         resultv[vertVPid] += p[3];
                         resultv[vertVPid] += p[4];
                         resultv[3] += p[5];
-                        resultv[4] += p[6];
+                        resultv[4] += p[6];*/
+                        resultv[II_VerticalPlanarFace] += p[0];
+                        resultv[II_VerticalPlanarFace] += p[1];
+                        resultv[II_VerticalPlanarFace] += p[2];
+                        resultv[II_HorizontalPlanarFace] += p[3];
+                        resultv[II_HorizontalPlanarFace] += p[4];
+                        resultv[II_Clutter] += p[5];
+                        resultv[II_Other] += p[6];
                     }
                     else{
                         // 0: ground, 1,2,3: vertical, 4:clutter, 5:poros, 6: sky
-                        resultv[0] += p[0];
-                        resultv[1] += p[1];
-                        resultv[1] += p[2];
-                        resultv[1] += p[3];
-                        resultv[2] += p[4];
-                        resultv[3] += p[5];
-                        resultv[4] += p[6];
+                        resultv[OI_Ground] += p[0];
+                        resultv[OI_VerticalPlanarFace] += p[1];
+                        resultv[OI_VerticalPlanarFace] += p[2];
+                        resultv[OI_VerticalPlanarFace] += p[3];
+                        resultv[OI_Clutter] += p[4];
+                        resultv[OI_Porous] += p[5];
+                        resultv[OI_Sky] += p[6];
                     }
                     votes(it.pos())++;
                 }

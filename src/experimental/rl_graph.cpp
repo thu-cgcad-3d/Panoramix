@@ -20,6 +20,7 @@ extern "C" {
 
 #include "tools.hpp"
 #include "rl_graph.hpp"
+#include "rl_graph_occlusion.hpp"
 
 #include "../gui/visualizers.hpp"
 
@@ -2295,7 +2296,7 @@ namespace panoramix {
 
                     const Vec3 * pp1 = nullptr;
                     const Vec3 * pp2 = nullptr;
-                    double maxAngle = 0.0;
+                    double maxAngle = -1;
                     for (int i = 0; i < points.size(); i++){
                         for (int ii = 0; ii < points[i].size(); ii++){
                             for (int j = i; j < points.size(); j++){
@@ -2359,6 +2360,47 @@ namespace panoramix {
                 inline std::vector<Vec3> operator()(const RLGraph & mg, RegionLineConnectionHandle bh) const {
                     return mg.data(bh).normalizedAnchors;
                 }
+            };
+
+            struct ExtractMoreAnchorsForBinary {
+                std::vector<Vec3> operator()(const RLGraph & mg, RegionBoundaryHandle bh) const{
+                    std::vector<Vec3> anchors;
+                    anchors.reserve(ElementsNum(mg.data(bh).normalizedSampledPoints));
+                    for (auto & ps : mg.data(bh).normalizedSampledPoints){
+                        if (ps.size() == 1){
+                            anchors.push_back(ps[0]);
+                            continue;
+                        }
+                        anchors.push_back(ps[0]);
+                        for (int i = 1; i < ps.size(); i++){
+                            anchors.push_back(ps[i]);
+                            Vec3 pdir = normalize(ps[i].cross(ps[i - 1]));
+                            auto newp = RotateDirection(ps[i], ps[i] + pdir, expandAngle);
+                            anchors.push_back(normalize(newp));
+                            newp = RotateDirection(ps[i], ps[i] + pdir, -expandAngle);
+                            anchors.push_back(normalize(newp));
+                        }
+                    }
+                    return anchors;
+                }
+                inline std::vector<Vec3> operator()(const RLGraph & mg, LineRelationHandle bh) const {
+                    return{ mg.data(bh).normalizedRelationCenter };
+                }
+                inline std::vector<Vec3> operator()(const RLGraph & mg, RegionLineConnectionHandle bh) const {
+                    std::vector<Vec3> anchors;
+                    anchors.reserve(mg.data(bh).normalizedAnchors.size() * 3);
+                    auto & ps = mg.data(bh).normalizedAnchors;
+                    if (ps.size() == 1)
+                        return ps;
+                    Vec3 pdir = normalize(ps.front().cross(ps.back()));
+                    for (auto & p : ps){
+                        anchors.push_back(p);
+                        anchors.push_back(RotateDirection(p, p + pdir, expandAngle));
+                        anchors.push_back(RotateDirection(p, p + pdir, -expandAngle));
+                    }
+                    return anchors;
+                }
+                double expandAngle;
             };
 
 
@@ -2455,8 +2497,9 @@ namespace panoramix {
                         eid++;
                     }
                 }
-
             }
+
+
 
             template <class ConstraintDataT, class SparseMatElementT>
             inline void RegisterConstraintEquations(const RLGraph & mg, 
@@ -2523,7 +2566,7 @@ namespace panoramix {
                         continue;
                     int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
                     for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                        vars[c.topo.hd].variables[i] = X[uhStartPosition + i];
+                        vars[c.topo.hd].variables[i] = X(uhStartPosition + i);
                     }
                 }
                 for (auto & c : mg.components<LineData>()){
@@ -2531,7 +2574,7 @@ namespace panoramix {
                         continue;
                     int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
                     for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                        vars[c.topo.hd].variables[i] = X[uhStartPosition + i];
+                        vars[c.topo.hd].variables[i] = X(uhStartPosition + i);
                     }
                 }
             }
@@ -2539,7 +2582,9 @@ namespace panoramix {
         }
 
         // inverse depth optimization
-        RLGraphVars SolveVariables(const RLGraph & mg, const RLGraphControls & controls, bool useWeights, bool useAllAnchors) {
+        RLGraphVars SolveVariables(const RLGraph & mg, const RLGraphControls & controls,
+            bool useWeights, bool useAllAnchors) {
+
             RLGraphVars vars = MakeVariables(mg, controls);
 
             int nanchor = NumberOfAnchors(controls);
@@ -2562,15 +2607,17 @@ namespace panoramix {
             RegisterVariableValues(mg, controls, vars, uh2varStartPosition, Xdata);
 
             // register cons
-            int consNum = useAllAnchors 
-                ? 
-                RegisterConstraintPositions(mg, controls, uh2varStartPosition,
-                uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
-                weightsForEachAppliedBinaryAnchor, ExtractAllAnchorsForBinary())
-                :
-                RegisterConstraintPositions(mg, controls, uh2varStartPosition,
-                uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
-                weightsForEachAppliedBinaryAnchor, ExtractNecessaryAnchorsForBinary());
+            int consNum = 0;
+
+            if (!useAllAnchors)
+                consNum = RegisterConstraintPositions(mg, controls, uh2varStartPosition,
+                    uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
+                    weightsForEachAppliedBinaryAnchor, ExtractNecessaryAnchorsForBinary());
+            else
+                consNum = RegisterConstraintPositions(mg, controls, uh2varStartPosition,
+                    uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
+                    weightsForEachAppliedBinaryAnchor, ExtractAllAnchorsForBinary());
+            
 
             std::vector<double> Bdata(consNum, 0.0);
             std::vector<Eigen::Triplet<double>> Atriplets;
@@ -2662,11 +2709,181 @@ namespace panoramix {
                 Clock clock("install solved variables");
                 InstallVariables(mg, controls, uh2varStartPosition, X, vars);
             }
-
+            NormalizeVariables(mg, controls, vars);
             return vars;
         }
 
         
+
+        namespace test {
+
+            inline Vec3 CenterDirection(const RegionData & rd){
+                return rd.normalizedCenter;
+            }
+
+            inline Vec3 CenterDirection(const LineData & ld){
+                return normalize(ld.line.center());
+            }
+
+
+        }
+
+
+
+     
+
+
+        namespace test {
+
+            RLGraphVars SolveVariablesCVXWithLineDetachStatus(const RLGraph & mg,
+                const RLGraphControls & controls, const HandledTable<LineHandle, LineDetachStatus> & lineDetachStatus,
+                bool useWeights, bool useAllAnchors) {
+
+                RLGraphVars vars = MakeVariables(mg, controls);
+
+                SetClock();
+
+                auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+                auto uh2anchorConsStartPosition = MakeHandledTableForAllComponents<int>(mg);
+                auto bh2consStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+                auto appliedBinaryAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
+                auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForAllConstraints<double>(mg);
+
+                // register vars
+                int varNum = RegisterVariablePositions(mg, controls, vars, uh2varStartPosition);
+                std::vector<double> Xdata(varNum, 1.0);
+                RegisterVariableValues(mg, controls, vars, uh2varStartPosition, Xdata);
+
+                // register cons
+                int consNum = useAllAnchors
+                    ?
+                    RegisterConstraintPositions(mg, controls, uh2varStartPosition,
+                    uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
+                    weightsForEachAppliedBinaryAnchor, ExtractAllAnchorsForBinary())
+                    :
+                    RegisterConstraintPositions(mg, controls, uh2varStartPosition,
+                    uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
+                    weightsForEachAppliedBinaryAnchor, ExtractNecessaryAnchorsForBinary());
+
+                std::vector<double> Bdata(consNum, 0.0);
+                std::vector<SparseMatElement<double>> Atriplets;
+                std::vector<SparseMatElement<double>> Wtriplets;
+                Atriplets.reserve(consNum * 6);
+                Wtriplets.reserve(consNum);
+
+                RegisterComponentAnchorEquations<RegionData>(mg, controls, vars, uh2varStartPosition, uh2anchorConsStartPosition,
+                    Atriplets, Wtriplets, Bdata);
+                RegisterComponentAnchorEquations<LineData>(mg, controls, vars, uh2varStartPosition, uh2anchorConsStartPosition,
+                    Atriplets, Wtriplets, Bdata);
+
+                RegisterConstraintEquations<RegionBoundaryData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
+                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
+                RegisterConstraintEquations<LineRelationData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
+                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
+                RegisterConstraintEquations<RegionLineConnectionData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
+                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
+
+                // distinguish between =, <= and >= constraints
+                static const int LT = 0, GT = 1;
+                DenseMatd consTypes(consNum, 2, 0.0);
+                for (auto & l : mg.components<LineData>()){
+                    // ll
+                    for (auto & ll : l.topo.constraints<LineRelationData>()){
+                        bool mayocc = MayOccludes(mg, lineDetachStatus, l.topo.hd, ll);
+                        if (mayocc){
+                            if (l.topo.hd == mg.topo(ll).component<0>()){
+                                // the first is closer than the second
+                                // first depth is smaller than the second
+                                // first inverse depth is bigger than the second
+                                // assgin a '>='
+                                for (int i = 0; i < appliedBinaryAnchors[ll].size(); i++){
+                                    consTypes(bh2consStartPosition[ll] + i, GT) = 1.0;
+                                }
+                            }
+                            else{
+                                // the second is closer than the first
+                                // second depth is smaller than the first
+                                // second inverse depth is bigger than the first
+                                // assgin a '<='
+                                for (int i = 0; i < appliedBinaryAnchors[ll].size(); i++){
+                                    consTypes(bh2consStartPosition[ll] + i, LT) = 1.0;
+                                }
+                            }
+                        }
+                    }
+                    // rl
+                    for (auto & rl : l.topo.constraints<RegionLineConnectionData>()){
+                        bool mayocc = MayOccludes(mg, lineDetachStatus, l.topo.hd, rl);
+                        if (mayocc){
+                            // the first is closer than the second
+                            // first depth is smaller than the second
+                            // first inverse depth is bigger than the second
+                            // assgin a '>='
+                            for (int i = 0; i < appliedBinaryAnchors[rl].size(); i++){
+                                consTypes(bh2consStartPosition[rl] + i, GT) = 1.0;
+                            }
+                        }
+                    }
+                }
+
+                // now optimize!
+                SparseMatd A = MakeSparseMatFromElements(consNum, varNum, Atriplets.begin(), Atriplets.end());
+                if (!useWeights){
+                    for (int i = 0; i < Wtriplets.size(); i++){
+                        Wtriplets[i].col = Wtriplets[i].row = i;
+                        Wtriplets[i].value = 1.0;
+                    }
+                }
+                SparseMatd W = MakeSparseMatFromElements(consNum, consNum, Wtriplets.begin(), Wtriplets.end());
+
+                misc::Matlab matlab;
+                matlab.PutVariable("A", A);
+                matlab.PutVariable("W", W);
+                matlab.PutVariable("B", Bdata);
+                matlab << "B = B';";
+                matlab.PutVariable("consTypes", consTypes);
+
+                matlab
+                    << "consNum = size(A, 1);"
+                    << "varNum = size(A, 2);"
+
+                    << "ltpart = consTypes(:,1) > 0 & consTypes(:,1) ~= consTypes(:,2);"
+                    << "A_lt = A(ltpart, :);"
+                    << "W_lt = W(ltpart, ltpart);"
+                    << "B_lt = B(ltpart, :);"
+
+                    << "gtpart = consTypes(:,2) > 0 & consTypes(:,1) ~= consTypes(:,2);"
+                    << "A_gt = A(gtpart, :);"
+                    << "W_gt = W(gtpart, gtpart);"
+                    << "B_gt = B(gtpart, :);"
+
+                    << "eqpart = consTypes(:,1) == consTypes(:,2);"
+                    << "A_eq = A(eqpart, :);"
+                    << "W_eq = W(eqpart, eqpart);"
+                    << "B_eq = B(eqpart, :);"
+
+                    << "save temp"
+                    << "cvx_begin"
+                    << "variable X(varNum);"
+                    << "minimize sum_square(A_eq * X - B_eq) + \
+                                          sum_square(A_lt * X - B_lt) * 0.5 + \
+                                                             sum_square(A_gt * X - B_gt) * 0.5"
+                                                             << "subject to"
+                                                             << " A_lt * X - B_lt <= 0;"
+                                                             << " A_gt * X - B_gt >= 0;"
+                                                             //<< " X > 0;"
+                                                             << "cvx_end";
+
+                DenseMatd X;
+                matlab.GetVariable("X", X);
+
+                InstallVariables(mg, controls, uh2varStartPosition, X, vars);
+                NormalizeVariables(mg, controls, vars);
+
+                return vars;
+            }
+
+        }
 
 
         namespace {
@@ -4247,13 +4464,6 @@ namespace panoramix {
             controls.disableAllInvalidConstraints(mg);
 
         }
-
-
-
-
-
-
-
 
 
 

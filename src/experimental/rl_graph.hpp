@@ -8,6 +8,8 @@
 #include "../core/cons_graph.hpp"
 #include "../core/cameras.hpp"
 
+
+
 namespace panoramix {
     namespace experimental {
 
@@ -362,9 +364,12 @@ namespace panoramix {
         void ClearAllComponentAnchors(RLGraphControls & controls);
 
         RLGraphVars MakeVariables(const RLGraph & mg, const RLGraphControls & controls, bool randomized = false);
-        RLGraphVars SolveVariables(const RLGraph & mg, 
-            const RLGraphControls & controls, 
-            bool useWeights = false, bool useAllAnchors = false);
+
+        RLGraphVars SolveVariables(const RLGraph & mg, const RLGraphControls & controls,
+            bool useWeights = false, bool useAllAnchors = true);
+        RLGraphVars SolveVariablesCVX(const RLGraph & mg, const RLGraphControls & controls,
+            bool useWeights = false, bool useAllAnchors = true);
+
         void OptimizeVariables(const RLGraph & mg,
             const RLGraphControls & controls, RLGraphVars & vars, 
             bool useWeights = true, bool useAllAnchors = false,
@@ -398,9 +403,7 @@ namespace panoramix {
 
 
 
-
-
-
+       
 
     }
 }

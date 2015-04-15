@@ -3,7 +3,7 @@
 #include "../src/core/algorithms.hpp"
 #include "../src/ml/data_set.hpp"
 #include "../src/misc/matlab.hpp"
-#include "../src/experimental/mixed_graph.hpp"
+#include "../src/experimental/engine.hpp"
 #include "../src/gui/visualizers.hpp"
 
 #include "config.hpp"
@@ -12,7 +12,7 @@ using namespace panoramix;
 using namespace test;
 using namespace experimental;
 
-#define LOG(...) std::cout << "[MixedGraph Optimization] #######  " << __VA_ARGS__ << " #######"<< std::endl
+#define LOG(...) std::cout << "[Engine Optimization] #######  " << __VA_ARGS__ << " #######"<< std::endl
 
 
 static_assert(IsCamera<PerspectiveCamera>::value, "");
@@ -138,7 +138,7 @@ void ForEachCase(FunT && fun){
 }
 
 
-TEST(MixedGraph, Basic){
+TEST(Engine, Basic){
 
     // load test data
     misc::Matlab::CDAndAddAllSubfolders(nyu2dir + "tinyworkspace\\");
@@ -178,7 +178,7 @@ TEST(MixedGraph, Basic){
     auto c = ml::annotations::nyu2::c_rgb();
     auto f = ml::annotations::nyu2::f_rgb();
     
-    MixedGraph mg(image, c, (f(0) + f(1)) / 2.0);
+    Engine mg(image, c, (f(0) + f(1)) / 2.0);
     mg.installOcclusionResponce(indices, occscore);
     mg.installGCResponse(gc);
 
@@ -191,7 +191,7 @@ TEST(MixedGraph, Basic){
 }
 
 
-TEST(MixedGraph, Batch){
+TEST(Engine, Batch){
 
     ForEachCase([](int id, const std::vector<std::vector<int32_t>> & indices, const std::vector<double> & occscore,
         const Image & image, const Image7d & gc, const Imagef & depth, const CameraParams & cameraParams){
@@ -203,7 +203,7 @@ TEST(MixedGraph, Batch){
         core::GeneralPerspectiveCamera cam_d(640, 480, cameraParams.c_d, cameraParams.f_d);
 
 
-        MixedGraph mg(image, cameraParams.c_rgb, Mean(cameraParams.f_rgb(0), cameraParams.f_rgb(1)));
+        Engine mg(image, cameraParams.c_rgb, Mean(cameraParams.f_rgb(0), cameraParams.f_rgb(1)));
 
         std::vector<Point3> gtPoints;
         gtPoints.reserve(depth.cols * depth.rows);

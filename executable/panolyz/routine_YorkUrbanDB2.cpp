@@ -1,3 +1,5 @@
+#include <thread>
+
 #include "../../src/core/basic_types.hpp"
 #include "../../src/experimental/rl_graph.hpp"
 #include "../../src/experimental/rl_graph_occlusion.hpp"
@@ -6,6 +8,7 @@
 #include "../../src/gui/visualizers.hpp"
 #include "../../src/misc/matlab.hpp"
 #include "../../src/gui/singleton.hpp"
+#include "../../src/ml/factor_graph.hpp"
 
 #include "tools.hpp"
 #include "routines.hpp"
@@ -79,18 +82,23 @@ namespace panolyz {
 
                 assert(gt.gcIndoor.size() == gt.gcOutdoor.size());
 
+
                 return gt;
             }
         };
 
 
         struct Preparation {
+            std::string fileprefix;
             View<PerspectiveCamera> view;
             std::vector<Classified<Line2>> lines;
             std::vector<Vec3> vps;
             Imagei segmentedImage;
             int segmentsNum;
             ImageOfType<Vec<double, 5>> gc;
+
+            std::vector<std::vector<PixelLoc>> edges;
+            std::vector<double> scores;
 
             bool outdoor;
 
@@ -115,6 +123,7 @@ namespace panolyz {
 
         Preparation Prepare(const std::string & name){
             auto path = "F:\\DataSets\\YorkUrbanDB\\data\\" + name + "\\" + name + ".jpg";
+            auto fileprefix = "F:\\DataSets\\YorkUrbanDB\\data\\" + name + "\\" + name;
 
             View<PerspectiveCamera> view;
             std::vector<Classified<Line2>> lines;
@@ -134,6 +143,7 @@ namespace panolyz {
             auto data = gt::LoadVPs(path);
             lines = std::move(data.lines);
             vps = std::move(data.vps);
+
             outdoor = data.isOutdoor;
             GeometricContextEstimator gcEstimator;
             gc = gcEstimator(outdoor ? data.gcOutdoor : data.gcIndoor2,
@@ -169,7 +179,11 @@ namespace panolyz {
                 pureLines[i] = lines[i].component;
             std::tie(segmentedImage, segmentsNum) = segmenter(view.image, pureLines, view.image.cols / 100.0);
 
-            return{ view, lines, vps, segmentedImage, segmentsNum, gc, outdoor };
+            // load occlusion detection results
+            //NOT_IMPLEMENTED_YET();
+
+
+            return{ fileprefix, view, lines, vps, segmentedImage, segmentsNum, gc, { {} }, {}, outdoor };
         }
 
 
@@ -181,9 +195,6 @@ namespace panolyz {
             int segmentsNum = p.segmentsNum;
             auto & gc = p.gc;
             bool outdoor = p.outdoor;
-
-            //auto edges = FindContoursOfRegionsAndBoundaries()
-
 
             RLGraph mg;
             RLGraphControls controls;
@@ -354,8 +365,7 @@ namespace panolyz {
                 }
                 else if (!outdoor && s > 4){
                     switch (maxlabel){
-                    case GeometricContextEstimator::II_FrontVerticalPlanarFace:
-                    case GeometricContextEstimator::II_SideVerticalPlanarFace:
+                    case GeometricContextEstimator::II_VerticalPlanarFace:
                         c.orientationClaz = -1;
                         c.orientationNotClaz = vertVPId;
                         break;
@@ -507,14 +517,48 @@ namespace panolyz {
             vis.show(true, true);
         }
 
+        void Show(const PerspectiveView & v, const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars){
+            gui::Visualizer vis("inversed depth setup");
+            Visualize(vis, v, mg, controls, vars);
+            vis.camera(v.camera);
+            vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
+            vis.show(true, true);
+        }
+
+        int Control2Label(const RLGraphComponentControl & control){
+            if (control.used == true && control.orientationClaz == -1 && control.orientationNotClaz == -1) return 0;
+            if (control.used == true && control.orientationClaz == 0 && control.orientationNotClaz == -1) return 1;
+            if (control.used == true && control.orientationClaz == 1 && control.orientationNotClaz == -1) return 2;
+            if (control.used == true && control.orientationClaz == 2 && control.orientationNotClaz == -1) return 3;
+            if (control.used == true && control.orientationClaz == -1 && control.orientationNotClaz == 0) return 4;
+            if (control.used == true && control.orientationClaz == -1 && control.orientationNotClaz == 1) return 5;
+            if (control.used == true && control.orientationClaz == -1 && control.orientationNotClaz == 2) return 6;
+            if (control.used == false && control.orientationClaz == -1 && control.orientationNotClaz == -1) return 7;
+            return -1;
+        }
+
+        void Label2Control(int label, RLGraphComponentControl & control){
+            switch (label){
+            case 0: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = -1; break;
+            case 1: control.used = true; control.orientationClaz = 0; control.orientationNotClaz = -1; break;
+            case 2: control.used = true; control.orientationClaz = 1; control.orientationNotClaz = -1; break;
+            case 3: control.used = true; control.orientationClaz = 2; control.orientationNotClaz = -1; break;
+            case 4: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = 0; break;
+            case 5: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = 1; break;
+            case 6: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = 2; break;
+            case 7: control.used = false; control.orientationClaz = -1; control.orientationNotClaz = -1; break;
+            }
+        }
 
         void LabelGT(const Preparation & p){
+
             auto & view = p.view;
             auto & lines = p.lines;
             auto & vps = p.vps;
             auto & segmentedImage = p.segmentedImage;
             int segmentsNum = p.segmentsNum;
             auto & gc = p.gc;
+            bool outdoor = p.outdoor;
 
             auto bps = FindContoursOfRegionsAndBoundaries(segmentedImage, 1, false);
             std::vector<std::string> regionLabelNames = {
@@ -556,30 +600,85 @@ namespace panolyz {
             rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 1, 3, true);
 
             controls = RLGraphControls(mg, vps);
+            AttachGeometricContextConstraints(mg, controls, view.camera, gc,
+                [outdoor, vertVPId](RLGraphComponentControl & c, const Vec<double, 5> & v, double s){
+                int maxlabel = std::max_element(v.val, v.val + 5) - v.val;
+                if (outdoor && s > 2){
+                    switch (maxlabel){
+                    case GeometricContextEstimator::OI_Ground:
+                        c.orientationClaz = vertVPId;
+                        c.orientationNotClaz = -1;
+                        break;
+                    case GeometricContextEstimator::OI_VerticalPlanarFace:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::OI_Clutter:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = -1;
+                        break;
+                    case GeometricContextEstimator::OI_Porous:
+                    case GeometricContextEstimator::OI_Sky:
+                        c.used = false;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                else if (!outdoor && s > 4){
+                    switch (maxlabel){
+                    case GeometricContextEstimator::II_VerticalPlanarFace:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::II_HorizontalPlanarFace:
+                        c.orientationClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::II_Clutter:
+                        c.orientationClaz = c.orientationNotClaz = -1;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            });
+
 
             p.showVPLines();
 
             Labels labels;
 
-            while (true){
-                LabelIt(labels, view.image, segmentedImage, bps, 
+            {
+                /// read region labels
+                labels.regionLabels.resize(rhs.size());
+                for (int i = 0; i < labels.regionLabels.size(); i++){
+                    RegionHandle rh = rhs[i];
+                    if (rh.invalid())
+                        continue;
+                    const auto & control = controls[rh];
+                    labels.regionLabels[i] = Control2Label(control);
+                }
+                /// read boundary labels
+                // todo
+            }
+
+            while(true){
+                bool accepted = LabelIt(labels, view.image, segmentedImage, bps, 
                     regionLabelNames, boundaryLabelNames, regionLabelColors, boundaryLabelColors);
+                if (accepted){
+                    LOG("Accepted!");
+                    SaveToDisk(p.fileprefix + "gtlabels.cereal", labels);
+                    break;
+                }
 
                 // apply labels to controls
                 // regions
                 for (int i = 0; i < labels.regionLabels.size(); i++){
                     RegionHandle rh = rhs[i];
+                    if (rh.invalid())
+                        continue;
                     auto & control = controls[rh];
-                    switch (labels.regionLabels[i]){
-                    case 0: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = -1; break;
-                    case 1: control.used = true; control.orientationClaz = 0; control.orientationNotClaz = -1; break;
-                    case 2: control.used = true; control.orientationClaz = 1; control.orientationNotClaz = -1; break;
-                    case 3: control.used = true; control.orientationClaz = 2; control.orientationNotClaz = -1; break;
-                    case 4: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = 0; break;
-                    case 5: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = 1; break;
-                    case 6: control.used = true; control.orientationClaz = -1; control.orientationNotClaz = 2; break;
-                    case 7: control.used = false; control.orientationClaz = -1; control.orientationNotClaz = -1; break;
-                    }
+                    Label2Control(labels.regionLabels[i], control);
                 }
                 // boundaries, line-region relations
                 // todo
@@ -627,17 +726,131 @@ namespace panolyz {
 
 
                     // initial status
+                    
+
+
                     vars = SolveVariables(mg, controls, false, true);
                     NormalizeVariables(mg, controls, vars);
                     if (1){
                         Show(p, mg, controls, vars);
                     }
                 }
-
             }
 
         }
 
+
+        template <class T, class CostFunT, class BranchFunT>
+        void BranchAndBound(T & solution, CostFunT && cost, BranchFunT && branch){
+            Scored<T> bound = ScoreAs(solution, cost(solution));            
+            std::priority_queue<Scored<T>> Q;
+            Q.push(bound);
+
+            while (!Q.empty()){
+                Scored<T> node = std::move(Q.top());
+                Q.pop();
+                if (node.score < bound.score){
+                    bound = std::move(node);
+                    std::cout << "current bound: " << bound.score << std::endl;
+                }
+                else{
+                    // branch
+                    std::vector<Scored<T>> subNodes;
+                    branch(std::move(node.component), [&subNodes](const T & subNode){
+                        subNodes.push_back(ScoreAs(subNode, 0.0));
+                    });
+
+                    // calc costs
+                    int pnum = std::thread::hardware_concurrency();
+                    auto task = [&subNodes, &cost](int tid){
+                        auto & subNode = subNodes[tid];
+                        subNode.score = cost(subNode.component);
+                    };
+                    std::cout << "COMPUTING SCORES" << std::endl;
+                    std::vector<std::thread> threads;
+                    for (int i = 0; i < subNodes.size(); i++){
+                        threads.push_back(std::thread(task, i));
+                        if (threads.size() == pnum){
+                            for (auto & t : threads){
+                                t.join();
+                            }
+                            threads.clear();
+                        }
+                    }
+
+                    for (auto & t : threads){
+                        t.join();
+                    }
+                    threads.clear();
+                    
+                    std::cout << "COMPUTING SCORES DONE" << std::endl;
+                    for (auto & n : subNodes){
+                        if (n.score <= bound.score){
+                            Q.push(std::move(n));
+                        }
+                    }
+                    std::cout << "Q size: " << Q.size() << std::endl;
+                }
+            }
+        }
+
+
+        struct branchFun {
+            template <class FunT>
+            inline void operator()(RLGraphControls && curNode, FunT && processSubNode) {
+                for (auto & r : mg.components<RegionData>()){
+                    RLGraphComponentControl & c = curNode[r.topo.hd];
+                    if (!c.used){
+                        continue;
+                    }
+                    if (c.orientationClaz == -1 && c.orientationNotClaz == -1){
+                        // free -> ground
+                        c.orientationClaz = vertVPId;
+                        processSubNode(curNode);
+                        c.orientationClaz = -1;
+                        // free -> along vertical
+                        c.orientationNotClaz = vertVPId;
+                        processSubNode(curNode);
+                        c.orientationNotClaz = -1;
+                    }
+                    else if (c.orientationClaz == -1 && c.orientationNotClaz == vertVPId){
+                        // along vertical -> to hvp1
+                        c.orientationClaz = hVPId1;
+                        c.orientationNotClaz = -1;
+                        processSubNode(curNode);
+                        // along vertical -> to hvp2
+                        c.orientationClaz = hVPId2;
+                        c.orientationNotClaz = -1;
+                        processSubNode(curNode);
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                    }
+                }
+
+                // connected -> disconnected
+                for (auto & b : mg.constraints<RegionBoundaryData>()){
+                    RLGraphConstraintControl & c = curNode[b.topo.hd];
+                    if (!c.used){
+                        continue;
+                    }
+                    c.used = false;
+                    processSubNode(curNode);
+                    c.used = true;
+                }
+                for (auto & b : mg.constraints<RegionLineConnectionData>()){
+                    RLGraphConstraintControl & c = curNode[b.topo.hd];
+                    if (!c.used){
+                        continue;
+                    }
+                    c.used = false;
+                    processSubNode(curNode);
+                    c.used = true;
+                }
+
+            }
+            int vertVPId, hVPId1, hVPId2;
+            const RLGraph & mg;
+        };
 
         void ExhausticReconstruct(const Preparation & p) {
 
@@ -656,6 +869,9 @@ namespace panolyz {
             std::vector<RegionHandle> rhs;
 
             int vertVPId = NearestDirectionId(vps, view.camera.upward());
+            int hVPId1 = (vertVPId + 1) % 3;
+            int hVPId2 = (vertVPId + 2) % 3;
+
             AppendLines(mg, lines, view.camera, vps, 40.0 / view.camera.focal(), 100.0 / view.camera.focal());
             rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 1, 3, true);
 
@@ -688,8 +904,7 @@ namespace panolyz {
                 }
                 else if (!outdoor && s > 4){
                     switch (maxlabel){
-                    case GeometricContextEstimator::II_FrontVerticalPlanarFace:
-                    case GeometricContextEstimator::II_SideVerticalPlanarFace:
+                    case GeometricContextEstimator::II_VerticalPlanarFace:
                         c.orientationClaz = -1;
                         c.orientationNotClaz = vertVPId;
                         break;
@@ -753,22 +968,672 @@ namespace panolyz {
                 if (1){
                     Show(p, mg, controls, vars);
                 }
-
-
-                //
-                while (true){
-                    std::queue<RLGraphControls> Q;
-                    Q.push(controls);
-
-                    auto & bestControls = Q.front();
-                    
-                    // search in branches
-                    break;
-
-                }
-                
             }
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        struct BoundaryJunction {
+            std::set<RegionBoundaryHandle> bhs;
+            std::vector<Vec3> positions;
+        };
+
+        std::vector<BoundaryJunction> GetJunctions(const RLGraph & mg,
+            const PerspectiveCamera & cam, const Imagei & regions, 
+            const std::vector<RegionHandle> & regionIds2Handles){
+
+            std::vector<BoundaryJunction> boundaryJunctions;
+            auto bjunctions = ExtractBoundaryJunctions(regions);
+            for (auto & junc : bjunctions){
+                auto & regionIds = junc.first;
+                auto & ps = junc.second;
+                std::set<RegionHandle> rhs;
+                for (int regionId : regionIds){
+                    RegionHandle rh = regionIds2Handles[regionId];
+                    if (rh.invalid())
+                        continue;
+                    rhs.insert(rh);
+                }
+                if (rhs.size() < 3)
+                    continue;
+                // locate boundary handles among rhs
+                std::set<RegionBoundaryHandle> bhs;
+                for (RegionHandle rh : rhs){
+                    auto & relatedBhs = mg.topo(rh).constraints<RegionBoundaryData>();
+                    for (RegionBoundaryHandle bh : relatedBhs){
+                        auto anotherRh = mg.topo(bh).component<0>();
+                        if (anotherRh == rh){
+                            anotherRh = mg.topo(bh).component<1>();
+                        }
+                        if (Contains(rhs, anotherRh)){
+                            bhs.insert(bh);
+                        }
+                    }
+                }
+                if (bhs.size() < 3)
+                    continue;
+                std::vector<Vec3> positions(ps.size());
+                for (int i = 0; i < ps.size(); i++){
+                    positions[i] = normalize(cam.spatialDirection(ps[i]));
+                }
+                boundaryJunctions.push_back(BoundaryJunction{ std::move(bhs), std::move(positions) });
+            }
+            return boundaryJunctions;
+        }
+
+        double Distance(const Point2 & p, const std::vector<PixelLoc> & edge){
+            double mind = std::numeric_limits<double>::max();
+            for (const auto & c : edge){
+                auto cc = core::vec_cast<double>(c);
+                double d = core::Distance(p, cc);
+                if (d < mind){
+                    mind = d;
+                }
+            }
+            return mind;
+        }
+
+
+
+        HandledTable<RegionBoundaryHandle, double> OcclusionResponce(const RLGraph & mg,
+            const PerspectiveCamera & cam, const std::vector<std::vector<PixelLoc>> & edges,
+            const std::vector<double> & scores){
+            assert(edges.size() == scores.size());
+            HandledTable<RegionBoundaryHandle, double> occlusionResponse = 
+                mg.createConstraintTable<RegionBoundaryData>(0.0);
+            auto getBB = [&edges](int eid)->Box2 {
+                return BoundingBoxOfContainer(edges.at(eid));
+            };
+            std::vector<int> eids(edges.size());
+            std::iota(eids.begin(), eids.end(), 0);
+            RTreeWrapper<int, decltype(getBB)> rtree(eids.begin(), eids.end(), getBB);
+            for (auto & bd : mg.constraints<RegionBoundaryData>()){
+                double & resp = occlusionResponse[bd.topo.hd];
+                double allSampleScoreSum = 0;
+                int allSampleNum = 0;
+                for (auto & ps : bd.data.normalizedEdges){
+                    for (auto & p : ps){
+                        allSampleNum++;
+                        auto sample = cam.screenProjection(p);
+                        double sampleScore = 0.0;
+                        int nearbyEdgeNum = 0;
+                        rtree.search(Box2(sample, sample).expand(5.0),
+                            [&scores, &sampleScore, &nearbyEdgeNum, &edges, &sample](int eid) -> bool {
+                            double dist = Distance(sample, edges[eid]);
+                            if (dist <= 3.0){
+                                sampleScore += scores[eid] > 0 ? 1.0 : (scores[eid] == 0.0 ? 0.0 : -1.0);
+                                nearbyEdgeNum++;
+                            }
+                            return true;
+                        });
+                        sampleScore /= std::max(nearbyEdgeNum, 1);
+                        allSampleScoreSum += sampleScore;
+                    }
+                }
+                occlusionResponse[bd.topo.hd] = allSampleScoreSum / std::max(allSampleNum, 1);
+            }
+            return occlusionResponse;
+        }
+
+
+
+
+
+
+
+
+
+
+        void BPReconstruct(const Preparation & p){
+            auto & view = p.view;
+            auto & lines = p.lines;
+            auto & vps = p.vps;
+            auto & segmentedImage = p.segmentedImage;
+            int segmentsNum = p.segmentsNum;
+            auto & gc = p.gc;
+
+            bool outdoor = p.outdoor;
+
+            RLGraph mg;
+            RLGraphControls controls;
+            RLGraphVars vars;
+            std::vector<RegionHandle> rhs;
+
+            int vertVPId = NearestDirectionId(vps, view.camera.upward());
+            int hVPId1 = (vertVPId + 1) % 3;
+            int hVPId2 = (vertVPId + 2) % 3;
+
+            AppendLines(mg, lines, view.camera, vps, 40.0 / view.camera.focal(), 100.0 / view.camera.focal());
+            rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 1, 3, true);
+
+            controls = RLGraphControls(mg, vps);
+
+
+            AttachGeometricContextConstraints(mg, controls, view.camera, gc,
+                [outdoor, vertVPId](RLGraphComponentControl & c, const Vec<double, 5> & v, double s){
+                int maxlabel = std::max_element(v.val, v.val + 5) - v.val;
+                if (outdoor && s > 2){
+                    switch (maxlabel){
+                    case GeometricContextEstimator::OI_Ground:
+                        c.orientationClaz = vertVPId;
+                        c.orientationNotClaz = -1;
+                        break;
+                    case GeometricContextEstimator::OI_VerticalPlanarFace:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::OI_Clutter:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = -1;
+                        break;
+                    case GeometricContextEstimator::OI_Porous:
+                    case GeometricContextEstimator::OI_Sky:
+                        c.used = false;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                else if (!outdoor && s > 4){
+                    switch (maxlabel){
+                    case GeometricContextEstimator::II_VerticalPlanarFace:
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::II_HorizontalPlanarFace:
+                        c.orientationClaz = vertVPId;
+                        break;
+                    case GeometricContextEstimator::II_Clutter:
+                        c.orientationClaz = c.orientationNotClaz = -1;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            });
+
+
+            // cc decompose
+            auto ccids = MakeHandledTableForAllComponents(mg, -1);
+            int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
+                return c.used && c.weight > 0;
+            });
+            RLGraphOldToNew old2new;
+            auto mgs = Decompose(mg, ccids, ccnum, &old2new);
+            for (auto & o2n : old2new.container<RegionHandle>()){
+                auto nrh = o2n.second.second;
+                int ccid = o2n.second.first;
+                assert(!nrh.invalid());
+                assert(nrh.id < mgs[ccid].internalComponents<RegionData>().size());
+            }
+            auto cs = Decompose(mg, controls, ccids, ccnum);
+            assert(mgs.size() == cs.size());
+
+            int largestCC = std::max_element(mgs.begin(), mgs.end(), [](const RLGraph & g1, const RLGraph & g2){
+                return g1.internalComponents<RegionData>().size() + g1.internalComponents<LineData>().size()
+                    < g2.internalComponents<RegionData>().size() + g2.internalComponents<LineData>().size();
+            }) - mgs.begin();
+
+            mg = std::move(mgs[largestCC]);
+            controls = std::move(cs[largestCC]);
+
+            std::vector<RegionHandle> newrhs = rhs;
+            for (auto & rh : newrhs){
+                if (rh.invalid()){
+                    continue;
+                }
+                auto newrh = old2new.at(rh);
+                if (newrh.first == largestCC){
+                    rh = newrh.second;
+                }
+                else{
+                    rh.reset();
+                }
+            }
+            rhs = std::move(newrhs);
+
+
+            if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                return;
+
+            // initial status
+            vars = SolveVariables(mg, controls, false, true);
+            NormalizeVariables(mg, controls, vars);
+            if (1){
+                Show(p, mg, controls, vars);
+            }
+
+            // 
+            auto boundaryJunctions = GetJunctions(mg, view.camera, segmentedImage, rhs);
+            auto gcResponse = CollectFeatureMeanOnRegions(mg, view.camera, gc);
+            auto occResponse = OcclusionResponce(mg, view.camera, p.edges, p.scores);
+
+
+
+
+            size_t vpnum = vps.size();
+
+            auto lineLeftRegionConnections =
+                mg.createComponentTable<LineData, std::set<RegionLineConnectionHandle>>();
+            auto lineRightRegionConnections =
+                mg.createComponentTable<LineData, std::set<RegionLineConnectionHandle>>();
+            for (auto & rl : mg.constraints<RegionLineConnectionData>()){
+                RegionHandle rh = rl.topo.component<0>();
+                LineHandle lh = rl.topo.component<1>();
+                const Line3 & lineProj = mg.data(lh).line;
+                Vec3 rightDir = normalize(lineProj.first.cross(lineProj.second));
+                const Vec3 & regionCenter = mg.data(rh).normalizedCenter;
+                bool isOnRight = (regionCenter - lineProj.center()).dot(rightDir) >= 0;
+                (isOnRight ? lineRightRegionConnections : lineLeftRegionConnections)[lh].insert(rl.topo.hd);
+            }
+
+
+            // solve!
+
+
+            size_t regionNum = mg.internalComponents<RegionData>().size();
+            size_t lineNum = mg.internalComponents<LineData>().size();
+            size_t boundaryNum = mg.internalConstraints<RegionBoundaryData>().size();
+            size_t rlConNum = mg.internalConstraints<RegionLineConnectionData>().size();
+            size_t llConNum = mg.internalConstraints<LineRelationData>().size();
+            size_t bjuncNum = boundaryJunctions.size();
+
+
+
+            // data that MUST be updated after each inverse depth optimization !!!!
+            struct ContinuousCaches {
+                HandledTable<RegionHandle, Plane3> regionPlanes;
+                HandledTable<LineHandle, Line3> spatialLines;
+                HandledTable<RegionBoundaryHandle, double> rrDistances;
+                HandledTable<RegionLineConnectionHandle, double> rlDistances;
+                HandledTable<LineRelationHandle, double> llDistances;
+
+                Plane3 & operator[](RegionHandle rh) { return regionPlanes[rh]; }
+                Line3 & operator[](LineHandle lh) { return spatialLines[lh]; }
+                double & operator[](RegionBoundaryHandle bh) { return rrDistances[bh]; }
+                double & operator[](RegionLineConnectionHandle bh) { return rlDistances[bh]; }
+                double & operator[](LineRelationHandle bh) { return llDistances[bh]; }
+
+                void update(const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars){
+                    // update continuous cache
+                    for (auto & r : mg.components<RegionData>()){
+                        (*this)[r.topo.hd] = Instance(mg, controls, vars, r.topo.hd);
+                    }
+                    for (auto & l : mg.components<LineData>()){
+                        (*this)[l.topo.hd] = Instance(mg, controls, vars, l.topo.hd);
+                    }
+
+                    for (auto & c : mg.constraints<RegionBoundaryData>()){
+                        double dist = 0.0;
+                        int num = 0;
+                        auto & samples = c.data.normalizedSampledPoints;
+                        auto & inst1 = (*this)[c.topo.component<0>()];
+                        auto & inst2 = (*this)[c.topo.component<1>()];
+                        for (auto & ss : samples){
+                            for (auto & s : ss){
+                                double d1 = DepthAt(s, inst1);
+                                double d2 = DepthAt(s, inst2);
+                                dist += abs(d1 - d2);
+                                num++;
+                            }
+                        }
+                        dist /= num;
+                        (*this)[c.topo.hd] = dist;
+                    }
+                    for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                        double dist = 0.0;
+                        int num = 0;
+                        auto & inst1 = (*this)[c.topo.component<0>()];
+                        auto & inst2 = (*this)[c.topo.component<1>()];
+                        for (auto & s : c.data.normalizedAnchors){
+                            double d1 = DepthAt(s, inst1);
+                            double d2 = DepthAt(s, inst2);
+                            dist += abs(d1 - d2);
+                            num++;
+                        }
+                        dist /= num;
+                        (*this)[c.topo.hd] = dist;
+                    }
+                }
+            };
+            ContinuousCaches cache = {
+                mg.createComponentTable<RegionData, Plane3>(),
+                mg.createComponentTable<LineData, Line3>(),
+                mg.createConstraintTable<RegionBoundaryData>(0.0),
+                mg.createConstraintTable<RegionLineConnectionData>(0.0),
+                mg.createConstraintTable<LineRelationData>(0.0)
+            };
+
+
+            ml::FactorGraph fg;
+            fg.reserveVarCategories(5);
+            fg.reserveVars(regionNum + lineNum + boundaryNum + rlConNum + llConNum);
+
+            /// add vars
+
+            // add region orientation constraint flags
+            // 3: {vpvert, vp, free}
+            auto regionOrientationVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 3, 0.5 });
+            auto regionVhs = mg.createComponentTable<RegionData, ml::FactorGraph::VarHandle>();
+            for (auto & r : mg.components<RegionData>()){
+                regionVhs[r.topo.hd] = fg.addVar(regionOrientationVc);
+            }
+
+            // add boundary flags
+            // 2: {not connected, connected}
+            auto boundaryOcclusionVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 });
+            auto boundaryVhs = mg.createConstraintTable<RegionBoundaryData, ml::FactorGraph::VarHandle>();
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
+                boundaryVhs[b.topo.hd] = fg.addVar(boundaryOcclusionVc);
+            }
+
+            // add line connection flags
+            // 3 : {both, left, right}
+            auto lineConnectionSidesVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 3, 0.5 });
+            auto lineConnectionSidesVhs = mg.createComponentTable<LineData, ml::FactorGraph::VarHandle>();
+            for (auto & l : mg.components<LineData>()){
+                lineConnectionSidesVhs[l.topo.hd] = fg.addVar(lineConnectionSidesVc);
+            }
+
+            // add ll connection flags
+            // 2: {not connected, connected}
+            auto llConVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 });
+            auto llConVhs = mg.createConstraintTable<LineRelationData, ml::FactorGraph::VarHandle>();
+            for (auto & r : mg.constraints<LineRelationData>()){
+                llConVhs[r.topo.hd] = fg.addVar(llConVc);
+            }
+
+
+            /// add factors
+
+
+
+        }
+
+
+
+
+
+
+#define TAG(name) ("." + std::string(#name) + std::to_string(name))
+
+        struct Config {
+            bool reestVPLines;
+            bool withGC;
+            bool withHCons;
+            bool useWeights;
+            bool useAllAnchors;
+
+
+            std::string tag() const {
+                return TAG(reestVPLines) + TAG(withGC) + TAG(withHCons) + TAG(useWeights) + TAG(useAllAnchors);
+            }
+        };
+
+
+
+
+        void SurfaceOrientationPrediction(const Preparation & p, const Config & config){
+
+            misc::Matlab matlab;
+            std::string tag = config.tag();
+
+            auto view = p.view;
+            auto lines = p.lines;
+            auto vps = p.vps;
+            auto & segmentedImage = p.segmentedImage;
+            int segmentsNum = p.segmentsNum;
+            auto & gc = p.gc;
+
+            if (config.reestVPLines){
+
+                matlab << "load('" + p.fileprefix + "om_vp_lines.mat');";
+                DenseMatd vpsd;
+                matlab.GetVariable("vp", vpsd);
+                std::vector<HPoint2> hvps(3);
+                for (int i = 0; i < 3; i++){
+                    hvps[i].numerator = { vpsd(i, 0), vpsd(i, 1) };
+                    hvps[i].denominator = 1.0;
+                }
+                view = CreatePerspectiveView(view.image, hvps, view.camera.eye(), view.camera.center(), view.camera.up());
+                for (int i = 0; i < 3; i++){
+                    vps[i] = normalize(view.camera.spatialDirection(hvps[i].value()));
+                }
+                double linenum = 0.0;
+                matlab << "linenum = length(lines);";
+                matlab.GetVariable("linenum", linenum);
+                lines.clear();
+                lines.reserve(linenum);
+                for (int i = 0; i < linenum; i++){
+                    DenseMatd pdata1, pdata2;
+                    matlab << ("p = lines(" + std::to_string(i + 1) + ").point1;");
+                    matlab.GetVariable("p", pdata1);
+                    matlab << ("p = lines(" + std::to_string(i + 1) + ").point2;");
+                    matlab.GetVariable("p", pdata2);
+                    double claz = 0;
+                    matlab << ("c = lines(" + std::to_string(i + 1) + ").lineclass;");
+                    matlab.GetVariable("c", claz);
+                    lines.push_back(ClassifyAs(Line2(Point2(pdata1(0), pdata1(1)), Point2(pdata2(0), pdata2(1))), int(claz - 1)));
+                }
+
+                //std::vector<core::Classified<core::Ray2>> vpRays;
+                //for (int i = 0; i < 3; i++){
+                //    std::cout << "vp[" << i << "] = " << view.camera.screenProjection(vps[i]) << std::endl;
+                //    for (double a = 0; a <= M_PI * 2.0; a += 0.1){
+                //        core::Point2 p = core::Point2(view.image.cols / 2, view.image.rows / 2) + core::Vec2(cos(a), sin(a)) * 1000.0;
+                //        vpRays.push_back(core::ClassifyAs(core::Ray2(p, (view.camera.screenProjectionInHPoint(vps[i]) - core::HPoint2(p, 1.0)).numerator), i));
+                //    }
+                //}
+                //gui::Visualizer2D(view.image)
+                //    << gui::manip2d::SetColorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size() - 3))
+                //    << gui::manip2d::SetThickness(1)
+                //    << vpRays
+                //    << gui::manip2d::SetThickness(2)
+                //    << lines
+                //    << gui::manip2d::Show();
+            }
+
+            bool outdoor = p.outdoor;
+
+            RLGraph mg;
+            RLGraphControls controls;
+            RLGraphVars vars;
+            std::vector<RegionHandle> rhs;
+
+            int vertVPId = NearestDirectionId(vps, view.camera.upward());
+            int hVPId1 = (vertVPId + 1) % 3;
+            int hVPId2 = (vertVPId + 2) % 3;
+
+            AppendLines(mg, lines, view.camera, vps, 40.0 / view.camera.focal(), 100.0 / view.camera.focal());
+            rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.001, 1, 3);
+
+            controls = RLGraphControls(mg, vps);
+
+            // gc
+            AttachGeometricContextConstraints(mg, controls, view.camera, gc,
+                [outdoor, vertVPId, config](RLGraphComponentControl & c, const Vec<double, 5> & v, double s){
+                bool withGC = config.withGC;
+                int maxlabel = std::max_element(v.val, v.val + 5) - v.val;
+                if (outdoor && s > 2){
+                    switch (maxlabel){
+                    case GeometricContextEstimator::OI_Ground:
+                        if (withGC){
+                            c.orientationClaz = vertVPId;
+                            c.orientationNotClaz = -1;
+                        }
+                        break;
+                    case GeometricContextEstimator::OI_VerticalPlanarFace:
+                        if (withGC){
+                            c.orientationClaz = -1;
+                            c.orientationNotClaz = vertVPId;
+                        }
+                        break;
+                    case GeometricContextEstimator::OI_Clutter:
+                        if (withGC){
+                            c.orientationClaz = -1;
+                            c.orientationNotClaz = -1;
+                        }
+                        break;
+                    case GeometricContextEstimator::OI_Porous:
+                    case GeometricContextEstimator::OI_Sky:
+                        c.used = false;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                else if (!outdoor && s > 3){
+                    switch (maxlabel){
+                    case GeometricContextEstimator::II_VerticalPlanarFace:
+                        if (withGC){
+                            c.orientationClaz = -1;
+                            c.orientationNotClaz = vertVPId;
+                        }
+                        break;
+                    case GeometricContextEstimator::II_HorizontalPlanarFace:
+                        if (withGC){
+                            c.orientationClaz = vertVPId;
+                        }
+                        break;
+                    case GeometricContextEstimator::II_Clutter:
+                        if (withGC){
+                            c.orientationClaz = c.orientationNotClaz = -1;
+                        }
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            });
+            if (config.withHCons){
+                AttachWallConstriants(mg, controls, 0.01, view.camera.upward());
+            }
+
+            // set weights
+            // set constraint weights
+            SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
+                return std::max(mg.data(h).junctionWeight * 10, 1.0f);
+            });
+            SetConstraintWeights<RegionBoundaryData>(controls, [&mg](RegionBoundaryHandle h){
+                return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
+            });
+            SetConstraintWeights<RegionLineConnectionData>(controls, [&mg](RegionLineConnectionHandle h){
+                return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
+            });
+
+
+
+            // cc decompose
+            auto ccids = MakeHandledTableForAllComponents(mg, -1);
+            int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
+                return c.used && c.weight > 0;
+            });
+            RLGraphOldToNew old2new;
+            auto mgs = Decompose(mg, ccids, ccnum, &old2new);
+            for (auto & o2n : old2new.container<RegionHandle>()){
+                auto nrh = o2n.second.second;
+                int ccid = o2n.second.first;
+                assert(!nrh.invalid());
+                assert(nrh.id < mgs[ccid].internalComponents<RegionData>().size());
+            }
+            auto cs = Decompose(mg, controls, ccids, ccnum);
+            assert(mgs.size() == cs.size());
+
+            int largestCC = std::max_element(mgs.begin(), mgs.end(), [](const RLGraph & g1, const RLGraph & g2){
+                return g1.internalComponents<RegionData>().size() + g1.internalComponents<LineData>().size()
+                    < g2.internalComponents<RegionData>().size() + g2.internalComponents<LineData>().size();
+            }) - mgs.begin();
+
+            mg = std::move(mgs[largestCC]);
+            controls = std::move(cs[largestCC]);
+
+            std::vector<RegionHandle> newrhs = rhs;
+            for (auto & rh : newrhs){
+                if (rh.invalid()){
+                    continue;
+                }
+                auto newrh = old2new.at(rh);
+                if (newrh.first == largestCC){
+                    rh = newrh.second;
+                }
+                else{
+                    rh.reset();
+                }
+            }
+            rhs = std::move(newrhs);
+
+
+            if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                return;
+
+            vars = SolveVariables(mg, controls, config.useWeights/*false*/,
+                config.useAllAnchors);
+
+                //return;
+
+            {
+                // save
+                auto planes = Instances<RegionData>(mg, controls, vars);
+                Image3f rlomap = Image3f::zeros(view.image.size());
+                for (auto it = rlomap.begin(); it != rlomap.end(); ++it){
+                    int rid = segmentedImage(it.pos());
+                    auto rh = rhs[rid];
+                    if (rh.invalid()){
+                        continue;
+                    }
+                    auto & plane = planes[rh];
+                    for (int i = 0; i < 3; i++){
+                        (*it)[i] = abs(normalize(plane.normal).dot(normalize(vps[i])));
+                    }
+                }
+                matlab.PutVariable("rlomap", rlomap);
+            }
+
+            Show(view, mg, controls, vars);
+
+            LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.0);
+            vars = SolveVariables(mg, controls, config.useWeights/*false*/, 
+                config.useAllAnchors);
+            {
+                // save
+                auto planes = Instances<RegionData>(mg, controls, vars);
+                Image3f rlomap = Image3f::zeros(view.image.size());
+                for (auto it = rlomap.begin(); it != rlomap.end(); ++it){
+                    int rid = segmentedImage(it.pos());
+                    auto rh = rhs[rid];
+                    if (rh.invalid()){
+                        continue;
+                    }
+                    auto & plane = planes[rh];
+                    for (int i = 0; i < 3; i++){
+                        (*it)[i] = abs(normalize(plane.normal).dot(normalize(vps[i])));
+                    }
+                }
+                matlab.PutVariable("rlomap_afterloose", rlomap);
+            }
+           
+            //matlab << ("save('" + p.fileprefix + tag + ".mat', 'rlomap', 'rlomap_afterloose');");
+            matlab << ("save('" + p.fileprefix + "try" + ".mat', 'rlomap', 'rlomap_afterloose');");
+            Show(view, mg, controls, vars);
+            
+        }
+
+
+
+
 
 
         void Run(){
@@ -783,25 +1648,64 @@ namespace panolyz {
             matlab.GetVariable("num", dnum);
             int num = dnum;
 
-            for (int i = 0; i < num; i++){
-                matlab << ("name = names{" + std::to_string(i + 1) + "};");
-                std::string name;
-                matlab.GetVariable("name", name);
-                std::cout << "processing " << name << std::endl;
+            Config conf;
+            conf.reestVPLines = true;
+            conf.useAllAnchors = true;
+            conf.useWeights = false;
+            conf.withGC = true;
+            conf.withHCons = false;
 
-                if (name != "p1080104"){
-                    continue;
-                }
 
-                auto p = Prepare(name);
-                
-                LabelGT(p);
+            //for (bool c1 : {true, false}){
+            //    conf.useAllAnchors = c1;
+            //    for (bool c2 : {false, true}){
+            //        conf.useWeights = c2;
 
-                //DepthOrdering(p);
-                //ReconstructLines(p);
-                //ReconstructModel(p);
-                //ExhausticReconstruct(p);
-            }
+            //        for (bool c3 : {true, false}){
+            //            conf.withGC = c3;
+            //            for (bool c4 : {false, true}){
+            //                conf.withHCons = c4;
+
+            int i = 0;
+                            //for (int i = 0; i < num; i++)
+                            {
+                                matlab << ("name = names{" + std::to_string(i + 1) + "};");
+                                std::string name;
+                                matlab.GetVariable("name", name);
+                                std::cout << "processing " << name << std::endl;
+                                std::cout << "tag: " << conf.tag() << std::endl;
+
+                                //if (name != "p1020816"){
+                                //    continue;
+                                //}
+
+                                //if (!nowstart)
+                                //    continue;
+
+
+                                auto p = Prepare(name);
+
+                                //LabelGT(p);
+
+                                //DepthOrdering(p);
+                                //ReconstructLines(p);
+                                //ReconstructModel(p);
+                                //ExhausticReconstruct(p);
+                                //BPReconstruct(p);
+                                //try{
+                                    SurfaceOrientationPrediction(p, conf);
+                                //}
+                                /*catch (std::exception e){
+                                    std::cout << e.what() << std::endl;
+                                }*/
+                            }
+
+            //            }
+            //        }
+            //    }
+            //}
+
+           
 
         }
     }

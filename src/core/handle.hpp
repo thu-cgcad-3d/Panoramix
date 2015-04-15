@@ -126,6 +126,15 @@ namespace panoramix {
             inline const_iterator begin() const { return const_iterator{ data, data.begin() }; }
             inline const_iterator end() const { return const_iterator{ data, data.end() }; }
 
+            template <class MappingFunT>
+            inline HandledTable<HandleT, std::decay_t<typename FunctionTraits<MappingFunT>::ResultType>> map(MappingFunT && fun) const {
+                HandledTable<HandleT, std::decay_t<typename FunctionTraits<MappingFunT>::ResultType>> result(data.size());
+                for (int i = 0; i < data.size(); i++){
+                    result.data[i] = fun(data[i]);
+                }
+                return result;
+            }
+
             template <class Archive> inline void serialize(Archive & ar) { ar(data); }
             ContainerT data;
         };

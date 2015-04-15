@@ -18,8 +18,9 @@ namespace panolyz {
             const std::vector<std::string> & boundaryLabelNames, 
             const std::vector<gui::Color> & regionLabelColors,
             const std::vector<gui::Color> & boundaryLabelColors,
+            bool & accepted,
             QWidget * p) :
-            QWidget(p), _im(im), _segments(segments), _boundaryPixels(boundaryPixels), _labels(labels) {
+            QWidget(p), _im(im), _segments(segments), _boundaryPixels(boundaryPixels), _labels(labels), _accepted(accepted) {
 
             assert(_labels.regionLabels.size() == MinMaxValOfImage(segments).second + 1);
             _regionLabelColors = regionLabelColors;
@@ -63,6 +64,7 @@ namespace panolyz {
             refresh();
 
             _scale = 1.0;
+            grabKeyboard();
         }
         virtual ~LabelWidget() {}
 
@@ -170,6 +172,19 @@ namespace panolyz {
             update();
         }
 
+        virtual void keyPressEvent(QKeyEvent * e) override {
+            if (e->key() == Qt::Key_Return){
+                _accepted = true;
+                //qApp->quit();
+                close();
+            }
+            else if (e->key() == Qt::Key_Escape){
+                _accepted = false;
+                //qApp->quit();
+                close();
+            }
+        }
+
     protected:
         inline QPointF positionOnImage(const QPointF & screenPos) const {
             // (x - imcenter) * scale + rect.center + translate
@@ -259,11 +274,13 @@ namespace panolyz {
 
         gui::ColorTable _regionLabelColors;
         gui::ColorTable _boundaryLabelColors;
+
+        bool & _accepted;
     };
 
 
 
-    void LabelIt(Labels & labels, const Image & im,
+    bool LabelIt(Labels & labels, const Image & im,
         const Imagei & segments,
         const std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryPixels,
         const std::vector<std::string> & regionLabelNames,
@@ -283,13 +300,16 @@ namespace panolyz {
 
         gui::Singleton::InitGui();
 
+        bool accepted = false;
         LabelWidget * w = new LabelWidget(labels, im, segments, boundaryPixels, 
-            regionLabelNames, boundaryLabelNames, regionLabelColors, boundaryLabelColors, nullptr);
+            regionLabelNames, boundaryLabelNames, regionLabelColors, boundaryLabelColors, accepted, nullptr);
         w->show();
 
         if (doModal){
             gui::Singleton::ContinueGui();
         }
+
+        return accepted;
 
     }
 

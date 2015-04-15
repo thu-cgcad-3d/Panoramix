@@ -29,7 +29,7 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = " MiscTest.Optional";  
    //testing::GTEST_FLAG(filter) = "Feature.VanishingPointsDetector";
    testing::GTEST_FLAG(filter) = "Feature.IndoorGeometricContextMatlab";
-   //testing::GTEST_FLAG(filter) = "MixedGraph.RebuildOnOnePanorama";
+   //testing::GTEST_FLAG(filter) = "Engine.RebuildOnOnePanorama";
    //testing::GTEST_FLAG(filter) = "Matlab.SparseMatrix";
    //testing::GTEST_FLAG(filter) = "View.OrientationContext";
    //testing::GTEST_FLAG(filter) = "ConstraintGraph.Basic";
@@ -40,7 +40,7 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = "FactorGraph.Denoise";
    //testing::GTEST_FLAG(filter) = "Feature.SegmentationBoundaryJunction";
    //testing::GTEST_FLAG(filter) = "Serialization.Mex";
-   //testing::GTEST_FLAG(filter) = "MixedGraph.Batch";
+   //testing::GTEST_FLAG(filter) = "Engine.Batch";
    //testing::GTEST_FLAG(filter) = "Camera.*";
    //testing::GTEST_FLAG(filter) = "UtilTest.PlaneIntersection";
    //testing::GTEST_FLAG(filter) = "Visualizer.LayeredShape3";

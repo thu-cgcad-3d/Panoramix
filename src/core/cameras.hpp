@@ -343,6 +343,12 @@ namespace panoramix {
             std::vector<Vec3> * vps = nullptr,
             double * focal = nullptr);
 
+        PerspectiveView CreatePerspectiveView(const Image & perspectiveImage,
+            const std::vector<HPoint2> & vps,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, -1));
+
 
         template <class CameraT, class = std::enable_if_t<IsCamera<CameraT>::value>>
         Failable<View<CameraT>> CreateView(const Image & image,

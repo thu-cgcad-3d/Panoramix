@@ -108,9 +108,8 @@ namespace panoramix {
             double gamma1 = 0.05, double gamma2 = 0.05);
 
 
-
-
-
+        // smooth
+        void SmoothInstances(const RLGraph & mg, const InstanceTable<RegionData> & planes, const InstanceTable<LineData> & lines);
 
 
     }

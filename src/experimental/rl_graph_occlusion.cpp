@@ -78,7 +78,116 @@ namespace panoramix {
 
 
 
+        HandledTable<LineHandle, LineDetachStatus> GuessLineDetachStatus(
+            const RLGraph & mg, const HandledTable<LineRelationHandle, DepthRelationGuess> & ldr){
 
+            auto result = mg.createComponentTable<LineData>(LineDetachStatus{ false, false });
+            for (auto & l : mg.components<LineData>()){
+                if (l.data.initialClaz == -1){
+                    continue;
+                }
+                Vec3 rightdir = normalize(l.data.line.first.cross(l.data.line.second));
+
+                int rightOccCandNum = 0;
+                int rightConNum = 0;
+                int rightAll = 0;
+                int leftOccCandNum = 0;
+                int leftConNum = 0;
+                int leftAll = 0;
+
+                for (auto & lr : l.topo.constraints<LineRelationData>()){
+                    const DepthRelationGuess & dr = ldr[lr];
+                    auto another = mg.topo(lr).component<0>();
+                    if (another == l.topo.hd){
+                        another = mg.topo(lr).component<1>();
+                    }
+                    auto & anotherld = mg.data(another);                    
+
+                    bool isOnRight = (anotherld.line.center() - l.data.line.center()).dot(rightdir) > 0;
+                    if (mg.topo(lr).component<0>() == l.topo.hd && dr == DepthRelationGuess::FirstMaybeCloser ||
+                        mg.topo(lr).component<1>() == l.topo.hd && dr == DepthRelationGuess::SecondMaybeCloser){
+                        if (isOnRight){
+                            rightOccCandNum++;
+                        }
+                        else{
+                            leftOccCandNum++;
+                        }
+                    }
+
+                    if (isOnRight){
+                        rightAll++;
+                    }
+                    else{
+                        leftAll++;
+                    }
+
+                    if (dr == DepthRelationGuess::MaybeConnected && mg.data(lr).type == LineRelationData::Intersection){
+                        if (isOnRight){
+                            rightConNum++;
+                        }
+                        else{
+                            leftConNum++;
+                        }
+
+                    }
+                }
+
+                for (auto & rl : l.topo.constraints<RegionLineConnectionData>()){
+                    bool isOnRight = (mg.data(mg.topo(rl).component<0>()).normalizedCenter - l.data.line.center()).dot(rightdir) > 0;
+                    if (isOnRight){
+                        rightAll++;
+                    }
+                    else{
+                        leftAll++;
+                    }
+                }
+
+                result[l.topo.hd].lineRightMayDetach = rightOccCandNum > 0 && rightConNum == 0 && 
+                    leftAll > 0 &&
+                    leftOccCandNum < rightOccCandNum;
+                result[l.topo.hd].lineLeftMayDetach = leftOccCandNum > 0 && leftConNum == 0 &&
+                    rightAll > 0 &&
+                    rightOccCandNum < leftOccCandNum;
+            }
+
+            return result;
+
+        }
+
+
+        bool MayOccludes(const RLGraph & mg, const HandledTable<LineHandle, LineDetachStatus> & lrds,
+            LineHandle lh,
+            LineRelationHandle lrh){
+            auto another = mg.topo(lrh).component<0>();
+            if (another == lh){
+                another = mg.topo(lrh).component<1>();
+            }
+            else{
+                assert(mg.topo(lrh).component<1>() == lh);
+            }
+            auto & anotherld = mg.data(another);
+            Vec3 rightdir = normalize(mg.data(lh).line.first.cross(mg.data(lh).line.second));
+            bool isOnRight = (anotherld.line.center() - mg.data(lh).line.center()).dot(rightdir) > 0;
+            if (isOnRight && lrds[lh].lineRightMayDetach)
+                return true;
+            if (!isOnRight && lrds[lh].lineLeftMayDetach)
+                return true;
+            return false;
+        }
+
+        bool MayOccludes(const RLGraph & mg, const HandledTable<LineHandle, LineDetachStatus> & lrds,
+            LineHandle lh,
+            RegionLineConnectionHandle rlh){
+            auto another = mg.topo(rlh).component<0>();
+            auto & anotherld = mg.data(another);
+            Vec3 rightdir = normalize(mg.data(lh).line.first.cross(mg.data(lh).line.second));
+            bool isOnRight = (anotherld.normalizedCenter - mg.data(lh).line.center()).dot(rightdir) > 0;
+            if (isOnRight && lrds[lh].lineRightMayDetach)
+                return true;
+            if (!isOnRight && lrds[lh].lineLeftMayDetach)
+                return true;
+            return false;
+        }
 
 
 

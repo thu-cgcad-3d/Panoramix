@@ -216,7 +216,7 @@ namespace panolyz {
                     if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
                         continue;
 
-                    vars = SolveVariables(mg, controls, false, false);
+                    vars = SolveVariables(mg, controls, false, true);
                     NormalizeVariables(mg, controls, vars);
                     //OptimizeVariables(mg, controls, vars);
                     std::cout << "score = " << Score(mg, controls, vars) << std::endl;

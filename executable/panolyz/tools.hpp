@@ -16,7 +16,7 @@ namespace panolyz {
         inline void serialize(Archive & ar) { ar(regionLabels, boundaryLabels); }
     };
 
-    void LabelIt(Labels & labels, 
+    bool LabelIt(Labels & labels, 
         const Image & im, 
         const Imagei & segments, 
         const std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryPixels,
@@ -25,6 +25,8 @@ namespace panolyz {
         const std::vector<gui::Color> & regionLabelColors,
         const std::vector<gui::Color> & boundaryLabelColors,
         bool doModal = true);
+
+
 
 
 }

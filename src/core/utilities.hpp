@@ -573,6 +573,16 @@ namespace panoramix {
         }
 
         template <class T>
+        inline Vec<T, 2> LeftPerpendicularDirectiion(const Vec<T, 2> & d){
+            return Vec<T, 2>(-d(1), d(0));
+        }
+
+        template <class T>
+        inline Vec<T, 2> RightPerpendicularDirectiion(const Vec<T, 2> & d){
+            return Vec<T, 2>(d(1), -d(0));
+        }
+
+        template <class T>
         inline std::pair<Vec<T, 3>, Vec<T, 3>> ProposeXYDirectionsFromZDirection(const Vec<T, 3> & z) {
             auto y = z.cross(Vec<T, 3>(1, 0, 0));
             if (y(0) == 0 && y(1) == 0 && y(2) == 0) {

@@ -4,23 +4,43 @@
 #include "../ml/factor_graph.hpp"
 #include "../gui/visualize2d.hpp"
 #include "../gui/visualizers.hpp"
-#include "mixed_graph.hpp"
+
+#include "tools.hpp"
+#include "rl_graph_occlusion.hpp"
+#include "engine.hpp"
 
 namespace panoramix {
     namespace experimental {
 
 
-        MixedGraph::MixedGraph(const Image & image,
+        Engine::Engine(const Image & image){
+            installImageAndExtractFeatures(image);
+        }
+
+        Engine::Engine(const Image & image,
             const Point2 & cameraCenterPosition,
             double cameraFocal) {
+            installImageAndExtractFeatures(image, cameraCenterPosition, cameraFocal);
+        }
 
-            LineSegmentExtractor lineExtractor;
-            lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
-            lines = core::ClassifyEachAs(lineExtractor(image, 1), -1);
+        void Engine::installImageAndExtractFeatures(const Image & image){
+            view = CreatePerspectiveView(image).unwrap();
+            initialize();
+        }
 
+        void Engine::installImageAndExtractFeatures(const Image & image,
+            const Point2 & cameraCenterPosition,
+            double cameraFocal) {
             view.camera = core::PerspectiveCamera(image.cols, image.rows, cameraCenterPosition, cameraFocal,
                 core::Point3(0, 0, 0), core::Point3(1, 0, 0), core::Point3(0, 0, -1));
             view.image = image;
+            initialize();
+        }
+
+        void Engine::initialize() {
+            LineSegmentExtractor lineExtractor;
+            lineExtractor.params().algorithm = core::LineSegmentExtractor::LSD;
+            lines = core::ClassifyEachAs(lineExtractor(view.image, 1), -1);
 
             // classify lines
             vps = EstimateVanishingPointsAndClassifyLines(view.camera, lines);
@@ -33,7 +53,7 @@ namespace panoramix {
             }
 
             // append lines
-            AppendLines(regionLineGraph, lines, view.camera, vps);
+            AppendLines(mg, lines, view.camera, vps);
 
             // append regions
             SegmentationExtractor segmenter;
@@ -46,10 +66,10 @@ namespace panoramix {
             for (int i = 0; i < lines.size(); i++)
                 pureLines[i] = lines[i].component;
             int segmentsNum = 0;
-            std::tie(regions, segmentsNum) = segmenter(image/*, pureLines, image.cols / 100.0*/);
+            std::tie(regions, segmentsNum) = segmenter(view.image/*, pureLines, image.cols / 100.0*/);
 
-            regionIds2Handles = AppendRegions(regionLineGraph, regions, view.camera, 0.001, 0.001, 3, 1);
-            
+            rhs = AppendRegions(mg, regions, view.camera, 0.001, 0.001, 3, 1);
+
 
             // boundary junctions
             // add region boundary handle
@@ -57,25 +77,25 @@ namespace panoramix {
             for (auto & junc : bjunctions){
                 auto & regionIds = junc.first;
                 auto & ps = junc.second;
-                std::set<RegionHandle> rhs;
+                std::set<RegionHandle> rhset;
                 for (int regionId : regionIds){
-                    RegionHandle rh = regionIds2Handles[regionId];
+                    RegionHandle rh = rhs[regionId];
                     if (rh.invalid())
                         continue;
-                    rhs.insert(rh);
+                    rhset.insert(rh);
                 }
-                if (rhs.size() < 3)
+                if (rhset.size() < 3)
                     continue;
                 // locate boundary handles among rhs
                 std::set<RegionBoundaryHandle> bhs;
-                for (RegionHandle rh : rhs){
-                    auto & relatedBhs = regionLineGraph.topo(rh).constraints<RegionBoundaryData>();
+                for (RegionHandle rh : rhset){
+                    auto & relatedBhs = mg.topo(rh).constraints<RegionBoundaryData>();
                     for (RegionBoundaryHandle bh : relatedBhs){
-                        auto anotherRh = regionLineGraph.topo(bh).component<0>();
+                        auto anotherRh = mg.topo(bh).component<0>();
                         if (anotherRh == rh){
-                            anotherRh = regionLineGraph.topo(bh).component<1>();
+                            anotherRh = mg.topo(bh).component<1>();
                         }
-                        if (Contains(rhs, anotherRh)){
+                        if (Contains(rhset, anotherRh)){
                             bhs.insert(bh);
                         }
                     }
@@ -88,30 +108,14 @@ namespace panoramix {
                 }
                 boundaryJunctions.push_back(BoundaryJunction{ std::move(bhs), std::move(positions) });
             }
-
         }
 
-        void MixedGraph::installGCResponse(const Image7d & gc){
-            assert(gc.size() == regions.size());
-            gcResponse = regionLineGraph.createComponentTable<RegionData>(Vec7());
-            auto regionAreas = regionLineGraph.createComponentTable<RegionData>(0.0);
-            for (auto it = gc.begin(); it != gc.end(); ++it){
-                auto p = it.pos();
-                const Vec7 & v = gc(p);
-                RegionHandle rh = regionIds2Handles[regions(p)];
-                if (rh.invalid())
-                    continue;
-                gcResponse[rh] += v;
-                regionAreas[rh] += 1.0;
-            }
-            for (int i = 0; i < gcResponse.data.size(); i++){
-                gcResponse.data[i] /= regionAreas.data[i];
-                double sum = std::accumulate(
-                    std::begin(gcResponse.data[i].val), 
-                    std::end(gcResponse.data[i].val), 
-                    0.0);
-                assert(IsFuzzyZero(sum - 1.0, 0.1));
-            }
+
+
+
+
+        void Engine::installGCResponse(const Image7d & gc){
+            gcResponse = CollectFeatureMeanOnRegions(mg, view.camera, gc);
         }
 
 
@@ -128,17 +132,17 @@ namespace panoramix {
         }
 
 
-        void MixedGraph::installOcclusionResponce(const std::vector<std::vector<PixelLoc>> & edges,
+        void Engine::installOcclusionResponce(const std::vector<std::vector<PixelLoc>> & edges,
             const std::vector<double> & scores){
             assert(edges.size() == scores.size());
-            occlusionResponse = regionLineGraph.createConstraintTable<RegionBoundaryData>(0.0);
+            occlusionResponse = mg.createConstraintTable<RegionBoundaryData>(0.0);
             auto getBB = [&edges](int eid)->Box2 {
                 return BoundingBoxOfContainer(edges.at(eid));
             };
             std::vector<int> eids(edges.size());
             std::iota(eids.begin(), eids.end(), 0);
             RTreeWrapper<int, decltype(getBB)> rtree(eids.begin(), eids.end(), getBB);
-            for (auto & bd : regionLineGraph.constraints<RegionBoundaryData>()){
+            for (auto & bd : mg.constraints<RegionBoundaryData>()){
                 double & resp = occlusionResponse[bd.topo.hd];
                 double allSampleScoreSum = 0;
                 int allSampleNum = 0;
@@ -165,7 +169,7 @@ namespace panoramix {
             }
         }
 
-        void MixedGraph::installOcclusionResponce(const std::vector<std::vector<int>> & edges,
+        void Engine::installOcclusionResponce(const std::vector<std::vector<int>> & edges,
             const std::vector<double> & scores){
             assert(edges.size() == scores.size());
             std::vector<std::vector<PixelLoc>> pixels(edges.size());
@@ -179,13 +183,13 @@ namespace panoramix {
             installOcclusionResponce(pixels, scores);
         }
 
-        void MixedGraph::showGCResponse() const{
+        void Engine::showGCResponse() const{
             
         }
 
-        void MixedGraph::showOcclusionResponse() const{
+        void Engine::showOcclusionResponse() const{
             gui::Visualizer2D vis(view.image);
-            for (auto & b : regionLineGraph.constraints<RegionBoundaryData>()){
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
                 double score = occlusionResponse[b.topo.hd];
                 if (score <= 0)
                     continue;
@@ -200,7 +204,7 @@ namespace panoramix {
             vis << gui::manip2d::Show();
         }
 
-        void MixedGraph::showBoundaryJunctions() const{
+        void Engine::showBoundaryJunctions() const{
             int regionsNum = MinMaxValOfImage(regions).second + 1;
             auto ctable = gui::CreateRandomColorTableWithSize(regionsNum);
             auto segs = ctable(regions);
@@ -216,21 +220,21 @@ namespace panoramix {
                 << gui::manip2d::Show();
         }
 
-        void MixedGraph::showDetachableRegionLineConnections() const{
+        void Engine::showDetachableRegionLineConnections() const{
             int regionsNum = MinMaxValOfImage(regions).second + 1;
             auto ctable = gui::CreateRandomColorTableWithSize(regionsNum);
             auto segs = ctable(regions);
             std::vector<Line2> lines;
-            lines.reserve(regionLineGraph.internalComponents<LineData>().size());
-            for (auto & l : regionLineGraph.components<LineData>()){
+            lines.reserve(mg.internalComponents<LineData>().size());
+            for (auto & l : mg.components<LineData>()){
                 Line2 line(view.camera.screenProjection(l.data.line.first), view.camera.screenProjection(l.data.line.second));
                 lines.push_back(line);
             }
             std::vector<Line2> detachableConnections, undetachableConnections;
-            for (auto & rl : regionLineGraph.constraints<RegionLineConnectionData>()){
-                auto rh = regionLineGraph.topo(rl.topo.hd).component<0>();
-                auto lh = regionLineGraph.topo(rl.topo.hd).component<1>();
-                auto & rcenter = regionLineGraph.data(rh).normalizedCenter;
+            for (auto & rl : mg.constraints<RegionLineConnectionData>()){
+                auto rh = mg.topo(rl.topo.hd).component<0>();
+                auto lh = mg.topo(rl.topo.hd).component<1>();
+                auto & rcenter = mg.data(rh).normalizedCenter;
                 Point2 rcenterProj = view.camera.screenProjection(rcenter);
                 std::vector<Point2> anchorProjs;
                 anchorProjs.reserve(rl.data.normalizedAnchors.size());
@@ -255,18 +259,18 @@ namespace panoramix {
         }
 
 
-        void MixedGraph::showSegmentations() const{
+        void Engine::showSegmentations() const{
             int regionsNum = MinMaxValOfImage(regions).second + 1;
             auto ctable = gui::CreateRandomColorTableWithSize(regionsNum);
             auto segs = ctable(regions);
             gui::Visualizer2D(segs) << gui::manip2d::Show();
         }
 
-        void MixedGraph::showVanishingPointsAndLines() const{
+        void Engine::showVanishingPointsAndLines() const{
             
         }
 
-        void MixedGraph::showRegionOrientationConstriants() const{
+        void Engine::showRegionOrientationConstriants() const{
 
         }
 
@@ -297,8 +301,8 @@ namespace panoramix {
         }
 
 
-        HandledTable<RegionHandle, Plane3> MixedGraph::solve() const {           
-            RLGraphControls controls(regionLineGraph, vps);
+        HandledTable<RegionHandle, Plane3> Engine::solve() const {           
+            RLGraphControls controls(mg, vps);
 
             size_t vpnum = vps.size();
             int vertVPId = -1, frontVPId = -1, sideVPId = -1;
@@ -308,7 +312,7 @@ namespace panoramix {
             // some precalculated data
             
             // region data
-            auto regionIntersectWithVPs = regionLineGraph.createComponentTable<RegionData, int>(-1);
+            auto regionIntersectWithVPs = mg.createComponentTable<RegionData, int>(-1);
             for (int i = 0; i < vpnum; i++){
                 for (auto & p : { view.camera.screenProjection(vps[i]), view.camera.screenProjection(-vps[i]) }){
                     PixelLoc pixel = ToPixelLoc(p);
@@ -317,14 +321,14 @@ namespace panoramix {
                         for (int y = -s; y <= s; y++){
                             PixelLoc pp(pixel.x + x, pixel.y + y);
                             if (Contains(regions, pixel)){
-                                regionIntersectWithVPs[regionIds2Handles[regions(pp)]] = i;
+                                regionIntersectWithVPs[rhs[regions(pp)]] = i;
                             }
                         }
                     }                   
                 }
             }
-            auto regionIntersectWithHorizon = regionLineGraph.createComponentTable<RegionData, int8_t>(false);
-            for (auto & r : regionLineGraph.components<RegionData>()){
+            auto regionIntersectWithHorizon = mg.createComponentTable<RegionData, int8_t>(false);
+            for (auto & r : mg.components<RegionData>()){
                 auto h = r.topo.hd;
                 auto & contours = r.data.normalizedContours;
                 bool intersected = false;
@@ -346,8 +350,8 @@ namespace panoramix {
             
             // line data
             auto lineScoresForVPs =
-                regionLineGraph.createComponentTable<LineData>(std::vector<double>(vpnum, 0.0));
-            for (auto & l : regionLineGraph.components<LineData>()){
+                mg.createComponentTable<LineData>(std::vector<double>(vpnum, 0.0));
+            for (auto & l : mg.components<LineData>()){
                 auto & line = l.data.line;
                 for (int i = 0; i < vpnum; i++){
                     auto normal = line.first.cross(line.second);
@@ -360,34 +364,34 @@ namespace panoramix {
 
 
             auto lineLeftRegionConnections = 
-                regionLineGraph.createComponentTable<LineData, std::set<RegionLineConnectionHandle>>();
+                mg.createComponentTable<LineData, std::set<RegionLineConnectionHandle>>();
             auto lineRightRegionConnections = 
-                regionLineGraph.createComponentTable<LineData, std::set<RegionLineConnectionHandle>>();
-            for (auto & rl : regionLineGraph.constraints<RegionLineConnectionData>()){
+                mg.createComponentTable<LineData, std::set<RegionLineConnectionHandle>>();
+            for (auto & rl : mg.constraints<RegionLineConnectionData>()){
                 RegionHandle rh = rl.topo.component<0>();
                 LineHandle lh = rl.topo.component<1>();
-                const Line3 & lineProj = regionLineGraph.data(lh).line;
+                const Line3 & lineProj = mg.data(lh).line;
                 Vec3 rightDir = normalize(lineProj.first.cross(lineProj.second));
-                const Vec3 & regionCenter = regionLineGraph.data(rh).normalizedCenter;
+                const Vec3 & regionCenter = mg.data(rh).normalizedCenter;
                 bool isOnRight = (regionCenter - lineProj.center()).dot(rightDir) >= 0;
                 (isOnRight ? lineRightRegionConnections : lineLeftRegionConnections)[lh].insert(rl.topo.hd);
             }
 
             float junctionWeightMax = 0.0f;
-            for (auto & ll : regionLineGraph.constraints<LineRelationData>()){
+            for (auto & ll : mg.constraints<LineRelationData>()){
                 junctionWeightMax = std::max(ll.data.junctionWeight, junctionWeightMax);
             }
             assert(junctionWeightMax > 0.0);
             double regionAreaMax = 0.0;
-            for (auto & r : regionLineGraph.components<RegionData>()){
+            for (auto & r : mg.components<RegionData>()){
                 regionAreaMax = std::max(regionAreaMax, r.data.area);
             }
 
-            size_t regionNum = regionLineGraph.internalComponents<RegionData>().size();
-            size_t lineNum = regionLineGraph.internalComponents<LineData>().size();
-            size_t boundaryNum = regionLineGraph.internalConstraints<RegionBoundaryData>().size();
-            size_t rlConNum = regionLineGraph.internalConstraints<RegionLineConnectionData>().size();
-            size_t llConNum = regionLineGraph.internalConstraints<LineRelationData>().size();
+            size_t regionNum = mg.internalComponents<RegionData>().size();
+            size_t lineNum = mg.internalComponents<LineData>().size();
+            size_t boundaryNum = mg.internalConstraints<RegionBoundaryData>().size();
+            size_t rlConNum = mg.internalConstraints<RegionLineConnectionData>().size();
+            size_t llConNum = mg.internalConstraints<LineRelationData>().size();
             size_t bjuncNum = boundaryJunctions.size();
 
 
@@ -449,11 +453,11 @@ namespace panoramix {
                 }
             };
             ContinuousCaches cache = {
-                regionLineGraph.createComponentTable<RegionData, Plane3>(),
-                regionLineGraph.createComponentTable<LineData, Line3>(),
-                regionLineGraph.createConstraintTable<RegionBoundaryData>(0.0),
-                regionLineGraph.createConstraintTable<RegionLineConnectionData>(0.0),
-                regionLineGraph.createConstraintTable<LineRelationData>(0.0)
+                mg.createComponentTable<RegionData, Plane3>(),
+                mg.createComponentTable<LineData, Line3>(),
+                mg.createConstraintTable<RegionBoundaryData>(0.0),
+                mg.createConstraintTable<RegionLineConnectionData>(0.0),
+                mg.createConstraintTable<LineRelationData>(0.0)
             };
 
             
@@ -466,49 +470,49 @@ namespace panoramix {
             /// add vars
 
             // add region orientation constraint flags
-            // 3: {no constraints, vertical, tofront, ceilingfloor, side}
+            // 3: {void, free, ground, vertical, {hvp1, hvp2} }
             auto regionOrientationVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 5, 0.5 });
-            auto regionVhs = regionLineGraph.createComponentTable<RegionData, ml::FactorGraph::VarHandle>();
-            for (auto & r : regionLineGraph.components<RegionData>()){
+            auto regionVhs = mg.createComponentTable<RegionData, ml::FactorGraph::VarHandle>();
+            for (auto & r : mg.components<RegionData>()){
                 regionVhs[r.topo.hd] = fg.addVar(regionOrientationVc);
             }
 
             // add line orientation constraint flags
             // 2: {no constraints, vp0, vp1, ...}
             auto lineOrientationVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ vpnum + 1, 0.5 }); 
-            auto lineVhs = regionLineGraph.createComponentTable<LineData, ml::FactorGraph::VarHandle>();
-            for (auto & l : regionLineGraph.components<LineData>()){
+            auto lineVhs = mg.createComponentTable<LineData, ml::FactorGraph::VarHandle>();
+            for (auto & l : mg.components<LineData>()){
                 lineVhs[l.topo.hd] = fg.addVar(lineOrientationVc);
             }
             
             // add boundary flags
             // 2: {not connected, connected}
             auto boundaryOcclusionVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 });
-            auto boundaryVhs = regionLineGraph.createConstraintTable<RegionBoundaryData, ml::FactorGraph::VarHandle>();
-            for (auto & b : regionLineGraph.constraints<RegionBoundaryData>()){
+            auto boundaryVhs = mg.createConstraintTable<RegionBoundaryData, ml::FactorGraph::VarHandle>();
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
                 boundaryVhs[b.topo.hd] = fg.addVar(boundaryOcclusionVc);
             }
 
             // add line connection flags
             // 3 : {both, left, right}
             auto lineConnectionSidesVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 3, 0.5 }); 
-            auto lineConnectionSidesVhs = regionLineGraph.createComponentTable<LineData, ml::FactorGraph::VarHandle>();
-            for (auto & l : regionLineGraph.components<LineData>()){
+            auto lineConnectionSidesVhs = mg.createComponentTable<LineData, ml::FactorGraph::VarHandle>();
+            for (auto & l : mg.components<LineData>()){
                 lineConnectionSidesVhs[l.topo.hd] = fg.addVar(lineConnectionSidesVc);
             }
 
             // add ll connection flags
             // 2: {not connected, connected}
             auto llConVc = fg.addVarCategory(ml::FactorGraph::VarCategory{ 2, 0.5 });
-            auto llConVhs = regionLineGraph.createConstraintTable<LineRelationData, ml::FactorGraph::VarHandle>();
-            for (auto & r : regionLineGraph.constraints<LineRelationData>()){
+            auto llConVhs = mg.createConstraintTable<LineRelationData, ml::FactorGraph::VarHandle>();
+            for (auto & r : mg.constraints<LineRelationData>()){
                 llConVhs[r.topo.hd] = fg.addVar(llConVc);
             }
 
             /// add factors
 
             // add region orientation unary cost (discrete and mixed)
-            for (auto & r : regionLineGraph.components<RegionData>()){
+            for (auto & r : mg.components<RegionData>()){
                 auto rh = r.topo.hd;
                 bool intersectWithHorizon = regionIntersectWithHorizon[rh];
                 int intersectWithVPs = regionIntersectWithVPs[rh];
@@ -516,6 +520,7 @@ namespace panoramix {
                     fg.addFactorCategory(
                     ml::FactorGraph::FactorCategory{ [this, rh, vertVPId, frontVPId, sideVPId, &cache,
                     intersectWithHorizon, intersectWithVPs](const int * labels, size_t nvars) -> double {
+
                     assert(nvars == 1);
                     assert(labels[0] >= 0 && labels[0] <= 4);
                     int rolabel = labels[0];
@@ -561,7 +566,7 @@ namespace panoramix {
             }
 
             // add line orientation cost
-            for (auto & l : regionLineGraph.components<LineData>()){
+            for (auto & l : mg.components<LineData>()){
                 auto lh = l.topo.hd;
                 auto lineOrientationFc = fg.addFactorCategory(
                     ml::FactorGraph::FactorCategory{ [this, lh, &lineScoresForVPs, &cache](const int * labels, size_t nvars) -> double{
@@ -570,7 +575,7 @@ namespace panoramix {
                     assert(lolabel >= 0 && lolabel <= vps.size());
 
                     double maxDistanceToRegions = 0.0;
-                    auto & rlConnections = regionLineGraph.topo(lh).constraints<RegionLineConnectionData>();
+                    auto & rlConnections = mg.topo(lh).constraints<RegionLineConnectionData>();
                     for (auto rlh : rlConnections){
                         maxDistanceToRegions = std::max(cache[rlh], maxDistanceToRegions);
                     }
@@ -583,14 +588,14 @@ namespace panoramix {
                         int vpclaz = lolabel - 1;
                         assert(0 <= lineScoresForVPs[lh][vpclaz] && lineScoresForVPs[lh][vpclaz] <= 1.0);
                         return 10 * (1.0 - lineScoresForVPs[lh][vpclaz]) * 
-                            maxDistanceToRegions * 5.0 / normalize(regionLineGraph.data(lh).line).length();
+                            maxDistanceToRegions * 5.0 / normalize(mg.data(lh).line).length();
                     }
                 }, 0.5 });
                 fg.addFactor({ lineVhs[lh] }, lineOrientationFc);
             }
 
             // add boundary flag unary cost
-            for (auto & b : regionLineGraph.constraints<RegionBoundaryData>()){
+            for (auto & b : mg.constraints<RegionBoundaryData>()){
                 auto bh = b.topo.hd;
                 auto boundaryFlagFc = fg.addFactorCategory(
                     ml::FactorGraph::FactorCategory{ [this, bh, &cache](const int * labels, size_t nvars) -> double{
@@ -608,7 +613,7 @@ namespace panoramix {
             }
 
             // add line connection side cost
-            for (auto & l : regionLineGraph.components<LineData>()){
+            for (auto & l : mg.components<LineData>()){
                 auto lh = l.topo.hd;
                 auto & leftRegionCons = lineLeftRegionConnections[lh];
                 auto & rightRegionCons = lineRightRegionConnections[lh];
@@ -652,7 +657,7 @@ namespace panoramix {
 
 
             // add line-line connection flag unary cost
-            for (auto & r : regionLineGraph.constraints<LineRelationData>()){
+            for (auto & r : mg.constraints<LineRelationData>()){
                 auto rh = r.topo.hd;
                 double junctionWeightRatio = r.data.junctionWeight / junctionWeightMax;
                 assert(!IsInfOrNaN(junctionWeightRatio));
@@ -699,18 +704,18 @@ namespace panoramix {
 
             // initialize
             LOG("initialize");
-            AttachPrincipleDirectionConstraints(regionLineGraph, controls, M_PI / 50.0);
-            AttachWallConstriants(regionLineGraph, controls, M_PI / 80.0);
-            AttachAnchorToCenterOfLargestLineIfNoAnchorExists(regionLineGraph, controls);
+            AttachPrincipleDirectionConstraints(mg, controls, M_PI / 50.0);
+            AttachWallConstriants(mg, controls, M_PI / 80.0);
+            AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls);
 
             const auto defaultControls = controls;
 
             // solve continuous vars
-            auto vars = SolveVariables(regionLineGraph, controls);
-            NormalizeVariables(regionLineGraph, controls, vars);
-            cache.update(regionLineGraph, controls, vars);
+            auto vars = SolveVariables(mg, controls);
+            NormalizeVariables(mg, controls, vars);
+            cache.update(mg, controls, vars);
 
-            //Visualize(view, regionLineGraph, controls, vars);
+            //Visualize(view, mg, controls, vars);
 
             for(int epoch = 0; epoch < 1; epoch ++){
 
@@ -725,7 +730,7 @@ namespace panoramix {
 
                 // install discrete vars into props
                 // region orientation
-                for (auto & r : regionLineGraph.components<RegionData>()){
+                for (auto & r : mg.components<RegionData>()){
                     int rolabel = results[regionVhs[r.topo.hd]];
                     auto & prop = controls[r.topo.hd];
                     if (rolabel == 0){
@@ -749,7 +754,7 @@ namespace panoramix {
                     }
                 }
                 // line orientation
-                for (auto & l : regionLineGraph.components<LineData>()){
+                for (auto & l : mg.components<LineData>()){
                     int lolabel = results[lineVhs[l.topo.hd]];
                     auto & prop = controls[l.topo.hd];
                     if (lolabel == 0){
@@ -763,18 +768,18 @@ namespace panoramix {
                 }
 
                 // boundary occlusion
-                for (auto & b : regionLineGraph.constraints<RegionBoundaryData>()){
+                for (auto & b : mg.constraints<RegionBoundaryData>()){
                     controls[b.topo.hd].weight = results[boundaryVhs[b.topo.hd]] == 1 ? defaultControls[b.topo.hd].weight : 1e-3;
                 }
 
                 std::array<int, 3> lineConnectionSideLabels = { { 0, 0, 0 } };
-                for (auto & l : regionLineGraph.components<LineData>()){
+                for (auto & l : mg.components<LineData>()){
                     int label = results[lineConnectionSidesVhs[l.topo.hd]];
                     lineConnectionSideLabels[label] ++;
                     for (RegionLineConnectionHandle leftConH : lineLeftRegionConnections[l.topo.hd]){
                         auto & prop = controls[leftConH];
                         auto & defaultProp = defaultControls[leftConH];
-                        /*if (!regionLineGraph.data(leftConH).detachable){
+                        /*if (!mg.data(leftConH).detachable){
                             prop.weight = defaultProp.weight;
                             continue;
                         }*/
@@ -783,7 +788,7 @@ namespace panoramix {
                     for (RegionLineConnectionHandle rightConH : lineRightRegionConnections[l.topo.hd]){
                         auto & prop = controls[rightConH];
                         auto & defaultProp = defaultControls[rightConH];
-                        /*if (!regionLineGraph.data(rightConH).detachable){
+                        /*if (!mg.data(rightConH).detachable){
                             prop.weight = defaultProp.weight;
                             continue;
                         }*/
@@ -791,16 +796,16 @@ namespace panoramix {
                     }
                 }
 
-                for (auto & r : regionLineGraph.constraints<LineRelationData>()) {
+                for (auto & r : mg.constraints<LineRelationData>()) {
                     controls[r.topo.hd].weight = results[llConVhs[r.topo.hd]] == 1 ? defaultControls[r.topo.hd].weight : 1e-3;
                 }
 
                 // solve continuous vars
-                vars = SolveVariables(regionLineGraph, controls);
-                NormalizeVariables(regionLineGraph, controls, vars);
-                cache.update(regionLineGraph, controls, vars);
+                vars = SolveVariables(mg, controls);
+                NormalizeVariables(mg, controls, vars);
+                cache.update(mg, controls, vars);
 
-                //Visualize(view, regionLineGraph, controls, vars);
+                //Visualize(view, mg, controls, vars);
             }
 
             return std::move(cache.regionPlanes);

@@ -179,7 +179,7 @@ public:
             _confLock.lockForRead();
 
             // append regions
-            auto segId2Rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2);
+            auto segId2Rhs = AppendRegions(mg, segmentedImage, view.camera, 0.01, 0.02, 3, 2, true);
             controls = RLGraphControls(mg, vps);
 
             im.unlock();
@@ -232,7 +232,7 @@ public:
                 if (!AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls, 1.0, 1.0))
                     continue;
 
-                vars = SolveVariables(mg, controls, true);
+                vars = SolveVariables(mg, controls, false, true);
                 NormalizeVariables(mg, controls, vars);
                 std::cout << "score = " << Score(mg, controls, vars) << std::endl;
 
@@ -240,14 +240,14 @@ public:
                 if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
                     continue;
 
-                vars = SolveVariables(mg, controls);
+                vars = SolveVariables(mg, controls, false, true);
                 NormalizeVariables(mg, controls, vars);
 
                 AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
 
                 if (!AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls))
                     continue;
-                vars = SolveVariables(mg, controls);
+                vars = SolveVariables(mg, controls, false, true);
                 NormalizeVariables(mg, controls, vars);
             }
 
@@ -479,7 +479,7 @@ public:
                 if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls, 1.0, 1.0))
                     continue;
 
-                vars = SolveVariables(mg, controls, false);
+                vars = SolveVariables(mg, controls, false, true);
                 NormalizeVariables(mg, controls, vars);
                 std::cout << "score = " << Score(mg, controls, vars) << std::endl;
             }

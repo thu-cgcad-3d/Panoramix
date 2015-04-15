@@ -204,11 +204,16 @@ namespace panoramix {
         class GeometricContextEstimator {
         public:
             enum IndoorIndex : size_t {
-                II_FrontVerticalPlanarFace = 0,
+               /* II_FrontVerticalPlanarFace = 0,
                 II_SideVerticalPlanarFace = 1,
                 II_HorizontalPlanarFace = 2,
                 II_Clutter = 3,
-                II_Other = 4
+                II_Other = 4*/
+                II_HorizontalPlanarFace = 0,
+                II_VerticalPlanarFace = 1,
+                II_Clutter = 2,
+                II_Other = 3,
+                II_Other2 = 4
             };
 
             enum OutdoorIndex : size_t{
