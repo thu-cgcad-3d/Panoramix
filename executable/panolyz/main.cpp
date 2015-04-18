@@ -6,9 +6,10 @@ using namespace panolyz;
 
 int main(int argc, char ** argv) {
 
-    //Routine<PanoramaIndoor>();
-    YorkUrbanDB2::Run();
+    //YorkUrbanDB2::Run();
     //PanoramaIndoor::Run();
+    //NormalIndoor::Run();
+    NYU2::Run();
 
     return 0;
 }

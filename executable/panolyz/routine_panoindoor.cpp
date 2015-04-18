@@ -14,10 +14,10 @@ namespace panolyz {
         void Run(){
 
             std::string path;
-            path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
+            path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";// too small
@@ -140,13 +140,11 @@ namespace panolyz {
                 }
 
                 controls = RLGraphControls(mg, vps);
-                SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
-                    return std::max(mg.data(h).junctionWeight, 1e-1f);
-                });
+                SetNecessaryConstraintWeightedAnchors(mg, controls);
 
                 auto ccids = MakeHandledTableForAllComponents(mg, -1);
                 int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                    return c.used && c.weight > 0;
+                    return c.used && c.weightedAnchors.size() > 0;
                 });
                 auto mgs = Decompose(mg, ccids, ccnum);
                 auto cs = Decompose(mg, controls, ccids, ccnum);
@@ -155,8 +153,8 @@ namespace panolyz {
                 for (int i = 0; i < ccnum; i++){
                     auto & mg = mgs[i];
                     auto & controls = cs[i];
-                    AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls);
-                    auto vars = SolveVariables(mgs[i], controls, true);
+                    AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls);
+                    auto vars = SolveVariablesWithBoundedAnchors(mgs[i], controls, true);
                     NormalizeVariables(mg, controls, vars);
 
                     gui::Visualizer vis;
@@ -188,20 +186,12 @@ namespace panolyz {
                 //AttachGeometricContextConstraints(mg, controls, view.camera, gc, gcVotes);
 
                 // set constraint weights
-                SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
-                    return std::max(mg.data(h).junctionWeight * 10.0f, 1.0f);
-                });
-                SetConstraintWeights<RegionBoundaryData>(controls, [&mg](RegionBoundaryHandle h){
-                    return std::max(mg.data(h).length / M_PI / 10.0, 0.0);
-                });
-                SetConstraintWeights<RegionLineConnectionData>(controls, [&mg](RegionLineConnectionHandle h){
-                    return std::max(mg.data(h).length / M_PI / 10.0, 0.0);
-                });
+                SetNecessaryConstraintWeightedAnchors(mg, controls);
 
                 // cc decompose
                 auto ccids = MakeHandledTableForAllComponents(mg, -1);
                 int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                    return c.used && c.weight > 0;
+                    return c.used && c.weightedAnchors.size() > 0;
                 });
                 auto mgs = Decompose(mg, ccids, ccnum);
                 auto cs = Decompose(mg, controls, ccids, ccnum);
@@ -213,26 +203,28 @@ namespace panolyz {
                     auto & controls = cs[i];
                     RLGraphVars vars;
 
-                    if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                    if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                         continue;
 
-                    vars = SolveVariables(mg, controls, false, true);
+                    //vars = SolveVariablesWithBoundedAnchors(mg, controls, false, true);
+                    ResetToSampledArmorAnchors(mg, controls, 0.05);
+                    vars = SolveVariablesWithBoundedAnchors(mg, controls, false, false);
                     NormalizeVariables(mg, controls, vars);
-                    //OptimizeVariables(mg, controls, vars);
+                    //SolveVariablesWithBoundedAnchors(mg, controls, vars);
                     std::cout << "score = " << Score(mg, controls, vars) << std::endl;
 
                     //LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
-                    //if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                    //if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                     //    continue;
 
-                    //vars = SolveVariables(mg, controls, true, false);
+                    //vars = SolveVariablesWithBoundedAnchors(mg, controls, true, false);
                     //NormalizeVariables(mg, controls, vars);
 
                   /*  AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
 
-                    if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                    if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                         continue;
-                    vars = SolveVariables(mg, controls, false, true);
+                    vars = SolveVariablesWithBoundedAnchors(mg, controls, false, true);
                     NormalizeVariables(mg, controls, vars);*/
 
                     gui::Visualizer vis;

@@ -5,7 +5,7 @@ namespace panolyz {
 
     auto costFun = [](const RLGraph& mg, const RLGraphControls & controls) -> double {
         auto & vps = controls.vanishingPoints;
-        auto vars = SolveVariables(mg, controls, false);
+        auto vars = SolveVariablesWithBoundedAnchors(mg, controls, false);
         NormalizeVariables(mg, controls, vars);
         auto planes = Instances<RegionData>(mg, controls, vars);
         auto lines = Instances<LineData>(mg, controls, vars);

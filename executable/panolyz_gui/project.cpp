@@ -232,7 +232,8 @@ public:
                 if (!AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls, 1.0, 1.0))
                     continue;
 
-                vars = SolveVariables(mg, controls, false, true);
+                ResetToSampledArmorAnchors(mg, controls, 0.1);
+                vars = SolveVariablesBoundComponentAnchors(mg, controls, false, false, 1.0, 5.0, 100);
                 NormalizeVariables(mg, controls, vars);
                 std::cout << "score = " << Score(mg, controls, vars) << std::endl;
 
@@ -240,14 +241,15 @@ public:
                 if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
                     continue;
 
-                vars = SolveVariables(mg, controls, false, true);
+                
+                vars = SolveVariablesBoundComponentAnchors(mg, controls, false, false, 1.0, 5.0, 100);
                 NormalizeVariables(mg, controls, vars);
 
                 AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
 
                 if (!AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls))
                     continue;
-                vars = SolveVariables(mg, controls, false, true);
+                vars = SolveVariablesBoundComponentAnchors(mg, controls, false, false, 1.0, 5.0, 100);
                 NormalizeVariables(mg, controls, vars);
             }
 
@@ -479,7 +481,7 @@ public:
                 if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls, 1.0, 1.0))
                     continue;
 
-                vars = SolveVariables(mg, controls, false, true);
+                vars = SolveVariablesBoundComponentAnchors(mg, controls, false, true, 1.0, 5.0, 100);
                 NormalizeVariables(mg, controls, vars);
                 std::cout << "score = " << Score(mg, controls, vars) << std::endl;
             }

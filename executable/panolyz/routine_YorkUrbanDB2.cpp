@@ -289,14 +289,13 @@ namespace panolyz {
 
             AppendLines(mg, lines, view.camera, vps, 40.0 / gt::focalReal, 100.0 / gt::focalReal);
 
+
             controls = RLGraphControls(mg, vps);
-            SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
-                return std::max(mg.data(h).junctionWeight, 1e-1f);
-            });
+            SetNecessaryConstraintWeightedAnchors(mg, controls);
 
             auto ccids = MakeHandledTableForAllComponents(mg, -1);
             int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                return c.used && c.weight > 0;
+                return c.used && c.weightedAnchors.size() > 0;
             });
             auto mgs = Decompose(mg, ccids, ccnum);
             auto cs = Decompose(mg, controls, ccids, ccnum);
@@ -305,8 +304,8 @@ namespace panolyz {
             for (int i = 0; i < ccnum; i++){
                 auto & mg = mgs[i];
                 auto & controls = cs[i];
-                AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls);
-                auto vars = SolveVariables(mgs[i], controls, true);
+                AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls);
+                auto vars = SolveVariablesWithBoundedAnchors(mgs[i], controls, true);
                 NormalizeVariables(mg, controls, vars);
 
                 gui::Visualizer vis;
@@ -385,20 +384,12 @@ namespace panolyz {
             //AttachWallConstriants(mg, controls);
 
             // set constraint weights
-            SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
-                return std::max(mg.data(h).junctionWeight * 10, 1.0f);
-            });
-            SetConstraintWeights<RegionBoundaryData>(controls, [&mg](RegionBoundaryHandle h){
-                return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
-            });
-            SetConstraintWeights<RegionLineConnectionData>(controls, [&mg](RegionLineConnectionHandle h){
-                return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
-            });
+            SetNecessaryConstraintWeightedAnchors(mg, controls);
 
             // cc decompose
             auto ccids = MakeHandledTableForAllComponents(mg, -1);
             int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                return c.used && c.weight > 0;
+                return c.used && c.weightedAnchors.size() > 0;
             });
             RLGraphOldToNew old2new;
             auto mgs = Decompose(mg, ccids, ccnum, &old2new);
@@ -417,7 +408,7 @@ namespace panolyz {
                 auto & controls = cs[i];
                 RLGraphVars vars;
 
-                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                     continue;
 
                 std::vector<RegionHandle> newrhs = rhs;
@@ -463,10 +454,10 @@ namespace panolyz {
                 }
 
                 { // with inversed depth setup
-                    vars = SolveVariables(mg, controls, true, true);
+                    vars = SolveVariablesWithBoundedAnchors(mg, controls, true, true);
                     NormalizeVariables(mg, controls, vars);
                     LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.0, 0.1);
-                    vars = SolveVariables(mg, controls, true, true);
+                    vars = SolveVariablesWithBoundedAnchors(mg, controls, true, true);
                     NormalizeVariables(mg, controls, vars);
                     if (1){
                         gui::Visualizer vis("inversed depth setup");
@@ -479,7 +470,7 @@ namespace panolyz {
                     return;
 
                     ClearAllComponentAnchors(controls);
-                    OptimizeVariables(mg, controls, vars, true, false);
+                    OptimizeVariablesWithBoundedAnchors(mg, controls, vars, true, false);
                     NormalizeVariables(mg, controls, vars);
                     if (1){
                         gui::Visualizer vis("inversed depth setup -> optimized");
@@ -492,7 +483,7 @@ namespace panolyz {
 
                 {  // without inversed depth setup
                     vars = MakeVariables(mg, controls);
-                    OptimizeVariables(mg, controls, vars, true, true);
+                    OptimizeVariablesWithBoundedAnchors(mg, controls, vars, true, true);
                     NormalizeVariables(mg, controls, vars);
                     if (1){
                         gui::Visualizer vis("directly optimized");
@@ -688,7 +679,7 @@ namespace panolyz {
                 // cc decompose
                 auto ccids = MakeHandledTableForAllComponents(mg, -1);
                 int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                    return c.used && c.weight > 0;
+                    return c.used && c.weightedAnchors.size() > 0;
                 });
                 RLGraphOldToNew old2new;
                 auto mgs = Decompose(mg, ccids, ccnum, &old2new);
@@ -707,7 +698,7 @@ namespace panolyz {
                     auto & controls = cs[i];
                     RLGraphVars vars;
 
-                    if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                    if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                         continue;
 
                     std::vector<RegionHandle> newrhs = rhs;
@@ -729,7 +720,7 @@ namespace panolyz {
                     
 
 
-                    vars = SolveVariables(mg, controls, false, true);
+                    vars = SolveVariablesWithBoundedAnchors(mg, controls, false, true);
                     NormalizeVariables(mg, controls, vars);
                     if (1){
                         Show(p, mg, controls, vars);
@@ -924,7 +915,7 @@ namespace panolyz {
             // cc decompose
             auto ccids = MakeHandledTableForAllComponents(mg, -1);
             int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                return c.used && c.weight > 0;
+                return c.used && c.weightedAnchors.size() > 0;
             });
             RLGraphOldToNew old2new;
             auto mgs = Decompose(mg, ccids, ccnum, &old2new);
@@ -944,7 +935,7 @@ namespace panolyz {
                 auto & controls = cs[i];
                 RLGraphVars vars;
 
-                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                     continue;
 
                 std::vector<RegionHandle> newrhs = rhs;
@@ -963,7 +954,7 @@ namespace panolyz {
 
 
                 // initial status
-                vars = SolveVariables(mg, controls, false, true);
+                vars = SolveVariablesWithBoundedAnchors(mg, controls, false, true);
                 NormalizeVariables(mg, controls, vars);
                 if (1){
                     Show(p, mg, controls, vars);
@@ -1169,7 +1160,7 @@ namespace panolyz {
             // cc decompose
             auto ccids = MakeHandledTableForAllComponents(mg, -1);
             int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                return c.used && c.weight > 0;
+                return c.used && c.weightedAnchors.size() > 0;
             });
             RLGraphOldToNew old2new;
             auto mgs = Decompose(mg, ccids, ccnum, &old2new);
@@ -1206,11 +1197,11 @@ namespace panolyz {
             rhs = std::move(newrhs);
 
 
-            if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+            if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                 return;
 
             // initial status
-            vars = SolveVariables(mg, controls, false, true);
+            vars = SolveVariablesWithBoundedAnchors(mg, controls, false, true);
             NormalizeVariables(mg, controls, vars);
             if (1){
                 Show(p, mg, controls, vars);
@@ -1377,6 +1368,8 @@ namespace panolyz {
             bool useWeights;
             bool useAllAnchors;
 
+            template <class A>
+            void serialize(A & a) { a(reestVPLines, withGC, withHCons, useWeights, useAllAnchors); }
 
             std::string tag() const {
                 return TAG(reestVPLines) + TAG(withGC) + TAG(withHCons) + TAG(useWeights) + TAG(useAllAnchors);
@@ -1476,18 +1469,23 @@ namespace panolyz {
                         }
                         break;
                     case GeometricContextEstimator::OI_VerticalPlanarFace:
-                        if (withGC){
+                        if (withGC && !config.withHCons){
                             c.orientationClaz = -1;
                             c.orientationNotClaz = vertVPId;
                         }
                         break;
                     case GeometricContextEstimator::OI_Clutter:
-                        if (withGC){
+                        if (withGC && !config.withHCons){
                             c.orientationClaz = -1;
                             c.orientationNotClaz = -1;
                         }
                         break;
                     case GeometricContextEstimator::OI_Porous:
+                        if (withGC && !config.withHCons){
+                            c.orientationClaz = -1;
+                            c.orientationNotClaz = -1;
+                        }
+                        break;
                     case GeometricContextEstimator::OI_Sky:
                         c.used = false;
                         break;
@@ -1498,7 +1496,7 @@ namespace panolyz {
                 else if (!outdoor && s > 3){
                     switch (maxlabel){
                     case GeometricContextEstimator::II_VerticalPlanarFace:
-                        if (withGC){
+                        if (withGC && !config.withHCons){
                             c.orientationClaz = -1;
                             c.orientationNotClaz = vertVPId;
                         }
@@ -1509,7 +1507,7 @@ namespace panolyz {
                         }
                         break;
                     case GeometricContextEstimator::II_Clutter:
-                        if (withGC){
+                        if (withGC && !config.withHCons){
                             c.orientationClaz = c.orientationNotClaz = -1;
                         }
                         break;
@@ -1519,27 +1517,19 @@ namespace panolyz {
                 }
             });
             if (config.withHCons){
-                AttachWallConstriants(mg, controls, 0.01, view.camera.upward());
+                AttachWallConstriants(mg, controls, 5 / view.camera.focal(), view.camera.upward());
             }
 
             // set weights
             // set constraint weights
-            SetConstraintWeights<LineRelationData>(controls, [&mg](LineRelationHandle h){
-                return std::max(mg.data(h).junctionWeight * 10, 1.0f);
-            });
-            SetConstraintWeights<RegionBoundaryData>(controls, [&mg](RegionBoundaryHandle h){
-                return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
-            });
-            SetConstraintWeights<RegionLineConnectionData>(controls, [&mg](RegionLineConnectionHandle h){
-                return std::max(mg.data(h).length / M_PI * 10.0, 1.0);
-            });
+            SetNecessaryConstraintWeightedAnchors(mg, controls);
 
 
 
             // cc decompose
             auto ccids = MakeHandledTableForAllComponents(mg, -1);
             int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                return c.used && c.weight > 0;
+                return c.used && c.weightedAnchors.size() > 0;
             });
             RLGraphOldToNew old2new;
             auto mgs = Decompose(mg, ccids, ccnum, &old2new);
@@ -1576,13 +1566,17 @@ namespace panolyz {
             rhs = std::move(newrhs);
 
 
-            if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+            if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                 return;
 
-            vars = SolveVariables(mg, controls, config.useWeights/*false*/,
-                config.useAllAnchors);
+            ResetToFullArmorAnchors(mg, controls);
+            vars = SolveVariablesWithBoundedAnchors(mg, controls,
+                    config.useWeights, 1000);
+            assert(!HasInfOrNaNValue(vars));
 
-                //return;
+
+            //vars = SolveVariablesWithBoundedAnchors(mg, controls, config.useWeights/*false*/,
+            //    config.useAllAnchors);
 
             {
                 // save
@@ -1602,31 +1596,30 @@ namespace panolyz {
                 matlab.PutVariable("rlomap", rlomap);
             }
 
-            Show(view, mg, controls, vars);
+            //Show(view, mg, controls, vars);
 
-            LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.0);
-            vars = SolveVariables(mg, controls, config.useWeights/*false*/, 
-                config.useAllAnchors);
-            {
-                // save
-                auto planes = Instances<RegionData>(mg, controls, vars);
-                Image3f rlomap = Image3f::zeros(view.image.size());
-                for (auto it = rlomap.begin(); it != rlomap.end(); ++it){
-                    int rid = segmentedImage(it.pos());
-                    auto rh = rhs[rid];
-                    if (rh.invalid()){
-                        continue;
-                    }
-                    auto & plane = planes[rh];
-                    for (int i = 0; i < 3; i++){
-                        (*it)[i] = abs(normalize(plane.normal).dot(normalize(vps[i])));
-                    }
-                }
-                matlab.PutVariable("rlomap_afterloose", rlomap);
-            }
+            //LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.0);
+            //vars = SolveVariablesBoundComponentAnchors(mg, controls, config.useWeights/*false*/,
+            //    config.useAllAnchors);
+            //{
+            //    // save
+            //    auto planes = Instances<RegionData>(mg, controls, vars);
+            //    Image3f rlomap = Image3f::zeros(view.image.size());
+            //    for (auto it = rlomap.begin(); it != rlomap.end(); ++it){
+            //        int rid = segmentedImage(it.pos());
+            //        auto rh = rhs[rid];
+            //        if (rh.invalid()){
+            //            continue;
+            //        }
+            //        auto & plane = planes[rh];
+            //        for (int i = 0; i < 3; i++){
+            //            (*it)[i] = abs(normalize(plane.normal).dot(normalize(vps[i])));
+            //        }
+            //    }
+            //    matlab.PutVariable("rlomap_afterloose", rlomap);
+            //}
            
-            //matlab << ("save('" + p.fileprefix + tag + ".mat', 'rlomap', 'rlomap_afterloose');");
-            matlab << ("save('" + p.fileprefix + "try" + ".mat', 'rlomap', 'rlomap_afterloose');");
+            //matlab << ("save('" + p.fileprefix + tag + ".mat', 'rlomap');");
             Show(view, mg, controls, vars);
             
         }
@@ -1649,33 +1642,33 @@ namespace panolyz {
             int num = dnum;
 
             Config conf;
-            conf.reestVPLines = true;
+            conf.reestVPLines = false;
             conf.useAllAnchors = true;
-            conf.useWeights = false;
+            conf.useWeights = true;
             conf.withGC = true;
-            conf.withHCons = false;
+            conf.withHCons = true;
 
+            std::vector<std::pair<Config, int>> errors;
 
-            //for (bool c1 : {true, false}){
+            //for (bool c1 : {true}){
             //    conf.useAllAnchors = c1;
-            //    for (bool c2 : {false, true}){
+            //    for (bool c2 : {false}){
             //        conf.useWeights = c2;
 
-            //        for (bool c3 : {true, false}){
+            //        for (bool c3 : {false}){
             //            conf.withGC = c3;
-            //            for (bool c4 : {false, true}){
+            //            for (bool c4 : {true}){
             //                conf.withHCons = c4;
-
-            int i = 0;
+            int i = 99;
                             //for (int i = 0; i < num; i++)
                             {
                                 matlab << ("name = names{" + std::to_string(i + 1) + "};");
                                 std::string name;
                                 matlab.GetVariable("name", name);
-                                std::cout << "processing " << name << std::endl;
+                                std::cout << "processing [" << i << "] " << name << std::endl;
                                 std::cout << "tag: " << conf.tag() << std::endl;
 
-                                //if (name != "p1020816"){
+                                //if (name != "p1020867"){
                                 //    continue;
                                 //}
 
@@ -1692,12 +1685,13 @@ namespace panolyz {
                                 //ReconstructModel(p);
                                 //ExhausticReconstruct(p);
                                 //BPReconstruct(p);
-                                //try{
+                                try{
                                     SurfaceOrientationPrediction(p, conf);
-                                //}
-                                /*catch (std::exception e){
+                                }
+                                catch (std::exception e){
                                     std::cout << e.what() << std::endl;
-                                }*/
+                                    errors.emplace_back(conf, i);
+                                }
                             }
 
             //            }
@@ -1705,7 +1699,7 @@ namespace panolyz {
             //    }
             //}
 
-           
+            //SaveToDisk("cache/errorids.cereal", errors);
 
         }
     }

@@ -11,7 +11,8 @@ namespace panolyz {
     DECL_ALGO(PanoramaIndoor);
     DECL_ALGO(YorkUrbanDB);
     DECL_ALGO(YorkUrbanDB2);
-
+    DECL_ALGO(NormalIndoor);
+    DECL_ALGO(NYU2);
 
     inline std::string Tagify(const std::string & path){
         auto tag = path;
