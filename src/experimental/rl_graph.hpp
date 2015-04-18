@@ -110,11 +110,6 @@ namespace panoramix {
         float ComputeIntersectionJunctionWeightWithLinesVotes(const Mat<float, 3, 2> & votes);
 
 
-        // estimate vanishing points
-        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const PerspectiveCamera & cams,
-            std::vector<Classified<Line2>> & lineSegments);
-        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
-            std::vector<std::vector<Classified<Line2>>> & lineSegments);
 
 
         // add lines to rl graph from classified line segments
@@ -152,15 +147,15 @@ namespace panoramix {
             template <class T> struct Original_ {};
             template <class HandleT> struct Original_<Decomposed<HandleT>> { using type = HandleT; };
             template <class T> using Original = typename Original_<T>::type;
+            template <class T> using HandleMapOldToNew = std::map<T, Decomposed<T>>;
+            template <class T> using HandleMapNewToOld = std::map<T, Original<T>>;
         }
-        template <class T> using HandleMapOldToNew = std::map<T, Decomposed<T>>;
         using RLGraphOldToNew = MetaBind<HandleMapOldToNew, 
             RegionHandle, 
             LineHandle,
             RegionBoundaryHandle, 
             LineRelationHandle, 
             RegionLineConnectionHandle>;
-        template <class T> using HandleMapNewToOld = std::map<T, Original<T>>;
         using RLGraphNewToOld = MetaBind<HandleMapNewToOld, 
             Decomposed<RegionHandle>, 
             Decomposed<LineHandle>,
@@ -181,19 +176,21 @@ namespace panoramix {
             int orientationClaz;
             int orientationNotClaz; // if region is tangential with some vp ?
             std::vector<Weighted<Point3>> weightedAnchors;
+            std::vector<Bounded<Vec3>> boundedAnchors;
             template <class Archiver>
             inline void serialize(Archiver & ar) {
-                ar(used, orientationClaz, orientationNotClaz, weightedAnchors);
+                ar(used, orientationClaz, orientationNotClaz, weightedAnchors, boundedAnchors);
             }
         };
         using RLGraphComponentControls = RLGraphComponentTable<RLGraphComponentControl>;
 
         struct RLGraphConstraintControl {
             bool used;
-            double weight;
+            std::vector<Weighted<Vec3>> weightedAnchors;
+            std::vector<Bounded<Vec3>> boundedAnchors;
             template <class Archiver>
             inline void serialize(Archiver & ar) {
-                ar(used, weight);
+                ar(used, weightedAnchors, boundedAnchors); 
             }
         };
         using RLGraphConstraintControls = RLGraphConstraintTable<RLGraphConstraintControl>;
@@ -258,6 +255,10 @@ namespace panoramix {
             }
         };
 
+        
+        void SetNecessaryConstraintWeighedAnchors(const RLGraph & mg, RLGraphControls & controls);
+        void SetFullConstraintWeighedAnchors(const RLGraph & mg, RLGraphControls & controls);
+
 
         struct RLGraphVar {
             std::vector<double> variables;
@@ -273,24 +274,21 @@ namespace panoramix {
         // connected components
         int ConnectedComponents(const RLGraph & mg, const RLGraphControls & controls,
             RLGraphComponentTable<int> & ccids,
-            const std::function<bool(const RLGraphConstraintControl &)> & constraintAsConnected = nullptr);
+            const std::function<bool(const RLGraphConstraintControl &)> & constraintAsConnected);
         std::vector<RLGraphControls> Decompose(const RLGraph & mg, const RLGraphControls & controls,
             const RLGraphComponentTable<int> & ccids, int ccnum);
 
 
 
 
-        // weights
-        void ResetWeights(const RLGraph & mg, RLGraphControls & controls);
-
+        // reset all weighted anchor's weights to 1.0
         template <class ConstraintDataT, class FunT>
-        inline void SetConstraintWeights(RLGraphControls & controls, FunT && fun){
+        inline void SetConstraintControls(RLGraphControls & controls, FunT && fun){
             auto & data = controls.constraintControls.dataOfType<ConstraintHandle<ConstraintDataT>>();
             for (int i = 0; i < data.size(); i++){
-                data[i].weight = fun(ConstraintHandle<ConstraintDataT>(i));
+                fun(ConstraintHandle<ConstraintDataT>(i), data[i]);
             }
         }
-
         template <class ComponentDataT, class FunT>
         inline void SetComponentControl(RLGraphControls & controls, FunT && fun){
             auto & data = controls.componentControls.dataOfType<ComponentHandle<ComponentDataT>>();
@@ -353,27 +351,99 @@ namespace panoramix {
 
 
 
-        // solve equations
-        int NumberOfAnchors(const RLGraphControls & controls);
-        bool AttachAnchorToCenterOfLargestLineIfNoAnchorExists(const RLGraph & mg,
+        // anchors
+        int NumberOfComponentWeightedAnchors(const RLGraphControls & controls);
+        int NumberOfComponentBoundedAnchors(const RLGraphControls & controls);
+        int NumberOfConstraintWeightedAnchors(const RLGraphControls & controls);
+        int NumberOfConstraintBoundedAnchors(const RLGraphControls & controls);
+
+        bool AttachWeightedAnchorToCenterOfLargestLineIfNoExists(const RLGraph & mg,
             RLGraphControls & controls,
             double depth = 1.0, double weight = 1.0, bool orientedOnly = true);
-        bool AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg,
+        bool AttachWeightedAnchorToCenterOfLargestRegionIfNoExists(const RLGraph & mg,
             RLGraphControls & controls,
             double depth = 1.0, double weight = 1.0, bool orientedOnly = true);
+
         void ClearAllComponentAnchors(RLGraphControls & controls);
+        void ClearAllConstraintAnchors(RLGraphControls & controls);
+
+
+
+
+        template <class T, int N, class CameraT>
+        HandledTable<RegionHandle, Vec<T, N>> CollectFeatureMeanOnRegions(const RLGraph & mg,
+            const CameraT & pcam, const ImageOfType<Vec<T, N>> & feature){
+            HandledTable<RegionHandle, Vec<T, N>> featureMeanTable = mg.createComponentTable<RegionData, Vec<T, N>>();
+            for (auto & r : mg.components<RegionData>()){
+                auto rh = r.topo.hd;
+                auto regionMaskView = PerfectRegionMaskView(mg, rh);
+                auto sampler = MakeCameraSampler(regionMaskView.camera, pcam);
+                auto featureOnRegion = sampler(feature);
+                int votes = 0;
+                Vec<T, N> featureSum;
+                for (auto it = regionMaskView.image.begin(); it != regionMaskView.image.end(); ++it){
+                    if (!*it){
+                        continue;
+                    }
+                    featureSum += featureOnRegion(it.pos());
+                    votes += 1;
+                }
+                auto featureMean = featureSum / std::max(votes, 1);
+                featureMeanTable[rh] = featureMean;
+            }
+            return featureMeanTable;
+        }
+
+
+
+
+
+
+        void AttachPrincipleDirectionConstraints(const RLGraph & mg, RLGraphControls & controls,
+            double rangeAngle = M_PI / 30.0, bool avoidLineConflictions = true);
+        void AttachWallConstriants(const RLGraph & mg, RLGraphControls & controls,
+            double rangeAngle = M_PI / 60.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
+        void AttachFloorAndCeilingConstraints(const RLGraph & mg,
+            RLGraphControls & controls, const RLGraphVars & vars,
+            double eyeHeightRatioLowerBound = 0.1, double eyeHeightRatioUpperBound = 0.6,
+            double angleThreshold = M_PI / 100.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
+
+
+
+        void LooseOrientationConstraintsOnComponents(const RLGraph & mg,
+            RLGraphControls & controls, const RLGraphVars & vars,
+            double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05,
+            double distThresRatio = 0.12);
+
+
+
 
         RLGraphVars MakeVariables(const RLGraph & mg, const RLGraphControls & controls, bool randomized = false);
+        bool HasInfOrNaNValue(const RLGraphVars & v);
 
-        RLGraphVars SolveVariables(const RLGraph & mg, const RLGraphControls & controls,
-            bool useWeights = false, bool useAllAnchors = true);
-        RLGraphVars SolveVariablesCVX(const RLGraph & mg, const RLGraphControls & controls,
-            bool useWeights = false, bool useAllAnchors = true);
 
-        void OptimizeVariables(const RLGraph & mg,
+
+
+        // solve equations
+        RLGraphVars SolveVariablesWithoutBoundedAnchors(const RLGraph & mg, 
+            const RLGraphControls & controls,
+            bool useWeights = false);
+
+        void ResetToFullArmorAnchors(const RLGraph & mg, RLGraphControls & controls);
+        void ResetToSampledArmorAnchors(const RLGraph & mg, RLGraphControls & controls, double sampleStepAngle);
+        
+        RLGraphVars SolveVariablesWithBoundedAnchors(const RLGraph & mg, const RLGraphControls & controls,
+            bool useWeights = false, int tryNum = 10);
+
+        void OptimizeVariablesWithBoundedAnchors(const RLGraph & mg, const RLGraphControls & controls, RLGraphVars & vars,
+            bool useWeights = true, int tryNum = 100, int maxOptimizeNum = 10,
+            const std::function<bool(const RLGraphVars &)> & callback = nullptr);
+
+
+      /*  void OptimizeVariablesLevenbergMarquardt(const RLGraph & mg,
             const RLGraphControls & controls, RLGraphVars & vars, 
             bool useWeights = true, bool useAllAnchors = false,
-            const std::function<bool(const RLGraphVars &)> & callback = nullptr);
+            const std::function<bool(const RLGraphVars &)> & callback = nullptr);*/
 
         void NormalizeVariables(const RLGraph & mg, const RLGraphControls & controls,
             RLGraphVars & vars);
@@ -382,24 +452,6 @@ namespace panoramix {
 
 
 
-
-        // adjust constraints
-        void AttachPrincipleDirectionConstraints(const RLGraph & mg, RLGraphControls & controls,
-            double rangeAngle = M_PI / 30.0, bool avoidLineConflictions = true);
-        void AttachWallConstriants(const RLGraph & mg, RLGraphControls & controls,
-            double rangeAngle = M_PI / 60.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
-        void AttachFloorAndCeilingConstraints(const RLGraph & mg, 
-            RLGraphControls & controls, const RLGraphVars & vars,
-            double eyeHeightRatioLowerBound = 0.1, double eyeHeightRatioUpperBound = 0.6,
-            double angleThreshold = M_PI / 100.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
-
-
-
-
-        void LooseOrientationConstraintsOnComponents(const RLGraph & mg, 
-            RLGraphControls & controls, const RLGraphVars & vars,
-            double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05, 
-            double distThresRatio = 0.12);
 
 
 

@@ -242,103 +242,6 @@ namespace panoramix {
             return junctionWeight;
         }
 
-        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const PerspectiveCamera & cam,
-            std::vector<Classified<Line2>> & lineSegments){
-            std::vector<Vec3> lineIntersections;
-
-            int linesNum = 0;
-            std::vector<Line2> pureLines(lineSegments.size());
-            linesNum += lineSegments.size();
-            for (int k = 0; k < pureLines.size(); k++){
-                pureLines[k] = lineSegments[k].component;
-            }
-            auto inters = ComputeLineIntersections(pureLines, nullptr, true, std::numeric_limits<double>::max());
-            // insert line intersections
-            for (auto & p : inters){
-                lineIntersections.push_back(normalize(cam.spatialDirection(p.value())));
-            }
-
-            auto vanishingPoints = FindOrthogonalPrinicipleDirections(lineIntersections, 1000, 500, true).unwrap();
-
-            // project lines to space
-            std::vector<Classified<Line3>> spatialLineSegments;
-            spatialLineSegments.reserve(linesNum);
-            for (const auto & line : lineSegments) {
-                auto & p1 = line.component.first;
-                auto & p2 = line.component.second;
-                auto pp1 = cam.spatialDirection(p1);
-                auto pp2 = cam.spatialDirection(p2);
-                Classified<Line3> cline3;
-                cline3.claz = -1;
-                cline3.component = Line3{ pp1, pp2 };
-                spatialLineSegments.push_back(cline3);
-            }
-
-            // classify lines
-            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
-
-            int ii = 0;
-            for (int j = 0; j < lineSegments.size(); j++){
-                lineSegments[j].claz = spatialLineSegments[ii].claz;
-                ii++;
-            }
-
-            return vanishingPoints;
-        }
-
-        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
-            std::vector<std::vector<Classified<Line2>>> & lineSegments){
-
-            assert(cams.size() == lineSegments.size());
-            std::vector<Vec3> lineIntersections;
-
-            int linesNum = 0;
-            for (int i = 0; i < cams.size(); i++){
-                std::vector<Line2> pureLines(lineSegments[i].size());
-                linesNum += lineSegments[i].size();
-                for (int k = 0; k < pureLines.size(); k++){
-                    pureLines[k] = lineSegments[i][k].component;
-                }
-                auto inters = ComputeLineIntersections(pureLines, nullptr, true, std::numeric_limits<double>::max());
-                // insert line intersections
-                for (auto & p : inters){
-                    lineIntersections.push_back(normalize(cams[i].spatialDirection(p.value())));
-                }
-            }
-
-            auto vanishingPoints = FindOrthogonalPrinicipleDirections(lineIntersections, 1000, 500, true).unwrap();
-
-            // project lines to space
-            std::vector<Classified<Line3>> spatialLineSegments;
-            spatialLineSegments.reserve(linesNum);
-            for (int i = 0; i < cams.size(); i++){
-                for (const auto & line : lineSegments[i]) {
-                    auto & p1 = line.component.first;
-                    auto & p2 = line.component.second;
-                    auto pp1 = cams[i].spatialDirection(p1);
-                    auto pp2 = cams[i].spatialDirection(p2);
-                    Classified<Line3> cline3;
-                    cline3.claz = -1;
-                    cline3.component = Line3{ pp1, pp2 };
-                    spatialLineSegments.push_back(cline3);
-                }
-            }
-
-            // classify lines
-            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
-
-            int ii = 0;
-            for (int i = 0; i < lineSegments.size(); i++){
-                for (int j = 0; j < lineSegments[i].size(); j++){
-                    lineSegments[i][j].claz = spatialLineSegments[ii].claz;
-                    ii++;
-                }
-            }
-
-            return vanishingPoints;
-
-        }
-
 
 
         namespace {
@@ -1209,8 +1112,10 @@ namespace panoramix {
         int ConnectedComponents(const RLGraph & mg, const RLGraphControls & controls, 
             RLGraphComponentTable<int> & ccIds,
             const std::function<bool(const RLGraphConstraintControl &)> & constraintAsConnected) {
-            std::vector<RLGraph> ccs;
 
+            assert(constraintAsConnected);
+
+            std::vector<RLGraph> ccs;
 
             struct HComp {
                 enum Type { Region, Line };
@@ -1263,14 +1168,8 @@ namespace panoramix {
                     RegionHandle rh(comp.id);
                     for (auto & h : mg.topo(rh).constraints<RegionBoundaryData>()){
                         auto & consControl = controls[h];
-                        if (!constraintAsConnected){
-                            if (!consControl.used || consControl.weight == 0.0)
-                                continue;
-                        }
-                        else{
-                            if (!constraintAsConnected(consControl))
-                                continue;
-                        }
+                        if (!constraintAsConnected(consControl))
+                            continue;
                         auto another = mg.topo(h).component<0>();
                         if (another == rh){
                             another = mg.topo(h).component<1>();
@@ -1279,14 +1178,8 @@ namespace panoramix {
                     }
                     for (auto & h : mg.topo(rh).constraints<RegionLineConnectionData>()){
                         auto & consControl = controls[h];
-                        if (!constraintAsConnected){
-                            if (!consControl.used || consControl.weight == 0.0)
-                                continue;
-                        }
-                        else{
-                            if (!constraintAsConnected(consControl))
-                                continue;
-                        }
+                        if (!constraintAsConnected(consControl))
+                            continue;
                         LineHandle another = mg.topo(h).component<1>();
                         neighbors.push_back(comp2htable[another]);
                     }
@@ -1295,14 +1188,8 @@ namespace panoramix {
                     LineHandle lh(comp.id);
                     for (auto & h : mg.topo(lh).constraints<LineRelationData>()){
                         auto & consControl = controls[h];
-                        if (!constraintAsConnected){
-                            if (!consControl.used || consControl.weight == 0.0)
-                                continue;
-                        }
-                        else{
-                            if (!constraintAsConnected(consControl))
-                                continue;
-                        }
+                        if (!constraintAsConnected(consControl))
+                            continue;
                         auto another = mg.topo(h).component<0>();
                         if (another == lh){
                             another = mg.topo(h).component<1>();
@@ -1311,14 +1198,8 @@ namespace panoramix {
                     }
                     for (auto & h : mg.topo(lh).constraints<RegionLineConnectionData>()){
                         auto & consControl = controls[h];
-                        if (!constraintAsConnected){
-                            if (!consControl.used || consControl.weight == 0.0)
-                                continue;
-                        }
-                        else{
-                            if (!constraintAsConnected(consControl))
-                                continue;
-                        }
+                        if (!constraintAsConnected(consControl))
+                            continue;
                         RegionHandle another = mg.topo(h).component<0>();
                         neighbors.push_back(comp2htable[another]);
                     }
@@ -1621,11 +1502,195 @@ namespace panoramix {
             for (auto & dtable : constraintControls.data){
                 for (auto & d : dtable){
                     d.used = true;
-                    d.weight = 1.0;
                 }
             }
-            ResetWeights(mg, *this);
         }
+
+
+
+        namespace {
+
+            struct ExtractNecessaryAnchorsForBinary {
+                std::vector<Vec3> operator()(const RLGraph & mg, RegionBoundaryHandle bh) const {
+                    size_t n = ElementsNum(mg.data(bh).normalizedSampledPoints);
+
+                    assert(n > 0);
+                    const auto & points = mg.data(bh).normalizedSampledPoints;
+
+                    if (n == 1){
+                        return{ points.front().front() };
+                    }
+
+                    const Vec3 * pp1 = nullptr;
+                    const Vec3 * pp2 = nullptr;
+                    double maxAngle = -1;
+                    for (int i = 0; i < points.size(); i++){
+                        for (int ii = 0; ii < points[i].size(); ii++){
+                            for (int j = i; j < points.size(); j++){
+                                for (int jj = 0; jj < points[j].size(); jj++){
+                                    if (std::tie(i, ii) >= std::tie(j, jj))
+                                        continue;
+                                    double angle = AngleBetweenDirections(points[i][ii], points[j][jj]);
+                                    if (angle > maxAngle){
+                                        maxAngle = angle;
+                                        pp1 = &points[i][ii];
+                                        pp2 = &points[j][jj];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    auto & p1 = *pp1;
+                    auto & p2 = *pp2;
+
+                    if (n == 2){
+                        return{ p1, p2 };
+                    }
+
+                    auto normal12 = p1.cross(p2);
+                    auto pp3 = &p1;
+                    for (auto & ps : points){
+                        for (auto & p : ps){
+                            if (abs(p.dot(normal12)) > abs(pp3->dot(normal12))){
+                                pp3 = &p;
+                            }
+                        }
+                    }
+                    auto & p3 = *pp3;
+                    IMPROVABLE_HERE(? );
+                    return{ p1, p2, p3 };
+                }
+
+                inline std::vector<Vec3> operator()(const RLGraph & mg, LineRelationHandle bh) const {
+                    return{ mg.data(bh).normalizedRelationCenter };
+                }
+
+                inline std::vector<Vec3> operator()(const RLGraph & mg, RegionLineConnectionHandle bh) const {
+                    return{ mg.data(bh).normalizedAnchors.front(), mg.data(bh).normalizedAnchors.back() };
+                }
+            };
+
+            struct ExtractAllAnchorsForBinary {
+                std::vector<Vec3> operator()(const RLGraph & mg, RegionBoundaryHandle bh) const{
+                    std::vector<Vec3> anchors;
+                    anchors.reserve(ElementsNum(mg.data(bh).normalizedSampledPoints));
+                    for (auto & ps : mg.data(bh).normalizedSampledPoints){
+                        for (auto & p : ps){
+                            anchors.push_back(p);
+                        }
+                    }
+                    return anchors;
+                }
+                inline std::vector<Vec3> operator()(const RLGraph & mg, LineRelationHandle bh) const {
+                    return{ mg.data(bh).normalizedRelationCenter };
+                }
+                inline std::vector<Vec3> operator()(const RLGraph & mg, RegionLineConnectionHandle bh) const {
+                    return mg.data(bh).normalizedAnchors;
+                }
+            };
+
+            struct ExtractMoreAnchorsForBinary {
+                std::vector<Vec3> operator()(const RLGraph & mg, RegionBoundaryHandle bh) const{
+                    std::vector<Vec3> anchors;
+                    anchors.reserve(ElementsNum(mg.data(bh).normalizedSampledPoints));
+                    for (auto & ps : mg.data(bh).normalizedSampledPoints){
+                        if (ps.size() == 1){
+                            anchors.push_back(ps[0]);
+                            continue;
+                        }
+                        anchors.push_back(ps[0]);
+                        for (int i = 1; i < ps.size(); i++){
+                            anchors.push_back(ps[i]);
+                            Vec3 pdir = normalize(ps[i].cross(ps[i - 1]));
+                            auto newp = RotateDirection(ps[i], ps[i] + pdir, expandAngle);
+                            anchors.push_back(normalize(newp));
+                            newp = RotateDirection(ps[i], ps[i] + pdir, -expandAngle);
+                            anchors.push_back(normalize(newp));
+                        }
+                    }
+                    return anchors;
+                }
+                inline std::vector<Vec3> operator()(const RLGraph & mg, LineRelationHandle bh) const {
+                    return{ mg.data(bh).normalizedRelationCenter };
+                }
+                inline std::vector<Vec3> operator()(const RLGraph & mg, RegionLineConnectionHandle bh) const {
+                    std::vector<Vec3> anchors;
+                    anchors.reserve(mg.data(bh).normalizedAnchors.size() * 3);
+                    auto & ps = mg.data(bh).normalizedAnchors;
+                    if (ps.size() == 1)
+                        return ps;
+                    Vec3 pdir = normalize(ps.front().cross(ps.back()));
+                    for (auto & p : ps){
+                        anchors.push_back(p);
+                        anchors.push_back(RotateDirection(p, p + pdir, expandAngle));
+                        anchors.push_back(RotateDirection(p, p + pdir, -expandAngle));
+                    }
+                    return anchors;
+                }
+                double expandAngle;
+            };
+
+        }
+
+
+        template <class ConstraintAnchorExtractorT>
+        void SetConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls, ConstraintAnchorExtractorT && extractor){
+            for (auto & c : mg.constraints<RegionBoundaryData>()){
+                auto & control = controls[c.topo.hd];
+                if (!control.used){
+                    continue;
+                }
+                auto as = extractor(mg, c.topo.hd);
+                assert(as.size() >= 1);
+                double fullWeight = c.data.length;
+                assert(fullWeight >= 0);
+                control.weightedAnchors.clear();
+                control.weightedAnchors.reserve(as.size());
+                for (const Point3 & anchor : as){
+                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / as.size())));
+                }
+            }
+            for (auto & c : mg.constraints<LineRelationData>()){
+                auto & control = controls[c.topo.hd];
+                if (!control.used){
+                    continue;
+                }
+                auto as = extractor(mg, c.topo.hd);
+                assert(as.size() >= 1);
+                double fullWeight = c.data.junctionWeight;
+                assert(fullWeight >= 0);
+                control.weightedAnchors.clear();
+                control.weightedAnchors.reserve(as.size());
+                for (const Point3 & anchor : as){
+                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / as.size())));
+                }
+            }
+            for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                auto & control = controls[c.topo.hd];
+                if (!control.used){
+                    continue;
+                }
+                auto as = extractor(mg, c.topo.hd);
+                assert(as.size() >= 1);
+                double fullWeight = c.data.length;
+                assert(fullWeight >= 0);
+                control.weightedAnchors.clear();
+                control.weightedAnchors.reserve(as.size());
+                for (const Point3 & anchor : as){
+                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / as.size())));
+                }
+            }
+        }
+
+
+        void SetNecessaryConstraintWeighedAnchors(const RLGraph & mg, RLGraphControls & controls){
+            SetConstraintWeightedAnchors(mg, controls, ExtractNecessaryAnchorsForBinary());
+        }
+
+        void SetFullConstraintWeighedAnchors(const RLGraph & mg, RLGraphControls & controls){
+            SetConstraintWeightedAnchors(mg, controls, ExtractAllAnchorsForBinary());
+        }
+
 
 
 
@@ -1685,155 +1750,6 @@ namespace panoramix {
 
 
 
-
-        void ResetWeights(const RLGraph & mg, RLGraphControls & controls){
-            auto & consProps = controls.constraintControls;
-            double maxChainLen = 0;
-            for (auto & b : mg.internalConstraints<RegionBoundaryData>()){
-                maxChainLen = std::max(ChainLength(b.data.normalizedSampledPoints), maxChainLen);
-            }
-            for (auto & c : mg.internalConstraints<RegionLineConnectionData>()){
-                maxChainLen = std::max(ChainLength(c.data.normalizedAnchors), maxChainLen);
-            }
-
-            for (auto & b : mg.internalConstraints<RegionBoundaryData>()){
-                consProps[b.topo.hd].weight = 1.0 * ChainLength(b.data.normalizedSampledPoints) / maxChainLen;
-            }
-            for (auto & c : mg.internalConstraints<RegionLineConnectionData>()){
-                consProps[c.topo.hd].weight = 1.0 * ChainLength(c.data.normalizedAnchors) / maxChainLen;
-            }
-            for (auto & ll : mg.internalConstraints<LineRelationData>()){
-                consProps[ll.topo.hd].weight = 1.0;
-            }
-            auto & compProps = controls.componentControls;
-            for (auto & t : compProps.data){
-                for (auto & prop : t){
-                    for (auto & wa : prop.weightedAnchors){
-                        wa.score = 1.0;
-                    }
-                }
-            }
-        }
-
-
-
-        namespace {
-
-            class GPCPolygon {
-            public:
-                GPCPolygon() : _p(nullptr) {}
-                explicit GPCPolygon(gpc_polygon * p) : _p(p) {}
-                template <class T>
-                GPCPolygon(const std::vector<std::vector<Point<T, 2>>> & pts) {
-                    _p = new gpc_polygon;
-                    auto & poly = *_p;
-                    poly.num_contours = pts.size();
-                    poly.contour = new gpc_vertex_list[pts.size()];
-                    for (int k = 0; k < pts.size(); k++){
-                        poly.contour[k].num_vertices = pts[k].size();
-                        poly.contour[k].vertex = new gpc_vertex[pts[k].size()];
-                        for (int i = 0; i < pts[k].size(); i++){
-                            poly.contour[k].vertex[i].x = pts[k][i][0];
-                            poly.contour[k].vertex[i].y = pts[k][i][1];
-                        }
-                    }
-                    poly.hole = new int[pts.size()];
-                    std::fill(poly.hole, poly.hole + pts.size(), 0);
-                }
-                GPCPolygon(const GPCPolygon & p) = delete;
-                GPCPolygon(GPCPolygon && p) {
-                    _p = p._p;
-                    p._p = nullptr;
-                }
-                GPCPolygon & operator = (const GPCPolygon & p) = delete;
-                GPCPolygon & operator = (GPCPolygon && p) {
-                    std::swap(_p, p._p);
-                    return *this;
-                }
-
-                ~GPCPolygon(){
-                    if (!_p)
-                        return;
-                    gpc_free_polygon(_p);
-                    delete _p;
-                    _p = nullptr;
-                }
-                template <class T>
-                operator std::vector<std::vector<Point<T, 2>>>() const {
-                    std::vector<std::vector<Point<T, 2>>> pts;
-                    auto & poly = *_p;
-                    pts.reserve(poly.num_contours);
-                    for (int k = 0; k < poly.num_contours; k++){
-                        if (poly.hole[k])
-                            continue;
-
-                        std::vector<Point<T, 2>> ps(poly.contour[k].num_vertices);
-                        for (int i = 0; i < ps.size(); i++){
-                            ps[i][0] = static_cast<T>(poly.contour[k].vertex[i].x);
-                            ps[i][1] = static_cast<T>(poly.contour[k].vertex[i].y);
-                        }
-                        pts.push_back(std::move(ps));
-                    }
-                    return pts;
-                }
-            public:
-                GPCPolygon clipWith(gpc_op op, const GPCPolygon & clipPoly) const {
-                    GPCPolygon result(new gpc_polygon);
-                    gpc_polygon_clip(op, _p, clipPoly._p, result._p);
-                    return result;
-                }
-
-                inline GPCPolygon operator - (const GPCPolygon & clipPoly) const {
-                    return clipWith(GPC_DIFF, clipPoly);
-                }
-                inline GPCPolygon operator & (const GPCPolygon & clipPoly) const {
-                    return clipWith(GPC_INT, clipPoly);
-                }
-                inline GPCPolygon operator ^ (const GPCPolygon & clipPoly) const {
-                    return clipWith(GPC_XOR, clipPoly);
-                }
-                inline GPCPolygon operator | (const GPCPolygon & clipPoly) const {
-                    return clipWith(GPC_UNION, clipPoly);
-                }
-
-            private:
-                gpc_polygon * _p;
-            };
-
-
-
-            //enum class OrientationHint {
-            //    Void,
-            //    Horizontal,
-            //    Vertical,
-            //    OtherPlanar,
-            //    NonPlanar,
-            //    Count
-            //};
-
-            //inline OrientationHint ToOrientationHint(GeometricContextLabel label, bool leftFrontRightAsVertical){
-            //    //THERE_ARE_BUGS_HERE("Only OtherPlanar is returned!");
-            //    //return OrientationHint::OtherPlanar;
-            //    switch (label){
-            //    case GeometricContextLabel::Ceiling: return OrientationHint::Horizontal;
-            //    case GeometricContextLabel::Floor: return OrientationHint::Horizontal;
-            //    case GeometricContextLabel::Front:
-            //    case GeometricContextLabel::Left:
-            //    case GeometricContextLabel::Right:
-            //        return leftFrontRightAsVertical ? OrientationHint::Vertical : OrientationHint::OtherPlanar;
-            //    case GeometricContextLabel::Furniture: return OrientationHint::Void;
-            //    case GeometricContextLabel::Ground: return OrientationHint::Horizontal;
-            //    case GeometricContextLabel::Sky: return OrientationHint::Void;
-            //    case GeometricContextLabel::Vertical: return OrientationHint::OtherPlanar;
-            //    case GeometricContextLabel::NotPlanar: return OrientationHint::NonPlanar;
-            //    default:
-            //        return OrientationHint::Void;
-            //    }
-            //}
-
-        }
-
-
         RLGraphVars MakeVariables(const RLGraph & mg, const RLGraphControls & controls, bool randomized) {
             RLGraphVars vars = MakeHandledTableForAllComponents<RLGraphVar>(mg);
             ForeachRLGraphComponentHandle(mg, InitializeVariablesForEachHandle{ mg, controls, vars });
@@ -1848,6 +1764,19 @@ namespace panoramix {
             }
             return vars;
         }
+
+        bool HasInfOrNaNValue(const RLGraphVars & v){
+            for (auto & vt : v.data){
+                for (auto & var : vt){
+                    for (auto & v : var.variables){
+                        if (IsInfOrNaN(v))
+                            return true;
+                    }
+                }
+            }
+            return false;
+        }
+
 
 
         namespace {
@@ -2134,7 +2063,7 @@ namespace panoramix {
                 double a = variables[0];
                 double b = variables[1];
 
-                NOT_TESTED_YET();
+                //NOT_TESTED_YET();
                 
                 return forientation[2] / (
                     a * (fdirection[0] * forientation[2] - forientation[0] * fdirection[2]) +
@@ -2172,19 +2101,56 @@ namespace panoramix {
         }
 
 
-        int NumberOfAnchors(const RLGraphControls & controls){
+        int NumberOfComponentWeightedAnchors(const RLGraphControls & controls){
             int nanchor = 0;
             for (auto & table : controls.componentControls.data){
-                for (auto & compProp : table){
-                    if (!compProp.used)
+                for (auto & c : table){
+                    if (!c.used)
                         continue;
-                    nanchor += compProp.weightedAnchors.size();
+                    nanchor += c.weightedAnchors.size();
                 }
             }
             return nanchor;
         }
 
-        bool AttachAnchorToCenterOfLargestLineIfNoAnchorExists(const RLGraph & mg,
+        int NumberOfComponentBoundedAnchors(const RLGraphControls & controls){
+            int nanchor = 0;
+            for (auto & table : controls.componentControls.data){
+                for (auto & c : table){
+                    if (!c.used)
+                        continue;
+                    nanchor += c.boundedAnchors.size();
+                }
+            }
+            return nanchor;
+        }
+
+        int NumberOfConstraintWeightedAnchors(const RLGraphControls & controls){
+            int nanchor = 0;
+            for (auto & table : controls.constraintControls.data){
+                for (auto & c : table){
+                    if (!c.used)
+                        continue;
+                    nanchor += c.weightedAnchors.size();
+                }
+            }
+            return nanchor;
+        }
+
+        int NumberOfConstraintBoundedAnchors(const RLGraphControls & controls){
+            int nanchor = 0;
+            for (auto & table : controls.constraintControls.data){
+                for (auto & c : table){
+                    if (!c.used)
+                        continue;
+                    nanchor += c.boundedAnchors.size();
+                }
+            }
+            return nanchor;
+        }
+
+
+        bool AttachWeightedAnchorToCenterOfLargestLineIfNoExists(const RLGraph & mg,
             RLGraphControls & controls,
             double depth, double weight, bool orientedOnly){
             LineHandle largest;
@@ -2206,7 +2172,7 @@ namespace panoramix {
             return largest.valid();
         }
 
-        bool AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(const RLGraph & mg,
+        bool AttachWeightedAnchorToCenterOfLargestRegionIfNoExists(const RLGraph & mg,
             RLGraphControls & controls,
             double depth, double weight, bool orientedOnly){
             RegionHandle largest;
@@ -2231,8 +2197,16 @@ namespace panoramix {
 
         void ClearAllComponentAnchors(RLGraphControls & controls){
             for (auto & table : controls.componentControls.data){
-                for (auto & compProp : table){
-                    compProp.weightedAnchors.clear();
+                for (auto & c : table){
+                    c.weightedAnchors.clear();
+                }
+            }
+        }
+
+        void ClearAllConstraintAnchors(RLGraphControls & controls){
+            for (auto & table : controls.constraintControls.data){
+                for (auto & c : table){
+                    c.weightedAnchors.clear();
                 }
             }
         }
@@ -2241,1124 +2215,6 @@ namespace panoramix {
 
         namespace {
 
-            int RegisterVariablePositions(const RLGraph & mg,
-                const RLGraphControls & controls, const RLGraphVars & vars,
-                RLGraphComponentTable<int> & uh2varStartPosition){
-                int varNum = 0;
-                for (auto & c : mg.components<LineData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    uh2varStartPosition[c.topo.hd] = varNum;
-                    varNum += vars[c.topo.hd].variables.size();
-                }
-                for (auto & c : mg.components<RegionData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    uh2varStartPosition[c.topo.hd] = varNum;
-                    varNum += vars[c.topo.hd].variables.size();
-                }
-                return varNum;
-            }
-
-
-            void RegisterVariableValues(const RLGraph & mg,
-                const RLGraphControls & controls, const RLGraphVars & vars,
-                const RLGraphComponentTable<int> & uh2varStartPosition,
-                std::vector<double> & X){
-                for (auto & c : mg.components<LineData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                        X[uh2varStartPosition.at(c.topo.hd) + i] = vars[c.topo.hd].variables.at(i);
-                    }
-                }
-                for (auto & c : mg.components<RegionData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                        X[uh2varStartPosition.at(c.topo.hd) + i] = vars[c.topo.hd].variables.at(i);
-                    }
-                }
-            }
-
-
-
-            struct ExtractNecessaryAnchorsForBinary {
-                std::vector<Vec3> operator()(const RLGraph & mg, RegionBoundaryHandle bh) const {
-                    size_t n = ElementsNum(mg.data(bh).normalizedSampledPoints);
-
-                    assert(n > 0);
-                    const auto & points = mg.data(bh).normalizedSampledPoints;
-
-                    if (n == 1){
-                        return{ points.front().front() };
-                    }
-
-                    const Vec3 * pp1 = nullptr;
-                    const Vec3 * pp2 = nullptr;
-                    double maxAngle = -1;
-                    for (int i = 0; i < points.size(); i++){
-                        for (int ii = 0; ii < points[i].size(); ii++){
-                            for (int j = i; j < points.size(); j++){
-                                for (int jj = 0; jj < points[j].size(); jj++){
-                                    if (std::tie(i, ii) >= std::tie(j, jj))
-                                        continue;
-                                    double angle = AngleBetweenDirections(points[i][ii], points[j][jj]);
-                                    if (angle > maxAngle){
-                                        maxAngle = angle;
-                                        pp1 = &points[i][ii];
-                                        pp2 = &points[j][jj];
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    auto & p1 = *pp1;
-                    auto & p2 = *pp2;
-
-                    if (n == 2){
-                        return{ p1, p2 };
-                    }
-
-                    auto normal12 = p1.cross(p2);
-                    auto pp3 = &p1;
-                    for (auto & ps : points){
-                        for (auto & p : ps){
-                            if (abs(p.dot(normal12)) > abs(pp3->dot(normal12))){
-                                pp3 = &p;
-                            }
-                        }
-                    }
-                    auto & p3 = *pp3;
-                    IMPROVABLE_HERE(? );
-                    return{ p1, p2, p3 };
-                }
-
-                inline std::vector<Vec3> operator()(const RLGraph & mg, LineRelationHandle bh) const {
-                    return{ mg.data(bh).normalizedRelationCenter };
-                }
-
-                inline std::vector<Vec3> operator()(const RLGraph & mg, RegionLineConnectionHandle bh) const {
-                    return{ mg.data(bh).normalizedAnchors.front(), mg.data(bh).normalizedAnchors.back() };
-                }
-            };
-
-            struct ExtractAllAnchorsForBinary {
-                std::vector<Vec3> operator()(const RLGraph & mg, RegionBoundaryHandle bh) const{
-                    std::vector<Vec3> anchors;
-                    anchors.reserve(ElementsNum(mg.data(bh).normalizedSampledPoints));
-                    for (auto & ps : mg.data(bh).normalizedSampledPoints){
-                        for (auto & p : ps){
-                            anchors.push_back(p);
-                        }
-                    }
-                    return anchors;
-                }
-                inline std::vector<Vec3> operator()(const RLGraph & mg, LineRelationHandle bh) const {
-                    return{ mg.data(bh).normalizedRelationCenter };
-                }
-                inline std::vector<Vec3> operator()(const RLGraph & mg, RegionLineConnectionHandle bh) const {
-                    return mg.data(bh).normalizedAnchors;
-                }
-            };
-
-            struct ExtractMoreAnchorsForBinary {
-                std::vector<Vec3> operator()(const RLGraph & mg, RegionBoundaryHandle bh) const{
-                    std::vector<Vec3> anchors;
-                    anchors.reserve(ElementsNum(mg.data(bh).normalizedSampledPoints));
-                    for (auto & ps : mg.data(bh).normalizedSampledPoints){
-                        if (ps.size() == 1){
-                            anchors.push_back(ps[0]);
-                            continue;
-                        }
-                        anchors.push_back(ps[0]);
-                        for (int i = 1; i < ps.size(); i++){
-                            anchors.push_back(ps[i]);
-                            Vec3 pdir = normalize(ps[i].cross(ps[i - 1]));
-                            auto newp = RotateDirection(ps[i], ps[i] + pdir, expandAngle);
-                            anchors.push_back(normalize(newp));
-                            newp = RotateDirection(ps[i], ps[i] + pdir, -expandAngle);
-                            anchors.push_back(normalize(newp));
-                        }
-                    }
-                    return anchors;
-                }
-                inline std::vector<Vec3> operator()(const RLGraph & mg, LineRelationHandle bh) const {
-                    return{ mg.data(bh).normalizedRelationCenter };
-                }
-                inline std::vector<Vec3> operator()(const RLGraph & mg, RegionLineConnectionHandle bh) const {
-                    std::vector<Vec3> anchors;
-                    anchors.reserve(mg.data(bh).normalizedAnchors.size() * 3);
-                    auto & ps = mg.data(bh).normalizedAnchors;
-                    if (ps.size() == 1)
-                        return ps;
-                    Vec3 pdir = normalize(ps.front().cross(ps.back()));
-                    for (auto & p : ps){
-                        anchors.push_back(p);
-                        anchors.push_back(RotateDirection(p, p + pdir, expandAngle));
-                        anchors.push_back(RotateDirection(p, p + pdir, -expandAngle));
-                    }
-                    return anchors;
-                }
-                double expandAngle;
-            };
-
-
-
-            template <class BinaryAnchorExtractorT>
-            int RegisterConstraintPositions(const RLGraph & mg,
-                const RLGraphControls & controls, 
-                const RLGraphComponentTable<int> & uh2varStartPosition,
-                RLGraphComponentTable<int> & uh2anchorConsStartPosition,
-                RLGraphConstraintTable<int> & bh2consStartPosition,
-                RLGraphConstraintTable<std::vector<Vec3>> & appliedBinaryAnchors,
-                RLGraphConstraintTable<double> & weightsForEachAppliedBinaryAnchor,
-                BinaryAnchorExtractorT && extractBinaryAnchors){
-
-                int consNum = 0;
-                // register anchor constraint positions
-                for (auto & c : mg.components<RegionData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    uh2anchorConsStartPosition[c.topo.hd] = consNum;
-                    consNum += controls[c.topo.hd].weightedAnchors.size();
-                }
-                for (auto & c : mg.components<LineData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    uh2anchorConsStartPosition[c.topo.hd] = consNum;
-                    consNum += controls[c.topo.hd].weightedAnchors.size();
-                }
-                // register constraint positions
-                for (auto & c : mg.constraints<RegionBoundaryData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
-                        continue;
-                    bh2consStartPosition[c.topo.hd] = consNum;
-                    appliedBinaryAnchors[c.topo.hd] = extractBinaryAnchors(mg, c.topo.hd);
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
-                    consNum += appliedBinaryAnchors[c.topo.hd].size();
-                }
-                for (auto & c : mg.constraints<LineRelationData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
-                        continue;
-                    bh2consStartPosition[c.topo.hd] = consNum;
-                    appliedBinaryAnchors[c.topo.hd] = extractBinaryAnchors(mg, c.topo.hd);
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
-                    consNum += appliedBinaryAnchors[c.topo.hd].size();
-                }
-                for (auto & c : mg.constraints<RegionLineConnectionData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
-                        continue;
-                    bh2consStartPosition[c.topo.hd] = consNum;
-                    appliedBinaryAnchors[c.topo.hd] = extractBinaryAnchors(mg, c.topo.hd);
-                    weightsForEachAppliedBinaryAnchor[c.topo.hd] = controls[c.topo.hd].weight / sqrt(appliedBinaryAnchors[c.topo.hd].size());
-                    consNum += appliedBinaryAnchors[c.topo.hd].size();
-                }
-                return consNum;
-            }
-
-
-
-
-            template <class ComponentDataT, class SparseMatElementT>
-            inline void RegisterComponentAnchorEquations(const RLGraph & mg,
-                const RLGraphControls & controls,
-                const RLGraphVars & vars,
-                const RLGraphComponentTable<int> & uh2varStartPosition,
-                const RLGraphComponentTable<int> & uh2anchorConsStartPosition,
-                std::vector<SparseMatElementT> & Atriplets,
-                std::vector<SparseMatElementT> & Wtriplets,
-                std::vector<double> & B){
-                // add anchors on components
-                for (auto & c : mg.components<ComponentDataT>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    auto uh = c.topo.hd;
-                    int uhVarNum = vars[uh].variables.size();
-                    int uhVarStartPosition = uh2varStartPosition.at(uh);
-                    int eid = uh2anchorConsStartPosition[uh];
-                    for (auto & wa : controls[c.topo.hd].weightedAnchors){
-                        const Point3 & anchor = wa.component;
-                        double weight = wa.score;
-                        auto uhVarCoeffsAtAnchorDirection = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, anchor, uh);
-                        assert(uhVarCoeffsAtAnchorDirection.size() == uhVarNum);
-                        for (int i = 0; i < uhVarCoeffsAtAnchorDirection.size(); i++){
-                            //A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
-                            Atriplets.emplace_back(eid, uhVarStartPosition + i, uhVarCoeffsAtAnchorDirection[i]);
-                        }
-                        B[eid] = 1.0 / norm(anchor);
-                        Wtriplets.emplace_back(eid, eid, weight);
-                        eid++;
-                    }
-                }
-            }
-
-
-
-            template <class ConstraintDataT, class SparseMatElementT>
-            inline void RegisterConstraintEquations(const RLGraph & mg, 
-                const RLGraphControls & controls,
-                const RLGraphVars & vars,
-                const RLGraphComponentTable<int> & uh2varStartPosition,
-                const RLGraphConstraintTable<int> & bh2consStartPosition,
-                const RLGraphConstraintTable<std::vector<Vec3>> & appliedBinaryAnchors,
-                const RLGraphConstraintTable<double> & weightsForEachAppliedBinaryAnchor,
-                std::vector<SparseMatElementT> & Atriplets,
-                std::vector<SparseMatElementT> & Wtriplets,
-                std::vector<double> & B) {
-
-                for (auto & c : mg.constraints<ConstraintDataT>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    auto bh = c.topo.hd;
-                    auto uh1 = mg.topo(bh).component<0>();
-                    auto uh2 = mg.topo(bh).component<1>();
-                    assert(controls[uh1].used || controls[uh2].used);
-                    auto & u1 = mg.data(uh1);
-                    auto & u2 = mg.data(uh2);
-
-                    int u1VarStartPosition = uh2varStartPosition.at(uh1);
-                    int u1VarNum = vars[uh1].variables.size();
-
-                    int u2VarStartPosition = uh2varStartPosition.at(uh2);
-                    int u2VarNum = vars[uh2].variables.size();
-
-                    int eid = bh2consStartPosition[bh];
-
-                    for (auto & a : appliedBinaryAnchors.at(bh)){
-                        B[eid] = 0.0;
-                        Wtriplets.emplace_back(eid, eid, weightsForEachAppliedBinaryAnchor.at(bh));
-                        {
-                            auto u1VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, a, uh1);
-                            assert(u1VarCoeffs.size() == u1VarNum);
-                            for (int i = 0; i < u1VarCoeffs.size(); i++){
-                                //A.insert(eid, u1VarStartPosition + i) = u1VarCoeffs[i]; // pos
-                                Atriplets.emplace_back(eid, u1VarStartPosition + i, u1VarCoeffs[i]);
-                            }
-                        }
-                        {
-                            auto u2VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, a, uh2);
-                            assert(u2VarCoeffs.size() == u2VarNum);
-                            for (int i = 0; i < u2VarCoeffs.size(); i++){
-                                //A.insert(eid, u2VarStartPosition + i) = -u2VarCoeffs[i]; // neg
-                                Atriplets.emplace_back(eid, u2VarStartPosition + i, -u2VarCoeffs[i]);
-                            }
-                        }
-                        eid++;
-                    }
-                }
-            }
-
-        
-
-            template <class VectorT>
-            void InstallVariables(const RLGraph & mg, const RLGraphControls & controls,
-                const RLGraphComponentTable<int> & uh2varStartPosition, const VectorT & X,
-                RLGraphVars & vars){
-                for (auto & c : mg.components<RegionData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                        vars[c.topo.hd].variables[i] = X(uhStartPosition + i);
-                    }
-                }
-                for (auto & c : mg.components<LineData>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
-                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                        vars[c.topo.hd].variables[i] = X(uhStartPosition + i);
-                    }
-                }
-            }
-
-        }
-
-        // inverse depth optimization
-        RLGraphVars SolveVariables(const RLGraph & mg, const RLGraphControls & controls,
-            bool useWeights, bool useAllAnchors) {
-
-            RLGraphVars vars = MakeVariables(mg, controls);
-
-            int nanchor = NumberOfAnchors(controls);
-            if (nanchor == 0){
-                WARNNING("no anchor is given! will ouput very very poor results!!!");
-            }
-            assert(nanchor > 0);
-
-            SetClock();
-
-            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
-            auto uh2anchorConsStartPosition = MakeHandledTableForAllComponents<int>(mg);
-            auto bh2consStartPosition = MakeHandledTableForAllConstraints<int>(mg);
-            auto appliedBinaryAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
-            auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForAllConstraints<double>(mg);
-
-            // register vars
-            int varNum = RegisterVariablePositions(mg, controls, vars, uh2varStartPosition);
-            std::vector<double> Xdata(varNum, 1.0);
-            RegisterVariableValues(mg, controls, vars, uh2varStartPosition, Xdata);
-
-            // register cons
-            int consNum = 0;
-
-            if (!useAllAnchors)
-                consNum = RegisterConstraintPositions(mg, controls, uh2varStartPosition,
-                    uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
-                    weightsForEachAppliedBinaryAnchor, ExtractNecessaryAnchorsForBinary());
-            else
-                consNum = RegisterConstraintPositions(mg, controls, uh2varStartPosition,
-                    uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
-                    weightsForEachAppliedBinaryAnchor, ExtractAllAnchorsForBinary());
-            
-
-            std::vector<double> Bdata(consNum, 0.0);
-            std::vector<Eigen::Triplet<double>> Atriplets;
-            std::vector<Eigen::Triplet<double>> Wtriplets;
-            Atriplets.reserve(consNum * 6);
-            Wtriplets.reserve(consNum);
-
-            RegisterComponentAnchorEquations<RegionData>(mg, controls, vars, uh2varStartPosition, uh2anchorConsStartPosition,
-                Atriplets, Wtriplets, Bdata);
-            RegisterComponentAnchorEquations<LineData>(mg, controls, vars, uh2varStartPosition, uh2anchorConsStartPosition,
-                Atriplets, Wtriplets, Bdata);
-
-            RegisterConstraintEquations<RegionBoundaryData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
-                appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
-            RegisterConstraintEquations<LineRelationData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
-                appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
-            RegisterConstraintEquations<RegionLineConnectionData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
-                appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
-
-            // matrices
-            Eigen::SparseMatrix<double> A;
-            {
-                Clock clock("form matrix A");
-                A.resize(consNum, varNum);
-                A.setFromTriplets(Atriplets.begin(), Atriplets.end());
-            }
-            Eigen::Map<const Eigen::VectorXd> B(Bdata.data(), Bdata.size());
-
-
-            Eigen::SparseMatrix<double> WA;
-            Eigen::VectorXd WB;
-            if (useWeights){
-                Clock clock("form matrix WA");
-                Eigen::SparseMatrix<double> W;
-                W.resize(consNum, consNum);
-                W.setFromTriplets(Wtriplets.begin(), Wtriplets.end());
-                WA = W * A;
-                WB = W * B;
-            }
-
-            static const bool useSPQR = true;
-
-            Eigen::VectorXd X;
-            if (!useSPQR) {
-                Clock clock("solve equations using Eigen::SparseQR");
-
-                A.makeCompressed();
-                WA.makeCompressed();
-
-                Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
-                static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
-
-                solver.compute(useWeights ? WA : A);
-
-                if (solver.info() != Eigen::Success) {
-                    assert(0);
-                    std::cout << "computation error" << std::endl;
-                    SHOULD_NEVER_BE_CALLED();
-                }
-
-                X = solver.solve(useWeights ? WB : B);
-                if (solver.info() != Eigen::Success) {
-                    assert(0);
-                    std::cout << "solving error" << std::endl;
-                    SHOULD_NEVER_BE_CALLED();
-                }
-            }
-            else{
-                Clock clock("solve equations using Eigen::SPQR");
-
-                Eigen::SPQR<Eigen::SparseMatrix<double, Eigen::ColMajor>> solver;
-                solver.compute(useWeights ? WA : A);
-
-                if (solver.info() != Eigen::Success) {
-                    assert(0);
-                    std::cout << "computation error" << std::endl;
-                    SHOULD_NEVER_BE_CALLED();
-                }
-
-                X = solver.solve(useWeights ? WB : B);
-                if (solver.info() != Eigen::Success) {
-                    assert(0);
-                    std::cout << "solving error" << std::endl;
-                    SHOULD_NEVER_BE_CALLED();
-                }
-            }
-
-            {
-                Clock clock("install solved variables");
-                InstallVariables(mg, controls, uh2varStartPosition, X, vars);
-            }
-            NormalizeVariables(mg, controls, vars);
-            return vars;
-        }
-
-        
-
-        namespace test {
-
-            inline Vec3 CenterDirection(const RegionData & rd){
-                return rd.normalizedCenter;
-            }
-
-            inline Vec3 CenterDirection(const LineData & ld){
-                return normalize(ld.line.center());
-            }
-
-
-        }
-
-
-
-     
-
-
-        namespace test {
-
-            RLGraphVars SolveVariablesCVXWithLineDetachStatus(const RLGraph & mg,
-                const RLGraphControls & controls, const HandledTable<LineHandle, LineDetachStatus> & lineDetachStatus,
-                bool useWeights, bool useAllAnchors) {
-
-                RLGraphVars vars = MakeVariables(mg, controls);
-
-                SetClock();
-
-                auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
-                auto uh2anchorConsStartPosition = MakeHandledTableForAllComponents<int>(mg);
-                auto bh2consStartPosition = MakeHandledTableForAllConstraints<int>(mg);
-                auto appliedBinaryAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
-                auto weightsForEachAppliedBinaryAnchor = MakeHandledTableForAllConstraints<double>(mg);
-
-                // register vars
-                int varNum = RegisterVariablePositions(mg, controls, vars, uh2varStartPosition);
-                std::vector<double> Xdata(varNum, 1.0);
-                RegisterVariableValues(mg, controls, vars, uh2varStartPosition, Xdata);
-
-                // register cons
-                int consNum = useAllAnchors
-                    ?
-                    RegisterConstraintPositions(mg, controls, uh2varStartPosition,
-                    uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
-                    weightsForEachAppliedBinaryAnchor, ExtractAllAnchorsForBinary())
-                    :
-                    RegisterConstraintPositions(mg, controls, uh2varStartPosition,
-                    uh2anchorConsStartPosition, bh2consStartPosition, appliedBinaryAnchors,
-                    weightsForEachAppliedBinaryAnchor, ExtractNecessaryAnchorsForBinary());
-
-                std::vector<double> Bdata(consNum, 0.0);
-                std::vector<SparseMatElement<double>> Atriplets;
-                std::vector<SparseMatElement<double>> Wtriplets;
-                Atriplets.reserve(consNum * 6);
-                Wtriplets.reserve(consNum);
-
-                RegisterComponentAnchorEquations<RegionData>(mg, controls, vars, uh2varStartPosition, uh2anchorConsStartPosition,
-                    Atriplets, Wtriplets, Bdata);
-                RegisterComponentAnchorEquations<LineData>(mg, controls, vars, uh2varStartPosition, uh2anchorConsStartPosition,
-                    Atriplets, Wtriplets, Bdata);
-
-                RegisterConstraintEquations<RegionBoundaryData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
-                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
-                RegisterConstraintEquations<LineRelationData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
-                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
-                RegisterConstraintEquations<RegionLineConnectionData>(mg, controls, vars, uh2varStartPosition, bh2consStartPosition,
-                    appliedBinaryAnchors, weightsForEachAppliedBinaryAnchor, Atriplets, Wtriplets, Bdata);
-
-                // distinguish between =, <= and >= constraints
-                static const int LT = 0, GT = 1;
-                DenseMatd consTypes(consNum, 2, 0.0);
-                for (auto & l : mg.components<LineData>()){
-                    // ll
-                    for (auto & ll : l.topo.constraints<LineRelationData>()){
-                        bool mayocc = MayOccludes(mg, lineDetachStatus, l.topo.hd, ll);
-                        if (mayocc){
-                            if (l.topo.hd == mg.topo(ll).component<0>()){
-                                // the first is closer than the second
-                                // first depth is smaller than the second
-                                // first inverse depth is bigger than the second
-                                // assgin a '>='
-                                for (int i = 0; i < appliedBinaryAnchors[ll].size(); i++){
-                                    consTypes(bh2consStartPosition[ll] + i, GT) = 1.0;
-                                }
-                            }
-                            else{
-                                // the second is closer than the first
-                                // second depth is smaller than the first
-                                // second inverse depth is bigger than the first
-                                // assgin a '<='
-                                for (int i = 0; i < appliedBinaryAnchors[ll].size(); i++){
-                                    consTypes(bh2consStartPosition[ll] + i, LT) = 1.0;
-                                }
-                            }
-                        }
-                    }
-                    // rl
-                    for (auto & rl : l.topo.constraints<RegionLineConnectionData>()){
-                        bool mayocc = MayOccludes(mg, lineDetachStatus, l.topo.hd, rl);
-                        if (mayocc){
-                            // the first is closer than the second
-                            // first depth is smaller than the second
-                            // first inverse depth is bigger than the second
-                            // assgin a '>='
-                            for (int i = 0; i < appliedBinaryAnchors[rl].size(); i++){
-                                consTypes(bh2consStartPosition[rl] + i, GT) = 1.0;
-                            }
-                        }
-                    }
-                }
-
-                // now optimize!
-                SparseMatd A = MakeSparseMatFromElements(consNum, varNum, Atriplets.begin(), Atriplets.end());
-                if (!useWeights){
-                    for (int i = 0; i < Wtriplets.size(); i++){
-                        Wtriplets[i].col = Wtriplets[i].row = i;
-                        Wtriplets[i].value = 1.0;
-                    }
-                }
-                SparseMatd W = MakeSparseMatFromElements(consNum, consNum, Wtriplets.begin(), Wtriplets.end());
-
-                misc::Matlab matlab;
-                matlab.PutVariable("A", A);
-                matlab.PutVariable("W", W);
-                matlab.PutVariable("B", Bdata);
-                matlab << "B = B';";
-                matlab.PutVariable("consTypes", consTypes);
-
-                matlab
-                    << "consNum = size(A, 1);"
-                    << "varNum = size(A, 2);"
-
-                    << "ltpart = consTypes(:,1) > 0 & consTypes(:,1) ~= consTypes(:,2);"
-                    << "A_lt = A(ltpart, :);"
-                    << "W_lt = W(ltpart, ltpart);"
-                    << "B_lt = B(ltpart, :);"
-
-                    << "gtpart = consTypes(:,2) > 0 & consTypes(:,1) ~= consTypes(:,2);"
-                    << "A_gt = A(gtpart, :);"
-                    << "W_gt = W(gtpart, gtpart);"
-                    << "B_gt = B(gtpart, :);"
-
-                    << "eqpart = consTypes(:,1) == consTypes(:,2);"
-                    << "A_eq = A(eqpart, :);"
-                    << "W_eq = W(eqpart, eqpart);"
-                    << "B_eq = B(eqpart, :);"
-
-                    << "save temp"
-                    << "cvx_begin"
-                    << "variable X(varNum);"
-                    << "minimize sum_square(A_eq * X - B_eq) + \
-                                          sum_square(A_lt * X - B_lt) * 0.5 + \
-                                                             sum_square(A_gt * X - B_gt) * 0.5"
-                                                             << "subject to"
-                                                             << " A_lt * X - B_lt <= 0;"
-                                                             << " A_gt * X - B_gt >= 0;"
-                                                             //<< " X > 0;"
-                                                             << "cvx_end";
-
-                DenseMatd X;
-                matlab.GetVariable("X", X);
-
-                InstallVariables(mg, controls, uh2varStartPosition, X, vars);
-                NormalizeVariables(mg, controls, vars);
-
-                return vars;
-            }
-
-        }
-
-
-        namespace {
-
-            
-            template <class T>
-            struct InstanceTableByHandle_ {};
-            template <>
-            struct InstanceTableByHandle_<RegionHandle> {
-                using type = HandledTable<RegionHandle, Plane3>;
-            };
-            template <>
-            struct InstanceTableByHandle_<LineHandle> {
-                using type = HandledTable<LineHandle, Line3>;
-            };
-            template <class T>
-            using InstanceTableByHandle = typename InstanceTableByHandle_<T>::type;
-
-            using RLGraphInstanceTable = MetaBind<InstanceTableByHandle, RegionHandle, LineHandle>;
-
-
-            double DistanceToInstance(const Point3 & p, const Plane3 & plane){
-                return plane.distanceTo(p);
-            }
-            double DistanceToInstance(const Point3 & p, const Line3 & line){
-                return DistanceFromPointToLine(p, line).first;
-            }
-
-
-            template <class ComponentDataT>
-            void SetComponentAnchorCosts(const Eigen::VectorXd & variables, Eigen::VectorXd & costs,
-                const RLGraph & mg, const RLGraphControls & controls,
-                const RLGraphComponentTable<int> & compAnchorConsStartPosition,
-                const RLGraphInstanceTable & insts,
-                bool useWeights){
-                for (auto & c : mg.components<ComponentDataT>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    int anchorStartPosition = compAnchorConsStartPosition[c.topo.hd];
-                    const auto & inst = insts[c.topo.hd];
-                    int i = 0;
-                    for (auto & wa : controls[c.topo.hd].weightedAnchors){
-                        const Point3 & anchor = wa.component;
-                        double weight = wa.score;
-                        double dist = DistanceToInstance(anchor, inst);
-                        costs[anchorStartPosition + i] = dist * (useWeights ? weight : 1.0);
-                        i++;
-                    }
-                }
-            }
-
-            template <class ConstarintDataT>
-            void SetConstraintAnchorCosts(const Eigen::VectorXd & variables, Eigen::VectorXd & costs,
-                const RLGraph & mg, const RLGraphControls & controls,
-                const RLGraphConstraintTable<int> & consAnchorConsStartPosition,
-                const RLGraphConstraintTable<std::vector<Vec3>> & appliedConsAnchors,
-                const RLGraphInstanceTable & insts,
-                bool useWeights){
-                for (auto & c : mg.constraints<ConstarintDataT>()){
-                    if (!controls[c.topo.hd].used)
-                        continue;
-                    // constraint anchors
-                    int anchorStartPosition = consAnchorConsStartPosition[c.topo.hd];
-                    auto & anchors = appliedConsAnchors.at(c.topo.hd);
-                    auto uh1 = c.topo.component<0>();
-                    auto uh2 = c.topo.component<1>();
-                    auto & inst1 = insts[uh1];
-                    auto & inst2 = insts[uh2];
-                    for (int i = 0; i < anchors.size(); i++){
-                        double depth1 = DepthAt(anchors[i], inst1);
-                        double depth2 = DepthAt(anchors[i], inst2);
-                        costs(anchorStartPosition + i) = abs(depth1 - depth2) *
-                            (useWeights ? (controls[c.topo.hd].weight / sqrt(anchors.size())) : 1.0);
-                    }
-                }
-            }
-
-        }
-
-
-
-        void OptimizeVariables(const RLGraph & mg, const RLGraphControls & controls, RLGraphVars & vars, 
-            bool useWeights, bool useAllAnchors, 
-            const std::function<bool(const RLGraphVars &)> & callback){
-
-            SetClock();
-
-            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
-
-            // register vars
-            int varNum = RegisterVariablePositions(mg, controls, vars, uh2varStartPosition);
-            std::vector<double> Xdata(varNum, 1.0);
-            RegisterVariableValues(mg, controls, vars, uh2varStartPosition, Xdata);
-
-
-            auto compAnchorConsStartPosition = MakeHandledTableForAllComponents<int>(mg);
-
-            auto appliedConsAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
-            auto weightsForEachAppliedConsAnchor = MakeHandledTableForAllConstraints<double>(mg);
-            auto consAnchorConsStartPosition = MakeHandledTableForAllConstraints<int>(mg);
-            
-            //auto regionBoundaryNormalConsStartPosition = MakeHandledTableForConstraints<int, RegionBoundaryData>(mg);
-
-
-            // register cons
-            int consNum = 0;
-            // register comp anchors and cons anchors
-            consNum += useAllAnchors ?
-                RegisterConstraintPositions(mg, controls, uh2varStartPosition, compAnchorConsStartPosition,
-                consAnchorConsStartPosition, appliedConsAnchors, weightsForEachAppliedConsAnchor,
-                ExtractAllAnchorsForBinary())
-                :
-                RegisterConstraintPositions(mg, controls, uh2varStartPosition, compAnchorConsStartPosition,
-                consAnchorConsStartPosition, appliedConsAnchors, weightsForEachAppliedConsAnchor,
-                ExtractNecessaryAnchorsForBinary());
-            //// register region boundary normal consistencies
-            //for (auto & b : mg.constraints<RegionBoundaryData>()){
-            //    regionBoundaryNormalConsStartPosition[b.topo.hd] = consNum;
-            //    consNum++;
-            //}
-
-            auto costFunctor = misc::MakeGenericNumericDiffFunctor<double>(
-                [&](const Eigen::VectorXd & v, Eigen::VectorXd & costs){
-
-                Eigen::VectorXd variables = v;
-
-                // compute current planes and lines
-                RLGraphInstanceTable insts;
-                insts.container<RegionHandle>() = mg.createComponentTable<RegionData, Plane3>();
-                insts.container<LineHandle>() = mg.createComponentTable<LineData, Line3>();
-                for (auto & c : mg.components<RegionData>()){
-                    insts[c.topo.hd] = InstanceGivenVariables(mg,
-                        variables.data() + uh2varStartPosition.at(c.topo.hd), controls, c.topo.hd);
-                }
-                for (auto & c : mg.components<LineData>()){
-                    insts[c.topo.hd] = InstanceGivenVariables(mg,
-                        variables.data() + uh2varStartPosition.at(c.topo.hd), controls, c.topo.hd);
-                }
-                
-                SetComponentAnchorCosts<RegionData>(variables, costs, mg, controls, compAnchorConsStartPosition, insts, useWeights);
-                SetComponentAnchorCosts<LineData>(variables, costs, mg, controls, compAnchorConsStartPosition, insts, useWeights);
-
-                SetConstraintAnchorCosts<RegionBoundaryData>(variables, costs, mg, controls, 
-                    consAnchorConsStartPosition, appliedConsAnchors, insts, useWeights);
-                SetConstraintAnchorCosts<LineRelationData>(variables, costs, mg, controls,
-                    consAnchorConsStartPosition, appliedConsAnchors, insts, useWeights);
-                SetConstraintAnchorCosts<RegionLineConnectionData>(variables, costs, mg, controls,
-                    consAnchorConsStartPosition, appliedConsAnchors, insts, useWeights);
-
-                //for (auto & c : mg.constraints<RegionBoundaryData>()){
-                //    if (!controls[c.topo.hd].used)
-                //        continue;
-                //    // constraint anchors
-                //    int anchorStartPosition = consAnchorConsStartPosition[c.topo.hd];
-                //    auto & anchors = appliedConsAnchors.at(c.topo.hd);
-                //    auto uh1 = c.topo.component<0>();
-                //    auto uh2 = c.topo.component<1>();
-                //    const Plane3 & inst1 = insts[uh1];
-                //    const Plane3 & inst2 = insts[uh2];
-                //    // region boundary normal consistency
-                //    costs(regionBoundaryNormalConsStartPosition[c.topo.hd]) = 
-                //        AngleBetweenUndirectedVectors(inst1.normal, inst2.normal) / 10.0 * c.data.length;
-                //}
-            }, varNum, consNum);
-
-
-            Eigen::VectorXd X = Eigen::Map<const Eigen::VectorXd>(Xdata.data(), Xdata.size());
-            Eigen::LevenbergMarquardt<decltype(costFunctor)> lm(costFunctor);
-            lm.parameters.maxfev = 5000;
-            //auto status = lm.minimize(X);
-            Eigen::LevenbergMarquardtSpace::Status status = lm.minimizeInit(X);
-            assert(status != Eigen::LevenbergMarquardtSpace::ImproperInputParameters);
-            do {
-                status = lm.minimizeOneStep(X);                
-                std::cout << "iter: " << lm.iter << "\t\t lm.fnorm = " << lm.fnorm << std::endl;
-
-                // test
-                if(0){
-                    Eigen::VectorXd costs = Eigen::VectorXd::Zero(consNum);
-                    costFunctor(X, costs);
-                    std::cout << "norm(costFunctor(X)) = " << costs.norm() << std::endl;
-                    costFunctor(X * 2, costs);
-                    std::cout << "norm(costFunctor(X * 2)) = " << costs.norm() << std::endl;
-                    costFunctor(X * 3, costs);
-                    std::cout << "norm(costFunctor(X * 3)) = " << costs.norm() << std::endl;
-                    costFunctor(X * 4, costs);
-                    std::cout << "norm(costFunctor(X * 4)) = " << costs.norm() << std::endl;
-                }
-
-                X.normalize();
-                if (callback){
-                    InstallVariables(mg, controls, uh2varStartPosition, X, vars);
-                    if (!callback(vars))
-                        break;
-                }
-            } while (status == Eigen::LevenbergMarquardtSpace::Running);
-
-
-            // install X
-            X.normalize();
-            InstallVariables(mg, controls, uh2varStartPosition, X, vars);
-
-        }
-
-
-
-        double MedianCenterDepth(const RLGraph & mg, const RLGraphControls & controls,
-            const RLGraphVars & vars){
-            for (auto & c : mg.components<RegionData>()){
-                if (!controls[c.topo.hd].used)
-                    continue;
-                for (auto & v : vars[c.topo.hd].variables){
-                    assert(!IsInfOrNaN(v));
-                }
-            }
-            for (auto & c : mg.components<LineData>()){
-                if (!controls[c.topo.hd].used)
-                    continue;
-                for (auto & v : vars[c.topo.hd].variables){
-                    assert(!IsInfOrNaN(v));
-                }
-            }
-
-            std::vector<double> centerDepths;
-            centerDepths.reserve(mg.internalComponents<RegionData>().size() + mg.internalComponents<LineData>().size());
-            for (auto & c : mg.components<RegionData>()){
-                if (!controls[c.topo.hd].used)
-                    continue;
-                double d = DepthAt(c.data.normalizedCenter, Instance(mg, controls, vars, c.topo.hd));
-                if (!IsInfOrNaN(d)){
-                    centerDepths.push_back(d);
-                }
-                //assert(!IsInfOrNaN(centerDepths.back()));
-            }
-            for (auto & c : mg.components<LineData>()){
-                if (!controls[c.topo.hd].used)
-                    continue;
-                double d = DepthAt(normalize(c.data.line.center()), Instance(mg, controls, vars, c.topo.hd));
-                if (!IsInfOrNaN(d)){
-                    centerDepths.push_back(d);
-                }
-                //assert(!IsInfOrNaN(centerDepths.back()));
-            }
-            std::nth_element(centerDepths.begin(), centerDepths.begin() + centerDepths.size() / 2, centerDepths.end());
-            double medianCenterDepth = centerDepths[centerDepths.size() / 2];
-            return medianCenterDepth;
-        }
-
-
-        double Score(const RLGraph & mg, const RLGraphControls & controls,
-            const RLGraphVars & vars){
-
-            // manhattan fitness
-            double sumOfComponentWeightedFitness = 0.0;
-            double sumOfComponentWeights = 0.0;
-
-            // lines
-            double maxLineSpanAngle = 0.0;
-            for (auto & l : mg.components<LineData>()){
-                if (!controls[l.topo.hd].used)
-                    continue;
-                double lineSpanAngle = AngleBetweenDirections(l.data.line.first, l.data.line.second);
-                if (lineSpanAngle > maxLineSpanAngle)
-                    maxLineSpanAngle = lineSpanAngle;
-            }
-
-            HandledTable<LineHandle, Line3> lines(mg.internalComponents<LineData>().size());
-            HandledTable<RegionHandle, Plane3> planes(mg.internalComponents<RegionData>().size());
-
-            for (auto & l : mg.components<LineData>()){
-                if (!controls[l.topo.hd].used)
-                    continue;
-                lines[l.topo.hd] = Instance(mg, controls, vars, l.topo.hd);
-
-                double fitness = 0.0;
-                double weight = 0.0;
-                double lineSpanAngle = AngleBetweenDirections(l.data.line.first, l.data.line.second);
-                auto & prop = controls[l.topo.hd];
-                if (prop.orientationClaz >= 0){
-                    fitness = 1.0;
-                    weight = lineSpanAngle / maxLineSpanAngle;
-                }
-                else{
-                    static const double angleThreshold = DegreesToRadians(10);
-                    double minAngle = angleThreshold;
-                    int bestVPId = -1;
-                    for (int i = 0; i < controls.vanishingPoints.size(); i++){
-                        double angle = AngleBetweenUndirectedVectors(controls.vanishingPoints[i], lines[l.topo.hd].direction());
-                        if (angle < minAngle){
-                            minAngle = angle;
-                            bestVPId = i;
-                        }
-                    }
-                    fitness = Gaussian(minAngle / angleThreshold, 0.1);
-                    weight = lineSpanAngle / maxLineSpanAngle;
-                }
-                sumOfComponentWeightedFitness += (fitness * weight);
-                sumOfComponentWeights += weight;
-            }
-
-            // regions
-            double maxRegionArea = 0.0;
-            for (auto & r : mg.components<RegionData>()){
-                if (!controls[r.topo.hd].used)
-                    continue;
-                if (r.data.area > maxRegionArea){
-                    maxRegionArea = r.data.area;
-                }
-            }
-
-            for (auto & r : mg.components<RegionData>()){
-                if (!controls[r.topo.hd].used)
-                    continue;
-                planes[r.topo.hd] = Instance(mg, controls, vars, r.topo.hd);
-
-                double fitness = 0.0;
-                double weight = 1.0;
-                auto & prop = controls[r.topo.hd];
-                if (prop.orientationClaz >= 0){
-                    fitness = 1.0;
-                    weight = r.data.area / maxRegionArea;
-                }
-                else{
-                    static const double angleThreshold = DegreesToRadians(10);
-                    double minAngle = angleThreshold;
-                    int bestVPId = -1;
-                    for (int i = 0; i < controls.vanishingPoints.size(); i++){
-                        double angle = AngleBetweenUndirectedVectors(controls.vanishingPoints[i], planes[r.topo.hd].normal);
-                        if (angle < minAngle){
-                            minAngle = angle;
-                            bestVPId = i;
-                        }
-                    }
-                    fitness = Gaussian(minAngle / angleThreshold, 0.1);
-                    weight = r.data.area / maxRegionArea;
-                }
-                sumOfComponentWeightedFitness += (fitness * weight);
-                sumOfComponentWeights += weight;
-            }
-
-
-            // constraint fitness
-            double sumOfConstraintWeightedFitness = 0.0;
-            double sumOfConstraintWeights = 0.0;
-            double sumOfNotUsedConstraintWeights = 0.0;
-            for (auto & c : mg.constraints<RegionBoundaryData>()){
-                static const double typeWeight = 1.0;
-                if (!controls[c.topo.hd].used){
-                    sumOfNotUsedConstraintWeights += ElementsNum(c.data.normalizedSampledPoints) * typeWeight;
-                    continue;
-                }
-
-                auto & plane1 = planes[c.topo.component<0>()];
-                auto & plane2 = planes[c.topo.component<1>()];
-                for (auto & ss : c.data.normalizedSampledPoints){
-                    for (auto & s : ss){
-                        double d1 = DepthAt(s, plane1);
-                        double d2 = DepthAt(s, plane2);
-                        if (IsInfOrNaN(d1) || IsInfOrNaN(d2)){
-                            std::cout << "nan/inf plane!" << std::endl;
-                            continue;
-                        }
-                        assert(d1 >= 0 && d2 >= 0);
-                        
-                        double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
-                        double weight = typeWeight;
-
-                        sumOfConstraintWeightedFitness += (fitness * weight);
-                        sumOfConstraintWeights += weight;
-                    }
-                }
-            }
-            //double maxJunctionWeight = 0.0;
-            //for (auto & c : mg.constraints<LineRelationData>()){
-            //    if (c.data.junctionWeight > maxJunctionWeight){
-            //        maxJunctionWeight = c.data.junctionWeight;
-            //    }
-            //}
-            for (auto & c : mg.constraints<LineRelationData>()){
-                static const double typeWeight = 8.0;
-                if (!controls[c.topo.hd].used){
-                    sumOfNotUsedConstraintWeights += /* c.data.junctionWeight / maxJunctionWeight **/ typeWeight;
-                    continue;
-                }
-
-                auto & line1 = lines[c.topo.component<0>()];
-                auto & line2 = lines[c.topo.component<1>()];
-                double d1 = DepthAt(c.data.normalizedRelationCenter, line1);
-                double d2 = DepthAt(c.data.normalizedRelationCenter, line2);
-                if (IsInfOrNaN(d1) || IsInfOrNaN(d2)){
-                    std::cout << "nan/inf line!" << std::endl;
-                    continue;
-                }
-
-                double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
-                double weight = typeWeight;
-
-                sumOfConstraintWeightedFitness += (fitness * weight);
-                sumOfConstraintWeights += weight;
-            }
-            for (auto & c : mg.constraints<RegionLineConnectionData>()){
-                static const double typeWeight = 1.0;
-                if (!controls[c.topo.hd].used){
-                    sumOfNotUsedConstraintWeights += ElementsNum(c.data.normalizedAnchors) * typeWeight;
-                    continue;
-                }
-
-                auto & plane = planes[c.topo.component<0>()];
-                auto & line = lines[c.topo.component<1>()];
-                for (auto & a : c.data.normalizedAnchors){
-                    double d1 = DepthAt(a, plane);
-                    double d2 = DepthAt(a, line);
-                    if (IsInfOrNaN(d1) || IsInfOrNaN(d2)){
-                        std::cout << "nan/inf regionline!" << std::endl;
-                        continue;
-                    }
-                    assert(d1 >= 0 && d2 >= 0);
-
-                    double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
-                    double weight = typeWeight;
-
-                    sumOfConstraintWeightedFitness += (fitness * weight);
-                    sumOfConstraintWeights += weight;
-                }
-            }
-
-            double score = sumOfComponentWeightedFitness / sumOfComponentWeights * 50
-                + sumOfConstraintWeightedFitness / sumOfConstraintWeights * 1000
-                - sumOfNotUsedConstraintWeights / (sumOfConstraintWeights + sumOfNotUsedConstraintWeights) * 5;
-
-            return score;
-        }
-
-
-
-
-
-        void NormalizeVariables(const RLGraph & mg, const RLGraphControls & controls,
-            RLGraphVars & vars){
-            double medianCenterDepth = MedianCenterDepth(mg, controls, vars);
-            
-            SetClock();
-
-            std::cout << "median center depth: " << medianCenterDepth << std::endl;
-
-            assert(!IsInfOrNaN(medianCenterDepth));
-
-            // normalize variables
-            for (auto & c : mg.components<RegionData>()){
-                if (!controls[c.topo.hd].used)
-                    continue;
-                for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                    vars[c.topo.hd].variables[i] *= medianCenterDepth;
-                }
-            }
-            for (auto & c : mg.components<LineData>()){
-                if (!controls[c.topo.hd].used)
-                    continue;
-                for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
-                    vars[c.topo.hd].variables[i] *= medianCenterDepth;
-                }
-            }
-        }
-
-
-
-
-
-
-
-
-
-
-        namespace {
-            
             // returns false if confliction occurs
             bool MakeRegionPlaneUsable(RegionHandle rh, bool usable, RLGraphControls & controls) {
                 auto & p = controls[rh];
@@ -3435,6 +2291,11 @@ namespace panoramix {
         }
 
 
+
+
+
+
+
         static const int regionLineRelatedThreshold = 2;
 
         void AttachPrincipleDirectionConstraints(const RLGraph & mg, RLGraphControls & controls,
@@ -3490,12 +2351,12 @@ namespace panoramix {
                     }
                 }
                 cv::fillPoly(mask, contourProjs, (uint8_t)1);
-                
+
                 // intersection test
                 for (int i = 0; i < controls.vanishingPoints.size(); i++){
                     auto p1 = ToPixelLoc(ppc.screenProjection(controls.vanishingPoints[i]));
                     auto p2 = ToPixelLoc(ppc.screenProjection(-controls.vanishingPoints[i]));
-                    
+
                     int dilateSize = ppcFocal * rangeAngle;
                     bool intersected = false;
                     for (int x = -dilateSize; x <= dilateSize; x++){
@@ -3510,7 +2371,7 @@ namespace panoramix {
                                 peakyRegionHandles[i].push_back(r.topo.hd);
                                 intersected = true;
                             }
-                            else if (Contains(mask, pp2)/*Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp2) */&& mask(pp2)){
+                            else if (Contains(mask, pp2)/*Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp2) */ && mask(pp2)){
                                 peakyRegionHandles[i].push_back(r.topo.hd);
                                 intersected = true;
                             }
@@ -3518,7 +2379,7 @@ namespace panoramix {
                     }
                 }
             }
-       
+
             for (int i = 0; i < controls.vanishingPoints.size(); i++){
                 auto & vp = controls.vanishingPoints[i];
                 auto & rhs = peakyRegionHandles[i];
@@ -3608,7 +2469,7 @@ namespace panoramix {
 
 
 
-        void AttachFloorAndCeilingConstraints(const RLGraph & mg, 
+        void AttachFloorAndCeilingConstraints(const RLGraph & mg,
             RLGraphControls & controls, const RLGraphVars & vars,
             double eyeHeightRatioLowerBound, double eyeHeightRatioUpperBound,
             double angleThreshold, const Vec3 & verticalSeed){
@@ -3657,7 +2518,7 @@ namespace panoramix {
                 regionPlanes[r.topo.hd] = plane;
                 double angleToVert = AngleBetweenUndirectedVectors(plane.normal, vertical);
                 if (angleToVert < angleThreshold){
-                    int belonging = r.data.normalizedCenter.dot(vertical) < 0 ? 0 : 1;                    
+                    int belonging = r.data.normalizedCenter.dot(vertical) < 0 ? 0 : 1;
                     double centerZ = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), r.data.normalizedCenter), plane).position.dot(vertical);
                     maybeCeilinsOrFloors[belonging].push_back(ScoreAs(r.topo.hd, centerZ));
 
@@ -3668,7 +2529,7 @@ namespace panoramix {
                             if (x < xmin) xmin = x;
                             if (x > xmax) xmax = x;
                             if (y < ymin) ymin = y;
-                            if (y > ymax) ymax = y; 
+                            if (y > ymax) ymax = y;
                         }
                     }
                 }
@@ -3691,8 +2552,8 @@ namespace panoramix {
                     }
                 }
                 int maxId = std::distance(votes.begin(), std::max_element(votes.begin(), votes.end()));
-                
-                std::vector<Scored<RegionHandle>> hs; 
+
+                std::vector<Scored<RegionHandle>> hs;
                 hs.reserve(rhsWithHeights.size());
                 for (auto rhh : rhsWithHeights){
                     if (Distance(rhh.score, rhsWithHeights[maxId].score) < heightAffectRange){
@@ -3723,7 +2584,7 @@ namespace panoramix {
                         for (auto & c : cs){
                             Point3 point = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), c), regionPlanes[rh]).position;
                             float x = point.dot(xDir), y = point.dot(yDir);
-                            csresized.emplace_back(static_cast<int>((x - xmin) * scale), 
+                            csresized.emplace_back(static_cast<int>((x - xmin) * scale),
                                 static_cast<int>((y - ymin) * scale));
                         }
                         contourResized.push_back(std::move(csresized));
@@ -3747,10 +2608,10 @@ namespace panoramix {
 
                 auto & plane = regionPlanes[r.topo.hd];
                 auto & contours = r.data.normalizedContours;
-                
+
                 std::vector<std::vector<Point2i>> contourResized;
                 contourResized.reserve(contours.size());
-                
+
                 bool hasPosDot = false, hasNegDot = false;
                 for (auto & cs : contours){
                     std::vector<Point2i> csresized;
@@ -3801,7 +2662,7 @@ namespace panoramix {
                     RegionHandle regionHandle(*it);
                     if (regionHandle.invalid())
                         continue;
-                    
+
                     regionAffectedCounts[regionHandle] ++;
                     // add horizontal constraint
                     if (regionAffectedCounts[regionHandle] > Square(imSize * 0.02)){
@@ -4170,7 +3031,7 @@ namespace panoramix {
 
             if (linesLoosableRatio <= 0.0 && regionsLoosableRatio <= 0.0)
                 return;
-            
+
             double medianCenterDepth = MedianCenterDepth(mg, controls, vars);
             double distThres = medianCenterDepth * distThresRatio;
             double nnSearchRange = distThres;
@@ -4464,6 +3325,1398 @@ namespace panoramix {
             controls.disableAllInvalidConstraints(mg);
 
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        namespace {
+
+            int RegisterVariablePositions(const RLGraph & mg,
+                const RLGraphControls & controls, const RLGraphVars & vars,
+                RLGraphComponentTable<int> & uh2varStartPosition){
+                int varNum = 0;
+                for (auto & c : mg.components<LineData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    uh2varStartPosition[c.topo.hd] = varNum;
+                    varNum += vars[c.topo.hd].variables.size();
+                }
+                for (auto & c : mg.components<RegionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    uh2varStartPosition[c.topo.hd] = varNum;
+                    varNum += vars[c.topo.hd].variables.size();
+                }
+                return varNum;
+            }
+
+
+            void FillVariableValues(const RLGraph & mg,
+                const RLGraphControls & controls, const RLGraphVars & vars,
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                std::vector<double> & X){
+                for (auto & c : mg.components<LineData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        X[uh2varStartPosition.at(c.topo.hd) + i] = vars[c.topo.hd].variables.at(i);
+                    }
+                }
+                for (auto & c : mg.components<RegionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        X[uh2varStartPosition.at(c.topo.hd) + i] = vars[c.topo.hd].variables.at(i);
+                    }
+                }
+            }
+
+
+
+
+
+
+            enum EquationType {
+                OnComponentWeightedAnchor = 0,
+                OnComponentBoundedAnchor = 1,
+                OnConstraintWeightedAnchor = 2,
+                OnConstraintBoundedAnchor = 3
+            };
+
+            // register component positions in equations
+            // register constraint positions in equations 
+            // collect applied constraint anchors
+            // layout:
+            //  [component1 weighted anchors][component1 bounded anchors]  [component2 ...] ...
+            //  [constraint1 weighted anchors][constraint1 bounded anchors]  [constraint2 ...] ...
+            // type order:
+            //  Region, Line
+            //  RegionBoundary, LineRelation, RegionLineConnection
+            std::vector<EquationType> RegisterEquationPositions(const RLGraph & mg,
+                const RLGraphControls & controls,
+                RLGraphComponentTable<int> & uh2eqStartPosition,
+                RLGraphConstraintTable<int> & bh2eqStartPosition){
+
+                std::vector<EquationType> equationTypes;
+
+                int consNum = 0;
+                
+                // register component constraint positions (weighted anchors, bounded anchors)
+                for (auto & c : mg.components<RegionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    uh2eqStartPosition[c.topo.hd] = consNum;
+                    auto & was = controls[c.topo.hd].weightedAnchors;
+                    consNum += was.size();
+                    equationTypes.insert(equationTypes.end(), was.size(), OnComponentWeightedAnchor);
+                    auto & bas = controls[c.topo.hd].boundedAnchors;
+                    consNum += bas.size();
+                    equationTypes.insert(equationTypes.end(), bas.size(), OnComponentBoundedAnchor);
+                }
+                for (auto & c : mg.components<LineData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    uh2eqStartPosition[c.topo.hd] = consNum;
+                    auto & was = controls[c.topo.hd].weightedAnchors;
+                    consNum += was.size();
+                    equationTypes.insert(equationTypes.end(), was.size(), OnComponentWeightedAnchor);
+                    auto & bas = controls[c.topo.hd].boundedAnchors;
+                    consNum += bas.size();
+                    equationTypes.insert(equationTypes.end(), bas.size(), OnComponentBoundedAnchor);
+                }
+
+                // register constraint positions (weighted anchors, bounded anchors)
+                for (auto & c : mg.constraints<RegionBoundaryData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
+                    bh2eqStartPosition[c.topo.hd] = consNum;
+                    auto & was = controls[c.topo.hd].weightedAnchors;
+                    consNum += was.size();
+                    equationTypes.insert(equationTypes.end(), was.size(), OnConstraintWeightedAnchor);
+                    auto & bas = controls[c.topo.hd].boundedAnchors;
+                    consNum += bas.size();
+                    equationTypes.insert(equationTypes.end(), bas.size(), OnConstraintBoundedAnchor);
+                }
+                for (auto & c : mg.constraints<LineRelationData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
+                    bh2eqStartPosition[c.topo.hd] = consNum;
+                    auto & was = controls[c.topo.hd].weightedAnchors;
+                    consNum += was.size();
+                    equationTypes.insert(equationTypes.end(), was.size(), OnConstraintWeightedAnchor);
+                    auto & bas = controls[c.topo.hd].boundedAnchors;
+                    consNum += bas.size();
+                    equationTypes.insert(equationTypes.end(), bas.size(), OnConstraintBoundedAnchor);
+                }
+                for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
+                    bh2eqStartPosition[c.topo.hd] = consNum;
+                    auto & was = controls[c.topo.hd].weightedAnchors;
+                    consNum += was.size();
+                    equationTypes.insert(equationTypes.end(), was.size(), OnConstraintWeightedAnchor);
+                    auto & bas = controls[c.topo.hd].boundedAnchors;
+                    consNum += bas.size();
+                    equationTypes.insert(equationTypes.end(), bas.size(), OnConstraintBoundedAnchor);
+                }
+                assert(consNum == equationTypes.size());
+                return equationTypes;
+            }
+
+
+            // fill A, W, B for component weighted anchors
+            // fill A, B1, B2 for component bounded anchors
+            template <class ComponentDataT, class SparseMatElementT>
+            void FillComponentAnchorEquationMatrices(const RLGraph & mg,
+                const RLGraphControls & controls,
+                const RLGraphVars & vars,
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                const RLGraphComponentTable<int> & uh2eqStartPosition,
+                std::vector<SparseMatElementT> & Atriplets,
+                std::vector<SparseMatElementT> & Wtriplets,
+                std::vector<double> & B,
+                std::vector<double> & B1, 
+                std::vector<double> & B2){
+                for (auto & c : mg.components<ComponentDataT>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    auto uh = c.topo.hd;
+                    int uhVarNum = vars[uh].variables.size();
+                    int uhVarStartPosition = uh2varStartPosition.at(uh);
+                    int eid = uh2eqStartPosition[uh];
+                    // fill weighted anchors
+                    for (auto & wa : controls[c.topo.hd].weightedAnchors){
+                        const Point3 & anchor = wa.component;
+                        double weight = wa.score;
+                        auto uhVarCoeffsAtAnchorDirection = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, anchor, uh);
+                        assert(uhVarCoeffsAtAnchorDirection.size() == uhVarNum);
+                        for (int i = 0; i < uhVarCoeffsAtAnchorDirection.size(); i++){
+                            //A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
+                            Atriplets.emplace_back(eid, uhVarStartPosition + i, uhVarCoeffsAtAnchorDirection[i]);
+                        }
+                        B[eid] = 1.0 / norm(anchor);
+                        B1[eid] = 0.0;
+                        B2[eid] = 0.0;
+                        Wtriplets.emplace_back(eid, eid, weight);
+                        eid++;
+                    }
+                    // fill bounded anchors
+                    for (auto & ba : controls[c.topo.hd].boundedAnchors){
+                        const Point3 & anchor = ba.component;
+                        double lb = ba.lowerBound;
+                        double ub = ba.upperBound;
+                        assert(lb > 0 && ub > 0);
+                        auto uhVarCoeffsAtAnchorDirection = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, anchor, uh);
+                        assert(uhVarCoeffsAtAnchorDirection.size() == uhVarNum);
+                        for (int i = 0; i < uhVarCoeffsAtAnchorDirection.size(); i++){
+                            //A.insert(eid, uhVarStartPosition + i) = uhVarCoeffsAtCenter[i];
+                            Atriplets.emplace_back(eid, uhVarStartPosition + i, uhVarCoeffsAtAnchorDirection[i]);
+                        }
+                        B[eid] = 0.0;
+                        B1[eid] = 1.0 / ub;
+                        B2[eid] = 1.0 / lb;
+                        Wtriplets.emplace_back(eid, eid, 1.0);
+                        eid++;
+                    }
+                }
+            }
+
+
+            // fill A, W, B for constraint weighted anchors
+            // fill A, B1, B2 for constraint bounded anchors
+            template <class ConstraintDataT, class SparseMatElementT>
+            void FillConstraintAnchorEquationMatrices(const RLGraph & mg,
+                const RLGraphControls & controls,
+                const RLGraphVars & vars,
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                const RLGraphConstraintTable<int> & bh2eqStartPosition,
+                std::vector<SparseMatElementT> & Atriplets,
+                std::vector<SparseMatElementT> & Wtriplets,
+                std::vector<double> & B,
+                std::vector<double> & B1,
+                std::vector<double> & B2) {
+
+                for (auto & c : mg.constraints<ConstraintDataT>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
+                    auto bh = c.topo.hd;
+                    auto uh1 = mg.topo(bh).component<0>();
+                    auto uh2 = mg.topo(bh).component<1>();
+                    assert(controls[uh1].used || controls[uh2].used);
+                    auto & u1 = mg.data(uh1);
+                    auto & u2 = mg.data(uh2);
+
+                    int u1VarStartPosition = uh2varStartPosition.at(uh1);
+                    int u1VarNum = vars[uh1].variables.size();
+
+                    int u2VarStartPosition = uh2varStartPosition.at(uh2);
+                    int u2VarNum = vars[uh2].variables.size();
+
+                    int eid = bh2eqStartPosition[bh];
+
+                    auto & was = controls[bh].weightedAnchors;
+                    auto & bas = controls[bh].boundedAnchors;
+
+                    // weighted anchors
+                    for (auto & wa : was){
+                        double weight = wa.weight();
+                        const Vec3 & a = wa.component;
+                        B[eid] = 0.0;
+                        B1[eid] = 0.0;
+                        B2[eid] = 0.0;
+                        Wtriplets.emplace_back(eid, eid, weight);
+                        {
+                            auto u1VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, a, uh1);
+                            assert(u1VarCoeffs.size() == u1VarNum);
+                            for (int i = 0; i < u1VarCoeffs.size(); i++){
+                                //A.insert(eid, u1VarStartPosition + i) = u1VarCoeffs[i]; // pos
+                                Atriplets.emplace_back(eid, u1VarStartPosition + i, u1VarCoeffs[i]);
+                            }
+                        }
+                        {
+                            auto u2VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, a, uh2);
+                            assert(u2VarCoeffs.size() == u2VarNum);
+                            for (int i = 0; i < u2VarCoeffs.size(); i++){
+                                //A.insert(eid, u2VarStartPosition + i) = -u2VarCoeffs[i]; // neg
+                                Atriplets.emplace_back(eid, u2VarStartPosition + i, -u2VarCoeffs[i]);
+                            }
+                        }
+                        eid++;
+                    }
+
+                    // bounded anchors
+                    for (auto & ba : bas){
+                        double lb = ba.lowerBound;
+                        double ub = ba.upperBound;
+                        const Vec3 & a = ba.component;
+                        B[eid] = 0.0;
+                        B1[eid] = - ub;
+                        B2[eid] = - lb;
+                        Wtriplets.emplace_back(eid, eid, 1.0);
+                        {
+                            auto u1VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, a, uh1);
+                            assert(u1VarCoeffs.size() == u1VarNum);
+                            for (int i = 0; i < u1VarCoeffs.size(); i++){
+                                //A.insert(eid, u1VarStartPosition + i) = u1VarCoeffs[i]; // pos
+                                Atriplets.emplace_back(eid, u1VarStartPosition + i, u1VarCoeffs[i]);
+                            }
+                        }
+                        {
+                            auto u2VarCoeffs = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, a, uh2);
+                            assert(u2VarCoeffs.size() == u2VarNum);
+                            for (int i = 0; i < u2VarCoeffs.size(); i++){
+                                //A.insert(eid, u2VarStartPosition + i) = -u2VarCoeffs[i]; // neg
+                                Atriplets.emplace_back(eid, u2VarStartPosition + i, -u2VarCoeffs[i]);
+                            }
+                        }
+                        eid++;
+                    }
+                }
+            }
+
+        
+
+            template <class SparseMatElementT>
+            std::pair<int, int> PrepareEverything(const RLGraph & mg,
+                const RLGraphControls & controls,
+                const RLGraphVars & vars,
+                RLGraphComponentTable<int> & uh2varStartPosition,
+                RLGraphComponentTable<int> & uh2eqStartPosition,
+                RLGraphConstraintTable<int> & bh2eqStartPosition,
+                std::vector<double> & Xdata,
+                std::vector<SparseMatElementT> & Atriplets,
+                std::vector<SparseMatElementT> & Wtriplets,
+                std::vector<double> & Bdata,
+                std::vector<double> & B1data,
+                std::vector<double> & B2data,
+                std::vector<EquationType> & equationTypes){
+
+                int varNum = RegisterVariablePositions(mg, controls, vars, uh2varStartPosition);
+                Xdata.resize(varNum, 1.0);
+                FillVariableValues(mg, controls, vars, uh2varStartPosition, Xdata);
+
+                // register cons
+                equationTypes = RegisterEquationPositions(mg, controls, uh2eqStartPosition, bh2eqStartPosition);
+                int consNum = equationTypes.size();
+
+                Bdata.resize(consNum, 0.0);
+                B1data.resize(consNum, 0.0);
+                B2data.resize(consNum, 0.0);
+                Atriplets.reserve(consNum * 6);
+                Wtriplets.reserve(consNum);
+
+                FillComponentAnchorEquationMatrices<RegionData>(mg, controls, vars,
+                    uh2varStartPosition, uh2eqStartPosition, Atriplets, Wtriplets, Bdata, B1data, B2data);
+                FillComponentAnchorEquationMatrices<LineData>(mg, controls, vars,
+                    uh2varStartPosition, uh2eqStartPosition, Atriplets, Wtriplets, Bdata, B1data, B2data);
+
+                FillConstraintAnchorEquationMatrices<RegionBoundaryData>(mg, controls, vars,
+                    uh2varStartPosition, bh2eqStartPosition, Atriplets, Wtriplets, Bdata, B1data, B2data);
+                FillConstraintAnchorEquationMatrices<LineRelationData>(mg, controls, vars,
+                    uh2varStartPosition, bh2eqStartPosition, Atriplets, Wtriplets, Bdata, B1data, B2data);
+                FillConstraintAnchorEquationMatrices<RegionLineConnectionData>(mg, controls, vars,
+                    uh2varStartPosition, bh2eqStartPosition, Atriplets, Wtriplets, Bdata, B1data, B2data);
+
+                return std::make_pair(varNum, consNum);
+            }
+
+
+
+            template <class VectorT>
+            void InstallVariables(const RLGraph & mg, const RLGraphControls & controls,
+                const RLGraphComponentTable<int> & uh2varStartPosition, const VectorT & X,
+                RLGraphVars & vars){
+                for (auto & c : mg.components<RegionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        vars[c.topo.hd].variables[i] = X(uhStartPosition + i);
+                    }
+                }
+                for (auto & c : mg.components<LineData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        vars[c.topo.hd].variables[i] = X(uhStartPosition + i);
+                    }
+                }
+            }
+
+            void InstallVariables(const RLGraph & mg, const RLGraphControls & controls,
+                const RLGraphComponentTable<int> & uh2varStartPosition, const std::vector<double> & X,
+                RLGraphVars & vars){
+                for (auto & c : mg.components<RegionData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        vars[c.topo.hd].variables[i] = X[uhStartPosition + i];
+                    }
+                }
+                for (auto & c : mg.components<LineData>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    int uhStartPosition = uh2varStartPosition.at(c.topo.hd);
+                    for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                        vars[c.topo.hd].variables[i] = X[uhStartPosition + i];
+                    }
+                }
+            }
+
+        }
+
+
+
+
+
+
+        // inverse depth optimization
+        RLGraphVars SolveVariablesWithoutBoundedAnchors(const RLGraph & mg, 
+            const RLGraphControls & controls,
+            bool useWeights) {
+
+            RLGraphVars vars = MakeVariables(mg, controls);
+
+            SetClock();
+
+            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto uh2eqStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto bh2eqStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+
+            int varNum, consNum;
+
+            std::vector<EquationType> equationTypes;
+            std::vector<double> Xdata;
+            std::vector<double> Bdata;
+            std::vector<double> B1data, B2data;
+            std::vector<Eigen::Triplet<double>> Atriplets;
+            std::vector<Eigen::Triplet<double>> Wtriplets;
+
+            std::tie(varNum, consNum) = PrepareEverything(mg, controls, vars, uh2varStartPosition,
+                uh2eqStartPosition, bh2eqStartPosition, Xdata, Atriplets, Wtriplets, Bdata, B1data, B2data, equationTypes);
+
+
+            // matrices
+            Eigen::SparseMatrix<double> A;
+            {
+                Clock clock("form matrix A");
+                A.resize(consNum, varNum);
+                A.setFromTriplets(Atriplets.begin(), Atriplets.end());
+            }
+            Eigen::Map<const Eigen::VectorXd> B(Bdata.data(), Bdata.size());
+
+
+            Eigen::SparseMatrix<double> WA;
+            Eigen::VectorXd WB;
+            if (useWeights){
+                Clock clock("form matrix WA");
+                Eigen::SparseMatrix<double> W;
+                W.resize(consNum, consNum);
+                W.setFromTriplets(Wtriplets.begin(), Wtriplets.end());
+                WA = W * A;
+                WB = W * B;
+            }
+
+            static const bool useSPQR = true;
+
+            Eigen::VectorXd X;
+            if (!useSPQR) {
+                Clock clock("solve equations using Eigen::SparseQR");
+
+                A.makeCompressed();
+                WA.makeCompressed();
+
+                Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
+                static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
+
+                solver.compute(useWeights ? WA : A);
+
+                if (solver.info() != Eigen::Success) {
+                    assert(0);
+                    std::cout << "computation error" << std::endl;
+                    SHOULD_NEVER_BE_CALLED();
+                }
+
+                X = solver.solve(useWeights ? WB : B);
+                if (solver.info() != Eigen::Success) {
+                    assert(0);
+                    std::cout << "solving error" << std::endl;
+                    SHOULD_NEVER_BE_CALLED();
+                }
+            }
+            else{
+                Clock clock("solve equations using Eigen::SPQR");
+
+                Eigen::SPQR<Eigen::SparseMatrix<double, Eigen::ColMajor>> solver;
+                solver.compute(useWeights ? WA : A);
+
+                if (solver.info() != Eigen::Success) {
+                    assert(0);
+                    std::cout << "computation error" << std::endl;
+                    SHOULD_NEVER_BE_CALLED();
+                }
+
+                X = solver.solve(useWeights ? WB : B);
+                if (solver.info() != Eigen::Success) {
+                    assert(0);
+                    std::cout << "solving error" << std::endl;
+                    SHOULD_NEVER_BE_CALLED();
+                }
+            }
+
+            {
+                Clock clock("install solved variables");
+                InstallVariables(mg, controls, uh2varStartPosition, X, vars);
+            }
+            NormalizeVariables(mg, controls, vars);
+            return vars;
+        }
+
+        
+
+
+        void ResetToFullArmorAnchors(const RLGraph & mg, RLGraphControls & controls) {
+
+            for (auto & ct : controls.componentControls.data){
+                for (auto & c : ct){
+                    c.weightedAnchors.clear();
+                }
+            }
+
+            for (auto & c : mg.components<RegionData>()){
+                for (auto & ps : c.data.normalizedContours){
+                    for (auto & p : ps){
+                        controls[c.topo.hd].weightedAnchors.push_back(ScoreAs(p, 1.0));
+                    }
+                }
+            }
+
+            for (auto & c : mg.components<LineData>()){
+                controls[c.topo.hd].weightedAnchors.push_back(ScoreAs(c.data.line.first, 1.0));
+                controls[c.topo.hd].weightedAnchors.push_back(ScoreAs(c.data.line.second, 1.0));
+            }
+            
+        }
+
+        void ResetToSampledArmorAnchors(const RLGraph & mg, RLGraphControls & controls, double sampleStepAngle){
+            for (auto & ct : controls.componentControls.data){
+                for (auto & c : ct){
+                    c.weightedAnchors.clear();
+                }
+            }
+
+            for (auto & c : mg.components<RegionData>()){
+                for (auto & ps : c.data.normalizedContours){
+                    for (auto & p : ps){
+                        auto & wa = controls[c.topo.hd].weightedAnchors;
+                        if (!wa.empty()){
+                            if (AngleBetweenDirections(wa.back().component, p) >= sampleStepAngle){
+                                wa.push_back(ScoreAs(p, 1.0));
+                            }
+                            else{
+                                continue;
+                            }
+                        }
+                        else{
+                            wa.push_back(ScoreAs(p, 1.0));
+                        }
+                    }
+                }
+            }
+
+            for (auto & c : mg.components<LineData>()){
+                controls[c.topo.hd].weightedAnchors.push_back(ScoreAs(c.data.line.first, 1.0));
+                controls[c.topo.hd].weightedAnchors.push_back(ScoreAs(c.data.line.second, 1.0));
+            }
+        }
+
+
+
+        RLGraphVars SolveVariablesBoundComponentAnchors(const RLGraph & mg, const RLGraphControls & controls,
+            bool useWeights, int tryNum){
+            
+            RLGraphVars vars = MakeVariables(mg, controls);
+
+            SetClock();
+
+            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto uh2eqStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto bh2eqStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+
+            int varNum, consNum;
+
+            std::vector<EquationType> equationTypes;
+            std::vector<double> Xdata;
+            std::vector<double> Bdata;
+            std::vector<double> B1data, B2data;
+            std::vector<SparseMatElement<double>> Atriplets;
+            std::vector<SparseMatElement<double>> Wtriplets;
+
+            std::tie(varNum, consNum) = PrepareEverything(mg, controls, vars, uh2varStartPosition,
+                uh2eqStartPosition, bh2eqStartPosition, Xdata, Atriplets, Wtriplets, Bdata, B1data, B2data, 
+                equationTypes);
+
+            SparseMatd A = MakeSparseMatFromElements(consNum, varNum, Atriplets.begin(), Atriplets.end());
+            if (!useWeights){
+                for (int i = 0; i < Wtriplets.size(); i++){
+                    Wtriplets[i].col = Wtriplets[i].row = i;
+                    Wtriplets[i].value = 1.0;
+                }
+            }
+            SparseMatd W = MakeSparseMatFromElements(consNum, consNum, Wtriplets.begin(), Wtriplets.end());
+
+            bool succeed = true;
+            misc::Matlab matlab;
+            matlab << "clear;";
+            succeed = matlab.PutVariable("A", A);
+            succeed = matlab.PutVariable("W", W);
+            succeed = matlab.PutVariable("B", Bdata);
+            succeed = matlab.PutVariable("B1", B1data);
+            succeed = matlab.PutVariable("B2", B2data);
+            matlab << "B = B'; B1 = B1'; B2 = B2';";
+
+            DenseMatd equationTypesData(equationTypes.size(), 1, 0.0);
+            for (int i = 0; i < equationTypes.size(); i++){
+                equationTypesData(i) = ToUnderlying(equationTypes[i]);
+            }
+            succeed = matlab.PutVariable("equationTypes", equationTypesData);
+
+            double scale = 1.0;
+            matlab.PutVariable("scale", scale);
+
+            // now optimize!
+            matlab
+                << "consNum = size(A, 1);"
+                << "varNum = size(A, 2);"
+
+                << "was = equationTypes(:) == 0 | equationTypes(:) == 2;"
+                << "bas = equationTypes(:) == 1 | equationTypes(:) == 3;"
+
+                << "A_was = A(was, :);"
+                << "W_was = W(was, was);"
+                << "B_was = B(was, :);"
+
+                << "A_bas = A(bas, :);"
+                << "B1_bas = B1(bas, :);"
+                << "B2_bas = B2(bas, :);";
+
+            DenseMatd X;
+            for (int t = 0; t < tryNum; t++){                    
+                matlab
+                    << "cvx_begin"
+                    << "variable X(varNum);"
+                    << "minimize norm(W_was * (A_was * X - B_was))"
+                    << "subject to "
+                    << "    B1_bas / scale <= A_bas * X <= B2_bas * scale;"
+                    << "cvx_end"
+                    << "scale = scale * 2.0;";
+
+                matlab.GetVariable("X", X);
+                bool hasInfOrNaN = false;
+                for (int i = 0; i < varNum; i++){
+                    if (IsInfOrNaN(X(i))){
+                        hasInfOrNaN = true;
+                        break;
+                    }
+                }
+                if (!hasInfOrNaN){
+                    break;
+                }
+            }
+
+            InstallVariables(mg, controls, uh2varStartPosition, X, vars);
+            NormalizeVariables(mg, controls, vars);
+            return vars;
+
+        }
+    
+
+
+
+
+        namespace {
+
+            template <class ComponentDataT, class SparseMatElementT>
+            void FillCertainComponentAnchorDepthMatrix(const RLGraph & mg,
+                const RLGraphControls & controls,
+                const double * Xdata,
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                const RLGraphConstraintTable<int> & bh2consStartPosition,
+                std::vector<SparseMatElementT> & compDtriplets){
+
+                for (auto & c : mg.components<ComponentDataT>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    auto uh = c.topo.hd;
+                    int uhVarNum = vars[uh].variables.size();
+                    int uhVarStartPosition = uh2varStartPosition.at(uh);
+                    int eid = uh2eqStartPosition[uh];
+                    // fill weighted anchors
+                    for (auto & wa : controls[c.topo.hd].weightedAnchors){
+                        double d = DepthAtDirectionGivenVariables(mg, Xdata + uh2varStartPosition.at(uh), controls, wa.component, uh);
+                        compDtriplets.emplace_back(eid, eid, d);
+                        eid++;
+                    }
+                    // fill bounded anchors
+                    for (auto & ba : controls[c.topo.hd].boundedAnchors){
+                        double d = DepthAtDirectionGivenVariables(mg, Xdata + uh2varStartPosition.at(uh), controls, ba.component, uh);
+                        compDtriplets.emplace_back(eid, eid, d);
+                        eid++;
+                    }
+                }
+            }
+
+            template <class SparseMatElementT>
+            void FillComponentAnchorDepthMatrix(const RLGraph & mg,
+                const RLGraphControls & controls,
+                const double * Xdata,
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                const RLGraphConstraintTable<int> & bh2consStartPosition,
+                std::vector<SparseMatElementT> & compDtriplets){
+                FillCertainComponentAnchorDepthMatrix<RegionData>(mg, controsl, Xdata, 
+                    uh2varStartPosition, bh2consStartPosition, compDtriplets);
+                FillCertainComponentAnchorDepthMatrix<LineData>(mg, controsl, Xdata,
+                    uh2varStartPosition, bh2consStartPosition, compDtriplets);
+            }
+
+
+            template <class ConstraintDataT, class SparseMatElementT>
+            void FillCertainConstriantAnchorDepthMatrix(const RLGraph & mg, 
+                const RLGraphControls & controls, 
+                const double * Xdata,
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                const RLGraphConstraintTable<int> & bh2consStartPosition,
+                std::vector<SparseMatElementT> & D1triplets,
+                std::vector<SparseMatElementT> & D2triplets){
+
+                for (auto & c : mg.constraints<ConstraintDataT>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    if (!(controls[c.topo.component<0>()].used && controls[c.topo.component<1>()].used))
+                        continue;
+
+                    auto bh = c.topo.hd;
+                    auto uh1 = mg.topo(bh).component<0>();
+                    auto uh2 = mg.topo(bh).component<1>();
+                    assert(controls[uh1].used || controls[uh2].used);
+                    int eid = bh2consStartPosition[bh];
+
+                    auto & was = controls[bh].weightedAnchors;
+                    auto & bas = controls[bh].boundedAnchors;
+
+                    for (auto & wa : was){
+                        double d1 = DepthAtDirectionGivenVariables(mg, Xdata + uh2varStartPosition.at(uh1), controls, wa.component, uh1);
+                        double d2 = DepthAtDirectionGivenVariables(mg, Xdata + uh2varStartPosition.at(uh2), controls, wa.component, uh2);
+                        D1triplets.emplace_back(eid, eid, d1);
+                        D2triplets.emplace_back(eid, eid, d2);
+                        eid++;
+                    }
+
+                    for (auto & ba : bas){
+                        double d1 = DepthAtDirectionGivenVariables(mg, Xdata + uh2varStartPosition.at(uh1), controls, ba.component, uh1);
+                        double d2 = DepthAtDirectionGivenVariables(mg, Xdata + uh2varStartPosition.at(uh2), controls, ba.component, uh2);
+                        D1triplets.emplace_back(eid, eid, d1);
+                        D2triplets.emplace_back(eid, eid, d2);
+                        eid++;
+                    }
+                }
+            }
+
+            template <class SparseMatElementT>
+            void FillConstriantAnchorDepthMatrix(const RLGraph & mg,
+                const RLGraphControls & controls,
+                const double * Xdata,
+                const RLGraphComponentTable<int> & uh2varStartPosition,
+                const RLGraphConstraintTable<int> & bh2consStartPosition,
+                std::vector<SparseMatElementT> & D1triplets,
+                std::vector<SparseMatElementT> & D2triplets){
+                FillCertainConstriantAnchorDepthMatrix<RegionBoundaryData>(mg, controls, Xdata,
+                    uh2varStartPosition, bh2consStartPosition, D1triplets, D2triplets);
+                FillCertainConstriantAnchorDepthMatrix<LineRelationData>(mg, controls, Xdata,
+                    uh2varStartPosition, bh2consStartPosition, D1triplets, D2triplets);
+                FillCertainConstriantAnchorDepthMatrix<RegionLineConnectionData>(mg, controls, Xdata,
+                    uh2varStartPosition, bh2consStartPosition, D1triplets, D2triplets);
+            }
+
+        }
+
+
+        void OptimizeVariablesWithBoundedAnchors(const RLGraph & mg, const RLGraphControls & controls, RLGraphVars & vars,
+            bool useWeights, int tryNum, int maxOptimizeNum,
+            const std::function<bool(const RLGraphVars &)> & callback){
+
+            SetClock();
+
+            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto uh2eqStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto bh2eqStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+
+            int varNum, consNum;
+
+            std::vector<EquationType> equationTypes;
+            std::vector<double> Xdata;
+            std::vector<double> Bdata;
+            std::vector<double> B1data, B2data;
+            std::vector<SparseMatElement<double>> Atriplets;
+            std::vector<SparseMatElement<double>> Wtriplets;
+
+            std::tie(varNum, consNum) = PrepareEverything(mg, controls, vars, uh2varStartPosition,
+                uh2eqStartPosition, bh2eqStartPosition, Xdata, Atriplets, Wtriplets, Bdata, B1data, B2data,
+                equationTypes);
+
+            SparseMatd A = MakeSparseMatFromElements(consNum, varNum, Atriplets.begin(), Atriplets.end());
+            if (!useWeights){
+                for (int i = 0; i < Wtriplets.size(); i++){
+                    Wtriplets[i].col = Wtriplets[i].row = i;
+                    Wtriplets[i].value = 1.0;
+                }
+            }
+            SparseMatd W = MakeSparseMatFromElements(consNum, consNum, Wtriplets.begin(), Wtriplets.end());
+
+            bool succeed = true;
+            misc::Matlab matlab;
+            matlab << "clear;";
+            succeed = matlab.PutVariable("A", A);
+            succeed = matlab.PutVariable("W", W);
+            succeed = matlab.PutVariable("B", Bdata);
+            succeed = matlab.PutVariable("B1", B1data);
+            succeed = matlab.PutVariable("B2", B2data);
+            matlab << "B = B'; B1 = B1'; B2 = B2';";
+
+            DenseMatd equationTypesData(equationTypes.size(), 1, 0.0);
+            for (int i = 0; i < equationTypes.size(); i++){
+                equationTypesData(i) = ToUnderlying(equationTypes[i]);
+            }
+            succeed = matlab.PutVariable("equationTypes", equationTypesData);
+
+            double scale = 1.0;
+            matlab.PutVariable("scale", scale);
+
+            // now optimize!
+            matlab
+                << "consNum = size(A, 1);"
+                << "varNum = size(A, 2);"
+
+                << "was = equationTypes(:) == 0 | equationTypes(:) == 2;"
+                << "bas = equationTypes(:) == 1 | equationTypes(:) == 3;"
+
+                << "A_was = A(was, :);"
+                << "W_was = W(was, was);"
+                << "B_was = B(was, :);"
+
+                << "A_bas = A(bas, :);"
+                << "B1_bas = B1(bas, :);"
+                << "B2_bas = B2(bas, :);";
+
+            std::vector<SparseMatElement<double>> compDtriplets, consD1triplets, consD2triplets;
+            compDtriplets.reserve(consNum);
+            consD1triplets.reserve(consNum);
+            consD2triplets.reserve(consNum);
+
+            for (int i = 0; i < maxOptimizeNum; i++){
+
+                // compute D matrix using Xdata
+                compDtriplets.clear();
+                consD1triplets.clear();
+                consD2triplets.clear();
+                FillComponentAnchorDepthMatrix(mg, controls, Xdata.data(), 
+                    uh2varStartPosition, bh2eqStartPosition, compDtriplets);
+                FillConstriantAnchorDepthMatrix(mg, controls, Xdata.data(), 
+                    uh2varStartPosition, bh2eqStartPosition, consD1triplets, consD2triplets);
+
+                matlab.PutVariable("compD", 
+                    MakeSparseMatFromElements(consNum, consNum, 
+                    compDtriplets.begin(), compDtriplets.end()));
+                matlab.PutVariable("consD1",
+                    MakeSparseMatFromElements(consNum, consNum, 
+                    consD1triplets.begin(), consD1triplets.end()));
+                matlab.PutVariable("consD2",
+                    MakeSparseMatFromElements(consNum, consNum, 
+                    consD2triplets.begin(), consD2triplets.end()));
+
+                for (int ii = 0; ii < tryNum; ii++){
+                    Clock clock("Solve LP");
+
+
+                    matlab
+                        << "cvx_begin"
+                        << "variable X(varNum);"
+                        << "minimize norm(consD1(was, was) * consD2(was, was) * W_was * (A_was * X - B_was))"
+                        << "subject to "
+                        << "    B1_bas / scale <= A_bas * X <= B2_bas * scale;"
+                        << "cvx_end"
+                        << "scale = scale * 2.0;";
+
+                    Xdata.clear();
+                    matlab << "X = X';";
+                    matlab.GetVariable("X", Xdata);
+                    if (!HasValue(Xdata, IsInfOrNaN<double>)){
+                        break;
+                    }
+                }
+
+                if (HasValue(Xdata, IsInfOrNaN<double>)){
+                    break;
+                }
+
+                double n = 0;
+                for (auto & v : Xdata){
+                    n += v * v;
+                }
+                n = sqrt(n);
+                for (auto & v : Xdata){
+                    v /= n;
+                }
+
+                if (callback){
+                    InstallVariables(mg, controls, uh2varStartPosition, Xdata, vars);
+                    NormalizeVariables(mg, controls, vars);
+                    callback(vars);
+                }
+            }
+
+            InstallVariables(mg, controls, uh2varStartPosition, Xdata, vars);
+            NormalizeVariables(mg, controls, vars);
+        }
+
+
+
+     
+
+
+        namespace {
+
+            
+            template <class T>
+            struct InstanceTableByHandle_ {};
+            template <>
+            struct InstanceTableByHandle_<RegionHandle> {
+                using type = HandledTable<RegionHandle, Plane3>;
+            };
+            template <>
+            struct InstanceTableByHandle_<LineHandle> {
+                using type = HandledTable<LineHandle, Line3>;
+            };
+            template <class T>
+            using InstanceTableByHandle = typename InstanceTableByHandle_<T>::type;
+
+            using RLGraphInstanceTable = MetaBind<InstanceTableByHandle, RegionHandle, LineHandle>;
+
+
+            double DistanceToInstance(const Point3 & p, const Plane3 & plane){
+                return plane.distanceTo(p);
+            }
+            double DistanceToInstance(const Point3 & p, const Line3 & line){
+                return DistanceFromPointToLine(p, line).first;
+            }
+
+
+            template <class ComponentDataT>
+            void SetComponentAnchorCosts(const Eigen::VectorXd & variables, Eigen::VectorXd & costs,
+                const RLGraph & mg, const RLGraphControls & controls,
+                const RLGraphComponentTable<int> & compAnchorConsStartPosition,
+                const RLGraphInstanceTable & insts,
+                bool useWeights){
+                for (auto & c : mg.components<ComponentDataT>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    int anchorStartPosition = compAnchorConsStartPosition[c.topo.hd];
+                    const auto & inst = insts[c.topo.hd];
+                    int i = 0;
+                    for (auto & wa : controls[c.topo.hd].weightedAnchors){
+                        const Point3 & anchor = wa.component;
+                        double weight = wa.score;
+                        double dist = DistanceToInstance(anchor, inst);
+                        costs[anchorStartPosition + i] = dist * (useWeights ? weight : 1.0);
+                        i++;
+                    }
+                }
+            }
+
+            template <class ConstarintDataT>
+            void SetConstraintAnchorCosts(const Eigen::VectorXd & variables, Eigen::VectorXd & costs,
+                const RLGraph & mg, const RLGraphControls & controls,
+                const RLGraphConstraintTable<int> & consAnchorConsStartPosition,
+                const RLGraphConstraintTable<std::vector<Vec3>> & appliedConsAnchors,
+                const RLGraphInstanceTable & insts,
+                bool useWeights){
+                for (auto & c : mg.constraints<ConstarintDataT>()){
+                    if (!controls[c.topo.hd].used)
+                        continue;
+                    // constraint anchors
+                    int anchorStartPosition = consAnchorConsStartPosition[c.topo.hd];
+                    auto & anchors = appliedConsAnchors.at(c.topo.hd);
+                    auto uh1 = c.topo.component<0>();
+                    auto uh2 = c.topo.component<1>();
+                    auto & inst1 = insts[uh1];
+                    auto & inst2 = insts[uh2];
+                    for (int i = 0; i < anchors.size(); i++){
+                        double depth1 = DepthAt(anchors[i], inst1);
+                        double depth2 = DepthAt(anchors[i], inst2);
+                        costs(anchorStartPosition + i) = abs(depth1 - depth2) *
+                            (useWeights ? (controls[c.topo.hd].weight / sqrt(anchors.size())) : 1.0);
+                    }
+                }
+            }
+
+        }
+
+
+
+        //void OptimizeVariablesLevenbergMarquardt(const RLGraph & mg, const RLGraphControls & controls, RLGraphVars & vars,
+        //    bool useWeights, bool useAllAnchors, 
+        //    const std::function<bool(const RLGraphVars &)> & callback){
+
+        //    SetClock();
+
+        //    auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+
+        //    // register vars
+        //    int varNum = RegisterVariablePositions(mg, controls, vars, uh2varStartPosition);
+        //    std::vector<double> Xdata(varNum, 1.0);
+        //    RegisterVariableValues(mg, controls, vars, uh2varStartPosition, Xdata);
+
+
+        //    auto compAnchorConsStartPosition = MakeHandledTableForAllComponents<int>(mg);
+
+        //    auto appliedConsAnchors = MakeHandledTableForAllConstraints<std::vector<Vec3>>(mg);
+        //    auto weightsForEachAppliedConsAnchor = MakeHandledTableForAllConstraints<double>(mg);
+        //    auto consAnchorConsStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+        //    
+        //    //auto regionBoundaryNormalConsStartPosition = MakeHandledTableForConstraints<int, RegionBoundaryData>(mg);
+
+
+        //    // register cons
+        //    int consNum = 0;
+        //    std::vector<ConstraintEquationType> consTypes;
+        //    // register comp anchors and cons anchors
+        //    consNum += useAllAnchors ?
+        //        RegisterConstraintPositions(mg, controls, uh2varStartPosition, compAnchorConsStartPosition,
+        //        consAnchorConsStartPosition, appliedConsAnchors, weightsForEachAppliedConsAnchor,
+        //        consTypes, ExtractAllAnchorsForBinary())
+        //        :
+        //        RegisterConstraintPositions(mg, controls, uh2varStartPosition, compAnchorConsStartPosition,
+        //        consAnchorConsStartPosition, appliedConsAnchors, weightsForEachAppliedConsAnchor,
+        //        consTypes, ExtractNecessaryAnchorsForBinary());
+        //    //// register region boundary normal consistencies
+        //    //for (auto & b : mg.constraints<RegionBoundaryData>()){
+        //    //    regionBoundaryNormalConsStartPosition[b.topo.hd] = consNum;
+        //    //    consNum++;
+        //    //}
+
+        //    auto costFunctor = misc::MakeGenericNumericDiffFunctor<double>(
+        //        [&](const Eigen::VectorXd & v, Eigen::VectorXd & costs){
+
+        //        Eigen::VectorXd variables = v;
+
+        //        // compute current planes and lines
+        //        RLGraphInstanceTable insts;
+        //        insts.container<RegionHandle>() = mg.createComponentTable<RegionData, Plane3>();
+        //        insts.container<LineHandle>() = mg.createComponentTable<LineData, Line3>();
+        //        for (auto & c : mg.components<RegionData>()){
+        //            insts[c.topo.hd] = InstanceGivenVariables(mg,
+        //                variables.data() + uh2varStartPosition.at(c.topo.hd), controls, c.topo.hd);
+        //        }
+        //        for (auto & c : mg.components<LineData>()){
+        //            insts[c.topo.hd] = InstanceGivenVariables(mg,
+        //                variables.data() + uh2varStartPosition.at(c.topo.hd), controls, c.topo.hd);
+        //        }
+        //        
+        //        SetComponentAnchorCosts<RegionData>(variables, costs, mg, controls, compAnchorConsStartPosition, insts, useWeights);
+        //        SetComponentAnchorCosts<LineData>(variables, costs, mg, controls, compAnchorConsStartPosition, insts, useWeights);
+
+        //        SetConstraintAnchorCosts<RegionBoundaryData>(variables, costs, mg, controls, 
+        //            consAnchorConsStartPosition, appliedConsAnchors, insts, useWeights);
+        //        SetConstraintAnchorCosts<LineRelationData>(variables, costs, mg, controls,
+        //            consAnchorConsStartPosition, appliedConsAnchors, insts, useWeights);
+        //        SetConstraintAnchorCosts<RegionLineConnectionData>(variables, costs, mg, controls,
+        //            consAnchorConsStartPosition, appliedConsAnchors, insts, useWeights);
+
+        //        //for (auto & c : mg.constraints<RegionBoundaryData>()){
+        //        //    if (!controls[c.topo.hd].used)
+        //        //        continue;
+        //        //    // constraint anchors
+        //        //    int anchorStartPosition = consAnchorConsStartPosition[c.topo.hd];
+        //        //    auto & anchors = appliedConsAnchors.at(c.topo.hd);
+        //        //    auto uh1 = c.topo.component<0>();
+        //        //    auto uh2 = c.topo.component<1>();
+        //        //    const Plane3 & inst1 = insts[uh1];
+        //        //    const Plane3 & inst2 = insts[uh2];
+        //        //    // region boundary normal consistency
+        //        //    costs(regionBoundaryNormalConsStartPosition[c.topo.hd]) = 
+        //        //        AngleBetweenUndirectedVectors(inst1.normal, inst2.normal) / 10.0 * c.data.length;
+        //        //}
+        //    }, varNum, consNum);
+
+
+        //    Eigen::VectorXd X = Eigen::Map<const Eigen::VectorXd>(Xdata.data(), Xdata.size());
+        //    Eigen::LevenbergMarquardt<decltype(costFunctor)> lm(costFunctor);
+        //    lm.parameters.maxfev = 5000;
+        //    //auto status = lm.minimize(X);
+        //    Eigen::LevenbergMarquardtSpace::Status status = lm.minimizeInit(X);
+        //    assert(status != Eigen::LevenbergMarquardtSpace::ImproperInputParameters);
+        //    do {
+        //        status = lm.minimizeOneStep(X);                
+        //        std::cout << "iter: " << lm.iter << "\t\t lm.fnorm = " << lm.fnorm << std::endl;
+
+        //        // test
+        //        if(0){
+        //            Eigen::VectorXd costs = Eigen::VectorXd::Zero(consNum);
+        //            costFunctor(X, costs);
+        //            std::cout << "norm(costFunctor(X)) = " << costs.norm() << std::endl;
+        //            costFunctor(X * 2, costs);
+        //            std::cout << "norm(costFunctor(X * 2)) = " << costs.norm() << std::endl;
+        //            costFunctor(X * 3, costs);
+        //            std::cout << "norm(costFunctor(X * 3)) = " << costs.norm() << std::endl;
+        //            costFunctor(X * 4, costs);
+        //            std::cout << "norm(costFunctor(X * 4)) = " << costs.norm() << std::endl;
+        //        }
+
+        //        X.normalize();
+        //        if (callback){
+        //            InstallVariables(mg, controls, uh2varStartPosition, X, vars);
+        //            if (!callback(vars))
+        //                break;
+        //        }
+        //    } while (status == Eigen::LevenbergMarquardtSpace::Running);
+
+
+        //    // install X
+        //    X.normalize();
+        //    InstallVariables(mg, controls, uh2varStartPosition, X, vars);
+
+        //}
+
+
+
+        double MedianCenterDepth(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars){
+
+            std::vector<double> centerDepths;
+            centerDepths.reserve(mg.internalComponents<RegionData>().size() + mg.internalComponents<LineData>().size());
+            for (auto & c : mg.components<RegionData>()){
+                if (!controls[c.topo.hd].used)
+                    continue;
+                double d = DepthAt(c.data.normalizedCenter, Instance(mg, controls, vars, c.topo.hd));
+                if (!IsInfOrNaN(d)){
+                    centerDepths.push_back(d);
+                }
+                //assert(!IsInfOrNaN(centerDepths.back()));
+            }
+            for (auto & c : mg.components<LineData>()){
+                if (!controls[c.topo.hd].used)
+                    continue;
+                double d = DepthAt(normalize(c.data.line.center()), Instance(mg, controls, vars, c.topo.hd));
+                if (!IsInfOrNaN(d)){
+                    centerDepths.push_back(d);
+                }
+                //assert(!IsInfOrNaN(centerDepths.back()));
+            }
+            std::nth_element(centerDepths.begin(), centerDepths.begin() + centerDepths.size() / 2, centerDepths.end());
+            double medianCenterDepth = centerDepths[centerDepths.size() / 2];
+            return medianCenterDepth;
+        }
+
+
+        double Score(const RLGraph & mg, const RLGraphControls & controls,
+            const RLGraphVars & vars){
+
+            // manhattan fitness
+            double sumOfComponentWeightedFitness = 0.0;
+            double sumOfComponentWeights = 0.0;
+
+            // lines
+            double maxLineSpanAngle = 0.0;
+            for (auto & l : mg.components<LineData>()){
+                if (!controls[l.topo.hd].used)
+                    continue;
+                double lineSpanAngle = AngleBetweenDirections(l.data.line.first, l.data.line.second);
+                if (lineSpanAngle > maxLineSpanAngle)
+                    maxLineSpanAngle = lineSpanAngle;
+            }
+
+            HandledTable<LineHandle, Line3> lines(mg.internalComponents<LineData>().size());
+            HandledTable<RegionHandle, Plane3> planes(mg.internalComponents<RegionData>().size());
+
+            for (auto & l : mg.components<LineData>()){
+                if (!controls[l.topo.hd].used)
+                    continue;
+                lines[l.topo.hd] = Instance(mg, controls, vars, l.topo.hd);
+
+                double fitness = 0.0;
+                double weight = 0.0;
+                double lineSpanAngle = AngleBetweenDirections(l.data.line.first, l.data.line.second);
+                auto & prop = controls[l.topo.hd];
+                if (prop.orientationClaz >= 0){
+                    fitness = 1.0;
+                    weight = lineSpanAngle / maxLineSpanAngle;
+                }
+                else{
+                    static const double angleThreshold = DegreesToRadians(10);
+                    double minAngle = angleThreshold;
+                    int bestVPId = -1;
+                    for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                        double angle = AngleBetweenUndirectedVectors(controls.vanishingPoints[i], lines[l.topo.hd].direction());
+                        if (angle < minAngle){
+                            minAngle = angle;
+                            bestVPId = i;
+                        }
+                    }
+                    fitness = Gaussian(minAngle / angleThreshold, 0.1);
+                    weight = lineSpanAngle / maxLineSpanAngle;
+                }
+                sumOfComponentWeightedFitness += (fitness * weight);
+                sumOfComponentWeights += weight;
+            }
+
+            // regions
+            double maxRegionArea = 0.0;
+            for (auto & r : mg.components<RegionData>()){
+                if (!controls[r.topo.hd].used)
+                    continue;
+                if (r.data.area > maxRegionArea){
+                    maxRegionArea = r.data.area;
+                }
+            }
+
+            for (auto & r : mg.components<RegionData>()){
+                if (!controls[r.topo.hd].used)
+                    continue;
+                planes[r.topo.hd] = Instance(mg, controls, vars, r.topo.hd);
+
+                double fitness = 0.0;
+                double weight = 1.0;
+                auto & prop = controls[r.topo.hd];
+                if (prop.orientationClaz >= 0){
+                    fitness = 1.0;
+                    weight = r.data.area / maxRegionArea;
+                }
+                else{
+                    static const double angleThreshold = DegreesToRadians(10);
+                    double minAngle = angleThreshold;
+                    int bestVPId = -1;
+                    for (int i = 0; i < controls.vanishingPoints.size(); i++){
+                        double angle = AngleBetweenUndirectedVectors(controls.vanishingPoints[i], planes[r.topo.hd].normal);
+                        if (angle < minAngle){
+                            minAngle = angle;
+                            bestVPId = i;
+                        }
+                    }
+                    fitness = Gaussian(minAngle / angleThreshold, 0.1);
+                    weight = r.data.area / maxRegionArea;
+                }
+                sumOfComponentWeightedFitness += (fitness * weight);
+                sumOfComponentWeights += weight;
+            }
+
+
+            // constraint fitness
+            double sumOfConstraintWeightedFitness = 0.0;
+            double sumOfConstraintWeights = 0.0;
+            double sumOfNotUsedConstraintWeights = 0.0;
+            for (auto & c : mg.constraints<RegionBoundaryData>()){
+                static const double typeWeight = 1.0;
+                if (!controls[c.topo.hd].used){
+                    sumOfNotUsedConstraintWeights += ElementsNum(c.data.normalizedSampledPoints) * typeWeight;
+                    continue;
+                }
+
+                auto & plane1 = planes[c.topo.component<0>()];
+                auto & plane2 = planes[c.topo.component<1>()];
+                for (auto & ss : c.data.normalizedSampledPoints){
+                    for (auto & s : ss){
+                        double d1 = DepthAt(s, plane1);
+                        double d2 = DepthAt(s, plane2);
+                        if (IsInfOrNaN(d1) || IsInfOrNaN(d2)){
+                            std::cout << "nan/inf plane!" << std::endl;
+                            continue;
+                        }
+                        assert(d1 >= 0 && d2 >= 0);
+                        
+                        double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
+                        double weight = typeWeight;
+
+                        sumOfConstraintWeightedFitness += (fitness * weight);
+                        sumOfConstraintWeights += weight;
+                    }
+                }
+            }
+            //double maxJunctionWeight = 0.0;
+            //for (auto & c : mg.constraints<LineRelationData>()){
+            //    if (c.data.junctionWeight > maxJunctionWeight){
+            //        maxJunctionWeight = c.data.junctionWeight;
+            //    }
+            //}
+            for (auto & c : mg.constraints<LineRelationData>()){
+                static const double typeWeight = 8.0;
+                if (!controls[c.topo.hd].used){
+                    sumOfNotUsedConstraintWeights += /* c.data.junctionWeight / maxJunctionWeight **/ typeWeight;
+                    continue;
+                }
+
+                auto & line1 = lines[c.topo.component<0>()];
+                auto & line2 = lines[c.topo.component<1>()];
+                double d1 = DepthAt(c.data.normalizedRelationCenter, line1);
+                double d2 = DepthAt(c.data.normalizedRelationCenter, line2);
+                if (IsInfOrNaN(d1) || IsInfOrNaN(d2)){
+                    std::cout << "nan/inf line!" << std::endl;
+                    continue;
+                }
+
+                double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
+                double weight = typeWeight;
+
+                sumOfConstraintWeightedFitness += (fitness * weight);
+                sumOfConstraintWeights += weight;
+            }
+            for (auto & c : mg.constraints<RegionLineConnectionData>()){
+                static const double typeWeight = 1.0;
+                if (!controls[c.topo.hd].used){
+                    sumOfNotUsedConstraintWeights += ElementsNum(c.data.normalizedAnchors) * typeWeight;
+                    continue;
+                }
+
+                auto & plane = planes[c.topo.component<0>()];
+                auto & line = lines[c.topo.component<1>()];
+                for (auto & a : c.data.normalizedAnchors){
+                    double d1 = DepthAt(a, plane);
+                    double d2 = DepthAt(a, line);
+                    if (IsInfOrNaN(d1) || IsInfOrNaN(d2)){
+                        std::cout << "nan/inf regionline!" << std::endl;
+                        continue;
+                    }
+                    assert(d1 >= 0 && d2 >= 0);
+
+                    double fitness = Gaussian(abs(d1 - d2) / (d1 + d2), 0.1);
+                    double weight = typeWeight;
+
+                    sumOfConstraintWeightedFitness += (fitness * weight);
+                    sumOfConstraintWeights += weight;
+                }
+            }
+
+            double score = sumOfComponentWeightedFitness / sumOfComponentWeights * 50
+                + sumOfConstraintWeightedFitness / sumOfConstraintWeights * 1000
+                - sumOfNotUsedConstraintWeights / (sumOfConstraintWeights + sumOfNotUsedConstraintWeights) * 5;
+
+            return score;
+        }
+
+
+
+
+
+        void NormalizeVariables(const RLGraph & mg, const RLGraphControls & controls,
+            RLGraphVars & vars){
+            double medianCenterDepth = MedianCenterDepth(mg, controls, vars);
+            
+            SetClock();
+
+            std::cout << "median center depth: " << medianCenterDepth << std::endl;
+
+            assert(!IsInfOrNaN(medianCenterDepth));
+
+            // normalize variables
+            for (auto & c : mg.components<RegionData>()){
+                if (!controls[c.topo.hd].used)
+                    continue;
+                for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                    vars[c.topo.hd].variables[i] *= medianCenterDepth;
+                }
+            }
+            for (auto & c : mg.components<LineData>()){
+                if (!controls[c.topo.hd].used)
+                    continue;
+                for (int i = 0; i < vars[c.topo.hd].variables.size(); i++){
+                    vars[c.topo.hd].variables[i] *= medianCenterDepth;
+                }
+            }
+        }
+
+
+
+
+
+
+
+
+
+
 
 
 
