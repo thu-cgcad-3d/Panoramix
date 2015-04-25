@@ -1,8 +1,8 @@
 #ifdef USE_MATLAB
+#include <mex.h>
 #include <engine.h>
 #endif
 
-#include "matlab_tools.hpp"
 #include "matlab.hpp"
 
 namespace panoramix {
@@ -77,10 +77,150 @@ namespace panoramix {
             }
         }
 
+
+        class MXArray;
+
+        class MXArray {
+        public:
+            MXArray() : _mxa(nullptr), _destroyWhenOutofScope(false) {}
+            MXArray(mxArray * mxa, bool dos = false) : _mxa(mxa), _destroyWhenOutofScope(dos){}
+            MXArray(MXArray && a) {
+                _mxa = a._mxa;
+                a._mxa = nullptr;
+                _destroyWhenOutofScope = a._destroyWhenOutofScope;
+                a._destroyWhenOutofScope = false;
+            }
+            virtual ~MXArray() {
+                if (_destroyWhenOutofScope){
+                    mxDestroyArray(_mxa);
+                }
+                _mxa = nullptr;
+            }
+
+        public:
+            mxClassID classID() const { return mxGetClassID(_mxa); }
+            void * data() const { return mxGetData(_mxa); }
+
+#define DECL_MXARRAY_MEMBERFUNCTION_IS(what) bool is##what() const { return mxIs##what(_mxa); }
+
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Numeric)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Cell)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Logical)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Char)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Struct)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Opaque)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(FunctionHandle)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Object)
+
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Complex)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Sparse)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Double)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Single)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Int8)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Uint8)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Int16)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Uint16)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Int32)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Uint32)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Int64)
+            DECL_MXARRAY_MEMBERFUNCTION_IS(Uint64)
+
+
+            template <class T> bool is() const { return false; }
+            template <> bool is<double>() const { return isDouble(); }
+            template <> bool is<float>() const { return isSingle(); }
+            template <> bool is<int8_t>() const { return isInt8(); }
+            template <> bool is<uint8_t>() const { return isUint8(); }
+            template <> bool is<int16_t>() const { return isInt16(); }
+            template <> bool is<uint16_t>() const { return isUint16(); }
+            template <> bool is<int32_t>() const { return isInt32(); }
+            template <> bool is<uint32_t>() const { return isUint32(); }
+            template <> bool is<int64_t>() const { return isInt64(); }
+            template <> bool is<uint64_t>() const { return isUint64(); }
+
+            size_t m() const { return mxGetM(_mxa); }
+            size_t n() const { return mxGetN(_mxa); }
+
+            bool empty() const { return mxIsEmpty(_mxa); }
+
+            bool isFromGlobalWorkspace() const { return mxIsFromGlobalWS(_mxa); }
+
+            double scalar() const { return mxGetScalar(_mxa); }
+            std::string toString() const {
+                size_t len = nelements();
+                std::string str(len, '\0');
+                mxGetString(_mxa, &str[0], len);
+                return str;
+            }
+
+            operator double() const { return scalar(); }
+            operator std::string() const { return toString(); }
+
+            size_t nelements() const { return mxGetNumberOfElements(_mxa); }
+            mwSize nzmax() const { return mxGetNzmax(_mxa); }
+
+            MXArray cell(mwIndex i) const { return mxGetCell(_mxa, i); }
+
+            int nfields() const { return mxGetNumberOfFields(_mxa); }
+            const char * fieldName(int n) const { return mxGetFieldNameByNumber(_mxa, n); }
+            int fieldNumber(const std::string & name) const { return mxGetFieldNumber(_mxa, name.c_str()); }
+            MXArray field(const std::string & name, int i) const { return mxGetField(_mxa, i, name.c_str()); }
+
+            MXArray property(const std::string & name, mwIndex i) const { return mxGetProperty(_mxa, i, name.c_str()); }
+
+            const char * className() const { return mxGetClassName(_mxa); }
+
+            mwSize ndims() const { return mxGetNumberOfDimensions(_mxa); }
+            std::vector<mwSize> dims() const {
+                std::vector<mwSize> ds(ndims());
+                std::copy_n(mxGetDimensions(_mxa), ds.size(), ds.begin());
+                return ds;
+            }
+            mwSize dim(int d) const {
+                return dims().at(d);
+            }
+
+            template <class ... Ints>
+            mwIndex offset(Ints... subs) const {
+                mwIndex sbs[sizeof...(Ints)] = { subs ... };
+                return mxCalcSingleSubscript(_mxa, sizeof...(Ints), sbs);
+            }
+
+            template <class T, class ... Ints, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+            const T & at(Ints... subs) const {
+                return static_cast<const T*>(mxGetData(_mxa))[offset(subs...)];
+            }
+            template <class T, class ... Ints, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+            T & at(Ints... subs) {
+                return static_cast<T*>(mxGetData(_mxa))[offset(subs...)];
+            }
+
+            void setData(void* d) { mxSetData(_mxa, d); }
+
+            void setM(size_t m) { mxSetM(_mxa, m); }
+            void setN(size_t n) { mxSetN(_mxa, n); }
+
+            void setIsFromGlobalWorkspace(bool b) { mxSetFromGlobalWS(_mxa, b); }
+
+            void setCell(mwIndex i, const MXArray & a) { mxSetCell(_mxa, i, a._mxa); }
+
+            void setField(const std::string & name, int i, const MXArray & a) { mxSetField(_mxa, i, name.c_str(), a._mxa); }
+            void setProperty(const std::string & name, int i, const MXArray & a) { mxSetProperty(_mxa, i, name.c_str(), a._mxa); }
+
+
+        protected:
+            mxArray * _mxa;
+            bool _destroyWhenOutofScope;
+        };
+
+
+
+
+
         class MatlabEngine {
         public:
-            inline explicit MatlabEngine(const char * cmd = nullptr, int bufferSize = 5e4) 
-                : _engine(nullptr), _buffer(nullptr) { 
+            inline explicit MatlabEngine(const char * cmd = nullptr, int bufferSize = 5e4)
+                : _engine(nullptr), _buffer(nullptr) {
                 _engine = engOpen(cmd);
                 if (_engine){
                     engSetVisible(_engine, false);
@@ -92,7 +232,7 @@ namespace panoramix {
                     std::cout << _buffer << std::endl;
                 }
             }
-            inline ~MatlabEngine() { 
+            inline ~MatlabEngine() {
                 if (_engine){
                     engClose(_engine);
                     std::cout << "Matlab Engine Closed" << std::endl;
@@ -105,33 +245,68 @@ namespace panoramix {
             engine * _engine;
             char * _buffer;
         };
-        
-        static MatlabEngine _Engine;
+
+        static MatlabEngine * _Engine = nullptr;
+        static int _EngineRefCount = 0;
+
 
         bool Matlab::IsBuilt() { return true; }
 
-        std::string Matlab::DefaultCodeDir() { return MATLAB_CODE_DIR; }
-
-        bool Matlab::IsUsable() {
-            return _Engine.eng() != nullptr;
+        bool Matlab::StartEngine(){
+            _EngineRefCount++;
+            if (_EngineRefCount > 0 && !_Engine){
+                _Engine = new MatlabEngine;
+                if (_Engine->eng() == nullptr){
+                    delete _Engine;
+                    _Engine = nullptr;
+                }
+            }
+            std::cout << "Matlab Engine RefCount: " << _EngineRefCount << std::endl;
+            return _Engine != nullptr;
         }
 
+        void Matlab::CloseEngine(){
+            if (_EngineRefCount <= 0){
+                _EngineRefCount = 0;
+                return;
+            }
+            _EngineRefCount--;
+            std::cout << "Matlab Engine RefCount: " << _EngineRefCount << std::endl;
+            if (_EngineRefCount <= 0){
+                _EngineRefCount = 0;
+                if (_Engine){
+                    delete _Engine;
+                    _Engine = nullptr;
+                }
+            }
+        }
+
+        bool Matlab::EngineStarted(){
+            return _Engine && _Engine->eng();
+        }
+
+        
+
+        std::string Matlab::DefaultCodeDir() { return MATLAB_CODE_DIR; }
+
+
+
         bool Matlab::RunScript(const char * cmd) {
-            if (!_Engine.eng())
+            if (!_Engine)
                 return false;
-            bool ret = engEvalString(_Engine.eng(), cmd) == 0;
-            if (strlen(_Engine.buffer()) > 0){
-                std::cout << "[Message when executing '" << cmd << "']:\n" << _Engine.buffer() << std::endl;
+            bool ret = engEvalString(_Engine->eng(), cmd) == 0;
+            if (strlen(_Engine->buffer()) > 0){
+                std::cout << "[Message when executing '" << cmd << "']:\n" << _Engine->buffer() << std::endl;
             }
             return ret;
         }
 
+
         const char * Matlab::LastMessage(){
-            return _Engine.buffer();
+            return _Engine->buffer();
         }
 
-        void * Matlab::PutVariable(CVInputArray mat){
-            
+        void * Matlab::PutVariable(CVInputArray mat){            
             cv::Mat& im = mat.getMat();
 
             // collect all dimensions of im
@@ -175,14 +350,14 @@ namespace panoramix {
         }
 
         bool Matlab::PutVariable(const char * name, CVInputArray mat){
-            if (!_Engine.eng())
+            if (!_Engine)
                 return false;
             
             mxArray * ma = static_cast<mxArray*>(PutVariable(mat));
             if (!ma)
                 return false;
 
-            int result = engPutVariable(_Engine.eng(), name, ma);
+            int result = engPutVariable(_Engine->eng(), name, ma);
             mxDestroyArray(ma);
             return result == 0;
         }
@@ -253,13 +428,13 @@ namespace panoramix {
         }
 
         bool Matlab::GetVariable(const char * name, CVOutputArray mat, bool lastDimIsChannel){
-            if (!_Engine.eng())
+            if (!_Engine)
                 return false;
 
             if (!mat.needed())
                 return true;
             
-            mxArray * ma = engGetVariable(_Engine.eng(), name);
+            mxArray * ma = engGetVariable(_Engine->eng(), name);
             if (!ma)
                 return false;
 
@@ -269,10 +444,10 @@ namespace panoramix {
         }
 
         bool Matlab::GetVariable(const char * name, double & a){
-            if (!_Engine.eng())
+            if (!_Engine)
                 return false;
 
-            mxArray * ma = engGetVariable(_Engine.eng(), name);
+            mxArray * ma = engGetVariable(_Engine->eng(), name);
             if (!ma)
                 return false;
 
@@ -293,10 +468,10 @@ namespace panoramix {
 
 
         bool Matlab::GetVariable(const char * name, std::string & a){
-            if (!_Engine.eng())
+            if (!_Engine)
                 return false;
 
-            mxArray * ma = engGetVariable(_Engine.eng(), name);
+            mxArray * ma = engGetVariable(_Engine->eng(), name);
             if (!ma)
                 return false;
 
@@ -405,21 +580,25 @@ namespace panoramix {
         }
 
         bool Matlab::PutVariable(const char * name, const cv::SparseMat & mat){
-            if (!_Engine.eng())
+            if (!_Engine)
                 return false;
             
             mxArray * ma = static_cast<mxArray*>(PutVariable(mat));
             if (!ma)
                 return false;
 
-            int result = engPutVariable(_Engine.eng(), name, ma);
+            int result = engPutVariable(_Engine->eng(), name, ma);
+            
             mxDestroyArray(ma);
             return result == 0;
         }
 
 
 #else
-        bool Matlab::IsBuilt() { return false; }
+        bool Matlab::IsBuilt() {return false;}
+        bool Matlab::StartEngine() {return false;}
+        void Matlab::CloseEngine() {}
+        bool Matlab::EngineStarted(){ return false;}
         std::string Matlab::DefaultCodeDir() { return ""; }
         bool Matlab::IsUsable() {return false;}
         bool Matlab::RunScript(const char *) {return false;}

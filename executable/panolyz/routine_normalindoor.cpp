@@ -5,6 +5,7 @@
 #include "../../src/gui/visualize2d.hpp"
 #include "../../src/gui/visualizers.hpp"
 #include "../../src/core/cameras.hpp"
+#include "../../src/core/clock.hpp"
 
 #include "routines.hpp"
 
@@ -90,6 +91,7 @@ namespace panolyz {
             Image image = cv::imread(path);
             ResizeToHeight(image, 400);
 
+
             View<PerspectiveCamera> view;
 
             std::vector<Classified<Line2>> lines;
@@ -97,7 +99,7 @@ namespace panolyz {
 
             Imagei segmentedImage;
 
-            bool RE_BUILD_FEATURES = false;
+            bool RE_BUILD_FEATURES = true;
 
             if (RE_BUILD_FEATURES){
 
@@ -107,6 +109,18 @@ namespace panolyz {
                 VanishingPointsDetector::Params vpdParams(VanishingPointsDetector::TardifSimplified);
                 view = CreatePerspectiveView(image, Point3(0, 0, 0), Point3(1, 0, 0), Point3(0, 0, -1),
                     LineSegmentExtractor(), VanishingPointsDetector(vpdParams), &line3s, &lines, &vps, &focal).unwrap();
+
+                {
+                    Clock clock("omap");
+                    std::vector<HPoint2> hvps(vps.size());
+                    for (int i = 0; i < vps.size(); i++){
+                        hvps[i] = view.camera.screenProjectionInHPoint(vps[i]);
+                    }
+                    auto om = ComputeOrientationMaps(lines, hvps, view.image.size());
+                    gui::ColorTable rgb = gui::ColorTableDescriptor::RGBGreys;
+                    cv::imshow("om", rgb(om));
+                    cv::waitKey();
+                }
 
                 SegmentationExtractor segmenter;
                 segmenter.params().algorithm = SegmentationExtractor::GraphCut;

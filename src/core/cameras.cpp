@@ -300,6 +300,46 @@ namespace panoramix {
             return cams;
         }
 
+
+        std::vector<PerspectiveCamera> CreatePanoContextCameras(const PanoramicCamera & panoCam,
+            int width , int height, double focal){
+            double fov = M_PI / 3;
+            std::vector<double> xh(12), yh(12);
+            for (int i = 0; i < xh.size(); i++){
+                xh[i] = M_PI / 6 * i - M_PI;
+                yh[i] = 0;
+            }
+
+            std::vector<double> xp, yp;
+            xp = { -3 / 3.0, -2 / 3.0, -1 / 3.0, +0 / 3.0, +1 / 3.0, +2 / 3.0, -3 / 3.0, -2 / 3.0, -1 / 3.0, +0 / 3.0, +1 / 3.0, +2 / 3.0 };
+            yp = { 1 / 4.0, 1 / 4.0, 1 / 4.0, 1 / 4.0, 1 / 4.0, 1 / 4.0, -1 / 4.0, -1 / 4.0, -1 / 4.0, -1 / 4.0, -1 / 4.0, -1 / 4.0 };
+            for (int i = 0; i < xp.size(); i++){
+                xp[i] *= M_PI;
+                yp[i] *= M_PI;
+            }
+
+            Vec3 x, y, z = normalize(-panoCam.up());
+            std::tie(x, y) = ProposeXYDirectionsFromZDirection(z);
+            std::vector<Vec3> directions(24);
+            for (int i = 0; i < 12; i++){
+                auto & d = directions[i];
+                double xv = xp[i], yv = yp[i];
+                d = cos(xv) * cos(yv) * x + sin(xv) * cos(yv) * y + sin(yv) * z;
+                auto & d2 = directions[i + 12];
+                xv = xh[i], yv = yh[i];
+                d2 = cos(xv) * cos(yv) * x + sin(xv) * cos(yv) * y + sin(yv) * z;
+            }
+            
+            std::vector<PerspectiveCamera> pcams;
+            pcams.reserve(directions.size());
+            for (const Vec3 & d : directions){
+                PerspectiveCamera cam(width, height, Point2(width, height) / 2.0, focal, panoCam.eye(), panoCam.eye() - d, z, 0.01, 1e4);
+                pcams.push_back(cam);
+            }
+            return pcams;
+        }
+
+
         std::vector<PerspectiveCamera> CreateCubicFacedCameras(const PanoramicCamera & panoCam,
             int width/* = 500*/, int height/* = 500*/, double focal/* = 250.0*/){
             Vec3 x, y;

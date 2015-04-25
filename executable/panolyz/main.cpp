@@ -9,7 +9,8 @@ int main(int argc, char ** argv) {
     //YorkUrbanDB2::Run();
     //PanoramaIndoor::Run();
     //NormalIndoor::Run();
-    NYU2::Run();
+    //NYU2::Run();
+    Prepare::Run();
 
     return 0;
 }

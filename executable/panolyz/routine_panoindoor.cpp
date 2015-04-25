@@ -14,10 +14,10 @@ namespace panolyz {
         void Run(){
 
             std::string path;
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
+            path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
-            path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
+            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
             //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";// too small
@@ -42,6 +42,7 @@ namespace panolyz {
             using namespace experimental;
 
             Image image = cv::imread(path);
+            MakePanorama(image);
             ResizeToHeight(image, 700);
 
             View<PanoramicCamera> view;
@@ -208,7 +209,7 @@ namespace panolyz {
 
                     //vars = SolveVariablesWithBoundedAnchors(mg, controls, false, true);
                     ResetToSampledArmorAnchors(mg, controls, 0.05);
-                    vars = SolveVariablesWithBoundedAnchors(mg, controls, false, false);
+                    vars = SolveVariablesWithBoundedAnchors(mg, controls, false, 1000);
                     NormalizeVariables(mg, controls, vars);
                     //SolveVariablesWithBoundedAnchors(mg, controls, vars);
                     std::cout << "score = " << Score(mg, controls, vars) << std::endl;

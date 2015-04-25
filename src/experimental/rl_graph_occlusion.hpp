@@ -36,29 +36,7 @@ namespace panoramix {
             RegionLineConnectionHandle rlh);
 
 
-        template <class T, int N, class CameraT>
-        HandledTable<RegionHandle, Vec<T, N>> CollectFeatureMeanOnRegions(const RLGraph & mg,
-            const CameraT & pcam, const ImageOfType<Vec<T, N>> & feature){
-            HandledTable<RegionHandle, Vec<T, N>> featureMeanTable = mg.createComponentTable<RegionData, Vec<T, N>>();
-            for (auto & r : mg.components<RegionData>()){
-                auto rh = r.topo.hd;
-                auto regionMaskView = PerfectRegionMaskView(mg, rh);
-                auto sampler = MakeCameraSampler(regionMaskView.camera, pcam);
-                auto featureOnRegion = sampler(feature);
-                int votes = 0;
-                Vec<T, N> featureSum;
-                for (auto it = regionMaskView.image.begin(); it != regionMaskView.image.end(); ++it){
-                    if (!*it){
-                        continue;
-                    }
-                    featureSum += featureOnRegion(it.pos());
-                    votes += 1;
-                }
-                auto featureMean = featureSum / std::max(votes, 1);
-                featureMeanTable[rh] = featureMean;
-            }
-            return featureMeanTable;
-        }
+
 
         using RLGraphGCTable = HandledTable<RegionHandle, Vec<double, 5>>;
 
@@ -71,8 +49,6 @@ namespace panoramix {
             const PerspectiveCamera & pcam, const ImageOfType<Vec<double, 5>> & gc,
             const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun = nullptr);
 
-        void AttachGeometricContextConstraintsSmarter(const RLGraph & mg, RLGraphControls & controls,
-            const PerspectiveCamera & pcam, const ImageOfType<Vec<double, 5>> & gc);
 
     }
 }

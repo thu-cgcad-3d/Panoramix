@@ -13,6 +13,9 @@ classdef Toolkit < handle
 		function varargout = segmentGraphCut(varargin)
              [varargout{1:nargout}] = mexToolkit('segmentGraphCut', varargin{:});
         end
+		function varargout = segmentGraphCutPano(varargin)
+             [varargout{1:nargout}] = mexToolkit('segmentGraphCutPano', varargin{:});
+        end
 		function varargout = segmentSLIC(varargin)
              [varargout{1:nargout}] = mexToolkit('segmentGraphCut', varargin{:});
         end

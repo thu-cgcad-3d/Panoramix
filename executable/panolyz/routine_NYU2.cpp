@@ -195,7 +195,7 @@ namespace panolyz {
                 std::vector<Point3> gtPoints;
                 gtPoints.reserve(data.depth.cols * data.depth.rows);
                 for (auto it = data.depth.begin(); it != data.depth.end(); ++it){
-                    auto d = cam_d.spatialDirection(it.pos()) * data.depth(it.pos());
+                    auto d = cam_d.spatialDirection(it.pos()) * data.depth(it.pos()) / 1e5;
                     //auto d = normalize(cam_d.spatialDirection(it.pos())) * data.rawDepth(it.pos());
                     gtPoints.emplace_back(d);
                 }
@@ -308,7 +308,43 @@ namespace panolyz {
                 rhs = std::move(newrhs);
 
                 // attach depths as anchors
+                Imagef realDepth(image.size(), 0.0);
+                for (auto it = realDepth.begin(); it != realDepth.end(); ++it){
+                    *it = norm(cam_d.spatialDirection(it.pos()) * data.depth(it.pos())) / 1e5;
+                }
+                
+                SetComponentControl<RegionData>(controls, [&mg, &view, &realDepth](RegionHandle rh, RLGraphComponentControl & c){
+                    auto center = mg.data(rh).normalizedCenter;
+                    float f = realDepth(ToPixelLoc(view.camera.screenProjection(center)));
+                    c.weightedAnchors.push_back(WeightAs(center * f, 1.0));
+                });
 
+                // remove constraint anchors on occlusions
+                SetConstraintControls<RegionBoundaryData>(controls, [&mg, &view, &realDepth](RegionBoundaryHandle bh, RLGraphConstraintControl & c){
+                    double maxDepth = MinMaxValOfImage(realDepth).second;
+                    std::vector<Weighted<Vec3>> validAnchors;
+                    for (auto & wa : c.weightedAnchors){
+                        auto p = ToPixelLoc(view.camera.screenProjection(wa.component));
+                        std::vector<float> ds;
+                        for (int xx = -2; xx <= 2; xx++){
+                            for (int yy = -2; yy <= 2; yy++){
+                                PixelLoc pp(p.x + xx, p.y + yy);
+                                if (Contains(realDepth, pp)){
+                                    ds.push_back(realDepth(pp));
+                                }
+                            }
+                        }
+                        std::sort(ds.begin(), ds.end());
+                        if (abs(ds.front() - ds.back()) <= maxDepth / 20.0){
+                            validAnchors.push_back(wa);
+                        }
+                    }
+                    c.weightedAnchors = std::move(validAnchors);
+                });
+
+                vars = SolveVariablesWithBoundedAnchors(mg, controls, false, 100);
+
+                Show(view, mg, controls, vars);
 
 
             });

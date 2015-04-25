@@ -17,6 +17,7 @@
 #include <complex>
 #include <functional>
 
+
 #include <opencv2/opencv.hpp>
 
 #include "version.hpp"
@@ -760,6 +761,26 @@ namespace panoramix {
         template <class Archive, class T, class S>
         inline void serialize(Archive & ar, Scored<T, S> & c) {
             ar(c.score, c.component);
+        }
+
+
+        // bounded
+        template <class T, class B = double>
+        struct Bounded {
+            B lowerBound, upperBound;
+            T component;
+        };
+
+        template <class T, class B1, class B2>
+        inline Bounded<std::decay_t<T>, std::decay_t<B1>> BoundAs(T && comp, B1 && lb, B2 && ub){
+            return Bounded<std::decay_t<T>, std::decay_t<B1>>{
+                std::forward<B1>(lb), std::forward<B2>(ub), std::forward<T>(comp)
+            };
+        }
+
+        template <class Archive, class T, class B>
+        inline void serialize(Archive & ar, Bounded<T, B> & c) {
+            ar(c.lowerBound, c.upperBound, c.component);
         }
 
 

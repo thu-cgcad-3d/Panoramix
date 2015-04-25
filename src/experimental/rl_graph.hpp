@@ -256,8 +256,8 @@ namespace panoramix {
         };
 
         
-        void SetNecessaryConstraintWeighedAnchors(const RLGraph & mg, RLGraphControls & controls);
-        void SetFullConstraintWeighedAnchors(const RLGraph & mg, RLGraphControls & controls);
+        void SetNecessaryConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls);
+        void SetFullConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls);
 
 
         struct RLGraphVar {

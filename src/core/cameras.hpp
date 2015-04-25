@@ -219,8 +219,26 @@ namespace panoramix {
             }
 
             template <
+                class T, int N,
+                class = std::enable_if_t<(N <= 4)>
+            >
+            ImageOfType<Vec<T, N>> operator()(const ImageOfType<Vec<T, N>> & inputIm,
+                int borderMode = cv::BORDER_REPLICATE,
+                const Vec<T, N> & borderValue = Vec<T, N>()) const {
+                Image outputIm;
+                cv::Scalar bv;
+                for (int i = 0; i < N; i++){
+                    bv[i] = borderValue[i];
+                }
+                cv::remap(inputIm, outputIm, _mapx, _mapy,
+                    cv::INTER_NEAREST, borderMode, bv);
+                return outputIm;
+            }
+
+            template <
                 class T, int N, 
-                class = std::enable_if_t<(N > 4)>
+                class = std::enable_if_t<(N > 4)>,
+                class = void
             >
             ImageOfType<Vec<T, N>> operator()(const ImageOfType<Vec<T, N>> & inputIm,
                 int borderMode = cv::BORDER_REPLICATE,
@@ -292,6 +310,9 @@ namespace panoramix {
             const std::vector<Vec3> & dirs,
             int width = 500, int height = 500, double focal = 250.0, double angleThreshold = 0.1);
 
+        std::vector<PerspectiveCamera> CreatePanoContextCameras(const PanoramicCamera & panoCam,
+            int width = 500, int height = 500, double focal = 250.0);
+
         // create cameras toward cubic faces
         std::vector<PerspectiveCamera> CreateCubicFacedCameras(const PanoramicCamera & panoCam,
             int width = 500, int height = 500, double focal = 250.0);
@@ -304,6 +325,9 @@ namespace panoramix {
             ImageT image;
             CameraT camera;
 
+            View(){}
+            View(const ImageT & im, const CameraT & cam) : image(im), camera(cam) {}
+
             template <class AnotherCameraT, class = std::enable_if_t<IsCamera<std::decay_t<AnotherCameraT>>::value>>
             inline View<std::decay_t<AnotherCameraT>, ImageT> sampled(AnotherCameraT && cam) const {
                 View<std::decay_t<AnotherCameraT>, ImageT> v;
@@ -312,16 +336,45 @@ namespace panoramix {
                 return v;
             }
 
+           
             template <class Archiver>
             void serialize(Archiver & ar) {
                 ar(image, camera);
             }
         };
 
+
+        template <
+            class OutCameraT, class InCameraT, class T,
+            class = std::enable_if_t<IsCamera<std::decay_t<InCameraT>>::value && IsCamera<std::decay_t<OutCameraT>>::value>
+        >
+        View<OutCameraT, ImageOfType<T>> Combine(const OutCameraT & camera, const std::vector<View<InCameraT, ImageOfType<T>>> & views){
+            if (views.empty()){
+                return View<OutCameraT, ImageOfType<T>>();
+            }
+            ImageOfType<T> converted = ImageOfType<T>::zeros(camera.screenSize());
+            static const int channels = cv::DataType<T>::channels;
+            Imagef counts(camera.screenSize(), 0.0f);
+            for (int i = 0; i < views.size(); i++){
+                auto sampler = MakeCameraSampler(camera, views[i].camera);
+                auto piece = sampler(views[i].image, cv::BORDER_CONSTANT);
+                converted += piece;
+                counts += sampler(Imagef::ones(views[i].image.size()), cv::BORDER_CONSTANT);
+            }
+            View<OutCameraT, ImageOfType<T>> v;
+            v.camera = camera;
+            v.image = ImageOfType<T>::zeros(camera.screenSize());
+            for (auto it = converted.begin(); it != converted.end(); ++it){
+                float count = counts(it.pos());
+                v.image(it.pos()) = *it / std::max(count, 1.0f);
+            }
+            return v;
+        }
+
+
         using PerspectiveView = View<PerspectiveCamera>;
         using PanoramicView = View<PanoramicCamera>;
         using PartialPanoramicView = View<PartialPanoramicCamera>;
-
 
 
 

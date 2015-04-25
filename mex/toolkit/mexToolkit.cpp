@@ -1,6 +1,7 @@
 #include "../class_handle.hpp"
 
 #include "../../src/misc/matlab.hpp"
+#include "../../src/misc/matlab_mex.hpp"
 #include "../../src/core/algorithms.hpp"
 #include "../../src/core/utilities.hpp"
 #include "../../src/gui/visualize2d.hpp"
@@ -39,6 +40,9 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
             mexErrMsgTxt("Wrong inputs num!");
             return;
         }  
+
+        misc::ConstMXArray mxa(argv[0]);
+
         std::string filename = GetString(argv[0]);
         double lastDimAsChannel = mxGetScalar(argv[2]);
         core::Image mat;
@@ -75,7 +79,32 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
         misc::Matlab::GetVariable(argv[0], image);
         core::Imagei segs;
         int segnum;
-        std::tie(segs, segnum) = segmenter(image);
+        std::tie(segs, segnum) = segmenter(image, false);
+        if (outc > 0){
+            outv[0] = static_cast<mxArray*>(misc::Matlab::PutVariable(segs));
+        }
+        if (outc > 1){
+            outv[1] = mxCreateDoubleScalar(segnum);
+        }
+        return;
+    }
+
+    if (cmd == "segmentGraphCutPano"){
+        if (argc == 0){
+            mexErrMsgTxt("Wrong inputs/outputs num!");
+            return;
+        }
+        core::SegmentationExtractor segmenter;
+        segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
+        if (argc > 1)
+            segmenter.params().sigma = mxGetScalar(argv[1]);
+        if (argc > 2)
+            segmenter.params().c = mxGetScalar(argv[2]);
+        core::Image image;
+        misc::Matlab::GetVariable(argv[0], image);
+        core::Imagei segs;
+        int segnum;
+        std::tie(segs, segnum) = segmenter(image, true);
         if (outc > 0){
             outv[0] = static_cast<mxArray*>(misc::Matlab::PutVariable(segs));
         }
@@ -109,6 +138,13 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[]) {
         }
         return;
     }
+
+    if (cmd == "vpLinesOM"){
+
+    }
+
+    
+
 
     // Got here, so command not recognized
     mexErrMsgTxt("Command not recognized.");

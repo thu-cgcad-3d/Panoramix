@@ -44,6 +44,4 @@ macro(panoramix_add_mex MEXNAME MFILE)
   install(FILES ${MFILE} DESTINATION ${MATLAB_CODE_DIR})
 endmacro()
 
-# add_subdirectory (boundary_graph)
-add_subdirectory (mixed_graph)
 add_subdirectory (toolkit)

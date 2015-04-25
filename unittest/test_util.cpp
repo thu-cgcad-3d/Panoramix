@@ -83,7 +83,7 @@ TEST(MiscTest, Failable){
     ASSERT_TRUE(!opt.null());
 
     auto data = opt.unwrap();
-    ASSERT_TRUE((data == std::vector<int>{1, 2, 3}));
+    ASSERT_TRUE((data == std::vector<int>{1, 2, 3, 4}));
     ASSERT_TRUE(opt.null());
 
     auto opt2 = core::AsResult(std::move(data));

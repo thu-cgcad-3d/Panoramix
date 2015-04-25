@@ -720,6 +720,106 @@ namespace panoramix {
 
 
 
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const PerspectiveCamera & cam,
+            std::vector<Classified<Line2>> & lineSegments){
+            std::vector<Vec3> lineIntersections;
+
+            int linesNum = 0;
+            std::vector<Line2> pureLines(lineSegments.size());
+            linesNum += lineSegments.size();
+            for (int k = 0; k < pureLines.size(); k++){
+                pureLines[k] = lineSegments[k].component;
+            }
+            auto inters = ComputeLineIntersections(pureLines, nullptr, true, std::numeric_limits<double>::max());
+            // insert line intersections
+            for (auto & p : inters){
+                lineIntersections.push_back(normalize(cam.spatialDirection(p.value())));
+            }
+
+            auto vanishingPoints = FindOrthogonalPrinicipleDirections(lineIntersections, 1000, 500, true).unwrap();
+
+            // project lines to space
+            std::vector<Classified<Line3>> spatialLineSegments;
+            spatialLineSegments.reserve(linesNum);
+            for (const auto & line : lineSegments) {
+                auto & p1 = line.component.first;
+                auto & p2 = line.component.second;
+                auto pp1 = cam.spatialDirection(p1);
+                auto pp2 = cam.spatialDirection(p2);
+                Classified<Line3> cline3;
+                cline3.claz = -1;
+                cline3.component = Line3{ pp1, pp2 };
+                spatialLineSegments.push_back(cline3);
+            }
+
+            // classify lines
+            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
+
+            int ii = 0;
+            for (int j = 0; j < lineSegments.size(); j++){
+                lineSegments[j].claz = spatialLineSegments[ii].claz;
+                ii++;
+            }
+
+            return vanishingPoints;
+        }
+
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
+            std::vector<std::vector<Classified<Line2>>> & lineSegments){
+
+            assert(cams.size() == lineSegments.size());
+            std::vector<Vec3> lineIntersections;
+
+            int linesNum = 0;
+            for (int i = 0; i < cams.size(); i++){
+                std::vector<Line2> pureLines(lineSegments[i].size());
+                linesNum += lineSegments[i].size();
+                for (int k = 0; k < pureLines.size(); k++){
+                    pureLines[k] = lineSegments[i][k].component;
+                }
+                auto inters = ComputeLineIntersections(pureLines, nullptr, true, std::numeric_limits<double>::max());
+                // insert line intersections
+                for (auto & p : inters){
+                    lineIntersections.push_back(normalize(cams[i].spatialDirection(p.value())));
+                }
+            }
+
+            auto vanishingPoints = FindOrthogonalPrinicipleDirections(lineIntersections, 1000, 500, true).unwrap();
+
+            // project lines to space
+            std::vector<Classified<Line3>> spatialLineSegments;
+            spatialLineSegments.reserve(linesNum);
+            for (int i = 0; i < cams.size(); i++){
+                for (const auto & line : lineSegments[i]) {
+                    auto & p1 = line.component.first;
+                    auto & p2 = line.component.second;
+                    auto pp1 = cams[i].spatialDirection(p1);
+                    auto pp2 = cams[i].spatialDirection(p2);
+                    Classified<Line3> cline3;
+                    cline3.claz = -1;
+                    cline3.component = Line3{ pp1, pp2 };
+                    spatialLineSegments.push_back(cline3);
+                }
+            }
+
+            // classify lines
+            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
+
+            int ii = 0;
+            for (int i = 0; i < lineSegments.size(); i++){
+                for (int j = 0; j < lineSegments[i].size(); j++){
+                    lineSegments[i][j].claz = spatialLineSegments[ii].claz;
+                    ii++;
+                }
+            }
+
+            return vanishingPoints;
+
+        }
+
+
+
+
 
 #pragma region VanishingPointsDetector
 
@@ -1321,7 +1421,8 @@ namespace panoramix {
                 return std::move(results);
             }
             else if (_params.algorithm == MATLAB_PanoContext){
-                assert(Matlab::IsUsable());
+                assert(Matlab::IsBuilt());
+                Matlab matlab;
                 // install lines
                 Imaged linesData(lines.size(), 4);
                 for (int i = 0; i < lines.size(); i++){
@@ -1333,7 +1434,6 @@ namespace panoramix {
                 Matlab::PutVariable("linesData", linesData);
                 Matlab::PutVariable("projCenter", projCenter);
                 // convert to struct array
-                Matlab matlab;
                 matlab << "[vp, f, lineclasses] = panoramix_wrapper_vpdetection(linesData, projCenter');";
                 Imaged vpData;
                 Imaged focal;
@@ -1357,7 +1457,7 @@ namespace panoramix {
                 return std::make_tuple(std::move(vps), focal(0), std::move(lineClasses));
             }
             else if (_params.algorithm == MATLAB_Tardif){
-                assert(Matlab::IsUsable());
+                assert(Matlab::IsBuilt());
                 // install lines
                 Imaged linesData(lines.size(), 5);
                 for (int i = 0; i < lines.size(); i++){
@@ -1367,7 +1467,7 @@ namespace panoramix {
                     linesData(i, 3) = lines[i].second[1];
                     linesData(i, 4) = 1.0;
                 }
-                Matlab::PutVariable("linesData", linesData);
+                //Matlab::PutVariable("linesData", linesData);
                 NOT_IMPLEMENTED_YET();
             }
             else /*if (_params.algorithm == TardifSimplified)*/{
@@ -2477,58 +2577,476 @@ namespace panoramix {
 
 
 
-        //GeometricContextEstimator::Params::Params() 
-        //    : useMatlab(true) {
-        //}
-
-
-        //GeometricContextEstimator::Feature GeometricContextEstimator::operator() (const Image & im, SceneClass sceneClaz) const{
-        //    if (_params.useMatlab && Matlab::IsUsable()){
-        //        Matlab::PutVariable("inputIm", im);
-        //        Matlab::PutVariable("isOutdoor", sceneClaz == SceneClass::Outdoor);
-        //        Matlab matlab;
-        //        
-        //        matlab
-        //            << "slabelConfMap = panoramix_wrapper_gc(inputIm, isOutdoor);"
-        //            << "save temp;";
-        //        
-        //        Image slabelConfMap;
-        //        Matlab::GetVariable("slabelConfMap", slabelConfMap, true);
-        //        assert(!slabelConfMap.empty());
-        //        std::vector<Imaged> result;
-        //        cv::split(slabelConfMap, result);
-        //        assert(result.size() == 7);
-        //        return sceneClaz == SceneClass::Indoor ? std::map<GeometricContextLabel, Imaged>{
-        //            { GeometricContextLabel::Floor, result[0] }, 
-        //            { GeometricContextLabel::Right, result[1] },
-        //            { GeometricContextLabel::Front, result[2] },
-        //            { GeometricContextLabel::Left, result[3] }, 
-        //            { GeometricContextLabel::NotPlanar, result[4] },
-        //            { GeometricContextLabel::Furniture, result[5] }, 
-        //            { GeometricContextLabel::Ceiling, result[6] }
-        //        } : std::map<GeometricContextLabel, Imaged>{
-        //            { GeometricContextLabel::Ground, result[0] },
-        //            { GeometricContextLabel::Sky, result[6] },
-        //            { GeometricContextLabel::NotPlanar, result[4] },
-        //            { GeometricContextLabel::Vertical, result[3] + result[2] + result[1] }
-        //        };
-        //    }
-        //    else{
-        //        NOT_IMPLEMENTED_YET();
-        //    }
-        //}
 
 
 
+        std::tuple<std::vector<Point2>, std::vector<Point2>, std::vector<Point2>, std::vector<int>, int>  sample_line(const std::vector<Line2> &lines, const std::vector<int> &lineClasses){
 
-        ImageOfType<Vec<double, 7>> ComputeGeometricContext(const Image & im, SceneClass sceneClass){
+
+            int sample_rate = 10; //sample every 5 pixel on line
+            std::vector<Point2> ls[3];
+            int count = 0;
+            std::vector<int> lsclass;
+
+            for (int i = 0; i < lines.size(); i++)
+            {
+                int n_sample = ceil(norm(lines[i].first - lines[i].second) / sample_rate);
+                int lclass = lineClasses[i];
+
+                /*ls(i).sample = [...
+                linspace(lines(i).point1(1), lines(i).point2(1), n_sample)' ...
+                linspace(lines(i).point1(2), lines(i).point2(2), n_sample)' ];*/
+                Point2 eps;
+                eps[0] = (lines[i].first - lines[i].second).val[0] / n_sample;
+                eps[1] = (lines[i].first - lines[i].second).val[1] / n_sample;
+                Point2 curr = lines[i].second;
+
+                if (lclass == -1)
+                {
+                    continue;
+                }
+
+
+                for (int j = 0; j < n_sample; j++)
+                {
+                    ls[lclass].push_back(curr);
+                    lsclass.push_back(lclass);
+                    count++;
+                    curr = curr + eps;
+                }
+
+                /*ls(i).lineclass = repmat(lines(i).lineclass, n_sample, 1);*/
+            }
+
+
+            return std::make_tuple(ls[0], ls[1], ls[2], lsclass, count);
+        }
+
+
+        Point2 move_line_towards_vp(Point2 curp1, Point2 curp2, Point2 vp, int amount, bool &atvp, Point2 &newp2){
+            Point2 vec1 = curp1 - vp;
+            Point2 vec2 = curp2 - vp;
+            double len1 = sqrt(vec1[0] * vec1[0] + vec1[1] * vec1[1]);
+            double len2 = sqrt(vec2[0] * vec2[0] + vec2[1] * vec2[1]);
+            Point2 norm1;
+            norm1[0] = vec1[0] / len1*amount;
+            norm1[1] = vec1[1] / len1*amount;
+            Point2 newp1;
+            Point2 norm2;
+            double ratio21 = len2 / len1;
+            norm2[0] = vec2[0] / len2  * amount* ratio21;
+            norm2[1] = vec2[1] / len2 * amount * ratio21;
+
+
+
+            if (len1 < abs(amount)){
+                newp1 = curp1;
+                newp2 = curp2;
+                atvp = 1;
+            }
+            else
+            {
+
+                newp1 = curp1 + norm1;
+                newp2 = curp2 + norm2;
+                atvp = 0;
+            }
+
+            return newp1;
+        };
+
+
+        std::vector<cv::Point2f> getpoly(const Line2 & line,
+            const Point2 & vanishingPoints, int to_away, const cv::Size & imageSize, std::vector<Point2> sample){
+            cv::Point2f p1;
+            p1.x = line.first[0];
+            p1.y = line.first[1];
+            cv::Point2f p2;
+            p2.x = line.second[0];
+            p2.y = line.second[1];
+
+
+
+            cv::Point2f curp1 = p1;
+            cv::Point2f curp2 = p2;
+            int moveAmount = 64;
+
+
+
+            std::vector<cv::Point2f> result;
+
+
+            //	Imagei oo = Imagei::ones(imageSize) * -1;;
+
+            while (moveAmount >= 1)
+            {
+                bool atvp = 0;
+                Point2 hcurp1;
+                Point2 hcurp2;
+
+                hcurp1[0] = curp1.x;
+                hcurp1[1] = curp1.y;
+                hcurp2[0] = curp2.x;
+                hcurp2[1] = curp2.y;
+
+
+                Point2 hnewp2;
+                Point2 hnewp1 = move_line_towards_vp(hcurp1, hcurp2, vanishingPoints, to_away * moveAmount, atvp, hnewp2);
+                cv::Point2f newp1;
+                cv::Point2f newp2;
+                newp1.x = hnewp1[0];
+                newp1.y = hnewp1[1];
+                newp2.x = hnewp2[0];
+                newp2.y = hnewp2[1];
+
+
+
+
+                bool failed = 0;
+                if (atvp == 1)
+                {
+
+                    failed = 1;
+                }
+                else if ((hnewp1[0] > imageSize.width || hnewp1[0]<1 || hnewp1[1]>imageSize.height || hnewp1[1]<1) || (hnewp2[0]>imageSize.width || hnewp2[0]<1 || hnewp2[1]>imageSize.height || hnewp2[1] < 1))
+                {
+
+                    failed = 1;
+                }
+                else
+                {
+                    std::vector<cv::Point2f> poly;
+                    poly.push_back(p1);
+                    poly.push_back(p2);
+                    cv::Point2f pt;
+                    for (int i = 0; i < sample.size(); i++)
+                    {
+                        pt.x = (sample[i])[0];
+                        pt.y = (sample[i])[1];
+                        poly.push_back(newp2);
+                        poly.push_back(newp1);
+                        poly.push_back(p1);
+                        double isstop = cv::pointPolygonTest(poly, pt, false);
+
+                        if (isstop>0){
+                            failed = 1;
+                            break;
+                        }
+                    }
+                }
+
+                if (failed == 1)
+                {
+
+                    moveAmount = moveAmount / 2;
+                }
+                else{
+                    curp1 = newp1;
+                    curp2 = newp2;
+                }
+            }
+            //cv::Point** pts;
+            //int* npts;
+            //int ncontours;
+            //cv::Mat IMG = cv::Mat::zeros(imageSize, CV_32SC1);
+            //
+            //cv::Point offset = cv::Point();
+            ///*cv::fillPoly(IMG, pts, npts, ncontours, 225, 8, 0, offset);
+            //cv::fillPoly()*/
+
+            result.push_back(p1);
+            result.push_back(p2);
+
+            result.push_back(curp2);
+            result.push_back(curp1);
+
+            return result;
+
+        }
+
+
+        void myfillPoly(cv::Mat& img, std::vector<std::vector<  Point<int32_t, 2>  > > & pts, int label)
+        {
+            for (auto & ps : pts)
+            {
+                cv::fillConvexPoly(img, ps, label);
+            }
+        }
+
+
+        Imagei ExtractOrientationMaps(
+            const cv::Size & imageSize,
+            const std::vector<Line2> & lines,
+            const std::array<HPoint2, 3> & vanishingPoints,
+            const std::vector<int> & lineClasses) {
+
+            // fill with -1 as default
+            Imagei omap = Imagei::ones(imageSize) * -1;
+            std::vector<std::vector<  Point<int32_t, 2>  > > lineextimg[3][3][2];
+
+            std::vector<Point2> ls[3];
+            std::vector<int> lsclass;
+            int lsSize;
+
+            std::tie(ls[0], ls[1], ls[2], lsclass, lsSize) = sample_line(lines, lineClasses);
+
+            size_t lnum = lines.size();
+            //size_t lnum = 40;
+            for (int i = 0; i < lnum; i++) {
+                int lclass = lineClasses[i];
+                if (lclass == -1)
+                    continue;
+                for (int j = 0; j < 3; j++)
+                {
+                    if (j == lclass)
+                    {
+                        ;
+                    }
+                    else{
+                        Point2 Vp = vanishingPoints[j].value();
+                        //Vp[0];
+                        int orient;
+                        for (int k = 0; k < 3; k++)
+                        {
+                            if (k != lclass && k != j)
+                                orient = k;
+                        }
+
+                        std::vector<cv::Point2f> poly1 = getpoly(lines[i], Vp, -1, imageSize, ls[orient]);
+                        std::vector<Point<int32_t, 2>> ppoly1;
+                        std::vector<Point<int32_t, 2>> ppoly2;
+                        for (int ii = 0; ii < poly1.size(); ii++)
+                        {
+                            Point<int32_t, 2> temppoint;
+                            temppoint[0] = poly1.at(ii).x;
+                            temppoint[1] = poly1.at(ii).y;
+                            ppoly1.push_back(temppoint);
+                        }
+                        lineextimg[lclass][j][0].push_back(ppoly1);
+                        std::vector<cv::Point2f> poly2 = getpoly(lines[i], Vp, 1, imageSize, ls[orient]);
+                        for (int ii = 0; ii < poly1.size(); ii++)
+                        {
+                            Point<int32_t, 2> temppoint;
+                            temppoint[0] = poly2.at(ii).x;
+                            temppoint[1] = poly2.at(ii).y;
+                            ppoly2.push_back(temppoint);
+                        }
+                        lineextimg[lclass][j][1].push_back(ppoly2);
+                        //std::cout << "i =  " << i << "," << j << std::endl;
+                        /*if (i == 4 && j == 0)
+                        int ass = 0;*/
+
+
+                    }
+                }
+
+
+            }
+
+
+            Imagei omap1 = Imagei::ones(imageSize) * -1;
+            Imagei omap2 = Imagei::ones(imageSize) * -1;
+            Imagei omap3 = Imagei::ones(imageSize) * -1;
+            Imagei omap12 = Imagei::ones(imageSize) * -1;
+            Imagei omap21 = Imagei::ones(imageSize) * -1;
+            Imagei omap10 = Imagei::ones(imageSize) * -1;
+            Imagei omap01 = Imagei::ones(imageSize) * -1;
+            Imagei omap02 = Imagei::ones(imageSize) * -1;
+            Imagei omap20 = Imagei::ones(imageSize) * -1;
+            myfillPoly(omap12, lineextimg[1][2][0], 0);
+            myfillPoly(omap12, lineextimg[1][2][1], 0);
+            myfillPoly(omap21, lineextimg[2][1][0], 0);
+            myfillPoly(omap21, lineextimg[2][1][1], 0);
+            myfillPoly(omap10, lineextimg[1][0][0], 2);
+            myfillPoly(omap10, lineextimg[1][0][1], 2);
+            myfillPoly(omap01, lineextimg[0][1][0], 2);
+            myfillPoly(omap01, lineextimg[0][1][1], 2);
+            myfillPoly(omap20, lineextimg[2][0][0], 1);
+            myfillPoly(omap20, lineextimg[2][0][1], 1);
+            myfillPoly(omap02, lineextimg[0][2][0], 1);
+            myfillPoly(omap02, lineextimg[0][2][1], 1);
+
+            for (int j = 0; j < imageSize.height; j++){
+                for (int i = 0; i < imageSize.width; i++)
+                {
+                    if (omap12[j][i] == 0 && omap21[j][i] == 0)
+                    {
+                        omap1[j][i] = 0;
+                    }
+                }
+            }
+            for (int j = 0; j < imageSize.height; j++){
+                for (int i = 0; i < imageSize.width; i++)
+                {
+                    if (omap02[j][i] == 1 && omap20[j][i] == 1)
+                    {
+                        omap3[j][i] = 1;
+                    }
+                }
+            }
+            for (int j = 0; j < imageSize.height; j++){
+                for (int i = 0; i < imageSize.width; i++)
+                {
+                    if (omap10[j][i] == 2 && omap01[j][i] == 2)
+                    {
+                        omap2[j][i] = 2;
+                    }
+                }
+            }
+
+
+
+
+
+            Image3d omapImage1 = Image3d::zeros(omap.size());
+            Image3d omapImage2 = Image3d::zeros(omap.size());
+            Image3d omapImage3 = Image3d::zeros(omap.size());
+
+            for (int x = 0; x < omap.cols; x++) {
+                for (int y = 0; y < omap.rows; y++) {
+                    Vec3 color(0, 0, 0);
+                    int omapValue = omap1(y, x);
+                    if (omapValue >= 0 && omapValue < 3)
+                        color[omapValue] = 255;
+                    omapImage1(y, x) = color;
+                }
+            }
+            for (int x = 0; x < omap.cols; x++) {
+                for (int y = 0; y < omap.rows; y++) {
+                    Vec3 color(0, 0, 0);
+                    int omapValue = omap2(y, x);
+                    if (omapValue >= 0 && omapValue < 3)
+                        color[omapValue] = 255;
+                    omapImage2(y, x) = color;
+                }
+            }
+            for (int x = 0; x < omap.cols; x++) {
+                for (int y = 0; y < omap.rows; y++) {
+                    Vec3 color(0, 0, 0);
+                    int omapValue = omap3(y, x);
+                    if (omapValue >= 0 && omapValue < 3)
+                        color[omapValue] = 255;
+                    omapImage3(y, x) = color;
+                }
+            }
+            //cv::imshow("Orientation Map1", omapImage1);
+            //cv::imshow("Orientation Map2", omapImage2);
+            //cv::imshow("Orientation Map3", omapImage3);
+            //cv::waitKey();
+            for (int j = 0; j < imageSize.height; j++){
+                for (int i = 0; i < imageSize.width; i++)
+                {
+                    if (omap1[j][i] == 0 && omap2[j][i] == -1 && omap3[j][i] == -1)
+                    {
+                        omap[j][i] = 0;
+                    }
+                    if (omap1[j][i] == -1 && omap2[j][i] == 2 && omap3[j][i] == -1)
+                    {
+                        omap[j][i] = 2;
+                    }
+                    if (omap1[j][i] == -1 && omap2[j][i] == -1 && omap3[j][i] == 1)
+                    {
+                        omap[j][i] = 1;
+                    }
+
+                }
+
+            }
+
+            //Imagei ao23 = (lineextimg[1][2][0] | lineextimg[1][2][1]);
+            //Imagei ao32 = (lineextimg[2][1][0] | lineextimg[2][1][1]);
+            //Imagei ao13 = (lineextimg[0][2][0] | lineextimg[0][2][1]);
+            //Imagei ao31 = (lineextimg[2][0][0] | lineextimg[2][0][1]);
+            //Imagei ao12 = (lineextimg[0][1][0] | lineextimg[0][1][1]);
+            //Imagei ao21 = (lineextimg[1][0][0] | lineextimg[1][0][1]);
+            //Imagei aa23 = (lineextimg[1][2][0] & lineextimg[1][2][1]);
+            //Imagei aa32 = (lineextimg[2][1][0] & lineextimg[2][1][1]);
+            //Imagei aa13 = (lineextimg[0][2][0] & lineextimg[0][2][1]);
+            //Imagei aa31 = (lineextimg[2][0][0] & lineextimg[2][0][1]);
+            //Imagei aa12 = (lineextimg[0][1][0] & lineextimg[0][1][1]);
+            //Imagei aa21 = (lineextimg[1][0][0] & lineextimg[1][0][1]);
+            //
+            //
+            //
+            //Imagei Aa1  = ao23 & ao32;
+            //Imagei Aa2 = ao13 & ao31;
+            //Imagei Aa3  = ao12 & ao21;
+
+            //Imagei b1  = Aa1 &~Aa2 &~Aa3;
+            //Imagei b2 = ~Aa1 &Aa2 &~Aa3;
+            //Imagei b3 = ~Aa1 &~Aa2 &Aa3;
+
+            ////omap = cat(3, b{ 1 }, b{ 2 }, b{ 3 });
+
+
+            //Imagei testmap = Imagei::ones(imageSize) * -1;
+            //std::vector<std::vector<Point<int32_t, 2>>> polys = { 
+            //	{
+            //	{ 0, 0 },
+            //	{ 20, 100 },
+            //	{ 50, 100 },
+            //	{ 150, 20 }
+            //},
+            //{
+            //	{ 0, 15 },
+            //	{ 20, 100 },
+            //	{ 50, 100 },
+            //	{ 150, 20 }
+            //} };
+            //// fill with 1
+            //myfillPoly(testmap, polys, 1);
+            //Image3d testmapImage = Image3d::zeros(omap.size());
+            //for (int x = 0; x < omap.cols; x++) {
+            //	for (int y = 0; y < omap.rows; y++) {
+            //		Vec3 color(0, 0, 0);
+            //		int omapValue = testmap(y, x);
+            //		if (omapValue >= 0 && omapValue < 3)
+            //			color[omapValue] = 255;
+            //		testmapImage(y, x) = color;
+            //	}
+            //}
+            //cv::imshow("Orientation Map test", testmapImage);
+
+
+
+
+            return omap;
+        }
+
+
+
+
+
+        Imagei ComputeOrientationMaps(const std::vector<Classified<Line2>> & lines,
+            const std::vector<HPoint2> & vps, const SizeI & imSize){
+
+            std::array<HPoint2, 3> vanishingPoints = { { vps[0], vps[1], vps[2] } };
+            std::vector<Line2> ls; ls.reserve(lines.size());
+            std::vector<int> lcs; lcs.reserve(lines.size());
+            for (int i = 0; i < lines.size(); i++){
+                if (lines[i].claz == -1 || lines[i].claz >= 3)
+                    continue;
+                ls.push_back(lines[i].component);
+                lcs.push_back(lines[i].claz);
+            }
+            return ExtractOrientationMaps(imSize, ls, vanishingPoints, lcs);
+
+        }
+
+
+
+
+
+
+
+        ImageOfType<Vec<double, 7>> ComputeGeometricContext(const Image & im, SceneClass sceneClass, bool useHedauForIndoor){
             Matlab matlab;
             matlab.PutVariable("im", im);
-            if (sceneClass == SceneClass::Indoor){
+            if (sceneClass == SceneClass::Indoor && useHedauForIndoor){
                 matlab << "[~, ~, slabelConfMap] = calcGC(im);";
             }
             else{
-                matlab << "slabelConfMap = panoramix_wrapper_gc(im, true);";
+                matlab << (std::string("slabelConfMap = panoramix_wrapper_gc(im, ") + (sceneClass == SceneClass::Outdoor ? "true" : "false") + ");");
             }
             ImageOfType<Vec<double, 7>> gc;
             matlab.GetVariable("slabelConfMap", gc);

@@ -1504,6 +1504,7 @@ namespace panoramix {
                     d.used = true;
                 }
             }
+            SetNecessaryConstraintWeightedAnchors(mg, *this);
         }
 
 
@@ -1642,12 +1643,12 @@ namespace panoramix {
                 }
                 auto as = extractor(mg, c.topo.hd);
                 assert(as.size() >= 1);
-                double fullWeight = c.data.length;
+                double fullWeight = c.data.length / M_PI * 20.0;
                 assert(fullWeight >= 0);
                 control.weightedAnchors.clear();
                 control.weightedAnchors.reserve(as.size());
                 for (const Point3 & anchor : as){
-                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / as.size())));
+                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / std::max(as.size(), 1ull))));
                 }
             }
             for (auto & c : mg.constraints<LineRelationData>()){
@@ -1662,7 +1663,7 @@ namespace panoramix {
                 control.weightedAnchors.clear();
                 control.weightedAnchors.reserve(as.size());
                 for (const Point3 & anchor : as){
-                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / as.size())));
+                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / std::max(as.size(), 1ull))));
                 }
             }
             for (auto & c : mg.constraints<RegionLineConnectionData>()){
@@ -1672,22 +1673,22 @@ namespace panoramix {
                 }
                 auto as = extractor(mg, c.topo.hd);
                 assert(as.size() >= 1);
-                double fullWeight = c.data.length;
+                double fullWeight = c.data.length / M_PI * 20.0;
                 assert(fullWeight >= 0);
                 control.weightedAnchors.clear();
                 control.weightedAnchors.reserve(as.size());
                 for (const Point3 & anchor : as){
-                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / as.size())));
+                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / std::max(as.size(), 1ull))));
                 }
             }
         }
 
 
-        void SetNecessaryConstraintWeighedAnchors(const RLGraph & mg, RLGraphControls & controls){
+        void SetNecessaryConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls){
             SetConstraintWeightedAnchors(mg, controls, ExtractNecessaryAnchorsForBinary());
         }
 
-        void SetFullConstraintWeighedAnchors(const RLGraph & mg, RLGraphControls & controls){
+        void SetFullConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls){
             SetConstraintWeightedAnchors(mg, controls, ExtractAllAnchorsForBinary());
         }
 
@@ -3750,6 +3751,9 @@ namespace panoramix {
             const RLGraphControls & controls,
             bool useWeights) {
 
+            assert(NumberOfComponentWeightedAnchors(controls) +
+                NumberOfComponentBoundedAnchors(controls) > 0);
+
             RLGraphVars vars = MakeVariables(mg, controls);
 
             SetClock();
@@ -3854,21 +3858,21 @@ namespace panoramix {
 
             for (auto & ct : controls.componentControls.data){
                 for (auto & c : ct){
-                    c.weightedAnchors.clear();
+                    c.boundedAnchors.clear();
                 }
             }
 
             for (auto & c : mg.components<RegionData>()){
                 for (auto & ps : c.data.normalizedContours){
                     for (auto & p : ps){
-                        controls[c.topo.hd].weightedAnchors.push_back(ScoreAs(p, 1.0));
+                        controls[c.topo.hd].boundedAnchors.push_back(BoundAs(p, 1.0, 10.0));
                     }
                 }
             }
 
             for (auto & c : mg.components<LineData>()){
-                controls[c.topo.hd].weightedAnchors.push_back(ScoreAs(c.data.line.first, 1.0));
-                controls[c.topo.hd].weightedAnchors.push_back(ScoreAs(c.data.line.second, 1.0));
+                controls[c.topo.hd].boundedAnchors.push_back(BoundAs(c.data.line.first, 1.0, 10.0));
+                controls[c.topo.hd].boundedAnchors.push_back(BoundAs(c.data.line.second, 1.0, 10.0));
             }
             
         }
@@ -3876,40 +3880,48 @@ namespace panoramix {
         void ResetToSampledArmorAnchors(const RLGraph & mg, RLGraphControls & controls, double sampleStepAngle){
             for (auto & ct : controls.componentControls.data){
                 for (auto & c : ct){
-                    c.weightedAnchors.clear();
+                    c.boundedAnchors.clear();
                 }
             }
-
             for (auto & c : mg.components<RegionData>()){
                 for (auto & ps : c.data.normalizedContours){
                     for (auto & p : ps){
-                        auto & wa = controls[c.topo.hd].weightedAnchors;
-                        if (!wa.empty()){
-                            if (AngleBetweenDirections(wa.back().component, p) >= sampleStepAngle){
-                                wa.push_back(ScoreAs(p, 1.0));
+                        auto & ba = controls[c.topo.hd].boundedAnchors;
+                        if (!ba.empty()){
+                            if (AngleBetweenDirections(ba.back().component, p) >= sampleStepAngle){
+                                ba.push_back(BoundAs(p, 1.0, 10.0));
                             }
                             else{
                                 continue;
                             }
                         }
                         else{
-                            wa.push_back(ScoreAs(p, 1.0));
+                            ba.push_back(BoundAs(p, 1.0, 10.0));
                         }
                     }
                 }
             }
-
             for (auto & c : mg.components<LineData>()){
-                controls[c.topo.hd].weightedAnchors.push_back(ScoreAs(c.data.line.first, 1.0));
-                controls[c.topo.hd].weightedAnchors.push_back(ScoreAs(c.data.line.second, 1.0));
+                controls[c.topo.hd].boundedAnchors.push_back(BoundAs(c.data.line.first, 1.0, 10.0));
+                controls[c.topo.hd].boundedAnchors.push_back(BoundAs(c.data.line.second, 1.0, 10.0));
             }
         }
 
 
 
-        RLGraphVars SolveVariablesBoundComponentAnchors(const RLGraph & mg, const RLGraphControls & controls,
+        RLGraphVars SolveVariablesWithBoundedAnchors(const RLGraph & mg, const RLGraphControls & controls,
             bool useWeights, int tryNum){
+
+            assert(tryNum > 0);
             
+            int n1 = NumberOfComponentWeightedAnchors(controls);
+            int n2 = NumberOfComponentBoundedAnchors(controls);
+            int n3 = NumberOfConstraintWeightedAnchors(controls);
+            int n4 = NumberOfConstraintBoundedAnchors(controls);
+
+            assert(NumberOfComponentWeightedAnchors(controls) + 
+                NumberOfComponentBoundedAnchors(controls) > 0);
+
             RLGraphVars vars = MakeVariables(mg, controls);
 
             SetClock();
@@ -4016,14 +4028,13 @@ namespace panoramix {
                 const RLGraphControls & controls,
                 const double * Xdata,
                 const RLGraphComponentTable<int> & uh2varStartPosition,
-                const RLGraphConstraintTable<int> & bh2consStartPosition,
+                const RLGraphComponentTable<int> & uh2eqStartPosition,
                 std::vector<SparseMatElementT> & compDtriplets){
 
                 for (auto & c : mg.components<ComponentDataT>()){
                     if (!controls[c.topo.hd].used)
                         continue;
                     auto uh = c.topo.hd;
-                    int uhVarNum = vars[uh].variables.size();
                     int uhVarStartPosition = uh2varStartPosition.at(uh);
                     int eid = uh2eqStartPosition[uh];
                     // fill weighted anchors
@@ -4046,12 +4057,12 @@ namespace panoramix {
                 const RLGraphControls & controls,
                 const double * Xdata,
                 const RLGraphComponentTable<int> & uh2varStartPosition,
-                const RLGraphConstraintTable<int> & bh2consStartPosition,
+                const RLGraphComponentTable<int> & uh2eqStartPosition,
                 std::vector<SparseMatElementT> & compDtriplets){
-                FillCertainComponentAnchorDepthMatrix<RegionData>(mg, controsl, Xdata, 
-                    uh2varStartPosition, bh2consStartPosition, compDtriplets);
-                FillCertainComponentAnchorDepthMatrix<LineData>(mg, controsl, Xdata,
-                    uh2varStartPosition, bh2consStartPosition, compDtriplets);
+                FillCertainComponentAnchorDepthMatrix<RegionData>(mg, controls, Xdata, 
+                    uh2varStartPosition, uh2eqStartPosition, compDtriplets);
+                FillCertainComponentAnchorDepthMatrix<LineData>(mg, controls, Xdata,
+                    uh2varStartPosition, uh2eqStartPosition, compDtriplets);
             }
 
 
@@ -4195,7 +4206,7 @@ namespace panoramix {
                 consD1triplets.clear();
                 consD2triplets.clear();
                 FillComponentAnchorDepthMatrix(mg, controls, Xdata.data(), 
-                    uh2varStartPosition, bh2eqStartPosition, compDtriplets);
+                    uh2varStartPosition, uh2eqStartPosition, compDtriplets);
                 FillConstriantAnchorDepthMatrix(mg, controls, Xdata.data(), 
                     uh2varStartPosition, bh2eqStartPosition, consD1triplets, consD2triplets);
 

@@ -255,13 +255,5 @@ namespace panoramix {
 
 
 
-
-        void AttachGeometricContextConstraintsSmarter(const RLGraph & mg, RLGraphControls & controls,
-            const PerspectiveCamera & pcam, const ImageOfType<Vec<double, 5>> & gc){
-
-
-
-        }
-
     }
 }

@@ -228,28 +228,28 @@ public:
 
                 mg = std::move(mgs[i]);
                 controls = std::move(cs[i]);
-
-                if (!AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls, 1.0, 1.0))
+                                
+                if (!AttachWeightedAnchorToCenterOfLargestRegionIfNoExists(mg, controls, 1.0, 1.0))
                     continue;
 
                 ResetToSampledArmorAnchors(mg, controls, 0.1);
-                vars = SolveVariablesBoundComponentAnchors(mg, controls, false, false, 1.0, 5.0, 100);
+                vars = SolveVariablesWithoutBoundedAnchors(mg, controls);
                 NormalizeVariables(mg, controls, vars);
                 std::cout << "score = " << Score(mg, controls, vars) << std::endl;
 
                 LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
-                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls))
+                if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                     continue;
 
                 
-                vars = SolveVariablesBoundComponentAnchors(mg, controls, false, false, 1.0, 5.0, 100);
+                vars = SolveVariablesWithoutBoundedAnchors(mg, controls);
                 NormalizeVariables(mg, controls, vars);
 
                 AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
 
-                if (!AttachAnchorToCenterOfLargestRegionIfNoAnchorExists(mg, controls))
+                if (!AttachWeightedAnchorToCenterOfLargestRegionIfNoExists(mg, controls))
                     continue;
-                vars = SolveVariablesBoundComponentAnchors(mg, controls, false, false, 1.0, 5.0, 100);
+                vars = SolveVariablesWithoutBoundedAnchors(mg, controls);
                 NormalizeVariables(mg, controls, vars);
             }
 
@@ -450,7 +450,7 @@ public:
 
             auto ccids = MakeHandledTableForAllComponents(mg, -1);
             int ccnum = ConnectedComponents(mg, controls, ccids, [](const RLGraphConstraintControl & c){
-                return c.used && c.weight > 0;
+                return c.used && c.weightedAnchors.size() > 0;
             });
             RLGraphOldToNew old2new;
             auto mgs = Decompose(mg, ccids, ccnum, &old2new);
@@ -478,10 +478,10 @@ public:
                 mg = std::move(mgs[i]);
                 controls = std::move(cs[i]);
 
-                if (!AttachAnchorToCenterOfLargestLineIfNoAnchorExists(mg, controls, 1.0, 1.0))
+                if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls, 1.0, 1.0))
                     continue;
 
-                vars = SolveVariablesBoundComponentAnchors(mg, controls, false, true, 1.0, 5.0, 100);
+                vars = SolveVariablesWithoutBoundedAnchors(mg, controls);
                 NormalizeVariables(mg, controls, vars);
                 std::cout << "score = " << Score(mg, controls, vars) << std::endl;
             }

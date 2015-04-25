@@ -3,19 +3,36 @@
 
 #include "../core/basic_types.hpp"
 
-
 namespace panoramix {
     namespace misc {
+
+        struct AnyPtr {
+            uintptr_t data;
+            AnyPtr() : data(0) {}
+            template <class T> AnyPtr(T * d) : data(static_cast<uintptr_t>(d)) {}
+            template <class T> operator T* () const { return static_cast<T*>(data); }
+            bool operator == (nullptr_t) const { return data == 0; }
+            bool operator != (nullptr_t) const { return data != 0; }
+        };
+
+
+        using MXAPtr = AnyPtr;
+
 
         using CVInputArray = cv::InputArray;
         using CVOutputArray = cv::OutputArray;
 
+
         class Matlab {
         public:
             static bool IsBuilt();
+
+            static bool StartEngine();
+            static void CloseEngine();
+            static bool EngineStarted();
+
             static std::string DefaultCodeDir();
 
-            static bool IsUsable();
             static bool RunScript(const char * cmd);
             static bool RunScript(const std::string & cmd) { return RunScript(cmd.data()); }
             static const char * LastMessage();
@@ -48,6 +65,8 @@ namespace panoramix {
             }           
 
         public:
+            Matlab() { StartEngine(); }
+            ~Matlab() { CloseEngine(); }
             inline Matlab & operator << (const std::string & cmd) { 
                 RunScript(cmd);
                 return *this;

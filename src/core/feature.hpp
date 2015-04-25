@@ -11,6 +11,10 @@ namespace panoramix {
     namespace core { 
 
 
+        class PerspectiveCamera;
+        class PanoramicCamera;
+
+
         // non maxima suppression
         void NonMaximaSuppression(const Image & src, Image & dst, int sz = 50,
             std::vector<PixelLoc> * pixels = nullptr,
@@ -88,6 +92,15 @@ namespace panoramix {
         int NearestDirectionId(const std::vector<Vec3> & directions,
             const Vec3 & verticalSeed = Vec3(0, 0, 1));
 
+
+        // estimate vanishing points
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const PerspectiveCamera & cams,
+            std::vector<Classified<Line2>> & lineSegments);
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
+            std::vector<std::vector<Classified<Line2>>> & lineSegments);
+
+
+
         // compute pp and focal from 3 orthogonal vps
         std::pair<Point2, double> ComputePrinciplePointAndFocalLength(const Point2 & vp1, const Point2 & vp2, const Point2 & vp3);
 
@@ -147,7 +160,6 @@ namespace panoramix {
 
 
         // segmentation
-        class PanoramicCamera;
         class SegmentationExtractor {
         public:
             using Feature = Imagei; // CV_32SC1
@@ -194,12 +206,19 @@ namespace panoramix {
 
 
 
+        Imagei ComputeOrientationMaps(const std::vector<Classified<Line2>> & lines,
+            const std::vector<HPoint2> & vps, const SizeI & imSize);
+
+
 
         /// geometric context estimator
         enum class SceneClass {
             Indoor,
             Outdoor
         };
+
+        ImageOfType<Vec<double, 7>> ComputeGeometricContext(const Image & im, SceneClass sceneClass, 
+            bool useHedauForIndoor = false);
 
         class GeometricContextEstimator {
         public:
