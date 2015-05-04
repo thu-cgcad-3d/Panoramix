@@ -57,6 +57,7 @@ namespace panoramix {
                 _exist = false;
                 return e ? std::move(_temp) : std::forward<TT>(defaultValue);
             }
+            inline operator T() { return unwrap(); }
 
         private:
             bool _exist;

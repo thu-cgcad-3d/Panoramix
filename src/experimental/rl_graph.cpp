@@ -8,7 +8,7 @@ extern "C" {
 #include <GCoptimization.h>
 
 
-#include "../misc/matlab.hpp"
+#include "../misc/matlab_engine.hpp"
 #include "../misc/eigen.hpp"
 
 //
@@ -3953,7 +3953,7 @@ namespace panoramix {
             SparseMatd W = MakeSparseMatFromElements(consNum, consNum, Wtriplets.begin(), Wtriplets.end());
 
             bool succeed = true;
-            misc::Matlab matlab;
+            misc::MatlabEngine matlab;
             matlab << "clear;";
             succeed = matlab.PutVariable("A", A);
             succeed = matlab.PutVariable("W", W);
@@ -4160,7 +4160,7 @@ namespace panoramix {
             SparseMatd W = MakeSparseMatFromElements(consNum, consNum, Wtriplets.begin(), Wtriplets.end());
 
             bool succeed = true;
-            misc::Matlab matlab;
+            misc::MatlabEngine matlab;
             matlab << "clear;";
             succeed = matlab.PutVariable("A", A);
             succeed = matlab.PutVariable("W", W);

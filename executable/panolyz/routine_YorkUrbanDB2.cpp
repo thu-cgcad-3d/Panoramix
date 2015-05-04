@@ -6,7 +6,7 @@
 #include "../../src/experimental/tools.hpp"
 #include "../../src/gui/visualize2d.hpp"
 #include "../../src/gui/visualizers.hpp"
-#include "../../src/misc/matlab.hpp"
+#include "../../src/misc/matlab_engine.hpp"
 #include "../../src/gui/singleton.hpp"
 #include "../../src/ml/factor_graph.hpp"
 
@@ -42,7 +42,7 @@ namespace panolyz {
                 std::string gcpath = base + "gc.mat";
 
                 Data gt;
-                misc::Matlab matlab;
+                misc::MatlabEngine matlab;
                 matlab << ("load(\'" + linespath + "\')");
 
                 DenseMatd linepts;
@@ -1381,7 +1381,7 @@ namespace panolyz {
 
         void SurfaceOrientationPrediction(const Preparation & p, const Config & config){
 
-            misc::Matlab matlab;
+            misc::MatlabEngine matlab;
             std::string tag = config.tag();
 
             auto view = p.view;
@@ -1634,7 +1634,7 @@ namespace panolyz {
             std::string name;
             name = "p1020171";
 
-            misc::Matlab matlab;
+            misc::MatlabEngine matlab;
             matlab.Load("F:\\DataSets\\YorkUrbanDB\\data\\names.mat");
             double dnum = 0;
             matlab << "num = length(names);";

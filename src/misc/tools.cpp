@@ -1,4 +1,4 @@
-#include "matlab.hpp"
+#include "matlab_engine.hpp"
 #include "tools.hpp"
 
 namespace panoramix {
@@ -10,7 +10,7 @@ namespace panoramix {
 
                 GroundTruth LoadGroundTruth(const std::string & camParams){
                     GroundTruth gt;
-                    Matlab matlab;
+                    MatlabEngine matlab;
                     matlab << ("temp = load('" + camParams + "');");
                     matlab << "temp = temp.vp_orthogonal;";
                     matlab.GetVariable("temp", gt.vp_orthogonal);

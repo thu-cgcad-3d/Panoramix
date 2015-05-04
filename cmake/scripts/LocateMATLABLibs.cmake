@@ -12,6 +12,7 @@ find_package(MATLAB REQUIRED)
 #  MATLAB_ROOT: path to Matlab's root directory
 list (APPEND MATLAB_INCLUDES ${MATLAB_INCLUDE_DIR})
 list (APPEND MATLAB_LIBS ${MATLAB_LIBRARIES})
+list (APPEND MATLAB_LIBS ${MATLAB_MAT_LIBRARY})
 endif ()
 
 foreach (i ${MATLAB_INCLUDES})

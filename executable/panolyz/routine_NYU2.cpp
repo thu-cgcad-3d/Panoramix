@@ -6,7 +6,7 @@
 #include "../../src/experimental/tools.hpp"
 #include "../../src/gui/visualize2d.hpp"
 #include "../../src/gui/visualizers.hpp"
-#include "../../src/misc/matlab.hpp"
+#include "../../src/misc/matlab_engine.hpp"
 #include "../../src/gui/singleton.hpp"
 #include "../../src/ml/factor_graph.hpp"
 
@@ -63,8 +63,8 @@ namespace panolyz {
         void ForEachCase(FunT && fun){
 
             // load test data
-            misc::Matlab::CDAndAddAllSubfolders(nyu2dir);
-            misc::Matlab matlab;
+            misc::MatlabEngine::CDAndAddAllSubfolders(nyu2dir);
+            misc::MatlabEngine matlab;
 
             // get camera params
             matlab << "camera_params;";

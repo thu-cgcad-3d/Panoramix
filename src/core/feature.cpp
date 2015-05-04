@@ -20,7 +20,7 @@ extern "C" {
 #include "containers.hpp"
 #include "clock.hpp"
 
-#include "../misc/matlab.hpp"
+#include "../misc/matlab_engine.hpp"
 #include "../misc/eigen.hpp"
 
 
@@ -29,7 +29,7 @@ extern "C" {
 namespace panoramix {
     namespace core {
 
-        using misc::Matlab;
+        using misc::MatlabEngine;
 
 #pragma region NonMaximaSuppression
 
@@ -1421,8 +1421,8 @@ namespace panoramix {
                 return std::move(results);
             }
             else if (_params.algorithm == MATLAB_PanoContext){
-                assert(Matlab::IsBuilt());
-                Matlab matlab;
+                assert(MatlabEngine::IsBuilt());
+                MatlabEngine matlab;
                 // install lines
                 Imaged linesData(lines.size(), 4);
                 for (int i = 0; i < lines.size(); i++){
@@ -1431,16 +1431,16 @@ namespace panoramix {
                     linesData(i, 2) = lines[i].second[0];
                     linesData(i, 3) = lines[i].second[1];
                 }
-                Matlab::PutVariable("linesData", linesData);
-                Matlab::PutVariable("projCenter", projCenter);
+                MatlabEngine::PutVariable("linesData", linesData);
+                MatlabEngine::PutVariable("projCenter", projCenter);
                 // convert to struct array
                 matlab << "[vp, f, lineclasses] = panoramix_wrapper_vpdetection(linesData, projCenter');";
                 Imaged vpData;
                 Imaged focal;
                 Imaged lineClassesData;
-                Matlab::GetVariable("vp", vpData, false);
-                Matlab::GetVariable("f", focal, false);
-                Matlab::GetVariable("lineclasses", lineClassesData, false);
+                MatlabEngine::GetVariable("vp", vpData, false);
+                MatlabEngine::GetVariable("f", focal, false);
+                MatlabEngine::GetVariable("lineclasses", lineClassesData, false);
                 if (!(vpData.cols == 2 && vpData.rows == 3)){
                     return nullptr;
                 }
@@ -1457,7 +1457,7 @@ namespace panoramix {
                 return std::make_tuple(std::move(vps), focal(0), std::move(lineClasses));
             }
             else if (_params.algorithm == MATLAB_Tardif){
-                assert(Matlab::IsBuilt());
+                assert(MatlabEngine::IsBuilt());
                 // install lines
                 Imaged linesData(lines.size(), 5);
                 for (int i = 0; i < lines.size(); i++){
@@ -1467,7 +1467,7 @@ namespace panoramix {
                     linesData(i, 3) = lines[i].second[1];
                     linesData(i, 4) = 1.0;
                 }
-                //Matlab::PutVariable("linesData", linesData);
+                //MatlabEngine::PutVariable("linesData", linesData);
                 NOT_IMPLEMENTED_YET();
             }
             else /*if (_params.algorithm == TardifSimplified)*/{
@@ -3040,7 +3040,7 @@ namespace panoramix {
 
 
         ImageOfType<Vec<double, 7>> ComputeGeometricContext(const Image & im, SceneClass sceneClass, bool useHedauForIndoor){
-            Matlab matlab;
+            MatlabEngine matlab;
             matlab.PutVariable("im", im);
             if (sceneClass == SceneClass::Indoor && useHedauForIndoor){
                 matlab << "[~, ~, slabelConfMap] = calcGC(im);";

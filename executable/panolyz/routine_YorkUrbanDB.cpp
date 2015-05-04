@@ -4,7 +4,7 @@
 #include "../../src/experimental/tools.hpp"
 #include "../../src/gui/visualize2d.hpp"
 #include "../../src/gui/visualizers.hpp"
-#include "../../src/misc/matlab.hpp"
+#include "../../src/misc/matlab_engine.hpp"
 
 #include "routines.hpp"
 
@@ -37,7 +37,7 @@ namespace panolyz {
                 std::string gcpath = base + "gc.mat";
 
                 Data gt;
-                misc::Matlab matlab;
+                misc::MatlabEngine matlab;
                 matlab << ("load(\'" + linespath + "\')");
 
                 DenseMatd linepts;
@@ -389,7 +389,7 @@ namespace panolyz {
             std::string name;
             name = "p1020171";
 
-            misc::Matlab matlab;
+            misc::MatlabEngine matlab;
             matlab.Load("F:\\DataSets\\YorkUrbanDB\\data\\names.mat");
             double dnum = 0;
             matlab << "num = length(names);";
