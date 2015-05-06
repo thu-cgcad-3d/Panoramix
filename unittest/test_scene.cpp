@@ -76,7 +76,7 @@ TEST(Scene, LayeredShape3){
     };
     ls.normal = Vec3(0, 0, 1);
     
-    gui::ResourceStore::set("texture", cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
+    gui::ResourceStore::set("texture", core::ImageRead(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
     SceneBuilder().begin(ls)
         .resource("texture").shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
         .end()
@@ -92,7 +92,7 @@ TEST(Scene, Interaction){
     core::Line3 ll[] = { { core::Point3(-1, 1, 2), core::Point3(1, -1, 0) }, { core::Point3(0, 2, 3), core::Point3(-1, -2, -3) } };
     core::Point3 pp[] = { core::Point3(-3, 1, 3), core::Point3(10, -2, -4) };
     
-    gui::ResourceStore::set("texture", cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
+    gui::ResourceStore::set("texture", core::ImageRead(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
 
     int clickedCount = 0;
     SceneBuilder()

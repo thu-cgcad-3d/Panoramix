@@ -564,7 +564,7 @@ namespace panoramix {
         SceneObjectMeshTriangle Scene::pickTriangleOnScreen(const RenderOptions & options,
             const core::Point2 & pOnScreen) const {
 
-            Ray3 centerRay(options.camera().eye(), normalize(options.camera().spatialDirection(pOnScreen)));
+            Ray3 centerRay(options.camera().eye(), normalize(options.camera().toSpace(pOnScreen)));
 
             Box3 bboxAll = boundingBox();
             auto bballAll = bboxAll.outerSphere();
@@ -631,7 +631,7 @@ namespace panoramix {
         SceneObjectMeshLine Scene::pickLineOnScreen(const RenderOptions & options,
             const core::Point2 & pOnScreen) const {
 
-            Ray3 centerRay(options.camera().eye(), normalize(options.camera().spatialDirection(pOnScreen)));
+            Ray3 centerRay(options.camera().eye(), normalize(options.camera().toSpace(pOnScreen)));
 
             Box3 bboxAll = boundingBox();
             auto bballAll = bboxAll.outerSphere();
@@ -666,7 +666,7 @@ namespace panoramix {
                     vo->mesh().fetchLineVerts(m.second, v1, v2);
                     Line3 lineInst(transformedVertPositions[v1], transformedVertPositions[v2]);
                     auto np = DistanceBetweenTwoLines(lineSegment, lineInst).second.second.position;
-                    auto npOnScreen = options.camera().screenProjection(np); ///// test
+                    auto npOnScreen = options.camera().toScreen(np); ///// test
                     if (!options.camera().isVisibleOnScreen(np))
                         return true;
                     double distance = Distance(npOnScreen, pOnScreen);
@@ -696,7 +696,7 @@ namespace panoramix {
         SceneObjectMeshPoint Scene::pickPointOnScreen(const RenderOptions & options,
             const core::Point2 & pOnScreen) const {
 
-            Ray3 centerRay(options.camera().eye(), normalize(options.camera().spatialDirection(pOnScreen)));
+            Ray3 centerRay(options.camera().eye(), normalize(options.camera().toSpace(pOnScreen)));
 
             Box3 bboxAll = boundingBox();
             auto bballAll = bboxAll.outerSphere();
@@ -728,7 +728,7 @@ namespace panoramix {
                     }
                     TriMesh::VertHandle v = m.second;
                     Point3 point = transformedVertPositions.at(v);
-                    auto npOnScreen = options.camera().screenProjection(point); ///// test
+                    auto npOnScreen = options.camera().toScreen(point); ///// test
                     if (!options.camera().isVisibleOnScreen(point))
                         return true;
                     double distance = Distance(npOnScreen, pOnScreen);

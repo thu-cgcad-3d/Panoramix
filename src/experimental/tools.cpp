@@ -21,20 +21,20 @@ namespace panoramix {
                 };
 
                 auto sppCallbackFun = [&controls, &mg, &uhClicked](gui::InteractionID iid,
-                    const std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>> & spp) {
-                    std::cout << (spp.first.isRegion ? "Region" : "Line") << spp.first.handleID << std::endl;
-                    if (spp.first.isRegion){
-                        uhClicked(RegionHandle(spp.first.handleID));
+                    const core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, ComponentID> & spp) {
+                    std::cout << (spp.decoration.isRegion ? "Region" : "Line") << spp.decoration.handleID << std::endl;
+                    if (spp.decoration.isRegion){
+                        uhClicked(RegionHandle(spp.decoration.handleID));
                     }
                     else {
-                        uhClicked(LineHandle(spp.first.handleID));
+                        uhClicked(LineHandle(spp.decoration.handleID));
                     }
                 };
 
                 gui::ResourceStore::set("texture", panorama);
 
                 viz.installingOptions().discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
-                std::vector<std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>>> spps;
+                std::vector<core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, ComponentID>> spps;
                 std::vector<gui::Colored<core::Line3>> lines;
 
                 for (auto & c : mg.components<RegionData>()){
@@ -58,7 +58,7 @@ namespace panoramix {
                         WARNNING("inf plane");
                         continue;
                     }
-                    spps.emplace_back(ComponentID{ uh.id, true }, std::move(gui::ColorAs(spp, uhColorizer(uh))));
+                    spps.push_back(core::DecorateAs(std::move(gui::ColorAs(spp, uhColorizer(uh))), ComponentID{ uh.id, true }));
                 }
 
                 for (auto & c : mg.components<LineData>()){

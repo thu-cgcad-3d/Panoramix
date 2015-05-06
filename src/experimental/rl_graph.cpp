@@ -490,7 +490,7 @@ namespace panoramix {
 
             std::vector<HPoint2> vps2d(vps.size());
             for (int i = 0; i < vps.size(); i++){
-                vps2d[i] = cam.screenProjectionInHPoint(vps[i]);
+                vps2d[i] = cam.toScreenInHPoint(vps[i]);
             }
             LinesGraph2D graph2d = CreateLinesGraph2D(lineSegments, vps2d, 
                 cam.focal() * intersectionAngleThreshold,
@@ -511,8 +511,8 @@ namespace panoramix {
                 auto & ld2d = l2d.data;
                 LineData ld;
                 ld.initialClaz = ld2d.claz;
-                ld.line.first = normalize(cam.spatialDirection(ld2d.line.first));
-                ld.line.second = normalize(cam.spatialDirection(ld2d.line.second));
+                ld.line.first = normalize(cam.toSpace(ld2d.line.first));
+                ld.line.second = normalize(cam.toSpace(ld2d.line.second));
                 lh2dToLh[l2d.topo.hd] = mg.addComponent(std::move(ld));
                 newLineHandles.insert(lh2dToLh[l2d.topo.hd]);
             }
@@ -522,7 +522,7 @@ namespace panoramix {
                 LineRelationData rd;
                 rd.type = rd2d.type;
                 rd.junctionWeight = rd2d.junctionWeight;
-                rd.normalizedRelationCenter = normalize(cam.spatialDirection(rd2d.relationCenter));
+                rd.normalizedRelationCenter = normalize(cam.toSpace(rd2d.relationCenter));
                 mg.addConstraint(std::move(rd), lh2dToLh.at(r2d.topo.lowers.front()), lh2dToLh.at(r2d.topo.lowers.back()));
             }
 
@@ -641,7 +641,7 @@ namespace panoramix {
                     for (int k = 0; k < contours.size(); k++){
                         rd.normalizedContours[k].reserve(contours[k].size());
                         for (auto & p : contours[k]){
-                            rd.normalizedContours[k].push_back(normalize(cam.spatialDirection(p)));
+                            rd.normalizedContours[k].push_back(normalize(cam.toSpace(p)));
                             center += rd.normalizedContours[k].back();
                         }
                     }
@@ -698,7 +698,7 @@ namespace panoramix {
                     directions.reserve(ElementsNum(contours));
                     for (auto & cs : contours){
                         for (auto & c : cs){
-                            directions.push_back(normalize(cam.spatialDirection(c)));
+                            directions.push_back(normalize(cam.toSpace(c)));
                             centerDirection += directions.back();
                         }
                     }
@@ -745,7 +745,7 @@ namespace panoramix {
                     for (int k = 0; k < contours.size(); k++){
                         rd.normalizedContours[k].reserve(contours[k].size());
                         for (auto & p : contours[k]){
-                            rd.normalizedContours[k].push_back(normalize(sCam.spatialDirection(p)));
+                            rd.normalizedContours[k].push_back(normalize(sCam.toSpace(p)));
                             center += rd.normalizedContours[k].back();
                         }
                         std::vector<Point2f> contourf(contours[k].size());
@@ -778,7 +778,7 @@ namespace panoramix {
 
                 for (auto & ld : mg.components<LineData>()){
                     auto & line = ld.data.line;
-                    Line2 line2(cam.screenProjection(line.first), cam.screenProjection(line.second));
+                    Line2 line2(cam.toScreen(line.first), cam.toScreen(line.second));
                     Vec2 vertToLineDir = normalize(PerpendicularDirection(line2.direction())); // vertical to this line
                     double stepOnImage = std::max(cam.focal() * samplingStepAngleOnLine, 0.5);
                     if (SampleLineOnImage){
@@ -814,7 +814,7 @@ namespace panoramix {
                             }
                             for (int regionId : connectedRegionIds){
                                 RegionLineConnectionData & rd = regionLineConnections[std::make_pair(regionHandles[regionId], ld.topo.hd)];
-                                rd.normalizedAnchors.push_back(normalize(cam.spatialDirection(sampleP)));
+                                rd.normalizedAnchors.push_back(normalize(cam.toSpace(sampleP)));
                                 rd.detachable = !(Contains(abitFarLeftRightRegionIds[0], regionId) && Contains(abitFarLeftRightRegionIds[1], regionId));
                             }
                         }
@@ -827,7 +827,7 @@ namespace panoramix {
                             Vec3 sample = RotateDirection(line.first, line.second, angle);
                             if (!cam.isVisibleOnScreen(sample))
                                 continue;
-                            Point2 sampleP = cam.screenProjection(sample);
+                            Point2 sampleP = cam.toScreen(sample);
                             PixelLoc originalP = ToPixelLoc(sampleP);
                             // collect neighbors
                             std::set<int> connectedRegionIds;
@@ -894,7 +894,7 @@ namespace panoramix {
                                 for (RegionLineConnectionHandle rlcon : mg.topo(rh).constraints<RegionLineConnectionData>()){
                                     LineHandle lh = mg.topo(rlcon).component<1>();
                                     const Line3 & line = mg.data(lh).line;
-                                    Line2 line2(cam.screenProjection(line.first), cam.screenProjection(line.second));
+                                    Line2 line2(cam.toScreen(line.first), cam.toScreen(line.second));
                                     double d = DistanceFromPointToLine(vec_cast<double>(p), line2).first;
                                     if (d < samplerSizeOnLine || d < samplerSizeOnBoundary){
                                         coveredByLine = true;
@@ -922,7 +922,7 @@ namespace panoramix {
                     for (int k = 0; k < edges.size(); k++){
                         bd.normalizedEdges[k].reserve(edges[k].size());
                         for (auto & p : edges[k]){
-                            bd.normalizedEdges[k].push_back(normalize(cam.spatialDirection(p)));
+                            bd.normalizedEdges[k].push_back(normalize(cam.toSpace(p)));
                         }
                     }
 
@@ -1003,7 +1003,7 @@ namespace panoramix {
                 auto & contourProj = contourProjs[k];
                 contourProj.reserve(contours[k].size());
                 for (auto & d : contours[k]){
-                    contourProj.push_back(vec_cast<int>(ppc.screenProjection(d)));
+                    contourProj.push_back(vec_cast<int>(ppc.toScreen(d)));
                 }
             }
             cv::fillPoly(mask, contourProjs, (uint8_t)1);
@@ -2346,15 +2346,15 @@ namespace panoramix {
                     auto & contourProj = contourProjs[k];
                     contourProj.reserve(contours[k].size());
                     for (auto & d : contours[k]){
-                        contourProj.push_back(vec_cast<int>(ppc.screenProjection(d)));
+                        contourProj.push_back(vec_cast<int>(ppc.toScreen(d)));
                     }
                 }
                 cv::fillPoly(mask, contourProjs, (uint8_t)1);
 
                 // intersection test
                 for (int i = 0; i < controls.vanishingPoints.size(); i++){
-                    auto p1 = ToPixelLoc(ppc.screenProjection(controls.vanishingPoints[i]));
-                    auto p2 = ToPixelLoc(ppc.screenProjection(-controls.vanishingPoints[i]));
+                    auto p1 = ToPixelLoc(ppc.toScreen(controls.vanishingPoints[i]));
+                    auto p2 = ToPixelLoc(ppc.toScreen(-controls.vanishingPoints[i]));
 
                     int dilateSize = ppcFocal * rangeAngle;
                     bool intersected = false;
@@ -2712,7 +2712,7 @@ namespace panoramix {
         //            auto & contourProj = contourProjs[k];
         //            contourProj.reserve(contours[k].size());
         //            for (auto & d : contours[k]){
-        //                contourProj.push_back(vec_cast<int>(ppc.screenProjection(d)));
+        //                contourProj.push_back(vec_cast<int>(ppc.toScreen(d)));
         //            }
         //        }
         //        cv::fillPoly(mask, contourProjs, (uint8_t)1);

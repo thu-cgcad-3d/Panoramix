@@ -209,6 +209,8 @@ namespace panoramix {
         template <class T>
         inline Canvas<T> AsCanvas(ImageOfType<T> && im) { return Canvas<T>(std::move(im)); }
 
+        template <class T>
+        inline Canvas<T> MakeCanvas(const ImageOfType<T> & im) { return Canvas<T>(im.clone()); }
 
     }
 }

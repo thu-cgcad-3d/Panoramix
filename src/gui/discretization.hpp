@@ -181,9 +181,9 @@ namespace panoramix {
             Discretize(mesh, c.component, oo);
         }
 
-        template <class AttachedT, class T>
-        inline void Discretize(TriMesh & mesh, const std::pair<AttachedT, T> & p, const DiscretizeOptions & o){
-            Discretize(mesh, p.second, o);
+        template <class T, class D>
+        inline void Discretize(TriMesh & mesh, const core::Decorated<T, D> & d, const DiscretizeOptions & o){
+            Discretize(mesh, d.component, o);
         }
 
         template <class IteratorT>

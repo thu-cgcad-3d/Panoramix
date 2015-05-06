@@ -24,7 +24,7 @@ int main(int argc, char * argv[], char * envp[]) {
 
    testing::GTEST_FLAG(catch_exceptions) = false;
    testing::GTEST_FLAG(throw_on_failure) = true;
-   testing::GTEST_FLAG(filter) = "Matlab.*";
+   //testing::GTEST_FLAG(filter) = "Matlab.*";
    //testing::GTEST_FLAG(filter) = "BasicType.Line";
    //testing::GTEST_FLAG(filter) = "BasicType.VecCast";
    //testing::GTEST_FLAG(filter) = "MiscTest.Failable";  
@@ -42,10 +42,10 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = "Feature.SegmentationBoundaryJunction";
    //testing::GTEST_FLAG(filter) = "Serialization.Mex";
    //testing::GTEST_FLAG(filter) = "Engine.Batch";
-   //testing::GTEST_FLAG(filter) = "Camera.*";
+   testing::GTEST_FLAG(filter) = "Camera.*";
    //testing::GTEST_FLAG(filter) = "UtilTest.PlaneIntersection";
-   //testing::GTEST_FLAG(filter) = "Visualizer.LayeredShape3";
-
+   //testing::GTEST_FLAG(filter) = "Scene.LayeredShape3";
+   //testing::GTEST_FLAG(filter) = "Scene.Interaction";
    
    return RUN_ALL_TESTS();
 }

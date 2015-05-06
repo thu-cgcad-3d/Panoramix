@@ -54,7 +54,7 @@ TEST(MatlabEngine, ImageConversion){
         misc::MatlabEngine::Start();
         ASSERT_TRUE(misc::MatlabEngine::RunScript("x = 1;"));
 
-        auto image = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        auto image = core::ImageRead(ProjectDataDirStrings::Normal + "/75.jpg");
         ASSERT_TRUE(misc::MatlabEngine::PutVariable("im", image));
         ASSERT_TRUE(misc::MatlabEngine::RunScript("imshow(im);"));
         ASSERT_TRUE(misc::MatlabEngine::RunScript("im = horzcat(im * 0.5, im);"));

@@ -733,7 +733,7 @@ namespace panoramix {
             auto inters = ComputeLineIntersections(pureLines, nullptr, true, std::numeric_limits<double>::max());
             // insert line intersections
             for (auto & p : inters){
-                lineIntersections.push_back(normalize(cam.spatialDirection(p.value())));
+                lineIntersections.push_back(normalize(cam.toSpace(p.value())));
             }
 
             auto vanishingPoints = FindOrthogonalPrinicipleDirections(lineIntersections, 1000, 500, true).unwrap();
@@ -744,8 +744,8 @@ namespace panoramix {
             for (const auto & line : lineSegments) {
                 auto & p1 = line.component.first;
                 auto & p2 = line.component.second;
-                auto pp1 = cam.spatialDirection(p1);
-                auto pp2 = cam.spatialDirection(p2);
+                auto pp1 = cam.toSpace(p1);
+                auto pp2 = cam.toSpace(p2);
                 Classified<Line3> cline3;
                 cline3.claz = -1;
                 cline3.component = Line3{ pp1, pp2 };
@@ -780,7 +780,7 @@ namespace panoramix {
                 auto inters = ComputeLineIntersections(pureLines, nullptr, true, std::numeric_limits<double>::max());
                 // insert line intersections
                 for (auto & p : inters){
-                    lineIntersections.push_back(normalize(cams[i].spatialDirection(p.value())));
+                    lineIntersections.push_back(normalize(cams[i].toSpace(p.value())));
                 }
             }
 
@@ -793,8 +793,8 @@ namespace panoramix {
                 for (const auto & line : lineSegments[i]) {
                     auto & p1 = line.component.first;
                     auto & p2 = line.component.second;
-                    auto pp1 = cams[i].spatialDirection(p1);
-                    auto pp2 = cams[i].spatialDirection(p2);
+                    auto pp1 = cams[i].toSpace(p1);
+                    auto pp2 = cams[i].toSpace(p2);
                     Classified<Line3> cline3;
                     cline3.claz = -1;
                     cline3.component = Line3{ pp1, pp2 };
@@ -990,7 +990,7 @@ namespace panoramix {
 
                     for (auto & inter : intersections){
                         Vec3 dir(inter.numerator[0], inter.numerator[1], inter.denominator * fakeFocal);
-                        for (auto & p : { cam.screenProjection(dir), cam.screenProjection(-dir) }){
+                        for (auto & p : { cam.toScreen(dir), cam.toScreen(-dir) }){
                             int x = p[0], y = p[1];
                             if (x < 0) x = 0;
                             if (x >= votes.cols) x = votes.cols - 1;
@@ -1005,7 +1005,7 @@ namespace panoramix {
                     NonMaximaSuppression(votes, votes, 50, &points);
                     intersections.clear();
                     for (auto & p : points){
-                        Vec3 dir = cam.spatialDirection(p);
+                        Vec3 dir = cam.toSpace(p);
                         intersections.emplace_back(Point2(dir[0], dir[1]), dir[2] / fakeFocal);
                     }
 
@@ -1896,8 +1896,8 @@ namespace panoramix {
                 const std::vector<Line3> & lines, const PanoramicCamera & cam, bool useYUV){
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
-                auto direction1 = cam.spatialDirection(p1);
-                auto direction2 = cam.spatialDirection(p2);
+                auto direction1 = cam.toSpace(p1);
+                auto direction2 = cam.toSpace(p2);
                 for (int lineId : { linesOccupation(p1), linesOccupation(p2) }){
                     if (lineId >= 0){
                         auto & line = lines[lineId];
@@ -2134,7 +2134,7 @@ namespace panoramix {
                     std::vector<std::vector<PixelLoc>> pline(1);
                     for (double a = 0.0; a <= spanAngle; a += 0.01){
                         auto direction = RotateDirection(l.first, l.second, a);
-                        pline.front().push_back(ToPixelLoc(cam.screenProjection(direction)));
+                        pline.front().push_back(ToPixelLoc(cam.toScreen(direction)));
                     }                    
                     cv::polylines(linesOccupation, pline, false, i, 2);
                 }
@@ -3128,7 +3128,7 @@ namespace panoramix {
                 int sideVPid = NearestDirectionId(vps, hcams[i].leftward());
 
                 for (auto it = result.begin(); it != result.end(); ++it){
-                    auto gcPos = ToPixelLoc(hcams[i].screenProjection(camera.spatialDirection(it.pos())));
+                    auto gcPos = ToPixelLoc(hcams[i].toScreen(camera.toSpace(it.pos())));
                     if (!Contains(gc, gcPos))
                         continue;
                     auto & resultv = *it;

@@ -15,7 +15,7 @@ TEST(Feature, SegmentationExtractor) {
         p.minSize = 400;
         p.sigma = 1;
         core::SegmentationExtractor seg(p);
-        core::Image3ub im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        core::Image3ub im = core::ImageRead(ProjectDataDirStrings::Normal + "/75.jpg");
         gui::AsCanvas(im).show();
         auto segs = seg(im);
         gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
@@ -26,7 +26,7 @@ TEST(Feature, SegmentationExtractor) {
         p.minSize = 400;
         p.sigma = 1;
         core::SegmentationExtractor seg(p);
-        core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        core::Image im = core::ImageRead(ProjectDataDirStrings::Normal + "/75.jpg");
         auto segs = seg(im, { core::Line2({ 0.0, 0.0 }, core::Point2(im.cols, im.rows)), core::Line2(core::Point2(im.cols, 0), core::Point2(0, im.rows)) });
         gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
     }
@@ -35,7 +35,7 @@ TEST(Feature, SegmentationExtractor) {
         p.algorithm = core::SegmentationExtractor::SLIC;
         p.superpixelSizeSuggestion = 3000;
         core::SegmentationExtractor seg(p);
-        core::Image3ub im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        core::Image3ub im = core::ImageRead(ProjectDataDirStrings::Normal + "/75.jpg");
         gui::AsCanvas(im).show();
         auto segs = seg(im);
         gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
@@ -44,7 +44,7 @@ TEST(Feature, SegmentationExtractor) {
         core::SegmentationExtractor::Params p;
         p.algorithm = core::SegmentationExtractor::QuickShiftCPU;
         core::SegmentationExtractor seg(p);
-        core::Image3ub im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        core::Image3ub im = core::ImageRead(ProjectDataDirStrings::Normal + "/75.jpg");
         gui::AsCanvas(im).show();
         auto segs = seg(im);
         gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
@@ -53,7 +53,7 @@ TEST(Feature, SegmentationExtractor) {
 
 
 TEST(Feature, SegmentationBoundaryJunction){
-    core::Image im = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
+    core::Image im = core::ImageRead(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
     core::ResizeToMakeHeightUnder(im, 800);
     core::SegmentationExtractor::Params p;
     auto segs = core::SegmentationExtractor(p)(im, true);
@@ -71,7 +71,7 @@ TEST(Feature, SegmentationBoundaryJunction){
 
 
 TEST(Feature, SegmentationExtractorInPanorama){
-    core::Image im = cv::imread(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
+    core::Image im = core::ImageRead(ProjectDataDirStrings::PanoramaOutdoor + "/univ0.jpg");
     core::ResizeToMakeHeightUnder(im, 800);
     core::SegmentationExtractor::Params p;
     auto segs = core::SegmentationExtractor(p)(im, true);
@@ -81,7 +81,7 @@ TEST(Feature, SegmentationExtractorInPanorama){
 
 TEST(Feature, LineSegmentExtractor) {
     core::LineSegmentExtractor lineseg;
-    core::Image3ub im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
+    core::Image3ub im = core::ImageRead(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
     core::LineSegmentExtractor::Params params;
     params.algorithm = core::LineSegmentExtractor::LSD;
     core::LineSegmentExtractor lineseg2(params);
@@ -126,7 +126,7 @@ TEST(Feature, VanishingPointsDetector) {
 
     for (auto & filename : filenames){
         std::cout << "testing image file: " << filename << std::endl;
-        core::Image3ub im = cv::imread(ProjectDataDirStrings::Normal + "/" + filename);
+        core::Image3ub im = core::ImageRead(ProjectDataDirStrings::Normal + "/" + filename);
         core::ResizeToMakeWidthUnder(im, 400);
 
         std::vector<core::HPoint2> vps;
@@ -170,7 +170,7 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
     using namespace core;
 
     // forged experiment for panorama
-    core::Image3ub im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/14.jpg");
+    core::Image3ub im = core::ImageRead(ProjectDataDirStrings::PanoramaIndoor + "/14.jpg");
     core::ResizeToMakeWidthUnder(im, 2000);
     //gui::Visualizer2D(im) << gui::manip2d::Show();
 
@@ -189,8 +189,8 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
     std::vector<Classified<Line3>> line3s(line2s.size());
     std::vector<Vec3> line3norms(line2s.size());
     for (int i = 0; i < line2s.size(); i++) {
-        line3s[i].component.first = normalize(cam.spatialDirection(line2s[i].first));
-        line3s[i].component.second = normalize(cam.spatialDirection(line2s[i].second));
+        line3s[i].component.first = normalize(cam.toSpace(line2s[i].first));
+        line3s[i].component.second = normalize(cam.toSpace(line2s[i].second));
         line3norms[i] = line3s[i].component.first.cross(line3s[i].component.second);
         line3s[i].claz = abs(line3norms[i].dot(vp1)) < 0.006 ? 0 : -1;
     }
@@ -210,7 +210,7 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
             auto & n1 = line3norms[i];
             auto & n2 = line3norms[j];
             auto inter = n1.cross(n2);
-            auto interp = cam.screenProjection(inter);
+            auto interp = cam.toScreen(inter);
             double dd = 40;
             if (dist < dd &&
                 DistanceFromPointToLine(interp, line2s[i]).first < dd &&
@@ -243,7 +243,7 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
         auto & n1 = line3norms[op.first];
         auto & n2 = line3norms[op.second];
         auto inter = n1.cross(n2);
-        auto interp = cam.screenProjection(inter);
+        auto interp = cam.toScreen(inter);
         viz.color(gui::ColorTag::LightGray).thickness(1)
             .add(Line2(line2s[op.first].center(), interp))
             .add(Line2(line2s[op.second].center(), interp));
@@ -265,7 +265,7 @@ TEST(Feature, FeatureExtractor) {
     
     for (int i = 0; i < 4; i++) {
         std::string name = ProjectDataDirStrings::Normal + "/" + "sampled_" + std::to_string(i) + ".png";
-        core::Image3ub im = cv::imread(name);
+        core::Image3ub im = core::ImageRead(name);
         auto segs = segmenter(im);
         gui::AsCanvas(im).colorTable(gui::CreateRandomColorTableWithSize(segs.second))
             .add(segs.first)

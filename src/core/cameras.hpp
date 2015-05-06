@@ -9,13 +9,20 @@ namespace panoramix {
 
         
         // perspective camera
-        class GeneralPerspectiveCamera {
+        class PerspectiveCamera {
         public:
-            GeneralPerspectiveCamera() {}
-            explicit GeneralPerspectiveCamera(int w, int h,
+            PerspectiveCamera();
+            PerspectiveCamera(int w, int h);
+            PerspectiveCamera(int w, int h,
                 const Point2 & pp, const Vec2 & focalxy,
-                const Vec3 & eye = Vec3(0, 0, 0),
-                const Vec3 & center = Vec3(1, 0, 0),
+                const Point3 & eye = Point3(0, 0, 0),
+                const Point3 & center = Point3(1, 0, 0),
+                const Vec3 & up = Vec3(0, 0, -1),
+                double nearPlane = 0.01, double farPlane = 1e4);
+            PerspectiveCamera(int w, int h,
+                const Point2 & pp, double focal,
+                const Point3 & eye = Point3(0, 0, 0),
+                const Point3 & center = Point3(1, 0, 0),
                 const Vec3 & up = Vec3(0, 0, -1),
                 double nearPlane = 0.01, double farPlane = 1e4);
 
@@ -26,16 +33,19 @@ namespace panoramix {
             inline double aspect() const { return double(_screenW) / double(_screenH); }
             inline double focalX() const { return _focalxy[0]; }
             inline double focalY() const { return _focalxy[1]; }
-            inline const Vec3 & eye() const { return _eye; }
-            inline const Vec3 & center() const { return _center; }
+            inline double focal() const { assert(_focalxy[0] == _focalxy[1]); return _focalxy[0]; }
+            inline const Point3 & eye() const { return _eye; }
+            inline const Point3 & center() const { return _center; }
             inline const Vec3 & up() const { return _up; }
             inline double nearPlane() const { return _near; }
             inline double farPlane() const { return _far; }
-            Vec2 screenProjection(const Vec3 & p3d) const;
-            bool isVisibleOnScreen(const Vec3 & p3d) const;
-            HPoint2 screenProjectionInHPoint(const Vec3 & p3d) const;
-            Vec3 spatialDirection(const Vec2 & p2d) const;
-            inline Vec3 spatialDirection(const PixelLoc & p) const { return spatialDirection(Vec2(p.x, p.y)); }
+            Point2 toScreen(const Point3 & p3d) const;
+            bool isVisibleOnScreen(const Point3 & p3d) const;
+            HPoint2 toScreenInHPoint(const Point3 & p3d) const;
+            Point3 toSpace(const Point2 & p2d) const;
+            inline Point3 toSpace(const PixelLoc & p) const { return toSpace(Point2(p.x, p.y)); }
+            inline Vec3 direction(const Point2 & p2d) const { return toSpace(p2d) - _eye; }
+            inline Vec3 direction(const PixelLoc & p) const { return direction(p); }
 
             inline const Mat4 & viewMatrix() const { return _viewMatrix; }
             inline const Mat4 & projectionMatrix() const { return _projectionMatrix; }
@@ -46,8 +56,9 @@ namespace panoramix {
             void setPrinciplePoint(const Point2 & pp, bool updateMat = true);
             void setFocalX(double fx, bool updateMat = true);
             void setFocalY(double fy, bool updateMat = true);
-            void setEye(const Vec3 & e, bool updateMat = true);
-            void setCenter(const Vec3 & c, bool updateMat = true);
+            void setFocal(double f, bool updateMat = true);
+            void setEye(const Point3 & e, bool updateMat = true);
+            void setCenter(const Point3 & c, bool updateMat = true);
             void setUp(const Vec3 & up, bool updateMat = true);
             void setNearAndFarPlanes(double nearPlane, double farPlane, bool updateMat = true);
 
@@ -85,41 +96,28 @@ namespace panoramix {
         };
 
 
-        class PerspectiveCamera : public GeneralPerspectiveCamera {
-        public:
-            explicit PerspectiveCamera(int w = 500, int h = 500,
-                const Point2 & pp = Point2(250, 250), double focal = 250,
-                const Vec3 & eye = Vec3(0, 0, 0),
-                const Vec3 & center = Vec3(1, 0, 0),
-                const Vec3 & up = Vec3(0, 0, -1),
-                double nearPlane = 0.01, double farPlane = 1e4);
-
-        public:
-            inline double focal() const { return focalX(); }
-            inline void setFocal(double f) { setFocalX(f, false); setFocalY(f, false); updateMatrices(); }
-        };
-
-
 
         // panoramic camera
         class PanoramicCamera {
         public:
             explicit PanoramicCamera(double focal = 250,
-                const Vec3 & eye = Vec3(0, 0, 0),
-                const Vec3 & center = Vec3(1, 0, 0),
+                const Point3 & eye = Vec3(0, 0, 0),
+                const Point3 & center = Vec3(1, 0, 0),
                 const Vec3 & up = Vec3(0, 0, 1));
 
             inline SizeI screenSize() const { return SizeI(static_cast<int>(_focal * 2 * M_PI), static_cast<int>(_focal * M_PI)); }
             inline double focal() const { return _focal; }
-            inline const Vec3 & eye() const { return _eye; }
-            inline const Vec3 & center() const { return _center; }
+            inline const Point3 & eye() const { return _eye; }
+            inline const Point3 & center() const { return _center; }
             inline const Vec3 & up() const { return _up; }
-            Vec2 screenProjection(const Vec3 & p3d) const;
-            bool isVisibleOnScreen(const Vec3 & p3d) const { return true; }
-            inline HPoint2 screenProjectionInHPoint(const Vec3 & p3d) const { return HPoint2(screenProjection(p3d), 1.0); }
-            Vec3 spatialDirection(const Vec2 & p2d) const;
-            inline Vec3 spatialDirection(const PixelLoc & p) const { return spatialDirection(Vec2(p.x, p.y)); }
-            inline Vec3 spatialDirection(const HPoint2 & p) const { return spatialDirection(p.value()); }
+            Point2 toScreen(const Point3 & p3d) const;
+            bool isVisibleOnScreen(const Point3 & p3d) const { return true; }
+            inline HPoint2 toScreenInHPoint(const Point3 & p3d) const { return HPoint2(toScreen(p3d), 1.0); }
+            Point3 toSpace(const Point2 & p2d) const;
+            inline Point3 toSpace(const PixelLoc & p) const { return toSpace(Vec2(p.x, p.y)); }
+            inline Point3 toSpace(const HPoint2 & p) const { return toSpace(p.value()); }
+            Vec3 direction(const Point2 & p2d) const;
+            inline Vec3 direction(const PixelLoc & p) const { return direction(p); }
 
         private:
             double _focal;
@@ -139,22 +137,23 @@ namespace panoramix {
         class PartialPanoramicCamera {
         public:
             explicit PartialPanoramicCamera(int w = 500, int h = 500, double focal = 250,
-                const Vec3 & eye = Vec3(0, 0, 0),
-                const Vec3 & center = Vec3(1, 0, 0),
+                const Point3 & eye = Vec3(0, 0, 0),
+                const Point3 & center = Vec3(1, 0, 0),
                 const Vec3 & up = Vec3(0, 0, -1));
             explicit PartialPanoramicCamera(const PanoramicCamera & panoCam, int w = 500, int h = 500);
 
             inline SizeI screenSize() const { return Size(static_cast<int>(_screenW), static_cast<int>(_screenH)); }
             inline double focal() const { return _focal; }
-            inline const Vec3 & eye() const { return _eye; }
-            inline const Vec3 & center() const { return _center; }
+            inline const Point3 & eye() const { return _eye; }
+            inline const Point3 & center() const { return _center; }
             inline const Vec3 & up() const { return _up; }
-            Vec2 screenProjection(const Vec3 & p3d) const;
-            bool isVisibleOnScreen(const Vec3 & p3d) const;
-            inline HPoint2 screenProjectionInHPoint(const Vec3 & p3d) const { return HPoint2(screenProjection(p3d), 1.0); }
-            Vec3 spatialDirection(const Vec2 & p2d) const;
-            inline Vec3 spatialDirection(const PixelLoc & p) const { return spatialDirection(Vec2(p.x, p.y)); }
-
+            Point2 toScreen(const Point3 & p3d) const;
+            bool isVisibleOnScreen(const Point3 & p3d) const;
+            inline HPoint2 toScreenInHPoint(const Point3 & p3d) const { return HPoint2(toScreen(p3d), 1.0); }
+            Point3 toSpace(const Point2 & p2d) const;
+            inline Point3 toSpace(const PixelLoc & p) const { return toSpace(Vec2(p.x, p.y)); }
+            Vec3 direction(const Point2 & p2d) const;
+            inline Vec3 direction(const PixelLoc & p) const { return direction(p); }
             PanoramicCamera toPanoramic() const { return PanoramicCamera(_focal, _eye, _center, _up); }
 
         private:
@@ -177,8 +176,9 @@ namespace panoramix {
         template <class OutCameraT, class InCameraT>
         class CameraSampler {
         public:
-            CameraSampler(const OutCameraT & outCam, const InCameraT & inCam)
-                : _outCam(outCam), _inCam(inCam) {
+            template <class OCamT, class ICamT>
+            CameraSampler(OCamT && outCam, ICamT && inCam)
+                : _outCam(std::forward<OCamT>(outCam)), _inCam(std::forward<ICamT>(inCam)) {
                 assert(outCam.eye() == inCam.eye());
                 auto outCamSize = _outCam.screenSize();
                 _mapx = cv::Mat::zeros(outCamSize, CV_32FC1);
@@ -186,13 +186,13 @@ namespace panoramix {
                 for (int j = 0; j < outCamSize.height; j++) {
                     for (int i = 0; i < outCamSize.width; i++) {
                         Vec2 screenp(i, j);
-                        Vec3 p3 = _outCam.spatialDirection(screenp);
+                        Vec3 p3 = _outCam.toSpace(screenp);
                         if (!_inCam.isVisibleOnScreen(p3)){
                             _mapx.at<float>(j, i) = -1;
                             _mapy.at<float>(j, i) = -1;
                             continue;
                         }
-                        Vec2 screenpOnInCam = _inCam.screenProjection(p3);
+                        Vec2 screenpOnInCam = _inCam.toScreen(p3);
                         _mapx.at<float>(j, i) = static_cast<float>(screenpOnInCam(0));
                         _mapy.at<float>(j, i) = static_cast<float>(screenpOnInCam(1));
                     }
@@ -268,8 +268,10 @@ namespace panoramix {
 
 
         template <class OutCameraT, class InCameraT>
-        inline CameraSampler<OutCameraT, InCameraT> MakeCameraSampler(const OutCameraT & outCam, const InCameraT & inCam){
-            return CameraSampler<OutCameraT, InCameraT>(outCam, inCam);
+        inline CameraSampler<std::decay_t<OutCameraT>, std::decay_t<InCameraT>> MakeCameraSampler(
+            OutCameraT && outCam, InCameraT && inCam){
+            return CameraSampler<std::decay_t<OutCameraT>, std::decay_t<InCameraT>>(
+                std::forward<OutCameraT>(outCam), std::forward<InCameraT>(inCam));
         }
 
 
@@ -282,11 +284,11 @@ namespace panoramix {
                 template <class TT>
                 static auto test(int) -> decltype(
                     std::declval<TT>().eye(),
-                    std::declval<TT>().screenProjection(std::declval<core::Vec3>()),
-                    std::declval<TT>().screenProjectionInHPoint(std::declval<core::Vec3>()),
-                    std::declval<TT>().isVisibleOnScreen(std::declval<core::Vec3>()),
-                    std::declval<TT>().spatialDirection(std::declval<core::Vec2>()),
-                    std::declval<TT>().spatialDirection(std::declval<core::PixelLoc>()),
+                    std::declval<TT>().toScreen(std::declval<core::Point3>()),
+                    std::declval<TT>().toScreenInHPoint(std::declval<core::Point3>()),
+                    std::declval<TT>().isVisibleOnScreen(std::declval<core::Point3>()),
+                    std::declval<TT>().toSpace(std::declval<core::Point2>()),
+                    std::declval<TT>().toSpace(std::declval<core::PixelLoc>()),
                     std::declval<TT>().screenSize(),
                     std::true_type()
                     );
@@ -383,6 +385,14 @@ namespace panoramix {
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, 1));
+        template <class T>
+        inline View<PanoramicCamera, ImageOfType<T>> CreatePanoramicView(const ImageOfType<T> & panorama,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, 1)){
+            auto v = CreatePanoramicView((const Image &)panorama, eye, center, up);
+            return View<PanoramicCamera, ImageOfType<T>>(std::move(v.image), std::move(v.camera));
+        }
 
         // create perspective view
         Failable<PerspectiveView> CreatePerspectiveView(const Image & perspectiveImage,

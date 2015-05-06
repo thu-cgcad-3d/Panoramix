@@ -32,7 +32,7 @@ TEST(FactorGraph, Simple){
 
 TEST(FactorGraph, DISABLED_Denoise){
 
-    auto im = cv::imread(ProjectDataDirStrings::BPTests + "/horse.jpg");
+    auto im = core::ImageRead(ProjectDataDirStrings::BPTests + "/horse.jpg");
     core::ResizeToMakeHeightUnder(im, 200);
     core::Image3d noised(im.size(), core::Vec3());
     for (auto it = noised.begin(); it != noised.end(); ++it){

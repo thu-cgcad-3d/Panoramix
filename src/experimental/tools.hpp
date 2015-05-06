@@ -45,7 +45,7 @@ namespace panoramix {
                     std::vector<PixelLoc> ps; ps.reserve(spanAngle / sampleAngle);
                     for (double angle = 0.0; angle <= spanAngle; angle += sampleAngle){
                         Vec3 dir = RotateDirection(line.first, line.second, angle);
-                        ps.push_back(ToPixelLoc(camera.screenProjection(dir)));
+                        ps.push_back(ToPixelLoc(camera.toScreen(dir)));
                     }
                     for (int i = 1; i < ps.size(); i++){
                         auto & p1 = ps[i - 1];
@@ -64,8 +64,8 @@ namespace panoramix {
                     for (auto & e : b.data.normalizedEdges){
                         if (e.size() <= 1) continue;
                         for (int i = 1; i < e.size(); i++){
-                            auto p1 = core::ToPixelLoc(camera.screenProjection(e[i - 1]));
-                            auto p2 = core::ToPixelLoc(camera.screenProjection(e[i]));
+                            auto p1 = core::ToPixelLoc(camera.toScreen(e[i - 1]));
+                            auto p2 = core::ToPixelLoc(camera.toScreen(e[i]));
                             cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
                             cv::line(rendered, p1, p2, (cv::Scalar)color, boundaryWidth);
                         }

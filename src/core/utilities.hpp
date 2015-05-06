@@ -377,8 +377,8 @@ namespace panoramix {
         }
 
         // decorators
-        template <class T>
-        inline auto BoundingBox(const Classified<T> & c) -> decltype(BoundingBox(c.component)) {
+        template <class T, class C>
+        inline auto BoundingBox(const Classified<T, C> & c) -> decltype(BoundingBox(c.component)) {
             return BoundingBox(c.component);
         }
 
@@ -387,8 +387,13 @@ namespace panoramix {
             return BoundingBox(n.component);
         }
 
-        template <class T>
-        inline auto BoundingBox(const Scored<T> & s) -> decltype(BoundingBox(s.component)){
+        template <class T, class S>
+        inline auto BoundingBox(const Scored<T, S> & s) -> decltype(BoundingBox(s.component)){
+            return BoundingBox(s.component);
+        }
+
+        template <class T, class D>
+        inline auto BoundingBox(const Decorated<T, D> & s) -> decltype(BoundingBox(s.component)){
             return BoundingBox(s.component);
         }
 

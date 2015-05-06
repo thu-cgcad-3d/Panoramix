@@ -22,12 +22,12 @@ namespace panoramix {
         QApplication* Singleton::InitGui(int argc, char ** argv) {
             if (qApp)
                 return qApp;
-            Q_INIT_RESOURCE(vis);
+            Q_INIT_RESOURCE(gui);
             QApplication* app = new QApplication(argc, argv);
             
             defaultIcon = QIcon(":/icons/icon.png");
             Q_ASSERT(!defaultIcon.isNull());
-            QFile file(":/css/vis_win.css");
+            QFile file(":/css/gui_win.css");
             bool opened = file.open(QFile::ReadOnly);
             Q_ASSERT(opened);
             defaultCSS = QTextStream(&file).readAll();

@@ -4,14 +4,33 @@
 namespace panoramix {
     namespace core {
 
-        GeneralPerspectiveCamera::GeneralPerspectiveCamera(int w, int h, const Point2 & pp, const Vec2 & focalxy, const Vec3 & eye,
+        PerspectiveCamera::PerspectiveCamera() 
+            : _screenW(500), _screenH(500), _principlePoint(250, 250), _focalxy(250),
+            _eye(0, 0, 0), _center(1, 0, 0), _up(0, 0, -1), _near(0.01), _far(1e4) {
+            updateMatrices();
+        }
+
+        PerspectiveCamera::PerspectiveCamera(int w, int h)
+            : _screenW(w), _screenH(h), _principlePoint(w/2.0, h/2.0), _focalxy(250),
+            _eye(0, 0, 0), _center(1, 0, 0), _up(0, 0, -1), _near(0.01), _far(1e4) {
+            updateMatrices();
+        }
+
+        PerspectiveCamera::PerspectiveCamera(int w, int h, const Point2 & pp, const Vec2 & focalxy, const Vec3 & eye,
             const Vec3 & center, const Vec3 & up, double near, double far)
             : _screenW(w), _screenH(h), _principlePoint(pp), _focalxy(focalxy),
             _eye(eye), _center(center), _up(up), _near(near), _far(far) {
             updateMatrices();
         }
 
-        void GeneralPerspectiveCamera::updateMatrices() {
+        PerspectiveCamera::PerspectiveCamera(int w, int h, const Point2 & pp, double focal, const Vec3 & eye,
+            const Vec3 & center, const Vec3 & up, double near, double far)
+            : _screenW(w), _screenH(h), _principlePoint(pp), _focalxy(focal, focal),
+            _eye(eye), _center(center), _up(up), _near(near), _far(far) {
+            updateMatrices();
+        }
+
+        void PerspectiveCamera::updateMatrices() {
             _viewMatrix = MakeMat4LookAt(_eye, _center, _up);
 
             /*double verticalViewAngle = atan(_principlePoint[1] / _focal) * 2;
@@ -23,7 +42,7 @@ namespace panoramix {
             _viewProjectionMatrix = _projectionMatrix * _viewMatrix;
         }
 
-        Vec2 GeneralPerspectiveCamera::screenProjection(const Vec3 & p3) const {
+        Point2 PerspectiveCamera::toScreen(const Point3 & p3) const {
             //THERE_ARE_BUGS_HERE("the input is not a point but a direction ?!!!! CONFUSION");
             Vec4 p4(p3(0), p3(1), p3(2), 1);
             Vec4 position = _viewProjectionMatrix * p4;
@@ -34,13 +53,13 @@ namespace panoramix {
             return Vec2(x, y);
         }
 
-        bool GeneralPerspectiveCamera::isVisibleOnScreen(const Vec3 & p3d) const {
+        bool PerspectiveCamera::isVisibleOnScreen(const Point3 & p3d) const {
             Vec4 p4(p3d(0), p3d(1), p3d(2), 1);
             Vec4 position = _viewProjectionMatrix * p4;
             return position(3) > 0 && position(2) > 0;
         }
 
-        HPoint2 GeneralPerspectiveCamera::screenProjectionInHPoint(const Vec3 & p3) const {
+        HPoint2 PerspectiveCamera::toScreenInHPoint(const Point3 & p3) const {
             //THERE_ARE_BUGS_HERE("the input is not a point but a direction ?!!!! CONFUSION");
             Vec4 p4(p3(0), p3(1), p3(2), 1);
             Vec4 position = _viewProjectionMatrix * p4;
@@ -53,7 +72,7 @@ namespace panoramix {
             return HPoint2({ x, y }, zratio);
         }
 
-        Vec3 GeneralPerspectiveCamera::spatialDirection(const Vec2 & p2d) const {
+        Point3 PerspectiveCamera::toSpace(const Point2 & p2d) const {
             double xratio = (p2d(0) / /*_screenW*/ (2.0 * _principlePoint[0]) - 0.5) * 2;
             double yratio = ((/*_screenH*/(2.0 * _principlePoint[1]) - p2d(1)) / /*_screenH*/(2.0 * _principlePoint[1]) - 0.5) * 2;
             Vec4 position(xratio, yratio, 1, 1);
@@ -65,7 +84,7 @@ namespace panoramix {
                 realPosition(2) / realPosition(3));
         }
 
-        void GeneralPerspectiveCamera::resizeScreen(const Size & sz, bool updateMat) {
+        void PerspectiveCamera::resizeScreen(const Size & sz, bool updateMat) {
             if (_screenH == sz.height && _screenW == sz.width)
                 return;
             auto offset = _principlePoint - Point2(_screenW / 2.0, _screenH / 2.0);
@@ -76,7 +95,7 @@ namespace panoramix {
                 updateMatrices();
         }
 
-        void GeneralPerspectiveCamera::setPrinciplePoint(const Point2 & pp, bool updateMat){
+        void PerspectiveCamera::setPrinciplePoint(const Point2 & pp, bool updateMat){
             if (_principlePoint == pp)
                 return;
             _principlePoint = pp;
@@ -84,7 +103,7 @@ namespace panoramix {
                 updateMatrices();
         }
 
-        void GeneralPerspectiveCamera::setFocalX(double fx, bool updateMat) {
+        void PerspectiveCamera::setFocalX(double fx, bool updateMat) {
             if (fx == _focalxy[0])
                 return;
             _focalxy[0] = fx;
@@ -92,7 +111,7 @@ namespace panoramix {
                 updateMatrices();
         }
 
-        void GeneralPerspectiveCamera::setFocalY(double fy, bool updateMat) {
+        void PerspectiveCamera::setFocalY(double fy, bool updateMat) {
             if (fy == _focalxy[1])
                 return;
             _focalxy[1] = fy;
@@ -100,7 +119,15 @@ namespace panoramix {
                 updateMatrices();
         }
 
-        void GeneralPerspectiveCamera::setEye(const Vec3 & e, bool updateMat) {
+        void PerspectiveCamera::setFocal(double f, bool updateMat) {
+            if (f == _focalxy[0] && f == _focalxy[1])
+                return;
+            _focalxy[0] = _focalxy[1] = f;
+            if (updateMat)
+                updateMatrices();
+        }
+
+        void PerspectiveCamera::setEye(const Vec3 & e, bool updateMat) {
             if (_eye == e)
                 return;
             _eye = e;
@@ -108,7 +135,7 @@ namespace panoramix {
                 updateMatrices();
         }
 
-        void GeneralPerspectiveCamera::setCenter(const Vec3 & c, bool updateMat) {
+        void PerspectiveCamera::setCenter(const Vec3 & c, bool updateMat) {
             if (_center == c)
                 return;
             _center = c;
@@ -116,7 +143,7 @@ namespace panoramix {
                 updateMatrices();
         }
 
-        void GeneralPerspectiveCamera::setUp(const Vec3 & up, bool updateMat) {
+        void PerspectiveCamera::setUp(const Vec3 & up, bool updateMat) {
             if (_up == up)
                 return;
             _up = up;
@@ -124,7 +151,7 @@ namespace panoramix {
                 updateMatrices();
         }
 
-        void GeneralPerspectiveCamera::setNearAndFarPlanes(double near, double far, bool updateMat) {
+        void PerspectiveCamera::setNearAndFarPlanes(double near, double far, bool updateMat) {
             if (_near == near && _far == far)
                 return;
             _near = near;
@@ -138,7 +165,7 @@ namespace panoramix {
             f = BoundBetween(norm(target.center - eye) + target.radius, 1e2, 1e8);
         }
 
-        void GeneralPerspectiveCamera::focusOn(const Sphere3 & target, bool updateMat) {
+        void PerspectiveCamera::focusOn(const Sphere3 & target, bool updateMat) {
             _center = target.center;
             auto eyedirection = _eye - _center;
             eyedirection = eyedirection / core::norm(eyedirection) * target.radius * 0.8;
@@ -148,7 +175,7 @@ namespace panoramix {
                 updateMatrices();
         }
 
-        void GeneralPerspectiveCamera::translate(const Vec3 & t, const Sphere3 & target, bool updateMat){
+        void PerspectiveCamera::translate(const Vec3 & t, const Sphere3 & target, bool updateMat){
             _eye += t;
             _center += t;
             AdjustNearAndFar(_near, _far, target, _eye);
@@ -156,7 +183,7 @@ namespace panoramix {
                 updateMatrices();
         }
 
-        void GeneralPerspectiveCamera::moveEyeWithCenterFixed(const Vec3 & t, const Sphere3 & target, bool distanceFixed, bool updateMat){
+        void PerspectiveCamera::moveEyeWithCenterFixed(const Vec3 & t, const Sphere3 & target, bool distanceFixed, bool updateMat){
             double dist = norm(_eye - _center);
             _eye += t;
             if (distanceFixed){
@@ -170,10 +197,6 @@ namespace panoramix {
 
 
 
-        PerspectiveCamera::PerspectiveCamera(int w, int h, const Point2 & pp, double focal, const Vec3 & eye,
-            const Vec3 & center, const Vec3 & up, double near, double far)
-            : GeneralPerspectiveCamera(w, h, pp, Vec2(focal, focal), eye, center, up, near, far) {
-        }
 
 
 
@@ -186,24 +209,29 @@ namespace panoramix {
             _zaxis = _xaxis.cross(_yaxis);
         }
 
-        Vec2 PanoramicCamera::screenProjection(const Vec3 & p3) const {
-            double xx = p3.dot(_xaxis);
-            double yy = p3.dot(_yaxis);
-            double zz = p3.dot(_zaxis);
+        Point2 PanoramicCamera::toScreen(const Point3 & p3) const {
+            double xx = (p3 - _eye).dot(_xaxis);
+            double yy = (p3 - _eye).dot(_yaxis);
+            double zz = (p3 - _eye).dot(_zaxis);
             GeoCoord pg = core::Vec3(xx, yy, zz);
             auto sz = screenSize();
             double x = (pg.longitude + M_PI) / 2.0 / M_PI * sz.width;
             double y = (pg.latitude + M_PI_2) / M_PI * sz.height;
-            return Vec2(x, y);
+            return Point2(x, y);
         }
 
-        Vec3 PanoramicCamera::spatialDirection(const Vec2 & p2d) const {
+        Point3 PanoramicCamera::toSpace(const Point2 & p2d) const {
+           return direction(p2d) + _eye;
+        }
+
+        Vec3 PanoramicCamera::direction(const Point2 & p2d) const{
             auto sz = screenSize();
             double longi = p2d(0) / double(sz.width) * 2 * M_PI - M_PI;
             double lati = p2d(1) / double(sz.height) * M_PI - M_PI_2;
             Vec3 dd = (GeoCoord(longi, lati).toVector());
             return dd(0) * _xaxis + dd(1) * _yaxis + dd(2) * _zaxis;
         }
+
 
 
 
@@ -224,7 +252,7 @@ namespace panoramix {
             _zaxis = _xaxis.cross(_yaxis);
         }
 
-        Vec2 PartialPanoramicCamera::screenProjection(const Vec3 & p3) const {
+        Vec2 PartialPanoramicCamera::toScreen(const Vec3 & p3) const {
             double xx = (p3 - _eye).dot(_xaxis);
             double yy = (p3 - _eye).dot(_yaxis);
             double zz = (p3 - _eye).dot(_zaxis);
@@ -254,7 +282,11 @@ namespace panoramix {
             return IsBetween(x, 0, _screenW) && IsBetween(y, 0, _screenH);
         }
 
-        Vec3 PartialPanoramicCamera::spatialDirection(const Vec2 & p2d) const {
+        Point3 PartialPanoramicCamera::toSpace(const Point2 & p2d) const {
+            return direction(p2d) + _eye;
+        }
+
+        Vec3 PartialPanoramicCamera::direction(const Point2 & p2d) const {
             double halfLongitudeAngleBound = _screenW / 2.0 / _focal;
             double halfLatitudeAngleBound = _screenH / 2.0 / _focal;
 
@@ -264,8 +296,6 @@ namespace panoramix {
             Vec3 dd = (GeoCoord(longi, lati).toVector());
             return dd(0) * _xaxis + dd(1) * _yaxis + dd(2) * _zaxis;
         }
-
-
 
 
 
@@ -415,8 +445,8 @@ namespace panoramix {
             if (line3sPtr){
                 std::vector<Classified<Line3>> line3s(lines.size());
                 for (int i = 0; i < lines.size(); i++){
-                    line3s[i].component.first = view.camera.spatialDirection(lines[i].first);
-                    line3s[i].component.second = view.camera.spatialDirection(lines[i].second);
+                    line3s[i].component.first = view.camera.toSpace(lines[i].first);
+                    line3s[i].component.second = view.camera.toSpace(lines[i].second);
                     line3s[i].claz = lineClasses[i];
                 }
                 *line3sPtr = std::move(line3s);
@@ -430,7 +460,7 @@ namespace panoramix {
             if (vpsPtr){
                 std::vector<Vec3> vp3s(vps.size());
                 for (int i = 0; i < vps.size(); i++){
-                    vp3s[i] = normalize(view.camera.spatialDirection(vps[i].value()));
+                    vp3s[i] = normalize(view.camera.toSpace(vps[i].value()));
                 }
                 *vpsPtr = std::move(vp3s);
             }
