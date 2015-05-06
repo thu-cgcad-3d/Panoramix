@@ -1,5 +1,6 @@
 #include <QtOpenGL>
 
+#include "../core/macros.hpp"
 #include "../core/containers.hpp"
 #include "qt_glue.hpp"
 #include "scene.hpp"
@@ -396,6 +397,10 @@ namespace panoramix {
                                 transformedVertexPositions.at(v3)
                         });
                     }
+
+                    THERE_ARE_BUGS_HERE("We can't determine how much the bounding box of lines/point "
+                        "should be with a fixed line width/point size and a dynamic camera!!!!");
+
                     for (TriMesh::LineHandle i = 0; i < mesh.numberOfLines(); i++){
                         TriMesh::VertHandle v1, v2;
                         mesh.fetchLineVerts(i, v1, v2);
@@ -403,14 +408,15 @@ namespace panoramix {
                             BoundingBoxOfContainer(std::vector<Point3>{
                                 transformedVertexPositions[v1],
                                 transformedVertexPositions[v2]
-                        });
+                        }).expand(1.0);
                     }
                     for (TriMesh::PointHandle i = 0; i < mesh.numerOfPoints(); i++){
-                        TriMesh::VertHandle v = i;
-                        lineBoxes[std::make_pair(h, i)] =
+                        TriMesh::VertHandle v;
+                        mesh.fetchPointVerts(i, v);
+                        pointBoxes[std::make_pair(h, i)] =
                             BoundingBoxOfContainer(std::vector<Point3>{
                             transformedVertexPositions[v]
-                        });
+                        }).expand(1.0);
                     }
 
                     _internal->calculatedBoundingBoxes[h] =
@@ -594,11 +600,6 @@ namespace panoramix {
                     TriMesh::VertHandle v1, v2, v3;
                     vo->mesh().fetchTriangleVerts(m.second, v1, v2, v3);
                     double out = 0.0;
-                    /*bool intersected = TriangleIntersection(ToAffinePoint(vo->mesh().vertices[v1].position),
-                        ToAffinePoint(vo->mesh().vertices[v2].position),
-                        ToAffinePoint(vo->mesh().vertices[v3].position),
-                        centerRay.anchor, centerRay.direction,
-                        &out, epsilon);*/
                     bool intersected = TriangleIntersection(
                         transformedVertPositions[v1],
                         transformedVertPositions[v2],
@@ -666,6 +667,8 @@ namespace panoramix {
                     Line3 lineInst(transformedVertPositions[v1], transformedVertPositions[v2]);
                     auto np = DistanceBetweenTwoLines(lineSegment, lineInst).second.second.position;
                     auto npOnScreen = options.camera().screenProjection(np); ///// test
+                    if (!options.camera().isVisibleOnScreen(np))
+                        return true;
                     double distance = Distance(npOnScreen, pOnScreen);
                     if (distance <= vo->lineWidth() / 2.0){
                         lines[m] = distance;
@@ -716,7 +719,7 @@ namespace panoramix {
                 Box3 detectionBox = BoundingBox(centerP) | BoundingBox(nextCenterP);
                 detectionBox.expand(stepLen);
 
-                _internal->lines.search(detectionBox,
+                _internal->points.search(detectionBox,
                     [&points, this, &centerRay, &options, &pOnScreen](const SceneObjectMeshPoint & m){
                     auto & transformedVertPositions = _internal->transformedVerticesPositions.at(m.first);
                     auto & vo = _tree.data(m.first);
@@ -726,8 +729,10 @@ namespace panoramix {
                     TriMesh::VertHandle v = m.second;
                     Point3 point = transformedVertPositions.at(v);
                     auto npOnScreen = options.camera().screenProjection(point); ///// test
+                    if (!options.camera().isVisibleOnScreen(point))
+                        return true;
                     double distance = Distance(npOnScreen, pOnScreen);
-                    if (distance <= vo->pointSize()){
+                    if (distance <= vo->pointSize() / 2.0){
                         points[m] = distance;
                     }
                     return true;

@@ -64,7 +64,8 @@ namespace panoramix {
             VertHandle addVertex(const core::Point3 & p, const DiscretizeOptions & o, bool asPoint = false);
             VertHandle addVertex(const core::Point3 & p, const core::Vec3 & normal, const DiscretizeOptions & o, bool asPoint = false);
 
-            size_t numerOfPoints() const { return iPoints.size(); }
+            size_t numerOfPoints() const;
+            void fetchPointVerts(PointHandle p, VertHandle & v) const;
 
             template <class T> 
             T & entityAtPoint(PointHandle p) const { return *static_cast<T*>(entPoints[p]); }

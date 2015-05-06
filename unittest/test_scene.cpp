@@ -90,7 +90,7 @@ TEST(Scene, Interaction){
    
     std::list<core::Sphere3> ss = { { core::Point3(1, 1, 1), 2.0 }, { core::Point3(-1, -1, -1), 2.0 } };
     core::Line3 ll[] = { { core::Point3(-1, 1, 2), core::Point3(1, -1, 0) }, { core::Point3(0, 2, 3), core::Point3(-1, -2, -3) } };
-    //auto t = core::MakeTriangle(core::Point3(0, 0, 1), core::Point3(1, 0, 0), core::Point3(0, 1, 0));
+    core::Point3 pp[] = { core::Point3(-3, 1, 3), core::Point3(10, -2, -4) };
     
     gui::ResourceStore::set("texture", cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
 
@@ -112,6 +112,16 @@ TEST(Scene, Interaction){
                     std::cout << "pressed on the line (" << l.first << ", " << l.second << ")" << std::endl;
             })
             .shaderSource(gui::OpenGLShaderSourceDescriptor::XLines)
+            .lineWidth(10)
+        .end()
+        .begin(pp, [&clickedCount](gui::InteractionID iid, core::Point3 & p){
+                if (iid == gui::ClickLeftButton)
+                    std::cout << "clicked on the point (" << p << ")" << std::endl;
+                else
+                    std::cout << "pressed on the point (" << p << ")" << std::endl;
+            })
+            .shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints)
+            .pointSize(20)
         .end()
         .show(true, true, gui::RenderOptions().renderMode(gui::RenderModeFlag::Lines | gui::RenderModeFlag::Triangles));
     

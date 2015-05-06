@@ -428,8 +428,19 @@ namespace panoramix {
                 activeObject().setShaderSource(ss);
                 return *this;
             }
+
             inline SceneBuilder & resource(const std::string resourceName) {
                 activeObject().resources().push_back(ResourceStore::get(resourceName));
+                return *this;
+            }
+
+            inline SceneBuilder & lineWidth(float w){
+                activeObject().setLineWidth(w);
+                return *this;
+            }
+
+            inline SceneBuilder & pointSize(float s){
+                activeObject().setPointSize(s);
                 return *this;
             }
 

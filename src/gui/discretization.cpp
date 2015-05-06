@@ -51,6 +51,16 @@ namespace panoramix {
             return addVertex(v, asPoint, o.entity);
         }
 
+
+        size_t TriMesh::numerOfPoints() const {
+            return iPoints.size();
+        }
+
+        void TriMesh::fetchPointVerts(PointHandle p, VertHandle & v) const{
+            v = iPoints[p];
+        }
+
+
         TriMesh::LineHandle TriMesh::addLine(TriMesh::VertHandle v1, TriMesh::VertHandle v2, EntityPtr ent) {
             iLines.push_back(v1);
             iLines.push_back(v2);
