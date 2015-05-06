@@ -4,6 +4,8 @@
 #include "../core/generic_topo.hpp"
 #include "../core/utilities.hpp"
 #include "../core/cameras.hpp"
+#include "../core/meta.hpp"
+
 #include "basic_types.hpp"
 #include "discretization.hpp"
 #include "resource.hpp"
@@ -18,90 +20,44 @@ namespace panoramix {
             Unknown
         };
 
-
  
         // building visual objects
-        class VisualObject;
-        using VisualObjectPtr = std::shared_ptr<VisualObject>;
-        using VisualObjectTree = core::Forest<VisualObjectPtr>;
+        class SceneObject;
+        using SceneObjectPtr = std::shared_ptr<SceneObject>;
+        using SceneObjectTree = core::Forest<SceneObjectPtr>;
 
-        using VisualObjectHandle = VisualObjectTree::NodeHandle;
-        using VisualObjectMeshTriangle = std::pair<VisualObjectHandle, TriMesh::TriangleHandle>;
-        using VisualObjectEntityID = std::pair<VisualObjectHandle, int>;
+        using SceneObjectHandle = SceneObjectTree::NodeHandle;
+        using SceneObjectMeshTriangle = std::pair<SceneObjectHandle, TriMesh::TriangleHandle>;
+        using SceneObjectMeshLine = std::pair<SceneObjectHandle, TriMesh::LineHandle>;
+        using SceneObjectMeshPoint = std::pair<SceneObjectHandle, TriMesh::PointHandle>;
 
-        typedef bool VisualObjectCallbackFunction(InteractionID, const VisualObjectTree &, const VisualObjectEntityID &);
-        template <class T> using VisualObjectCallbackFunctionSimple = void(InteractionID, T & data);
+        template <class T> using SceneObjectCallbackFunction = void(InteractionID, T & data);
 
-        namespace {
-
-            template <class FunAndArgT>
-            struct IsComplexCallbackFunctionImp {
-                template <class FunAndArgTT>
-                static auto test(int) -> decltype(
-                    std::declval<FunAndArgTT>().first(Unknown,
-                    std::declval<VisualObjectTree>(),
-                    std::declval<VisualObjectEntityID>()),
-                    std::true_type()
-                    );
-
-                template <class>
-                static std::false_type
-                    test(...);
-
-                enum { value = std::is_same<decltype(test<FunAndArgT>(0)), std::true_type>::value };
-            };
-
-            template <class FunAndArgT>
-            struct IsSimpleCallbackFunctionImp {
-                template <class FunAndArgTT>
-                static auto test(int) -> decltype(
-                    std::declval<FunAndArgTT &>().first(Unknown, std::declval<FunAndArgTT &>().second),
-                    std::true_type()
-                    );
-
-                template <class>
-                static std::false_type
-                    test(...);
-
-                enum { value = std::is_same<decltype(test<FunAndArgT>(0)), std::true_type>::value };
-            };
-
-        }
-
-
-        enum class CallbackFunctionType {
-            Complex, Simple, None
-        };
-        using ComplexTag = std::integral_constant<CallbackFunctionType, CallbackFunctionType::Complex>;
-        using SimpleTag = std::integral_constant<CallbackFunctionType, CallbackFunctionType::Simple>;
-        using NoneTag = std::integral_constant<CallbackFunctionType, CallbackFunctionType::None>;
-
-        template <class FunT, class T>
-        struct CallbackFunctionTraits
-            : std::integral_constant<CallbackFunctionType,
-            (IsComplexCallbackFunctionImp<std::pair<FunT, T>>::value ? CallbackFunctionType::Complex :
-            (IsSimpleCallbackFunctionImp<std::pair<FunT, T>>::value ? CallbackFunctionType::Simple :
-            CallbackFunctionType::None))> {};
 
 
 
 
         struct RenderOptions {
-            std::string winName;
-            Color backgroundColor;
-            RenderModeFlags renderMode;
-            core::PerspectiveCamera camera;
-            float bwColor;
-            float bwTexColor;
-            bool cullFrontFace, cullBackFace;
+            DECL_PROPERTY(RenderOptions, std::string, winName);
+            DECL_PROPERTY(RenderOptions, Color, backgroundColor);
+            DECL_PROPERTY(RenderOptions, RenderModeFlags, renderMode);
+            DECL_PROPERTY(RenderOptions, core::PerspectiveCamera, camera);
+            DECL_PROPERTY(RenderOptions, float, bwColor);
+            DECL_PROPERTY(RenderOptions, float, bwTexColor);
+            DECL_PROPERTY(RenderOptions, bool, cullFrontFace);
+            DECL_PROPERTY(RenderOptions, bool, cullBackFace);
+
+            RenderOptions();
         };
 
-        class VisualObjectInternal;
-        class VisualObject {
+
+
+        class SceneObjectInternal;
+        class SceneObject {
         public:
-            explicit VisualObject(int eleNum = 1);
-            explicit VisualObject(int eleNum, const OpenGLShaderSource & shaderSource);
-            virtual ~VisualObject();
+            explicit SceneObject();
+            explicit SceneObject(const OpenGLShaderSource & shaderSource);
+            virtual ~SceneObject();
 
             // install shaders
             // before initialize()
@@ -121,14 +77,11 @@ namespace panoramix {
             TriMesh & mesh() { return _mesh; }
             const TriMesh & mesh() const { return _mesh; }
 
-            bool isSingleEntityMeshTriangle(TriMesh::TriangleHandle t) const;
-            int entityIDOfMeshTriangle(TriMesh::TriangleHandle t) const;
-
-            void selectEntity(int entId);
-            void switchEntitySelection(int entId);
+            void setEntitySelection(EntityPtr ent, bool selected);
+            void switchEntitySelection(EntityPtr ent);
             void clearSelection();
-            inline const std::set<int> & selectedEntities() const { return _selectedEntities; }
-            inline bool entityIsSelected(int entId) const { return core::Contains(_selectedEntities, entId); }
+            inline const std::set<EntityPtr> & selectedEntities() const { return _selectedEntities; }
+            inline bool entityIsSelected(EntityPtr ent) const { return core::Contains(_selectedEntities, ent); }
 
             // resource
             std::vector<ResourcePtr> & resources() { return _resources; }
@@ -137,21 +90,42 @@ namespace panoramix {
             // data binding   
             template <class FunT>
             inline void bindCallbackFunction(FunT && fun) { _callback = std::forward<FunT>(fun); }
-
-            inline bool invokeCallbackFunction(InteractionID iid,
-                const VisualObjectTree & tree,
-                const VisualObjectEntityID & entity) const {
+            
+            // invoke call back
+            inline bool invokeCallbackFunction(InteractionID iid, EntityPtr ent) const {
                 if (_callback)
-                    return _callback(iid, tree, entity);
+                    return _callback(iid, ent);
+                return false;
+            }
+            inline bool invokeCallbackFunctionOnTriangle(InteractionID iid, TriMesh::TriangleHandle t) const {
+                if (_callback)
+                    return _callback(iid, _mesh.entTriangles.at(t));
+                return false;
+            }
+            inline bool invokeCallbackFunctionOnLine(InteractionID iid, TriMesh::LineHandle t) const {
+                if (_callback)
+                    return _callback(iid, _mesh.entLines.at(t));
+                return false;
+            }
+            inline bool invokeCallbackFunctionOnPoint(InteractionID iid, TriMesh::PointHandle t) const {
+                if (_callback)
+                    return _callback(iid, _mesh.entPoints.at(t));
                 return false;
             }
 
+            inline float lineWidth() const { return _lineWidth; }
+            inline float pointSize() const { return _pointSize; }
             inline void setLineWidth(float lw){ _lineWidth = lw; }
             inline void setPointSize(float ps){ _pointSize = ps; }
 
+            inline bool selectable() const { return _selectable; }
+            inline void setSelectable(bool s) { _selectable = s; }
+
         protected:
             core::Mat4f _modelMat;
+            
             TriMesh _mesh;
+
             core::Point3 _projectionCenter;
             std::vector<ResourcePtr> _resources;
             OpenGLShaderSource _shaderSource;
@@ -159,16 +133,16 @@ namespace panoramix {
             float _lineWidth;
             float _pointSize;
 
-            VisualObjectInternal * _internal;
+            bool _selectable;
+            SceneObjectInternal * _internal;
 
-            std::function<VisualObjectCallbackFunction> _callback;
+            std::function<bool(InteractionID, EntityPtr)> _callback;
 
-            int _entitiNum;
-            std::set<int> _selectedEntities;
+            std::set<EntityPtr> _selectedEntities;
         };
 
 
-        struct VisualObjectInstallingOptions {
+        struct SceneObjectInstallingOptions {
             OpenGLShaderSource defaultShaderSource;
             float lineWidth;
             float pointSize;
@@ -177,184 +151,306 @@ namespace panoramix {
 
 
         template <class T>
-        std::shared_ptr<VisualObject> Visualize(const T & data,
-            const VisualObjectInstallingOptions & o){
-            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(1);
+        std::shared_ptr<SceneObject> Visualize(const T & data,
+            const SceneObjectInstallingOptions & o,
+            std::false_type isContainer){
+            std::shared_ptr<SceneObject> vo = std::make_shared<SceneObject>();
 
             auto dopt = o.discretizeOptions;
-            dopt.index = 0;
+            dopt.entity = &data;
             Discretize(vo->mesh(), data, dopt);
 
             vo->setShaderSource(o.defaultShaderSource);
             vo->setLineWidth(o.lineWidth);
             vo->setPointSize(o.pointSize);
+            vo->setSelectable(false);
             return vo;
         }
 
         template <class T>
-        std::shared_ptr<VisualObject> VisualizeCollection(const std::vector<T> & data,
-            const VisualObjectInstallingOptions & o){
-            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(data.size());
+        std::shared_ptr<SceneObject> Visualize(const T & data,
+            const SceneObjectInstallingOptions & o,
+            std::true_type isContainer){
+            std::shared_ptr<SceneObject> vo =
+                std::make_shared<SceneObject>();
 
             auto dopt = o.discretizeOptions;
-            dopt.index = 0;
-            Discretize(vo->mesh(), data, dopt);
+            for (auto & e : data){
+                dopt.entity = &e;
+                Discretize(vo->mesh(), e, dopt);
+            }
 
             vo->setShaderSource(o.defaultShaderSource);
             vo->setLineWidth(o.lineWidth);
             vo->setPointSize(o.pointSize);
+            vo->setSelectable(false);
             return vo;
         }
 
-        template <class T, class FunT>
-        std::shared_ptr<VisualObject> Visualize(T & data, const FunT & fun,
-            const VisualObjectInstallingOptions & o,
-            ComplexTag){
+        //template <class T, class FunT>
+        //std::shared_ptr<SceneObject> Visualize(T & data, const FunT & fun,
+        //    const SceneObjectInstallingOptions & o,
+        //    std::false_type isContainer,
+        //    std::true_type isComplex){
 
-            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(1);
+        //    std::shared_ptr<SceneObject> vo = std::make_shared<SceneObject>(1);
+
+        //    auto dopt = o.discretizeOptions;
+        //    dopt.entity = nullptr;
+        //    Discretize(vo->mesh(), data, dopt);
+
+        //    vo->setShaderSource(o.defaultShaderSource);
+        //    vo->bindCallbackFunction(fun);
+        //    vo->setLineWidth(o.lineWidth);
+        //    vo->setPointSize(o.pointSize);
+        //    vo->setSelectable(true);
+        //    return vo;
+        //}
+
+        //template <class T, class FunT>
+        //std::shared_ptr<SceneObject> Visualize(T & data, const FunT & fun,
+        //    const SceneObjectInstallingOptions & o,
+        //    std::true_type isContainer,
+        //    std::true_type isComplex ){
+
+        //    std::shared_ptr<SceneObject> vo = 
+        //        std::make_shared<SceneObject>(std::distance(std::begin(data), std::end(data)));
+
+        //    auto dopt = o.discretizeOptions;
+        //    for (auto & e : data){
+        //        dopt.entity = &e;
+        //        Discretize(vo->mesh(), e, dopt);
+        //    }
+
+        //    vo->setShaderSource(o.defaultShaderSource);
+        //    vo->bindCallbackFunction(fun);
+        //    vo->setLineWidth(o.lineWidth);
+        //    vo->setPointSize(o.pointSize);
+        //    vo->setSelectable(true);
+        //    return vo;
+        //}
+
+
+        template <class T, class FunT>
+        std::shared_ptr<SceneObject> Visualize(T & data, const FunT & fun,
+            const SceneObjectInstallingOptions & o,
+            std::false_type isContainer){
+
+            std::shared_ptr<SceneObject> vo = std::make_shared<SceneObject>();
 
             auto dopt = o.discretizeOptions;
-            dopt.index = 0;
+            dopt.entity = nullptr;
             Discretize(vo->mesh(), data, dopt);
 
             vo->setShaderSource(o.defaultShaderSource);
-            vo->bindCallbackFunction(fun);
             vo->setLineWidth(o.lineWidth);
             vo->setPointSize(o.pointSize);
-            return vo;
-        }
+            vo->setSelectable(true);
 
-        template <class T, class FunT>
-        std::shared_ptr<VisualObject> VisualizeCollection(std::vector<T> & data, const FunT & fun,
-            const VisualObjectInstallingOptions & o,
-            ComplexTag){
-
-            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(data.size());
-
-            auto dopt = o.discretizeOptions;
-            dopt.index = 0;
-            Discretize(vo->mesh(), data, dopt);
-
-            vo->setShaderSource(o.defaultShaderSource);
-            vo->bindCallbackFunction(fun);
-            vo->setLineWidth(o.lineWidth);
-            vo->setPointSize(o.pointSize);
-            return vo;
-        }
-
-
-        template <class T, class FunT>
-        std::shared_ptr<VisualObject> Visualize(T & data, const FunT & fun,
-            const VisualObjectInstallingOptions & o,
-            SimpleTag){
-
-            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(1);
-
-            auto dopt = o.discretizeOptions;
-            dopt.index = 0;
-            Discretize(vo->mesh(), data, dopt);
-
-            vo->setShaderSource(o.defaultShaderSource);
-            vo->setLineWidth(o.lineWidth);
-            vo->setPointSize(o.pointSize);
-
-            struct CallbackFunction {
-                inline CallbackFunction(T & d, const FunT & f)
-                : originalData(d), originalFun(f){}
-                inline bool operator() (InteractionID iid,
-                    const VisualObjectTree &, const VisualObjectEntityID &) const {
-                    originalFun(iid, originalData);
+            struct Wrapper {
+                inline Wrapper(const FunT & f) : originalFun(f){}
+                inline bool operator() (InteractionID iid, EntityPtr entPtr) const {
+                    originalFun(iid, entPtr.ref<T>());
                     return true;
                 }
-                T & originalData;
                 const FunT & originalFun;
             };
 
-            vo->bindCallbackFunction(CallbackFunction(data, fun));
+            vo->bindCallbackFunction(Wrapper(fun));
             return vo;
         }
 
         template <class T, class FunT>
-        std::shared_ptr<VisualObject> VisualizeCollection(std::vector<T> & data, const FunT & fun,
-            const VisualObjectInstallingOptions & o,
-            SimpleTag){
+        std::shared_ptr<SceneObject> Visualize(T & data, const FunT & fun,
+            const SceneObjectInstallingOptions & o,
+            std::true_type isContainer){
 
-            std::shared_ptr<VisualObject> vo = std::make_shared<VisualObject>(data.size());
+            using ValueType = std::decay_t<decltype(*std::begin(data))>;
+
+            std::shared_ptr<SceneObject> vo = 
+                std::make_shared<SceneObject>();
 
             auto dopt = o.discretizeOptions;
-            dopt.index = 0;
-            Discretize(vo->mesh(), data, dopt);
+            for (auto & e : data){
+                dopt.entity = &e;
+                Discretize(vo->mesh(), e, dopt);
+            }
 
             vo->setShaderSource(o.defaultShaderSource);
             vo->setLineWidth(o.lineWidth);
             vo->setPointSize(o.pointSize);
+            vo->setSelectable(true);
 
-            struct CallbackFunction {
-                inline CallbackFunction(std::vector<T> & d, const FunT & f)
-                : originalData(d), originalFun(f){}
-                inline bool operator() (InteractionID iid,
-                    const VisualObjectTree & tree, const VisualObjectEntityID & entityID) const {
-                    originalFun(iid, originalData[entityID.second]);
+            struct Wrapper {
+                inline Wrapper(const FunT & f) : originalFun(f){}
+                inline bool operator() (InteractionID iid, EntityPtr entPtr) const {
+                    originalFun(iid, entPtr.ref<ValueType>());
                     return true;
                 }
-                std::vector<T> & originalData;
                 const FunT & originalFun;
             };
 
-            vo->bindCallbackFunction(CallbackFunction(data, fun));
+            vo->bindCallbackFunction(Wrapper(fun));
             return vo;
         }
 
 
 
+        using SceneObjectEntity = std::pair<SceneObjectHandle, EntityPtr>;
 
-
-
+        class SceneBuilder;
         class SceneInternal;
         class Scene {
         public:
             Scene();
-            explicit Scene(const VisualObjectTree & tree);
+            explicit Scene(SceneObjectTree && tree);
+            explicit Scene(const SceneObjectTree & tree);
+            Scene(Scene && s);
+            Scene & operator = (Scene && s);
+            Scene(const Scene & s) = delete;
+            Scene & operator = (const Scene & s) = delete;
             ~Scene();
 
-            inline void install(const VisualObjectTree & tree) {
-                _tree = tree;
-                update();
+        public:
+            inline bool null() const { return _internal == nullptr; }
+            inline const SceneObjectTree & tree() const { return _tree; }
+
+            inline void select(SceneObjectEntity ent) { 
+                _tree.data(ent.first)->setEntitySelection(ent.second, true); 
             }
-
-            inline void install(VisualObjectTree && tree) {
-                _tree = std::move(tree);
-                update();
+            inline void switchSelect(SceneObjectEntity ent) { 
+                _tree.data(ent.first)->switchEntitySelection(ent.second);
             }
-
-            inline const VisualObjectTree & tree() const { return _tree; }
-
-            inline void select(VisualObjectEntityID ent) { _tree.data(ent.first)->selectEntity(ent.second); }
-            inline void switchSelect(VisualObjectEntityID ent) { _tree.data(ent.first)->switchEntitySelection(ent.second); }
             inline void clearSelection() {
                 for (auto & n : _tree.nodes())
                     n.data->clearSelection();
             }
 
-            void update();
-            void clear();
-
             const core::Box3 & boundingBox() const;
-            core::Box3 boundingBoxOfObject(VisualObjectHandle h) const;
-            core::Box3 boundingBoxOfTriangleInObjectMesh(const VisualObjectMeshTriangle & omt) const;
+            core::Box3 boundingBoxOfObject(SceneObjectHandle h) const;
+
+            core::Box3 boundingBoxOfTriangleInObjectMesh(const SceneObjectMeshTriangle & omt) const;
+            core::Box3 boundingBoxOfLineInObjectMesh(const SceneObjectMeshLine & oml) const;
+            core::Box3 boundingBoxOfPointInObjectMesh(const SceneObjectMeshPoint & omp) const;
 
             void initialize() const;
             void render(const RenderOptions & options) const;
 
-            VisualObjectMeshTriangle pickOnScreen(const RenderOptions & options,
+            SceneObjectMeshTriangle pickTriangleOnScreen(const RenderOptions & options,
                 const core::Point2 & pOnScreen) const;
+            SceneObjectMeshLine pickLineOnScreen(const RenderOptions & options,
+                const core::Point2 & pOnScreen) const;
+            SceneObjectMeshPoint pickPointOnScreen(const RenderOptions & options,
+                const core::Point2 & pOnScreen) const;
+
+            inline SceneObjectEntity entityOfTriangle(SceneObjectMeshTriangle t) const {
+                if (t.first.invalid())
+                    return SceneObjectEntity();
+                return{ t.first, _tree.data(t.first)->mesh().entTriangles.at(t.second) };
+            }
+            inline SceneObjectEntity entityOfLine(SceneObjectMeshLine t) const {
+                if (t.first.invalid())
+                    return SceneObjectEntity();
+                return{ t.first, _tree.data(t.first)->mesh().entLines.at(t.second) };
+            }
+            inline SceneObjectEntity entityOfPoint(SceneObjectMeshPoint t) const {
+                if (t.first.invalid())
+                    return SceneObjectEntity();
+                return{ t.first, _tree.data(t.first)->mesh().entPoints.at(t.second) };
+            }
+
+            void pickOnScreen(const RenderOptions & options, const core::Point2 & pOnScreen,
+                SceneObjectMeshTriangle & t, SceneObjectMeshLine & l, SceneObjectMeshPoint & p) const;
+            std::set<SceneObjectEntity> pickOnScreen(const RenderOptions & options, const core::Point2 & pOnScreen) const;
+
+            void invokeCallbackFunctions(InteractionID iid, const std::set<SceneObjectEntity> & ents, bool selectedOnly = true) const;
+            void invokeCallbackFunctionsOnAllSelected(InteractionID iid) const;
 
             core::PerspectiveCamera perfectView(int width, int height, const core::Vec3 & up = core::Vec3(0, 0, 1)) const;
 
         private:
-            SceneInternal * _internal;
-            VisualObjectTree _tree;
+            void update();
+
+        private:
+            std::unique_ptr<SceneInternal> _internal;
+            SceneObjectTree _tree;
         };
+
+
+
+
+
+        class SceneBuilder {
+        public:
+            SceneBuilder();
+            SceneBuilder(const SceneObjectInstallingOptions & defaultO);
+            
+        public:
+            const SceneObjectTree & tree() const { return _tree; }
+            SceneObjectInstallingOptions & installingOptions() { return _installingOptions; }
+            const SceneObjectInstallingOptions & installingOptions() const { return _installingOptions; }
+            Scene scene() { return Scene(_tree); }
+
+            SceneObjectHandle activeObjectHandle() const { return _activeOH; }
+            SceneObject & activeObject() const { return *_tree.data(_activeOH); }
+
+            const TriMesh & activeMesh() const { return _tree.data(_activeOH)->mesh(); }
+            TriMesh & activeMesh() { return _tree.data(_activeOH)->mesh(); }
+
+            template <class T>
+            inline SceneBuilder & add(const T & data) {
+                _tree.add(_activeOH, Visualize(data, _installingOptions, core::IsContainer<T>()));
+                return *this;
+            }
+            template <class T, class FunT>
+            inline SceneBuilder & add(T & data, const FunT & fun) {
+                _tree.add(_activeOH, Visualize(data, fun, _installingOptions, 
+                    std::integral_constant<bool, core::IsContainer<T>::value>()));
+                return *this;
+            }
+
+
+            template <class T>
+            inline SceneBuilder & begin(const T & data) {
+                _activeOH = _tree.add(_activeOH, Visualize(data, _installingOptions, 
+                    std::integral_constant<bool, core::IsContainer<T>::value>()));
+                return *this;
+            }
+
+            template <class T, class FunT>
+            inline SceneBuilder & begin(T & data, const FunT & fun) {
+                _activeOH = _tree.add(_activeOH, Visualize(data, fun, _installingOptions, 
+                    std::integral_constant<bool, core::IsContainer<T>::value>()));
+                return *this;
+            }
+
+            inline SceneBuilder & shaderSource(const OpenGLShaderSource & ss) {
+                activeObject().setShaderSource(ss);
+                return *this;
+            }
+            inline SceneBuilder & resource(const std::string resourceName) {
+                activeObject().resources().push_back(ResourceStore::get(resourceName));
+                return *this;
+            }
+
+
+            inline SceneBuilder & end() {
+                if (!_tree.isRoot(_activeOH)){
+                    _activeOH = _tree.parent(_activeOH);
+                }
+                return *this;
+            }
+
+
+            void show(bool doModal = true, bool autoSetCamera = true, 
+                const RenderOptions & options = RenderOptions());
+
+        private:
+            SceneObjectInstallingOptions _installingOptions;
+            SceneObjectTree _tree;
+            SceneObjectHandle _activeOH;
+        };
+
 
  
     }

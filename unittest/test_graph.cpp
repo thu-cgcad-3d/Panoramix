@@ -2,19 +2,13 @@
 #include "../src/core/homo_graph.hpp"
 #include "../src/core/iterators.hpp"
 #include "../src/core/utilities.hpp"
-#include "../src/gui/visualizers.hpp"
+#include "../src/gui/scene.hpp"
 #include "config.hpp"
 
 using namespace panoramix;
 using namespace test;
 using TestMesh = core::Mesh<core::Vec3>;
 
-
-TEST(HandledTable, HandedTable) {
-
-    
-
-}
 
 
 TEST(MiscToolsTest, ConditionalIterator) {
@@ -48,19 +42,18 @@ void VisualizeMesh(const TestMesh & mesh){
         points.push_back(v.data);
     }
 
-    gui::Visualizer viz;
-    viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
-    viz.installingOptions.discretizeOptions.color = gui::ColorTag::Black;
-    viz.installingOptions.lineWidth = 5;
+    gui::SceneBuilder viz;
+    viz.installingOptions().discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
+    viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
+    viz.installingOptions().lineWidth = 5;
     viz.add(lines);
-    viz.installingOptions.discretizeOptions.color = gui::ColorTag::Red;
-    viz.installingOptions.pointSize = 20;
+    viz.installingOptions().discretizeOptions.color = gui::ColorTag::Red;
+    viz.installingOptions().pointSize = 20;
     viz.add(points);
-    viz.renderOptions.backgroundColor = gui::ColorTag::White;
-    viz.camera(core::PerspectiveCamera(500, 500, core::Point2(250, 250), 500,
+    viz.show(true, true, 
+        gui::RenderOptions().backgroundColor(gui::White).camera(core::PerspectiveCamera(500, 500, core::Point2(250, 250), 500,
         core::Vec3(-3, 0, 0),
-        core::Vec3(0.5, 0.5, 0.5)));
-    viz.show();
+        core::Vec3(0.5, 0.5, 0.5))));
 }
 
 

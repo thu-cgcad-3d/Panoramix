@@ -1,5 +1,3 @@
-#include "../gui/visualize2d.hpp"
-
 #include "rl_graph_occlusion.hpp"
 
 namespace panoramix {

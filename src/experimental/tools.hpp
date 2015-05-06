@@ -2,8 +2,8 @@
 #define PANORAMIX_EXPERIMENTAL_TOOLS_HPP
 
 #include "../gui/basic_types.hpp"
-#include "../gui/visualize2d.hpp"
-#include "../gui/visualizers.hpp"
+#include "../gui/scene.hpp"
+#include "../gui/canvas.hpp"
 
 #include "rl_graph.hpp"
 
@@ -78,9 +78,9 @@ namespace panoramix {
 
 
         // visualize current mixed graph
-        void Visualize(gui::Visualizer & vis, const View<PanoramicCamera> & texture,
+        void Visualize(gui::SceneBuilder & vis, const View<PanoramicCamera> & texture,
             const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars);
-        void Visualize(gui::Visualizer & vis, const View<PerspectiveCamera> & texture,
+        void Visualize(gui::SceneBuilder & vis, const View<PerspectiveCamera> & texture,
             const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars);
 
 

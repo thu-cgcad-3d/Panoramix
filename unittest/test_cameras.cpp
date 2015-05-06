@@ -1,5 +1,5 @@
 #include "../src/core/cameras.hpp"
-#include "../src/gui/visualize2d.hpp"
+#include "../src/gui/canvas.hpp"
 
 #include "config.hpp"
 
@@ -51,25 +51,24 @@ TEST(Camera, PerspectiveCameraRandom){
 
 
 TEST(Camera, CameraSampler) {
-    cv::Mat im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
+    core::Image3ub im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
 
     EXPECT_EQ(2000, im.cols);
     EXPECT_EQ(1000, im.rows);
     cv::resize(im, im, cv::Size(1000, 500));
-    gui::Visualizer2D viz(im);
-    viz.params.alphaForNewImage = 0.5;
+    auto c = gui::AsCanvas(im.clone());
+    c.alpha(0.5);
 
     core::PanoramicCamera originCam(im.cols / M_PI / 2.0);
     core::PanoramicCamera newCam(im.cols / M_PI / 2.0, 
         core::Vec3(0, 0, 0), 
         core::Vec3(0, 0, 1),
         core::Vec3(0, 1, 0));
-    viz << core::MakeCameraSampler(newCam, originCam)(im)
-        << gui::manip2d::Show(false);
+    c.add(core::MakeCameraSampler(newCam, originCam)(im));
+    c.show(false);
 
     core::PartialPanoramicCamera newCam2(newCam);
-    gui::Visualizer2D(core::MakeCameraSampler(newCam2, originCam)(im))
-        << gui::manip2d::Show();
+    gui::AsCanvas(core::MakeCameraSampler(newCam2, originCam)(im)).show();
 
 
     float camPositions[4][3] = {
@@ -86,8 +85,8 @@ TEST(Camera, CameraSampler) {
             core::Vec3(0, 0, -1));
         core::CameraSampler<core::PerspectiveCamera, core::PanoramicCamera> sampler(cam,
             core::PanoramicCamera(im.cols / M_PI / 2.0));
-        cv::Mat sampledIm = sampler(im);
+        auto sampledIm = sampler(im);
         cv::imwrite(ProjectDataDirStrings::Normal + "/13-" + std::to_string(i) + ".png", sampledIm);
-        gui::Visualizer2D(sampledIm) << gui::manip2d::Show();
+        gui::AsCanvas(sampledIm).show();
     }
 }

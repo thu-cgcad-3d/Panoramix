@@ -283,5 +283,12 @@ namespace panoramix {
     }
 
 }
+
+#define DECL_PROPERTY(claz, type, name) \
+    private: type _##name;  \
+    public: inline const type & name() const { return _##name; }\
+    public: inline type & name() { return _##name; }\
+    public: inline claz & name(const type & v) { _##name = v; return *this; }
+
  
 #endif

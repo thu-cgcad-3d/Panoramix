@@ -5,7 +5,7 @@ namespace panoramix {
     namespace core {
 
         template <class ...T> 
-        struct DelayStaticAssert {
+        struct AlwaysFalse {
             enum { value = false };
         };
 
@@ -37,7 +37,7 @@ namespace panoramix {
 
         // should never be instanciated error
 #define SHOULD_NEVER_BE_INSTANCIATED(...) \
-    static_assert(panoramix::core::DelayStaticAssert<__VA_ARGS__>::value, \
+    static_assert(panoramix::core::AlwaysFalse<__VA_ARGS__>::value, \
     FUNCTION_LINE_FILE_STRING + "This feature should never be instanciated by compiler! \n")
 
 

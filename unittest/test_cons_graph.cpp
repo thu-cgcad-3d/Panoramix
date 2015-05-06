@@ -1,5 +1,5 @@
+#include "../src/core/basic_types.hpp"
 #include "../src/core/cons_graph.hpp"
-#include "../src/gui/visualize2d.hpp"
 
 #include "config.hpp"
 

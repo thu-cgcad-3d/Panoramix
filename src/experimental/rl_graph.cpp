@@ -22,8 +22,6 @@ extern "C" {
 #include "rl_graph.hpp"
 #include "rl_graph_occlusion.hpp"
 
-#include "../gui/visualizers.hpp"
-
 
 namespace panoramix {
     namespace experimental {

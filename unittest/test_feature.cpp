@@ -1,7 +1,7 @@
 #include "../src/core/cameras.hpp"
 #include "../src/core/utilities.hpp"
 #include "../src/core/feature.hpp"
-#include "../src/gui/visualize2d.hpp"
+#include "../src/gui/canvas.hpp"
 
 #include "config.hpp"
 
@@ -15,12 +15,10 @@ TEST(Feature, SegmentationExtractor) {
         p.minSize = 400;
         p.sigma = 1;
         core::SegmentationExtractor seg(p);
-        core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
-        gui::Visualizer2D(im) << gui::manip2d::Show();
+        core::Image3ub im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        gui::AsCanvas(im).show();
         auto segs = seg(im);
-        gui::Visualizer2D(segs.first)
-            << gui::manip2d::SetColorTable(gui::CreateRandomColorTableWithSize(segs.second))
-            << gui::manip2d::Show();
+        gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
     }
     {
         core::SegmentationExtractor::Params p;
@@ -30,32 +28,26 @@ TEST(Feature, SegmentationExtractor) {
         core::SegmentationExtractor seg(p);
         core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
         auto segs = seg(im, { core::Line2({ 0.0, 0.0 }, core::Point2(im.cols, im.rows)), core::Line2(core::Point2(im.cols, 0), core::Point2(0, im.rows)) });
-        gui::Visualizer2D(segs.first)
-            << gui::manip2d::SetColorTable(gui::CreateRandomColorTableWithSize(segs.second))
-            << gui::manip2d::Show();
+        gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
     }
     {
         core::SegmentationExtractor::Params p;
         p.algorithm = core::SegmentationExtractor::SLIC;
         p.superpixelSizeSuggestion = 3000;
         core::SegmentationExtractor seg(p);
-        core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
-        gui::Visualizer2D(im) << gui::manip2d::Show();
+        core::Image3ub im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        gui::AsCanvas(im).show();
         auto segs = seg(im);
-        gui::Visualizer2D(segs.first)
-            << gui::manip2d::SetColorTable(gui::CreateRandomColorTableWithSize(segs.second))
-            << gui::manip2d::Show();
+        gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
     }
     {
         core::SegmentationExtractor::Params p;
         p.algorithm = core::SegmentationExtractor::QuickShiftCPU;
         core::SegmentationExtractor seg(p);
-        core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
-        gui::Visualizer2D(im) << gui::manip2d::Show();
+        core::Image3ub im = cv::imread(ProjectDataDirStrings::Normal + "/75.jpg");
+        gui::AsCanvas(im).show();
         auto segs = seg(im);
-        gui::Visualizer2D(segs.first)
-            << gui::manip2d::SetColorTable(gui::CreateRandomColorTableWithSize(segs.second))
-            << gui::manip2d::Show();
+        gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
     }
 }
 
@@ -71,11 +63,10 @@ TEST(Feature, SegmentationBoundaryJunction){
         ps.insert(ps.end(), j.second.begin(), j.second.end());
     }
     auto ctable = gui::CreateRandomColorTableWithSize(segs.second);
-    core::Image image = ctable(segs.first);
-    gui::Visualizer2D(image)
-        << gui::manip2d::SetColor(gui::Black)
-        << ps
-        << gui::manip2d::Show();
+    auto image = ctable(segs.first);
+    gui::AsCanvas(image)
+        .color(gui::Black)
+        .add(ps).show();
 }
 
 
@@ -84,23 +75,18 @@ TEST(Feature, SegmentationExtractorInPanorama){
     core::ResizeToMakeHeightUnder(im, 800);
     core::SegmentationExtractor::Params p;
     auto segs = core::SegmentationExtractor(p)(im, true);
-    gui::Visualizer2D(segs.first)
-        << gui::manip2d::SetColorTable(gui::CreateRandomColorTableWithSize(segs.second))
-        << gui::manip2d::Show();
+    gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
 }
 
 
 TEST(Feature, LineSegmentExtractor) {
     core::LineSegmentExtractor lineseg;
-    core::Image im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
+    core::Image3ub im = cv::imread(ProjectDataDirStrings::LocalManhattan + "/buildings2.jpg");
     core::LineSegmentExtractor::Params params;
     params.algorithm = core::LineSegmentExtractor::LSD;
     core::LineSegmentExtractor lineseg2(params);
-    gui::Visualizer2D(im)
-        << gui::manip2d::SetColor(gui::ColorTag::Yellow)
-        << gui::manip2d::SetThickness(2) <<
-        lineseg2(im)
-        << gui::manip2d::Show(0);
+    gui::AsCanvas(im).color(gui::ColorTag::Yellow).thickness(2)
+        .add(lineseg2(im)).show();
 }
 
 TEST(Feature, VanishingPointsDetector) {
@@ -140,7 +126,7 @@ TEST(Feature, VanishingPointsDetector) {
 
     for (auto & filename : filenames){
         std::cout << "testing image file: " << filename << std::endl;
-        core::Image im = cv::imread(ProjectDataDirStrings::Normal + "/" + filename);
+        core::Image3ub im = cv::imread(ProjectDataDirStrings::Normal + "/" + filename);
         core::ResizeToMakeWidthUnder(im, 400);
 
         std::vector<core::HPoint2> vps;
@@ -164,13 +150,12 @@ TEST(Feature, VanishingPointsDetector) {
                 vpRays.push_back(core::ClassifyAs(core::Ray2(p, (vps[i] - core::HPoint2(p, 1.0)).numerator), i));
             }
         }
-        gui::Visualizer2D(im)
-            << gui::manip2d::SetColorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size()-3))
-            << gui::manip2d::SetThickness(1)
-            << vpRays
-            << gui::manip2d::SetThickness(2)
-            << classifiedLines
-            << gui::manip2d::Show(0);
+        gui::AsCanvas(im).colorTable(gui::ColorTable(gui::ColorTableDescriptor::RGB).appendRandomizedGreyColors(vps.size()-3))
+            .thickness(1)
+            .add(vpRays)
+            .thickness(2)
+            .add(classifiedLines)
+            .show(0);
     }
 
     for (auto & filename : failedFileNames){
@@ -185,7 +170,7 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
     using namespace core;
 
     // forged experiment for panorama
-    core::Image im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/14.jpg");
+    core::Image3ub im = cv::imread(ProjectDataDirStrings::PanoramaIndoor + "/14.jpg");
     core::ResizeToMakeWidthUnder(im, 2000);
     //gui::Visualizer2D(im) << gui::manip2d::Show();
 
@@ -245,11 +230,10 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
             orthoPairs.push_back(p);
     }
 
-    gui::Visualizer2D viz(pim);
-    viz = viz << gui::manip2d::SetThickness(2);
+    auto viz = gui::AsCanvas(pim).thickness(2);
     for (int i = 0; i < line2s.size(); i++){
         if (line3s[i].claz == 0){
-            viz << gui::manip2d::SetColor(gui::ColorTag::Red) << line2s[i];
+            viz.color(gui::ColorTag::Red).add(line2s[i]);
         }
         else {
             //viz << gui::manip2d::SetColor(gui::ColorTag::Black) << line2s[i];
@@ -260,14 +244,14 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
         auto & n2 = line3norms[op.second];
         auto inter = n1.cross(n2);
         auto interp = cam.screenProjection(inter);
-        viz << gui::manip2d::SetColor(gui::ColorTag::LightGray) << gui::manip2d::SetThickness(1)
-            << Line2(line2s[op.first].center(), interp)
-            << Line2(line2s[op.second].center(), interp);
-        viz << gui::manip2d::SetColor(gui::ColorTag::White) << gui::manip2d::SetThickness(2) 
-            << line2s[op.first] << line2s[op.second];
+        viz.color(gui::ColorTag::LightGray).thickness(1)
+            .add(Line2(line2s[op.first].center(), interp))
+            .add(Line2(line2s[op.second].center(), interp));
+        viz.color(gui::ColorTag::White).thickness(2)
+            .add(line2s[op.first]).add(line2s[op.second]);
     }
 
-    viz << gui::manip2d::Show();
+    viz.show();
 
 }
 
@@ -281,13 +265,11 @@ TEST(Feature, FeatureExtractor) {
     
     for (int i = 0; i < 4; i++) {
         std::string name = ProjectDataDirStrings::Normal + "/" + "sampled_" + std::to_string(i) + ".png";
-        cv::Mat im = cv::imread(name);
+        core::Image3ub im = cv::imread(name);
         auto segs = segmenter(im);
-        gui::Visualizer2D(im) 
-            << [](gui::Visualizer2D & viz) { viz.params.winName = "haha"; }
-        << gui::manip2d::SetColorTable(gui::CreateRandomColorTableWithSize(segs.second))
-            << segs.first
-            << lineSegmentExtractor(im) 
-            << gui::manip2d::Show();
+        gui::AsCanvas(im).colorTable(gui::CreateRandomColorTableWithSize(segs.second))
+            .add(segs.first)
+            .add(lineSegmentExtractor(im))
+            .show();
     }
 }

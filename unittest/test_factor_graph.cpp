@@ -30,7 +30,7 @@ TEST(FactorGraph, Simple){
 }
 
 
-TEST(FactorGraph, Denoise){
+TEST(FactorGraph, DISABLED_Denoise){
 
     auto im = cv::imread(ProjectDataDirStrings::BPTests + "/horse.jpg");
     core::ResizeToMakeHeightUnder(im, 200);

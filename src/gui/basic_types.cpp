@@ -475,6 +475,7 @@ namespace panoramix {
                 "attribute highp vec3 normal;\n"
                 "attribute lowp vec4 color;\n"
                 "attribute lowp vec2 texCoord;\n"
+                "attribute uint isSelected;\n"
 
                 "uniform highp mat4 viewMatrix;\n"
                 "uniform highp mat4 modelMatrix;\n"
@@ -482,12 +483,14 @@ namespace panoramix {
 
                 "varying lowp vec4 pixelColor;\n"
                 "varying lowp vec2 pixelTexCoord;\n"
+                "varying lowp float pixelSelection;\n"
 
                 "void main(void)\n"
                 "{\n"
                 "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
                 "    pixelColor = color;\n"
                 "    pixelTexCoord = texCoord;\n"
+                "    pixelSelection = isSelected == 0u ? 0.0 : 1.0;\n"
                 "}\n",
 
 
@@ -502,6 +505,7 @@ namespace panoramix {
 
                 "varying lowp vec4 pixelColor;\n"
                 "varying lowp vec2 pixelTexCoord;\n"
+                "varying lowp float pixelSelection;\n"
 
                 "void main(void)\n"
                 "{\n"
@@ -509,8 +513,9 @@ namespace panoramix {
                 "   gl_FragColor = (pixelColor * bwColor + texColor * bwTexColor)" 
                         "       / (bwColor + bwTexColor);\n"
                 "   float distance = length(gl_PointCoord - vec2(0.5));\n"
+                "   gl_FragColor.a = 1.0 - pixelSelection * 0.5;\n"
                 "   if(distance > 0.4 && distance <= 0.5)\n"
-                "       gl_FragColor.a = 1.0 - (distance - 0.4) * 0.1;\n"
+                "       gl_FragColor.a = (1.0 - (distance - 0.4) * 0.1) * gl_FragColor.a;\n"
                 "   else if(distance > 0.5)\n"
                 "       discard;\n"
                 "}\n"
@@ -523,6 +528,7 @@ namespace panoramix {
                 "attribute highp vec3 normal;\n"
                 "attribute lowp vec4 color;\n"
                 "attribute lowp vec2 texCoord;\n"
+                "attribute uint isSelected;\n"
 
                 "uniform highp mat4 viewMatrix;\n"
                 "uniform highp mat4 modelMatrix;\n"
@@ -530,12 +536,14 @@ namespace panoramix {
 
                 "varying lowp vec4 pixelColor;\n"
                 "varying lowp vec2 pixelTexCoord;\n"
+                "varying lowp float pixelSelection;\n"
 
                 "void main(void)\n"
                 "{\n"
                 "    gl_Position = projectionMatrix * viewMatrix * modelMatrix * position;\n"
                 "    pixelColor = color;\n"
                 "    pixelTexCoord = texCoord;\n"
+                "    pixelSelection = isSelected == 0u ? 0.0 : 1.0;\n"
                 "}\n",
 
 
@@ -550,12 +558,14 @@ namespace panoramix {
 
                 "varying lowp vec4 pixelColor;\n"
                 "varying lowp vec2 pixelTexCoord;\n"
+                "varying lowp float pixelSelection;\n"
 
                 "void main(void)\n"
                 "{\n"
                 "   lowp vec4 texColor = texture2D(tex, pixelTexCoord);\n"
                 "   gl_FragColor = (pixelColor * bwColor + texColor * bwTexColor)"
                 "       / (bwColor + bwTexColor);\n"
+                "   gl_FragColor.a = 1.0 - pixelSelection * 0.5;\n"
                 "}\n"
             };
 

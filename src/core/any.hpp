@@ -9,6 +9,35 @@
 namespace panoramix {
     namespace core {
 
+        // AnyPtr
+        class AnyPtr {
+        public:
+            AnyPtr() : _ptr(nullptr) {}
+            AnyPtr(nullptr_t) : _ptr(nullptr) {}
+            
+            template <class T>
+            inline AnyPtr(T * p) : _ptr((void*)p) {}
+            template <class T>
+            inline operator T* () const { return static_cast<T*>(_ptr); }
+            template <class T, class = std::enable_if_t<!std::is_pointer<T>::value>>
+            inline operator T() const { 
+                static_assert(AlwaysFalse<T>::value, "cannot be directly converted to non pointer type!"); 
+            }
+
+            inline AnyPtr & operator = (nullptr_t) { _ptr = nullptr; return *this; }
+            inline bool operator == (AnyPtr p) const { return _ptr == p._ptr; }
+            inline bool operator != (AnyPtr p) const { return _ptr != p._ptr; }
+            inline bool operator == (nullptr_t) const { return !_ptr; }
+            inline bool operator < (AnyPtr p) const { return _ptr < p._ptr; }
+
+            template <class T>
+            inline T & ref() const { return *(static_cast<T*>(_ptr)); }
+
+        private:
+            void * _ptr;
+        };
+
+
 
         // class Any
         struct DataBase {

@@ -420,6 +420,12 @@ namespace panoramix {
             return BoundingBoxOfRange(std::begin(cont), std::end(cont));
         }
 
+        template <class T>
+        inline auto BoundingBoxOfContainer(std::initializer_list<T> ilist)
+            -> decltype(BoundingBox(*ilist.begin())) {
+            return BoundingBoxOfRange(ilist.begin(), ilist.end());
+        }
+
         // bounding box of pair-range
         template <class PairIteratorT>
         auto BoundingBoxOfPairRange(PairIteratorT begin, PairIteratorT end) -> decltype(BoundingBox((*begin).second)) {

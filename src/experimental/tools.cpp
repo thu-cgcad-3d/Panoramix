@@ -9,7 +9,7 @@ namespace panoramix {
         namespace {
 
             template <class UhClickHandlerFunT, class UhColorizerFunT = core::ConstantFunctor<gui::Color>>
-            void VisualizeTemplated(gui::Visualizer & viz, const core::Image & panorama,
+            void VisualizeTemplated(gui::SceneBuilder & viz, const core::Image & panorama,
                 const RLGraph & mg,
                 const RLGraphControls & controls, const RLGraphVars & vars,
                 UhClickHandlerFunT && uhClicked,
@@ -33,9 +33,7 @@ namespace panoramix {
 
                 gui::ResourceStore::set("texture", panorama);
 
-                viz.renderOptions.bwColor = 1.0;
-                viz.renderOptions.bwTexColor = 0.0;
-                viz.installingOptions.discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
+                viz.installingOptions().discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
                 std::vector<std::pair<ComponentID, gui::Colored<gui::SpatialProjectedPolygon>>> spps;
                 std::vector<gui::Colored<core::Line3>> lines;
 
@@ -77,8 +75,8 @@ namespace panoramix {
                 }
 
                 viz.begin(spps, sppCallbackFun).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
-                viz.installingOptions.discretizeOptions.color = gui::ColorTag::DarkGray;
-                viz.installingOptions.lineWidth = 5.0;
+                viz.installingOptions().discretizeOptions.color = gui::ColorTag::DarkGray;
+                viz.installingOptions().lineWidth = 5.0;
                 viz.add(lines);
 
                 std::vector<core::Line3> connectionLines;
@@ -108,14 +106,9 @@ namespace panoramix {
                     }
                 }
 
-                viz.installingOptions.discretizeOptions.color = gui::ColorTag::Black;
-                viz.installingOptions.lineWidth = 1.0;
+                viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
+                viz.installingOptions().lineWidth = 1.0;
                 viz.add(connectionLines);
-
-                viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines;
-                viz.renderOptions.backgroundColor = gui::ColorTag::White;
-                viz.renderOptions.bwColor = 0.0;
-                viz.renderOptions.bwTexColor = 0.5;
 
                 gui::ResourceStore::clear();
 
@@ -169,14 +162,14 @@ namespace panoramix {
         };
 
 
-        void Visualize(gui::Visualizer & vis, const View<PanoramicCamera> & texture,
+        void Visualize(gui::SceneBuilder & vis, const View<PanoramicCamera> & texture,
             const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars){
             VisualizeTemplated(vis, texture.image, mg, controls, vars,
                 ComponentHandleClickHandler{ mg, controls, vars },
                 ComponentHandleColorizer{ mg, controls, vars });
         }
 
-        void Visualize(gui::Visualizer & vis, const View<PerspectiveCamera> & texture,
+        void Visualize(gui::SceneBuilder & vis, const View<PerspectiveCamera> & texture,
             const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars) {
             VisualizeTemplated(vis, texture.sampled(PanoramicCamera(500, Point3(0, 0, 0), Point3(1, 0, 0), Vec3(0, 0, 1))).image,
                 mg, controls, vars, ComponentHandleClickHandler{ mg, controls, vars },

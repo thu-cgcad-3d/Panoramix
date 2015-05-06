@@ -24,6 +24,7 @@ namespace panoramix {
         }
 
         Vec2 GeneralPerspectiveCamera::screenProjection(const Vec3 & p3) const {
+            //THERE_ARE_BUGS_HERE("the input is not a point but a direction ?!!!! CONFUSION");
             Vec4 p4(p3(0), p3(1), p3(2), 1);
             Vec4 position = _viewProjectionMatrix * p4;
             double xratio = position(0) / position(3) / 2;
@@ -40,6 +41,7 @@ namespace panoramix {
         }
 
         HPoint2 GeneralPerspectiveCamera::screenProjectionInHPoint(const Vec3 & p3) const {
+            //THERE_ARE_BUGS_HERE("the input is not a point but a direction ?!!!! CONFUSION");
             Vec4 p4(p3(0), p3(1), p3(2), 1);
             Vec4 position = _viewProjectionMatrix * p4;
             double xratio = position(0) / 2;

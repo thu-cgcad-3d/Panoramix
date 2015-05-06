@@ -419,6 +419,12 @@ namespace panoramix {
         template <class T>
         class Forest {
         public:
+            Forest(){}
+            Forest(const Forest &) = default;
+            Forest & operator = (const Forest &) = default;
+            Forest(Forest && f) { _nodes = std::move(f._nodes); }
+            Forest & operator = (Forest && f) { _nodes = std::move(f._nodes);  return *this; }
+
             using NodeHandle = Handle<ForestTopo>;
             using NodeExistsPred = TripletExistsPred<ForestTopo, T>;
 

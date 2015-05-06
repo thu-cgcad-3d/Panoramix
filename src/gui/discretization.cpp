@@ -22,44 +22,48 @@ namespace panoramix {
 
         // tri mesh implementation
         TriMesh::Vertex::Vertex()
-            : position(0, 0, 0, 1), normal(0, 0, 0), color(0, 0, 0, 1), texCoord(0, 0), entityIndex(-1), isSelected(false) {
+            : position(0, 0, 0, 1), normal(0, 0, 0), color(0, 0, 0, 1), texCoord(0, 0) {
         }
 
 
-        TriMesh::VertHandle TriMesh::addVertex(const TriMesh::Vertex & v) {
+        TriMesh::VertHandle TriMesh::addVertex(const TriMesh::Vertex & v, bool asPoint, EntityPtr ent) {
             vertices.push_back(v);
-            iPoints.push_back(static_cast<TriMesh::VertHandle>(vertices.size() - 1));
-            return iPoints.back();
+            iverts.push_back(static_cast<TriMesh::VertHandle>(vertices.size() - 1));
+            if (asPoint){
+                iPoints.push_back(static_cast<TriMesh::VertHandle>(vertices.size() - 1));
+                entPoints.push_back(ent);
+            }
+            return iverts.back();
         }
 
-        TriMesh::VertHandle TriMesh::addVertex(const core::Point3 & p, const DiscretizeOptions & o){
+        TriMesh::VertHandle TriMesh::addVertex(const core::Point3 & p, const DiscretizeOptions & o, bool asPoint){
             TriMesh::Vertex v;
             v.position = Concat(p, 1.0);
             v.color = o.color;
-            v.entityIndex = o.index;
-            return addVertex(v);
+            return addVertex(v, asPoint, o.entity);
         }
 
-        TriMesh::VertHandle TriMesh::addVertex(const core::Point3 & p, const core::Vec3 & normal, const DiscretizeOptions & o){
+        TriMesh::VertHandle TriMesh::addVertex(const core::Point3 & p, const core::Vec3 & normal, const DiscretizeOptions & o, bool asPoint){
             TriMesh::Vertex v;
             v.position = Concat(p, 1.0);
             v.normal = normal;
             v.color = o.color;
-            v.entityIndex = o.index;
-            return addVertex(v);
+            return addVertex(v, asPoint, o.entity);
         }
 
-        TriMesh::LineHandle TriMesh::addLine(TriMesh::VertHandle v1, TriMesh::VertHandle v2) {
+        TriMesh::LineHandle TriMesh::addLine(TriMesh::VertHandle v1, TriMesh::VertHandle v2, EntityPtr ent) {
             iLines.push_back(v1);
             iLines.push_back(v2);
+            entLines.push_back(ent);
             return iLines.size() / 2;
         }
 
-        TriMesh::LineHandle TriMesh::addIsolatedLine(const Vertex & v1, const Vertex & v2) {
+        TriMesh::LineHandle TriMesh::addIsolatedLine(const Vertex & v1, const Vertex & v2, EntityPtr ent) {
             vertices.push_back(v1);
             iLines.push_back(vertices.size() - 1);
             vertices.push_back(v2);
             iLines.push_back(vertices.size() - 1);
+            entLines.push_back(ent);
             return iLines.size() / 2;
         }
 
@@ -72,20 +76,22 @@ namespace panoramix {
             v2 = iLines[l * 2 + 1];
         }
 
-        TriMesh::TriangleHandle TriMesh::addTriangle(TriMesh::VertHandle v1, TriMesh::VertHandle v2, TriMesh::VertHandle v3) {
+        TriMesh::TriangleHandle TriMesh::addTriangle(TriMesh::VertHandle v1, TriMesh::VertHandle v2, TriMesh::VertHandle v3, EntityPtr ent) {
             iTriangles.push_back(v1);
             iTriangles.push_back(v2);
             iTriangles.push_back(v3);
+            entTriangles.push_back(ent);
             return iTriangles.size() / 3;
         }
 
-        TriMesh::TriangleHandle TriMesh::addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3) {
+        TriMesh::TriangleHandle TriMesh::addIsolatedTriangle(const Vertex & v1, const Vertex & v2, const Vertex & v3, EntityPtr ent) {
             vertices.push_back(v1);
             iTriangles.push_back(vertices.size() - 1);
             vertices.push_back(v2);
             iTriangles.push_back(vertices.size() - 1);
             vertices.push_back(v3);
             iTriangles.push_back(vertices.size() - 1);
+            entTriangles.push_back(ent);
             return iTriangles.size() / 3;
         }
 
@@ -99,12 +105,12 @@ namespace panoramix {
             v3 = iTriangles[t * 3 + 2];
         }
 
-        void TriMesh::addQuad(TriMesh::VertHandle v1, TriMesh::VertHandle v2, TriMesh::VertHandle v3, TriMesh::VertHandle v4) {
-            addTriangle(v1, v2, v3);
-            addTriangle(v1, v3, v4);
+        void TriMesh::addQuad(TriMesh::VertHandle v1, TriMesh::VertHandle v2, TriMesh::VertHandle v3, TriMesh::VertHandle v4, EntityPtr ent) {
+            addTriangle(v1, v2, v3, ent);
+            addTriangle(v1, v3, v4, ent);
         }
 
-        void TriMesh::addPolygon(const std::vector<TriMesh::VertHandle> & vhs) {
+        void TriMesh::addPolygon(const std::vector<TriMesh::VertHandle> & vhs, EntityPtr ent) {
             assert(vhs.size() >= 3);
             // get normal direction
             Vec3 normal = normalize(
@@ -115,16 +121,20 @@ namespace panoramix {
             TriangulatePolygon(vhs.begin(), vhs.end(), [this, &normal](VertHandle vh) {
                 Vec3 v = ToVec3Affine(vertices[vh].position);
                 return ToVec2(v - v.dot(normal) * normal);
-            }, [this](VertHandle a, VertHandle b, VertHandle c){
-                addTriangle(a, b, c);
+            }, [this, ent](VertHandle a, VertHandle b, VertHandle c){
+                addTriangle(a, b, c, ent);
             });
         }
 
         void TriMesh::clear() {
             vertices.clear();
+            iverts.clear();
             iPoints.clear();
             iLines.clear();
             iTriangles.clear();
+            entPoints.clear();
+            entLines.clear();
+            entTriangles.clear();
         }
 
         Box3 TriMesh::boundingBox() const {
@@ -169,7 +179,7 @@ namespace panoramix {
             for (int i = 0; i < m.size(); i++){
                 for (auto & p : m.layers[i]){
                     auto n = normalize(p - origin);
-                    vhs[i].push_back(mesh.addVertex(p, n, o));
+                    vhs[i].push_back(mesh.addVertex(p, n, o, false));
                     Vec2 proj((p - origin).dot(x), (p - origin).dot(y));
                     projAngles[i].push_back(SignedAngleBetweenDirections(Vec2(1, 0), proj));
                 }
@@ -180,7 +190,7 @@ namespace panoramix {
             }
 
 
-            mesh.addPolygon(vhs.front());
+            mesh.addPolygon(vhs.front(), o.entity);
             for (int i = 1; i < m.size(); i++){
                 // find nearest two vertices in last layer
                 if (vhs[i].empty()){
@@ -197,7 +207,7 @@ namespace panoramix {
                 for (int k = 0; k < lastids.size() + thisids.size(); k++){
                     if (anglea < angleb){
                         int newa = (a + 1) % lastids.size();
-                        mesh.addTriangle(lastVhs[lastids[a]], thisVhs[thisids[b]], lastVhs[lastids[newa]]);
+                        mesh.addTriangle(lastVhs[lastids[a]], thisVhs[thisids[b]], lastVhs[lastids[newa]], o.entity);
                         a = newa;
                         double newanglea = lastAngles[lastids[newa]];
                         if (newanglea < anglea){
@@ -207,7 +217,7 @@ namespace panoramix {
                     }
                     else{
                         int newb = (b + 1) % thisids.size();
-                        mesh.addTriangle(thisVhs[thisids[b]], thisVhs[thisids[newb]], lastVhs[lastids[a]]);
+                        mesh.addTriangle(thisVhs[thisids[b]], thisVhs[thisids[newb]], lastVhs[lastids[a]], o.entity);
                         b = newb;
                         double newangleb = thisAngles[thisids[newb]];
                         if (newangleb < angleb){
@@ -219,7 +229,7 @@ namespace panoramix {
             }
 
             std::reverse(vhs.back().begin(), vhs.back().end());
-            mesh.addPolygon(vhs.back());
+            mesh.addPolygon(vhs.back(), o.entity);
         }
 
 
@@ -246,16 +256,15 @@ namespace panoramix {
                         v.position = point;
                         v.texCoord = { xratio, yratio };
                         v.color = o.color;
-                        v.entityIndex = o.index;
-                        vhs[i][j] = mesh.addVertex(v);
+                        vhs[i][j] = mesh.addVertex(v, false, o.entity);
                     }
                 }
                 for (int i = 1; i < m; i++) {
                     int previ = i == 0 ? m - 1 : i - 1;
                     for (int j = 0; j < n; j++) {
                         int prevj = j == 0 ? n - 1 : j - 1;
-                        mesh.addTriangle(vhs[i][j], vhs[i][prevj], vhs[previ][prevj]);
-                        mesh.addTriangle(vhs[i][j], vhs[previ][prevj], vhs[previ][j]);
+                        mesh.addTriangle(vhs[i][j], vhs[i][prevj], vhs[previ][prevj], o.entity);
+                        mesh.addTriangle(vhs[i][j], vhs[previ][prevj], vhs[previ][j], o.entity);
                     }
                 }
             }
@@ -277,7 +286,6 @@ namespace panoramix {
                         v.position = point;
                         v.texCoord = { xratio, yratio };
                         v.color = o.color;
-                        v.entityIndex = o.index;
                         vs[i][j] = v;
                     }
                 }
@@ -285,8 +293,8 @@ namespace panoramix {
                     int previ = i == 0 ? m - 1 : i - 1;
                     for (int j = 0; j < n; j++) {
                         int prevj = j == 0 ? n - 1 : j - 1;
-                        mesh.addIsolatedTriangle(vs[i][j], vs[i][prevj], vs[previ][prevj]);
-                        mesh.addIsolatedTriangle(vs[i][j], vs[previ][prevj], vs[previ][j]);
+                        mesh.addIsolatedTriangle(vs[i][j], vs[i][prevj], vs[previ][prevj], o.entity);
+                        mesh.addIsolatedTriangle(vs[i][j], vs[previ][prevj], vs[previ][j], o.entity);
                     }
                 }
             }
@@ -306,10 +314,9 @@ namespace panoramix {
                 v.position = Concat(cs[i], 1.0);
                 v.normal = spp.plane.normal;
                 v.color = o.color;
-                v.entityIndex = o.index;
-                vhandles[i] = mesh.addVertex(v);
+                vhandles[i] = mesh.addVertex(v, false, o.entity);
             }
-            mesh.addPolygon(vhandles);
+            mesh.addPolygon(vhandles, o.entity);
         }
 
 
