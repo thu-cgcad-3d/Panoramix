@@ -432,6 +432,18 @@ namespace panoramix {
             return CreatePerspectiveView(image, eye, center, up);
         }
 
+        template <class CameraT, class T, class = std::enable_if_t<IsCamera<CameraT>::value>>
+        inline Failable<View<CameraT, ImageOfType<T>>> CreateView(const ImageOfType<T> & image,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, -1)){
+            auto r = CreateView<CameraT>((const Image &)image, eye, center, up);
+            if (r.failed())
+                return nullptr;
+            auto v = r.wrap();
+            return View<CameraT, ImageOfType<T>>(std::move(v.image), std::move(v.camera));
+        }
+
     }
 }
  

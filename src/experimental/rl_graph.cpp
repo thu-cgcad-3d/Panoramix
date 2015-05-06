@@ -1,11 +1,11 @@
 
 extern "C" {
-    #include <gpc.h>
+   // #include <gpc.h>
 //    #include <mosek.h>
 }
 
 //
-#include <GCoptimization.h>
+//#include <GCoptimization.h>
 
 
 #include "../misc/matlab_engine.hpp"
@@ -1315,33 +1315,33 @@ namespace panoramix {
 
         namespace {
 
-            template <class FunctorT>
-            struct DataCostFunctorWrapper : GCoptimization::DataCostFunctor{
-                inline DataCostFunctorWrapper(FunctorT && f) : fun(std::forward<FunctorT>(f)) {}
-                virtual GCoptimization::EnergyTermType compute(GCoptimization::SiteID s, GCoptimization::LabelID l) override {
-                    return fun(s, l);
-                }
-                FunctorT fun;
-            };
-            template <class FunctorT>
-            inline DataCostFunctorWrapper<FunctorT> * AllocDataCostFunctor(FunctorT && f) {
-                return new DataCostFunctorWrapper<FunctorT>(std::forward<FunctorT>(f));
-            }
+            //template <class FunctorT>
+            //struct DataCostFunctorWrapper : GCoptimization::DataCostFunctor{
+            //    inline DataCostFunctorWrapper(FunctorT && f) : fun(std::forward<FunctorT>(f)) {}
+            //    virtual GCoptimization::EnergyTermType compute(GCoptimization::SiteID s, GCoptimization::LabelID l) override {
+            //        return fun(s, l);
+            //    }
+            //    FunctorT fun;
+            //};
+            //template <class FunctorT>
+            //inline DataCostFunctorWrapper<FunctorT> * AllocDataCostFunctor(FunctorT && f) {
+            //    return new DataCostFunctorWrapper<FunctorT>(std::forward<FunctorT>(f));
+            //}
 
-            template <class FunctorT>
-            struct SmoothCostFunctorWrapper : GCoptimization::SmoothCostFunctor {
-                inline SmoothCostFunctorWrapper(FunctorT && f) : fun(std::forward<FunctorT>(f)){}
-                virtual GCoptimization::EnergyTermType compute(
-                    GCoptimization::SiteID s1, GCoptimization::SiteID s2,
-                    GCoptimization::LabelID l1, GCoptimization::LabelID l2) override {
-                    return fun(s1, s2, l1, l2);
-                }
-                FunctorT fun;
-            };
-            template <class FunctorT>
-            inline SmoothCostFunctorWrapper<FunctorT> * AllocSmoothCostFunctor(FunctorT && f) {
-                return new SmoothCostFunctorWrapper<FunctorT>(std::forward<FunctorT>(f));
-            }
+            //template <class FunctorT>
+            //struct SmoothCostFunctorWrapper : GCoptimization::SmoothCostFunctor {
+            //    inline SmoothCostFunctorWrapper(FunctorT && f) : fun(std::forward<FunctorT>(f)){}
+            //    virtual GCoptimization::EnergyTermType compute(
+            //        GCoptimization::SiteID s1, GCoptimization::SiteID s2,
+            //        GCoptimization::LabelID l1, GCoptimization::LabelID l2) override {
+            //        return fun(s1, s2, l1, l2);
+            //    }
+            //    FunctorT fun;
+            //};
+            //template <class FunctorT>
+            //inline SmoothCostFunctorWrapper<FunctorT> * AllocSmoothCostFunctor(FunctorT && f) {
+            //    return new SmoothCostFunctorWrapper<FunctorT>(std::forward<FunctorT>(f));
+            //}
 
 
             namespace {

@@ -2,20 +2,26 @@
 #include "../src/core/utilities.hpp"
 #include "../src/core/feature.hpp"
 #include "../src/gui/canvas.hpp"
+#include "../src/gui/utitilies.hpp"
 
 #include "config.hpp"
 
 using namespace panoramix;
 using namespace test;
 
+
 TEST(Feature, SegmentationExtractor) {
+    core::Image3ub im = gui::PickAnImage();
+    if (im.empty())
+        return;
+
+    core::ResizeToMakeHeightUnder(im, 600);
     {
         core::SegmentationExtractor::Params p;
         p.c = 5;
         p.minSize = 400;
         p.sigma = 1;
-        core::SegmentationExtractor seg(p);
-        core::Image3ub im = core::ImageRead(ProjectDataDirStrings::Normal + "/75.jpg");
+        core::SegmentationExtractor seg(p);      
         gui::AsCanvas(im).show();
         auto segs = seg(im);
         gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
@@ -26,7 +32,6 @@ TEST(Feature, SegmentationExtractor) {
         p.minSize = 400;
         p.sigma = 1;
         core::SegmentationExtractor seg(p);
-        core::Image im = core::ImageRead(ProjectDataDirStrings::Normal + "/75.jpg");
         auto segs = seg(im, { core::Line2({ 0.0, 0.0 }, core::Point2(im.cols, im.rows)), core::Line2(core::Point2(im.cols, 0), core::Point2(0, im.rows)) });
         gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
     }
@@ -35,7 +40,6 @@ TEST(Feature, SegmentationExtractor) {
         p.algorithm = core::SegmentationExtractor::SLIC;
         p.superpixelSizeSuggestion = 3000;
         core::SegmentationExtractor seg(p);
-        core::Image3ub im = core::ImageRead(ProjectDataDirStrings::Normal + "/75.jpg");
         gui::AsCanvas(im).show();
         auto segs = seg(im);
         gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
@@ -44,7 +48,6 @@ TEST(Feature, SegmentationExtractor) {
         core::SegmentationExtractor::Params p;
         p.algorithm = core::SegmentationExtractor::QuickShiftCPU;
         core::SegmentationExtractor seg(p);
-        core::Image3ub im = core::ImageRead(ProjectDataDirStrings::Normal + "/75.jpg");
         gui::AsCanvas(im).show();
         auto segs = seg(im);
         gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
