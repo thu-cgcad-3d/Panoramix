@@ -389,17 +389,14 @@ namespace panoramix {
 
 
 
-
-        View<PanoramicCamera> CreatePanoramicView(const Image & panorama,
+        PanoramicCamera CreatePanoramicCamera(const Image & panorama,
             const Point3 & eye, const Point3 & center, const Vec3 & up) {
             assert(abs(panorama.cols - panorama.rows * 2) < panorama.rows / 10.0f);
-            return View<PanoramicCamera>{
-                panorama,
-                    PanoramicCamera(panorama.cols / M_PI / 2.0, eye, center, up)
-            };
+            return PanoramicCamera(panorama.cols / M_PI / 2.0, eye, center, up);
         }
 
-        Failable<PerspectiveView> CreatePerspectiveView(const Image & perspectiveImage,
+
+        Failable<PerspectiveCamera> CreatePerspectiveCamera(const Image & perspectiveImage,
             const Point3 & eye, const Point3 & center, const Vec3 & up,
             const LineSegmentExtractor & lse, const VanishingPointsDetector & vpd,
             std::vector<Classified<Line3>> * line3sPtr,
@@ -414,7 +411,7 @@ namespace panoramix {
             int maxTry = 500;
             while (vps.empty()){
                 auto result = vpd(lines, perspectiveImage.size());
-                if (-- maxTry < 0)
+                if (--maxTry < 0)
                     break;
                 if (result.failed()){
                     std::srand(clock());
@@ -428,7 +425,7 @@ namespace panoramix {
             }
 
             Point2 principlePoint;
-            std::tie(principlePoint, std::ignore) = 
+            std::tie(principlePoint, std::ignore) =
                 ComputePrinciplePointAndFocalLength(vps[0].value(), vps[1].value(), vps[2].value());
 
             // only reserve first 3 vps
@@ -437,16 +434,14 @@ namespace panoramix {
                 if (c >= 3) c = -1;
             }
 
-            View<PerspectiveCamera> view;
-            view.image = perspectiveImage;
-            view.camera = PerspectiveCamera(view.image.cols, view.image.rows, 
+            PerspectiveCamera camera(perspectiveImage.cols, perspectiveImage.rows,
                 principlePoint, focal, eye, center, up);
-                
+
             if (line3sPtr){
                 std::vector<Classified<Line3>> line3s(lines.size());
                 for (int i = 0; i < lines.size(); i++){
-                    line3s[i].component.first = view.camera.toSpace(lines[i].first);
-                    line3s[i].component.second = view.camera.toSpace(lines[i].second);
+                    line3s[i].component.first = camera.toSpace(lines[i].first);
+                    line3s[i].component.second = camera.toSpace(lines[i].second);
                     line3s[i].claz = lineClasses[i];
                 }
                 *line3sPtr = std::move(line3s);
@@ -460,7 +455,7 @@ namespace panoramix {
             if (vpsPtr){
                 std::vector<Vec3> vp3s(vps.size());
                 for (int i = 0; i < vps.size(); i++){
-                    vp3s[i] = normalize(view.camera.toSpace(vps[i].value()));
+                    vp3s[i] = normalize(camera.toSpace(vps[i].value()));
                 }
                 *vpsPtr = std::move(vp3s);
             }
@@ -468,12 +463,12 @@ namespace panoramix {
                 *focalPtr = focal;
             }
 
-            return std::move(view);
+            return std::move(camera);
 
         }
 
 
-        PerspectiveView CreatePerspectiveView(const Image & perspectiveImage, 
+        PerspectiveCamera CreatePerspectiveCamera(const Image & perspectiveImage,
             const std::vector<HPoint2> & vps,
             const Point3 & eye, const Point3 & center, const Vec3 & up){
 
@@ -482,13 +477,14 @@ namespace panoramix {
             std::tie(principlePoint, focal) =
                 ComputePrinciplePointAndFocalLength(vps[0].value(), vps[1].value(), vps[2].value());
 
-            View<PerspectiveCamera> view;
-            view.image = perspectiveImage;
-            view.camera = PerspectiveCamera(view.image.cols, view.image.rows,
+            return PerspectiveCamera(perspectiveImage.cols, perspectiveImage.rows,
                 principlePoint, focal, eye, center, up);
-
-            return view;
         }
+
+
+
+
+        
 
 
     }

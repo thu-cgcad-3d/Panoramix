@@ -380,22 +380,12 @@ namespace panoramix {
 
 
 
-        // create panoramic view
-        PanoramicView CreatePanoramicView(const Image & panorama,
+        PanoramicCamera CreatePanoramicCamera(const Image & panorama,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, 1));
-        template <class T>
-        inline View<PanoramicCamera, ImageOfType<T>> CreatePanoramicView(const ImageOfType<T> & panorama,
-            const Point3 & eye = Point3(0, 0, 0),
-            const Point3 & center = Point3(1, 0, 0),
-            const Vec3 & up = Vec3(0, 0, 1)){
-            auto v = CreatePanoramicView((const Image &)panorama, eye, center, up);
-            return View<PanoramicCamera, ImageOfType<T>>(std::move(v.image), std::move(v.camera));
-        }
 
-        // create perspective view
-        Failable<PerspectiveView> CreatePerspectiveView(const Image & perspectiveImage,
+        Failable<PerspectiveCamera> CreatePerspectiveCamera(const Image & perspectiveImage,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, -1),
@@ -406,11 +396,80 @@ namespace panoramix {
             std::vector<Vec3> * vps = nullptr,
             double * focal = nullptr);
 
-        PerspectiveView CreatePerspectiveView(const Image & perspectiveImage,
+        PerspectiveCamera CreatePerspectiveCamera(const Image & perspectiveImage,
             const std::vector<HPoint2> & vps,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, -1));
+
+
+
+        // create panoramic view
+        inline PanoramicView CreatePanoramicView(const Image & panorama,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, 1)){
+            return PanoramicView(panorama, CreatePanoramicCamera(panorama, eye, center, up));
+        }
+        template <class T>
+        inline View<PanoramicCamera, ImageOfType<T>> CreatePanoramicView(const ImageOfType<T> & panorama,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, 1)){
+            return View<PanoramicCamera, ImageOfType<T>>(panorama, CreatePanoramicCamera(panorama, eye, center, up));
+        }
+
+        // create perspective view
+        inline Failable<PerspectiveView> CreatePerspectiveView(const Image & perspectiveImage,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, -1),
+            const LineSegmentExtractor & lse = LineSegmentExtractor(),
+            const VanishingPointsDetector & vpd = VanishingPointsDetector(),
+            std::vector<Classified<Line3>> * line3s = nullptr,
+            std::vector<Classified<Line2>> * line2s = nullptr,
+            std::vector<Vec3> * vps = nullptr,
+            double * focal = nullptr){
+            auto cam = CreatePerspectiveCamera(perspectiveImage, eye, center, up, lse, vpd, line3s, line2s, vps, focal);
+            if (cam.failed())
+                return nullptr;
+            return PerspectiveView(perspectiveImage, cam.unwrap());
+        }
+        template <class T>
+        inline Failable<View<PerspectiveCamera, ImageOfType<T>>> CreatePerspectiveView(const ImageOfType<T> & perspectiveImage,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, -1),
+            const LineSegmentExtractor & lse = LineSegmentExtractor(),
+            const VanishingPointsDetector & vpd = VanishingPointsDetector(),
+            std::vector<Classified<Line3>> * line3s = nullptr,
+            std::vector<Classified<Line2>> * line2s = nullptr,
+            std::vector<Vec3> * vps = nullptr,
+            double * focal = nullptr){
+            auto cam = CreatePerspectiveCamera(perspectiveImage, eye, center, up, lse, vpd, line3s, line2s, vps, focal);
+            if (cam.failed())
+                return nullptr;
+            return View<PerspectiveCamera, ImageOfType<T>>(perspectiveImage, cam.unwrap());
+        }
+
+        inline PerspectiveView CreatePerspectiveView(const Image & perspectiveImage,
+            const std::vector<HPoint2> & vps,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, -1)){
+            return PerspectiveView(perspectiveImage, 
+                CreatePerspectiveCamera(perspectiveImage, vps, eye, center, up));
+        }
+        template <class T>
+        inline View<PerspectiveCamera, ImageOfType<T>> CreatePerspectiveView(const ImageOfType<T> & perspectiveImage,
+            const std::vector<HPoint2> & vps,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, -1)){
+            return View<PerspectiveCamera, ImageOfType<T>>(perspectiveImage, 
+                CreatePerspectiveCamera(perspectiveImage, vps, eye, center, up));
+        }
+     
 
 
         template <class CameraT, class = std::enable_if_t<IsCamera<CameraT>::value>>
@@ -418,6 +477,17 @@ namespace panoramix {
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, -1));
+
+        template <class CameraT, class T, class = std::enable_if_t<IsCamera<CameraT>::value>>
+        Failable<View<CameraT, ImageOfType<T>>> CreateView(const ImageOfType<T> & image,
+            const Point3 & eye = Point3(0, 0, 0),
+            const Point3 & center = Point3(1, 0, 0),
+            const Vec3 & up = Vec3(0, 0, -1)){
+            auto v = CreateView<CameraT>((const Image &)image, eye, center, up);
+            if (v.failed())
+                return nullptr;
+            return View<CameraT, ImageOfType<T>>(image, v.unwrap.camera);
+        }
 
 
         template <>
@@ -432,17 +502,6 @@ namespace panoramix {
             return CreatePerspectiveView(image, eye, center, up);
         }
 
-        template <class CameraT, class T, class = std::enable_if_t<IsCamera<CameraT>::value>>
-        inline Failable<View<CameraT, ImageOfType<T>>> CreateView(const ImageOfType<T> & image,
-            const Point3 & eye = Point3(0, 0, 0),
-            const Point3 & center = Point3(1, 0, 0),
-            const Vec3 & up = Vec3(0, 0, -1)){
-            auto r = CreateView<CameraT>((const Image &)image, eye, center, up);
-            if (r.failed())
-                return nullptr;
-            auto v = r.wrap();
-            return View<CameraT, ImageOfType<T>>(std::move(v.image), std::move(v.camera));
-        }
 
     }
 }

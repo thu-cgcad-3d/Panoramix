@@ -187,49 +187,6 @@ namespace panoramix {
             return vo;
         }
 
-        //template <class T, class FunT>
-        //std::shared_ptr<SceneObject> Visualize(T & data, const FunT & fun,
-        //    const SceneObjectInstallingOptions & o,
-        //    std::false_type isContainer,
-        //    std::true_type isComplex){
-
-        //    std::shared_ptr<SceneObject> vo = std::make_shared<SceneObject>(1);
-
-        //    auto dopt = o.discretizeOptions;
-        //    dopt.entity = nullptr;
-        //    Discretize(vo->mesh(), data, dopt);
-
-        //    vo->setShaderSource(o.defaultShaderSource);
-        //    vo->bindCallbackFunction(fun);
-        //    vo->setLineWidth(o.lineWidth);
-        //    vo->setPointSize(o.pointSize);
-        //    vo->setSelectable(true);
-        //    return vo;
-        //}
-
-        //template <class T, class FunT>
-        //std::shared_ptr<SceneObject> Visualize(T & data, const FunT & fun,
-        //    const SceneObjectInstallingOptions & o,
-        //    std::true_type isContainer,
-        //    std::true_type isComplex ){
-
-        //    std::shared_ptr<SceneObject> vo = 
-        //        std::make_shared<SceneObject>(std::distance(std::begin(data), std::end(data)));
-
-        //    auto dopt = o.discretizeOptions;
-        //    for (auto & e : data){
-        //        dopt.entity = &e;
-        //        Discretize(vo->mesh(), e, dopt);
-        //    }
-
-        //    vo->setShaderSource(o.defaultShaderSource);
-        //    vo->bindCallbackFunction(fun);
-        //    vo->setLineWidth(o.lineWidth);
-        //    vo->setPointSize(o.pointSize);
-        //    vo->setSelectable(true);
-        //    return vo;
-        //}
-
 
         template <class T, class FunT>
         std::shared_ptr<SceneObject> Visualize(T & data, const FunT & fun,

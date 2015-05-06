@@ -372,10 +372,10 @@ namespace panoramix {
                     return 0;
                 T len = 0;
                 for (int i = 0; i + 1 < points.size(); i++){
-                    len += norm(points[i], points[i + 1]);
+                    len += norm(points[i] - points[i + 1]);
                 }
                 if (closed){
-                    len += norm(points.front(), points.back());
+                    len += norm(points.front() - points.back());
                 }
                 return len;
             }
