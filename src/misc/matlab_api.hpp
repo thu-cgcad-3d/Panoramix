@@ -72,6 +72,8 @@ namespace panoramix {
             void setN(size_t n) { mxSetN(_mxa, n); }
 
             bool null() const { return _mxa == nullptr; }
+            bool operator! () const { return null(); }
+            operator bool() const { return !null(); }
             bool empty() const { return mxIsEmpty(_mxa); }
 
             bool isFromGlobalWorkspace() const { return mxIsFromGlobalWS(_mxa); }

@@ -24,6 +24,7 @@
 #include "macros.hpp"
 #include "serialization.hpp"
 #include "ratio.hpp"
+#include "ring.hpp"
 #include "any.hpp"
 #include "decorate.hpp"
 #include "failable.hpp"
@@ -42,9 +43,9 @@ namespace panoramix {
         using Vec2i = Vec<int, 2>;
         using Vec3i = Vec<int, 3>;
         using Vec4i = Vec<int, 4>;
-        using Vec2b = Vec<uint8_t, 2>;
-        using Vec3b = Vec<uint8_t, 3>;
-        using Vec4b = Vec<uint8_t, 4>;
+        using Vec2ub = Vec<uint8_t, 2>;
+        using Vec3ub = Vec<uint8_t, 3>;
+        using Vec4ub = Vec<uint8_t, 4>;
         template <class T, int N> using Point = cv::Vec<T, N>;
         using Point2 = Point<double, 2>;
         using Point3 = Point<double, 3>;
@@ -154,6 +155,10 @@ namespace panoramix {
 
 
         // geographic coordinate
+        template <class T>
+        inline double Angle(const Vec<T, 2> & d){ return std::atan2(d(1), d(0)); }
+        template <class T>
+        inline Vec<T, 2> Direction(double angle) { return Vec<T, 2>(cos(angle), sin(angle)); }
         struct GeoCoord {
             inline explicit GeoCoord(double longi = 0.0, double lati = 0.0)
                 : longitude(longi), latitude(lati) {}
@@ -464,7 +469,15 @@ namespace panoramix {
             return cv::imwrite(filename, im);
         }
 
-        inline int Area(const Image & im) { return im.cols * im.rows; }
+        template <class T = int>
+        inline T Area(const Image & im) { return im.cols * im.rows; }
+        template <class T = double>
+        inline Point<T, 2> Center(const Image & im) { return Point<T, 2>(im.cols / 2.0, im.rows / 2.0); }
+
+        void ClipToSquare(Image & im);
+        Imageb ClipToDisk(Image & im);
+        Imageb Rotate(Image & im, double angle);
+
         void ResizeToWidth(Image & im, int width);
         void ResizeToHeight(Image & im, int height);
 		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);

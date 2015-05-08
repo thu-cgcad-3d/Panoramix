@@ -4,6 +4,25 @@
 namespace panoramix {
     namespace core {
 
+        void ClipToSquare(Image & image){
+            int mindim = std::min(image.cols, image.rows);
+            image = image(cv::Range(image.rows / 2 - mindim / 2, image.rows / 2 + mindim / 2),
+                cv::Range(image.cols / 2 - mindim / 2, image.cols / 2 + mindim / 2));
+        }
+
+        Imageb ClipToDisk(Image & im){
+            NOT_IMPLEMENTED_YET();
+        }
+
+        Imageb Rotate(Image & im, double angle){
+            int len = std::max(im.cols, im.rows);
+            cv::Mat r = cv::getRotationMatrix2D(Center<float>(im), angle / M_PI * 180, 1.0);
+            Imageb mask(im.size(), true);
+            cv::warpAffine(im, im, r, cv::Size(len, len));
+            cv::warpAffine(mask, mask, r, cv::Size(len, len));
+            return mask;
+        }
+
         void ResizeToWidth(Image & im, int width){
             if (im.cols == width)
                 return;

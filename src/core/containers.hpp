@@ -7,6 +7,7 @@
 #include "basic_types.hpp"
 #include "utilities.hpp"
 #include "handle.hpp"
+#include "iterators.hpp"
  
 namespace panoramix {
     namespace core {
@@ -48,6 +49,67 @@ namespace panoramix {
 
 
 
+        // simple RTree
+        template <class BoxT, class T>
+        class RTree {
+        public:
+            using BoxType = BoxT;
+            using ValueType = typename BoxType::Type;
+            static const int Dimension = BoxType::Dimension;
+
+            inline explicit RTree()
+                : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()) {}
+
+            template <class IteratorT>
+            inline RTree(IteratorT begin, IteratorT end)
+                : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()){
+                insert(begin, end);
+            }
+
+            inline RTree(RTree && r)
+                : _rtree(std::move(r._rtree)) {}
+            inline RTree & operator = (RTree && r){
+                _rtree = std::move(r._rtree);
+                return *this;
+            }
+
+            RTree(const RTree &) = delete;
+            RTree & operator = (const RTree &) = delete;
+
+        public:
+            inline size_t size() const { return _rtree->Count(); }
+            inline bool empty() const { return size() == 0; }
+
+            inline void clear() { return _rtree->RemoveAll(); }
+
+            inline void insert(const BoxType & box, const T & t) {
+                _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
+            }
+
+            inline void insert(const std::pair<BoxType, T> & p){
+                _rtree->Insert(p.first.minCorner.val, p.first.maxCorner.val, p.second);
+            }
+
+            template <class IteratorT>
+            void insert(IteratorT begin, IteratorT end) {
+                while (begin != end){
+                    insert(*begin);
+                    ++begin;
+                }
+            }
+
+            template <class CallbackFunctorT>
+            inline int search(const BoxType & b, CallbackFunctorT && callback) const {
+                return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
+            }
+
+            inline int count(const BoxType & b) const {
+                return _rtree->Search(b.minCorner.val, b.maxCorner.val, StaticConstantFunctor<bool, true>());
+            }
+
+        private:
+            std::unique_ptr<third_party::RTree<T, ValueType, Dimension>> _rtree;
+        };
 
 
         
@@ -60,15 +122,26 @@ namespace panoramix {
             static const int Dimension = BoxType::Dimension;
 
             inline explicit RTreeWrapper(BoundingBoxFunctorT getBB = BoundingBoxFunctorT())
-                : _rtree(std::make_shared<third_party::RTree<T, ValueType, Dimension>>()),
+                : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()),
                 _getBoundingBox(getBB) {}
 
             template <class IteratorT>
             inline RTreeWrapper(IteratorT begin, IteratorT end, BoundingBoxFunctorT getBB = BoundingBoxFunctorT())
-                : _rtree(std::make_shared<third_party::RTree<T, ValueType, Dimension>>()),
+                : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()),
                 _getBoundingBox(getBB){
                 insert(begin, end);
             }
+
+            inline RTreeWrapper(RTreeWrapper && r) 
+                : _rtree(std::move(r._rtree)), _getBoundingBox(std::move(r._getBoundingBox)) {}
+            inline RTreeWrapper & operator = (RTreeWrapper && r){
+                _rtree = std::move(r._rtree);
+                _getBoundingBox = std::move(r._getBoundingBox);
+                return *this;
+            }
+
+            RTreeWrapper(const RTreeWrapper &) = delete;
+            RTreeWrapper & operator = (const RTreeWrapper &) = delete;
 
         public:
             inline size_t size() const { return _rtree->Count(); }
@@ -76,6 +149,10 @@ namespace panoramix {
 
             inline void clear() { return _rtree->RemoveAll(); }
             inline const BoundingBoxFunctorT & getBoundingBox() const { return _getBoundingBox; }
+
+            inline void insert(const BoxType & box, const T & t) {
+                _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
+            }
 
             inline void insert(const T & t) {
                 BoxType box = _getBoundingBox(t);
@@ -105,12 +182,16 @@ namespace panoramix {
             }
 
             template <class CallbackFunctorT>
-            inline int search(const BoxType & b, CallbackFunctorT callback) const {
+            inline int search(const BoxType & b, CallbackFunctorT && callback) const {
                 return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
             }
 
+            inline int count(const BoxType & b) const {
+                return _rtree->Search(b.minCorner.val, b.maxCorner.val, StaticConstantFunctor<bool, true>());
+            }
+
             template <class CallbackFunctorT>
-            inline int searchNear(const T & t, CallbackFunctorT callback) const {
+            inline int searchNear(const T & t, CallbackFunctorT && callback) const {
                 auto b = _getBoundingBox(t);
                 return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
             }
@@ -129,7 +210,7 @@ namespace panoramix {
             }
 
         private:
-            std::shared_ptr<third_party::RTree<T, ValueType, Dimension>> _rtree;
+            std::unique_ptr<third_party::RTree<T, ValueType, Dimension>> _rtree;
             BoundingBoxFunctorT _getBoundingBox;
         };
 

@@ -329,6 +329,9 @@ namespace panoramix {
 
             View(){}
             View(const ImageT & im, const CameraT & cam) : image(im), camera(cam) {}
+            View(const View<CameraT, Image> & v) : image(v.image), camera(v.camera) {}
+            template <class T>
+            View(const View<CameraT, ImageOfType<T>> & v) : image(v.image), camera(v.camera) {}
 
             template <class AnotherCameraT, class = std::enable_if_t<IsCamera<std::decay_t<AnotherCameraT>>::value>>
             inline View<std::decay_t<AnotherCameraT>, ImageT> sampled(AnotherCameraT && cam) const {

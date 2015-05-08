@@ -2,8 +2,8 @@
 #include "../../src/experimental/rl_graph.hpp"
 #include "../../src/experimental/tools.hpp"
 #include "../../src/experimental/rl_graph_occlusion.hpp"
-#include "../../src/gui/visualize2d.hpp"
-#include "../../src/gui/visualizers.hpp"
+#include "../../src/gui/scene.hpp"
+#include "../../src/gui/canvas.hpp"
 #include "../../src/core/cameras.hpp"
 #include "../../src/core/clock.hpp"
 
@@ -22,11 +22,9 @@ namespace panolyz {
 
 
         void Show(const PerspectiveView & v, const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars){
-            gui::Visualizer vis("inversed depth setup");
+            gui::SceneBuilder vis;
             Visualize(vis, v, mg, controls, vars);
-            vis.camera(v.camera);
-            vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
-            vis.show(true, true);
+            vis.show(true, true, gui::RenderOptions().camera(v.camera).cullBackFace(false).cullFrontFace(false));
         }
 
 
@@ -114,7 +112,7 @@ namespace panolyz {
                     Clock clock("omap");
                     std::vector<HPoint2> hvps(vps.size());
                     for (int i = 0; i < vps.size(); i++){
-                        hvps[i] = view.camera.screenProjectionInHPoint(vps[i]);
+                        hvps[i] = view.camera.toScreenInHPoint(vps[i]);
                     }
                     auto om = ComputeOrientationMaps(lines, hvps, view.image.size());
                     gui::ColorTable rgb = gui::ColorTableDescriptor::RGBGreys;
@@ -138,8 +136,8 @@ namespace panolyz {
 
                 if (0){
                     auto ctable = gui::CreateRandomColorTableWithSize(segmentsNum);
-                    gui::Visualizer2D(ctable(segmentedImage)) << gui::manip2d::Show();
-                    gui::Visualizer2D(ctable(segmentedImage)) << view.image << gui::manip2d::Show();
+                    gui::AsCanvas(ctable(segmentedImage)).show();
+                    gui::AsCanvas(ctable(segmentedImage)).show();
                 }
 
                 Save(path, "pre", view, lines, vps, segmentedImage);

@@ -185,8 +185,21 @@ namespace panoramix {
             }
 
 
+            inline const Canvas & maxHeight(int mh) {
+                core::ResizeToMakeHeightUnder(_image, mh);
+                return *this;
+            }
+            inline const Canvas & maxWidth(int mw) {
+                core::ResizeToMakeWidthUnder(_image, mw);
+                return *this;
+            }
+            inline const Canvas & maxWidthAndHeight(int mw, int mh) {
+                core::ResizeToMakeHeightUnder(_image, mh);
+                core::ResizeToMakeWidthUnder(_image, mw);
+                return *this;
+            }
 
-            void show(bool delay = 0, const std::string & winName = "Canvas"){
+            void show(bool delay = 0, const std::string & winName = "Canvas") const {
                 static int id = 0;
                 core::Image im = _image.clone();
                 if (im.channels() > 3){

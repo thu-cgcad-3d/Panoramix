@@ -3956,8 +3956,11 @@ namespace panoramix {
             succeed = matlab.PutVariable("A", A);
             succeed = matlab.PutVariable("W", W);
             succeed = matlab.PutVariable("B", Bdata);
+            assert(succeed);
             succeed = matlab.PutVariable("B1", B1data);
+            assert(succeed);
             succeed = matlab.PutVariable("B2", B2data);
+            assert(succeed);
             matlab << "B = B'; B1 = B1'; B2 = B2';";
 
             DenseMatd equationTypesData(equationTypes.size(), 1, 0.0);

@@ -121,7 +121,7 @@ namespace panoramix {
         Color RandomColor();
         inline Color ColorFromImage(const core::Image & im, core::PixelLoc p) { return Color(im.ptr(p.y, p.x), im.type()); }
 
-        
+
 
         // line style
         enum class PenStyle {

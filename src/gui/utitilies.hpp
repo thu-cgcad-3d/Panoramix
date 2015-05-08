@@ -12,7 +12,7 @@ namespace panoramix {
 
         std::vector<core::Image> PickImages(const std::string & dir = std::string());
 
-
+        std::vector<core::Image> PickAllImagesFromAFolder(const std::string & dir = std::string());
 
     }
 }

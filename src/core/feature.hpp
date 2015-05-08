@@ -20,9 +20,15 @@ namespace panoramix {
             std::vector<PixelLoc> * pixels = nullptr,
             const Imageb & mask = Imageb());
 
-
-
-
+        std::vector<KeyPoint> SIFT(const Image & im, cv::OutputArray descriptors = cv::noArray(),
+            int nfeatures = 0, int nOctaveLayers = 3,
+            double contrastThreshold = 0.04, double edgeThreshold = 10,
+            double sigma = 1.6);
+        std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors,
+            double hessianThreshold,
+            int nOctaves = 4, int nOctaveLayers = 2,
+            bool extended = true, bool upright = false);
+        std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors = cv::noArray());
 
         // line extractor
         class LineSegmentExtractor {

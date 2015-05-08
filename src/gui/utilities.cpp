@@ -30,5 +30,12 @@ namespace panoramix {
             return ims;
         }
 
+        std::vector<core::Image> PickAllImagesFromAFolder(const std::string & dir){
+            Singleton::InitGui();
+            auto folder = QFileDialog::getExistingDirectory(nullptr, QObject::tr("Select a folder containing images"),
+                QString::fromStdString(dir));
+            NOT_IMPLEMENTED_YET();
+        }
+
     }
 }

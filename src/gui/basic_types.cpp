@@ -271,7 +271,7 @@ namespace panoramix {
         core::Image3ub ColorTable::operator()(const core::Imagei & indexIm) const{
             core::Image3ub im(indexIm.size());
             for (auto i = indexIm.begin(); i != indexIm.end(); ++i){
-                core::Vec3b color = (*this)[*i];
+                core::Vec3ub color = (*this)[*i];
                 im(i.pos()) = color;
             }
             return im;

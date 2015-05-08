@@ -83,6 +83,36 @@ namespace panoramix {
 
 
 
+        std::vector<KeyPoint> SIFT(const Image & im, cv::OutputArray descriptors,
+            int nfeatures, int nOctaveLayers,
+            double contrastThreshold, double edgeThreshold,
+            double sigma){
+            cv::SIFT sift(nfeatures, nOctaveLayers, contrastThreshold, edgeThreshold, sigma);
+            std::vector<KeyPoint> keypoints;
+            sift(im, cv::noArray(), keypoints, descriptors);
+            return keypoints;
+        }
+
+        std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors,
+            double hessianThreshold,
+            int nOctaves, int nOctaveLayers,
+            bool extended, bool upright){
+            cv::SURF surf(hessianThreshold, nOctaves, nOctaveLayers, extended, upright);
+            std::vector<KeyPoint> keypoints;
+            surf(im, cv::noArray(), keypoints, descriptors);
+            return keypoints;
+        }
+
+        std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors){
+            cv::SURF surf;
+            std::vector<KeyPoint> keypoints;
+            surf(im, cv::noArray(), keypoints, descriptors);
+            return keypoints;
+        }
+
+
+
+
 #pragma region LineSegmentExtractor
 
         namespace {
@@ -2162,7 +2192,7 @@ namespace panoramix {
                 for (int x = 0; x < im.cols; x++){
                     for (int y = 0; y < im.rows; y++){
                         auto & pixel = ubuff[y * im.cols + x];
-                        auto & color = im.at<Vec3b>(PixelLoc(x, y));
+                        auto & color = im.at<Vec3ub>(PixelLoc(x, y));
                         pixel = (color[2] << 16) + (color[1] << 8) + color[0];
                     }
                 }

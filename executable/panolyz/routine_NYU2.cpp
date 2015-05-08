@@ -4,8 +4,8 @@
 #include "../../src/experimental/rl_graph.hpp"
 #include "../../src/experimental/rl_graph_occlusion.hpp"
 #include "../../src/experimental/tools.hpp"
-#include "../../src/gui/visualize2d.hpp"
-#include "../../src/gui/visualizers.hpp"
+#include "../../src/gui/scene.hpp"
+#include "../../src/gui/canvas.hpp"
 #include "../../src/misc/matlab_engine.hpp"
 #include "../../src/gui/singleton.hpp"
 #include "../../src/ml/factor_graph.hpp"
@@ -26,12 +26,11 @@ namespace panolyz {
 
         using Image7d = ImageOfType<Vec<double, 7>>;
 
+
         void Show(const PerspectiveView & v, const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars){
-            gui::Visualizer vis("inversed depth setup");
+            gui::SceneBuilder vis;
             Visualize(vis, v, mg, controls, vars);
-            vis.camera(v.camera);
-            vis.renderOptions.cullBackFace = vis.renderOptions.cullFrontFace = false;
-            vis.show(true, true);
+            vis.show(true, true, gui::RenderOptions().camera(v.camera).cullBackFace(false).cullFrontFace(false));
         }
 
         struct CameraParams {
@@ -195,17 +194,18 @@ namespace panolyz {
                 std::vector<Point3> gtPoints;
                 gtPoints.reserve(data.depth.cols * data.depth.rows);
                 for (auto it = data.depth.begin(); it != data.depth.end(); ++it){
-                    auto d = cam_d.spatialDirection(it.pos()) * data.depth(it.pos()) / 1e5;
-                    //auto d = normalize(cam_d.spatialDirection(it.pos())) * data.rawDepth(it.pos());
+                    auto d = cam_d.toSpace(it.pos()) * data.depth(it.pos()) / 1e5;
+                    //auto d = normalize(cam_d.toSpace(it.pos())) * data.rawDepth(it.pos());
                     gtPoints.emplace_back(d);
                 }
 
-                gui::Visualizer vis;
+               /* gui::Visualizer vis;
                 vis.installingOptions.pointSize = 1.0;
                 vis.renderOptions.renderMode |= gui::RenderModeFlag::Points;
-                vis.renderOptions.backgroundColor = gui::White;
-                vis.camera(core::PerspectiveCamera(1000, 800, core::Point2(500, 400), 800, Point3(-1, 1, 1), Point3(0, 0, 0), Point3(0, 0, -1)));
-                vis.add(gtPoints).show(true, true);
+                vis.renderOptions.backgroundColor = gui::White;*/
+                gui::SceneBuilder vis;
+                vis.pointSize(1.0).add(gtPoints);
+                vis.show(true, true, gui::RenderOptions().renderMode(gui::RenderModeFlag::All));
 
 
                 Image image = data.image;
@@ -310,12 +310,12 @@ namespace panolyz {
                 // attach depths as anchors
                 Imagef realDepth(image.size(), 0.0);
                 for (auto it = realDepth.begin(); it != realDepth.end(); ++it){
-                    *it = norm(cam_d.spatialDirection(it.pos()) * data.depth(it.pos())) / 1e5;
+                    *it = norm(cam_d.toSpace(it.pos()) * data.depth(it.pos())) / 1e5;
                 }
                 
                 SetComponentControl<RegionData>(controls, [&mg, &view, &realDepth](RegionHandle rh, RLGraphComponentControl & c){
                     auto center = mg.data(rh).normalizedCenter;
-                    float f = realDepth(ToPixelLoc(view.camera.screenProjection(center)));
+                    float f = realDepth(ToPixelLoc(view.camera.toScreen(center)));
                     c.weightedAnchors.push_back(WeightAs(center * f, 1.0));
                 });
 
@@ -324,7 +324,7 @@ namespace panolyz {
                     double maxDepth = MinMaxValOfImage(realDepth).second;
                     std::vector<Weighted<Vec3>> validAnchors;
                     for (auto & wa : c.weightedAnchors){
-                        auto p = ToPixelLoc(view.camera.screenProjection(wa.component));
+                        auto p = ToPixelLoc(view.camera.toScreen(wa.component));
                         std::vector<float> ds;
                         for (int xx = -2; xx <= 2; xx++){
                             for (int yy = -2; yy <= 2; yy++){

@@ -1,5 +1,7 @@
 #include "../src/core/version.hpp"
 #include "../src/core/basic_types.hpp"
+#include "../src/core/ring.hpp"
+#include "../src/core/utilities.hpp"
 #include "config.hpp"
 
 #include <iostream>
@@ -78,5 +80,37 @@ TEST(BasicType, VecCast) {
 
 }
 
+TEST(BasicType, Ring) {
+
+    //core::Radian r = M_PI;
+    //double rr = r;
+    //ASSERT_FLOAT_EQ(rr, M_PI);
+
+    //r += M_PI;
+    //double rr2 = r;
+    //ASSERT_FLOAT_EQ(rr2, 0);
+
+    core::Radian rrr = M_PI * 2;
+    double rrr2 = rrr;
+    ASSERT_FLOAT_EQ(rrr2, 0);
+
+}
+
+TEST(BasicType, RingPerformance){
+    core::Radian r = M_PI;
+    for (uint64_t i = 0; i < 1e8; i++){
+        r = r + M_PI * 2.5 + 1.0;
+    }
+    std::cout << double(r) << std::endl;
+}
+
+TEST(BasicType, RingPerformanceBaseline){
+    double r = M_PI;
+    for (uint64_t i = 0; i < 1e8; i++){
+        r = r + M_PI * 2.5 + 1.0;
+        r = core::WrapBetween(r, 0.0, M_PI * 2);
+    }
+    std::cout << double(r) << std::endl;
+}
 
 

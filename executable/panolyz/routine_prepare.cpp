@@ -4,8 +4,8 @@
 #include "../../src/experimental/rl_graph.hpp"
 #include "../../src/experimental/tools.hpp"
 #include "../../src/experimental/rl_graph_occlusion.hpp"
-#include "../../src/gui/visualize2d.hpp"
-#include "../../src/gui/visualizers.hpp"
+#include "../../src/gui/canvas.hpp"
+#include "../../src/gui/scene.hpp"
 #include "../../src/core/cameras.hpp"
 #include "../../src/core/clock.hpp"
 
@@ -44,17 +44,13 @@ namespace panolyz {
                     LineSegmentExtractor(), VanishingPointsDetector(vpdParams), &line3s, &lines, &vps, &focal).unwrap();
                 std::vector<HPoint2> hvps(vps.size());
                 for (int i = 0; i < vps.size(); i++){
-                    hvps[i] = view.camera.screenProjectionInHPoint(vps[i]);
+                    hvps[i] = view.camera.toScreenInHPoint(vps[i]);
                 }
 
                 SaveToDisk(folder + "\\feature\\" + filename + "_view_lines_vps_focal",
                     view, lines, vps, focal);
                 {
-                    gui::Visualizer2D vis(image);
-                    vis.params.colorTable = gui::ColorTableDescriptor::RGBGreys;
-                    vis.params.thickness = 2.0;
-                    vis << lines;
-                    cv::imwrite(folder + "\\snapshot\\" + filename + "_lines.png", vis.image());
+                    gui::AsCanvas(image).colorTable(gui::ColorTableDescriptor::RGBGreys).thickness(2.0).add(lines).show();
                 }
 
 
@@ -85,11 +81,7 @@ namespace panolyz {
                     gui::ColorTable rand = gui::CreateGreyColorTableWithSize(segmentsNum);
                     rand.randomize();
                     auto segim = rand(segmentedImage);
-                    gui::Visualizer2D vis(segim);
-                    vis.params.colorTable = gui::ColorTableDescriptor::RGBGreys;
-                    vis.params.thickness = 2.0;
-                    vis << lines;
-                    cv::imwrite(folder + "\\snapshot\\" + filename + "_segs_lines.png", vis.image());
+                    gui::AsCanvas(segim).colorTable(gui::ColorTableDescriptor::RGBGreys).thickness(2.0).add(lines).show();
                 }
 
                 qDebug() << "computing geometric contexts";
@@ -129,7 +121,7 @@ namespace panolyz {
                 MakePanorama(image);
                 ResizeToHeight(image, 700);
                 
-                View<PanoramicCamera> view;
+                View<PanoramicCamera, Image3ub> view;
                 std::vector<PerspectiveCamera> cams;
                 std::vector<std::vector<Classified<Line2>>> lines;
                 std::vector<Vec3> vps;
@@ -158,10 +150,8 @@ namespace panolyz {
                     std::vector<View<PerspectiveCamera, Image3f>> lineviews(cams.size());
                     for (int i = 0; i < cams.size(); i++){
                         auto pim = view.sampled(cams[i]).image;
-                        gui::Visualizer2D vis(pim);
-                        vis << gui::manip2d::SetThickness(3)
-                            << gui::manip2d::SetColorTable(ctable)
-                            << lines[i];
+                        auto vis = gui::MakeCanvas(pim);
+                        vis.colorTable(ctable).thickness(3.0).add(lines[i]);
                         lineviews[i].camera = cams[i];
                         lineviews[i].image = vis.image() / 255.0f;
                     }
@@ -176,15 +166,15 @@ namespace panolyz {
                 for (int i = 0; i < cams.size(); i++){
                     for (auto & line : lines[i]){
                         line3s.push_back(ClassifyAs(
-                            Line3(cams[i].spatialDirection(line.component.first), 
-                            cams[i].spatialDirection(line.component.second)), line.claz));
+                            Line3(cams[i].toSpace(line.component.first), 
+                            cams[i].toSpace(line.component.second)), line.claz));
                     }
                 }
                 std::vector<View<PerspectiveCamera, Image3ub>> omaps;
                 for (int i = 0; i < cams.size(); i++){
                     std::vector<HPoint2> hvps(vps.size());
                     for (int k = 0; k < vps.size(); k++){
-                        hvps[k] = cams[i].screenProjectionInHPoint(vps[k]);
+                        hvps[k] = cams[i].toScreenInHPoint(vps[k]);
                     }
                     Imagei omap = ComputeOrientationMaps(lines[i], hvps, cams[i].screenSize());
                     std::vector<Imageub> omapChannels = { omap == 0, omap == 1, omap == 2 };
@@ -225,10 +215,8 @@ namespace panolyz {
                     std::vector<View<PerspectiveCamera, Image3f>> lineviews(cams.size());
                     for (int i = 0; i < cams.size(); i++){
                         auto pim = MakeCameraSampler(cams[i], view.camera)(greys(segmentedImage));
-                        gui::Visualizer2D vis(pim);
-                        vis << gui::manip2d::SetThickness(3)
-                            << gui::manip2d::SetColorTable(ctable)
-                            << lines[i];
+                        auto vis = gui::MakeCanvas(pim);
+                        vis.thickness(3).colorTable(ctable).add(lines[i]);
                         lineviews[i].camera = cams[i];
                         lineviews[i].image = vis.image() / 255.0f;
                     }
@@ -242,7 +230,7 @@ namespace panolyz {
                 //for (int i = 0; i < cams.size(); i++){
                 //    std::vector<HPoint2> hvps(vps.size());
                 //    for (int k = 0; k < vps.size(); k++){
-                //        hvps[k] = cams[i].screenProjectionInHPoint(vps[k]);
+                //        hvps[k] = cams[i].toScreenInHPoint(vps[k]);
                 //    }
                 //    auto pview = view.sampled(cams[i]);
                 //    // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown

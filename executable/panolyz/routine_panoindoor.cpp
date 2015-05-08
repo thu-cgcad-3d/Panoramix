@@ -1,8 +1,9 @@
 #include "../../src/core/basic_types.hpp"
 #include "../../src/experimental/rl_graph.hpp"
 #include "../../src/experimental/tools.hpp"
-#include "../../src/gui/visualize2d.hpp"
-#include "../../src/gui/visualizers.hpp"
+#include "../../src/gui/scene.hpp"
+#include "../../src/gui/canvas.hpp"
+#include "../../src/gui/utitilies.hpp"
 
 #include "routines.hpp"
 
@@ -41,11 +42,11 @@ namespace panolyz {
             using namespace core;
             using namespace experimental;
 
-            Image image = cv::imread(path);
+            core::Image3ub image = gui::PickAnImage(PROJECT_TEST_DATA_DIR_STR"/panorama/indoor");
             MakePanorama(image);
             ResizeToHeight(image, 700);
 
-            View<PanoramicCamera> view;
+            View<PanoramicCamera, Image3ub> view;
 
             std::vector<PerspectiveCamera> cams;
             std::vector<std::vector<Classified<Line2>>> lines;
@@ -76,10 +77,7 @@ namespace panolyz {
                     auto ctable = gui::CreateRandomColorTableWithSize(vps.size());
                     for (int i = 0; i < cams.size(); i++){
                         auto pim = view.sampled(cams[i]).image;
-                        gui::Visualizer2D(pim)
-                            << gui::manip2d::SetThickness(3)
-                            << gui::manip2d::SetColorTable(ctable)
-                            << lines[i] << gui::manip2d::Show();
+                        gui::AsCanvas(pim).thickness(3).colorTable(ctable).add(lines[i]).show();
                     }
                 }
 
@@ -88,8 +86,8 @@ namespace panolyz {
                 std::vector<Line3> line3ds;
                 for (int i = 0; i < cams.size(); i++){
                     for (auto & l : lines[i]){
-                        line3ds.emplace_back(normalize(cams[i].spatialDirection(l.component.first)),
-                            normalize(cams[i].spatialDirection(l.component.second)));
+                        line3ds.emplace_back(normalize(cams[i].toSpace(l.component.first)),
+                            normalize(cams[i].toSpace(l.component.second)));
                     }
                 }
                 SegmentationExtractor segmenter;
@@ -102,8 +100,8 @@ namespace panolyz {
 
                 if (0){
                     auto ctable = gui::CreateRandomColorTableWithSize(segmentsNum);
-                    gui::Visualizer2D(ctable(segmentedImage)) << gui::manip2d::Show();
-                    gui::Visualizer2D(ctable(segmentedImage)) << view.image << gui::manip2d::Show();
+                    gui::AsCanvas(ctable(segmentedImage)).show();
+                    gui::AsCanvas(ctable(segmentedImage)).add(view.image).show();
                 }            
 
                 Save(path, "pre", view, cams, lines, vps, segmentedImage);
@@ -158,10 +156,10 @@ namespace panolyz {
                     auto vars = SolveVariablesWithBoundedAnchors(mgs[i], controls, true);
                     NormalizeVariables(mg, controls, vars);
 
-                    gui::Visualizer vis;
+                    gui::SceneBuilder vis;
                     Visualize(vis, view, mg, controls, vars);
-                    vis.camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0)));
-                    vis.show(true, false);
+                    vis.show(true, false, 
+                        gui::RenderOptions().camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
                 }
 
             }
@@ -228,10 +226,10 @@ namespace panolyz {
                     vars = SolveVariablesWithBoundedAnchors(mg, controls, false, true);
                     NormalizeVariables(mg, controls, vars);*/
 
-                    gui::Visualizer vis;
+                    gui::SceneBuilder vis;
                     Visualize(vis, view, mg, controls, vars);
-                    vis.camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0)));
-                    vis.show(true, false);
+                    vis.show(true, false,
+                        gui::RenderOptions().camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
 
                     {
                         LayeredShape3 shape;
@@ -258,19 +256,16 @@ namespace panolyz {
 
                         gui::ResourceStore::set("texture", view.image);
 
-                        gui::Visualizer viz;
+                        gui::SceneBuilder viz;
                         viz.begin(shape).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
-
-                        viz.renderOptions.renderMode = gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines;
-                        viz.renderOptions.backgroundColor = gui::ColorTag::White;
-                        viz.renderOptions.bwColor = 0.0;
-                        viz.renderOptions.bwTexColor = 1.0;
-                        viz.renderOptions.cullBackFace = false;
-                        viz.renderOptions.cullFrontFace = true;
-                        viz.camera(PerspectiveCamera(1000, 800, Point2(500, 400),
-                            800, Point3(-1, 1, 1), Point3(0, 0, 0)));
-
-                        viz.show(true, false);
+                        viz.show(true, false, gui::RenderOptions()
+                            .renderMode(gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines)
+                            .backgroundColor(gui::White)
+                            .bwColor(0.0)
+                            .bwTexColor(1.0)
+                            .cullBackFace(false)
+                            .cullFrontFace(true)
+                            .camera(PerspectiveCamera(1000, 800, Point2(500, 400), 800, Point3(-1, 1, 1), Point3(0, 0, 0))));
                     }
                 }
 

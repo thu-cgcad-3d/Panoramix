@@ -80,7 +80,7 @@ namespace panolyz {
                 gui::Color color = _regionLabelColors[rlabel];
                 gui::Color imColor = gui::ColorFromImage(_im, it.pos());
                 auto c = imColor.blendWith(color, 0.7);
-                *it = Vec3b(c.blue(), c.green(), c.red());
+                *it = Vec3ub(c.blue(), c.green(), c.red());
             }
             // region boundary
             for (auto & ps : _boundaryPixels){
@@ -90,7 +90,7 @@ namespace panolyz {
                     for (int i = 1; i < edge.size(); i++){
                         cv::LineIterator it(rendered, edge[i - 1], edge[i]);
                         for (int k = 0; k < it.count; k++, ++it){
-                            *((Vec3b*)*it) = Vec3b(c.blue(), c.green(), c.red());
+                            *((Vec3ub*)*it) = Vec3ub(c.blue(), c.green(), c.red());
                         }
                     }
                 }

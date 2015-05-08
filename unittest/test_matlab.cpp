@@ -17,13 +17,17 @@ TEST(MatlabEngine, CVX) {
         misc::MatlabEngine::RunScript("clear");
         misc::MatlabEngine::RunScript("cvx_setup");
         int m = 16, n = 8;
+        std::vector<double> b(m);
+        std::generate(b.begin(), b.end(), std::rand);
         misc::MatlabEngine::PutVariable("m", m);
         misc::MatlabEngine::PutVariable("n", n);
+        misc::MatlabEngine::PutVariable("b", b);
+        misc::MatlabEngine::RunScript("b = b';");
         misc::MatlabEngine::RunScript("[m n]");
         misc::MatlabEngine matlab;
         matlab
             << "A = randn(m, n);"
-            << "b = randn(m, 1);"
+            //<< "b = randn(m, 1);"
             << "save tempfile;"
             << "cvx_begin"
             << "   variable x(n)"
