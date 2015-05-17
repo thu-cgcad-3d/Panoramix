@@ -1,7 +1,7 @@
 #include "../src/core/version.hpp"
 #include "../src/core/basic_types.hpp"
 #include "../src/core/ring.hpp"
-#include "../src/core/utilities.hpp"
+#include "../src/core/utility.hpp"
 #include "config.hpp"
 
 #include <iostream>
@@ -97,6 +97,14 @@ TEST(BasicType, Ring) {
 }
 
 TEST(BasicType, RingPerformance){
+    auto r = core::Radian::toRep(M_PI);
+    for (uint64_t i = 0; i < 1e8; i++){
+        r = r + core::Radian::toRep(M_PI) * 2.5 + core::Radian::toRep(1.0);
+    }
+    std::cout << core::Radian::toValue(r) << std::endl;
+}
+
+TEST(BasicType, RingPerformance2){
     core::Radian r = M_PI;
     for (uint64_t i = 0; i < 1e8; i++){
         r = r + M_PI * 2.5 + 1.0;

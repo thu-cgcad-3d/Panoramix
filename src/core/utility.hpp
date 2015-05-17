@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_UTILITIES_HPP
-#define PANORAMIX_CORE_UTILITIES_HPP
+#ifndef PANORAMIX_CORE_UTILITY_HPP
+#define PANORAMIX_CORE_UTILITY_HPP
 
 #include <iterator>
 #include <Eigen/Dense>
@@ -120,7 +120,7 @@ namespace panoramix {
             return m.find(k) != m.end();
         }
 
-        inline bool Contains(const Image & im, const PixelLoc & pixel) {
+        inline bool Contains(const Image & im, const Pixel & pixel) {
             return 0 <= pixel.x && pixel.x < im.cols && 0 <= pixel.y && pixel.y < im.rows;
         }
 
@@ -245,7 +245,7 @@ namespace panoramix {
             return norm(a - b);
         }
 
-        inline double Distance(const PixelLoc & a, const PixelLoc & b) {
+        inline double Distance(const Pixel & a, const Pixel & b) {
             return sqrt(Square(a.x - b.x) + Square(a.y - b.y));
         }
 
@@ -312,7 +312,7 @@ namespace panoramix {
             return BoundingBox(hp.value());
         }
 
-        inline Box2 BoundingBox(const PixelLoc & p) {
+        inline Box2 BoundingBox(const Pixel & p) {
             return Box2(
                 Point2(static_cast<double>(p.x), static_cast<double>(p.y)),
                 Point2(static_cast<double>(p.x), static_cast<double>(p.y)));
@@ -325,11 +325,6 @@ namespace panoramix {
         template <class T, int N>
         inline Box<T, N> BoundingBox(const Line<T, N> & l) {
             return Box<T, N>(l.first, l.second);
-        }
-
-        template <class T, int N>
-        inline Box<T, N> BoundingBox(const HLine<T, N> & l) {
-            return BoundingBox(l.toLine());
         }
 
         template <class T, int N>
@@ -538,7 +533,7 @@ namespace panoramix {
             return index;
         }
 
-        inline int EncodeSubscriptToIndex(const PixelLoc & p, const SizeI & size){
+        inline int EncodeSubscriptToIndex(const Pixel & p, const Sizei & size){
             return p.x * size.height + p.y;
         }
 
@@ -569,8 +564,8 @@ namespace panoramix {
             return DecodeIndexToSubscriptPrivate(index, dimension, std::is_integral<T>());
         }
 
-        inline PixelLoc DecodeIndexToSubscript(int index, const SizeI & size){
-            return PixelLoc(index / size.height, index % size.height);
+        inline Pixel DecodeIndexToSubscript(int index, const Sizei & size){
+            return Pixel(index / size.height, index % size.height);
         }
 
 

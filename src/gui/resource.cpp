@@ -1,4 +1,4 @@
-#include "../core/utilities.hpp"
+#include "../core/utility.hpp"
 #include "qt_glue.hpp"
 #include "resource.hpp"
 

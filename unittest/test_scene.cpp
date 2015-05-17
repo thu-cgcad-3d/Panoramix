@@ -17,8 +17,8 @@ using namespace test;
 TEST(Canvas, Color) {
 
     int m = 600;
-    core::ImageOfType<core::Vec<double, 4>> hs(m, m);
-    core::ImageOfType<core::Vec<double, 4>> sv(m, m);
+    core::ImageOf<core::Vec<double, 4>> hs(m, m);
+    core::ImageOf<core::Vec<double, 4>> sv(m, m);
     for (int i = 0; i < m; i++){
         for (int j = 0; j < m; j++){
             hs(i, j) = gui::ColorFromHSV(i / (double)m, j / (double)m, 0.5);

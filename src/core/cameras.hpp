@@ -26,7 +26,7 @@ namespace panoramix {
                 const Vec3 & up = Vec3(0, 0, -1),
                 double nearPlane = 0.01, double farPlane = 1e4);
 
-            inline SizeI screenSize() const { return Size(static_cast<int>(_screenW), static_cast<int>(_screenH)); }
+            inline Sizei screenSize() const { return Sizei(static_cast<int>(_screenW), static_cast<int>(_screenH)); }
             inline double screenWidth() const { return _screenW; }
             inline double screenHeight() const { return _screenH; }
             inline const Point2 & principlePoint() const { return _principlePoint; }
@@ -43,9 +43,9 @@ namespace panoramix {
             bool isVisibleOnScreen(const Point3 & p3d) const;
             HPoint2 toScreenInHPoint(const Point3 & p3d) const;
             Point3 toSpace(const Point2 & p2d) const;
-            inline Point3 toSpace(const PixelLoc & p) const { return toSpace(Point2(p.x, p.y)); }
+            inline Point3 toSpace(const Pixel & p) const { return toSpace(Point2(p.x, p.y)); }
             inline Vec3 direction(const Point2 & p2d) const { return toSpace(p2d) - _eye; }
-            inline Vec3 direction(const PixelLoc & p) const { return direction(p); }
+            inline Vec3 direction(const Pixel & p) const { return direction(p); }
 
             inline const Mat4 & viewMatrix() const { return _viewMatrix; }
             inline const Mat4 & projectionMatrix() const { return _projectionMatrix; }
@@ -105,7 +105,7 @@ namespace panoramix {
                 const Point3 & center = Vec3(1, 0, 0),
                 const Vec3 & up = Vec3(0, 0, 1));
 
-            inline SizeI screenSize() const { return SizeI(static_cast<int>(_focal * 2 * M_PI), static_cast<int>(_focal * M_PI)); }
+            inline Sizei screenSize() const { return Sizei(static_cast<int>(_focal * 2 * M_PI), static_cast<int>(_focal * M_PI)); }
             inline double focal() const { return _focal; }
             inline const Point3 & eye() const { return _eye; }
             inline const Point3 & center() const { return _center; }
@@ -114,10 +114,10 @@ namespace panoramix {
             bool isVisibleOnScreen(const Point3 & p3d) const { return true; }
             inline HPoint2 toScreenInHPoint(const Point3 & p3d) const { return HPoint2(toScreen(p3d), 1.0); }
             Point3 toSpace(const Point2 & p2d) const;
-            inline Point3 toSpace(const PixelLoc & p) const { return toSpace(Vec2(p.x, p.y)); }
+            inline Point3 toSpace(const Pixel & p) const { return toSpace(Vec2(p.x, p.y)); }
             inline Point3 toSpace(const HPoint2 & p) const { return toSpace(p.value()); }
             Vec3 direction(const Point2 & p2d) const;
-            inline Vec3 direction(const PixelLoc & p) const { return direction(p); }
+            inline Vec3 direction(const Pixel & p) const { return direction(p); }
 
         private:
             double _focal;
@@ -142,7 +142,7 @@ namespace panoramix {
                 const Vec3 & up = Vec3(0, 0, -1));
             explicit PartialPanoramicCamera(const PanoramicCamera & panoCam, int w = 500, int h = 500);
 
-            inline SizeI screenSize() const { return Size(static_cast<int>(_screenW), static_cast<int>(_screenH)); }
+            inline Sizei screenSize() const { return Size(static_cast<int>(_screenW), static_cast<int>(_screenH)); }
             inline double focal() const { return _focal; }
             inline const Point3 & eye() const { return _eye; }
             inline const Point3 & center() const { return _center; }
@@ -151,9 +151,9 @@ namespace panoramix {
             bool isVisibleOnScreen(const Point3 & p3d) const;
             inline HPoint2 toScreenInHPoint(const Point3 & p3d) const { return HPoint2(toScreen(p3d), 1.0); }
             Point3 toSpace(const Point2 & p2d) const;
-            inline Point3 toSpace(const PixelLoc & p) const { return toSpace(Vec2(p.x, p.y)); }
+            inline Point3 toSpace(const Pixel & p) const { return toSpace(Vec2(p.x, p.y)); }
             Vec3 direction(const Point2 & p2d) const;
-            inline Vec3 direction(const PixelLoc & p) const { return direction(p); }
+            inline Vec3 direction(const Pixel & p) const { return direction(p); }
             PanoramicCamera toPanoramic() const { return PanoramicCamera(_focal, _eye, _center, _up); }
 
         private:
@@ -209,10 +209,10 @@ namespace panoramix {
             }
 
             template <class T>
-            ImageOfType<T> operator() (const ImageOfType<T> & inputIm,
+            ImageOf<T> operator() (const ImageOf<T> & inputIm,
                 int borderMode = cv::BORDER_REPLICATE,
                 const T & borderValue = T()) const {
-                ImageOfType<T> outputIm;
+                ImageOf<T> outputIm;
                 cv::remap(inputIm, outputIm, _mapx, _mapy,
                     cv::INTER_NEAREST, borderMode, borderValue);
                 return outputIm;
@@ -222,7 +222,7 @@ namespace panoramix {
                 class T, int N,
                 class = std::enable_if_t<(N <= 4)>
             >
-            ImageOfType<Vec<T, N>> operator()(const ImageOfType<Vec<T, N>> & inputIm,
+            ImageOf<Vec<T, N>> operator()(const ImageOf<Vec<T, N>> & inputIm,
                 int borderMode = cv::BORDER_REPLICATE,
                 const Vec<T, N> & borderValue = Vec<T, N>()) const {
                 Image outputIm;
@@ -240,7 +240,7 @@ namespace panoramix {
                 class = std::enable_if_t<(N > 4)>,
                 class = void
             >
-            ImageOfType<Vec<T, N>> operator()(const ImageOfType<Vec<T, N>> & inputIm,
+            ImageOf<Vec<T, N>> operator()(const ImageOf<Vec<T, N>> & inputIm,
                 int borderMode = cv::BORDER_REPLICATE,
                 const Vec<T, N> & borderValue = Vec<T, N>()) const {
                 std::vector<Image> channels;
@@ -249,7 +249,7 @@ namespace panoramix {
                     auto & c = channels[i];
                     cv::remap(c, c, _mapx, _mapy, cv::INTER_NEAREST, borderMode, borderValue[i]);
                 }
-                ImageOfType<Vec<T, N>> result;
+                ImageOf<Vec<T, N>> result;
                 cv::merge(channels, result);
                 return result;
             }
@@ -288,7 +288,7 @@ namespace panoramix {
                     std::declval<TT>().toScreenInHPoint(std::declval<core::Point3>()),
                     std::declval<TT>().isVisibleOnScreen(std::declval<core::Point3>()),
                     std::declval<TT>().toSpace(std::declval<core::Point2>()),
-                    std::declval<TT>().toSpace(std::declval<core::PixelLoc>()),
+                    std::declval<TT>().toSpace(std::declval<core::Pixel>()),
                     std::declval<TT>().screenSize(),
                     std::true_type()
                     );
@@ -331,7 +331,7 @@ namespace panoramix {
             View(const ImageT & im, const CameraT & cam) : image(im), camera(cam) {}
             View(const View<CameraT, Image> & v) : image(v.image), camera(v.camera) {}
             template <class T>
-            View(const View<CameraT, ImageOfType<T>> & v) : image(v.image), camera(v.camera) {}
+            View(const View<CameraT, ImageOf<T>> & v) : image(v.image), camera(v.camera) {}
 
             template <class AnotherCameraT, class = std::enable_if_t<IsCamera<std::decay_t<AnotherCameraT>>::value>>
             inline View<std::decay_t<AnotherCameraT>, ImageT> sampled(AnotherCameraT && cam) const {
@@ -340,7 +340,6 @@ namespace panoramix {
                 v.camera = std::forward<AnotherCameraT>(cam);
                 return v;
             }
-
            
             template <class Archiver>
             void serialize(Archiver & ar) {
@@ -353,11 +352,11 @@ namespace panoramix {
             class OutCameraT, class InCameraT, class T,
             class = std::enable_if_t<IsCamera<std::decay_t<InCameraT>>::value && IsCamera<std::decay_t<OutCameraT>>::value>
         >
-        View<OutCameraT, ImageOfType<T>> Combine(const OutCameraT & camera, const std::vector<View<InCameraT, ImageOfType<T>>> & views){
+        View<OutCameraT, ImageOf<T>> Combine(const OutCameraT & camera, const std::vector<View<InCameraT, ImageOf<T>>> & views){
             if (views.empty()){
-                return View<OutCameraT, ImageOfType<T>>();
+                return View<OutCameraT, ImageOf<T>>();
             }
-            ImageOfType<T> converted = ImageOfType<T>::zeros(camera.screenSize());
+            ImageOf<T> converted = ImageOf<T>::zeros(camera.screenSize());
             static const int channels = cv::DataType<T>::channels;
             Imagef counts(camera.screenSize(), 0.0f);
             for (int i = 0; i < views.size(); i++){
@@ -366,9 +365,36 @@ namespace panoramix {
                 converted += piece;
                 counts += sampler(Imagef::ones(views[i].image.size()), cv::BORDER_CONSTANT);
             }
-            View<OutCameraT, ImageOfType<T>> v;
+            View<OutCameraT, ImageOf<T>> v;
             v.camera = camera;
-            v.image = ImageOfType<T>::zeros(camera.screenSize());
+            v.image = ImageOf<T>::zeros(camera.screenSize());
+            for (auto it = converted.begin(); it != converted.end(); ++it){
+                float count = counts(it.pos());
+                v.image(it.pos()) = *it / std::max(count, 1.0f);
+            }
+            return v;
+        }
+
+        template <
+            class OutCameraT, class InCameraT, class T, class W,
+            class = std::enable_if_t<IsCamera<std::decay_t<InCameraT>>::value && IsCamera<std::decay_t<OutCameraT>>::value>
+        >
+        View<OutCameraT, ImageOf<T>> Combine(const OutCameraT & camera, const std::vector<Weighted<View<InCameraT, ImageOf<T>>, W>> & views){
+            if (views.empty()){
+                return View<OutCameraT, ImageOf<T>>();
+            }
+            ImageOf<T> converted = ImageOf<T>::zeros(camera.screenSize());
+            static const int channels = cv::DataType<T>::channels;
+            Imagef counts(camera.screenSize(), 0.0f);
+            for (int i = 0; i < views.size(); i++){
+                auto sampler = MakeCameraSampler(camera, views[i].component.camera);
+                auto piece = sampler(views[i].component.image, cv::BORDER_CONSTANT);
+                converted += piece;
+                counts += sampler(Imagef(views[i].component.image.size(), views[i].weight()), cv::BORDER_CONSTANT);
+            }
+            View<OutCameraT, ImageOf<T>> v;
+            v.camera = camera;
+            v.image = ImageOf<T>::zeros(camera.screenSize());
             for (auto it = converted.begin(); it != converted.end(); ++it){
                 float count = counts(it.pos());
                 v.image(it.pos()) = *it / std::max(count, 1.0f);
@@ -415,11 +441,11 @@ namespace panoramix {
             return PanoramicView(panorama, CreatePanoramicCamera(panorama, eye, center, up));
         }
         template <class T>
-        inline View<PanoramicCamera, ImageOfType<T>> CreatePanoramicView(const ImageOfType<T> & panorama,
+        inline View<PanoramicCamera, ImageOf<T>> CreatePanoramicView(const ImageOf<T> & panorama,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, 1)){
-            return View<PanoramicCamera, ImageOfType<T>>(panorama, CreatePanoramicCamera(panorama, eye, center, up));
+            return View<PanoramicCamera, ImageOf<T>>(panorama, CreatePanoramicCamera(panorama, eye, center, up));
         }
 
         // create perspective view
@@ -439,7 +465,7 @@ namespace panoramix {
             return PerspectiveView(perspectiveImage, cam.unwrap());
         }
         template <class T>
-        inline Failable<View<PerspectiveCamera, ImageOfType<T>>> CreatePerspectiveView(const ImageOfType<T> & perspectiveImage,
+        inline Failable<View<PerspectiveCamera, ImageOf<T>>> CreatePerspectiveView(const ImageOf<T> & perspectiveImage,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, -1),
@@ -452,7 +478,7 @@ namespace panoramix {
             auto cam = CreatePerspectiveCamera(perspectiveImage, eye, center, up, lse, vpd, line3s, line2s, vps, focal);
             if (cam.failed())
                 return nullptr;
-            return View<PerspectiveCamera, ImageOfType<T>>(perspectiveImage, cam.unwrap());
+            return View<PerspectiveCamera, ImageOf<T>>(perspectiveImage, cam.unwrap());
         }
 
         inline PerspectiveView CreatePerspectiveView(const Image & perspectiveImage,
@@ -464,12 +490,12 @@ namespace panoramix {
                 CreatePerspectiveCamera(perspectiveImage, vps, eye, center, up));
         }
         template <class T>
-        inline View<PerspectiveCamera, ImageOfType<T>> CreatePerspectiveView(const ImageOfType<T> & perspectiveImage,
+        inline View<PerspectiveCamera, ImageOf<T>> CreatePerspectiveView(const ImageOf<T> & perspectiveImage,
             const std::vector<HPoint2> & vps,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, -1)){
-            return View<PerspectiveCamera, ImageOfType<T>>(perspectiveImage, 
+            return View<PerspectiveCamera, ImageOf<T>>(perspectiveImage, 
                 CreatePerspectiveCamera(perspectiveImage, vps, eye, center, up));
         }
      
@@ -482,14 +508,14 @@ namespace panoramix {
             const Vec3 & up = Vec3(0, 0, -1));
 
         template <class CameraT, class T, class = std::enable_if_t<IsCamera<CameraT>::value>>
-        Failable<View<CameraT, ImageOfType<T>>> CreateView(const ImageOfType<T> & image,
+        Failable<View<CameraT, ImageOf<T>>> CreateView(const ImageOf<T> & image,
             const Point3 & eye = Point3(0, 0, 0),
             const Point3 & center = Point3(1, 0, 0),
             const Vec3 & up = Vec3(0, 0, -1)){
             auto v = CreateView<CameraT>((const Image &)image, eye, center, up);
             if (v.failed())
                 return nullptr;
-            return View<CameraT, ImageOfType<T>>(image, v.unwrap.camera);
+            return View<CameraT, ImageOf<T>>(image, v.unwrap.camera);
         }
 
 

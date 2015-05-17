@@ -17,7 +17,7 @@ namespace panoramix {
 
         // non maxima suppression
         void NonMaximaSuppression(const Image & src, Image & dst, int sz = 50,
-            std::vector<PixelLoc> * pixels = nullptr,
+            std::vector<Pixel> * pixels = nullptr,
             const Imageb & mask = Imageb());
 
         std::vector<KeyPoint> SIFT(const Image & im, cv::OutputArray descriptors = cv::noArray(),
@@ -85,7 +85,7 @@ namespace panoramix {
 
 
         // compute straightness of points
-        std::pair<double, Ray2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
+        std::pair<double, Ray2> ComputeStraightness(const std::vector<std::vector<Pixel>> & edges,
             double * interArea = nullptr, double * interLen = nullptr);
 
 
@@ -121,7 +121,8 @@ namespace panoramix {
                 MATLAB_Tardif
             };
             struct Params {
-                inline Params(Algorithm algo = Naive, double maxPPOffsetRatio = 2.0, double minFocalRatio = 0.05, double maxFocalRatio = 20.0)
+                inline Params(Algorithm algo = Naive, double maxPPOffsetRatio = 2.0, 
+                    double minFocalRatio = 0.05, double maxFocalRatio = 20.0)
                     : maxPrinciplePointOffsetRatio(maxPPOffsetRatio),
                     minFocalLengthRatio(minFocalRatio), 
                     maxFocalLengthRatio(maxFocalRatio), 
@@ -144,9 +145,9 @@ namespace panoramix {
             // accepts (lines, projection center)
             // returns (>= 3 vanishing points (the first 3 vanishing points should be the Manhattan VPs), the focal length, line classes)
             Failable<std::tuple<std::vector<HPoint2>, double, std::vector<int>>> operator() (
-                const std::vector<Line2> & lines, const SizeI & imSize) const;  
+                const std::vector<Line2> & lines, const Sizei & imSize) const;  
             Failable<std::tuple<std::vector<HPoint2>, double>> operator() (
-                std::vector<Classified<Line2>> & lines, const SizeI & imSize) const;
+                std::vector<Classified<Line2>> & lines, const Sizei & imSize) const;
 
             template <class Archive> inline void serialize(Archive & ar) { ar(_params); }
         
@@ -206,58 +207,32 @@ namespace panoramix {
 
 
         bool IsDenseSegmentation(const Imagei & segRegions);
-        std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> FindContoursOfRegionsAndBoundaries(
+        std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> FindContoursOfRegionsAndBoundaries(
             const Imagei & segRegions, int connectionExtendSize, bool simplifyStraightEdgePixels = true);
-        std::map<std::set<int>, std::vector<PixelLoc>> ExtractBoundaryJunctions(const Imagei & regions);
+        std::map<std::set<int>, std::vector<Pixel>> ExtractBoundaryJunctions(const Imagei & regions);
 
 
 
         Imagei ComputeOrientationMaps(const std::vector<Classified<Line2>> & lines,
-            const std::vector<HPoint2> & vps, const SizeI & imSize);
+            const std::vector<HPoint2> & vps, const Sizei & imSize);
 
 
 
         /// geometric context estimator
-        enum class SceneClass {
-            Indoor,
-            Outdoor
+        Image7d ComputeRawGeometricContext(const Image & im, bool outdoor, bool useHedauForIndoor);
+
+        enum class GeometricContextIndex : size_t {
+            FloorOrGround = 0,
+            CeilingOrSky = 1,
+            Vertical = 2,
+            ClutterOrPorous = 3,
+            Other = 4
         };
 
-        ImageOfType<Vec<double, 7>> ComputeGeometricContext(const Image & im, SceneClass sceneClass, 
-            bool useHedauForIndoor = false);
+        Image5d MergeGeometricContextLabelsHoiem(const Image7d & rawgc);
+        Image5d MergeGeometricContextLabelsHedau(const Image7d & rawgc);
 
-        class GeometricContextEstimator {
-        public:
-            enum IndoorIndex : size_t {
-               /* II_FrontVerticalPlanarFace = 0,
-                II_SideVerticalPlanarFace = 1,
-                II_HorizontalPlanarFace = 2,
-                II_Clutter = 3,
-                II_Other = 4*/
-                II_HorizontalPlanarFace = 0,
-                II_VerticalPlanarFace = 1,
-                II_Clutter = 2,
-                II_Other = 3,
-                II_Other2 = 4
-            };
-
-            enum OutdoorIndex : size_t{
-                OI_Ground = 0,
-                OI_VerticalPlanarFace = 1,
-                OI_Clutter = 2,
-                OI_Porous = 3,
-                OI_Sky = 4
-            };
-
-        public:
-            ImageOfType<Vec<double, 5>> operator()(const ImageOfType<Vec<double, 7>> & rawgc,
-                SceneClass sceneClass = SceneClass::Indoor) const;
-            ImageOfType<Vec<double, 5>> operator() (const Image & im, 
-                SceneClass sceneClass = SceneClass::Indoor) const;
-            std::pair<ImageOfType<Vec<double, 5>>, Imagei> operator() (const Image & pim, 
-                const PanoramicCamera & cam, const std::vector<Vec3> & vps,
-                SceneClass sceneClass = SceneClass::Indoor) const;
-        };
+        Image5d ComputeGeometricContext(const Image & im, bool outdoor, bool useHedauForIndoor = false);
 
 
     }

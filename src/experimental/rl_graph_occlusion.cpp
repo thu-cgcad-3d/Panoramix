@@ -191,7 +191,7 @@ namespace panoramix {
 
         template <class CameraT, class CallbackFunT>
         void AttachGeometricContextConstraintsTemplated(const RLGraph & mg, RLGraphControls & controls,
-            const CameraT & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes,
+            const CameraT & pcam, const ImageOf<Vec<double, 5>> & gc, const Imagei & gcVotes,
             CallbackFunT && fun){
 
 
@@ -241,12 +241,12 @@ namespace panoramix {
 
 
         void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
-            const PanoramicCamera & pcam, const ImageOfType<Vec<double, 5>> & gc, const Imagei & gcVotes,
+            const PanoramicCamera & pcam, const ImageOf<Vec<double, 5>> & gc, const Imagei & gcVotes,
             const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
             AttachGeometricContextConstraintsTemplated(mg, controls, pcam, gc, gcVotes, fun);
         }
         void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
-            const PerspectiveCamera & pcam, const ImageOfType<Vec<double, 5>> & gc,
+            const PerspectiveCamera & pcam, const ImageOf<Vec<double, 5>> & gc,
             const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun){
             AttachGeometricContextConstraintsTemplated(mg, controls, pcam, gc, Imagei::ones(gc.size()), fun);
         }

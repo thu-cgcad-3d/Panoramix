@@ -1,7 +1,7 @@
 #include <Eigen/Dense>
 #include <Eigen/StdVector>
 
-#include "../core/utilities.hpp"
+#include "../core/utility.hpp"
 #include "../core/cons_graph.hpp"
 #include "factor_graph.hpp"
  

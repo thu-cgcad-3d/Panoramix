@@ -1,20 +1,11 @@
 
-extern "C" {
-   // #include <gpc.h>
-//    #include <mosek.h>
-}
-
-//
-//#include <GCoptimization.h>
-
-
 #include "../misc/matlab_engine.hpp"
 #include "../misc/eigen.hpp"
 
 //
 #include "../core/algorithms.hpp"
 #include "../core/containers.hpp"
-#include "../core/utilities.hpp"
+#include "../core/utility.hpp"
 #include "../core/clock.hpp"
 #include "../core/homo_graph.hpp"
 
@@ -88,7 +79,7 @@ namespace panoramix {
 
 
             struct ComparePixelLoc {
-                inline bool operator ()(const PixelLoc & a, const PixelLoc & b) const {
+                inline bool operator ()(const Pixel & a, const Pixel & b) const {
                     if (a.x != b.x)
                         return a.x < b.x;
                     return a.y < b.y;
@@ -96,7 +87,7 @@ namespace panoramix {
             };
 
 
-            inline Point2 ToPoint2(const PixelLoc & p) {
+            inline Point2 ToPoint2(const Pixel & p) {
                 return Point2(p.x, p.y);
             }
 
@@ -110,8 +101,8 @@ namespace panoramix {
                 return Point<float, 2>(static_cast<float>(p[0]), static_cast<float>(p[1]));
             }
 
-            inline PixelLoc ToPixelLoc(const Point2 & p) {
-                return PixelLoc(static_cast<int>(p[0]), static_cast<int>(p[1]));
+            inline Pixel ToPixel(const Point2 & p) {
+                return Pixel(static_cast<int>(p[0]), static_cast<int>(p[1]));
             }
 
             std::pair<double, double> ComputeSpanningArea(const Point2 & a, const Point2 & b, const Ray2 & line) {
@@ -441,7 +432,7 @@ namespace panoramix {
                             }
 
 
-                            auto p = ToPixelLoc(lrd.relationCenter);
+                            auto p = ToPixel(lrd.relationCenter);
                             if (core::IsBetween(lrd.relationCenter[0], 0, linesBBox.size()[0] - 1) &&
                                 core::IsBetween(lrd.relationCenter[1], 0, linesBBox.size()[1] - 1)){
                                 lrd.junctionWeight = ComputeIntersectionJunctionWeightWithLinesVotes(
@@ -613,17 +604,17 @@ namespace panoramix {
                     Image regionMask = (segmentedRegions == i);
 
                     // find contour of the region
-                    std::vector<std::vector<PixelLoc>> contours;
+                    std::vector<std::vector<Pixel>> contours;
 
                     cv::findContours(regionMask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the outer contours
                     std::sort(contours.begin(), contours.end(),
-                        [](const std::vector<PixelLoc> & ca, const std::vector<PixelLoc> & cb){return ca.size() > cb.size(); });
+                        [](const std::vector<Pixel> & ca, const std::vector<Pixel> & cb){return ca.size() > cb.size(); });
 
                     if (contours.size() >= 2){
                         //std::cout << "multiple contours for one region in perspective projection!";
                     }
 
-                    auto iter = std::find_if(contours.begin(), contours.end(), [](const std::vector<PixelLoc> & c){return c.size() <= 2; });
+                    auto iter = std::find_if(contours.begin(), contours.end(), [](const std::vector<Pixel> & c){return c.size() <= 2; });
                     contours.erase(iter, contours.end());
 
                     //assert(!contours.empty() && "no contour? impossible~");
@@ -687,7 +678,7 @@ namespace panoramix {
                     Image regionMask = (segmentedRegions == i);
 
                     // find contour of the region
-                    std::vector<std::vector<PixelLoc>> contours;
+                    std::vector<std::vector<Pixel>> contours;
                     cv::findContours(regionMask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the outer contours
                     if (contours.empty()){
                         continue;
@@ -723,13 +714,13 @@ namespace panoramix {
                     regionMask = (sampledSegmentedRegions == i);
                     cv::findContours(regionMask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the outer contours
                     std::sort(contours.begin(), contours.end(),
-                        [](const std::vector<PixelLoc> & ca, const std::vector<PixelLoc> & cb){return ca.size() > cb.size(); });
+                        [](const std::vector<Pixel> & ca, const std::vector<Pixel> & cb){return ca.size() > cb.size(); });
 
                     if (contours.size() >= 2){
                         //std::cout << "multiple contours for one region in projection!";
                     }
 
-                    auto iter = std::find_if(contours.begin(), contours.end(), [](const std::vector<PixelLoc> & c){return c.size() <= 2; });
+                    auto iter = std::find_if(contours.begin(), contours.end(), [](const std::vector<Pixel> & c){return c.size() <= 2; });
                     contours.erase(iter, contours.end());
 
                     //assert(!contours.empty() && "no contour? impossible~");
@@ -784,11 +775,11 @@ namespace panoramix {
                     if (SampleLineOnImage){
                         for (double stepLen = 0.0; stepLen <= line2.length(); stepLen += stepOnImage){
                             Point2 sampleP = line2.first + normalize(line2.second - line2.first) * stepLen;
-                            PixelLoc originalP = ToPixelLoc(sampleP);
+                            Pixel originalP = ToPixel(sampleP);
                             std::set<int> connectedRegionIds;
                             for (int x = originalP.x - samplerSizeOnLine; x <= originalP.x + samplerSizeOnLine; x++){
                                 for (int y = originalP.y - samplerSizeOnLine; y <= originalP.y + samplerSizeOnLine; y++){
-                                    PixelLoc p(x, y);
+                                    Pixel p(x, y);
                                     if (!Contains(segmentedRegions, p))
                                         continue;
                                     int regionId = segmentedRegions(p);
@@ -802,7 +793,7 @@ namespace panoramix {
                             std::set<int> abitFarLeftRightRegionIds[2];
                             for (int d = std::min(samplerSizeOnLine, 2); d <= samplerSizeOnLine * 2; d++){
                                 for (int dir : {-d, d}){
-                                    PixelLoc p = ToPixelLoc(sampleP + vertToLineDir * dir);
+                                    Pixel p = ToPixel(sampleP + vertToLineDir * dir);
                                     if (!Contains(segmentedRegions, p))
                                         continue;
                                     int regionId = segmentedRegions(p);
@@ -828,12 +819,12 @@ namespace panoramix {
                             if (!cam.isVisibleOnScreen(sample))
                                 continue;
                             Point2 sampleP = cam.toScreen(sample);
-                            PixelLoc originalP = ToPixelLoc(sampleP);
+                            Pixel originalP = ToPixel(sampleP);
                             // collect neighbors
                             std::set<int> connectedRegionIds;
                             for (int x = originalP.x - samplerSizeOnLine; x <= originalP.x + samplerSizeOnLine; x++){
                                 for (int y = originalP.y - samplerSizeOnLine; y <= originalP.y + samplerSizeOnLine; y++){
-                                    PixelLoc p(x, y);
+                                    Pixel p(x, y);
                                     if (!Contains(segmentedRegions, p))
                                         continue;
                                     int regionId = segmentedRegions(p);
@@ -847,7 +838,7 @@ namespace panoramix {
                             std::set<int> abitFarLeftRightRegionIds[2];
                             for (int d = std::min(samplerSizeOnLine, 2); d <= samplerSizeOnLine * 2; d++){
                                 for (int dir : {-d, d}){
-                                    PixelLoc p = ToPixelLoc(sampleP + vertToLineDir * dir);
+                                    Pixel p = ToPixel(sampleP + vertToLineDir * dir);
                                     if (!Contains(segmentedRegions, p))
                                         continue;
                                     int regionId = segmentedRegions(p);
@@ -874,7 +865,7 @@ namespace panoramix {
 
 
                 // add region boundary constraints
-                std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges =
+                std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> boundaryEdges =
                     FindContoursOfRegionsAndBoundaries(segmentedRegions, samplerSizeOnBoundary, false);
 
                 for (auto & bep : boundaryEdges) {
@@ -886,10 +877,10 @@ namespace panoramix {
 
                     auto rh = regionHandles[rids.first];
                     if (noBoundaryUnderLines){
-                        std::vector<std::vector<PixelLoc>> filteredBoundaryPixels;
+                        std::vector<std::vector<Pixel>> filteredBoundaryPixels;
                         for (auto & e : edges){
-                            std::vector<PixelLoc> filteredEdge;
-                            for (PixelLoc p : e){
+                            std::vector<Pixel> filteredEdge;
+                            for (Pixel p : e){
                                 bool coveredByLine = false;
                                 for (RegionLineConnectionHandle rlcon : mg.topo(rh).constraints<RegionLineConnectionData>()){
                                     LineHandle lh = mg.topo(rlcon).component<1>();
@@ -2353,8 +2344,8 @@ namespace panoramix {
 
                 // intersection test
                 for (int i = 0; i < controls.vanishingPoints.size(); i++){
-                    auto p1 = ToPixelLoc(ppc.toScreen(controls.vanishingPoints[i]));
-                    auto p2 = ToPixelLoc(ppc.toScreen(-controls.vanishingPoints[i]));
+                    auto p1 = ToPixel(ppc.toScreen(controls.vanishingPoints[i]));
+                    auto p2 = ToPixel(ppc.toScreen(-controls.vanishingPoints[i]));
 
                     int dilateSize = ppcFocal * rangeAngle;
                     bool intersected = false;
@@ -2364,8 +2355,8 @@ namespace panoramix {
                         for (int y = -dilateSize; y <= dilateSize; y++){
                             if (intersected)
                                 break;
-                            auto pp1 = PixelLoc(p1.x + x, p1.y + y);
-                            auto pp2 = PixelLoc(p2.x + x, p2.y + y);
+                            auto pp1 = Pixel(p1.x + x, p1.y + y);
+                            auto pp2 = Pixel(p2.x + x, p2.y + y);
                             if (Contains(mask, pp1) /*Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp1)*/ && mask(pp1)){
                                 peakyRegionHandles[i].push_back(r.topo.hd);
                                 intersected = true;

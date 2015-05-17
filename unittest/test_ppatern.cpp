@@ -1,10 +1,10 @@
 #include "../src/core/cameras.hpp"
-#include "../src/core/utilities.hpp"
+#include "../src/core/utility.hpp"
 #include "../src/core/feature.hpp"
 #include "../src/core/containers.hpp"
 #include "../src/core/clock.hpp"
 #include "../src/gui/canvas.hpp"
-#include "../src/gui/utitilies.hpp"
+#include "../src/gui/utility.hpp"
 
 #include "config.hpp"
 
@@ -27,6 +27,18 @@ void ShowDir(const core::Image3ub & im, std::initializer_list<double> angles){
     canvas.show();
 }
 
+//core::Vec2 EstimateGeneralGrad(const core::Imaged & dense){
+//
+//    using namespace core;
+//    int winhsize = 50;
+//    for (int x = winhsize; x < dense.cols - winhsize; x++){
+//        for (int y = winhsize; y < dense.rows - winhsize; y++){
+//
+//        }
+//    }
+//
+//}
+
 
 TEST(PPattern, A){
 
@@ -37,28 +49,28 @@ TEST(PPattern, A){
     core::ResizeToHeight(image, 800);
     auto mask = core::Rotate(image, core::DegreesToRadians(0));
 
-    auto kps = core::SURF(image);
+    auto kps = core::SIFT(image);
 
     gui::MakeCanvas(image).add(kps).show();
 
     core::RTreeWrapper<cv::KeyPoint, core::DefaultInfluenceBoxFunctor<double>> featureRtree(kps.begin(), kps.end(), 
         core::DefaultInfluenceBoxFunctor<double>(0.5));
 
-    int winhsize = 50;
+    int winhsize = 100;
     int step = 3;
-    core::Imaged dense(core::SizeI((image.cols - 2 * winhsize) / step + 1, (image.rows - 2 * winhsize) / step + 1), -1);
+    core::Imaged dense(core::Sizei((image.cols - 2 * winhsize) / step + 1, (image.rows - 2 * winhsize) / step + 1), -1);
     core::RTree<core::Box2, core::Point3> denseSamples;
     for (int x = winhsize; x < image.cols - winhsize; x += step){
         for (int y = winhsize; y < image.rows - winhsize; y += step){
             if (!mask(y, x)){
                 continue;
             }
-            core::Box2 box = core::BoundingBox(core::PixelLoc(x, y)).expand(winhsize);
+            core::Box2 box = core::BoundingBox(core::Pixel(x, y)).expand(winhsize);
             int count = featureRtree.count(box);
             int i = (y - winhsize) / step;
             int j = (x - winhsize) / step;
             dense(i, j) = count;
-            denseSamples.insert(core::BoundingBox(core::PixelLoc(x, y)).expand(1), core::Point3(x, y, count));
+            denseSamples.insert(core::BoundingBox(core::Pixel(x, y)).expand(1), core::Point3(x, y, count));
         }
     }
     double maxDense = core::MinMaxValOfImage(dense).second;
@@ -71,6 +83,7 @@ TEST(PPattern, A){
     }
     std::vector<std::vector<double>> votes(thetas.size(), std::vector<double>(1000, 0.0));
     std::vector<double> entropies(thetas.size(), 0.0);
+    std::vector<double> grads(thetas.size(), 0.0);
     double validRadius = std::min(image.cols, image.rows) / 2.0;
     for (int i = 0; i < votes.size(); i++){
         auto & vtable = votes[i];
@@ -93,10 +106,15 @@ TEST(PPattern, A){
         }
         double entropy = core::EntropyOfContainer(vtable);
         entropies[i] = entropy;
+        grads[i] = abs(std::accumulate(vtable.begin(), vtable.begin() + 500, 0)
+            - std::accumulate(vtable.begin() + 500, vtable.begin() + 1000, 0));
+        //grads[i] /= std::accumulate(vtable.begin(), vtable.begin() + 1000, 0);
     }
 
     int maxEntropyId = std::max_element(entropies.begin(), entropies.end()) - entropies.begin();
     int minEntropyId = std::min_element(entropies.begin(), entropies.end()) - entropies.begin();
+
+    int maxgrad = std::min_element(grads.begin(), grads.end()) - grads.begin();
 
     double thetaA = thetas[maxEntropyId];
     double thetaB = thetas[minEntropyId];
@@ -114,7 +132,7 @@ TEST(PPattern, A){
     //    for (int x = gradsize; x < dense.cols - gradsize; x += 5){
     //        for (int y = gradsize; y < dense.rows - gradsize; y += 5){
 
-    //            core::PixelLoc pos(x * step + winhsize, y * step + winhsize);
+    //            core::Pixel pos(x * step + winhsize, y * step + winhsize);
     //            if (!mask(pos)){
     //                continue;
     //            }
@@ -125,7 +143,7 @@ TEST(PPattern, A){
     //            for (int xx = x - gradsize; xx <= x + gradsize; xx++){
     //                for (int yy = y - gradsize; yy <= y + gradsize; yy++){
 
-    //                    core::PixelLoc pos(xx * step + winhsize, yy * step + winhsize);
+    //                    core::Pixel pos(xx * step + winhsize, yy * step + winhsize);
     //                    if (!mask(pos)){
     //                        continue;
     //                    }

@@ -4,6 +4,8 @@
 namespace panoramix {
     namespace core {
 
+#define FORCEINLINE __forceinline
+
         template <class ...T> 
         struct AlwaysFalse {
             enum { value = false };

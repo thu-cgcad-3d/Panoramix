@@ -2,7 +2,7 @@
 #define PANORAMIX_GUI_CANVAS_HPP
 
 #include "../core/basic_types.hpp"
-#include "../core/utilities.hpp"
+#include "../core/utility.hpp"
 #include "../core/meta.hpp"
 
 #include "basic_types.hpp"
@@ -28,8 +28,8 @@ namespace panoramix {
                 const Point2 & root = d.second;
                 auto dir = normalize(ray.direction);
                 double scale = norm(imCenter) * 2;
-                PixelLoc p1 = ToPixelLoc(root - dir * scale);
-                PixelLoc p2 = ToPixelLoc(root + dir * scale);
+                Pixel p1 = ToPixel(root - dir * scale);
+                Pixel p2 = ToPixel(root + dir * scale);
                 cv::clipLine(cv::Rect(0, 0, im.cols, im.rows), p1, p2);
                 cv::line(im, p1, p2, po.color, po.thickness, po.lineType, po.shift);
             }
@@ -39,10 +39,10 @@ namespace panoramix {
         template <class T>
         class Canvas {
         public:
-            Canvas(ImageOfType<T> & im) : _image(im) {
+            Canvas(ImageOf<T> & im) : _image(im) {
                 resetPaintingOptions();
             }
-            Canvas(ImageOfType<T> && im) : _image(im) {
+            Canvas(ImageOf<T> && im) : _image(im) {
                 resetPaintingOptions();
             }
 
@@ -55,7 +55,7 @@ namespace panoramix {
                 _paintingOptions.colorTable = ColorTableDescriptor::AllColors;
             }
 
-            ImageOfType<T> & image() { return _image; }
+            ImageOf<T> & image() { return _image; }
 
             PaintingOptions & paintingOptions() { return _paintingOptions; }
             const PaintingOptions & paintingOptions() const { return _paintingOptions; }
@@ -70,14 +70,14 @@ namespace panoramix {
             inline Canvas & add(const Point<TT, 2> & p) {
                 int x = static_cast<int>(std::round(p[0]));
                 int y = static_cast<int>(std::round(p[1]));
-                auto pp = PixelLoc(x, y);
+                auto pp = Pixel(x, y);
                 if (Contains(image(), pp)){
                     image()(pp) = paintingOptions().color;
                 }
                 return *this;
             }
 
-            inline Canvas & add(const PixelLoc & pp){
+            inline Canvas & add(const Pixel & pp){
                 if (Contains(image(), pp)){
                     image()(pp) = paintingOptions().color;
                 }
@@ -95,17 +95,11 @@ namespace panoramix {
                 cv::line(image(), cv::Point(static_cast<int>(line.first(0)), static_cast<int>(line.first(1))),
                     cv::Point(static_cast<int>(line.second(0)), static_cast<int>(line.second(1))),
                     paintingOptions().color,
-                    paintingOptions().thickness, 
-                    paintingOptions().lineType, 
+                    paintingOptions().thickness,
+                    paintingOptions().lineType,
                     paintingOptions().shift);
                 return *this;
             }
-
-            template <class TT>
-            inline Canvas & add(const HLine<TT, 2> & line) {
-                return add(line.toLine());
-            }
-
 
             inline Canvas & add(const Ray2 & ray) {
                 DrawRay2OnImage(image(), ray, paintingOptions());
@@ -159,7 +153,7 @@ namespace panoramix {
             }
 
             template <class TT>
-            inline Canvas & add(const ImageOfType<TT> & im) {
+            inline Canvas & add(const ImageOf<TT> & im) {
                 cv::addWeighted(image(), (1.0f - paintingOptions().alpha), im, paintingOptions().alpha, 0.0, image());
                 return *this;
             }
@@ -214,16 +208,16 @@ namespace panoramix {
 
         private:
             PaintingOptions _paintingOptions;
-            ImageOfType<T> _image;
+            ImageOf<T> _image;
         };
 
         template <class T>
-        inline Canvas<T> AsCanvas(ImageOfType<T> & im) { return Canvas<T>(im); }
+        inline Canvas<T> AsCanvas(ImageOf<T> & im) { return Canvas<T>(im); }
         template <class T>
-        inline Canvas<T> AsCanvas(ImageOfType<T> && im) { return Canvas<T>(std::move(im)); }
+        inline Canvas<T> AsCanvas(ImageOf<T> && im) { return Canvas<T>(std::move(im)); }
 
         template <class T>
-        inline Canvas<T> MakeCanvas(const ImageOfType<T> & im) { return Canvas<T>(im.clone()); }
+        inline Canvas<T> MakeCanvas(const ImageOf<T> & im) { return Canvas<T>(im.clone()); }
 
     }
 }

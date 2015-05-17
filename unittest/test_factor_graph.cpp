@@ -1,4 +1,4 @@
-#include "../src/core/utilities.hpp"
+#include "../src/core/utility.hpp"
 #include "../src/gui/basic_types.hpp"
 #include "../src/ml/factor_graph.hpp"
 #include "config.hpp"
@@ -100,12 +100,12 @@ TEST(FactorGraph, DISABLED_Denoise){
     // add smoothness factor nodes
     for (int i = 0; i < noised.rows - 1; i++){
         for (int j = 0; j < noised.cols - 1; j++){
-            auto vh = vhs[core::EncodeSubscriptToIndex(core::PixelLoc(j, i), noised.size())];
-            fg.addFactor({ vh, vhs[core::EncodeSubscriptToIndex(core::PixelLoc(j + 1, i), noised.size())] }, smoothnessfcid1);
-            fg.addFactor({ vh, vhs[core::EncodeSubscriptToIndex(core::PixelLoc(j, i + 1), noised.size())] }, smoothnessfcid1);
-            fg.addFactor({ vh, vhs[core::EncodeSubscriptToIndex(core::PixelLoc(j + 1, i + 1), noised.size())] }, smoothnessfcid2);
+            auto vh = vhs[core::EncodeSubscriptToIndex(core::Pixel(j, i), noised.size())];
+            fg.addFactor({ vh, vhs[core::EncodeSubscriptToIndex(core::Pixel(j + 1, i), noised.size())] }, smoothnessfcid1);
+            fg.addFactor({ vh, vhs[core::EncodeSubscriptToIndex(core::Pixel(j, i + 1), noised.size())] }, smoothnessfcid1);
+            fg.addFactor({ vh, vhs[core::EncodeSubscriptToIndex(core::Pixel(j + 1, i + 1), noised.size())] }, smoothnessfcid2);
             if (i > 0){
-                fg.addFactor({ vh, vhs[core::EncodeSubscriptToIndex(core::PixelLoc(j + 1, i - 1), noised.size())] }, smoothnessfcid2);
+                fg.addFactor({ vh, vhs[core::EncodeSubscriptToIndex(core::Pixel(j + 1, i - 1), noised.size())] }, smoothnessfcid2);
             }
         }
     }

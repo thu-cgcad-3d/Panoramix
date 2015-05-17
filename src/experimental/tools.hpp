@@ -15,11 +15,11 @@ namespace panoramix {
         // output a 2d image of this rl graph
         template <
             class CameraT,
-            class RhColorerT = core::ConstantFunctor<gui::Color>,
-            class LhColorerT = core::ConstantFunctor<gui::Color>,
-            class RBhColorerT = core::ConstantFunctor<gui::Color>
+            class RhColorerT = core::ConstantFunctor<gui::ColorTag>,
+            class LhColorerT = core::ConstantFunctor<gui::ColorTag>,
+            class RBhColorerT = core::ConstantFunctor<gui::ColorTag>
         >
-        Image Print(const RLGraph & mg, const Imagei & segmentedRegions, const CameraT & camera, const std::vector<RegionHandle> & rh2rids,
+        Image3f Print(const RLGraph & mg, const Imagei & segmentedRegions, const CameraT & camera, const std::vector<RegionHandle> & rh2rids,
         RhColorerT && rhColor = gui::Transparent,
         LhColorerT && lhColor = gui::Transparent,
         RBhColorerT && rbColor = gui::Transparent,
@@ -42,10 +42,10 @@ namespace panoramix {
                     static const double sampleAngle = M_PI / 100.0;
                     auto & line = ld.data.line;
                     double spanAngle = AngleBetweenDirections(line.first, line.second);
-                    std::vector<PixelLoc> ps; ps.reserve(spanAngle / sampleAngle);
+                    std::vector<Pixel> ps; ps.reserve(spanAngle / sampleAngle);
                     for (double angle = 0.0; angle <= spanAngle; angle += sampleAngle){
                         Vec3 dir = RotateDirection(line.first, line.second, angle);
-                        ps.push_back(ToPixelLoc(camera.toScreen(dir)));
+                        ps.push_back(ToPixel(camera.toScreen(dir)));
                     }
                     for (int i = 1; i < ps.size(); i++){
                         auto & p1 = ps[i - 1];
@@ -64,8 +64,8 @@ namespace panoramix {
                     for (auto & e : b.data.normalizedEdges){
                         if (e.size() <= 1) continue;
                         for (int i = 1; i < e.size(); i++){
-                            auto p1 = core::ToPixelLoc(camera.toScreen(e[i - 1]));
-                            auto p2 = core::ToPixelLoc(camera.toScreen(e[i]));
+                            auto p1 = core::ToPixel(camera.toScreen(e[i - 1]));
+                            auto p2 = core::ToPixel(camera.toScreen(e[i]));
                             cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
                             cv::line(rendered, p1, p2, (cv::Scalar)color, boundaryWidth);
                         }

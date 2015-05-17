@@ -1,6 +1,6 @@
 #include "basic_types.hpp"
 
-#include "../core/utilities.hpp"
+#include "../core/utility.hpp"
 
 namespace panoramix {
     namespace gui {

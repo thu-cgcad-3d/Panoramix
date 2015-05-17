@@ -3,18 +3,21 @@
 
 #include "singleton.hpp"
 #include "qt_glue.hpp"
-#include "utitilies.hpp"
+#include "utility.hpp"
 
 namespace panoramix {
     namespace gui {
 
-        core::Image PickAnImage(const std::string & dir){
+        core::Image PickAnImage(const std::string & dir, std::string * picked){
             Singleton::InitGui();
             auto filename = QFileDialog::getOpenFileName(nullptr, QObject::tr("Select an image file"), 
                 QString::fromStdString(dir), 
                 QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
             if (filename.isEmpty())
                 return core::Image();
+            if (picked){
+                *picked = filename.toStdString();
+            }
             return cv::imread(filename.toStdString());
         }
 

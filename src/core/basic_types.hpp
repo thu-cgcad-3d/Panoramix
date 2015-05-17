@@ -57,6 +57,8 @@ namespace panoramix {
         using Point3i = Point<int, 3>;
         using Point4i = Point<int, 4>;
 
+        using Vec5 = Vec<double, 5>;
+        using Vec5f = Vec<float, 5>;
         using Vec7 = Vec<double, 7>;
         using Vec7f = Vec<float, 7>;
 
@@ -191,7 +193,7 @@ namespace panoramix {
 
         // size
         using Size = cv::Size2f;
-        using SizeI = cv::Size2i;
+        using Sizei = cv::Size2i;
 
 
 
@@ -294,6 +296,10 @@ namespace panoramix {
             return Line<T, N>(line.first * factor, line.second * factor);
         }
         template <class T, int N>
+        inline Line<T, N> operator / (const Line<T, N> & line, const T & factor){
+            return Line<T, N>(line.first / factor, line.second / factor);
+        }
+        template <class T, int N>
         inline Line<T, N> operator * (const T & factor, const Line<T, N> & line){
             return Line<T, N>(line.first * factor, line.second * factor);
         }
@@ -341,25 +347,6 @@ namespace panoramix {
 
 
 
-        // homogeneous line
-        template <class T, int N>
-        struct HLine {
-            HPoint<T, N> first, second;
-            inline Line<T, N> toLine() const {
-                return Line<T, N>{first.value(), second.value()};
-            }
-        };
-        template <class T, int N>
-        inline bool operator ==  (const HLine<T, N> & a, const HLine<T, N> & b) {
-            return a.first == b.first && a.second == b.second;
-        }
-        template <class Archive, class T, int N>
-        inline void serialize(Archive & ar, HLine<T, N> & l) {
-            ar(l.first, l.second);
-        }
-        using HLine2 = HLine<double, 2>;
-        using HLine3 = HLine<double, 3>;
-
 
         // chain
         template <class T, int N>
@@ -401,71 +388,73 @@ namespace panoramix {
 
         // image
         using Image = cv::Mat;
-        template <class T> using ImageOfType = cv::Mat_<T> ;
-        using Imageb = ImageOfType<bool>;
-        using Image3b = ImageOfType<Vec<bool, 3>>;
-        using Imageub = ImageOfType<uint8_t>;
-        using Image3ub = ImageOfType<Vec<uint8_t, 3>>;
-        using Imagei = ImageOfType<int>;
-        using Image3i = ImageOfType<Vec<int, 3>>;
-        using Imagef = ImageOfType<float>;
-        using Image3f = ImageOfType<Vec<float, 3>>;
-        using Imaged = ImageOfType<double>;
-        using Image3d = ImageOfType<Vec<double, 3>>;
+        template <class T> using ImageOf = cv::Mat_<T> ;
+        using Imageb = ImageOf<bool>;
+        using Image3b = ImageOf<Vec<bool, 3>>;
+        using Imageub = ImageOf<uint8_t>;
+        using Image3ub = ImageOf<Vec<uint8_t, 3>>;
+        using Imagei = ImageOf<int>;
+        using Image3i = ImageOf<Vec<int, 3>>;
+        using Imagef = ImageOf<float>;
+        using Image3f = ImageOf<Vec<float, 3>>;
+        using Imaged = ImageOf<double>;
+        using Image3d = ImageOf<Vec<double, 3>>;
+        using Image5d = ImageOf<Vec<double, 5>>;
+        using Image7d = ImageOf<Vec<double, 7>>;
 
 
 
         namespace {
             template <class To, class From>
-            inline ImageOfType<To> VecCastPrivate(const ImageOfType<From> & im, std::false_type) {
-                ImageOfType<To> cim(im.size());
+            inline ImageOf<To> VecCastPrivate(const ImageOf<From> & im, std::false_type) {
+                ImageOf<To> cim(im.size());
                 for (auto it = im.begin(); it != im.end(); ++it){
                     cim(it.pos()) = static_cast<To>(*it);
                 }
                 return cim;
             }
             template <class To>
-            inline ImageOfType<To> VecCastPrivate(const ImageOfType<To> & v, std::true_type) {
+            inline ImageOf<To> VecCastPrivate(const ImageOf<To> & v, std::true_type) {
                 return v.clone();
             }
 
             template <class To, class From, int N>
-            inline ImageOfType<Vec<To, N>> VecCastPrivate(const ImageOfType<Vec<From, N>> & im, std::false_type) {
-                ImageOfType<Vec<To, N>> cim(im.size());
+            inline ImageOf<Vec<To, N>> VecCastPrivate(const ImageOf<Vec<From, N>> & im, std::false_type) {
+                ImageOf<Vec<To, N>> cim(im.size());
                 for (auto it = im.begin(); it != im.end(); ++it){
                     cim(it.pos()) = vec_cast<To>(*it);
                 }
                 return cim;
             }
             template <class To, int N>
-            inline ImageOfType<Vec<To, N>> VecCastPrivate(const ImageOfType<Vec<To, N>> & v, std::true_type) {
+            inline ImageOf<Vec<To, N>> VecCastPrivate(const ImageOf<Vec<To, N>> & v, std::true_type) {
                 return v.clone();
             }
         }
 
         template <class To, class From>
-        inline ImageOfType<To> vec_cast(const ImageOfType<From> & v) {
+        inline ImageOf<To> vec_cast(const ImageOf<From> & v) {
             return VecCastPrivate<To>(v, std::integral_constant<bool, std::is_same<To, From>::value>());
         }
 
         template <class To, class From, int N>
-        inline ImageOfType<Vec<To, N>> vec_cast(const ImageOfType<Vec<From, N>> & v) {
+        inline ImageOf<Vec<To, N>> vec_cast(const ImageOf<Vec<From, N>> & v) {
             return VecCastPrivate<To>(v, std::integral_constant<bool, std::is_same<To, From>::value>());
         }
 
 
-        using PixelLoc = cv::Point;
+        using Pixel = cv::Point;
         template <class T>
-        inline Vec<T, 2> vec_cast(const PixelLoc & p) { 
+        inline Vec<T, 2> vec_cast(const Pixel & p) { 
             return Vec<T, 2>(static_cast<T>(p.x), static_cast<T>(p.y)); 
         }
 
         template <class T = Vec<uint8_t, 3>>
-        inline ImageOfType<T> ImageRead(const std::string & filename){
+        inline ImageOf<T> ImageRead(const std::string & filename){
             return cv::imread(filename);
         }
         template <class T>
-        inline bool ImageWrite(const std::string & filename, const ImageOfType<T> & im){
+        inline bool ImageWrite(const std::string & filename, const ImageOf<T> & im){
             return cv::imwrite(filename, im);
         }
 
@@ -485,16 +474,29 @@ namespace panoramix {
         bool MayBeAPanorama(const Image & im);
         bool MakePanorama(Image & im);
         
-        std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im);
+        std::pair<Pixel, Pixel> MinMaxLocOfImage(const Image & im);
         std::pair<double, double> MinMaxValOfImage(const Image & im);
-
-        template <class T> 
-        inline PixelLoc ToPixelLoc(const Point<T, 2> & p){
-            return PixelLoc(static_cast<int>(p[0]), static_cast<int>(p[1]));
+        template <class T>
+        inline T Mean(const ImageOf<T> & im, const Imageub & mask) {
+            T sum = T();
+            int count = 0;
+            for (auto it = im.begin(); it != im.end(); ++it){
+                if (!mask.empty() && !mask(it.pos())){
+                    continue;
+                }
+                sum += (*it);
+                count++;
+            }
+            return sum / count;
         }
 
-        PixelLoc PixelLocFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv);
-        GeoCoord GeoCoordFromPixelLoc(const PixelLoc & pixel, int longidiv, int latidiv);
+        template <class T> 
+        inline Pixel ToPixel(const Point<T, 2> & p){
+            return Pixel(static_cast<int>(p[0]), static_cast<int>(p[1]));
+        }
+
+        Pixel PixelFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv);
+        GeoCoord GeoCoordFromPixel(const Pixel & pixel, int longidiv, int latidiv);
 
 
         // dense mat
@@ -646,8 +648,9 @@ namespace panoramix {
             Vec<T, N> normal;
             Polygon() {}
             Polygon(const std::vector<Point<T, N>> & cs, const Vec<T, N> & n) : corners(cs), normal(n){}
-            Polygon(const Chain<T, N> & c) : corners(c.points), normal(normalize(corners.at(0).cross(corners.at(1)))) {}
-            Polygon(Chain<T, N> && c) : corners(std::move(c.points)), normal(normalize(corners.at(0).cross(corners.at(1)))) {}
+            Polygon(std::vector<Point<T, N>> && cs, const Vec<T, N> & n) : corners(std::move(cs)), normal(n){}
+            Polygon(const Chain<T, N> & c) : corners(c.points), normal(normalize((corners.at(0) - corners.at(1)).cross(corners.at(1) - corners.at(2)))) {}
+            Polygon(Chain<T, N> && c) : corners(std::move(c.points)), normal(normalize((corners.at(0) - corners.at(1)).cross(corners.at(1) - corners.at(2)))) {}
             inline Plane<T, N> plane() const { return Plane<T, N>(corners.front(), normal); }
             inline Chain<T, N> boundary() const { return Chain<T, N>{corners, true}; }
         };

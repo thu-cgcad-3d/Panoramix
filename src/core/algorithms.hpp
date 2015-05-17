@@ -2,7 +2,7 @@
 #define PANORAMIX_CORE_ALGORITHMS_HPP
 
 #include "basic_types.hpp"
-#include "utilities.hpp"
+#include "utility.hpp"
 
 namespace panoramix {
     namespace core {

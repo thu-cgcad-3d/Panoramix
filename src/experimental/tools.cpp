@@ -1,4 +1,5 @@
 #include "../core/algorithms.hpp"
+#include "../core/containers.hpp"
 #include "tools.hpp"
 
 namespace panoramix {
@@ -186,12 +187,21 @@ namespace panoramix {
         std::vector<SectionalPiece> MakeSectionalPieces(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
             const Plane3 & cutplane){
 
+            Box3 bboxAll;
+            for (auto & p : polygons){
+                bboxAll |= BoundingBoxOfContainer(p);
+            }
+            double gsize = std::cbrt(bboxAll.size(0) * bboxAll.size(1) * bboxAll.size(2));
+
             std::vector<SectionalPiece> segments;
-            std::vector<double> startAngles;
+            std::vector<double> startAngles, endAngles;
 
             Vec3 x, y;
             std::tie(x, y) = ProposeXYDirectionsFromZDirection(cutplane.normal);
             Point3 original = cutplane.root();
+
+            RTree<Box2, int> segmentIdRTree;
+            Box2 bboxOnCutplane;
 
             for (auto it = polygons.begin(); it != polygons.end(); ++it){
                 RegionHandle rh = it.hd();
@@ -205,7 +215,7 @@ namespace panoramix {
                     if (core::IsFuzzyParallel(plane.normal, cutplane.normal, 0.01))
                         continue;
 
-                    Vec3 along = normalize(cutplane.normal.cross(plane.normal));
+                    Vec3 along = normalize(cutplane.normal.cross(plane.normal)); // intersection line direction
                     std::vector<Scored<std::pair<Point3, Point2>>> cutpoints;
 
                     for (int i = 1; i <= polygon.corners.size(); i++){
@@ -214,7 +224,7 @@ namespace panoramix {
                         double lastDist = cutplane.signedDistanceTo(lastP);
                         double dist = cutplane.signedDistanceTo(p);
 
-                        if (lastDist < 0 && dist > 0 || lastDist > 0 && dist < 0){
+                        if (lastDist < 0 && dist > 0 || lastDist > 0 && dist < 0){ // intersection!
                             Point3 intersection = (lastP * abs(dist) + p * abs(lastDist)) / (abs(dist) + abs(lastDist));
                             double order = intersection.dot(along);
                             Point2 projOnCutPlane((intersection - original).dot(x), (intersection - original).dot(y));
@@ -233,12 +243,18 @@ namespace panoramix {
                     // chain the segments
                     std::sort(cutpoints.begin(), cutpoints.end());
                     for (int i = 0; i < cutpoints.size(); i += 2){
+                        auto box2 = BoundingBox(cutpoints[i].component.second) | BoundingBox(cutpoints[i + 1].component.second);
+                        bboxOnCutplane |= box2;
+
                         SectionalPiece segment;
                         segment.rh = rh;
                         segment.range.first = cutpoints[i].component.first;
                         segment.range.second = cutpoints[i + 1].component.first;
                         segments.push_back(segment);
+                        segmentIdRTree.insert(box2, segments.size() - 1);
+                        
                         startAngles.push_back(SignedAngleBetweenDirections(Vec2(1, 0), cutpoints[i].component.second));
+                        endAngles.push_back(SignedAngleBetweenDirections(Vec2(1, 0), cutpoints[i + 1].component.second));
                     }
                 }
             }
@@ -246,15 +262,31 @@ namespace panoramix {
             if (segments.empty())
                 return segments;
 
+            if (sqrt(bboxOnCutplane.size(0) * bboxOnCutplane.size(1)) < gsize * 0.1)
+                return std::vector<SectionalPiece>();
+
             std::vector<int> ids(segments.size());
             std::iota(ids.begin(), ids.end(), 0);
             std::sort(ids.begin(), ids.end(), [&startAngles](int id1, int id2){return startAngles[id1] < startAngles[id2]; });
 
+            std::vector<int> ids2(1, ids.front());
+            ids2.reserve(ids.size());
+            for (int i = 1; i < ids.size(); i++){
+                int id = ids[i];
+                Radian lastEndAngle = endAngles[ids2.back()];
+                Radian thisStartAngle = startAngles[id];
+                if (thisStartAngle <= lastEndAngle){
+                    continue;
+                }
+                ids2.push_back(id);
+            }
+
             std::vector<SectionalPiece> segs;
             segs.reserve(segments.size());
-            for (int id : ids){
+            for (int id : ids2){
                 segs.push_back(std::move(segments[id]));
             }
+
             return segs;
         }
 

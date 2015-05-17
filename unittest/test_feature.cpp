@@ -1,8 +1,8 @@
 #include "../src/core/cameras.hpp"
-#include "../src/core/utilities.hpp"
+#include "../src/core/utility.hpp"
 #include "../src/core/feature.hpp"
 #include "../src/gui/canvas.hpp"
-#include "../src/gui/utitilies.hpp"
+#include "../src/gui/utility.hpp"
 
 #include "config.hpp"
 
@@ -61,7 +61,7 @@ TEST(Feature, SegmentationBoundaryJunction){
     core::SegmentationExtractor::Params p;
     auto segs = core::SegmentationExtractor(p)(im, true);
     auto junctions = core::ExtractBoundaryJunctions(segs.first);
-    std::vector<core::PixelLoc> ps;
+    std::vector<core::Pixel> ps;
     for (auto & j : junctions){
         ps.insert(ps.end(), j.second.begin(), j.second.end());
     }
@@ -119,6 +119,8 @@ TEST(Feature, VanishingPointsDetector) {
         "room22.jpg"
     };
 
+    auto images = gui::PickImages("F:\\DataSets\\YorkUrbanDB\\data\\");
+
     core::LineSegmentExtractor::Params lsParams;
     lsParams.minLength = 20;
     lsParams.xBorderWidth = lsParams.yBorderWidth = 20;
@@ -127,9 +129,10 @@ TEST(Feature, VanishingPointsDetector) {
 
     std::vector<std::string> failedFileNames;
 
-    for (auto & filename : filenames){
-        std::cout << "testing image file: " << filename << std::endl;
-        core::Image3ub im = core::ImageRead(ProjectDataDirStrings::Normal + "/" + filename);
+    for (auto & image : images){
+        //std::cout << "testing image file: " << filename << std::endl;
+        //core::Image3ub im = core::ImageRead(ProjectDataDirStrings::Normal + "/" + filename);
+        core::Image3ub im = image;
         core::ResizeToMakeWidthUnder(im, 400);
 
         std::vector<core::HPoint2> vps;
@@ -140,7 +143,7 @@ TEST(Feature, VanishingPointsDetector) {
         auto result = vpdetector(classifiedLines, im.size());
         if (result.null()){
             std::cout << "failed to find vanishing points!" << std::endl;
-            failedFileNames.push_back(filename);
+            //failedFileNames.push_back(filename);
             continue;
         }
         std::tie(vps, focalLength) = result.unwrap();

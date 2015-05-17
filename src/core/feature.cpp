@@ -16,7 +16,7 @@ extern "C" {
 
 #include "cameras.hpp"
 #include "feature.hpp"
-#include "utilities.hpp"
+#include "utility.hpp"
 #include "containers.hpp"
 #include "clock.hpp"
 
@@ -33,7 +33,7 @@ namespace panoramix {
 
 #pragma region NonMaximaSuppression
 
-        void NonMaximaSuppression(const Image & src, Image & dst, int sz, std::vector<PixelLoc> * pixels,
+        void NonMaximaSuppression(const Image & src, Image & dst, int sz, std::vector<Pixel> * pixels,
             const Imageb & mask) {
 
             const int M = src.rows;
@@ -524,7 +524,7 @@ namespace panoramix {
         }
 
 
-        std::pair<double, Ray2> ComputeStraightness(const std::vector<std::vector<PixelLoc>> & edges,
+        std::pair<double, Ray2> ComputeStraightness(const std::vector<std::vector<Pixel>> & edges,
             double * interleavedArea, double * interleavedLen) {
             
             std::vector<Point<float, 2>> points;
@@ -608,7 +608,7 @@ namespace panoramix {
             Imagef votePanel = Imagef::zeros(longitudeDivideNum, latitudeDivideNum);
             size_t pn = intersections.size();
             for (const Vec3& p : intersections){
-                PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
+                Pixel pixel = PixelFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);
                 votePanel(pixel.x, pixel.y) += 1.0;
             }
             cv::GaussianBlur(votePanel, votePanel, cv::Size((longitudeDivideNum / 50) * 2 + 1, (latitudeDivideNum / 50) * 2 + 1),
@@ -620,7 +620,7 @@ namespace panoramix {
             cv::minMaxIdx(votePanel, &minVal, &maxVal, 0, maxIndex);
             cv::Point maxPixel(maxIndex[0], maxIndex[1]);
 
-            vps[0] = GeoCoordFromPixelLoc(maxPixel, longitudeDivideNum, latitudeDivideNum).toVector();
+            vps[0] = GeoCoordFromPixel(maxPixel, longitudeDivideNum, latitudeDivideNum).toVector();
             const Vec3 & vec0 = vps[0];
 
             // iterate locations orthogonal to vps[0]
@@ -635,7 +635,7 @@ namespace panoramix {
 
                 double score = 0;
                 for (const Vec3 & v : { vec1, vec1rev, vec2, vec2rev }){
-                    PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                    Pixel pixel = PixelFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
                     score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
                         WrapBetween(pixel.y, 0, latitudeDivideNum));
                 }
@@ -662,7 +662,7 @@ namespace panoramix {
 
                         double score = 0;
                         for (Vec3 & v : vecs){
-                            PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                            Pixel pixel = PixelFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
                             score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
                                 WrapBetween(pixel.y, 0, latitudeDivideNum));
                         }
@@ -707,7 +707,7 @@ namespace panoramix {
 
                     double score = 0;
                     for (const Vec3 & v : { vec1, vec1rev, vec2, vec2rev }){
-                        PixelLoc pixel = PixelLocFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
+                        Pixel pixel = PixelFromGeoCoord(GeoCoord(v), longitudeDivideNum, latitudeDivideNum);
                         score += votePanel(WrapBetween(pixel.x, 0, longitudeDivideNum),
                             WrapBetween(pixel.y, 0, latitudeDivideNum));
                     }
@@ -884,21 +884,6 @@ namespace panoramix {
 
         namespace {
 
-            //struct LineVPScoreFunctor {
-            //    inline LineVPScoreFunctor(double angleThres = M_PI / 3.0, double s = 0.1) 
-            //        : angleThreshold(angleThres), sigma(s) {}
-            //    inline double operator()(double angle, bool liesOnLine) const {
-            //        if (angle >= angleThreshold)
-            //            return 0;
-            //        if (liesOnLine)
-            //            return 0;
-            //        double vote = (1 - (1 / angleThreshold) * angle);
-            //        vote = exp(-Square(1 - vote) / sigma / sigma / 2);
-            //        return vote;
-            //    }
-            //    double angleThreshold, sigma;
-            //};
-
             Imaged LinesVotesToPoints(const std::vector<HPoint2> & points, const std::vector<Line2> & lines) {
 
                 SetClock();
@@ -1031,7 +1016,7 @@ namespace panoramix {
                     }
 
                     cv::GaussianBlur(votes, votes, cv::Size(5, 5), 0.1);
-                    std::vector<PixelLoc> points;
+                    std::vector<Pixel> points;
                     NonMaximaSuppression(votes, votes, 50, &points);
                     intersections.clear();
                     for (auto & p : points){
@@ -1354,9 +1339,6 @@ namespace panoramix {
 
         namespace {
 
-
-
-
             // estimate vanishing points using classified lines
             HPoint2 EstimateVanishingPointsFromLines(const std::vector<Line2> & lines, double * score = nullptr){
                 assert(!lines.empty());
@@ -1425,7 +1407,7 @@ namespace panoramix {
 
 
         Failable<std::tuple<std::vector<HPoint2>, double, std::vector<int>>> VanishingPointsDetector::operator() (
-            const std::vector<Line2> & lines, const SizeI & imSize) const {
+            const std::vector<Line2> & lines, const Sizei & imSize) const {
             
             Point2 projCenter(imSize.width / 2.0, imSize.height / 2.0);
             double imScale = sqrt(imSize.area());
@@ -1461,15 +1443,15 @@ namespace panoramix {
                     linesData(i, 2) = lines[i].second[0];
                     linesData(i, 3) = lines[i].second[1];
                 }
-                MatlabEngine::PutVariable("linesData", linesData);
-                MatlabEngine::PutVariable("projCenter", projCenter);
+                matlab.PutVariable("linesData", linesData);
+                matlab.PutVariable("projCenter", projCenter);
                 // convert to struct array
                 matlab << "[vp, f, lineclasses] = panoramix_wrapper_vpdetection(linesData, projCenter');";
                 Imaged vpData;
                 Imaged focal;
                 Imaged lineClassesData;
-                MatlabEngine::GetVariable("vp", vpData, false);
-                MatlabEngine::GetVariable("f", focal, false);
+                matlab.GetVariable("vp", vpData, false);
+                matlab.GetVariable("f", focal, false);
                 MatlabEngine::GetVariable("lineclasses", lineClassesData, false);
                 if (!(vpData.cols == 2 && vpData.rows == 3)){
                     return nullptr;
@@ -1549,8 +1531,6 @@ namespace panoramix {
                         continue;
                     vps[i] = EstimateVanishingPointsFromLines(lineClusters[i]);
                 }
-
-
 
                 // find class with maximum initial score as the first class
                 int firstClass = std::distance(clusterInitialScores.begin(), 
@@ -1718,7 +1698,7 @@ namespace panoramix {
 
        
         Failable<std::tuple<std::vector<HPoint2>, double>> VanishingPointsDetector::operator() (
-            std::vector<Classified<Line2>> & lines, const SizeI & imSize) const {
+            std::vector<Classified<Line2>> & lines, const Sizei & imSize) const {
             std::vector<HPoint2> vps;
             double focalLength = 0.0;
             std::vector<int> lineClassies;
@@ -1902,15 +1882,15 @@ namespace panoramix {
 
             // measure pixel distance with 2d line cuttings
             inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
-                const PixelLoc & p1, const PixelLoc & p2,
+                const Pixel & p1, const Pixel & p2,
                 const std::vector<Line2> & lines, bool useYUV){
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
                 for (int lineId : { linesOccupation(p1), linesOccupation(p2) }){
                     if (lineId >= 0){
                         auto & line = lines[lineId];
-                        double p1OnLeftFlag = (p1 - ToPixelLoc(line.first)).cross(ToPixelLoc(line.direction()));
-                        double p2OnLeftFlag = (p2 - ToPixelLoc(line.first)).cross(ToPixelLoc(line.direction()));
+                        double p1OnLeftFlag = (p1 - ToPixel(line.first)).cross(ToPixel(line.direction()));
+                        double p2OnLeftFlag = (p2 - ToPixel(line.first)).cross(ToPixel(line.direction()));
                         if (p1OnLeftFlag * p2OnLeftFlag < 0){
                             return 1e5;
                         }
@@ -1922,7 +1902,7 @@ namespace panoramix {
             }
 
             inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
-                const PixelLoc & p1, const PixelLoc & p2,
+                const Pixel & p1, const Pixel & p2,
                 const std::vector<Line3> & lines, const PanoramicCamera & cam, bool useYUV){
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
@@ -2132,7 +2112,7 @@ namespace panoramix {
                 Imagei linesOccupation(im.size(), -1);
                 for (int i = 0; i < lines.size(); i++){
                     auto & l = lines[i];
-                    cv::line(linesOccupation, ToPixelLoc(l.first), ToPixelLoc(l.second), i, 2);
+                    cv::line(linesOccupation, ToPixel(l.first), ToPixel(l.second), i, 2);
                 }
 
                 // build pixel graph
@@ -2161,10 +2141,10 @@ namespace panoramix {
                 for (int i = 0; i < lines.size(); i++){
                     auto & l = lines[i];
                     double spanAngle = AngleBetweenDirections(l.first, l.second);
-                    std::vector<std::vector<PixelLoc>> pline(1);
+                    std::vector<std::vector<Pixel>> pline(1);
                     for (double a = 0.0; a <= spanAngle; a += 0.01){
                         auto direction = RotateDirection(l.first, l.second, a);
-                        pline.front().push_back(ToPixelLoc(cam.toScreen(direction)));
+                        pline.front().push_back(ToPixel(cam.toScreen(direction)));
                     }                    
                     cv::polylines(linesOccupation, pline, false, i, 2);
                 }
@@ -2192,7 +2172,7 @@ namespace panoramix {
                 for (int x = 0; x < im.cols; x++){
                     for (int y = 0; y < im.rows; y++){
                         auto & pixel = ubuff[y * im.cols + x];
-                        auto & color = im.at<Vec3ub>(PixelLoc(x, y));
+                        auto & color = im.at<Vec3ub>(Pixel(x, y));
                         pixel = (color[2] << 16) + (color[1] << 8) + color[0];
                     }
                 }
@@ -2210,7 +2190,7 @@ namespace panoramix {
                 Imagei labels = Imagei::zeros(im.size());
                 for (int x = 0; x < im.cols; x++){
                     for (int y = 0; y < im.rows; y++){
-                        labels(PixelLoc(x, y)) = klabels[y * im.cols + x];
+                        labels(Pixel(x, y)) = klabels[y * im.cols + x];
                     }
                 }
 
@@ -2454,7 +2434,7 @@ namespace panoramix {
         namespace {
 
             struct ComparePixelLoc {
-                inline bool operator ()(const PixelLoc & a, const PixelLoc & b) const {
+                inline bool operator ()(const Pixel & a, const Pixel & b) const {
                     if (a.x != b.x)
                         return a.x < b.x;
                     return a.y < b.y;
@@ -2484,22 +2464,22 @@ namespace panoramix {
             return true;
         }
 
-        std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> FindContoursOfRegionsAndBoundaries(
+        std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> FindContoursOfRegionsAndBoundaries(
             const Imagei & segRegions, int connectionExtendSize, bool simplifyStraightEdgePixels){
 
-            std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> boundaryEdges;
-            std::map<std::pair<int, int>, std::set<PixelLoc, ComparePixelLoc>> boundaryPixels;
+            std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> boundaryEdges;
+            std::map<std::pair<int, int>, std::set<Pixel, ComparePixelLoc>> boundaryPixels;
 
             int width = segRegions.cols;
             int height = segRegions.rows;
             for (int y = 0; y < height - 1; y++) {
                 for (int x = 0; x < width - 1; x++) {
-                    int originalRegionId = segRegions(PixelLoc(x, y));
+                    int originalRegionId = segRegions(Pixel(x, y));
                     for (int xx = std::max(x - connectionExtendSize, 0); xx <= std::min(x + connectionExtendSize, width - 1); xx++){
                         for (int yy = std::max(y - connectionExtendSize, 0); yy <= std::min(y + connectionExtendSize, height - 1); yy++){
-                            int regionIdHere = segRegions(PixelLoc(xx, yy));
+                            int regionIdHere = segRegions(Pixel(xx, yy));
                             if (originalRegionId != regionIdHere){
-                                boundaryPixels[MakeOrderedPair(originalRegionId, regionIdHere)].insert(PixelLoc((x + xx) / 2, (y + yy) / 2));
+                                boundaryPixels[MakeOrderedPair(originalRegionId, regionIdHere)].insert(Pixel((x + xx) / 2, (y + yy) / 2));
                             }
                         }
                     }
@@ -2514,14 +2494,14 @@ namespace panoramix {
                 if (pixels.empty())
                     continue;
 
-                PixelLoc p = *pixels.begin();
+                Pixel p = *pixels.begin();
 
                 static const int xdirs[] = { 1, 0, -1, 0, -1, 1, 1, -1, 0, 0, 2, -2 };
                 static const int ydirs[] = { 0, 1, 0, -1, 1, -1, 1, -1, 2, -2, 0, 0 };
 
                 IMPROVABLE_HERE("what if connectionExtendSize is too large? will it cause bugs here searching edges?");
 
-                std::vector<std::vector<PixelLoc>> edges;
+                std::vector<std::vector<Pixel>> edges;
                 edges.push_back({ p });
                 pixels.erase(p);
 
@@ -2531,7 +2511,7 @@ namespace panoramix {
 
                     bool foundMore = false;
                     for (int i = 0; i < std::distance(std::begin(xdirs), std::end(xdirs)); i++) {
-                        PixelLoc next = curTail;
+                        Pixel next = curTail;
                         next.x += xdirs[i];
                         next.y += ydirs[i];
                         if (!IsBetween(next.x, 0, width - 1) || !IsBetween(next.y, 0, height - 1))
@@ -2563,7 +2543,7 @@ namespace panoramix {
                             break;
                         }
                         else { // more pixels
-                            PixelLoc p = *pixels.begin();
+                            Pixel p = *pixels.begin();
                             edges.push_back({ p });
                             pixels.erase(p);
                         }
@@ -2579,8 +2559,8 @@ namespace panoramix {
         }
 
 
-        std::map<std::set<int>, std::vector<PixelLoc>> ExtractBoundaryJunctions(const Imagei & regions){
-            std::map<std::set<int>, std::vector<PixelLoc>> junctions;
+        std::map<std::set<int>, std::vector<Pixel>> ExtractBoundaryJunctions(const Imagei & regions){
+            std::map<std::set<int>, std::vector<Pixel>> junctions;
             for (auto it = regions.begin(); it != regions.end(); ++it){
                 auto p = it.pos();
                 if (p.x == regions.cols - 1)
@@ -2588,8 +2568,8 @@ namespace panoramix {
                 if (p.y == regions.rows - 1)
                     continue;
                 std::set<int> regionIds = {
-                    regions(p), regions(PixelLoc(p.x + 1, p.y)),
-                    regions(PixelLoc(p.x, p.y + 1)), regions(PixelLoc(p.x + 1, p.y + 1))
+                    regions(p), regions(Pixel(p.x + 1, p.y)),
+                    regions(Pixel(p.x, p.y + 1)), regions(Pixel(p.x + 1, p.y + 1))
                 };
                 if (regionIds.size() >= 3){
                     junctions[regionIds].push_back(p);
@@ -3048,7 +3028,7 @@ namespace panoramix {
 
 
         Imagei ComputeOrientationMaps(const std::vector<Classified<Line2>> & lines,
-            const std::vector<HPoint2> & vps, const SizeI & imSize){
+            const std::vector<HPoint2> & vps, const Sizei & imSize){
 
             std::array<HPoint2, 3> vanishingPoints = { { vps[0], vps[1], vps[2] } };
             std::vector<Line2> ls; ls.reserve(lines.size());
@@ -3069,132 +3049,60 @@ namespace panoramix {
 
 
 
-        ImageOfType<Vec<double, 7>> ComputeGeometricContext(const Image & im, SceneClass sceneClass, bool useHedauForIndoor){
+        ImageOf<Vec<double, 7>> ComputeRawGeometricContext(const Image & im, bool outdoor, bool useHedauForIndoor){
             MatlabEngine matlab;
             matlab.PutVariable("im", im);
-            if (sceneClass == SceneClass::Indoor && useHedauForIndoor){
+            if (useHedauForIndoor){
+                if (outdoor){
+                    SHOULD_NEVER_BE_CALLED("hedau'a algorithm only aplies for indoor scenes!");
+                }
                 matlab << "[~, ~, slabelConfMap] = calcGC(im);";
             }
             else{
-                matlab << (std::string("slabelConfMap = panoramix_wrapper_gc(im, ") + (sceneClass == SceneClass::Outdoor ? "true" : "false") + ");");
+                matlab << (std::string("slabelConfMap = panoramix_wrapper_gc(im, ") + (outdoor ? "true" : "false") + ");");
             }
-            ImageOfType<Vec<double, 7>> gc;
+            ImageOf<Vec<double, 7>> gc;
             matlab.GetVariable("slabelConfMap", gc);
             assert(gc.channels() == 7);
             assert(gc.size() == im.size());
             return gc;
         }
 
-        ImageOfType<Vec<double, 5>> GeometricContextEstimator::operator()(const ImageOfType<Vec<double, 7>> & rawgc,
-            SceneClass sceneClass) const{
-            ImageOfType<Vec<double, 5>> result(rawgc.size(), Vec<double, 5>());
+        Image5d MergeGeometricContextLabelsHoiem(const Image7d & rawgc){
+            Image5d result(rawgc.size(), Vec<double, 5>());
             for (auto it = result.begin(); it != result.end(); ++it){
                 auto & p = rawgc(it.pos());
                 auto & resultv = *it;
-                if (sceneClass == SceneClass::Indoor){
-                    // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
-                    /*resultv[II_FrontVerticalPlanarFace] += p[0];
-                    resultv[II_SideVerticalPlanarFace] += p[1];
-                    resultv[II_SideVerticalPlanarFace] += p[2];
-                    resultv[II_HorizontalPlanarFace] += p[3];
-                    resultv[II_HorizontalPlanarFace] += p[4];
-                    resultv[II_Clutter] += p[5];
-                    resultv[II_Other] += p[6];*/
-                    resultv[II_HorizontalPlanarFace] += p[3];
-                    resultv[II_HorizontalPlanarFace] += p[4];
-                    resultv[II_VerticalPlanarFace] += p[0];
-                    resultv[II_VerticalPlanarFace] += p[1];
-                    resultv[II_VerticalPlanarFace] += p[2];
-                    resultv[II_Clutter] += p[5];
-                    resultv[II_Other] += p[6];
-                }
-                else{
-                    // 0: ground, 1,2,3: vertical, 4:clutter, 5:poros, 6: sky
-                    resultv[OI_Ground] += p[0];
-                    resultv[OI_VerticalPlanarFace] += p[1];
-                    resultv[OI_VerticalPlanarFace] += p[2];
-                    resultv[OI_VerticalPlanarFace] += p[3];
-                    resultv[OI_Clutter] += p[4];
-                    resultv[OI_Porous] += p[5];
-                    resultv[OI_Sky] += p[6];
-                }
+                // 0: ground, 1,2,3: vertical, 4:clutter, 5:poros, 6: sky
+                resultv[ToUnderlying(GeometricContextIndex::FloorOrGround)] += p[0];
+                resultv[ToUnderlying(GeometricContextIndex::ClutterOrPorous)] += (p[4] + p[5]);
+                resultv[ToUnderlying(GeometricContextIndex::Vertical)] += (p[1] + p[2] +p[3]);
+                resultv[ToUnderlying(GeometricContextIndex::CeilingOrSky)] += p[6];
+                resultv[ToUnderlying(GeometricContextIndex::Other)] += 0.0;
+                assert(IsFuzzyZero(std::accumulate(std::begin(resultv.val), std::end(resultv.val), 0.0) - 1.0, 1e-2));
             }
             return result;
         }
 
-        ImageOfType<Vec<double, 5>> GeometricContextEstimator::operator() (const Image & im, SceneClass sceneClass) const{
-            if (im.channels() == 7){
-                return (*this)((const ImageOfType<Vec<double, 7>>&)im, sceneClass);
+        Image5d MergeGeometricContextLabelsHedau(const Image7d & rawgc){
+            Image5d result(rawgc.size(), Vec<double, 5>());
+            for (auto it = result.begin(); it != result.end(); ++it){
+                auto & p = rawgc(it.pos());
+                auto & resultv = *it;
+                // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
+                resultv[ToUnderlying(GeometricContextIndex::FloorOrGround)] += (p[3]);
+                resultv[ToUnderlying(GeometricContextIndex::ClutterOrPorous)] += p[5];
+                resultv[ToUnderlying(GeometricContextIndex::Vertical)] += (p[0] + p[1] +p[2]);
+                resultv[ToUnderlying(GeometricContextIndex::CeilingOrSky)] += p[4];
+                resultv[ToUnderlying(GeometricContextIndex::Other)] += p[6];
+                assert(IsFuzzyZero(std::accumulate(std::begin(resultv.val), std::end(resultv.val), 0.0) - 1.0, 1e-2));
             }
-            ImageOfType<Vec<double, 7>> gc = ComputeGeometricContext(im, sceneClass);
-            return (*this)(gc, sceneClass);
+            return result;
         }
 
-        std::pair<ImageOfType<Vec<double, 5>>, Imagei> GeometricContextEstimator::operator() (const Image & image,
-            const PanoramicCamera & camera, const std::vector<Vec3> & allvps, SceneClass sceneClass) const {
-
-            NOT_IMPLEMENTED_YET(); 
-
-            ImageOfType<Vec<double, 5>> result = ImageOfType<Vec<double, 7>>::zeros(image.size());
-            Imagei votes = Imagei::zeros(image.size());
-
-            assert(allvps.size() >= 3);
-            std::vector<Vec3> vps = { allvps[0], allvps[1], allvps[2] };
-
-            int vertVPid = NearestDirectionId(vps, camera.up());
-            std::vector<PerspectiveCamera> hcams;
-            for (int i = -1; i <= 1; i++){
-                std::vector<Vec3> vvps = vps;
-                for (auto & d : vvps){
-                    d += normalize(camera.up()) * i * 0.5;
-                }
-                auto cs = CreateHorizontalPerspectiveCameras(camera, vvps, 600, 400, 200);
-                hcams.insert(hcams.end(), cs.begin(), cs.end());
-            }
-            // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
-            for (int i = 0; i < hcams.size(); i++){
-                auto gc = ComputeGeometricContext(PanoramicView{ image, camera }.sampled(hcams[i]).image, sceneClass);
-                int frontVPid = NearestDirectionId(vps, hcams[i].forward());
-                int sideVPid = NearestDirectionId(vps, hcams[i].leftward());
-
-                for (auto it = result.begin(); it != result.end(); ++it){
-                    auto gcPos = ToPixelLoc(hcams[i].toScreen(camera.toSpace(it.pos())));
-                    if (!Contains(gc, gcPos))
-                        continue;
-                    auto & resultv = *it;
-                    auto & p = gc(gcPos);
-
-                    if (sceneClass == SceneClass::Indoor){
-                       /* resultv[frontVPid] += p[0];
-                        resultv[sideVPid] += p[1];
-                        resultv[sideVPid] += p[2];
-                        resultv[vertVPid] += p[3];
-                        resultv[vertVPid] += p[4];
-                        resultv[3] += p[5];
-                        resultv[4] += p[6];*/
-                        resultv[II_VerticalPlanarFace] += p[0];
-                        resultv[II_VerticalPlanarFace] += p[1];
-                        resultv[II_VerticalPlanarFace] += p[2];
-                        resultv[II_HorizontalPlanarFace] += p[3];
-                        resultv[II_HorizontalPlanarFace] += p[4];
-                        resultv[II_Clutter] += p[5];
-                        resultv[II_Other] += p[6];
-                    }
-                    else{
-                        // 0: ground, 1,2,3: vertical, 4:clutter, 5:poros, 6: sky
-                        resultv[OI_Ground] += p[0];
-                        resultv[OI_VerticalPlanarFace] += p[1];
-                        resultv[OI_VerticalPlanarFace] += p[2];
-                        resultv[OI_VerticalPlanarFace] += p[3];
-                        resultv[OI_Clutter] += p[4];
-                        resultv[OI_Porous] += p[5];
-                        resultv[OI_Sky] += p[6];
-                    }
-                    votes(it.pos())++;
-                }
-            }
-
-            return std::make_pair(result, votes);
+        Image5d ComputeGeometricContext(const Image & im, bool outdoor, bool useHedauForIndoor){
+            auto rawgc = ComputeRawGeometricContext(im, outdoor, useHedauForIndoor);
+            return useHedauForIndoor ? MergeGeometricContextLabelsHedau(rawgc) : MergeGeometricContextLabelsHoiem(rawgc);
         }
 
 

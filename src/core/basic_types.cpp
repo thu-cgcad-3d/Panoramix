@@ -75,15 +75,15 @@ namespace panoramix {
         }
 
 
-        std::pair<PixelLoc, PixelLoc> MinMaxLocOfImage(const Image & im) {
-            PixelLoc minLoc, maxLoc;
+        std::pair<Pixel, Pixel> MinMaxLocOfImage(const Image & im) {
+            Pixel minLoc, maxLoc;
             double minVal, maxVal;
             cv::minMaxLoc(im, &minVal, &maxVal, &minLoc, &maxLoc);
             return std::make_pair(minLoc, maxLoc);
         }
         
         std::pair<double, double> MinMaxValOfImage(const Image & im) {
-            PixelLoc minLoc, maxLoc;
+            Pixel minLoc, maxLoc;
             double minVal, maxVal;
             cv::minMaxLoc(im, &minVal, &maxVal, &minLoc, &maxLoc);
             return std::make_pair(minVal, maxVal);
@@ -91,15 +91,15 @@ namespace panoramix {
 
 
 
-        PixelLoc PixelLocFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv) {
+        Pixel PixelFromGeoCoord(const GeoCoord & p, int longidiv, int latidiv) {
             int longtid = static_cast<int>((p.longitude + M_PI) * longidiv / M_PI / 2);
             int latid = static_cast<int>((p.latitude + M_PI_2) * latidiv / M_PI);
             longtid = (longtid % longidiv + longidiv) % longidiv;
             latid = (latid % latidiv + latidiv) % latidiv;
-            return PixelLoc(longtid, latid);
+            return Pixel(longtid, latid);
         }
 
-        GeoCoord GeoCoordFromPixelLoc(const cv::Point & pixel, int longidiv, int latidiv) {
+        GeoCoord GeoCoordFromPixel(const cv::Point & pixel, int longidiv, int latidiv) {
             return GeoCoord{ pixel.x * M_PI * 2 / longidiv - M_PI, pixel.y * M_PI / latidiv - M_PI_2 };
         }
 

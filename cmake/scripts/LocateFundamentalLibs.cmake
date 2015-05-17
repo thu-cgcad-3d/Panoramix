@@ -8,10 +8,10 @@ find_package (OpenCV REQUIRED)
 find_package (MOSEK REQUIRED)
 find_package (SuiteSparse REQUIRED)
 
-set(Boost_USE_STATIC_LIBS OFF) 
+set(Boost_USE_STATIC_LIBS ON) 
 set(Boost_USE_MULTITHREADED ON)  
 set(Boost_USE_STATIC_RUNTIME OFF) 
-find_package (Boost REQUIRED COMPONENTS math_tr1 filesystem graph program_options)
+find_package (Boost REQUIRED COMPONENTS math_tr1 system filesystem graph program_options)
 
 set (SuiteSparse_USE_LAPACK_BLAS "on")
 include(${USE_SuiteSparse})

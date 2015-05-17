@@ -86,7 +86,7 @@ namespace panoramix {
         inline QPointF MakeQPointF(const core::Point<T, 2> & p) {
             return QPointF(static_cast<float>(p[0]), static_cast<float>(p[1]));
         }
-        inline QPoint MakeQPoint(const core::PixelLoc & p) {
+        inline QPoint MakeQPoint(const core::Pixel & p) {
             return QPoint(p.x, p.y);
         }
 
@@ -96,7 +96,7 @@ namespace panoramix {
         inline QSizeF MakeQSizeF(const core::Size & sz) {
             return QSizeF(sz.width, sz.height);
         }
-        inline QSize MakeQSize(const core::SizeI & sz) {
+        inline QSize MakeQSize(const core::Sizei & sz) {
             return QSize(sz.width, sz.height);
         }
 

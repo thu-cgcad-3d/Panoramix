@@ -92,6 +92,69 @@ namespace panoramix {
             _mxa = nullptr;
         }
 
+        cv::Mat MXArray::toCVMat(bool lastDimIsChannel) const{
+            if (_mxa == nullptr){
+                return cv::Mat();
+            }
+            cv::Mat mat;
+            const mxArray * ma = _mxa;
+            int d = mxGetNumberOfDimensions(ma);
+            assert((d >= 2) && "dimension num of the variable must be over 2");
+            const mwSize * dimSizes = mxGetDimensions(ma);
+
+            // set channels, dims and dimSizes
+            int channels = 0;
+            int cvDims = 0;
+            int * cvDimSizes = nullptr;
+
+            if (lastDimIsChannel && d > 2){
+                channels = dimSizes[d - 1];
+                cvDims = d - 1;
+                cvDimSizes = new int[d - 1];
+                std::copy(dimSizes, dimSizes + d - 1, cvDimSizes);
+            }
+            else{
+                channels = 1;
+                cvDims = d;
+                cvDimSizes = new int[d];
+                std::copy(dimSizes, dimSizes + d, cvDimSizes);
+            }
+
+            const size_t szForEachElem = mxGetElementSize(ma);
+            int depth = MxClassIDToCVDepth(mxGetClassID(ma));
+            if (depth == -1){
+                delete[] cvDimSizes;
+                return cv::Mat();
+            }
+
+            const uint8_t * mad = (const uint8_t*)mxGetData(ma);
+            // create Mat
+            mat.create(cvDims, cvDimSizes, CV_MAKETYPE(depth, channels));
+            cv::Mat im = mat;
+
+            mwIndex * mxIndices = new mwIndex[im.dims + 1];
+            int * cvIndices = new int[im.dims];
+
+            cv::MatConstIterator iter(&im);
+            int imTotal = im.total();
+            for (int i = 0; i < imTotal; i++, ++iter){
+                // get indices in cv::Mat
+                iter.pos(cvIndices);
+                // copy indices to mxIndices
+                std::copy(cvIndices, cvIndices + im.dims, mxIndices);
+                for (mwIndex k = 0; k < channels; k++){
+                    uint8_t * toDataHead = (*iter) + k * szForEachElem;
+                    mxIndices[im.dims] = k; // set the last indices
+                    const uint8_t * fromDataHead = mad + mxCalcSingleSubscript(ma, im.dims + 1, mxIndices) * szForEachElem;
+                    std::memcpy(toDataHead, fromDataHead, szForEachElem);
+                }
+            }
+
+            delete[] cvDimSizes;
+            delete[] mxIndices;
+            delete[] cvIndices;
+            return mat;
+        }
 
 
         MXArray CVInputArrayToMXArray(cv::InputArray mat, bool dos){

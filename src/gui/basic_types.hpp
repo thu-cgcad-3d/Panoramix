@@ -119,7 +119,7 @@ namespace panoramix {
         std::ostream & operator << (std::ostream & os, ColorTag ct);
         Color ColorFromHSV(double h, double s, double v, double a = 1.0);
         Color RandomColor();
-        inline Color ColorFromImage(const core::Image & im, core::PixelLoc p) { return Color(im.ptr(p.y, p.x), im.type()); }
+        inline Color ColorFromImage(const core::Image & im, core::Pixel p) { return Color(im.ptr(p.y, p.x), im.type()); }
 
 
 

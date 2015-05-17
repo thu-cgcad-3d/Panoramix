@@ -3,7 +3,7 @@
 
 
 #include "../core/basic_types.hpp"
-#include "../core/utilities.hpp"
+#include "../core/utility.hpp"
 #include "../core/generic_topo.hpp"
 #include "../core/cons_graph.hpp"
 #include "../core/cameras.hpp"
@@ -372,7 +372,7 @@ namespace panoramix {
 
         template <class T, int N, class CameraT>
         HandledTable<RegionHandle, Vec<T, N>> CollectFeatureMeanOnRegions(const RLGraph & mg,
-            const CameraT & pcam, const ImageOfType<Vec<T, N>> & feature){
+            const CameraT & pcam, const ImageOf<Vec<T, N>> & feature){
             HandledTable<RegionHandle, Vec<T, N>> featureMeanTable = mg.createComponentTable<RegionData, Vec<T, N>>();
             for (auto & r : mg.components<RegionData>()){
                 auto rh = r.topo.hd;
@@ -439,11 +439,6 @@ namespace panoramix {
             bool useWeights = true, int tryNum = 100, int maxOptimizeNum = 10,
             const std::function<bool(const RLGraphVars &)> & callback = nullptr);
 
-
-      /*  void OptimizeVariablesLevenbergMarquardt(const RLGraph & mg,
-            const RLGraphControls & controls, RLGraphVars & vars, 
-            bool useWeights = true, bool useAllAnchors = false,
-            const std::function<bool(const RLGraphVars &)> & callback = nullptr);*/
 
         void NormalizeVariables(const RLGraph & mg, const RLGraphControls & controls,
             RLGraphVars & vars);

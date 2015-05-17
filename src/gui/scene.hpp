@@ -2,7 +2,7 @@
 #define PANORAMIX_SCENE_HPP
 
 #include "../core/generic_topo.hpp"
-#include "../core/utilities.hpp"
+#include "../core/utility.hpp"
 #include "../core/cameras.hpp"
 #include "../core/meta.hpp"
 

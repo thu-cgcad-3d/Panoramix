@@ -90,8 +90,11 @@ namespace panoramix {
                 return str;
             }
 
+            cv::Mat toCVMat(bool lastDimIsChannel = true) const;
+
             operator double() const { return scalar(); }
             operator std::string() const { return toString(); }
+            operator cv::Mat() const { return toCVMat(); }
 
             size_t nelements() const { return mxGetNumberOfElements(_mxa); }
             size_t nzmax() const { return mxGetNzmax(_mxa); }
@@ -102,7 +105,7 @@ namespace panoramix {
             int nfields() const { return mxGetNumberOfFields(_mxa); }
             const char * fieldName(int n) const { return mxGetFieldNameByNumber(_mxa, n); }
             int fieldNumber(const std::string & name) const { return mxGetFieldNumber(_mxa, name.c_str()); }
-            MXArray field(const std::string & name, int i) const { return mxGetField(_mxa, i, name.c_str()); }
+            MXArray field(const std::string & name, int i = 0) const { return mxGetField(_mxa, i, name.c_str()); }
             void setField(const std::string & name, int i, const MXArray & a) { mxSetField(_mxa, i, name.c_str(), a._mxa); }
 
             MXArray property(const std::string & name, size_t i) const { return mxGetProperty(_mxa, i, name.c_str()); }

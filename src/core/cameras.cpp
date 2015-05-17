@@ -1,4 +1,4 @@
-#include "utilities.hpp"
+#include "utility.hpp"
 #include "cameras.hpp"
 
 namespace panoramix {

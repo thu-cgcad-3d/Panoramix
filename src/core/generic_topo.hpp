@@ -38,6 +38,15 @@ namespace panoramix {
         public:
             static const int LayerNum = 2;
 
+            Mesh(){}
+            Mesh(Mesh && m) : _verts(std::move(m._verts)), _halfs(std::move(m._halfs)), _faces(std::move(m._faces)) {}
+            Mesh & operator = (Mesh && m) {
+                _verts = (std::move(m._verts));
+                _halfs = (std::move(m._halfs));
+                _faces = (std::move(m._faces));
+                return *this;
+            }
+
             using VertData = VertDataT;
             using HalfData = HalfDataT;
             using FaceData = FaceDataT;
