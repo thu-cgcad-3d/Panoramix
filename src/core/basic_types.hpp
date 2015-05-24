@@ -76,6 +76,12 @@ namespace panoramix {
         template <class T>
         inline T normalize(const T & d) { return d / norm(d); }
 
+        template <int N = 3, class T = double>
+        inline const Point<T, N> & Origin() { 
+            static const Point<T, N> _origin;
+            return _origin; 
+        }
+
         namespace {
             template <class To, class From, int N>
             inline Vec<To, N> VecCastPrivate(const Vec<From, N> & v, std::false_type) {
@@ -158,7 +164,7 @@ namespace panoramix {
 
         // geographic coordinate
         template <class T>
-        inline double Angle(const Vec<T, 2> & d){ return std::atan2(d(1), d(0)); }
+        inline double Argument(const Vec<T, 2> & d){ return std::atan2(d(1), d(0)); }
         template <class T>
         inline Vec<T, 2> Direction(double angle) { return Vec<T, 2>(cos(angle), sin(angle)); }
         struct GeoCoord {
@@ -279,8 +285,11 @@ namespace panoramix {
             inline T length() const { return norm(first - second); }
             inline Vec<T, N> direction() const { return second - first; }
             inline Line reversed() const { return Line(second, first); }
-            inline Ray<T, N> infiniteLine() const { return Ray<T, N>{ first, second - first }; }
+            inline Ray<T, N> ray() const { return Ray<T, N>{ first, second - first }; }
             inline Line & operator *= (const T & factor) { first *= factor; second *= factor; return *this; }
+            inline Line & operator /= (const T & factor) { first /= factor; second /= factor; return *this; }
+            inline Line & operator += (const Vec<T, N> & trans) { first += trans; second += trans; return *this; }
+            inline Line & operator -= (const Vec<T, N> & trans) { first -= trans; second -= trans; return *this; }
             Point<T, N> first, second;
         };
         template <class T, int N>

@@ -344,21 +344,15 @@ namespace panoramix {
 
         namespace {
             template <class FunT, class TupleT, int ... Is>
-            inline auto TupleMapUsingSequence(FunT && fun, const TupleT & t, Sequence<Is...>) -> decltype(std::make_tuple(fun(std::get<Is>(t)) ...)) {
+            inline auto TupleMapUsingSequence(FunT && fun, const TupleT & t, Sequence<Is...>) 
+                -> decltype(std::make_tuple(fun(std::get<Is>(t)) ...)) {
                 return std::make_tuple(fun(std::get<Is>(t)) ...);
             }
-            /*template <int I, class FunT, class TupleTupleT>
-            inline auto TupleOpEach(FunT && fun, TupleTupleT && ts) -> decltype(fun(std::get<I>(ts)...)) {
-                return Invoke(fun, )
-            }
-            template <class FunT, class ... TupleTs, int ... Is>
-            inline auto TupleOpUsingSequence(FunT && fun, const TupleTs & ... ts, Sequence<Is...>){
-                return std::make_tuple(TupleOpEach<Is>(fun, ts ...)
-            }*/
         }
 
         template <class FunT, class ... Ts>
-        inline auto TupleMap(FunT && fun, const std::tuple<Ts...> & t) -> decltype(TupleMapUsingSequence(std::forward<FunT>(fun), t, SequenceGenerator<sizeof...(Ts)>::type())) {
+        inline auto TupleMap(FunT && fun, const std::tuple<Ts...> & t) 
+            -> decltype(TupleMapUsingSequence(std::forward<FunT>(fun), t, SequenceGenerator<sizeof...(Ts)>::type())) {
             return TupleMapUsingSequence(std::forward<FunT>(fun), t, SequenceGenerator<sizeof...(Ts)>::type());
         }
 

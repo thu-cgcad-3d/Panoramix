@@ -31,7 +31,6 @@ namespace panoramix {
 
         using misc::MatlabEngine;
 
-#pragma region NonMaximaSuppression
 
         void NonMaximaSuppression(const Image & src, Image & dst, int sz, std::vector<Pixel> * pixels,
             const Imageb & mask) {
@@ -78,8 +77,6 @@ namespace panoramix {
                 }
             }
         }
-
-#pragma endregion NonMaximaSuppression
 
 
 
@@ -2216,78 +2213,82 @@ namespace panoramix {
                 }
             }
 
-            int * map_to_flatmap(float * map, unsigned int size) {
-                /********** Flatmap **********/
-                int *flatmap = (int *)malloc(size*sizeof(int));
-                for (unsigned int p = 0; p < size; p++)
-                {
-                    flatmap[p] = map[p];
-                }
+            namespace quickshift_details {
 
-                bool changed = true;
-                while (changed)
-                {
-                    changed = false;
+                int * map_to_flatmap(float * map, unsigned int size) {
+                    /********** Flatmap **********/
+                    int *flatmap = (int *)malloc(size*sizeof(int));
                     for (unsigned int p = 0; p < size; p++)
                     {
-                        changed = changed || (flatmap[p] != flatmap[flatmap[p]]);
-                        flatmap[p] = flatmap[flatmap[p]];
+                        flatmap[p] = map[p];
                     }
-                }
 
-                /* Consistency check */
-                for (unsigned int p = 0; p < size; p++)
-                    assert(flatmap[p] == flatmap[flatmap[p]]);
-
-                return flatmap;
-            }
-
-            image_t imseg(image_t im, int * flatmap) {
-                /********** Mean Color **********/
-                float * meancolor = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
-                float * counts = (float *)calloc(im.N1*im.N2, sizeof(float));
-
-                for (int p = 0; p < im.N1*im.N2; p++)
-                {
-                    counts[flatmap[p]]++;
-                    for (int k = 0; k < im.K; k++)
-                        meancolor[flatmap[p] + k*im.N1*im.N2] += im.I[p + k*im.N1*im.N2];
-                }
-
-                int roots = 0;
-                for (int p = 0; p < im.N1*im.N2; p++)
-                {
-                    if (flatmap[p] == p)
-                        roots++;
-                }
-                printf("Roots: %d\n", roots);
-
-                int nonzero = 0;
-                for (int p = 0; p < im.N1*im.N2; p++)
-                {
-                    if (counts[p] > 0)
+                    bool changed = true;
+                    while (changed)
                     {
-                        nonzero++;
-                        for (int k = 0; k < im.K; k++)
-                            meancolor[p + k*im.N1*im.N2] /= counts[p];
+                        changed = false;
+                        for (unsigned int p = 0; p < size; p++)
+                        {
+                            changed = changed || (flatmap[p] != flatmap[flatmap[p]]);
+                            flatmap[p] = flatmap[flatmap[p]];
+                        }
                     }
+
+                    /* Consistency check */
+                    for (unsigned int p = 0; p < size; p++)
+                        assert(flatmap[p] == flatmap[flatmap[p]]);
+
+                    return flatmap;
                 }
-                if (roots != nonzero)
-                    printf("Nonzero: %d\n", nonzero);
-                assert(roots == nonzero);
+
+                image_t imseg(image_t im, int * flatmap) {
+                    /********** Mean Color **********/
+                    float * meancolor = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+                    float * counts = (float *)calloc(im.N1*im.N2, sizeof(float));
+
+                    for (int p = 0; p < im.N1*im.N2; p++)
+                    {
+                        counts[flatmap[p]]++;
+                        for (int k = 0; k < im.K; k++)
+                            meancolor[flatmap[p] + k*im.N1*im.N2] += im.I[p + k*im.N1*im.N2];
+                    }
+
+                    int roots = 0;
+                    for (int p = 0; p < im.N1*im.N2; p++)
+                    {
+                        if (flatmap[p] == p)
+                            roots++;
+                    }
+                    printf("Roots: %d\n", roots);
+
+                    int nonzero = 0;
+                    for (int p = 0; p < im.N1*im.N2; p++)
+                    {
+                        if (counts[p] > 0)
+                        {
+                            nonzero++;
+                            for (int k = 0; k < im.K; k++)
+                                meancolor[p + k*im.N1*im.N2] /= counts[p];
+                        }
+                    }
+                    if (roots != nonzero)
+                        printf("Nonzero: %d\n", nonzero);
+                    assert(roots == nonzero);
 
 
-                /********** Create output image **********/
-                image_t imout = im;
-                imout.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
-                for (int p = 0; p < im.N1*im.N2; p++)
-                for (int k = 0; k < im.K; k++)
-                    imout.I[p + k*im.N1*im.N2] = meancolor[flatmap[p] + k*im.N1*im.N2];
+                    /********** Create output image **********/
+                    image_t imout = im;
+                    imout.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+                    for (int p = 0; p < im.N1*im.N2; p++)
+                    for (int k = 0; k < im.K; k++)
+                        imout.I[p + k*im.N1*im.N2] = meancolor[flatmap[p] + k*im.N1*im.N2];
 
-                free(meancolor);
-                free(counts);
+                    free(meancolor);
+                    free(counts);
 
-                return imout;
+                    return imout;
+                }
+
             }
 
 
@@ -2308,8 +2309,8 @@ namespace panoramix {
                 for (int p = 0; p < im.N1*im.N2; p++)
                 if (map[p] == p) assert(gaps[p] == INF);
 
-                flatmap = map_to_flatmap(map, im.N1*im.N2);
-                imout = imseg(im, flatmap);
+                flatmap = quickshift_details::map_to_flatmap(map, im.N1*im.N2);
+                imout = quickshift_details::imseg(im, flatmap);
                 Imagei segmented(im.N1, im.N2);
                 for (int col = 0; col < im.N2; col++)
                 for (int row = 0; row < im.N1; row++)
@@ -2344,8 +2345,8 @@ namespace panoramix {
                 for (int p = 0; p < im.N1*im.N2; p++)
                 if (map[p] == p) assert(gaps[p] == INF);
 
-                flatmap = map_to_flatmap(map, im.N1*im.N2);
-                imout = imseg(im, flatmap);
+                flatmap = quickshift_details::map_to_flatmap(map, im.N1*im.N2);
+                imout = quickshift_details::imseg(im, flatmap);
                 Imagei segmented(im.N1, im.N2);
                 for (int col = 0; col < im.N2; col++)
                 for (int row = 0; row < im.N1; row++)
@@ -2590,8 +2591,8 @@ namespace panoramix {
 
 
 
-        std::tuple<std::vector<Point2>, std::vector<Point2>, std::vector<Point2>, std::vector<int>, int>  sample_line(const std::vector<Line2> &lines, const std::vector<int> &lineClasses){
-
+        std::tuple<std::vector<Point2>, std::vector<Point2>, std::vector<Point2>, std::vector<int>, int>  sample_line(
+            const std::vector<Line2> &lines, const std::vector<int> &lineClasses){
 
             int sample_rate = 10; //sample every 5 pixel on line
             std::vector<Point2> ls[3];
@@ -2647,8 +2648,6 @@ namespace panoramix {
             norm2[0] = vec2[0] / len2  * amount* ratio21;
             norm2[1] = vec2[1] / len2 * amount * ratio21;
 
-
-
             if (len1 < abs(amount)){
                 newp1 = curp1;
                 newp2 = curp2;
@@ -2675,13 +2674,9 @@ namespace panoramix {
             p2.x = line.second[0];
             p2.y = line.second[1];
 
-
-
             cv::Point2f curp1 = p1;
             cv::Point2f curp2 = p2;
             int moveAmount = 64;
-
-
 
             std::vector<cv::Point2f> result;
 
@@ -2709,16 +2704,14 @@ namespace panoramix {
                 newp2.x = hnewp2[0];
                 newp2.y = hnewp2[1];
 
-
-
-
                 bool failed = 0;
                 if (atvp == 1)
                 {
 
                     failed = 1;
                 }
-                else if ((hnewp1[0] > imageSize.width || hnewp1[0]<1 || hnewp1[1]>imageSize.height || hnewp1[1]<1) || (hnewp2[0]>imageSize.width || hnewp2[0]<1 || hnewp2[1]>imageSize.height || hnewp2[1] < 1))
+                else if ((hnewp1[0] > imageSize.width || hnewp1[0]<1 || hnewp1[1]>imageSize.height || hnewp1[1]<1) || 
+                    (hnewp2[0]>imageSize.width || hnewp2[0]<1 || hnewp2[1]>imageSize.height || hnewp2[1] < 1))
                 {
 
                     failed = 1;
@@ -3056,7 +3049,8 @@ namespace panoramix {
                 if (outdoor){
                     SHOULD_NEVER_BE_CALLED("hedau'a algorithm only aplies for indoor scenes!");
                 }
-                matlab << "[~, ~, slabelConfMap] = calcGC(im);";
+                matlab << "addMatlabCodes;";
+                matlab << "[~, ~, slabelConfMap] = gc(im);";
             }
             else{
                 matlab << (std::string("slabelConfMap = panoramix_wrapper_gc(im, ") + (outdoor ? "true" : "false") + ");");

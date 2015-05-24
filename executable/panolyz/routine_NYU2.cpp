@@ -24,7 +24,7 @@ namespace panolyz {
         using namespace experimental;
 
 
-        using Image7d = ImageOfType<Vec<double, 7>>;
+        using Image7d = ImageOf<Vec<double, 7>>;
 
 
         void Show(const PerspectiveView & v, const RLGraph & mg, const RLGraphControls & controls, const RLGraphVars & vars){
@@ -315,7 +315,7 @@ namespace panolyz {
                 
                 SetComponentControl<RegionData>(controls, [&mg, &view, &realDepth](RegionHandle rh, RLGraphComponentControl & c){
                     auto center = mg.data(rh).normalizedCenter;
-                    float f = realDepth(ToPixelLoc(view.camera.toScreen(center)));
+                    float f = realDepth(ToPixel(view.camera.toScreen(center)));
                     c.weightedAnchors.push_back(WeightAs(center * f, 1.0));
                 });
 
@@ -324,11 +324,11 @@ namespace panolyz {
                     double maxDepth = MinMaxValOfImage(realDepth).second;
                     std::vector<Weighted<Vec3>> validAnchors;
                     for (auto & wa : c.weightedAnchors){
-                        auto p = ToPixelLoc(view.camera.toScreen(wa.component));
+                        auto p = ToPixel(view.camera.toScreen(wa.component));
                         std::vector<float> ds;
                         for (int xx = -2; xx <= 2; xx++){
                             for (int yy = -2; yy <= 2; yy++){
-                                PixelLoc pp(p.x + xx, p.y + yy);
+                                Pixel pp(p.x + xx, p.y + yy);
                                 if (Contains(realDepth, pp)){
                                     ds.push_back(realDepth(pp));
                                 }

@@ -19,7 +19,7 @@ namespace panoramix {
             ProjectiveComponent(const ProjectiveComponent &) = delete;
             ProjectiveComponent & operator = (const ProjectiveComponent &) = delete;
 
-            virtual std::vector<std::vector<double>> coefficients(const Vec3 & direction) const = 0;
+            virtual DenseMatd coefficients(const Vec3 & direction) const = 0;
             int nparams() const { return _nparams; }
 
         private:
@@ -30,7 +30,7 @@ namespace panoramix {
         class LineDoF1 : public ProjectiveComponent {
         public:
             LineDoF1(const Line3 & l);
-            std::vector<std::vector<double>> coefficients(const Vec3 & direction) const override;
+            DenseMatd coefficients(const Vec3 & direction) const override;
             Line3 line;
         };
 
@@ -38,7 +38,7 @@ namespace panoramix {
         class LineDoF2 : public ProjectiveComponent {
         public:
             LineDoF2(const Line3 & l);
-            std::vector<std::vector<double>> coefficients(const Vec3 & direction) const override;
+            DenseMatd coefficients(const Vec3 & direction) const override;
             Line3 line;
         };
 
@@ -46,7 +46,7 @@ namespace panoramix {
         class RegionDoF1 : public ProjectiveComponent {
         public:
             RegionDoF1(const Plane3 & p);
-            std::vector<std::vector<double>> coefficients(const Vec3 & direction) const override;
+            DenseMatd coefficients(const Vec3 & direction) const override;
             Plane3 plane;
         };
 
@@ -54,7 +54,7 @@ namespace panoramix {
         class RegionDoF2 : public ProjectiveComponent {
         public:
             RegionDoF2(const Vec3 & ad);
-            std::vector<std::vector<double>> coefficients(const Vec3 & direction) const override;
+            DenseMatd coefficients(const Vec3 & direction) const override;
             Vec3 axisDirection;
         };
 
@@ -62,7 +62,7 @@ namespace panoramix {
         class RegionDoF3 : public ProjectiveComponent {
         public:
             RegionDoF3();
-            std::vector<std::vector<double>> coefficients(const Vec3 & direction) const override;
+            DenseMatd coefficients(const Vec3 & direction) const override;
         };
 
         // [scale of placed mesh / scale of real mesh]
@@ -71,7 +71,7 @@ namespace panoramix {
         public:
             MeshDoF1(const Mesh<Point3> & m);
             std::vector<Point3> intersectionsOnPlacedMesh(const Vec3 & direction) const;
-            std::vector<std::vector<double>> coefficients(const Vec3 & direction) const override;
+            DenseMatd coefficients(const Vec3 & direction) const override;
         private:
             std::unique_ptr<MeshDoF1Data> _data;
         };

@@ -13,7 +13,7 @@ namespace panolyz {
     public:
         LabelWidget(Labels & labels, const Image & im, 
             const Imagei & segments, 
-            const std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryPixels,
+            const std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> & boundaryPixels,
             const std::vector<std::string> & regionLabelNames,
             const std::vector<std::string> & boundaryLabelNames, 
             const std::vector<gui::Color> & regionLabelColors,
@@ -200,7 +200,7 @@ namespace panolyz {
                     int sz = strokeSize;
                     for (int dx = -sz; dx <= sz; dx++){
                         for (int dy = -sz; dy <= sz; dy++){
-                            PixelLoc pp(p.x() + dx, p.y() + dy);
+                            Pixel pp(p.x() + dx, p.y() + dy);
                             if (!Contains(_segments, pp))
                                 continue;
                             int segId = _segments(pp);
@@ -227,7 +227,7 @@ namespace panolyz {
                     std::set<int> regionIds;
                     for (int dx = -sz; dx <= sz; dx++){
                         for (int dy = -sz; dy <= sz; dy++){
-                            PixelLoc pp(p.x() + dx, p.y() + dy);
+                            Pixel pp(p.x() + dx, p.y() + dy);
                             if (!Contains(_segments, pp))
                                 continue;
                             regionIds.insert(_segments(pp));
@@ -259,7 +259,7 @@ namespace panolyz {
     private:        
         Image _im;
         Imagei _segments;
-        std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> _boundaryPixels;
+        std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> _boundaryPixels;
         Labels & _labels;
 
         QReadWriteLock _imageLock;
@@ -282,7 +282,7 @@ namespace panolyz {
 
     bool LabelIt(Labels & labels, const Image & im,
         const Imagei & segments,
-        const std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryPixels,
+        const std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> & boundaryPixels,
         const std::vector<std::string> & regionLabelNames,
         const std::vector<std::string> & boundaryLabelNames,
         const std::vector<gui::Color> & regionLabelColors,

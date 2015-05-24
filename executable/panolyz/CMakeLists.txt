@@ -18,7 +18,7 @@ endif ()
 set_property(GLOBAL PROPERTY USE_FOLDERS On)
 
 # build project
-include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES})
+include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES} ${MATLAB_INCLUDES})
 panoramix_add_executable (Panolyz ${SOURCES})
-target_link_libraries (Panolyz ${PROJECT_NAME} ${Qt_LIBS})
+target_link_libraries (Panolyz ${PROJECT_NAME} ${Qt_LIBS} ${MATLAB_LIBS})
 set_property(TARGET Panolyz PROPERTY FOLDER "${PROJECT_NAME}.Executable")

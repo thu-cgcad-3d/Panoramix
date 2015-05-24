@@ -19,7 +19,7 @@ namespace panolyz {
         using namespace core;
         using namespace experimental;
 
-        using Image7d = ImageOfType<Vec<double, 7>>;
+        using Image7d = ImageOf<Vec<double, 7>>;
 
         void RunNormal(std::string folder, bool indoor){
             QString qfolder = QString::fromStdString(folder);
@@ -85,7 +85,7 @@ namespace panolyz {
                 }
 
                 qDebug() << "computing geometric contexts";
-                auto gc = ComputeGeometricContext(image, indoor ? SceneClass::Indoor : SceneClass::Outdoor, false);
+                auto gc = ComputeGeometricContext(image, indoor, false);
                 SaveToDisk(folder + "\\feature\\" + filename + "_gc7", gc);
                 {
                     Image3f gcim(gc.size(), 0.0);

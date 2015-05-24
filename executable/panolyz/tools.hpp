@@ -19,7 +19,7 @@ namespace panolyz {
     bool LabelIt(Labels & labels, 
         const Image & im, 
         const Imagei & segments, 
-        const std::map<std::pair<int, int>, std::vector<std::vector<PixelLoc>>> & boundaryPixels,
+        const std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> & boundaryPixels,
         const std::vector<std::string> & regionLabelNames, 
         const std::vector<std::string> & boundaryLabelNames,
         const std::vector<gui::Color> & regionLabelColors,

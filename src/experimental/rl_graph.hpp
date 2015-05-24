@@ -328,7 +328,7 @@ namespace panoramix {
            return norm(IntersectionOfLineAndPlane(Ray3(eye, direction), plane).position);
         }
         inline double DepthAt(const Vec3 & direction, const Line3 & line, const Point3 & eye = Point3(0, 0, 0)){
-            return norm(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), direction), line.infiniteLine()).second.first);
+            return norm(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), direction), line.ray()).second.first);
         }
 
         template <class InstanceT>

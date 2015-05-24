@@ -12,10 +12,19 @@ namespace panoramix {
         struct Decorated {
             D decoration;
             T component;
+            inline operator T() const { return component; }
         };
         template <class T, class D>
         inline Decorated<std::decay_t<T>, std::decay_t<D>> DecorateAs(T && comp, D && d){
             return Decorated<std::decay_t<T>, std::decay_t<D>>{std::forward<D>(d), std::forward<T>(comp)};
+        }
+        template <class T, class D>
+        inline bool operator == (const Decorated<T, D> & a, const Decorated<T, D> & b) {
+            return a.component == b.component;
+        }
+        template <class T, class D>
+        inline bool operator < (const Decorated<T, D> & a, const Decorated<T, D> & b) {
+            return a.component < b.component;
         }
         template <class Archive, class T, class D>
         inline void serialize(Archive & ar, Decorated<T, D> & c) {

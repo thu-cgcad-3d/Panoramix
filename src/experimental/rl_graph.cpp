@@ -321,8 +321,8 @@ namespace panoramix {
                         }
                         else if(clazi != clazj && clazi >= 0 && clazj >= 0) { // intersections for classified lines
                             if (d < intersectionDistanceThreshold){
-                                auto conCenter = HPointFromVector(GetCoeffs(linei.infiniteLine())
-                                    .cross(GetCoeffs(linej.infiniteLine()))).value();
+                                auto conCenter = HPointFromVector(GetCoeffs(linei.ray())
+                                    .cross(GetCoeffs(linej.ray()))).value();
 
                                 assert(conCenter != Point2(0.0, 0.0));
 
@@ -3134,7 +3134,7 @@ namespace panoramix {
                             Line3 & thatLine = lines[lh];
                             for (auto & a : mg.data(rlch).normalizedAnchors){
                                 Point3 pointHere = IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), a), thisPlane).position;
-                                Point3 pointThere = DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), a), thatLine.infiniteLine()).second.first;
+                                Point3 pointThere = DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), a), thatLine.ray()).second.first;
                                 double dist = Distance(pointHere, pointThere);
                                 if (dist > ndist){
                                     ndist = dist;

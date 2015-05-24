@@ -383,13 +383,16 @@ namespace panoramix {
             if (views.empty()){
                 return View<OutCameraT, ImageOf<T>>();
             }
-            ImageOf<T> converted = ImageOf<T>::zeros(camera.screenSize());
             static const int channels = cv::DataType<T>::channels;
+            using channel_type = typename cv::DataType<T>::channel_type;
+            ImageOf<T> converted = ImageOf<T>::zeros(camera.screenSize());
             Imagef counts(camera.screenSize(), 0.0f);
             for (int i = 0; i < views.size(); i++){
                 auto sampler = MakeCameraSampler(camera, views[i].component.camera);
                 auto piece = sampler(views[i].component.image, cv::BORDER_CONSTANT);
-                converted += piece;
+                for (auto it = converted.begin(); it != converted.end(); ++it){
+                    *it += (piece(it.pos()) * views[i].weight());
+                }
                 counts += sampler(Imagef(views[i].component.image.size(), views[i].weight()), cv::BORDER_CONSTANT);
             }
             View<OutCameraT, ImageOf<T>> v;

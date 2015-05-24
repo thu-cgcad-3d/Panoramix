@@ -245,7 +245,7 @@ namespace panoramix {
 
         private:
             std::string _fname;
-            MATFile * _fp;
+            ::MATFile * _fp;
         };
 
     }

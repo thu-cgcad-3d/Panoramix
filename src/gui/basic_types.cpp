@@ -339,17 +339,11 @@ namespace panoramix {
         }
 
 
-        OpenGLShaderSource::OpenGLShaderSource(OpenGLShaderSourceDescriptor d) {
-            auto & ss = PredefinedShaderSource(d);
-            _vshaderSrc = ss._vshaderSrc;
-            _fshaderSrc = ss._fshaderSrc;
-        }
-
 
         // opengl shader source 
-        const OpenGLShaderSource & PredefinedShaderSource(OpenGLShaderSourceDescriptor name) {
+        const std::pair<std::string, std::string> & PredefinedShaderSource(OpenGLShaderSourceDescriptor name) {
 
-            static const OpenGLShaderSource defaultPointsShaderSource = {
+            static const std::pair<std::string, std::string> defaultPointsShaderSource = {
                 "#version 120\n"
                 "attribute highp vec4 position;\n"
                 "attribute highp vec3 normal;\n"
@@ -378,7 +372,7 @@ namespace panoramix {
                 "}\n"
             };
 
-            static const OpenGLShaderSource defaultLinesShaderSource = {
+            static const std::pair<std::string, std::string> defaultLinesShaderSource = {
                 "#version 120\n"
                 "attribute lowp vec4 position;\n"
                 "attribute lowp vec3 normal;\n"
@@ -401,7 +395,7 @@ namespace panoramix {
                 "}\n"
             };
 
-            static const OpenGLShaderSource defaultTrianglesShaderSource = {
+            static const std::pair<std::string, std::string> defaultTrianglesShaderSource = {
                 "#version 120\n"
                 "attribute highp vec4 position;\n"
                 "attribute highp vec3 normal;\n"
@@ -426,7 +420,7 @@ namespace panoramix {
                 "}\n"
             };
 
-            static const OpenGLShaderSource panoramaShaderSource = {
+            static const std::pair<std::string, std::string> panoramaShaderSource = {
                 "#version 120\n"
                 "attribute highp vec3 position;\n"
                 "attribute highp vec3 normal;\n"
@@ -468,7 +462,7 @@ namespace panoramix {
 
 
 
-            static const OpenGLShaderSource xPointsShaderSource = {
+            static const std::pair<std::string, std::string> xPointsShaderSource = {
                 "#version 130\n"
 
                 "attribute highp vec4 position;\n"
@@ -521,7 +515,7 @@ namespace panoramix {
                 "}\n"
             };
 
-            static const OpenGLShaderSource xLinesShaderSource = {
+            static const std::pair<std::string, std::string> xLinesShaderSource = {
                 "#version 130\n"
 
                 "attribute highp vec4 position;\n"
@@ -569,7 +563,7 @@ namespace panoramix {
                 "}\n"
             };
 
-            static const OpenGLShaderSource xTrianglesShaderSource = {
+            static const std::pair<std::string, std::string> xTrianglesShaderSource = {
                 "#version 130\n"
 
                 "attribute highp vec4 position;\n"
@@ -617,7 +611,7 @@ namespace panoramix {
                 "}\n"
             };
 
-            static const OpenGLShaderSource xPanoramaShaderSource = {
+            static const std::pair<std::string, std::string> xPanoramaShaderSource = {
                 "#version 130\n"
 
                 "attribute highp vec3 position;\n"
@@ -690,6 +684,9 @@ namespace panoramix {
         }
 
 
+        OpenGLShaderSource::OpenGLShaderSource(OpenGLShaderSourceDescriptor d) {
+            std::tie(_vshaderSrc, _fshaderSrc) = PredefinedShaderSource(d);
+        }
 
 
 

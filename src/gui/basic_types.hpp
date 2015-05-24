@@ -150,13 +150,13 @@ namespace panoramix {
                 : _exceptionalColor(ColorTag::Transparent) {}
             inline ColorTable(const std::vector<Color> & ctable, const Color & exceptColor = ColorTag::Transparent)
                 : _colors(ctable), _exceptionalColor(exceptColor) {}
+            inline ColorTable(std::vector<Color> && ctable, const Color & exceptColor = ColorTag::Transparent)
+                : _colors(std::move(ctable)), _exceptionalColor(exceptColor) {}
 
             ColorTable(ColorTableDescriptor descriptor);
 
             inline ColorTable(std::initializer_list<Color> c, const Color & exceptColor = ColorTag::Transparent) 
                 : _colors(c), _exceptionalColor(exceptColor) {}
-
-            //ColorTable(std::initializer_list<ColorTag> ctags, ColorTag exceptColor = ColorTag::Transparent);
 
             template <class ColorIteratorT, class = std::enable_if_t<std::is_same<std::iterator_traits<ColorIteratorT>::value_type, Color>::value>>
             inline ColorTable(ColorIteratorT begin, ColorIteratorT end, const Color & exceptColor = ColorTag::Transparent)
@@ -230,11 +230,10 @@ namespace panoramix {
 
         class OpenGLShaderSource {
         public:
-            OpenGLShaderSource(OpenGLShaderSourceDescriptor d = OpenGLShaderSourceDescriptor::DefaultTriangles);
+            OpenGLShaderSource(OpenGLShaderSourceDescriptor d = OpenGLShaderSourceDescriptor::XTriangles);
 
             template <class StringT1, class StringT2>
-            inline OpenGLShaderSource(StringT1 && vs, StringT2 && fs) : _vshaderSrc(std::forward<StringT1>(vs)), _fshaderSrc(std::forward<StringT2>(fs)) {}
-            inline OpenGLShaderSource(OpenGLShaderSource && ss) : _vshaderSrc(std::move(ss._vshaderSrc)), _fshaderSrc(std::move(ss._fshaderSrc)) {}
+            OpenGLShaderSource(StringT1 && vs, StringT2 && fs) : _vshaderSrc(std::forward<StringT1>(vs)), _fshaderSrc(std::forward<StringT2>(fs)) {}
 
             const std::string & vertexShaderSource() const { return _vshaderSrc; }
             const std::string & fragmentShaderSource() const { return _fshaderSrc; }
@@ -244,8 +243,6 @@ namespace panoramix {
         private:
             std::string _vshaderSrc, _fshaderSrc;
         };
-
-        const OpenGLShaderSource & PredefinedShaderSource(OpenGLShaderSourceDescriptor descriptor);
 
 
 

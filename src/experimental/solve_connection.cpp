@@ -25,19 +25,19 @@ namespace panoramix {
         LineDoF1::LineDoF1(const Line3 & l) : ProjectiveComponent(1), line(l) { }
 
 
-        std::vector<std::vector<double>> LineDoF1::coefficients(const Vec3 & direction) const {
-            Ray3 infLine = (line / norm(line.center())).infiniteLine();
+        DenseMatd LineDoF1::coefficients(const Vec3 & direction) const {
+            Ray3 infLine = (line / norm(line.center())).ray();
             // variable is 1.0/centerDepth
             // corresponding coeff is 1.0/depthRatio
             // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
             double depthRatio = norm(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), direction), infLine).second.first);
-            return{ std::vector<double>{1.0 / depthRatio} };
+            return DenseMatd(1, 1, 1.0 / depthRatio);
         }
 
         LineDoF2::LineDoF2(const Line3 & l) : ProjectiveComponent(2), line(l){ }
 
 
-        std::vector<std::vector<double>> LineDoF2::coefficients(const Vec3 & direction) const {
+        DenseMatd LineDoF2::coefficients(const Vec3 & direction) const {
             double theta = AngleBetweenDirections(normalize(line.first), normalize(line.second));
             double phi = AngleBetweenDirections(normalize(line.first), direction);
             /*           | sin(theta) | | p | | q |
@@ -49,19 +49,19 @@ namespace panoramix {
             double coeffFor1_p = -sin(phi - theta) / sin(theta);
             double coeffFor1_q = sin(phi) / sin(theta);
             assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
-            return{ std::vector<double>{coeffFor1_p, coeffFor1_q} };
+            return DenseMatd(Mat<double, 1, 2>(coeffFor1_p, coeffFor1_q));
         }
 
         RegionDoF1::RegionDoF1(const Plane3 & p) : ProjectiveComponent(1), plane(p) {}
 
 
-        std::vector<std::vector<double>> RegionDoF1::coefficients(const Vec3 & direction) const {
+        DenseMatd RegionDoF1::coefficients(const Vec3 & direction) const {
             Plane3 plane(normalize(plane.anchor), plane.normal);
             // variable is 1.0/centerDepth
             // corresponding coeff is 1.0/depthRatio
             // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
             double depthRatio = norm(IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), direction), plane).position);
-            return{ std::vector<double>{1.0 / depthRatio} };
+            return DenseMatd(1, 1, 1.0 / depthRatio);
         }
 
 
@@ -78,7 +78,7 @@ namespace panoramix {
         }
 
 
-        std::vector<std::vector<double>> RegionDoF2::coefficients(const Vec3 & direction) const {
+        DenseMatd RegionDoF2::coefficients(const Vec3 & direction) const {
             // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
             // -> 1.0/depth = ax + by + cz
             // -> 1.0/depth = ax + by + (- o1a - o2b)/o3 * z = a(x-o1*z/o3) + b(y-o2*z/o3)
@@ -88,18 +88,16 @@ namespace panoramix {
             std::swap(forientation[sc], forientation[2]);
             Vec3 fdirection = direction;
             std::swap(fdirection[sc], fdirection[2]);
-            return{ std::vector<double>{
-                fdirection[0] - forientation[0] * fdirection[2] / forientation[2],
-                    fdirection[1] - forientation[1] * fdirection[2] / forientation[2]
-            } };
+            return DenseMatd(Mat<double, 1, 2>(fdirection[0] - forientation[0] * fdirection[2] / forientation[2],
+                fdirection[1] - forientation[1] * fdirection[2] / forientation[2]));
         }
 
         RegionDoF3::RegionDoF3() : ProjectiveComponent(3){ }
 
-        std::vector<std::vector<double>> RegionDoF3::coefficients(const Vec3 & direction) const {
+        DenseMatd RegionDoF3::coefficients(const Vec3 & direction) const {
             // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
             // -> 1.0/depth = ax + by + cz
-            return{ std::vector<double>{direction[0], direction[1], direction[2]} };
+            return DenseMatd(Mat<double, 1, 3>(direction[0], direction[1], direction[2]));
         }
 
 
@@ -265,11 +263,11 @@ namespace panoramix {
         }
 
 
-        std::vector<std::vector<double>> MeshDoF1::coefficients(const Vec3 & direction) const {
+        DenseMatd MeshDoF1::coefficients(const Vec3 & direction) const {
             auto pts = intersectionsOnPlacedMesh(direction);
-            std::vector<std::vector<double>> coeffs(pts.size(), std::vector<double>(1, 0.0));
+            DenseMatd coeffs(pts.size(), 1, 0.0);
             for (int i = 0; i < pts.size(); i++){
-                coeffs[i][0] = 1.0 / norm(pts[i]);
+                coeffs(i, 0) = 1.0 / norm(pts[i]);
             }
             return coeffs;
         }

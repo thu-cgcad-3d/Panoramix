@@ -23,8 +23,8 @@ namespace panoramix {
             }
         }
 
-
-        std::vector<int> ComputeSpatialRegionProperties(const Imagei & segmentedRegions, const PanoramicCamera & cam,
+        template <class CameraT>
+        std::vector<int> ComputeSpatialRegionPropertiesTemplated(const Imagei & segmentedRegions, const CameraT & cam,
             std::vector<std::vector<std::vector<Vec3>>> * ncontoursPtr,
             std::vector<Vec3> * ncentersPtr,
             std::vector<double> * areasPtr){
@@ -131,6 +131,35 @@ namespace panoramix {
             }
 
             return regionIds;
+        }
+
+
+
+        std::vector<int> ComputeSpatialRegionProperties(
+            const Imagei & segmentedRegions, const PerspectiveCamera & cam,
+            std::vector<std::vector<std::vector<Vec3>>> * ncontoursPtr,
+            std::vector<Vec3> * ncentersPtr,
+            std::vector<double> * areasPtr){
+            return ComputeSpatialRegionPropertiesTemplated(segmentedRegions, cam, ncontoursPtr, ncentersPtr, areasPtr);
+        }
+
+
+
+        std::vector<int> ComputeSpatialRegionProperties(
+            const Imagei & segmentedRegions, const PanoramicCamera & cam,
+            std::vector<std::vector<std::vector<Vec3>>> * ncontoursPtr,
+            std::vector<Vec3> * ncentersPtr,
+            std::vector<double> * areasPtr){
+            return ComputeSpatialRegionPropertiesTemplated(segmentedRegions, cam, ncontoursPtr, ncentersPtr, areasPtr);
+        }
+
+
+        std::vector<int> ComputeSpatialRegionProperties(
+            const Imagei & segmentedRegions, const PartialPanoramicCamera & cam,
+            std::vector<std::vector<std::vector<Vec3>>> * ncontoursPtr,
+            std::vector<Vec3> * ncentersPtr,
+            std::vector<double> * areasPtr){
+            return ComputeSpatialRegionPropertiesTemplated(segmentedRegions, cam, ncontoursPtr, ncentersPtr, areasPtr);
         }
 
 

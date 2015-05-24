@@ -73,6 +73,7 @@ namespace panoramix {
                 return *this;
             }
 
+            inline Any(Any && a) : _data(a._data) { a._data = nullptr; }
             inline Any & operator = (Any && a) { swap(a); return *this; }
             inline void swap(Any & a){ std::swap(_data, a._data); }
 

@@ -1,9 +1,10 @@
 #include "../../src/core/basic_types.hpp"
 #include "../../src/experimental/rl_graph.hpp"
 #include "../../src/experimental/tools.hpp"
+#include "../../src/misc/matlab_engine.hpp"
 #include "../../src/gui/scene.hpp"
 #include "../../src/gui/canvas.hpp"
-#include "../../src/gui/utitilies.hpp"
+#include "../../src/gui/utility.hpp"
 
 #include "routines.hpp"
 
@@ -15,34 +16,15 @@ namespace panolyz {
         void Run(){
 
             std::string path;
-            path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/13.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/14.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x3.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/45.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x2.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/univ1.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (9).jpg";// too small
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/outdoor/yard.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (11).jpg"; // too small
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (10).jpg"; // too small
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (7).jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab2.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/univlab3.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/k (2).jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x5.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x6.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x7.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x8.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/x9.jpg";
-            //path = PROJECT_TEST_DATA_DIR_STR"/panorama/indoor/google_chinese.png";
-
 
             using namespace panoramix;
             using namespace core;
             using namespace experimental;
 
-            core::Image3ub image = gui::PickAnImage(PROJECT_TEST_DATA_DIR_STR"/panorama/indoor");
+            core::Image3ub image = gui::PickAnImage(PROJECT_TEST_DATA_DIR_STR"/panorama/indoor", &path);
+            if (image.empty())
+                return;
+
             MakePanorama(image);
             ResizeToHeight(image, 700);
 
@@ -51,10 +33,13 @@ namespace panolyz {
             std::vector<PerspectiveCamera> cams;
             std::vector<std::vector<Classified<Line2>>> lines;
             std::vector<Vec3> vps;
+            int vertVPId;
 
             Imagei segmentedImage;
 
-            if (1){
+#define REFRESH 1
+
+            if (REFRESH){
                 view = CreatePanoramicView(image);
 
                 // collect lines in each view
@@ -80,6 +65,7 @@ namespace panolyz {
                         gui::AsCanvas(pim).thickness(3).colorTable(ctable).add(lines[i]).show();
                     }
                 }
+                vertVPId = NearestDirectionId(vps, Vec3(0, 0, 1));
 
                 // extract lines from segmentated region boundaries and classify them using estimated vps
                 // make 3d lines
@@ -104,26 +90,40 @@ namespace panolyz {
                     gui::AsCanvas(ctable(segmentedImage)).add(view.image).show();
                 }            
 
-                Save(path, "pre", view, cams, lines, vps, segmentedImage);
+                Save(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
             }
             else{
-                Load(path, "pre", view, cams, lines, vps, segmentedImage);
+                Load(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
             }
 
 
-            // vp1 vp2 vp3 clutter unknown
-            ImageOfType<Vec<double, 5>> gc;
-            Imagei gcVotes;
-            if (0){
+
+
+            std::vector<PerspectiveCamera> hcams;
+            std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
+            if (REFRESH){
                 // extract gcs
-                GeometricContextEstimator gcEstimator;
-                std::tie(gc, gcVotes) = gcEstimator(view.image, view.camera, vps);
-                Save(path, "gc", gc, gcVotes);
+                hcams = CreateHorizontalPerspectiveCameras(view.camera, 16, 500, 400, 300);
+                gcs.resize(hcams.size());
+                misc::MatlabEngine matlab;
+                for (int i = 0; i < hcams.size(); i++){
+                    auto pim = view.sampled(hcams[i]);
+                    auto pgc = ComputeGeometricContext(pim.image, false, true);
+                    gcs[i].component.camera = hcams[i];
+                    gcs[i].component.image = pgc;
+                    gcs[i].score = abs(normalize(hcams[i].forward()).dot(normalize(view.camera.up())));
+                }
+                Save(path, "hcamsgcs", hcams, gcs);
             }
             else{
-                //Load(path, "gc", gc, gcVotes);
+                Load(path, "hcamsgcs", hcams, gcs);                
             }
 
+            Image5d gc;
+            gc = Combine(view.camera, gcs).image;
+            if (1){
+                gui::AsCanvas(gc).show();
+            }
 
 
 
@@ -181,8 +181,46 @@ namespace panolyz {
 
                 controls = RLGraphControls(mg, vps);
                 AttachPrincipleDirectionConstraints(mg, controls, M_PI / 20.0);
-                AttachWallConstriants(mg, controls, M_PI / 20);
-                //AttachGeometricContextConstraints(mg, controls, view.camera, gc, gcVotes);
+                AttachWallConstriants(mg, controls, M_PI / 10);
+                
+                auto gcMeanOnRegions = CollectFeatureMeanOnRegions(mg, view.camera, gc);
+                auto up = normalize(vps[vertVPId]);
+                if (up.dot(- view.camera.up()) < 0){
+                    up = -up;
+                }
+                gui::AsCanvas(Print(mg, segmentedImage, view.camera, rhs, [&up, &mg](RegionHandle rh){
+                    return mg.data(rh).normalizedCenter.dot(up) < 0 ? gui::Red : gui::Blue;
+                })).show();
+                SetComponentControl<RegionData>(controls, 
+                    [&mg, &controls, &vps, &gcMeanOnRegions, &view, &up, vertVPId](RegionHandle rh, RLGraphComponentControl & c){
+                    auto & gcMean = gcMeanOnRegions[rh];
+                    assert(IsFuzzyZero(std::accumulate(std::begin(gcMean.val), std::end(gcMean.val), 0.0) - 1.0, 1e-4));
+                    size_t maxid = std::max_element(std::begin(gcMean.val), std::end(gcMean.val)) - gcMean.val;
+                    double floorScore = gcMean[ToUnderlying(GeometricContextIndex::FloorOrGround)];
+                    if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.data(rh).normalizedCenter.dot(up) < 0){ // lower
+                        // assign horizontal constriant
+                        c.orientationClaz = vertVPId;
+                        c.orientationNotClaz = -1;
+                        c.used = true;
+                        return;
+                    }
+                    double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
+                    if (wallScore > 0.6){
+                        // assign vertical constraint
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                        c.used = true;
+                        return;
+                    }
+                    double clutterScore = gcMean[ToUnderlying(GeometricContextIndex::ClutterOrPorous)];
+                    if (clutterScore > 0.7){
+                        c.orientationClaz = c.orientationNotClaz = -1;
+                        c.used = false;
+                        return;
+                    }
+                });
+                controls.disableAllInvalidConstraints(mg);
+
 
                 // set constraint weights
                 SetNecessaryConstraintWeightedAnchors(mg, controls);
@@ -212,12 +250,12 @@ namespace panolyz {
                     //SolveVariablesWithBoundedAnchors(mg, controls, vars);
                     std::cout << "score = " << Score(mg, controls, vars) << std::endl;
 
-                    //LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.02, 0.1);
-                    //if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
-                    //    continue;
+                    LooseOrientationConstraintsOnComponents(mg, controls, vars, 0.2, 0.01, 0.1);
+                    if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
+                        continue;
 
-                    //vars = SolveVariablesWithBoundedAnchors(mg, controls, true, false);
-                    //NormalizeVariables(mg, controls, vars);
+                    vars = SolveVariablesWithBoundedAnchors(mg, controls, false, 1000);
+                    NormalizeVariables(mg, controls, vars);
 
                   /*  AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
 
@@ -238,7 +276,7 @@ namespace panolyz {
                         double medianDepth = MedianCenterDepth(mg, controls, vars);
                         Vec3 vertDir = normalize(controls.vanishingPoints[vertVPId]);
 
-                        auto range = experimental::EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.02, 0.7, -1e5, -1e5);
+                        auto range = experimental::EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.02, 0.9, -1e5, -1e5);
 
                         std::vector<Chain3> chains;
                         for (double x = range.first; x <= range.second; x += medianDepth * 0.02){

@@ -9,7 +9,7 @@ namespace panoramix {
 
         // generic algorithms
         template <class IteratorT, class OutIteratorT, class IsCompatibleFunT>
-        inline void ForeachCompatibleWithLastElement(IteratorT begin, IteratorT end, OutIteratorT out, 
+        void ForeachCompatibleWithLastElement(IteratorT begin, IteratorT end, OutIteratorT out, 
             IsCompatibleFunT && isCompWithLast){
             if (begin == end)
                 return;
@@ -254,12 +254,12 @@ namespace panoramix {
             class VertCompareT = std::less < typename std::iterator_traits<VertIteratorT>::value_type >
         >
         void MinimumSpanningTree(
-        VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-        EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
-        EdgeOutputIteratorT MSTedges,
-        EdgeVertsGetterT && vertsGetter,
-        EdgeCompareOnWeightT && edgeCompareOnWeight,
-        VertCompareT && vertCompare = VertCompareT()
+            VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+            EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
+            EdgeOutputIteratorT MSTedges,
+            EdgeVertsGetterT && vertsGetter,
+            EdgeCompareOnWeightT && edgeCompareOnWeight,
+            VertCompareT && vertCompare = VertCompareT()
         ) {
 
             using Edge = typename std::iterator_traits<typename EdgeIteratorT>::value_type;

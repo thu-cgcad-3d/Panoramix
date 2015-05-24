@@ -148,10 +148,9 @@ namespace panolyz {
 
 
             // gc
-            ImageOfType<Vec<double, 5>> gc;
+            ImageOf<Vec<double, 5>> gc;
             if (RE_BUILD_FEATURES){
-                GeometricContextEstimator gcEstimator;
-                gc = gcEstimator(view.image, outdoor ? SceneClass::Outdoor : SceneClass::Indoor);
+                gc = ComputeGeometricContext(view.image, outdoor);
                 Save(path, "gc", gc);
             }
             else{

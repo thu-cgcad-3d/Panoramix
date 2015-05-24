@@ -82,7 +82,7 @@ namespace panoramix {
 
         SceneObject::SceneObject()
             : 
-            _shaderSource(PredefinedShaderSource(OpenGLShaderSourceDescriptor::XLines)),
+            _shaderSource(OpenGLShaderSourceDescriptor::XLines),
             _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
             _internal = new SceneObjectInternal;
             _lineWidth = 2.0;
@@ -1021,7 +1021,7 @@ namespace panoramix {
             _installingOptions.discretizeOptions.isolatedTriangles = false;
             _installingOptions.discretizeOptions.subdivisionNums[0] = 32;
             _installingOptions.discretizeOptions.subdivisionNums[1] = 64;
-            _installingOptions.defaultShaderSource = PredefinedShaderSource(OpenGLShaderSourceDescriptor::XTriangles);
+            _installingOptions.defaultShaderSource = OpenGLShaderSourceDescriptor::XTriangles;
             _installingOptions.pointSize = 10.0;
             _installingOptions.lineWidth = 5.0;
         }
