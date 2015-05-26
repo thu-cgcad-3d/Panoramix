@@ -124,6 +124,7 @@ namespace panoramix {
 
 
         // line style
+        // keep sync with Qt::PenStyle
         enum class PenStyle {
             NoPen,
             SolidLine,	//1	A plain line.

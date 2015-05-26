@@ -15,6 +15,7 @@ namespace panolyz {
     DECL_ALGO(NYU2);
     DECL_ALGO(Prepare);
     DECL_ALGO(PanoContext);
+    DECL_ALGO(ActivePanoramaIndoor);
 
     inline std::string Tagify(const std::string & path){
         auto tag = path;
