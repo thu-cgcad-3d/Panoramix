@@ -5,13 +5,13 @@ namespace panoramix {
     namespace core {
 
         PerspectiveCamera::PerspectiveCamera() 
-            : _screenW(500), _screenH(500), _principlePoint(250, 250), _focalxy(250),
+            : _screenW(500), _screenH(500), _principlePoint(250, 250), _focalxy(250, 250),
             _eye(0, 0, 0), _center(1, 0, 0), _up(0, 0, -1), _near(0.01), _far(1e4) {
             updateMatrices();
         }
 
         PerspectiveCamera::PerspectiveCamera(int w, int h)
-            : _screenW(w), _screenH(h), _principlePoint(w/2.0, h/2.0), _focalxy(250),
+            : _screenW(w), _screenH(h), _principlePoint(w/2.0, h/2.0), _focalxy(250, 250),
             _eye(0, 0, 0), _center(1, 0, 0), _up(0, 0, -1), _near(0.01), _far(1e4) {
             updateMatrices();
         }
@@ -122,7 +122,8 @@ namespace panoramix {
         void PerspectiveCamera::setFocal(double f, bool updateMat) {
             if (f == _focalxy[0] && f == _focalxy[1])
                 return;
-            _focalxy[0] = _focalxy[1] = f;
+            _focalxy[0] = f;
+            _focalxy[1] = f;
             if (updateMat)
                 updateMatrices();
         }
@@ -194,7 +195,20 @@ namespace panoramix {
                 updateMatrices();
         }
 
+        void PerspectiveCamera::moveCenterWithEyeFixed(const Vec3 & t, bool updateMat) {
+            float sc = std::max(screenSize().width, screenSize().height) * 0.2;
+            Vec3 tt = t * norm(eye() - center()) / sc;
 
+            Vec3 xv = rightward();
+            Vec3 yv = upward();
+            auto xyTrans = xv * tt[0] + yv * tt[1];
+            double r = (norm(eye() - center()) - tt[2]) /
+                norm(eye() + xyTrans - center());
+            _center = (center() + xyTrans - eye()) * r + eye();
+            _up = normalize(yv);
+            if (updateMat)
+                updateMatrices();
+        }
 
 
 

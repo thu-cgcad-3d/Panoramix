@@ -2,6 +2,7 @@
 #define PANORAMIX_GUI_UTILITY_HPP
 
 #include "basic_types.hpp"
+#include "../core/cameras.hpp"
 
 class QWidget;
 
@@ -22,12 +23,16 @@ namespace panoramix {
         struct PenConfig {
             std::string name;
             std::string description;
-            int thickness;
+            double thickness;
             Color color;
             PenStyle style;
         };
 
         void PaintWith(const std::function<core::Image()> & updater,
+            const std::vector<PenConfig> & penConfigs,
+            const std::function<bool(const std::vector<core::Point2> & polyline, int penId)> & callback);
+
+        void PaintWithPanorama(const core::PanoramicView & view,
             const std::vector<PenConfig> & penConfigs,
             const std::function<bool(const std::vector<core::Point2> & polyline, int penId)> & callback);
 

@@ -73,6 +73,7 @@ namespace panoramix {
             void focusOn(const Sphere3 & target, bool updateMat = true);
             void translate(const Vec3 & t, const Sphere3 & target, bool updateMat = true);
             void moveEyeWithCenterFixed(const Vec3 & t, const Sphere3 & target, bool distanceFixed = false, bool updateMat = true);
+            void moveCenterWithEyeFixed(const Vec3 & t, bool updateMat = true);
 
         protected:
             void updateMatrices();

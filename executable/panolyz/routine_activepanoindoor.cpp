@@ -27,6 +27,13 @@ namespace panolyz {
             }*/
 
             core::Image3ub image = gui::PickAnImage(PROJECT_TEST_DATA_DIR_STR"/panorama/indoor", &path);
+
+            std::vector<gui::PenConfig> penConfigs = {
+                { "A", "a", 2.0, gui::Red, gui::PenStyle::SolidLine },
+                { "B", "b", 2.0, gui::Blue, gui::PenStyle::DashDotDotLine }
+            };
+
+
             if (image.empty())
                 return;
 
@@ -42,10 +49,15 @@ namespace panolyz {
 
             Imagei segmentedImage;
 
-#define REFRESH 0
+#define REFRESH 1
 
             if (REFRESH){
                 view = CreatePanoramicView(image);
+
+                gui::PaintWithPanorama(view, penConfigs,
+                    [](const std::vector<Point2> & polyline, int penId){
+                    return false;
+                });
 
                 // collect lines in each view
                 cams = CreateCubicFacedCameras(view.camera, image.rows, image.rows, image.rows * 0.4);
