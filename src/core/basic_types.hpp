@@ -28,6 +28,7 @@
 #include "any.hpp"
 #include "decorate.hpp"
 #include "failable.hpp"
+#include "meta.hpp"
 
 namespace panoramix {
     namespace core {
@@ -476,6 +477,24 @@ namespace panoramix {
         Imageb ClipToDisk(Image & im);
         Imageb Rotate(Image & im, double angle);
 
+        template <class T>
+        inline void ReverseCols(ImageOf<T> & im){
+            for (int i = 0; i < im.cols / 2; i++){
+                for (int k = 0; k < im.rows; k++){
+                    std::swap(im(k, i), im(k, im.cols - 1 - i));
+                }
+            }
+        }
+
+        template <class T>
+        inline void ReverseRows(ImageOf<T> & im){
+            for (int i = 0; i < im.rows / 2; i++){
+                for (int k = 0; k < im.cols; k++){
+                    std::swap(im(i, k), im(im.rows - 1 - i, k));
+                }
+            }
+        }
+
         void ResizeToWidth(Image & im, int width);
         void ResizeToHeight(Image & im, int height);
 		void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);
@@ -525,6 +544,7 @@ namespace panoramix {
             inline SparseMatElement() : row(-1), col(-1) {}
             inline SparseMatElement(int r, int c, T v) : row(r), col(c), value(v) {}
         };
+        using SparseMatElementd = SparseMatElement<double>;
         template <class SparseMatElementIteratorT, class T = typename std::iterator_traits<SparseMatElementIteratorT>::value_type::ValueType>
         inline SparseMat<T> MakeSparseMatFromElements(int row, int col, 
             SparseMatElementIteratorT && begin, SparseMatElementIteratorT && end){
@@ -573,6 +593,8 @@ namespace panoramix {
         }
         using Sphere2 = Sphere<double, 2>;
         using Sphere3 = Sphere<double, 3>;
+        template <int N = 3, class T = double>
+        inline Sphere<T, N> UnitSphere() { return Sphere<T, N>{ Point<T, N>(), static_cast<T>(1.0) }; }
 
 
         // box

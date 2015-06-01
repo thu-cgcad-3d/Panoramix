@@ -1,8 +1,9 @@
 #ifndef PANORAMIX_GUI_UTILITY_HPP
 #define PANORAMIX_GUI_UTILITY_HPP
 
-#include "basic_types.hpp"
 #include "../core/cameras.hpp"
+#include "basic_types.hpp"
+#include "scene.hpp"
 
 class QWidget;
 
@@ -31,6 +32,9 @@ namespace panoramix {
         void PaintWith(const std::function<core::Image()> & updater,
             const std::vector<PenConfig> & penConfigs,
             const std::function<bool(const std::vector<core::Point2> & polyline, int penId)> & callback);
+
+
+        void VisualizeWithPanoramicOperation(const Scene & scene, const RenderOptions & options);
 
         void PaintWithPanorama(const core::PanoramicView & view,
             const std::vector<PenConfig> & penConfigs,

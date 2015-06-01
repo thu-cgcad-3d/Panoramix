@@ -102,6 +102,7 @@ TEST(Scene, Interaction){
             else
                 std::cout << "pressed on the spheres, its center is at " << s.center << std::endl;
             })
+                .rotate(core::Vec3(0, 0, 1), M_PI_2)
             .resource("texture")
             .shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
         .end()

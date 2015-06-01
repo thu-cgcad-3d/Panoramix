@@ -13,6 +13,10 @@ namespace panoramix {
         using yes = std::true_type;
         using no = std::false_type;
 
+        struct Dummy {
+            template <class Archive> inline void serialize(Archive & ar) {}
+        };
+
         
         // a templated integer sequence
         template<int ...>

@@ -401,6 +401,21 @@ namespace panoramix {
                 return *this;
             }
 
+            inline SceneBuilder & rotate(const core::Vec3 & axis, double angle){
+                auto & mat = activeObject().modelMatrix();
+                // rotate 
+                double l = axis[0], m = axis[1], n = axis[2];
+                double cosv = cos(angle), sinv = sin(angle);
+                core::Mat4f rot(
+                    l*l*(1 - cosv) + cosv, m*l*(1 - cosv) - n*sinv, n*l*(1 - cosv) + m*sinv, 0,
+                    l*m*(1 - cosv) + n*sinv, m*m*(1 - cosv) + cosv, n*m*(1 - cosv) - l*sinv, 0,
+                    l*n*(1 - cosv) - m*sinv, m*n*(1 - cosv) + l*sinv, n*n*(1 - cosv) + cosv, 0,
+                    0,0,0,1
+                    );
+                mat = rot * mat;
+                return *this;
+            }
+
 
             inline SceneBuilder & end() {
                 if (!_tree.isRoot(_activeOH)){

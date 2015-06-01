@@ -92,12 +92,13 @@ namespace panoramix {
                     action->setToolTip(QString::fromStdString(pc[i].description));
                     action->setWhatsThis(QString::fromStdString(pc[i].description));
                     // draw icon
-                    QImage image(64, 64, QImage::Format::Format_ARGB32_Premultiplied);
+                    int sz = 16;
+                    QImage image(sz, sz, QImage::Format::Format_ARGB32_Premultiplied);
                     image.fill(MakeQColor(gui::White));
                     _pens[i] = QPen(MakeQColor(pc[i].color), pc[i].thickness, MakeQPenStyle(pc[i].style));
                     QPainter painter(&image);
                     painter.setPen(_pens[i]);
-                    painter.drawLine(QPointF(0, 32), QPointF(64, 32));
+                    painter.drawLine(QPointF(0, sz / 2), QPointF(sz, sz/2));
                     painter.end();
                     action->setIcon(QIcon(QPixmap::fromImage(image)));
                     connect(action, &QAction::triggered, [this, i] { _activePenId = i; });
@@ -113,6 +114,7 @@ namespace panoramix {
 
         protected:
             void mousePressEvent(QMouseEvent * e) override {
+                _moved = false;
                 if (e->buttons() & Qt::LeftButton){
                     if (_activePenId == -1)
                         return;
@@ -125,6 +127,7 @@ namespace panoramix {
             }
 
             void mouseMoveEvent(QMouseEvent * e) override {
+                _moved = true;
                 if (e->buttons() & Qt::LeftButton){
                     if (_activePenId == -1)
                         return;
@@ -140,6 +143,8 @@ namespace panoramix {
             }
 
             void mouseReleaseEvent(QMouseEvent * e) override {
+                bool isClick = !_moved;
+                _moved = false;
                 unsetCursor();
                 if (_activePenId == -1)
                     return;
@@ -163,7 +168,7 @@ namespace panoramix {
             int _activePenId;
             std::vector<QPen> _pens;
             std::vector<PenConfig> _penConfigs;
-
+            bool _moved;
             QCursor _penCursor;
         };
 
@@ -284,6 +289,113 @@ namespace panoramix {
         }
 
 
+        void VisualizeWithPanoramicOperation(const Scene & scene, const RenderOptions & options){
+
+            using namespace panoramix::core;
+
+            Singleton::InitGui();
+
+            class Widget : public PaintableWidget<QGLWidget> {
+                using BaseClass = PaintableWidget<QGLWidget>;
+            public:
+                explicit Widget(const Scene & scene, const RenderOptions & options,
+                    QWidget * parent = nullptr)
+                    : BaseClass({}, parent), _scene(scene), _options(options) {
+
+                    setMouseTracking(true);
+                    setAutoBufferSwap(false);
+                    grabKeyboard();
+                }
+
+            protected:
+                void initializeGL() {
+                    makeCurrent();
+                    glEnable(GL_MULTISAMPLE);
+                    GLint bufs;
+                    GLint samples;
+                    glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
+                    glGetIntegerv(GL_SAMPLES, &samples);
+                    qDebug("Have %d buffers and %d samples", bufs, samples);
+                    qglClearColor(MakeQColor(_options.backgroundColor()));
+                    _scene.initialize();
+                }
+
+                void resizeGL(int w, int h) {
+                    core::PerspectiveCamera & camera = _options.camera();
+                    camera.resizeScreen(core::Size(w, h));
+                    glViewport(0, 0, w, h);
+                }
+
+                void paintEvent(QPaintEvent * e) override {
+                    QPainter painter(this);
+                    painter.beginNativePainting();
+                    qglClearColor(MakeQColor(_options.backgroundColor()));
+                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                    core::PerspectiveCamera & camera = _options.camera();
+                    camera.resizeScreen(core::Size(width(), height()));
+
+                    _scene.render(_options);
+
+                    painter.endNativePainting();
+
+                    if (_activePenId >= 0){
+                        auto pen = _pens[_activePenId];
+                        painter.setPen(pen);
+                    }
+                    painter.setRenderHint(QPainter::Antialiasing);
+                    painter.drawPolyline(_stroke);
+                    swapBuffers();
+                }
+
+                void mousePressEvent(QMouseEvent * e) {
+                    if (e->buttons() & Qt::MidButton){
+                        _lastPos = e->pos();
+                        setCursor(Qt::OpenHandCursor);
+                    }
+                    else {
+                        BaseClass::mousePressEvent(e);
+                    }
+                }
+
+                void mouseMoveEvent(QMouseEvent * e) {
+                    QVector3D t(e->pos() - _lastPos);
+                    t.setX(-t.x());
+                    if (e->buttons() & Qt::MidButton){
+                        _options.camera().moveCenterWithEyeFixed(MakeCoreVec(t));
+                        setCursor(Qt::ClosedHandCursor);
+                        update();
+                    }
+                    else{
+                        BaseClass::mouseMoveEvent(e);
+                    }
+                    _lastPos = e->pos();
+                }
+
+                void wheelEvent(QWheelEvent * e) {
+                    _options.camera().setFocal(_options.camera().focal() * exp(e->delta() / 1000.0));
+                    BaseClass::wheelEvent(e);
+                    update();
+                }
+
+                void processStroke(const std::vector<core::Point2> & stroke, int penId) {
+                }
+
+            private:
+                QPoint _lastPos;
+                const Scene & _scene;
+                RenderOptions _options;
+            };
+
+            Widget w(scene, options);
+            w.show();
+
+            Singleton::ContinueGui();
+
+        }
+
+
+
         void PaintWithPanorama(const core::PanoramicView & view,
             const std::vector<PenConfig> & penConfigs,
             const std::function<bool(const std::vector<core::Point2> & polyline, int penId)> & callback){
@@ -371,7 +483,6 @@ namespace panoramix {
                         BaseClass::mousePressEvent(e);
                     }
                 }
-
 
                 void mouseMoveEvent(QMouseEvent * e) {
                     QVector3D t(e->pos() - _lastPos);

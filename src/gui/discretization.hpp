@@ -105,6 +105,9 @@ namespace panoramix {
 
         // discretization
 
+        inline void Discretize(TriMesh & mesh, const core::Dummy & d, const DiscretizeOptions & o){}
+
+
         template <class T>
         inline void Discretize(TriMesh & mesh, const core::Point<T, 3> & p, const DiscretizeOptions & o){
             TriMesh::Vertex v;

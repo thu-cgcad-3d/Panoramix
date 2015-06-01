@@ -12,10 +12,6 @@
 namespace panoramix {
     namespace core {
 
-        struct Dummy {
-            template <class Archive> inline void serialize(Archive & ar) {}
-        };
-
 
         static const int Dynamic = -1;
 

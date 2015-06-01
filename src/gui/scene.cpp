@@ -178,7 +178,7 @@ namespace panoramix {
             glLineWidth(_lineWidth);
             glPointSize(_pointSize);
 
-            assert(thisModelMatrix == core::Mat4f::eye());
+            //assert(thisModelMatrix == core::Mat4f::eye());
 
             program->setUniformValue("panoramaCenter", MakeQVec(_projectionCenter));
 

@@ -92,7 +92,20 @@ namespace panoramix {
 
             cv::Mat toCVMat(bool lastDimIsChannel = true) const;
 
+            operator float() const { return scalar(); }
             operator double() const { return scalar(); }
+            operator long double() const { return scalar(); }
+
+            operator int8_t() const { return static_cast<int8_t>(std::round(scalar())); }
+            operator int16_t() const { return static_cast<int16_t>(std::round(scalar())); }
+            operator int32_t() const { return static_cast<int32_t>(std::round(scalar())); }
+            operator int64_t() const { return static_cast<int64_t>(std::round(scalar())); }
+
+            operator uint8_t() const { return static_cast<uint8_t>(std::round(scalar())); }
+            operator uint16_t() const { return static_cast<uint16_t>(std::round(scalar())); }
+            operator uint32_t() const { return static_cast<uint32_t>(std::round(scalar())); }
+            operator uint64_t() const { return static_cast<uint64_t>(std::round(scalar())); }
+
             operator std::string() const { return toString(); }
             operator cv::Mat() const { return toCVMat(); }
 
