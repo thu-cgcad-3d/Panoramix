@@ -868,6 +868,7 @@ namespace panoramix {
                 void resizeGL(int w, int h) {
                     core::PerspectiveCamera & camera = options.camera();
                     camera.resizeScreen(core::Size(w, h));
+                    camera.setFocal(std::max(width(), height()));
                     glViewport(0, 0, w, h);
                 }
 
@@ -875,6 +876,7 @@ namespace panoramix {
                 void autoSetCamera() {
                     auto sphere = scene.boundingBox().outerSphere();
                     options.camera().resizeScreen(core::Size(width(), height()), false);
+                    options.camera().setFocal(std::max(width(), height()));
                     options.camera().focusOn(sphere, true);
                     update();
                 }

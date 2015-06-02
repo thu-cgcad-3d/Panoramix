@@ -1,6 +1,6 @@
 #ifndef PANORAMIX_CORE_META_HPP
 #define PANORAMIX_CORE_META_HPP
- 
+
 #include <tuple>
 #include <array>
 #include <utility>
@@ -17,10 +17,10 @@ namespace panoramix {
             template <class Archive> inline void serialize(Archive & ar) {}
         };
 
-        
+
         // a templated integer sequence
         template<int ...>
-        struct Sequence { };
+        struct Sequence {};
 
         template <>
         struct Sequence<> {
@@ -45,7 +45,7 @@ namespace panoramix {
         struct IsSequence : no {};
 
         template <int ... S>
-        struct IsSequence<Sequence<S...>> : yes {};
+        struct IsSequence<Sequence<S...>> : yes{};
 
         // sequence element getter
         template <int Id, class SequenceT>
@@ -57,7 +57,7 @@ namespace panoramix {
         };
 
         template <int Id, int N, int ...S>
-        struct SequenceElement<Id, Sequence<N, S...>>{
+        struct SequenceElement<Id, Sequence<N, S...>> {
             static const int value = SequenceElement<Id - 1, Sequence<S...>>::value;
         };
 
@@ -82,7 +82,7 @@ namespace panoramix {
 
         // use SequenceGenerator<N>::type to deduct Sequence<0, 1, 2, 3, ..., N-1>
         template<int N, int ...S>
-        struct SequenceGenerator : SequenceGenerator<N - 1, N - 1, S...> { };
+        struct SequenceGenerator : SequenceGenerator<N - 1, N - 1, S...> {};
         template<int ...S>
         struct SequenceGenerator<0, S...> {
             using type = Sequence<S...>;
@@ -90,7 +90,7 @@ namespace panoramix {
 
         // use SequenceRangeGenerator<From, To>::type to deduct Sequence<From, From+1, ..., To-1>
         template <int From, int To, int ...S>
-        struct SequenceRangeGenerator : SequenceRangeGenerator<From, To - 1, To - 1, S...>{};
+        struct SequenceRangeGenerator : SequenceRangeGenerator<From, To - 1, To - 1, S...> {};
         template <int From, int ...S>
         struct SequenceRangeGenerator<From, From, S...> {
             using type = Sequence<S...>;
@@ -102,7 +102,7 @@ namespace panoramix {
         struct IsTuple : no {};
 
         template <class ...T>
-        struct IsTuple<std::tuple<T...>> : yes {};
+        struct IsTuple<std::tuple<T...>> : yes{};
 
 
         // tuple contains element type judger
@@ -140,7 +140,7 @@ namespace panoramix {
 
         template <class E, class T, class ...Ts>
         struct TypeFirstLocationInTuple<E, std::tuple<T, Ts...>> {
-            enum  { _v = TypeFirstLocationInTuple<E, std::tuple<Ts...>>::value };
+            enum { _v = TypeFirstLocationInTuple<E, std::tuple<Ts...>>::value };
             static const int value = (_v == -1) ? -1 : (_v + 1);
         };
 
@@ -244,63 +244,63 @@ namespace panoramix {
         // iterate over
         namespace {
             template <class FunT, class T>
-            inline void IterateOverImp(T && t, FunT && fun, std::false_type){
+            inline void IterateOverImp(T && t, FunT && fun, std::false_type) {
                 fun(std::forward<T>(t));
             }
             template <class FunT, class T>
-            inline void IterateOverImp(T && t, FunT && fun, std::true_type){
-                for (auto && e : t){
+            inline void IterateOverImp(T && t, FunT && fun, std::true_type) {
+                for (auto && e : t) {
                     IterateOver(e, fun);
                 }
             }
         }
 
         template <class FunT, class T>
-        inline void IterateOver(T && t, FunT && fun){
+        inline void IterateOver(T && t, FunT && fun) {
             IterateOverImp(std::forward<T>(t), std::forward<FunT>(fun), std::integral_constant<bool, IsContainer<T>::value>());
         }
 
         template <class FunT, class T1, class T2>
-        inline void IterateOver(std::pair<T1, T2> & p, FunT && fun){
+        inline void IterateOver(std::pair<T1, T2> & p, FunT && fun) {
             IterateOver(p.first, fun);
             IterateOver(p.second, fun);
         }
 
         template <class FunT, class T1, class T2>
-        inline void IterateOver(const std::pair<T1, T2> & p, FunT && fun){
+        inline void IterateOver(const std::pair<T1, T2> & p, FunT && fun) {
             IterateOver(p.first, fun);
             IterateOver(p.second, fun);
         }
 
         template <class FunT, class T1, class T2>
-        inline void IterateOver(std::pair<T1, T2> && p, FunT && fun){
+        inline void IterateOver(std::pair<T1, T2> && p, FunT && fun) {
             IterateOver(std::move(p.first), fun);
             IterateOver(std::move(p.second), fun);
         }
 
         namespace {
             template <class FunT, class ArgT>
-            inline bool EvalOneArg(FunT && fun, ArgT && arg) { 
-                IterateOver(std::forward<ArgT>(arg), std::forward<FunT>(fun)); return true; 
+            inline bool EvalOneArg(FunT && fun, ArgT && arg) {
+                IterateOver(std::forward<ArgT>(arg), std::forward<FunT>(fun)); return true;
             }
             template <class FunT, class TupleT, int ... I>
-            inline void IterateOverTupleUsingSequence(TupleT && t, FunT && fun, Sequence<I...>){
+            inline void IterateOverTupleUsingSequence(TupleT && t, FunT && fun, Sequence<I...>) {
                 bool dummy[] = { EvalOneArg(fun, std::get<I>(t))... };
             }
         }
 
         template <class FunT, class ...Ts>
-        inline void IterateOver(std::tuple<Ts...> & t, FunT && fun){
+        inline void IterateOver(std::tuple<Ts...> & t, FunT && fun) {
             IterateOverTupleUsingSequence(t, std::forward<FunT>(fun), SequenceGenerator<sizeof...(Ts)>::type());
         }
 
         template <class FunT, class ...Ts>
-        inline void IterateOver(const std::tuple<Ts...> & t, FunT && fun){
+        inline void IterateOver(const std::tuple<Ts...> & t, FunT && fun) {
             IterateOverTupleUsingSequence(t, std::forward<FunT>(fun), SequenceGenerator<sizeof...(Ts)>::type());
         }
 
         template <class FunT, class ...Ts>
-        inline void IterateOver(std::tuple<Ts...> && t, FunT && fun){
+        inline void IterateOver(std::tuple<Ts...> && t, FunT && fun) {
             IterateOverTupleUsingSequence(std::move(t), std::forward<FunT>(fun), SequenceGenerator<sizeof...(Ts)>::type());
         }
 
@@ -348,14 +348,14 @@ namespace panoramix {
 
         namespace {
             template <class FunT, class TupleT, int ... Is>
-            inline auto TupleMapUsingSequence(FunT && fun, const TupleT & t, Sequence<Is...>) 
+            inline auto TupleMapUsingSequence(FunT && fun, const TupleT & t, Sequence<Is...>)
                 -> decltype(std::make_tuple(fun(std::get<Is>(t)) ...)) {
                 return std::make_tuple(fun(std::get<Is>(t)) ...);
             }
         }
 
         template <class FunT, class ... Ts>
-        inline auto TupleMap(FunT && fun, const std::tuple<Ts...> & t) 
+        inline auto TupleMap(FunT && fun, const std::tuple<Ts...> & t)
             -> decltype(TupleMapUsingSequence(std::forward<FunT>(fun), t, SequenceGenerator<sizeof...(Ts)>::type())) {
             return TupleMapUsingSequence(std::forward<FunT>(fun), t, SequenceGenerator<sizeof...(Ts)>::type());
         }
@@ -366,7 +366,7 @@ namespace panoramix {
         // some common used functors for std classes
         struct SizeFunctor {
             template <class T>
-            inline size_t operator()(const T & t) const{
+            inline size_t operator()(const T & t) const {
                 return t.size();
             }
         };
@@ -387,7 +387,7 @@ namespace panoramix {
 
         struct ClearFunctor {
             template <class T>
-            inline void operator()(T & t) const{
+            inline void operator()(T & t) const {
                 t.clear();
             }
         };
@@ -401,13 +401,13 @@ namespace panoramix {
                 streamer = (streamer << std::forward<T>(t) << seperator);
             }
         };
-        
+
         template <class StreamerT, class SeperatorT>
         inline GeneralStreamFunctor<StreamerT, std::decay_t<SeperatorT>> MakeStreamFunctor(
             StreamerT && streamer, SeperatorT && sep) {
-            return GeneralStreamFunctor<StreamerT, std::decay_t<SeperatorT>>{ 
-                std::forward<StreamerT>(streamer), 
-                    std::forward<SeperatorT>(sep) 
+            return GeneralStreamFunctor<StreamerT, std::decay_t<SeperatorT>>{
+                std::forward<StreamerT>(streamer),
+                    std::forward<SeperatorT>(sep)
             };
         }
 
@@ -432,7 +432,7 @@ namespace panoramix {
 
 
         template <class T>
-        inline std::underlying_type_t<T> ToUnderlying(T t){
+        inline std::underlying_type_t<T> ToUnderlying(T t) {
             return static_cast<std::underlying_type_t<T>>(t);
         }
 
@@ -495,5 +495,5 @@ namespace panoramix {
 
     }
 }
- 
+
 #endif

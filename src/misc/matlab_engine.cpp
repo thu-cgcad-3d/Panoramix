@@ -118,7 +118,6 @@ namespace panoramix {
         std::string MatlabEngine::DefaultCodeDir() { return MATLAB_CODE_DIR; }
 
 
-
         bool MatlabEngine::RunScript(const char * cmd) {
             if (!_Engine)
                 return false;
@@ -138,7 +137,7 @@ namespace panoramix {
             if (!_Engine)
                 return false;
             
-            MXArray ma = CVInputArrayToMXArray(mat, true);
+            MXA ma(mat, true);
             if (!ma)
                 return false;
 
@@ -154,11 +153,11 @@ namespace panoramix {
             if (!mat.needed())
                 return true;
             
-            MXArray ma = ToMXArray(engGetVariable(_Engine->eng(), name), true);
+            MXA ma(engGetVariable(_Engine->eng(), name), true);
             if (ma.null())
                 return false;
 
-            bool result = CVOutputArrayFromMXArray(ma, mat, lastDimIsChannel);
+            bool result = ma.toCVOutputArray(mat, lastDimIsChannel);
             return result;
         }
 
@@ -166,7 +165,7 @@ namespace panoramix {
             if (!_Engine)
                 return false;
 
-            MXArray ma = ToMXArray(engGetVariable(_Engine->eng(), name), true);
+            MXA ma(engGetVariable(_Engine->eng(), name), true);
             if (ma.null())
                 return false;
 
@@ -179,7 +178,7 @@ namespace panoramix {
             if (!_Engine)
                 return false;
 
-            MXArray ma = ToMXArray(engGetVariable(_Engine->eng(), name), true);
+            MXA ma(engGetVariable(_Engine->eng(), name), true);
             if (ma.null())
                 return false;
 
@@ -192,7 +191,7 @@ namespace panoramix {
             if (!_Engine)
                 return false;
             
-            auto ma = ToMXArray(mat, true);
+            MXA ma(mat, true);
             if (ma.null())
                 return false;
 

@@ -7,29 +7,33 @@
 
 #include <mex.h>
 #include <mat.h>
+#include <engine.h>
 
 #include "../core/basic_types.hpp"
 
 namespace panoramix {
     namespace misc {
 
-        class MXArray {
+        class Matlab;
+        class MAT;
+
+        class MXA {
         public:
-            MXArray();
-            MXArray(mxArray * mxa, bool dos = false);
-            MXArray(MXArray && a);
-            MXArray & operator = (MXArray && a);
-            MXArray(const MXArray &) = delete;
-            MXArray & operator = (const MXArray & a) = delete;
-            virtual ~MXArray();
+            MXA();
+            MXA(mxArray * mxa, bool dos = false);
+            MXA(MXA && a);
+            MXA & operator = (MXA && a);
+            MXA(const MXA &) = delete;
+            MXA & operator = (const MXA & a) = delete;
+            virtual ~MXA();
 
         public:
             operator mxArray * () const { return _mxa; }
-            mxClassID classID() const { return mxGetClassID(_mxa); }
-            void * data() const { return mxGetData(_mxa); }
-            void setData(void* d) { mxSetData(_mxa, d); }
+            mxClassID classID() const;
+            void * data() const;
+            void setData(void* d);
 
-#define DECL_MXARRAY_MEMBERFUNCTION_IS(what) bool is##what() const { return mxIs##what(_mxa); }
+#define DECL_MXARRAY_MEMBERFUNCTION_IS(what) bool is##what() const;
 
             DECL_MXARRAY_MEMBERFUNCTION_IS(Numeric)
             DECL_MXARRAY_MEMBERFUNCTION_IS(Cell)
@@ -66,31 +70,34 @@ namespace panoramix {
             template <> bool is<int64_t>() const { return isInt64(); }
             template <> bool is<uint64_t>() const { return isUint64(); }
 
-            size_t m() const { return mxGetM(_mxa); }
-            size_t n() const { return mxGetN(_mxa); }
-            void setM(size_t m) { mxSetM(_mxa, m); }
-            void setN(size_t n) { mxSetN(_mxa, n); }
+            size_t m() const;
+            size_t n() const;
+            void setM(size_t m);
+            void setN(size_t n);
 
             bool null() const { return _mxa == nullptr; }
             bool operator! () const { return null(); }
             operator bool() const { return !null(); }
-            bool empty() const { return mxIsEmpty(_mxa); }
+            bool empty() const;
 
-            bool isFromGlobalWorkspace() const { return mxIsFromGlobalWS(_mxa); }
-            void setIsFromGlobalWorkspace(bool b) { mxSetFromGlobalWS(_mxa, b); }
+            bool isFromGlobalWorkspace() const;
+            void setIsFromGlobalWorkspace(bool b);
 
-            double scalar() const { return mxGetScalar(_mxa); }
-            std::string toString() const {
-                size_t len = nelements() + 1;
-                char * buffer = new char[len];
-                memset(buffer, '\0', len);
-                mxGetString(_mxa, buffer, len);
-                std::string str = buffer;
-                delete[] buffer;
-                return str;
+
+            MXA(const cv::Mat & m, bool dos = false);
+            MXA(double scalar, bool dos = false);
+            MXA(const std::string & string, bool dos = false);
+            MXA(const cv::SparseMat & m, bool dos = false);
+            MXA(cv::InputArray m, bool dos = false);
+
+
+            double scalar() const;
+            std::string toString() const;
+                       
+            bool toCVOutputArray(cv::OutputArray o, bool lastDimIsChannel = true) const;
+            cv::Mat toCVMat(bool lastDimIsChannel = true) const {
+                cv::Mat m; toCVOutputArray(m, lastDimIsChannel); return m;
             }
-
-            cv::Mat toCVMat(bool lastDimIsChannel = true) const;
 
             operator float() const { return scalar(); }
             operator double() const { return scalar(); }
@@ -109,109 +116,56 @@ namespace panoramix {
             operator std::string() const { return toString(); }
             operator cv::Mat() const { return toCVMat(); }
 
-            size_t nelements() const { return mxGetNumberOfElements(_mxa); }
-            size_t nzmax() const { return mxGetNzmax(_mxa); }
+            //template <class T, std::enable_if_t<std::is_default_constructible<T>::value && std::is_convertible<T, cv::OutputArray>::value>>
+            //operator T() const {
+            //    T result;
+            //    toCVOutputArray(result, true);
+            //    return result;
+            //}
 
-            MXArray cell(size_t i) const { return mxGetCell(_mxa, i); }
-            void setCell(size_t i, const MXArray & a) { mxSetCell(_mxa, i, a._mxa); }
+            size_t nelements() const;
+            size_t nzmax() const;
 
-            int nfields() const { return mxGetNumberOfFields(_mxa); }
-            const char * fieldName(int n) const { return mxGetFieldNameByNumber(_mxa, n); }
-            int fieldNumber(const std::string & name) const { return mxGetFieldNumber(_mxa, name.c_str()); }
-            MXArray field(const std::string & name, int i = 0) const { return mxGetField(_mxa, i, name.c_str()); }
-            void setField(const std::string & name, int i, const MXArray & a) { mxSetField(_mxa, i, name.c_str(), a._mxa); }
+            MXA cell(size_t i) const;
+            void setCell(size_t i, const MXA & a);
 
-            MXArray property(const std::string & name, size_t i) const { return mxGetProperty(_mxa, i, name.c_str()); }
-            void setProperty(const std::string & name, int i, const MXArray & a) { mxSetProperty(_mxa, i, name.c_str(), a._mxa); }
+            int nfields() const;
+            const char * fieldName(int n) const;
+            int fieldNumber(const std::string & name) const;
+            MXA field(const std::string & name, int i = 0) const;
+            void setField(const std::string & name, int i, const MXA & a);
 
-            const char * className() const { return mxGetClassName(_mxa); }
+            MXA property(const std::string & name, size_t i) const;
+            void setProperty(const std::string & name, int i, const MXA & a);
 
-            size_t ndims() const { return mxGetNumberOfDimensions(_mxa); }
-            std::vector<size_t> dims() const {
-                std::vector<size_t> ds(ndims());
-                std::copy_n(mxGetDimensions(_mxa), ds.size(), ds.begin());
-                return ds;
-            }
-            size_t dim(int d) const {
-                return dims().at(d);
-            }
-            size_t length() const {
-                auto ds = dims();
-                if (ds.empty()) return 0;
-                return *std::max_element(ds.begin(), ds.end());
-            }
+            const char * className() const;
+
+            size_t ndims() const;
+            std::vector<size_t> dims() const;
+            size_t dim(int d) const { return dims().at(d); }
+            size_t length() const;
+
+            size_t calcSingleSubscript(size_t dim, size_t * subs) const;
 
             template <class ... Ints>
             size_t offset(Ints... subs) const {
                 size_t sbs[sizeof...(Ints)] = { subs ... };
-                return mxCalcSingleSubscript(_mxa, sizeof...(Ints), sbs);
+                return calcSingleSubscript(sizeof...(Ints), sbs);
             }
 
             template <class T, class ... Ints, class = std::enable_if_t<std::is_arithmetic<T>::value>>
             const T & at(Ints... subs) const {
-                return static_cast<const T*>(mxGetData(_mxa))[offset(subs...)];
+                return static_cast<const T*>(data())[offset(subs...)];
             }
             template <class T, class ... Ints, class = std::enable_if_t<std::is_arithmetic<T>::value>>
             T & at(Ints... subs) {
-                return static_cast<T*>(mxGetData(_mxa))[offset(subs...)];
+                return static_cast<T*>(data())[offset(subs...)];
             }
-
 
         protected:
             mxArray * _mxa;
             bool _destroyWhenOutofScope;
         };
-
-
-        inline MXArray ToMXArray(mxArray * mxa, bool dos = false) {
-            return MXArray(mxa, dos);
-        }
-
-        inline const MXArray ToMXArray(const mxArray * mxa){
-            return MXArray(const_cast<mxArray*>(mxa), false);
-        }
-
-        inline std::vector<MXArray> ToMXArray(int n, mxArray ** mxas, bool dos = false){
-            std::vector<MXArray> as;
-            for (int i = 0; i < n; i++){
-                as.emplace_back(mxas[i], dos);
-            }
-            return as;
-        }
-
-        inline std::vector<const MXArray> ToMXArray(int n, const mxArray ** mxas){
-            std::vector<const MXArray> as;
-            for (int i = 0; i < n; i++){
-                as.emplace_back(const_cast<mxArray*>(mxas[i]), false);
-            }
-            return as;
-        }
-
-
-        MXArray CVInputArrayToMXArray(cv::InputArray mat, bool dos = false);
-        bool CVOutputArrayFromMXArray(const MXArray & mxa, cv::OutputArray mat, bool lastDimIsChannel = true);
-
-        inline MXArray ToMXArray(const core::Image & mat, bool dos = false) {
-            return CVInputArrayToMXArray(mat, dos); 
-        }
-        inline bool FromMXArray(const MXArray & mxa, core::Image & mat, bool lastDimIsChannel = true){ 
-            return CVOutputArrayFromMXArray(mxa, mat, lastDimIsChannel); 
-        }
-
-        MXArray ToMXArray(const std::vector<cv::KeyPoint> & ps, bool dos = false);
-        inline bool FromMXArray(const MXArray & mxa, std::vector<cv::KeyPoint> & ps) {
-            return CVOutputArrayFromMXArray(mxa, ps, false); 
-        }
-
-        inline MXArray ToMXArray(double d, bool dos = false){ return CVInputArrayToMXArray(d, dos); }
-        inline bool FromMXArray(const MXArray & mxa, double & d) {
-            cv::Mat m;
-            bool r = CVOutputArrayFromMXArray(mxa, m, false); 
-            d = m.at<double>(0);
-            return r;
-        }
-
-        MXArray ToMXArray(const cv::SparseMat & mat, bool dos = false);
 
 
         // the mat file
@@ -230,10 +184,13 @@ namespace panoramix {
             MAT();
             explicit MAT(const std::string & fname, const std::string & mode);
             explicit MAT(const std::string & fname, OpeningMode mode);
+
             MAT(MAT && a);
             MAT & operator = (MAT && a);
+
             MAT(const MAT &) = delete;
             MAT & operator = (const MAT & a) = delete;
+
             virtual ~MAT();
 
         public:
@@ -241,25 +198,43 @@ namespace panoramix {
 
             std::vector<std::string> varNames() const;
 
-            MXArray var(const std::string & name) const { 
-                return matGetVariable(_fp, name.c_str());
-            }
-            bool setVar(const std::string & name, const MXArray & mxa, bool asGlobal = false) { 
-                if (!asGlobal){
-                    return matPutVariable(_fp, name.c_str(), mxa) == 0;
-                }
-                else{
-                    return matPutVariableAsGlobal(_fp, name.c_str(), mxa) == 0;
-                }
-            }
-            bool removeVar(const std::string & name) {
-                return matDeleteVariable(_fp, name.c_str()) == 0;
-            }
+            MXA var(const std::string & name) const;
+            bool setVar(const std::string & name, const MXA & mxa, bool asGlobal = false);
+            bool removeVar(const std::string & name);
 
         private:
             std::string _fname;
             ::MATFile * _fp;
         };
+
+
+        // the matlab engine
+        class Matlab {
+        public:
+            Matlab(const std::string & defaultDir = std::string());
+            ~Matlab();
+
+            Matlab(Matlab && e);
+            Matlab & operator = (Matlab && e);
+
+            Matlab(const Matlab &) = delete;
+            Matlab & operator = (const Matlab &) = delete;
+
+        public:
+            bool started() const;
+            bool run(const std::string & cmd) const;
+            std::string lastMessage() const;
+
+            MXA var(const std::string & name) const;
+            bool setVar(const std::string & name, const MXA & mxa);
+            
+            const Matlab & operator << (const std::string & cmd) const;
+
+        private:
+            ::Engine * _eng;
+            char * _buffer;
+        };
+
 
     }
 }

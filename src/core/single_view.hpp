@@ -34,10 +34,6 @@ namespace panoramix {
 
 
 
-         
-
-
-
     }
 }
 

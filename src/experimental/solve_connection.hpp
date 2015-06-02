@@ -1,9 +1,6 @@
 #ifndef PANORAMIX_EXPERIMENTAL_SOLVE_CONNECTION_HPP
 #define PANORAMIX_EXPERIMENTAL_SOLVE_CONNECTION_HPP
 
-#include <Eigen/Dense>
-#include <Eigen/Sparse>
-
 #include "../core/basic_types.hpp"
 #include "../core/utility.hpp"
 #include "../core/generic_topo.hpp"
@@ -35,7 +32,7 @@ namespace panoramix {
             virtual CoeffVec coefficients(const ProjectiveAnchor::Ptr & anchor) const {
                 return coefficients(anchor->direction());
             }
-            virtual void updateUsingParams(const double * params) const {}
+            virtual void updateUsingParams(const double * params) const = 0;
             int nparams() const { return _nparams; }
 
         private:
@@ -45,10 +42,10 @@ namespace panoramix {
 
         class ProjectiveSolver {
         public:
-            ProjectiveSolver() : _varNum(0), _eqNum(0) {}
+            ProjectiveSolver() : _nvars(0), _neqs(0) {}
 
-            int nvariables() const { return _varNum; }
-            int nequations() const { return _eqNum; }
+            int nvariables() const { return _nvars; }
+            int nequations() const { return _neqs; }
 
             int bindLineDoF1(Line3 & l);
             int bindLineDoF2(Line3 & l);
@@ -80,8 +77,8 @@ namespace panoramix {
             std::vector<double> _Bmat;
             enum Op { Equal, LowerThan };
             std::vector<Op> _ops;
-            int _varNum;
-            int _eqNum;
+            int _nvars;
+            int _neqs;
         };
 
     }

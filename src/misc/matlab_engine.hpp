@@ -34,6 +34,7 @@ namespace panoramix {
             }
 
             static bool PutVariable(const char * name, CVInputArray a);
+
             static bool GetVariable(const char * name, CVOutputArray a, bool lastDimIsChannel = true);
             static bool GetVariable(const char * name, double & a);
             static bool GetVariable(const char * name, std::string & t);

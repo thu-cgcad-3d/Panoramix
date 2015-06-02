@@ -386,8 +386,8 @@ namespace panoramix {
         int ProjectiveSolver::bindLineDoF1(Line3 & l) { return append(std::make_unique<LineDoF1>(l)); }
         int ProjectiveSolver::bindLineDoF2(Line3 & l) { return append(std::make_unique<LineDoF2>(l)); }
         int ProjectiveSolver::bindPlaneDoF1(Plane3 & p) { return append(std::make_unique<PlaneDoF1>(p)); }
-        int ProjectiveSolver::bindPlaneDoF2(Plane3 & p, const Vec3 & axisDirection) { return append(std::make_unique<PlaneDoF2>(axisDirection)); }
-        int ProjectiveSolver::bindPlaneDoF3(Plane3 & p) { return append(std::make_unique<PlaneDoF3>()); }
+        int ProjectiveSolver::bindPlaneDoF2(Plane3 & p, const Vec3 & axisDirection) { return append(std::make_unique<PlaneDoF2>(p, axisDirection)); }
+        int ProjectiveSolver::bindPlaneDoF3(Plane3 & p) { return append(std::make_unique<PlaneDoF3>(p)); }
         int ProjectiveSolver::bindDoF1(Mesh<Point3> & mesh) { return append(std::make_unique<MeshDoF1>(mesh)); }
 
         int ProjectiveSolver::makeNormalAnchor(const Vec3 & d) { return append(std::make_unique<NormalAnchor>(d)); }
@@ -400,7 +400,7 @@ namespace panoramix {
             auto & anchor = _anchors.at(anchorId);
             auto coeffA = _components.at(a)->coefficients(anchor);
             auto coeffB = _components.at(b)->coefficients(anchor);
-            int eid = _eqNum;
+            int eid = _neqs;
             for (int i = 0; i < _components.at(a)->nparams(); i++){
                 _Amat.emplace_back(eid, i + _compStartPositionsInX.at(a), coeffA.at(i));
             }
@@ -409,7 +409,7 @@ namespace panoramix {
             }
             _Bmat.push_back(0.0);
             _ops.push_back(Equal);
-            _eqNum++;
+            _neqs++;
             return eid;
         }
 
@@ -418,7 +418,7 @@ namespace panoramix {
             auto & anchor = _anchors.at(anchorId);
             auto coeffA = _components.at(a)->coefficients(anchor);
             auto coeffB = _components.at(b)->coefficients(anchor);
-            int eid = _eqNum;
+            int eid = _neqs;
             for (int i = 0; i < _components.at(a)->nparams(); i++){
                 _Amat.emplace_back(eid, i + _compStartPositionsInX.at(a), - coeffA.at(i));
             }
@@ -427,54 +427,54 @@ namespace panoramix {
             }
             _Bmat.push_back(0.0);
             _ops.push_back(LowerThan);
-            _eqNum++;
+            _neqs++;
             return eid;
         }
 
         int ProjectiveSolver::makeAEqualToDepthAt(int a, double d, int anchorId){
             auto & anchor = _anchors.at(anchorId);
             auto coeffA = _components.at(a)->coefficients(anchor);
-            int eid = _eqNum;
+            int eid = _neqs;
             for (int i = 0; i < _components.at(a)->nparams(); i++){
                 _Amat.emplace_back(eid, i + _compStartPositionsInX.at(a), coeffA.at(i));
             }
             _Bmat.push_back(1.0 / d);
             _ops.push_back(Equal);
-            _eqNum++;
+            _neqs++;
             return eid;
         }
 
         int ProjectiveSolver::makeACloserThanDepthAt(int a, double d, int anchorId){
             auto & anchor = _anchors.at(anchorId);
             auto coeffA = _components.at(a)->coefficients(anchor);
-            int eid = _eqNum;
+            int eid = _neqs;
             for (int i = 0; i < _components.at(a)->nparams(); i++){
                 _Amat.emplace_back(eid, i + _compStartPositionsInX.at(a), - coeffA.at(i));
             }
             _Bmat.push_back(- 1.0 / d);
             _ops.push_back(LowerThan);
-            _eqNum++;
+            _neqs++;
             return eid;
         }
 
         int ProjectiveSolver::makeAFartherThanDepthAt(int a, double d, int anchorId){
             auto & anchor = _anchors.at(anchorId);
             auto coeffA = _components.at(a)->coefficients(anchor);
-            int eid = _eqNum;
+            int eid = _neqs;
             for (int i = 0; i < _components.at(a)->nparams(); i++){
                 _Amat.emplace_back(eid, i + _compStartPositionsInX.at(a), coeffA.at(i));
             }
             _Bmat.push_back(1.0 / d);
             _ops.push_back(LowerThan);
-            _eqNum++;
+            _neqs++;
             return eid;
         }
 
 
         int ProjectiveSolver::append(ProjectiveComponent::Ptr && p) {
             _components.push_back(std::move(p));
-            _compStartPositionsInX.push_back(_varNum);
-            _varNum += _components.back()->nparams();
+            _compStartPositionsInX.push_back(_nvars);
+            _nvars += _components.back()->nparams();
             return _components.size() - 1;
         }
         int ProjectiveSolver::append(ProjectiveAnchor::Ptr && a) {
@@ -485,7 +485,9 @@ namespace panoramix {
 
 
         void ProjectiveSolver::solve() const {
-            SparseMatd A = MakeSparseMatFromElements(_eqNum, _varNum, _Amat.begin(), _Amat.end());
+            SparseMatd A = MakeSparseMatFromElements(_neqs, _nvars, _Amat.begin(), _Amat.end());
+
+            assert(_Bmat.size() == _neqs && _ops.size() == _neqs);
 
             bool succeed = true;
             misc::MatlabEngine matlab;
@@ -503,7 +505,8 @@ namespace panoramix {
             assert(succeed);
             matlab << "Op = Op';";
 
-            matlab << "neq = size(A, 1);"
+            matlab 
+                << "neq = size(A, 1);"
                 << "nvar = size(A, 2);"
                 << "equalpart = Op(:) == 0;"
                 << "ltpart = Op(:) == 1;"
@@ -520,7 +523,7 @@ namespace panoramix {
             std::vector<double> X;
             matlab.GetVariable("X", X);
             bool hasInfOrNaN = false;
-            for (int i = 0; i < _varNum; i++){
+            for (int i = 0; i < _nvars; i++){
                 assert(!IsInfOrNaN(X[i]));
             }
 

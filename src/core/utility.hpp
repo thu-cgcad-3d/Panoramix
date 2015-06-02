@@ -338,7 +338,7 @@ namespace panoramix {
 
         template <class T, int N>
         inline Box<T, N> BoundingBox(const Sphere<T, N> & s){
-            return Box<T, N>(s.center).expand(s.radius);
+            return Box<T, N>(s.center, s.center).expand(s.radius);
         }
 
         template <class T, int N>
@@ -911,49 +911,6 @@ namespace panoramix {
             return c;
         }
 
-
-
-
-        // camera functions with matrix
-        // make a lookat view matrix
-        template <class T>
-        Mat<T, 4, 4> MakeMat4LookAt(const Vec<T, 3> & eye, const Vec<T, 3> & center,
-            const Vec<T, 3> & up) {
-            Vec<T, 3> zaxis = (center - eye); zaxis /= core::norm(zaxis);
-            Vec<T, 3> xaxis = up.cross(zaxis); xaxis /= core::norm(xaxis);
-            Vec<T, 3> yaxis = zaxis.cross(xaxis);
-            Mat<T, 4, 4> m(
-                -xaxis(0), yaxis(0), -zaxis(0), 0,
-                -xaxis(1), yaxis(1), -zaxis(1), 0,
-                -xaxis(2), yaxis(2), -zaxis(2), 0,
-                xaxis.dot(eye), -yaxis.dot(eye), zaxis.dot(eye), 1);
-            return m.t();
-        }
-
-        // make a perspective projection matrix
-        template <class T>
-        Mat<T, 4, 4> MakeMat4Perspective(const T & fovyRadians, const T & aspect,
-            const T & nearZ, const T & farZ) {
-            T cotan = T(1.0) / std::tan(fovyRadians / 2.0);
-            Mat<T, 4, 4> m(
-                cotan / aspect, 0, 0, 0,
-                0, cotan, 0, 0,
-                0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
-                0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0);
-            return m.t();
-        }
-
-        template <class T>
-        Mat<T, 4, 4> MakeMat4Perspective(const T & fx, const T & fy,
-            const T & cx, const T & cy,
-            const T & nearZ, const T & farZ) {
-            Mat<T, 4, 4> m(
-                fx / cx, 0, 0, 0,
-                0, fy / cy, 0, 0,
-                0, 0, (farZ + nearZ) / (nearZ - farZ), -1,
-                0, 0, (2 * farZ * nearZ) / (nearZ - farZ), 0);
-            return m.t();
-        }
 
 
 

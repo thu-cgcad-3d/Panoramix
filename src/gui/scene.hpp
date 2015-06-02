@@ -404,7 +404,8 @@ namespace panoramix {
             inline SceneBuilder & rotate(const core::Vec3 & axis, double angle){
                 auto & mat = activeObject().modelMatrix();
                 // rotate 
-                double l = axis[0], m = axis[1], n = axis[2];
+                auto a = core::normalize(axis);
+                double l = a[0], m = a[1], n = a[2];
                 double cosv = cos(angle), sinv = sin(angle);
                 core::Mat4f rot(
                     l*l*(1 - cosv) + cosv, m*l*(1 - cosv) - n*sinv, n*l*(1 - cosv) + m*sinv, 0,

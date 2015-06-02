@@ -149,25 +149,70 @@ namespace panoramix {
         void Discretize(TriMesh & mesh, const core::Sphere3 & s, const DiscretizeOptions & o);
 
         template <class T>
-        inline void Discretize(TriMesh & mesh, const core::Sphere<T, 3> & s, const DiscretizeOptions & o){
+        void Discretize(TriMesh & mesh, const core::Sphere<T, 3> & s, const DiscretizeOptions & o){
             Discretize(mesh, core::Sphere3{ vec_cast<double>(s.center), static_cast<double>(s.radius) }, o);
         }
 
         template <class T>
-        inline void Discretize(TriMesh & mesh, const core::Polygon<T, 3> & p, const DiscretizeOptions & o) {
+        void Discretize(TriMesh & mesh, const core::Box<T, 3> & b, const DiscretizeOptions & o) {
+            std::vector<TriMesh::VertHandle> vhandles;
+            vhandles.reserve(8);
+            auto center = b.center();
+            // add vertices
+            for (int i = 0; i < 2; i++) {
+                for (int j = 0; j < 2; j++) {
+                    for (int k = 0; k < 2; k++) {
+                        TriMesh::Vertex v;
+                        auto c = b.corner({ i == 1, j == 1, k == 1 });
+                        v.position = core::Vec4f(c[0], c[1], c[2], 1.0);
+                        v.normal = core::vec_cast<float>(core::normalize(c - center));
+                        v.color = o.color;
+                        vhandles.push_back(mesh.addVertex(v, true, o.entity));
+                    }
+                }
+            }
+            // add faces
+            mesh.addPolygon({ vhandles[0], vhandles[4], vhandles[5], vhandles[1] }, o.entity);
+            mesh.addPolygon({ vhandles[4], vhandles[6], vhandles[7], vhandles[5] }, o.entity);
+            mesh.addPolygon({ vhandles[6], vhandles[2], vhandles[3], vhandles[7] }, o.entity);
+            mesh.addPolygon({ vhandles[2], vhandles[0], vhandles[1], vhandles[3] }, o.entity);
+            mesh.addPolygon({ vhandles[1], vhandles[5], vhandles[7], vhandles[3] }, o.entity);
+            mesh.addPolygon({ vhandles[2], vhandles[6], vhandles[4], vhandles[0] }, o.entity);
+        }
+
+        template <class T>
+        void Discretize(TriMesh & mesh, const core::Polygon<T, 3> & p, const DiscretizeOptions & o) {
             std::vector<TriMesh::VertHandle> vhandles(p.corners.size());
             for (int i = 0; i < p.corners.size(); i++){
                 TriMesh::Vertex v;
                 v.position = core::Vec4f(p.corners[i][0], p.corners[i][1], p.corners[i][2], 1.0);
                 v.normal = core::vec_cast<float>(p.normal);
                 v.color = o.color;
-                v.entityIndex = o.index;
                 vhandles[i] = mesh.addVertex(v, false, o.entity);
             }
             mesh.addPolygon(vhandles, o.entity);
         }
 
         void Discretize(TriMesh & mesh, const SpatialProjectedPolygon & spp, const DiscretizeOptions & o);
+
+
+        template <class T, class E>
+        void Discretize(TriMesh & mesh, const core::TransformedIn3D<T, E> & t, const DiscretizeOptions & o) {
+            int prevVertSize = mesh.iverts.size();
+            Discretize(mesh, t.component, o);
+            int curVertSize = mesh.iverts.size();
+            core::Mat<float, 4, 4> mat4 = t.mat4;
+            core::Mat<float, 3, 3> mat3(
+                t.mat4(0, 0), t.mat4(1, 0), t.mat4(2, 0),
+                t.mat4(0, 1), t.mat4(1, 1), t.mat4(2, 1),
+                t.mat4(0, 2), t.mat4(1, 2), t.mat4(2, 2)
+                );
+            for (int i = prevVertSize; i < curVertSize; i++) {
+                auto & v = mesh.vertex(mesh.iverts[i]);
+                v.position = mat4 * v.position;
+                v.normal = mat3 * v.normal;
+            }
+        }
 
 
         template <class T>

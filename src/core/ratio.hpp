@@ -1,7 +1,9 @@
 #ifndef PANORAMIX_CORE_RATIO_HPP
 #define PANORAMIX_CORE_RATIO_HPP
 
+#include <cstdint>
 #include <type_traits>
+#include <ratio>
  
 namespace panoramix {
     namespace core {

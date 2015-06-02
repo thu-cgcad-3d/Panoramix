@@ -89,41 +89,51 @@ TEST(Scene, Interaction){
     using namespace gui;    
    
     std::list<core::Sphere3> ss = { { core::Point3(1, 1, 1), 2.0 }, { core::Point3(-1, -1, -1), 2.0 } };
-    core::Line3 ll[] = { { core::Point3(-1, 1, 2), core::Point3(1, -1, 0) }, { core::Point3(0, 2, 3), core::Point3(-1, -2, -3) } };
-    core::Point3 pp[] = { core::Point3(-3, 1, 3), core::Point3(10, -2, -4) };
+    std::vector<gui::Colored<core::Line3>> xyz = { 
+        gui::ColorAs(core::Line3{ core::Point3(), core::Point3(4, 0, 0) }, gui::Red), 
+        gui::ColorAs(core::Line3{ core::Point3(), core::Point3(0, 4, 0) }, gui::Green),
+        gui::ColorAs(core::Line3{ core::Point3(), core::Point3(0, 0, 4) }, gui::Blue)
+    };
+    auto origin = gui::ColorAs(core::Point3(), gui::Black);
     
     gui::ResourceStore::set("texture", core::ImageRead(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
+    auto box = core::MakeTransformableIn3D(core::BoundingBoxOfContainer(ss)).rotate(core::Vec3(1, 0, 1), M_PI / 3);
 
     int clickedCount = 0;
-    SceneBuilder()
-        .begin(ss, [&clickedCount](gui::InteractionID iid, core::Sphere3 & s){
-            if (iid == gui::ClickLeftButton)
-                std::cout << "clicked on the spheres, its center is at " << s.center << std::endl;
-            else
-                std::cout << "pressed on the spheres, its center is at " << s.center << std::endl;
-            })
-                .rotate(core::Vec3(0, 0, 1), M_PI_2)
-            .resource("texture")
-            .shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
-        .end()
-        .begin(ll, [&clickedCount](gui::InteractionID iid, core::Line3 & l){
-                if (iid == gui::ClickLeftButton)
-                    std::cout << "clicked on the line (" << l.first << ", " << l.second << ")" << std::endl;
-                else
-                    std::cout << "pressed on the line (" << l.first << ", " << l.second << ")" << std::endl;
-            })
-            .shaderSource(gui::OpenGLShaderSourceDescriptor::XLines)
-            .lineWidth(10)
-        .end()
-        .begin(pp, [&clickedCount](gui::InteractionID iid, core::Point3 & p){
-                if (iid == gui::ClickLeftButton)
-                    std::cout << "clicked on the point (" << p << ")" << std::endl;
-                else
-                    std::cout << "pressed on the point (" << p << ")" << std::endl;
-            })
-            .shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints)
-            .pointSize(20)
-        .end()
-        .show(true, true, gui::RenderOptions().renderMode(gui::RenderModeFlag::Lines | gui::RenderModeFlag::Triangles));
+    SceneBuilder sb;
+    sb.begin(ss, [&clickedCount](gui::InteractionID iid, core::Sphere3 & s) {
+        if (iid == gui::ClickLeftButton)
+            std::cout << "clicked on the spheres, its center is at " << s.center << std::endl;
+        else
+            std::cout << "pressed on the spheres, its center is at " << s.center << std::endl;
+    })
+        .rotate(core::Vec3(0, 0, 1), M_PI_2)
+        .resource("texture")
+        .shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
+        .end();
+
+    sb.begin(xyz)
+        .shaderSource(gui::OpenGLShaderSourceDescriptor::XLines)
+        .lineWidth(10)
+        .end();
+
+    sb.begin(origin).shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints).pointSize(40).end();
+    
+    int n = 5;
+    std::vector<gui::Colored<core::TransformedIn3D<core::Box3>>> boxes;
+    auto ctable = gui::CreateGreyColorTableWithSize(n+1);
+    for (int i = 0; i < n; i++) {
+        boxes.push_back(gui::ColorAs(core::MakeTransformableIn3D(core::BoundingBoxOfContainer(ss))
+            .scale(0.1).translate(core::Vec3(0, 3, 0)).rotate(core::Vec3(1, 0, 0), M_PI / n * i).translate(core::Vec3(0, 0, -1)), 
+            ctable[i]));
+        boxes.push_back(gui::ColorAs(core::MakeTransformableIn3D(core::BoundingBoxOfContainer(ss))
+            .scale(0.1).translate(core::Vec3(0, 5, 0)).rotate(core::Vec3(1, 0, 0), M_PI / n * i).translate(core::Vec3(0, 0, 1)),
+            ctable[i]));
+    }
+    sb.begin(boxes).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
+
+    sb.show(true, true, 
+        gui::RenderOptions().renderMode(gui::RenderModeFlag::Lines | gui::RenderModeFlag::Triangles)
+        .cullBackFace(false).cullFrontFace(false));
     
 }

@@ -125,7 +125,7 @@ namespace panoramix {
 
         // line style
         // keep sync with Qt::PenStyle
-        enum class PenStyle {
+        enum PenStyle {
             NoPen,
             SolidLine,	//1	A plain line.
             DashLine,	//2	Dashes separated by a few pixels.
@@ -136,7 +136,7 @@ namespace panoramix {
         };
 
         // color table
-        enum class ColorTableDescriptor {
+        enum ColorTableDescriptor {
             RGB,
             AllColors,
             AllColorsExcludingWhite,
