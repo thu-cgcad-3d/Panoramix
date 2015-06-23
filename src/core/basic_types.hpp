@@ -16,19 +16,20 @@
 #include <cstdint>
 #include <complex>
 #include <functional>
+#include <random>
 
 
 #include <opencv2/opencv.hpp>
 
 #include "version.hpp"
 #include "macros.hpp"
+#include "meta.hpp"
 #include "serialization.hpp"
 #include "ratio.hpp"
 #include "ring.hpp"
 #include "any.hpp"
 #include "decorate.hpp"
 #include "failable.hpp"
-#include "meta.hpp"
 #include "geometry.hpp"
 #include "image.hpp"
 

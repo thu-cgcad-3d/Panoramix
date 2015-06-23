@@ -110,21 +110,41 @@ namespace panoramix {
 
         // serialization wrapper
         template <class StringT, class ...T>
-        inline void SaveToDisk(StringT && filename, const T & ... data) {
+        inline bool SaveToDisk(StringT && filename, const T & ... data) {
             std::ofstream out(filename, std::ios::binary);
-            BinaryOutputArchive archive(out);
-            archive(data...);
-            std::cout << "file \"" << filename << "\" saved" << std::endl;
-            out.close();
+            if (!out.is_open()) {
+                std::cout << "file \"" << filename << "\" cannot be saved!" << std::endl;
+                return false;
+            }
+            try {
+                BinaryOutputArchive archive(out);
+                archive(data...);
+                std::cout << "file \"" << filename << "\" saved" << std::endl;
+                out.close();
+            } catch (std::exception & e) {
+                std::cout << e.what() << std::endl;
+                return false;
+            }
+            return true;
         }
 
         template <class StringT, class ...T>
-        inline void LoadFromDisk(StringT && filename, T & ... data) {
+        inline bool LoadFromDisk(StringT && filename, T & ... data) {
             std::ifstream in(filename, std::ios::binary);
-            BinaryInputArchive archive(in);
-            archive(data...);
-            std::cout << "file \"" << filename << "\" loaded" << std::endl;
-            in.close();
+            if (!in.is_open()) {
+                std::cout << "file \"" << filename << "\" cannot be loaded!" << std::endl;
+                return false;
+            }
+            try {
+                BinaryInputArchive archive(in);
+                archive(data...);
+                std::cout << "file \"" << filename << "\" loaded" << std::endl;
+                in.close();
+            } catch (std::exception & e) {
+                std::cout << e.what() << std::endl;
+                return false;
+            }
+            return true;
         }
 
         using TimeStamp = uint64_t;

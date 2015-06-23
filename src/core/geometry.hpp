@@ -7,6 +7,7 @@
 
 #include <opencv2/opencv.hpp>
 
+#include "meta.hpp"
 #include "ratio.hpp"
 
 namespace panoramix {
@@ -42,8 +43,9 @@ namespace panoramix {
         using Vec7 = Vec<double, 7>;
         using Vec7f = Vec<float, 7>;
 
-        template <class T> struct IsVecOrPoint : std::false_type {};
-        template <class T, int N> struct IsVecOrPoint<Point<T, N>> : std::true_type{};
+        template <class T> struct IsVecOrPoint : no {};
+        template <class T, int N> struct IsVecOrPoint<Point<T, N>> : yes{};
+        template <class T, int N> struct IsNotContainerByHand<Point<T, N>> : yes{};
 
         // matrix
         template <class T, int M, int N> using Mat = cv::Matx<T, M, N>;
@@ -51,6 +53,8 @@ namespace panoramix {
         using Mat4 = Mat<double, 4, 4>;
         using Mat3f = Mat<float, 3, 3>;
         using Mat4f = Mat<float, 4, 4>;
+
+        template <class T, int M, int N> struct IsNotContainerByHand<Mat<T, M, N>> : yes{};
 
         using cv::norm;
         template <class T>
@@ -62,44 +66,56 @@ namespace panoramix {
             return _origin;
         }
 
-        namespace {
-            template <class To, class From, int N>
-            inline Vec<To, N> VecCastPrivate(const Vec<From, N> & v, std::false_type) {
-                Vec<To, N> out;
-                for (int i = 0; i < N; i++) {
-                    out[i] = static_cast<To>(v[i]);
-                }
-                return out;
-            }
-            template <class To, int N>
-            inline const Vec<To, N> & VecCastPrivate(const Vec<To, N> & v, std::true_type) {
-                return v;
-            }
+        template <int N = 3, class T = double>
+        inline const Vec<T, N> & X() {
+            static const Vec<T, N> _x(1);
+            return _x;
+        }
+
+        template <int N = 3, class T = double>
+        inline const Vec<T, N> & Y() {
+            static const Vec<T, N> _y(0, 1);
+            return _y;
+        }
+
+        template <int N = 3, class T = double>
+        inline const Vec<T, N> & Z() {
+            static const Vec<T, N> _z(0, 0, 1);
+            return _z;
         }
 
         template <class To, class From, int N>
-        inline Vec<To, N> vec_cast(const Vec<From, N> & v) {
-            return VecCastPrivate<To>(v, std::integral_constant<bool, std::is_same<To, From>::value>());
+        inline Vec<To, N> ecast(const Vec<From, N> & v) {
+            return v;
+        }
+
+        template <class To, class From, int N>
+        inline std::vector<Vec<To, N>> ecast(const std::vector<Vec<From, N>> & v) {
+            std::vector<Vec<To, N>> result(v.size());
+            for (int i = 0; i < v.size(); i++) {
+                result[i] = v[i];
+            }
+            return result;
         }
 
         template <class T, int M, int N>
-        inline Vec<T, M + N> Concat(const Vec<T, M> & a, const Vec<T, N> & b) {
+        inline Vec<T, M + N> cat(const Vec<T, M> & a, const Vec<T, N> & b) {
             Vec<T, M + N> ab;
             std::copy(a.val, a.val + M, ab.val);
             std::copy(b.val, b.val + N, ab.val + M);
             return ab;
         }
 
-        template <class T, int M>
-        inline Vec<T, M + 1> Concat(const Vec<T, M> & a, const T & b) {
+        template <class T, int M, class K>
+        inline Vec<T, M + 1> cat(const Vec<T, M> & a, const K & b) {
             Vec<T, M + 1> ab;
             std::copy(a.val, a.val + M, ab.val);
             ab[M] = b;
             return ab;
         }
 
-        template <class T, int M>
-        inline Vec<T, M + 1> Concat(const T & a, const Vec<T, M> & b) {
+        template <class T, int M, class K>
+        inline Vec<T, M + 1> cat(const K & a, const Vec<T, M> & b) {
             Vec<T, M + 1> ab;
             ab.val[0] = a;
             std::copy(b.val, b.val + M, ab.val + 1);
@@ -188,6 +204,16 @@ namespace panoramix {
                 0, sy, 0, 0,
                 0, 0, sz, 0,
                 0, 0, 0, 1);
+        }
+
+        template <class T>
+        Mat<T, 4, 4> MakeMat4LocalToWorld(const Vec<T, 3> & localx, const Vec<T, 3> & localy, const Vec<T, 3> & localz, 
+            const Point<T, 3> & localo) {
+            return Mat<T, 4, 4>(
+                localx[0], localy[0], localz[0], localo[0],
+                localx[1], localy[1], localz[1], localo[1],
+                localx[2], localy[2], localz[2], localo[2],
+                0, 0, 0, 1).t();
         }
 
 
@@ -349,6 +375,7 @@ namespace panoramix {
         // line
         template <class T, int N>
         struct Line {
+            static const int Dimension = N;
             inline Line() {}
             inline Line(const Point<T, N> & f, const Point<T, N> & s)
                 : first(f), second(s) {}
@@ -399,6 +426,12 @@ namespace panoramix {
             return Line<T, N>(normalize(line.first), normalize(line.second));
         }
 
+        template <class T>
+        struct IsLine : std::false_type {};
+
+        template <class T, int N>
+        struct IsLine<Line<T, N>> : std::true_type{};
+
 
 
         // position on line/infline
@@ -434,10 +467,20 @@ namespace panoramix {
             std::vector<Point<T, N>> points;
             bool closed;
 
+            const Point<T, N> & at(size_t i) const { return points.at(i % points.size()); }
+            const Point<T, N> & prev(size_t i) const { return points.at((i - 1 + points.size()) % points.size()); }
+            const Point<T, N> & next(size_t i) const { return points.at((i + 1) % points.size()); }
+
+            Line<T, N> edge(size_t i) const { return Line<T, N>(at(i), next(i)); }
+            
             const Point<T, N> & operator[](size_t i) const { return points[i]; }
             Point<T, N> & operator[](size_t i) { return points[i]; }
+            
             size_t size() const { return points.size(); }
             bool empty() const { return points.empty(); }
+
+            void append(const Point<T, N> & p) { points.push_back(p); }
+            void insert(size_t i, const Point<T, N> & p) { points.insert(points.begin() + (i % points.size()), p); }
 
             T length() const {
                 if (points.empty())
@@ -451,6 +494,36 @@ namespace panoramix {
                 }
                 return len;
             }
+
+            template <class K>
+            operator Chain<K, N>() const {
+                Chain<K, N> c;
+                c.points.resize(points.size());
+                for (int i = 0; i < points.size(); i++) {
+                    c.points[i] = points[i];
+                }
+                c.closed = closed;
+                return c;
+            }
+
+            template <class FunT>
+            void fixedStepSample(double stepLen, FunT && fun) const {
+                if (empty()) {
+                    return;
+                }
+                fun(points.front());
+                auto last = points.front();
+                for (int i = 1; i < points.size(); i++) {
+                    double dist = Distance(last, points[i]);
+                    auto dir = normalize(points[i] - last);
+                    while (dist >= stepLen) {
+                        auto p = last + dir * stepLen;
+                        fun(p);
+                        dist -= stepLen;
+                        last = p;
+                    }
+                }
+            }
         };
 
         template <class T, int N>
@@ -461,27 +534,10 @@ namespace panoramix {
         inline void serialize(Archive & ar, Chain<T, N> & l) {
             ar(l.points, l.closed);
         }
+        using Chain2i = Chain<int, 2>;
         using Chain2 = Chain<double, 2>;
         using Chain3 = Chain<double, 3>;
 
-
-
-        namespace {
-            template <class T, int N>
-            Vec<T, N> MakeMin(const Vec<T, N>& v1, const Vec<T, N>& v2) {
-                Vec<T, N> v;
-                for (int i = 0; i < N; i++)
-                    v[i] = v1[i] < v2[i] ? v1[i] : v2[i];
-                return v;
-            }
-            template <class T, int N>
-            Vec<T, N> MakeMax(const Vec<T, N>& v1, const Vec<T, N>& v2) {
-                Vec<T, N> v;
-                for (int i = 0; i < N; i++)
-                    v[i] = v1[i] < v2[i] ? v2[i] : v1[i];
-                return v;
-            }
-        }
 
 
         // sphere
@@ -498,10 +554,35 @@ namespace panoramix {
         inline void serialize(Archive & ar, Sphere<T, N> & s) {
             ar(s.center, s.radius);
         }
+        
+        using Circle = Sphere<double, 2>;
         using Sphere2 = Sphere<double, 2>;
         using Sphere3 = Sphere<double, 3>;
+
         template <int N = 3, class T = double>
-        inline Sphere<T, N> UnitSphere() { return Sphere<T, N>{ Point<T, N>(), static_cast<T>(1.0) }; }
+        const Sphere<T, N> & UnitSphere() { 
+            static const Sphere<T, N> _us = { Point<T, N>(), static_cast<T>(1.0) }; 
+            return _us;
+        }
+
+
+        namespace {
+            template <class T, int N>
+            Vec<T, N> AllMinOf(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+                Vec<T, N> v;
+                for (int i = 0; i < N; i++)
+                    v[i] = v1[i] < v2[i] ? v1[i] : v2[i];
+                return v;
+            }
+            template <class T, int N>
+            Vec<T, N> AllMaxOf(const Vec<T, N>& v1, const Vec<T, N>& v2) {
+                Vec<T, N> v;
+                for (int i = 0; i < N; i++)
+                    v[i] = v1[i] < v2[i] ? v2[i] : v1[i];
+                return v;
+            }
+        }
+
 
 
         // box
@@ -515,7 +596,7 @@ namespace panoramix {
 
             Box() : isNull(true) {}
             Box(const Point<T, N> & c1, const Point<T, N> & c2)
-                : minCorner(MakeMin(c1, c2)), maxCorner(MakeMax(c1, c2)), isNull(false) {}
+                : minCorner(AllMinOf(c1, c2)), maxCorner(AllMaxOf(c1, c2)), isNull(false) {}
 
             Point<T, N> corner(std::initializer_list<bool> isMaxes) const {
                 Point<T, N> c;
@@ -567,8 +648,8 @@ namespace panoramix {
                 }
                 if (b.isNull)
                     return *this;
-                minCorner = MakeMin(minCorner, b.minCorner);
-                maxCorner = MakeMax(maxCorner, b.maxCorner);
+                minCorner = AllMinOf(minCorner, b.minCorner);
+                maxCorner = AllMaxOf(maxCorner, b.maxCorner);
                 return *this;
             }        
         };
@@ -588,6 +669,12 @@ namespace panoramix {
         using Box2 = Box<double, 2>;
         using Box3 = Box<double, 3>;
 
+        template <int N = 3, class T = double>
+        const Box<T, N> & UnitBox() {
+            static const Box<T, N> _ub(Point<T, N>(), Point<T, N>::ones());
+            return _ub;
+        }
+
         template <class T>
         struct IsBox : std::false_type {};
 
@@ -602,6 +689,7 @@ namespace panoramix {
         struct Polygon {
             std::vector<Point<T, N>> corners;
             Vec<T, N> normal;
+            
             Polygon() {}
             Polygon(const std::vector<Point<T, N>> & cs, const Vec<T, N> & n) : corners(cs), normal(n) {}
             Polygon(std::vector<Point<T, N>> && cs, const Vec<T, N> & n) : corners(std::move(cs)), normal(n) {}
@@ -609,6 +697,17 @@ namespace panoramix {
             Polygon(Chain<T, N> && c) : corners(std::move(c.points)), normal(normalize((corners.at(0) - corners.at(1)).cross(corners.at(1) - corners.at(2)))) {}
             inline Plane<T, N> plane() const { return Plane<T, N>(corners.front(), normal); }
             inline Chain<T, N> boundary() const { return Chain<T, N>{corners, true}; }
+
+            template <class K, std::enable_if_t<!std::is_same<K, T>::value>>
+            operator Polygon<K, N>() const {
+                std::vector<Point<K, N>> ps(corners.size());
+                for (int i = 0; i < corners.size(); i++)
+                    ps[i] = corners[i];
+                return Polygon<K, N>(std::move(ps), normal);
+            }
+
+            template <class = std::enable_if_t<std::is_floating_point<T>::value && N == 3>>
+            inline T area() const { return Area(*this); }
         };
 
         template <class Archive, class T, int N>
@@ -616,6 +715,8 @@ namespace panoramix {
             ar(p.corners, p.normal);
         }
 
+        using Polygon2 = Polygon<double, 2>;
+        using Polygon2f = Polygon<float, 2>;
         using Polygon3 = Polygon<double, 3>;
         using Polygon3f = Polygon<float, 3>;
 
@@ -623,8 +724,13 @@ namespace panoramix {
         inline Polygon<T, 3> MakeTriangle(const Point<T, 3> & p1, const Point<T, 3> & p2, const Point<T, 3> & p3) {
             return Polygon<T, 3>{{ p1, p2, p3 }, (p2 - p1).cross(p3 - p1)};
         }
-        double Area(const Polygon3 & polygon);
+        
         float Area(const Polygon3f & polygon);
+        double Area(const Polygon3 & polygon);
+        //long double Area(const Polygon<long double, 3> & polygon);
+        
+        double PointTest(const Polygon2f & poly, const Point2f & p);
+        bool Contains(const Polygon2f & poly, const Point2f & p);
 
 
 
@@ -642,6 +748,7 @@ namespace panoramix {
             ar(p.layers, p.normal);
         }
         using LayeredShape3 = LayeredShape<double, 3>;
+
 
 
 
@@ -675,11 +782,42 @@ namespace panoramix {
                 mat4 = Mat<E, 4, 4>::eye();
                 return *this;
             }
+
+            Point<E, 3> toWorld(const Point<E, 3> & p) const {
+                Vec<E, 4> c = mat4 * cat(p, 1.0);
+                return Point<E, 3>(c[0] / c[3], c[1] / c[3], c[2] / c[3]);
+            }
+            Point<E, 3> toLocal(const Point<E, 3> & p) const {
+                Vec<E, 4> c = mat4 * cat(p, 1.0);
+                Vec<E, 4> localc;
+                bool solvable = cv::solve(mat4, c, localc);
+                assert(solvable);
+                return Point<E, 3>(localc[0] / localc[3], localc[1] / localc[3], localc[2] / localc[3]);
+            }
+
+            template <class = std::enable_if_t<std::is_same<T, Line<E, 3>>::value>>
+            Point<E, 3> first() const {
+                return toWorld(component.first);
+            }
+            template <class = std::enable_if_t<std::is_same<T, Line<E, 3>>::value>>
+            Point<E, 3> second() const {
+                return toWorld(component.second);
+            }
+            template <class = std::enable_if_t<std::is_same<T, Box<E, 3>>::value>>
+            Point<E, 3> corner(std::initializer_list<bool> isMaxes) const {
+                return toWorld(component.corner(isMaxes));
+            }
         };
 
         template <class E = double, class T>
         TransformedIn3D<std::decay_t<T>, E> MakeTransformableIn3D(T && c) {
             return TransformedIn3D<std::decay_t<T>, E>(std::forward<T>(c));
+        }
+
+        template <class E = double, class T>
+        TransformedIn3D<std::decay_t<T>, E> AsInLocalCoordinates(T && c, 
+            const Vec<E, 3> & x, const Vec<E, 3> & y, const Vec<E, 3> & z, const Point<E, 3> & o) {
+            return TransformedIn3D<std::decay_t<T>, E>(std::forward<T>(c), MakeMat4LocalToWorld(x, y, z, o));
         }
 
         template <class T, class E>
@@ -692,6 +830,29 @@ namespace panoramix {
         }
 
     }
+}
+
+
+namespace std {
+
+    template <class T, int N, int M>
+    const T * begin(const panoramix::core::Mat<T, N, M> & v) { return v.val; }
+
+    template <class T, int N, int M>
+    const T * end(const panoramix::core::Mat<T, N, M> & v) { return v.val + N * M; }
+
+    template <class T, int N, int M>
+    const T * cbegin(const panoramix::core::Mat<T, N, M> & v) { return v.val; }
+
+    template <class T, int N, int M>
+    const T * cend(const panoramix::core::Mat<T, N, M> & v) { return v.val + N * M; }
+
+    template <class T, int N, int M>
+    T * begin(panoramix::core::Mat<T, N, M> & v) { return v.val; }
+
+    template <class T, int N, int M>
+    T * end(panoramix::core::Mat<T, N, M> & v) { return v.val + N * M; }
+
 }
 
 

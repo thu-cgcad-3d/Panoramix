@@ -1,4 +1,4 @@
-#include "qt_glue.hpp"
+#include "qttools.hpp"
 
 #include <QtDebug>
 

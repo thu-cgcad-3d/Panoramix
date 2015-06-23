@@ -40,10 +40,10 @@ namespace panoramix {
 
             // from vec4
             template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
-            inline Color(const core::Vec<T, 4> & v) : _rgba(core::vec_cast<int>(v)) {}
+            inline Color(const core::Vec<T, 4> & v) : _rgba(v) {}
 
             template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>, class = void>
-            inline Color(const core::Vec<T, 4> & v) : _rgba(core::vec_cast<int>(v * 255)) {}
+            inline Color(const core::Vec<T, 4> & v) : _rgba(v * 255) {}
 
             // from vec3
             template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
@@ -79,10 +79,10 @@ namespace panoramix {
             
             // to vec4            
             template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
-            inline operator core::Vec<T, 4>() const { return core::vec_cast<T>(_rgba); }
+            inline operator core::Vec<T, 4>() const { return _rgba; }
 
             template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>, class = void>
-            inline operator core::Vec<T, 4>() const { return core::vec_cast<T>(_rgba) / 255.0; }
+            inline operator core::Vec<T, 4>() const { return _rgba / 255.0; }
 
             // to vec3
             template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
@@ -134,6 +134,15 @@ namespace panoramix {
             DashDotDotLine,	//5	One dash, two dots, one dash, two dots.
             CustomDashLine
         };
+
+        struct PenConfig {
+            std::string name;
+            std::string description;
+            double thickness;
+            Color color;
+            PenStyle style;
+        };
+
 
         // color table
         enum ColorTableDescriptor {

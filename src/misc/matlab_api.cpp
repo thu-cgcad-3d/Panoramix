@@ -368,6 +368,11 @@ namespace panoramix {
             return true;
         }
 
+        MXA MXA::clone(bool dos) const {
+            if (_mxa)
+                return MXA(mxDuplicateArray(_mxa), dos);
+            return MXA();
+        }
 
         mxClassID MXA::classID() const {
             return mxGetClassID(_mxa);
@@ -480,6 +485,7 @@ namespace panoramix {
         size_t MXA::calcSingleSubscript(size_t dim, size_t * subs) const {
             return mxCalcSingleSubscript(_mxa, dim, subs);
         }
+
 
 
 

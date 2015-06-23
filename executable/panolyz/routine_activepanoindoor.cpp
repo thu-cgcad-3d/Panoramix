@@ -54,10 +54,10 @@ namespace panolyz {
             if (REFRESH){
                 view = CreatePanoramicView(image);
 
-                gui::PaintWithPanorama(view, penConfigs,
-                    [](const std::vector<Point2> & polyline, int penId){
-                    return false;
-                });
+                //gui::PaintWithPanorama(view, penConfigs,
+                //    [](const std::vector<Point2> & polyline, int penId){
+                //    return false;
+                //});
 
                 // collect lines in each view
                 cams = CreateCubicFacedCameras(view.camera, image.rows, image.rows, image.rows * 0.4);

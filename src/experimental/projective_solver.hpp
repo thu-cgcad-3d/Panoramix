@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_EXPERIMENTAL_SOLVE_CONNECTION_HPP
-#define PANORAMIX_EXPERIMENTAL_SOLVE_CONNECTION_HPP
+#ifndef PANORAMIX_EXPERIMENTAL_PROJECTIVE_SOLVER_HPP
+#define PANORAMIX_EXPERIMENTAL_PROJECTIVE_SOLVER_HPP
 
 #include "../core/basic_types.hpp"
 #include "../core/utility.hpp"
@@ -63,7 +63,7 @@ namespace panoramix {
             int makeACloserThanDepthAt(int a, double d, int anchorId);
             int makeAFartherThanDepthAt(int a, double d, int anchorId);
 
-            void solve() const;
+            bool solve(double * nanOrInfRatio = nullptr) const;
 
         private:
             int append(ProjectiveComponent::Ptr && p);
@@ -80,6 +80,10 @@ namespace panoramix {
             int _nvars;
             int _neqs;
         };
+
+
+
+
 
     }
 }

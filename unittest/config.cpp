@@ -29,7 +29,7 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = "BasicType.VecCast";
    //testing::GTEST_FLAG(filter) = "MiscTest.Failable";  
    //testing::GTEST_FLAG(filter) = "Feature.SegmentationExtractor";
-   testing::GTEST_FLAG(filter) = "Feature.VanishingPointsDetector";
+   //testing::GTEST_FLAG(filter) = "Feature.VanishingPointsDetector";
    //testing::GTEST_FLAG(filter) = "Feature.IndoorGeometricContextMatlab";
    //testing::GTEST_FLAG(filter) = "Engine.RebuildOnOnePanorama";
    //testing::GTEST_FLAG(filter) = "Matlab.SparseMatrix";
@@ -49,6 +49,7 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = "Scene.Interaction";
    //testing::GTEST_FLAG(filter) = "PPattern.*";
    //testing::GTEST_FLAG(filter) = "BasicType.*";
-   
+   testing::GTEST_FLAG(filter) = "Feature.OcclusionDetection";
+
    return RUN_ALL_TESTS();
 }

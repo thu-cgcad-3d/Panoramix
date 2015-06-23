@@ -38,14 +38,14 @@ namespace panoramix {
 
         TriMesh::VertHandle TriMesh::addVertex(const core::Point3 & p, const DiscretizeOptions & o, bool asPoint){
             TriMesh::Vertex v;
-            v.position = Concat(p, 1.0);
+            v.position = cat(p, 1.0);
             v.color = o.color;
             return addVertex(v, asPoint, o.entity);
         }
 
         TriMesh::VertHandle TriMesh::addVertex(const core::Point3 & p, const core::Vec3 & normal, const DiscretizeOptions & o, bool asPoint){
             TriMesh::Vertex v;
-            v.position = Concat(p, 1.0);
+            v.position = cat(p, 1.0);
             v.normal = normal;
             v.color = o.color;
             return addVertex(v, asPoint, o.entity);
@@ -321,7 +321,7 @@ namespace panoramix {
             std::vector<TriMesh::VertHandle> vhandles(cs.size());
             for (int i = 0; i < cs.size(); i++){
                 TriMesh::Vertex v;
-                v.position = Concat(cs[i], 1.0);
+                v.position = cat(cs[i], 1.0);
                 v.normal = spp.plane.normal;
                 v.color = o.color;
                 vhandles[i] = mesh.addVertex(v, false, o.entity);

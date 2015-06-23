@@ -16,6 +16,7 @@ namespace panolyz {
     DECL_ALGO(Prepare);
     DECL_ALGO(PanoContext);
     DECL_ALGO(ActivePanoramaIndoor);
+    DECL_ALGO(RLOpt);
 
     inline std::string Tagify(const std::string & path){
         auto tag = path;
@@ -28,13 +29,13 @@ namespace panolyz {
 
 
     template <class StringT, class ... Ts>
-    inline void Save(const std::string & path, StringT && s, Ts && ... ts){
-        panoramix::core::SaveToDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
+    inline bool Save(const std::string & path, StringT && s, Ts && ... ts){
+        return panoramix::core::SaveToDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
     }
 
     template <class StringT, class ... Ts>
-    inline void Load(const std::string & path, StringT && s, Ts & ... ts){
-        panoramix::core::LoadFromDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
+    inline bool Load(const std::string & path, StringT && s, Ts & ... ts){
+        return panoramix::core::LoadFromDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
     }
 
 

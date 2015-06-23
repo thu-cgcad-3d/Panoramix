@@ -7,13 +7,25 @@
 namespace panoramix {
     namespace core {
 
+        template <class T>
+        struct IsDecorated : no {};
+
         // decorated without functional
         template <class T, class D>
         struct Decorated {
+            using ComponentType = T;
+            using DecorationType = D;
             D decoration;
             T component;
-            inline operator T() const { return component; }
+            operator T() const { return component; }
+            template <class K> 
+            Decorated<std::decay_t<K>, D> converted(K && k) const { 
+                return{ decoration, std::forward<K>(k) }; 
+            }
         };
+        template <class T, class D>
+        struct IsDecorated<Decorated<T, D>> : yes{};
+
         template <class T, class D>
         inline Decorated<std::decay_t<T>, std::decay_t<D>> DecorateAs(T && comp, D && d){
             return Decorated<std::decay_t<T>, std::decay_t<D>>{std::forward<D>(d), std::forward<T>(comp)};
@@ -34,9 +46,18 @@ namespace panoramix {
         // something classified
         template <class T, class ClassT = int>
         struct Classified {
+            using ComponentType = T;
+            using DecorationType = ClassT;            
             ClassT claz;
             T component;
+            template <class K>
+            Classified<std::decay_t<K>, DecorationType> converted(K && k) const {
+                return{ claz, std::forward<K>(k) };
+            }
         };
+        template <class T, class ClassT>
+        struct IsDecorated<Classified<T, ClassT>> : yes{};
+
         template <class T, class ClassT>
         inline Classified<std::decay_t<T>, std::decay_t<ClassT>> ClassifyAs(T && comp, ClassT && claz){
             return Classified<std::decay_t<T>, std::decay_t<ClassT>>{std::forward<ClassT>(claz), std::forward<T>(comp)};
@@ -68,9 +89,18 @@ namespace panoramix {
         // something noted
         template <class T>
         struct Noted {
+            using ComponentType = T;
+            using DecorationType = std::string;
             std::string note;
             T component;
+            template <class K>
+            Noted<std::decay_t<K>> converted(K && k) const {
+                return{ note, std::forward<K>(k) };
+            }
         };
+        template <class T>
+        struct IsDecorated<Noted<T>> : yes{};
+
         template <class T, class StringT>
         inline Noted<std::decay_t<T>> NoteAs(T && comp, StringT && note){
             return Noted<std::decay_t<T>>{std::forward<StringT>(note), std::forward<T>(comp)};
@@ -88,10 +118,20 @@ namespace panoramix {
         // something scored for sorting
         template <class T, class S = double>
         struct Scored {
+            using ComponentType = T;
+            using DecorationType = S;
+            template <class K> using Converted = Scored<K, S>;
             S score;
             T component;
             const S & weight() const { return score; }
+            template <class K>
+            Scored<std::decay_t<K>, S> converted(K && k) const {
+                return Scored<std::decay_t<K>, S>{ score, std::forward<K>(k) };
+            }
         };
+        template <class T, class S>
+        struct IsDecorated<Scored<T, S>> : yes{};
+
         template <class T, class S = double>
         using Weighted = Scored<T, S>;
 
@@ -136,20 +176,31 @@ namespace panoramix {
         // bounded
         template <class T, class B = double>
         struct Bounded {
-            B lowerBound, upperBound;
+            using ComponentType = T;
+            using DecorationType = std::pair<B, B>;
+            template <class K> using Converted = Bounded<K, B>;
+            std::pair<B, B> bound;
             T component;
+            const B & lowerBound() const { return bound.first; }
+            const B & upperBound() const { return bound.second; }
+            template <class K>
+            Bounded<std::decay_t<K>, B> converted(K && k) const {
+                return{ bound, std::forward<K>(k) };
+            }
         };
+        template <class T, class B>
+        struct IsDecorated<Bounded<T, B>> : yes{};
 
         template <class T, class B1, class B2>
         inline Bounded<std::decay_t<T>, std::decay_t<B1>> BoundAs(T && comp, B1 && lb, B2 && ub){
             return Bounded<std::decay_t<T>, std::decay_t<B1>>{
-                std::forward<B1>(lb), std::forward<B2>(ub), std::forward<T>(comp)
+                std::make_pair(std::forward<B1>(lb), std::forward<B2>(ub)), std::forward<T>(comp)
             };
         }
 
         template <class Archive, class T, class B>
         inline void serialize(Archive & ar, Bounded<T, B> & c) {
-            ar(c.lowerBound, c.upperBound, c.component);
+            ar(c.bound, c.component);
         }
 
 
@@ -157,9 +208,19 @@ namespace panoramix {
         // something enabled
         template <class T>
         struct Enabled {
+            using ComponentType = T;
+            using DecorationType = bool;
+            template <class K> using Converted = Enabled<K>;
             bool enabled;
             T component;
+            template <class K>
+            Enabled<std::decay_t<K>> converted(K && k) const {
+                return{ enabled, std::forward<K>(k) };
+            }
         };
+        template <class T>
+        struct IsDecorated<Enabled<T>> : yes{};
+
         template <class T>
         inline Enabled<std::decay_t<T>> EnableAs(T && comp, bool e = true){
             return Enabled<std::decay_t<T>>{e, std::forward<T>(comp)};

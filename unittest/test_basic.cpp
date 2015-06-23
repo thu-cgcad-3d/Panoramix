@@ -15,18 +15,15 @@ TEST(ConfigTest, Version) {
     EXPECT_EQ(PANORAMIX_VERSION_MINOR, core::GetVersion().minor);
 }
 
-TEST(BasicType, Vec) {
-    {
+TEST(BasicType, Vec) {{
         core::Vec3 v1(0, 0, 0), v2(1, 1, 1);
         core::Vec3 v12 = v1 + v2 * 3.0;
         ASSERT_TRUE(v12 == core::Vec3(3, 3, 3));
-    }
-    {
-        core::Vec4 v1(0, 0, 0, 0), v2(1, 1, 1, 1);
-        core::Vec4 v12 = v1 + v2 * 3.0;
-        ASSERT_TRUE(v12 == core::Vec4(3, 3, 3, 3));
-    }
-}
+    } {
+    core::Vec4 v1(0, 0, 0, 0), v2(1, 1, 1, 1);
+    core::Vec4 v12 = v1 + v2 * 3.0;
+    ASSERT_TRUE(v12 == core::Vec4(3, 3, 3, 3));
+}}
 
 TEST(BasicType, HPoint) {
     for (int i = 0; i < 1000; i++){
@@ -60,15 +57,15 @@ TEST(BasicType, Line) {
 TEST(BasicType, VecCast) {
 
     core::Imaged im(100, 100, 0.0);
-    auto imi = core::vec_cast<int>(im);
+    auto imi = core::ecast<int>(im);
 
     for (auto & i : imi){
         ASSERT_EQ(i, 0);
     }
 
     core::Image3d im3(100, 100, core::Vec3(1, 2, 3));
-    auto imi3 = core::vec_cast<int>(im3);
-    auto imd3 = core::vec_cast<double>(im3);
+    auto imi3 = core::ecast<int>(im3);
+    auto imd3 = core::ecast<double>(im3);
 
     for (auto & i : imi3){
         ASSERT_TRUE(i == core::Vec3i(1, 2, 3));

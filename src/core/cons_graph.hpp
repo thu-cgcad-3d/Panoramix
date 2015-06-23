@@ -188,6 +188,16 @@ namespace panoramix {
             using ConstraintDataTupleType = typename ConstraintDataTupleFromConstraintConfigTuple<ConstraintConfigTupleT>::type;
             static const int ConstraintDataTypeNum = std::tuple_size<ConstraintDataTupleType>::value;
 
+            ConstraintGraph() {}
+            ConstraintGraph(const ConstraintGraph &) = default;
+            ConstraintGraph(ConstraintGraph && cg) 
+                : _components(std::move(cg._components)), _constraints(std::move(cg._constraints)) {}
+            ConstraintGraph & operator = (ConstraintGraph && cg) {
+                _components = std::move(cg._components);
+                _constraints = std::move(cg._constraints);
+                return *this;
+            }
+
         public:
 
             template <class DataT>

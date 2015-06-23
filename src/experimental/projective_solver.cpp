@@ -5,7 +5,7 @@
 #include "../core/algorithms.hpp"
 #include "../core/containers.hpp"
 
-#include "solve_connection.hpp"
+#include "projective_solver.hpp"
 
 namespace panoramix {
     namespace experimental {
@@ -484,7 +484,7 @@ namespace panoramix {
 
 
 
-        void ProjectiveSolver::solve() const {
+        bool ProjectiveSolver::solve(double * nanOrInfRatio) const {
             SparseMatd A = MakeSparseMatFromElements(_neqs, _nvars, _Amat.begin(), _Amat.end());
 
             assert(_Bmat.size() == _neqs && _ops.size() == _neqs);
@@ -518,18 +518,24 @@ namespace panoramix {
                 << "    A(ltpart, :) * X <= B(ltpart, :);"
                 << "cvx_end"
 
-                << "X = X(:)';";
+                << "X = X(:)' / norm(X);";
 
             std::vector<double> X;
             matlab.GetVariable("X", X);
-            bool hasInfOrNaN = false;
-            for (int i = 0; i < _nvars; i++){
-                assert(!IsInfOrNaN(X[i]));
+
+            if (nanOrInfRatio) {
+                *nanOrInfRatio = 
+                    std::count_if(X.begin(), X.end(), [](double x) {return IsInfOrNaN(x); }) / double(X.size());
             }
+            if (std::any_of(X.begin(), X.end(), [](double x) {return IsInfOrNaN(x); }) ||
+                std::all_of(X.begin(), X.end(), [](double x) {return x == 0.0; }))
+                return false;
 
             for (int i = 0; i < _components.size(); i++){
                 _components[i]->updateUsingParams(X.data() + _compStartPositionsInX[i]);
             }
+
+            return true;
         }
 
 

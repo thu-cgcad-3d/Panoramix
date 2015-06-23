@@ -107,8 +107,16 @@ namespace panoramix {
             }
 
             template <class TT>
-            inline Canvas & add(const Ray<T, 2> & line){
-                return add(Ray2(core::vec_cast<double>(line.anchor), core::vec_cast<double>(line.direction)));
+            inline Canvas & add(const Ray<TT, 2> & line){
+                return add(Ray2(core::ecast<double>(line.anchor), core::ecast<double>(line.direction)));
+            }
+
+            template <class TT>
+            inline Canvas & add(const Chain<TT, 2> & c) {
+                for (int i = 0; i < (c.closed ? c.size() : (c.size() - 1)); i++) {
+                    add(c.edge(i));
+                }
+                return *this;
             }
 
             // keypoints
@@ -141,6 +149,15 @@ namespace panoramix {
             template <class T>
             inline Canvas & add(const Enabled<T> & thing){
                 if (thing.enabled){
+                    return add(thing.component);
+                }
+                return *this;
+            }
+
+            // enabled thing
+            template <class T, class S>
+            inline Canvas & add(const Scored<T, S> & thing) {
+                if (thing.score > 0) {
                     return add(thing.component);
                 }
                 return *this;

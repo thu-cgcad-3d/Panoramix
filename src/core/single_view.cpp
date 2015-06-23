@@ -23,6 +23,7 @@ namespace panoramix {
             }
         }
 
+
         template <class CameraT>
         std::vector<int> ComputeSpatialRegionPropertiesTemplated(const Imagei & segmentedRegions, const CameraT & cam,
             std::vector<std::vector<std::vector<Vec3>>> * ncontoursPtr,
@@ -38,10 +39,10 @@ namespace panoramix {
             if (ncentersPtr){ ncentersPtr->clear(); ncentersPtr->reserve(regionNum); }
             if (areasPtr){ areasPtr->clear(); areasPtr->reserve(regionNum); }
 
-            std::vector<int> regionIds;
-            regionIds.reserve(regionNum);
+            std::vector<int> idsOld2New(regionNum, -1);
 
             // calculate contours and tangential projected areas for each region data
+            int newId = 0;
             for (int i = 0; i < regionNum; i++){
 
                 Image regionMask = (segmentedRegions == i);
@@ -110,7 +111,7 @@ namespace panoramix {
                     }
                     std::vector<Point2f> contourf(contours[k].size());
                     for (int kk = 0; kk < contours[k].size(); kk++){
-                        contourf[kk] = vec_cast<float>(contours[k][kk]);
+                        contourf[kk] = ecast<float>(contours[k][kk]);
                     }
                     area += cv::contourArea(contourf);
                 }
@@ -126,11 +127,12 @@ namespace panoramix {
                     areasPtr->push_back(area);
                 }
 
-                regionIds.push_back(i);
+                idsOld2New[i] = newId;
+                newId++;
 
             }
 
-            return regionIds;
+            return idsOld2New;
         }
 
 
@@ -187,7 +189,7 @@ namespace panoramix {
                 auto & contourProj = contourProjs[k];
                 contourProj.reserve(contours[k].size());
                 for (auto & d : contours[k]){
-                    contourProj.push_back(vec_cast<int>(ppc.toScreen(d)));
+                    contourProj.push_back(ecast<int>(ppc.toScreen(d)));
                 }
             }
             cv::fillPoly(mask, contourProjs, (uint8_t)1);

@@ -498,6 +498,10 @@ namespace panoramix {
                 }
             }
 
+            void clear() {
+                _nodes.clear();
+            }
+
             template <class NodeHandlePtrContainerT = HandlePtrArray<ForestTopo>>
             void gc(const NodeHandlePtrContainerT & nhPtrs = NodeHandlePtrContainerT()) {
                 std::vector<NodeHandle> nnlocs;

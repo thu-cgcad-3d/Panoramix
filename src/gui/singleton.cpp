@@ -2,7 +2,7 @@
 #include <QtOpenGL>
 #include <QApplication>
 
-#include "qt_glue.hpp"
+#include "qttools.hpp"
 #include "singleton.hpp"
 
 namespace panoramix {

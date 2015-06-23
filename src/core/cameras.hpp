@@ -172,10 +172,38 @@ namespace panoramix {
             friend class cereal::access;
         };
 
+      
+        namespace {
+            template <class T>
+            struct IsCameraImpl {
+                template <class TT>
+                static auto test(int) -> decltype(
+                    std::declval<TT>().eye(),
+                    std::declval<TT>().toScreen(std::declval<core::Point3>()),
+                    std::declval<TT>().toScreenInHPoint(std::declval<core::Point3>()),
+                    std::declval<TT>().isVisibleOnScreen(std::declval<core::Point3>()),
+                    std::declval<TT>().toSpace(std::declval<core::Point2>()),
+                    std::declval<TT>().toSpace(std::declval<core::Pixel>()),
+                    std::declval<TT>().screenSize(),
+                    std::true_type()
+                    );
+                template <class>
+                static std::false_type test(...);
+                static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
+            };
+        }
+
+        // judge whether T is a camera type
+        template <class T>
+        struct IsCamera : std::integral_constant<bool, IsCameraImpl<T>::value> {};
+
+
 
         // sample image from image using camera conversion
         template <class OutCameraT, class InCameraT>
         class CameraSampler {
+            static_assert(IsCamera<OutCameraT>::value && IsCamera<InCameraT>::value, 
+                "OutCameraT and InCameraT should both be cameras!");
         public:
             template <class OCamT, class ICamT>
             CameraSampler(OCamT && outCam, ICamT && inCam)
@@ -188,7 +216,7 @@ namespace panoramix {
                     for (int i = 0; i < outCamSize.width; i++) {
                         Vec2 screenp(i, j);
                         Vec3 p3 = _outCam.toSpace(screenp);
-                        if (!_inCam.isVisibleOnScreen(p3)){
+                        if (!_inCam.isVisibleOnScreen(p3)) {
                             _mapx.at<float>(j, i) = -1;
                             _mapy.at<float>(j, i) = -1;
                             continue;
@@ -228,7 +256,7 @@ namespace panoramix {
                 const Vec<T, N> & borderValue = Vec<T, N>()) const {
                 Image outputIm;
                 cv::Scalar bv;
-                for (int i = 0; i < N; i++){
+                for (int i = 0; i < N; i++) {
                     bv[i] = borderValue[i];
                 }
                 cv::remap(inputIm, outputIm, _mapx, _mapy,
@@ -237,7 +265,7 @@ namespace panoramix {
             }
 
             template <
-                class T, int N, 
+                class T, int N,
                 class = std::enable_if_t<(N > 4)>,
                 class = void
             >
@@ -246,7 +274,7 @@ namespace panoramix {
                 const Vec<T, N> & borderValue = Vec<T, N>()) const {
                 std::vector<Image> channels;
                 cv::split(inputIm, channels);
-                for (int i = 0; i < N; i++){
+                for (int i = 0; i < N; i++) {
                     auto & c = channels[i];
                     cv::remap(c, c, _mapx, _mapy, cv::INTER_NEAREST, borderMode, borderValue[i]);
                 }
@@ -259,18 +287,12 @@ namespace panoramix {
             OutCameraT _outCam;
             InCameraT _inCam;
             cv::Mat _mapx, _mapy;
-
-            template <class Archive>
-            inline void serialize(Archive & ar) {
-                ar(_outCam, _inCam, _mapx, _mapy);
-            }
-            friend class cereal::access;
         };
 
 
         template <class OutCameraT, class InCameraT>
         inline CameraSampler<std::decay_t<OutCameraT>, std::decay_t<InCameraT>> MakeCameraSampler(
-            OutCameraT && outCam, InCameraT && inCam){
+            OutCameraT && outCam, InCameraT && inCam) {
             return CameraSampler<std::decay_t<OutCameraT>, std::decay_t<InCameraT>>(
                 std::forward<OutCameraT>(outCam), std::forward<InCameraT>(inCam));
         }
@@ -278,30 +300,88 @@ namespace panoramix {
 
 
 
-      
-        namespace {
-            template <class T>
-            struct IsCameraImpl {
-                template <class TT>
-                static auto test(int) -> decltype(
-                    std::declval<TT>().eye(),
-                    std::declval<TT>().toScreen(std::declval<core::Point3>()),
-                    std::declval<TT>().toScreenInHPoint(std::declval<core::Point3>()),
-                    std::declval<TT>().isVisibleOnScreen(std::declval<core::Point3>()),
-                    std::declval<TT>().toSpace(std::declval<core::Point2>()),
-                    std::declval<TT>().toSpace(std::declval<core::Pixel>()),
-                    std::declval<TT>().screenSize(),
-                    std::true_type()
-                    );
-                template <class>
-                static std::false_type test(...);
-                static const bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
-            };
-        }
+        template <class CameraT, class = std::enable_if_t<IsCamera<CameraT>::value>>
+        struct DimensionConvertor {
+            const CameraT & cam;
+            DimensionConvertor(const CameraT & c) : cam(c) {}
 
-        // judge whether T is a camera type
-        template <class T>
-        struct IsCamera : std::integral_constant<bool, IsCameraImpl<T>::value> {};
+            Point3 toSpace(const Point2 & p) const { return cam.toSpace(p); }
+            Point2 toScreen(const Point3 & p) const { return cam.toScreen(p); }
+
+            Line3 toSpace(const Line2 & line2) const { return Line3(cam.toSpace(line2.first), cam.toSpace(line2.second)); }
+            Line2 toScreen(const Line3 & line3) const { return Line2(cam.toScreen(line3.first), cam.toScreen(line3.second)); }
+
+            Ray3 toSpace(const Ray2 & ray) const { return Line3(cam.toSpace(ray.anchor), cam.toSpace(ray.anchor + ray.direction)).ray(); }
+            Ray2 toScreen(const Ray3 & ray) const { return toScreen(Line3(ray.anchor, ray.anchor + ray.direction)).ray(); }
+
+            Chain3 toSpace(const Chain2 & chain) const {
+                Chain3 c;
+                c.closed = chain.closed;
+                c.points.resize(chain.points.size());
+                for (int i = 0; i < c.points.size(); i++) {
+                    c.points[i] = toSpace(chain.points[i]);
+                }
+                return c;
+            }
+            Chain2 toScreen(const Chain3 & chain) const {
+                Chain2 c;
+                c.closed = chain.closed;
+                c.points.resize(chain.points.size());
+                for (int i = 0; i < c.points.size(); i++) {
+                    c.points[i] = toScreen(chain.points[i]);
+                }
+                return c;
+            }
+
+
+            template <class T, class = std::enable_if_t<IsDecorated<T>::value>>
+            struct DecoratedToSpace {
+                using type = decltype(std::declval<T>().converted(std::declval<DimensionConvertor<CameraT>>().toSpace(std::declval<T>().component)));
+            };
+            template <class T, class = std::enable_if_t<IsDecorated<T>::value>>
+            struct DecoratedToScreen {
+                using type = decltype(std::declval<T>().converted(std::declval<DimensionConvertor<CameraT>>().toScreen(std::declval<T>().component)));
+            };
+
+            template <class T>
+            struct GeneralToSpace {
+                using type = std::decay_t<decltype(std::declval<DimensionConvertor<CameraT>>().toSpace(std::declval<T>()))>;
+            };
+            template <class T>
+            struct GeneralToScreen {
+                using type = std::decay_t<decltype(std::declval<DimensionConvertor<CameraT>>().toScreen(std::declval<T>()))>;
+            };
+
+            template <class T, class = std::enable_if_t<IsDecorated<T>::value>>
+            typename DecoratedToSpace<T>::type toSpace(const T & c) const {
+                return c.converted(toSpace(c.component));
+            }
+            template <class T, class = std::enable_if_t<IsDecorated<T>::value>>
+            typename DecoratedToScreen<T>::type toScreen(const T & c) const {
+                return c.converted(toScreen(c.component));
+            }
+
+            template <class T>
+            std::vector<typename GeneralToSpace<T>::type> toSpace(const std::vector<T> & v) const {
+                std::vector<typename GeneralToSpace<T>::type> results(v.size());
+                for (int i = 0; i < v.size(); i++)
+                    results[i] = toSpace(v[i]);
+                return results;
+            }
+            template <class T>
+            std::vector<typename GeneralToScreen<T>::type> toScreen(const std::vector<T> & v) const {
+                std::vector<typename GeneralToScreen<T>::type> results(v.size());
+                for (int i = 0; i < v.size(); i++)
+                    results[i] = toScreen(v[i]);
+                return results;
+            }
+
+        };
+
+        template <class CameraT>
+        DimensionConvertor<CameraT> AsDimensionConvertor(const CameraT & cam) {
+            return DimensionConvertor<CameraT>(cam);
+        }
 
 
 
@@ -347,6 +427,12 @@ namespace panoramix {
                 ar(image, camera);
             }
         };
+
+        template <class CameraT, class ImageT>
+        View<CameraT, ImageT> MakeView(const ImageT & im, const CameraT & c) {
+            assert(im.size() == c.screenSize());
+            return View<CameraT, ImageT>(im, c);
+        }
 
 
         template <
@@ -405,6 +491,25 @@ namespace panoramix {
             }
             return v;
         }
+
+
+        template <class CameraT, class InCameraT, class T>
+        T MeanInMask(const View<InCameraT, ImageOf<T>> & source, const View<CameraT, Imageub> & maskView) {
+            ImageOf<T> converted = source.sampled(maskView.camera).image;
+            int votes = 0;
+            T featureSum;
+            for (auto it = maskView.image.begin(); it != maskView.image.end(); ++it) {
+                if (!*it) {
+                    continue;
+                }
+                featureSum += converted(it.pos());
+                votes += 1;
+            }
+            return featureSum * (1.0 / std::max(votes, 1));
+        }
+
+
+
 
 
         using PerspectiveView = View<PerspectiveCamera>;
@@ -534,6 +639,9 @@ namespace panoramix {
             const Point3 & eye, const Point3 & center, const Vec3 & up){
             return CreatePerspectiveView(image, eye, center, up);
         }
+
+
+   
 
 
     }

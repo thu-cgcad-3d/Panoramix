@@ -7,6 +7,7 @@ namespace panoramix {
     namespace core {
             
         using Image = cv::Mat;
+
         template <class T> using ImageOf = cv::Mat_<T>;
         using Imageb = ImageOf<bool>;
         using Image3b = ImageOf<Vec<bool, 3>>;
@@ -21,6 +22,8 @@ namespace panoramix {
         using Image5d = ImageOf<Vec<double, 5>>;
         using Image7d = ImageOf<Vec<double, 7>>;
 
+        template <> struct IsNotContainerByHand<Image> : yes{};
+        template <class T> struct IsNotContainerByHand<ImageOf<T>> : yes{};
 
         namespace {
             template <class To, class From>
@@ -40,7 +43,7 @@ namespace panoramix {
             inline ImageOf<Vec<To, N>> VecCastPrivate(const ImageOf<Vec<From, N>> & im, std::false_type) {
                 ImageOf<Vec<To, N>> cim(im.size());
                 for (auto it = im.begin(); it != im.end(); ++it) {
-                    cim(it.pos()) = vec_cast<To>(*it);
+                    cim(it.pos()) = ecast<To>(*it);
                 }
                 return cim;
             }
@@ -51,19 +54,19 @@ namespace panoramix {
         }
 
         template <class To, class From>
-        inline ImageOf<To> vec_cast(const ImageOf<From> & v) {
+        inline ImageOf<To> ecast(const ImageOf<From> & v) {
             return VecCastPrivate<To>(v, std::integral_constant<bool, std::is_same<To, From>::value>());
         }
 
         template <class To, class From, int N>
-        inline ImageOf<Vec<To, N>> vec_cast(const ImageOf<Vec<From, N>> & v) {
+        inline ImageOf<Vec<To, N>> ecast(const ImageOf<Vec<From, N>> & v) {
             return VecCastPrivate<To>(v, std::integral_constant<bool, std::is_same<To, From>::value>());
         }
 
 
         using Pixel = cv::Point;
         template <class T>
-        inline Vec<T, 2> vec_cast(const Pixel & p) {
+        inline Vec<T, 2> ecast(const Pixel & p) {
             return Vec<T, 2>(static_cast<T>(p.x), static_cast<T>(p.y));
         }
 
@@ -138,6 +141,7 @@ namespace panoramix {
         // dense mat
         template <class T>
         using DenseMat = cv::Mat_<T>;
+        using DenseMati = DenseMat<int>;
         using DenseMatd = DenseMat<double>;
 
         // sparse mat
@@ -165,6 +169,26 @@ namespace panoramix {
             return mat;
         }
 
+
+        template <class T>
+        class ImageX {
+        public:
+            ImageX() {}
+            ImageX(const cv::Mat_<T> & mat) : _mat(mat) {}
+            explicit ImageX(const std::string & fname) : _mat(cv::imread(fname)) {}
+            ImageX(ImageX && im) : _mat(im._mat) { im._mat = cv::Mat_<T>(); }
+
+            int width() const { return _mat.cols; }
+            int height() const { return _mat.rows; }
+
+            template <class K = int>
+            K area() const { return _mat.cols * _mat.rows; }
+            template <class K = double>
+            Point<K, 2> center() const { return Point<K, 2>(_mat.cols / 2.0, _mat.rows / 2.0); }
+
+        private:
+            cv::Mat_<T> _mat;
+        };
 
     }
 }

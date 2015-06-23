@@ -73,12 +73,12 @@ namespace panoramix {
 
 
         // classify lines in 2d
-        void ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
+        DenseMatd ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
             double angleThreshold, double sigma, double scoreThreshold = 0.8,
             double avoidVPDistanceThreshold = -1.0);
 
         // classify lines in 3d
-        void ClassifyLines(std::vector<Classified<Line3>> &lines, const std::vector<Vec3> & vps,
+        DenseMatd ClassifyLines(std::vector<Classified<Line3>> &lines, const std::vector<Vec3> & vps,
             double angleThreshold, double sigma, double scoreThreshold = 0.8, 
             double avoidVPAngleThreshold = M_PI / 18.0);
 
@@ -101,9 +101,9 @@ namespace panoramix {
 
         // estimate vanishing points
         std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const PerspectiveCamera & cams,
-            std::vector<Classified<Line2>> & lineSegments);
+            std::vector<Classified<Line2>> & lineSegments, DenseMatd * lineVPScores = nullptr);
         std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
-            std::vector<std::vector<Classified<Line2>>> & lineSegments);
+            std::vector<std::vector<Classified<Line2>>> & lineSegments, std::vector<DenseMatd> * lineVPScores = nullptr);
 
 
 
@@ -207,9 +207,9 @@ namespace panoramix {
 
 
         bool IsDenseSegmentation(const Imagei & segRegions);
-        std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> FindContoursOfRegionsAndBoundaries(
+        std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> FindRegionBoundaries(
             const Imagei & segRegions, int connectionExtendSize, bool simplifyStraightEdgePixels = true);
-        std::map<std::set<int>, std::vector<Pixel>> ExtractBoundaryJunctions(const Imagei & regions);
+        std::vector<std::pair<std::vector<int>, Pixel>> ExtractBoundaryJunctions(const Imagei & regions, bool crossBorder = false);
 
 
 
@@ -233,6 +233,10 @@ namespace panoramix {
         Image5d MergeGeometricContextLabelsHedau(const Image7d & rawgc);
 
         Image5d ComputeGeometricContext(const Image & im, bool outdoor, bool useHedauForIndoor = false);
+
+
+        /// occlusion boundary detector
+        std::vector<Scored<Chain2>> DetectOcclusionBoundary(const Image & im);
 
 
     }

@@ -91,7 +91,7 @@ TEST(PPattern, A){
         auto thetaDir = core::Direction<double>(theta);
         std::vector<int> voteNums(vtable.size(), 0);
         for (auto it = dense.begin(); it != dense.end(); ++it){
-            auto p = core::vec_cast<double>(it.pos());
+            auto p = core::ecast<double>(it.pos());
             auto dir = p - core::Center(image);
             double angle = core::AngleBetweenDirections(thetaDir, dir);
             double projPos = cos(angle) * core::norm(dir);
@@ -137,7 +137,7 @@ TEST(PPattern, A){
     //                continue;
     //            }
 
-    //            if (core::Distance(core::vec_cast<double>(pos), core::Center(image)) > 400)
+    //            if (core::Distance(core::ecast<double>(pos), core::Center(image)) > 400)
     //                continue;
 
     //            for (int xx = x - gradsize; xx <= x + gradsize; xx++){
@@ -148,7 +148,7 @@ TEST(PPattern, A){
     //                        continue;
     //                    }
 
-    //                    if (core::Distance(core::vec_cast<double>(pos), core::Center(image)) > 400)
+    //                    if (core::Distance(core::ecast<double>(pos), core::Center(image)) > 400)
     //                        continue;
 
     //                    if (xx == x && yy == y) {

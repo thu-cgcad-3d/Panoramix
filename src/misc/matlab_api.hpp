@@ -28,6 +28,7 @@ namespace panoramix {
             virtual ~MXA();
 
         public:
+            MXA clone(bool dos = false) const;
             operator mxArray * () const { return _mxa; }
             mxClassID classID() const;
             void * data() const;
@@ -77,7 +78,6 @@ namespace panoramix {
 
             bool null() const { return _mxa == nullptr; }
             bool operator! () const { return null(); }
-            operator bool() const { return !null(); }
             bool empty() const;
 
             bool isFromGlobalWorkspace() const;
@@ -116,13 +116,6 @@ namespace panoramix {
             operator std::string() const { return toString(); }
             operator cv::Mat() const { return toCVMat(); }
 
-            //template <class T, std::enable_if_t<std::is_default_constructible<T>::value && std::is_convertible<T, cv::OutputArray>::value>>
-            //operator T() const {
-            //    T result;
-            //    toCVOutputArray(result, true);
-            //    return result;
-            //}
-
             size_t nelements() const;
             size_t nzmax() const;
 
@@ -153,11 +146,11 @@ namespace panoramix {
                 return calcSingleSubscript(sizeof...(Ints), sbs);
             }
 
-            template <class T, class ... Ints, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+            template <class T = double, class ... Ints, class = std::enable_if_t<std::is_arithmetic<T>::value>>
             const T & at(Ints... subs) const {
                 return static_cast<const T*>(data())[offset(subs...)];
             }
-            template <class T, class ... Ints, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+            template <class T = double, class ... Ints, class = std::enable_if_t<std::is_arithmetic<T>::value>>
             T & at(Ints... subs) {
                 return static_cast<T*>(data())[offset(subs...)];
             }

@@ -21,14 +21,6 @@ namespace panoramix {
 
         std::vector<core::Image> PickAllImagesFromAFolder(const std::string & dir = std::string());
 
-        struct PenConfig {
-            std::string name;
-            std::string description;
-            double thickness;
-            Color color;
-            PenStyle style;
-        };
-
         void PaintWith(const std::function<core::Image()> & updater,
             const std::vector<PenConfig> & penConfigs,
             const std::function<bool(const std::vector<core::Point2> & polyline, int penId)> & callback);
@@ -36,9 +28,16 @@ namespace panoramix {
 
         void VisualizeWithPanoramicOperation(const Scene & scene, const RenderOptions & options);
 
-        void PaintWithPanorama(const core::PanoramicView & view,
+
+        void VisualizeAll(const core::View<core::PanoramicCamera, core::Image3ub> & view,
+            const std::vector<core::Classified<core::Line3>> & lines,
+            const core::Imagei & segs, int nsegs,
+            const core::Image5d & gc);
+
+        void DrawChainsInPanorama(const core::PanoramicView & view,
             const std::vector<PenConfig> & penConfigs,
-            const std::function<bool(const std::vector<core::Point2> & polyline, int penId)> & callback);
+            std::vector<core::Chain3> & chains);
+        
 
     }
 }

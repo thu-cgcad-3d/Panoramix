@@ -83,7 +83,7 @@ message (STATUS "test data directory: " ${TEST_DATA_DIR})
 add_subdirectory (unittest unittest)
 add_subdirectory (executable executable)
 if (${USE_MATLAB})
-	add_subdirectory(mex mex)
+	#add_subdirectory(mex mex)
 endif()
 
 

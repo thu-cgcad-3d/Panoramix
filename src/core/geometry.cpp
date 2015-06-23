@@ -20,9 +20,19 @@ namespace panoramix {
             return area;
         }
 
-        double Area(const Polygon3 & polygon) { return AreaTemplated(polygon); }
+        
         float Area(const Polygon3f & polygon) { return AreaTemplated(polygon); }
+        double Area(const Polygon3 & polygon) { return AreaTemplated(polygon); }
 
+        double PointTest(const Polygon2f & poly, const Point2f & p) {
+            return cv::pointPolygonTest(poly.corners, p, true);
+        }
+
+        bool Contains(const Polygon2f & poly, const Point2f & p) {
+            return cv::pointPolygonTest(poly.corners, p, false) >= 0;
+        }
+
+        //long double Area(const Polygon<long double, 3> & polygon) { return AreaTemplated(polygon); }
 
     }
 }

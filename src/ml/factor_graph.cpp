@@ -28,7 +28,7 @@ namespace panoramix {
             return true;
         }
 
-        double FactorGraph::energy(const ResultTable & labels) const{
+        double FactorGraph::energy(const ResultTable & labels, void * givenData) const {
             assert(valid());            
             double e = 0.0;
             for (auto & f : _graph.elements<1>()){
@@ -37,14 +37,14 @@ namespace panoramix {
                 for (int i = 0; i < idx.size(); i++){
                     idx[i] = labels[vhs[i]];
                 }
-                double factorCost = _factorCategories[f.data].costs(idx.data(), idx.size());
+                double factorCost = _factorCategories[f.data].costs(idx.data(), idx.size(), f.data, givenData);
                 e += factorCost;
             }
             return e;
         }
 
 
-        FactorGraph::ResultTable FactorGraph::solve(int maxEpoch, int innerLoopNum, const CallbackFunction & callback) const {
+        FactorGraph::ResultTable FactorGraph::solve(int maxEpoch, int innerLoopNum, const CallbackFunction & callback, void * givenData) const {
 
             // convex belief propagation
 
@@ -203,7 +203,7 @@ namespace panoramix {
                                 // others: input _varCategories
                                 double & outValue = messages.data(f2vmsghs[i]).values[idx[i]];
                                 // theta
-                                double theta = costFun(idx.data(), idx.size());
+                                double theta = costFun(idx.data(), idx.size(), fid, givenData);
                                 assert(!IsInfOrNaN(theta));
                                 assert(theta >= 0);
 
@@ -278,10 +278,11 @@ namespace panoramix {
         }
 
 
-        FactorGraph::ResultTable FactorGraph::solveWithSimpleCallback(int maxEpoch, int innerLoopNum, const SimpleCallbackFunction & callback) const {
+        FactorGraph::ResultTable FactorGraph::solveWithSimpleCallback(int maxEpoch, int innerLoopNum, 
+            const SimpleCallbackFunction & callback, void * givenData) const {
             return solve(maxEpoch, innerLoopNum, [&callback](int epoch, double energy, double denergy, const ResultTable & results) -> bool {
                 return callback(epoch, energy);
-            });
+            }, givenData);
         }
 
     }

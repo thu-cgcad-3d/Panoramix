@@ -2,7 +2,7 @@
 
 #include "../core/macros.hpp"
 #include "../core/containers.hpp"
-#include "qt_glue.hpp"
+#include "qttools.hpp"
 #include "scene.hpp"
 #include "singleton.hpp"
 
@@ -1069,6 +1069,11 @@ namespace panoramix {
             if (doModal) {
                 Singleton::ContinueGui();
             }
+        }
+
+        void SceneBuilder::clear() {
+            _tree.clear();
+            _activeOH.reset();
         }
 
 

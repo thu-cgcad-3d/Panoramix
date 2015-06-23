@@ -1,5 +1,5 @@
 #include "../core/utility.hpp"
-#include "qt_glue.hpp"
+#include "qttools.hpp"
 #include "resource.hpp"
 
 

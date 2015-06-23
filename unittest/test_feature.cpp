@@ -32,7 +32,10 @@ TEST(Feature, SegmentationExtractor) {
         p.minSize = 400;
         p.sigma = 1;
         core::SegmentationExtractor seg(p);
-        auto segs = seg(im, { core::Line2({ 0.0, 0.0 }, core::Point2(im.cols, im.rows)), core::Line2(core::Point2(im.cols, 0), core::Point2(0, im.rows)) });
+        auto segs = seg(im, { 
+            core::Line2({ 0.0, 0.0 }, core::Point2(im.cols, im.rows)), 
+            core::Line2(core::Point2(im.cols, 0), core::Point2(0, im.rows))
+        });
         gui::AsCanvas(gui::CreateRandomColorTableWithSize(segs.second)(segs.first)).show();
     }
     {
@@ -63,7 +66,7 @@ TEST(Feature, SegmentationBoundaryJunction){
     auto junctions = core::ExtractBoundaryJunctions(segs.first);
     std::vector<core::Pixel> ps;
     for (auto & j : junctions){
-        ps.insert(ps.end(), j.second.begin(), j.second.end());
+        ps.insert(ps.end(), j.second);
     }
     auto ctable = gui::CreateRandomColorTableWithSize(segs.second);
     auto image = ctable(segs.first);
@@ -278,4 +281,16 @@ TEST(Feature, FeatureExtractor) {
             .add(lineSegmentExtractor(im))
             .show();
     }
+}
+
+
+TEST(Feature, OcclusionDetection) {
+
+    auto images = gui::PickImages("H:\\GitHub\\Panoramix\\data\\normal");
+    for (core::Image3ub && im : images) {
+        core::ResizeToMakeHeightUnder(im, 400);
+        auto bd = core::DetectOcclusionBoundary(im);
+        gui::MakeCanvas(im).color(gui::Red).thickness(2.0).add(bd).show();
+    }
+
 }

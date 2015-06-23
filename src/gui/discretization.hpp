@@ -36,7 +36,7 @@ namespace panoramix {
 
                 template <class Archive>
                 inline void serialize(Archive & ar) {
-                    ar(position, normal, color, texCoord, isSelected);
+                    ar(position, normal, color, texCoord);
                 }
             };
 
@@ -119,9 +119,9 @@ namespace panoramix {
         template <class T>
         inline void Discretize(TriMesh & mesh, const core::Line<T, 3> & l, const DiscretizeOptions & o){
             TriMesh::Vertex v1, v2;
-            v1.position = core::Concat(core::vec_cast<float>(l.first), 1.0f);
+            v1.position = core::cat(core::ecast<float>(l.first), 1.0f);
             v1.color = o.color;
-            v2.position = core::Concat(core::vec_cast<float>(l.second), 1.0f);
+            v2.position = core::cat(core::ecast<float>(l.second), 1.0f);
             v2.color = o.color;
             mesh.addIsolatedLine(v1, v2, o.entity);
         }
@@ -150,7 +150,7 @@ namespace panoramix {
 
         template <class T>
         void Discretize(TriMesh & mesh, const core::Sphere<T, 3> & s, const DiscretizeOptions & o){
-            Discretize(mesh, core::Sphere3{ vec_cast<double>(s.center), static_cast<double>(s.radius) }, o);
+            Discretize(mesh, core::Sphere3{ ecast<double>(s.center), static_cast<double>(s.radius) }, o);
         }
 
         template <class T>
@@ -165,12 +165,28 @@ namespace panoramix {
                         TriMesh::Vertex v;
                         auto c = b.corner({ i == 1, j == 1, k == 1 });
                         v.position = core::Vec4f(c[0], c[1], c[2], 1.0);
-                        v.normal = core::vec_cast<float>(core::normalize(c - center));
+                        v.normal = core::normalize(c - center);
                         v.color = o.color;
                         vhandles.push_back(mesh.addVertex(v, true, o.entity));
                     }
                 }
             }
+            // add edges
+            mesh.addLine(vhandles[0], vhandles[4], o.entity);
+            mesh.addLine(vhandles[1], vhandles[5], o.entity);
+            mesh.addLine(vhandles[3], vhandles[7], o.entity);
+            mesh.addLine(vhandles[2], vhandles[6], o.entity);
+
+            mesh.addLine(vhandles[0], vhandles[2], o.entity);
+            mesh.addLine(vhandles[1], vhandles[3], o.entity);
+            mesh.addLine(vhandles[5], vhandles[7], o.entity);
+            mesh.addLine(vhandles[4], vhandles[6], o.entity);
+
+            mesh.addLine(vhandles[0], vhandles[1], o.entity);
+            mesh.addLine(vhandles[2], vhandles[3], o.entity);
+            mesh.addLine(vhandles[4], vhandles[5], o.entity);
+            mesh.addLine(vhandles[6], vhandles[7], o.entity);
+
             // add faces
             mesh.addPolygon({ vhandles[0], vhandles[4], vhandles[5], vhandles[1] }, o.entity);
             mesh.addPolygon({ vhandles[4], vhandles[6], vhandles[7], vhandles[5] }, o.entity);
@@ -186,7 +202,7 @@ namespace panoramix {
             for (int i = 0; i < p.corners.size(); i++){
                 TriMesh::Vertex v;
                 v.position = core::Vec4f(p.corners[i][0], p.corners[i][1], p.corners[i][2], 1.0);
-                v.normal = core::vec_cast<float>(p.normal);
+                v.normal = p.normal;
                 v.color = o.color;
                 vhandles[i] = mesh.addVertex(v, false, o.entity);
             }

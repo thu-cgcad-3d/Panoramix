@@ -11,8 +11,9 @@ int main(int argc, char ** argv) {
     //NormalIndoor::Run();
     //NYU2::Run();
     //Prepare::Run();
-    PanoContext::Run();
+    //PanoContext::Run();
     //ActivePanoramaIndoor::Run();
+    RLOpt::Run();
 
     return 0;
 }

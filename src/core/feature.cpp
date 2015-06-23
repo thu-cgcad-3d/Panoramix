@@ -20,6 +20,7 @@ extern "C" {
 #include "containers.hpp"
 #include "clock.hpp"
 
+#include "../misc/matlab_api.hpp"
 #include "../misc/matlab_engine.hpp"
 #include "../misc/eigen.hpp"
 
@@ -420,15 +421,16 @@ namespace panoramix {
 
 
 
-        void ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
+        DenseMatd ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
             double angleThreshold, double sigma, double scoreThreshold, double avoidVPDistanceThreshold){
 
-            for (auto & line : lines){
+            size_t nlines = lines.size();
+            size_t npoints = vps.size();
+            DenseMatd linescorestable(nlines, npoints, 0.0);
+            for (int i = 0; i < nlines; i++) {
+                auto & line = lines[i];
                 // classify lines
                 line.claz = -1;
-
-                // classify
-                std::vector<double> linescores(vps.size());
 
                 // get score based on angle
                 for (int j = 0; j < vps.size(); j++){
@@ -439,37 +441,39 @@ namespace panoramix {
                     double score = exp(-(angle / angleThreshold) * (angle / angleThreshold) / sigma / sigma / 2);
                     if (avoidVPDistanceThreshold >= 0.0 && 
                         DistanceFromPointToLine(point.value(), line.component).first < avoidVPDistanceThreshold){
-                        linescores[j] = -1.0;
+                        linescorestable(i, j) = -1.0;
                     }
                     else{
-                        linescores[j] = (angle > angleThreshold) ? 0 : score;
+                        linescorestable(i, j) = (angle > angleThreshold) ? 0 : score;
                     }
                 }
 
                 double curscore = scoreThreshold;
                 for (int j = 0; j < vps.size(); j++){
-                    if (linescores[j] > curscore){
+                    if (linescorestable(i, j) > curscore) {
                         line.claz = j;
-                        curscore = linescores[j];
+                        curscore = linescorestable(i, j);
                     }
                 }
             }
+
+            return linescorestable;
         }
 
 
-        void ClassifyLines(std::vector<Classified<Line3>> & lines, const std::vector<Vec3> & vps,
+        DenseMatd ClassifyLines(std::vector<Classified<Line3>> & lines, const std::vector<Vec3> & vps,
             double angleThreshold, double sigma, double scoreThreshold, double avoidVPAngleThreshold) {
 
             size_t nlines = lines.size();
             size_t npoints = vps.size();
+
+            DenseMatd linescorestable(nlines, npoints, 0.0);
 
             for (size_t i = 0; i < nlines; i++){
                 const Vec3 & a = lines[i].component.first;
                 const Vec3 & b = lines[i].component.second;
                 Vec3 normab = a.cross(b);
                 normab /= norm(normab);
-
-                std::vector<double> linescores(npoints);
 
                 // get score based on angle
                 for (int j = 0; j < npoints; j++){
@@ -480,10 +484,10 @@ namespace panoramix {
                             DistanceFromPointToLine(normalize(point), normalize(lines[i].component)).first,
                             DistanceFromPointToLine(normalize(-point), normalize(lines[i].component)).first
                         ) < 2.0 * sin(avoidVPAngleThreshold / 2.0)){ // avoid that a line belongs to its nearby vp
-                        linescores[j] = -1.0;
+                        linescorestable(i, j) = -1.0;
                     }
                     else{
-                        linescores[j] = (angle > angleThreshold) ? 0 : score;
+                        linescorestable(i, j) = (angle > angleThreshold) ? 0 : score;
                     }
                 }
 
@@ -491,13 +495,14 @@ namespace panoramix {
                 lines[i].claz = -1;
                 double curscore = scoreThreshold;
                 for (int j = 0; j < npoints; j++){
-
-                    if (linescores[j] > curscore){
+                    if (linescorestable(i, j) > curscore) {
                         lines[i].claz = j;
-                        curscore = linescores[j];
+                        curscore = linescorestable(i, j);
                     }
                 }
             }
+
+            return linescorestable;
         }
 
 
@@ -540,8 +545,8 @@ namespace panoramix {
                 for (int i = 0; i < e.size() - 1; i++) {
                     double area, len;
                     std::tie(area, len) = ComputeSpanningArea(
-                        vec_cast<double>(e[i]),
-                        vec_cast<double>(e[i + 1]),
+                        ecast<double>(e[i]),
+                        ecast<double>(e[i + 1]),
                         fittedLine);
                     interArea += area;
                     interLen += len;
@@ -748,7 +753,7 @@ namespace panoramix {
 
 
         std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const PerspectiveCamera & cam,
-            std::vector<Classified<Line2>> & lineSegments){
+            std::vector<Classified<Line2>> & lineSegments, DenseMatd * lineVPScores){
             std::vector<Vec3> lineIntersections;
 
             int linesNum = 0;
@@ -780,7 +785,10 @@ namespace panoramix {
             }
 
             // classify lines
-            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
+            auto scores = ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
+            if (lineVPScores) {
+                *lineVPScores = scores;
+            }
 
             int ii = 0;
             for (int j = 0; j < lineSegments.size(); j++){
@@ -792,7 +800,7 @@ namespace panoramix {
         }
 
         std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
-            std::vector<std::vector<Classified<Line2>>> & lineSegments){
+            std::vector<std::vector<Classified<Line2>>> & lineSegments, std::vector<DenseMatd> * lineVPScores){
 
             assert(cams.size() == lineSegments.size());
             std::vector<Vec3> lineIntersections;
@@ -830,7 +838,17 @@ namespace panoramix {
             }
 
             // classify lines
-            ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
+            auto scores = ClassifyLines(spatialLineSegments, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
+            assert(scores.rows == spatialLineSegments.size() && scores.cols == vanishingPoints.size());
+            if (lineVPScores) {
+                auto & s = *lineVPScores;
+                s.resize(cams.size());
+                int ii = 0;
+                for (int i = 0; i < cams.size(); i++) {
+                    scores(cv::Range(ii, ii + lineSegments[i].size()), cv::Range::all()).copyTo(s[i]);
+                    ii += lineSegments[i].size();
+                }                
+            }
 
             int ii = 0;
             for (int i = 0; i < lineSegments.size(); i++){
@@ -1349,8 +1367,8 @@ namespace panoramix {
                     if (score){
                         *score = 0.0;
                     }
-                    auto eq1 = Concat(lines[0].first, 1.0).cross(Concat(lines[0].second, 1.0));
-                    auto eq2 = Concat(lines[1].first, 1.0).cross(Concat(lines[1].second, 1.0));
+                    auto eq1 = cat(lines[0].first, 1.0).cross(cat(lines[0].second, 1.0));
+                    auto eq2 = cat(lines[1].first, 1.0).cross(cat(lines[1].second, 1.0));
                     return HPointFromVector(eq1.cross(eq2));
                 }
 
@@ -1383,8 +1401,8 @@ namespace panoramix {
                 LevenbergMarquardt<decltype(functor)> lm(std::move(functor));
 
                 // calc initial vp
-                Vec3 initialVP = Concat(lines[0].first, 1.0).cross(Concat(lines[0].second, 1.0))
-                    .cross(Concat(lines[1].first, 1.0).cross(Concat(lines[1].second, 1.0)));
+                Vec3 initialVP = cat(lines[0].first, 1.0).cross(cat(lines[0].second, 1.0))
+                    .cross(cat(lines[1].first, 1.0).cross(cat(lines[1].second, 1.0)));
                 initialVP /= norm(initialVP);
                 VectorXd x(2);
                 x << atan2(initialVP[1], initialVP[0]), acos(initialVP[2]);
@@ -2013,9 +2031,6 @@ namespace panoramix {
                         scale = 0.0;
                     }
                     std::fill_n(vsizes.data() + y * width, width, scale);
-                    /*for (int x = 0; x < width; x++){
-                        vsizes[y * width + x] = scale;
-                    }*/
                 }
                 return vsizes;
             }
@@ -2465,7 +2480,7 @@ namespace panoramix {
             return true;
         }
 
-        std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> FindContoursOfRegionsAndBoundaries(
+        std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> FindRegionBoundaries(
             const Imagei & segRegions, int connectionExtendSize, bool simplifyStraightEdgePixels){
 
             std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> boundaryEdges;
@@ -2500,7 +2515,9 @@ namespace panoramix {
                 static const int xdirs[] = { 1, 0, -1, 0, -1, 1, 1, -1, 0, 0, 2, -2 };
                 static const int ydirs[] = { 0, 1, 0, -1, 1, -1, 1, -1, 2, -2, 0, 0 };
 
-                IMPROVABLE_HERE("what if connectionExtendSize is too large? will it cause bugs here searching edges?");
+                if (connectionExtendSize > 2) {
+                    IMPROVABLE_HERE("what if connectionExtendSize is too large? will it cause bugs here searching edges?");
+                }
 
                 std::vector<std::vector<Pixel>> edges;
                 edges.push_back({ p });
@@ -2560,20 +2577,25 @@ namespace panoramix {
         }
 
 
-        std::map<std::set<int>, std::vector<Pixel>> ExtractBoundaryJunctions(const Imagei & regions){
-            std::map<std::set<int>, std::vector<Pixel>> junctions;
+        std::vector<std::pair<std::vector<int>, Pixel>> ExtractBoundaryJunctions(const Imagei & regions, bool crossBorder){
+            std::vector<std::pair<std::vector<int>, Pixel>> junctions;
             for (auto it = regions.begin(); it != regions.end(); ++it){
                 auto p = it.pos();
-                if (p.x == regions.cols - 1)
+                if (p.x == regions.cols - 1 && !crossBorder)
                     continue;
-                if (p.y == regions.rows - 1)
+                if (p.y == regions.rows - 1 && !crossBorder)
                     continue;
-                std::set<int> regionIds = {
-                    regions(p), regions(Pixel(p.x + 1, p.y)),
-                    regions(Pixel(p.x, p.y + 1)), regions(Pixel(p.x + 1, p.y + 1))
+                std::vector<int> regionIds = {
+                    regions(p), 
+                    regions(Pixel((p.x + 1) % regions.cols, p.y)),
+                    regions(Pixel(p.x, (p.y + 1) % regions.rows)), 
+                    regions(Pixel((p.x + 1) % regions.cols, (p.y + 1) % regions.rows))
                 };
-                if (regionIds.size() >= 3){
-                    junctions[regionIds].push_back(p);
+                std::set<int> idset(regionIds.begin(), regionIds.end());
+                if (idset.size() == 3) {
+                    junctions.emplace_back(std::vector<int>(idset.begin(), idset.end()), p);
+                } else if (idset.size() == 4) {
+                    junctions.emplace_back(std::move(regionIds), p);
                 }
             }
             return junctions;
@@ -3097,6 +3119,47 @@ namespace panoramix {
         Image5d ComputeGeometricContext(const Image & im, bool outdoor, bool useHedauForIndoor){
             auto rawgc = ComputeRawGeometricContext(im, outdoor, useHedauForIndoor);
             return useHedauForIndoor ? MergeGeometricContextLabelsHedau(rawgc) : MergeGeometricContextLabelsHoiem(rawgc);
+        }
+
+
+
+
+
+        std::vector<Scored<Chain2>> DetectOcclusionBoundary(const Image & im) {
+            misc::Matlab matlab;
+            matlab << "oldpath = cd('F:\\MATLAB\\miaomiaoliu.occ\\occ');";
+            matlab.setVar("im", im);
+            matlab << "[bndinfo, score] = detect_occlusion_yh(im);";
+            matlab << "inds = bndinfo.edges.indices;";
+            matlab << "cd(oldpath);";
+            auto inds = matlab.var("inds");
+            auto score = matlab.var("score");
+            assert(inds.isCell());
+            int ninds = inds.length();
+            assert(score.length() == ninds);
+            std::vector<Scored<Chain2>> bd;
+            bd.reserve(ninds);
+            for (int i = 0; i < ninds; i++) {
+                auto chain = inds.cell(i);
+                assert(chain.is<uint32_t>());
+                double s = score.at(i);
+                Chain2 b;
+                b.closed = false;
+                b.points.reserve(chain.length());
+                for (int j = 0; j < chain.length(); j++) {
+                    int index = chain.at<uint32_t>(j);
+                    --index;
+                    int y = index % im.rows;
+                    int x = index / im.rows;
+                    if (!b.empty()) {
+                        double d = Distance(b.points.back(), Point2(x, y));
+                        assert(d < 50);
+                    }
+                    b.append(Point2(x, y));
+                }
+                bd.push_back(ScoreAs(std::move(b), s));
+            }
+            return bd;
         }
 
 

@@ -24,20 +24,24 @@ namespace panoramix {
 
         template <>
         struct Sequence<> {
-            static const int Count = 0;
-            static const int Sum = 0;
-            static const int Product = 1;
-            static const bool All = (Product != 0);
-            static const bool Any = (Sum != 0);
+            enum : int {
+                Count = 0,
+                Sum = 0,
+                Product = 1,
+                All = (Product != 0),
+                Any = (Sum != 0)
+            };
         };
 
         template <int N, int ...S>
         struct Sequence<N, S...> {
-            static const int Count = 1 + Sequence<S...>::Count;
-            static const int Sum = N + Sequence<S...>::Sum;
-            static const int Product = N * Sequence<S...>::Product;
-            static const bool All = (Product != 0);
-            static const bool Any = (Sum != 0);
+            enum : int {
+                Count = 1 + Sequence<S...>::Count,
+                Sum = N + Sequence<S...>::Sum,
+                Product = N * Sequence<S...>::Product,
+                All = (Product != 0),
+                Any = (Sum != 0)
+            };
         };
 
         // sequence type judger
@@ -179,6 +183,11 @@ namespace panoramix {
         inline const T & Get(std::initializer_list<T> & v) { return *(v.begin() + I); }
 
 
+        // registered as not a container
+        template <class T>
+        struct IsNotContainerByHand : std::false_type {};
+
+
         // determine whether T is a container
         namespace {
             template <class T>
@@ -196,7 +205,7 @@ namespace panoramix {
         }
 
         template <class T>
-        struct IsContainer : std::integral_constant<bool, IsContainerImp<T>::value> {};
+        struct IsContainer : std::integral_constant<bool, IsContainerImp<T>::value && !IsNotContainerByHand<T>::value> {};
 
 
         // determine whether T can accepts ArgTs as arguments
@@ -216,12 +225,6 @@ namespace panoramix {
 
 
         // function traits
-        template <class T>
-        struct IsFunction : std::false_type {};
-
-        template <class ResultT, class ... ArgTs>
-        struct IsFunction<ResultT(ArgTs...)> : std::true_type{};
-
         template <class T>
         struct FunctionTraits : public FunctionTraits<decltype(&T::operator())> {};
 
@@ -442,6 +445,16 @@ namespace panoramix {
         struct MetaBind {
             using ContainerTuple = std::tuple<MetaContainerT<EntryTs>...>;
             ContainerTuple containers;
+
+            MetaBind() {}
+            MetaBind(const MetaBind &) = default;
+            MetaBind & operator = (const MetaBind &) = default;
+            MetaBind(MetaBind && mb) : containers(std::move(mb.containers)) {}
+            MetaBind & operator = (MetaBind && mb) { 
+                containers = std::move(mb.containers); 
+                return *this; 
+            }
+
             using EntryTuple = std::tuple<EntryTs...>;
             template <class EntryT>
             struct EntryProperty {
@@ -457,6 +470,27 @@ namespace panoramix {
             inline typename EntryProperty<EntryT>::ContainerType & container() {
                 return std::get<EntryProperty<EntryT>::Location>(containers);
             }
+
+
+            template <class EntryT, class FunctorT>
+            inline auto perform(FunctorT && fun) -> decltype(fun(container<EntryT>())) { 
+                return fun(container<EntryT>());
+            }
+            template <class EntryT, class FunctorT>
+            inline auto perform(FunctorT && fun) const -> decltype(fun(container<EntryT>())) {
+                return fun(container<EntryT>());
+            }
+
+
+            template <class FunctorT>
+            inline auto perform(FunctorT && fun) -> std::tuple<decltype(fun(container<EntryTs>()))...> {
+                return std::make_tuple(fun(container<EntryTs>()) ...);
+            }
+            template <class FunctorT>
+            inline auto perform(FunctorT && fun) const -> std::tuple<decltype(fun(container<EntryTs>()))...> {
+                return std::make_tuple(fun(container<EntryTs>()) ...);
+            }
+
 
             // conditionaly supported
             // .at(Entry)
@@ -490,6 +524,24 @@ namespace panoramix {
             template <class EntryT>
             inline void insert(EntryT && entry) {
                 container<std::decay_t<EntryT>>().insert(std::forward<EntryT>(entry));
+            }
+
+            template <class EntryT>
+            inline bool contains(EntryT && entry) const {
+                return Contains(container<std::decay_t<EntryT>>(), std::forward<EntryT>(entry));
+            }
+
+
+            // size
+            template <class = void>
+            size_t size() const {
+                size_t szs[] = { container<EntryTs>().size() ... };
+                return std::accumulate(std::begin(szs), std::end(szs), size_t(0));
+            }
+
+            template <class Archiver>
+            void serialize(Archiver & ar) {
+                ar(containers);
             }
         };
 

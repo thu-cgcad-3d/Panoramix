@@ -30,6 +30,12 @@ namespace panoramix {
         View<PartialPanoramicCamera, Imageub> PerfectRegionMaskView(
             const std::vector<std::vector<Vec3>> & contours,
             const Vec3 & center, double focal);
+        inline View<PartialPanoramicCamera, Imageub> PerfectRegionMaskView(
+            const std::vector<Vec3> & contours,
+            const Vec3 & center, double focal) {
+            return PerfectRegionMaskView(std::vector<std::vector<Vec3>>{contours}, center, focal);
+        }
+
 
 
 

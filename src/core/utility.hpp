@@ -90,9 +90,9 @@ namespace panoramix {
 
 
         // contains
-        template <class ContainerT, class ValueT, class = std::enable_if_t<IsContainerOfType<ContainerT, ValueT>::value>>
+        template <class ContainerT, class ValueT, class = std::enable_if_t<IsContainer<ContainerT>::value>>
         inline bool Contains(const ContainerT & c, const ValueT & v) {
-            return std::find(std::cbegin(c), std::cend(c), v) != std::cend(c);
+            return std::find(std::begin(c), std::end(c), v) != std::end(c);
         }
 
         template <class T, class ValueT>
@@ -123,6 +123,13 @@ namespace panoramix {
         inline bool Contains(const Image & im, const Pixel & pixel) {
             return 0 <= pixel.x && pixel.x < im.cols && 0 <= pixel.y && pixel.y < im.rows;
         }
+
+        template <class T>
+        bool Contains(const ImageOf<T> & im, const Pixel & pixel) {
+            return 0 <= pixel.x && pixel.x < im.cols && 0 <= pixel.y && pixel.y < im.rows;
+        }
+
+        bool Contains(const Polygon3 & poly, const Point2 & p);
 
 
         // all same
@@ -467,14 +474,14 @@ namespace panoramix {
 
 
         // tools
-        template <class T, class K>
-        inline bool FuzzyEquals(const T & a, const T & b, const K & epsilon){
+        template <class T, class K = double>
+        inline bool FuzzyEquals(const T & a, const T & b, const K & epsilon = std::numeric_limits<K>::epsilon()) {
             return Distance(a, b) <= epsilon; // not only numerics
         }
 
-        template <class T>
-        inline int DiracDelta(const T & v) {
-            return v == 0 ? 1 : 0;
+        template <class T, class K = double>
+        inline int DiracDelta(const T & v, const K & epsilon = std::numeric_limits<K>::epsilon()) {
+            return std::abs(v) <= epsilon ? 1 : 0;
         }
 
         // [low, high]

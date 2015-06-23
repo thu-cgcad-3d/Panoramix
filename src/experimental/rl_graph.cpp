@@ -138,7 +138,7 @@ namespace panoramix {
             // Y
             double Y = 0.0;
             for (int s = 0; s < 2; s++) {
-                Y += v(0, s) * v(1, s) * v(2, s) * DiracDelta(v(0, 1 - s) + v(1, 1 - s) + v(2, 1 - s));
+                Y += v(0, s) * v(1, s) * v(2, s) * DiracDelta(v(0, 1 - s) + v(1, 1 - s) + v(2, 1 - s), 1e-4);
             }
 
             // W
@@ -741,7 +741,7 @@ namespace panoramix {
                         }
                         std::vector<Point2f> contourf(contours[k].size());
                         for (int kk = 0; kk < contours[k].size(); kk++){
-                            contourf[kk] = vec_cast<float>(contours[k][kk]);
+                            contourf[kk] = ecast<float>(contours[k][kk]);
                         }
                         rd.area += cv::contourArea(contourf);
                     }
@@ -866,7 +866,7 @@ namespace panoramix {
 
                 // add region boundary constraints
                 std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> boundaryEdges =
-                    FindContoursOfRegionsAndBoundaries(segmentedRegions, samplerSizeOnBoundary, false);
+                    FindRegionBoundaries(segmentedRegions, samplerSizeOnBoundary, false);
 
                 for (auto & bep : boundaryEdges) {
                     auto & rids = bep.first;
@@ -886,7 +886,7 @@ namespace panoramix {
                                     LineHandle lh = mg.topo(rlcon).component<1>();
                                     const Line3 & line = mg.data(lh).line;
                                     Line2 line2(cam.toScreen(line.first), cam.toScreen(line.second));
-                                    double d = DistanceFromPointToLine(vec_cast<double>(p), line2).first;
+                                    double d = DistanceFromPointToLine(ecast<double>(p), line2).first;
                                     if (d < samplerSizeOnLine || d < samplerSizeOnBoundary){
                                         coveredByLine = true;
                                         break;
@@ -994,7 +994,7 @@ namespace panoramix {
                 auto & contourProj = contourProjs[k];
                 contourProj.reserve(contours[k].size());
                 for (auto & d : contours[k]){
-                    contourProj.push_back(vec_cast<int>(ppc.toScreen(d)));
+                    contourProj.push_back(ecast<int>(ppc.toScreen(d)));
                 }
             }
             cv::fillPoly(mask, contourProjs, (uint8_t)1);
@@ -2337,7 +2337,7 @@ namespace panoramix {
                     auto & contourProj = contourProjs[k];
                     contourProj.reserve(contours[k].size());
                     for (auto & d : contours[k]){
-                        contourProj.push_back(vec_cast<int>(ppc.toScreen(d)));
+                        contourProj.push_back(ecast<int>(ppc.toScreen(d)));
                     }
                 }
                 cv::fillPoly(mask, contourProjs, (uint8_t)1);
@@ -2703,7 +2703,7 @@ namespace panoramix {
         //            auto & contourProj = contourProjs[k];
         //            contourProj.reserve(contours[k].size());
         //            for (auto & d : contours[k]){
-        //                contourProj.push_back(vec_cast<int>(ppc.toScreen(d)));
+        //                contourProj.push_back(ecast<int>(ppc.toScreen(d)));
         //            }
         //        }
         //        cv::fillPoly(mask, contourProjs, (uint8_t)1);
@@ -3524,8 +3524,8 @@ namespace panoramix {
                     // fill bounded anchors
                     for (auto & ba : controls[c.topo.hd].boundedAnchors){
                         const Point3 & anchor = ba.component;
-                        double lb = ba.lowerBound;
-                        double ub = ba.upperBound;
+                        double lb = ba.lowerBound();
+                        double ub = ba.upperBound();
                         assert(lb > 0 && ub > 0);
                         auto uhVarCoeffsAtAnchorDirection = VariableCoefficientsForInverseDepthAtDirection(mg, controls, vars, anchor, uh);
                         assert(uhVarCoeffsAtAnchorDirection.size() == uhVarNum);
@@ -3609,8 +3609,8 @@ namespace panoramix {
 
                     // bounded anchors
                     for (auto & ba : bas){
-                        double lb = ba.lowerBound;
-                        double ub = ba.upperBound;
+                        double lb = ba.lowerBound();
+                        double ub = ba.upperBound();
                         const Vec3 & a = ba.component;
                         B[eid] = 0.0;
                         B1[eid] = - ub;

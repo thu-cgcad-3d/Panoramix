@@ -1,7 +1,7 @@
 #include <QtWidgets>
 
 #include "../../src/core/feature.hpp"
-#include "../../src/gui/qt_glue.hpp"
+#include "../../src/gui/qttools.hpp"
 #include "../../src/gui/singleton.hpp"
 
 #include "tools.hpp"

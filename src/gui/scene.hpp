@@ -189,7 +189,7 @@ namespace panoramix {
 
 
         template <class T, class FunT>
-        std::shared_ptr<SceneObject> Visualize(T & data, const FunT & fun,
+        std::shared_ptr<SceneObject> Visualize(T & data, FunT && fun,
             const SceneObjectInstallingOptions & o,
             std::false_type isContainer){
 
@@ -205,20 +205,20 @@ namespace panoramix {
             vo->setSelectable(true);
 
             struct Wrapper {
-                inline Wrapper(const FunT & f) : originalFun(f){}
+                inline Wrapper(FunT && f) : originalFun(std::forward<FunT>(f)){}
                 inline bool operator() (InteractionID iid, EntityPtr entPtr) const {
                     originalFun(iid, entPtr.ref<T>());
                     return true;
                 }
-                const FunT & originalFun;
+                std::decay_t<FunT> originalFun;
             };
 
-            vo->bindCallbackFunction(Wrapper(fun));
+            vo->bindCallbackFunction(Wrapper(std::forward<FunT>(fun)));
             return vo;
         }
 
         template <class T, class FunT>
-        std::shared_ptr<SceneObject> Visualize(T & data, const FunT & fun,
+        std::shared_ptr<SceneObject> Visualize(T & data, FunT && fun,
             const SceneObjectInstallingOptions & o,
             std::true_type isContainer){
 
@@ -239,15 +239,15 @@ namespace panoramix {
             vo->setSelectable(true);
 
             struct Wrapper {
-                inline Wrapper(const FunT & f) : originalFun(f){}
+                inline Wrapper(FunT && f) : originalFun(std::forward<FunT>(f)) {}
                 inline bool operator() (InteractionID iid, EntityPtr entPtr) const {
                     originalFun(iid, entPtr.ref<ValueType>());
                     return true;
                 }
-                const FunT & originalFun;
+                std::decay_t<FunT> originalFun;
             };
 
-            vo->bindCallbackFunction(Wrapper(fun));
+            vo->bindCallbackFunction(Wrapper(std::forward<FunT>(fun)));
             return vo;
         }
 
@@ -360,8 +360,8 @@ namespace panoramix {
                 return *this;
             }
             template <class T, class FunT>
-            inline SceneBuilder & add(T & data, const FunT & fun) {
-                _tree.add(_activeOH, Visualize(data, fun, _installingOptions, 
+            inline SceneBuilder & add(T & data, FunT && fun) {
+                _tree.add(_activeOH, Visualize(data, std::forward<FunT>(fun), _installingOptions, 
                     std::integral_constant<bool, core::IsContainer<T>::value>()));
                 return *this;
             }
@@ -375,8 +375,8 @@ namespace panoramix {
             }
 
             template <class T, class FunT>
-            inline SceneBuilder & begin(T & data, const FunT & fun) {
-                _activeOH = _tree.add(_activeOH, Visualize(data, fun, _installingOptions, 
+            inline SceneBuilder & begin(T & data, FunT && fun) {
+                _activeOH = _tree.add(_activeOH, Visualize(data, std::forward<FunT>(fun), _installingOptions, 
                     std::integral_constant<bool, core::IsContainer<T>::value>()));
                 return *this;
             }
@@ -425,6 +425,7 @@ namespace panoramix {
                 return *this;
             }
 
+            void clear();
 
             void show(bool doModal = true, bool autoSetCamera = true, 
                 const RenderOptions & options = RenderOptions());
