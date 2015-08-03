@@ -5,7 +5,7 @@
 #include "../core/cons_graph.hpp"
 #include "factor_graph.hpp"
  
-namespace panoramix {
+namespace pano {
     namespace ml {
 
         using namespace core;
@@ -148,7 +148,7 @@ namespace panoramix {
                 varMarginals[v.topo.hd] = VectorXd::Zero(_varCategories[v.data].nlabels);
             }
 
-            double lastE = std::numeric_limits<double>::max();
+            double lastE = std::numeric_limits<double>::infinity();
             ResultTable results(_graph.internalElements<0>().size());
 
             for (int epoch = 0; epoch < maxEpoch; epoch ++){
@@ -187,7 +187,7 @@ namespace panoramix {
 
                         // reset f2v messages
                         for (auto & f2v : f2vmsghs){
-                            messages.data(f2v).values.setConstant(std::numeric_limits<double>::max());
+                            messages.data(f2v).values.setConstant(std::numeric_limits<double>::infinity());
                         }
 
                         // dispatch messages from this factor
@@ -204,7 +204,7 @@ namespace panoramix {
                                 double & outValue = messages.data(f2vmsghs[i]).values[idx[i]];
                                 // theta
                                 double theta = costFun(idx.data(), idx.size(), fid, givenData);
-                                assert(!IsInfOrNaN(theta));
+                                assert(!std::isnan(theta));
                                 assert(theta >= 0);
 
                                 // sum of other input _varCategories
@@ -213,10 +213,10 @@ namespace panoramix {
                                     if (j == i) continue;
                                     sumOfOtherVars += messages.data(v2fmsghs[j]).values[idx[j]];
                                 }
-                                assert(!IsInfOrNaN(sumOfOtherVars));
+                                assert(!std::isnan(sumOfOtherVars));
                                 double score = theta + sumOfOtherVars;
-                                assert(!IsInfOrNaN(score));
-                                assert(score < std::numeric_limits<double>::max());
+                                assert(!std::isnan(score));
+                                assert(score <= std::numeric_limits<double>::infinity());
                                 if (score < outValue){
                                     outValue = score;
                                 }
@@ -236,7 +236,7 @@ namespace panoramix {
                         }
                         
                         for (auto & f2v : f2vmsghs){
-                            assert(messages.data(f2v).values.maxCoeff() < std::numeric_limits<double>::max());
+                            assert(messages.data(f2v).values.maxCoeff() <= std::numeric_limits<double>::infinity());
                         }
                     }
                 }
@@ -249,12 +249,12 @@ namespace panoramix {
                 for (auto & f2v : messages.constraints<F2VMessage>()){
                     MGVHandle vh = f2v.topo.component<1>();
                     varMarginals[messages.data(vh).h] += f2v.data.values; 
-                    assert(varMarginals[messages.data(vh).h].maxCoeff() < std::numeric_limits<double>::max());
+                    assert(varMarginals[messages.data(vh).h].maxCoeff() < std::numeric_limits<double>::infinity());
                 }
                 // get result                
                 for (auto & v : _graph.elements<0>()){
                     int label = -1;
-                    double curCost = std::numeric_limits<double>::max();
+                    double curCost = std::numeric_limits<double>::infinity();
                     const VectorXd & marginal = varMarginals[v.topo.hd];
                     for (int i = 0; i < marginal.size(); i++){
                         assert(!core::IsInfOrNaN(marginal[i]));

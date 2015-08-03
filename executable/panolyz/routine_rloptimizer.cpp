@@ -1,6 +1,5 @@
 #include "../../src/core/meta.hpp"
 #include "../../src/experimental/rloptimizer.hpp"
-#include "../../src/misc/matlab_engine.hpp"
 #include "../../src/gui/scene.hpp"
 #include "../../src/gui/canvas.hpp"
 #include "../../src/gui/utility.hpp"
@@ -11,7 +10,7 @@
 
 namespace panolyz {
 
-    using namespace panoramix;
+    using namespace pano;
     using namespace core;
     using namespace experimental;
 
@@ -91,13 +90,15 @@ namespace panolyz {
             Image3ub image = gui::PickAnImage("H:\\GitHub\\Panoramix\\data\\panorama\\indoor", &path);
             ResizeToMakeHeightUnder(image, 600);
 
+            misc::Matlab matlab;
+
             View<PanoramicCamera, Image3ub> view = CreatePanoramicView(image);
 
             std::vector<PerspectiveCamera> cams;
             std::vector<std::vector<Classified<Line2>>> lines;
             std::vector<Vec3> vps;
             std::vector<DenseMatd> lineVPScores;
-            if(refresh || !Load(path, "vplines", cams, lines, vps, lineVPScores)){
+            if (refresh || !Load(path, "vplines", cams, lines, vps, lineVPScores)) {
                 cams = CreateCubicFacedCameras(view.camera);
                 lines.resize(cams.size());
                 for (int i = 0; i < cams.size(); i++) {
@@ -112,6 +113,7 @@ namespace panolyz {
                 }
                 // estimate vp            
                 vps = EstimateVanishingPointsAndClassifyLines(cams, lines, &lineVPScores);
+                OrderVanishingPoints(vps, view.camera.up());
                 if (0) {
                     auto ctable = gui::CreateRandomColorTableWithSize(vps.size());
                     for (int i = 0; i < cams.size(); i++) {
@@ -144,7 +146,7 @@ namespace panolyz {
             if (refresh || !Load(path, "occ", occbnds)) {
                 for (int i = 0; i < hcams.size(); i++) {
                     auto pim = view.sampled(hcams[i]).image;
-                    auto occ = AsDimensionConvertor(hcams[i]).toSpace(DetectOcclusionBoundary(pim));
+                    auto occ = AsDimensionConvertor(hcams[i]).toSpace(DetectOcclusionBoundary(matlab, pim));
                     for (auto & soc : occ) {
                         occbnds.push_back(soc);
                     }
@@ -156,10 +158,9 @@ namespace panolyz {
             std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
             if (refresh || !Load(path, "gcs", gcs)) {
                 gcs.resize(hcams.size());
-                misc::MatlabEngine matlab;
                 for (int i = 0; i < hcams.size(); i++) {
                     auto pim = view.sampled(hcams[i]);
-                    auto pgc = ComputeGeometricContext(pim.image, false, true);
+                    auto pgc = ComputeGeometricContext(matlab, pim.image, false, true);
                     gcs[i].component.camera = hcams[i];
                     gcs[i].component.image = pgc;
                     gcs[i].score = sin(AngleBetweenUndirectedVectors(hcams[i].forward(), view.camera.up()));
@@ -176,6 +177,8 @@ namespace panolyz {
             }
 
             // graph
+            OrderVanishingPoints(vps, view.camera.up());
+
             RLGraph g;
             std::vector<RHandle> segId2Rhs;
             if (refresh || !Load(path, "g", g, segId2Rhs)) {
@@ -200,17 +203,36 @@ namespace panolyz {
                 cv::waitKey();
             }
 
-            //
-            RLOptimizer opt;
-            
-            // make patches
-            std::vector<RLGraphPatch> patches = MakePatches(g, 5, DegreesToRadians(30));
+            // first time reconstruct
+            auto pp = MakeASinglePatch(g);
+          
+            RLGraphPatchDict<RLGraphLabel> initialLabels;
+            FillSingleLabels(g, vps, pp, initialLabels);
+            std::unordered_map<RHandle, Plane3> recPlanes;
+            std::unordered_map<LHandle, Line3> recLines;
+            Reconstruct(g, vps, pp, initialLabels, recPlanes, recLines);
+            Visualize(g, view, recPlanes, recLines);
 
+
+            // make patches
+            std::vector<RLGraphPatch> patches;
+            MakeIcosahedron([&patches, &g, &view, &segId2Rhs, &segs](double x, double y, double z) {
+                Vec3 dir(x, y, z);
+                auto p2 = ToPixel(view.camera.toScreen(dir));
+                if (Contains(segs, p2)) {
+                    RHandle rh = segId2Rhs[segs(p2)];
+                    patches.push_back(SamplePatch(g, rh, 10, DegreesToRadians(20)));
+                }
+                return 1;
+            });
+
+
+            RLOptimizer opt;
             opt.setup(g, vps, patches);
             opt.preprocess();
+            Save(path, "opt_fea", opt.graphFeatureDictTable(), opt.patchFeatureDictTable());
 
-            HandledTable<RHandle, Plane3> recPlanes;
-            HandledTable<LHandle, Line3> recLines;
+
             //opt.inference(opt.suggestedWeights(), recPlanes, recLines);
 
 

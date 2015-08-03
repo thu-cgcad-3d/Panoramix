@@ -1,9 +1,9 @@
-#ifndef PANORAMIX_RESOURCE_HPP
-#define PANORAMIX_RESOURCE_HPP
+#pragma once
+
 
 #include "../core/basic_types.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace gui {
 
 
@@ -34,5 +34,3 @@ namespace panoramix {
     }
 }
 
-
-#endif

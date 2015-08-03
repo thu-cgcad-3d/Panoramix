@@ -3,7 +3,7 @@
 
 #include "config.hpp"
 
-using namespace panoramix;
+using namespace pano;
 using namespace test;
 
 using CG = core::ConstraintGraph<

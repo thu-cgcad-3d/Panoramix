@@ -1,4 +1,3 @@
-#include "../src/core/version.hpp"
 #include "../src/core/basic_types.hpp"
 #include "../src/core/ring.hpp"
 #include "../src/core/utility.hpp"
@@ -8,12 +7,8 @@
 #include <random>
 #include <Eigen/Dense>
 
-using namespace panoramix;
+using namespace pano;
 
-TEST(ConfigTest, Version) {
-    EXPECT_EQ(PANORAMIX_VERSION_MAJOR, core::GetVersion().major);
-    EXPECT_EQ(PANORAMIX_VERSION_MINOR, core::GetVersion().minor);
-}
 
 TEST(BasicType, Vec) {{
         core::Vec3 v1(0, 0, 0), v2(1, 1, 1);
@@ -78,14 +73,6 @@ TEST(BasicType, VecCast) {
 }
 
 TEST(BasicType, Ring) {
-
-    //core::Radian r = M_PI;
-    //double rr = r;
-    //ASSERT_FLOAT_EQ(rr, M_PI);
-
-    //r += M_PI;
-    //double rr2 = r;
-    //ASSERT_FLOAT_EQ(rr2, 0);
 
     core::Radian rrr = M_PI * 2;
     double rrr2 = rrr;

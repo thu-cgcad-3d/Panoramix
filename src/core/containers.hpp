@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_CONTAINERS_HPP
-#define PANORAMIX_CORE_CONTAINERS_HPP
+#pragma once
+
 
 #include <nanoflann.hpp>
 
@@ -9,7 +9,7 @@
 #include "handle.hpp"
 #include "iterators.hpp"
  
-namespace panoramix {
+namespace pano {
     namespace core {
 
 
@@ -29,8 +29,8 @@ namespace panoramix {
                 auto iter = begin;
                 std::advance(iter, idx_p2);
                 ValueType dist = 0.0;
-                for (int i = 0; i < size; i++){
-                    dist += Square((*iter)(i) - p1[i]);
+                for (int i = 0; i < size; i++) {
+                    dist += Square((*iter)(i)-p1[i]);
                 }
                 return dist;
             }
@@ -45,7 +45,7 @@ namespace panoramix {
             IteratorT begin, end;
         };
 
-        
+
 
 
 
@@ -573,7 +573,146 @@ namespace panoramix {
         }
 
 
+
+        // sparse dict
+        template <class T>
+        class Dictionary {
+            struct Node {
+                std::vector<std::unique_ptr<Node>> children;
+                std::unique_ptr<T> val;
+                bool isLeaf() const { return children.empty(); }
+                Node() : val(nullptr){}
+                explicit Node(size_t nc) : children(nc), val(nullptr) {}
+                explicit Node(std::unique_ptr<T> v) : val(std::move(v)) {}
+                Node(Node && n) : children(std::move(n.children)), val(std::move(n.val)) {}
+                Node(const Node &) = delete;
+                Node & operator = (Node && n) { children = std::move(n.children), val = std::move(n.val); return *this; }
+                Node & operator = (const Node &) = delete;
+                template <class Archive>
+                void serialize(Archive & ar) {
+                    ar(children, val);
+                }
+            };
+
+        public:
+            Dictionary() : _root(nullptr), _size(0){}
+            explicit Dictionary(const std::vector<size_t> & ncs) : _nchildren(ncs), _root(nullptr), _size(0) {}
+            explicit Dictionary(std::vector<size_t> && ncs) : _nchildren(std::move(ncs)), _root(nullptr), _size(0) {}
+            Dictionary(Dictionary && t) : _nchildren(std::move(t._nchildren)), _root(std::move(t._root)), _size(t._size) { t._size = 0; }
+            Dictionary(const Dictionary &) = delete;
+
+            Dictionary & operator = (Dictionary && t) {
+                _nchildren = std::move(t._nchildren);
+                _root = std::move(t._root);
+                std::swap(_size, t._size);
+                return *this;
+            }
+            Dictionary & operator = (const Dictionary &) = delete;
+
+        public:
+            template <class IndexT, class TT, class = std::enable_if_t<std::is_integral<IndexT>::value>>
+            void insert(const IndexT * inds, TT && val) {
+                Node * leaf = create(inds);
+                if (!leaf->val) {
+                    leaf->val = std::make_unique<T>(std::forward<TT>(val));
+                    _size++;
+                } else {
+                    leaf->val = std::make_unique<T>(std::forward<TT>(val));
+                }
+            }
+            template <class IndexT, class TT>
+            void insert(std::initializer_list<IndexT> inds, TT && val) {
+                assert(inds.size() == _nchildren.size());
+                return insert(inds.begin(), std::forward<TT>(val));
+            }
+            template <class IndexT, class = std::enable_if_t<std::is_integral<IndexT>::value>>
+            bool contains(const IndexT * inds) const {
+                return locate(inds) != nullptr;
+            }
+            template <class IndexT>
+            bool contains(std::initializer_list<IndexT> inds) const {
+                assert(inds.size() == _nchildren.size());
+                return contains(inds.begin());
+            }
+            template <class IndexT, class = std::enable_if_t<std::is_integral<IndexT>::value>>
+            const T & at(const IndexT * inds) const {
+                auto n = locate(inds);
+                assert(n->isLeaf());
+                return *(n->val);
+            }
+            template <class IndexT, class = std::enable_if_t<std::is_integral<IndexT>::value>>
+            T & at(const IndexT * inds) {
+                auto n = locate(inds);
+                assert(n->isLeaf());
+                return *(n->val);
+            }
+            template <class IndexT>
+            const T & at(std::initializer_list<IndexT> inds) const {
+                assert(inds.size() == _nchildren.size()); 
+                return at(inds.begin());
+            }
+            template <class IndexT>
+            T & at(std::initializer_list<IndexT> inds) {
+                assert(inds.size() == _nchildren.size()); 
+                return at(inds.begin()); 
+            }
+
+            size_t size() const { return _size; }
+
+            template <class Archive>
+            void serialize(Archive & ar) {
+                ar(_nchildren, _size, _root);
+            }
+
+        private:
+            template <class IndexT = size_t>
+            Node * create(const IndexT * inds) {
+                if (_nchildren.empty()) {
+                    return nullptr;
+                }
+                if (!_root) {
+                    _root = std::make_unique<Node>(_nchildren[0]);
+                }
+                Node * parent = _root.get();
+                int lastInd = inds[0];
+                for (int i = 1; i < _nchildren.size(); i++) {
+                    auto ind = inds[i];
+                    size_t nc = _nchildren[i];
+                    if (!parent->children[lastInd]) {
+                        parent->children[lastInd] = std::make_unique<Node>(nc);
+                    }
+                    parent = parent->children[lastInd].get();
+                    lastInd = ind;
+                }
+                if (!parent->children[lastInd]) {
+                    parent->children[lastInd] = std::make_unique<Node>(nullptr);
+                }
+                return parent->children[lastInd].get();
+            }
+
+            template <class IndexT = size_t>
+            Node * locate(const IndexT * inds) const {
+                Node * curNode = _root.get();
+                for (int i = 0; i < _nchildren.size(); i++) {
+                    auto ind = inds[i];
+                    size_t nc = _nchildren[i];
+                    if (!curNode) {
+                        return nullptr;
+                    }
+                    assert(ind < nc);
+                    curNode = curNode->children[ind].get();
+                }
+                return curNode;
+            }
+
+
+        private:
+            std::vector<size_t> _nchildren;
+            size_t _size;
+            std::unique_ptr<Node> _root;
+        };
+
+
     }
 }
  
-#endif

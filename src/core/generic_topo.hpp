@@ -1,10 +1,9 @@
-#ifndef PANORAMIX_CORE_GENERIC_TOPO_HPP
-#define PANORAMIX_CORE_GENERIC_TOPO_HPP
+#pragma once
 
 
 #include "handle.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core { 
 
         // the mesh class
@@ -563,4 +562,3 @@ namespace panoramix {
 
 }
  
-#endif

@@ -1,9 +1,9 @@
-#ifndef PANORAMIX_CORE_IMAGE_HPP
-#define PANORAMIX_CORE_IMAGE_HPP
+#pragma once
+
 
 #include "geometry.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
             
         using Image = cv::Mat;
@@ -20,6 +20,7 @@ namespace panoramix {
         using Imaged = ImageOf<double>;
         using Image3d = ImageOf<Vec<double, 3>>;
         using Image5d = ImageOf<Vec<double, 5>>;
+        using Image6d = ImageOf<Vec<double, 6>>;
         using Image7d = ImageOf<Vec<double, 7>>;
 
         template <> struct IsNotContainerByHand<Image> : yes{};
@@ -169,29 +170,6 @@ namespace panoramix {
             return mat;
         }
 
-
-        template <class T>
-        class ImageX {
-        public:
-            ImageX() {}
-            ImageX(const cv::Mat_<T> & mat) : _mat(mat) {}
-            explicit ImageX(const std::string & fname) : _mat(cv::imread(fname)) {}
-            ImageX(ImageX && im) : _mat(im._mat) { im._mat = cv::Mat_<T>(); }
-
-            int width() const { return _mat.cols; }
-            int height() const { return _mat.rows; }
-
-            template <class K = int>
-            K area() const { return _mat.cols * _mat.rows; }
-            template <class K = double>
-            Point<K, 2> center() const { return Point<K, 2>(_mat.cols / 2.0, _mat.rows / 2.0); }
-
-        private:
-            cv::Mat_<T> _mat;
-        };
-
     }
 }
 
-
-#endif

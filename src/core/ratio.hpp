@@ -1,11 +1,10 @@
-#ifndef PANORAMIX_CORE_RATIO_HPP
-#define PANORAMIX_CORE_RATIO_HPP
+#pragma once
 
 #include <cstdint>
 #include <type_traits>
 #include <ratio>
  
-namespace panoramix {
+namespace pano {
     namespace core {
 
 
@@ -197,23 +196,18 @@ namespace panoramix {
 namespace std {
 
     template <class T, class S>
-    inline panoramix::core::Ratio<T, S> abs(const panoramix::core::Ratio<T, S> & r) {
-        return panoramix::core::MakeRatio(abs(r.numerator), abs(r.denominator));
+    inline pano::core::Ratio<T, S> abs(const pano::core::Ratio<T, S> & r) {
+        return pano::core::MakeRatio(abs(r.numerator), abs(r.denominator));
     }
 
     template <class T, class S>
-    inline bool isinf(const panoramix::core::Ratio<T, S> & r){
+    inline bool isinf(const pano::core::Ratio<T, S> & r){
         return r.denominator == 0.0 && r.numerator != 0.0;
     }
 
     template <class T, class S>
-    inline bool isnan(const panoramix::core::Ratio<T, S> & r){
+    inline bool isnan(const pano::core::Ratio<T, S> & r){
         return r.denominator == 0.0 && r.numerator == 0.0;
     }
 
 }
-
-
-
- 
-#endif

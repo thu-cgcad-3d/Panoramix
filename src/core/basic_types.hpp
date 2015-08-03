@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_BASIC_TYPES_HPP
-#define PANORAMIX_CORE_BASIC_TYPES_HPP
+#pragma once
+
 
 #include <iterator>
 #include <vector>
@@ -21,7 +21,6 @@
 
 #include <opencv2/opencv.hpp>
 
-#include "version.hpp"
 #include "macros.hpp"
 #include "meta.hpp"
 #include "serialization.hpp"
@@ -34,4 +33,3 @@
 #include "image.hpp"
 
  
-#endif

@@ -3,11 +3,11 @@
 #include <random>
 #include <thread>
 
-#include "../src/misc/matlab_engine.hpp"
+//#include "../src/misc/matlab_engine.hpp"
 
 #include "config.hpp"
 
-using namespace panoramix;
+using namespace pano;
 using namespace test;
 
 

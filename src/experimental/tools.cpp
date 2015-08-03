@@ -2,7 +2,7 @@
 #include "../core/containers.hpp"
 #include "tools.hpp"
 
-namespace panoramix {
+namespace pano {
 
     namespace experimental {
 

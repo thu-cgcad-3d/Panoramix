@@ -30,12 +30,12 @@ namespace panolyz {
 
     template <class StringT, class ... Ts>
     inline bool Save(const std::string & path, StringT && s, Ts && ... ts){
-        return panoramix::core::SaveToDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
+        return pano::core::SaveToDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
     }
 
     template <class StringT, class ... Ts>
     inline bool Load(const std::string & path, StringT && s, Ts & ... ts){
-        return panoramix::core::LoadFromDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
+        return pano::core::LoadFromDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
     }
 
 

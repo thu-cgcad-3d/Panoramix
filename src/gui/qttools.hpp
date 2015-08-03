@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_GUI_QTTOOLS_HPP
-#define PANORAMIX_GUI_QTTOOLS_HPP
+#pragma once
+
 
 #include <QtCore>
 #include <QtGui>
@@ -9,7 +9,7 @@
 #include "../core/basic_types.hpp"
 #include "basic_types.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace gui {
 
 
@@ -246,4 +246,3 @@ namespace panoramix {
     }
 }
  
-#endif

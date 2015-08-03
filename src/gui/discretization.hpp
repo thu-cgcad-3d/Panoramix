@@ -1,11 +1,11 @@
-#ifndef PANORAMIX_DISCRETIZATION_HPP
-#define PANORAMIX_DISCRETIZATION_HPP
+#pragma once
+
 
 #include "../core/any.hpp"
 #include "../core/basic_types.hpp"
 #include "basic_types.hpp"
  
-namespace panoramix {
+namespace pano {
     namespace gui {
  
         // discretize options
@@ -292,4 +292,3 @@ namespace panoramix {
 
 }
  
-#endif

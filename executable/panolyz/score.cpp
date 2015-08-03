@@ -4,8 +4,11 @@
 namespace panolyz {
 
     auto costFun = [](const RLGraph& mg, const RLGraphControls & controls) -> double {
+
+        misc::Matlab matlab;
+
         auto & vps = controls.vanishingPoints;
-        auto vars = SolveVariablesWithBoundedAnchors(mg, controls, false);
+        auto vars = SolveVariablesWithBoundedAnchors(matlab, mg, controls, false);
         NormalizeVariables(mg, controls, vars);
         auto planes = Instances<RegionData>(mg, controls, vars);
         auto lines = Instances<LineData>(mg, controls, vars);

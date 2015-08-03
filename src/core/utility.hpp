@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_UTILITY_HPP
-#define PANORAMIX_CORE_UTILITY_HPP
+#pragma once
+
 
 #include <iterator>
 #include <Eigen/Dense>
@@ -7,7 +7,7 @@
 
 #include "basic_types.hpp"
  
-namespace panoramix {
+namespace pano {
     namespace core {
 
         // test value
@@ -1060,8 +1060,8 @@ namespace panoramix {
         }
 
         // make an icosahedron
-        template <class AddVertex3FunT, class AddTriFaceFunT>
-        void MakeIcosahedron(AddVertex3FunT && addVertex, AddTriFaceFunT && addFace) {
+        template <class AddVertex3FunT, class AddTriFaceFunT = Dummy>
+        void MakeIcosahedron(AddVertex3FunT && addVertex, AddTriFaceFunT && addFace = AddTriFaceFunT()) {
             using VertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
             // create a basic icosahedron
             static const float t = (1.0f + std::sqrt(5.0f)) / 2.0f;
@@ -1139,4 +1139,3 @@ namespace panoramix {
     }
 }
  
-#endif

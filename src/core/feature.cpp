@@ -5,7 +5,7 @@
 extern "C" {
     #include <lsd.h>
 }
-#include <quickshift_common.h>
+//#include <quickshift_common.h>
 
 #include <SLIC.h>
 
@@ -21,16 +21,13 @@ extern "C" {
 #include "clock.hpp"
 
 #include "../misc/matlab_api.hpp"
-#include "../misc/matlab_engine.hpp"
 #include "../misc/eigen.hpp"
 
 
 
 
-namespace panoramix {
+namespace pano {
     namespace core {
-
-        using misc::MatlabEngine;
 
 
         void NonMaximaSuppression(const Image & src, Image & dst, int sz, std::vector<Pixel> * pixels,
@@ -863,6 +860,24 @@ namespace panoramix {
         }
 
 
+        void OrderVanishingPoints(std::vector<Vec3> & vps, const Vec3 & verticalSeed /*= Z()*/) {
+            assert(vps.size() >= 1);
+            int vertId = NearestDirectionId(vps, verticalSeed);
+            std::swap(vps[0], vps[vertId]);
+            for (int i = 1; i < vps.size(); i++) {
+                if (IsFuzzyPerpendicular(vps[0], vps[i])) {
+                    std::swap(vps[1], vps[i]);
+                    break;
+                }
+            }
+            for (int i = 2; i < vps.size(); i++) {
+                if (IsFuzzyPerpendicular(vps[0], vps[i]) && IsFuzzyPerpendicular(vps[1], vps[i])) {
+                    std::swap(vps[2], vps[i]);
+                    break;
+                }
+            }
+        }
+
 
 
 
@@ -1448,8 +1463,7 @@ namespace panoramix {
                 return std::move(results);
             }
             else if (_params.algorithm == MATLAB_PanoContext){
-                assert(MatlabEngine::IsBuilt());
-                MatlabEngine matlab;
+                misc::Matlab matlab;
                 // install lines
                 Imaged linesData(lines.size(), 4);
                 for (int i = 0; i < lines.size(); i++){
@@ -1458,16 +1472,14 @@ namespace panoramix {
                     linesData(i, 2) = lines[i].second[0];
                     linesData(i, 3) = lines[i].second[1];
                 }
-                matlab.PutVariable("linesData", linesData);
-                matlab.PutVariable("projCenter", projCenter);
+                matlab.setVar("linesData", linesData);
+                matlab.setVar("projCenter", cv::Mat(projCenter));
                 // convert to struct array
                 matlab << "[vp, f, lineclasses] = panoramix_wrapper_vpdetection(linesData, projCenter');";
-                Imaged vpData;
-                Imaged focal;
-                Imaged lineClassesData;
-                matlab.GetVariable("vp", vpData, false);
-                matlab.GetVariable("f", focal, false);
-                MatlabEngine::GetVariable("lineclasses", lineClassesData, false);
+               
+                Imaged vpData = matlab.var("vp").toCVMat(false);
+                Imaged focal = matlab.var("f").toCVMat(false);
+                Imaged lineClassesData = matlab.var("lineclasses").toCVMat(false);
                 if (!(vpData.cols == 2 && vpData.rows == 3)){
                     return nullptr;
                 }
@@ -1484,7 +1496,6 @@ namespace panoramix {
                 return std::make_tuple(std::move(vps), focal(0), std::move(lineClasses));
             }
             else if (_params.algorithm == MATLAB_Tardif){
-                assert(MatlabEngine::IsBuilt());
                 // install lines
                 Imaged linesData(lines.size(), 5);
                 for (int i = 0; i < lines.size(); i++){
@@ -1610,8 +1621,8 @@ namespace panoramix {
                                 //-------------------------------------------------------------- 
                                 //                            2                           2 
                                 //    (e1x vz - 2 vx + e2x vz)  + (e1y vz - 2 vy + e2y vz)
-                                auto top = abs(e1y * vx - e2y * vx - e1x * vy + e2x * vy + e1x * e2y * vz - e2x * e1y * vz);
-                                auto bottom = sqrt((e1x * vz - vx * 2.0 + e2x * vz).square() + (e1y * vz - 2.0 * vy + e2y * vz).square());
+                                auto top = abs(e1y * vx - e2y * vx - e1x * vy + e2x * vy + e1x * e2y * vz - e2x * e1y * vz).eval();
+                                auto bottom = sqrt((e1x * vz - vx * 2.0 + e2x * vz).square() + (e1y * vz - 2.0 * vy + e2y * vz).square()).eval();
                                 v.middleRows(startPoses[k], lineMats[k]->cols()) = (top / bottom).matrix().transpose();
                             }
 
@@ -1801,9 +1812,9 @@ namespace panoramix {
                     int p; // parent
                     float size;
                 };
-                explicit Universe(const std::vector<float> & eleSizes) 
-                        : elements(eleSizes.size()), num(eleSizes.size()) {
-                    for (int i = 0; i < eleSizes.size(); i++){
+                explicit Universe(const std::vector<float> & eleSizes)
+                    : elements(eleSizes.size()), num(eleSizes.size()) {
+                    for (int i = 0; i < eleSizes.size(); i++) {
                         elements[i].rank = 0;
                         elements[i].size = eleSizes[i];
                         elements[i].p = i;
@@ -1820,8 +1831,7 @@ namespace panoramix {
                     if (elements[x].rank > elements[y].rank) {
                         elements[y].p = x;
                         elements[x].size += elements[y].size;
-                    }
-                    else {
+                    } else {
                         elements[x].p = y;
                         elements[y].size += elements[x].size;
                         if (elements[x].rank == elements[y].rank)
@@ -1842,10 +1852,10 @@ namespace panoramix {
 
             // merge similar nodes in graph
             template <class ThresholdFunT = decltype(DefaultThreshold)>
-            Universe SegmentGraph(const std::vector<float> & verticesSizes, std::vector<Edge> & edges, float c, 
+            Universe SegmentGraph(const std::vector<float> & verticesSizes, std::vector<Edge> & edges, float c,
                 ThresholdFunT && thresholdFun = DefaultThreshold) {
-                
-                std::sort(edges.begin(), edges.end(), [](const Edge & e1, const Edge & e2){
+
+                std::sort(edges.begin(), edges.end(), [](const Edge & e1, const Edge & e2) {
                     return e1.w < e2.w;
                 });
 
@@ -1876,12 +1886,12 @@ namespace panoramix {
             }
 
 
-            inline float ColorDistance(const Vec3 & a, const Vec3 & b, bool useYUV){
+            inline float ColorDistance(const Vec3 & a, const Vec3 & b, bool useYUV) {
                 static const Mat3 RGB2YUV(
                     0.299, 0.587, 0.114,
                     -0.14713, -0.28886, 0.436,
                     0.615, -0.51499, -0.10001
-                );
+                    );
                 static const Mat3 BGR2VUY = RGB2YUV.t();
                 return useYUV ? norm(BGR2VUY * (a - b)) * 3.0 : norm(a - b);
             }
@@ -1898,15 +1908,15 @@ namespace panoramix {
             // measure pixel distance with 2d line cuttings
             inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
                 const Pixel & p1, const Pixel & p2,
-                const std::vector<Line2> & lines, bool useYUV){
+                const std::vector<Line2> & lines, bool useYUV) {
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
-                for (int lineId : { linesOccupation(p1), linesOccupation(p2) }){
-                    if (lineId >= 0){
+                for (int lineId : { linesOccupation(p1), linesOccupation(p2) }) {
+                    if (lineId >= 0) {
                         auto & line = lines[lineId];
                         double p1OnLeftFlag = (p1 - ToPixel(line.first)).cross(ToPixel(line.direction()));
                         double p2OnLeftFlag = (p2 - ToPixel(line.first)).cross(ToPixel(line.direction()));
-                        if (p1OnLeftFlag * p2OnLeftFlag < 0){
+                        if (p1OnLeftFlag * p2OnLeftFlag < 0) {
                             return 1e5;
                         }
                     }
@@ -1918,18 +1928,18 @@ namespace panoramix {
 
             inline float PixelDiff(const Image & im, const Imagei & linesOccupation,
                 const Pixel & p1, const Pixel & p2,
-                const std::vector<Line3> & lines, const PanoramicCamera & cam, bool useYUV){
+                const std::vector<Line3> & lines, const PanoramicCamera & cam, bool useYUV) {
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
                 auto direction1 = cam.toSpace(p1);
                 auto direction2 = cam.toSpace(p2);
-                for (int lineId : { linesOccupation(p1), linesOccupation(p2) }){
-                    if (lineId >= 0){
+                for (int lineId : { linesOccupation(p1), linesOccupation(p2) }) {
+                    if (lineId >= 0) {
                         auto & line = lines[lineId];
                         auto lineNormal = line.first.cross(line.second);
                         double p1OnLeftFlag = lineNormal.dot(direction1);
                         double p2OnLeftFlag = lineNormal.dot(direction2);
-                        if (p1OnLeftFlag * p2OnLeftFlag < 0){
+                        if (p1OnLeftFlag * p2OnLeftFlag < 0) {
                             return 1e5;
                         }
                     }
@@ -1941,9 +1951,9 @@ namespace panoramix {
 
 
 
-            template <class PixelDiffFuncT>
+            template <class PixelDiffFuncT, class ImageT>
             std::vector<Edge> ComposeGraphEdges(int width, int height, bool isPanorama,
-                const Image & smoothed, const PixelDiffFuncT & pixelDiff){
+                const ImageT & smoothed, const PixelDiffFuncT & pixelDiff) {
 
                 std::vector<Edge> edges;
                 edges.reserve(width * height * 4);
@@ -1982,26 +1992,26 @@ namespace panoramix {
                         }
                     }
                 }
-                if (isPanorama){ // collect panorama borders
-                    for (int y = 0; y < height; y++){
+                if (isPanorama) { // collect panorama borders
+                    for (int y = 0; y < height; y++) {
                         Edge edge;
                         edge.a = y * width + 0;
                         edge.b = y * width + width - 1;
                         edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y });
                         edges.push_back(edge);
-                        if (y < height - 1){
+                        if (y < height - 1) {
                             edge.b = (y + 1) * width + width - 1;
-                            edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y + 1});
+                            edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y + 1 });
                             edges.push_back(edge);
                         }
-                        if (y > 0){
+                        if (y > 0) {
                             edge.b = (y - 1) * width + width - 1;
                             edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y - 1 });
                             edges.push_back(edge);
                         }
                     }
-                    for (int x1 = 0; x1 < width; x1++){
-                        for (int x2 = x1; x2 < width; x2++){
+                    for (int x1 = 0; x1 < width; x1++) {
+                        for (int x2 = x1; x2 < width; x2++) {
                             Edge edge;
                             edge.a = 0 * width + x1;
                             edge.b = 0 * width + x2;
@@ -2018,16 +2028,16 @@ namespace panoramix {
             }
 
 
-            std::vector<float> ComposeGraphVerticesSizes(int width, int height, bool isPanorama){
-                if (!isPanorama){
+            std::vector<float> ComposeGraphVerticesSizes(int width, int height, bool isPanorama) {
+                if (!isPanorama) {
                     return std::vector<float>(width * height, 1.0f);
                 }
                 std::vector<float> vsizes(width * height);
                 float radius = width / 2.0 / M_PI;
-                for (int y = 0; y < height; y++){
-                    float longitude = (y - height/2.0f) / radius;
+                for (int y = 0; y < height; y++) {
+                    float longitude = (y - height / 2.0f) / radius;
                     float scale = cos(longitude);
-                    if (scale < 0){
+                    if (scale < 0) {
                         scale = 0.0;
                     }
                     std::fill_n(vsizes.data() + y * width, width, scale);
@@ -2036,9 +2046,9 @@ namespace panoramix {
             }
 
 
-            std::pair<Imagei, Image> PerformSegmentation(const std::vector<float> & verticesSizes, 
-                std::vector<Edge> & edges, int width, int height, 
-                float sigma, float c, int minSize, int & numCCs, bool returnColoredResult = false){
+            std::pair<Imagei, Image> PerformSegmentation(const std::vector<float> & verticesSizes,
+                std::vector<Edge> & edges, int width, int height,
+                float sigma, float c, int minSize, int & numCCs, bool returnColoredResult = false) {
 
                 int num = (int)edges.size();
                 Universe u = SegmentGraph(verticesSizes, edges, c);
@@ -2056,7 +2066,7 @@ namespace panoramix {
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
                         int comp = u.find(y * width + x);
-                        if (compIntSet.find(comp) == compIntSet.end()){
+                        if (compIntSet.find(comp) == compIntSet.end()) {
                             compIntSet.insert(std::make_pair(comp, (int)compIntSet.size()));
                         }
                         output(cv::Point(x, y)) = compIntSet[comp];
@@ -2064,13 +2074,13 @@ namespace panoramix {
                 }
                 assert(compIntSet.size() == numCCs);
 
-                if (!returnColoredResult){
+                if (!returnColoredResult) {
                     return std::make_pair(output, Image());
                 }
 
                 Image coloredOutput(cv::Size2i(width, height), CV_8UC3);
                 std::vector<cv::Vec<uint8_t, 3>> colors(numCCs);
-                std::generate(colors.begin(), colors.end(), [](){
+                std::generate(colors.begin(), colors.end(), []() {
                     return cv::Vec<uint8_t, 3>(uint8_t(std::rand() % 256),
                         uint8_t(std::rand() % 256),
                         uint8_t(std::rand() % 256));
@@ -2088,7 +2098,7 @@ namespace panoramix {
 
 
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
-            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, bool isPanorama, 
+            std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize, bool isPanorama,
                 int & numCCs, bool returnColoredResult = false, bool useYUV = true) {
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
@@ -2101,18 +2111,18 @@ namespace panoramix {
                 // build pixel graph
                 std::vector<float> vSizes = ComposeGraphVerticesSizes(width, height, isPanorama);
                 //float(*pixelDiff)(const Image & im, const cv::Point & p1, const cv::Point & p2, bool useYUV) = PixelDiff;
-                std::vector<Edge> edges = ComposeGraphEdges(width, height, isPanorama, smoothed, 
-                    [useYUV](const Image & im, const cv::Point & p1, const cv::Point & p2){
+                std::vector<Edge> edges = ComposeGraphEdges(width, height, isPanorama, smoothed,
+                    [useYUV](const Image & im, const cv::Point & p1, const cv::Point & p2) {
                     return PixelDiff(im, p1, p2, useYUV);
                 });
 
-                return PerformSegmentation(vSizes, edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);
+                return PerformSegmentation(vSizes, edges, width, height, sigma, c, minSize, numCCs, returnColoredResult);              
             }
 
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
             std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize,
                 const std::vector<Line2> & lines,
-                int & numCCs, bool returnColoredResult = false, bool useYUV = true){
+                int & numCCs, bool returnColoredResult = false, bool useYUV = true) {
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
 
@@ -2122,15 +2132,15 @@ namespace panoramix {
                 cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
 
                 Imagei linesOccupation(im.size(), -1);
-                for (int i = 0; i < lines.size(); i++){
+                for (int i = 0; i < lines.size(); i++) {
                     auto & l = lines[i];
                     cv::line(linesOccupation, ToPixel(l.first), ToPixel(l.second), i, 2);
                 }
 
                 // build pixel graph
                 std::vector<float> vSizes = ComposeGraphVerticesSizes(width, height, false);
-                std::vector<Edge> edges = ComposeGraphEdges(width, height, false, smoothed, 
-                    [&linesOccupation, &lines, useYUV](const Image & im, const cv::Point & p1, const cv::Point & p2){
+                std::vector<Edge> edges = ComposeGraphEdges(width, height, false, smoothed,
+                    [&linesOccupation, &lines, useYUV](const Image & im, const cv::Point & p1, const cv::Point & p2) {
                     return PixelDiff(im, linesOccupation, p1, p2, lines, useYUV);
                 });
 
@@ -2140,7 +2150,7 @@ namespace panoramix {
             // first return is CV_32SC1, the second is CV_8UC3 (for display)
             std::pair<Imagei, Image> SegmentImage(const Image & im, float sigma, float c, int minSize,
                 const std::vector<Line3> & lines, const PanoramicCamera & cam,
-                int & numCCs, bool returnColoredResult = false, bool useYUV = true){
+                int & numCCs, bool returnColoredResult = false, bool useYUV = true) {
 
                 assert(im.depth() == CV_8U && im.channels() == 3);
 
@@ -2150,21 +2160,21 @@ namespace panoramix {
                 cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
 
                 Imagei linesOccupation(im.size(), -1);
-                for (int i = 0; i < lines.size(); i++){
+                for (int i = 0; i < lines.size(); i++) {
                     auto & l = lines[i];
                     double spanAngle = AngleBetweenDirections(l.first, l.second);
                     std::vector<std::vector<Pixel>> pline(1);
-                    for (double a = 0.0; a <= spanAngle; a += 0.01){
+                    for (double a = 0.0; a <= spanAngle; a += 0.01) {
                         auto direction = RotateDirection(l.first, l.second, a);
                         pline.front().push_back(ToPixel(cam.toScreen(direction)));
-                    }                    
+                    }
                     cv::polylines(linesOccupation, pline, false, i, 2);
                 }
 
                 // build pixel graph
                 std::vector<float> vSizes = ComposeGraphVerticesSizes(width, height, true);
                 std::vector<Edge> edges = ComposeGraphEdges(width, height, true, smoothed,
-                    [&linesOccupation, &lines, &cam, useYUV](const Image & im, const cv::Point & p1, const cv::Point & p2){
+                    [&linesOccupation, &lines, &cam, useYUV](const Image & im, const cv::Point & p1, const cv::Point & p2) {
                     return PixelDiff(im, linesOccupation, p1, p2, lines, cam, useYUV);
                 });
 
@@ -2175,14 +2185,14 @@ namespace panoramix {
 
 
 
-            std::pair<Imagei, int> SegmentImageUsingSLIC(const Image & im, int spsize, int spnum){
+            std::pair<Imagei, int> SegmentImageUsingSLIC(const Image & im, int spsize, int spnum) {
                 assert(im.depth() == CV_8U && im.channels() == 3);
 
                 SLIC slic;
                 unsigned int * ubuff = new unsigned int[im.cols * im.rows];
                 // fill buffer
-                for (int x = 0; x < im.cols; x++){
-                    for (int y = 0; y < im.rows; y++){
+                for (int x = 0; x < im.cols; x++) {
+                    for (int y = 0; y < im.rows; y++) {
                         auto & pixel = ubuff[y * im.cols + x];
                         auto & color = im.at<Vec3ub>(Pixel(x, y));
                         pixel = (color[2] << 16) + (color[1] << 8) + color[0];
@@ -2191,17 +2201,16 @@ namespace panoramix {
 
                 int * klabels = nullptr;
                 int nlabels = 0;
-                if (spsize > 0){
+                if (spsize > 0) {
                     slic.DoSuperpixelSegmentation_ForGivenSuperpixelSize(ubuff, im.cols, im.rows, klabels, nlabels, spsize, 50);
-                }
-                else{
+                } else {
                     slic.DoSuperpixelSegmentation_ForGivenNumberOfSuperpixels(ubuff, im.cols, im.rows, klabels, nlabels, spnum, 50);
                 }
 
                 // fill labels back
                 Imagei labels = Imagei::zeros(im.size());
-                for (int x = 0; x < im.cols; x++){
-                    for (int y = 0; y < im.rows; y++){
+                for (int x = 0; x < im.cols; x++) {
+                    for (int y = 0; y < im.rows; y++) {
                         labels(Pixel(x, y)) = klabels[y * im.cols + x];
                     }
                 }
@@ -2212,174 +2221,179 @@ namespace panoramix {
                 return std::make_pair(labels, nlabels);
             }
 
-
-            inline void ToQuickShiftImage(const Image & IMG, image_t & im){
-                im.N1 = IMG.rows;
-                im.N2 = IMG.cols;
-                im.K = IMG.channels();
-                assert(im.K == 3);
-                im.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
-                for (int k = 0; k < im.K; k++)
-                for (int col = 0; col < im.N2; col++)
-                for (int row = 0; row < im.N1; row++)
-                {
-                    auto & pt = IMG.at<cv::Vec<uint8_t, 3>>(/*im.N1 - 1 - row*/row, col);
-                    im.I[row + col*im.N1 + k*im.N1*im.N2] = 32. * pt[k] / 255.; // Scale 0-32
-                }
-            }
-
-            namespace quickshift_details {
-
-                int * map_to_flatmap(float * map, unsigned int size) {
-                    /********** Flatmap **********/
-                    int *flatmap = (int *)malloc(size*sizeof(int));
-                    for (unsigned int p = 0; p < size; p++)
-                    {
-                        flatmap[p] = map[p];
-                    }
-
-                    bool changed = true;
-                    while (changed)
-                    {
-                        changed = false;
-                        for (unsigned int p = 0; p < size; p++)
-                        {
-                            changed = changed || (flatmap[p] != flatmap[flatmap[p]]);
-                            flatmap[p] = flatmap[flatmap[p]];
-                        }
-                    }
-
-                    /* Consistency check */
-                    for (unsigned int p = 0; p < size; p++)
-                        assert(flatmap[p] == flatmap[flatmap[p]]);
-
-                    return flatmap;
-                }
-
-                image_t imseg(image_t im, int * flatmap) {
-                    /********** Mean Color **********/
-                    float * meancolor = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
-                    float * counts = (float *)calloc(im.N1*im.N2, sizeof(float));
-
-                    for (int p = 0; p < im.N1*im.N2; p++)
-                    {
-                        counts[flatmap[p]]++;
-                        for (int k = 0; k < im.K; k++)
-                            meancolor[flatmap[p] + k*im.N1*im.N2] += im.I[p + k*im.N1*im.N2];
-                    }
-
-                    int roots = 0;
-                    for (int p = 0; p < im.N1*im.N2; p++)
-                    {
-                        if (flatmap[p] == p)
-                            roots++;
-                    }
-                    printf("Roots: %d\n", roots);
-
-                    int nonzero = 0;
-                    for (int p = 0; p < im.N1*im.N2; p++)
-                    {
-                        if (counts[p] > 0)
-                        {
-                            nonzero++;
-                            for (int k = 0; k < im.K; k++)
-                                meancolor[p + k*im.N1*im.N2] /= counts[p];
-                        }
-                    }
-                    if (roots != nonzero)
-                        printf("Nonzero: %d\n", nonzero);
-                    assert(roots == nonzero);
-
-
-                    /********** Create output image **********/
-                    image_t imout = im;
-                    imout.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
-                    for (int p = 0; p < im.N1*im.N2; p++)
-                    for (int k = 0; k < im.K; k++)
-                        imout.I[p + k*im.N1*im.N2] = meancolor[flatmap[p] + k*im.N1*im.N2];
-
-                    free(meancolor);
-                    free(counts);
-
-                    return imout;
-                }
-
-            }
-
-
-            std::pair<Imagei, int> SegmentImageUsingQuickShiftCPU(const Image & originalIm, float sigma, float tau) {
-                image_t im;
-                ToQuickShiftImage(originalIm, im);
-                float *map, *E, *gaps;
-                int * flatmap;
-                image_t imout;
-
-                map = (float *)calloc(im.N1*im.N2, sizeof(float));
-                gaps = (float *)calloc(im.N1*im.N2, sizeof(float));
-                E = (float *)calloc(im.N1*im.N2, sizeof(float));
-
-                quickshift(im, sigma, tau, map, gaps, E);
-
-                /* Consistency check */
-                for (int p = 0; p < im.N1*im.N2; p++)
-                if (map[p] == p) assert(gaps[p] == INF);
-
-                flatmap = quickshift_details::map_to_flatmap(map, im.N1*im.N2);
-                imout = quickshift_details::imseg(im, flatmap);
-                Imagei segmented(im.N1, im.N2);
-                for (int col = 0; col < im.N2; col++)
-                for (int row = 0; row < im.N1; row++)
-                {
-                    segmented(row, col) = flatmap[row + col*im.N1];
-                }
-                int segnum = *std::max_element(flatmap, flatmap + im.N1 * im.N2) + 1;
-
-                free(im.I);
-                free(imout.I);
-                free(map);
-                free(gaps);
-                free(E);
-                free(flatmap);
-                return std::make_pair(segmented, segnum);
-            }
-
-            std::pair<Imagei, int> SegmentImageUsingQuickShiftGPU(const Image & originalIm, float sigma, float tau) {
-                image_t im;
-                ToQuickShiftImage(originalIm, im);
-                float *map, *E, *gaps;
-                int * flatmap;
-                image_t imout;
-
-                map = (float *)calloc(im.N1*im.N2, sizeof(float));
-                gaps = (float *)calloc(im.N1*im.N2, sizeof(float));
-                E = (float *)calloc(im.N1*im.N2, sizeof(float));
-
-                quickshift_gpu(im, sigma, tau, map, gaps, E);
-
-                /* Consistency check */
-                for (int p = 0; p < im.N1*im.N2; p++)
-                if (map[p] == p) assert(gaps[p] == INF);
-
-                flatmap = quickshift_details::map_to_flatmap(map, im.N1*im.N2);
-                imout = quickshift_details::imseg(im, flatmap);
-                Imagei segmented(im.N1, im.N2);
-                for (int col = 0; col < im.N2; col++)
-                for (int row = 0; row < im.N1; row++)
-                {
-                    segmented(row, col) = flatmap[row + col*im.N1];
-                }
-                int segnum = *std::max_element(flatmap, flatmap + im.N1 * im.N2) + 1;
-
-                free(im.I);
-                free(imout.I);
-                free(map);
-                free(gaps);
-                free(E);
-                free(flatmap);
-                return std::make_pair(segmented, segnum);
-            }
-
         }
+
+#if 0
+            //    inline void ToQuickShiftImage(const Image & IMG, image_t & im){
+            //        im.N1 = IMG.rows;
+            //        im.N2 = IMG.cols;
+            //        im.K = IMG.channels();
+            //        assert(im.K == 3);
+            //        im.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+            //        for (int k = 0; k < im.K; k++)
+            //        for (int col = 0; col < im.N2; col++)
+            //        for (int row = 0; row < im.N1; row++)
+            //        {
+            //            auto & pt = IMG.at<cv::Vec<uint8_t, 3>>(/*im.N1 - 1 - row*/row, col);
+            //            im.I[row + col*im.N1 + k*im.N1*im.N2] = 32. * pt[k] / 255.; // Scale 0-32
+            //        }
+            //    }
+
+            //    namespace quickshift_details {
+
+            //        int * map_to_flatmap(float * map, unsigned int size) {
+            //            /********** Flatmap **********/
+            //            int *flatmap = (int *)malloc(size*sizeof(int));
+            //            for (unsigned int p = 0; p < size; p++)
+            //            {
+            //                flatmap[p] = map[p];
+            //            }
+
+            //            bool changed = true;
+            //            while (changed)
+            //            {
+            //                changed = false;
+            //                for (unsigned int p = 0; p < size; p++)
+            //                {
+            //                    changed = changed || (flatmap[p] != flatmap[flatmap[p]]);
+            //                    flatmap[p] = flatmap[flatmap[p]];
+            //                }
+            //            }
+
+            //            /* Consistency check */
+            //            for (unsigned int p = 0; p < size; p++)
+            //                assert(flatmap[p] == flatmap[flatmap[p]]);
+
+            //            return flatmap;
+            //        }
+
+            //        image_t imseg(image_t im, int * flatmap) {
+            //            /********** Mean Color **********/
+            //            float * meancolor = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+            //            float * counts = (float *)calloc(im.N1*im.N2, sizeof(float));
+
+            //            for (int p = 0; p < im.N1*im.N2; p++)
+            //            {
+            //                counts[flatmap[p]]++;
+            //                for (int k = 0; k < im.K; k++)
+            //                    meancolor[flatmap[p] + k*im.N1*im.N2] += im.I[p + k*im.N1*im.N2];
+            //            }
+
+            //            int roots = 0;
+            //            for (int p = 0; p < im.N1*im.N2; p++)
+            //            {
+            //                if (flatmap[p] == p)
+            //                    roots++;
+            //            }
+            //            printf("Roots: %d\n", roots);
+
+            //            int nonzero = 0;
+            //            for (int p = 0; p < im.N1*im.N2; p++)
+            //            {
+            //                if (counts[p] > 0)
+            //                {
+            //                    nonzero++;
+            //                    for (int k = 0; k < im.K; k++)
+            //                        meancolor[p + k*im.N1*im.N2] /= counts[p];
+            //                }
+            //            }
+            //            if (roots != nonzero)
+            //                printf("Nonzero: %d\n", nonzero);
+            //            assert(roots == nonzero);
+
+
+            //            /********** Create output image **********/
+            //            image_t imout = im;
+            //            imout.I = (float *)calloc(im.N1*im.N2*im.K, sizeof(float));
+            //            for (int p = 0; p < im.N1*im.N2; p++)
+            //            for (int k = 0; k < im.K; k++)
+            //                imout.I[p + k*im.N1*im.N2] = meancolor[flatmap[p] + k*im.N1*im.N2];
+
+            //            free(meancolor);
+            //            free(counts);
+
+            //            return imout;
+            //        }
+
+            //    }
+
+
+            //    std::pair<Imagei, int> SegmentImageUsingQuickShiftCPU(const Image & originalIm, float sigma, float tau) {
+            //        image_t im;
+            //        ToQuickShiftImage(originalIm, im);
+            //        float *map, *E, *gaps;
+            //        int * flatmap;
+            //        image_t imout;
+
+            //        map = (float *)calloc(im.N1*im.N2, sizeof(float));
+            //        gaps = (float *)calloc(im.N1*im.N2, sizeof(float));
+            //        E = (float *)calloc(im.N1*im.N2, sizeof(float));
+
+            //        quickshift(im, sigma, tau, map, gaps, E);
+
+            //        /* Consistency check */
+            //        for (int p = 0; p < im.N1*im.N2; p++)
+            //        if (map[p] == p) assert(gaps[p] == INF);
+
+            //        flatmap = quickshift_details::map_to_flatmap(map, im.N1*im.N2);
+            //        imout = quickshift_details::imseg(im, flatmap);
+            //        Imagei segmented(im.N1, im.N2);
+            //        for (int col = 0; col < im.N2; col++)
+            //        for (int row = 0; row < im.N1; row++)
+            //        {
+            //            segmented(row, col) = flatmap[row + col*im.N1];
+            //        }
+            //        int segnum = *std::max_element(flatmap, flatmap + im.N1 * im.N2) + 1;
+
+            //        free(im.I);
+            //        free(imout.I);
+            //        free(map);
+            //        free(gaps);
+            //        free(E);
+            //        free(flatmap);
+            //        return std::make_pair(segmented, segnum);
+            //    }
+
+            //    std::pair<Imagei, int> SegmentImageUsingQuickShiftGPU(const Image & originalIm, float sigma, float tau) {
+            //        image_t im;
+            //        ToQuickShiftImage(originalIm, im);
+            //        float *map, *E, *gaps;
+            //        int * flatmap;
+            //        image_t imout;
+
+            //        map = (float *)calloc(im.N1*im.N2, sizeof(float));
+            //        gaps = (float *)calloc(im.N1*im.N2, sizeof(float));
+            //        E = (float *)calloc(im.N1*im.N2, sizeof(float));
+
+            //        quickshift_gpu(im, sigma, tau, map, gaps, E);
+
+            //        /* Consistency check */
+            //        for (int p = 0; p < im.N1*im.N2; p++)
+            //        if (map[p] == p) assert(gaps[p] == INF);
+
+            //        flatmap = quickshift_details::map_to_flatmap(map, im.N1*im.N2);
+            //        imout = quickshift_details::imseg(im, flatmap);
+            //        Imagei segmented(im.N1, im.N2);
+            //        for (int col = 0; col < im.N2; col++)
+            //        for (int row = 0; row < im.N1; row++)
+            //        {
+            //            segmented(row, col) = flatmap[row + col*im.N1];
+            //        }
+            //        int segnum = *std::max_element(flatmap, flatmap + im.N1 * im.N2) + 1;
+
+            //        free(im.I);
+            //        free(imout.I);
+            //        free(map);
+            //        free(gaps);
+            //        free(E);
+            //        free(flatmap);
+            //        return std::make_pair(segmented, segnum);
+            //    }
+
+            //}
+#endif
+
+   
 
 
         std::pair<Imagei, int> SegmentationExtractor::operator() (const Image & im, bool isPanorama) const {
@@ -2394,11 +2408,13 @@ namespace panoramix {
             }
             else if (_params.algorithm == QuickShiftCPU){
                 assert(!isPanorama);
-                return SegmentImageUsingQuickShiftCPU(im, 6, 10);
+                NOT_IMPLEMENTED_YET();
+                //return SegmentImageUsingQuickShiftCPU(im, 6, 10);
             }
             else if (_params.algorithm == QuickShiftGPU){
                 assert(!isPanorama);
-                return SegmentImageUsingQuickShiftGPU(im, 6, 10);
+                NOT_IMPLEMENTED_YET();
+                //return SegmentImageUsingQuickShiftGPU(im, 6, 10);
             }
             else{
                 SHOULD_NEVER_BE_CALLED();
@@ -2447,6 +2463,9 @@ namespace panoramix {
 #pragma endregion SegmentationExtractor
 
 
+
+
+
         namespace {
 
             struct ComparePixelLoc {
@@ -2464,6 +2483,137 @@ namespace panoramix {
             }
 
         }
+
+
+
+        void RemoveThinRegionInSegmentation(Imagei & segs, int widthThres /*= 2.0*/, bool crossBorder /*= false*/) {
+            Imageb segregions(segs.size(), true);
+            for (auto it = segs.begin(); it != segs.end(); ++it) {
+                auto p = it.pos();
+                if (p.x == segs.cols - 1 && !crossBorder)
+                    continue;
+                if (p.y == segs.rows - 1 && !crossBorder)
+                    continue;
+                for (int x = 0; x <= 1; x++) {
+                    for (int y = 0; y <= 1; y++) {
+                        int xx = (p.x + x + segs.cols) % segs.cols;
+                        int yy = (p.y + y + segs.rows) % segs.rows;
+                        if (segs(yy, xx) != *it) {
+                            segregions(p) = false;
+                        }
+                    }
+                }
+            }
+
+            cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT,
+                cv::Size(2 * widthThres + 1, 2 * widthThres + 1),
+                cv::Point(widthThres, widthThres));
+            cv::erode(segregions, segregions, element);
+
+            DenseMatd precompte(widthThres * 2 + 1, widthThres * 2 + 1, 0.0);
+            for (int x = -widthThres; x <= widthThres; x++) {
+                for (int y = -widthThres; y <= widthThres; y++) {
+                    precompte(x + widthThres, y + widthThres) = sqrt(x * x + y * y);
+                }
+            }
+
+            std::map<Pixel, std::map<int, double>, ComparePixelLoc> distanceTable;
+            for (auto it = segs.begin(); it != segs.end(); ++it) {
+                auto p = it.pos();
+                if (segregions(p)) // consider near-boundary pixels only
+                    continue;
+                auto & dtable = distanceTable[p];                
+                for (int x = -widthThres; x <= widthThres; x++) {
+                    for (int y = -widthThres; y <= widthThres; y++) {
+                        Pixel curp = p + Pixel(x, y);
+                        if (!Contains(segs, curp) && !crossBorder) {
+                            continue;
+                        }
+                        curp.x = (curp.x + segs.cols) % segs.cols;
+                        curp.y = (curp.y + segs.rows) % segs.rows;
+                        double distance = precompte(x + widthThres, y + widthThres);
+                        if (segregions(curp)) { // curp is at certain regions
+                            int segid = segs(curp);
+                            if (!Contains(dtable, segid) || dtable.at(segid) > distance) {
+                                dtable[segid] = distance;
+                            }
+                        } else {
+                            auto & curdtable = distanceTable[curp];
+                            // use dtable to update curdtable
+                            for (auto & dd : dtable) {
+                                if (!Contains(curdtable, dd.first) || curdtable.at(dd.first) > dd.second + distance) {
+                                    curdtable[dd.first] = dd.second + distance;
+                                }
+                            }
+                            // use curdtable to update dtable
+                            for (auto & dd : curdtable) {
+                                if (!Contains(dtable, dd.first) || dtable.at(dd.first) > dd.second + distance) {
+                                    dtable[dd.first] = dd.second + distance;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (auto & pd : distanceTable) {
+                int minDistSegId = -1;
+                double minDist = std::numeric_limits<double>::max();
+                for (auto & dd : pd.second) {
+                    if (dd.second < minDist) {
+                        minDistSegId = dd.first;
+                        minDist = dd.second;
+                    }
+                }
+                assert(minDistSegId != -1);
+                segs(pd.first) = minDistSegId;
+            }
+        }
+
+
+
+        int DensifySegmentation(Imagei & segs, bool crossBorder) {
+
+            int width = segs.cols;
+            int height = segs.rows;
+
+            // build pixel graph
+            std::vector<float> vSizes = ComposeGraphVerticesSizes(width, height, crossBorder);
+            std::vector<Edge> edges = ComposeGraphEdges(width, height, crossBorder, segs,
+                [](const Imagei & im, const cv::Point & p1, const cv::Point & p2) {
+                return im(p1) == im(p2) ? 0 : 1e5;
+            });
+
+            int num = (int)edges.size();
+            Universe u = SegmentGraph(vSizes, edges, 0.1);
+
+            for (int i = 0; i < num; i++) {
+                int a = u.find(edges[i].a);
+                int b = u.find(edges[i].b);
+                if (a != b && edges[i].w == 0)
+                    u.join(a, b);
+            }
+
+            int numCCs = u.numSets();
+            std::unordered_map<int, int> compIntSet;
+            Imagei output(cv::Size2i(width, height));
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int comp = u.find(y * width + x);
+                    if (compIntSet.find(comp) == compIntSet.end()) {
+                        compIntSet.insert(std::make_pair(comp, (int)compIntSet.size()));
+                    }
+                    output(cv::Point(x, y)) = compIntSet[comp];
+                }
+            }
+            assert(compIntSet.size() == numCCs);
+
+            segs = output;
+            return numCCs;
+        }
+
+
+
 
         bool IsDenseSegmentation(const Imagei & segRegions){
             int minv, maxv;
@@ -2577,6 +2727,8 @@ namespace panoramix {
         }
 
 
+
+
         std::vector<std::pair<std::vector<int>, Pixel>> ExtractBoundaryJunctions(const Imagei & regions, bool crossBorder){
             std::vector<std::pair<std::vector<int>, Pixel>> junctions;
             for (auto it = regions.begin(); it != regions.end(); ++it){
@@ -2602,10 +2754,164 @@ namespace panoramix {
         }
 
 
+        bool operator < (const Pixel & a, const Pixel & b) {
+            return std::tie(a.x, a.y) < std::tie(b.x, b.y);
+        }
+
+        void ExtractSegmentationTopology(const Imagei & segs,
+            std::vector<std::vector<Pixel>> & bndpixels,
+            std::vector<Pixel> & juncpositions,
+            std::vector<std::vector<int>> & seg2bnds,
+            std::vector<std::pair<int, int>> & bnd2segs,
+            std::vector<std::vector<int>> & seg2juncs,
+            std::vector<std::vector<int>> & junc2segs,
+            std::vector<std::pair<int, int>> & bnd2juncs,
+            std::vector<std::vector<int>> & junc2bnds, 
+            bool crossBorder) {
+
+            bndpixels.clear();
+            juncpositions.clear();
+            seg2bnds.clear();
+            seg2juncs.clear();
+            bnd2segs.clear();
+            bnd2juncs.clear();
+            junc2segs.clear();
+            junc2bnds.clear();
+
+            int width = segs.cols;
+            int height = segs.rows;
+            int nsegs = MinMaxValOfImage(segs).second + 1; 
+
+            seg2bnds.resize(nsegs);
+            seg2juncs.resize(nsegs);
+            
+            std::map<std::set<int>, std::vector<int>> segs2juncs;            
+            std::map<std::pair<int, int>, std::set<Pixel, ComparePixelLoc>> segpair2pixels;
+            std::map<Pixel, std::set<int>, ComparePixelLoc> pixel2segs;
+            std::map<Pixel, int, ComparePixelLoc> pixel2junc;
+
+            for (auto it = segs.begin(); it != segs.end(); ++it) {
+                auto p = it.pos();
+                if (p.x == segs.cols - 1 && !crossBorder)
+                    continue;
+                if (p.y == segs.rows - 1 && !crossBorder)
+                    continue;
+
+                // seg ids related
+                std::set<int> idset = {
+                    segs(p),
+                    segs(Pixel((p.x + 1) % segs.cols, p.y)),
+                    segs(Pixel(p.x, (p.y + 1) % segs.rows)),
+                    segs(Pixel((p.x + 1) % segs.cols, (p.y + 1) % segs.rows))
+                };
+                
+                if (idset.size() <= 1) {
+                    continue;
+                }
+
+                // meet a bnd or a junc (and bnd) pixel
+                pixel2segs[p] = std::move(idset);
+                auto & relatedsegs = pixel2segs[p];
+
+                // register this pixel as a bnd candidate for bnd of related segids
+                for (auto ii = relatedsegs.begin(); ii != relatedsegs.end(); ++ii) {
+                    for (auto jj = std::next(ii); jj != relatedsegs.end(); ++jj) {
+                        segpair2pixels[MakeOrderedPair(*ii, *jj)].insert(p);
+                    }
+                }
+
+                // meet a junc
+                if (relatedsegs.size() >= 3) { 
+                    // create a new junc
+                    juncpositions.push_back(p);
+                    int newjuncid = juncpositions.size() - 1;
+                    pixel2junc[p] = newjuncid;
+                    segs2juncs[relatedsegs].push_back(newjuncid);
+                    for (int segid : relatedsegs) {
+                        seg2juncs[segid].push_back(newjuncid);
+                    }
+                    junc2segs.emplace_back(relatedsegs.begin(), relatedsegs.end());
+                }
+            }
+
+            junc2bnds.resize(juncpositions.size());
+
+            // connect different junctions using allbndpixels
+            // and thus generate seperated bnds
+            for (int i = 0; i < juncpositions.size(); i++) {
+                auto & juncpos = juncpositions[i];
+                auto & relatedSegIds = junc2segs[i];
+
+                for (int ii = 0; ii < relatedSegIds.size(); ii++) {
+                    for (int jj = ii + 1; jj < relatedSegIds.size(); jj++) {
+                        int segi = relatedSegIds[ii];
+                        int segj = relatedSegIds[jj];
+                        
+                        const auto & pixelsForThisSegPair = segpair2pixels.at(MakeOrderedPair(segi, segj));
+                        std::vector<Pixel> pixelsForThisBnd;
+
+                        std::set<Pixel, ComparePixelLoc> visitedPixels;
+
+                        // use BFS
+                        std::queue<Pixel> Q;
+                        Q.push(juncpos);
+                        visitedPixels.insert(juncpos);
+
+                        while (!Q.empty()) {
+                            auto curp = Q.front();
+                            pixelsForThisBnd.push_back(curp);
+
+                            // find another junc!
+                            if (Contains(pixel2junc, curp) && i < pixel2junc.at(curp) && !pixelsForThisBnd.empty()) {
+                                int tojuncid = pixel2junc.at(curp);
+                                // make a new bnd!
+                                bndpixels.push_back(std::move(pixelsForThisBnd));
+                                int newbndid = bndpixels.size() - 1;
+                                bnd2juncs.emplace_back(i, tojuncid);
+                                bnd2segs.emplace_back(segi, segj);
+                                junc2bnds[i].push_back(newbndid);
+                                junc2bnds[tojuncid].push_back(newbndid);
+                                seg2bnds[segi].push_back(newbndid);
+                                seg2bnds[segj].push_back(newbndid);
+                                break;
+                            }
+
+                            Q.pop();
+                            for (int x = -1; x <= 1; x++) {
+                                for (int y = -1; y <= 1; y++) {
+                                    auto nextp = curp + Pixel(x, y);
+                                    if (!Contains(segs, nextp) && !crossBorder) {
+                                        continue;
+                                    }
+                                    if (!Contains(pixelsForThisSegPair, nextp)) {
+                                        continue;
+                                    }
+                                    nextp.x = (nextp.x + width) % width;
+                                    nextp.y = (nextp.y + height) % height;
+                                    if (Contains(visitedPixels, nextp)) {
+                                        continue;
+                                    }
+                                    Q.push(nextp);
+                                    visitedPixels.insert(nextp);
+                                }
+                            }
+                        }
 
 
 
+                    }
+                }
+               
+            }
 
+        }
+
+
+
+        SegmentationTopo::SegmentationTopo(const Imagei & segs, bool crossBorder) {
+            core::ExtractSegmentationTopology(segs, bndpixels, juncpositions, 
+                seg2bnds, bnd2segs, seg2juncs, junc2segs, bnd2juncs, junc2bnds, crossBorder);
+        }
 
 
 
@@ -3064,9 +3370,9 @@ namespace panoramix {
 
 
 
-        ImageOf<Vec<double, 7>> ComputeRawGeometricContext(const Image & im, bool outdoor, bool useHedauForIndoor){
-            MatlabEngine matlab;
-            matlab.PutVariable("im", im);
+        ImageOf<Vec<double, 7>> ComputeRawGeometricContext(misc::Matlab & matlab, const Image & im, bool outdoor, bool useHedauForIndoor) {
+            matlab << "clear;";
+            matlab.setVar("im", im);
             if (useHedauForIndoor){
                 if (outdoor){
                     SHOULD_NEVER_BE_CALLED("hedau'a algorithm only aplies for indoor scenes!");
@@ -3078,7 +3384,7 @@ namespace panoramix {
                 matlab << (std::string("slabelConfMap = panoramix_wrapper_gc(im, ") + (outdoor ? "true" : "false") + ");");
             }
             ImageOf<Vec<double, 7>> gc;
-            matlab.GetVariable("slabelConfMap", gc);
+            gc = matlab.var("slabelConfMap");
             assert(gc.channels() == 7);
             assert(gc.size() == im.size());
             return gc;
@@ -3100,7 +3406,9 @@ namespace panoramix {
             return result;
         }
 
-        Image5d MergeGeometricContextLabelsHedau(const Image7d & rawgc){
+       
+
+        Image5d MergeGeometricContextLabelsHedau(const Image7d & rawgc) {
             Image5d result(rawgc.size(), Vec<double, 5>());
             for (auto it = result.begin(); it != result.end(); ++it){
                 auto & p = rawgc(it.pos());
@@ -3116,17 +3424,90 @@ namespace panoramix {
             return result;
         }
 
-        Image5d ComputeGeometricContext(const Image & im, bool outdoor, bool useHedauForIndoor){
-            auto rawgc = ComputeRawGeometricContext(im, outdoor, useHedauForIndoor);
+
+
+        Image5d ComputeGeometricContext(misc::Matlab & matlab, const Image & im, bool outdoor, bool useHedauForIndoor) {
+            auto rawgc = ComputeRawGeometricContext(matlab, im, outdoor, useHedauForIndoor);
             return useHedauForIndoor ? MergeGeometricContextLabelsHedau(rawgc) : MergeGeometricContextLabelsHoiem(rawgc);
         }
 
 
 
 
+        Image6d MergeGeometricContextLabelsHedau(const Image7d & rawgc, const Vec3 & forward, const Vec3 & hvp1) {
+            Image6d result(rawgc.size(), Vec<double, 6>());
+            double angle = AngleBetweenUndirectedVectors(forward, hvp1);
+            for (auto it = result.begin(); it != result.end(); ++it) {
+                auto & p = rawgc(it.pos());
+                auto & resultv = *it;
+                // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::FloorOrGround)] += (p[3]);
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::ClutterOrPorous)] += p[5];
 
-        std::vector<Scored<Chain2>> DetectOcclusionBoundary(const Image & im) {
-            misc::Matlab matlab;
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::Vertical1)] += p[0] * Gaussian(angle, DegreesToRadians(20));
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::Vertical2)] += (p[1] + p[2]) * Gaussian(angle - M_PI_2, DegreesToRadians(20));
+
+                //resultv[ToUnderlying(GeometricContextIndex::Vertical)] += (p[0] + p[1] + p[2]);
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::CeilingOrSky)] += p[4];
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::Other)] += p[6];
+                //assert(IsFuzzyZero(std::accumulate(std::begin(resultv.val), std::end(resultv.val), 0.0) - 1.0, 1e-2));
+            }
+            return result;
+        }
+
+
+        Image6d MergeGeometricContextLabelsHoiem(const Image7d & rawgc, const Vec3 & forward, const Vec3 & hvp1) {
+            Image6d result(rawgc.size(), Vec<double, 6>());
+            double angle = AngleBetweenUndirectedVectors(forward, hvp1);
+            for (auto it = result.begin(); it != result.end(); ++it) {
+                auto & p = rawgc(it.pos());
+                auto & resultv = *it;
+                // 0: ground, 1,2,3: vertical, 4:clutter, 5:poros, 6: sky
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::FloorOrGround)] += p[0];
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::ClutterOrPorous)] += (p[4] + p[5]);
+
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::Vertical1)] += p[2] * (1.0 - angle / M_PI_2);
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::Vertical2)] += (p[1] + p[3]) * angle / M_PI_2;
+
+                //resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::Vertical)] += (p[1] + p[2] + p[3]);
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::CeilingOrSky)] += p[6];
+                resultv[ToUnderlying(GeometricContextIndexWithHorizontalOrientations::Other)] += 0.0;
+                //assert(IsFuzzyZero(std::accumulate(std::begin(resultv.val), std::end(resultv.val), 0.0) - 1.0, 1e-2));
+            }
+            return result;
+        }
+
+        Image6d ComputeGeometricContext(misc::Matlab & matlab, const Image & im, const Vec3 & forward, const Vec3 & hvp1, 
+            bool outdoor, bool useHedauForIndoor /*= false*/) {
+            auto rawgc = ComputeRawGeometricContext(matlab, im, outdoor, useHedauForIndoor);
+            return useHedauForIndoor ? MergeGeometricContextLabelsHedau(rawgc, forward, hvp1) : MergeGeometricContextLabelsHoiem(rawgc, forward, hvp1);
+        }
+
+
+
+        Image3d ConvertToImage3d(const Image5d & gc) {
+            Image3d vv(gc.size());
+            std::vector<Vec3> colors = {
+                Vec3(1, 0, 0),
+                Vec3(0, 1, 0),
+                Vec3(0, 0, 1),
+                normalize(Vec3(1, 1, 1))
+            };
+            for (auto it = gc.begin(); it != gc.end(); ++it) {
+                const Vec5 & v = *it;
+                Vec3 color;
+                for (int i = 0; i < 4; i++) {
+                    color += colors[i] * v[i];
+                }
+                vv(it.pos()) = color;
+            }
+            return vv;
+        }
+
+
+
+        std::vector<Scored<Chain2>> DetectOcclusionBoundary(misc::Matlab & matlab, const Image & im) {
+            matlab << "clear";
             matlab << "oldpath = cd('F:\\MATLAB\\miaomiaoliu.occ\\occ');";
             matlab.setVar("im", im);
             matlab << "[bndinfo, score] = detect_occlusion_yh(im);";

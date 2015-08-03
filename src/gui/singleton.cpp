@@ -5,7 +5,7 @@
 #include "qttools.hpp"
 #include "singleton.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace gui {
 
         static QIcon defaultIcon;

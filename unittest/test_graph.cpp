@@ -5,7 +5,7 @@
 #include "../src/gui/scene.hpp"
 #include "config.hpp"
 
-using namespace panoramix;
+using namespace pano;
 using namespace test;
 using TestMesh = core::Mesh<core::Vec3>;
 

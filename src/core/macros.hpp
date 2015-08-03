@@ -1,7 +1,6 @@
-#ifndef PANORAMIX_CORE_MACROS_HPP
-#define PANORAMIX_CORE_MACROS_HPP
- 
-namespace panoramix {
+#pragma once
+
+namespace pano {
     namespace core {
 
 #define FORCEINLINE __forceinline
@@ -25,6 +24,7 @@ namespace panoramix {
         // improvable here
 #define IMPROVABLE_HERE(...)
 
+
         // there are bugs here
 #define THERE_ARE_BUGS_HERE(...)  \
     std::cout << (FUNCTION_LINE_FILE_STRING + "This feature may have BUGS, Check it: \""__VA_ARGS__"\"\n") << std::endl
@@ -39,7 +39,7 @@ namespace panoramix {
 
         // should never be instanciated error
 #define SHOULD_NEVER_BE_INSTANCIATED(...) \
-    static_assert(panoramix::core::AlwaysFalse<__VA_ARGS__>::value, \
+    static_assert(pano::core::AlwaysFalse<__VA_ARGS__>::value, \
     FUNCTION_LINE_FILE_STRING + "This feature should never be instanciated by compiler! \n")
 
 
@@ -47,7 +47,8 @@ namespace panoramix {
 #define WARNNING(...) std::cout << "[WARNNING!] #######" << (std::string("  ") + __VA_ARGS__) << " #######"<< std::endl
 
 
+#define pano_unstable
+
     }
 }
  
-#endif

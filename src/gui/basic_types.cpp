@@ -2,7 +2,7 @@
 
 #include "../core/utility.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace gui {
 
         using namespace core;

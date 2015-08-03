@@ -1,7 +1,7 @@
 #include "utility.hpp"
 #include "cameras.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         PerspectiveCamera::PerspectiveCamera() 

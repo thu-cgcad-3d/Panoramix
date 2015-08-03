@@ -6,7 +6,7 @@
 #include "scene.hpp"
 #include "singleton.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace gui {
 
         using namespace core;

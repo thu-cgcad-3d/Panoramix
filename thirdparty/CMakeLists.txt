@@ -4,7 +4,7 @@
 #add_subdirectory ("gco-v3.0")
 add_subdirectory ("lsd_1.6")
 add_subdirectory ("slic")
-add_subdirectory ("gpuquickshift")
+#add_subdirectory ("gpuquickshift")
 add_subdirectory ("vanishingpoint-msac")
 add_subdirectory ("vpdetection")
 #add_subdirectory ("libsvm-3.20")
@@ -20,7 +20,7 @@ set (ThirdParty_INCLUDES
 	#${CMAKE_CURRENT_SOURCE_DIR}/android-camera/feature_mos/src
 	#${CMAKE_CURRENT_SOURCE_DIR}/android-camera/feature_stab/db_vlvm
 	#${CMAKE_CURRENT_SOURCE_DIR}/dlib
-	${CMAKE_CURRENT_SOURCE_DIR}/gpuquickshift
+	#${CMAKE_CURRENT_SOURCE_DIR}/gpuquickshift
 	${CMAKE_CURRENT_SOURCE_DIR}/vanishingpoint-msac
 	${CMAKE_CURRENT_SOURCE_DIR}/vpdetection
 	#${CMAKE_CURRENT_SOURCE_DIR}/libsvm-3.20
@@ -33,7 +33,7 @@ set (ThirdParty_LIBS
 	#"gco-v3.0" 
 	"lsd_1.6" 
 	"slic" 
-	"gpuquickshift" 
+	#"gpuquickshift" 
 	"vanishingpoint-msac" 
 	"vpdetection" 
 	##"libsvm-3.20"

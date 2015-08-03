@@ -1,17 +1,8 @@
-#ifndef PANORAMIX_MISC_MXARRAY_HPP
-#define PANORAMIX_MISC_MXARRAY_HPP
-
-#ifndef USE_MATLAB
-#error USE_MATLAB flag required
-#endif
-
-#include <mex.h>
-#include <mat.h>
-#include <engine.h>
+#pragma once
 
 #include "../core/basic_types.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace misc {
 
         class Matlab;
@@ -20,7 +11,7 @@ namespace panoramix {
         class MXA {
         public:
             MXA();
-            MXA(mxArray * mxa, bool dos = false);
+            MXA(void * mxa, bool dos = false);
             MXA(MXA && a);
             MXA & operator = (MXA && a);
             MXA(const MXA &) = delete;
@@ -29,8 +20,7 @@ namespace panoramix {
 
         public:
             MXA clone(bool dos = false) const;
-            operator mxArray * () const { return _mxa; }
-            mxClassID classID() const;
+            void * mxa() const { return _mxa; }
             void * data() const;
             void setData(void* d);
 
@@ -76,7 +66,7 @@ namespace panoramix {
             void setM(size_t m);
             void setN(size_t n);
 
-            bool null() const { return _mxa == nullptr; }
+            bool null() const { return _mxa == 0; }
             bool operator! () const { return null(); }
             bool empty() const;
 
@@ -156,7 +146,7 @@ namespace panoramix {
             }
 
         protected:
-            mxArray * _mxa;
+            void * _mxa;
             bool _destroyWhenOutofScope;
         };
 
@@ -187,7 +177,7 @@ namespace panoramix {
             virtual ~MAT();
 
         public:
-            bool null() const { return _fp == nullptr; }
+            bool null() const { return _fp == 0; }
 
             std::vector<std::string> varNames() const;
 
@@ -197,7 +187,7 @@ namespace panoramix {
 
         private:
             std::string _fname;
-            ::MATFile * _fp;
+            void * _fp;
         };
 
 
@@ -217,19 +207,20 @@ namespace panoramix {
             bool started() const;
             bool run(const std::string & cmd) const;
             std::string lastMessage() const;
+            bool errorLastRun() const;
 
             MXA var(const std::string & name) const;
             bool setVar(const std::string & name, const MXA & mxa);
             
             const Matlab & operator << (const std::string & cmd) const;
 
+            bool cdAndAddAllSubfolders(const std::string & dir);
+
         private:
-            ::Engine * _eng;
             char * _buffer;
+            void * _eng;
         };
 
 
     }
 }
-
-#endif

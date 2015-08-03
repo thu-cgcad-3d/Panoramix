@@ -2,7 +2,7 @@
 
 #include "config.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace test {
 
         std::string ProjectDataDirStrings::Base = PROJECT_TEST_DATA_DIR_STR;
@@ -49,7 +49,11 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = "Scene.Interaction";
    //testing::GTEST_FLAG(filter) = "PPattern.*";
    //testing::GTEST_FLAG(filter) = "BasicType.*";
-   testing::GTEST_FLAG(filter) = "Feature.OcclusionDetection";
+   //testing::GTEST_FLAG(filter) = "Feature.OcclusionDetection";
+   //testing::GTEST_FLAG(filter) = "ContainerTest.Dictionary";
+   //testing::GTEST_FLAG(filter) = "SingleView.ComputeSpatialRegionProperties";
+   //testing::GTEST_FLAG(filter) = "Feature.ExtractSegmentationTopology";
+   testing::GTEST_FLAG(filter) = "Feature.RemoveThinRegionInSegmentation";
 
    return RUN_ALL_TESTS();
 }

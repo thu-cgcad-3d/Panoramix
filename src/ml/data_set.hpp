@@ -1,9 +1,8 @@
-#ifndef PANORAMIX_ML_DATA_SET_HPP
-#define PANORAMIX_ML_DATA_SET_HPP
+#pragma once
 
 #include "../core/basic_types.hpp"
  
-namespace panoramix {
+namespace pano {
     namespace ml {
 
         // dataset annotations
@@ -148,6 +147,3 @@ namespace panoramix {
 
     }
 }
- 
- 
-#endif

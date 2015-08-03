@@ -1,9 +1,11 @@
-#ifndef PANORAMIX_EXPERIMENTAL_RL_GRAPH_OCCLUSION_HPP
-#define PANORAMIX_EXPERIMENTAL_RL_GRAPH_OCCLUSION_HPP
+#pragma once
 
-#include"rl_graph.hpp"
+#include "../gui/canvas.hpp"
 
-namespace panoramix {
+#include "rl_graph.hpp"
+#include "rl_graph_control.hpp"
+
+namespace pano {
     namespace experimental {
 
         // depth ordering
@@ -14,6 +16,8 @@ namespace panoramix {
             Unknown
         };
 
+
+        // guess line depth relations
         HandledTable<LineRelationHandle, DepthRelationGuess> GuessLineDepthRelation(
             const RLGraph & mg, double maxDistance);
 
@@ -38,19 +42,73 @@ namespace panoramix {
 
 
 
-        using RLGraphGCTable = HandledTable<RegionHandle, Vec<double, 5>>;
 
 
-        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
-            const PanoramicCamera & pcam, const ImageOf<Vec<double, 5>> & gc, const Imagei & gcVotes,
-            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun = nullptr);
+        std::vector<std::vector<Vec3>> SamplesOnBoundaries(const SegmentationTopo & segtopo,
+            const PanoramicCamera & cam, double sampleStepAngle = DegreesToRadians(1));
 
-        void AttachGeometricContextConstraints(const RLGraph & mg, RLGraphControls & controls,
-            const PerspectiveCamera & pcam, const ImageOf<Vec<double, 5>> & gc,
-            const std::function<void(RLGraphComponentControl &, const Vec<double, 5> &, double significancy)> & fun = nullptr);
+
+        std::vector<int> ClassifyBoundaries(const std::vector<std::vector<Vec3>> & bndSamples,
+            const std::vector<Vec3> & vps, double angleThres = DegreesToRadians(1.5));
+
+
+
+        struct TStructure {
+            int centerJunctionId;
+            int longEndJunctionIds[2];
+            int shortEndJunctionId;
+            std::vector<int> longBndIds[2];
+            std::vector<int> shortBndIds;
+            int longVPId;
+            int shortVPId;
+
+            template <class Archiver>
+            void serialize(Archiver & ar) {
+                ar(centerJunctionId, longEndJunctionIds, shortEndJunctionId, 
+                    longBndIds, shortBndIds, longVPId, shortVPId);
+            }
+        };
+
+
+        // find TStructures in graph
+        std::vector<TStructure> FindTStructures(const SegmentationTopo & segtopo,
+            const PanoramicCamera & cam, const std::vector<Vec3> & vps, 
+            double minSpanAngle = DegreesToRadians(20), double angleThres = DegreesToRadians(1.5));
+
+        std::vector<TStructure> FindTStructuresFuzzy(const SegmentationTopo & segtopo,
+            const std::vector<std::vector<Vec3>> & bndsamples,
+            const std::vector<int> & bndclasses,
+            const PanoramicCamera & cam, const std::vector<Vec3> & vps,
+            double minSpanAngle, 
+            double angleThres /*= DegreesToRadians(1.5)*/);
+
+
+        // make mask from TStructure
+        void TStructureMaskView(const PanoramicCamera & cam, 
+            const SegmentationTopo & segtopo, const TStructure & ts, 
+            std::array<View<PartialPanoramicCamera, Imageub>, 2> & smallParts,
+            View<PartialPanoramicCamera, Imageub> & largePart,
+            double focal = 50.0, double largePartWidthAngle = DegreesToRadians(5));
+
+
+        // GuessOccludedTStructures
+        std::vector<int> GuessOccludedTStructures(const std::vector<Vec3> & vps, 
+            const SegmentationTopo & segtopo, const std::vector<TStructure> & tstructs, const PanoramicCamera & cam,
+            const Image5d & gc);
+    
+        // ApplyOccludedTStructure
+        void ApplyOccludedTStructure(const RLGraph & mg, RLGraphControls & controls, 
+            const SegmentationTopo & segtopo, 
+            const std::vector<RegionBoundaryHandle> & bhs,
+            const PanoramicCamera & camera, const std::vector<TStructure> & occtstructs);
+
+        // ShowTStructures
+        void ShowTStructures(gui::Canvas3ub &canvas,
+            const SegmentationTopo & segtopo, const std::vector<TStructure> & occtstructs);
+
+
 
 
     }
 }
 
-#endif

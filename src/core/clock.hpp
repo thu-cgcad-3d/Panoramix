@@ -1,11 +1,10 @@
-#ifndef PANORAMIX_CORE_CLOCK_HPP
-#define PANORAMIX_CORE_CLOCK_HPP
+#pragma once
 
 #include <string>
 #include <chrono>
 #include <iostream>
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         class Clock {
@@ -30,4 +29,3 @@ namespace panoramix {
    	}
 }
 
-#endif

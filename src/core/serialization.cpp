@@ -6,7 +6,7 @@
 
 #include "macros.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         TimeStamp LastModifiedTimeOfFile(const char * filename) {

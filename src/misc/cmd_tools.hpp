@@ -1,10 +1,10 @@
-#ifndef PANORAMIX_MISC_CMD_TOOLS_HPP
-#define PANORAMIX_MISC_CMD_TOOLS_HPP
+#pragma once
+
 
 #include "../core/any.hpp"
 #include "../core/basic_types.hpp"
 
-namespace panoramix {
+namespace pano {
 	namespace misc{
 
         struct CmdOption {
@@ -37,4 +37,3 @@ namespace panoramix {
 	}
 }
  
-#endif

@@ -1,7 +1,7 @@
 #include <QtCore>
 
 #include "../../src/core/basic_types.hpp"
-#include "../../src/experimental/rl_graph.hpp"
+#include "../../src/experimental/rl_graph_solver.hpp"
 #include "../../src/experimental/tools.hpp"
 #include "../../src/experimental/rl_graph_occlusion.hpp"
 #include "../../src/gui/canvas.hpp"
@@ -15,7 +15,7 @@ namespace panolyz {
 
     namespace Prepare {
 
-        using namespace panoramix;
+        using namespace pano;
         using namespace core;
         using namespace experimental;
 
@@ -23,6 +23,9 @@ namespace panolyz {
 
         void RunNormal(std::string folder, bool indoor){
             QString qfolder = QString::fromStdString(folder);
+
+            misc::Matlab matlab;
+
             for (auto & finfo : QDir(qfolder + "\\image").entryInfoList(QStringList() << "*.jpg" << "*.png")){
                 qDebug() << finfo.absoluteFilePath();
 
@@ -85,7 +88,7 @@ namespace panolyz {
                 }
 
                 qDebug() << "computing geometric contexts";
-                auto gc = ComputeGeometricContext(image, indoor, false);
+                auto gc = ComputeGeometricContext(matlab, image, indoor, false);
                 SaveToDisk(folder + "\\feature\\" + filename + "_gc7", gc);
                 {
                     Image3f gcim(gc.size(), 0.0);
@@ -262,8 +265,8 @@ namespace panolyz {
 
         void Run() {
 
-            //RunNormal("F:\\DataSets\\yanghao.panoramix\\normal\\outdoor", false);
-            RunPano("F:\\DataSets\\yanghao.panoramix\\pano\\indoor");
+            //RunNormal("F:\\DataSets\\yanghao.pano\\normal\\outdoor", false);
+            RunPano("F:\\DataSets\\yanghao.pano\\pano\\indoor");
 
         }
 

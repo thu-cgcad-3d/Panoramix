@@ -8,8 +8,19 @@
 
 #include "rlgraph.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace experimental {
+
+
+
+        Polygon3 RData::asPolygon(const Plane3 & plane) const {
+            auto & outerContour = normalizedContours.front();
+            std::vector<Point3> projectedContur(outerContour.size());
+            for (int i = 0; i < outerContour.size(); i++) {
+                projectedContur[i] = IntersectionOfLineAndPlane(Ray3(Origin(), outerContour[i]), plane).position;
+            }
+            return Polygon3(std::move(projectedContur), plane.normal);
+        }
 
 
         RLGraphBuilder::Params::Params() : 
@@ -450,6 +461,7 @@ namespace panoramix {
 
             }
 
+
         }
 
 
@@ -494,6 +506,8 @@ namespace panoramix {
                     auto rh = mg.addComponent(std::move(rd));
                     regId2Rh[i] = rh;
                 }
+
+                
 
 
                 int regionNum = areas.size();

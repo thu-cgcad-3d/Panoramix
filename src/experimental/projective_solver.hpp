@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_EXPERIMENTAL_PROJECTIVE_SOLVER_HPP
-#define PANORAMIX_EXPERIMENTAL_PROJECTIVE_SOLVER_HPP
+#pragma once
+
 
 #include "../core/basic_types.hpp"
 #include "../core/utility.hpp"
@@ -8,10 +8,10 @@
 #include "../core/cameras.hpp"
 #include "../core/generic_topo.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace experimental {
 
-        using namespace panoramix::core;
+        using namespace pano::core;
 
         class ProjectiveAnchor;
         class ProjectiveComponent;
@@ -63,7 +63,7 @@ namespace panoramix {
             int makeACloserThanDepthAt(int a, double d, int anchorId);
             int makeAFartherThanDepthAt(int a, double d, int anchorId);
 
-            bool solve(double * nanOrInfRatio = nullptr) const;
+            bool solve(double * nanOrInfRatio = nullptr, bool quiet = false) const;
 
         private:
             int append(ProjectiveComponent::Ptr && p);
@@ -88,4 +88,3 @@ namespace panoramix {
     }
 }
 
-#endif

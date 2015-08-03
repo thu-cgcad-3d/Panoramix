@@ -1,10 +1,10 @@
-#ifndef PANORAMIX_CORE_CAMERAS_HPP
-#define PANORAMIX_CORE_CAMERAS_HPP
+#pragma once
+
 
 #include "basic_types.hpp"
 #include "feature.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         
@@ -647,4 +647,3 @@ namespace panoramix {
     }
 }
  
-#endif

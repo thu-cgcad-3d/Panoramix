@@ -1,11 +1,11 @@
-#ifndef PANORAMIX_GUI_SINGLETON_HPP
-#define PANORAMIX_GUI_SINGLETON_HPP
+#pragma once
+
 
 class QIcon;
 class QString;
 class QApplication;
 
-namespace panoramix {
+namespace pano {
     namespace gui {
 
         struct Singleton {
@@ -22,4 +22,3 @@ namespace panoramix {
     }
 }
  
-#endif

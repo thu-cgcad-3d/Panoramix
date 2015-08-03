@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_ML_FACTOR_GRAPH_HPP
-#define PANORAMIX_ML_FACTOR_GRAPH_HPP
+#pragma once
+
 
 #include <type_traits>
 
@@ -7,7 +7,7 @@
 #include "../core/basic_types.hpp"
 #include "../core/homo_graph.hpp"
  
-namespace panoramix {
+namespace pano {
     namespace ml {
 
         class FactorGraph {
@@ -100,4 +100,3 @@ namespace panoramix {
     }
 }
  
-#endif

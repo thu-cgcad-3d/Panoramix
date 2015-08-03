@@ -1,9 +1,9 @@
-#ifndef PANORAMIX_CORE_FAILABLE_HPP
-#define PANORAMIX_CORE_FAILABLE_HPP
+#pragma once
+
 
 #include <utility>
  
-namespace panoramix {
+namespace pano {
     namespace core {
     
         // failable result
@@ -76,11 +76,8 @@ namespace panoramix {
 namespace std {
 
     template <class T>
-    void swap(panoramix::core::Failable<T> & a, panoramix::core::Failable<T> & b){
+    void swap(pano::core::Failable<T> & a, pano::core::Failable<T> & b){
         a.swap(b);
     }
 
 }
-
- 
-#endif

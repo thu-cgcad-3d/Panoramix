@@ -2,10 +2,9 @@
 
 #include "../../src/core/basic_types.hpp"
 #include "../../src/core/single_view.hpp"
-#include "../../src/experimental/rl_graph.hpp"
+#include "../../src/experimental/rl_graph_solver.hpp"
 #include "../../src/experimental/tools.hpp"
 #include "../../src/experimental/projective_solver.hpp"
-#include "../../src/misc/matlab_engine.hpp"
 #include "../../src/misc/matlab_api.hpp"
 #include "../../src/gui/scene.hpp"
 #include "../../src/gui/canvas.hpp"
@@ -19,9 +18,9 @@ namespace panolyz {
     namespace PanoContext {
 
 
-        using namespace panoramix;
-        using namespace panoramix::core;
-        using namespace panoramix::experimental;
+        using namespace pano;
+        using namespace pano::core;
+        using namespace pano::experimental;
 
         static const std::string root = "F:\\DataSets\\PanoContext\\bedroom";
 
@@ -384,6 +383,8 @@ namespace panolyz {
         }
 
         void Task::calcGC(bool refresh) {
+            misc::Matlab matlab;
+
             // gc
             std::vector<PerspectiveCamera> hcams;
             if (refresh || !Load(path, "hcams", hcams)) {
@@ -395,10 +396,9 @@ namespace panolyz {
             std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
             if (refresh || !Load(path, "gcs", gcs)) {
                 gcs.resize(hcams.size());
-                misc::MatlabEngine matlab;
                 for (int i = 0; i < hcams.size(); i++) {
                     auto pim = view.sampled(hcams[i]);
-                    auto pgc = ComputeGeometricContext(pim.image, false, true);
+                    auto pgc = ComputeGeometricContext(matlab, pim.image, false, true);
                     gcs[i].component.camera = hcams[i];
                     gcs[i].component.image = pgc;
                     gcs[i].score = sin(AngleBetweenUndirectedVectors(hcams[i].forward(), view.camera.up()));

@@ -1,13 +1,13 @@
-#ifndef PANORAMIX_EXPERIMENTAL_TOOLS_HPP
-#define PANORAMIX_EXPERIMENTAL_TOOLS_HPP
+#pragma once
+
 
 #include "../gui/basic_types.hpp"
 #include "../gui/scene.hpp"
 #include "../gui/canvas.hpp"
 
-#include "rl_graph.hpp"
+#include "rl_graph_solver.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace experimental {
 
 
@@ -114,5 +114,3 @@ namespace panoramix {
 
     }
 }
-
-#endif

@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_GEOMETRY_HPP
-#define PANORAMIX_CORE_GEOMETRY_HPP
+#pragma once
+
 
 #include <vector>
 #include <cstdint>
@@ -10,7 +10,7 @@
 #include "meta.hpp"
 #include "ratio.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         // vectors/points
@@ -836,24 +836,23 @@ namespace panoramix {
 namespace std {
 
     template <class T, int N, int M>
-    const T * begin(const panoramix::core::Mat<T, N, M> & v) { return v.val; }
+    const T * begin(const pano::core::Mat<T, N, M> & v) { return v.val; }
 
     template <class T, int N, int M>
-    const T * end(const panoramix::core::Mat<T, N, M> & v) { return v.val + N * M; }
+    const T * end(const pano::core::Mat<T, N, M> & v) { return v.val + N * M; }
 
     template <class T, int N, int M>
-    const T * cbegin(const panoramix::core::Mat<T, N, M> & v) { return v.val; }
+    const T * cbegin(const pano::core::Mat<T, N, M> & v) { return v.val; }
 
     template <class T, int N, int M>
-    const T * cend(const panoramix::core::Mat<T, N, M> & v) { return v.val + N * M; }
+    const T * cend(const pano::core::Mat<T, N, M> & v) { return v.val + N * M; }
 
     template <class T, int N, int M>
-    T * begin(panoramix::core::Mat<T, N, M> & v) { return v.val; }
+    T * begin(pano::core::Mat<T, N, M> & v) { return v.val; }
 
     template <class T, int N, int M>
-    T * end(panoramix::core::Mat<T, N, M> & v) { return v.val + N * M; }
+    T * end(pano::core::Mat<T, N, M> & v) { return v.val + N * M; }
 
 }
 
 
-#endif

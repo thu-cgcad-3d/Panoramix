@@ -3,7 +3,7 @@
 #include "../src/ml/factor_graph.hpp"
 #include "config.hpp"
 
-using namespace panoramix;
+using namespace pano;
 using namespace test;
 
 
@@ -30,7 +30,7 @@ TEST(FactorGraph, Simple){
 }
 
 
-TEST(FactorGraph, DISABLED_Denoise){
+TEST(FactorGraph, Denoise){
 
     auto im = core::ImageRead(ProjectDataDirStrings::BPTests + "/horse.jpg");
     core::ResizeToMakeHeightUnder(im, 200);
@@ -89,12 +89,22 @@ TEST(FactorGraph, DISABLED_Denoise){
     // append smoothness factor types
     auto smoothnessfcid1 = fg.addFactorCategory(ml::FactorGraph::FactorCategory{
         [](const int * labels, size_t nvars, ml::FactorGraph::FactorCategoryId fcid, void *) -> double {
-            return labels[0] == labels[1] ? 0.0 : 0.5;
+            return labels[0] == labels[1] ? 0.0 : 5;
         }, 1.0
     });
     auto smoothnessfcid2 = fg.addFactorCategory(ml::FactorGraph::FactorCategory{
         [](const int * labels, size_t nvars, ml::FactorGraph::FactorCategoryId fcid, void *) -> double {
-            return labels[0] == labels[1] ? 0.0 : 0.3;
+            return labels[0] == labels[1] ? 0.0 : 3;
+        }, 1.0
+    });
+
+    auto smoothnessfcid3 = fg.addFactorCategory(ml::FactorGraph::FactorCategory{
+        [](const int * labels, size_t nvars, ml::FactorGraph::FactorCategoryId fcid, void *) -> double {
+            if (labels[4] == 0 && std::accumulate(labels, labels + nvars, 0) == 8)
+                return 1.0; // return std::numeric_limits<double>::infinity();
+            if (labels[4] == 1 && std::accumulate(labels, labels + nvars, 0) == 1)
+                return 1.0; // return std::numeric_limits<double>::infinity();
+            return 0.0;
         }, 1.0
     });
 
@@ -108,6 +118,16 @@ TEST(FactorGraph, DISABLED_Denoise){
             if (i > 0){
                 fg.addFactor({ vh, vhs[core::EncodeSubscriptToIndex(core::Pixel(j + 1, i - 1), noised.size())] }, smoothnessfcid2);
             }
+          /*std::vector<ml::FactorGraph::VarHandle> localVhs;
+            for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    auto p = core::Pixel(j + x, i + y);
+                    if (!core::Contains(noised, p))
+                        continue;
+                    localVhs.push_back(vhs[core::EncodeSubscriptToIndex(p, noised.size())]);
+                }
+            }
+            fg.addFactor(localVhs.begin(), localVhs.end(), smoothnessfcid3);*/
         }
     }
 

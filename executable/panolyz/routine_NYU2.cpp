@@ -1,12 +1,12 @@
 #include <thread>
 
 #include "../../src/core/basic_types.hpp"
-#include "../../src/experimental/rl_graph.hpp"
+#include "../../src/experimental/rl_graph_solver.hpp"
 #include "../../src/experimental/rl_graph_occlusion.hpp"
 #include "../../src/experimental/tools.hpp"
 #include "../../src/gui/scene.hpp"
 #include "../../src/gui/canvas.hpp"
-#include "../../src/misc/matlab_engine.hpp"
+#include "../../src/misc/matlab_api.hpp"
 #include "../../src/gui/singleton.hpp"
 #include "../../src/ml/factor_graph.hpp"
 
@@ -19,7 +19,7 @@ namespace panolyz {
     namespace NYU2 {
 
 
-        using namespace panoramix;
+        using namespace pano;
         using namespace core;
         using namespace experimental;
 
@@ -61,9 +61,9 @@ namespace panolyz {
         template <class FunT>
         void ForEachCase(FunT && fun){
 
-            // load test data
-            misc::MatlabEngine::CDAndAddAllSubfolders(nyu2dir);
-            misc::MatlabEngine matlab;
+            misc::Matlab matlab;
+            matlab.cdAndAddAllSubfolders(nyu2dir);
+
 
             // get camera params
             matlab << "camera_params;";
@@ -79,19 +79,19 @@ namespace panolyz {
                 << "t = [t_x;t_y;t_z];";
 
             CameraParams cameraParams;
-            matlab.GetVariable("f_rgb", cameraParams.f_rgb);
-            matlab.GetVariable("f_d", cameraParams.f_d);
-            matlab.GetVariable("c_rgb", cameraParams.c_rgb);
-            matlab.GetVariable("c_d", cameraParams.c_d);
-            matlab.GetVariable("k_rgb", cameraParams.k_rgb);
-            matlab.GetVariable("k_d", cameraParams.k_d);
-            matlab.GetVariable("p_rgb", cameraParams.p_rgb);
-            matlab.GetVariable("p_d", cameraParams.p_d);
-            matlab.GetVariable("t", cameraParams.t);
-            matlab.GetVariable("R", cameraParams.R);
-            matlab.GetVariable("depthParam1", cameraParams.depthParam1);
-            matlab.GetVariable("depthParam2", cameraParams.depthParam2);
-            matlab.GetVariable("maxDepth", cameraParams.maxDepth);
+            cameraParams.f_rgb = matlab.var("f_rgb").toCVMat();
+            cameraParams.f_d = matlab.var("f_d").toCVMat();
+            cameraParams.c_rgb = matlab.var("c_rgb").toCVMat();
+            cameraParams.c_d = matlab.var("c_d").toCVMat();
+            cameraParams.k_rgb = matlab.var("k_rgb").toCVMat();
+            cameraParams.k_d = matlab.var("k_d").toCVMat();
+            cameraParams.p_rgb = matlab.var("p_rgb").toCVMat();
+            cameraParams.p_d = matlab.var("p_d").toCVMat();
+            cameraParams.t = matlab.var("t").toCVMat();
+            cameraParams.R = matlab.var("R").toCVMat();
+            cameraParams.depthParam1 = matlab.var("depthParam1");
+            cameraParams.depthParam2 = matlab.var("depthParam2");
+            cameraParams.maxDepth = matlab.var("maxDepth");
 
             int offsetper30 = 0;
             int offsetper100 = 0;
@@ -124,19 +124,19 @@ namespace panolyz {
                 double edgenum = 0;
                 matlab << ("inds = bndinfos(" + std::to_string(trueIdPer30) + ").edges.indices;");
                 matlab << "edgenum = length(inds);";
-                matlab.GetVariable("edgenum", edgenum);
+                edgenum = matlab.var("edgenum");
                 assert(edgenum > 0);
 
                 std::vector<std::vector<int32_t>> indices(edgenum);
                 for (int i = 0; i < edgenum; i++){
                     matlab << ("indices = inds{" + std::to_string(i + 1) + "}';");
-                    matlab.GetVariable("indices", indices[i]);
+                    indices[i] = matlab.var("indices").toCVMat();
                 }
 
                 // get occ scores
                 std::vector<double> occscore;
                 matlab << ("occscore = occscores{" + std::to_string(trueIdPer30) + "}';");
-                matlab.GetVariable("occscore", occscore);
+                occscore = matlab.var("occscore").toCVMat();
                 assert(occscore.size() == (int)edgenum);
 
 
@@ -144,17 +144,17 @@ namespace panolyz {
                 // get image
                 Image image;
                 matlab << ("image = crop_image(ims(:,:,:, " + std::to_string(trueIdPer100) + "));");
-                matlab.GetVariable("image", image, true);
+                image = matlab.var("image").toCVMat(true);
 
                 // get gc
                 Image7d gc;
                 matlab << ("g = crop_image(gc(:,:,:," + std::to_string(trueIdPer100) + "));");
-                matlab.GetVariable("g", gc, true);
+                gc = matlab.var("g").toCVMat(true);
 
                 // get depth
                 Imagef depth;
                 matlab << ("depth = crop_image(dps(:,:," + std::to_string(trueIdPer100) + "));");
-                matlab.GetVariable("depth", depth, false);
+                depth = matlab.var("depth").toCVMat(false);
                 assert(image.size() == gc.size());
                 assert(image.size() == depth.size());
 
@@ -162,7 +162,7 @@ namespace panolyz {
                 // get rawdepth
                 Imagef rawDepth;
                 matlab << ("rawDepth = crop_image(rdps(:,:," + std::to_string(trueIdPer100) + "));");
-                matlab.GetVariable("rawDepth", rawDepth, false);
+                rawDepth = matlab.var("rawDepth").toCVMat(false);
                 assert(image.size() == gc.size());
                 assert(image.size() == rawDepth.size());
 
@@ -184,6 +184,8 @@ namespace panolyz {
 
 
             ForEachCase([](int id, const Data & data){
+
+                misc::Matlab matlab;
 
                 //if (id < 4)
                 //    return;
@@ -342,7 +344,7 @@ namespace panolyz {
                     c.weightedAnchors = std::move(validAnchors);
                 });
 
-                vars = SolveVariablesWithBoundedAnchors(mg, controls, false, 100);
+                vars = SolveVariablesWithBoundedAnchors(matlab, mg, controls, false, 100);
 
                 Show(view, mg, controls, vars);
 

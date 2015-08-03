@@ -1,7 +1,9 @@
 #include "../../src/core/basic_types.hpp"
-#include "../../src/experimental/rl_graph.hpp"
+#include "../../src/core/containers.hpp"
+#include "../../src/experimental/rl_graph_solver.hpp"
+#include "../../src/experimental/rl_graph_occlusion.hpp"
 #include "../../src/experimental/tools.hpp"
-#include "../../src/misc/matlab_engine.hpp"
+#include "../../src/misc/matlab_api.hpp"
 #include "../../src/gui/scene.hpp"
 #include "../../src/gui/canvas.hpp"
 #include "../../src/gui/utility.hpp"
@@ -17,9 +19,11 @@ namespace panolyz {
 
             std::string path;
 
-            using namespace panoramix;
+            using namespace pano;
             using namespace core;
             using namespace experimental;
+
+            misc::Matlab matlab;
 
             core::Image3ub image = gui::PickAnImage(PROJECT_TEST_DATA_DIR_STR"/panorama/indoor", &path);
             if (image.empty())
@@ -37,9 +41,9 @@ namespace panolyz {
 
             Imagei segmentedImage;
 
-#define REFRESH 1
+            static const bool REFRESH = false;
 
-            if (REFRESH){
+            if (REFRESH || !Load(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId)) {
                 view = CreatePanoramicView(image);
 
                 // collect lines in each view
@@ -82,49 +86,66 @@ namespace panolyz {
                 segmenter.params().c = 1.0;
                 segmenter.params().superpixelSizeSuggestion = 2000;
                 int segmentsNum = 0;
-                std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, M_PI / 36.0);
-
-                if (0){
-                    auto ctable = gui::CreateRandomColorTableWithSize(segmentsNum);
-                    gui::AsCanvas(ctable(segmentedImage)).show();
-                    gui::AsCanvas(ctable(segmentedImage)).add(view.image).show();
-                }            
+                std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, DegreesToRadians(1));     
+                RemoveThinRegionInSegmentation(segmentedImage);
+                segmentsNum = DensifySegmentation(segmentedImage);
+                assert(IsDenseSegmentation(segmentedImage));
 
                 Save(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
             }
-            else{
-                Load(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
+
+
+            if (1) {
+                auto ctable = gui::CreateRandomColorTableWithSize(MinMaxValOfImage(segmentedImage).second + 1);
+                gui::AsCanvas(ctable(segmentedImage)).show();
+                gui::AsCanvas(ctable(segmentedImage)).add(view.image).show();
             }
 
-
-
-
+            
             std::vector<PerspectiveCamera> hcams;
             std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
-            if (REFRESH){
+            if (REFRESH || !Load(path, "hcamsgcs", hcams, gcs)) {
                 // extract gcs
-                hcams = CreateHorizontalPerspectiveCameras(view.camera, 16, 500, 400, 300);
+                hcams = CreateHorizontalPerspectiveCameras(view.camera, 16, 500, 600, 300);
+                //hcams = CreatePanoContextCameras(view.camera, 500, 400, 300);
                 gcs.resize(hcams.size());
-                misc::MatlabEngine matlab;
                 for (int i = 0; i < hcams.size(); i++){
                     auto pim = view.sampled(hcams[i]);
-                    auto pgc = ComputeGeometricContext(pim.image, false, true);
+                    auto pgc = ComputeGeometricContext(matlab, pim.image, false, true);
                     gcs[i].component.camera = hcams[i];
                     gcs[i].component.image = pgc;
-                    gcs[i].score = abs(normalize(hcams[i].forward()).dot(normalize(view.camera.up())));
+                    gcs[i].score = abs(1.0 - normalize(hcams[i].forward()).dot(normalize(view.camera.up())));
                 }
                 Save(path, "hcamsgcs", hcams, gcs);
             }
-            else{
-                Load(path, "hcamsgcs", hcams, gcs);                
-            }
 
             Image5d gc;
-            gc = Combine(view.camera, gcs).image;
-            if (1){
-                gui::AsCanvas(gc).show();
+            if (REFRESH || !Load(path, "gcmerged", gc)) {
+                gc = Combine(view.camera, gcs).image;
+                Save(path, "gcmerged", gc);
             }
 
+            if (0){
+                std::vector<Imaged> gcChannels;
+                cv::split(gc, gcChannels);
+                gui::AsCanvas(ConvertToImage3d(gc)).show();
+                misc::MAT gcMat("./cache/gcMat.mat", misc::MAT::Write);
+                gcMat.setVar("gc", gc);                
+            }
+
+
+            // occ
+            std::vector<Scored<Chain3>> occbnds;
+            if (REFRESH || !Load(path, "occ_panoindoor", occbnds)) {
+                for (int i = 0; i < hcams.size(); i++) {
+                    auto pim = view.sampled(hcams[i]).image;
+                    auto occ = AsDimensionConvertor(hcams[i]).toSpace(DetectOcclusionBoundary(matlab, pim));
+                    for (auto & soc : occ) {
+                        occbnds.push_back(soc);
+                    }
+                }
+                Save(path, "occ_panoindoor", occbnds);
+            }
 
 
             // consider only lines
@@ -153,7 +174,7 @@ namespace panolyz {
                     auto & mg = mgs[i];
                     auto & controls = cs[i];
                     AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls);
-                    auto vars = SolveVariablesWithBoundedAnchors(mgs[i], controls, true);
+                    auto vars = SolveVariablesWithBoundedAnchors(matlab, mgs[i], controls, true);
                     NormalizeVariables(mg, controls, vars);
 
                     gui::SceneBuilder vis;
@@ -165,39 +186,100 @@ namespace panolyz {
             }
 
 
+
+
+            // seg topo & t-structs
+            SegmentationTopo segtopo;
+            std::vector<std::vector<Vec3>> bndSamples;
+            std::vector<int> bndClasses;
+            std::vector<TStructure> tstructs;
+            if (0 || !Load(path, "segtopo", segtopo, bndSamples, bndClasses, tstructs)) {
+                segtopo = SegmentationTopo(segmentedImage, true);
+                bndSamples = SamplesOnBoundaries(segtopo, view.camera, DegreesToRadians(1));
+                bndClasses = ClassifyBoundaries(bndSamples, vps, DegreesToRadians(1.5));
+                tstructs = FindTStructuresFuzzy(segtopo, bndSamples, bndClasses, view.camera, vps, DegreesToRadians(10), DegreesToRadians(2));
+
+                // occ from T-struct
+                auto occtstructs = GuessOccludedTStructures(vps, segtopo, tstructs, view.camera, gc);
+                std::vector<TStructure> occts;
+                for (int id : occtstructs) {
+                    occts.push_back(tstructs[id]);
+                }
+                tstructs = std::move(occts);
+                Save(path, "segtopo", segtopo, bndSamples, bndClasses, tstructs);
+            }
+
+
+            auto canvas = gui::MakeCanvas(Image3ub(image.size(), Vec3ub()));
+            ShowTStructures(canvas.color(gui::White), segtopo, tstructs);
+            canvas.show();
+            canvas = gui::MakeCanvas(Image3ub(image.size(), Vec3ub()));
+            ShowTStructures(canvas.color(gui::White), segtopo, tstructs);
+            canvas.show();
+
+
+            if(1){
+                auto bndSamples = SamplesOnBoundaries(segtopo, view.camera, DegreesToRadians(1));
+                auto bndClasses = ClassifyBoundaries(bndSamples, vps, DegreesToRadians(2));
+                auto canvas = gui::MakeCanvas(Image3ub(image.size(), Vec3ub()));
+                gui::ColorTable vpctable = gui::ColorTableDescriptor::RGBGreys;
+                for (int i = 0; i < bndSamples.size(); i++) {
+                    canvas.color(vpctable[bndClasses[i]]);
+                    canvas.add(segtopo.bndpixels[i]);
+                }
+                canvas.show();
+            }
+
+
+
+
+
+
             RLGraph mg;
-            RLGraphControls controls;
-            RLGraphVars vars;
             std::vector<RegionHandle> rhs;
+            std::vector<RegionBoundaryHandle> bhs;
 
-
-            // consider both lines and regions
-            if (1){
-
-                for (int i = 0; i < cams.size(); i++){
+            if (1 || !Load(path, "mg_rhs_bhs", mg, rhs, bhs)) {
+                for (int i = 0; i < cams.size(); i++) {
                     AppendLines(mg, lines[i], cams[i], vps);
                 }
-                rhs = AppendRegions(mg, segmentedImage, view.camera, 0.03, 0.02, 4, 4, false);
+                std::tie(rhs, bhs) = AppendRegions(mg, segmentedImage, segtopo.bndpixels, segtopo.bnd2segs, 
+                    view.camera, 0.03, 0.02, 4, 4, false);                
+                //rhs = AppendRegions(mg, segmentedImage, view.camera, 0.03, 0.02, 4, 4, false);
+                Save(path, "mg_rhs_bhs", mg, rhs, bhs);
+            }
+
+
+            RLGraphControls controls;
+            // initialize controls
+            if (1 || !Load(path, "controls", controls)) {
 
                 controls = RLGraphControls(mg, vps);
                 AttachPrincipleDirectionConstraints(mg, controls, M_PI / 20.0);
                 AttachWallConstriants(mg, controls, M_PI / 10);
-                
+                ApplyOccludedTStructure(mg, controls, segtopo, bhs, view.camera, tstructs);
+
+                // gc
                 auto gcMeanOnRegions = CollectFeatureMeanOnRegions(mg, view.camera, gc);
+                auto occOnBoundaries = CollectOcclusionResponseOnBoundaries(mg, occbnds, view.camera);
                 auto up = normalize(vps[vertVPId]);
-                if (up.dot(- view.camera.up()) < 0){
+                if (up.dot(-view.camera.up()) < 0) {
                     up = -up;
                 }
-                gui::AsCanvas(Print(mg, segmentedImage, view.camera, rhs, [&up, &mg](RegionHandle rh){
-                    return mg.data(rh).normalizedCenter.dot(up) < 0 ? gui::Red : gui::Blue;
-                })).show();
-                SetComponentControl<RegionData>(controls, 
-                    [&mg, &controls, &vps, &gcMeanOnRegions, &view, &up, vertVPId](RegionHandle rh, RLGraphComponentControl & c){
+                SetComponentControl<RegionData>(controls,
+                    [&mg, &controls, &vps, &gcMeanOnRegions, &view, &up, vertVPId](RegionHandle rh, RLGraphComponentControl & c) {
                     auto & gcMean = gcMeanOnRegions[rh];
-                    assert(IsFuzzyZero(std::accumulate(std::begin(gcMean.val), std::end(gcMean.val), 0.0) - 1.0, 1e-4));
-                    size_t maxid = std::max_element(std::begin(gcMean.val), std::end(gcMean.val)) - gcMean.val;
+                    double gcMeanSum = std::accumulate(std::begin(gcMean.val), std::end(gcMean.val), 0.0);
+                    if (gcMeanSum == 0.0) {
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = -1;
+                        c.used = true;
+                        return;
+                    }
+                    //assert(IsFuzzyZero(gcMeanSum - 1.0, 1e-4));
+                    size_t maxid = std::max_element(std::begin(gcMean), std::end(gcMean)) - gcMean.val;
                     double floorScore = gcMean[ToUnderlying(GeometricContextIndex::FloorOrGround)];
-                    if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.data(rh).normalizedCenter.dot(up) < 0){ // lower
+                    if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.data(rh).normalizedCenter.dot(up) < 0) { // lower
                         // assign horizontal constriant
                         c.orientationClaz = vertVPId;
                         c.orientationNotClaz = -1;
@@ -205,7 +287,7 @@ namespace panolyz {
                         return;
                     }
                     double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
-                    if (wallScore > 0.6){
+                    if (wallScore > 0.6) {
                         // assign vertical constraint
                         c.orientationClaz = -1;
                         c.orientationNotClaz = vertVPId;
@@ -213,17 +295,42 @@ namespace panolyz {
                         return;
                     }
                     double clutterScore = gcMean[ToUnderlying(GeometricContextIndex::ClutterOrPorous)];
-                    if (clutterScore > 0.7){
+                    if (clutterScore > 0.7) {
                         c.orientationClaz = c.orientationNotClaz = -1;
                         c.used = false;
                         return;
                     }
                 });
+
+
+
+
                 controls.disableAllInvalidConstraints(mg);
+
+                {
+                    auto pim = Print(mg, segmentedImage, view.camera, rhs,
+                        core::ConstantFunctor<gui::ColorTag>(gui::Transparent),
+                        core::ConstantFunctor<gui::ColorTag>(gui::Transparent),
+                        [&occOnBoundaries](RegionBoundaryHandle rrh) {
+                        return occOnBoundaries[rrh] ? gui::Yellow : gui::Transparent;
+                    }, 2);
+                    cv::imshow("occ", Image3f(pim / 2.0f) + Image3f(image / 255.0f / 2.0f));
+                    cv::waitKey();
+                }
 
 
                 // set constraint weights
                 SetNecessaryConstraintWeightedAnchors(mg, controls);
+
+                Save(path, "controls", controls);
+            }
+
+
+
+            RLGraphVars vars;
+
+            // consider both lines and regions
+            if (1){
 
                 // cc decompose
                 auto ccids = MakeHandledTableForAllComponents(mg, -1);
@@ -245,7 +352,7 @@ namespace panolyz {
 
                     //vars = SolveVariablesWithBoundedAnchors(mg, controls, false, true);
                     ResetToSampledArmorAnchors(mg, controls, 0.05);
-                    vars = SolveVariablesWithBoundedAnchors(mg, controls, false, 1000);
+                    vars = SolveVariablesWithBoundedAnchors(matlab, mg, controls, false, 1000);
                     NormalizeVariables(mg, controls, vars);
                     //SolveVariablesWithBoundedAnchors(mg, controls, vars);
                     std::cout << "score = " << Score(mg, controls, vars) << std::endl;
@@ -254,7 +361,7 @@ namespace panolyz {
                     if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                         continue;
 
-                    vars = SolveVariablesWithBoundedAnchors(mg, controls, false, 1000);
+                    vars = SolveVariablesWithBoundedAnchors(matlab, mg, controls, false, 1000);
                     NormalizeVariables(mg, controls, vars);
 
                   /*  AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
@@ -276,10 +383,10 @@ namespace panolyz {
                         double medianDepth = MedianCenterDepth(mg, controls, vars);
                         Vec3 vertDir = normalize(controls.vanishingPoints[vertVPId]);
 
-                        auto range = experimental::EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.02, 0.9, -1e5, -1e5);
+                        auto range = EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.01, 0.99, -1e5, -1e5);
 
                         std::vector<Chain3> chains;
-                        for (double x = range.first; x <= range.second; x += medianDepth * 0.02){
+                        for (double x = range.first; x <= range.second; x += medianDepth * 0.01){
                             Plane3 cutplane(vertDir * x, vertDir);
                             auto loop = experimental::MakeSectionalPieces(polygons, cutplane);
                             if (loop.empty())

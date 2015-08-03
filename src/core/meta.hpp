@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_META_HPP
-#define PANORAMIX_CORE_META_HPP
+#pragma once
+
 
 #include <tuple>
 #include <array>
@@ -7,13 +7,14 @@
 #include <vector>
 #include <deque>
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         using yes = std::true_type;
         using no = std::false_type;
 
         struct Dummy {
+            template <class ... ParamTs> void operator()(ParamTs && ... params) const {}
             template <class Archive> inline void serialize(Archive & ar) {}
         };
 
@@ -547,5 +548,3 @@ namespace panoramix {
 
     }
 }
-
-#endif

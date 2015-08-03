@@ -1,7 +1,7 @@
 #include "../../src/core/basic_types.hpp"
-#include "../../src/experimental/rl_graph.hpp"
+#include "../../src/experimental/rl_graph_solver.hpp"
 #include "../../src/experimental/tools.hpp"
-#include "../../src/misc/matlab_engine.hpp"
+#include "../../src/misc/matlab_api.hpp"
 #include "../../src/gui/scene.hpp"
 #include "../../src/gui/canvas.hpp"
 #include "../../src/gui/utility.hpp"
@@ -13,13 +13,15 @@ namespace panolyz {
 
     namespace ActivePanoramaIndoor{
 
-        void Run(){
+        void Run(){       
 
             std::string path;
 
-            using namespace panoramix;
+            using namespace pano;
             using namespace core;
             using namespace experimental;
+
+            misc::Matlab matlab;
 
             /*while (1){
                 int r = gui::SelectFrom({ "Yes", "No", "Cancel" }, "Confirm?");
@@ -120,10 +122,9 @@ namespace panolyz {
                 // extract gcs
                 hcams = CreateHorizontalPerspectiveCameras(view.camera, 16, 500, 400, 300);
                 gcs.resize(hcams.size());
-                misc::MatlabEngine matlab;
                 for (int i = 0; i < hcams.size(); i++){
                     auto pim = view.sampled(hcams[i]);
-                    auto pgc = ComputeGeometricContext(pim.image, false, true);
+                    auto pgc = ComputeGeometricContext(matlab, pim.image, false, true);
                     gcs[i].component.camera = hcams[i];
                     gcs[i].component.image = pgc;
                     gcs[i].score = sin(AngleBetweenUndirectedVectors(hcams[i].forward(), view.camera.up()));

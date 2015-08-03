@@ -1,5 +1,4 @@
-#ifndef PANORAMIX_GUI_UTILITY_HPP
-#define PANORAMIX_GUI_UTILITY_HPP
+#pragma once
 
 #include "../core/cameras.hpp"
 #include "basic_types.hpp"
@@ -7,7 +6,7 @@
 
 class QWidget;
 
-namespace panoramix {
+namespace pano {
     namespace gui {
 
         int SelectFrom(const std::vector<std::string> & strs,
@@ -41,5 +40,3 @@ namespace panoramix {
 
     }
 }
-
-#endif

@@ -1,7 +1,7 @@
 #include "macros.hpp"
 #include "image.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         void ClipToSquare(Image & image) {

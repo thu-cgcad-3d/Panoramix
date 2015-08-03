@@ -5,7 +5,7 @@
 #include <iostream>
 #include <random>
 
-using namespace panoramix;
+using namespace pano;
 
 TEST(Tuples, Invoke){
 

@@ -1,6 +1,6 @@
 #include "data_set.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace ml {        
         namespace annotations {
 

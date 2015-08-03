@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_RING_HPP
-#define PANORAMIX_CORE_RING_HPP
+#pragma once
+
 
 #include <cmath>
 #include <cstdint>
@@ -8,7 +8,7 @@
 
 #include "macros.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
 
@@ -93,5 +93,3 @@ namespace panoramix {
     }
 }
 
-
-#endif

@@ -10,6 +10,7 @@ classdef Toolkit < handle
 		function varargout = loadMatFromPanoramix(varargin)
              [varargout{1:nargout}] = mexToolkit('loadMatFromPanoramix', varargin{:});
         end
+
 		function varargout = segmentGraphCut(varargin)
              [varargout{1:nargout}] = mexToolkit('segmentGraphCut', varargin{:});
         end
@@ -19,5 +20,16 @@ classdef Toolkit < handle
 		function varargout = segmentSLIC(varargin)
              [varargout{1:nargout}] = mexToolkit('segmentGraphCut', varargin{:});
         end
+		function varargout = SIFT(varargin)
+             [varargout{1:nargout}] = mexToolkit('SIFT', varargin{:});
+        end
+		function varargout = SURF(varargin)
+             [varargout{1:nargout}] = mexToolkit('SURF', varargin{:});
+        end
+
+		function p = estimatePerspectivePattern(im)
+			p = mexToolkit('estimatePerspectivePattern', im2double(im));
+		end
+
     end
 end

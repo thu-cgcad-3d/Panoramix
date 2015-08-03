@@ -1,7 +1,7 @@
 #include "../core/algorithms.hpp"
 #include "discretization.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace gui {
  
         using namespace core;

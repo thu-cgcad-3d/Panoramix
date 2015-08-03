@@ -1,13 +1,14 @@
-#ifndef PANORAMIX_CORE_FEATURE_HPP
-#define PANORAMIX_CORE_FEATURE_HPP
+#pragma once
+
 
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/stitching/detail/matchers.hpp>
 #include <opencv2/nonfree/features2d.hpp>
 
 #include "basic_types.hpp"
+#include "../misc/matlab_api.hpp"
  
-namespace panoramix {
+namespace pano {
     namespace core { 
 
 
@@ -104,7 +105,8 @@ namespace panoramix {
             std::vector<Classified<Line2>> & lineSegments, DenseMatd * lineVPScores = nullptr);
         std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
             std::vector<std::vector<Classified<Line2>>> & lineSegments, std::vector<DenseMatd> * lineVPScores = nullptr);
-
+        // [vert, horiz1, horiz2, other]
+        void OrderVanishingPoints(std::vector<Vec3> & vps, const Vec3 & verticalSeed = Z());
 
 
         // compute pp and focal from 3 orthogonal vps
@@ -206,21 +208,78 @@ namespace panoramix {
         };
 
 
+        // RemoveThinRegionInSegmentation
+        void RemoveThinRegionInSegmentation(Imagei & segs, int widthThres = 1.0, bool crossBorder = false);
+
+
+        // DensifySegmentation
+        int DensifySegmentation(Imagei & segs, bool crossBorder = false);
+
+        
+        // IsDenseSegmentation
         bool IsDenseSegmentation(const Imagei & segRegions);
+
+
+        // FindRegionBoundaries
         std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> FindRegionBoundaries(
             const Imagei & segRegions, int connectionExtendSize, bool simplifyStraightEdgePixels = true);
+
+
+        // ExtractBoundaryJunctions
         std::vector<std::pair<std::vector<int>, Pixel>> ExtractBoundaryJunctions(const Imagei & regions, bool crossBorder = false);
 
 
+        // ExtractSegmentationTopology
+        void ExtractSegmentationTopology(const Imagei & segs,
+            std::vector<std::vector<Pixel>> & bndpixels,
+            std::vector<Pixel> & juncpositions,
+            std::vector<std::vector<int>> & seg2bnds,
+            std::vector<std::pair<int, int>> & bnd2segs,
+            std::vector<std::vector<int>> & seg2juncs,
+            std::vector<std::vector<int>> & junc2segs,
+            std::vector<std::pair<int, int>> & bnd2juncs,
+            std::vector<std::vector<int>> & junc2bnds,
+            bool crossBorder = false);
 
+        // SegmentationTopo
+        struct SegmentationTopo {
+            std::vector<std::vector<Pixel>> bndpixels;
+            std::vector<Pixel> juncpositions;
+            std::vector<std::vector<int>> seg2bnds;
+            std::vector<std::pair<int, int>> bnd2segs;
+            std::vector<std::vector<int>> seg2juncs;
+            std::vector<std::vector<int>> junc2segs;
+            std::vector<std::pair<int, int>> bnd2juncs;
+            std::vector<std::vector<int>> junc2bnds;
+            
+            SegmentationTopo() {}
+            explicit SegmentationTopo(const Imagei & segs, bool corssBorder = false);
+
+            size_t nboundaries() const { return bndpixels.size(); }
+            size_t nsegs() const { return seg2bnds.size(); }
+            size_t njunctions() const { return juncpositions.size(); }
+
+            template <class Archiver>
+            void serialize(Archiver & ar) {
+                ar(bndpixels, juncpositions,
+                    seg2bnds, bnd2segs, seg2juncs, junc2segs, bnd2juncs, junc2bnds);
+            }
+        };
+        
+
+
+        
+        // ComputeOrientationMaps
         Imagei ComputeOrientationMaps(const std::vector<Classified<Line2>> & lines,
             const std::vector<HPoint2> & vps, const Sizei & imSize);
 
-
+        // ConvertToImage3d
+        Image3d ConvertToImage3d(const Image5d & gc);
 
         /// geometric context estimator
-        Image7d ComputeRawGeometricContext(const Image & im, bool outdoor, bool useHedauForIndoor);
+        Image7d ComputeRawGeometricContext(misc::Matlab & matlab, const Image & im, bool outdoor, bool useHedauForIndoor);
 
+        // GeometricContextIndex
         enum class GeometricContextIndex : size_t {
             FloorOrGround = 0,
             CeilingOrSky = 1,
@@ -229,17 +288,37 @@ namespace panoramix {
             Other = 4
         };
 
+        // MergeGeometricContextLabelsXXX
         Image5d MergeGeometricContextLabelsHoiem(const Image7d & rawgc);
         Image5d MergeGeometricContextLabelsHedau(const Image7d & rawgc);
 
-        Image5d ComputeGeometricContext(const Image & im, bool outdoor, bool useHedauForIndoor = false);
+        // ComputeGeometricContext
+        Image5d ComputeGeometricContext(misc::Matlab & matlab, const Image & im, bool outdoor, bool useHedauForIndoor = false);
 
+        inline GeometricContextIndex MaxGeometricIndex(const Vec5 & gcv) { return (GeometricContextIndex)(std::max_element(gcv.val, gcv.val + 5) - gcv.val); }
+
+
+        // GeometricContextIndexWithHorizontalOrientations
+        enum class GeometricContextIndexWithHorizontalOrientations : size_t {
+            FloorOrGround = 0,
+            CeilingOrSky = 1,
+            Vertical1 = 2,
+            Vertical2 = 3,
+            ClutterOrPorous = 4,
+            Other = 5
+        };
+
+        // MergeGeometricContextLabelsXXX
+        Image6d MergeGeometricContextLabelsHedau(const Image7d & rawgc, const Vec3 & forward, const Vec3 & hvp1);
+        Image6d MergeGeometricContextLabelsHoiem(const Image7d & rawgc, const Vec3 & forward, const Vec3 & hvp1);
+
+        // ComputeGeometricContext
+        Image6d ComputeGeometricContext(misc::Matlab & matlab, const Image & im, const Vec3 & forward, const Vec3 & hvp1, 
+            bool outdoor, bool useHedauForIndoor = false);
 
         /// occlusion boundary detector
-        std::vector<Scored<Chain2>> DetectOcclusionBoundary(const Image & im);
+        std::vector<Scored<Chain2>> DetectOcclusionBoundary(misc::Matlab & matlab, const Image & im);
 
 
     }
 }
- 
-#endif

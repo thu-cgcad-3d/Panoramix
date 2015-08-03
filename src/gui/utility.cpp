@@ -7,7 +7,7 @@
 #include "utility.hpp"
 #include "scene.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace gui {
 
         int SelectFrom(const std::vector<std::string> & strs,
@@ -302,7 +302,7 @@ namespace panoramix {
 
         void VisualizeWithPanoramicOperation(const Scene & scene, const RenderOptions & options) {
 
-            using namespace panoramix::core;
+            using namespace pano::core;
 
             Singleton::InitGui();
 
@@ -412,7 +412,7 @@ namespace panoramix {
         void DrawChainsInPanorama(const core::PanoramicView & view, 
             const std::vector<PenConfig> & penConfigs,
             std::vector<core::Chain3> & chains) {
-            using namespace panoramix::core;
+            using namespace pano::core;
 
             Singleton::InitGui();
 

@@ -1,13 +1,13 @@
-#ifndef PANORAMIX_EXPERIMENTAL_RL_GRAPH_HPP
-#define PANORAMIX_EXPERIMENTAL_RL_GRAPH_HPP
+#pragma once
+
 
 #include "../core/basic_types.hpp"
 #include "../core/cons_graph.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace experimental {
 
-        using namespace panoramix::core;
+        using namespace pano::core;
 
         // rl graph
         struct RData;
@@ -42,8 +42,9 @@ namespace panoramix {
         struct RData {
             Vec3 normalizedCenter;
             double area;
-            std::vector<std::vector<Vec3>> normalizedContours;
+            std::vector<std::vector<Vec3>> normalizedContours;  // normalizedContours.front() represtents the outer contour!!!
             Vec5 gcMean;
+            Polygon3 asPolygon(const Plane3 & plane) const;
             template <class Archiver>
             void serialize(Archiver & ar) {
                 ar(normalizedCenter, area, normalizedContours, gcMean);
@@ -86,7 +87,7 @@ namespace panoramix {
 
         namespace {
             // connection data
-            struct RL_RRL_DataBase {
+            struct ConnectionBase {
                 std::vector<Vec3> normalizedAnchors;
                 double length;
                 template <class Archiver>
@@ -95,12 +96,12 @@ namespace panoramix {
                 }
             };
         }
-        struct RLData : RL_RRL_DataBase {};
-        struct RRLData : RL_RRL_DataBase {};
+        struct RLData : ConnectionBase {};
+        struct RRLData : ConnectionBase {};
 
         namespace {
             // boundary junction data
-            struct RRR_RRRR_DataBase { 
+            struct JunctionBase { 
                 Vec3 normalizedCenter;
                 template <class Archiver>
                 void serialize(Archiver & ar) {
@@ -108,10 +109,8 @@ namespace panoramix {
                 }
             };
         }
-        struct RRRData : RRR_RRRR_DataBase {};
-        struct RRRRData : RRR_RRRR_DataBase {};
-
-
+        struct RRRData : JunctionBase {};
+        struct RRRRData : JunctionBase {};
         
         
 
@@ -185,4 +184,3 @@ namespace panoramix {
 
 }
 
-#endif

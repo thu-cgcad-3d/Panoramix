@@ -8,7 +8,7 @@
 
 #include "config.hpp"
 
-using namespace panoramix;
+using namespace pano;
 using namespace test;
 
 std::string ppatternFolder = "F://PPattern//image";

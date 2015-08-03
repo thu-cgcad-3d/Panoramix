@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_SERIALIZATION_HPP
-#define PANORAMIX_CORE_SERIALIZATION_HPP
+#pragma once
+
 
 #include <fstream>
 
@@ -36,7 +36,7 @@
 namespace cv {
 
     // MUST be defined in the namespace of the underlying type (cv::XXX), 
-    //    definition of alias names in namespace panoramix::core won't work!
+    //    definition of alias names in namespace pano::core won't work!
     // see http://stackoverflow.com/questions/13192947/argument-dependent-name-lookup-and-typedef
 
     // Serialization for cv::Mat
@@ -98,7 +98,7 @@ namespace cv {
 }
 
 
-namespace panoramix {
+namespace pano {
 
     namespace core {
 
@@ -178,6 +178,3 @@ namespace panoramix {
     }
 
 }
-
-
-#endif

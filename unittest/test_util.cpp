@@ -9,7 +9,7 @@
 
 #include "config.hpp"
 
-using namespace panoramix;
+using namespace pano;
 
 inline double randf(){
     return (std::rand() % 100000) / 100000.0;
@@ -576,6 +576,44 @@ TEST(ContainerTest, MaxHeap){
             ASSERT_LE(HH.at(j), HH.at(topKey));
         }
     }
+}
+
+
+TEST(ContainerTest, Dictionary) {
+
+    core::Dictionary<std::string> dict({3, 5, 4, 3});
+    dict.insert({ 1, 2, 3, 1 }, "1231");
+    dict.insert({ 1, 3, 2, 1 }, "1321");
+    dict.insert({ 2, 1, 3, 2 }, "2132");
+
+    ASSERT_TRUE(dict.at({ 1, 2, 3, 1 }) == "1231");
+    ASSERT_TRUE(dict.at({ 1, 3, 2, 1 }) == "1321");
+    ASSERT_TRUE(dict.at({ 2, 1, 3, 2 }) == "2132");
+
+    ASSERT_TRUE(!dict.contains({ 1, 1, 1, 1 }));
+
+    auto dict2 = std::move(dict);
+
+    ASSERT_TRUE(dict2.at({ 1, 2, 3, 1 }) == "1231");
+    ASSERT_TRUE(dict2.at({ 1, 3, 2, 1 }) == "1321");
+    ASSERT_TRUE(dict2.at({ 2, 1, 3, 2 }) == "2132");
+
+    dict2.insert({ 2, 1, 3, 2 }, "xxxx");
+    ASSERT_TRUE(dict2.at({ 2, 1, 3, 2 }) == "xxxx");
+
+    ASSERT_TRUE(!dict2.contains({ 1, 1, 1, 1 }));
+
+
+    core::SaveToDisk("./dict.cereal", dict2);
+
+    core::Dictionary<std::string> dict3;
+    core::LoadFromDisk("./dict.cereal", dict3);
+
+    ASSERT_TRUE(dict3.at({ 2, 1, 3, 2 }) == "xxxx");
+
+    ASSERT_TRUE(dict3.at({ 1, 2, 3, 1 }) == "1231");
+    ASSERT_TRUE(dict3.at({ 1, 3, 2, 1 }) == "1321");
+
 }
 
 

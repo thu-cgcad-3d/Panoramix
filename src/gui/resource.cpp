@@ -3,7 +3,7 @@
 #include "resource.hpp"
 
 
-namespace panoramix {
+namespace pano {
     namespace gui {
 
 

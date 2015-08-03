@@ -2,7 +2,7 @@
 #include "utility.hpp"
 #include "geometry.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         template <class T>
@@ -31,8 +31,6 @@ namespace panoramix {
         bool Contains(const Polygon2f & poly, const Point2f & p) {
             return cv::pointPolygonTest(poly.corners, p, false) >= 0;
         }
-
-        //long double Area(const Polygon<long double, 3> & polygon) { return AreaTemplated(polygon); }
 
     }
 }

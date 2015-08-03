@@ -1,5 +1,5 @@
 #include "../../src/core/basic_types.hpp"
-#include "../../src/experimental/rl_graph.hpp"
+#include "../../src/experimental/rl_graph_solver.hpp"
 #include "../../src/experimental/tools.hpp"
 #include "../../src/experimental/rl_graph_occlusion.hpp"
 #include "../../src/gui/scene.hpp"
@@ -16,7 +16,7 @@ namespace panolyz {
     namespace NormalIndoor {
 
 
-        using namespace panoramix;
+        using namespace pano;
         using namespace core;
         using namespace experimental;
 
@@ -29,6 +29,8 @@ namespace panolyz {
 
 
         void Run(){
+
+            misc::Matlab matlab;
 
             bool withGC = false;
             bool withHCons = true;
@@ -150,7 +152,7 @@ namespace panolyz {
             // gc
             ImageOf<Vec<double, 5>> gc;
             if (RE_BUILD_FEATURES){
-                gc = ComputeGeometricContext(view.image, outdoor);
+                gc = ComputeGeometricContext(matlab, view.image, outdoor);
                 Save(path, "gc", gc);
             }
             else{
@@ -287,7 +289,7 @@ namespace panolyz {
             ResetToSampledArmorAnchors(mg, controls, 2.0 / view.camera.focal());
             vars = MakeVariables(mg, controls);
 
-            OptimizeVariablesWithBoundedAnchors(mg, controls, vars, useWeights, 1000, 10,
+            OptimizeVariablesWithBoundedAnchors(matlab, mg, controls, vars, useWeights, 1000, 10,
                 [&view, &mg, &controls](const RLGraphVars & vs){
                 Show(view, mg, controls, vs);
                 return true;

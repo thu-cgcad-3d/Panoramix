@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_SCENE_HPP
-#define PANORAMIX_SCENE_HPP
+#pragma once
+
 
 #include "../core/generic_topo.hpp"
 #include "../core/utility.hpp"
@@ -10,7 +10,7 @@
 #include "discretization.hpp"
 #include "resource.hpp"
  
-namespace panoramix {
+namespace pano {
     namespace gui {
 
 
@@ -440,5 +440,3 @@ namespace panoramix {
  
     }
 }
- 
-#endif

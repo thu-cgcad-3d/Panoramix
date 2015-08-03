@@ -1,10 +1,9 @@
-#ifndef PANORAMIX_CORE_ALGORITHMS_HPP
-#define PANORAMIX_CORE_ALGORITHMS_HPP
+#pragma once
 
 #include "basic_types.hpp"
 #include "utility.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         // generic algorithms
@@ -526,5 +525,3 @@ namespace panoramix {
 
     }
 }
- 
-#endif

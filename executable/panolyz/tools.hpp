@@ -5,7 +5,7 @@
 
 namespace panolyz {
 
-    using namespace panoramix;
+    using namespace pano;
     using namespace core;
     using namespace experimental;
 

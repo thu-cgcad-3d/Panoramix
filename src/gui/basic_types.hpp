@@ -1,9 +1,9 @@
-#ifndef PANORAMIX_GUI_BASIC_TYPES_HPP
-#define PANORAMIX_GUI_BASIC_TYPES_HPP
+#pragma once
+
 
 #include "../core/basic_types.hpp"
  
-namespace panoramix {
+namespace pano {
     namespace gui {
 
         // color
@@ -298,4 +298,3 @@ namespace panoramix {
     public: inline claz & name(const type & v) { _##name = v; return *this; }
 
  
-#endif

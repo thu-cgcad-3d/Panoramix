@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_MISC_EIGEN_HPP
-#define PANORAMIX_MISC_EIGEN_HPP
+#pragma once
+
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
@@ -7,7 +7,7 @@
 #include <unsupported/Eigen/NonLinearOptimization>
 #include <unsupported/Eigen/NumericalDiff>
 
-namespace panoramix {
+namespace pano {
     namespace misc{
 
         // Generic functor
@@ -59,6 +59,3 @@ namespace panoramix {
 
     }
 }
-
-
-#endif

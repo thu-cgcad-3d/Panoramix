@@ -2,7 +2,7 @@
 
 #include "single_view.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
 
@@ -87,14 +87,12 @@ namespace panoramix {
                     [](const std::vector<Pixel> & ca, const std::vector<Pixel> & cb){return ca.size() > cb.size(); });
 
                 if (contours.size() >= 2){
-                    //std::cout << "multiple contours for one region in projection!";
+                    std::cout << "multiple contours for one region in projection!";
                 }
 
-                auto iter = std::find_if(contours.begin(), contours.end(),
-                    [](const std::vector<Pixel> & c){return c.size() <= 2; });
-                contours.erase(iter, contours.end());
+                contours.erase(std::remove_if(contours.begin(), contours.end(),
+                    [](const std::vector<Pixel> & c) {return c.size() <= 2; }), contours.end());
 
-                //assert(!contours.empty() && "no contour? impossible~");
                 if (contours.empty() || contours.front().size() <= 2){
                     continue;
                 }

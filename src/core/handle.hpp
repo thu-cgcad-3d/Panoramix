@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_HANDLE_HPP
-#define PANORAMIX_CORE_HANDLE_HPP
+#pragma once
+
 
 #include <vector>
 #include <cstdint>
@@ -9,7 +9,7 @@
 #include "meta.hpp"
 #include "iterators.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
 
@@ -198,6 +198,122 @@ namespace panoramix {
 
 
 
+        // a very light-weighted fixed sized container with heterogeneous entries
+        template <class DataT, class ... HandleTs>
+        class Table {
+            enum : size_t { HandleTsNum = sizeof...(HandleTs) };
+            using HandleTsTuple = std::tuple<HandleTs...>;
+
+        public:
+            using value_type = DataT;
+            using iterator = typename std::vector<value_type>::iterator;
+            using const_iterator = typename std::vector<value_type>::const_iterator;
+
+            Table() {}
+            explicit Table(std::initializer_list<size_t> szs) {
+                size_t s = 0;
+                assert(szs.size() <= HandleTsNum);
+                auto siBegin = _startIndices.begin();
+                for (size_t sz : szs) {
+                    *siBegin = s;
+                    s += sz;
+                    ++siBegin;
+                }
+                _data = std::vector<value_type>(s);
+            }
+            Table(std::initializer_list<size_t> szs, const value_type & val) {
+                size_t s = 0;
+                assert(szs.size() <= HandleTsNum);
+                auto siBegin = _startIndices.begin();
+                for (size_t sz : szs) {
+                    *siBegin = s;
+                    s += sz;
+                    ++siBegin;
+                }
+                _data = std::vector<value_type>(s, val);
+            }
+
+            Table(Table && t) : Table() { swap(t); }
+            Table & operator = (Table && t) { swap(t); return *this; }
+            Table(const Table & t) = delete;
+            Table & operator = (const Table & t) = delete;
+
+            void swap(Table & t) {
+                std::swap(_startIndices, t._startIndices);
+                std::swap(_data, t._data);
+            }
+
+            size_t size() const { return _data.size(); }
+            bool empty() const { return _data.empty(); }
+            const value_type * data() const { return _data.data(); }
+            value_type * data() { return _data.data(); }
+
+            iterator begin() { return _data.begin(); }
+            iterator end() { return _data.end(); }
+            const_iterator begin() const { return _data.begin(); }
+            const_iterator end() const { return _data.end(); }
+            const_iterator cbegin() const { return _data.cbegin(); }
+            const_iterator cend() const { return _data.cend(); }
+
+            template <class HandleT>
+            Range<iterator> range() {
+                enum : size_t { _Idx = TypeFirstLocationInTuple<HandleT, HandleTsTuple>::value };
+                return Range<iterator>{
+                    _data.begin() + _startIndices[_Idx],
+                        _Idx + 1 == HandleTsNum ? (_data.end()) : (_data.begin() + _startIndices[_Idx + 1])
+                };
+            }
+
+            template <class HandleT>
+            Range<const_iterator> range() const {
+                enum : size_t { _Idx = TypeFirstLocationInTuple<HandleT, HandleTsTuple>::value };
+                return Range<const_iterator>{
+                    _data.begin() + _startIndices[_Idx],
+                        _Idx + 1 == HandleTsNum ? (_data.end()) : (_data.begin() + _startIndices[_Idx + 1])
+                };
+            }
+
+            template <class HandleT>
+            value_type & operator()(HandleT h) {
+                assert(!empty());
+                return _data[_startIndices[TypeFirstLocationInTuple<HandleT, HandleTsTuple>::value] + h.id];
+            }
+            template <class HandleT>
+            const value_type & operator()(HandleT h) const {
+                assert(!empty());
+                return _data[_startIndices[TypeFirstLocationInTuple<HandleT, HandleTsTuple>::value] + h.id];
+            }
+            template <class HandleT>
+            value_type & operator[](HandleT h) {
+                assert(!empty());
+                return _data[_startIndices[TypeFirstLocationInTuple<HandleT, HandleTsTuple>::value] + h.id];
+            }
+            template <class HandleT>
+            const value_type & operator[](HandleT h) const {
+                assert(!empty());
+                return _data[_startIndices[TypeFirstLocationInTuple<HandleT, HandleTsTuple>::value] + h.id];
+            }
+            template <class HandleT>
+            const value_type & at(HandleT h) const {
+                assert(!empty());
+                return _data[_startIndices[TypeFirstLocationInTuple<HandleT, HandleTsTuple>::value] + h.id];
+            }
+
+            bool operator == (const Table & t) const {
+                if (empty()) return t.empty();
+                if (t.empty()) return false;
+                return _startIndices == t._startIndices && _data == t._data;
+            }
+
+            template <class Archive> inline void serialize(Archive & ar) { ar(_startIndices, _data); }
+
+        private:
+            std::array<size_t, HandleTsNum> _startIndices;
+            std::vector<value_type> _data;
+        };
+
+
+
 
 
         // triplet 
@@ -358,8 +474,8 @@ namespace panoramix {
 namespace std {
 
     template <class Tag>
-    struct hash<panoramix::core::Handle<Tag>> {
-        inline uint64_t operator()(panoramix::core::Handle<Tag> a) const {
+    struct hash<pano::core::Handle<Tag>> {
+        inline uint64_t operator()(pano::core::Handle<Tag> a) const {
             return static_cast<uint64_t>(a.id);
         }
     };
@@ -367,4 +483,3 @@ namespace std {
 }
 
 
-#endif

@@ -1,10 +1,9 @@
-#ifndef PANORAMIX_CORE_DECORATE_HPP
-#define PANORAMIX_CORE_DECORATE_HPP
+#pragma once
 
 #include <vector>
 #include <string>
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         template <class T>
@@ -238,5 +237,3 @@ namespace panoramix {
     }
 }
 
-
-#endif

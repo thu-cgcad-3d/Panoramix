@@ -16,3 +16,4 @@ matlab/*.lib
 matlab/*.mexw64
 matlab/temp.mat
 Panoramix.sublime-project
+*.cereal

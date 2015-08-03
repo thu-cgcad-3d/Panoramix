@@ -1,7 +1,7 @@
 #include "../core/utility.hpp"
 #include "cmd_tools.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace misc{
 
         CmdOptions::CmdOptions(std::initializer_list<CmdOption> ilist){

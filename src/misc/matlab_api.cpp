@@ -1,10 +1,14 @@
+#include <mex.h>
+#include <mat.h>
+#include <engine.h>
+
 #include "matlab_api.hpp"
 
 #ifndef USE_MATLAB
 #error USE_MATLAB flag required
 #endif
 
-namespace panoramix {
+namespace pano {
 
     namespace misc {
 
@@ -72,16 +76,16 @@ namespace panoramix {
         }
 
 
-        MXA::MXA() : _mxa(nullptr), _destroyWhenOutofScope(false) {}
-        MXA::MXA(mxArray * mxa, bool dos) : _mxa(mxa), _destroyWhenOutofScope(dos) {}
+        MXA::MXA() : _mxa(0), _destroyWhenOutofScope(false) {}
+        MXA::MXA(void * mxa, bool dos) : _mxa(mxa), _destroyWhenOutofScope(dos) {}
         MXA::MXA(MXA && a) {
             _mxa = a._mxa;
-            a._mxa = nullptr;
+            a._mxa = 0;
             _destroyWhenOutofScope = a._destroyWhenOutofScope;
             a._destroyWhenOutofScope = false;
         }
 
-        MXA::MXA(const cv::Mat & im, bool dos /*= false*/) : _mxa(nullptr), _destroyWhenOutofScope(false) {
+        MXA::MXA(const cv::Mat & im, bool dos /*= false*/) : _mxa(0), _destroyWhenOutofScope(false) {
             // collect all dimensions of im
             int channelNum = im.channels();
             mwSize * dimSizes = new mwSize[im.dims + 1];
@@ -119,11 +123,11 @@ namespace panoramix {
             delete[] mxIndices;
             delete[] cvIndices;
 
-            _mxa = ma;
+            _mxa = static_cast<void *>(ma);
             _destroyWhenOutofScope = dos;
         }
 
-        MXA::MXA(double scalar, bool dos /*= false*/) : _mxa(nullptr), _destroyWhenOutofScope(false) {
+        MXA::MXA(double scalar, bool dos /*= false*/) : _mxa(0), _destroyWhenOutofScope(false) {
             mwSize dimSizes[] = { 1 };
             mxArray * ma = mxCreateNumericArray(1, dimSizes, mxClassID::mxDOUBLE_CLASS, mxREAL);
             if (!ma)
@@ -134,12 +138,12 @@ namespace panoramix {
             _destroyWhenOutofScope = dos;
         }
 
-        MXA::MXA(const std::string & string, bool dos /*= false*/) : _mxa(nullptr), _destroyWhenOutofScope(false) {
+        MXA::MXA(const std::string & string, bool dos /*= false*/) : _mxa(0), _destroyWhenOutofScope(false) {
             _mxa = mxCreateStringFromNChars(string.c_str(), string.size());
             _destroyWhenOutofScope = dos;
         }
 
-        MXA::MXA(const cv::SparseMat & mat, bool dos /*= false*/) : _mxa(nullptr), _destroyWhenOutofScope(false) {
+        MXA::MXA(const cv::SparseMat & mat, bool dos /*= false*/) : _mxa(0), _destroyWhenOutofScope(false) {
             // collect all dimensions of im
             int channelNum = mat.channels();
             assert(channelNum == 1);
@@ -265,12 +269,12 @@ namespace panoramix {
         }
         MXA::~MXA() {
             if (_destroyWhenOutofScope) {
-                mxDestroyArray(_mxa);
+                mxDestroyArray(static_cast<mxArray*>(_mxa));
             }
             _mxa = nullptr;
         }
 
-#define IMP_MXARRAY_MEMBERFUNCTION_IS(what) bool MXA::is##what() const { return mxIs##what(_mxa); }
+#define IMP_MXARRAY_MEMBERFUNCTION_IS(what) bool MXA::is##what() const { return mxIs##what(static_cast<mxArray*>(_mxa)); }
 
         IMP_MXARRAY_MEMBERFUNCTION_IS(Numeric)
         IMP_MXARRAY_MEMBERFUNCTION_IS(Cell)
@@ -299,7 +303,7 @@ namespace panoramix {
             size_t len = nelements() + 1;
             char * buffer = new char[len];
             memset(buffer, '\0', len);
-            mxGetString(_mxa, buffer, len);
+            mxGetString(static_cast<mxArray*>(_mxa), buffer, len);
             std::string str = buffer;
             delete[] buffer;
             return str;
@@ -310,7 +314,7 @@ namespace panoramix {
                 return true;
             if (null())
                 return false;
-            const mxArray * ma = _mxa;
+            const mxArray * ma = static_cast<mxArray*>(_mxa);
             int d = mxGetNumberOfDimensions(ma);
             assert((d >= 2) && "dimension num of the variable must be over 2");
             const mwSize * dimSizes = mxGetDimensions(ma);
@@ -370,109 +374,105 @@ namespace panoramix {
 
         MXA MXA::clone(bool dos) const {
             if (_mxa)
-                return MXA(mxDuplicateArray(_mxa), dos);
+                return MXA(mxDuplicateArray(static_cast<mxArray*>(_mxa)), dos);
             return MXA();
         }
 
-        mxClassID MXA::classID() const {
-            return mxGetClassID(_mxa);
-        }
-
         void * MXA::data() const {
-            return mxGetData(_mxa);
+            return mxGetData(static_cast<mxArray*>(_mxa));
         }
 
         void MXA::setData(void* d) {
-            mxSetData(_mxa, d);
+            mxSetData(static_cast<mxArray*>(_mxa), d);
         }
 
         size_t MXA::m() const {
-            return mxGetM(_mxa);
+            return mxGetM(static_cast<mxArray*>(_mxa));
         }
 
         size_t MXA::n() const {
-            return mxGetN(_mxa);
+            return mxGetN(static_cast<mxArray*>(_mxa));
         }
 
         void MXA::setM(size_t m) {
-            mxSetM(_mxa, m);
+            mxSetM(static_cast<mxArray*>(_mxa), m);
         }
 
         void MXA::setN(size_t n) {
-            mxSetN(_mxa, n);
+            mxSetN(static_cast<mxArray*>(_mxa), n);
         }
 
         bool MXA::empty() const {
-            return mxIsEmpty(_mxa);
+            return mxIsEmpty(static_cast<mxArray*>(_mxa));
         }
 
         bool MXA::isFromGlobalWorkspace() const {
-            return mxIsFromGlobalWS(_mxa);
+            return mxIsFromGlobalWS(static_cast<mxArray*>(_mxa));
         }
 
         void MXA::setIsFromGlobalWorkspace(bool b) {
-            mxSetFromGlobalWS(_mxa, b);
+            mxSetFromGlobalWS(static_cast<mxArray*>(_mxa), b);
         }
 
         double MXA::scalar() const {
-            return mxGetScalar(_mxa);
+            return mxGetScalar(static_cast<mxArray*>(_mxa));
         }
 
         size_t MXA::nelements() const {
-            return mxGetNumberOfElements(_mxa);
+            return mxGetNumberOfElements(static_cast<mxArray*>(_mxa));
         }
 
         size_t MXA::nzmax() const {
-            return mxGetNzmax(_mxa);
+            return mxGetNzmax(static_cast<mxArray*>(_mxa));
         }
 
         MXA MXA::cell(size_t i) const {
-            return mxGetCell(_mxa, i);
+            return mxGetCell(static_cast<mxArray*>(_mxa), i);
         }
 
         void MXA::setCell(size_t i, const MXA & a) {
-            mxSetCell(_mxa, i, a._mxa);
+            mxSetCell(static_cast<mxArray*>(_mxa), i, static_cast<mxArray*>(a._mxa));
         }
 
         int MXA::nfields() const {
-            return mxGetNumberOfFields(_mxa);
+            return mxGetNumberOfFields(static_cast<mxArray*>(_mxa));
         }
 
         const char * MXA::fieldName(int n) const {
-            return mxGetFieldNameByNumber(_mxa, n);
+            return mxGetFieldNameByNumber(static_cast<mxArray*>(_mxa), n);
         }
 
         int MXA::fieldNumber(const std::string & name) const {
-            return mxGetFieldNumber(_mxa, name.c_str());
+            return mxGetFieldNumber(static_cast<mxArray*>(_mxa), name.c_str());
         }
 
         MXA MXA::field(const std::string & name, int i /*= 0*/) const {
-            return mxGetField(_mxa, i, name.c_str());
+            return mxGetField(static_cast<mxArray*>(_mxa), i, name.c_str());
         }
 
         void MXA::setField(const std::string & name, int i, const MXA & a) {
-            mxSetField(_mxa, i, name.c_str(), a._mxa);
+            mxSetField(static_cast<mxArray*>(_mxa), i, name.c_str(), static_cast<mxArray*>(a._mxa));
         }
 
         MXA MXA::property(const std::string & name, size_t i) const {
-            return mxGetProperty(_mxa, i, name.c_str());
+            return mxGetProperty(static_cast<mxArray*>(_mxa), i, name.c_str());
         }
 
         void MXA::setProperty(const std::string & name, int i, const MXA & a) {
-            mxSetProperty(_mxa, i, name.c_str(), a._mxa);
+            mxSetProperty(static_cast<mxArray*>(_mxa), i, name.c_str(), static_cast<mxArray*>(a._mxa));
         }
 
         const char * MXA::className() const {
-            return mxGetClassName(_mxa);
+            return mxGetClassName(static_cast<mxArray*>(_mxa));
         }
 
         size_t MXA::ndims() const {
-            return mxGetNumberOfDimensions(_mxa);
+            return mxGetNumberOfDimensions(static_cast<mxArray*>(_mxa));
         }
 
         std::vector<size_t> MXA::dims() const {
             std::vector<size_t> ds(ndims());
-            std::copy_n(mxGetDimensions(_mxa), ds.size(), ds.begin());
+            std::copy_n(mxGetDimensions(static_cast<mxArray*>(_mxa)), ds.size(), ds.begin());
             return ds;
         }
 
@@ -483,7 +483,7 @@ namespace panoramix {
         }
 
         size_t MXA::calcSingleSubscript(size_t dim, size_t * subs) const {
-            return mxCalcSingleSubscript(_mxa, dim, subs);
+            return mxCalcSingleSubscript(static_cast<mxArray*>(_mxa), dim, subs);
         }
 
 
@@ -538,7 +538,7 @@ namespace panoramix {
 
         MAT::~MAT() {
             if (_fp) {
-                matClose(_fp);
+                matClose(static_cast<::MATFile*>(_fp));
                 _fp = nullptr;
             }
         }
@@ -546,7 +546,7 @@ namespace panoramix {
 
         std::vector<std::string> MAT::varNames() const {
             int num = 0;
-            char ** names = matGetDir(_fp, &num);
+            char ** names = matGetDir(static_cast<::MATFile*>(_fp), &num);
             if (!names)
                 return std::vector<std::string>();
             std::vector<std::string> vnames(num);
@@ -558,33 +558,35 @@ namespace panoramix {
         }
 
         MXA MAT::var(const std::string & name) const {
-            return matGetVariable(_fp, name.c_str());
+            return matGetVariable(static_cast<::MATFile*>(_fp), name.c_str());
         }
 
         bool MAT::setVar(const std::string & name, const MXA & mxa, bool asGlobal /*= false*/) {
             if (!asGlobal) {
-                return matPutVariable(_fp, name.c_str(), mxa) == 0;
+                return matPutVariable(static_cast<::MATFile*>(_fp), name.c_str(), static_cast<mxArray*>(mxa.mxa())) == 0;
             } else {
-                return matPutVariableAsGlobal(_fp, name.c_str(), mxa) == 0;
+                return matPutVariableAsGlobal(static_cast<::MATFile*>(_fp), name.c_str(), static_cast<mxArray*>(mxa.mxa())) == 0;
             }
         }
 
         bool MAT::removeVar(const std::string & name) {
-            return matDeleteVariable(_fp, name.c_str()) == 0;
+            return matDeleteVariable(static_cast<::MATFile*>(_fp), name.c_str()) == 0;
         }
 
 
         Matlab::Matlab(const std::string & defaultDir) : _eng(nullptr), _buffer(nullptr) {
             static const int bufferSize = 1024;
-            _eng = engOpenSingleUse(nullptr, nullptr, nullptr);
+            _eng = engOpen(nullptr);
             if (_eng) {
-                engSetVisible(_eng, false);
+                engSetVisible(static_cast<::Engine*>(_eng), false);
                 _buffer = new char[bufferSize];
                 std::memset(_buffer, 0, bufferSize);
-                engOutputBuffer(_eng, _buffer, bufferSize);
+                engOutputBuffer(static_cast<::Engine*>(_eng), _buffer, bufferSize);
                 std::cout << "Matlab Engine Launched" << std::endl;
                 if (!defaultDir.empty()) {
-                    engEvalString(_eng, ("cd " + defaultDir + "; startup; pwd").c_str());
+                    engEvalString(static_cast<::Engine*>(_eng), ("cd " + defaultDir + "; startup; pwd").c_str());
+                } else {
+                    (*this) << (std::string("cd ") + MATLAB_CODE_DIR + "; startup; pwd");
                 }
                 std::cout << _buffer << std::endl;
             }
@@ -592,7 +594,7 @@ namespace panoramix {
 
         Matlab::~Matlab() {
             if (_eng) {
-                engClose(_eng);
+                engClose(static_cast<::Engine*>(_eng));
                 std::cout << "Matlab Engine Closed" << std::endl;
             }
             delete[] _buffer;
@@ -619,7 +621,7 @@ namespace panoramix {
         }
 
         bool Matlab::run(const std::string & cmd) const {
-            bool ret = engEvalString(_eng, cmd.c_str()) == 0;
+            bool ret = engEvalString(static_cast<::Engine*>(_eng), cmd.c_str()) == 0;
             if (strlen(_buffer) > 0) {
                 std::cout << "[Message when executing '" << cmd << "']:\n" << _buffer << std::endl;
             }
@@ -630,18 +632,28 @@ namespace panoramix {
             return _buffer;
         }
 
+        bool Matlab::errorLastRun() const {
+            return std::string(_buffer).substr(0, 5) == "Error";
+        }
+
         MXA Matlab::var(const std::string & name) const {
-            return MXA(engGetVariable(_eng, name.c_str()), true);
+            return MXA(engGetVariable(static_cast<::Engine*>(_eng), name.c_str()), true);
         }
 
         bool Matlab::setVar(const std::string & name, const MXA & mxa) {
-            return engPutVariable(_eng, name.c_str(), mxa) == 0;
+            return engPutVariable(static_cast<::Engine*>(_eng), name.c_str(), static_cast<mxArray*>(mxa.mxa())) == 0;
         }
 
         const Matlab & Matlab::operator<<(const std::string & cmd) const {
             run(cmd);
             return *this;
         }
+
+        bool Matlab::cdAndAddAllSubfolders(const std::string & dir) {
+            return run("cd " + dir) && run("addpath(genpath('.'));");
+        }
+
+
 
     }
 

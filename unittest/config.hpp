@@ -8,7 +8,7 @@
 #include "gtest/gtest.h"
 
 
-namespace panoramix {
+namespace pano {
     namespace test {
 
         struct ProjectDataDirStrings {

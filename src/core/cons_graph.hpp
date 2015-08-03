@@ -1,10 +1,9 @@
-#ifndef PANORAMIX_CORE_CONS_GRAPH_HPP
-#define PANORAMIX_CORE_CONS_GRAPH_HPP
- 
+#pragma once
+
 #include <numeric>
 #include "handle.hpp" 
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
 
@@ -690,5 +689,3 @@ namespace panoramix {
     	
     }
 }
- 
-#endif

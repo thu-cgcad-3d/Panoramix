@@ -3,7 +3,7 @@
 
 #include "config.hpp"
 
-using namespace panoramix;
+using namespace pano;
 using namespace test;
 
 static_assert(core::IsCamera<core::PerspectiveCamera>::value, "");

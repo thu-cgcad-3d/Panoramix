@@ -1,12 +1,12 @@
-#ifndef PANORAMIX_CORE_ANY_HPP
-#define PANORAMIX_CORE_ANY_HPP
+#pragma once
+
 
 #include <typeinfo>
 #include <string>
 #include <exception>
 #include <cassert>
 
-namespace panoramix {
+namespace pano {
     namespace core {
 
         // AnyPtr
@@ -129,15 +129,22 @@ namespace panoramix {
             DataBase * _data;
         };
 
+
+        struct StaticStorage {
+            static void set(const std::string & name, const Any & val);
+            static void set(const std::string & name, Any && val);
+            static bool has(const std::string & name);
+            static Any get(const std::string & name);
+        };
+
+
    	}
 }
 
 
 namespace std {
 
-    inline void swap(panoramix::core::Any & a, panoramix::core::Any & b) { a.swap(b); }
+    inline void swap(pano::core::Any & a, pano::core::Any & b) { a.swap(b); }
 
 }
 
- 
-#endif

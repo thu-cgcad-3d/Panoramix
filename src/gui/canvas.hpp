@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_GUI_CANVAS_HPP
-#define PANORAMIX_GUI_CANVAS_HPP
+#pragma once
+
 
 #include "../core/basic_types.hpp"
 #include "../core/utility.hpp"
@@ -7,7 +7,7 @@
 
 #include "basic_types.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace gui {
 
         using namespace core;
@@ -236,7 +236,7 @@ namespace panoramix {
         template <class T>
         inline Canvas<T> MakeCanvas(const ImageOf<T> & im) { return Canvas<T>(im.clone()); }
 
+        using Canvas3ub = Canvas<Vec3ub>;
+
     }
 }
- 
-#endif

@@ -1,5 +1,5 @@
-#ifndef PANORAMIX_CORE_ITERATORS_HPP
-#define PANORAMIX_CORE_ITERATORS_HPP
+#pragma once
+
 
 #include <stack>
 #include <iterator>
@@ -14,7 +14,7 @@
 
 #include "meta.hpp"
  
-namespace panoramix {
+namespace pano {
     namespace core {
 
 
@@ -192,42 +192,6 @@ namespace panoramix {
             return YieldIterator<T, std::decay_t<ProcessorT>>(std::forward<ProcessorT>(p));
         }
 
-
-
-        //template <class WalkerT>
-        //class WalkerContainerWrapper {
-        //public:
-        //    using reference_type = decltype(std::declval<NexterT>().next());
-        //    using value_type = std::decay_t<reference_type>;
-        //    struct iterator : public std::iterator<std::forward_iterator_tag, value_type> {
-        //        const bool isEnd;
-        //        WalkerT nexter;
-        //        reference_type * curValuePtr;
-        //        explicit iterator(bool e, WalkerT n) : isEnd(e), nexter(n), curValuePtr(nullptr) {}
-        //        inline reference_type operator *() const { return *curValuePtr; }
-        //        inline reference_type * operator -> () const { return curValuePtr; }
-        //        inline iterator & operator ++() { curValuePtr = &(nexter.next()); }
-        //        inline bool operator == (iterator it) const { 
-        //            assert(isEnd || it.isEnd);
-        //            return isEnd ? it.nexter.hasNext() : nexter.hasNext();
-        //        }
-        //    };
-        //    
-        //    explicit WalkerContainerWrapper(NexterT nexter) : _nexter(nexter) {}
-        //    inline iterator begin() { return iterator(false, _nexter); }
-        //    inline iterator end() { return iterator(true, _nexter); }
-
-        //private:
-        //    WalkerT _nexter;
-        //};
-
-        //template <class WalkerT>
-        //inline WalkerContainerWrapper<WalkerT> WrapWalker(const WalkerT & w) {
-        //    return WalkerContainerWrapper<WalkerT>(w);
-        //}
-
         
     }
 }
-
-#endif

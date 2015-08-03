@@ -1,13 +1,12 @@
 
 #include "../misc/matlab_api.hpp"
-#include "../misc/matlab_engine.hpp"
 
 #include "../core/algorithms.hpp"
 #include "../core/containers.hpp"
 
 #include "projective_solver.hpp"
 
-namespace panoramix {
+namespace pano {
     namespace experimental {
 
         using CoeffVec = ProjectiveComponent::CoeffVec;
@@ -484,16 +483,16 @@ namespace panoramix {
 
 
 
-        bool ProjectiveSolver::solve(double * nanOrInfRatio) const {
+        bool ProjectiveSolver::solve(double * nanOrInfRatio, bool quiet) const {
             SparseMatd A = MakeSparseMatFromElements(_neqs, _nvars, _Amat.begin(), _Amat.end());
 
             assert(_Bmat.size() == _neqs && _ops.size() == _neqs);
 
             bool succeed = true;
-            misc::MatlabEngine matlab;
+            misc::Matlab matlab;
             matlab << "clear;";
-            succeed = matlab.PutVariable("A", A) &&
-                matlab.PutVariable("B", _Bmat);
+            succeed = matlab.setVar("A", A) &&
+                matlab.setVar("B", cv::Mat(_Bmat));
             assert(succeed);
             matlab << "B = B';";
 
@@ -501,27 +500,27 @@ namespace panoramix {
             for (int i = 0; i < _ops.size(); i++){
                 opTypes[i] = _ops[i] == Equal ? 0.0 : 1.0;
             }
-            succeed = matlab.PutVariable("Op", opTypes);
+            succeed = matlab.setVar("Op", cv::Mat(opTypes));
             assert(succeed);
             matlab << "Op = Op';";
 
-            matlab 
-                << "neq = size(A, 1);"
-                << "nvar = size(A, 2);"
-                << "equalpart = Op(:) == 0;"
-                << "ltpart = Op(:) == 1;"
+            bool result = matlab.run("neq = size(A, 1);") &&
+                matlab.run("nvar = size(A, 2);") &&
+                matlab.run("equalpart = Op(:) == 0;") &&
+                matlab.run("ltpart = Op(:) == 1;") &&
 
-                << "cvx_begin"
-                << "variable X(nvar);"
-                << "minimize norm(A(equalpart, :) * X - B(equalpart, :))"
-                << "subject to "
-                << "    A(ltpart, :) * X <= B(ltpart, :);"
-                << "cvx_end"
+                matlab.run(quiet ? "cvx_begin quiet" : "cvx_begin") &&
+                matlab.run("variable X(nvar);") &&
+                matlab.run("minimize norm(A(equalpart, :) * X - B(equalpart, :))") &&
+                matlab.run("subject to ") &&
+                matlab.run("    A(ltpart, :) * X <= B(ltpart, :);") &&
+                matlab.run("cvx_end") &&
 
-                << "X = X(:)' / norm(X);";
+                matlab.run("X = X(:)' / norm(X);");
+            if (!result)
+                return false;
 
-            std::vector<double> X;
-            matlab.GetVariable("X", X);
+            std::vector<double> X = matlab.var("X").toCVMat();
 
             if (nanOrInfRatio) {
                 *nanOrInfRatio = 
