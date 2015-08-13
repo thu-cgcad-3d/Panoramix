@@ -1351,7 +1351,7 @@ namespace pano {
                 bool mayCrossAnyVP = false;
                 for (auto & vp : controls.vanishingPoints) {
                     double angle = AngleBetweenUndirectedVectors(vp, r.data.normalizedCenter);
-                    if (angle < radiusAngle) {
+                    if (angle <= radiusAngle) {
                         mayCrossAnyVP = true;
                         break;
                     }
@@ -1394,10 +1394,10 @@ namespace pano {
                                 break;
                             auto pp1 = Pixel(p1.x + x, p1.y + y);
                             auto pp2 = Pixel(p2.x + x, p2.y + y);
-                            if (Contains(mask, pp1) /*Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp1)*/ && mask(pp1)) {
+                            if (Contains(mask, pp1) && mask(pp1)) {
                                 peakyRegionHandles[i].push_back(r.topo.hd);
                                 intersected = true;
-                            } else if (Contains(mask, pp2)/*Box<int, 2>(Point2i(0, 0), Point2i(mask.cols - 1, mask.rows - 1)).contains(pp2) */ && mask(pp2)) {
+                            } else if (Contains(mask, pp2) && mask(pp2)) {
                                 peakyRegionHandles[i].push_back(r.topo.hd);
                                 intersected = true;
                             }

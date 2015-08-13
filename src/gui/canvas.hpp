@@ -141,7 +141,7 @@ namespace pano {
             template <class T>
             inline Canvas & add(const Noted<T> & thing){
                 auto center = core::BoundingBox(thing.component).center();
-                cv::putText(image(), thing.note, cv::Point(static_cast<int>(center[0]), static_cast<int>(center[1])), 1, 1, paintingOptions().color);
+                cv::putText(image(), thing.note, cv::Point(static_cast<int>(center[0]), static_cast<int>(center[1])), 1, 0.5, paintingOptions().color);
                 return add(thing.component);
             }
 

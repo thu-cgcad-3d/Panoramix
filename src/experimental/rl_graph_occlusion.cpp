@@ -1,3 +1,7 @@
+
+#include "../core/containers.hpp"
+#include "../ml/factor_graph.hpp"
+
 #include "rl_graph_occlusion.hpp"
 
 namespace pano {
@@ -192,6 +196,11 @@ namespace pano {
 
 
 
+
+
+
+
+
         namespace {
 
             bool AllAlong(const std::vector<std::vector<Vec3>> & pts, const Vec3 & from, const Vec3 & to, double angleThres) {
@@ -267,6 +276,440 @@ namespace pano {
         }
 
 
+        HandledTable<RegionBoundaryHandle, DepthRelation> DetectOcclusions(
+            const RLGraph & mg, const RLGraphControls & controls,
+            const SegmentationTopo & segtopo, const std::vector<int> & bndclasses, 
+            const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
+            const std::vector<Vec3> & vps) {
+
+            auto occlusions = mg.createConstraintTable<RegionBoundaryData>(DepthRelation::Connected);
+
+            assert(segtopo.nsegs() == rhs.size());
+            assert(segtopo.nboundaries() == bhs.size());
+            for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                auto & segids = segtopo.bnd2segs[bndid];
+                auto rh1 = rhs[segids.first];
+                auto rh2 = rhs[segids.second];
+                if (rh1.invalid() || rh2.invalid()) {
+                    continue;
+                }
+                auto bh = bhs[bndid];
+                if (bh.invalid()) {
+                    continue;
+                }
+
+                if (!controls[rh1].used || !controls[rh2].used) {
+                    continue;
+                }
+                int bndclass = bndclasses[bndid];
+
+                // 
+                if (controls[rh1].orientationClaz != -1 && controls[rh2].orientationClaz != -1
+                    && controls[rh1].orientationClaz != controls[rh2].orientationClaz
+                    && (bndclass == -1 
+                    || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh1].orientationClaz]) 
+                    || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh2].orientationClaz]))) {
+                    // break this
+                    occlusions[bh] = DepthRelation::Disconnected;
+                    auto & rhvp1 = vps[controls[rh1].orientationClaz];
+                    auto & rhvp2 = vps[controls[rh2].orientationClaz];
+                    if (bndclass != -1) {
+                        auto & bndvp = vps[bndclass];
+                        if (IsFuzzyPerpendicular(rhvp1, bndvp) && !IsFuzzyPerpendicular(rhvp2, bndvp)) {
+                            occlusions[bh] = DepthRelation::FirstIsFront;
+                        } else if (!IsFuzzyPerpendicular(rhvp1, bndvp) && IsFuzzyPerpendicular(rhvp2, bndvp)) {
+                            occlusions[bh] = DepthRelation::SecondIsFront;
+                        }
+                    }
+                } else if (controls[rh1].orientationClaz != -1 && 
+                    controls[rh2].orientationClaz == -1 && controls[rh2].orientationNotClaz == controls[rh1].orientationClaz
+                    && (bndclass == -1
+                    || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh1].orientationClaz]))) {
+                    // break this
+                    occlusions[bh] = DepthRelation::Disconnected;
+                    if (bndclass == controls[rh1].orientationClaz) {
+                        occlusions[bh] = DepthRelation::SecondIsFront;
+                    }
+                } else if (controls[rh2].orientationClaz != -1 &&
+                    controls[rh1].orientationClaz == -1 && controls[rh1].orientationNotClaz == controls[rh2].orientationClaz
+                    && (bndclass == -1
+                    || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh2].orientationClaz]))) {
+                    // break this
+                    occlusions[bh] = DepthRelation::Disconnected;
+                    if (bndclass == controls[rh2].orientationClaz) {
+                        occlusions[bh] = DepthRelation::FirstIsFront;
+                    }
+                }
+            }
+
+            return occlusions;
+
+        }
+
+
+
+        namespace {
+
+            bool NoOrientationControl(const RLGraphComponentControl & c) {
+                return c.orientationClaz == -1 && c.orientationNotClaz == -1;
+            }
+
+        }
+
+
+
+        HandledTable<RegionBoundaryHandle, DepthRelation> DetectOcclusions2(
+            const RLGraph & mg, const RLGraphControls & controls,
+            const Imagei & segs,
+            const SegmentationTopo & segtopo, const std::vector<std::vector<Vec3>> & bndsamples, const std::vector<int> & bndclasses,
+            const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
+            const std::vector<Vec3> & vps, double angleDistThres) {
+
+            auto occlusions = mg.createConstraintTable<RegionBoundaryData>(DepthRelation::Connected);
+            assert(segtopo.nsegs() == rhs.size());
+            assert(segtopo.nboundaries() == bhs.size());
+
+            struct BndSample {
+                int bndid;
+                int sampleid;
+                bool operator == (const BndSample & bs) const { return std::tie(bndid, sampleid) == std::tie(bs.bndid, bs.sampleid); }
+                bool operator < (const BndSample & bs) const { return std::tie(bndid, sampleid) < std::tie(bs.bndid, bs.sampleid); }
+            };
+            
+            RTreeMap<Vec3, BndSample> samples;
+            for (int bndid = 0; bndid < bndsamples.size(); bndid++) {
+                auto & segids = segtopo.bnd2segs[bndid];
+                auto rh1 = rhs[segids.first];
+                auto rh2 = rhs[segids.second];
+                if (rh1.invalid() || rh2.invalid()) {
+                    continue;
+                }
+                if (std::tie(controls[rh1].orientationClaz, controls[rh1].orientationNotClaz) ==
+                    std::tie(controls[rh2].orientationClaz, controls[rh2].orientationNotClaz)) {
+                    continue;
+                }
+                if (!NoOrientationControl(controls[rh1]) && !NoOrientationControl(controls[rh2])) {
+                    continue; // only consider detached edges
+                }
+                for (int sampleid = 0; sampleid < bndsamples[bndid].size(); sampleid++) {
+                    samples.insert(std::make_pair(bndsamples[bndid][sampleid], BndSample{ bndid, sampleid }));
+                }
+            }
+
+            std::map<BndSample, BndSample> closestBs;
+            for (int bndid = 0; bndid < bndsamples.size(); bndid++) {
+                for (int sampleid = 0; sampleid < bndsamples[bndid].size(); sampleid++) {
+
+                    auto & segids = segtopo.bnd2segs[bndid];
+                    auto rh1 = rhs[segids.first];
+                    auto rh2 = rhs[segids.second];
+                    if (rh1.invalid() || rh2.invalid()) {
+                        continue;
+                    }
+                    if (std::tie(controls[rh1].orientationClaz, controls[rh1].orientationNotClaz) ==
+                        std::tie(controls[rh2].orientationClaz, controls[rh2].orientationNotClaz)) {
+                        continue;
+                    }
+                    if (!NoOrientationControl(controls[rh1]) && !NoOrientationControl(controls[rh2])) {
+                        continue; // only consider detached edges
+                    }
+
+                    auto controledSide = controls[rh1];
+                    if (NoOrientationControl(controledSide)) {
+                        controledSide = controls[rh2];
+                    }
+                    assert(!NoOrientationControl(controledSide));
+
+                    auto & dir = bndsamples[bndid][sampleid];
+
+                    BndSample closest = { -1, -1 };
+                    double minAngle = angleDistThres;
+                    
+                    samples.search(BoundingBox(normalize(dir)).expand(angleDistThres * 2),
+                        [&closest, &minAngle, &segtopo, &rhs, &controls, &controledSide, &dir](const std::pair<Vec3, BndSample> & bs) {
+
+                        auto & segids = segtopo.bnd2segs[bs.second.bndid];
+                        auto rh1 = rhs[segids.first];
+                        auto rh2 = rhs[segids.second];
+
+                        auto thisControledSide = controls[rh1];
+                        if (NoOrientationControl(thisControledSide)) {
+                            thisControledSide = controls[rh2];
+                        }
+                        assert(!NoOrientationControl(thisControledSide));
+
+                        if (std::tie(thisControledSide.orientationClaz, thisControledSide.orientationNotClaz) ==
+                            std::tie(controledSide.orientationClaz, controledSide.orientationNotClaz)) {
+                            return true;
+                        }
+
+                        double angle = AngleBetweenDirections(dir, bs.first);
+                        if (angle < minAngle) {
+                            closest = bs.second;
+                            minAngle = angle;
+                        }
+
+                        return true;
+                    });
+
+                    if (closest.bndid != -1) {
+                        closestBs[BndSample{ bndid, sampleid }] = closest;
+                    }
+                }
+            }
+
+            std::vector<std::pair<BndSample, BndSample>> closestPairs;
+            for (auto & p : closestBs) {
+                if (closestBs.at(p.second) == p.first) {
+                    closestPairs.emplace_back(p.first, p.second);
+                }
+            }
+
+            // segidpair -> [bndid -> ratio]
+            std::map<std::pair<int, int>, std::map<int, double>> segpair2bnds;
+            for (int bndid = 0; bndid < bndsamples.size(); bndid++) {
+                auto & segids = segtopo.bnd2segs[bndid];
+                auto rh1 = rhs[segids.first];
+                auto rh2 = rhs[segids.second];
+                if (rh1.invalid() || rh2.invalid()) {
+                    continue;
+                }
+                if (std::tie(controls[rh1].orientationClaz, controls[rh1].orientationNotClaz) ==
+                    std::tie(controls[rh2].orientationClaz, controls[rh2].orientationNotClaz)) {
+                    continue;
+                }
+                if (!NoOrientationControl(controls[rh1]) && !NoOrientationControl(controls[rh2])) {
+                    auto orderedSegIds = segids.first < segids.second ? segids : std::make_pair(segids.second, segids.first);
+                    segpair2bnds[orderedSegIds][bndid] = 1.0;
+                }
+            }
+            for (auto & p : closestPairs) {
+                int bndid1 = p.first.bndid;
+                int bndid2 = p.second.bndid;
+                assert(bndid1 != p.second.bndid);
+
+                int constrainedSegId1 = segtopo.bnd2segs[bndid1].first;
+                if (NoOrientationControl(controls[rhs[segtopo.bnd2segs[bndid1].first]])) {
+                    constrainedSegId1 = segtopo.bnd2segs[bndid1].second;
+                }
+
+                int constrainedSegId2 = segtopo.bnd2segs[bndid2].first;
+                if (NoOrientationControl(controls[rhs[segtopo.bnd2segs[bndid2].first]])) {
+                    constrainedSegId2 = segtopo.bnd2segs[bndid2].second;
+                }
+
+                assert(!NoOrientationControl(controls[rhs[constrainedSegId1]]) &&
+                    !NoOrientationControl(controls[rhs[constrainedSegId2]]));
+
+                auto & bnds =
+                    segpair2bnds[constrainedSegId1 < constrainedSegId2 ? 
+                    std::make_pair(constrainedSegId1, constrainedSegId2) : 
+                    std::make_pair(constrainedSegId2, constrainedSegId2)];
+
+                bnds[bndid1] += 1.0 / bndsamples[bndid1].size();
+                bnds[bndid2] += 1.0 / bndsamples[bndid2].size();
+            }
+
+
+            for (auto & segpairbnd : segpair2bnds) {
+                const auto & segids = segpairbnd.first;
+                auto & bnds = segpairbnd.second;
+
+                auto rh1 = rhs[segids.first];
+                auto rh2 = rhs[segids.second];
+                if (rh1.invalid() || rh2.invalid()) {
+                    continue;
+                }
+
+                for (auto & bndwithscore : bnds) {
+                    int bndid = bndwithscore.first;
+                    double occupationRatio = bndwithscore.second;
+                    if (occupationRatio < 0.5) {
+                        continue;
+                    }
+
+                    auto bh = bhs[bndid];
+                    if (bh.invalid()) {
+                        continue;
+                    }
+
+                    if (!controls[rh1].used || !controls[rh2].used) {
+                        continue;
+                    }
+                    int bndclass = bndclasses[bndid];
+
+
+                    if (controls[rh1].orientationClaz != -1 && controls[rh2].orientationClaz != -1
+                        && controls[rh1].orientationClaz != controls[rh2].orientationClaz
+                        && bndclass != -1
+                        && IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh1].orientationClaz])
+                        && IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh2].orientationClaz])) {
+                        // break this
+                        occlusions[bh] = DepthRelation::MaybeFolder;   
+                    } else if (controls[rh1].orientationClaz != -1 && controls[rh2].orientationClaz != -1
+                        && controls[rh1].orientationClaz != controls[rh2].orientationClaz
+                        && (bndclass == -1
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh1].orientationClaz])
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh2].orientationClaz]))) {
+                        // break this
+                        occlusions[bh] = DepthRelation::Disconnected;
+                        auto & rhvp1 = vps[controls[rh1].orientationClaz];
+                        auto & rhvp2 = vps[controls[rh2].orientationClaz];
+                        if (bndclass != -1) {
+                            auto & bndvp = vps[bndclass];
+                            if (IsFuzzyPerpendicular(rhvp1, bndvp) && !IsFuzzyPerpendicular(rhvp2, bndvp)) {
+                                occlusions[bh] = DepthRelation::FirstIsFront;
+                            } else if (!IsFuzzyPerpendicular(rhvp1, bndvp) && IsFuzzyPerpendicular(rhvp2, bndvp)) {
+                                occlusions[bh] = DepthRelation::SecondIsFront;
+                            }
+                        }
+                    } else if (controls[rh1].orientationClaz != -1 &&
+                        controls[rh2].orientationClaz == -1 && controls[rh2].orientationNotClaz == controls[rh1].orientationClaz
+                        && (bndclass == -1
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh1].orientationClaz]))) {
+                        // break this
+                        occlusions[bh] = DepthRelation::Disconnected;
+                        if (bndclass == controls[rh1].orientationClaz) {
+                            occlusions[bh] = DepthRelation::SecondIsFront;
+                        }
+                    } else if (controls[rh2].orientationClaz != -1 &&
+                        controls[rh1].orientationClaz == -1 && controls[rh1].orientationNotClaz == controls[rh2].orientationClaz
+                        && (bndclass == -1
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh2].orientationClaz]))) {
+                        // break this
+                        occlusions[bh] = DepthRelation::Disconnected;
+                        if (bndclass == controls[rh2].orientationClaz) {
+                            occlusions[bh] = DepthRelation::FirstIsFront;
+                        }
+                    } else if (controls[rh1].orientationClaz != -1 &&
+                        controls[rh2].orientationClaz == -1 && controls[rh2].orientationNotClaz == controls[rh1].orientationClaz
+                        && bndclass != -1
+                        && IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh1].orientationClaz])) {
+                        occlusions[bh] = DepthRelation::MaybeFolder;
+                    } else if (controls[rh2].orientationClaz != -1 &&
+                        controls[rh1].orientationClaz == -1 && controls[rh1].orientationNotClaz == controls[rh2].orientationClaz
+                        && bndclass != -1
+                        && IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh2].orientationClaz])) {
+                        occlusions[bh] = DepthRelation::MaybeFolder;
+                    }
+                }
+            }
+
+
+            // extend the occlusions !!!
+            // todo
+            ml::FactorGraph fg;
+            // add bnd as vars
+            int bndLabelVC = fg.addVarCategory(2, 1.0); // 0-> disconnect, 1-> connect
+            std::vector<ml::FactorGraph::VarHandle> vhs(segtopo.nboundaries());
+            for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                if (bhs[bndid].invalid()) {
+                    continue;
+                }
+                vhs[bndid] = fg.addVar(bndLabelVC);
+            }
+            // add unary factors
+            for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                if (vhs[bndid].invalid()) {
+                    continue;
+                }
+                auto & vh = vhs[bndid];
+                fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [](int vlabel) -> double {
+                    
+                }, 1.0 });
+            }
+
+            // add factors based on junctions
+            for (int jid = 0; jid < segtopo.njunctions(); jid++) {
+                auto & bndids = segtopo.junc2bnds[jid];
+                // todo
+            }
+
+            auto resultLabels = fg.solve(1000, 10);
+            // todo
+
+            return occlusions;
+
+        }
+
+
+
+
+
+
+
+        void ApplyOcclusions(const RLGraph & mg, RLGraphControls & controls,
+            const HandledTable<RegionBoundaryHandle, DepthRelation> & occlusions) {
+
+            for (auto it = occlusions.begin(); it != occlusions.end(); ++it) {
+
+                auto bh = it.hd();
+                DepthRelation relation = *it;
+
+                if (relation == DepthRelation::Connected || relation == DepthRelation::MaybeFolder) {
+                    continue;
+                }
+                if (bh.invalid()) {
+                    continue;
+                }
+                controls[bh].used = false;
+
+                // the front side region
+                auto rh1 = mg.topo(bh).component<0>();
+                auto rh2 = mg.topo(bh).component<1>();
+
+                // related lh ?
+                for (auto & l : mg.components<LineData>()) {
+                    bool hasRh1 = false, hasRh2 = false;
+                    RegionLineConnectionHandle rlh1, rlh2;
+                    for (RegionLineConnectionHandle rlh : l.topo.constraints<RegionLineConnectionData>()) {
+                        if (mg.topo(rlh).component<0>() == rh1) {
+                            hasRh1 = true;
+                            rlh1 = rlh;
+                        }
+                        if (mg.topo(rlh).component<0>() == rh2) {
+                            hasRh2 = true;
+                            rlh2 = rlh;
+                        }
+                        if (hasRh1 && hasRh2) {
+                            break;
+                        }
+                    }
+                    if (hasRh1 && hasRh2) {
+                        if (relation == DepthRelation::FirstIsFront) {
+                            controls[rlh2].used = false;
+                            controls[rlh1].used = true;
+                        } else if(relation == DepthRelation::SecondIsFront) {
+                            controls[rlh1].used = false;
+                            controls[rlh2].used = true;
+                        } else if (relation == DepthRelation::Disconnected) {
+                            controls[rlh1].used = false;
+                            controls[rlh2].used = false;
+                        } else {
+                            SHOULD_NEVER_BE_CALLED();
+                        }
+
+                        // spread to all rhs related to this lh
+                        if (true) {
+                            Vec3 lineNormal = normalize(l.data.line.first.cross(l.data.line.second));
+                            double dot1 = mg.data(rh1).normalizedCenter.dot(lineNormal);
+                            double dot2 = mg.data(rh2).normalizedCenter.dot(lineNormal);
+                            if (dot1 * dot2 >= 0) {
+                                continue; // confused case...
+                            }
+                            for (RegionLineConnectionHandle rlh : l.topo.constraints<RegionLineConnectionData>()) {
+                                double dotHere = mg.data(mg.topo(rlh).component<0>()).normalizedCenter.dot(lineNormal);
+                                bool tendToRh1 = (dot1 * dotHere >= 0);
+                                if (tendToRh1 && relation != DepthRelation::FirstIsFront || !tendToRh1 && relation == DepthRelation::FirstIsFront) {
+                                    controls[rlh].used = false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+        }
 
 
 
@@ -449,7 +892,7 @@ namespace pano {
             const std::vector<int> & bndclasses,
             const PanoramicCamera & cam, const std::vector<Vec3> & vps, 
             double minSpanAngle, double angleThres /*= DegreesToRadians(1.5)*/) {
-            double testSpanAngle = minSpanAngle / 3.0;
+            double testSpanAngle = minSpanAngle / 2.0;
 
             std::vector<TStructure> tstructs;
 
@@ -537,7 +980,7 @@ namespace pano {
                             ss.insert(ss.end(), bndsamples[b].begin(), bndsamples[b].end());
                         } 
                         for (int i = 0; i < vps.size(); i++) {
-                            if (samples[i].size() < allSamplePointCount * 0.7) {
+                            if (samples[i].size() < allSamplePointCount * 0.5) {
                                 continue;
                             }
                             if (AllAlong(samples[i], jcenterdir, vps[i], angleThres)) {
@@ -819,7 +1262,12 @@ namespace pano {
             const std::vector<RegionBoundaryHandle> & bhs,
             const PanoramicCamera & cam, const std::vector<TStructure> & occtstructs) {
 
+            int i = 0;
             for (auto & ts : occtstructs) {
+                if (i == 14) {
+                    std::cout << std::endl;
+                }
+                i++;
 
                 Vec3 center = normalize(cam.toSpace(segtopo.juncpositions[ts.centerJunctionId]));
                 Vec3 longEnds[] = {
@@ -847,8 +1295,10 @@ namespace pano {
                         // which lies at the short end side from center?
                         double dot1 = rh1center.dot(longEdgeNormal);
                         double dot2 = rh2center.dot(longEdgeNormal);
+
                         double dotShortEnd = shortEnd.dot(longEdgeNormal);
 
+                        // rh1 | rh2
                         bool rh1isFront = true;
                         if (dotShortEnd > 0) {
                             rh1isFront = dot1 < dot2;
@@ -881,6 +1331,23 @@ namespace pano {
                                     controls[rlh1].used = false;
                                     controls[rlh2].used = true;
                                 }
+
+                                // spread to all rhs related to this lh
+                                if (false) { ///// todo
+                                    Vec3 lineNormal = normalize(l.data.line.first.cross(l.data.line.second));
+                                    double dot1 = mg.data(rh1).normalizedCenter.dot(longEdgeNormal);
+                                    double dot2 = mg.data(rh2).normalizedCenter.dot(longEdgeNormal);
+                                    if (dot1 * dot2 >= 0) {
+                                        continue; // confused case...
+                                    }
+                                    for (RegionLineConnectionHandle rlh : l.topo.constraints<RegionLineConnectionData>()) {
+                                        double dotHere = mg.data(mg.topo(rlh).component<0>()).normalizedCenter.dot(longEdgeNormal);
+                                        bool tendToRh1 = (dot1 * dotHere >= 0);
+                                        if (tendToRh1 && !rh1isFront || !tendToRh1 && rh1isFront) {
+                                            controls[rlh].used = false;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -897,7 +1364,7 @@ namespace pano {
             auto ctable = gui::CreateRandomColorTableWithSize(occtstructs.size());
             int i = 0;
             for (auto & ts : occtstructs) {
-                auto & c = ctable[i++];
+                auto & c = ctable[i];
                 canvas.color(c);
                 for (auto & bid : ts.shortBndIds) {
                     canvas.add(segtopo.bndpixels[bid]);
@@ -907,6 +1374,8 @@ namespace pano {
                         canvas.add(segtopo.bndpixels[bid]);
                     }
                 }
+                canvas.add(NoteAs(segtopo.juncpositions[ts.centerJunctionId], std::to_string(i)));
+                i++;
             }
 
         }

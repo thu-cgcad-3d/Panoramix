@@ -41,8 +41,13 @@ namespace pano {
 
 
 
-
-
+        enum class DepthRelation {
+            FirstIsFront,
+            SecondIsFront,
+            Disconnected,
+            MaybeFolder,
+            Connected,
+        };
 
         std::vector<std::vector<Vec3>> SamplesOnBoundaries(const SegmentationTopo & segtopo,
             const PanoramicCamera & cam, double sampleStepAngle = DegreesToRadians(1));
@@ -50,6 +55,26 @@ namespace pano {
 
         std::vector<int> ClassifyBoundaries(const std::vector<std::vector<Vec3>> & bndSamples,
             const std::vector<Vec3> & vps, double angleThres = DegreesToRadians(1.5));
+
+
+
+
+
+        HandledTable<RegionBoundaryHandle, DepthRelation> DetectOcclusions(
+            const RLGraph & mg, const RLGraphControls & controls, 
+            const SegmentationTopo & segtopo, const std::vector<int> & bndclasses,
+            const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
+            const std::vector<Vec3> & vps);
+
+        HandledTable<RegionBoundaryHandle, DepthRelation> DetectOcclusions2(
+            const RLGraph & mg, const RLGraphControls & controls,
+            const Imagei & segs,
+            const SegmentationTopo & segtopo, const std::vector<std::vector<Vec3>> & bndsamples, const std::vector<int> & bndclasses,
+            const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
+            const std::vector<Vec3> & vps, double angleDistThres = DegreesToRadians(1));
+
+        void ApplyOcclusions(const RLGraph & mg, RLGraphControls & controls,
+            const HandledTable<RegionBoundaryHandle, DepthRelation> & occlusions);
 
 
 

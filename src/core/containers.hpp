@@ -48,6 +48,129 @@ namespace pano {
 
 
 
+        // RTreeSet
+        template <class T, class BoundingBoxFunctorT = DefaultBoundingBoxFunctor>
+        class RTreeSet {
+        public:
+            using BoxType = decltype(std::declval<BoundingBoxFunctorT>()(std::declval<T>()));
+            using ValueType = typename BoxType::Type;
+            static const int Dimension = BoxType::Dimension;
+
+            inline explicit RTreeSet(const BoundingBoxFunctorT & bboxFun = BoundingBoxFunctorT())
+                : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()), _bbox(bboxFun) {}
+
+            template <class IteratorT>
+            inline RTreeSet(IteratorT begin, IteratorT end, const BoundingBoxFunctorT & bboxFun = BoundingBoxFunctorT())
+                : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()), _bbox(bboxFun) {
+                insert(begin, end);
+            }
+
+            inline RTreeSet(RTreeSet && r)
+                : _rtree(std::move(r._rtree)), _bbox(std::move(r._bbox)) {}
+            inline RTreeSet & operator = (RTreeSet && r) {
+                _rtree = std::move(r._rtree);
+                _bbox = std::move(r._bbox);
+                return *this;
+            }
+
+            RTreeSet(const RTreeSet &) = delete;
+            RTreeSet & operator = (const RTreeSet &) = delete;
+
+        public:
+            inline size_t size() const { return _rtree->Count(); }
+            inline bool empty() const { return size() == 0; }
+
+            inline void clear() { return _rtree->RemoveAll(); }
+
+            inline void insert(const T & t) {
+                auto box = bbox(t);
+                _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
+            }
+
+            template <class IteratorT>
+            void insert(IteratorT begin, IteratorT end) {
+                while (begin != end) {
+                    insert(*begin);
+                    ++begin;
+                }
+            }
+
+            template <class CallbackFunctorT>
+            inline int search(const BoxType & b, CallbackFunctorT && callback) const {
+                return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
+            }
+            inline int count(const BoxType & b) const {
+                return _rtree->Search(b.minCorner.val, b.maxCorner.val, StaticConstantFunctor<bool, true>());
+            }
+
+        private:
+            std::unique_ptr<third_party::RTree<T, ValueType, Dimension>> _rtree;
+            BoundingBoxFunctorT _bbox;
+        };
+
+
+        // RTreeMap
+        template <class T, class ValT, class BoundingBoxFunctorT = DefaultBoundingBoxFunctor>
+        class RTreeMap {
+        public:
+            using BoxType = decltype(std::declval<BoundingBoxFunctorT>()(std::declval<T>()));
+            using ValueType = typename BoxType::Type;
+            static const int Dimension = BoxType::Dimension;
+
+            inline explicit RTreeMap(const BoundingBoxFunctorT & bboxFun = BoundingBoxFunctorT())
+                : _rtree(std::make_unique<third_party::RTree<std::pair<T, ValT>, ValueType, Dimension>>()), _bbox(bboxFun) {}
+
+            template <class IteratorT>
+            inline RTreeMap(IteratorT begin, IteratorT end, const BoundingBoxFunctorT & bboxFun = BoundingBoxFunctorT())
+                : _rtree(std::make_unique<third_party::RTree<std::pair<T, ValT>, ValueType, Dimension>>()), _bbox(bboxFun) {
+                insert(begin, end);
+            }
+
+            inline RTreeMap(RTreeMap && r)
+                : _rtree(std::move(r._rtree)), _bbox(std::move(r._bbox)) {}
+            inline RTreeMap & operator = (RTreeMap && r) {
+                _rtree = std::move(r._rtree);
+                _bbox = std::move(r._bbox);
+                return *this;
+            }
+
+            RTreeMap(const RTreeMap &) = delete;
+            RTreeMap & operator = (const RTreeMap &) = delete;
+
+        public:
+            inline size_t size() const { return _rtree->Count(); }
+            inline bool empty() const { return size() == 0; }
+
+            inline void clear() { return _rtree->RemoveAll(); }
+
+            inline void insert(const std::pair<T, ValT> & p) {
+                auto box = _bbox(p.first);
+                _rtree->Insert(box.minCorner.val, box.maxCorner.val, p);
+            }
+
+            template <class IteratorT>
+            void insert(IteratorT begin, IteratorT end) {
+                while (begin != end) {
+                    insert(*begin);
+                    ++begin;
+                }
+            }
+
+            template <class CallbackFunctorT>
+            inline int search(const BoxType & b, CallbackFunctorT && callback) const {
+                return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
+            }
+            inline int count(const BoxType & b) const {
+                return _rtree->Search(b.minCorner.val, b.maxCorner.val, StaticConstantFunctor<bool, true>());
+            }
+
+        private:
+            std::unique_ptr<third_party::RTree<std::pair<T, ValT>, ValueType, Dimension>> _rtree;
+            BoundingBoxFunctorT _bbox;
+        };
+
+
+
 
         // simple RTree
         template <class BoxT, class T>

@@ -9,6 +9,7 @@ namespace panolyz {
 
     // declare routines
     DECL_ALGO(PanoramaIndoor);
+    DECL_ALGO(PanoramaIndoor2);
     //DECL_ALGO(YorkUrbanDB);
     //DECL_ALGO(YorkUrbanDB2);
     DECL_ALGO(NormalIndoor);
