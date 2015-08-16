@@ -44,9 +44,10 @@ namespace pano {
         enum class DepthRelation {
             FirstIsFront,
             SecondIsFront,
+            Connected,
             Disconnected,
             MaybeFolder,
-            Connected,
+            Unknown
         };
 
         std::vector<std::vector<Vec3>> SamplesOnBoundaries(const SegmentationTopo & segtopo,
@@ -73,10 +74,18 @@ namespace pano {
             const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
             const std::vector<Vec3> & vps, double angleDistThres = DegreesToRadians(1));
 
+
+        HandledTable<RegionBoundaryHandle, DepthRelation> DetectOcclusions3(
+            const RLGraph & mg, const RLGraphControls & controls,
+            const Imagei & segs,
+            const SegmentationTopo & segtopo, const std::vector<std::vector<Vec3>> & bndsamples, const std::vector<int> & bndclasses,
+            const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
+            const std::vector<Vec3> & vps, double angleDistThres = DegreesToRadians(1), double angleSampleStepOnLine = DegreesToRadians(1));
+
+
         void ApplyOcclusions(const RLGraph & mg, RLGraphControls & controls,
             const HandledTable<RegionBoundaryHandle, DepthRelation> & occlusions);
-
-
+        
 
         struct TStructure {
             int centerJunctionId;

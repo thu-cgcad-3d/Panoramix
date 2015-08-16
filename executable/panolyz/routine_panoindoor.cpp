@@ -43,7 +43,7 @@ namespace panolyz {
 
             static const bool REFRESH = false;
 
-            if (REFRESH || !Load(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId)) {
+            if (0 || !Load(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId)) {
                 view = CreatePanoramicView(image);
 
                 // collect lines in each view
@@ -87,8 +87,8 @@ namespace panolyz {
                 segmenter.params().superpixelSizeSuggestion = 2000;
                 int segmentsNum = 0;
                 std::tie(segmentedImage, segmentsNum) = segmenter(view.image, line3ds, view.camera, DegreesToRadians(1));     
-                RemoveThinRegionInSegmentation(segmentedImage);
-                segmentsNum = DensifySegmentation(segmentedImage);
+                RemoveThinRegionInSegmentation(segmentedImage, true);
+                segmentsNum = DensifySegmentation(segmentedImage, true);
                 assert(IsDenseSegmentation(segmentedImage));
 
                 Save(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
@@ -213,23 +213,22 @@ namespace panolyz {
             auto canvas = gui::MakeCanvas(Image3ub(image.size(), Vec3ub()));
             ShowTStructures(canvas.color(gui::White), segtopo, tstructs);
             canvas.show();
-            canvas = gui::MakeCanvas(Image3ub(image.size(), Vec3ub()));
-            ShowTStructures(canvas.color(gui::White), segtopo, tstructs);
-            canvas.show();
 
 
-            if(1){
-                auto bndSamples = SamplesOnBoundaries(segtopo, view.camera, DegreesToRadians(1));
-                auto bndClasses = ClassifyBoundaries(bndSamples, vps, DegreesToRadians(2));
+            if(0){
                 auto canvas = gui::MakeCanvas(Image3ub(image.size(), Vec3ub()));
                 gui::ColorTable vpctable = gui::ColorTableDescriptor::RGBGreys;
                 for (int i = 0; i < bndSamples.size(); i++) {
                     canvas.color(vpctable[bndClasses[i]]);
                     canvas.add(segtopo.bndpixels[i]);
+                    auto & ps = segtopo.bndpixels[i];
+                    if (ps.empty()) {
+                        continue;
+                    }
+                    canvas.add(NoteAs(ps[ps.size() / 2], std::to_string(i)));
                 }
                 canvas.show();
             }
-
 
 
 
@@ -255,8 +254,8 @@ namespace panolyz {
             if (1 || !Load(path, "controls", controls)) {
 
                 controls = RLGraphControls(mg, vps);
-                AttachPrincipleDirectionConstraints(mg, controls, M_PI / 20.0);
-                AttachWallConstriants(mg, controls, M_PI / 10);
+                AttachPrincipleDirectionConstraints(mg, controls, M_PI / 30.0, false);
+                AttachWallConstriants(mg, controls, M_PI / 50);
                 ApplyOccludedTStructure(mg, controls, segtopo, bhs, view.camera, tstructs);
 
                 // gc
@@ -270,13 +269,12 @@ namespace panolyz {
                     [&mg, &controls, &vps, &gcMeanOnRegions, &view, &up, vertVPId](RegionHandle rh, RLGraphComponentControl & c) {
                     auto & gcMean = gcMeanOnRegions[rh];
                     double gcMeanSum = std::accumulate(std::begin(gcMean.val), std::end(gcMean.val), 0.0);
-                    if (gcMeanSum == 0.0) {
-                        c.orientationClaz = -1;
-                        c.orientationNotClaz = -1;
-                        c.used = true;
-                        return;
-                    }
-                    //assert(IsFuzzyZero(gcMeanSum - 1.0, 1e-4));
+                    //if (gcMeanSum == 0.0) {
+                    //    c.orientationClaz = -1;
+                    //    c.orientationNotClaz = -1;
+                    //    c.used = true;
+                    //    return;
+                    //}
                     size_t maxid = std::max_element(std::begin(gcMean), std::end(gcMean)) - gcMean.val;
                     double floorScore = gcMean[ToUnderlying(GeometricContextIndex::FloorOrGround)];
                     if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.data(rh).normalizedCenter.dot(up) < 0) { // lower
@@ -294,15 +292,36 @@ namespace panolyz {
                         c.used = true;
                         return;
                     }
-                    double clutterScore = gcMean[ToUnderlying(GeometricContextIndex::ClutterOrPorous)];
+                    /*double clutterScore = gcMean[ToUnderlying(GeometricContextIndex::ClutterOrPorous)];
                     if (clutterScore > 0.7) {
                         c.orientationClaz = c.orientationNotClaz = -1;
                         c.used = false;
                         return;
-                    }
+                    }*/
                 });
 
 
+                {
+                    auto pim = Print(mg, segmentedImage, view.camera, rhs,
+                        [&controls](RegionHandle rh) -> gui::Color {
+                        static const gui::ColorTable ctable = gui::ColorTableDescriptor::RGBGreys;
+                        if (!controls[rh].used) {
+                            return gui::Black;
+                        }
+                        if (controls[rh].orientationClaz != -1) {
+                            return ctable[controls[rh].orientationClaz];
+                        }
+                        if (controls[rh].orientationNotClaz != -1) {
+                            return ctable[controls[rh].orientationNotClaz] * 0.2;
+                        }
+                        return gui::Transparent;
+                    },
+                        core::ConstantFunctor<gui::ColorTag>(gui::Transparent),
+                        core::ConstantFunctor<gui::ColorTag>(gui::Transparent),
+                      2);
+                    cv::imshow("occ", Image3f(pim * 0.99f) + Image3f(image / 255.0f * 0.01f));
+                    cv::waitKey();
+                }
 
 
                 controls.disableAllInvalidConstraints(mg);

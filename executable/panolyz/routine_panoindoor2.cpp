@@ -189,7 +189,7 @@ namespace panolyz {
                     AppendLines(mg, lines[i], cams[i], vps);
                 }
                 std::tie(rhs, bhs) = AppendRegions(mg, segmentedImage, segtopo.bndpixels, segtopo.bnd2segs,
-                    view.camera, 0.03, 0.02, 4, 4, false);
+                    view.camera, 0.03, 0.02, 4, 4, false); // we have to reserve bnds under lines for reasoning
                 //rhs = AppendRegions(mg, segmentedImage, view.camera, 0.03, 0.02, 4, 4, false);
                 Save(path, "mg_rhs_bhs", mg, rhs, bhs);
             }
@@ -202,7 +202,6 @@ namespace panolyz {
                 controls = RLGraphControls(mg, vps);
                 AttachPrincipleDirectionConstraints(mg, controls, M_PI / 40.0, false);
                 AttachWallConstriants(mg, controls, M_PI / 100.0);
-
 
                 // gc
                 auto gcMeanOnRegions = CollectFeatureMeanOnRegions(mg, view.camera, gc);
@@ -242,8 +241,8 @@ namespace panolyz {
 
                 // detach connections using region orientations
                 //auto occlusions = DetectOcclusions(mg, controls, segtopo, bndClasses, rhs, bhs, vps);
-                auto occlusions = DetectOcclusions2(mg, controls, segmentedImage, segtopo, 
-                    bndSamples, bndClasses, rhs, bhs, vps, DegreesToRadians(5));
+                auto occlusions = DetectOcclusions3(mg, controls, segmentedImage, segtopo, 
+                    bndSamples, bndClasses, rhs, bhs, vps, DegreesToRadians(10), DegreesToRadians(1));
 
 
                 ApplyOcclusions(mg, controls, occlusions);
@@ -267,10 +266,10 @@ namespace panolyz {
                         core::ConstantFunctor<gui::ColorTag>(gui::Transparent),
                         [&occlusions](RegionBoundaryHandle rrh) {
                         switch (occlusions[rrh]) {
-                        case DepthRelation::Disconnected: return gui::Yellow;
                         case DepthRelation::FirstIsFront: 
+                            return gui::Green;
                         case DepthRelation::SecondIsFront:
-                            return gui::Red;
+                            return gui::Blue;
                         case DepthRelation::MaybeFolder:
                             return gui::White;
                         default: return gui::Transparent;

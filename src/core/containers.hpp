@@ -147,6 +147,10 @@ namespace pano {
                 auto box = _bbox(p.first);
                 _rtree->Insert(box.minCorner.val, box.maxCorner.val, p);
             }
+            inline void emplace(const T & key, const ValT & val) {
+                auto box = _bbox(key);
+                _rtree->Insert(box.minCorner.val, box.maxCorner.val, std::make_pair(key, val));
+            }
 
             template <class IteratorT>
             void insert(IteratorT begin, IteratorT end) {
