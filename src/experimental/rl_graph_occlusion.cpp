@@ -1270,6 +1270,14 @@ namespace pano {
                 auto bh = it.hd();
                 DepthRelation relation = *it;
 
+                size_t spnum = 0;
+                for (auto & sps : mg.data(bh).normalizedSampledPoints) {
+                    spnum += sps.size();
+                }
+                if (spnum <= 1) {
+                    controls[bh].used = false;
+                }
+
                 if (relation == DepthRelation::Connected || relation == DepthRelation::MaybeFolder) {
                     continue;
                 }

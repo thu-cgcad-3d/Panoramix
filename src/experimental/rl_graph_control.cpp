@@ -645,6 +645,7 @@ namespace pano {
 
         template <class ConstraintAnchorExtractorT>
         void SetConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls, ConstraintAnchorExtractorT && extractor) {
+            static const bool constantWeightForEachAnchor = true;
             for (auto & c : mg.constraints<RegionBoundaryData>()) {
                 auto & control = controls[c.topo.hd];
                 if (!control.used) {
@@ -657,7 +658,7 @@ namespace pano {
                 control.weightedAnchors.clear();
                 control.weightedAnchors.reserve(as.size());
                 for (const Point3 & anchor : as) {
-                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / std::max(as.size(), 1ull))));
+                    control.weightedAnchors.push_back(WeightAs(anchor, constantWeightForEachAnchor ? 1.0 : sqrt(fullWeight / std::max(as.size(), 1ull))));
                 }
             }
             for (auto & c : mg.constraints<LineRelationData>()) {
@@ -672,7 +673,7 @@ namespace pano {
                 control.weightedAnchors.clear();
                 control.weightedAnchors.reserve(as.size());
                 for (const Point3 & anchor : as) {
-                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / std::max(as.size(), 1ull))));
+                    control.weightedAnchors.push_back(WeightAs(anchor, constantWeightForEachAnchor ? 1.0 : sqrt(fullWeight / std::max(as.size(), 1ull))));
                 }
             }
             for (auto & c : mg.constraints<RegionLineConnectionData>()) {
@@ -687,7 +688,7 @@ namespace pano {
                 control.weightedAnchors.clear();
                 control.weightedAnchors.reserve(as.size());
                 for (const Point3 & anchor : as) {
-                    control.weightedAnchors.push_back(WeightAs(anchor, sqrt(fullWeight / std::max(as.size(), 1ull))));
+                    control.weightedAnchors.push_back(WeightAs(anchor, constantWeightForEachAnchor ? 1.0 : sqrt(fullWeight / std::max(as.size(), 1ull))));
                 }
             }
         }
