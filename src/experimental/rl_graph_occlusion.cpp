@@ -933,6 +933,7 @@ namespace pano {
             }
 
 
+            std::cout << "building factor graph" << std::endl;
 
             // factor graph for bnds
             ml::FactorGraph fg;
@@ -1236,6 +1237,8 @@ namespace pano {
 
 
 
+            std::cout << "solving factor graph" << std::endl;
+
             ml::FactorGraph::ResultTable resultLabels;
             fg.solve(100, 10, [&resultLabels](int epoch, double energy, double denergy, const ml::FactorGraph::ResultTable & results) -> bool {
                 std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
@@ -1270,12 +1273,14 @@ namespace pano {
                 auto bh = it.hd();
                 DepthRelation relation = *it;
 
-                size_t spnum = 0;
-                for (auto & sps : mg.data(bh).normalizedSampledPoints) {
-                    spnum += sps.size();
-                }
-                if (spnum <= 1) {
-                    controls[bh].used = false;
+                if (true) {
+                    size_t spnum = 0;
+                    for (auto & sps : mg.data(bh).normalizedSampledPoints) {
+                        spnum += sps.size();
+                    }
+                    if (spnum <= 1) {
+                        controls[bh].used = false;
+                    }
                 }
 
                 if (relation == DepthRelation::Connected || relation == DepthRelation::MaybeFolder) {

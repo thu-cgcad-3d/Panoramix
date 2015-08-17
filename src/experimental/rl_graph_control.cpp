@@ -645,7 +645,7 @@ namespace pano {
 
         template <class ConstraintAnchorExtractorT>
         void SetConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls, ConstraintAnchorExtractorT && extractor) {
-            static const bool constantWeightForEachAnchor = true;
+            static const bool constantWeightForEachAnchor = false;
             for (auto & c : mg.constraints<RegionBoundaryData>()) {
                 auto & control = controls[c.topo.hd];
                 if (!control.used) {
