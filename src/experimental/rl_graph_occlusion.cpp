@@ -354,6 +354,10 @@ namespace pano {
                 return c.orientationClaz == -1 && c.orientationNotClaz == -1;
             }
 
+            bool NoOrientationControl(const OrientationControl & c) {
+                return c.orientationClaz == -1 && c.orientationNotClaz == -1;
+            }
+
         }
 
 
@@ -1261,6 +1265,454 @@ namespace pano {
             return occlusions;
         }
 
+
+
+
+        HandledTable<RegionBoundaryHandle, DepthRelation> DetectOcclusions4(
+            const RLGraph & mg, const HandledTable<RegionHandle, OrientationControl> & controls,
+            const Imagei & segs,
+            const SegmentationTopo & segtopo, const std::vector<std::vector<Vec3>> & bndsamples, const std::vector<int> & bndclasses,
+            const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
+            const std::vector<Vec3> & vps, double angleDistThres, double angleSampleStepOnLine) {
+
+            // register all sample points           
+            struct BndSample {
+                int bndid;
+                int sampleid;
+                bool operator == (const BndSample & bs) const { return std::tie(bndid, sampleid) == std::tie(bs.bndid, bs.sampleid); }
+                bool operator < (const BndSample & bs) const { return std::tie(bndid, sampleid) < std::tie(bs.bndid, bs.sampleid); }
+            };
+            RTreeMap<Vec3, BndSample> samples;
+            for (int bndid = 0; bndid < bndsamples.size(); bndid++) {
+                auto & segids = segtopo.bnd2segs[bndid];
+                auto rh1 = rhs[segids.first];
+                auto rh2 = rhs[segids.second];
+                if (rh1.invalid() || rh2.invalid()) {
+                    continue;
+                }
+                for (int sampleid = 0; sampleid < bndsamples[bndid].size(); sampleid++) {
+                    samples.insert(std::make_pair(bndsamples[bndid][sampleid], BndSample{ bndid, sampleid }));
+                }
+            }
+
+            // find closest bnd sample pairs to locate edge bnds along narrow segs
+            // segidpair -> [bndid -> ratio]
+            std::map<std::pair<int, int>, std::map<int, double>> segpair2bnds;
+            std::map<std::pair<int, int>, int> bndPairCorrespSampleNums;
+            {
+                std::map<BndSample, BndSample> closestBs;
+                for (int bndid = 0; bndid < bndsamples.size(); bndid++) {
+                    for (int sampleid = 0; sampleid < bndsamples[bndid].size(); sampleid++) {
+                        auto & segids = segtopo.bnd2segs[bndid];
+                        auto rh1 = rhs[segids.first];
+                        auto rh2 = rhs[segids.second];
+                        if (rh1.invalid() || rh2.invalid()) {
+                            continue;
+                        }
+                        if (std::tie(controls[rh1].orientationClaz, controls[rh1].orientationNotClaz) ==
+                            std::tie(controls[rh2].orientationClaz, controls[rh2].orientationNotClaz)) {
+                            continue;
+                        }
+                        if (!NoOrientationControl(controls[rh1]) && !NoOrientationControl(controls[rh2])) {
+                            continue; // only consider detached edges
+                        }
+
+                        auto controledSide = controls[rh1];
+                        if (NoOrientationControl(controledSide)) {
+                            controledSide = controls[rh2];
+                        }
+                        assert(!NoOrientationControl(controledSide));
+
+                        auto & dir = bndsamples[bndid][sampleid];
+
+                        BndSample closest = { -1, -1 };
+                        double minAngle = angleDistThres;
+
+                        samples.search(BoundingBox(normalize(dir)).expand(angleDistThres * 2),
+                            [&closest, &minAngle, &segtopo, &rhs, &controls, &controledSide, &dir](const std::pair<Vec3, BndSample> & bs) {
+
+                            auto & segids = segtopo.bnd2segs[bs.second.bndid];
+                            auto rh1 = rhs[segids.first];
+                            auto rh2 = rhs[segids.second];
+
+                            if (std::tie(controls[rh1].orientationClaz, controls[rh1].orientationNotClaz) ==
+                                std::tie(controls[rh2].orientationClaz, controls[rh2].orientationNotClaz)) {
+                                return true;
+                            }
+                            if (!NoOrientationControl(controls[rh1]) && !NoOrientationControl(controls[rh2])) {
+                                return true; // only consider detached edges
+                            }
+
+                            auto thisControledSide = controls[rh1];
+                            if (NoOrientationControl(thisControledSide)) {
+                                thisControledSide = controls[rh2];
+                            }
+                            assert(!NoOrientationControl(thisControledSide));
+
+                            if (std::tie(thisControledSide.orientationClaz, thisControledSide.orientationNotClaz) ==
+                                std::tie(controledSide.orientationClaz, controledSide.orientationNotClaz)) {
+                                return true;
+                            }
+
+                            double angle = AngleBetweenDirections(dir, bs.first);
+                            if (angle < minAngle) {
+                                closest = bs.second;
+                                minAngle = angle;
+                            }
+
+                            return true;
+                        });
+
+                        if (closest.bndid != -1) {
+                            closestBs[BndSample{ bndid, sampleid }] = closest;
+                        }
+                    }
+                }
+
+                std::vector<std::pair<BndSample, BndSample>> closestPairs;
+                for (auto & p : closestBs) {
+                    if (closestBs.at(p.second) == p.first) {
+                        closestPairs.emplace_back(p.first, p.second);
+                    }
+                }
+                for (auto & samplePair : closestPairs) {
+                    bndPairCorrespSampleNums[MakeOrderedPair(samplePair.first.bndid, samplePair.second.bndid)] ++;
+                }
+
+
+                for (int bndid = 0; bndid < bndsamples.size(); bndid++) {
+                    auto & segids = segtopo.bnd2segs[bndid];
+                    auto rh1 = rhs[segids.first];
+                    auto rh2 = rhs[segids.second];
+                    if (rh1.invalid() || rh2.invalid()) {
+                        continue;
+                    }
+                    if (std::tie(controls[rh1].orientationClaz, controls[rh1].orientationNotClaz) ==
+                        std::tie(controls[rh2].orientationClaz, controls[rh2].orientationNotClaz)) {
+                        continue;
+                    }
+                    if (!NoOrientationControl(controls[rh1]) && !NoOrientationControl(controls[rh2])) {
+                        auto orderedSegIds = segids.first < segids.second ? segids : std::make_pair(segids.second, segids.first);
+                        segpair2bnds[orderedSegIds][bndid] = 1.0;
+                    }
+                }
+                for (auto & p : closestPairs) {
+                    int bndid1 = p.first.bndid;
+                    int bndid2 = p.second.bndid;
+                    assert(bndid1 != p.second.bndid);
+
+                    int constrainedSegId1 = segtopo.bnd2segs[bndid1].first;
+                    if (NoOrientationControl(controls[rhs[segtopo.bnd2segs[bndid1].first]])) {
+                        constrainedSegId1 = segtopo.bnd2segs[bndid1].second;
+                    }
+
+                    int constrainedSegId2 = segtopo.bnd2segs[bndid2].first;
+                    if (NoOrientationControl(controls[rhs[segtopo.bnd2segs[bndid2].first]])) {
+                        constrainedSegId2 = segtopo.bnd2segs[bndid2].second;
+                    }
+
+                    assert(!NoOrientationControl(controls[rhs[constrainedSegId1]]) &&
+                        !NoOrientationControl(controls[rhs[constrainedSegId2]]));
+
+                    auto & bnds =
+                        segpair2bnds[constrainedSegId1 < constrainedSegId2 ?
+                        std::make_pair(constrainedSegId1, constrainedSegId2) :
+                        std::make_pair(constrainedSegId2, constrainedSegId2)];
+
+                    bnds[bndid1] += 1.0 / bndsamples[bndid1].size();
+                    bnds[bndid2] += 1.0 / bndsamples[bndid2].size();
+                }
+            }
+
+            // get first guess
+            auto firstGuess = mg.createConstraintTable<RegionBoundaryData>(DepthRelation::Unknown);
+            for (auto & segpairbnd : segpair2bnds) {
+                const auto & segids = segpairbnd.first;
+                auto & bnds = segpairbnd.second;
+
+                auto rh1 = rhs[segids.first];
+                auto rh2 = rhs[segids.second];
+                if (rh1.invalid() || rh2.invalid()) {
+                    continue;
+                }
+                for (auto & bndwithscore : bnds) {
+                    int bndid = bndwithscore.first;
+
+                    double occupationRatio = bndwithscore.second;
+                    if (occupationRatio < 0.5) {
+                        continue;
+                    }
+
+                    auto bh = bhs[bndid];
+                    if (bh.invalid()) {
+                        continue;
+                    }
+
+                    if (!controls[rh1].used || !controls[rh2].used) {
+                        continue;
+                    }
+
+                    int bndclass = bndclasses[bndid];
+
+                    if (controls[rh1].orientationClaz != -1 && controls[rh2].orientationClaz != -1
+                        && controls[rh1].orientationClaz != controls[rh2].orientationClaz
+                        && (bndclass == -1
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh1].orientationClaz])
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh2].orientationClaz]))) {
+                        // break this
+                        firstGuess[bh] = DepthRelation::Disconnected;
+                        auto & rhvp1 = vps[controls[rh1].orientationClaz];
+                        auto & rhvp2 = vps[controls[rh2].orientationClaz];
+                        if (bndclass != -1) {
+                            auto & bndvp = vps[bndclass];
+                            if (IsFuzzyPerpendicular(rhvp1, bndvp) && !IsFuzzyPerpendicular(rhvp2, bndvp)) {
+                                firstGuess[bh] = DepthRelation::FirstIsFront;
+                            } else if (!IsFuzzyPerpendicular(rhvp1, bndvp) && IsFuzzyPerpendicular(rhvp2, bndvp)) {
+                                firstGuess[bh] = DepthRelation::SecondIsFront;
+                            }
+                        }
+                    } else if (controls[rh1].orientationClaz != -1 &&
+                        controls[rh2].orientationClaz == -1 && controls[rh2].orientationNotClaz == controls[rh1].orientationClaz
+                        && (bndclass == -1
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh1].orientationClaz]))) {
+                        // break this
+                        firstGuess[bh] = DepthRelation::Disconnected;
+                        if (bndclass == controls[rh1].orientationClaz) {
+                            firstGuess[bh] = DepthRelation::SecondIsFront;
+                        }
+                    } else if (controls[rh2].orientationClaz != -1 &&
+                        controls[rh1].orientationClaz == -1 && controls[rh1].orientationNotClaz == controls[rh2].orientationClaz
+                        && (bndclass == -1
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh2].orientationClaz]))) {
+                        // break this
+                        firstGuess[bh] = DepthRelation::Disconnected;
+                        if (bndclass == controls[rh2].orientationClaz) {
+                            firstGuess[bh] = DepthRelation::FirstIsFront;
+                        }
+                    } else if (controls[rh1].orientationClaz != -1 && controls[rh2].orientationClaz != -1 &&
+                        controls[rh1].orientationClaz == controls[rh2].orientationClaz) {
+                        firstGuess[bh] = DepthRelation::Connected;
+                    } else if (controls[rh1].orientationClaz == -1 && controls[rh1].orientationNotClaz != -1
+                        && controls[rh2].orientationClaz == -1 && controls[rh2].orientationNotClaz != -1
+                        && controls[rh1].orientationNotClaz == controls[rh2].orientationNotClaz
+                        && bndclass != -1 && bndclass != controls[rh1].orientationNotClaz) {
+                        firstGuess[bh] = DepthRelation::Connected;
+                    }
+                }
+            }
+
+            auto bndsAttachedToLines = mg.createComponentTable<LineData, std::vector<int>>();
+            {
+                for (auto & l : mg.components<LineData>()) {
+                    std::vector<std::set<int>> bndSamplesNearLines(segtopo.nboundaries());
+                    auto & line = l.data.line;
+                    double angle = AngleBetweenDirections(line.first, line.second);
+                    if (angle < DegreesToRadians(1)) {
+                        continue;
+                    }
+                    double angleStep = angleSampleStepOnLine;
+                    for (double a = 0.0; a <= angle; a += angleStep) {
+                        Vec3 dir = RotateDirection(line.first, line.second, a);
+                        BndSample nearest = { -1, -1 };
+                        double minAngleDist = M_PI;
+
+                        // find nearest bndSample
+                        samples.search(BoundingBox(normalize(dir)).expand(angleDistThres * 2),
+                            [&bndsamples, &dir, &nearest, &minAngleDist](const std::pair<Vec3, BndSample> & bs) {
+                            auto & thisDir = bndsamples[bs.second.bndid][bs.second.sampleid];
+                            double angleDist = AngleBetweenDirections(thisDir, dir);
+                            if (minAngleDist > angleDist) {
+                                minAngleDist = angleDist;
+                                nearest = bs.second;
+                            }
+                            return true;
+                        });
+
+                        if (nearest.bndid == -1) {
+                            continue;
+                        }
+                        bndSamplesNearLines[nearest.bndid].insert(nearest.sampleid);
+                    }
+
+                    auto & bndsAttached = bndsAttachedToLines[l.topo.hd];
+                    for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                        if (bndSamplesNearLines[bndid].size() > bndsamples[bndid].size() * 0.6) {
+                            bndsAttached.push_back(bndid);
+                        }
+                    }
+                }
+            }
+
+
+            std::cout << "building factor graph" << std::endl;
+
+            // factor graph for bnds
+            ml::FactorGraph fg;
+            static const double spnum2weightRatio = 1.0 / 100.0;
+
+            // add bnd as vars
+            std::vector<ml::FactorGraph::VarHandle> vhs(segtopo.nboundaries());
+            for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                if (bhs[bndid].invalid()) {
+                    continue;
+                }
+                vhs[bndid] = fg.addVar(fg.addVarCategory(3, bndsamples[bndid].size() / 10.0)); // first front, second front, connected
+            }
+
+            // first guess factor
+            for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                if (vhs[bndid].invalid()) {
+                    continue;
+                }
+                auto guess = firstGuess[bhs[bndid]];
+                size_t spnum = bndsamples[bndid].size();
+                int unaryFC = fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [guess, spnum](const int * varlabels, size_t nvar,
+                    ml::FactorGraph::FactorCategoryId fcid, void * givenData) -> double {
+                    double weight = spnum * spnum2weightRatio;
+                    assert(nvar == 1);
+                    DepthRelation label = static_cast<DepthRelation>(varlabels[0]);
+                    switch (guess) {
+                    case DepthRelation::Unknown: return label == DepthRelation::Connected ? 0.0 : 1.0 * weight;  // always prefer connected
+                    case DepthRelation::Connected: return label == DepthRelation::Connected ? 0.0 : 3.0 * weight;
+                    case DepthRelation::Disconnected:
+                        return Contains({
+                            DepthRelation::Disconnected, DepthRelation::FirstIsFront, DepthRelation::SecondIsFront
+                        }, label) ? 0.0 : 10.0 * weight;
+                    case DepthRelation::FirstIsFront: return label == DepthRelation::FirstIsFront ? 0.0 : 20.0 * weight;
+                    case DepthRelation::SecondIsFront: return label == DepthRelation::SecondIsFront ? 0.0 : 20.0 * weight;
+                    default: SHOULD_NEVER_BE_CALLED("this label should never occur in first guess!");
+                    }
+                }, 10.0 });
+                fg.addFactor({ vhs[bndid] }, unaryFC);
+            }
+
+            // overlap factor
+            for (auto & bndPair : bndPairCorrespSampleNums) {
+                if (bhs[bndPair.first.first].invalid() || bhs[bndPair.first.second].invalid()) {
+                    continue;
+                }
+                int overlapSPNum = bndPair.second;
+                double weight = spnum2weightRatio * overlapSPNum;
+                int overlapFC = fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [weight](const int * varlabels, size_t nvar,
+                    ml::FactorGraph::FactorCategoryId fcid, void * givenData) -> double {
+                    assert(nvar == 2);
+                    DepthRelation label1 = static_cast<DepthRelation>(varlabels[0]);
+                    DepthRelation label2 = static_cast<DepthRelation>(varlabels[1]);
+                    if (label1 != DepthRelation::Connected && label2 != DepthRelation::Connected) {
+                        return 10.0 * weight;
+                    }
+                    return 0.0;
+                }, 1.0 });
+                fg.addFactor({ vhs[bndPair.first.first], vhs[bndPair.first.second] }, overlapFC);
+            }
+
+            // junction validity factor
+            for (int jid = 0; jid < segtopo.njunctions(); jid++) {
+                auto & bndids = segtopo.junc2bnds[jid];
+                if (std::any_of(bndids.begin(), bndids.end(), [&bhs](int bndid) {return bhs[bndid].invalid(); })) {
+                    continue;
+                }
+                double weight = 0.0;
+                for (int bndid : bndids) {
+                    weight += spnum2weightRatio * bndsamples[bndid].size();
+                }
+                int juncValidFC = fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [&bndids, weight](const int * varlabels, size_t nvar,
+                    ml::FactorGraph::FactorCategoryId fcid, void * givenData) -> double {
+                    assert(nvar == bndids.size());
+                    int disconNum = 0;
+                    for (int i = 0; i < nvar; i++) {
+                        if (DepthRelation(varlabels[i]) != DepthRelation::Connected) {
+                            disconNum++;
+                        }
+                    }
+                    if (disconNum >= 3) {
+                        return 10.0 * weight;
+                    }
+                    return 0.0;
+                }, 1.0 });
+                std::vector<ml::FactorGraph::VarHandle> relatedVHs(bndids.size());
+                for (int i = 0; i < bndids.size(); i++) {
+                    relatedVHs[i] = vhs[bndids[i]];
+                }
+                fg.addFactor(relatedVHs.begin(), relatedVHs.end(), juncValidFC);
+            }
+
+            for (auto & bnds : bndsAttachedToLines) {
+                if (bnds.size() <= 1) {
+                    continue;
+                }
+                for (int i = 0; i < bnds.size(); i++) {
+                    for (int j = i + 1; (j < i + 9 && j < bnds.size()); j++) {
+                        int bnd1 = bnds[i];
+                        int bnd2 = bnds[j];
+                        if (bhs[bnd1].invalid() || bhs[bnd2].invalid()) {
+                            continue;
+                        }
+
+                        auto & segs1 = segtopo.bnd2segs[bnd1];
+                        auto & bh1 = bhs[bnd1];
+                        auto & bh2 = bhs[bnd2];
+                        Vec3 bnd1SegPairDir = normalize(mg.data(mg.topo(bh1).component<0>()).normalizedCenter.cross(mg.data(mg.topo(bh1).component<1>()).normalizedCenter));
+                        auto & segs2 = segtopo.bnd2segs[bnd2];
+                        Vec3 bnd2SegPairDir = normalize(mg.data(mg.topo(bh2).component<0>()).normalizedCenter.cross(mg.data(mg.topo(bh2).component<1>()).normalizedCenter));
+                        bool sameSegPairDir = bnd1SegPairDir.dot(bnd2SegPairDir) > 0;
+
+                        double weight = (bndsamples[bnd1].size() + bndsamples[bnd2].size()) * spnum2weightRatio;
+                        int bndContFC = fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [weight, sameSegPairDir](const int * varlabels, size_t nvar,
+                            ml::FactorGraph::FactorCategoryId fcid, void * givenData) -> double {
+                            assert(nvar == 2);
+                            DepthRelation rel1 = (DepthRelation)varlabels[0];
+                            DepthRelation rel2 = (DepthRelation)varlabels[1];
+                            if (rel1 == DepthRelation::Connected && rel2 == DepthRelation::Connected ||
+                                rel1 == DepthRelation::Disconnected && rel2 == DepthRelation::Disconnected ||
+                                rel1 == DepthRelation::Disconnected && Contains({ DepthRelation::FirstIsFront, DepthRelation::SecondIsFront }, rel2) ||
+                                rel2 == DepthRelation::Disconnected && Contains({ DepthRelation::FirstIsFront, DepthRelation::SecondIsFront }, rel1)) {
+                                return 0.0;
+                            }
+                            if (sameSegPairDir) {
+                                if (rel1 == DepthRelation::FirstIsFront && rel2 == DepthRelation::FirstIsFront ||
+                                    rel1 == DepthRelation::SecondIsFront && rel2 == DepthRelation::SecondIsFront) {
+                                    return 0.0;
+                                }
+                            } else {
+                                if (rel1 == DepthRelation::FirstIsFront && rel2 == DepthRelation::SecondIsFront ||
+                                    rel1 == DepthRelation::SecondIsFront && rel2 == DepthRelation::FirstIsFront) {
+                                    return 0.0;
+                                }
+                            }
+                            return 5.0 * weight;
+                        }, 1.0 });
+                        fg.addFactor({ vhs[bnd1], vhs[bnd2] }, bndContFC);
+                    }
+                }
+            }
+
+
+
+            std::cout << "solving factor graph" << std::endl;
+
+            ml::FactorGraph::ResultTable resultLabels;
+            fg.solve(100, 10, [&resultLabels](int epoch, double energy, double denergy, const ml::FactorGraph::ResultTable & results) -> bool {
+                std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
+                if (denergy < 0.1) {
+                    resultLabels = results;
+                    return true;
+                }
+                return false;
+            });
+
+            auto occlusions = mg.createConstraintTable<RegionBoundaryData>(DepthRelation::Connected);
+            for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                if (vhs[bndid].invalid()) {
+                    continue;
+                }
+                auto & bh = bhs[bndid];
+                occlusions[bh] = (DepthRelation)resultLabels[vhs[bndid]];
+            }
+
+            return occlusions;
+
+        }
 
 
 

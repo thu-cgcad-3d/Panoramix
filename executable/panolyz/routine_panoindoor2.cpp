@@ -104,10 +104,20 @@ namespace panolyz {
 
             std::vector<PerspectiveCamera> hcams;
             std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
-            if (REFRESH || !Load(path, "hcamsgcs", hcams, gcs)) {
+
+            static const int hcamNum = 16;
+            static const Sizei hcamScreenSize(500, 500);
+            static const int hcamFocal = 200;
+
+            std::string hcamsgcsFileName;
+            {
+                std::stringstream ss;
+                ss << "hcamsgcs_" << hcamNum << "_" << hcamScreenSize.width << "_" << hcamScreenSize.height << "_" << hcamFocal;
+                hcamsgcsFileName = ss.str();
+            }
+            if (0 || !Load(path, hcamsgcsFileName, hcams, gcs)) {
                 // extract gcs
-                hcams = CreateHorizontalPerspectiveCameras(view.camera, 16, 500, 600, 300);
-                //hcams = CreatePanoContextCameras(view.camera, 500, 400, 300);
+                hcams = CreateHorizontalPerspectiveCameras(view.camera, hcamNum, hcamScreenSize.width, hcamScreenSize.height, hcamFocal);
                 gcs.resize(hcams.size());
                 for (int i = 0; i < hcams.size(); i++) {
                     auto pim = view.sampled(hcams[i]);
@@ -116,11 +126,11 @@ namespace panolyz {
                     gcs[i].component.image = pgc;
                     gcs[i].score = abs(1.0 - normalize(hcams[i].forward()).dot(normalize(view.camera.up())));
                 }
-                Save(path, "hcamsgcs", hcams, gcs);
+                Save(path, hcamsgcsFileName, hcams, gcs);
             }
 
             Image5d gc;
-            if (REFRESH || !Load(path, "gcmerged", gc)) {
+            if (1 || !Load(path, "gcmerged", gc)) {
                 gc = Combine(view.camera, gcs).image;
                 Save(path, "gcmerged", gc);
             }
@@ -136,7 +146,7 @@ namespace panolyz {
 
             // occ
             std::vector<Scored<Chain3>> occbnds;
-            if (REFRESH || !Load(path, "occ_panoindoor", occbnds)) {
+            if (0 || !Load(path, "occ_panoindoor", occbnds)) {
                 for (int i = 0; i < hcams.size(); i++) {
                     auto pim = view.sampled(hcams[i]).image;
                     auto occ = AsDimensionConvertor(hcams[i]).toSpace(DetectOcclusionBoundary(matlab, pim));
@@ -203,25 +213,41 @@ namespace panolyz {
                 AttachPrincipleDirectionConstraints(mg, controls, M_PI / 40.0, false);
                 AttachWallConstriants(mg, controls, M_PI / 100.0);
 
-                // gc
+                // gc                
                 auto gcMeanOnRegions = CollectFeatureMeanOnRegions(mg, view.camera, gc);
                 auto occOnBoundaries = CollectOcclusionResponseOnBoundaries(mg, occbnds, view.camera);
                 auto up = normalize(vps[vertVPId]);
                 if (up.dot(-view.camera.up()) < 0) {
                     up = -up;
                 }
+                std::cout << "use gc" << std::endl;
+
                 SetComponentControl<RegionData>(controls,
                     [&mg, &controls, &vps, &gcMeanOnRegions, &view, &up, vertVPId](RegionHandle rh, RLGraphComponentControl & c) {
                     auto & gcMean = gcMeanOnRegions[rh];
                     double gcMeanSum = std::accumulate(std::begin(gcMean.val), std::end(gcMean.val), 0.0);
-                    //if (gcMeanSum == 0.0) {
-                    //    c.orientationClaz = -1;
-                    //    c.orientationNotClaz = -1;
-                    //    c.used = true;
-                    //    return;
-                    //}
+                    assert(gcMeanSum <= 1.1);
+                    if (gcMeanSum == 0.0) {
+                        /*c.orientationClaz = vertVPId;
+                        c.orientationNotClaz = -1;
+                        c.used = true;*/
+                        return;
+                    }
+
                     size_t maxid = std::max_element(std::begin(gcMean), std::end(gcMean)) - gcMean.val;
-                    double floorScore = gcMean[ToUnderlying(GeometricContextIndex::FloorOrGround)];
+                    if (maxid == ToUnderlying(GeometricContextIndex::ClutterOrPorous) && gcMean[maxid] <= 0.5) {
+                        maxid = ToUnderlying(std::max({
+                            GeometricContextIndex::FloorOrGround, 
+                            GeometricContextIndex::CeilingOrSky, 
+                            GeometricContextIndex::Vertical
+                        }, [&gcMean](GeometricContextIndex a, GeometricContextIndex b) {
+                            return gcMean[ToUnderlying(a)] < gcMean[ToUnderlying(b)];
+                        }));
+                        if (gcMean[maxid] <= 0.4) {
+                            return;
+                        }
+                    }
+
                     if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.data(rh).normalizedCenter.dot(up) < 0) { // lower
                         // assign horizontal constriant
                         c.orientationClaz = vertVPId;
@@ -230,8 +256,7 @@ namespace panolyz {
                         return;
                     }
                     double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
-                    if (wallScore > 0.6) {
-                        // assign vertical constraint
+                    if (wallScore > 0.7) {
                         c.orientationClaz = -1;
                         c.orientationNotClaz = vertVPId;
                         c.used = true;
@@ -241,10 +266,51 @@ namespace panolyz {
 
                 // detach connections using region orientations
                 //auto occlusions = DetectOcclusions(mg, controls, segtopo, bndClasses, rhs, bhs, vps);
-                auto occlusions = DetectOcclusions3(mg, controls, segmentedImage, segtopo, 
+                std::cout << "reasoning occlusions" << std::endl;
+
+                auto ocontrolsForOcclusionDetection = mg.createComponentTable<RegionData, OrientationControl>();
+                for (auto it = ocontrolsForOcclusionDetection.begin(); it != ocontrolsForOcclusionDetection.end(); ++it) {
+                    auto & gcMean = gcMeanOnRegions[it.hd()];
+                    double gcMeanSum = std::accumulate(std::begin(gcMean.val), std::end(gcMean.val), 0.0);
+                    assert(gcMeanSum <= 1.1);
+                    
+                    auto & c = *it;
+                    auto rh = it.hd();
+
+                    if (gcMeanSum == 0.0) {
+                        continue;
+                    }
+
+                    size_t maxid = std::max_element(std::begin(gcMean), std::end(gcMean)) - gcMean.val;
+                    if (maxid == ToUnderlying(GeometricContextIndex::ClutterOrPorous) && gcMean[maxid] <= 0.5) {
+                        maxid = ToUnderlying(std::max({
+                            GeometricContextIndex::FloorOrGround,
+                            GeometricContextIndex::CeilingOrSky,
+                            GeometricContextIndex::Vertical
+                        }, [&gcMean](GeometricContextIndex a, GeometricContextIndex b) {
+                            return gcMean[ToUnderlying(a)] < gcMean[ToUnderlying(b)];
+                        }));
+                    }
+
+                    if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.data(rh).normalizedCenter.dot(up) < 0) { // lower
+                        // assign horizontal constriant
+                        c.orientationClaz = vertVPId;
+                        c.orientationNotClaz = -1;
+                        c.used = true;
+                        continue;
+                    }
+                    double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
+                    if (wallScore > 0.7) {
+                        c.orientationClaz = -1;
+                        c.orientationNotClaz = vertVPId;
+                        c.used = true;
+                        continue;
+                    }
+                }
+                auto occlusions = DetectOcclusions4(mg, ocontrolsForOcclusionDetection, segmentedImage, segtopo,
                     bndSamples, bndClasses, rhs, bhs, vps, DegreesToRadians(10), DegreesToRadians(1));
 
-
+                std::cout << "applying occlusions" << std::endl;
                 ApplyOcclusions(mg, controls, occlusions);
 
 

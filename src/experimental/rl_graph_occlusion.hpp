@@ -82,6 +82,20 @@ namespace pano {
             const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
             const std::vector<Vec3> & vps, double angleDistThres = DegreesToRadians(1), double angleSampleStepOnLine = DegreesToRadians(1));
 
+        
+        struct OrientationControl {
+            bool used;
+            int orientationClaz;
+            int orientationNotClaz;
+            OrientationControl() : used(true), orientationClaz(-1), orientationNotClaz(-1) {}
+        };
+        HandledTable<RegionBoundaryHandle, DepthRelation> DetectOcclusions4(
+            const RLGraph & mg, const HandledTable<RegionHandle, OrientationControl> & ocontrols,
+            const Imagei & segs,
+            const SegmentationTopo & segtopo, const std::vector<std::vector<Vec3>> & bndsamples, const std::vector<int> & bndclasses,
+            const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
+            const std::vector<Vec3> & vps, double angleDistThres = DegreesToRadians(1), double angleSampleStepOnLine = DegreesToRadians(1));
+
 
         void ApplyOcclusions(const RLGraph & mg, RLGraphControls & controls,
             const HandledTable<RegionBoundaryHandle, DepthRelation> & occlusions);
