@@ -135,7 +135,7 @@ namespace panolyz {
                 Save(path, "gcmerged", gc);
             }
 
-            if (0) {
+            if (1) {
                 std::vector<Imaged> gcChannels;
                 cv::split(gc, gcChannels);
                 gui::AsCanvas(ConvertToImage3d(gc)).show();
@@ -144,18 +144,18 @@ namespace panolyz {
             }
 
 
-            // occ
-            std::vector<Scored<Chain3>> occbnds;
-            if (0 || !Load(path, "occ_panoindoor", occbnds)) {
-                for (int i = 0; i < hcams.size(); i++) {
-                    auto pim = view.sampled(hcams[i]).image;
-                    auto occ = AsDimensionConvertor(hcams[i]).toSpace(DetectOcclusionBoundary(matlab, pim));
-                    for (auto & soc : occ) {
-                        occbnds.push_back(soc);
-                    }
-                }
-                Save(path, "occ_panoindoor", occbnds);
-            }
+            //// occ
+            //std::vector<Scored<Chain3>> occbnds;
+            //if (0 || !Load(path, "occ_panoindoor", occbnds)) {
+            //    for (int i = 0; i < hcams.size(); i++) {
+            //        auto pim = view.sampled(hcams[i]).image;
+            //        auto occ = AsDimensionConvertor(hcams[i]).toSpace(DetectOcclusionBoundary(matlab, pim));
+            //        for (auto & soc : occ) {
+            //            occbnds.push_back(soc);
+            //        }
+            //    }
+            //    Save(path, "occ_panoindoor", occbnds);
+            //}
 
 
 
@@ -215,7 +215,7 @@ namespace panolyz {
 
                 // gc                
                 auto gcMeanOnRegions = CollectFeatureMeanOnRegions(mg, view.camera, gc);
-                auto occOnBoundaries = CollectOcclusionResponseOnBoundaries(mg, occbnds, view.camera);
+                //auto occOnBoundaries = CollectOcclusionResponseOnBoundaries(mg, occbnds, view.camera);
                 auto up = normalize(vps[vertVPId]);
                 if (up.dot(-view.camera.up()) < 0) {
                     up = -up;
@@ -235,20 +235,20 @@ namespace panolyz {
                     }
 
                     size_t maxid = std::max_element(std::begin(gcMean), std::end(gcMean)) - gcMean.val;
-                    if (maxid == ToUnderlying(GeometricContextIndex::ClutterOrPorous) && gcMean[maxid] <= 0.5) {
-                        maxid = ToUnderlying(std::max({
-                            GeometricContextIndex::FloorOrGround, 
-                            GeometricContextIndex::CeilingOrSky, 
-                            GeometricContextIndex::Vertical
-                        }, [&gcMean](GeometricContextIndex a, GeometricContextIndex b) {
-                            return gcMean[ToUnderlying(a)] < gcMean[ToUnderlying(b)];
-                        }));
-                        if (gcMean[maxid] <= 0.4) {
-                            return;
-                        }
-                    }
+                    //if (maxid == ToUnderlying(GeometricContextIndex::ClutterOrPorous) && gcMean[maxid] <= 0.5) {
+                    //    maxid = ToUnderlying(std::max({
+                    //        GeometricContextIndex::FloorOrGround, 
+                    //        GeometricContextIndex::CeilingOrSky, 
+                    //        GeometricContextIndex::Vertical
+                    //    }, [&gcMean](GeometricContextIndex a, GeometricContextIndex b) {
+                    //        return gcMean[ToUnderlying(a)] < gcMean[ToUnderlying(b)];
+                    //    }));
+                    //    if (gcMean[maxid] <= 0.4) {
+                    //        return;
+                    //    }
+                    //}
 
-                    if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.data(rh).normalizedCenter.dot(up) < 0) { // lower
+                    if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround)/* && mg.data(rh).normalizedCenter.dot(up) < 0*/) { // lower
                         // assign horizontal constriant
                         c.orientationClaz = vertVPId;
                         c.orientationNotClaz = -1;
@@ -256,7 +256,7 @@ namespace panolyz {
                         return;
                     }
                     double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
-                    if (wallScore > 0.7) {
+                    if (wallScore > 0.8 && mg.data(rh).normalizedCenter.dot(up) < 0) {
                         c.orientationClaz = -1;
                         c.orientationNotClaz = vertVPId;
                         c.used = true;
@@ -273,9 +273,12 @@ namespace panolyz {
                     auto & gcMean = gcMeanOnRegions[it.hd()];
                     double gcMeanSum = std::accumulate(std::begin(gcMean.val), std::end(gcMean.val), 0.0);
                     assert(gcMeanSum <= 1.1);
-                    
-                    auto & c = *it;
+
                     auto rh = it.hd();
+                    auto & c = *it;
+                    c.used = controls[rh].used;
+                    c.orientationClaz = controls[rh].orientationClaz;
+                    c.orientationNotClaz = controls[rh].orientationNotClaz;                  
 
                     if (gcMeanSum == 0.0) {
                         continue;
