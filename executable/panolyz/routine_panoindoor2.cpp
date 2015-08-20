@@ -2,6 +2,7 @@
 #include "../../src/core/containers.hpp"
 #include "../../src/experimental/rl_graph_solver.hpp"
 #include "../../src/experimental/rl_graph_occlusion.hpp"
+#include "../../src/experimental/rl_graph_modeling.hpp"
 #include "../../src/experimental/tools.hpp"
 #include "../../src/misc/matlab_api.hpp"
 #include "../../src/gui/scene.hpp"
@@ -43,7 +44,7 @@ namespace panolyz {
 
             static const bool REFRESH = false;
 
-            if (0 || !Load(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId)) {
+            if (1 || !Load(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId)) {
                 view = CreatePanoramicView(image);
 
                 // collect lines in each view
@@ -130,7 +131,7 @@ namespace panolyz {
             }
 
             Image5d gc;
-            if (1 || !Load(path, "gcmerged", gc)) {
+            if (0 || !Load(path, "gcmerged", gc)) {
                 gc = Combine(view.camera, gcs).image;
                 Save(path, "gcmerged", gc);
             }
@@ -144,26 +145,11 @@ namespace panolyz {
             }
 
 
-            //// occ
-            //std::vector<Scored<Chain3>> occbnds;
-            //if (0 || !Load(path, "occ_panoindoor", occbnds)) {
-            //    for (int i = 0; i < hcams.size(); i++) {
-            //        auto pim = view.sampled(hcams[i]).image;
-            //        auto occ = AsDimensionConvertor(hcams[i]).toSpace(DetectOcclusionBoundary(matlab, pim));
-            //        for (auto & soc : occ) {
-            //            occbnds.push_back(soc);
-            //        }
-            //    }
-            //    Save(path, "occ_panoindoor", occbnds);
-            //}
-
-
-
             // seg topo
             SegmentationTopo segtopo;
             std::vector<std::vector<Vec3>> bndSamples;
             std::vector<int> bndClasses;
-            if (0 || !Load(path, "segtopo2", segtopo, bndSamples, bndClasses)) {
+            if (1 || !Load(path, "segtopo2", segtopo, bndSamples, bndClasses)) {
                 segtopo = SegmentationTopo(segmentedImage, true);
                 bndSamples = SamplesOnBoundaries(segtopo, view.camera, DegreesToRadians(1));
                 bndClasses = ClassifyBoundaries(bndSamples, vps, DegreesToRadians(1.5));
@@ -228,26 +214,15 @@ namespace panolyz {
                     double gcMeanSum = std::accumulate(std::begin(gcMean.val), std::end(gcMean.val), 0.0);
                     assert(gcMeanSum <= 1.1);
                     if (gcMeanSum == 0.0) {
-                        /*c.orientationClaz = vertVPId;
-                        c.orientationNotClaz = -1;
-                        c.used = true;*/
+                        /*if (mg.data(rh).normalizedCenter.dot(up) < 0) {
+                            c.orientationClaz = vertVPId;
+                            c.orientationNotClaz = -1;
+                            c.used = true;
+                        }*/
                         return;
                     }
 
                     size_t maxid = std::max_element(std::begin(gcMean), std::end(gcMean)) - gcMean.val;
-                    //if (maxid == ToUnderlying(GeometricContextIndex::ClutterOrPorous) && gcMean[maxid] <= 0.5) {
-                    //    maxid = ToUnderlying(std::max({
-                    //        GeometricContextIndex::FloorOrGround, 
-                    //        GeometricContextIndex::CeilingOrSky, 
-                    //        GeometricContextIndex::Vertical
-                    //    }, [&gcMean](GeometricContextIndex a, GeometricContextIndex b) {
-                    //        return gcMean[ToUnderlying(a)] < gcMean[ToUnderlying(b)];
-                    //    }));
-                    //    if (gcMean[maxid] <= 0.4) {
-                    //        return;
-                    //    }
-                    //}
-
                     if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround)/* && mg.data(rh).normalizedCenter.dot(up) < 0*/) { // lower
                         // assign horizontal constriant
                         c.orientationClaz = vertVPId;
@@ -256,7 +231,7 @@ namespace panolyz {
                         return;
                     }
                     double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
-                    if (wallScore > 0.8 && mg.data(rh).normalizedCenter.dot(up) < 0) {
+                    if (wallScore > 0.5 && mg.data(rh).normalizedCenter.dot(up) < 0) {
                         c.orientationClaz = -1;
                         c.orientationNotClaz = vertVPId;
                         c.used = true;
@@ -264,8 +239,6 @@ namespace panolyz {
                     }
                 });
 
-                // detach connections using region orientations
-                //auto occlusions = DetectOcclusions(mg, controls, segtopo, bndClasses, rhs, bhs, vps);
                 std::cout << "reasoning occlusions" << std::endl;
 
                 auto ocontrolsForOcclusionDetection = mg.createComponentTable<RegionData, OrientationControl>();
@@ -303,7 +276,7 @@ namespace panolyz {
                         continue;
                     }
                     double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
-                    if (wallScore > 0.7) {
+                    if (wallScore > 0.5 && mg.data(rh).normalizedCenter.dot(up) < 0) {
                         c.orientationClaz = -1;
                         c.orientationNotClaz = vertVPId;
                         c.used = true;
@@ -330,7 +303,7 @@ namespace panolyz {
                         if (controls[rh].orientationNotClaz != -1) {
                             return ctable[controls[rh].orientationNotClaz] * 0.2;
                         }
-                        return gui::Transparent;
+                        return gui::White;
                     },
                         core::ConstantFunctor<gui::ColorTag>(gui::Transparent),
                         [&occlusions](RegionBoundaryHandle rrh) {
@@ -363,7 +336,7 @@ namespace panolyz {
                         if (controls[rh].orientationNotClaz != -1) {
                             return ctable[controls[rh].orientationNotClaz] * 0.2;
                         }
-                        return gui::Transparent;
+                        return gui::White;
                     },
                         core::ConstantFunctor<gui::ColorTag>(gui::Transparent),
                         [&controls](RegionBoundaryHandle rrh) {
@@ -406,7 +379,11 @@ namespace panolyz {
 
                     //vars = SolveVariablesWithBoundedAnchors(mg, controls, false, true);
                     ResetToSampledArmorAnchors(mg, controls, 0.05);
+
+                    ///vars = SolveVariablesWithoutBoundedAnchors(mg, controls, false);
                     vars = SolveVariablesWithBoundedAnchors(matlab, mg, controls, false, 1000);
+                    ///vars = SolveVariablesWithBoundedAnchors2(matlab, mg, controls, false, 10);
+
                     NormalizeVariables(mg, controls, vars);
                     //SolveVariablesWithBoundedAnchors(mg, controls, vars);
                     std::cout << "score = " << Score(mg, controls, vars) << std::endl;
@@ -415,29 +392,26 @@ namespace panolyz {
                     if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
                         continue;
 
+                    ///vars = SolveVariablesWithoutBoundedAnchors(mg, controls, false);
                     vars = SolveVariablesWithBoundedAnchors(matlab, mg, controls, false, 1000);
+                    ///vars = SolveVariablesWithBoundedAnchors2(matlab, mg, controls, false, 10);
+
                     NormalizeVariables(mg, controls, vars);
 
-                    /*  AttachFloorAndCeilingConstraints(mg, controls, vars, 0.1, 0.6);
 
-                    if (!AttachWeightedAnchorToCenterOfLargestLineIfNoExists(mg, controls))
-                    continue;
-                    vars = SolveVariablesWithBoundedAnchors(mg, controls, false, true);
-                    NormalizeVariables(mg, controls, vars);*/
 
                     gui::SceneBuilder vis;
                     Visualize(vis, view, mg, controls, vars);
                     vis.show(true, false,
                         gui::RenderOptions().camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
 
-                    {
+                    {                  
                         LayeredShape3 shape;
                         auto polygons = RegionPolygons(mg, controls, vars);
-                        int vertVPId = NearestDirectionId(controls.vanishingPoints);
                         double medianDepth = MedianCenterDepth(mg, controls, vars);
                         Vec3 vertDir = normalize(controls.vanishingPoints[vertVPId]);
 
-                        auto range = EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.01, 0.99, -1e5, -1e5);
+                        auto range = EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.4, 0.3, -1e5, -1e5);
 
                         std::vector<Chain3> chains;
                         for (double x = range.first; x <= range.second; x += medianDepth * 0.01) {
@@ -448,23 +422,35 @@ namespace panolyz {
                             chains.push_back(experimental::MakeChain(loop));
                         }
 
+                        {
+                            gui::SceneBuilder vis;
+                            vis.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
+                            vis.installingOptions().lineWidth = 1.0;
+                            vis.begin(chains).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).lineWidth(1.0).end();
+                            Visualize(vis, view, mg, controls, vars);                            
+                            vis.show(true, false,
+                                gui::RenderOptions().camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
+                        }
+
+
                         for (int i = 0; i < chains.size(); i++) {
                             shape.layers.push_back(std::move(chains[i].points));
                         }
                         shape.normal = vertDir;
 
-                        gui::ResourceStore::set("texture", view.image);
-
-                        gui::SceneBuilder viz;
-                        viz.begin(shape).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
-                        viz.show(true, false, gui::RenderOptions()
-                            .renderMode(gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines)
-                            .backgroundColor(gui::White)
-                            .bwColor(0.0)
-                            .bwTexColor(1.0)
-                            .cullBackFace(false)
-                            .cullFrontFace(true)
-                            .camera(PerspectiveCamera(1000, 800, Point2(500, 400), 800, Point3(-1, 1, 1), Point3(0, 0, 0))));
+                        {
+                            gui::SceneBuilder viz;
+                            gui::ResourceStore::set("texture", image);
+                            viz.begin(shape).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+                            viz.show(true, false, gui::RenderOptions()
+                                .renderMode(gui::RenderModeFlag::Triangles | gui::RenderModeFlag::Lines)
+                                .backgroundColor(gui::White)
+                                .bwColor(0.0)
+                                .bwTexColor(1.0)
+                                .cullBackFace(false)
+                                .cullFrontFace(true)
+                                .camera(PerspectiveCamera(1000, 800, Point2(500, 400), 800, Point3(-1, 1, 1), Point3(0, 0, 0))));
+                        }
                     }
                 }
 

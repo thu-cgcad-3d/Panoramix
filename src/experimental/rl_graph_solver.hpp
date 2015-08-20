@@ -27,6 +27,10 @@ namespace pano {
         RLGraphVars SolveVariablesWithBoundedAnchors(misc::Matlab & matlab, const RLGraph & mg, const RLGraphControls & controls,
             bool useWeights = false, int tryNum = 10);
 
+        RLGraphVars SolveVariablesWithBoundedAnchors2(misc::Matlab & matlab, const RLGraph & mg, const RLGraphControls & controls,
+            bool useWeights = false, int tryNum = 10);
+
+
         void OptimizeVariablesWithBoundedAnchors(misc::Matlab & matlab, const RLGraph & mg, const RLGraphControls & controls, RLGraphVars & vars,
             bool useWeights = true, int tryNum = 100, int maxOptimizeNum = 10,
             const std::function<bool(const RLGraphVars &)> & callback = nullptr);      

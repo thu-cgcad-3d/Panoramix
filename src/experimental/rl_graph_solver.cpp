@@ -688,6 +688,117 @@ namespace pano {
 
 
 
+        RLGraphVars SolveVariablesWithBoundedAnchors2(misc::Matlab & matlab, const RLGraph & mg, const RLGraphControls & controls,
+            bool useWeights, int tryNum) {
+
+            assert(tryNum > 0);
+
+            int n1 = NumberOfComponentWeightedAnchors(controls);
+            int n2 = NumberOfComponentBoundedAnchors(controls);
+            int n3 = NumberOfConstraintWeightedAnchors(controls);
+            int n4 = NumberOfConstraintBoundedAnchors(controls);
+
+            assert(NumberOfComponentWeightedAnchors(controls) +
+                NumberOfComponentBoundedAnchors(controls) > 0);
+
+            RLGraphVars vars = MakeVariables(mg, controls);
+
+            SetClock();
+
+            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto uh2eqStartPosition = MakeHandledTableForAllComponents<int>(mg);
+            auto bh2eqStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+
+            int varNum, consNum;
+
+            std::vector<EquationType> equationTypes;
+            std::vector<double> Xdata;
+            std::vector<double> Bdata;
+            std::vector<double> B1data, B2data;
+            std::vector<SparseMatElement<double>> Atriplets;
+            std::vector<SparseMatElement<double>> Wtriplets;
+
+            std::tie(varNum, consNum) = PrepareEverything(mg, controls, vars, uh2varStartPosition,
+                uh2eqStartPosition, bh2eqStartPosition, Xdata, Atriplets, Wtriplets, Bdata, B1data, B2data,
+                equationTypes);
+
+            SparseMatd A = MakeSparseMatFromElements(consNum, varNum, Atriplets.begin(), Atriplets.end());
+            if (!useWeights) {
+                for (int i = 0; i < Wtriplets.size(); i++) {
+                    Wtriplets[i].col = Wtriplets[i].row = i;
+                    Wtriplets[i].value = 1.0;
+                }
+            }
+            SparseMatd W = MakeSparseMatFromElements(consNum, consNum, Wtriplets.begin(), Wtriplets.end());
+
+            bool succeed = true;
+            matlab << "clear;";
+            succeed = matlab.setVar("A", A);
+            succeed = matlab.setVar("W", W);
+            succeed = matlab.setVar("B", cv::Mat(Bdata));
+            assert(succeed);
+            succeed = matlab.setVar("B1", cv::Mat(B1data));
+            assert(succeed);
+            succeed = matlab.setVar("B2", cv::Mat(B2data));
+            assert(succeed);
+            //matlab << "B = B'; B1 = B1'; B2 = B2';";
+
+            DenseMatd equationTypesData(equationTypes.size(), 1, 0.0);
+            for (int i = 0; i < equationTypes.size(); i++) {
+                equationTypesData(i) = ToUnderlying(equationTypes[i]);
+            }
+            succeed = matlab.setVar("equationTypes", equationTypesData);
+
+            double scale = 1.0;
+            matlab.setVar("scale", scale);
+
+            // now optimize!
+            matlab
+                << "consNum = size(A, 1);"
+                << "varNum = size(A, 2);"
+
+                << "was = equationTypes(:) == 0 | equationTypes(:) == 2;"
+                << "bas = equationTypes(:) == 1 | equationTypes(:) == 3;"
+
+                << "A_was = A(was, :);"
+                << "W_was = W(was, was);"
+                << "B_was = B(was, :);"
+
+                << "A_bas = A(bas, :);"
+                << "B1_bas = B1(bas, :);"
+                << "B2_bas = B2(bas, :);";
+
+            DenseMatd X;
+            double minE = std::numeric_limits<double>::infinity();
+
+            for (int t = 0; t < tryNum; t++) {
+                matlab
+                    << "cvx_begin"
+                    << "variable X(varNum);"
+                    << "minimize norm(W_was * (A_was * X - B_was))"
+                    << "subject to "
+                    << "    B1_bas / scale <= A_bas * X <= B2_bas * scale;"
+                    << "cvx_end"
+                    << "scale = scale * 2.0;";
+
+                matlab << "e = norm(W_was * (A_was * X - B_was)) * scale'";
+                double e = matlab.var("e").scalar();
+                if (IsInfOrNaN(e)) {
+                    continue;
+                }
+                if (e >= minE) {
+                    continue;
+                }
+
+                minE = e;
+                X = (DenseMatd)matlab.var("X");
+            }
+
+            InstallVariables(mg, controls, uh2varStartPosition, X, vars);
+            NormalizeVariables(mg, controls, vars);
+            return vars;
+
+        }
 
 
         namespace {

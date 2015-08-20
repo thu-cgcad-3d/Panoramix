@@ -1608,7 +1608,10 @@ namespace pano {
 
             // junction validity factor
             for (int jid = 0; jid < segtopo.njunctions(); jid++) {
-                auto & bndids = segtopo.junc2bnds[jid];
+                std::set<int> bndids(segtopo.junc2bnds[jid].begin(), segtopo.junc2bnds[jid].end());
+                if (bndids.size() < 3) {
+                    continue;
+                }
                 if (std::any_of(bndids.begin(), bndids.end(), [&bhs](int bndid) {return bhs[bndid].invalid(); })) {
                     continue;
                 }
@@ -1616,9 +1619,9 @@ namespace pano {
                 for (int bndid : bndids) {
                     weight += spnum2weightRatio * bndsamples[bndid].size();
                 }
-                int juncValidFC = fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [&bndids, weight](const int * varlabels, size_t nvar,
+                int juncValidFC = fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [weight](const int * varlabels, size_t nvar,
                     ml::FactorGraph::FactorCategoryId fcid, void * givenData) -> double {
-                    assert(nvar == bndids.size());
+                    assert(nvar >= 3);
                     int disconNum = 0;
                     for (int i = 0; i < nvar; i++) {
                         if (DepthRelation(varlabels[i]) != DepthRelation::Connected) {
@@ -1631,8 +1634,10 @@ namespace pano {
                     return 0.0;
                 }, 1.0 });
                 std::vector<ml::FactorGraph::VarHandle> relatedVHs(bndids.size());
+                auto it = bndids.begin();
                 for (int i = 0; i < bndids.size(); i++) {
-                    relatedVHs[i] = vhs[bndids[i]];
+                    relatedVHs[i] = vhs[*it];
+                    ++it;
                 }
                 fg.addFactor(relatedVHs.begin(), relatedVHs.end(), juncValidFC);
             }
@@ -1694,6 +1699,10 @@ namespace pano {
             ml::FactorGraph::ResultTable resultLabels;
             fg.solve(100, 10, [&resultLabels](int epoch, double energy, double denergy, const ml::FactorGraph::ResultTable & results) -> bool {
                 std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
+                if (energy == 0.0) {
+                    resultLabels = results;
+                    return false;
+                }
                 if (denergy < 0.1) {
                     resultLabels = results;
                     return true;

@@ -2,6 +2,7 @@
 #include "../../src/core/containers.hpp"
 #include "../../src/experimental/rl_graph_solver.hpp"
 #include "../../src/experimental/rl_graph_occlusion.hpp"
+#include "../../src/experimental/rl_graph_modeling.hpp"
 #include "../../src/experimental/tools.hpp"
 #include "../../src/misc/matlab_api.hpp"
 #include "../../src/gui/scene.hpp"
@@ -104,9 +105,9 @@ namespace panolyz {
             
             std::vector<PerspectiveCamera> hcams;
             std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
-            if (REFRESH || !Load(path, "hcamsgcs", hcams, gcs)) {
+            if (0 || !Load(path, "hcamsgcs", hcams, gcs)) {
                 // extract gcs
-                hcams = CreateHorizontalPerspectiveCameras(view.camera, 16, 500, 600, 300);
+                hcams = CreateHorizontalPerspectiveCameras(view.camera, 16, 500, 500, 200);
                 //hcams = CreatePanoContextCameras(view.camera, 500, 400, 300);
                 gcs.resize(hcams.size());
                 for (int i = 0; i < hcams.size(); i++){
@@ -120,7 +121,7 @@ namespace panolyz {
             }
 
             Image5d gc;
-            if (REFRESH || !Load(path, "gcmerged", gc)) {
+            if (0 || !Load(path, "gcmerged", gc)) {
                 gc = Combine(view.camera, gcs).image;
                 Save(path, "gcmerged", gc);
             }
@@ -193,26 +194,25 @@ namespace panolyz {
             std::vector<std::vector<Vec3>> bndSamples;
             std::vector<int> bndClasses;
             std::vector<TStructure> tstructs;
-            if (0 || !Load(path, "segtopo", segtopo, bndSamples, bndClasses, tstructs)) {
+            if (1 || !Load(path, "segtopo2", segtopo, bndSamples, bndClasses, tstructs)) {
                 segtopo = SegmentationTopo(segmentedImage, true);
                 bndSamples = SamplesOnBoundaries(segtopo, view.camera, DegreesToRadians(1));
                 bndClasses = ClassifyBoundaries(bndSamples, vps, DegreesToRadians(1.5));
-                tstructs = FindTStructuresFuzzy(segtopo, bndSamples, bndClasses, view.camera, vps, DegreesToRadians(10), DegreesToRadians(2));
+                //tstructs = FindTStructuresFuzzy(segtopo, bndSamples, bndClasses, view.camera, vps, DegreesToRadians(10), DegreesToRadians(2));
 
                 // occ from T-struct
-                auto occtstructs = GuessOccludedTStructures(vps, segtopo, tstructs, view.camera, gc);
+               /* auto occtstructs = GuessOccludedTStructures(vps, segtopo, tstructs, view.camera, gc);
                 std::vector<TStructure> occts;
                 for (int id : occtstructs) {
                     occts.push_back(tstructs[id]);
                 }
-                tstructs = std::move(occts);
-                Save(path, "segtopo", segtopo, bndSamples, bndClasses, tstructs);
+                tstructs = std::move(occts);*/
+                Save(path, "segtopo2", segtopo, bndSamples, bndClasses/*, tstructs*/);
             }
 
-
-            auto canvas = gui::MakeCanvas(Image3ub(image.size(), Vec3ub()));
-            ShowTStructures(canvas.color(gui::White), segtopo, tstructs);
-            canvas.show();
+            //auto canvas = gui::MakeCanvas(Image3ub(image.size(), Vec3ub()));
+            //ShowTStructures(canvas.color(gui::White), segtopo, tstructs);
+            //canvas.show();
 
 
             if(0){
@@ -256,7 +256,7 @@ namespace panolyz {
                 controls = RLGraphControls(mg, vps);
                 AttachPrincipleDirectionConstraints(mg, controls, M_PI / 30.0, false);
                 AttachWallConstriants(mg, controls, M_PI / 50);
-                ApplyOccludedTStructure(mg, controls, segtopo, bhs, view.camera, tstructs);
+                //ApplyOccludedTStructure(mg, controls, segtopo, bhs, view.camera, tstructs);
 
                 // gc
                 auto gcMeanOnRegions = CollectFeatureMeanOnRegions(mg, view.camera, gc);
@@ -269,12 +269,12 @@ namespace panolyz {
                     [&mg, &controls, &vps, &gcMeanOnRegions, &view, &up, vertVPId](RegionHandle rh, RLGraphComponentControl & c) {
                     auto & gcMean = gcMeanOnRegions[rh];
                     double gcMeanSum = std::accumulate(std::begin(gcMean.val), std::end(gcMean.val), 0.0);
-                    //if (gcMeanSum == 0.0) {
-                    //    c.orientationClaz = -1;
-                    //    c.orientationNotClaz = -1;
-                    //    c.used = true;
-                    //    return;
-                    //}
+                    if (gcMeanSum == 0.0) {
+                        /*c.orientationClaz = -1;
+                        c.orientationNotClaz = -1;
+                        c.used = true;*/
+                        return;
+                    }
                     size_t maxid = std::max_element(std::begin(gcMean), std::end(gcMean)) - gcMean.val;
                     double floorScore = gcMean[ToUnderlying(GeometricContextIndex::FloorOrGround)];
                     if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.data(rh).normalizedCenter.dot(up) < 0) { // lower
@@ -285,7 +285,7 @@ namespace panolyz {
                         return;
                     }
                     double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
-                    if (wallScore > 0.6) {
+                    if (wallScore > 0.6 && mg.data(rh).normalizedCenter.dot(up) < 0) {
                         // assign vertical constraint
                         c.orientationClaz = -1;
                         c.orientationNotClaz = vertVPId;
@@ -402,7 +402,7 @@ namespace panolyz {
                         double medianDepth = MedianCenterDepth(mg, controls, vars);
                         Vec3 vertDir = normalize(controls.vanishingPoints[vertVPId]);
 
-                        auto range = EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.01, 0.99, -1e5, -1e5);
+                        auto range = EstimateEffectiveRangeAlongDirection(polygons, vertDir, medianDepth * 0.01, 0.5, -1e5, -1e5);
 
                         std::vector<Chain3> chains;
                         for (double x = range.first; x <= range.second; x += medianDepth * 0.01){
