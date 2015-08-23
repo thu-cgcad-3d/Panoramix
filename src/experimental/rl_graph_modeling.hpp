@@ -12,7 +12,7 @@ namespace pano {
             std::pair<Point3, Point3> range;
         };
         std::vector<SectionalPiece> MakeSectionalPieces(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
-            const Plane3 & cutplane);
+            const Plane3 & cutplane, bool removeIllPosedPolygons = false);
 
         Chain3 MakeChain(const std::vector<SectionalPiece> & pieces, bool closed = true);
         inline double Area(const std::vector<SectionalPiece> & loop) { return Area(Polygon3(MakeChain(loop))); }

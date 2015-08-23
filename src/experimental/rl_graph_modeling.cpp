@@ -7,7 +7,11 @@ namespace pano {
     namespace experimental {
 
         std::vector<SectionalPiece> MakeSectionalPieces(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
-            const Plane3 & cutplane) {
+            const Plane3 & cutplane, bool removeIllPosedPolygons) {
+
+            if (removeIllPosedPolygons) {
+                /// todo
+            }
 
             Box3 bboxAll;
             for (auto & p : polygons) {
@@ -138,6 +142,9 @@ namespace pano {
             const RLGraph & mg, const RLGraphControls & controls) {
 
             NOT_IMPLEMENTED_YET();
+
+
+
 
         }
 

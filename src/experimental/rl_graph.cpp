@@ -1149,7 +1149,137 @@ namespace pano {
         }
 
 
+        std::pair<std::vector<RegionHandle>, std::vector<RegionBoundaryHandle>> AppendRegions2(RLGraph & mg, const Imagei & segmentedRegions,
+            const std::vector<std::vector<Pixel>> & bndpixels,
+            const std::vector<std::pair<int, int>> & bnd2segs,
+            const PanoramicCamera & cam,
+            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine) {
 
+            using CameraT = PanoramicCamera;
+
+            auto regionHandles = CollectRegionsFromSegmentation(mg, segmentedRegions, cam);
+            int regionNum = regionHandles.size();
+
+
+            // add region-line connections
+            std::map<std::pair<RegionHandle, LineHandle>, RegionLineConnectionData> regionLineConnections;
+
+            for (auto & ld : mg.components<LineData>()) {
+                auto & line = ld.data.line;
+                Line2 line2(cam.toScreen(line.first), cam.toScreen(line.second));
+
+                double stepOnImage = std::max(cam.focal() * samplingStepAngleOnLine, 0.5);               
+                double spanAngle = AngleBetweenDirections(line.first, line.second);
+                int stepNum = static_cast<int>(std::ceil(spanAngle / samplingStepAngleOnLine));
+                assert(stepNum >= 1);
+
+                for (int step = 0; step <= stepNum; step++) {
+                    double angle = step * samplingStepAngleOnLine;
+                    Vec3 sample = RotateDirection(line.first, line.second, angle);
+                    if (!cam.isVisibleOnScreen(sample))
+                        continue;
+
+                    Point2 sampleP = cam.toScreen(sample);
+                    Pixel originalP = ToPixel(sampleP);
+
+                    // collect neighbors
+                    std::set<int> connectedRegionIds;
+                    for (int samplerSizeOnLine = 1; samplerSizeOnLine < 4; samplerSizeOnLine++) {
+                        for (int x = originalP.x - samplerSizeOnLine; x <= originalP.x + samplerSizeOnLine; x++) {
+                            for (int y = originalP.y - samplerSizeOnLine; y <= originalP.y + samplerSizeOnLine; y++) {
+                                if (Distance(Pixel(x, y), originalP) > samplerSizeOnLine) {
+                                    continue;
+                                }
+                                Pixel p(WrapBetween(x, 0, segmentedRegions.cols), WrapBetween(y, 0, segmentedRegions.rows));
+                                int regionId = segmentedRegions(p);
+                                auto rh = regionHandles[regionId];
+                                if (rh.invalid())
+                                    continue;
+                                connectedRegionIds.insert(regionId);
+                            }
+                        }
+                        if (connectedRegionIds.size() >= 2) {
+                            break;
+                        }
+                    }
+
+                    if (connectedRegionIds.size() < 2) {
+                        continue;
+                    }
+
+                    for (int regionId : connectedRegionIds) {
+                        RegionLineConnectionData & rd = regionLineConnections[std::make_pair(regionHandles[regionId], ld.topo.hd)];
+                        rd.normalizedAnchors.push_back(normalize(sample));
+                        rd.detachable = false;
+                    }
+                }
+               
+            }
+
+            for (auto & rlc : regionLineConnections) {
+                // compute length;
+                rlc.second.length = AngleBetweenDirections(rlc.second.normalizedAnchors.front(), rlc.second.normalizedAnchors.back());
+                mg.addConstraint(std::move(rlc.second), rlc.first.first, rlc.first.second);
+            }
+
+
+            // add region-region
+            assert(bndpixels.size() == bnd2segs.size());
+
+            std::vector<RegionBoundaryHandle> boundaryHandles(bndpixels.size());
+            std::map<std::pair<int, int>, RegionBoundaryHandle> segs2bh;
+
+            for (int i = 0; i < bndpixels.size(); i++) {
+                auto & rids = bnd2segs[i];
+                auto edge = bndpixels[i];
+
+                if (regionHandles[rids.first].invalid() || regionHandles[rids.second].invalid())
+                    continue;
+                if (edge.size() < 2)
+                    continue;
+
+                auto rh = regionHandles[rids.first];
+
+                RegionBoundaryHandle & bh = segs2bh[rids];
+                if (bh.invalid()) {
+                    RegionBoundaryData bdorigin;
+                    bdorigin.length = 0;
+                    bh = mg.addConstraint(std::move(bdorigin), regionHandles[rids.first], regionHandles[rids.second]);
+                }
+
+                RegionBoundaryData & bd = mg.data(bh);
+
+                std::vector<Vec3> edge3d;
+                for (auto & p : edge) {
+                    edge3d.push_back(normalize(cam.toSpace(p)));
+                }
+                bd.normalizedEdges.push_back(std::move(edge3d));
+                auto & lastEdge = bd.normalizedEdges.back();
+
+                // get edge point projections
+                for (int i = 0; i < int(lastEdge.size()) - 1; i++) {
+                    bd.length += AngleBetweenDirections(lastEdge[i], lastEdge[i + 1]);
+                }
+
+                // get sample points
+                std::vector<Vec3> points = { lastEdge.front() };
+                for (auto & edgeP : lastEdge) {
+                    double remainedAngle = AngleBetweenDirections(points.back(), edgeP);
+                    while (remainedAngle >= samplingStepAngleOnBoundary) {
+                        points.push_back(normalize(RotateDirection(points.back(), edgeP, samplingStepAngleOnBoundary)));
+                        remainedAngle -= samplingStepAngleOnBoundary;
+                    }
+                }
+                bd.normalizedSampledPoints.push_back(std::move(points));
+                assert(bd.normalizedSampledPoints.size() == bd.normalizedEdges.size());
+
+                boundaryHandles[i] = bh;
+            }
+
+
+            return std::make_pair(regionHandles, boundaryHandles);
+
+        }
 
 
 

@@ -141,6 +141,12 @@ namespace pano {
             double samplingStepAngleOnBoundary, double samplingStepAngleOnLine,
             int samplerSizeOnBoundary = 3, int samplerSizeOnLine = 3, bool noBoundaryUnderLines = false);
 
+        std::pair<std::vector<RegionHandle>, std::vector<RegionBoundaryHandle>>
+            AppendRegions2(RLGraph & mg, const Imagei & segmentedRegions,
+            const std::vector<std::vector<Pixel>> & bndpixels,
+            const std::vector<std::pair<int, int>> & bnd2segs,
+            const PanoramicCamera & cam,
+            double samplingStepAngleOnBoundary, double samplingStepAngleOnLine);
 
 
         // get a perfect mask view for a region

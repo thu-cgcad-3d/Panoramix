@@ -63,13 +63,6 @@ namespace panolyz {
 
                 // estimate vp
                 vps = EstimateVanishingPointsAndClassifyLines(cams, lines);
-                if (0) {
-                    auto ctable = gui::CreateRandomColorTableWithSize(vps.size());
-                    for (int i = 0; i < cams.size(); i++) {
-                        auto pim = view.sampled(cams[i]).image;
-                        gui::AsCanvas(pim).thickness(3).colorTable(ctable).add(lines[i]).show();
-                    }
-                }
                 vertVPId = NearestDirectionId(vps, Vec3(0, 0, 1));
 
                 // extract lines from segmentated region boundaries and classify them using estimated vps
@@ -96,9 +89,17 @@ namespace panolyz {
             }
 
 
+            if (0) {
+                auto ctable = gui::CreateRandomColorTableWithSize(vps.size());
+                for (int i = 0; i < cams.size(); i++) {
+                    auto pim = view.sampled(cams[i]).image;
+                    gui::AsCanvas(pim).thickness(3).colorTable(ctable).add(lines[i]).show();
+                }
+            }
+
             if (1) {
                 auto ctable = gui::CreateRandomColorTableWithSize(MinMaxValOfImage(segmentedImage).second + 1);
-                gui::AsCanvas(ctable(segmentedImage)).show();
+                //gui::AsCanvas(ctable(segmentedImage)).show();
                 gui::AsCanvas(ctable(segmentedImage)).add(view.image).show();
             }
 
@@ -157,7 +158,7 @@ namespace panolyz {
             }
 
 
-            if (0) {
+            if (1) {
                 auto canvas = gui::MakeCanvas(Image3ub(image.size(), Vec3ub()));
                 gui::ColorTable vpctable = gui::ColorTableDescriptor::RGBGreys;
                 for (int i = 0; i < bndSamples.size(); i++) {
@@ -184,8 +185,10 @@ namespace panolyz {
                 for (int i = 0; i < cams.size(); i++) {
                     AppendLines(mg, lines[i], cams[i], vps);
                 }
-                std::tie(rhs, bhs) = AppendRegions(mg, segmentedImage, segtopo.bndpixels, segtopo.bnd2segs,
-                    view.camera, 0.03, 0.02, 4, 4, false); // we have to reserve bnds under lines for reasoning
+                std::tie(rhs, bhs) = AppendRegions2(mg, segmentedImage, segtopo.bndpixels, segtopo.bnd2segs,
+                    view.camera, 0.03, 0.02);
+                //std::tie(rhs, bhs) = AppendRegions(mg, segmentedImage, segtopo.bndpixels, segtopo.bnd2segs,
+                //    view.camera, 0.03, 0.02, 1, 1, false); // we have to reserve bnds under lines for reasoning
                 //rhs = AppendRegions(mg, segmentedImage, view.camera, 0.03, 0.02, 4, 4, false);
                 Save(path, "mg_rhs_bhs", mg, rhs, bhs);
             }
@@ -230,6 +233,12 @@ namespace panolyz {
                         c.used = true;
                         return;
                     }
+                    if (maxid == ToUnderlying(GeometricContextIndex::CeilingOrSky)) {
+                        c.orientationClaz = vertVPId;
+                        c.orientationNotClaz = -1;
+                        c.used = true;
+                        return;
+                    }
                     double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
                     if (wallScore > 0.5 && mg.data(rh).normalizedCenter.dot(up) < 0) {
                         c.orientationClaz = -1;
@@ -251,57 +260,62 @@ namespace panolyz {
                     auto & c = *it;
                     c.used = controls[rh].used;
                     c.orientationClaz = controls[rh].orientationClaz;
-                    c.orientationNotClaz = controls[rh].orientationNotClaz;                  
+                    c.orientationNotClaz = controls[rh].orientationNotClaz;     
 
-                    if (gcMeanSum == 0.0) {
-                        continue;
-                    }
+                    //if (gcMeanSum == 0.0) {
+                    //    continue;
+                    //}
 
-                    size_t maxid = std::max_element(std::begin(gcMean), std::end(gcMean)) - gcMean.val;
-                    if (maxid == ToUnderlying(GeometricContextIndex::ClutterOrPorous) && gcMean[maxid] <= 0.5) {
-                        maxid = ToUnderlying(std::max({
-                            GeometricContextIndex::FloorOrGround,
-                            GeometricContextIndex::CeilingOrSky,
-                            GeometricContextIndex::Vertical
-                        }, [&gcMean](GeometricContextIndex a, GeometricContextIndex b) {
-                            return gcMean[ToUnderlying(a)] < gcMean[ToUnderlying(b)];
-                        }));
-                    }
+                    //size_t maxid = std::max_element(std::begin(gcMean), std::end(gcMean)) - gcMean.val;
+                    //if (maxid == ToUnderlying(GeometricContextIndex::ClutterOrPorous) && gcMean[maxid] <= 0.5) {
+                    //    maxid = ToUnderlying(std::max({
+                    //        GeometricContextIndex::FloorOrGround,
+                    //        GeometricContextIndex::CeilingOrSky,
+                    //        GeometricContextIndex::Vertical
+                    //    }, [&gcMean](GeometricContextIndex a, GeometricContextIndex b) {
+                    //        return gcMean[ToUnderlying(a)] < gcMean[ToUnderlying(b)];
+                    //    }));
+                    //}
 
-                    if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.data(rh).normalizedCenter.dot(up) < 0) { // lower
-                        // assign horizontal constriant
-                        c.orientationClaz = vertVPId;
-                        c.orientationNotClaz = -1;
-                        c.used = true;
-                        continue;
-                    }
-                    double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
-                    if (wallScore > 0.5 && mg.data(rh).normalizedCenter.dot(up) < 0) {
-                        c.orientationClaz = -1;
-                        c.orientationNotClaz = vertVPId;
-                        c.used = true;
-                        continue;
-                    }
+                    //if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.data(rh).normalizedCenter.dot(up) < 0) { // lower
+                    //    // assign horizontal constriant
+                    //    c.orientationClaz = vertVPId;
+                    //    c.orientationNotClaz = -1;
+                    //    c.used = true;
+                    //    continue;
+                    //}
+                    //double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
+                    //if (wallScore > 0.7 && mg.data(rh).normalizedCenter.dot(up) < 0) {
+                    //    c.orientationClaz = -1;
+                    //    c.orientationNotClaz = vertVPId;
+                    //    c.used = true;
+                    //    continue;
+                    //}
                 }
-                auto occlusions = DetectOcclusions4(mg, ocontrolsForOcclusionDetection, segmentedImage, segtopo,
-                    bndSamples, bndClasses, rhs, bhs, vps, DegreesToRadians(10), DegreesToRadians(1));
+                //auto occlusions = DetectOcclusions4(mg, ocontrolsForOcclusionDetection, segmentedImage, segtopo,
+                    //bndSamples, bndClasses, rhs, bhs, vps, DegreesToRadians(10), DegreesToRadians(1));
+
+                auto occlusions = DetectOcclusions5(mg, ocontrolsForOcclusionDetection, segmentedImage, segtopo,
+                    bndSamples, bndClasses, rhs, bhs, vps, DegreesToRadians(1.5), DegreesToRadians(0.5));
 
                 std::cout << "applying occlusions" << std::endl;
-                ApplyOcclusions(mg, controls, occlusions);
+                ApplyOcclusions(mg, controls, occlusions, false);
+
+                DisableTJunctionsInLineRelations(mg, controls, 0.1);
 
 
                 {
                     auto pim = Print(mg, segmentedImage, view.camera, rhs,
-                        [&controls](RegionHandle rh) -> gui::Color {
+                        [&ocontrolsForOcclusionDetection](RegionHandle rh) -> gui::Color {
                         static const gui::ColorTable ctable = gui::ColorTableDescriptor::RGBGreys;
-                        if (!controls[rh].used) {
+                        if (!ocontrolsForOcclusionDetection[rh].used) {
                             return gui::Black;
                         }
-                        if (controls[rh].orientationClaz != -1) {
-                            return ctable[controls[rh].orientationClaz];
+                        if (ocontrolsForOcclusionDetection[rh].orientationClaz != -1) {
+                            return ctable[ocontrolsForOcclusionDetection[rh].orientationClaz];
                         }
-                        if (controls[rh].orientationNotClaz != -1) {
-                            return ctable[controls[rh].orientationNotClaz] * 0.2;
+                        if (ocontrolsForOcclusionDetection[rh].orientationNotClaz != -1) {
+                            return ctable[ocontrolsForOcclusionDetection[rh].orientationNotClaz] * 0.2;
                         }
                         return gui::White;
                     },
@@ -381,7 +395,7 @@ namespace panolyz {
                     ResetToSampledArmorAnchors(mg, controls, 0.05);
 
                     ///vars = SolveVariablesWithoutBoundedAnchors(mg, controls, false);
-                    vars = SolveVariablesWithBoundedAnchors(matlab, mg, controls, false, 1000);
+                    vars = SolveVariablesWithBoundedAnchors(matlab, mg, controls, true, 1000);
                     ///vars = SolveVariablesWithBoundedAnchors2(matlab, mg, controls, false, 10);
 
                     NormalizeVariables(mg, controls, vars);
@@ -393,7 +407,7 @@ namespace panolyz {
                         continue;
 
                     ///vars = SolveVariablesWithoutBoundedAnchors(mg, controls, false);
-                    vars = SolveVariablesWithBoundedAnchors(matlab, mg, controls, false, 1000);
+                    vars = SolveVariablesWithBoundedAnchors(matlab, mg, controls, true, 1000);
                     ///vars = SolveVariablesWithBoundedAnchors2(matlab, mg, controls, false, 10);
 
                     NormalizeVariables(mg, controls, vars);
@@ -402,8 +416,8 @@ namespace panolyz {
 
                     gui::SceneBuilder vis;
                     Visualize(vis, view, mg, controls, vars);
-                    vis.show(true, false,
-                        gui::RenderOptions().camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
+                    vis.show(true, false, gui::RenderOptions().cullFrontFace(false).cullBackFace(true).bwColor(0.0).bwTexColor(1.0)
+                            .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
 
                     {                  
                         LayeredShape3 shape;

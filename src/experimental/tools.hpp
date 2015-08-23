@@ -88,28 +88,7 @@ namespace pano {
 
 
 
-        // cut loop
-        struct SectionalPiece {
-            RegionHandle rh;
-            std::pair<Point3, Point3> range;
-        };
-        std::vector<SectionalPiece> MakeSectionalPieces(const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
-            const Plane3 & cutplane);
-
-        Chain3 MakeChain(const std::vector<SectionalPiece> & pieces, bool closed = true);
-        inline double Area(const std::vector<SectionalPiece> & loop) { return Area(Polygon3(MakeChain(loop))); }
-
-
-
-        // estimate 
-        std::pair<double, double> EstimateEffectiveRangeAlongDirection(
-            const HandledTable<RegionHandle, std::vector<Polygon3>> & polygons,
-            const Vec3 & direction, double stepLen, double minEffectiveAreaRatio = 0.6,
-            double gamma1 = 0.05, double gamma2 = 0.05);
-
-
-        // smooth
-        void SmoothInstances(const RLGraph & mg, const InstanceTable<RegionData> & planes, const InstanceTable<LineData> & lines);
+    
 
 
     }
