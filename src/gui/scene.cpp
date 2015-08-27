@@ -58,7 +58,10 @@ namespace pano {
             , _bwColor(.3)
             , _bwTexColor(0.7)
             , _cullFrontFace(true)
-            , _cullBackFace(false){
+            , _cullBackFace(false)
+            , _panoramaProjectionCenter(0, 0, 0)
+            , _panoramaHoriCenterRatio(0.5f)
+            , _panoramaAspectRatio(0.5f) {
         }
 
 
@@ -83,7 +86,7 @@ namespace pano {
         SceneObject::SceneObject()
             : 
             _shaderSource(OpenGLShaderSourceDescriptor::XLines),
-            _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
+            _modelMat(core::Mat4::eye()) {
             _internal = new SceneObjectInternal;
             _lineWidth = 2.0;
             _pointSize = 5.0;
@@ -93,7 +96,7 @@ namespace pano {
         SceneObject::SceneObject(const OpenGLShaderSource & shaderSource)
             :
             _shaderSource(shaderSource),
-            _modelMat(core::Mat4::eye()), _projectionCenter(0, 0, 0) {
+            _modelMat(core::Mat4::eye()) {
             _internal = new SceneObjectInternal;
             _lineWidth = 2.0;
             _pointSize = 5.0;
@@ -180,7 +183,9 @@ namespace pano {
 
             //assert(thisModelMatrix == core::Mat4f::eye());
 
-            program->setUniformValue("panoramaCenter", MakeQVec(_projectionCenter));
+            program->setUniformValue("panoramaCenter", MakeQVec(options.panoramaProjectionCenter()));
+            program->setUniformValue("panoramaHoriCenterRatio", options.panoramaHoriCenterRatio());
+            program->setUniformValue("panoramaAspectRatio", options.panoramaAspectRatio());
 
             program->setUniformValue("projectionMatrix", MakeQMatrix(options.camera().projectionMatrix()));
             program->setUniformValue("modelMatrix", MakeQMatrix(thisModelMatrix));
@@ -286,9 +291,12 @@ namespace pano {
                     rtree = std::make_unique<third_party::RTree<EntityT, double, 3>>();
                     // insert bboxes
                     for (auto & b : calculatedBoundingBox){
+                        if (HasValue(b.second, IsInfOrNaN<double>)) {
+                            continue;
+                        }
                         rtree->Insert(b.second.minCorner.val, b.second.maxCorner.val, b.first);
                     }
-                    assert(rtree->Count() == calculatedBoundingBox.size());
+                    assert(rtree->Count() <= calculatedBoundingBox.size());
                 }
                 inline SceneObjectMeshEntityIndexer(SceneObjectMeshEntityIndexer && idx) 
                     : calculatedBoundingBox(std::move(idx.calculatedBoundingBox)), rtree(std::move(idx.rtree)) {}
@@ -732,7 +740,7 @@ namespace pano {
                     if (!options.camera().isVisibleOnScreen(point))
                         return true;
                     double distance = Distance(npOnScreen, pOnScreen);
-                    if (distance <= vo->pointSize() / 2.0){
+                    if (distance <= vo->pointSize() / 2.0) {
                         points[m] = distance;
                     }
                     return true;
@@ -820,137 +828,132 @@ namespace pano {
 
 
 
+
+        class SceneWidget : public QGLWidget {
+        public:
+            RenderOptions options;
+            Scene scene;
+
+            SceneWidget(Scene && v, const RenderOptions & ro, QWidget * parent = nullptr)
+                : QGLWidget(parent), options(ro), scene(std::move(v)) {
+                setMouseTracking(true);
+                setAutoBufferSwap(false);
+                grabKeyboard();
+            }
+
+        protected:
+            void initializeGL() {
+                makeCurrent();
+                glEnable(GL_MULTISAMPLE);
+                GLint bufs;
+                GLint samples;
+                glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
+                glGetIntegerv(GL_SAMPLES, &samples);
+                qDebug("Have %d buffers and %d samples", bufs, samples);
+                qglClearColor(MakeQColor(options.backgroundColor()));
+                scene.initialize();
+            }
+
+            void paintGL() {
+                QPainter painter;
+                painter.begin(this);
+                painter.beginNativePainting();
+                qglClearColor(MakeQColor(options.backgroundColor()));
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                core::PerspectiveCamera & camera = options.camera();
+                camera.resizeScreen(core::Size(width(), height()));
+
+                scene.render(options);
+
+                painter.endNativePainting();
+                swapBuffers();
+            }
+
+            void resizeGL(int w, int h) {
+                core::PerspectiveCamera & camera = options.camera();
+                camera.resizeScreen(core::Size(w, h));
+                camera.setFocal(std::max(width(), height()));
+                glViewport(0, 0, w, h);
+            }
+
+        public:
+            void autoSetCamera() {
+                auto sphere = scene.boundingBox().outerSphere();
+                options.camera().resizeScreen(core::Size(width(), height()), false);
+                options.camera().setFocal(std::max(width(), height()));
+                options.camera().focusOn(sphere, true);
+                update();
+            }
+
+        protected:
+            virtual void mousePressEvent(QMouseEvent * e) override {
+                _lastPos = e->pos();
+                if (e->buttons() & Qt::RightButton)
+                    setCursor(Qt::OpenHandCursor);
+                else if (e->buttons() & Qt::MidButton)
+                    setCursor(Qt::SizeAllCursor);
+                else if (e->buttons() & Qt::LeftButton) {
+                    auto ents = scene.pickOnScreen(options, core::Point2(e->pos().x(), e->pos().y()));
+                    if (e->modifiers() & Qt::ControlModifier) {
+                        for (auto & ent : ents) {
+                            scene.switchSelect(ent);
+                        }
+                    } else {
+                        scene.clearSelection();
+                        for (auto & ent : ents) {
+                            scene.select(ent);
+                        }
+                    }
+                    scene.invokeCallbackFunctions(InteractionID::ClickLeftButton, ents, true);
+                }
+                update();
+            }
+
+            virtual void mouseMoveEvent(QMouseEvent * e) override {
+                QVector3D t(e->pos() - _lastPos);
+                t.setX(-t.x());
+                auto sphere = scene.boundingBox().outerSphere();
+                if ((e->buttons() & Qt::RightButton) && !(e->modifiers() & Qt::ShiftModifier)) {
+                    core::Vec3 trans = t.x() * options.camera().rightward() + t.y() * options.camera().upward();
+                    trans *= 0.02;
+                    options.camera().moveEyeWithCenterFixed(trans, sphere, true, true);
+                    setCursor(Qt::ClosedHandCursor);
+                    update();
+                } else if ((e->buttons() & Qt::MidButton) ||
+                    ((e->buttons() & Qt::RightButton) && (e->modifiers() & Qt::ShiftModifier))) {
+                    core::Vec3 trans = t.x() * options.camera().rightward() + t.y() * options.camera().upward();
+                    trans *= 0.02;
+                    options.camera().translate(trans, sphere, true);
+                    update();
+                }
+                _lastPos = e->pos();
+            }
+
+            virtual void wheelEvent(QWheelEvent * e) override {
+                auto sphere = scene.boundingBox().outerSphere();
+                double d = e->delta() / 10;
+                double dist = core::Distance(options.camera().eye(), options.camera().center());
+                core::Vec3 trans = d * dist / 1000.0 * options.camera().forward();
+                options.camera().moveEyeWithCenterFixed(trans, sphere, false, true);
+                update();
+            }
+
+            virtual void mouseReleaseEvent(QMouseEvent * e) override {
+                unsetCursor();
+            }
+
+            virtual void keyPressEvent(QKeyEvent * e) override {
+                if (e->key() == Qt::Key_Space) {
+                    scene.invokeCallbackFunctionsOnAllSelected(InteractionID::PressSpace);
+                }
+            }
+
+        private:
+            QPointF _lastPos;
+        };
+
         namespace {
-
-            // visualizer widget
-
-            class VisualizerWidget : public QGLWidget {
-            public:
-                RenderOptions options;
-                Scene scene;
-
-                VisualizerWidget(Scene && v, const RenderOptions & ro, QWidget * parent = nullptr)
-                    : QGLWidget(parent), options(ro), scene(std::move(v)) {
-                    setMouseTracking(true);
-                    setAutoBufferSwap(false);
-                    grabKeyboard();
-                }
-
-            protected:
-                void initializeGL() {
-                    makeCurrent();
-                    glEnable(GL_MULTISAMPLE);
-                    GLint bufs;
-                    GLint samples;
-                    glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
-                    glGetIntegerv(GL_SAMPLES, &samples);
-                    qDebug("Have %d buffers and %d samples", bufs, samples);
-                    qglClearColor(MakeQColor(options.backgroundColor()));
-                    scene.initialize();
-                }
-
-                void paintGL() {
-                    QPainter painter;
-                    painter.begin(this);
-                    painter.beginNativePainting();
-                    qglClearColor(MakeQColor(options.backgroundColor()));
-                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-                    core::PerspectiveCamera & camera = options.camera();
-                    camera.resizeScreen(core::Size(width(), height()));
-
-                    scene.render(options);
-
-                    painter.endNativePainting();
-                    swapBuffers();
-                }
-
-                void resizeGL(int w, int h) {
-                    core::PerspectiveCamera & camera = options.camera();
-                    camera.resizeScreen(core::Size(w, h));
-                    camera.setFocal(std::max(width(), height()));
-                    glViewport(0, 0, w, h);
-                }
-
-            public:
-                void autoSetCamera() {
-                    auto sphere = scene.boundingBox().outerSphere();
-                    options.camera().resizeScreen(core::Size(width(), height()), false);
-                    options.camera().setFocal(std::max(width(), height()));
-                    options.camera().focusOn(sphere, true);
-                    update();
-                }
-
-            protected:
-                virtual void mousePressEvent(QMouseEvent * e) override {
-                    _lastPos = e->pos();
-                    if (e->buttons() & Qt::RightButton)
-                        setCursor(Qt::OpenHandCursor);
-                    else if (e->buttons() & Qt::MidButton)
-                        setCursor(Qt::SizeAllCursor);
-                    else if (e->buttons() & Qt::LeftButton){
-                        auto ents = scene.pickOnScreen(options, core::Point2(e->pos().x(), e->pos().y()));
-                        if (e->modifiers() & Qt::ControlModifier){                            
-                            for (auto & ent : ents){
-                                scene.switchSelect(ent);
-                            }
-                        }
-                        else{
-                            scene.clearSelection();
-                            for (auto & ent : ents){
-                                scene.select(ent);
-                            }
-                        }
-                        scene.invokeCallbackFunctions(InteractionID::ClickLeftButton, ents, true);                       
-                    }
-                    update();
-                }
-
-                virtual void mouseMoveEvent(QMouseEvent * e) override {
-                    QVector3D t(e->pos() - _lastPos);
-                    t.setX(-t.x());
-                    auto sphere = scene.boundingBox().outerSphere();
-                    if ((e->buttons() & Qt::RightButton) && !(e->modifiers() & Qt::ShiftModifier)) {
-                        core::Vec3 trans = t.x() * options.camera().rightward() + t.y() * options.camera().upward();
-                        trans *= 0.02;
-                        options.camera().moveEyeWithCenterFixed(trans, sphere, true, true);
-                        setCursor(Qt::ClosedHandCursor);
-                        update();
-                    }
-                    else if ((e->buttons() & Qt::MidButton) ||
-                        ((e->buttons() & Qt::RightButton) && (e->modifiers() & Qt::ShiftModifier))) {
-                        core::Vec3 trans = t.x() * options.camera().rightward() + t.y() * options.camera().upward();
-                        trans *= 0.02;
-                        options.camera().translate(trans, sphere, true);
-                        update();
-                    }
-                    _lastPos = e->pos();
-                }
-
-                virtual void wheelEvent(QWheelEvent * e) override {
-                    auto sphere = scene.boundingBox().outerSphere();
-                    double d = e->delta() / 10;
-                    double dist = core::Distance(options.camera().eye(), options.camera().center());
-                    core::Vec3 trans = d * dist / 1000.0 * options.camera().forward();
-                    options.camera().moveEyeWithCenterFixed(trans, sphere, false, true);
-                    update();
-                }
-
-                virtual void mouseReleaseEvent(QMouseEvent * e) override {
-                    unsetCursor();
-                }
-
-                virtual void keyPressEvent(QKeyEvent * e) override {
-                    if (e->key() == Qt::Key_Space){
-                        scene.invokeCallbackFunctionsOnAllSelected(InteractionID::PressSpace);
-                    }
-                }
-
-            private:
-                QPointF _lastPos;
-            };
-
-
             template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>>
             QWidget * MakeGuiAgent(core::Noted<T> & value, QWidget * parent = nullptr){
                 QDoubleSpinBox * spinBox = new QDoubleSpinBox(parent);
@@ -994,25 +997,32 @@ namespace pano {
                 dialog.exec();
             }
 
+        }
 
-            void PopUpGui(RenderOptions & options, QWidget * widget = nullptr){
-                core::Noted<float> bwColor = core::NoteAs(options.bwColor(), "Blend Weight of Color");
-                core::Noted<float> bwTexColor = core::NoteAs(options.bwTexColor(), "Blend Weight of Texture Color");
-                core::Noted<bool> cullFrontFace = core::NoteAs(options.cullFrontFace(), "Cull Front Face");
-                core::Noted<bool> cullBackFace = core::NoteAs(options.cullBackFace(), "Cull Back Face");
-                core::Noted<bool> showPoints = core::NoteAs<bool>(options.renderMode() & RenderModeFlag::Points, "Show Points");
-                core::Noted<bool> showLines = core::NoteAs<bool>(options.renderMode() & RenderModeFlag::Lines, "Show Lines");
-                core::Noted<bool> showFaces = core::NoteAs<bool>(options.renderMode() & RenderModeFlag::Triangles, "Show Faces");
-                PopUpDialog(widget, bwColor, bwTexColor, cullFrontFace, cullBackFace, showPoints, showLines, showFaces);
-                options.bwColor() = bwColor.component;
-                options.bwTexColor() = bwTexColor.component;
-                options.cullFrontFace() = cullFrontFace.component;
-                options.cullBackFace() = cullBackFace.component;
-                options.renderMode() = (showPoints.component ? RenderModeFlag::Points : RenderModeFlag::None)
-                    | (showLines.component ? RenderModeFlag::Lines : RenderModeFlag::None)
-                    | (showFaces.component ? RenderModeFlag::Triangles : RenderModeFlag::None);
-            }
 
+
+        void PopUpGui(RenderOptions & options, QWidget * widget) {
+            core::Noted<float> bwColor = core::NoteAs(options.bwColor(), "Blend Weight of Color");
+            core::Noted<float> bwTexColor = core::NoteAs(options.bwTexColor(), "Blend Weight of Texture Color");
+            core::Noted<bool> cullFrontFace = core::NoteAs(options.cullFrontFace(), "Cull Front Face");
+            core::Noted<bool> cullBackFace = core::NoteAs(options.cullBackFace(), "Cull Back Face");
+            core::Noted<bool> showPoints = core::NoteAs<bool>(options.renderMode() & RenderModeFlag::Points, "Show Points");
+            core::Noted<bool> showLines = core::NoteAs<bool>(options.renderMode() & RenderModeFlag::Lines, "Show Lines");
+            core::Noted<bool> showFaces = core::NoteAs<bool>(options.renderMode() & RenderModeFlag::Triangles, "Show Faces");
+            core::Noted<float> panoramaHoriCenterRatio = core::NoteAs(options.panoramaHoriCenterRatio(), "Panorama Horizon Center Ratio");
+            core::Noted<float> panoramaAspectRatio = core::NoteAs(options.panoramaAspectRatio(), "Panorama Aspect Ratio (h/w)");
+
+            PopUpDialog(widget, bwColor, bwTexColor, cullFrontFace, cullBackFace, showPoints, showLines, showFaces,
+                panoramaHoriCenterRatio, panoramaAspectRatio);
+            options.bwColor() = bwColor.component;
+            options.bwTexColor() = bwTexColor.component;
+            options.cullFrontFace() = cullFrontFace.component;
+            options.cullBackFace() = cullBackFace.component;
+            options.renderMode() = (showPoints.component ? RenderModeFlag::Points : RenderModeFlag::None)
+                | (showLines.component ? RenderModeFlag::Lines : RenderModeFlag::None)
+                | (showFaces.component ? RenderModeFlag::Triangles : RenderModeFlag::None);
+            options.panoramaHoriCenterRatio() = panoramaHoriCenterRatio.component;
+            options.panoramaAspectRatio() = panoramaAspectRatio.component;
         }
 
 
@@ -1030,10 +1040,13 @@ namespace pano {
 
         SceneBuilder::SceneBuilder(const SceneObjectInstallingOptions & defaultO) : _installingOptions(defaultO) {}
 
+        SceneWidget * SceneBuilder::createWidget(const RenderOptions & options, QWidget * parent) {
+            return new SceneWidget(scene(), options, parent);
+        }
 
         void SceneBuilder::show(bool doModal, bool autoSetCamera, const RenderOptions & options){
             auto app = Singleton::InitGui();
-            VisualizerWidget * w = new VisualizerWidget(scene(), options);
+            SceneWidget * w = createWidget(options);
 
             QMainWindow * mwin = new QMainWindow;
             mwin->setCentralWidget(w);

@@ -9,6 +9,9 @@
 #include "basic_types.hpp"
 #include "discretization.hpp"
 #include "resource.hpp"
+
+
+class QWidget;
  
 namespace pano {
     namespace gui {
@@ -46,6 +49,9 @@ namespace pano {
             DECL_PROPERTY(RenderOptions, float, bwTexColor);
             DECL_PROPERTY(RenderOptions, bool, cullFrontFace);
             DECL_PROPERTY(RenderOptions, bool, cullBackFace);
+            DECL_PROPERTY(RenderOptions, float, panoramaHoriCenterRatio);
+            DECL_PROPERTY(RenderOptions, float, panoramaAspectRatio);
+            DECL_PROPERTY(RenderOptions, core::Point3, panoramaProjectionCenter);
 
             RenderOptions();
         };
@@ -126,7 +132,6 @@ namespace pano {
             
             TriMesh _mesh;
 
-            core::Point3 _projectionCenter;
             std::vector<ResourcePtr> _resources;
             OpenGLShaderSource _shaderSource;
 
@@ -335,8 +340,10 @@ namespace pano {
 
 
 
+        void PopUpGui(RenderOptions & options, QWidget * widget = nullptr);
 
 
+        class SceneWidget;
         class SceneBuilder {
         public:
             SceneBuilder();
@@ -427,6 +434,7 @@ namespace pano {
 
             void clear();
 
+            SceneWidget * createWidget(const RenderOptions & options, QWidget * parent = nullptr);
             void show(bool doModal = true, bool autoSetCamera = true, 
                 const RenderOptions & options = RenderOptions());
 

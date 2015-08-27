@@ -1991,8 +1991,8 @@ namespace pano {
                     assert(nvar == 1);
                     DepthRelation label = static_cast<DepthRelation>(varlabels[0]);
                     switch (guess) {
-                    case DepthRelation::Unknown: return label == DepthRelation::Connected ? 0.0 : 1.0 * weight;  // always prefer connected
-                    case DepthRelation::Connected: return label == DepthRelation::Connected ? 0.0 : 3.0 * weight;
+                    case DepthRelation::Unknown: return label == DepthRelation::Connected ? 0.0 : 3.0 * weight;  // always prefer connected
+                    case DepthRelation::Connected: return label == DepthRelation::Connected ? 0.0 : 5.0 * weight;
                     case DepthRelation::Disconnected:
                         return Contains({
                             DepthRelation::Disconnected, DepthRelation::FirstIsFront, DepthRelation::SecondIsFront

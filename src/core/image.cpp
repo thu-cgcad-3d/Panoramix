@@ -63,13 +63,25 @@ namespace pano {
             return true;
         }
 
-        bool MakePanorama(Image & im) {
+        bool MakePanorama(Image & im, int horiCenter, bool * extendedOnTop, bool * extendedOnBottom) {
             if (im.cols < im.rows * 2)
                 return false;
-            if (im.cols == im.rows * 2)
+            if (im.cols == im.rows * 2) {
+                if (extendedOnTop) *extendedOnTop = false;
+                if (extendedOnBottom) *extendedOnBottom = false;
                 return true;
+            }
+            if (horiCenter == -1) {
+                horiCenter = im.rows / 2;
+            }
             Image pim = Image::zeros(im.cols / 2, im.cols, im.type());
-            im.copyTo(pim(cv::Rect(0, (pim.rows - im.rows) / 2, pim.cols, im.rows)));
+            if (pim.rows / 2.0 < horiCenter) {
+                return false;
+            }
+
+            if(extendedOnTop) *extendedOnTop = horiCenter < pim.rows / 2.0 - 1.0;
+            if(extendedOnBottom) *extendedOnBottom = (im.rows - horiCenter) < pim.rows / 2.0 - 1.0;
+            im.copyTo(pim(cv::Rect(0, std::round(pim.rows / 2.0 - horiCenter), pim.cols, im.rows)));
             im = pim;
             return true;
         }

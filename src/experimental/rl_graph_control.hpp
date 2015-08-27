@@ -120,6 +120,7 @@ namespace pano {
 
         void SetNecessaryConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls);
         void SetFullConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls);
+        void SetMoreConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls, double expandAngle);
 
 
         struct RLGraphVar {

@@ -647,6 +647,8 @@ namespace pano {
                 "uniform lowp float bwColor;\n"
                 "uniform lowp float bwTexColor;\n"
                 "uniform highp vec3 panoramaCenter;\n"
+                "uniform highp float panoramaHoriCenterRatio;\n"
+                "uniform highp float panoramaAspectRatio;\n" // height/width
 
                 "varying highp vec3 pixelPosition;\n"
                 "varying highp vec3 pixelNormal;\n"
@@ -658,7 +660,13 @@ namespace pano {
                 "    highp vec3 direction = pixelPosition - panoramaCenter;\n"
                 "    highp float longi = atan(direction.y, direction.x);\n"
                 "    highp float lati = asin(direction.z / length(direction));\n"
-                "    highp vec2 texCoord = vec2(longi / 3.1415926535897932 / 2.0 + 0.5, - lati / 3.1415926535897932 + 0.5);\n"
+                "    highp float globalx = longi / 3.1415926535897932 / 2.0 + 0.5;\n"
+                "    highp float globaly = - lati / 3.1415926535897932 + 0.5;\n"
+                //"    highp vec2 texCoord = vec2(longi / 3.1415926535897932 / 2.0 + 0.5, - lati / 3.1415926535897932 + 0.5);\n"
+                "    highp float texx = globalx;\n"
+                "    highp float texy =  (globaly / 2.0 - (0.25 - panoramaHoriCenterRatio * panoramaAspectRatio)) / panoramaAspectRatio;\n"
+                "    if(texy < 0.0 || texy > 1.0){ discard; } \n"
+                "    highp vec2 texCoord = vec2(texx, texy);\n"
                 "    lowp vec4 texColor = texture2D(tex, texCoord);\n"
                 "    gl_FragColor = (pixelColor * bwColor + texColor * bwTexColor)"
                 "       / (bwColor + bwTexColor);\n"

@@ -13,9 +13,7 @@ namespace pano {
         ResourcePtr MakeResource(const core::Image & image){
 
             struct TextureResource : Resource {
-                inline TextureResource(const core::Image & im) : initialized(false), 
-                image(MakeQImage(im)), 
-                texture(new QOpenGLTexture(QOpenGLTexture::Target2D)) {}
+                inline TextureResource(const core::Image & im) : initialized(false), image(MakeQImage(im)), texture(new QOpenGLTexture(QOpenGLTexture::Target2D)) {}
 
                 virtual bool isNull() const override { return image.isNull(); }
                 virtual void initialize() override {

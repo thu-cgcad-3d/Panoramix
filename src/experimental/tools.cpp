@@ -83,16 +83,14 @@ namespace pano {
                 std::vector<core::Line3> connectionLines;
                 for (auto & c : mg.constraints<RegionBoundaryData>()){
                     if (!controls[c.topo.hd].used)
-                        continue;
-                    auto & samples = c.data.normalizedSampledPoints;
+                        continue;                  
+                    auto & samples = controls[c.topo.hd].weightedAnchors;
                     auto inst1 = Instance(mg, controls, vars, c.topo.component<0>());
                     auto inst2 = Instance(mg, controls, vars, c.topo.component<1>());
                     for (auto & ss : samples){
-                        for (auto & s : ss){
-                            double d1 = DepthAt(s, inst1);
-                            double d2 = DepthAt(s, inst2);
-                            connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
-                        }
+                        double d1 = DepthAt(ss.component, inst1);
+                        double d2 = DepthAt(ss.component, inst2);
+                        connectionLines.emplace_back(normalize(ss.component) * d1, normalize(ss.component) * d2);
                     }
                 }
                 for (auto & c : mg.constraints<RegionLineConnectionData>()){
@@ -100,10 +98,10 @@ namespace pano {
                         continue;
                     auto inst1 = Instance(mg, controls, vars, c.topo.component<0>());
                     auto inst2 = Instance(mg, controls, vars, c.topo.component<1>());
-                    for (auto & s : c.data.normalizedAnchors){
-                        double d1 = DepthAt(s, inst1);
-                        double d2 = DepthAt(s, inst2);
-                        connectionLines.emplace_back(normalize(s) * d1, normalize(s) * d2);
+                    for (auto & s : controls[c.topo.hd].weightedAnchors) {
+                        double d1 = DepthAt(s.component, inst1);
+                        double d2 = DepthAt(s.component, inst2);
+                        connectionLines.emplace_back(normalize(s.component) * d1, normalize(s.component) * d2);
                     }
                 }
 

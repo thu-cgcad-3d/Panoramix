@@ -702,6 +702,17 @@ namespace pano {
             SetConstraintWeightedAnchors(mg, controls, ExtractAllAnchorsForBinary());
         }
 
+        void SetMoreConstraintWeightedAnchors(const RLGraph & mg, RLGraphControls & controls, double expandAngle) {
+            SetConstraintWeightedAnchors(mg, controls, ExtractMoreAnchorsForBinary{ expandAngle });
+        }
+
+
+
+
+
+
+
+
 
 
 

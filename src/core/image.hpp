@@ -112,7 +112,7 @@ namespace pano {
         void ResizeToMakeWidthUnder(Image & im, int widthUpperBound);
         void ResizeToMakeHeightUnder(Image & im, int heightUpperBound);
         bool MayBeAPanorama(const Image & im);
-        bool MakePanorama(Image & im);
+        bool MakePanorama(Image & im, int horiCenter = -1, bool * extendedOnTop = nullptr, bool * extendedOnBottom = nullptr);
 
         std::pair<Pixel, Pixel> MinMaxLocOfImage(const Image & im);
         std::pair<double, double> MinMaxValOfImage(const Image & im);

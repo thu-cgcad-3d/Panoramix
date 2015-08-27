@@ -2,6 +2,8 @@
 #include <QtOpenGL>
 #include <QtWidgets>
 
+#include "../core/cameras.hpp"
+
 #include "singleton.hpp"
 #include "qttools.hpp"
 #include "utility.hpp"
@@ -9,6 +11,8 @@
 
 namespace pano {
     namespace gui {
+
+        using namespace core;
 
         int SelectFrom(const std::vector<std::string> & strs,
             const std::string & title, const std::string & text,
@@ -45,7 +49,7 @@ namespace pano {
             return cv::imread(filename.toStdString());
         }
 
-        std::vector<core::Image> PickImages(const std::string & dir) {
+        std::vector<core::Image> PickImages(const std::string & dir, std::vector<std::string> * picked) {
             Singleton::InitGui();
             auto filenames = QFileDialog::getOpenFileNames(nullptr, QObject::tr("Select an image file"),
                 QString::fromStdString(dir),
@@ -54,15 +58,182 @@ namespace pano {
             for (auto & filename : filenames) {
                 ims.push_back(cv::imread(filename.toStdString()));
             }
+            if (picked) {
+                for (auto & filename : filenames) {
+                    picked->push_back(filename.toStdString());
+                }
+            }
             return ims;
         }
 
-        std::vector<core::Image> PickAllImagesFromAFolder(const std::string & dir) {
+        std::vector<Image> PickAllImagesFromAFolder(const std::string & dir) {
             Singleton::InitGui();
             auto folder = QFileDialog::getExistingDirectory(nullptr, QObject::tr("Select a folder containing images"),
                 QString::fromStdString(dir));
             NOT_IMPLEMENTED_YET();
         }
+
+
+
+
+
+
+
+        bool MakePanoramaByHand(Image & im, bool * extendedOnTop, bool * extendedOnBottom) {
+            if (im.cols < im.rows * 2)
+                return false;
+            if (im.cols == im.rows * 2) {
+                if (extendedOnTop) *extendedOnTop = false;
+                if (extendedOnBottom) *extendedOnBottom = false;
+                LOG("No need to adjust the panoramic image by hand");
+                return true;
+            }
+
+
+            class Widget : public QGLWidget {
+                using BaseClass = QGLWidget;
+            public:
+                explicit Widget(Scene && scene, RenderOptions & options,
+                    QWidget * parent = nullptr)
+                    : BaseClass(parent), _scene(std::move(scene)), _options(options) {
+
+                    setMouseTracking(true);
+                    setAutoBufferSwap(false);
+                    grabKeyboard();
+                }
+
+            protected:
+                void initializeGL() {
+                    makeCurrent();
+                    glEnable(GL_MULTISAMPLE);
+                    GLint bufs;
+                    GLint samples;
+                    glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
+                    glGetIntegerv(GL_SAMPLES, &samples);
+                    qDebug("Have %d buffers and %d samples", bufs, samples);
+                    qglClearColor(MakeQColor(_options.backgroundColor()));
+                    _scene.initialize();
+                }
+
+                void resizeGL(int w, int h) {
+                    core::PerspectiveCamera & camera = _options.camera();
+                    camera.resizeScreen(core::Size(w, h));
+                    glViewport(0, 0, w, h);
+                }
+
+                void paintEvent(QPaintEvent * e) override {
+                    QPainter painter(this);
+                    painter.beginNativePainting();
+                    qglClearColor(MakeQColor(_options.backgroundColor()));
+                    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                    core::PerspectiveCamera & camera = _options.camera();
+                    camera.resizeScreen(core::Size(width(), height()));
+
+                    _scene.render(_options);
+
+                    painter.endNativePainting();
+                    swapBuffers();
+                }
+
+                void mousePressEvent(QMouseEvent * e) {
+                    if (e->buttons() & Qt::MidButton) {
+                        _lastPos = e->pos();
+                        setCursor(Qt::OpenHandCursor);
+                    } else {
+                        BaseClass::mousePressEvent(e);
+                    }
+                }
+
+                void mouseMoveEvent(QMouseEvent * e) {
+                    QVector3D t(e->pos() - _lastPos);
+                    t.setX(-t.x());
+                    if (e->buttons() & Qt::MidButton) {
+                        _options.camera().moveCenterWithEyeFixed(MakeCoreVec(t));
+                        setCursor(Qt::ClosedHandCursor);
+                        update();
+                    } else {
+                        BaseClass::mouseMoveEvent(e);
+                    }
+                    _lastPos = e->pos();
+                }
+
+                void wheelEvent(QWheelEvent * e) {
+                    _options.camera().setFocal(_options.camera().focal() * exp(e->delta() / 1000.0));
+                    BaseClass::wheelEvent(e);
+                    update();
+                }
+
+                void keyPressEvent(QKeyEvent * e) override {
+                    BaseClass::keyPressEvent(e);
+                }
+
+
+            private:
+                QPoint _lastPos;
+                Scene _scene;
+                RenderOptions & _options;
+            };
+
+
+
+            SceneBuilder sb;
+            ResourceStore::set("tex", im);
+            Sphere3 sp;
+            sp.center = Origin();
+            sp.radius = 1.0;
+            sb.begin(sp).shaderSource(OpenGLShaderSourceDescriptor::XPanorama).resource("tex").end();
+
+            RenderOptions options;
+            options.panoramaAspectRatio(im.rows / float(im.cols));
+            options.panoramaHoriCenterRatio(0.5f);
+            options.camera(PerspectiveCamera(500, 500, Point2(250, 250), 200, Origin(), X(), -Z()));
+
+
+            auto app = Singleton::InitGui();
+            Widget * w = new Widget(sb.scene(), options);
+
+            QMainWindow * mwin = new QMainWindow;
+            mwin->setCentralWidget(w);
+            mwin->setAttribute(Qt::WA_DeleteOnClose);
+            mwin->resize(MakeQSize(options.camera().screenSize()));
+            mwin->setWindowTitle(QString::fromStdString(options.winName()));
+            mwin->setWindowIcon(Singleton::DefaultIcon());
+            mwin->setStyleSheet(Singleton::DefaultCSS());
+
+            auto menuView = mwin->menuBar()->addMenu(QObject::tr("View"));
+            auto actionSettings = menuView->addAction(QObject::tr("Settings"));
+            QObject::connect(actionSettings, &QAction::triggered, [w, &options]() {
+                PopUpGui(options, w);
+                w->update();
+            });
+            auto menuAbout = mwin->menuBar()->addMenu(QObject::tr("About"));
+            auto actionAbout = menuAbout->addAction(QObject::tr("About"));
+            QObject::connect(actionAbout, &QAction::triggered, [mwin]() {
+                QMessageBox::about(mwin, QObject::tr("About this program"),
+                    QObject::tr("Panoramix.Vis is the visulization module of project Panoramix developped by Yang Hao."));
+            });
+            mwin->statusBar()->show();
+
+
+            auto palette = mwin->palette();
+            palette.setColor(QPalette::Window, MakeQColor(options.backgroundColor()));
+            mwin->setPalette(palette);
+
+            mwin->show();
+            Singleton::ContinueGui();
+
+            float panoHCenterRatio = 1.0f - options.panoramaHoriCenterRatio();
+            
+            int panoHCenter = panoHCenterRatio * im.rows;
+            std::cout << "hcenter ratio: " << panoHCenterRatio << std::endl;
+            std::cout << "hcenter: " << panoHCenter << std::endl;
+            return MakePanorama(im, panoHCenter, extendedOnTop, extendedOnBottom);
+
+        }
+
+
+
 
         Qt::PenStyle MakeQPenStyle(PenStyle ps) {
             return Qt::PenStyle(ps);
@@ -385,6 +556,10 @@ namespace pano {
                     _options.camera().setFocal(_options.camera().focal() * exp(e->delta() / 1000.0));
                     BaseClass::wheelEvent(e);
                     update();
+                }
+
+                void keyPressEvent(QKeyEvent * e) override {
+                    BaseClass::keyPressEvent(e);
                 }
 
                 virtual void processStroke(const std::vector<core::Point2> & stroke, int penId) override {}

@@ -16,9 +16,13 @@ namespace pano {
 
         core::Image PickAnImage(const std::string & dir = std::string(), std::string * picked = nullptr);
 
-        std::vector<core::Image> PickImages(const std::string & dir = std::string());
+        std::vector<core::Image> PickImages(const std::string & dir = std::string(), std::vector<std::string> * picked = nullptr);
 
         std::vector<core::Image> PickAllImagesFromAFolder(const std::string & dir = std::string());
+
+
+        bool MakePanoramaByHand(core::Image & im, bool * extendedOnTop = nullptr, bool * extendedOnBottom = nullptr);
+
 
         void PaintWith(const std::function<core::Image()> & updater,
             const std::vector<PenConfig> & penConfigs,
