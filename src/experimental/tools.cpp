@@ -75,12 +75,13 @@ namespace pano {
                     lines.push_back(gui::ColorAs(l, uhColorizer(uh)));
                 }
 
-                viz.begin(spps, sppCallbackFun).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
-                viz.installingOptions().discretizeOptions.color = gui::ColorTag::DarkGray;
+                viz.begin(spps/*, sppCallbackFun*/).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+                viz.installingOptions().discretizeOptions.color = gui::ColorTag::Magenta;
                 viz.installingOptions().lineWidth = 5.0;
                 viz.add(lines);
 
-                std::vector<core::Line3> connectionLines;
+                std::vector<core::Line3> connectionLinesRR;
+                std::vector<core::Point3> connectionLineRREnds;
                 for (auto & c : mg.constraints<RegionBoundaryData>()){
                     if (!controls[c.topo.hd].used)
                         continue;                  
@@ -90,9 +91,21 @@ namespace pano {
                     for (auto & ss : samples){
                         double d1 = DepthAt(ss.component, inst1);
                         double d2 = DepthAt(ss.component, inst2);
-                        connectionLines.emplace_back(normalize(ss.component) * d1, normalize(ss.component) * d2);
+                        connectionLinesRR.emplace_back(normalize(ss.component) * d1, normalize(ss.component) * d2);
+                        connectionLineRREnds.push_back(connectionLinesRR.back().first);
+                        connectionLineRREnds.push_back(connectionLinesRR.back().second);
                     }
                 }
+
+                viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
+                viz.installingOptions().lineWidth = 1.5;
+                viz.add(connectionLinesRR);
+                viz.installingOptions().pointSize = 3.0;
+                viz.add(connectionLineRREnds);
+
+
+                std::vector<core::Decorated<core::Line3, RegionLineConnectionHandle>> connectionLinesRL;
+                std::vector<core::Decorated<core::Point3, RegionLineConnectionHandle>> connectionLineRLEnds;
                 for (auto & c : mg.constraints<RegionLineConnectionData>()){
                     if (!controls[c.topo.hd].used)
                         continue;
@@ -101,16 +114,24 @@ namespace pano {
                     for (auto & s : controls[c.topo.hd].weightedAnchors) {
                         double d1 = DepthAt(s.component, inst1);
                         double d2 = DepthAt(s.component, inst2);
-                        connectionLines.emplace_back(normalize(s.component) * d1, normalize(s.component) * d2);
+                        connectionLinesRL.push_back(core::DecorateAs(Line3(normalize(s.component) * d1, normalize(s.component) * d2), c.topo.hd));
+                        connectionLineRLEnds.push_back(core::DecorateAs(connectionLinesRL.back().component.first, c.topo.hd));
+                        connectionLineRLEnds.push_back(core::DecorateAs(connectionLinesRL.back().component.second, c.topo.hd));
                     }
                 }
 
-                viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
-                viz.installingOptions().lineWidth = 1.0;
-                viz.add(connectionLines);
+
+                viz.installingOptions().discretizeOptions.color = gui::ColorTag::Gray;
+                viz.installingOptions().lineWidth = 5;
+                viz.add(connectionLinesRL, [](gui::InteractionID iid, const core::Decorated<Line3, RegionLineConnectionHandle> & cline) {
+                    std::cout << "rlh.id = " << cline.decoration.id << std::endl;
+                });
+                viz.installingOptions().pointSize = 3.0;
+                viz.add(connectionLineRLEnds);
 
                 //gui::ResourceStore::clear();
-
+                viz.show(true, false, gui::RenderOptions().cullFrontFace(false).cullBackFace(true).bwColor(0.0).bwTexColor(1.0)
+                    .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
             }
 
 
@@ -150,12 +171,19 @@ namespace pano {
             const RLGraphControls & controls;
             const RLGraphVars & vars;
             inline bool operator()(ComponentHandle<RegionData> rh) const{
+                if (rh.invalid()) {
+                    return false;
+                }
                 std::cout << "area: " << mg.data(rh).area
                     << " connected regions: " << mg.topo(rh).constraints<RegionBoundaryData>().size()
                     << " connected lines: " << mg.topo(rh).constraints<RegionLineConnectionData>().size() << std::endl;
                 return false;
             }
-            inline bool operator()(ComponentHandle<LineData> rh) const {
+            inline bool operator()(ComponentHandle<LineData> lh) const {
+                if (lh.invalid()) {
+                    return false;
+                }
+                std::cout << "length: " << AngleBetweenDirections(mg.data(lh).line.first, mg.data(lh).line.second) << std::endl;
                 return false;
             }
         };

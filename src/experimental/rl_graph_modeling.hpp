@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../ml/annotation.hpp"
 #include "rl_graph_solver.hpp"
 
 namespace pano {

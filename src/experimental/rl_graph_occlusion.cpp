@@ -1,4 +1,5 @@
 
+#include "../core/algorithms.hpp"
 #include "../core/containers.hpp"
 #include "../ml/factor_graph.hpp"
 
@@ -1790,6 +1791,8 @@ namespace pano {
                 }
                 for (int bndid : bnds) {
                     auto bh = bhs[bndid];
+
+
                     if (bh.invalid()) {
                         continue;
                     }
@@ -2173,6 +2176,491 @@ namespace pano {
 
 
 
+        HandledTable<RegionBoundaryHandle, DepthRelation> DetectOcclusions6(
+            const RLGraph & mg, const HandledTable<RegionHandle, OrientationControl> & controls,
+            const Imagei & segs,
+            const SegmentationTopo & segtopo, const std::vector<std::vector<Vec3>> & bndsamples, const std::vector<int> & bndclasses,
+            const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
+            const std::vector<Vec3> & vps, double angleDistThres, double angleSampleStepOnLine) {
+
+            // register all sample points           
+            struct BndSample {
+                int bndid;
+                int sampleid;
+                bool operator == (const BndSample & bs) const { return std::tie(bndid, sampleid) == std::tie(bs.bndid, bs.sampleid); }
+                bool operator < (const BndSample & bs) const { return std::tie(bndid, sampleid) < std::tie(bs.bndid, bs.sampleid); }
+            };
+            RTreeMap<Vec3, BndSample> samples;
+            for (int bndid = 0; bndid < bndsamples.size(); bndid++) {
+                auto & segids = segtopo.bnd2segs[bndid];
+                auto rh1 = rhs[segids.first];
+                auto rh2 = rhs[segids.second];
+                if (rh1.invalid() || rh2.invalid()) {
+                    continue;
+                }
+                for (int sampleid = 0; sampleid < bndsamples[bndid].size(); sampleid++) {
+                    samples.insert(std::make_pair(bndsamples[bndid][sampleid], BndSample{ bndid, sampleid }));
+                }
+            }
+
+
+            // find closest bnd sample pairs to locate edge bnds along narrow segs
+            // segidpair -> [bndid -> ratio]
+            std::map<std::pair<int, int>, std::set<int>> segpair2bnds;
+            for (int bndid = 0; bndid < bndsamples.size(); bndid++) {
+                auto & segids = segtopo.bnd2segs[bndid];
+                auto rh1 = rhs[segids.first];
+                auto rh2 = rhs[segids.second];
+                if (rh1.invalid() || rh2.invalid()) {
+                    continue;
+                }
+                if (std::tie(controls[rh1].orientationClaz, controls[rh1].orientationNotClaz) ==
+                    std::tie(controls[rh2].orientationClaz, controls[rh2].orientationNotClaz)) {
+                    continue;
+                }
+                auto orderedSegIds = segids.first < segids.second ? segids : std::make_pair(segids.second, segids.first);
+                segpair2bnds[orderedSegIds].insert(bndid);
+            }
+
+
+            // get first guess
+            auto firstGuess = mg.createConstraintTable<RegionBoundaryData>(DepthRelation::Unknown);
+            for (auto & segpairbnd : segpair2bnds) {
+                const auto & segids = segpairbnd.first;
+                auto & bnds = segpairbnd.second;
+
+                auto rh1 = rhs[segids.first];
+                auto rh2 = rhs[segids.second];
+                if (rh1.invalid() || rh2.invalid()) {
+                    continue;
+                }
+                for (int bndid : bnds) {
+                    auto bh = bhs[bndid];
+                    if (bh.invalid()) {
+                        continue;
+                    }
+
+                    if (!controls[rh1].used || !controls[rh2].used) {
+                        continue;
+                    }
+
+                   /* if (mg.data(bh).length < angleDistThres) {
+                        firstGuess[bh] = DepthRelation::Disconnected;
+                        continue;
+                    }*/
+
+                    int bndclass = bndclasses[bndid];
+
+                    if (controls[rh1].orientationClaz != -1 && controls[rh2].orientationClaz != -1
+                        && controls[rh1].orientationClaz != controls[rh2].orientationClaz
+                        && (bndclass == -1
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh1].orientationClaz])
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh2].orientationClaz]))) {
+                        // break this
+                        firstGuess[bh] = DepthRelation::Disconnected;
+                        auto & rhvp1 = vps[controls[rh1].orientationClaz];
+                        auto & rhvp2 = vps[controls[rh2].orientationClaz];
+                        if (bndclass != -1) {
+                            auto & bndvp = vps[bndclass];
+                            if (IsFuzzyPerpendicular(rhvp1, bndvp) && !IsFuzzyPerpendicular(rhvp2, bndvp)) {
+                                firstGuess[bh] = DepthRelation::FirstIsFront;
+                            } else if (!IsFuzzyPerpendicular(rhvp1, bndvp) && IsFuzzyPerpendicular(rhvp2, bndvp)) {
+                                firstGuess[bh] = DepthRelation::SecondIsFront;
+                            }
+                        }
+                    } else if (controls[rh1].orientationClaz != -1 &&
+                        controls[rh2].orientationClaz == -1 && controls[rh2].orientationNotClaz == controls[rh1].orientationClaz
+                        && (bndclass == -1
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh1].orientationClaz]))) {
+                        // break this
+                        firstGuess[bh] = DepthRelation::Disconnected;
+                        if (bndclass == controls[rh1].orientationClaz) {
+                            firstGuess[bh] = DepthRelation::SecondIsFront;
+                        }
+                    } else if (controls[rh2].orientationClaz != -1 &&
+                        controls[rh1].orientationClaz == -1 && controls[rh1].orientationNotClaz == controls[rh2].orientationClaz
+                        && (bndclass == -1
+                        || !IsFuzzyPerpendicular(vps[bndclass], vps[controls[rh2].orientationClaz]))) {
+                        // break this
+                        firstGuess[bh] = DepthRelation::Disconnected;
+                        if (bndclass == controls[rh2].orientationClaz) {
+                            firstGuess[bh] = DepthRelation::FirstIsFront;
+                        }
+                    } else if (controls[rh1].orientationClaz == -1 && controls[rh1].orientationNotClaz == -1 &&
+                        controls[rh2].orientationClaz == -1 && controls[rh2].orientationNotClaz != -1
+                        && (bndclass == controls[rh2].orientationNotClaz /*|| bndclass == -1*/)) {
+                        // break this
+                        firstGuess[bh] = DepthRelation::SecondIsFront;
+                    } else if (controls[rh2].orientationClaz == -1 && controls[rh2].orientationNotClaz == -1 &&
+                        controls[rh1].orientationClaz == -1 && controls[rh1].orientationNotClaz != -1
+                        && (bndclass == controls[rh1].orientationNotClaz /*|| bndclass == -1*/)) {
+                        // break this
+                        firstGuess[bh] = DepthRelation::FirstIsFront;
+                    } else if (controls[rh1].orientationClaz != -1 && controls[rh2].orientationClaz != -1 &&
+                        controls[rh1].orientationClaz == controls[rh2].orientationClaz) {
+                        firstGuess[bh] = DepthRelation::Connected;
+                    } else if (controls[rh1].orientationClaz == -1 && controls[rh1].orientationNotClaz != -1
+                        && controls[rh2].orientationClaz == -1 && controls[rh2].orientationNotClaz != -1
+                        && controls[rh1].orientationNotClaz == controls[rh2].orientationNotClaz
+                        && bndclass != -1 && bndclass != controls[rh1].orientationNotClaz) {
+                        firstGuess[bh] = DepthRelation::Connected;
+                    }
+                }
+            }
+
+            // get bnd overlappings
+            std::vector<std::vector<int>> bndsThatShouldNotAllDisconnect;
+            for (int segid = 0; segid < segtopo.nsegs(); segid++) {
+                auto & rh = rhs[segid];
+                if (rh.invalid() || !controls[rh].used) {
+                    continue;
+                }
+                auto & bnds = segtopo.seg2bnds[segid];
+                if (bnds.empty()) {
+                    continue;
+                }
+                if (bnds.size() == 1) {
+                    continue;
+                }
+
+                // also consider the orientation of the seg and the bnds for improvement !!!!!
+                std::vector<int> bndidsOrdered;
+                double minSampleRatioRequiredForASeg = 0.3;
+
+                if (controls[rh].orientationClaz == -1 && controls[rh].orientationNotClaz == -1) {
+                    bndidsOrdered = bnds;
+                    minSampleRatioRequiredForASeg = 0.4;
+                } else if (controls[rh].orientationClaz == -1 && controls[rh].orientationNotClaz != -1) {
+                    for (int bndid : bnds) {
+                        if (bndclasses[bndid] != controls[rh].orientationNotClaz) {
+                            bndidsOrdered.push_back(bndid);
+                        }
+                        minSampleRatioRequiredForASeg = 0.9;
+                    }
+                } else if (controls[rh].orientationClaz != -1) {
+                    bndidsOrdered = bnds;
+                    minSampleRatioRequiredForASeg = 0.5;
+                } else {
+                    SHOULD_NEVER_BE_CALLED();
+                }
+
+                if (bndidsOrdered.empty()) {
+                    bndidsOrdered = bnds;
+                    std::sort(bndidsOrdered.begin(), bndidsOrdered.end(), [&bndsamples](int bid1, int bid2) {
+                        return bndsamples[bid1].size() < bndsamples[bid2].size();
+                    });
+                    bndidsOrdered = { bndidsOrdered[0], bndidsOrdered[1] };
+                }
+
+                std::sort(bndidsOrdered.begin(), bndidsOrdered.end(), [&bndsamples](int bid1, int bid2) {
+                    return bndsamples[bid1].size() > bndsamples[bid2].size();
+                });
+                int allBsNum = 0;
+                for (int bndid : bndidsOrdered) {
+                    allBsNum += bndsamples[bndid].size();
+                }
+
+
+                int expendableBsNum = std::ceil((1.0 - minSampleRatioRequiredForASeg) * allBsNum);
+                std::vector<int> expendableBnds;
+                int occupiedBsNum = 0;
+                for (int bndid : bndidsOrdered) {
+                    occupiedBsNum += bndsamples[bndid].size();
+                    expendableBnds.push_back(bndid);
+                    if (occupiedBsNum >= expendableBsNum) {
+                        break;
+                    }
+                }
+
+                if (expendableBnds.size() <= 1 || expendableBnds.size() > 3) {
+                    continue;
+                }
+                bndsThatShouldNotAllDisconnect.push_back(std::move(expendableBnds));
+            }
+
+
+            // get bnds attached to lines
+            auto lh2ccid = mg.createComponentTable<LineData>(-1);
+            std::map<int, std::set<LineHandle>> ccid2lhs;
+            int lhccnum = 0;
+            {
+                std::vector<LineHandle> lhs;
+                lhs.reserve(mg.internalComponents<LineData>().size());
+                for (auto & l : mg.components<LineData>()) {
+                    lhs.push_back(l.topo.hd);
+                }
+                auto getNeighborLhs = [&mg, angleDistThres](const LineHandle & lh) {
+                    std::vector<LineHandle> neighbors;
+                    auto & line = mg.data(lh).line;
+                    for (auto & llh : mg.topo(lh).constraints<LineRelationData>()) {
+                        if (mg.data(llh).type != LineRelationData::Incidence)
+                            continue;
+                        LineHandle anotherLh = mg.topo(llh).component<0>();
+                        if (anotherLh == lh) {
+                            anotherLh = mg.topo(llh).component<1>();
+                        }
+                        auto & anotherLine = mg.data(anotherLh).line;
+                        auto nearest = DistanceBetweenTwoLines(line, anotherLine);
+                        double angleDist = AngleBetweenDirections(nearest.second.first.position, nearest.second.second.position);
+                        if (angleDist > angleDistThres)
+                            continue;
+                        neighbors.push_back(anotherLh);
+                    }
+                    return neighbors;
+                };
+                lhccnum = core::ConnectedComponents(lhs.begin(), lhs.end(), std::move(getNeighborLhs),
+                    [&lh2ccid, &ccid2lhs](const LineHandle & lh, int ccid) {
+                    lh2ccid[lh] = ccid;
+                    ccid2lhs[ccid].insert(lh);
+                });
+            }
+            std::vector<std::vector<int>> bndsAttachedToLines(lhccnum);
+            for (auto & pp : ccid2lhs) {
+                auto & lhs = pp.second;
+
+                std::vector<std::set<int>> bndSamplesNearLines(segtopo.nboundaries());
+                for (auto lh : lhs) {
+                    auto & line = mg.data(lh).line;
+                    double angle = AngleBetweenDirections(line.first, line.second);
+                    if (angle < DegreesToRadians(1)) {
+                        continue;
+                    }
+
+                    double angleStep = angleSampleStepOnLine;
+                    for (double a = 0.0; a <= angle; a += angleStep) {
+                        Vec3 dir = RotateDirection(line.first, line.second, a);
+
+                        // find nearest bndSample
+                        samples.search(BoundingBox(normalize(dir)).expand(angleDistThres * 2),
+                            [&bndsamples, &dir, &bndSamplesNearLines, angleDistThres](const std::pair<Vec3, BndSample> & bs) {
+                            auto & thisDir = bndsamples[bs.second.bndid][bs.second.sampleid];
+                            double angleDist = AngleBetweenDirections(thisDir, dir);
+                            if (angleDist < angleDistThres) {
+                                bndSamplesNearLines[bs.second.bndid].insert(bs.second.sampleid);
+                            }
+                            return true;
+                        });
+                    }
+                }
+
+                auto & bndsAttached = bndsAttachedToLines[pp.first];
+                for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                    if (bndSamplesNearLines[bndid].size() > bndsamples[bndid].size() * 0.8) {
+                        bndsAttached.push_back(bndid);
+                    }
+                }
+            }
+
+
+            std::cout << "building factor graph" << std::endl;
+
+            // factor graph for bnds
+            ml::FactorGraph fg;
+            static const double spnum2weightRatio = 1.0 / 100.0;
+
+            // add bnd as vars
+            std::vector<ml::FactorGraph::VarHandle> vhs(segtopo.nboundaries());
+            for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                if (bhs[bndid].invalid()) {
+                    continue;
+                }
+                vhs[bndid] = fg.addVar(fg.addVarCategory(3, bndsamples[bndid].size() / 10.0)); // first front, second front, connected
+            }
+
+            // first guess factor
+            for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                if (vhs[bndid].invalid()) {
+                    continue;
+                }
+                auto guess = firstGuess[bhs[bndid]];
+                size_t spnum = bndsamples[bndid].size();
+                int unaryFC = fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [guess, spnum](const int * varlabels, size_t nvar,
+                    ml::FactorGraph::FactorCategoryId fcid, void * givenData) -> double {
+                    double weight = spnum * spnum2weightRatio;
+                    assert(nvar == 1);
+                    DepthRelation label = static_cast<DepthRelation>(varlabels[0]);
+                    switch (guess) {
+                    case DepthRelation::Unknown: return label == DepthRelation::Connected ? 0.0 : 1.0 * weight;  // always prefer connected
+                    case DepthRelation::Connected: return label == DepthRelation::Connected ? 0.0 : 5.0 * weight;
+                    case DepthRelation::Disconnected:
+                        return Contains({
+                            DepthRelation::Disconnected, DepthRelation::FirstIsFront, DepthRelation::SecondIsFront
+                        }, label) ? 0.0 : 20.0 * weight;
+                    case DepthRelation::FirstIsFront: return label == DepthRelation::FirstIsFront ? 0.0 : 30.0 * weight;
+                    case DepthRelation::SecondIsFront: return label == DepthRelation::SecondIsFront ? 0.0 : 30.0 * weight;
+                    default: SHOULD_NEVER_BE_CALLED("this label should never occur in first guess!");
+                    }
+                }, 10.0 });
+                fg.addFactor({ vhs[bndid] }, unaryFC);
+            }
+
+            // overlap factor
+            for (auto & bnds : bndsThatShouldNotAllDisconnect) {
+                bool hasInvalidBnds = false;
+                for (int bndid : bnds) {
+                    auto bh = bhs[bndid];
+                    if (bh.invalid()) {
+                        hasInvalidBnds = true;
+                        break;
+                    }
+                }
+                if (hasInvalidBnds) {
+                    continue;
+                }
+
+                int bndnum = bnds.size();
+                assert(bndnum > 1 && bndnum <= 3);
+                int spnum = 0;
+                for (int bndid : bnds) {
+                    spnum += bndsamples[bndid].size();
+                }
+                double weight = spnum2weightRatio * spnum;
+                int overlapFC = fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [bndnum, weight](const int * varlabels, size_t nvar,
+                    ml::FactorGraph::FactorCategoryId fcid, void * givenData) -> double {
+                    assert(nvar == bndnum);
+                    for (int i = 0; i < nvar; i++) {
+                        DepthRelation label = static_cast<DepthRelation>(varlabels[i]);
+                        if (label == DepthRelation::Connected) {
+                            return 0.0;
+                        }
+                    }
+                    return 30.0 * weight;
+                }, 1.0 });
+
+                std::vector<ml::FactorGraph::VarHandle> relatedVHs(bnds.size());
+                auto it = bnds.begin();
+                for (int i = 0; i < bnds.size(); i++) {
+                    relatedVHs[i] = vhs[*it];
+                    ++it;
+                }
+                fg.addFactor(relatedVHs.begin(), relatedVHs.end(), overlapFC);
+            }
+
+            // junction validity factor
+            for (int jid = 0; jid < segtopo.njunctions(); jid++) {
+                std::set<int> bndids(segtopo.junc2bnds[jid].begin(), segtopo.junc2bnds[jid].end());
+                if (bndids.size() < 3) {
+                    continue;
+                }
+                if (std::any_of(bndids.begin(), bndids.end(), [&bhs](int bndid) {return bhs[bndid].invalid(); })) {
+                    continue;
+                }
+                double weight = 0.0;
+                for (int bndid : bndids) {
+                    weight += spnum2weightRatio * bndsamples[bndid].size();
+                }
+                int juncValidFC = fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [weight](const int * varlabels, size_t nvar,
+                    ml::FactorGraph::FactorCategoryId fcid, void * givenData) -> double {
+                    assert(nvar >= 3);
+                    int disconNum = 0;
+                    for (int i = 0; i < nvar; i++) {
+                        if (DepthRelation(varlabels[i]) != DepthRelation::Connected) {
+                            disconNum++;
+                        }
+                    }
+                    if (disconNum >= 3) {
+                        return 10.0 * weight;
+                    }
+                    if (disconNum == 1) {
+                        return 1.0 * weight;
+                    }
+                    return 0.0;
+                }, 1.0 });
+                std::vector<ml::FactorGraph::VarHandle> relatedVHs(bndids.size());
+                auto it = bndids.begin();
+                for (int i = 0; i < bndids.size(); i++) {
+                    relatedVHs[i] = vhs[*it];
+                    ++it;
+                }
+                fg.addFactor(relatedVHs.begin(), relatedVHs.end(), juncValidFC);
+            }
+
+            // attached to lines
+            for (auto & bnds : bndsAttachedToLines) {
+                if (bnds.size() <= 1) {
+                    continue;
+                }
+                for (int i = 0; i < bnds.size(); i++) {
+                    for (int j = i + 1; (j < i + 16 && j < bnds.size()); j++) {
+                        int bnd1 = bnds[i];
+                        int bnd2 = bnds[j];
+                        if (bhs[bnd1].invalid() || bhs[bnd2].invalid()) {
+                            continue;
+                        }
+
+                        auto & segs1 = segtopo.bnd2segs[bnd1];
+                        auto & bh1 = bhs[bnd1];
+                        auto & bh2 = bhs[bnd2];
+                        Vec3 bnd1SegPairDir = normalize(mg.data(mg.topo(bh1).component<0>()).normalizedCenter.cross(mg.data(mg.topo(bh1).component<1>()).normalizedCenter));
+                        auto & segs2 = segtopo.bnd2segs[bnd2];
+                        Vec3 bnd2SegPairDir = normalize(mg.data(mg.topo(bh2).component<0>()).normalizedCenter.cross(mg.data(mg.topo(bh2).component<1>()).normalizedCenter));
+                        bool sameSegPairDir = bnd1SegPairDir.dot(bnd2SegPairDir) > 0;
+
+                        double weight = (bndsamples[bnd1].size() + bndsamples[bnd2].size()) * spnum2weightRatio;
+                        int bndContFC = fg.addFactorCategory(ml::FactorGraph::FactorCategory{ [weight, sameSegPairDir](const int * varlabels, size_t nvar,
+                            ml::FactorGraph::FactorCategoryId fcid, void * givenData) -> double {
+                            assert(nvar == 2);
+                            DepthRelation rel1 = (DepthRelation)varlabels[0];
+                            DepthRelation rel2 = (DepthRelation)varlabels[1];
+                            if (rel1 == DepthRelation::Connected && rel2 == DepthRelation::Connected ||
+                                rel1 == DepthRelation::Disconnected && rel2 == DepthRelation::Disconnected ||
+                                rel1 == DepthRelation::Disconnected && Contains({ DepthRelation::FirstIsFront, DepthRelation::SecondIsFront }, rel2) ||
+                                rel2 == DepthRelation::Disconnected && Contains({ DepthRelation::FirstIsFront, DepthRelation::SecondIsFront }, rel1)) {
+                                return 0.0;
+                            }
+                            if (sameSegPairDir) {
+                                if (rel1 == DepthRelation::FirstIsFront && rel2 == DepthRelation::FirstIsFront ||
+                                    rel1 == DepthRelation::SecondIsFront && rel2 == DepthRelation::SecondIsFront) {
+                                    return 0.0;
+                                }
+                            } else {
+                                if (rel1 == DepthRelation::FirstIsFront && rel2 == DepthRelation::SecondIsFront ||
+                                    rel1 == DepthRelation::SecondIsFront && rel2 == DepthRelation::FirstIsFront) {
+                                    return 0.0;
+                                }
+                            }
+                            return 3.0 * weight;
+                        }, 1.0 });
+                        fg.addFactor({ vhs[bnd1], vhs[bnd2] }, bndContFC);
+                    }
+                }
+            }
+
+
+
+            std::cout << "solving factor graph" << std::endl;
+
+            ml::FactorGraph::ResultTable resultLabels;
+            fg.solve(100, 10, [&resultLabels](int epoch, double energy, double denergy, const ml::FactorGraph::ResultTable & results) -> bool {
+                std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
+                if (energy == 0.0) {
+                    resultLabels = results;
+                    return false;
+                }
+                if (denergy < 0.1) {
+                    resultLabels = results;
+                    return true;
+                }
+                return false;
+            });
+
+            auto occlusions = mg.createConstraintTable<RegionBoundaryData>(DepthRelation::Connected);
+            for (int bndid = 0; bndid < segtopo.nboundaries(); bndid++) {
+                if (vhs[bndid].invalid()) {
+                    continue;
+                }
+                auto & bh = bhs[bndid];
+                occlusions[bh] = (DepthRelation)resultLabels[vhs[bndid]];
+            }
+
+            return occlusions;
+
+        }
+
+
+
+
+
 
 
 
@@ -2182,7 +2670,6 @@ namespace pano {
             const HandledTable<RegionBoundaryHandle, DepthRelation> & occlusions, bool spreadOnLineEachTime) {
 
             for (auto it = occlusions.begin(); it != occlusions.end(); ++it) {
-
                 auto bh = it.hd();
                 DepthRelation relation = *it;
 
@@ -2207,6 +2694,7 @@ namespace pano {
                 // the front side region
                 auto rh1 = mg.topo(bh).component<0>();
                 auto rh2 = mg.topo(bh).component<1>();
+                assert(rh1.id < rh2.id);
 
                 // related lh ?
                 for (auto & l : mg.components<LineData>()) {
@@ -2232,10 +2720,7 @@ namespace pano {
                         } else if(relation == DepthRelation::SecondIsFront) {
                             controls[rlh1].used = false;
                             controls[rlh2].used = true;
-                        } /*else if (relation == DepthRelation::Disconnected) {
-                            controls[rlh1].used = false;
-                            controls[rlh2].used = false;
-                        }*/ else {
+                        } else {
                             SHOULD_NEVER_BE_CALLED();
                         }
 
@@ -2261,6 +2746,100 @@ namespace pano {
 
         }
 
+
+        void ApplyOcclusions2(const RLGraph & mg, RLGraphControls & controls,
+            const HandledTable<RegionBoundaryHandle, DepthRelation> & occlusions) {
+
+            std::vector<LineHandle> lhs;
+            lhs.reserve(mg.internalComponents<LineData>().size());
+            for (auto & l : mg.components<LineData>()) {
+                lhs.push_back(l.topo.hd);
+            }
+
+            auto getNeighborLhs = [&mg](const LineHandle & lh) {
+                std::vector<LineHandle> neighbors;
+                for (auto & llh : mg.topo(lh).constraints<LineRelationData>()) {
+                    if (mg.data(llh).type == LineRelationData::Incidence) {
+                        LineHandle anotherLh = mg.topo(llh).component<0>();
+                        if (anotherLh == lh) {
+                            anotherLh = mg.topo(llh).component<1>();
+                        }
+                        neighbors.push_back(anotherLh);
+                    }
+                }
+                return neighbors;
+            };
+
+            auto lh2ccid = mg.createComponentTable<LineData>(-1);
+            std::map<int, std::set<LineHandle>> ccid2lhs;
+            int ccids = core::ConnectedComponents(lhs.begin(), lhs.end(), std::move(getNeighborLhs), 
+                [&lh2ccid, &ccid2lhs](const LineHandle & lh, int ccid) {
+                lh2ccid[lh] = ccid; 
+                ccid2lhs[ccid].insert(lh);
+            });
+
+
+            // apply occlusions
+            for (auto it = occlusions.begin(); it != occlusions.end(); ++it) {
+                auto bh = it.hd();
+                DepthRelation relation = *it;
+
+                if (true) {
+                    size_t spnum = 0;
+                    for (auto & sps : mg.data(bh).normalizedSampledPoints) {
+                        spnum += sps.size();
+                    }
+                    if (spnum <= 1) {
+                        controls[bh].used = false;
+                    }
+                }
+
+                if (relation == DepthRelation::Connected || relation == DepthRelation::MaybeFolder) {
+                    continue;
+                }
+                if (bh.invalid()) {
+                    continue;
+                }
+                controls[bh].used = false;
+
+                // the front side region
+                auto rh1 = mg.topo(bh).component<0>();
+                auto rh2 = mg.topo(bh).component<1>();
+                assert(rh1.id < rh2.id);
+
+                // related lh ?
+                for (auto & pp : ccid2lhs) {
+                    auto & lhs = pp.second;
+                    
+                    std::set<RegionLineConnectionHandle> rlh1s, rlh2s;
+
+                    for (LineHandle lh : lhs) {
+                        for (RegionLineConnectionHandle rlh : mg.topo(lh).constraints<RegionLineConnectionData>()) {
+                            if (mg.topo(rlh).component<0>() == rh1) {
+                                rlh1s.insert(rlh);
+                            }
+                            if (mg.topo(rlh).component<0>() == rh2) {
+                                rlh2s.insert(rlh);
+                            }
+                        }
+                    }
+                    if (!rlh1s.empty() && !rlh2s.empty()) {
+                        if (relation == DepthRelation::FirstIsFront) {
+                            for (auto & rlh1 : rlh1s) { controls[rlh1].used = true; }
+                            for (auto & rlh2 : rlh2s) { controls[rlh2].used = false; }
+                        } else if (relation == DepthRelation::SecondIsFront) {
+                            for (auto & rlh1 : rlh1s) { controls[rlh1].used = false; }
+                            for (auto & rlh2 : rlh2s) { controls[rlh2].used = true; }
+                        } else {
+                            SHOULD_NEVER_BE_CALLED();
+                        }
+                    }
+                }
+            }
+
+
+
+        }
 
 
 

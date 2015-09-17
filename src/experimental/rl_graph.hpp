@@ -122,6 +122,15 @@ namespace pano {
             double interViewIncidenceAngleAlongDirectionThreshold = 0.15, // for new line-line incidence recognition
             double interViewIncidenceAngleVerticalDirectionThreshold = 0.03);
 
+        std::vector<LineHandle> AppendLines2(RLGraph & mg, const std::vector<Classified<Line3>> & lineSegments,
+            const std::vector<Vec3> & vps,
+            double intersectionAngleThreshold = 0.04,
+            double incidenceAngleAlongDirectionThreshold = M_PI_2,
+            double incidenceAngleVerticalDirectionThreshold = 0.02);
+
+
+
+
 
         // add more regions and related constraints to rl graph
         // AppendRegions

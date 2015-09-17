@@ -246,9 +246,13 @@ namespace pano {
 
 
 
-
+        std::vector<RegionHandle> CollectRegionsIntersectingDirection(const Vec3 & dirction, bool alsoConsiderBackward,
+            const RLGraph & mg, double rangeAngle = M_PI / 30.0);
         void AttachPrincipleDirectionConstraints(const RLGraph & mg, RLGraphControls & controls,
             double rangeAngle = M_PI / 30.0, bool avoidLineConflictions = true);
+        void AttachPrincipleDirectionConstraints2(const RLGraph & mg, RLGraphControls & controls, const Vec3 & up,
+            double rangeAngle = M_PI / 30.0, bool avoidLineConflictions = true);
+
         void AttachWallConstriants(const RLGraph & mg, RLGraphControls & controls,
             double rangeAngle = M_PI / 60.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
         void AttachFloorAndCeilingConstraints(const RLGraph & mg,

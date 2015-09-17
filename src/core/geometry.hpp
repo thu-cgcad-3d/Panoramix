@@ -534,6 +534,14 @@ namespace pano {
         inline void serialize(Archive & ar, Chain<T, N> & l) {
             ar(l.points, l.closed);
         }
+        template <class T, int N>
+        inline Chain<T, N> normalize(const Chain<T, N> & c) {
+            auto r = c;
+            for (auto & p : c.points) {
+                p = normalize(p);
+            }
+            return r;
+        }
         using Chain2i = Chain<int, 2>;
         using Chain2 = Chain<double, 2>;
         using Chain3 = Chain<double, 3>;

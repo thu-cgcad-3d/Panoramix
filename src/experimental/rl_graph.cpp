@@ -565,6 +565,164 @@ namespace pano {
         }
 
 
+
+        std::vector<LineHandle> AppendLines2(RLGraph & mg, const std::vector<Classified<Line3>> & lines,
+            const std::vector<Vec3> & vps,
+            double intersectionAngleThreshold,
+            double incidenceAngleAlongDirectionThreshold,
+            double incidenceAngleVerticalDirectionThreshold) {
+
+            if (lines.empty())
+                return std::vector<LineHandle>();
+
+            assert(mg.internalComponents<LineData>().empty() && mg.internalComponents<RegionData>().empty());
+
+            std::vector<LineHandle> lhs;
+            lhs.reserve(lines.size());
+            mg.internalComponents<LineData>().reserve(lines.size());
+
+            for (auto & line : lines) {
+                LineData ld;
+                ld.initialClaz = line.claz;
+                ld.line = normalize(line.component);
+                lhs.push_back(mg.addComponent(std::move(ld)));
+            }
+
+            // construct incidence/intersection relations
+            auto & linesData = mg.internalComponents<LineData>();
+            for (int i = 0; i < linesData.size(); i++) {
+                auto & linei = linesData[i].data.line;
+                Vec3 ni = normalize(linei.first.cross(linei.second));
+                int clazi = linesData[i].data.initialClaz;
+
+                for (int j = i + 1; j < linesData.size(); j++) {
+                    auto & linej = linesData[j].data.line;
+                    int clazj = linesData[j].data.initialClaz;
+                    Vec3 nj = normalize(linej.first.cross(linej.second));
+
+                    auto nearest = DistanceBetweenTwoLines(linei, linej);
+                    double d = AngleBetweenDirections(nearest.second.first.position, nearest.second.second.position);
+
+                    if (clazi == clazj && clazi >= 0) { // incidences for classified lines
+                        auto conCenter = normalize(nearest.second.first.position + nearest.second.second.position);
+                        auto conDir = (nearest.second.first.position - nearest.second.second.position);
+
+                        auto & vp = vps[clazi];
+
+                        if (AngleBetweenDirections(vp, conCenter) < intersectionAngleThreshold)
+                            continue;
+
+                        if (d < incidenceAngleAlongDirectionThreshold &&
+                            AngleBetweenUndirectedVectors(ni, nj) < incidenceAngleVerticalDirectionThreshold) {
+                            LineRelationData lrd;
+                            lrd.type = LineRelationData::Type::Incidence;
+                            lrd.normalizedRelationCenter = conCenter;
+                            lrd.junctionWeight = 5.0;
+
+                            if (HasValue(lrd.normalizedRelationCenter, IsInfOrNaN<double>))
+                                continue;
+
+                            mg.addConstraint(std::move(lrd), lhs[i], lhs[j]);
+                        }
+
+                    } else if (clazi != clazj && clazi >= 0 && clazj >= 0) { // intersections for classified lines
+                        if (d < intersectionAngleThreshold) {
+                            auto conCenter = normalize(ni.cross(nj));
+
+                            if (DistanceFromPointToLine(conCenter, linei).first > intersectionAngleThreshold * 4 ||
+                                DistanceFromPointToLine(conCenter, linej).first > intersectionAngleThreshold * 4)
+                                continue;
+
+                            LineRelationData lrd;
+                            lrd.type = LineRelationData::Type::Intersection;
+                            lrd.normalizedRelationCenter = conCenter;
+                            lrd.junctionWeight = 3.0;
+
+                            if (HasValue(lrd.normalizedRelationCenter, IsInfOrNaN<double>))
+                                continue;
+
+                            mg.addConstraint(std::move(lrd), lhs[i], lhs[j]);
+                        }
+                    }
+                }
+            }
+
+
+
+            // compute junction weights
+            static const double angleThreshold = M_PI / 32;
+            static const double sigma = 0.1;
+
+            enum LineVotingDirection : int {
+                TowardsVanishingPoint = 0,
+                TowardsOppositeOfVanishingPoint = 1
+            };
+            enum class JunctionType : int {
+                L, T, Y, W, X
+            };
+
+            for (auto & lr : mg.internalConstraints<LineRelationData>()) {
+                //std::cout << lr.topo.hd.id << std::endl;
+                auto & lrd = lr.data;
+                if (lrd.type == LineRelationData::Incidence) {
+                    lrd.junctionWeight = IncidenceJunctionWeight(false);
+                } else if (lrd.type == LineRelationData::Intersection) {
+                    Mat<float, 3, 2> votingData;
+                    std::fill(std::begin(votingData), std::end(votingData), 0);
+
+                    for (auto & ld : mg.components<LineData>()) {
+                        auto & line = ld.data.line;
+                        int claz = ld.data.initialClaz;
+                        if (claz == -1 || claz >= 3)
+                            continue;
+
+                        auto & vp = vps[claz];
+                        Vec3 center = normalize(line.center());
+
+                        Vec3 center2vp = normalize(center.cross(vp));
+                        Vec3 center2pos = normalize(center.cross(lrd.normalizedRelationCenter));
+
+                        double angle = AngleBetweenUndirectedVectors(center2vp, center2pos);
+                        double angleSmall = angle > M_PI_2 ? (M_PI - angle) : angle;
+                        if (IsInfOrNaN(angleSmall))
+                            continue;
+
+                        assert(angleSmall >= 0 && angleSmall <= M_PI_2);
+
+                        double angleScore =
+                            exp(-(angleSmall / angleThreshold) * (angleSmall / angleThreshold) / sigma / sigma / 2);
+
+                        auto proj = ProjectionOfPointOnLine(lrd.normalizedRelationCenter, line);
+                        double projRatio = BoundBetween(proj.ratio, 0.0, 1.0);
+
+                        Vec3 lined = line.first.cross(line.second);
+                        double lineSpanAngle = AngleBetweenDirections(line.first, line.second);
+                        if (AngleBetweenDirections(center2vp, lined) < M_PI_2) { // first-second-vp
+                            votingData(claz, TowardsVanishingPoint) += angleScore * lineSpanAngle * (1 - projRatio);
+                            votingData(claz, TowardsOppositeOfVanishingPoint) += angleScore * lineSpanAngle * projRatio;
+                        } else { // vp-first-second
+                            votingData(claz, TowardsOppositeOfVanishingPoint) += angleScore * lineSpanAngle * (1 - projRatio);
+                            votingData(claz, TowardsVanishingPoint) += angleScore * lineSpanAngle * projRatio;
+                        }
+                    }
+
+                    lrd.junctionWeight = ComputeIntersectionJunctionWeightWithLinesVotes(
+                        votingData);
+                } else {
+                    assert(false && "invalid branch!");
+                }
+            }
+            
+            return lhs;
+        }
+
+
+
+
+
+
+
+
         namespace {
 
             std::vector<RegionHandle> CollectRegionsFromSegmentation(RLGraph & mg, const Imagei & segmentedRegions, const PerspectiveCamera & cam){
@@ -1244,7 +1402,12 @@ namespace pano {
                 if (bh.invalid()) {
                     RegionBoundaryData bdorigin;
                     bdorigin.length = 0;
-                    bh = mg.addConstraint(std::move(bdorigin), regionHandles[rids.first], regionHandles[rids.second]);
+                    auto rh1 = regionHandles[rids.first];
+                    auto rh2 = regionHandles[rids.second];
+                    if (rh1.id > rh2.id) {
+                        std::swap(rh1, rh2);
+                    }
+                    bh = mg.addConstraint(std::move(bdorigin), rh1, rh2);
                 }
 
                 RegionBoundaryData & bd = mg.data(bh);

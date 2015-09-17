@@ -106,9 +106,20 @@ namespace pano {
             double angleDistThres = DegreesToRadians(1), double angleSampleStepOnLine = DegreesToRadians(1));
 
 
+        HandledTable<RegionBoundaryHandle, DepthRelation> DetectOcclusions6(
+            const RLGraph & mg, const HandledTable<RegionHandle, OrientationControl> & ocontrols,
+            const Imagei & segs,
+            const SegmentationTopo & segtopo, const std::vector<std::vector<Vec3>> & bndsamples, const std::vector<int> & bndclasses,
+            const std::vector<RegionHandle> & rhs, const std::vector<RegionBoundaryHandle> & bhs,
+            const std::vector<Vec3> & vps,
+            double angleDistThres = DegreesToRadians(1), double angleSampleStepOnLine = DegreesToRadians(1));
+
 
         void ApplyOcclusions(const RLGraph & mg, RLGraphControls & controls,
             const HandledTable<RegionBoundaryHandle, DepthRelation> & occlusions, bool spreadOnLineEachTime = true);
+
+        void ApplyOcclusions2(const RLGraph & mg, RLGraphControls & controls,
+            const HandledTable<RegionBoundaryHandle, DepthRelation> & occlusions);
 
 
         void DisableTJunctionsInLineRelations(const RLGraph & mg, RLGraphControls & controls, double tjuncRatioThres = 0.1);

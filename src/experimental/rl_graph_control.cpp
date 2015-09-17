@@ -668,7 +668,7 @@ namespace pano {
                 }
                 auto as = extractor(mg, c.topo.hd);
                 assert(as.size() >= 1);
-                double fullWeight = c.data.junctionWeight;
+                double fullWeight = c.data.junctionWeight * 10.0;
                 assert(fullWeight >= 0);
                 control.weightedAnchors.clear();
                 control.weightedAnchors.reserve(as.size());
@@ -1337,17 +1337,14 @@ namespace pano {
 
         static const int regionLineRelatedThreshold = 2;
 
-        void AttachPrincipleDirectionConstraints(const RLGraph & mg, RLGraphControls & controls,
-            double rangeAngle, bool avoidLineConflictions) {
 
-            SetClock();
+        std::vector<RegionHandle> CollectRegionsIntersectingDirection(const Vec3 & direction, bool alsoConsiderBackward,
+            const RLGraph & mg,  double rangeAngle) {
 
             // find peaky regions
-            std::vector<std::vector<RegionHandle>> peakyRegionHandles(controls.vanishingPoints.size());
+            std::vector<RegionHandle> peakyRegionHandles;
             for (auto & r : mg.components<RegionData>()) {
                 auto h = r.topo.hd;
-                if (!controls[h].used)
-                    continue;
 
                 auto & contours = r.data.normalizedContours;
                 double radiusAngle = 0.0;
@@ -1360,16 +1357,8 @@ namespace pano {
                     }
                 }
 
-                bool mayCrossAnyVP = false;
-                for (auto & vp : controls.vanishingPoints) {
-                    double angle = AngleBetweenUndirectedVectors(vp, r.data.normalizedCenter);
-                    if (angle <= radiusAngle) {
-                        mayCrossAnyVP = true;
-                        break;
-                    }
-                }
-
-                if (!mayCrossAnyVP) {
+                if ((alsoConsiderBackward ? AngleBetweenUndirectedVectors(direction, r.data.normalizedCenter) : 
+                    AngleBetweenDirections(direction, r.data.normalizedCenter)) > radiusAngle) {
                     continue;
                 }
 
@@ -1392,36 +1381,130 @@ namespace pano {
                 cv::fillPoly(mask, contourProjs, (uint8_t)1);
 
                 // intersection test
-                for (int i = 0; i < controls.vanishingPoints.size(); i++) {
-                    auto p1 = ToPixel(ppc.toScreen(controls.vanishingPoints[i]));
-                    auto p2 = ToPixel(ppc.toScreen(-controls.vanishingPoints[i]));
+                auto p = ToPixel(ppc.toScreen(direction));
+                auto p2 = ToPixel(ppc.toScreen(-direction));
 
-                    int dilateSize = ppcFocal * rangeAngle;
-                    bool intersected = false;
-                    for (int x = -dilateSize; x <= dilateSize; x++) {
+                int dilateSize = ppcFocal * rangeAngle;
+                bool intersected = false;
+                for (int x = -dilateSize; x <= dilateSize; x++) {
+                    if (intersected)
+                        break;
+                    for (int y = -dilateSize; y <= dilateSize; y++) {
                         if (intersected)
                             break;
-                        for (int y = -dilateSize; y <= dilateSize; y++) {
-                            if (intersected)
-                                break;
-                            auto pp1 = Pixel(p1.x + x, p1.y + y);
+                        auto pp = Pixel(p.x + x, p.y + y);
+                        if (Contains(mask, pp) && mask(pp)) {
+                            peakyRegionHandles.push_back(r.topo.hd);
+                            intersected = true;
+                        }
+                        if (alsoConsiderBackward) {
                             auto pp2 = Pixel(p2.x + x, p2.y + y);
-                            if (Contains(mask, pp1) && mask(pp1)) {
-                                peakyRegionHandles[i].push_back(r.topo.hd);
-                                intersected = true;
-                            } else if (Contains(mask, pp2) && mask(pp2)) {
-                                peakyRegionHandles[i].push_back(r.topo.hd);
+                            if (Contains(mask, pp2) && mask(pp2)) {
+                                peakyRegionHandles.push_back(r.topo.hd);
                                 intersected = true;
                             }
                         }
                     }
                 }
+               
             }
+
+            return peakyRegionHandles;
+        }
+
+
+        void AttachPrincipleDirectionConstraints(const RLGraph & mg, RLGraphControls & controls,
+            double rangeAngle, bool avoidLineConflictions) {
+
+            SetClock();
+
+            // find peaky regions
+            std::vector<std::vector<RegionHandle>> peakyRegionHandles(controls.vanishingPoints.size());
+            for (int i = 0; i < controls.vanishingPoints.size(); i++) {
+                peakyRegionHandles[i] = CollectRegionsIntersectingDirection(controls.vanishingPoints[i], true, mg, rangeAngle);
+            }
+
+            //for (auto & r : mg.components<RegionData>()) {
+            //    auto h = r.topo.hd;
+            //    if (!controls[h].used)
+            //        continue;
+
+            //    auto & contours = r.data.normalizedContours;
+            //    double radiusAngle = 0.0;
+            //    for (auto & cs : r.data.normalizedContours) {
+            //        for (auto & c : cs) {
+            //            double angle = AngleBetweenDirections(r.data.normalizedCenter, c);
+            //            if (angle > radiusAngle) {
+            //                radiusAngle = angle;
+            //            }
+            //        }
+            //    }
+
+            //    bool mayCrossAnyVP = false;
+            //    for (auto & vp : controls.vanishingPoints) {
+            //        double angle = AngleBetweenUndirectedVectors(vp, r.data.normalizedCenter);
+            //        if (angle <= radiusAngle) {
+            //            mayCrossAnyVP = true;
+            //            break;
+            //        }
+            //    }
+
+            //    if (!mayCrossAnyVP) {
+            //        continue;
+            //    }
+
+            //    float ppcFocal = 100.0f;
+            //    int ppcSize = 2 * radiusAngle * ppcFocal + 10;
+            //    Vec3 x;
+            //    std::tie(x, std::ignore) = ProposeXYDirectionsFromZDirection(r.data.normalizedCenter);
+            //    PartialPanoramicCamera ppc(ppcSize, ppcSize, ppcFocal, Point3(0, 0, 0), r.data.normalizedCenter, x);
+            //    Imageub mask = Imageub::zeros(ppc.screenSize());
+
+            //    // project contours to ppc
+            //    std::vector<std::vector<Point2i>> contourProjs(contours.size());
+            //    for (int k = 0; k < contours.size(); k++) {
+            //        auto & contourProj = contourProjs[k];
+            //        contourProj.reserve(contours[k].size());
+            //        for (auto & d : contours[k]) {
+            //            contourProj.push_back(ecast<int>(ppc.toScreen(d)));
+            //        }
+            //    }
+            //    cv::fillPoly(mask, contourProjs, (uint8_t)1);
+
+            //    // intersection test
+            //    for (int i = 0; i < controls.vanishingPoints.size(); i++) {
+            //        auto p1 = ToPixel(ppc.toScreen(controls.vanishingPoints[i]));
+            //        auto p2 = ToPixel(ppc.toScreen(-controls.vanishingPoints[i]));
+
+            //        int dilateSize = ppcFocal * rangeAngle;
+            //        bool intersected = false;
+            //        for (int x = -dilateSize; x <= dilateSize; x++) {
+            //            if (intersected)
+            //                break;
+            //            for (int y = -dilateSize; y <= dilateSize; y++) {
+            //                if (intersected)
+            //                    break;
+            //                auto pp1 = Pixel(p1.x + x, p1.y + y);
+            //                auto pp2 = Pixel(p2.x + x, p2.y + y);
+            //                if (Contains(mask, pp1) && mask(pp1)) {
+            //                    peakyRegionHandles[i].push_back(r.topo.hd);
+            //                    intersected = true;
+            //                } else if (Contains(mask, pp2) && mask(pp2)) {
+            //                    peakyRegionHandles[i].push_back(r.topo.hd);
+            //                    intersected = true;
+            //                }
+            //            }
+            //        }
+            //    }
+            //}
 
             for (int i = 0; i < controls.vanishingPoints.size(); i++) {
                 auto & vp = controls.vanishingPoints[i];
                 auto & rhs = peakyRegionHandles[i];
                 for (auto rh : rhs) {
+                    if (!controls[rh].used) {
+                        continue;
+                    }
                     if (avoidLineConflictions) {
                         bool hasLineConflictions = false;
                         for (auto conh : mg.topo(rh).constraints<RegionLineConnectionData>()) {
@@ -1454,6 +1537,73 @@ namespace pano {
             controls.disableAllInvalidConstraints(mg);
 
         }
+
+
+
+
+        void AttachPrincipleDirectionConstraints2(const RLGraph & mg, RLGraphControls & controls, const Vec3 & up,
+            double rangeAngle, bool avoidLineConflictions) {
+
+            SetClock();
+
+            // find peaky regions
+            std::vector<std::vector<RegionHandle>> peakyRegionHandles(controls.vanishingPoints.size());
+            for (int i = 0; i < controls.vanishingPoints.size(); i++) {
+                if (AngleBetweenUndirectedVectors(controls.vanishingPoints[i], up) < DegreesToRadians(10)) {
+                    if (controls.vanishingPoints[i].dot(up) > 0) {
+                        peakyRegionHandles[i] = CollectRegionsIntersectingDirection(- controls.vanishingPoints[i], false, mg, rangeAngle);
+                    } else {
+                        peakyRegionHandles[i] = CollectRegionsIntersectingDirection(controls.vanishingPoints[i], false, mg, rangeAngle);
+                    }
+                } else {
+                    peakyRegionHandles[i] = CollectRegionsIntersectingDirection(controls.vanishingPoints[i], true, mg, rangeAngle);
+                }
+            }
+
+            for (int i = 0; i < controls.vanishingPoints.size(); i++) {
+                auto & vp = controls.vanishingPoints[i];
+                auto & rhs = peakyRegionHandles[i];
+                for (auto rh : rhs) {
+                    if (!controls[rh].used) {
+                        continue;
+                    }
+                    if (avoidLineConflictions) {
+                        bool hasLineConflictions = false;
+                        for (auto conh : mg.topo(rh).constraints<RegionLineConnectionData>()) {
+                            if (mg.data(conh).normalizedAnchors.size() < regionLineRelatedThreshold)
+                                continue;
+                            LineHandle lh = mg.topo(conh).component<1>();
+                            auto & lprop = controls[lh];
+                            if (lprop.orientationClaz == i) {
+                                hasLineConflictions = true;
+                                break;
+                            }
+                        }
+                        if (!hasLineConflictions)
+                            MakeRegionPlaneToward(rh, i, controls);
+                    } else {
+                        MakeRegionPlaneToward(rh, i, controls);
+                        for (auto conh : mg.topo(rh).constraints<RegionLineConnectionData>()) {
+                            if (mg.data(conh).normalizedAnchors.size() < regionLineRelatedThreshold)
+                                continue;
+                            LineHandle lh = mg.topo(conh).component<1>();
+                            auto & lprop = controls[lh];
+                            if (lprop.orientationClaz == i) {
+                                lprop.orientationClaz = -1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            controls.disableAllInvalidConstraints(mg);
+
+        }
+
+
+
+
+
 
 
         void AttachWallConstriants(const RLGraph & mg, RLGraphControls & controls,

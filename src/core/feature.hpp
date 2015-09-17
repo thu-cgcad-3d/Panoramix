@@ -72,6 +72,10 @@ namespace pano {
             bool suppresscross = true, 
             double minDistanceBetweenLinePairs = std::numeric_limits<double>::max());
 
+        std::vector<Vec3> ComputeLineIntersections(const std::vector<Line3> & lines,
+            std::vector<std::pair<int, int>> * lineids = nullptr,
+            double minAngleDistanceBetweenLinePairs = M_PI);
+
 
         // classify lines in 2d
         DenseMatd ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
@@ -82,6 +86,9 @@ namespace pano {
         DenseMatd ClassifyLines(std::vector<Classified<Line3>> &lines, const std::vector<Vec3> & vps,
             double angleThreshold, double sigma, double scoreThreshold = 0.8, 
             double avoidVPAngleThreshold = M_PI / 18.0);
+
+        // MergeLines
+        std::vector<Line3> MergeLines(const std::vector<Line3> & lines, double angleThres = 0.03);
 
 
 
@@ -105,6 +112,9 @@ namespace pano {
             std::vector<Classified<Line2>> & lineSegments, DenseMatd * lineVPScores = nullptr);
         std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
             std::vector<std::vector<Classified<Line2>>> & lineSegments, std::vector<DenseMatd> * lineVPScores = nullptr);
+
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(std::vector<Classified<Line3>> & lines, DenseMatd * lineVPScores = nullptr);
+
         // [vert, horiz1, horiz2, other]
         void OrderVanishingPoints(std::vector<Vec3> & vps, const Vec3 & verticalSeed = Z());
 

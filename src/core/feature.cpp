@@ -415,7 +415,38 @@ namespace pano {
 
         }
 
+        std::vector<Vec3> ComputeLineIntersections(const std::vector<Line3> & lines,
+            std::vector<std::pair<int, int>> * lineids,
+            double minAngleDistanceBetweenLinePairs) {
+            SetClock();
 
+            std::vector<Vec3> interps;
+            size_t lnum = lines.size();
+            for (int i = 0; i < lnum; i++) {
+                Vec3 ni = normalize(lines[i].first.cross(lines[i].second));
+
+                for (int j = i + 1; j < lnum; j++) {
+                    auto nearest = DistanceBetweenTwoLines(lines[i], lines[j]).second;
+                    if (minAngleDistanceBetweenLinePairs < M_PI && 
+                        AngleBetweenDirections(nearest.first.position, nearest.second.position) < minAngleDistanceBetweenLinePairs)
+                        continue;
+
+                    Vec3 nj = normalize(lines[j].first.cross(lines[j].second));
+                    Vec3 interp = ni.cross(nj);
+
+                    if (norm(interp) < 1e-5) {
+                        continue;
+                    }
+
+                    interp /= norm(interp);
+                    interps.push_back(interp);
+                    if (lineids)
+                        lineids->emplace_back(i, j);
+                }
+            }
+
+            return interps;
+        }
 
 
         DenseMatd ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
@@ -500,6 +531,108 @@ namespace pano {
             }
 
             return linescorestable;
+        }
+
+
+
+
+        std::vector<Line3> MergeLines(const std::vector<Line3> & lines, double angleThres) {
+            
+            assert(angleThres < M_PI_4);
+            RTreeMap<Vec3, int> lineNormals;
+            std::vector<std::pair<std::vector<int>, Vec3>> groups;
+            for (int i = 0; i < lines.size(); i++) {
+                auto & line = lines[i];
+                auto n = normalize(line.first.cross(line.second));
+
+                int nearestGroupId = -1;
+                double minAngle = angleThres;
+                lineNormals.search(BoundingBox(n).expand(angleThres * 3), [&nearestGroupId, &minAngle, &n](const std::pair<Vec3, int> & ln) {
+                    double angle = AngleBetweenUndirectedVectors(ln.first, n);
+                    if (angle < minAngle) {
+                        minAngle = angle;
+                        nearestGroupId = ln.second;
+                    }
+                    return true;
+                });
+
+                if (nearestGroupId != -1) { // is in some group
+                    groups[nearestGroupId].first.push_back(i);
+                } else { // create a new group
+                    groups.emplace_back(std::vector<int>{i}, n);
+                    lineNormals.emplace(n, groups.size() - 1);
+                }
+            }
+
+            std::vector<Line3> merged;
+            merged.reserve(groups.size() * 2);
+
+            // merge the group
+            for (auto & g : groups) {
+                auto & normal = g.second;
+                Vec3 x, y;
+                std::tie(x, y) = ProposeXYDirectionsFromZDirection(normal);
+                assert(x.cross(y).dot(normal) > 0);
+
+                std::vector<std::pair<double, bool>> angleRangeEnds;
+                angleRangeEnds.reserve(g.first.size() * 2);
+                for (int i : g.first) {
+                    auto & line = lines[i];
+                    auto & n = normalize(line.first.cross(line.second));
+                    
+                    double angleFrom = atan2(line.first.dot(y), line.first.dot(x));
+                    double angleTo = atan2(line.second.dot(y), line.second.dot(x));
+                    assert(IsBetween(angleFrom, -M_PI, M_PI) && IsBetween(angleTo, -M_PI, M_PI));
+
+                    if (n.dot(normal) < 0) {
+                        std::swap(angleFrom, angleTo);
+                    }
+
+                    if (angleFrom < angleTo) {
+                        angleRangeEnds.emplace_back(angleFrom, true);
+                        angleRangeEnds.emplace_back(angleTo, false);
+                    } else {
+                        angleRangeEnds.emplace_back(angleFrom, true);
+                        angleRangeEnds.emplace_back(angleTo + M_PI * 2, false);
+                    }
+                }
+
+                std::sort(angleRangeEnds.begin(), angleRangeEnds.end(),
+                    [](const std::pair<double, bool> & a, const std::pair<double, bool> & b) {
+                    return a.first < b.first;
+                });
+
+                int occupation = 0;
+                bool occupied = false;
+
+                std::vector<double> mergedAngleRanges;
+                for (auto & stop : angleRangeEnds) {
+                    if (stop.second) {
+                        occupation++;
+                    } else {
+                        occupation--;
+                    }
+                    assert(occupation >= 0);
+                    if (!occupied && occupation > 0) {
+                        mergedAngleRanges.push_back(stop.first);
+                        occupied = true;
+                    } else if (occupied && occupation == 0) {
+                        mergedAngleRanges.push_back(stop.first);
+                        occupied = false;
+                    }
+                }
+
+                assert(mergedAngleRanges.size() % 2 == 0);
+
+                // make lines
+                for (int i = 0; i < mergedAngleRanges.size(); i += 2) {
+                    Vec3 from = x * cos(mergedAngleRanges[i]) + y * sin(mergedAngleRanges[i]);
+                    Vec3 to = x * cos(mergedAngleRanges[i + 1]) + y * sin(mergedAngleRanges[i + 1]);
+                    merged.emplace_back(from, to);
+                }
+            }
+
+            return merged;
         }
 
 
@@ -858,6 +991,29 @@ namespace pano {
             return vanishingPoints;
 
         }
+
+
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(std::vector<Classified<Line3>> & lines, DenseMatd * lineVPScores) {
+            std::vector<Vec3> lineIntersections;
+            
+            std::vector<Line3> pureLines(lines.size());
+            for (int i = 0; i < lines.size(); i++) {
+                pureLines[i] = lines[i].component;
+            }
+            auto inters = ComputeLineIntersections(pureLines, nullptr);
+
+            auto vanishingPoints = FindOrthogonalPrinicipleDirections(inters, 1000, 500, true).unwrap();
+
+            auto scores = ClassifyLines(lines, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
+            assert(scores.rows == lines.size() && scores.cols == vanishingPoints.size());
+
+            if (lineVPScores) {
+                *lineVPScores = std::move(scores);
+            }
+
+            return vanishingPoints;
+        }
+
 
 
         void OrderVanishingPoints(std::vector<Vec3> & vps, const Vec3 & verticalSeed /*= Z()*/) {

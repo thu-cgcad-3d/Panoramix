@@ -50,8 +50,12 @@ namespace pano {
                     for (int i = 1; i < ps.size(); i++){
                         auto & p1 = ps[i - 1];
                         auto & p2 = ps[i];
+                        if (Distance(p1, p2) >= rendered.cols / 2) {
+                            continue;
+                        }
                         cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
-                        cv::line(rendered, p1, p2, (cv::Scalar)color, lineWidth);
+                        cv::line(rendered, p1, p2, (cv::Scalar)color / 255.0, lineWidth);
+                        //rendered(ps[i]) = color;
                     }
                 }
             }
@@ -67,7 +71,7 @@ namespace pano {
                             auto p1 = core::ToPixel(camera.toScreen(e[i - 1]));
                             auto p2 = core::ToPixel(camera.toScreen(e[i]));
                             cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
-                            cv::line(rendered, p1, p2, (cv::Scalar)color, boundaryWidth);
+                            cv::line(rendered, p1, p2, (cv::Scalar)color / 255.0, boundaryWidth);
                         }
                     }
                 }
