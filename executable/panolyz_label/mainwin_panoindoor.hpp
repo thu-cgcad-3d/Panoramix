@@ -16,7 +16,7 @@ namespace panolyz {
     namespace PanoramaIndoor {
 
         class Widget : public QGLWidget {
-            Q_OBJECT
+            //Q_OBJECT
             typedef QGLWidget BaseClass;
         public:
             Widget(QWidget * parent = nullptr);
@@ -25,8 +25,6 @@ namespace panolyz {
             void setCurAnnotation(PanoIndoorAnnotation * anno);
 
         protected:
-            virtual void initializeGL() override;
-            virtual void resizeGL(int w, int h) override;
             virtual void paintEvent(QPaintEvent * e) override;
             virtual void mousePressEvent(QMouseEvent * e) override;
             virtual void mouseMoveEvent(QMouseEvent * e) override;
@@ -35,6 +33,10 @@ namespace panolyz {
             virtual void keyPressEvent(QKeyEvent * e) override;
 
         private:
+            void clearStroke();
+            void acceptAsPolygon(int towardVPId, int alongVPId, bool clutter);
+            void acceptAsOcclusion();
+
             void rebuildPolygonLineScenes();
             void rebuildStrokeScene();
 
@@ -49,25 +51,33 @@ namespace panolyz {
             PanoIndoorAnnotation * _anno;
 
             enum State {
-                Idle, CreatingPolygon, CreatingLine
+                Idle, CreatingPolygon, CreatingOcclusion
             };
             State _state;
             Chain3 _chain;
+
+            // cur brush
+            int _towardVPId, _alongVPId;
+            bool _isClutter;
         };
 
 
         class MainWin : public QMainWindow {
-            Q_OBJECT
+            //Q_OBJECT
         public:
             MainWin();
             ~MainWin();
 
             void selectFile(const QString & fname);
+            void clear();
 
+            QString imageFileName() const { return _fname; }
+            QString annoFileName() const;
 
         private:
             Widget * _w;
             PanoIndoorAnnotation _anno;
+            QString _fname;
         };
 
 

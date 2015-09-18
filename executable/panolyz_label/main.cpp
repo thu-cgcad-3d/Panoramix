@@ -8,7 +8,9 @@
 namespace category = panolyz::PanoramaIndoor;
 
 int main(int argc, char ** argv) {
+    
     pano::gui::Singleton::InitGui(argc, argv);
+
     QApplication::setApplicationName(QObject::tr("PANOLYZ_LABEL"));
     QApplication::setQuitOnLastWindowClosed(true);
 
@@ -22,7 +24,8 @@ int main(int argc, char ** argv) {
         mwin.selectFile(fname);
         mwin.resize(900, 800);
         mwin.show();
+        pano::gui::Singleton::ContinueGui();
     }
 
-    return pano::gui::Singleton::ContinueGui();
+    //return pano::gui::Singleton::ContinueGui();
 }

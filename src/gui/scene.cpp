@@ -124,16 +124,14 @@ namespace pano {
         }
 
         void SceneObject::initialize() const {
-
+            if (_internal && _internal->program && _internal->program->isLinked()) {
+                return;
+            }
             _internal->meshVerticesSelected.resize(_mesh.vertices.size(), 0);
 
             auto vo = _internal;
             vo->initialize();
             auto program = vo->program;
-
-            if (program->isLinked()) {
-                return;
-            }
 
             // setup shaders
             if (!program->addShaderFromSourceCode(QOpenGLShader::Vertex,

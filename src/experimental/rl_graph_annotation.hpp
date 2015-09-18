@@ -21,6 +21,18 @@ namespace pano {
             std::vector<bool> polygonAreClutters;
             std::vector<Chain3> occlusions;
 
+            void reset() { 
+                view.image = Image();
+                vps.clear();
+                vertVPId = 0;
+                lines.clear();
+                polygons.clear();
+                polygonTowardVPIds.clear();
+                polygonAlongVPIds.clear();
+                polygonAreClutters.clear();
+                occlusions.clear();
+            }
+
             template <class Archiver>
             inline void serialize(Archiver & ar) {
                 ar(view, vps, vertVPId, lines,

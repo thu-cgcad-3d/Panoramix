@@ -8,6 +8,10 @@ namespace panolyz {
         using namespace pano::gui;
 
         Widget::Widget(QWidget * parent /*= nullptr*/) : QGLWidget(parent), _anno(nullptr), _state(Idle) {
+            _towardVPId = -1;
+            _alongVPId = -1;
+            _isClutter = false;
+
             setMouseTracking(true);
             setAutoBufferSwap(false);
             grabKeyboard();
@@ -19,24 +23,52 @@ namespace panolyz {
             QAction * defaultAction = nullptr;
             connect(defaultAction = bas->addAction(tr("Cancel")), &QAction::triggered, [this]() { 
                 _state = Idle; 
-                _chain.points.clear();
-                rebuildStrokeScene();
+                clearStroke();
                 update();
             });            
             connect(defaultAction = bas->addAction(tr("Create Polygon")), &QAction::triggered, [this]() {
                 _state = CreatingPolygon;
-                _chain.points.clear();
-                _chain.closed = false;
-                rebuildStrokeScene();
+                clearStroke();
                 update();
             });
-            connect(defaultAction = bas->addAction(tr("Create Line")), &QAction::triggered, [this]() {
-                _state = CreatingLine;
-                _chain.points.clear();
-                _chain.closed = false;
-                rebuildStrokeScene();
+            connect(defaultAction = bas->addAction(tr("Create Occlusion")), &QAction::triggered, [this]() {
+                _state = CreatingOcclusion;
+                clearStroke();
                 update();
             });
+
+            {
+                QAction * sep = new QAction(bas);
+                sep->setSeparator(true);
+                bas->addAction(sep);
+            }
+            
+            connect(defaultAction = bas->addAction(tr("Polygon Brush: Toward Red VP")), &QAction::triggered, [this]() {
+                _towardVPId = 0; _alongVPId = -1; _isClutter = false;
+            });
+            connect(defaultAction = bas->addAction(tr("Polygon Brush: Toward Green VP")), &QAction::triggered, [this]() {
+                _towardVPId = 1; _alongVPId = -1; _isClutter = false;
+            });
+            connect(defaultAction = bas->addAction(tr("Polygon Brush: Toward Blue VP")), &QAction::triggered, [this]() {
+                _towardVPId = 2; _alongVPId = -1; _isClutter = false;
+            });
+
+            connect(defaultAction = bas->addAction(tr("Polygon Brush: Vertical")), &QAction::triggered, [this]() {
+                _towardVPId = -1; _alongVPId = _anno->vertVPId; _isClutter = false;
+            });
+
+            connect(defaultAction = bas->addAction(tr("Polygon Brush: Free")), &QAction::triggered, [this]() {
+                _towardVPId = -1; _alongVPId = -1; _isClutter = false;
+            });
+
+            connect(defaultAction = bas->addAction(tr("Polygon Brush: Clutter")), &QAction::triggered, [this]() {
+                _towardVPId = -1; _alongVPId = -1; _isClutter = true;
+            });
+
+            for (auto a : bas->actions()) a->setCheckable(true);
+            bas->setExclusive(true);
+            defaultAction->setChecked(true);
+            addActions(bas->actions());
         }
 
         Widget::~Widget() {
@@ -47,12 +79,7 @@ namespace panolyz {
         void Widget::setCurAnnotation(PanoIndoorAnnotation * anno) {
             _state = Idle;
 
-            if (anno == nullptr) {
-                _anno = anno;
-                return;
-            }
-
-            assert(!anno.view.image.empty());
+            assert(!anno->view.image.empty());
             auto im = anno->view.image;
 
             SceneBuilder sb;
@@ -66,41 +93,37 @@ namespace panolyz {
             _options.panoramaAspectRatio(im.rows / float(im.cols));
             _options.panoramaHoriCenterRatio(0.5f);
             _options.camera(PerspectiveCamera(500, 500, Point2(250, 250), 200, Origin(), X(), -Z()));
+            _options.renderMode(gui::RenderModeFlag::All);
 
             _imageScene = sb.scene();
 
+            clearStroke();
+            rebuildPolygonLineScenes();
             update();
         }
 
-
-        void Widget::initializeGL() {
-            if (!_anno) {
-                return;
-            }
-            makeCurrent();
-            glEnable(GL_MULTISAMPLE);
-            GLint bufs;
-            GLint samples;
-            glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
-            glGetIntegerv(GL_SAMPLES, &samples);
-            qDebug("Have %d buffers and %d samples", bufs, samples);
-            qglClearColor(MakeQColor(_options.backgroundColor()));
-            _imageScene.initialize();
-        }
-
-        void Widget::resizeGL(int w, int h) {
-            core::PerspectiveCamera & camera = _options.camera();
-            camera.resizeScreen(core::Size(w, h));
-            glViewport(0, 0, w, h);
-        }
 
         void Widget::paintEvent(QPaintEvent * e) {
             if (!_anno) {
                 return;
             }
+            _imageScene.initialize();
+            for (auto & s : _polygonLineScenes) {
+                s.initialize();
+            }
+            _strokeScene.initialize();
 
             QPainter painter(this);
             painter.beginNativePainting();
+
+            glEnable(GL_MULTISAMPLE);
+            GLint bufs;
+            GLint samples;
+            glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
+            glGetIntegerv(GL_SAMPLES, &samples);
+            //qDebug("Have %d buffers and %d samples", bufs, samples);
+
+
             qglClearColor(MakeQColor(_options.backgroundColor()));
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -111,6 +134,7 @@ namespace panolyz {
             for (auto & s : _polygonLineScenes) {
                 s.render(_options);
             }
+            _strokeScene.render(_options);
 
             painter.endNativePainting();
             swapBuffers();
@@ -123,6 +147,14 @@ namespace panolyz {
             if (e->buttons() & Qt::MidButton) {
                 _lastPos = e->pos();
                 setCursor(Qt::OpenHandCursor);
+            } else if((e->buttons() & Qt::LeftButton) && _state != Idle){
+                if (_state == CreatingOcclusion) {
+                    _chain.points.push_back(normalize(_options.camera().toSpace(gui::MakeCoreVec(e->pos()))));
+                } else if (_state == CreatingPolygon) {
+                    _chain.points.push_back(normalize(_options.camera().toSpace(gui::MakeCoreVec(e->pos()))));
+                }
+                rebuildStrokeScene();
+                update();
             } else {
                 BaseClass::mousePressEvent(e);
             }
@@ -156,12 +188,27 @@ namespace panolyz {
             if (!_anno) {
                 return;
             }
+
+            update();
             BaseClass::wheelEvent(e);
         }
 
         void Widget::keyPressEvent(QKeyEvent * e) {
             if (!_anno) {
                 return;
+            }
+            if (e->key() == Qt::Key_Space) {
+                if (_state == CreatingOcclusion) {
+                    acceptAsOcclusion();
+                } else if (_state == CreatingPolygon) {
+                    acceptAsPolygon(_towardVPId, _alongVPId, _isClutter);
+                }
+                clearStroke();
+                rebuildPolygonLineScenes();
+                update();
+            } else if (e->key() == Qt::Key_Escape) {
+                clearStroke();
+                update();
             }
             BaseClass::keyPressEvent(e);
         }
@@ -205,7 +252,7 @@ namespace panolyz {
             // occlusion chains                   
             for (auto & occ : _anno->occlusions) {
                 SceneBuilder sb;
-                sb.lineWidth(5.0);
+                sb.installingOptions().lineWidth = 5.0;
                 sb.installingOptions().discretizeOptions.color = gui::Cyan;
                 sb.installingOptions().defaultShaderSource = gui::OpenGLShaderSourceDescriptor::XLines;
 
@@ -219,8 +266,13 @@ namespace panolyz {
         }
 
         void Widget::rebuildStrokeScene() {
+            if (_chain.empty()) {
+                _strokeScene = gui::Scene();
+                return;
+            }
+
             SceneBuilder sb;
-            sb.lineWidth(5.0);
+            sb.installingOptions().lineWidth = 5.0;
             sb.installingOptions().discretizeOptions.color = gui::Orange;
             sb.installingOptions().defaultShaderSource = gui::OpenGLShaderSourceDescriptor::XLines;
             auto o = _chain;
@@ -231,29 +283,85 @@ namespace panolyz {
             _strokeScene = sb.scene();
         }
 
+        void Widget::clearStroke() {
+            _chain.points.clear();
+            _strokeScene = gui::Scene();
+        }
+
+        void Widget::acceptAsPolygon(int towardVPId, int alongVPId, bool clutter) {
+            _anno->polygons.push_back(Polygon3(_chain));
+            _anno->polygonTowardVPIds.push_back(towardVPId);
+            _anno->polygonAlongVPIds.push_back(alongVPId);
+            _anno->polygonAreClutters.push_back(clutter);
+            _chain.points.clear();
+            _strokeScene = gui::Scene();
+            rebuildPolygonLineScenes();
+        }
+
+        void Widget::acceptAsOcclusion() {
+            _anno->occlusions.push_back(std::move(_chain));
+            _chain.points.clear();
+            _strokeScene = gui::Scene();
+            rebuildPolygonLineScenes();
+        }
+
 
         MainWin::MainWin() : QMainWindow(nullptr) {
-            _w = new Widget;
+            _anno.reset();
+            _w = new Widget(this);
             setCentralWidget(_w);
+
+            QAction * defaultAction = nullptr;
+            
+            // menus...
+            auto menuFile = menuBar()->addMenu(tr("File"));
+            connect(defaultAction = menuFile->addAction(tr("Open Image (with Annotation if possible)")), &QAction::triggered, [this]() {
+                auto fname = QFileDialog::getOpenFileName(this, tr("Select An Image File"), tr("H:\\DataSet"), 
+                    tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
+                if (fname.isEmpty())
+                    return;
+                selectFile(fname);
+            });
+            defaultAction->setShortcut(tr("Ctrl+o"));
+
+            connect(defaultAction = menuFile->addAction(tr("Save Annotation")), &QAction::triggered, [this]() {
+                if (_fname.isEmpty())
+                    return;
+                QFileInfo annofinfo(annoFileName());
+                if (!SaveToDisk(annofinfo.absoluteFilePath().toStdString(), _anno)) {
+                    QMessageBox::critical(this, tr("Saving Annotation Failed!"), tr("Can't Save To \"") + annofinfo.absoluteFilePath() + "\"!");
+                } else {
+                    qDebug() << "Success!";
+                }
+            });
+            defaultAction->setShortcut(tr("Ctrl+s"));
         }
 
         MainWin::~MainWin() {
 
         }
 
+        void MainWin::clear() {
+            _fname.clear();
+            _anno.reset();
+        }
+
         void MainWin::selectFile(const QString & fname) {
-            assert(!fname.isEmpty());
             QFileInfo finfo(fname);
             assert(finfo.exists());
+
+            _fname = fname;
             
             // get annotation filename
-            auto annoFileName = finfo.fileName() + ".anno.cereal";
-            QFileInfo annofinfo(annoFileName);
+            QFileInfo annofinfo(annoFileName());
 
             // if exist, load it
             if (!annofinfo.exists() || !LoadFromDisk(annofinfo.absoluteFilePath().toStdString(), _anno)) {
                 // can't load
                 auto image = gui::MakeCVMat(QImage(fname));
+                MakePanorama(image);
+                ResizeToHeight(image, 700);
+
                 _anno.view = CreatePanoramicView(image);
 
                 // collect lines in each view
@@ -274,6 +382,7 @@ namespace panolyz {
                 // estimate vp
                 auto line3s = ClassifyEachAs(rawLine3s, -1);
                 auto vps = EstimateVanishingPointsAndClassifyLines(line3s);
+                OrderVanishingPoints(vps);
                 int vertVPId = NearestDirectionId(vps, Vec3(0, 0, 1));
 
                 _anno.lines = std::move(line3s);
@@ -282,6 +391,15 @@ namespace panolyz {
             }  
 
             _w->setCurAnnotation(&_anno);
+        }
+
+        QString MainWin::annoFileName() const {
+            QFileInfo finfo(_fname);
+            if (!finfo.exists())
+                return QString();
+
+            auto annoFileName = finfo.absoluteFilePath() + ".anno.cereal";
+            return annoFileName;
         }
 
     }
