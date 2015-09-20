@@ -2,11 +2,24 @@
 #include "../core/geometry.hpp"
 #include "../core/cameras.hpp"
 
+#include "rl_graph_control.hpp"
+
 namespace pano {
 
     namespace experimental {
 
         using namespace core;
+
+        struct OrientedPolygon {
+            Polygon3 polygon;
+            int towardVPId;
+            int alongVPId;
+            bool isClutter;
+            template <class Archiver>
+            inline void serialize(Archiver & ar) {
+                ar(polygon, towardVPId, alongVPId, isClutter);
+            }
+        };
 
         struct PanoIndoorAnnotation {
             PanoramicView view;
@@ -15,10 +28,7 @@ namespace pano {
             int vertVPId;
             std::vector<Classified<Line3>> lines;
 
-            std::vector<Polygon3> polygons;
-            std::vector<int> polygonTowardVPIds;
-            std::vector<int> polygonAlongVPIds;
-            std::vector<bool> polygonAreClutters;
+            std::vector<OrientedPolygon> polygons;
             std::vector<Chain3> occlusions;
 
             void reset() { 
@@ -27,18 +37,30 @@ namespace pano {
                 vertVPId = 0;
                 lines.clear();
                 polygons.clear();
-                polygonTowardVPIds.clear();
-                polygonAlongVPIds.clear();
-                polygonAreClutters.clear();
                 occlusions.clear();
             }
 
             template <class Archiver>
             inline void serialize(Archiver & ar) {
                 ar(view, vps, vertVPId, lines,
-                    polygons, polygonTowardVPIds, polygonAlongVPIds, polygonAreClutters, occlusions);
+                    polygons, occlusions);
             }
         };
+
+        std::string AnnotationFilePath(const std::string & imageFilePath);
+
+        void ProjectOn(const Polygon3 & polygon, const PanoramicCamera & cam, Imagei & canvas, int val);
+
+        void AttachAnnotationConstraints(const RLGraph & mg,
+            const PanoramicCamera & cam,
+            const SegmentationTopo & segtopo,
+            const std::vector<RegionHandle> & rhs,
+            const std::vector<RegionBoundaryHandle> & bhs,
+            RLGraphControls & controls,
+            const std::vector<OrientedPolygon> & polygons,
+            const std::vector<Chain3> & occlusions);
+
+
 
 
         // quantitative evaluations 

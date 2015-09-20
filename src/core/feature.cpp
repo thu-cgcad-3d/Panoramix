@@ -2109,7 +2109,9 @@ namespace pano {
 
             template <class PixelDiffFuncT, class ImageT>
             std::vector<Edge> ComposeGraphEdges(int width, int height, bool isPanorama,
-                const ImageT & smoothed, const PixelDiffFuncT & pixelDiff) {
+                const ImageT & smoothed, const PixelDiffFuncT & pixelDiff, 
+                bool useOnlyStraightConnectivity = false, 
+                bool connectAllPolerPixelsIfIsPanorama = true) {
 
                 std::vector<Edge> edges;
                 edges.reserve(width * height * 4);
@@ -2131,20 +2133,22 @@ namespace pano {
                             edges.push_back(edge);
                         }
 
-                        if ((x < width - 1) && (y < height - 1)) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = ((y + 1) % height) * width + ((x + 1) % width);
-                            edge.w = pixelDiff(smoothed, { x, y }, { (x + 1) % width, (y + 1) % height });
-                            edges.push_back(edge);
-                        }
+                        if (!useOnlyStraightConnectivity) {
+                            if ((x < width - 1) && (y < height - 1)) {
+                                Edge edge;
+                                edge.a = y * width + x;
+                                edge.b = ((y + 1) % height) * width + ((x + 1) % width);
+                                edge.w = pixelDiff(smoothed, { x, y }, { (x + 1) % width, (y + 1) % height });
+                                edges.push_back(edge);
+                            }
 
-                        if ((x < width - 1) && (y > 0)) {
-                            Edge edge;
-                            edge.a = y * width + x;
-                            edge.b = ((y + height - 1) % height) * width + ((x + 1) % width);
-                            edge.w = pixelDiff(smoothed, { x, y }, { (x + 1) % width, (y + height - 1) % height });
-                            edges.push_back(edge);
+                            if ((x < width - 1) && (y > 0)) {
+                                Edge edge;
+                                edge.a = y * width + x;
+                                edge.b = ((y + height - 1) % height) * width + ((x + 1) % width);
+                                edge.w = pixelDiff(smoothed, { x, y }, { (x + 1) % width, (y + height - 1) % height });
+                                edges.push_back(edge);
+                            }
                         }
                     }
                 }
@@ -2155,28 +2159,32 @@ namespace pano {
                         edge.b = y * width + width - 1;
                         edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y });
                         edges.push_back(edge);
-                        if (y < height - 1) {
-                            edge.b = (y + 1) * width + width - 1;
-                            edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y + 1 });
-                            edges.push_back(edge);
-                        }
-                        if (y > 0) {
-                            edge.b = (y - 1) * width + width - 1;
-                            edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y - 1 });
-                            edges.push_back(edge);
+                        if (!useOnlyStraightConnectivity) {
+                            if (y < height - 1) {
+                                edge.b = (y + 1) * width + width - 1;
+                                edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y + 1 });
+                                edges.push_back(edge);
+                            }
+                            if (y > 0) {
+                                edge.b = (y - 1) * width + width - 1;
+                                edge.w = pixelDiff(smoothed, cv::Point{ 0, y }, cv::Point{ width - 1, y - 1 });
+                                edges.push_back(edge);
+                            }
                         }
                     }
-                    for (int x1 = 0; x1 < width; x1++) {
-                        for (int x2 = x1; x2 < width; x2++) {
-                            Edge edge;
-                            edge.a = 0 * width + x1;
-                            edge.b = 0 * width + x2;
-                            edge.w = pixelDiff(smoothed, cv::Point{ x1, 0 }, cv::Point{ x2, 0 });
-                            edges.push_back(edge);
-                            edge.a = (height - 1) * width + x2;
-                            edge.b = (height - 1) * width + x1;
-                            edge.w = pixelDiff(smoothed, cv::Point{ x2, height - 1 }, cv::Point{ x1, height - 1 });
-                            edges.push_back(edge);
+                    if (connectAllPolerPixelsIfIsPanorama) {
+                        for (int x1 = 0; x1 < width; x1++) {
+                            for (int x2 = x1; x2 < width; x2++) {
+                                Edge edge;
+                                edge.a = 0 * width + x1;
+                                edge.b = 0 * width + x2;
+                                edge.w = pixelDiff(smoothed, cv::Point{ x1, 0 }, cv::Point{ x2, 0 });
+                                edges.push_back(edge);
+                                edge.a = (height - 1) * width + x2;
+                                edge.b = (height - 1) * width + x1;
+                                edge.w = pixelDiff(smoothed, cv::Point{ x2, height - 1 }, cv::Point{ x1, height - 1 });
+                                edges.push_back(edge);
+                            }
                         }
                     }
                 }
@@ -2738,7 +2746,7 @@ namespace pano {
             std::vector<Edge> edges = ComposeGraphEdges(width, height, crossBorder, segs,
                 [](const Imagei & im, const cv::Point & p1, const cv::Point & p2) {
                 return im(p1) == im(p2) ? 0 : 1e5;
-            });
+            }, true, false);
 
             int num = (int)edges.size();
             Universe u = SegmentGraph(vSizes, edges, 0.1);
@@ -2910,9 +2918,6 @@ namespace pano {
         }
 
 
-        bool operator < (const Pixel & a, const Pixel & b) {
-            return std::tie(a.x, a.y) < std::tie(b.x, b.y);
-        }
 
         void ExtractSegmentationTopology(const Imagei & segs,
             std::vector<std::vector<Pixel>> & bndpixels,

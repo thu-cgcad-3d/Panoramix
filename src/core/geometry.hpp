@@ -38,6 +38,18 @@ namespace pano {
         using Point3i = Point<int, 3>;
         using Point4i = Point<int, 4>;
 
+        template <class T, int N>
+        inline bool operator < (const Vec<T, N> & a, const Vec<T, N> & b) {
+            for (int i = 0; i < N; i++) {
+                if (a[i] > b[i]) {
+                    return false;
+                } else if (a[i] < b[i]) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         using Vec5 = Vec<double, 5>;
         using Vec5f = Vec<float, 5>;
         using Vec7 = Vec<double, 7>;

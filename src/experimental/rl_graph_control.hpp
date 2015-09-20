@@ -260,8 +260,6 @@ namespace pano {
             double eyeHeightRatioLowerBound = 0.1, double eyeHeightRatioUpperBound = 0.6,
             double angleThreshold = M_PI / 100.0, const Vec3 & verticalSeed = Vec3(0, 0, 1));
 
-
-
         void LooseOrientationConstraintsOnComponents(const RLGraph & mg,
             RLGraphControls & controls, const RLGraphVars & vars,
             double linesLoosableRatio = 0.2, double regionsLoosableRatio = 0.05,

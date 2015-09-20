@@ -190,6 +190,25 @@ namespace pano {
             return featureMeanTable;
         }
 
+        template <class T, int N, class CameraT>
+        HandledTable<RegionHandle, std::map<Vec<T, N>, int>> CollectLabelCountsOnRegions(const RLGraph & mg,
+            const CameraT & pcam, const ImageOf<Vec<T, N>> & label) {
+            HandledTable<RegionHandle, std::map<Vec<T, N>, int>> labelCountsTable = mg.createComponentTable<RegionData, std::map<Vec<T, N>, int>>();
+            for (auto & r : mg.components<RegionData>()) {
+                auto rh = r.topo.hd;
+                auto regionMaskView = PerfectRegionMaskView(mg, rh);
+                auto sampler = MakeCameraSampler(regionMaskView.camera, pcam);
+                auto featureOnRegion = sampler(feature);
+                for (auto it = regionMaskView.image.begin(); it != regionMaskView.image.end(); ++it) {
+                    if (!*it) {
+                        continue;
+                    }
+                    labelCountsTable[rh][featureOnRegion(it.pos())] ++;
+                }
+            }
+            return labelCountsTable;
+        }
+
 
 
         HandledTable<RegionBoundaryHandle, int> CollectOcclusionResponseOnBoundaries(const RLGraph & mg,
