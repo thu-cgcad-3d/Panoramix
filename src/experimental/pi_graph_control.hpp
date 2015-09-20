@@ -12,9 +12,8 @@ namespace pano {
         void DisableBottomSeg(PIGraph & mg);
         void DisableInvalidConstraints(PIGraph & mg);
 
-        void AttachGCConstraints(PIGraph & mg, const Image5d & gc);
+        void AttachGCConstraints(PIGraph & mg, const Image5d & gc, int vertVPId);
 
-        void DetectAndApplyOcclusions(PIGraph & mg);
-
+ 
     }
 }

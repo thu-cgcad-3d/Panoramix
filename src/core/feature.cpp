@@ -1003,6 +1003,7 @@ namespace pano {
             auto inters = ComputeLineIntersections(pureLines, nullptr);
 
             auto vanishingPoints = FindOrthogonalPrinicipleDirections(inters, 1000, 500, true).unwrap();
+            OrderVanishingPoints(vanishingPoints);
 
             auto scores = ClassifyLines(lines, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
             assert(scores.rows == lines.size() && scores.cols == vanishingPoints.size());

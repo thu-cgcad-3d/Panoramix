@@ -13,13 +13,12 @@ namespace pano {
             std::vector<int> peakySegs;
             for (int i = 0; i < mg.nsegs; i++) {
                 double radiusAngle = 0.0;
-                for (int bnd : mg.seg2bnds[i]) {
-                    for (int bp : mg.bnd2bndPieces[bnd]) {
-                        for (auto & c : mg.bndPiece2dirs[bp]) {
-                            double angle = AngleBetweenDirections(mg.seg2center[i], c);
-                            if (angle > radiusAngle) {
-                                radiusAngle = angle;
-                            }
+                auto & contours = mg.seg2contours[i];
+                for (auto & cs : contours) {
+                    for (auto & c : cs) {
+                        double angle = AngleBetweenDirections(mg.seg2center[i], c);
+                        if (angle > radiusAngle) {
+                            radiusAngle = angle;
                         }
                     }
                 }
@@ -37,7 +36,6 @@ namespace pano {
                 Imageub mask = Imageub::zeros(ppc.screenSize());
 
                 // project contours to ppc
-                auto & contours = mg.seg2contours[i];
                 std::vector<std::vector<Point2i>> contourProjs(contours.size());
                 for (int k = 0; k < contours.size(); k++) {
                     auto & contourProj = contourProjs[k];
@@ -208,7 +206,6 @@ namespace pano {
                         }
                     }
                 }
-
                 if (intersected) {
                     horizontalSegs.push_back(seg);
                 }
@@ -219,25 +216,72 @@ namespace pano {
         }
 
         void DisableTopSeg(PIGraph & mg) {
-
+            int topSeg = mg.segs(Pixel(0, 0));
+            mg.seg2control[topSeg].used = false;
         }
 
         void DisableBottomSeg(PIGraph & mg) {
-
+            int bottomSeg = mg.segs(Pixel(0, mg.segs.rows - 1));
+            mg.seg2control[bottomSeg].used = false;
         }
 
         void DisableInvalidConstraints(PIGraph & mg) {
 
         }
 
-        void AttachGCConstraints(PIGraph & mg, const Image5d & gc) {
+        void AttachGCConstraints(PIGraph & mg, const Image5d & gc, int vertVPId) {
+
+            auto up = normalize(mg.vps[vertVPId]);
+            if (up.dot(-mg.view.camera.up()) < 0) {
+                up = -up;
+            }
+
+            auto gcMeanOnSegs = CollectFeatureMeanOnSegs(mg, mg.view.camera, gc);
+            for (int seg = 0; seg < mg.nsegs; seg++) {
+                auto & c = mg.seg2control[seg];
+                if (!c.used) {
+                    continue;
+                }
+                auto & gcMean = gcMeanOnSegs[seg];
+                double gcMeanSum = std::accumulate(std::begin(gcMean.val), std::end(gcMean.val), 0.0);
+                assert(gcMeanSum <= 1.1);
+                if (gcMeanSum == 0.0) {
+                    continue;
+                }
+
+                std::vector<size_t> orderedIds(std::distance(std::begin(gcMean), std::end(gcMean)));
+                std::iota(orderedIds.begin(), orderedIds.end(), 0ull);
+                std::sort(orderedIds.begin(), orderedIds.end(), [&gcMean](size_t a, size_t b) {return gcMean[a] > gcMean[b]; });
+
+                size_t maxid = orderedIds.front();
+                if (maxid == ToUnderlying(GeometricContextIndex::ClutterOrPorous) && gcMean[maxid] < 0.5) {
+                    maxid = orderedIds[1];
+                }
+
+                if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.seg2center[seg].dot(up) < 0) { // lower
+                    // assign horizontal constriant
+                    c.orientationClaz = vertVPId;
+                    c.orientationNotClaz = -1;
+                    c.used = true;
+                    continue;
+                }
+                if (maxid == ToUnderlying(GeometricContextIndex::CeilingOrSky)) {
+                    c.orientationClaz = vertVPId;
+                    c.orientationNotClaz = -1;
+                    c.used = true;
+                    continue;
+                }
+                double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
+                if (wallScore > 0.5 && mg.seg2center[seg].dot(up) < 0) {
+                    c.orientationClaz = -1;
+                    c.orientationNotClaz = vertVPId;
+                    c.used = true;
+                    continue;
+                }
+            }
 
         }
 
-
-        void DetectAndApplyOcclusions(PIGraph & mg) {
-
-        }
 
 
 

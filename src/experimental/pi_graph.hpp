@@ -3,6 +3,8 @@
 #include "../core/basic_types.hpp"
 #include "../core/cameras.hpp"
 
+#include "../gui/basic_types.hpp"
+
 namespace pano {
 
     namespace experimental {
@@ -102,6 +104,98 @@ namespace pano {
             double incidenceAngleVerticalDirectionThreshold);
 
 
+
+
+
+
+
+        // Print PIGraph
+        template <
+            class SegColorerT = core::ConstantFunctor<gui::ColorTag>,
+            class LinePieceColorerT = core::ConstantFunctor<gui::ColorTag>,
+            class BndPieceColorerT = core::ConstantFunctor<gui::ColorTag>
+        >
+        inline Image3f Print(const PIGraph & mg,
+            SegColorerT && segColor = gui::Transparent,
+            LinePieceColorerT && lpColor = gui::Transparent,
+            BndPieceColorerT && bpColor = gui::Transparent,
+            int boundaryWidth = 1, int lineWidth = 2) {
+            Image3f rendered = Image3f::zeros(mg.segs.size());
+            // segs
+            for (auto it = rendered.begin(); it != rendered.end(); ++it) {
+                int seg = mg.segs(it.pos());
+                gui::Color color = segColor(seg);
+                *it = Vec3f(color.bluef(), color.greenf(), color.redf());
+            }
+            // lines
+            if (lineWidth > 0) {
+                for (int lp = 0; lp < mg.linePiece2line.size(); lp++) {
+                    gui::Color color = lpColor(lp);
+                    if (color.isTransparent())
+                        continue;
+                    auto & ps = mg.linePiece2samples[lp];
+                    for (int i = 1; i < ps.size(); i++) {
+                        auto p1 = ToPixel(mg.view.camera.toScreen(ps[i - 1]));
+                        auto p2 = ToPixel(mg.view.camera.toScreen(ps[i]));
+                        if (Distance(p1, p2) >= rendered.cols / 2) {
+                            continue;
+                        }
+                        cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
+                        cv::line(rendered, p1, p2, (cv::Scalar)color / 255.0, lineWidth);
+                    }
+                }
+            }
+            // region boundary
+            if (boundaryWidth > 0) {
+                for (int bp = 0; bp < mg.bndPiece2bnd.size(); bp ++) {
+                    gui::Color color = bpColor(bp);
+                    if (color.isTransparent())
+                        continue;
+                    auto & e = mg.bndPiece2dirs[bp];
+                    for (int i = 1; i < e.size(); i++) {
+                        auto p1 = core::ToPixel(mg.view.camera.toScreen(e[i - 1]));
+                        auto p2 = core::ToPixel(mg.view.camera.toScreen(e[i]));
+                        if (Distance(p1, p2) >= rendered.cols / 2) {
+                            continue;
+                        }
+                        cv::clipLine(cv::Rect(0, 0, rendered.cols, rendered.rows), p1, p2);
+                        cv::line(rendered, p1, p2, (cv::Scalar)color / 255.0, boundaryWidth);
+                    }
+                }
+            }
+            return rendered;
+        }
+
+
+        // PerfectSegMaskView
+        View<PartialPanoramicCamera, Imageub> PerfectSegMaskView(const PIGraph & mg, int seg, double focal = 100.0);
+
+        // CollectFeatureMeanOnSegs
+        template <class T, int N, class CameraT>
+        std::vector<Vec<T, N>> CollectFeatureMeanOnSegs(const PIGraph & mg,
+            const CameraT & pcam, const ImageOf<Vec<T, N>> & feature) {
+            std::vector<Vec<T, N>> featureMeanTable(mg.nsegs);
+            for (int i = 0; i < mg.nsegs; i++) {
+                auto regionMaskView = PerfectSegMaskView(mg, i, 100.0);
+                if (regionMaskView.image.empty()) {
+                    continue;
+                }
+                auto sampler = MakeCameraSampler(regionMaskView.camera, pcam);
+                auto featureOnRegion = sampler(feature);
+                int votes = 0;
+                Vec<T, N> featureSum;
+                for (auto it = regionMaskView.image.begin(); it != regionMaskView.image.end(); ++it) {
+                    if (!*it) {
+                        continue;
+                    }
+                    featureSum += featureOnRegion(it.pos());
+                    votes += 1;
+                }
+                auto featureMean = featureSum / std::max(votes, 1);
+                featureMeanTable[i] = featureMean;
+            }
+            return featureMeanTable;
+        }
     }
 
 }

@@ -111,7 +111,6 @@ namespace pano {
             for (auto it = segs.begin(); it != segs.end(); ++it) {
                 double weight = cos((it.pos().y - height / 2.0) / height * M_PI);
                 mg.seg2area[*it] += weight;
-                mg.seg2center[*it] += normalize(view.camera.toSpace(it.pos()));
             }
             for (auto & c : mg.seg2center) {
                 c /= norm(c);
@@ -170,13 +169,16 @@ namespace pano {
                 contours.erase(iter, contours.end());
 
                 mg.seg2contours[i].resize(contours.size());
+                mg.seg2center[i] = Origin();
                 for (int j = 0; j < contours.size(); j++) {
                     auto & cs = mg.seg2contours[i][j];
                     cs.reserve(contours[j].size());
                     for (auto & p : contours[j]) {
-                        cs.push_back(normalize(view.camera.toSpace(p)));
+                        cs.push_back(normalize(sCam.toSpace(p)));
+                        mg.seg2center[i] += cs.back();
                     }
                 }
+                mg.seg2center[i] /= norm(mg.seg2center[i]);
             }
 
 
@@ -642,6 +644,43 @@ namespace pano {
         
             return mg;
         }
+
+
+
+
+
+
+        View<PartialPanoramicCamera, Imageub> PerfectSegMaskView(const PIGraph & mg, int seg, double focal) {
+            auto & contours = mg.seg2contours[seg];
+            double radiusAngle = 0.0;
+            for (auto & cs : contours) {
+                for (auto & c : cs) {
+                    double angle = AngleBetweenDirections(mg.seg2center[seg], c);
+                    if (angle > radiusAngle) {
+                        radiusAngle = angle;
+                    }
+                }
+            }
+            int ppcSize = std::ceil(2 * radiusAngle * focal);
+            Vec3 x;
+            std::tie(x, std::ignore) = ProposeXYDirectionsFromZDirection(mg.seg2center[seg]);
+            PartialPanoramicCamera ppc(ppcSize, ppcSize, focal, Point3(0, 0, 0), mg.seg2center[seg], x);
+            Imageub mask = Imageub::zeros(ppc.screenSize());
+
+            // project contours to ppc
+            std::vector<std::vector<Point2i>> contourProjs(contours.size());
+            for (int k = 0; k < contours.size(); k++) {
+                auto & contourProj = contourProjs[k];
+                contourProj.reserve(contours[k].size());
+                for (auto & d : contours[k]) {
+                    contourProj.push_back(ecast<int>(ppc.toScreen(d)));
+                }
+            }
+            cv::fillPoly(mask, contourProjs, (uint8_t)1);
+            return View<PartialPanoramicCamera, Imageub>{mask, ppc};
+        }
+
+
 
     }
 
