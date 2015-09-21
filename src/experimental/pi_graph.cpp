@@ -424,7 +424,6 @@ namespace pano {
                 }
             }
             mg.bndPiece2linePieces.resize(mg.bndPiece2dirs.size());
-            mg.bndPiece2anchors.resize(mg.bndPiece2dirs.size());
             mg.bndPiece2occlusion.resize(mg.bndPiece2dirs.size(), OcclusionRelation::Unknown);
 
 
@@ -476,6 +475,7 @@ namespace pano {
                         (nearestBndPiece == -1 && lastDetectedSeg != nearestSeg) ||
                         j == samples.size() - 1) && !(lastDetectedBndPiece == -1 && lastDetectedSeg == -1);
                     if (neighborChanged) {
+                        double len = AngleBetweenDirections(collectedSamples.front(), collectedSamples.back());
                         if (collectedSamples.size() >= 2) {
                             if (lastDetectedBndPiece != -1) { // line piece bound to bnd piece
                                 mg.linePiece2bndPiece.push_back(lastDetectedBndPiece);
@@ -483,8 +483,9 @@ namespace pano {
                                 mg.line2linePieces[i].push_back(linePieceId);
                                 mg.linePiece2line.push_back(i);
                                 mg.linePiece2samples.push_back(std::move(collectedSamples));
+                                mg.linePiece2length.push_back(len);
                                 mg.linePiece2seg.push_back(-1);
-                                mg.linePiece2used.push_back(true);
+                                mg.linePiece2attachment.push_back(AttachmentRelation::Unknown);
                                 auto & bndPieceDirs = mg.bndPiece2dirs[lastDetectedBndPiece];
                                 assert(bndPieceDirs.size() > 1);
                                 Vec3 bndRotNormal = bndPieceDirs.front().cross(bndPieceDirs.back());
@@ -496,9 +497,10 @@ namespace pano {
                                 mg.line2linePieces[i].push_back(linePieceId);
                                 mg.linePiece2line.push_back(i);
                                 mg.linePiece2samples.push_back(std::move(collectedSamples));
+                                mg.linePiece2length.push_back(len);
                                 mg.linePiece2seg.push_back(lastDetectedSeg);
                                 mg.seg2linePieces[lastDetectedSeg].push_back(linePieceId);
-                                mg.linePiece2used.push_back(true);
+                                mg.linePiece2attachment.push_back(AttachmentRelation::Unknown);
                                 mg.linePiece2bndPieceInSameDirection.push_back(true);
                             }
                         }

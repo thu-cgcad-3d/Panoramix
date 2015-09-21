@@ -78,7 +78,6 @@ namespace pano {
             std::map<ml::FactorGraph::VarHandle, int> vh2bndPiece;
             for (int i = 0; i < mg.nbndPieces(); i++) {
                 std::vector<BndPieceLabel> allowedLabels;
-                int vc = -1;
                 double c_i = mg.bndPiece2length[i];
 
                 if (mg.bndPiece2occlusion[i] != OcclusionRelation::Unknown) {
@@ -88,11 +87,39 @@ namespace pano {
                 } else {
                     allowedLabels = { Connected, LeftIsFront, RightIsFront };
                 }
-                vc = fg.addVarCategory(allowedLabels.size(), c_i);
+                int vc = fg.addVarCategory(allowedLabels.size(), c_i);
                 auto vh = fg.addVar(vc);
                 bndPiece2vh[i] = vh;
                 bndPiece2allowedLabels[i] = std::move(allowedLabels);
                 vh2bndPiece[vh] = i;
+            }
+
+            // linePieces (that are not bound to bndPieces)
+            enum LinePieceLabel {
+                Attached = (int)AttachmentRelation::Attached, 
+                Detached = (int)AttachmentRelation::Detached
+            };
+            std::vector<ml::FactorGraph::VarHandle> linePiece2vh(mg.nlinePieces());
+            std::vector<std::vector<LinePieceLabel>> linePiece2allowedLabels(mg.nlinePieces());
+            std::map<ml::FactorGraph::VarHandle, int> vh2linePiece;
+            for (int i = 0; i < mg.nlinePieces(); i++) {
+                bool hasBndPiece = mg.linePiece2bndPiece[i] != -1;
+                if (hasBndPiece) {
+                    continue;
+                }
+                std::vector<LinePieceLabel> allowedLabels;
+                if (mg.linePiece2attachment[i] != AttachmentRelation::Unknown) {
+                    allowedLabels = { (LinePieceLabel)mg.linePiece2attachment[i] };
+                } else if(mg.linePiece2length[i] < DegreesToRadians(1)) {
+                    allowedLabels = { Detached };
+                } else {
+                    allowedLabels = { Attached, Detached };
+                }
+                int vc = fg.addVarCategory(allowedLabels.size(), mg.linePiece2length[i]);
+                auto vh = fg.addVar(vc);
+                linePiece2vh[i] = vh;
+                linePiece2allowedLabels[i] = std::move(allowedLabels);
+                vh2linePiece[vh] = i;
             }
 
 
@@ -107,7 +134,8 @@ namespace pano {
                     ml::FactorGraph::FactorCategoryId fcid, void * givenData)->double {
                     assert(nvar == 1);
                     int dof = seg2allowedLabels[seg][varlabels[0]].dof();
-                    return mg.seg2area[seg] * (dof - 1) * 0.01;
+                    //return mg.seg2area[seg] * (dof - 1) * 0.01;
+                    return 0.0;
                 }, 1.0);
                 fg.addFactor({ seg2vh[seg] }, fc);
             }
@@ -120,11 +148,29 @@ namespace pano {
                     BndPieceLabel label = bndPiece2allowedLabels[bndPiece][varlabels[0]];
                     double len = mg.bndPiece2length[bndPiece];
                     if (label != Connected) {
-                        return mg.bndPiece2linePieces[bndPiece].empty() ? len * 0.1 : 0.0;
+                        return mg.bndPiece2linePieces[bndPiece].empty() ? len * 0.01 : 0.0;
                     }
                     return 0.0;
                 }, 1.0);
                 fg.addFactor({ bndPiece2vh[bndPiece] }, fc);
+            }
+
+            // linePiece
+            for (int linePiece = 0; linePiece < mg.nlinePieces(); linePiece++) {
+                if (linePiece2vh[linePiece].invalid()) {
+                    continue;
+                }
+                int fc = fg.addFactorCategory([linePiece, &linePiece2allowedLabels, &mg](const int * varlabels, size_t nvar,
+                    ml::FactorGraph::FactorCategoryId fcid, void * givenData)->double {
+                    assert(nvar == 1);
+                    LinePieceLabel label = linePiece2allowedLabels[linePiece][varlabels[0]];
+                    double len = mg.linePiece2length[linePiece];
+                    if (label != Attached) {
+                        return len * 0.005;
+                    }
+                    return 0.0;
+                }, 1.0);
+                fg.addFactor({ linePiece2vh[linePiece] }, fc);
             }
 
             // seg-bndPiece-seg
@@ -155,12 +201,12 @@ namespace pano {
                         }
 
                         // 1 -- 1
-                        if (seglabel1.dof() == 1 && seglabel2.dof() == 1 &&
-                            seglabel1 == seglabel2 &&
-                            (bndPieceClaz == seglabel1.orientationClaz || bndPieceClaz == -1) && 
-                            bndPieceLabel != Connected) {
-                            return bndPieceLen * 3.0;
-                        }
+                        //if (seglabel1.dof() == 1 && seglabel2.dof() == 1 &&
+                        //    seglabel1 == seglabel2 &&
+                        //    (bndPieceClaz == seglabel1.orientationClaz || bndPieceClaz == -1) && 
+                        //    bndPieceLabel != Connected) {
+                        //    return bndPieceLen * 3.0;
+                        //}
 
                         if (seglabel1.dof() == 1 && seglabel2.dof() == 1 && 
                             seglabel1.orientationClaz != seglabel2.orientationClaz && 
@@ -200,68 +246,58 @@ namespace pano {
                         if (seglabel1.dof() == 1 && seglabel2.dof() == 2 &&
                             seglabel1.orientationClaz == seglabel2.orientationNotClaz &&
                             bndPieceClaz == seglabel1.orientationClaz && bndPieceLabel != RightIsFront) {
-                            return bndPieceLen * 10.0;
+                            return bndPieceLen * 100.0;
                         }
                         if (seglabel1.dof() == 2 && seglabel2.dof() == 1 &&
                             seglabel1.orientationNotClaz == seglabel2.orientationClaz &&
                             bndPieceClaz == seglabel2.orientationClaz && bndPieceLabel != LeftIsFront) {
-                            return bndPieceLen * 10.0;
+                            return bndPieceLen * 100.0;
                         }                        
 
                         // 2 -- 2
-                        if (seglabel1.dof() == 2 && seglabel2.dof() == 2 &&
-                            seglabel1.orientationNotClaz == seglabel2.orientationNotClaz &&
-                            bndPieceClaz != -1 && bndPieceClaz != seglabel1.orientationNotClaz && bndPieceLabel != Connected) {
-                            return bndPieceLen * 3.0;
-                        }
+                        //if (seglabel1.dof() == 2 && seglabel2.dof() == 2 &&
+                        //    seglabel1.orientationNotClaz == seglabel2.orientationNotClaz &&
+                        //    bndPieceClaz != -1 && bndPieceClaz != seglabel1.orientationNotClaz && bndPieceLabel != Connected) {
+                        //    return bndPieceLen * 3.0;
+                        //}
 
                         return 0.0;
-                    }, 10.0);
+                    }, 1.0);
                     fg.addFactor({ sv1, sv2, bndPiece2vh[bndPiece] }, fc);
                 }    
             }
 
-            //// seg supporting by bnd
-            //for (int seg = 0; seg < mg.nsegs; seg++) {
-            //    auto sv = seg2vh[seg];
-            //    if (sv.invalid()) continue;
+            // seg supporting by bnd
+            for (int seg = 0; seg < mg.nsegs; seg++) {
+                auto sv = seg2vh[seg];
+                if (sv.invalid()) continue;
 
-            //    int bndPiecesNum = 0;
-            //    for (int bnd : mg.seg2bnds[seg]) {
-            //        bndPiecesNum += mg.bnd2bndPieces[bnd].size();
-            //    }
+                int bndPiecesNum = 0;
+                for (int bnd : mg.seg2bnds[seg]) {
+                    bndPiecesNum += mg.bnd2bndPieces[bnd].size();
+                }
 
-            //    for (int bnd : mg.seg2bnds[seg]) {
-            //        for (int bndPiece : mg.bnd2bndPieces[bnd]) {
-            //            int fc = fg.addFactorCategory([seg, bndPiece, bndPiecesNum, &mg, &seg2allowedLabels, &bndPiece2allowedLabels](
-            //                const int * varlabels, size_t nvar,
-            //                ml::FactorGraph::FactorCategoryId fcid, void * givenData) {
-            //                assert(nvar == 2);
-            //                auto seglabel = seg2allowedLabels[seg][varlabels[0]];
-            //                BndPieceLabel bndPieceLabel = bndPiece2allowedLabels[bndPiece][varlabels[1]];
-            //                
-            //                int bndPieceClaz = mg.bndPiece2classes[bndPiece];
+                for (int bnd : mg.seg2bnds[seg]) {
+                    for (int bndPiece : mg.bnd2bndPieces[bnd]) {
+                        int fc = fg.addFactorCategory([seg, bndPiece, bndPiecesNum, &mg, &seg2allowedLabels, &bndPiece2allowedLabels](
+                            const int * varlabels, size_t nvar,
+                            ml::FactorGraph::FactorCategoryId fcid, void * givenData) {
+                            assert(nvar == 2);
+                            auto seglabel = seg2allowedLabels[seg][varlabels[0]];
+                            BndPieceLabel bndPieceLabel = bndPiece2allowedLabels[bndPiece][varlabels[1]];
+                            
+                            int bndPieceClaz = mg.bndPiece2classes[bndPiece];
 
-            //                if (bndPieceLabel == Connected) {
-            //                    return 0.0;
-            //                }
-
-            //                if (seglabel.dof() == 3) {
-            //                    return 1.0 / bndPiecesNum;
-            //                }
-            //                if (seglabel.dof() == 2 && bndPieceClaz != seglabel.orientationNotClaz) {
-            //                    return 1.0 / bndPiecesNum;
-            //                }
-            //                if (seglabel.dof() == 1) {
-            //                    return 0.3 / bndPiecesNum;
-            //                }
-
-            //                return 0.0;
-            //            }, 0.1);
-            //            fg.addFactor({ sv, bndPiece2vh[bndPiece] }, fc);
-            //        }
-            //    }
-            //}
+                            if (bndPieceLabel == Connected) {
+                                return 0.0;
+                            }
+                            return 1.0 / bndPiecesNum * 0.01;
+                            //return 0.0;
+                        }, 1.0);
+                        fg.addFactor({ sv, bndPiece2vh[bndPiece] }, fc);
+                    }
+                }
+            }
 
 
             // seg hinted by bnd
@@ -291,7 +327,7 @@ namespace pano {
                             static const double bndPieceLenThres = DegreesToRadians(5);
 
                             if (seglabel.dof() == 1 && bndPieceClaz == seglabel.orientationClaz && bndPieceLen >= bndPieceLenThres) {
-                                return bndPieceLen * 3;
+                                return bndPieceLen * 0.1;
                             }
 
                             return 0.0;
@@ -307,6 +343,7 @@ namespace pano {
             for (int line = 0; line < mg.nlines(); line++) {
                 auto & linePieces = mg.line2linePieces[line];
                 if (linePieces.size() == 1) continue;
+                // bndPiece - bndPiece
                 for (int i = 0; i < linePieces.size(); i++) {
                     for (int j = i + 1; j < linePieces.size(); j++) {
 
@@ -337,21 +374,52 @@ namespace pano {
                                 return 0.0;
                             }
                             if ((bndPieceLabel1 == Connected) || (bndPieceLabel2 == Connected)) {
-                                return weight * 10;
+                                return weight * 100;
                             }
                             if (sameDirection && bndPieceLabel1 != bndPieceLabel2) {
-                                return weight * 10;
+                                return weight * 100;
                             }
                             if (!sameDirection && bndPieceLabel1 == bndPieceLabel2) {
-                                return weight * 10;
+                                return weight * 100;
                             }
 
                             return 0.0;
 
-                        }, 5.0);
+                        }, 1.0);
 
                         fg.addFactor({ bndPiece2vh[bndPiece1], bndPiece2vh[bndPiece2] }, fc);
 
+                    }
+                }
+                // bndPiece - linePiece
+                for (int i = 0; i < linePieces.size(); i++) {
+                    int bndPiece = mg.linePiece2bndPiece[linePieces[i]];
+                    if (bndPiece == -1) {
+                        continue;
+                    }
+                    for (int j = 0; j < linePieces.size(); j++) {
+                        int linePiece = linePieces[j];
+                        if (mg.linePiece2bndPiece[linePiece] != -1) {
+                            continue;
+                        }
+                        int fc = fg.addFactorCategory(
+                            [bndPiece, linePiece, &mg, &bndPiece2allowedLabels, &linePiece2allowedLabels](
+                            const int * varlabels, size_t nvar, ml::FactorGraph::FactorCategoryId fcid, void * givenData) {
+
+                            assert(nvar == 2);
+                            BndPieceLabel bndPieceLabel = bndPiece2allowedLabels[bndPiece][varlabels[0]];
+                            LinePieceLabel linePieceLabel = linePiece2allowedLabels[linePiece][varlabels[1]];
+                            double bndPieceLen = mg.bndPiece2length[bndPiece];
+                            double linePieceLen = mg.linePiece2length[linePiece];
+                            double weight = bndPieceLen + linePieceLen;
+
+                            if (bndPieceLabel == Connected && linePieceLabel == Attached ||
+                                bndPieceLabel != Connected && linePieceLabel == Detached) {
+                                return 0.0;
+                            }
+                            return weight * 10;
+                        }, 1.0);
+                        fg.addFactor({ bndPiece2vh[bndPiece], linePiece2vh[linePiece] }, fc);
                     }
                 }
             }
@@ -424,13 +492,13 @@ namespace pano {
 
             ml::FactorGraph::ResultTable bestLabels;
             double minEnergy = std::numeric_limits<double>::infinity();
-            fg.solve(20, 10, [&bestLabels, &minEnergy](int epoch, double energy, double denergy, const ml::FactorGraph::ResultTable & results) -> bool {
+            fg.solve(1000, 10, [&bestLabels, &minEnergy](int epoch, double energy, double denergy, const ml::FactorGraph::ResultTable & results) -> bool {
                 std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
                 if (energy < minEnergy) {
                     bestLabels = results;
                     minEnergy = energy;
                 }
-                if (denergy / std::max(energy, 1.0) > 0.3) {
+                if (denergy / std::max(energy, 1.0) > 0.01) {
                     return false;
                 }
                 return true;

@@ -26,6 +26,12 @@ namespace pano {
             Unknown
         };
 
+        enum class AttachmentRelation {
+            Attached,
+            Detached,
+            Unknown
+        };
+
         struct PIGraph {
             PanoramicView view;
             std::vector<Vec3> vps;
@@ -44,9 +50,10 @@ namespace pano {
 
             // linePiece
             std::vector<std::vector<Vec3>> linePiece2samples;
+            std::vector<double> linePiece2length;
             std::vector<int> linePiece2line;
             std::vector<int> linePiece2seg; // could be -1
-            std::vector<bool> linePiece2used; // for linePice2seg only, as for linePIece2bndPiece, see the bndPiece2occlusion
+            std::vector<AttachmentRelation> linePiece2attachment; // for linePice2seg only, as for linePIece2bndPiece, see the bndPiece2occlusion
             std::vector<int> linePiece2bndPiece; // could be -1 (either 2seg or 2bndPiece)
             std::vector<bool> linePiece2bndPieceInSameDirection;
             int nlinePieces() const { return linePiece2samples.size(); }
@@ -63,7 +70,6 @@ namespace pano {
             std::vector<std::pair<int, int>> lineRelation2lines;
             std::vector<double> lineRelation2weight;
             std::vector<bool> lineRelation2IsIncidence;
-            std::vector<bool> lineRelation2used;
             int nlineRelations() const { return lineRelation2anchor.size(); }
 
             // bndPiece (a STRAIGHT boundary piece in a bnd)
@@ -72,7 +78,6 @@ namespace pano {
             std::vector<int> bndPiece2classes;
             std::vector<int> bndPiece2bnd;
             std::vector<std::vector<int>> bndPiece2linePieces;
-            std::vector<std::vector<Vec3>> bndPiece2anchors;
             std::vector<OcclusionRelation> bndPiece2occlusion;
             int nbndPieces() const { return bndPiece2dirs.size(); }
 
@@ -87,16 +92,24 @@ namespace pano {
             std::vector<std::vector<int>> junc2bnds;
             int njuncs() const { return junc2positions.size(); }
 
+
+            // ccs for solving equations
+            int nccs;
+            std::vector<int> seg2ccid;
+            std::vector<int> line2ccid;
+
+
             template <class Archiver>
             void serialize(Archiver & ar) {
                 ar(view, vps, verticalVPId);
                 ar(segs, nsegs, seg2bnds, seg2linePieces, seg2control, seg2area, seg2center, seg2plane, seg2contours);
-                ar(linePiece2samples, linePiece2line, linePiece2seg, linePiece2used, linePiece2bndPiece, linePiece2bndPieceInSameDirection);
+                ar(linePiece2samples, linePiece2length, linePiece2line, linePiece2seg, linePiece2attachment, linePiece2bndPiece, linePiece2bndPieceInSameDirection);
                 ar(lines, line2linePieces, line2lineRelations, line2reconstructed);
-                ar(lineRelation2anchor, lineRelation2lines, lineRelation2weight, lineRelation2IsIncidence, lineRelation2used);
-                ar(bndPiece2dirs, bndPiece2length, bndPiece2classes, bndPiece2bnd, bndPiece2linePieces, bndPiece2anchors, bndPiece2occlusion);
+                ar(lineRelation2anchor, lineRelation2lines, lineRelation2weight, lineRelation2IsIncidence);
+                ar(bndPiece2dirs, bndPiece2length, bndPiece2classes, bndPiece2bnd, bndPiece2linePieces, bndPiece2occlusion);
                 ar(bnd2bndPieces, bnd2segs, bnd2juncs);
                 ar(junc2positions, junc2bnds);
+                ar(nccs, seg2ccid, line2ccid);
             }
 
         };
