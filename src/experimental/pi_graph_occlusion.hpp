@@ -3,7 +3,7 @@
 namespace pano {
     namespace experimental {
 
-        void DetectAndApplyOcclusions(PIGraph & mg);
+        void DetectOcclusions(PIGraph & mg);
 
     }
 }

@@ -20,15 +20,16 @@ namespace pano {
         };
 
         enum class OcclusionRelation {
-            FirstIsFront,
-            SecondIsFront,
             Connected,
+            LeftIsFront,
+            RightIsFront,
             Unknown
         };
 
         struct PIGraph {
             PanoramicView view;
             std::vector<Vec3> vps;
+            int verticalVPId;
 
             // seg
             Imagei segs;
@@ -48,12 +49,14 @@ namespace pano {
             std::vector<bool> linePiece2used; // for linePice2seg only, as for linePIece2bndPiece, see the bndPiece2occlusion
             std::vector<int> linePiece2bndPiece; // could be -1 (either 2seg or 2bndPiece)
             std::vector<bool> linePiece2bndPieceInSameDirection;
+            int nlinePieces() const { return linePiece2samples.size(); }
 
             // line
             std::vector<Classified<Line3>> lines;
             std::vector<std::vector<int>> line2linePieces;
             std::vector<std::vector<int>> line2lineRelations;
             std::vector<Line3> line2reconstructed;
+            int nlines() const { return lines.size(); }
 
             // lineRelation
             std::vector<Vec3> lineRelation2anchor;
@@ -61,6 +64,7 @@ namespace pano {
             std::vector<double> lineRelation2weight;
             std::vector<bool> lineRelation2IsIncidence;
             std::vector<bool> lineRelation2used;
+            int nlineRelations() const { return lineRelation2anchor.size(); }
 
             // bndPiece (a STRAIGHT boundary piece in a bnd)
             std::vector<std::vector<Vec3>> bndPiece2dirs; // continuous
@@ -70,19 +74,22 @@ namespace pano {
             std::vector<std::vector<int>> bndPiece2linePieces;
             std::vector<std::vector<Vec3>> bndPiece2anchors;
             std::vector<OcclusionRelation> bndPiece2occlusion;
+            int nbndPieces() const { return bndPiece2dirs.size(); }
 
             // bnd (a CONTINUOUS boundary between TWO segs)
             std::vector<std::vector<int>> bnd2bndPieces; // continuously connected
             std::vector<std::pair<int, int>> bnd2segs; // left , right
             std::vector<std::pair<int, int>> bnd2juncs; // from, to
+            int nbnds() const { return bnd2bndPieces.size(); }
 
             // junc (junction of >=3 bnds)
             std::vector<Vec3> junc2positions;
             std::vector<std::vector<int>> junc2bnds;
+            int njuncs() const { return junc2positions.size(); }
 
             template <class Archiver>
             void serialize(Archiver & ar) {
-                ar(view, vps);
+                ar(view, vps, verticalVPId);
                 ar(segs, nsegs, seg2bnds, seg2linePieces, seg2control, seg2area, seg2center, seg2plane, seg2contours);
                 ar(linePiece2samples, linePiece2line, linePiece2seg, linePiece2used, linePiece2bndPiece, linePiece2bndPieceInSameDirection);
                 ar(lines, line2linePieces, line2lineRelations, line2reconstructed);
@@ -94,7 +101,7 @@ namespace pano {
 
         };
 
-        PIGraph BuildPIGraph(const PanoramicView & view, const std::vector<Vec3> & vps,
+        PIGraph BuildPIGraph(const PanoramicView & view, const std::vector<Vec3> & vps, int verticalVPId,
             const Imagei & segs, const std::vector<Classified<Line3>> & lines,
             double bndPieceSplitAngleThres,
             double bndPieceClassifyAngleThres,

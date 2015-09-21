@@ -159,11 +159,11 @@ namespace pano {
         }
 
 
-        void AttachPrincipleDirectionConstraints(PIGraph & mg, double angle) {
+        void AttachPrincipleDirectionConstraints(PIGraph & mg) {
             SetClock();
             std::vector<std::vector<int>> peakySegs(mg.vps.size());
             for (int i = 0; i < mg.vps.size(); i++) {
-                peakySegs[i] = CollectSegsIntersectingDirection(mg.vps[i], true, mg, angle);
+                peakySegs[i] = CollectSegsIntersectingDirection(mg.vps[i], true, mg, M_PI / 30.0);
             }
             for (int i = 0; i < mg.vps.size(); i++) {
                 auto & vp = mg.vps[i];
@@ -185,9 +185,9 @@ namespace pano {
             }
         }
 
-        void AttachWallConstraints(PIGraph & mg, double rangeAngle, int vertVPId) {
+        void AttachWallConstraints(PIGraph & mg, double rangeAngle) {
             SetClock();
-            auto & vertical = mg.vps[vertVPId];
+            auto & vertical = mg.vps[mg.verticalVPId];
 
             std::vector<int> horizontalSegs;
             for (int seg = 0; seg < mg.nsegs; seg ++) {
@@ -211,27 +211,39 @@ namespace pano {
                 }
             }
             for (auto h : horizontalSegs) {
-                MakeRegionPlaneAlsoAlong(h, vertVPId, mg);
+                MakeRegionPlaneAlsoAlong(h, mg.verticalVPId, mg);
             }
         }
 
         void DisableTopSeg(PIGraph & mg) {
             int topSeg = mg.segs(Pixel(0, 0));
             mg.seg2control[topSeg].used = false;
+            for (int bnd : mg.seg2bnds[topSeg]) {
+                bool onLeft = mg.bnd2segs[bnd].first == topSeg;
+                for (int bp : mg.bnd2bndPieces[bnd]) {
+                    mg.bndPiece2occlusion[bp] = onLeft ? OcclusionRelation::RightIsFront : OcclusionRelation::LeftIsFront;
+                }
+            }
         }
 
         void DisableBottomSeg(PIGraph & mg) {
             int bottomSeg = mg.segs(Pixel(0, mg.segs.rows - 1));
             mg.seg2control[bottomSeg].used = false;
+            for (int bnd : mg.seg2bnds[bottomSeg]) {
+                bool onLeft = mg.bnd2segs[bnd].first == bottomSeg;
+                for (int bp : mg.bnd2bndPieces[bnd]) {
+                    mg.bndPiece2occlusion[bp] = onLeft ? OcclusionRelation::RightIsFront : OcclusionRelation::LeftIsFront;
+                }
+            }
         }
 
         void DisableInvalidConstraints(PIGraph & mg) {
 
         }
 
-        void AttachGCConstraints(PIGraph & mg, const Image5d & gc, int vertVPId) {
+        void AttachGCConstraints(PIGraph & mg, const Image5d & gc) {
 
-            auto up = normalize(mg.vps[vertVPId]);
+            auto up = normalize(mg.vps[mg.verticalVPId]);
             if (up.dot(-mg.view.camera.up()) < 0) {
                 up = -up;
             }
@@ -260,13 +272,13 @@ namespace pano {
 
                 if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.seg2center[seg].dot(up) < 0) { // lower
                     // assign horizontal constriant
-                    c.orientationClaz = vertVPId;
+                    c.orientationClaz = mg.verticalVPId;
                     c.orientationNotClaz = -1;
                     c.used = true;
                     continue;
                 }
                 if (maxid == ToUnderlying(GeometricContextIndex::CeilingOrSky)) {
-                    c.orientationClaz = vertVPId;
+                    c.orientationClaz = mg.verticalVPId;
                     c.orientationNotClaz = -1;
                     c.used = true;
                     continue;
@@ -274,7 +286,7 @@ namespace pano {
                 double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
                 if (wallScore > 0.5 && mg.seg2center[seg].dot(up) < 0) {
                     c.orientationClaz = -1;
-                    c.orientationNotClaz = vertVPId;
+                    c.orientationNotClaz = mg.verticalVPId;
                     c.used = true;
                     continue;
                 }

@@ -79,7 +79,7 @@ namespace pano {
 
         }
 
-        PIGraph BuildPIGraph(const PanoramicView & view, const std::vector<Vec3> & vps,
+        PIGraph BuildPIGraph(const PanoramicView & view, const std::vector<Vec3> & vps, int verticalVPId,
             const Imagei & segs, const std::vector<Classified<Line3>> & lines, 
             double bndPieceSplitAngleThres, 
             double bndPieceClassifyAngleThres,
@@ -90,7 +90,9 @@ namespace pano {
 
             PIGraph mg;
             mg.view = view;
-            mg.vps = vps;
+            assert(vps.size() >= 3);
+            mg.vps = std::vector<Vec3>(vps.begin(), vps.begin() + 3);
+            mg.verticalVPId = verticalVPId;
 
             mg.segs = segs;
             assert(IsDenseSegmentation(segs));
@@ -108,14 +110,14 @@ namespace pano {
             mg.seg2plane.resize(nsegs);
             mg.seg2contours.resize(nsegs);
 
+            double fullArea = 0.0;
             for (auto it = segs.begin(); it != segs.end(); ++it) {
                 double weight = cos((it.pos().y - height / 2.0) / height * M_PI);
                 mg.seg2area[*it] += weight;
-            }
-            for (auto & c : mg.seg2center) {
-                c /= norm(c);
+                fullArea += weight;
             }
             for (int i = 0; i < nsegs; i++) {
+                mg.seg2area[i] /= fullArea;
                 auto & control = mg.seg2control[i];
                 control.orientationClaz = control.orientationNotClaz = -1;
                 control.used = true;
@@ -422,6 +424,8 @@ namespace pano {
                 }
             }
             mg.bndPiece2linePieces.resize(mg.bndPiece2dirs.size());
+            mg.bndPiece2anchors.resize(mg.bndPiece2dirs.size());
+            mg.bndPiece2occlusion.resize(mg.bndPiece2dirs.size(), OcclusionRelation::Unknown);
 
 
             // register bndPiece dirs in RTree
@@ -432,7 +436,7 @@ namespace pano {
                 }
             }
             RTreeMap<Vec3, int> lineRTree;
-            const double lineSampleAngle = bndPieceBoundToLineAngleThres / 2.0;
+            static const double lineSampleAngle = DegreesToRadians(0.5);
             std::vector<std::vector<Vec3>> lineSamples(mg.lines.size());
             for (int i = 0; i < mg.lines.size(); i++) {
                 auto & line = mg.lines[i];

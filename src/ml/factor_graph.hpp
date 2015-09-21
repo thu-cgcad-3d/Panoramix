@@ -45,6 +45,7 @@ namespace pano {
                 _varCategories.push_back(vc); return _varCategories.size() - 1; 
             }
             VarCategoryId addVarCategory(size_t nlabels, double c_i) {
+                assert(nlabels > 0);
                 return addVarCategory(VarCategory{ nlabels, c_i });
             }
 
@@ -56,6 +57,10 @@ namespace pano {
             }
             FactorCategoryId addFactorCategory(const FactorCategory & fc) {
                 _factorCategories.push_back(fc); return _factorCategories.size() - 1; 
+            }
+            template <class FunT>
+            FactorCategoryId addFactorCategory(FunT && costFun, double c_alpha) {
+                _factorCategories.push_back(FactorCategory{ std::forward<FunT>(costFun), c_alpha });  return _factorCategories.size() - 1;
             }
 
             const FactorCategory & factorCategory(FactorCategoryId fid) const { return _factorCategories.at(fid); }
@@ -69,10 +74,12 @@ namespace pano {
             VarCategory & varCategory(VarHandle vh) { return _varCategories.at(_graph.data(vh)); }
 
             FactorHandle addFactor(std::initializer_list<VarHandle> vhs, FactorCategoryId fc) { 
+                assert(std::all_of(vhs.begin(), vhs.end(), [](VarHandle vh) {return vh.valid(); }));
                 return _graph.add<1>(vhs, fc); 
             }
             template <class IteratorT>
             FactorHandle addFactor(IteratorT vhsBegin, IteratorT vhsEnd, FactorCategoryId fc) { 
+                assert(std::all_of(vhsBegin, vhsEnd, [](VarHandle vh) {return vh.valid(); }));
                 return _graph.add<1>(vhsBegin, vhsEnd, fc); 
             }
             const FactorCategory & factorCategory(FactorHandle fh) const { return _factorCategories.at(_graph.data(fh)); }

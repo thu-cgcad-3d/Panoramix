@@ -113,6 +113,7 @@ namespace pano {
                 MGFHandle mgfh = f.topo.hd;
                 FactorHandle fh = f.data.h;
                 auto & vhs = _graph.topo(fh).lowers;
+                assert(!vhs.empty());
                 auto & v2fmsghsSet = messages.topo(mgfh).constraints<V2FMessage>();
                 auto & v2fmsghs = orderedV2Fmsghs[mgfh];
                 v2fmsghs.resize(vhs.size());
