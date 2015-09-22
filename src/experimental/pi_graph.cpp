@@ -107,8 +107,8 @@ namespace pano {
             mg.seg2center.resize(nsegs);
             mg.seg2control.resize(nsegs);
             mg.seg2linePieces.resize(nsegs);
-            mg.seg2plane.resize(nsegs);
             mg.seg2contours.resize(nsegs);
+            mg.seg2recPlanes.resize(nsegs);
 
             double fullArea = 0.0;
             for (auto it = segs.begin(); it != segs.end(); ++it) {
@@ -122,8 +122,6 @@ namespace pano {
                 control.orientationClaz = control.orientationNotClaz = -1;
                 control.used = true;
                 auto & center = mg.seg2center[i];
-                mg.seg2plane[i].normal = - center;
-                mg.seg2plane[i].anchor = center;
             }
             for (int i = 0; i < nsegs; i++) {
                 Image regionMask = (segs == i);
@@ -189,10 +187,7 @@ namespace pano {
             int nlines = lines.size();
             mg.line2linePieces.resize(nlines);
             mg.line2lineRelations.resize(nlines);
-            mg.line2reconstructed.resize(nlines);
-            for (int i = 0; i < nlines; i++) {
-                mg.line2reconstructed[i] = mg.lines[i].component;
-            }
+            mg.line2recLines.resize(nlines);
 
             std::map<std::set<int>, std::vector<int>> segs2juncs;
             std::vector<std::vector<int>> seg2juncs(nsegs);

@@ -237,10 +237,6 @@ namespace pano {
             }
         }
 
-        void DisableInvalidConstraints(PIGraph & mg) {
-
-        }
-
         void AttachGCConstraints(PIGraph & mg, const Image5d & gc) {
 
             auto up = normalize(mg.vps[mg.verticalVPId]);
@@ -294,6 +290,10 @@ namespace pano {
 
         }
 
+
+        void AttachAnnotations(PIGraph & mg, const PIAnnotation & anno) {
+
+        }
 
 
 

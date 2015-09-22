@@ -5,5 +5,8 @@ namespace pano {
 
         void DetectOcclusions(PIGraph & mg);
 
+        // just set all bndpiece and linepice connected/attached
+        void AssumeThereAreNoOcclusions(PIGraph & mg);
+
     }
 }

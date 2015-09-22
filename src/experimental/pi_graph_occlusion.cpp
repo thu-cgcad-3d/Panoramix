@@ -529,5 +529,14 @@ namespace pano {
         }
 
 
+        void AssumeThereAreNoOcclusions(PIGraph & mg) {
+            for (int bp = 0; bp < mg.nbndPieces(); bp++) {
+                mg.bndPiece2occlusion[bp] = OcclusionRelation::Connected;
+            }
+            for (int lp = 0; lp < mg.nlinePieces(); lp++) {
+                mg.linePiece2attachment[lp] = AttachmentRelation::Attached;
+            }
+        }
+
     }
 }

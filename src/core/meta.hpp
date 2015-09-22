@@ -433,6 +433,12 @@ namespace pano {
             inline RetT operator()(ParamTs && ... params) const { return value; }
             const RetT value;
         };
+        template <>
+        struct ConstantFunctor<void> {
+            inline ConstantFunctor() {}
+            template <class ... ParamTs>
+            inline void operator()(ParamTs && ... params) const {}
+        };
 
 
         template <class T>

@@ -165,6 +165,7 @@ namespace pano {
                         MGF2VHandle oppose;
                         for (MGF2VHandle f2v : messages.topo(vh).constraints<F2VMessage>()){
                             v2f.data.values += messages.data(f2v).values;
+                            assert(!v2f.data.values.hasNaN());
                             if (messages.topo(f2v).component<0>() == fh){
                                 oppose = f2v;
                             }
@@ -238,6 +239,7 @@ namespace pano {
                         
                         for (auto & f2v : f2vmsghs){
                             assert(messages.data(f2v).values.maxCoeff() <= std::numeric_limits<double>::infinity());
+                            assert(!messages.data(f2v).values.hasNaN());
                         }
                     }
                 }

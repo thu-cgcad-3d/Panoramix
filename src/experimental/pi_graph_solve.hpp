@@ -6,7 +6,9 @@
 namespace pano {
     namespace experimental {
 
-        void SolvePIGraph(PIGraph & mg, misc::Matlab & matlab);
+        void BuildConstraintGraph(PIGraph & mg);
 
+        void SolvePIGraph(int ccid, PIGraph & mg, misc::Matlab & matlab, int tryNum);
+      
     }
 }
