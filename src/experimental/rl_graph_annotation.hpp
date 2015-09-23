@@ -47,8 +47,6 @@ namespace pano {
             }
         };
 
-        std::string AnnotationFilePath(const std::string & imageFilePath);
-
         void ProjectOn(const Polygon3 & polygon, const PanoramicCamera & cam, Imagei & canvas, int val);
 
         void AttachAnnotationConstraints(const RLGraph & mg,

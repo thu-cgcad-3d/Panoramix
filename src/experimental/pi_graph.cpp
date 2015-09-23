@@ -110,14 +110,14 @@ namespace pano {
             mg.seg2contours.resize(nsegs);
             mg.seg2recPlanes.resize(nsegs);
 
-            double fullArea = 0.0;
+            mg.fullArea = 0.0;
             for (auto it = segs.begin(); it != segs.end(); ++it) {
                 double weight = cos((it.pos().y - height / 2.0) / height * M_PI);
                 mg.seg2area[*it] += weight;
-                fullArea += weight;
+                mg.fullArea += weight;
             }
             for (int i = 0; i < nsegs; i++) {
-                mg.seg2area[i] /= fullArea;
+                mg.seg2area[i] /= mg.fullArea;
                 auto & control = mg.seg2control[i];
                 control.orientationClaz = control.orientationNotClaz = -1;
                 control.used = true;

@@ -1,11 +1,10 @@
 #include <QApplication>
-
+#include <QFileDialog>
+#include <QtCore>
 
 #include "../../src/gui/singleton.hpp"
+#include "../../src/experimental/pi_graph_annotation.hpp"
 
-#include "mainwin_panoindoor.hpp"
-
-namespace category = panolyz::PanoramaIndoor;
 
 int main(int argc, char ** argv) {
     
@@ -20,12 +19,8 @@ int main(int argc, char ** argv) {
         QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
 
     for (auto & fname : filenames) {
-        category::MainWin mwin;
-        mwin.selectFile(fname);
-        mwin.resize(900, 800);
-        mwin.show();
-        pano::gui::Singleton::ContinueGui();
+        auto anno = pano::experimental::LoadOrInitializeNewAnnotation(fname.toStdString());
+        pano::experimental::EditAnnotation(anno);
+        pano::experimental::SaveAnnotation(fname.toStdString(), anno);
     }
-
-    //return pano::gui::Singleton::ContinueGui();
 }

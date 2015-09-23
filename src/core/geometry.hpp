@@ -489,6 +489,7 @@ namespace pano {
             Point<T, N> & operator[](size_t i) { return points[i]; }
             
             size_t size() const { return points.size(); }
+            void clear() { points.clear(); }
             bool empty() const { return points.empty(); }
 
             void append(const Point<T, N> & p) { points.push_back(p); }

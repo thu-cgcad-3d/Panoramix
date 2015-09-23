@@ -404,8 +404,8 @@ namespace pano {
                         });
                     }
 
-                    THERE_ARE_BUGS_HERE("We can't determine how much the bounding box of lines/point "
-                        "should be with a fixed line width/point size and a dynamic camera!!!!");
+                  /*  THERE_ARE_BUGS_HERE("We can't determine how much the bounding box of lines/point "
+                        "should be with a fixed line width/point size and a dynamic camera!!!!");*/
 
                     for (TriMesh::LineHandle i = 0; i < mesh.numberOfLines(); i++){
                         TriMesh::VertHandle v1, v2;

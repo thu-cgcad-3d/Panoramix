@@ -77,6 +77,7 @@ namespace pano {
             std::vector<std::vector<int>> seg2linePieces;            
             std::vector<SegControl> seg2control;
             std::vector<double> seg2area;
+            double fullArea;
             std::vector<Vec3> seg2center;
             std::vector<std::vector<std::vector<Vec3>>> seg2contours;
 
@@ -141,7 +142,7 @@ namespace pano {
             template <class Archiver>
             void serialize(Archiver & ar) {
                 ar(view, vps, verticalVPId);
-                ar(segs, nsegs, seg2bnds, seg2linePieces, seg2control, seg2area, seg2center, seg2contours);
+                ar(segs, nsegs, seg2bnds, seg2linePieces, seg2control, seg2area, fullArea, seg2center, seg2contours);
                 ar(linePiece2samples, linePiece2length, linePiece2line, linePiece2seg, linePiece2attachment, linePiece2bndPiece, linePiece2bndPieceInSameDirection);
                 ar(lines, line2linePieces, line2lineRelations);
                 ar(lineRelation2anchor, lineRelation2lines, lineRelation2weight, lineRelation2IsIncidence);

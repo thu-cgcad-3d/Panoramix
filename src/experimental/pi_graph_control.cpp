@@ -291,11 +291,6 @@ namespace pano {
         }
 
 
-        void AttachAnnotations(PIGraph & mg, const PIAnnotation & anno) {
-
-        }
-
-
 
     }
 }

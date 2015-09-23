@@ -186,7 +186,7 @@ namespace pano {
             const std::vector<Color> & colors() const { return _colors; }
             size_t size() const { return _colors.size(); }
             const Color & exceptionalColor() const { return _exceptionalColor; }
-            Color & exceptoinalColor() { return _exceptionalColor; }
+            Color & exceptionalColor() { return _exceptionalColor; }
             const Color & operator[](int claz) const { return claz < 0 ? _exceptionalColor : _colors[claz]; }
             Color & operator[](int claz) { return claz < 0 ? _exceptionalColor : _colors[claz]; }
             bool empty() const { return _colors.empty(); }

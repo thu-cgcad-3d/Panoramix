@@ -367,9 +367,11 @@ namespace pano {
             matlab << "scale = 1.0;";
             matlab << "D1D2 = ones(m, 1);"; //  current depths of anchors
 
+            double minE = std::numeric_limits<double>::infinity();
+
             std::vector<double> X;
             for (int i = 0; i < tryNum; i++) {
-                matlab << "K = (A1 - A2) .* repmat(D1D2 .* W, [1, n]);";
+                matlab << "K = (A1 - A2) .* repmat(D1D2.* W, [1, n]);";
                 matlab
                     << "cvx_begin"
                     << "variable X(n);"
@@ -379,16 +381,18 @@ namespace pano {
                     << "    ones(m, 1) <= A2 * X <= ones(m, 1) * scale;"
                     << "cvx_end";
 
-                matlab << "scale = scale * 1.5;";
+                matlab << "scale = scale * 2;";
                 //matlab << "D1D2 = 1./ (A1 * X) ./ (A2 * X);";
                 //matlab << "K = (A1 - A2) .* repmat(D1D2 .* W, [1, n]);";
                 matlab << "e = norm(K * X);";
+                matlab << "X = 2 * X ./ median((A1 + A2) * X);";
                 double e = matlab.var("e").scalar();
-                if (!IsInfOrNaN(e)) {
+                if (!IsInfOrNaN(e) && e < minE) {
                     std::cout << "e = " << e << std::endl;
                     X = matlab.var("X").toCVMat();
+                    minE = e;
                     break;
-                }                  
+                } 
             }
 
             // install results

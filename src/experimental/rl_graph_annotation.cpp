@@ -1,5 +1,3 @@
-#include <QFileInfo>
-
 #include "../core/single_view.hpp"
 
 #include "rl_graph_annotation.hpp"
@@ -8,14 +6,6 @@ namespace pano {
 
     namespace experimental {
 
-
-        std::string AnnotationFilePath(const std::string & imageFilePath) {
-            QFileInfo finfo(QString::fromStdString(imageFilePath));
-            if (!finfo.exists())
-                return "";
-            auto annoFileName = finfo.absoluteFilePath() + ".anno.cereal";
-            return annoFileName.toStdString();
-        }
 
         void ProjectOn(const Polygon3 & polygon, const PanoramicCamera & cam, Imagei & canvas, int val) {
             Vec3 center;
