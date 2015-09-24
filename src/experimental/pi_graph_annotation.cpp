@@ -1,3 +1,4 @@
+#include "../core/containers.hpp"
 #include "../gui/qttools.hpp"
 #include "../gui/utility.hpp"
 #include "../gui/singleton.hpp"
@@ -99,10 +100,11 @@ namespace pano {
         }
 
 
-
         void AttachAnnotatedPolygonsAndOcclusions(PIGraph & mg,
-            const std::vector<AnnotedPolygon> & polygons, const std::vector<AnnotedOcclusion> & occs) {
+            const std::vector<AnnotedPolygon> & polygons, const std::vector<AnnotedOcclusion> & occs,
+            double polygonBoundarySampleStepAngle, double occChainSampleStepAngle, double occChainToBndPieceAngleThres) {
             std::cout << "attaching annotated polygons and occlusions" << std::endl;
+            
             AssumeThereAreNoOcclusions(mg);
 
             // attach polygons
@@ -117,19 +119,22 @@ namespace pano {
                 center /= norm(center);
                 double maxAngleRadius = 0.0;
                 auto chain = polygon.boundary();
-                static const double sampleStepAngle = DegreesToRadians(1);
                 std::vector<Vec3> contour;
                 for (int k = 0; k < chain.size(); k++) {
                     auto & p1 = chain.at(k);
                     auto & p2 = chain.next(k);
-                    for (double a = 0.0; a < AngleBetweenDirections(p1, p2); a += sampleStepAngle) {
+                    double span = AngleBetweenDirections(p1, p2);
+
+                    for (double a = 0.0; a < span; a += polygonBoundarySampleStepAngle) {
                         auto dir = RotateDirection(p1, p2, a);
+                        assert(IsFuzzyZero(AngleBetweenDirections(p1, dir) - a, 1e-2));
                         double angle = AngleBetweenDirections(dir, center);
                         if (maxAngleRadius < angle) {
                             maxAngleRadius = angle;
                         }
+                        int ss = contour.size();
                         contour.push_back(dir);
-                    }
+                    }                   
                 }
 
                 Vec3 up;
@@ -140,24 +145,40 @@ namespace pano {
                 // project polygon using this camera
                 std::vector<Point2i> proj;
                 proj.reserve(contour.size());
-             
-                for (auto & dir : contour) {
-                    proj.push_back(cam.toScreen(dir));
+                
+                for (int k = 0; k < contour.size(); k++) {
+                    auto & dir = contour[k];
+                    auto p = cam.toScreen(dir);
+                    proj.push_back(p);
                 }
                 cv::fillPoly(mask, std::vector<std::vector<Point2i>>{proj}, (uint8_t)1);
 
                 auto segProj = segView.sampled(cam).image;
+                auto imProj = mg.view.sampled(cam).image;
                 for (auto it = mask.begin(); it != mask.end(); ++it) {
                     if (*it) {
                         int seg = segProj(it.pos());
-                        seg2polygonOccupationArea[seg][i] += 1.0 / mg.seg2area[seg] / mg.fullArea; // TODO weight error
+                        seg2polygonOccupationArea[seg][i] += 1.0 / mg.seg2area[seg] / mg.fullArea; // TODO there may be bugs here
                     }
                 }
             }
 
             for (int seg = 0; seg < mg.nsegs; seg++) {
                 auto & polyAreas = seg2polygonOccupationArea[seg];
-                double maxAreaRatio = 0.2;
+                double maxAreaRatio = 0.4;
+                // check whether their is any clutter mask polygons
+                bool hasClutterMask = false;
+                for (auto & p : polyAreas) {
+                    if (p.second > maxAreaRatio && !polygons[p.first].control.used) {
+                        hasClutterMask = true;
+                        break;
+                    }
+                }
+                if (hasClutterMask) {
+                    mg.seg2control[seg].orientationClaz = mg.seg2control[seg].orientationNotClaz = -1;
+                    mg.seg2control[seg].used = false;
+                    continue;
+                }
                 int bestPoly = -1;
                 for (auto & p : polyAreas) {
                     if (p.second > maxAreaRatio) {
@@ -172,6 +193,55 @@ namespace pano {
 
 
             // attach occlusions
+            RTreeMap<Vec3, int> bndPiecesRTree;
+            for (int bp = 0; bp < mg.nbndPieces(); bp++) {
+                for (auto & d : mg.bndPiece2dirs[bp]) {
+                    bndPiecesRTree.emplace(normalize(d), bp);
+                }
+            }
+            for (int i = 0; i < occs.size(); i++) {
+                auto & chain = occs[i].chain;
+
+                // sample on each chain               
+                for (int j = 1; j < chain.size(); j++) {
+                    auto & p1 = chain[j - 1];
+                    auto & p2 = chain[j];
+                    std::map<int, int> bndPiecesMet;
+                    for (double a = 0.0; a < AngleBetweenDirections(p1, p2); a += occChainSampleStepAngle) {
+                        auto dir = normalize(RotateDirection(p1, p2, a));
+                        // find nearest bnd piece
+                        int nearestbp = -1;
+                        double minAngleDist = occChainToBndPieceAngleThres;
+                        bndPiecesRTree.search(BoundingBox(dir).expand(occChainToBndPieceAngleThres * 3),
+                            [&dir, &minAngleDist, &nearestbp](const std::pair<Vec3, int> & bndPieceD) {
+                            double angleDist = AngleBetweenDirections(bndPieceD.first, dir);
+                            if (angleDist < minAngleDist) {
+                                minAngleDist = angleDist;
+                                nearestbp = bndPieceD.second;
+                            }
+                            return true;
+                        });
+                        if (nearestbp != -1) {
+                            bndPiecesMet[nearestbp] ++;
+                        }
+                    }
+                    for (auto & bpp : bndPiecesMet) {                        
+                        int bndPiece = bpp.first;
+                        auto & bndPieceDirs = mg.bndPiece2dirs[bndPiece];
+                        assert(bndPieceDirs.size() > 1);
+                        Vec3 bndRotNormal = bndPieceDirs.front().cross(bndPieceDirs.back());
+                        Vec3 edgeRotNormal = normalize(p1.cross(p2));
+                        bool sameDirection = bndRotNormal.dot(edgeRotNormal) > 0;
+                        if (sameDirection) {
+                            mg.bndPiece2occlusion[bndPiece] = OcclusionRelation::LeftIsFront;
+                        } else {
+                            mg.bndPiece2occlusion[bndPiece] = OcclusionRelation::RightIsFront;
+                        }
+                    }
+                }
+
+            }
+
 
         }
 

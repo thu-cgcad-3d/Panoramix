@@ -85,6 +85,28 @@ TEST(Feature, SegmentationExtractorInPanorama){
 }
 
 
+TEST(Feature, RemoveSmallRegionInSegmentation) {
+    core::Image3ub im = gui::PickAnImage(ProjectDataDirStrings::PanoramaIndoor);
+    core::ResizeToMakeHeightUnder(im, 800);
+    core::SegmentationExtractor segmenter;
+    segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
+    segmenter.params().sigma = 10.0;
+    segmenter.params().c = 1.0;
+    segmenter.params().superpixelSizeSuggestion = 2000;
+    core::Imagei segs;
+    int nsegs = 0;
+    std::tie(segs, nsegs) = segmenter(im, true);
+    gui::AsCanvas(gui::CreateRandomColorTableWithSize(nsegs)(segs)).show();
+
+    EXPECT_TRUE(core::IsDenseSegmentation(segs));
+    nsegs = core::RemoveSmallRegionInSegmentation(segs, 1000, true);
+    EXPECT_TRUE(core::IsDenseSegmentation(segs));
+
+    gui::AsCanvas(gui::CreateRandomColorTableWithSize(nsegs)(segs)).show();
+
+}
+
+
 TEST(Feature, RemoveThinRegionInSegmentation) {
     core::Image3ub im = gui::PickAnImage(ProjectDataDirStrings::PanoramaIndoor);
     core::ResizeToMakeHeightUnder(im, 800);

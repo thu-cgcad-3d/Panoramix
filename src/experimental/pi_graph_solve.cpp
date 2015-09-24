@@ -53,15 +53,15 @@ namespace pano {
                     continue;
                 }
                 auto & edge = edgesMap[MakeOrderedPair(seg2vert[seg1], seg2vert[seg2])];
-                auto & anchors = edge.anchors;
-                double & weight = edge.weight;
                 for (int bp : mg.bnd2bndPieces[bnd]) {
                     if (mg.bndPiece2occlusion[bp] != OcclusionRelation::Connected) {
                         continue;
                     }
-                    anchors.push_back(mg.bndPiece2dirs[bp].front());
-                    anchors.push_back(mg.bndPiece2dirs[bp].back());
-                    weight += mg.bndPiece2length[bp];
+                    auto & anchors = mg.bndPiece2dirs[bp];
+                    //edge.anchors.insert(edge.anchors.end(), anchors.begin(), anchors.end());
+                    edge.anchors.push_back(anchors.front());
+                    edge.anchors.push_back(anchors.back());
+                    edge.weight += mg.bndPiece2length[bp];
                 }                
             }
             // seg - bndpiece - linepiece - line
@@ -78,15 +78,19 @@ namespace pano {
                 if ((occ == OcclusionRelation::Connected || occ == OcclusionRelation::LeftIsFront) && seg2vert[seg1] != -1) {
                     // connect seg1 and line
                     auto & edge = edgesMap[MakeOrderedPair(seg2vert[seg1], line2vert[line])];
-                    edge.anchors.push_back(mg.bndPiece2dirs[bp].front());
-                    edge.anchors.push_back(mg.bndPiece2dirs[bp].back());
+                    auto & anchors = mg.bndPiece2dirs[bp];
+                    //edge.anchors.insert(edge.anchors.end(), anchors.begin(), anchors.end());
+                    edge.anchors.push_back(anchors.front());
+                    edge.anchors.push_back(anchors.back());
                     edge.weight += mg.bndPiece2length[bp];
                 }
                 if ((occ == OcclusionRelation::Connected || occ == OcclusionRelation::RightIsFront) && seg2vert[seg2] != -1) {
                     // connect seg2 and line
                     auto & edge = edgesMap[MakeOrderedPair(seg2vert[seg2], line2vert[line])];
-                    edge.anchors.push_back(mg.bndPiece2dirs[bp].front());
-                    edge.anchors.push_back(mg.bndPiece2dirs[bp].back());
+                    auto & anchors = mg.bndPiece2dirs[bp];
+                    //edge.anchors.insert(edge.anchors.end(), anchors.begin(), anchors.end());
+                    edge.anchors.push_back(anchors.front());
+                    edge.anchors.push_back(anchors.back());
                     edge.weight += mg.bndPiece2length[bp];
                 }
             }
@@ -104,8 +108,10 @@ namespace pano {
                 if (att == AttachmentRelation::Attached) {
                     // connect seg and line
                     auto & edge = edgesMap[MakeOrderedPair(seg2vert[seg], line2vert[line])];
-                    edge.anchors.push_back(mg.linePiece2samples[lp].front());
-                    edge.anchors.push_back(mg.linePiece2samples[lp].back());
+                    auto & anchors = mg.linePiece2samples[lp];
+                    //edge.anchors.insert(edge.anchors.end(), anchors.begin(), anchors.end());
+                    edge.anchors.push_back(anchors.front());
+                    edge.anchors.push_back(anchors.back());
                     edge.weight += mg.linePiece2length[lp];
                 }
             }
@@ -337,6 +343,7 @@ namespace pano {
                 int varpos1 = vert2varPosition[edge.vert1];
                 int varpos2 = vert2varPosition[edge.vert2];
                 
+                double eachWeight = sqrt(1.0 - Gaussian(edge.weight, 0.1) / edge.anchors.size());
                 for (auto & anchor : edge.anchors) {
                     auto coeffs1 = VariableCoefficientsForInverseDepthAtDirection(mg, vert1, anchor);
                     for (int k = 0; k < coeffs1.size(); k++) {
@@ -346,7 +353,7 @@ namespace pano {
                     for (int k = 0; k < coeffs2.size(); k++) {
                         A2triplets.emplace_back(eid, varpos2 + k, coeffs2[k]);
                     }
-                    W.push_back(edge.weight);
+                    W.push_back(eachWeight);
                     eid++;
                 }
             }
@@ -364,36 +371,46 @@ namespace pano {
             matlab << "m = size(A1, 1);"; // number of equations
             matlab << "n = size(A1, 2);"; // number of variables
 
-            matlab << "scale = 1.0;";
-            matlab << "D1D2 = ones(m, 1);"; //  current depths of anchors
+            matlab << "scale = 1.0;";           
 
             double minE = std::numeric_limits<double>::infinity();
 
             std::vector<double> X;
             for (int i = 0; i < tryNum; i++) {
-                matlab << "K = (A1 - A2) .* repmat(D1D2.* W, [1, n]);";
-                matlab
-                    << "cvx_begin"
-                    << "variable X(n);"
-                    << "minimize norm(K * X)"
-                    << "subject to"
-                    << "    ones(m, 1) <= A1 * X <= ones(m, 1) * scale;"
-                    << "    ones(m, 1) <= A2 * X <= ones(m, 1) * scale;"
-                    << "cvx_end";
-
-                matlab << "scale = scale * 2;";
-                //matlab << "D1D2 = 1./ (A1 * X) ./ (A2 * X);";
-                //matlab << "K = (A1 - A2) .* repmat(D1D2 .* W, [1, n]);";
-                matlab << "e = norm(K * X);";
-                matlab << "X = 2 * X ./ median((A1 + A2) * X);";
-                double e = matlab.var("e").scalar();
-                if (!IsInfOrNaN(e) && e < minE) {
-                    std::cout << "e = " << e << std::endl;
-                    X = matlab.var("X").toCVMat();
-                    minE = e;
+                matlab << "D1D2 = ones(m, 1);"; //  current depths of anchors
+                while(true) {
+                    matlab << "K = (A1 - A2) .* repmat(D1D2 .* W, [1, n]);";
+                    matlab
+                        << "cvx_begin"
+                        << "variable X(n);"
+                        << "minimize norm(K * X)"
+                        << "subject to"
+                        << "    ones(m, 1) <= A1 * X <= ones(m, 1) * scale;"
+                        << "    ones(m, 1) <= A2 * X <= ones(m, 1) * scale;"
+                        << "cvx_end";
+                    matlab << "e = norm(K * X);";
+                    double curE = matlab.var("e").scalar();
+                    std::cout << "e = " << curE << std::endl;
+                    if (IsInfOrNaN(curE)) {
+                        break;
+                    }
+                    if (curE < minE) {
+                        minE = curE;
+                        matlab << "X = 2 * X ./ median((A1 + A2) * X);";
+                        X = matlab.var("X").toCVMat();
+                    } else {
+                        break;
+                    }
+                    matlab << "D1D2 = 1./ (A1 * X) ./ (A2 * X);";
+                    matlab << "D1D2 = abs(D1D2) / norm(D1D2);";
+                }
+                if (IsInfOrNaN(minE)) {
+                    matlab << "scale = scale * 2;";
+                } else {
                     break;
-                } 
+                }
             }
+         
 
             // install results
             for (int vert : vertsInCC) {

@@ -318,11 +318,16 @@ namespace pano {
         namespace {
 
             inline double UniformSphericalAngleToScreenLength(double angle, double focal) {
-                return sqrt(2.0 * (1.0 - cos(angle))) * focal;
+                assert(angle <= M_PI && angle >= 0);
+                double len = sqrt(2.0 * (1.0 - cos(angle))) * focal;
+                assert(len >= 0);
+                return len;
             }
 
             inline double UniformSphericalScreenLengthToAngle(double len, double focal) {
-                return acos(1.0 - Square(len / focal) / 2.0);
+                double angle = acos(1.0 - Square(len / focal) / 2.0);
+                //assert(angle <= M_PI && angle >= 0);
+                return angle;
             }
 
         }
@@ -342,7 +347,7 @@ namespace pano {
             double a = sqrt(yy * yy + zz * zz);
             yy /= a;
             zz /= a;
-            double theta = AngleBetweenUndirectedVectors(p3 - _eye, _center - _eye);
+            double theta = AngleBetweenDirections(p3 - _eye, _center - _eye);
             double len = UniformSphericalAngleToScreenLength(theta, _focal);
             return Point2(_screenRadius + yy * len, _screenRadius + zz * len);
         }
@@ -357,7 +362,7 @@ namespace pano {
             Vec3 v3 = normalize(_yaxis * v2[0] + _zaxis * v2[1]);
             double len = Distance(p2d, Point2(_screenRadius, _screenRadius));
             double theta = UniformSphericalScreenLengthToAngle(len, _focal);
-            return v3 * tan(theta) * Distance(_eye, _center) + _center;
+            return v3 * sin(theta) * Distance(_eye, _center) + _center * cos(theta);
         }
 
 

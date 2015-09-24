@@ -62,7 +62,7 @@ namespace panolyz {
                 SaveToDisk(folder + "\\feature\\" + filename + "_omap", om);
                 {
                     gui::ColorTable rgb = gui::ColorTableDescriptor::RGBGreys;
-                    rgb.exceptoinalColor() = gui::Transparent;
+                    rgb.exceptionalColor() = gui::Transparent;
                     cv::imwrite(folder + "\\snapshot\\" + filename + "_omap.png", rgb(om));
                 }
 
@@ -194,7 +194,7 @@ namespace panolyz {
                 SaveToDisk(folder + "\\feature\\" + filename + "_omap", panoOmap.image);
                 {
                     gui::ColorTable rgb = gui::ColorTableDescriptor::RGBGreys;
-                    rgb.exceptoinalColor() = gui::Transparent;
+                    rgb.exceptionalColor() = gui::Transparent;
                     cv::imwrite(folder + "\\snapshot\\" + filename + "_omap.png", panoOmap.image * 255);
                 }
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../core/serialization.hpp"
+#include "../core/utility.hpp"
 #include "pi_graph.hpp"
 
 namespace pano {
@@ -34,12 +36,30 @@ namespace pano {
             std::vector<Classified<Line3>> lines;
             std::vector<AnnotedPolygon> polygons;
             std::vector<AnnotedOcclusion> occlusions;
+            std::vector<Line3> foldingLines;
 
             PIAnnotation() : vertVPId(-1) {}
 
             template <class Archiver>
-            inline void serialize(Archiver & ar) {
-                ar(originalImage, rectifiedImage, view, vps, vertVPId, lines, polygons, occlusions);
+            inline void load(Archiver & ar, std::int32_t version) {
+                if (version == 0) {
+                    ar(originalImage, rectifiedImage, view, vps, vertVPId, lines, polygons, occlusions);
+                } else if(version == 1){
+                    ar(originalImage, rectifiedImage, view, vps, vertVPId, lines, polygons, occlusions, foldingLines);
+                } else {
+                    NOT_IMPLEMENTED_YET();
+                }
+            }
+
+            template <class Archiver>
+            inline void save(Archiver & ar, std::int32_t version) const {
+                if (version == 0) {
+                    ar(originalImage, rectifiedImage, view, vps, vertVPId, lines, polygons, occlusions);
+                } else if (version == 1) {
+                    ar(originalImage, rectifiedImage, view, vps, vertVPId, lines, polygons, occlusions, foldingLines);
+                } else {
+                    NOT_IMPLEMENTED_YET();
+                }
             }
         };
 
@@ -53,8 +73,14 @@ namespace pano {
         void SaveAnnotation(const std::string & imagePath, const PIAnnotation & anno);
 
         // AttachAnnotatedPolygonsAndOcclusions
-        void AttachAnnotatedPolygonsAndOcclusions(PIGraph & mg, 
-            const std::vector<AnnotedPolygon> & polygons, const std::vector<AnnotedOcclusion> & occs);
+        void AttachAnnotatedPolygonsAndOcclusions(PIGraph & mg,
+            const std::vector<AnnotedPolygon> & polygons, const std::vector<AnnotedOcclusion> & occs,
+            double polygonBoundarySampleStepAngle = DegreesToRadians(1),
+            double occChainSampleStepAngle = DegreesToRadians(0.1),
+            double occChainToBndPieceAngleThres = DegreesToRadians(3));
 
     }
 }
+
+
+CEREAL_CLASS_VERSION(pano::experimental::PIAnnotation, 0);

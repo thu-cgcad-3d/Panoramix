@@ -18,7 +18,7 @@ namespace panolyz {
 
     namespace PanoramaIndoor4 {
 
-        static const bool refresh = false;
+        static const bool refresh = true;
 
         void Run() {
 
@@ -58,7 +58,7 @@ namespace panolyz {
                 }
 
                 ResizeToHeight(image, 700);
-                if (0) {
+                if (1) {
                     cv::imshow("rectified", image);
                     cv::waitKey();
                 }
@@ -73,7 +73,7 @@ namespace panolyz {
 
                 Imagei segmentedImage;
 
-                if (0 || !Load(path, "pre2", view, cams, line3s, vps, segmentedImage, vertVPId)) {
+                if (1 || !Load(path, "pre2", view, cams, line3s, vps, segmentedImage, vertVPId)) {
                     view = CreatePanoramicView(image);
 
                     // collect lines in each view
@@ -107,8 +107,9 @@ namespace panolyz {
                     segmenter.params().superpixelSizeSuggestion = 2000;
                     int segmentsNum = 0;
                     std::tie(segmentedImage, segmentsNum) = segmenter(view.image, rawLine3s, view.camera, DegreesToRadians(1));
-                    RemoveThinRegionInSegmentation(segmentedImage, true);
-                    segmentsNum = DensifySegmentation(segmentedImage, true);
+                    //RemoveThinRegionInSegmentation(segmentedImage, true);
+                    //segmentsNum = DensifySegmentation(segmentedImage, true);
+                    segmentsNum = RemoveSmallRegionInSegmentation(segmentedImage, 100, true);
                     assert(IsDenseSegmentation(segmentedImage));
 
                     Save(path, "pre2", view, cams, line3s, vps, segmentedImage, vertVPId);
@@ -125,7 +126,7 @@ namespace panolyz {
                 //    }
                 //}
 
-                if (refresh) {
+                if (0) {
                     auto ctable = gui::CreateRandomColorTableWithSize(MinMaxValOfImage(segmentedImage).second + 1);
                     //gui::AsCanvas(ctable(segmentedImage)).show();
                     gui::AsCanvas(ctable(segmentedImage)).add(view.image).show();
@@ -183,8 +184,10 @@ namespace panolyz {
 
 
                 // pi graph
+                static const bool rebuild = true;
+
                 PIGraph mg;
-                if (0 || !Load(path, "pigraph", mg)) {
+                if (rebuild || !Load(path, "pigraph", mg)) {
                     mg = BuildPIGraph(view, vps, vertVPId, segmentedImage, line3s,
                         DegreesToRadians(1), DegreesToRadians(1), DegreesToRadians(1), 
                         0.04, M_PI_2, 0.02);
@@ -209,7 +212,7 @@ namespace panolyz {
                 }
 
                 // set pi graph constraints
-                if (0 || !Load(path, "pigraph_controled", mg)) {
+                if (rebuild || !Load(path, "pigraph_controled", mg)) {
                     auto up = normalize(vps[vertVPId]);
                     if (up.dot(-view.camera.up()) < 0) {
                         up = -up;
@@ -221,8 +224,8 @@ namespace panolyz {
                     }
 
                     AttachGCConstraints(mg, gc);
-                    DetectOcclusions(mg);
-                    //AssumeThereAreNoOcclusions(mg);
+                    //DetectOcclusions(mg);
+                    AssumeThereAreNoOcclusions(mg);
 
                     {
                         auto pim = Print(mg,
@@ -263,7 +266,7 @@ namespace panolyz {
                 }
 
                 // solve pi graph
-                if (1 || !Load(path, "pigraph_solved", mg)) {
+                if (rebuild || !Load(path, "pigraph_solved", mg)) {
                     
                     BuildConstraintGraph(mg);
 
@@ -293,7 +296,7 @@ namespace panolyz {
                 }
 
 
-                Visualize({ mg.ccidsBigToSmall.front() }, mg);
+                VisualizeReconstruction({ mg.ccidsBigToSmall.front() }, mg);
 
             }
 

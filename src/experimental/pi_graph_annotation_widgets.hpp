@@ -32,13 +32,12 @@ namespace pano {
             void clearStroke();
             void acceptAsPolygon(int towardVPId, int alongVPId, bool used);
             void acceptAsOcclusion();
+            void acceptAsLines();
 
             void rebuildLinesScene();
             void rebuildPolygonScenes();
             void rebuildOcclusionScenes();
             void rebuildStrokeScene();
-
-            void syncToAnnotation();
 
         private:
             QPoint _lastPos;
@@ -55,32 +54,19 @@ namespace pano {
             PIAnnotation * _anno;
 
             enum State {
-                Idle, CreatingPolygon, CreatingOcclusion
+                Idle, CreatingPolygon, CreatingOcclusion, CreatingLine
             };
             State _state;
             Chain3 _chain;
 
             // cur brush
             SegControl _segControl;
+
+            bool _showPolygons;
+            bool _showLines;
+            bool _showOcclusions;
+            bool _showVPs;
         };
-
-
-      /*  class MainWin : public QMainWindow {
-        public:
-            MainWin();
-            ~MainWin();
-
-            void selectFile(const QString & fname);
-            void clear();
-
-            QString imageFileName() const { return _fname; }
-            QString annoFileName() const;
-
-        private:
-            PIAnnotationWidget * _w;
-            PIAnnotation _anno;
-            QString _fname;
-        };*/
 
 
     }

@@ -162,8 +162,9 @@ namespace pano {
                 contours.clear();
                 regionMask = (sampledSegmentedRegions == i);
                 cv::findContours(regionMask, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the outer contours
-                std::sort(contours.begin(), contours.end(),
-                    [](const std::vector<Pixel> & ca, const std::vector<Pixel> & cb) {return ca.size() > cb.size(); });
+                std::sort(contours.begin(), contours.end(), [](const std::vector<Pixel> & ca, const std::vector<Pixel> & cb) {
+                    return ca.size() > cb.size(); 
+                });
 
                 auto iter = std::find_if(contours.begin(), contours.end(), [](const std::vector<Pixel> & c) {return c.size() <= 2; });
                 contours.erase(iter, contours.end());
@@ -178,7 +179,11 @@ namespace pano {
                         mg.seg2center[i] += cs.back();
                     }
                 }
-                mg.seg2center[i] /= norm(mg.seg2center[i]);
+                if (mg.seg2center[i] != Origin()) {
+                    mg.seg2center[i] /= norm(mg.seg2center[i]);
+                } else {
+                    mg.seg2center[i] = normalize(centerDirection);
+                }
             }
 
 

@@ -68,8 +68,13 @@ namespace pano {
         }
 
 
+
+        // Print Constraints        
+        //void PrintConstriants(const PIGraph & mg);
+
+
         // visualize
-        void Visualize(const std::vector<int> & ccids, const PIGraph & mg,
+        void VisualizeReconstruction(const std::vector<int> & ccids, const PIGraph & mg,
             const std::function<gui::Color(int vert)> & vertColor = core::ConstantFunctor<gui::Color>(gui::White),
             const std::function<void(int vert)> & vertClick = core::ConstantFunctor<void>());
 

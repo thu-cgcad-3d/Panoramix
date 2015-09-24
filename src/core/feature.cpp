@@ -2652,6 +2652,10 @@ namespace pano {
 
 
         void RemoveThinRegionInSegmentation(Imagei & segs, int widthThres /*= 2.0*/, bool crossBorder /*= false*/) {
+            if (crossBorder) {
+                THERE_ARE_BUGS_HERE("CrossBorder should not be applied to top/bottom borders!");
+            }
+
             Imageb segregions(segs.size(), true);
             for (auto it = segs.begin(); it != segs.end(); ++it) {
                 auto p = it.pos();
@@ -2733,6 +2737,121 @@ namespace pano {
                 assert(minDistSegId != -1);
                 segs(pd.first) = minDistSegId;
             }
+        }
+
+
+        int RemoveSmallRegionInSegmentation(Imagei & segs, double areaThres, bool panoWeights) {
+            
+            int nsegs = MinMaxValOfImage(segs).second + 1;
+            
+            std::vector<Scored<int>> segAreas(nsegs);
+            for (int i = 0; i < nsegs; i++) {
+                segAreas[i].component = i;
+                segAreas[i].score = 0;
+            }
+
+            int height = segs.rows;
+            for (auto it = segs.begin(); it != segs.end(); ++it) {
+                double weight = 1.0;
+                if (panoWeights) {
+                    weight = cos((it.pos().y - height / 2.0) / height * M_PI);
+                }
+                segAreas[*it].score -= weight; // record negative areas
+            }
+
+            std::vector<std::map<int, double>> segAdjacents(nsegs);
+            for (auto it = segs.begin(); it != segs.end(); ++it) {
+                auto p = it.pos();
+
+                // seg ids related
+                std::set<int> idset = {
+                    segs(p),
+                    segs(Pixel((p.x + 1) % segs.cols, p.y))
+                };
+                if (p.y < height - 1) { // note that the top/bottom borders cannot be crossed!
+                    idset.insert(segs(Pixel(p.x, p.y + 1)));
+                    idset.insert(segs(Pixel((p.x + 1) % segs.cols, p.y + 1)));
+                }
+
+                if (idset.size() <= 1) {
+                    continue;
+                }
+
+                double weight = cos((it.pos().y - height / 2.0) / height * M_PI);;
+
+                // register this pixel as a bnd candidate for bnd of related segids
+                for (auto ii = idset.begin(); ii != idset.end(); ++ii) {
+                    for (auto jj = std::next(ii); jj != idset.end(); ++jj) {
+                        segAdjacents[*ii][*jj] += weight;
+                        segAdjacents[*jj][*ii] += weight;
+                    }
+                }
+            }
+
+            std::vector<int> segParent(nsegs);
+            std::iota(segParent.begin(), segParent.end(), 0);
+
+            // record current root segs
+            MaxHeap<int, double> rootSegs(segAreas.begin(), segAreas.end());
+            
+            while (-rootSegs.topScore() <= areaThres) {
+                int smallestRootSeg = rootSegs.top();
+                assert(segParent[smallestRootSeg] == smallestRootSeg);
+
+                double smallestArea = -rootSegs.topScore();
+                assert(smallestArea > 0);
+                
+                MaxHeap<int, double> adjacentRootSegs;
+                for (auto & adj : segAdjacents[smallestRootSeg]) {
+                    int adjSeg = adj.first;
+                    // find its root seg
+                    while (adjSeg != segParent[adjSeg]) {
+                        adjSeg = segParent[adjSeg];
+                    }
+                    assert(rootSegs.contains(adjSeg));
+                    if (adjSeg == smallestRootSeg) {
+                        continue;
+                    }
+                    if (!adjacentRootSegs.contains(adjSeg)) {
+                        adjacentRootSegs.push(adjSeg, adj.second);
+                    } else {
+                        adjacentRootSegs.setScore(adjSeg, adjacentRootSegs.at(adjSeg) + adj.second);
+                    }
+                }
+                if (adjacentRootSegs.empty()) {
+                    rootSegs.setScore(smallestRootSeg, - areaThres - 1);
+                    continue;
+                }
+
+                int rootSegForMerging = adjacentRootSegs.top();
+                assert(segParent[rootSegForMerging] == rootSegForMerging);
+
+                // merge!
+                double newNegativeArea = rootSegs.at(rootSegForMerging) - smallestArea;
+                segParent[smallestRootSeg] = rootSegForMerging;
+                rootSegs.pop();               
+                rootSegs.setScore(rootSegForMerging, newNegativeArea);
+            }
+
+            std::map<int, int> root2new;
+            for (auto & root : rootSegs) {
+                root2new[root.component] = root2new.size();
+            }
+
+            std::vector<int> old2new(nsegs);
+            for (int i = 0; i < nsegs; i++) {
+                int seg = i;
+                while (segParent[seg] != seg) {
+                    seg = segParent[seg];
+                }
+                old2new[i] = root2new.at(seg);
+            }
+
+            for (int & seg : segs) {
+                seg = old2new[seg];
+            }
+
+            return rootSegs.size();
         }
 
 

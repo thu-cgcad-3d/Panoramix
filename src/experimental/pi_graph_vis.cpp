@@ -21,7 +21,7 @@ namespace pano {
         }
 
 
-        void Visualize(const std::vector<int> & ccids, const PIGraph & mg,
+        void VisualizeReconstruction(const std::vector<int> & ccids, const PIGraph & mg,
             const std::function<gui::Color(int vert)> & vertColor,
             const std::function<void(int vert)> & vertClick) {
 
@@ -80,33 +80,52 @@ namespace pano {
                     }
                 }
 
-                viz.begin(spps, sppCallbackFun).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+                viz.begin(spps/*, sppCallbackFun*/).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
                 viz.installingOptions().discretizeOptions.color = gui::ColorTag::Magenta;
-                viz.installingOptions().lineWidth = 5.0;
+                viz.installingOptions().lineWidth = 3.0;
                 viz.add(lines);
 
-                std::vector<core::Line3> connectionLinesRR;
-                std::vector<core::Point3> connectionLineRREnds;
+                std::vector<core::Decorated<gui::Colored<core::Line3>, std::pair<int, int>>> connectionLines;
+                std::vector<core::Point3> connectionLineEnds;
                 for (auto & e : mg.edges) {
                     if (mg.vert2cc[e.vert1] != ccid || mg.vert2cc[e.vert2] != ccid)
                         continue;
+                    int snum = mg.verts[e.vert1].isSeg + mg.verts[e.vert2].isSeg;
                     auto & samples = e.anchors;
                     for (auto & ss : samples) {
                         double d1 = DepthOfVertexAt(mg, e.vert1, ss);
                         double d2 = DepthOfVertexAt(mg, e.vert2, ss);
-                        connectionLinesRR.emplace_back(normalize(ss) * d1, normalize(ss) * d2);
-                        connectionLineRREnds.push_back(connectionLinesRR.back().first);
-                        connectionLineRREnds.push_back(connectionLinesRR.back().second);
+                        Line3 line(normalize(ss) * d1, normalize(ss) * d2);
+                        connectionLines.push_back(DecorateAs(gui::ColorAs(line, snum == 0 ? gui::Black : snum == 1 ? gui::Blue : gui::Yellow), std::make_pair(e.vert1, e.vert2)));
+                        connectionLineEnds.push_back(connectionLines.back().component.component.first);
+                        connectionLineEnds.push_back(connectionLines.back().component.component.second);
                     }
                 }
 
                 viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
-                viz.installingOptions().lineWidth = 1.5;
-                viz.add(connectionLinesRR);
-                viz.installingOptions().pointSize = 3.0;
-                viz.add(connectionLineRREnds);
+                viz.installingOptions().lineWidth = 5.0;
+                viz.begin(connectionLines, [&mg](gui::InteractionID iid,
+                    const core::Decorated<gui::Colored<Line3>, std::pair<int, int>> & line) {
+                    std::cout << "this is an anchor of edge connecting ";
+                    auto & v1 = mg.verts[line.decoration.first];
+                    auto & v2 = mg.verts[line.decoration.second];
+                    if (v1.isSeg) {
+                        std::cout << "seg " << v1.id;
+                    } else {
+                        std::cout << "line " << v1.id;
+                    }
+                    std::cout << " and ";
+                    if (v2.isSeg) {
+                        std::cout << "seg " << v2.id;
+                    } else {
+                        std::cout << "line " << v2.id;
+                    }
+                    std::cout << std::endl;
+                }).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
+                viz.installingOptions().pointSize = 8.0;
+                viz.begin(connectionLineEnds).shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints).end();
 
-                viz.show(true, false, gui::RenderOptions().cullFrontFace(false).cullBackFace(true).bwColor(0.0).bwTexColor(1.0)
+                viz.show(true, false, gui::RenderOptions().cullFrontFace(false).cullBackFace(true).bwColor(0.7).bwTexColor(0.3)
                     .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
             }
 

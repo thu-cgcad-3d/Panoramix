@@ -221,6 +221,8 @@ namespace pano {
         // RemoveThinRegionInSegmentation
         void RemoveThinRegionInSegmentation(Imagei & segs, int widthThres = 1.0, bool crossBorder = false);
 
+        // RemoveSmallRegionInSegmentation
+        int RemoveSmallRegionInSegmentation(Imagei & segs, double areaThres, bool panoWeights = false);
 
         // DensifySegmentation
         int DensifySegmentation(Imagei & segs, bool crossBorder = false);

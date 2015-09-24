@@ -13,7 +13,7 @@ int main(int argc, char ** argv) {
     QApplication::setApplicationName(QObject::tr("PANOLYZ_LABEL"));
     QApplication::setQuitOnLastWindowClosed(true);
 
-    QString dir = "H:\\DataSet";
+    QString dir = "H:\\DataSet\\pi";
     auto filenames = QFileDialog::getOpenFileNames(nullptr, QObject::tr("Select an image file"),
         dir,
         QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));

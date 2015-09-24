@@ -11,6 +11,8 @@ namespace pano {
             _segControl.orientationNotClaz = -1;
             _segControl.used = true;
 
+            _showPolygons = _showLines = _showOcclusions = _showVPs = true;
+
             setMouseTracking(true);
             setAutoBufferSwap(false);
             grabKeyboard();
@@ -26,6 +28,11 @@ namespace pano {
                 update();
             });
 
+            connect(defaultAction = bas->addAction(tr("Create Lines")), &QAction::triggered, [this]() {
+                _state = CreatingLine;
+                clearStroke();
+                update();
+            });
             connect(defaultAction = bas->addAction(tr("Create Occlusion")), &QAction::triggered, [this]() {
                 _state = CreatingOcclusion;
                 clearStroke();
@@ -88,6 +95,45 @@ namespace pano {
             bas->setExclusive(true);
             defaultAction->setChecked(true);
             addActions(bas->actions());
+
+
+            connect(defaultAction = new QAction(tr("Show Lines"), this), &QAction::triggered, [this](bool checked) {
+                _showLines = checked;
+                update();
+            });
+            defaultAction->setCheckable(true);
+            defaultAction->setChecked(_showLines);
+            addAction(defaultAction);
+
+            connect(defaultAction = new QAction(tr("Show Polygons"), this), &QAction::triggered, [this](bool checked) {
+                _showPolygons = checked;
+                update();
+            });
+            defaultAction->setCheckable(true);
+            defaultAction->setChecked(_showPolygons);
+            addAction(defaultAction);
+
+            connect(defaultAction = new QAction(tr("Show Occlusions"), this), &QAction::triggered, [this](bool checked) {
+                _showOcclusions = checked;
+                update();
+            });
+            defaultAction->setCheckable(true);
+            defaultAction->setChecked(_showOcclusions);
+            addAction(defaultAction);
+
+            connect(defaultAction = new QAction(tr("Show VPs"), this), &QAction::triggered, [this](bool checked) {
+                _showVPs = checked;
+                update();
+            });
+            defaultAction->setCheckable(true);
+            defaultAction->setChecked(_showVPs);
+            addAction(defaultAction);
+
+            {
+                QAction * sep = new QAction(bas);
+                sep->setSeparator(true);
+                bas->addAction(sep);
+            }
 
             connect(defaultAction = new QAction(tr("Settings"), this), &QAction::triggered, [this]() {
                 PopUpGui(_options, this);
@@ -171,13 +217,19 @@ namespace pano {
             camera.resizeScreen(core::Size(width(), height()));
 
             _imageScene.render(_options);
-            for (auto & s : _polygonScenes) {
-                s.render(_options);
+            if (_showPolygons) {
+                for (auto & s : _polygonScenes) {
+                    s.render(_options);
+                }
             }
-            for (auto & s : _occlusionScenes) {
-                s.render(_options);
+            if (_showOcclusions) {
+                for (auto & s : _occlusionScenes) {
+                    s.render(_options);
+                }
             }
-            _linesScene.render(_options);
+            if (_showLines) {
+                _linesScene.render(_options);
+            }            
             _strokeScene.render(_options);
 
             painter.endNativePainting();
@@ -195,6 +247,8 @@ namespace pano {
                 if (_state == CreatingOcclusion) {
                     _chain.points.push_back(normalize(_options.camera().toSpace(gui::MakeCoreVec(e->pos()))));
                 } else if (_state == CreatingPolygon) {
+                    _chain.points.push_back(normalize(_options.camera().toSpace(gui::MakeCoreVec(e->pos()))));
+                } else if (_state == CreatingLine) {
                     _chain.points.push_back(normalize(_options.camera().toSpace(gui::MakeCoreVec(e->pos()))));
                 }
                 rebuildStrokeScene();
@@ -248,6 +302,9 @@ namespace pano {
                 } else if (_state == CreatingPolygon) {
                     acceptAsPolygon(_segControl.orientationClaz, _segControl.orientationNotClaz, _segControl.used);
                     rebuildPolygonScenes();
+                } else if (_state == CreatingLine) {
+                    acceptAsLines();
+                    rebuildLinesScene();
                 }
                 clearStroke();
                 update();
@@ -347,20 +404,37 @@ namespace pano {
         }
 
         void PIAnnotationWidget::acceptAsPolygon(int towardVPId, int alongVPId, bool used) {
+            if (_chain.empty()) {
+                return;
+            }
             AnnotedPolygon poly;
             poly.control.orientationClaz = towardVPId;
             poly.control.orientationNotClaz = alongVPId;
             poly.control.used = used;
             poly.polygon = _chain;
+            for (auto & c : poly.polygon.corners) {
+                c = normalize(c) * (poly.control.used ? 0.5 : 0.4);
+            }
             _anno->polygons.push_back(std::move(poly));
             _polygonsDeleted.push_back(false);
         }
 
         void PIAnnotationWidget::acceptAsOcclusion() {
+            if (_chain.empty()) {
+                return;
+            }
             _anno->occlusions.push_back({ std::move(_chain) });
             _occlusionsDeleted.push_back(false);
         }
 
+        void PIAnnotationWidget::acceptAsLines() {
+            if (_chain.empty()) {
+                return;
+            }
+            for (int i = 1; i < _chain.size(); i++) {
+                _anno->lines.push_back(ClassifyAs(_chain.edge(i), -1));
+            }
+        }
 
 
         //MainWin::MainWin() : QMainWindow(nullptr) {

@@ -44,7 +44,7 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = "Serialization.Mex";
    //testing::GTEST_FLAG(filter) = "Engine.Batch";
    //testing::GTEST_FLAG(filter) = "Camera.*";
-   testing::GTEST_FLAG(filter) = "Camera.UniformSphericalCamera";
+   //testing::GTEST_FLAG(filter) = "Camera.UniformSphericalCamera";
    //testing::GTEST_FLAG(filter) = "UtilTest.PlaneIntersection";
    //testing::GTEST_FLAG(filter) = "Scene.LayeredShape3";
    //testing::GTEST_FLAG(filter) = "Scene.Interaction";
@@ -55,6 +55,7 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = "SingleView.ComputeSpatialRegionProperties";
    //testing::GTEST_FLAG(filter) = "Feature.ExtractSegmentationTopology";
    //testing::GTEST_FLAG(filter) = "Feature.RemoveThinRegionInSegmentation";
-
+   testing::GTEST_FLAG(filter) = "Feature.RemoveSmallRegionInSegmentation";
+   
    return RUN_ALL_TESTS();
 }

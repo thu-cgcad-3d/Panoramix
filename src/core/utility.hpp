@@ -873,7 +873,7 @@ namespace pano {
         template <class T>
         inline Vec<T, 3> RotateDirection(const Vec<T, 3> & originalDirection, const Vec<T, 3> & toDirection, double angle) {
             Vec<T, 3> tovec = normalize(originalDirection.cross(toDirection).cross(originalDirection));
-            return normalize(normalize(originalDirection) + tovec * tan(angle));
+            return normalize(normalize(originalDirection) * cos(angle) + tovec * sin(angle));
         }
 
 
