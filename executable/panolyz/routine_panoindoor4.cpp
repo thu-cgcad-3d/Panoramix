@@ -115,20 +115,8 @@ namespace panolyz {
                     Save(path, "pre2", view, cams, line3s, vps, segmentedImage, vertVPId);
                 }
 
-                //if (refresh) {
-                //    auto ctable = gui::CreateRandomColorTableWithSize(vps.size());
-                //    for (int i = 0; i < cams.size(); i++) {
-                //        auto pim = view.sampled(cams[i]).image;
-                //        for (auto & l : line3s) {
-                //            auto ll = ClassifyAs(Line2(cams[i].toScreen(l.component.first, cams[i].toScreen(l.component.second))
-                //            gui::AsCanvas(pim).thickness(3).colorTable(ctable).add(lines[i]).show();
-                //        }
-                //    }
-                //}
-
                 if (0) {
                     auto ctable = gui::CreateRandomColorTableWithSize(MinMaxValOfImage(segmentedImage).second + 1);
-                    //gui::AsCanvas(ctable(segmentedImage)).show();
                     gui::AsCanvas(ctable(segmentedImage)).add(view.image).show();
                 }
 

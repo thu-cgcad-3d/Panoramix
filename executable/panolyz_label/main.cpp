@@ -3,7 +3,10 @@
 #include <QtCore>
 
 #include "../../src/gui/singleton.hpp"
+
 #include "../../src/experimental/pi_graph_annotation.hpp"
+#include "../../src/experimental/pi_graph_solve.hpp"
+#include "../../src/experimental/pi_graph_vis.hpp"
 
 
 int main(int argc, char ** argv) {
@@ -19,8 +22,11 @@ int main(int argc, char ** argv) {
         QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
 
     for (auto & fname : filenames) {
-        auto anno = pano::experimental::LoadOrInitializeNewAnnotation(fname.toStdString());
-        pano::experimental::EditAnnotation(anno);
-        pano::experimental::SaveAnnotation(fname.toStdString(), anno);
+        auto anno = pano::experimental::LoadOrInitializeNewLayoutAnnotation(fname.toStdString());
+        pano::experimental::EditLayoutAnnotation(anno);
+        pano::experimental::ReconstructLayoutAnnotation(anno);
+        pano::experimental::VisualizeLayoutAnnotation(anno);
+        pano::experimental::SaveLayoutAnnotation(fname.toStdString(), anno);
     }
+
 }

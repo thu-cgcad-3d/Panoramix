@@ -4,6 +4,7 @@
 #include "../gui/scene.hpp"
 
 #include "pi_graph.hpp"
+#include "pi_graph_annotation.hpp"
 
 namespace pano {
     namespace experimental {
@@ -73,11 +74,14 @@ namespace pano {
         //void PrintConstriants(const PIGraph & mg);
 
 
-        // visualize
+        // VisualizeReconstruction
         void VisualizeReconstruction(const std::vector<int> & ccids, const PIGraph & mg,
             const std::function<gui::Color(int vert)> & vertColor = core::ConstantFunctor<gui::Color>(gui::White),
             const std::function<void(int vert)> & vertClick = core::ConstantFunctor<void>());
 
+
+        // VisualizeLayoutAnnotation
+        void VisualizeLayoutAnnotation(const PILayoutAnnotation & anno);
 
     }
 }

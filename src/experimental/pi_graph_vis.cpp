@@ -131,5 +131,11 @@ namespace pano {
 
         }
 
+
+
+        void VisualizeLayoutAnnotation(const PILayoutAnnotation & anno) {
+            // todo
+        }
+
     }
 }

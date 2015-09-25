@@ -8,9 +8,9 @@ int main(int argc, char ** argv) {
 
     //YorkUrbanDB2::Run();
     //PanoramaIndoor::Run();
-    PanoramaIndoor2::Run();
+    //PanoramaIndoor2::Run();
     //PanoramaIndoor3::Run();
-    //PanoramaIndoor4::Run();
+    PanoramaIndoor4::Run();
     //PanoramaIndoorTest::Run();
 
     //NormalIndoor::Run();

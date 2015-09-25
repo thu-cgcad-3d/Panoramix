@@ -427,5 +427,14 @@ namespace pano {
 
         }
 
+
+
+
+        void ReconstructLayoutAnnotation(PILayoutAnnotation & anno) {
+            // todo
+        }
+
+
+
     }
 }

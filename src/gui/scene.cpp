@@ -313,6 +313,7 @@ namespace pano {
                 inline int search(const core::Box3 & b, CallbackFunctorT && callback) const {
                     return rtree->Search(b.minCorner.val, b.maxCorner.val, std::forward<CallbackFunctorT>(callback));
                 }
+                inline bool empty() const { return !rtree || rtree->Count() == 0; }
             private:
                 std::map<EntityT, core::Box3> calculatedBoundingBox;
                 std::unique_ptr<third_party::RTree<EntityT, double, 3>> rtree;
@@ -570,6 +571,10 @@ namespace pano {
         SceneObjectMeshTriangle Scene::pickTriangleOnScreen(const RenderOptions & options,
             const core::Point2 & pOnScreen) const {
 
+            if (null() || _internal->triangles.empty()) {
+                return SceneObjectMeshTriangle();
+            }
+
             Ray3 centerRay(options.camera().eye(), normalize(options.camera().toSpace(pOnScreen)));
 
             Box3 bboxAll = boundingBox();
@@ -637,6 +642,10 @@ namespace pano {
         SceneObjectMeshLine Scene::pickLineOnScreen(const RenderOptions & options,
             const core::Point2 & pOnScreen) const {
 
+            if (null() || _internal->lines.empty()) {
+                return SceneObjectMeshLine();
+            }
+
             Ray3 centerRay(options.camera().eye(), normalize(options.camera().toSpace(pOnScreen)));
 
             Box3 bboxAll = boundingBox();
@@ -701,6 +710,10 @@ namespace pano {
 
         SceneObjectMeshPoint Scene::pickPointOnScreen(const RenderOptions & options,
             const core::Point2 & pOnScreen) const {
+
+            if (null() || _internal->points.empty()) {
+                return SceneObjectMeshPoint();
+            }
 
             Ray3 centerRay(options.camera().eye(), normalize(options.camera().toSpace(pOnScreen)));
 
