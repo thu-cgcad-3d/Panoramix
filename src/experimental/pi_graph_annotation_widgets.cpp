@@ -597,7 +597,7 @@ namespace pano {
             });
             addAction(defaultAction);
             connect(defaultAction = new QAction(tr("Rebuild Faces"), this), &QAction::triggered, [this]() {
-                _anno->generateFacesWithBorders();
+                _anno->regenerateFaces();
                 rebuildLayoutScene();
                 clearStroke();
                 update();
@@ -644,6 +644,8 @@ namespace pano {
             _options.panoramaHoriCenterRatio(0.5f);
             _options.camera(PerspectiveCamera(500, 500, Point2(250, 250), 200, Origin(), X(), -Z()));
             _options.renderMode(gui::RenderModeFlag::All);
+            _options.cullBackFace(false);
+            _options.cullFrontFace(false);
             
             rebuildLayoutScene();
             rebuildCluttersScene();
@@ -835,7 +837,6 @@ namespace pano {
             SceneBuilder sb;
             sb.installingOptions().lineWidth = 10.0;
             sb.installingOptions().pointSize = 30.0;
-            sb.installingOptions().discretizeOptions.color = gui::Cyan;
             
             auto & corners = _anno->corners;
             
@@ -861,7 +862,7 @@ namespace pano {
                 auto & cs = _anno->border2corners[i];
                 _borderLines[i].component.component.first = normalize(corners[cs.first]) * visualDepthBorder;
                 _borderLines[i].component.component.second = normalize(corners[cs.second]) * visualDepthBorder;
-                _borderLines[i].component.color = _anno->border2connected[i] ? gui::White : gui::Gray;
+                _borderLines[i].component.color = _anno->border2connected[i] ? gui::White : gui::Black;
             }
             sb.begin(_borderLines, [this](gui::InteractionID iid, const core::Decorated<Colored<Line3>, int> & line) {
                 std::cout << "border " << line.decoration << " is clicked" << std::endl;
@@ -877,25 +878,34 @@ namespace pano {
             const static gui::ColorTable rgbtable = gui::RGB;
             for (int i = 0; i < _anno->face2control.size(); i++) {
                 _facePolygons[i].decoration = i;
-                const auto & cs = _anno->face2corners[i];
                 auto & control = _anno->face2control[i];
-                _facePolygons[i].component.color = control.dof() == 3 
-                    ? gui::White 
-                    : (control.dof() == 2 
-                        ? rgbtable[control.orientationNotClaz].blendWith(gui::Blue, 0.2) 
-                        : rgbtable[control.orientationClaz]);
-                _facePolygons[i].component.component.normal = Origin();
+                _facePolygons[i].component.color = control.dof() == 3
+                    ? gui::White
+                    : (control.dof() == 2
+                    ? rgbtable[control.orientationNotClaz].blendWith(gui::Black, 0.7)
+                    : rgbtable[control.orientationClaz]);
+
+                auto & polygon = _facePolygons[i].component.component;
+                const auto & cs = _anno->face2corners[i];
+              
+                polygon.normal = Origin();
                 for (int corner : cs) {
-                    _facePolygons[i].component.component.corners.push_back(normalize(corners[corner]) * visualDepthFace);
-                    _facePolygons[i].component.component.normal += _facePolygons[i].component.component.corners.back();
+                    polygon.corners.push_back(normalize(corners[corner]) * visualDepthFace);
+                    polygon.normal += polygon.corners.back();
                 }
-                _facePolygons[i].component.component.normal /= norm(_facePolygons[i].component.component.normal);
+                std::reverse(polygon.corners.begin(), polygon.corners.end());
+                polygon.normal /= norm(polygon.normal);
             }
             sb.begin(_facePolygons, [this](gui::InteractionID iid, const core::Decorated<Colored<Polygon3>, int> & polygon) {
                 std::cout << "face " << polygon.decoration << " is clicked" << std::endl;
                 _cornerClicked = -1;
                 _borderClicked = -1;
                 _faceClicked = polygon.decoration;
+                std::cout << "its corners include: ";
+                for (int c : _anno->face2corners[_faceClicked]) {
+                    std::cout << c << " ";
+                }
+                std::cout << std::endl;
             }).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).end();
 
             _layoutScene = sb.scene();

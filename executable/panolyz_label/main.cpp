@@ -3,6 +3,7 @@
 #include <QtCore>
 
 #include "../../src/gui/singleton.hpp"
+#include "../../src/gui/utility.hpp"
 
 #include "../../src/experimental/pi_graph_annotation.hpp"
 #include "../../src/experimental/pi_graph_solve.hpp"
@@ -21,12 +22,24 @@ int main(int argc, char ** argv) {
         dir,
         QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
 
+    pano::misc::Matlab matlab;
+
     for (auto & fname : filenames) {
         auto anno = pano::experimental::LoadOrInitializeNewLayoutAnnotation(fname.toStdString());
-        pano::experimental::EditLayoutAnnotation(anno);
-        pano::experimental::ReconstructLayoutAnnotation(anno);
-        pano::experimental::VisualizeLayoutAnnotation(anno);
-        pano::experimental::SaveLayoutAnnotation(fname.toStdString(), anno);
+        while (true) {
+            pano::experimental::EditLayoutAnnotation(anno);
+            pano::experimental::ReconstructLayoutAnnotation(anno, matlab);
+            pano::experimental::VisualizeLayoutAnnotation(anno);
+            int selected = pano::gui::SelectFrom({ "Accept", "Edit Again", "Abandon" }, 
+                "Your decision?", 
+                "Accept the edit, or edit it again, or just abandon the edit this time?", 0, 2);
+            if (selected == 0) {
+                pano::experimental::SaveLayoutAnnotation(fname.toStdString(), anno);
+                break;
+            } else if (selected == 2) {
+                break;
+            }
+        }
     }
 
 }

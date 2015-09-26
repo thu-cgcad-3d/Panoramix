@@ -134,7 +134,36 @@ namespace pano {
 
 
         void VisualizeLayoutAnnotation(const PILayoutAnnotation & anno) {
-            // todo
+            
+            gui::SceneBuilder viz;
+            viz.installingOptions().discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
+            std::vector<core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int>> spps;
+
+            gui::ResourceStore::set("texture", anno.rectifiedImage);
+            for (int face = 0; face < anno.nfaces(); face++) {
+
+                gui::SpatialProjectedPolygon spp;
+                spp.projectionCenter = core::Point3(0, 0, 0);
+                spp.plane = anno.face2plane[face];                
+                for (int c : anno.face2corners[face]) {
+                    spp.corners.push_back(normalize(anno.corners[c]));
+                }
+
+                static const gui::ColorTable rgbTable = gui::RGB;
+                auto & control = anno.face2control[face];
+
+                spps.push_back(core::DecorateAs(std::move(gui::ColorAs(spp, 
+                    control.dof() == 1 
+                    ? rgbTable[control.orientationClaz] 
+                    : (control.dof() == 2 
+                        ? rgbTable[control.orientationNotClaz] 
+                        : gui::Color(gui::White)))), face));
+            }
+
+            viz.begin(spps/*, sppCallbackFun*/).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+            viz.show(true, false, gui::RenderOptions().cullFrontFace(true).cullBackFace(false).bwColor(0.1).bwTexColor(0.9)
+                .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
+
         }
 
     }

@@ -18,6 +18,10 @@ namespace pano {
                 if (orientationNotClaz != -1) return 2;
                 return 3;
             }
+            bool operator == (const SegControl & c) const {
+                return std::tie(orientationClaz, orientationNotClaz, used) == 
+                    std::tie(c.orientationClaz, c.orientationNotClaz, used); 
+            }
             template <class Archiver>
             void serialize(Archiver & ar) {
                 ar(orientationClaz, orientationNotClaz, used);

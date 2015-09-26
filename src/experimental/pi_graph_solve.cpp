@@ -430,8 +430,222 @@ namespace pano {
 
 
 
-        void ReconstructLayoutAnnotation(PILayoutAnnotation & anno) {
-            // todo
+
+
+
+        std::vector<double> VariableCoefficientsForInverseDepthAtDirection(const std::vector<Vec3> & vps, const SegControl & control, 
+            const Vec3 & center, const Vec3 & direction) {
+            if (control.dof() == 1) {
+                Plane3 plane(center, vps[control.orientationClaz]);
+                // variable is 1.0/centerDepth
+                // corresponding coeff is 1.0/depthRatio
+                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                double depthRatio = norm(IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), direction), plane).position);
+                return std::vector<double>{1.0 / depthRatio};
+            } else if (control.dof() == 2) {
+                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                // -> 1.0/depth = ax + by + cz
+                // -> 1.0/depth = ax + by + (- o1a - o2b)/o3 * z = a(x-o1*z/o3) + b(y-o2*z/o3)
+                auto orientation = normalize(vps[control.orientationNotClaz]);
+                int sc = SwappedComponent(orientation);
+                Vec3 forientation = orientation;
+                std::swap(forientation[sc], forientation[2]);
+                Vec3 fdirection = direction;
+                std::swap(fdirection[sc], fdirection[2]);
+                return std::vector<double>{
+                    fdirection[0] - forientation[0] * fdirection[2] / forientation[2],
+                        fdirection[1] - forientation[1] * fdirection[2] / forientation[2]
+                };
+            } else {
+                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                // -> 1.0/depth = ax + by + cz
+                return std::vector<double>{direction[0], direction[1], direction[2]};
+            }
+        }
+
+
+        Plane3 SegInstance(const std::vector<Vec3> & vps, const SegControl & control, const Vec3 & center, const double * variables) {
+            auto & c = control;
+            if (c.orientationClaz >= 0) {
+                return Plane3(center / NonZeroize(variables[0]), vps[c.orientationClaz]);
+            } else if (c.orientationClaz == -1 && c.orientationNotClaz >= 0) {
+                double vs[] = { variables[0], variables[1], 0.0 }; // fake vs
+                // v1 * o1 + v2 * o2 + v3 * o3 = 0, since region.orientation is orthogonal to normal
+                auto orientation = normalize(vps[c.orientationNotClaz]);
+                int c = SwappedComponent(orientation);
+                std::swap(orientation[c], orientation[2]); // now fake orientation
+                vs[2] = (-vs[0] * orientation[0] - vs[1] * orientation[1])
+                    / orientation[2];
+                std::swap(vs[c], vs[2]); // now real vs
+                return Plane3FromEquation(vs[0], vs[1], vs[2]);
+            } else /*if (region.type == MGUnary::RegionWithFixedNormal)*/ {
+                return Plane3FromEquation(variables[0], variables[1], variables[2]);
+            }
+        }
+
+
+        void ReconstructLayoutAnnotation(PILayoutAnnotation & anno, misc::Matlab & matlab) {
+            
+            // group faces as planes
+            std::vector<int> face2plane(anno.nfaces());
+            std::map<int, std::set<int>> plane2faces;
+
+            std::vector<int> faces(anno.nfaces());
+            std::iota(faces.begin(), faces.end(), 0);
+            int nplanes = core::ConnectedComponents(faces.begin(), faces.end(), [&anno](int face) {
+                std::vector<int> coplanarFaces;
+                for (auto & p : anno.coplanarFacePairs) {
+                    if (p.first == face) {
+                        coplanarFaces.push_back(p.second);
+                    } else if (p.second == face) {
+                        coplanarFaces.push_back(p.first);
+                    }
+                }
+                return coplanarFaces;
+            }, [&face2plane, &plane2faces](int face, int ccid) {
+                face2plane[face] = ccid;
+                plane2faces[ccid].insert(face);
+            });
+
+
+            // get plane properties
+            std::vector<SegControl> plane2control(nplanes);
+            std::vector<Vec3> plane2center(nplanes);
+            std::vector<int> plane2varPosition(nplanes);
+            std::vector<int> plane2nvar(nplanes);
+
+            int nvars = 0;
+            for (int i = 0; i < nplanes; i++) {
+                SegControl control = { -1, -1, true };
+                Vec3 center;
+                for (int face : plane2faces[i]) {
+                    auto & ctrl = anno.face2control[face];
+                    if (ctrl.dof() < control.dof()) {
+                        control = ctrl;                        
+                    }
+                    for (int c : anno.face2corners[face]) {
+                        center += normalize(anno.corners[c]);
+                    }
+                }
+                center /= norm(center);
+                plane2control[i] = control;
+                plane2center[i] = center;
+                int nvar = control.dof();
+                plane2nvar[i] = nvar;
+                plane2varPosition[i] = nvars;
+                nvars += nvar;
+            }
+
+            // get corners2border and border2face
+            std::map<std::pair<int, int>, int> corners2border;
+            for (int i = 0; i < anno.nborders(); i++) {
+                auto & cs = anno.border2corners[i];
+                corners2border[cs] = i;
+            }
+            std::vector<std::pair<int, int>> border2face(anno.nborders(), std::make_pair(-1, -1));
+            for (int i = 0; i < anno.nfaces(); i++) {
+                auto & cs = anno.face2corners[i];
+                for (int j = 0; j < cs.size(); j++) {
+                    int c1 = cs[j];
+                    int c2 = cs[(j + 1) % cs.size()];
+                    if (Contains(corners2border, std::make_pair(c1, c2))) {
+                        int b = corners2border.at(std::make_pair(c1, c2));
+                        border2face[b].first = i;
+                    } else if (Contains(corners2border, std::make_pair(c2, c1))) {
+                        int b = corners2border.at(std::make_pair(c2, c1));
+                        border2face[b].second = i;
+                    } else {
+                        SHOULD_NEVER_BE_CALLED();
+                    }
+                }
+            }
+
+            // the elements of sparse matrix A
+            // inverse depths of vert1s on each anchor A1 * X
+            // inverse depths of vert2s on each anchor A2 * X
+            // weight on each anchor W
+            std::vector<SparseMatElementd> A1triplets, A2triplets;
+            int eid = 0;
+            for (int i = 0; i < anno.nborders(); i++) {
+                int plane1 = face2plane[border2face[i].first];
+                int plane2 = face2plane[border2face[i].second];
+                assert(plane1 != -1 && plane2 != -1);
+                if (!anno.border2connected[i]) {
+                    continue;
+                }
+                int varpos1 = plane2varPosition[plane1];
+                int varpos2 = plane2varPosition[plane2];
+
+                Vec3 corners[] = { anno.corners[anno.border2corners[i].first], anno.corners[anno.border2corners[i].second] };
+                for (auto & anchor : corners) {
+                    auto coeffs1 = VariableCoefficientsForInverseDepthAtDirection(anno.vps, 
+                        plane2control[plane1], plane2center[plane1], anchor);
+                    for (int k = 0; k < coeffs1.size(); k++) {
+                        A1triplets.emplace_back(eid, varpos1 + k, coeffs1[k]);
+                    }
+                    auto coeffs2 = VariableCoefficientsForInverseDepthAtDirection(anno.vps,
+                        plane2control[plane2], plane2center[plane2], anchor);
+                    for (int k = 0; k < coeffs2.size(); k++) {
+                        A2triplets.emplace_back(eid, varpos2 + k, coeffs2[k]);
+                    }
+                    eid++;
+                }
+            }
+
+            int neqs = eid;
+
+            auto A1 = MakeSparseMatFromElements(neqs, nvars, A1triplets.begin(), A1triplets.end());
+            auto A2 = MakeSparseMatFromElements(neqs, nvars, A2triplets.begin(), A2triplets.end());
+
+            matlab << "clear;";
+            matlab.setVar("A1", A1);
+            matlab.setVar("A2", A2);
+
+            matlab << "m = size(A1, 1);"; // number of equations
+            matlab << "n = size(A1, 2);"; // number of variables
+
+            matlab << "scale = 100.0;";
+
+            double minE = std::numeric_limits<double>::infinity();
+
+            std::vector<double> X;
+            {
+                matlab << "D1D2 = ones(m, 1);"; //  current depths of anchors
+                while (true) {
+                    matlab << "K = (A1 - A2) .* repmat(D1D2, [1, n]);";
+                    matlab
+                        << "cvx_begin"
+                        << "variable X(n);"
+                        << "minimize norm(K * X)"
+                        << "subject to"
+                        << "    ones(m, 1) <= A1 * X <= ones(m, 1) * scale;"
+                        << "    ones(m, 1) <= A2 * X <= ones(m, 1) * scale;"
+                        << "cvx_end";
+                    matlab << "e = norm(K * X);";
+                    double curE = matlab.var("e").scalar();
+                    std::cout << "e = " << curE << std::endl;
+                    if (IsInfOrNaN(curE)) {
+                        break;
+                    }
+                    if (curE < minE) {
+                        minE = curE;
+                        matlab << "X = 2 * X ./ median((A1 + A2) * X);";
+                        X = matlab.var("X").toCVMat();
+                    } else {
+                        break;
+                    }
+                    matlab << "D1D2 = 1./ (A1 * X) ./ (A2 * X);";
+                    matlab << "D1D2 = abs(D1D2) / norm(D1D2);";
+                }               
+            }
+
+            // install back as planes
+            for (int i = 0; i < nplanes; i++) {
+                Plane3 inst = SegInstance(anno.vps, plane2control[i], plane2center[i], X.data() + plane2varPosition[i]);
+                for (int face : plane2faces[i]) {
+                    anno.face2plane[face] = inst;
+                }
+            }          
         }
 
 

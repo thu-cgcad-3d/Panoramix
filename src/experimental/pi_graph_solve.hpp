@@ -11,7 +11,7 @@ namespace pano {
 
         void SolvePIGraph(int ccid, PIGraph & mg, misc::Matlab & matlab, int tryNum);
 
-        void ReconstructLayoutAnnotation(PILayoutAnnotation & anno);
+        void ReconstructLayoutAnnotation(PILayoutAnnotation & anno, misc::Matlab & matlab);
 
       
     }

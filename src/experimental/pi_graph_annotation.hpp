@@ -93,34 +93,35 @@ namespace pano {
             std::vector<Vec3> vps;
             int vertVPId;
                         
-            std::vector<Vec3> corners;
-            std::map<std::pair<int, int>, int> corners2border;
+            std::vector<Vec3> corners;            
             std::vector<std::pair<int, int>> border2corners; // from, to
             std::vector<bool> border2connected;
-            std::vector<std::pair<int, int>> border2faces; // left, right
-
-            int addBorder(int c1, int c2);
-            int splitBorderBy(int b, int c);
 
             std::vector<std::vector<int>> face2corners;
             std::vector<SegControl> face2control;
             std::vector<Plane3> face2plane;
-            std::vector<std::pair<int, int>> coplanarFaces;
+            std::vector<std::pair<int, int>> coplanarFacePairs;
             std::vector<Polygon3> clutters;
 
             PILayoutAnnotation() : vertVPId(-1) {}
+            
             int ncorners() const { return corners.size(); }
             int nborders() const { return border2corners.size(); }
             int nfaces() const { return face2corners.size(); }
-            void generateFacesWithBorders();
+
+            int getBorder(int c1, int c2);
+            int addBorder(int c1, int c2);
+            int splitBorderBy(int b, int c);
+
+            void regenerateFaces();
 
             template <class Archiver>
             inline void serialize(Archiver & ar, std::int32_t version) {
                 if (version == 0) {
                     ar(originalImage, rectifiedImage, extendedOnTop, extendedOnBottom);
                     ar(view, vps, vertVPId);
-                    ar(corners, corners2border, border2corners, border2connected, border2faces);
-                    ar(face2corners, face2control, face2plane, coplanarFaces, clutters);
+                    ar(corners, border2corners, border2connected);
+                    ar(face2corners, face2control, face2plane, coplanarFacePairs, clutters);
                 } else {
                     NOT_IMPLEMENTED_YET();
                 }
