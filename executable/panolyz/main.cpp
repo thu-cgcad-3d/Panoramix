@@ -10,8 +10,8 @@ int main(int argc, char ** argv) {
     //PanoramaIndoor::Run();
     //PanoramaIndoor2::Run();
     //PanoramaIndoor3::Run();
-    PanoramaIndoor4::Run();
-    //PanoramaIndoorTest::Run();
+    //PanoramaIndoor4::Run();
+    PanoramaIndoorTest::Run();
 
     //NormalIndoor::Run();
     //NYU2::Run();

@@ -609,7 +609,7 @@ namespace pano {
             double minE = std::numeric_limits<double>::infinity();
 
             std::vector<double> X;
-            {
+            for (int i = 0; i < 100; i++) {
                 matlab << "D1D2 = ones(m, 1);"; //  current depths of anchors
                 while (true) {
                     matlab << "K = (A1 - A2) .* repmat(D1D2, [1, n]);";
@@ -636,7 +636,12 @@ namespace pano {
                     }
                     matlab << "D1D2 = 1./ (A1 * X) ./ (A2 * X);";
                     matlab << "D1D2 = abs(D1D2) / norm(D1D2);";
-                }               
+                }   
+                if (IsInfOrNaN(minE)) {
+                    matlab << "scale = scale * 2;";
+                } else {
+                    break;
+                }
             }
 
             // install back as planes

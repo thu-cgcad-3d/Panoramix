@@ -17,7 +17,7 @@ int main(int argc, char ** argv) {
     QApplication::setApplicationName(QObject::tr("PANOLYZ_LABEL"));
     QApplication::setQuitOnLastWindowClosed(true);
 
-    QString dir = "H:\\DataSet\\pi";
+    QString dir = "H:\\DataSet\\PanoContext";
     auto filenames = QFileDialog::getOpenFileNames(nullptr, QObject::tr("Select an image file"),
         dir,
         QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
@@ -27,7 +27,7 @@ int main(int argc, char ** argv) {
     for (auto & fname : filenames) {
         auto anno = pano::experimental::LoadOrInitializeNewLayoutAnnotation(fname.toStdString());
         while (true) {
-            pano::experimental::EditLayoutAnnotation(anno);
+            pano::experimental::EditLayoutAnnotation(fname.toStdString(), anno);
             pano::experimental::ReconstructLayoutAnnotation(anno, matlab);
             pano::experimental::VisualizeLayoutAnnotation(anno);
             int selected = pano::gui::SelectFrom({ "Accept", "Edit Again", "Abandon" }, 
