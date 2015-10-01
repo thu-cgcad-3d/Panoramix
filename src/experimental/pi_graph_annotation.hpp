@@ -61,7 +61,6 @@ namespace pano {
         void EditLayoutAnnotation(const std::string & imagePath, PILayoutAnnotation & anno);
 
         void SaveLayoutAnnotation(const std::string & imagePath, const PILayoutAnnotation & anno);
-        void SaveTempLayoutAnnotation(const std::string & imagePath, const PILayoutAnnotation & anno);
 
     }
 }

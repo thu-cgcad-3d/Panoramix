@@ -1062,7 +1062,11 @@ namespace pano {
             QMainWindow * mwin = new QMainWindow;
             mwin->setCentralWidget(w);
             mwin->setAttribute(Qt::WA_DeleteOnClose);
-            mwin->resize(MakeQSize(options.camera().screenSize()));
+            if (!autoSetCamera) {
+                mwin->resize(MakeQSize(options.camera().screenSize()));
+            } else {
+                mwin->resize(800, 800);
+            }
             mwin->setWindowTitle(QString::fromStdString(options.winName()));
             mwin->setWindowIcon(Singleton::DefaultIcon());
             mwin->setStyleSheet(Singleton::DefaultCSS());

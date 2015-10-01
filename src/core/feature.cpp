@@ -2121,16 +2121,16 @@ namespace pano {
                         if (x < width - 1) {
                             Edge edge;
                             edge.a = y * width + x;
-                            edge.b = y * width + ((x + 1) % width);
-                            edge.w = pixelDiff(smoothed, { x, y }, { (x + 1) % width, y });
+                            edge.b = y * width + x + 1;
+                            edge.w = pixelDiff(smoothed, { x, y }, { (x + 1), y });
                             edges.push_back(edge);
                         }
 
                         if (y < height - 1) {
                             Edge edge;
                             edge.a = y * width + x;
-                            edge.b = ((y + 1) % height) * width + x;
-                            edge.w = pixelDiff(smoothed, { x, y }, { x, (y + 1) % height });
+                            edge.b = (y + 1) * width + x;
+                            edge.w = pixelDiff(smoothed, { x, y }, { x, (y + 1) });
                             edges.push_back(edge);
                         }
 
@@ -2138,16 +2138,16 @@ namespace pano {
                             if ((x < width - 1) && (y < height - 1)) {
                                 Edge edge;
                                 edge.a = y * width + x;
-                                edge.b = ((y + 1) % height) * width + ((x + 1) % width);
-                                edge.w = pixelDiff(smoothed, { x, y }, { (x + 1) % width, (y + 1) % height });
+                                edge.b = (y + 1) * width + x + 1;
+                                edge.w = pixelDiff(smoothed, { x, y }, { (x + 1), (y + 1) });
                                 edges.push_back(edge);
                             }
 
                             if ((x < width - 1) && (y > 0)) {
                                 Edge edge;
                                 edge.a = y * width + x;
-                                edge.b = ((y + height - 1) % height) * width + ((x + 1) % width);
-                                edge.w = pixelDiff(smoothed, { x, y }, { (x + 1) % width, (y + height - 1) % height });
+                                edge.b = (y - 1) * width + (x + 1);
+                                edge.w = pixelDiff(smoothed, { x, y }, { (x + 1), (y - 1) });
                                 edges.push_back(edge);
                             }
                         }
@@ -2652,32 +2652,46 @@ namespace pano {
 
 
         void RemoveThinRegionInSegmentation(Imagei & segs, int widthThres /*= 2.0*/, bool crossBorder /*= false*/) {
-            if (crossBorder) {
+            /*if (crossBorder) {
                 THERE_ARE_BUGS_HERE("CrossBorder should not be applied to top/bottom borders!");
-            }
+            }*/
 
-            Imageb segregions(segs.size(), true);
-            for (auto it = segs.begin(); it != segs.end(); ++it) {
+            int width = segs.cols, height = segs.rows;
+
+            Imageb insiders(segs.size(), false);
+            for (auto it = insiders.begin(); it != insiders.end(); ++it) {
                 auto p = it.pos();
-                if (p.x == segs.cols - 1 && !crossBorder)
-                    continue;
-                if (p.y == segs.rows - 1 && !crossBorder)
-                    continue;
-                for (int x = 0; x <= 1; x++) {
-                    for (int y = 0; y <= 1; y++) {
-                        int xx = (p.x + x + segs.cols) % segs.cols;
-                        int yy = (p.y + y + segs.rows) % segs.rows;
-                        if (segs(yy, xx) != *it) {
-                            segregions(p) = false;
+                int seg = segs(p);
+                bool isInside = true;
+                for (int x = -widthThres; x <= widthThres; x++) {
+                    if (!isInside) {
+                        break;
+                    }
+                    int xx = p.x + x;
+                    if ((xx < 0 || xx > width - 1) && !crossBorder) {
+                        continue;
+                    }
+                    xx = (xx + width) % width;
+                    for (int y = -widthThres; y <= widthThres; y++) {
+                        if (!isInside) {
+                            break;
+                        }
+                        int yy = p.y + y;
+                        if (yy < 0 || yy > height - 1) {
+                            continue;
+                        }
+                        if (segs(yy, xx) != seg) {
+                            isInside = false;
                         }
                     }
                 }
+                *it = isInside;
             }
 
-            cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT,
+            /*cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT,
                 cv::Size(2 * widthThres + 1, 2 * widthThres + 1),
                 cv::Point(widthThres, widthThres));
-            cv::erode(segregions, segregions, element);
+            cv::erode(segregions, segregions, element);*/
 
             DenseMatd precompte(widthThres * 2 + 1, widthThres * 2 + 1, 0.0);
             for (int x = -widthThres; x <= widthThres; x++) {
@@ -2686,28 +2700,32 @@ namespace pano {
                 }
             }
 
-            std::map<Pixel, std::map<int, double>, ComparePixelLoc> distanceTable;
+            std::vector<std::map<int, double>> distanceTable(width * height);
             for (auto it = segs.begin(); it != segs.end(); ++it) {
                 auto p = it.pos();
-                if (segregions(p)) // consider near-boundary pixels only
+                if (insiders(p)) // consider near-boundary pixels only
                     continue;
-                auto & dtable = distanceTable[p];                
+                auto & dtable = distanceTable[p.x * height + p.y];                
                 for (int x = -widthThres; x <= widthThres; x++) {
                     for (int y = -widthThres; y <= widthThres; y++) {
-                        Pixel curp = p + Pixel(x, y);
-                        if (!Contains(segs, curp) && !crossBorder) {
+                        int xx = p.x + x;
+                        if ((xx < 0 || xx > width - 1) && !crossBorder) {
                             continue;
                         }
-                        curp.x = (curp.x + segs.cols) % segs.cols;
-                        curp.y = (curp.y + segs.rows) % segs.rows;
+                        xx = (xx + width) % width;
+                        int yy = p.y + y;
+                        if (yy < 0 || yy > height - 1) {
+                            continue;
+                        }
+                        Pixel curp(xx, yy);
                         double distance = precompte(x + widthThres, y + widthThres);
-                        if (segregions(curp)) { // curp is at certain regions
+                        if (insiders(curp)) { // curp is at certain regions
                             int segid = segs(curp);
                             if (!Contains(dtable, segid) || dtable.at(segid) > distance) {
                                 dtable[segid] = distance;
                             }
                         } else {
-                            auto & curdtable = distanceTable[curp];
+                            auto & curdtable = distanceTable[curp.x * height + curp.y];
                             // use dtable to update curdtable
                             for (auto & dd : dtable) {
                                 if (!Contains(curdtable, dd.first) || curdtable.at(dd.first) > dd.second + distance) {
@@ -2725,17 +2743,23 @@ namespace pano {
                 }
             }
 
-            for (auto & pd : distanceTable) {
-                int minDistSegId = -1;
-                double minDist = std::numeric_limits<double>::max();
-                for (auto & dd : pd.second) {
-                    if (dd.second < minDist) {
-                        minDistSegId = dd.first;
-                        minDist = dd.second;
+            for (int x = 0; x < width; x++) {
+                for (int y = 0; y < height; y++) {
+                    int id = x * height + y;
+                    if (distanceTable[id].empty()) {
+                        continue;
                     }
-                }
-                assert(minDistSegId != -1);
-                segs(pd.first) = minDistSegId;
+                    int minDistSegId = -1;
+                    double minDist = std::numeric_limits<double>::max();
+                    for (auto & dd : distanceTable[id]) {
+                        if (dd.second < minDist) {
+                            minDistSegId = dd.first;
+                            minDist = dd.second;
+                        }
+                    }
+                    assert(minDistSegId != -1);
+                    segs(y, x) = minDistSegId;
+                }               
             }
         }
 
@@ -2854,6 +2878,55 @@ namespace pano {
             return rootSegs.size();
         }
 
+
+
+        void RemoveDanglingPixelsInSegmentation(Imagei & segs, bool crossBorder) {
+
+            int width = segs.cols;
+            int height = segs.rows;
+            
+            while (true) {
+                bool hasDanglingPixels = false;
+                for (auto it = segs.begin(); it != segs.end(); ++it) {
+                    int seg = *it;
+                    std::vector<int> neighbors;
+                    neighbors.reserve(4);
+                    auto p = it.pos();
+                    if (p.x > 0 || crossBorder) {
+                        neighbors.push_back(segs(Pixel((p.x + width - 1) % width, p.y)));
+                    }
+                    if (p.x < width - 1 || crossBorder) {
+                        neighbors.push_back(segs(Pixel((p.x + 1) % width, p.y)));
+                    }
+                    if (p.y > 0) {
+                        neighbors.push_back(segs(Pixel(p.x, p.y - 1)));
+                    }
+                    if (p.y < height - 1) {
+                        neighbors.push_back(segs(Pixel(p.x, p.y + 1)));
+                    }
+                    bool isDanglingPixel = true;
+                    for (int nb : neighbors) {
+                        if (nb == seg) {
+                            isDanglingPixel = false;
+                            break;
+                        }
+                    }
+                    if (isDanglingPixel) {
+                        int maxCountNeighbor = *std::max_element(neighbors.begin(), neighbors.end(), 
+                            [&neighbors](int nb1, int nb2) {
+                            return std::count(neighbors.begin(), neighbors.end(), nb1) < 
+                                std::count(neighbors.begin(), neighbors.end(), nb2);
+                        });
+                        *it = maxCountNeighbor;
+                        hasDanglingPixels = true;
+                    }
+                }
+                if (!hasDanglingPixels) {
+                    break;
+                }
+            }
+
+        }
 
 
         int DensifySegmentation(Imagei & segs, bool crossBorder) {

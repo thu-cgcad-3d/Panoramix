@@ -800,6 +800,151 @@ namespace pano {
             return Ray<T, 3>(anchor, dir);
         }
 
+
+
+
+        // triangulate polygon
+        template <class VertIteratorT, class VertPoint2GetterT, class AddTriFaceFunT>
+        int TriangulatePolygon(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+            VertPoint2GetterT && getPoint2, AddTriFaceFunT && addFace) {
+
+            using VHandleT = typename std::iterator_traits<VertIteratorT>::value_type;
+            std::deque<std::vector<VHandleT>> vhGroupQ;
+            vhGroupQ.emplace_back(vertsBegin, vertsEnd);
+
+            int faceNum = 0;
+
+            while (!vhGroupQ.empty()) {
+                std::vector<VHandleT> is = vhGroupQ.front();
+                vhGroupQ.pop_front();
+
+                if (is.size() <= 2)
+                    continue;
+
+                if (is.size() == 3) {
+                    addFace(is[0], is[1], is[2]);
+                    faceNum++;
+                } else {
+                    // leftmost
+                    int leftmostII = 0;
+                    auto leftmostP = getPoint2(is[leftmostII]);
+                    for (int i = 0; i < is.size(); i++) {
+                        auto p = getPoint2(is[i]);
+                        if (p[0] < leftmostP[0]) {
+                            leftmostII = i;
+                            leftmostP = p;
+                        }
+                    }
+
+                    int leftmostPrevII = (leftmostII + is.size() - 1) % is.size();
+                    int leftmostNextII = (leftmostII + 1) % is.size();
+                    auto a = getPoint2(is[leftmostPrevII]);
+                    auto b = getPoint2(is[leftmostNextII]);
+
+                    int innerLeftmostII = -1;
+                    decltype(a) innerLeftmostP;
+                    for (int i = 0; i < is.size(); i++) {
+                        if (abs(i - leftmostII) <= 1 ||
+                            i == 0 && leftmostII == (is.size()) - 1 ||
+                            i == (is.size()) - 1 && leftmostII == 0)
+                            continue;
+                        auto p = getPoint2(is[i]);
+                        if (IsInTriangle(p, a, leftmostP, b)) {
+                            if (innerLeftmostII == -1) {
+                                innerLeftmostII = i;
+                                innerLeftmostP = p;
+                            } else if (p[0] < innerLeftmostP[0]) {
+                                innerLeftmostII = i;
+                                innerLeftmostP = p;
+                            }
+                        }
+                    }
+
+                    int split1 = leftmostII;
+                    int split2 = innerLeftmostII;
+                    if (innerLeftmostII < 0) {
+                        split1 = leftmostPrevII;
+                        split2 = leftmostNextII;
+                    }
+
+                    assert(split1 != split2);
+
+                    std::vector<VHandleT> part1, part2;
+
+                    for (int i = split1; i != split2; i = (i + 1) % is.size())
+                        part1.push_back(is[i]);
+                    part1.push_back(is[split2]);
+                    for (int i = split2; i != split1; i = (i + 1) % is.size())
+                        part2.push_back(is[i]);
+                    part2.push_back(is[split1]);
+
+                    assert(part1.size() >= 3);
+                    assert(part2.size() >= 3);
+
+                    is.clear();
+
+                    vhGroupQ.push_back(part1);
+                    vhGroupQ.push_back(part2);
+                }
+            }
+
+            return faceNum;
+
+        }
+
+
+
+        // intersection of line and polygon
+        template <class T>
+        Failable<Point<T, 3>> IntersectionOfLineAndPolygon(const Ray<T, 3> & ray, const Polygon<T, 3> & polygon, T epsilon = 0) {
+            Vec<T, 3> x, y;
+            std::tie(x, y) = ProposeXYDirectionsFromZDirection(polygon.normal);
+            bool hasIntersection = false;
+            Point<T, 3> intersection;
+            TriangulatePolygon(polygon.corners.begin(), polygon.corners.end(), [&](const Point<T, 3> & v) {
+                auto proj = v - v.dot(polygon.normal) * polygon.normal;
+                return Vec<T, 2>(proj.dot(x), proj.dot(y));
+            }, [&hasIntersection, &intersection, &ray, epsilon](const Point<T, 3> & V1, const Point<T, 3> & V2, const Point<T, 3> & V3) {
+                if (hasIntersection) {
+                    return;
+                }
+                Vec<T, 3> e1 = V2 - V1, e2 = V3 - V1;  //Edge1, Edge2
+                auto & O = ray.anchor;
+                auto & D = ray.direction;
+                auto P = D.cross(e2);
+                //Begin calculating determinant - also used to calculate u parameter                
+                //if determinant is near zero, ray lies in plane of triangle
+                T det = e1.dot(P);
+                //NOT CULLING
+                if (det > -epsilon && det < epsilon) return;
+                auto inv_det = 1.f / det;
+                //calculate distance from V1 to ray origin
+                auto t = O - V1;
+                //Calculate u parameter and test bound
+                auto u = t.dot(P) * inv_det;
+                //The intersection lies outside of the triangle
+                if (u < 0.f || u > 1.f) return;
+                //Prepare to test v parameter
+                auto Q = t.cross(e1);
+                //Calculate V parameter and test bound
+                auto v = D.dot(Q) * inv_det;
+                //The intersection lies outside of the triangle
+                if (v < 0.f || u + v  > 1.f) return;
+                T lambda = e2.dot(Q) * inv_det;
+
+                if (lambda > epsilon) { //ray intersection
+                    intersection = ray.anchor + ray.direction * lambda;
+                    hasIntersection = true;
+                }
+            });
+
+            if (hasIntersection) {
+                return std::move(intersection);
+            }
+            return nullptr;
+        }
+
+
         // distance from point to plane
         template <class T, int N>
         inline std::pair<T, Point<T, N>> DistanceFromPointToPlane(const Point<T, N> & p, const Plane<T, N> & plane) {

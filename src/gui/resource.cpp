@@ -17,6 +17,9 @@ namespace pano {
 
                 virtual bool isNull() const override { return image.isNull(); }
                 virtual void initialize() override {
+                    if (initialized) {
+                        return;
+                    }
                     if (!texture->isCreated()){
                         texture->create();
                     }

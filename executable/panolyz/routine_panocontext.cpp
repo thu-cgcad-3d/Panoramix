@@ -22,7 +22,7 @@ namespace panolyz {
         using namespace pano::core;
         using namespace pano::experimental;
 
-        static const std::string root = "F:\\DataSets\\PanoContext\\bedroom";
+        static const std::string root = "H:\\DataSet\\PanoContext\\bedroom";
 
         struct Task;
         struct GlobalConfig {

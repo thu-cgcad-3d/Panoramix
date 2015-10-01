@@ -1,3 +1,4 @@
+#include "../core/basic_types.hpp"
 #include "../core/image.hpp"
 #include "../core/utility.hpp"
 #include "../core/containers.hpp"
@@ -271,22 +272,24 @@ namespace pano {
                         int segj = relatedSegIds[jj];
 
                         const auto & pixelsForThisSegPair = segpair2pixels.at(MakeOrderedPair(segi, segj));
-                        std::vector<Pixel> pixelsForThisBnd;
-                        int saySegIIsOnLeft = 0, saySegIIsOnRight = 0;
 
+                        std::vector<Pixel> pixelsForThisBnd;
                         std::set<Pixel, ComparePixel> visitedPixels;
 
-                        // use BFS
-                        std::queue<Pixel> Q;
-                        Q.push(juncpos);
+                        // use dfs
+                        //std::stack<Pixel> Q;
+                        //Q.push(juncpos);
+                        int saySegIIsOnLeft = 0, saySegIIsOnRight = 0;
+                        pixelsForThisBnd.push_back(juncpos);
                         visitedPixels.insert(juncpos);
 
-                        while (!Q.empty()) {
-                            auto curp = Q.front();
-                            pixelsForThisBnd.push_back(curp);
+                        int lastDirId = 0;
+                        while (true) {
+                            
+                            auto & curp = pixelsForThisBnd.back();
 
                             // find another junc!
-                            if (Contains(pixel2junc, curp) && i < pixel2junc.at(curp) && pixelsForThisBnd.size() > 1) {
+                            if (pixelsForThisBnd.size() > 1 && Contains(pixel2junc, curp) && i < pixel2junc.at(curp)) {
                                 int tojuncid = pixel2junc.at(curp);
 
                                 // make a new bnd!
@@ -295,8 +298,10 @@ namespace pano {
                                 mg.bnd2juncs.emplace_back(i, tojuncid);
 
                                 if (saySegIIsOnLeft < saySegIIsOnRight) {
+                                    assert(saySegIIsOnLeft == 0);
                                     mg.bnd2segs.emplace_back(segj, segi); // left, right
                                 } else {
+                                    assert(saySegIIsOnRight == 0);
                                     mg.bnd2segs.emplace_back(segi, segj);
                                 }
                                 saySegIIsOnLeft = saySegIIsOnRight = 0;
@@ -309,8 +314,6 @@ namespace pano {
 
                                 break;
                             }
-
-                            Q.pop();
 
                             // * - * - *
                             // | d | a |
@@ -326,7 +329,9 @@ namespace pano {
                             static const int rightdxs[] = { 1, 0, 0, 1 };
                             static const int rightdys[] = { 1, 1, 0, 0 };
 
-                            for (int k = 0; k < 4; k++) {
+                            bool hasMore = false;
+                            for (int kk = 0; kk < 4; kk++) {
+                                int k = (lastDirId + kk + 3) % 4;
                                 auto nextp = curp + Pixel(dxs[k], dys[k]);
                                 nextp.x = (nextp.x + width) % width;
 
@@ -353,10 +358,97 @@ namespace pano {
                                         continue;
                                     }
                                 }
-                                Q.push(nextp);
+
+                                pixelsForThisBnd.push_back(nextp);
                                 visitedPixels.insert(nextp);
+                                lastDirId = k;
+                                hasMore = true;
+                                break;
+                            }
+
+                            if (!hasMore) {
+                                break;
                             }
                         }
+
+                        //while (!Q.empty()) {
+                        //    auto curp = Q.top();
+                        //    pixelsForThisBnd.push_back(curp);
+
+                        //    // find another junc!
+                        //    if (Contains(pixel2junc, curp) && i < pixel2junc.at(curp) && pixelsForThisBnd.size() > 1) {
+                        //        int tojuncid = pixel2junc.at(curp);
+
+                        //        // make a new bnd!
+                        //        bndPixels.push_back(std::move(pixelsForThisBnd));
+                        //        int newbndid = bndPixels.size() - 1;
+                        //        mg.bnd2juncs.emplace_back(i, tojuncid);
+
+                        //        if (saySegIIsOnLeft < saySegIIsOnRight) {
+                        //            assert(saySegIIsOnLeft == 0);
+                        //            mg.bnd2segs.emplace_back(segj, segi); // left, right
+                        //        } else {
+                        //            assert(saySegIIsOnRight == 0);
+                        //            mg.bnd2segs.emplace_back(segi, segj);
+                        //        }
+                        //        saySegIIsOnLeft = saySegIIsOnRight = 0;
+
+                        //        mg.junc2bnds[i].push_back(newbndid);
+                        //        mg.junc2bnds[tojuncid].push_back(newbndid);
+
+                        //        mg.seg2bnds[segi].push_back(newbndid);
+                        //        mg.seg2bnds[segj].push_back(newbndid);
+
+                        //        break;
+                        //    }
+
+                        //    Q.pop();
+
+                        //    // * - * - *
+                        //    // | d | a |
+                        //    // * -[*]- *
+                        //    // | c | b |
+                        //    // * - * - *
+                        //    static const int dxs[] = { 1, 0, -1, 0 };
+                        //    static const int dys[] = { 0, 1, 0, -1 };
+
+                        //    static const int leftdxs[] = { 1, 1, 0, 0 };
+                        //    static const int leftdys[] = { 0, 1, 1, 0 };
+
+                        //    static const int rightdxs[] = { 1, 0, 0, 1 };
+                        //    static const int rightdys[] = { 1, 1, 0, 0 };
+
+                        //    for (int k = 0; k < 4; k++) {
+                        //        auto nextp = curp + Pixel(dxs[k], dys[k]);
+                        //        nextp.x = (nextp.x + width) % width;
+
+                        //        if (nextp.y >= height || nextp.y < 0) { // note that the top/bottom borders cannot be crossed!
+                        //            continue;
+                        //        }
+                        //        if (!Contains(pixelsForThisSegPair, nextp)) {
+                        //            continue;
+                        //        }
+                        //        if (Contains(visitedPixels, nextp)) {
+                        //            continue;
+                        //        }
+
+                        //        auto rightp = curp + Pixel(rightdxs[k], rightdys[k]);
+                        //        rightp.x = (rightp.x + width) % width;
+                        //        auto leftp = curp + Pixel(leftdxs[k], leftdys[k]);
+                        //        leftp.x = (leftp.x + width) % width;
+                        //        if (Contains(segs, rightp) && Contains(segs, leftp)) {
+                        //            if (segs(rightp) == segi && segs(leftp) == segj) {
+                        //                saySegIIsOnRight++;
+                        //            } else if (segs(rightp) == segj && segs(leftp) == segi) {
+                        //                saySegIIsOnLeft++;
+                        //            } else {
+                        //                continue;
+                        //            }
+                        //        }
+                        //        Q.push(nextp);
+                        //        visitedPixels.insert(nextp);
+                        //    }
+                        //}
                     }
                 }            
             }
@@ -446,6 +538,8 @@ namespace pano {
                     lineRTree.emplace(sample, i);
                 }
             }           
+
+
 
             // split lines to linePieces
             for (int i = 0; i < mg.lines.size(); i++) {

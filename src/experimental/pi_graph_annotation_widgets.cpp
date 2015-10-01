@@ -166,17 +166,35 @@ namespace pano {
             addAction(defaultAction);
 
 
+            {
+                QAction * sep = new QAction(this);
+                sep->setSeparator(true);
+                addAction(sep);
+            }
+
+
             // visibility
             connect(defaultAction = new QAction(tr("Show Layouts"), this), &QAction::triggered, [this](bool checked) {
                 _showLayouts = checked;
                 update();
             });
+            defaultAction->setShortcut(tr("1"));
             defaultAction->setCheckable(true);
             defaultAction->setChecked(_showLayouts);
+            addAction(defaultAction);
+            connect(defaultAction = new QAction(tr("Show Clutters"), this), &QAction::triggered, [this](bool checked) {
+                _showClutters = checked;
+                update();
+            });
+            defaultAction->setShortcut(tr("2"));
+            defaultAction->setCheckable(true);
+            defaultAction->setChecked(_showClutters);
+            addAction(defaultAction);
             connect(defaultAction = new QAction(tr("Show VPs"), this), &QAction::triggered, [this](bool checked) {
                 _showVPs = checked;
                 update();
             });
+            defaultAction->setShortcut(tr("3"));
             defaultAction->setCheckable(true);
             defaultAction->setChecked(_showVPs);
             addAction(defaultAction);
@@ -380,7 +398,8 @@ namespace pano {
                     rebuildLayoutScene();
                 } else if (_state == DrawingClutter) {
 
-                    _stroke.points.push_back(normalize(_options.camera().toSpace(gui::MakeCoreVec(e->pos()))));
+                    _stroke.append(normalize(_options.camera().toSpace(gui::MakeCoreVec(e->pos()))));
+                    rebuildStrokeScene();
                 
                 } else if (_state == ConnectCoplanarFaces) {                    
                     if (_lastHitFaceId != -1 && _faceClicked != -1) {
@@ -391,7 +410,7 @@ namespace pano {
                         _lastHitFaceId = _faceClicked;
                     }
                 }
-                rebuildStrokeScene();
+
                 update();
             } else {
                 QGLWidget::mousePressEvent(e);
@@ -552,24 +571,45 @@ namespace pano {
                 std::cout << "face " << _anno->coplanarFacePairs[line.decoration].first
                     << " and face " << _anno->coplanarFacePairs[line.decoration].second
                     << " are labeled as coplanar" << std::endl;
-            }).lineWidth(7.0).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
+            }).lineWidth(2.0).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
 
             _layoutScene = sb.scene();
         }
 
 
         void PILayoutAnnotationWidget::rebuildCluttersScene() {
+            _clutterPolygons = decltype(_clutterPolygons)(_anno->clutters.size());
+            for (int i = 0; i < _anno->clutters.size(); i++) {
+                auto & poly = _clutterPolygons[i];
+                poly.decoration = i;
+                poly.component = _anno->clutters[i];
+                for (auto & c : poly.component.corners) {
+                    c = normalize(c) * visualDepthClutter;
+                }
+            }
+            SceneBuilder sb;
+            sb.installingOptions().discretizeOptions.color = gui::Black;
+            sb.begin(_clutterPolygons).shaderSource(gui::OpenGLShaderSourceDescriptor::XTriangles).end();
 
+            _cluttersScene = sb.scene();
         }
 
         void PILayoutAnnotationWidget::rebuildStrokeScene() {
+            SceneBuilder sb;
+            sb.installingOptions().defaultShaderSource = gui::OpenGLShaderSourceDescriptor::XLines;
+            sb.installingOptions().lineWidth = 20.0;
+            sb.installingOptions().discretizeOptions.color = gui::Black;
 
+            sb.add(_stroke);
+            _strokeScene = sb.scene();
         }
 
 
 
         void PILayoutAnnotationWidget::acceptClutter() {
-
+            if (_stroke.size() >= 3) {
+                _anno->clutters.emplace_back(_stroke);
+            }
         }
 
 
