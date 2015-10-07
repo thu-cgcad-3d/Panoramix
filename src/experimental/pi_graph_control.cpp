@@ -221,7 +221,7 @@ namespace pano {
             for (int bnd : mg.seg2bnds[topSeg]) {
                 bool onLeft = mg.bnd2segs[bnd].first == topSeg;
                 for (int bp : mg.bnd2bndPieces[bnd]) {
-                    mg.bndPiece2occlusion[bp] = onLeft ? OcclusionRelation::RightIsFront : OcclusionRelation::LeftIsFront;
+                    mg.bndPiece2segRelation[bp] = onLeft ? SegRelation::RightIsFront : SegRelation::LeftIsFront;
                 }
             }
         }
@@ -232,7 +232,7 @@ namespace pano {
             for (int bnd : mg.seg2bnds[bottomSeg]) {
                 bool onLeft = mg.bnd2segs[bnd].first == bottomSeg;
                 for (int bp : mg.bnd2bndPieces[bnd]) {
-                    mg.bndPiece2occlusion[bp] = onLeft ? OcclusionRelation::RightIsFront : OcclusionRelation::LeftIsFront;
+                    mg.bndPiece2segRelation[bp] = onLeft ? SegRelation::RightIsFront : SegRelation::LeftIsFront;
                 }
             }
         }

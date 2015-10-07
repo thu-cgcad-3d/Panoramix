@@ -6,9 +6,12 @@ include_directories (${Fundamental_INCLUDES} ${Qt_INCLUDES})
 
 if (MSVC)
 	add_definitions ( "/DMATLAB_CODE_DIR=\"${MATLAB_CODE_DIR}\"")
+	add_definitions ( "/DPROJECT_CACHE_DIR_STR=\"${CACHE_DIR}\"" )
 else ()
 	add_definitions ( "-DMATLAB_CODE_DIR=\"${MATLAB_CODE_DIR}\"")
+	add_definitions ( "-DPROJECT_CACHE_DIR_STR=\"${CACHE_DIR}\"" )
 endif ()
+
 
 
 file (GLOB CORE_HEADERS ./core/*.hpp)

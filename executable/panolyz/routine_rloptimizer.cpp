@@ -98,7 +98,7 @@ namespace panolyz {
             std::vector<std::vector<Classified<Line2>>> lines;
             std::vector<Vec3> vps;
             std::vector<DenseMatd> lineVPScores;
-            if (refresh || !Load(path, "vplines", cams, lines, vps, lineVPScores)) {
+            if (refresh || !misc::LoadCache(path, "vplines", cams, lines, vps, lineVPScores)) {
                 cams = CreateCubicFacedCameras(view.camera);
                 lines.resize(cams.size());
                 for (int i = 0; i < cams.size(); i++) {
@@ -121,29 +121,29 @@ namespace panolyz {
                         gui::AsCanvas(pim).thickness(3).colorTable(ctable).add(lines[i]).show();
                     }
                 }
-                Save(path, "vplines", cams, lines, vps, lineVPScores);
+                misc::SaveCache(path, "vplines", cams, lines, vps, lineVPScores);
             }
 
             // segs
             Imagei segs;
             int nsegs;
-            if (refresh || !Load(path, "segs", segs, nsegs)) {
+            if (refresh || !misc::LoadCache(path, "segs", segs, nsegs)) {
                 SegmentationExtractor seger;
                 seger.params().algorithm = SegmentationExtractor::GraphCut;
                 std::tie(segs, nsegs) = seger(image, true);
-                Save(path, "segs", segs, nsegs);
+                misc::SaveCache(path, "segs", segs, nsegs);
             }       
             
 
             std::vector<PerspectiveCamera> hcams;
-            if (refresh || !Load(path, "hcams", hcams)) {
+            if (refresh || !misc::LoadCache(path, "hcams", hcams)) {
                 hcams = CreatePanoContextCameras(view.camera, 500, 400, 300);
-                Save(path, "hcams", hcams);
+                misc::SaveCache(path, "hcams", hcams);
             }
 
             // occ
             std::vector<Scored<Chain3>> occbnds;
-            if (refresh || !Load(path, "occ", occbnds)) {
+            if (refresh || !misc::LoadCache(path, "occ", occbnds)) {
                 for (int i = 0; i < hcams.size(); i++) {
                     auto pim = view.sampled(hcams[i]).image;
                     auto occ = AsDimensionConvertor(hcams[i]).toSpace(DetectOcclusionBoundary(matlab, pim));
@@ -151,12 +151,12 @@ namespace panolyz {
                         occbnds.push_back(soc);
                     }
                 }
-                Save(path, "occ", occbnds);
+                misc::SaveCache(path, "occ", occbnds);
             }
 
             // extract gcs
             std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
-            if (refresh || !Load(path, "gcs", gcs)) {
+            if (refresh || !misc::LoadCache(path, "gcs", gcs)) {
                 gcs.resize(hcams.size());
                 for (int i = 0; i < hcams.size(); i++) {
                     auto pim = view.sampled(hcams[i]);
@@ -165,15 +165,15 @@ namespace panolyz {
                     gcs[i].component.image = pgc;
                     gcs[i].score = sin(AngleBetweenUndirectedVectors(hcams[i].forward(), view.camera.up()));
                 }
-                Save(path, "gcs", gcs);
+                misc::SaveCache(path, "gcs", gcs);
             }
 
 
             // gc
             Image5d gc;
-            if (refresh || !Load(path, "gc", gc)) {
+            if (refresh || !misc::LoadCache(path, "gc", gc)) {
                 gc = Combine(view.camera, gcs).image;
-                Save(path, "gc", gc);
+                misc::SaveCache(path, "gc", gc);
             }
 
             // graph
@@ -181,7 +181,7 @@ namespace panolyz {
 
             RLGraph g;
             std::vector<RHandle> segId2Rhs;
-            if (refresh || !Load(path, "g", g, segId2Rhs)) {
+            if (refresh || !misc::LoadCache(path, "g", g, segId2Rhs)) {
                 RLGraphBuilder gb;
                 std::vector<Chain3> occs;
                 for (auto & soc : occbnds) {
@@ -190,7 +190,7 @@ namespace panolyz {
                     }
                 }
                 g = gb(vps, lines, lineVPScores, cams, segs, gc, occs, view.camera, &segId2Rhs);
-                Save(path, "g", g, segId2Rhs);
+                misc::SaveCache(path, "g", g, segId2Rhs);
             }
             {
                 auto pim = Print(g, segs, view.camera, segId2Rhs, 
@@ -230,7 +230,7 @@ namespace panolyz {
             RLOptimizer opt;
             opt.setup(g, vps, patches);
             opt.preprocess();
-            Save(path, "opt_fea", opt.graphFeatureDictTable(), opt.patchFeatureDictTable());
+            misc::SaveCache(path, "opt_fea", opt.graphFeatureDictTable(), opt.patchFeatureDictTable());
 
 
             //opt.inference(opt.suggestedWeights(), recPlanes, recLines);

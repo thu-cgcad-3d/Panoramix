@@ -576,7 +576,7 @@ namespace pano {
 
         Matlab::Matlab(const std::string & defaultDir) : _eng(nullptr), _buffer(nullptr) {
             static const int bufferSize = 1024;
-            _eng = engOpen(nullptr);
+            _eng = engOpenSingleUse(nullptr, nullptr, nullptr);
             if (_eng) {
                 engSetVisible(static_cast<::Engine*>(_eng), false);
                 _buffer = new char[bufferSize];

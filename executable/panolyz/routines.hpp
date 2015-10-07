@@ -2,6 +2,7 @@
 #define PANOLYZ_ROUTINES_HPP
 
 #include "../../src/core/basic_types.hpp"
+#include "../../src/misc/cache.hpp"
 
 namespace panolyz {
 
@@ -21,26 +22,27 @@ namespace panolyz {
     DECL_ALGO(PanoContext);
     DECL_ALGO(ActivePanoramaIndoor);
     DECL_ALGO(RLOpt);
+    DECL_ALGO(GC);
 
-    inline std::string Tagify(const std::string & path){
-        auto tag = path;
-        std::replace(tag.begin(), tag.end(), '.', '_');
-        std::replace(tag.begin(), tag.end(), '\\', '.');
-        std::replace(tag.begin(), tag.end(), '/', '.');
-        std::replace(tag.begin(), tag.end(), ':', '.');
-        return tag;
-    }
+    //inline std::string Tagify(const std::string & path){
+    //    auto tag = path;
+    //    std::replace(tag.begin(), tag.end(), '.', '_');
+    //    std::replace(tag.begin(), tag.end(), '\\', '.');
+    //    std::replace(tag.begin(), tag.end(), '/', '.');
+    //    std::replace(tag.begin(), tag.end(), ':', '.');
+    //    return tag;
+    //}
 
 
-    template <class StringT, class ... Ts>
-    inline bool Save(const std::string & path, StringT && s, Ts && ... ts){
-        return pano::core::SaveToDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
-    }
+    //template <class StringT, class ... Ts>
+    //inline bool misc::SaveCache(const std::string & path, StringT && s, Ts && ... ts){
+    //    return pano::core::SaveToDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
+    //}
 
-    template <class StringT, class ... Ts>
-    inline bool Load(const std::string & path, StringT && s, Ts & ... ts){
-        return pano::core::LoadFromDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
-    }
+    //template <class StringT, class ... Ts>
+    //inline bool misc::LoadCache(const std::string & path, StringT && s, Ts & ... ts){
+    //    return pano::core::LoadFromDisk("./cache/" + Tagify(path) + "_" + s + ".cereal", ts...);
+    //}
 
 
 

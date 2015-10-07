@@ -66,15 +66,43 @@ namespace pano {
             return ims;
         }
 
-        std::vector<Image> PickAllImagesFromAFolder(const std::string & dir) {
+        std::vector<Image> PickAllImagesFromAFolder(const std::string & dir, std::vector<std::string> * picked) {
             Singleton::InitGui();
             auto folder = QFileDialog::getExistingDirectory(nullptr, QObject::tr("Select a folder containing images"),
                 QString::fromStdString(dir));
-            NOT_IMPLEMENTED_YET();
+            if (folder.isEmpty()) {
+                return std::vector<Image>();
+            }
+            std::vector<Image> ims;
+            QDirIterator it(folder, QStringList() << "*.jpg" << "*.png" << "*.jpeg", QDir::Files, QDirIterator::Subdirectories);
+            while (it.hasNext()) {
+                std::string filename = it.next().toStdString();
+                ims.push_back(cv::imread(filename));
+                std::cout << filename << " is read" << std::endl;
+                if (picked) {
+                    picked->push_back(filename);
+                }
+            }
+            return ims;
         }
 
 
-
+        void ForEachImageFromAFolder(const std::string & dir, const std::function<bool(const std::string & impath)> & fun) {
+            Singleton::InitGui();
+            auto folder = QFileDialog::getExistingDirectory(nullptr, QObject::tr("Select a folder containing images"),
+                QString::fromStdString(dir));
+            if (folder.isEmpty()) {
+                return;
+            }
+            QDirIterator it(folder, QStringList() << "*.jpg" << "*.png" << "*.jpeg", QDir::Files, QDirIterator::Subdirectories);
+            while (it.hasNext()) {
+                std::string filename = it.next().toStdString();
+                std::cout << "processing " << filename << std::endl;
+                if (!fun(filename)) {
+                    break;
+                }
+            }
+        }
 
 
 

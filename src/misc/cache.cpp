@@ -12,5 +12,9 @@ namespace pano {
             return tag;
         }
 
+        std::string CachePath() {
+            return PROJECT_CACHE_DIR_STR"/";
+        }
+
     }
 }

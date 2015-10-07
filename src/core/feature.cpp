@@ -78,32 +78,32 @@ namespace pano {
 
 
 
-        std::vector<KeyPoint> SIFT(const Image & im, cv::OutputArray descriptors,
-            int nfeatures, int nOctaveLayers,
-            double contrastThreshold, double edgeThreshold,
-            double sigma){
-            cv::SIFT sift(nfeatures, nOctaveLayers, contrastThreshold, edgeThreshold, sigma);
-            std::vector<KeyPoint> keypoints;
-            sift(im, cv::noArray(), keypoints, descriptors);
-            return keypoints;
-        }
+        //std::vector<KeyPoint> SIFT(const Image & im, cv::OutputArray descriptors,
+        //    int nfeatures, int nOctaveLayers,
+        //    double contrastThreshold, double edgeThreshold,
+        //    double sigma){
+        //    cv::SIFT sift(nfeatures, nOctaveLayers, contrastThreshold, edgeThreshold, sigma);
+        //    std::vector<KeyPoint> keypoints;
+        //    sift(im, cv::noArray(), keypoints, descriptors);
+        //    return keypoints;
+        //}
 
-        std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors,
-            double hessianThreshold,
-            int nOctaves, int nOctaveLayers,
-            bool extended, bool upright){
-            cv::SURF surf(hessianThreshold, nOctaves, nOctaveLayers, extended, upright);
-            std::vector<KeyPoint> keypoints;
-            surf(im, cv::noArray(), keypoints, descriptors);
-            return keypoints;
-        }
+        //std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors,
+        //    double hessianThreshold,
+        //    int nOctaves, int nOctaveLayers,
+        //    bool extended, bool upright){
+        //    cv::SURF surf(hessianThreshold, nOctaves, nOctaveLayers, extended, upright);
+        //    std::vector<KeyPoint> keypoints;
+        //    surf(im, cv::noArray(), keypoints, descriptors);
+        //    return keypoints;
+        //}
 
-        std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors){
-            cv::SURF surf;
-            std::vector<KeyPoint> keypoints;
-            surf(im, cv::noArray(), keypoints, descriptors);
-            return keypoints;
-        }
+        //std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors){
+        //    cv::SURF surf;
+        //    std::vector<KeyPoint> keypoints;
+        //    surf(im, cv::noArray(), keypoints, descriptors);
+        //    return keypoints;
+        //}
 
 
 
@@ -536,7 +536,7 @@ namespace pano {
 
 
 
-        std::vector<Line3> MergeLines(const std::vector<Line3> & lines, double angleThres) {
+        std::vector<Line3> MergeLines(const std::vector<Line3> & lines, double angleThres, double mergeAngleThres) {
             
             assert(angleThres < M_PI_4);
             RTreeMap<Vec3, int> lineNormals;
@@ -562,6 +562,24 @@ namespace pano {
                     groups.emplace_back(std::vector<int>{i}, n);
                     lineNormals.emplace(n, groups.size() - 1);
                 }
+            }
+
+            // optimize normals
+            auto calcWeightedNormal = [&lines](int lineid) {
+                auto & line = lines[lineid];
+                return normalize(line.first.cross(line.second)) * AngleBetweenDirections(line.first, line.second);
+            };
+            for (auto & g : groups) {
+                auto & lineids = g.first;
+                Vec3 nsum = calcWeightedNormal(lineids.front());
+                for (int i = 1; i < g.first.size(); i++) {
+                    Vec3 n = calcWeightedNormal(lineids[i]);
+                    if (n.dot(nsum) < 0) {
+                        n = -n;
+                    }
+                    nsum += n;
+                }
+                g.second = normalize(nsum);
             }
 
             std::vector<Line3> merged;
@@ -620,6 +638,28 @@ namespace pano {
                         mergedAngleRanges.push_back(stop.first);
                         occupied = false;
                     }
+                }
+
+                // merge ranges
+                if (mergeAngleThres > 0) {
+                    std::vector<double> mergedAngleRanges2;
+                    mergedAngleRanges2.reserve(mergedAngleRanges.size());
+                    for (int i = 0; i < mergedAngleRanges.size(); i += 2) {
+                        if (mergedAngleRanges2.empty()) {
+                            mergedAngleRanges2.push_back(mergedAngleRanges[i]);
+                            mergedAngleRanges2.push_back(mergedAngleRanges[i+1]);
+                            continue;
+                        }
+                        double & lastEnd = mergedAngleRanges2.back();
+                        if (mergedAngleRanges[i] >= lastEnd && mergedAngleRanges[i] - lastEnd < mergeAngleThres ||
+                            mergedAngleRanges[i] < lastEnd && mergedAngleRanges[i] + M_PI * 2 - lastEnd < mergeAngleThres) {
+                            lastEnd = mergedAngleRanges[i + 1];
+                        } else {
+                            mergedAngleRanges2.push_back(mergedAngleRanges[i]);
+                            mergedAngleRanges2.push_back(mergedAngleRanges[i + 1]);
+                        }
+                    }
+                    mergedAngleRanges = std::move(mergedAngleRanges2);
                 }
 
                 assert(mergedAngleRanges.size() % 2 == 0);
@@ -2218,11 +2258,17 @@ namespace pano {
                 int num = (int)edges.size();
                 Universe u = SegmentGraph(verticesSizes, edges, c);
 
-                for (int i = 0; i < num; i++) {
-                    int a = u.find(edges[i].a);
-                    int b = u.find(edges[i].b);
-                    if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize)))
-                        u.join(a, b);
+                bool merged = true;
+                while (merged) {
+                    merged = false;
+                    for (int i = 0; i < num; i++) {
+                        int a = u.find(edges[i].a);
+                        int b = u.find(edges[i].b);
+                        if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize))) {
+                            u.join(a, b);
+                            merged = true;
+                        }
+                    }
                 }
 
                 numCCs = u.numSets();

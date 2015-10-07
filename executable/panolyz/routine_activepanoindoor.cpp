@@ -109,10 +109,10 @@ namespace panolyz {
                     gui::AsCanvas(ctable(segmentedImage)).add(view.image).show();
                 }
 
-                Save(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
+                misc::SaveCache(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
             }
             else{
-                Load(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
+                misc::LoadCache(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
             }
 
 
@@ -129,10 +129,10 @@ namespace panolyz {
                     gcs[i].component.image = pgc;
                     gcs[i].score = sin(AngleBetweenUndirectedVectors(hcams[i].forward(), view.camera.up()));
                 }
-                Save(path, "hcamsgcs", hcams, gcs);
+                misc::SaveCache(path, "hcamsgcs", hcams, gcs);
             }
             else{
-                Load(path, "hcamsgcs", hcams, gcs);
+                misc::LoadCache(path, "hcamsgcs", hcams, gcs);
             }
 
             Image5d gc;

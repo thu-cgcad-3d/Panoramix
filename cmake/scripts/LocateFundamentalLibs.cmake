@@ -5,16 +5,16 @@ find_package (OpenCV REQUIRED)
 #find_package (GLPK REQUIRED)
 #find_package (GLEW REQUIRED)
 # find_package (Armadillo REQUIRED CONFIG)
-find_package (MOSEK REQUIRED)
-find_package (SuiteSparse REQUIRED)
+# find_package (MOSEK REQUIRED)
+# find_package (SuiteSparse REQUIRED)
 
-set(Boost_USE_STATIC_LIBS ON) 
-set(Boost_USE_MULTITHREADED ON)  
-set(Boost_USE_STATIC_RUNTIME OFF) 
-find_package (Boost REQUIRED COMPONENTS math_tr1 system filesystem graph program_options)
+#set(Boost_USE_STATIC_LIBS ON) 
+#set(Boost_USE_MULTITHREADED ON)  
+#set(Boost_USE_STATIC_RUNTIME OFF) 
+#find_package (Boost REQUIRED COMPONENTS math_tr1 system filesystem graph program_options)
 
-set (SuiteSparse_USE_LAPACK_BLAS "on")
-include(${USE_SuiteSparse})
+#set (SuiteSparse_USE_LAPACK_BLAS "on")
+#include(${USE_SuiteSparse})
 
 set (Fundamental_INCLUDES 
 	${EIGEN3_INCLUDE_DIR} 
@@ -22,9 +22,9 @@ set (Fundamental_INCLUDES
 	#${GLPK_INCLUDE_DIR} 
 	#${GLEW_INCLUDE_DIRS} 
 #	${ARMADILLO_INCLUDE_DIRS}
-	${MOSEK_INCLUDE_DIR} 
-	";${SuiteSparse_INCLUDE_DIRS}"
-	${Boost_INCLUDE_DIRS}
+	#${MOSEK_INCLUDE_DIR} 
+	#";${SuiteSparse_INCLUDE_DIRS}"
+	#${Boost_INCLUDE_DIRS}
 )
 
 foreach (i ${Fundamental_INCLUDES})
@@ -36,9 +36,9 @@ set (Fundamental_LIBS
 	#${GLPK_LIBRARY} 
 	#${GLEW_LIBRARIES} 
 	#${ARMADILLO_LIBRARIES}
-	${MOSEK_LIBRARY}
-	"${SuiteSparse_LIBRARIES}"
-	${Boost_LIBRARIES}
+	#${MOSEK_LIBRARY}
+	#"${SuiteSparse_LIBRARIES}"
+	#${Boost_LIBRARIES}
 )
 
 foreach (i ${Fundamental_LIBS})
@@ -54,7 +54,7 @@ endif ()
 # 	message (WARNING "BLAS or LAPACK dlls may be required by Armadillo in runtime, remember to add them to PATH")
 # endif ()
 
-list (APPEND Fundamental_PATH ${ARMADILLO_LIBRARY_DIRS})
-list (APPEND Fundamental_PATH ${MOSEK_BIN_DIR})
-list (APPEND Fundamental_PATH ${BOOST_LIBARAYDIR})
-list (APPEND Fundamental_PATH "${SuiteSparse_LIB_DIRS}")
+#list (APPEND Fundamental_PATH ${ARMADILLO_LIBRARY_DIRS})
+#list (APPEND Fundamental_PATH ${MOSEK_BIN_DIR})
+#list (APPEND Fundamental_PATH ${BOOST_LIBARAYDIR})
+#list (APPEND Fundamental_PATH "${SuiteSparse_LIB_DIRS}")

@@ -374,12 +374,12 @@ namespace panolyz {
         void Task::updateChains() {
             // assign chains
             // draw chains
-            Load(path, "chains", floorChain, ceilingChain);
+            misc::LoadCache(path, "chains", floorChain, ceilingChain);
             std::vector<Chain3> chains = { std::move(ceilingChain), std::move(floorChain) };
             gui::DrawChainsInPanorama(view, penConfigs, chains);
             ceilingChain = std::move(chains[0]);
             floorChain = std::move(chains[1]);
-            Save(path, "chains", floorChain, ceilingChain);
+            misc::SaveCache(path, "chains", floorChain, ceilingChain);
         }
 
         void Task::calcGC(bool refresh) {
@@ -387,14 +387,14 @@ namespace panolyz {
 
             // gc
             std::vector<PerspectiveCamera> hcams;
-            if (refresh || !Load(path, "hcams", hcams)) {
+            if (refresh || !misc::LoadCache(path, "hcams", hcams)) {
                 hcams = CreatePanoContextCameras(view.camera, 500, 400, 300);
-                Save(path, "hcams", hcams);
+                misc::SaveCache(path, "hcams", hcams);
             }
 
             // extract gcs
             std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
-            if (refresh || !Load(path, "gcs", gcs)) {
+            if (refresh || !misc::LoadCache(path, "gcs", gcs)) {
                 gcs.resize(hcams.size());
                 for (int i = 0; i < hcams.size(); i++) {
                     auto pim = view.sampled(hcams[i]);
@@ -403,12 +403,12 @@ namespace panolyz {
                     gcs[i].component.image = pgc;
                     gcs[i].score = sin(AngleBetweenUndirectedVectors(hcams[i].forward(), view.camera.up()));
                 }
-                Save(path, "gcs", gcs);
+                misc::SaveCache(path, "gcs", gcs);
             }
 
-            if (refresh || !Load(path, "gc", gc)) {
+            if (refresh || !misc::LoadCache(path, "gc", gc)) {
                 gc = Combine(view.camera, gcs).image;
-                Save(path, "gc", gc);
+                misc::SaveCache(path, "gc", gc);
             }
             gui::MakeCanvas(gc).maxHeight(500).show();
         }
@@ -448,7 +448,7 @@ namespace panolyz {
         //void Task::calcSegs(bool refresh) {
         //    // extract segments
         //    if (refresh || 
-        //        !Load(path, "segs", segs, nsegs, validSegIds, segContours, segCenters, segAreas, segimWithObjectsMask, segPositions)) {
+        //        !misc::LoadCache(path, "segs", segs, nsegs, validSegIds, segContours, segCenters, segAreas, segimWithObjectsMask, segPositions)) {
         //        SegmentationExtractor segmenter;
         //        segmenter.params().algorithm = SegmentationExtractor::GraphCut;
         //        std::vector<Line3> chainLines;
@@ -524,7 +524,7 @@ namespace panolyz {
         //          segPositions[i] = FreePlane;
         //          }*/
 
-        //        Save(path, "segs", segs, nsegs, validSegIds, segContours, segCenters, segAreas, segimWithObjectsMask, segPositions);
+        //        misc::SaveCache(path, "segs", segs, nsegs, validSegIds, segContours, segCenters, segAreas, segimWithObjectsMask, segPositions);
         //    }
         //}
 

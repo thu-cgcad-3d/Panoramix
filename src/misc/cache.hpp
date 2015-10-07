@@ -8,14 +8,16 @@ namespace pano {
 
         std::string Tagify(const std::string & path);
 
+        std::string CachePath();
+
         template <class StringT, class ... Ts>
         inline bool SaveCache(const std::string & path, StringT && what, Ts && ... ts) {
-            return pano::core::SaveToDisk("./cache/" + Tagify(path) + "_" + what + ".cereal", ts...);
+            return pano::core::SaveToDisk(CachePath() + Tagify(path) + "_" + what + ".cereal", ts...);
         }
 
         template <class StringT, class ... Ts>
         inline bool LoadCache(const std::string & path, StringT && what, Ts & ... ts) {
-            return pano::core::LoadFromDisk("./cache/" + Tagify(path) + "_" + what + ".cereal", ts...);
+            return pano::core::LoadFromDisk(CachePath() + Tagify(path) + "_" + what + ".cereal", ts...);
         }
 
 

@@ -88,9 +88,6 @@ namespace pano {
             explicit HandledTable(size_t maxSize) : data(maxSize) {}
             HandledTable(size_t maxSize, const DataT & d) : data(maxSize, d) {}
 
-            HandledTable(HandledTable && t) : data(std::move(t.data)) {}
-            HandledTable & operator = (HandledTable && t) { data = std::move(t.data); return *this; }
-
             void resize(size_t sz) { data.resize(sz); }
             size_t size() const { return data.size(); }
             const DataT & operator[](HandleT h) const { return data[h.id]; }

@@ -27,7 +27,7 @@ namespace panolyz {
             misc::Matlab matlab;
 
             std::vector<std::string> paths;
-            std::vector<Image> images = gui::PickImages(PROJECT_TEST_DATA_DIR_STR"/panorama/indoor", &paths);
+            std::vector<Image> images = gui::PickImages("H:\\DataSet\\PanoContext\\bedroom\\", &paths);
             assert(paths.size() == images.size());
 
             for (int k = 0; k < images.size(); k++) {
@@ -41,7 +41,7 @@ namespace panolyz {
                 bool extendedOnTop = false, extendedOnBottom = false;
 
                 static const bool automaticallyRectifyIfNeeded = false;                
-                if (0 || !Load(path, "rectified", image, extendedOnTop, extendedOnBottom)) {
+                if (0 || !misc::LoadCache(path, "rectified", image, extendedOnTop, extendedOnBottom)) {
                     image = original.clone();
                     if (!automaticallyRectifyIfNeeded) {
                         if (!gui::MakePanoramaByHand(image, &extendedOnTop, &extendedOnBottom)) {
@@ -52,7 +52,7 @@ namespace panolyz {
                             WARNNING("failed making panorama");
                         }
                     }
-                    Save(path, "rectified", image, extendedOnTop, extendedOnBottom);
+                    misc::SaveCache(path, "rectified", image, extendedOnTop, extendedOnBottom);
                 }
 
                 ResizeToHeight(image, 700);
@@ -71,7 +71,7 @@ namespace panolyz {
 
                 Imagei segmentedImage;
 
-                if (refresh || !Load(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId)) {
+                if (refresh || !misc::LoadCache(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId)) {
                     view = CreatePanoramicView(image);
 
                     // collect lines in each view
@@ -114,7 +114,7 @@ namespace panolyz {
                     segmentsNum = DensifySegmentation(segmentedImage, true);
                     assert(IsDenseSegmentation(segmentedImage));
 
-                    Save(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
+                    misc::SaveCache(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
                 }
 
 
@@ -148,7 +148,7 @@ namespace panolyz {
                         ss << "hcamsgcs_" << hcamNum << "_" << hcamScreenSize.width << "_" << hcamScreenSize.height << "_" << hcamFocal;
                         hcamsgcsFileName = ss.str();
                     }
-                    if (0 || !Load(path, hcamsgcsFileName, hcams, gcs)) {
+                    if (0 || !misc::LoadCache(path, hcamsgcsFileName, hcams, gcs)) {
                         // extract gcs
                         hcams = CreateHorizontalPerspectiveCameras(view.camera, hcamNum, hcamScreenSize.width, hcamScreenSize.height, hcamFocal);
                         gcs.resize(hcams.size());
@@ -159,7 +159,7 @@ namespace panolyz {
                             gcs[i].component.image = pgc;
                             gcs[i].score = abs(1.0 - normalize(hcams[i].forward()).dot(normalize(view.camera.up())));
                         }
-                        Save(path, hcamsgcsFileName, hcams, gcs);
+                        misc::SaveCache(path, hcamsgcsFileName, hcams, gcs);
                     }
                     std::string gcmergedFileName;
                     {
@@ -167,9 +167,9 @@ namespace panolyz {
                         ss << "gc_" << hcamNum << "_" << hcamScreenSize.width << "_" << hcamScreenSize.height << "_" << hcamFocal;
                         gcmergedFileName = ss.str();
                     }
-                    if (0 || !Load(path, gcmergedFileName, gc)) {
+                    if (0 || !misc::LoadCache(path, gcmergedFileName, gc)) {
                         gc = Combine(view.camera, gcs).image;
-                        Save(path, gcmergedFileName, gc);
+                        misc::SaveCache(path, gcmergedFileName, gc);
                     }
                 }
 
@@ -187,11 +187,11 @@ namespace panolyz {
                 SegmentationTopo segtopo;
                 std::vector<std::vector<Vec3>> bndSamples;
                 std::vector<int> bndClasses;
-                if (1 || !Load(path, "segtopo2", segtopo, bndSamples, bndClasses)) {
+                if (1 || !misc::LoadCache(path, "segtopo2", segtopo, bndSamples, bndClasses)) {
                     segtopo = SegmentationTopo(segmentedImage, true);
                     bndSamples = SamplesOnBoundaries(segtopo, view.camera, DegreesToRadians(1));
                     bndClasses = ClassifyBoundaries(bndSamples, vps, DegreesToRadians(1.5));
-                    Save(path, "segtopo2", segtopo, bndSamples, bndClasses);
+                    misc::SaveCache(path, "segtopo2", segtopo, bndSamples, bndClasses);
                 }
 
 
@@ -225,7 +225,7 @@ namespace panolyz {
                 std::vector<RegionHandle> rhs;
                 std::vector<RegionBoundaryHandle> bhs;
 
-                if (1 || !Load(path, "mg_rhs_bhs", mg, rhs, bhs)) {
+                if (1 || !misc::LoadCache(path, "mg_rhs_bhs", mg, rhs, bhs)) {
                     for (int i = 0; i < cams.size(); i++) {
                         AppendLines(mg, lines[i], cams[i], vps);
                     }
@@ -234,13 +234,13 @@ namespace panolyz {
                     //std::tie(rhs, bhs) = AppendRegions(mg, segmentedImage, segtopo.bndpixels, segtopo.bnd2segs,
                     //    view.camera, 0.03, 0.02, 1, 1, false); // we have to reserve bnds under lines for reasoning
                     //rhs = AppendRegions(mg, segmentedImage, view.camera, 0.03, 0.02, 4, 4, false);
-                    Save(path, "mg_rhs_bhs", mg, rhs, bhs);
+                    misc::SaveCache(path, "mg_rhs_bhs", mg, rhs, bhs);
                 }
 
 
                 RLGraphControls controls;
                 // initialize controls
-                if (1 || !Load(path, "controls", controls)) {
+                if (1 || !misc::LoadCache(path, "controls", controls)) {
 
                     auto up = normalize(vps[vertVPId]);
                     if (up.dot(-view.camera.up()) < 0) {
@@ -444,7 +444,7 @@ namespace panolyz {
                     SetFullConstraintWeightedAnchors(mg, controls);
                     //SetMoreConstraintWeightedAnchors(mg, controls, 0.02);
 
-                    Save(path, "controls", controls);
+                    misc::SaveCache(path, "controls", controls);
                 }
 
 

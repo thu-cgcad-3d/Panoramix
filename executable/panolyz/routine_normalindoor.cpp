@@ -142,10 +142,10 @@ namespace panolyz {
                     gui::AsCanvas(ctable(segmentedImage)).show();
                 }
 
-                Save(path, "pre", view, lines, vps, segmentedImage);
+                misc::SaveCache(path, "pre", view, lines, vps, segmentedImage);
             }
             else{
-                Load(path, "pre", view, lines, vps, segmentedImage);
+                misc::LoadCache(path, "pre", view, lines, vps, segmentedImage);
             }
 
 
@@ -153,10 +153,10 @@ namespace panolyz {
             ImageOf<Vec<double, 5>> gc;
             if (RE_BUILD_FEATURES){
                 gc = ComputeGeometricContext(matlab, view.image, outdoor);
-                Save(path, "gc", gc);
+                misc::SaveCache(path, "gc", gc);
             }
             else{
-                Load(path, "gc", gc);
+                misc::LoadCache(path, "gc", gc);
             }
 
 

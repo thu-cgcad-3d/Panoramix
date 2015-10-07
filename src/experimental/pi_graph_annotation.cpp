@@ -4,7 +4,6 @@
 #include "../gui/singleton.hpp"
 
 #include "pi_graph_annotation_widgets.hpp"
-#include "pi_graph_occlusion.hpp"
 #include "pi_graph_annotation.hpp"
 
 namespace pano {

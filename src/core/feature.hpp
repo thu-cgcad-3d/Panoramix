@@ -3,7 +3,7 @@
 
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/stitching/detail/matchers.hpp>
-#include <opencv2/nonfree/features2d.hpp>
+//#include <opencv2/nonfree/features2d.hpp>
 
 #include "basic_types.hpp"
 #include "../misc/matlab_api.hpp"
@@ -21,15 +21,15 @@ namespace pano {
             std::vector<Pixel> * pixels = nullptr,
             const Imageb & mask = Imageb());
 
-        std::vector<KeyPoint> SIFT(const Image & im, cv::OutputArray descriptors = cv::noArray(),
-            int nfeatures = 0, int nOctaveLayers = 3,
-            double contrastThreshold = 0.04, double edgeThreshold = 10,
-            double sigma = 1.6);
-        std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors,
-            double hessianThreshold,
-            int nOctaves = 4, int nOctaveLayers = 2,
-            bool extended = true, bool upright = false);
-        std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors = cv::noArray());
+        //std::vector<KeyPoint> SIFT(const Image & im, cv::OutputArray descriptors = cv::noArray(),
+        //    int nfeatures = 0, int nOctaveLayers = 3,
+        //    double contrastThreshold = 0.04, double edgeThreshold = 10,
+        //    double sigma = 1.6);
+        //std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors,
+        //    double hessianThreshold,
+        //    int nOctaves = 4, int nOctaveLayers = 2,
+        //    bool extended = true, bool upright = false);
+        //std::vector<KeyPoint> SURF(const Image & im, cv::OutputArray descriptors = cv::noArray());
 
         // line extractor
         class LineSegmentExtractor {
@@ -88,7 +88,7 @@ namespace pano {
             double avoidVPAngleThreshold = M_PI / 18.0);
 
         // MergeLines
-        std::vector<Line3> MergeLines(const std::vector<Line3> & lines, double angleThres = 0.03);
+        std::vector<Line3> MergeLines(const std::vector<Line3> & lines, double angleThres = 0.03, double mergeAngleThres = 0.0);
 
 
 

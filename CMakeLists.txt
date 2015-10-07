@@ -71,12 +71,15 @@ list (APPEND Fundamental_INCLUDES ${ThirdParty_INCLUDES})
 list (APPEND Fundamental_LIBS ${ThirdParty_LIBS})
 
 
-# the libs
-add_subdirectory (src lib)
-
 # data dir
 get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
 message (STATUS "test data directory: " ${TEST_DATA_DIR})
+get_filename_component(CACHE_DIR "D:/STORAGE/CACHE/Panoramix" REALPATH)
+message (STATUS "cache directory: " ${CACHE_DIR})
+
+
+# the libs
+add_subdirectory (src lib)
 
 
 # executable

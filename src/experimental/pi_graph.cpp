@@ -1,7 +1,11 @@
+#include "../core/algorithms.hpp"
 #include "../core/basic_types.hpp"
+#include "../core/cameras.hpp"
 #include "../core/image.hpp"
 #include "../core/utility.hpp"
 #include "../core/containers.hpp"
+
+#include "../gui/canvas.hpp"
 
 #include "rl_graph.hpp"
 #include "pi_graph.hpp"
@@ -78,7 +82,288 @@ namespace pano {
                 }
             };
 
+            int Sub2Ind(const Pixel & p, int w, int h) {
+                return p.x * h + p.y;
+            }
+            Pixel Ind2Sub(int ind, int w, int h) {
+                return Pixel(ind / h, ind % h);
+            }
+
         }
+
+
+
+        template <class T>
+        class MergeFindSet {
+            struct Element {
+                int rank;
+                int parent;
+                T data;
+            };
+        public:
+            template <class IteratorT>
+            MergeFindSet(IteratorT b, IteratorT e) {
+                init(b, e);
+            }
+
+            int setsCount() const { return _nsets; }
+            const T & data(int id) const { return _elements[id].data; }
+            
+            int find(int x) {
+                int y = x;
+                while (y != _elements[y].parent)
+                    y = _elements[y].parent;
+                _elements[x].parent = y;
+                return y;
+            }
+            template <class MergeFunT = std::plus<>>
+            void join(int x, int y, MergeFunT && merge = MergeFunT()) {
+                if (_elements[x].rank > _elements[y].rank) {
+                    _elements[y].parent = x;
+                    _elements[x].data = merge(_elements[x].data, _elements[y].data);
+                } else {
+                    _elements[x].parent = y;
+                    _elements[y].data = merge(_elements[x].data, _elements[y].data);
+                    if (_elements[x].rank == _elements[y].rank)
+                        _elements[y].rank++;
+                }
+                _nsets--;
+            }
+                
+        private:
+            template <class IteratorT>
+            void init(IteratorT b, IteratorT e) {
+                _elements.reserve(std::distance(b, e));
+                int i = 0;
+                _nsets = 0;
+                while (b != e) {
+                    _elements.push_back(Element{ 0, i, *b });
+                    ++b;
+                    ++i;
+                    ++_nsets;
+                }
+            }
+
+        private:
+            int _nsets;
+            std::vector<Element> _elements;
+        };
+
+
+        inline double ColorDistance(const Vec3 & a, const Vec3 & b, bool useYUV) {
+            static const Mat3 RGB2YUV(
+                0.299, 0.587, 0.114,
+                -0.14713, -0.28886, 0.436,
+                0.615, -0.51499, -0.10001
+                );
+            static const Mat3 BGR2VUY = RGB2YUV.t();
+            return useYUV ? norm(BGR2VUY * (a - b)) * 3.0 : norm(a - b);
+        }
+
+        // for edge weight computation
+        // measure pixel distance
+        inline double PixelDiff(const Image3ub & im, const cv::Point & p1, const cv::Point & p2, bool useYUV) {
+            assert(im.depth() == CV_8U && im.channels() == 3);
+            auto & c1 = im(p1);
+            auto & c2 = im(p2);
+            return ColorDistance(c1, c2, useYUV);
+        }
+
+        inline double DistanceAngleFromPointToLine(const Point3 & p, const Line3 & l) {
+            auto n = DistanceFromPointToLine(p, l);
+            return AngleBetweenDirections(p, n.second.position);
+        }
+
+
+        int SegmentationForPIGraph(const PanoramicView & view, const std::vector<Classified<Line3>> & lines,
+            Imagei & segs, double lineExtendAngle = DegreesToRadians(5)) {
+
+            auto & im = view.image;
+            int width = im.cols;
+            int height = im.rows;
+            Image smoothed;
+            cv::GaussianBlur(im, smoothed, cv::Size(5, 5), 10.0f);
+
+            // register lines in RTree
+            RTreeMap<Vec3, int> linesRTree;
+            static const double lineSampleAngle = DegreesToRadians(2);
+            for (int i = 0; i < lines.size(); i++) {
+                if (lines[i].claz == -1) { // don't consider clutter lines here
+                    continue;
+                }
+                auto & line = lines[i].component;
+                double spanAngle = AngleBetweenDirections(line.first, line.second);
+                for (double a = 0.0; a <= spanAngle + lineSampleAngle / 2; a += lineSampleAngle) {
+                    auto direction = RotateDirection(line.first, line.second, a);
+                    linesRTree.emplace(normalize(direction), i);
+                }
+            }
+
+            // pixel graph
+            // collect vertices
+            struct Vertex {
+                Vec3 weightedCenterDir;
+                double area;
+                std::vector<Vec3> outerSupporters;
+            };
+            std::vector<Vertex> vertices(width * height);
+            float radius = width / 2.0 / M_PI;
+            for (int y = 0; y < height; y++) {
+                float longitude = (y - height / 2.0f) / radius;
+                float area = cos(longitude);
+                if (area < 1e-9) {
+                    area = 1e-9;
+                }
+                for (int x = 0; x < width; x++) {
+                    Pixel p(x, y);
+                    auto & v = vertices[Sub2Ind(p, width, height)];
+                    auto centerDir = normalize(view.camera.toSpace(p));
+                    v.weightedCenterDir = centerDir * area;
+                    v.area = area;
+                    v.outerSupporters = { centerDir };
+                }
+            }
+            // collect edges
+            struct Edge {
+                int ind1, ind2;
+                double weight;
+            };
+            std::vector<Edge> edges;
+            edges.reserve(4 * width * height);
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    Pixel p(x, y);
+                    Vec3 dir = normalize(view.camera.toSpace(p));
+                    std::set<int> nearbyLines;
+                    linesRTree.search(BoundingBox(dir).expand(lineSampleAngle * 3), 
+                        [&nearbyLines](const std::pair<Vec3, int> & lineSample) {
+                        nearbyLines.insert(lineSample.second);
+                        return true;
+                    });
+                   
+                    static const int dx[] = { 1, 0, 1, -1 };
+                    static const int dy[] = { 0, 1, 1, 1 };
+                    static const double offset[] = { 1.0, 1.0, 1.1, 1.1};
+                    for (int k = 0; k < 4; k++) {
+                        int xx = x + dx[k];
+                        int yy = y + dy[k];
+                        if (yy < 0 || yy >= height) {
+                            continue;
+                        }
+                        xx = (xx + width) % width;
+                        Pixel p2(xx, yy);
+                        Vec3 dir2 = normalize(view.camera.toSpace(p2));
+
+                        bool isSeperatedByLine = false;
+                        for (int lineid : nearbyLines) {
+                            auto line = normalize(lines[lineid].component);
+                            Vec3 normal = normalize(line.first.cross(line.second));
+                            if (dir.dot(normal) * dir2.dot(normal) < -1e-10
+                                && DistanceAngleFromPointToLine(dir, line) < lineExtendAngle
+                                && DistanceAngleFromPointToLine(dir2, line) < lineExtendAngle) {
+                                isSeperatedByLine = true;
+                                //pixelsOnLines[lineid].push_back()
+                                break;
+                            }
+                        }
+
+                        if (isSeperatedByLine) {
+                            continue;
+                        }
+
+                        Edge edge;
+                        edge.ind1 = Sub2Ind(p, width, height);
+                        edge.ind2 = Sub2Ind(p2, width, height);
+                        edge.weight = PixelDiff(smoothed, p, p2, false) * offset[k];
+                        edges.push_back(edge);
+                    }
+                }
+            }
+            // add polar pixel connections
+            for (int x1 = 0; x1 < width; x1++) {
+                for (int x2 = x1 + 1; x2 < width; x2++) {
+                    for (int y : {0, height - 1}) {
+                        Pixel p1(x1, y), p2(x2, y);
+                        Edge edge;
+                        edge.ind1 = Sub2Ind(p1, width, height);
+                        edge.ind2 = Sub2Ind(p2, width, height);
+                        edge.weight = PixelDiff(smoothed, p1, p2, false);
+                        edges.push_back(edge);
+                    }
+                }
+            }
+
+
+            // segmentation
+            std::sort(edges.begin(), edges.end(), [](const Edge & e1, const Edge & e2) {
+                return e1.weight < e2.weight;
+            });
+            
+
+            // merge conditionally
+            auto joinFunc = [](const Vertex & va, const Vertex & vb) {
+                Vertex merged;
+                merged.weightedCenterDir = va.weightedCenterDir + vb.weightedCenterDir;
+                merged.area = va.area + vb.area;
+                // compute merged outer supporters
+
+                return merged;
+            };
+
+            static const double c = 100.0;
+            std::vector<double> thresholds(vertices.size(), c);
+            MergeFindSet<Vertex> mfset(vertices.begin(), vertices.end());
+            for (int i = 0; i < edges.size(); i++) {
+                const Edge & edge = edges[i];
+                int a = mfset.find(edge.ind1);
+                int b = mfset.find(edge.ind2);
+                if (a == b) {
+                    continue;
+                }
+                if (edge.weight <= thresholds[a] && edge.weight <= thresholds[b]) {
+                    mfset.join(a, b, joinFunc);
+                    a = mfset.find(a);
+                    thresholds[a] = edge.weight + c / mfset.data(a).area;
+                }
+            }
+            static const double minSize = 200.0;
+            while (true) {
+                bool merged = false;
+                for (int i = 0; i < edges.size(); i++) {
+                    const Edge & edge = edges[i];
+                    int a = mfset.find(edge.ind1);
+                    int b = mfset.find(edge.ind2);
+                    if (a == b) {
+                        continue;
+                    }
+                    if (mfset.data(a).area < minSize || mfset.data(b).area < minSize) {
+                        mfset.join(a, b, joinFunc);
+                        merged = true;
+                    }
+                }
+                if (!merged) {
+                    break;
+                }
+            }
+
+            int numCCs = mfset.setsCount();
+            std::unordered_map<int, int> compIntSet;
+            segs = Imagei(height, width);
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int comp = mfset.find(Sub2Ind(Pixel(x, y), width, height));
+                    if (compIntSet.find(comp) == compIntSet.end()) {
+                        compIntSet.insert(std::make_pair(comp, (int)compIntSet.size()));
+                    }
+                    segs(Pixel(x, y)) = compIntSet[comp];
+                }
+            }
+
+            return numCCs;
+
+        }
+
+
 
         PIGraph BuildPIGraph(const PanoramicView & view, const std::vector<Vec3> & vps, int verticalVPId,
             const Imagei & segs, const std::vector<Classified<Line3>> & lines, 
@@ -91,19 +376,20 @@ namespace pano {
 
             PIGraph mg;
             mg.view = view;
+            int width = view.image.cols;
+            int height = view.image.rows;
             assert(vps.size() >= 3);
             mg.vps = std::vector<Vec3>(vps.begin(), vps.begin() + 3);
             mg.verticalVPId = verticalVPId;
 
+
             mg.segs = segs;
-            assert(IsDenseSegmentation(segs));
-            int width = segs.cols;
-            int height = segs.rows;
             int nsegs = MinMaxValOfImage(segs).second + 1;
+            mg.nsegs = nsegs;
 
             // init segs
-            mg.nsegs = nsegs;
-            mg.seg2area.resize(nsegs);
+
+            mg.seg2areaRatio.resize(nsegs);
             mg.seg2bnds.resize(nsegs);
             mg.seg2center.resize(nsegs);
             mg.seg2control.resize(nsegs);
@@ -112,20 +398,20 @@ namespace pano {
             mg.seg2recPlanes.resize(nsegs);
 
             mg.fullArea = 0.0;
-            for (auto it = segs.begin(); it != segs.end(); ++it) {
+            for (auto it = mg.segs.begin(); it != mg.segs.end(); ++it) {
                 double weight = cos((it.pos().y - height / 2.0) / height * M_PI);
-                mg.seg2area[*it] += weight;
+                mg.seg2areaRatio[*it] += weight;
                 mg.fullArea += weight;
             }
             for (int i = 0; i < nsegs; i++) {
-                mg.seg2area[i] /= mg.fullArea;
+                mg.seg2areaRatio[i] /= mg.fullArea;
                 auto & control = mg.seg2control[i];
                 control.orientationClaz = control.orientationNotClaz = -1;
                 control.used = true;
                 auto & center = mg.seg2center[i];
             }
             for (int i = 0; i < nsegs; i++) {
-                Image regionMask = (segs == i);
+                Image regionMask = (mg.segs == i);
 
                 // find contour of the region
                 std::vector<std::vector<Pixel>> contours;
@@ -370,104 +656,30 @@ namespace pano {
                                 break;
                             }
                         }
-
-                        //while (!Q.empty()) {
-                        //    auto curp = Q.top();
-                        //    pixelsForThisBnd.push_back(curp);
-
-                        //    // find another junc!
-                        //    if (Contains(pixel2junc, curp) && i < pixel2junc.at(curp) && pixelsForThisBnd.size() > 1) {
-                        //        int tojuncid = pixel2junc.at(curp);
-
-                        //        // make a new bnd!
-                        //        bndPixels.push_back(std::move(pixelsForThisBnd));
-                        //        int newbndid = bndPixels.size() - 1;
-                        //        mg.bnd2juncs.emplace_back(i, tojuncid);
-
-                        //        if (saySegIIsOnLeft < saySegIIsOnRight) {
-                        //            assert(saySegIIsOnLeft == 0);
-                        //            mg.bnd2segs.emplace_back(segj, segi); // left, right
-                        //        } else {
-                        //            assert(saySegIIsOnRight == 0);
-                        //            mg.bnd2segs.emplace_back(segi, segj);
-                        //        }
-                        //        saySegIIsOnLeft = saySegIIsOnRight = 0;
-
-                        //        mg.junc2bnds[i].push_back(newbndid);
-                        //        mg.junc2bnds[tojuncid].push_back(newbndid);
-
-                        //        mg.seg2bnds[segi].push_back(newbndid);
-                        //        mg.seg2bnds[segj].push_back(newbndid);
-
-                        //        break;
-                        //    }
-
-                        //    Q.pop();
-
-                        //    // * - * - *
-                        //    // | d | a |
-                        //    // * -[*]- *
-                        //    // | c | b |
-                        //    // * - * - *
-                        //    static const int dxs[] = { 1, 0, -1, 0 };
-                        //    static const int dys[] = { 0, 1, 0, -1 };
-
-                        //    static const int leftdxs[] = { 1, 1, 0, 0 };
-                        //    static const int leftdys[] = { 0, 1, 1, 0 };
-
-                        //    static const int rightdxs[] = { 1, 0, 0, 1 };
-                        //    static const int rightdys[] = { 1, 1, 0, 0 };
-
-                        //    for (int k = 0; k < 4; k++) {
-                        //        auto nextp = curp + Pixel(dxs[k], dys[k]);
-                        //        nextp.x = (nextp.x + width) % width;
-
-                        //        if (nextp.y >= height || nextp.y < 0) { // note that the top/bottom borders cannot be crossed!
-                        //            continue;
-                        //        }
-                        //        if (!Contains(pixelsForThisSegPair, nextp)) {
-                        //            continue;
-                        //        }
-                        //        if (Contains(visitedPixels, nextp)) {
-                        //            continue;
-                        //        }
-
-                        //        auto rightp = curp + Pixel(rightdxs[k], rightdys[k]);
-                        //        rightp.x = (rightp.x + width) % width;
-                        //        auto leftp = curp + Pixel(leftdxs[k], leftdys[k]);
-                        //        leftp.x = (leftp.x + width) % width;
-                        //        if (Contains(segs, rightp) && Contains(segs, leftp)) {
-                        //            if (segs(rightp) == segi && segs(leftp) == segj) {
-                        //                saySegIIsOnRight++;
-                        //            } else if (segs(rightp) == segj && segs(leftp) == segi) {
-                        //                saySegIIsOnLeft++;
-                        //            } else {
-                        //                continue;
-                        //            }
-                        //        }
-                        //        Q.push(nextp);
-                        //        visitedPixels.insert(nextp);
-                        //    }
-                        //}
                     }
                 }            
             }
 
             // split bnds into pieces
             std::cout << "splitting boundaries" << std::endl;
-            std::vector<std::vector<Vec3>> bnd2SmoothedPostions(bndPixels.size());
+            std::vector<std::vector<Vec3>> bnd2SmoothedDirs(bndPixels.size());
+            const double bndSampleAngle = 1.1 / mg.view.camera.focal();
             for (int i = 0; i < bndPixels.size(); i++) {
                 assert(bndPixels[i].size() >= 2);
-                for (int j = 0; j < bndPixels[i].size(); j+=2) {
-                    bnd2SmoothedPostions[i].push_back(normalize(view.camera.toSpace(bndPixels[i][j])));
+                auto & smoothedDirs = bnd2SmoothedDirs[i];
+                for (int j = 0; j < bndPixels[i].size() - 1; j++) {
+                    auto & pixel = bndPixels[i][j];
+                    auto dir = normalize(view.camera.toSpace(pixel));
+                    if (smoothedDirs.empty() || AngleBetweenDirections(smoothedDirs.back(), dir) >= bndSampleAngle) {
+                        smoothedDirs.push_back(dir);
+                    }
                 }
-                if (bnd2SmoothedPostions[i].size() == 1) {
-                    bnd2SmoothedPostions[i].push_back(normalize(view.camera.toSpace(bndPixels[i].back())));
-                }
+                smoothedDirs.push_back(normalize(view.camera.toSpace(bndPixels[i].back())));
+                assert(smoothedDirs.size() >= 2);
             }
             mg.bnd2bndPieces.resize(mg.bnd2segs.size());
-            for (int i = 0; i < bnd2SmoothedPostions.size(); i++) {
-                const auto & dirs = bnd2SmoothedPostions[i];
+            for (int i = 0; i < bnd2SmoothedDirs.size(); i++) {
+                const auto & dirs = bnd2SmoothedDirs[i];
                 assert(dirs.size() > 0);
 
                 std::vector<Vec3> curPiece = { dirs.front() };
@@ -516,7 +728,7 @@ namespace pano {
                 }
             }
             mg.bndPiece2linePieces.resize(mg.bndPiece2dirs.size());
-            mg.bndPiece2occlusion.resize(mg.bndPiece2dirs.size(), OcclusionRelation::Unknown);
+            mg.bndPiece2segRelation.resize(mg.bndPiece2dirs.size(), SegRelation::Unknown);
 
 
             // register bndPiece dirs in RTree
@@ -527,7 +739,7 @@ namespace pano {
                 }
             }
             RTreeMap<Vec3, int> lineRTree;
-            static const double lineSampleAngle = DegreesToRadians(0.5);
+            const double lineSampleAngle = bndPieceBoundToLineAngleThres / 5.0;
             std::vector<std::vector<Vec3>> lineSamples(mg.lines.size());
             for (int i = 0; i < mg.lines.size(); i++) {
                 auto & line = mg.lines[i];
@@ -554,7 +766,7 @@ namespace pano {
                     int nearestSeg = -1;
                     if (j < samples.size()) {
                         auto & d = samples[j];
-                        bndPieceRTree.search(BoundingBox(d).expand(bndPieceBoundToLineAngleThres * 3),
+                        bndPieceRTree.search(BoundingBox(d).expand(std::max(bndSampleAngle, bndPieceBoundToLineAngleThres) * 3),
                             [&d, &minAngleDist, &nearestBndPiece](const std::pair<Vec3, int> & bndPieceD) {
                             double angleDist = AngleBetweenDirections(bndPieceD.first, d);
                             if (angleDist < minAngleDist) {
@@ -563,7 +775,10 @@ namespace pano {
                             }
                             return true;
                         });
-                        nearestSeg = segs(ToPixel(view.camera.toScreen(d)));
+                        auto pixel = ToPixel(view.camera.toScreen(d));
+                        pixel.x = WrapBetween(pixel.x, 0, width);
+                        pixel.y = BoundBetween(pixel.y, 0, height - 1);
+                        nearestSeg = segs(pixel);
                     }
                     bool neighborChanged = (nearestBndPiece != lastDetectedBndPiece || 
                         (nearestBndPiece == -1 && lastDetectedSeg != nearestSeg) ||
@@ -579,7 +794,7 @@ namespace pano {
                                 mg.linePiece2samples.push_back(std::move(collectedSamples));
                                 mg.linePiece2length.push_back(len);
                                 mg.linePiece2seg.push_back(-1);
-                                mg.linePiece2attachment.push_back(AttachmentRelation::Unknown);
+                                mg.linePiece2segLineRelation.push_back(SegLineRelation::Unknown);
                                 auto & bndPieceDirs = mg.bndPiece2dirs[lastDetectedBndPiece];
                                 assert(bndPieceDirs.size() > 1);
                                 Vec3 bndRotNormal = bndPieceDirs.front().cross(bndPieceDirs.back());
@@ -594,7 +809,7 @@ namespace pano {
                                 mg.linePiece2length.push_back(len);
                                 mg.linePiece2seg.push_back(lastDetectedSeg);
                                 mg.seg2linePieces[lastDetectedSeg].push_back(linePieceId);
-                                mg.linePiece2attachment.push_back(AttachmentRelation::Unknown);
+                                mg.linePiece2segLineRelation.push_back(SegLineRelation::Unknown);
                                 mg.linePiece2bndPieceInSameDirection.push_back(true);
                             }
                         }
@@ -737,8 +952,9 @@ namespace pano {
                             votingData(claz, TowardsVanishingPoint) += angleScore * lineSpanAngle * projRatio;
                         }
                     }
-                    mg.lineRelation2weight[i] = ComputeIntersectionJunctionWeightWithLinesVotes(
-                        votingData);
+                    mg.lineRelation2weight[i] = std::max(0.1f, ComputeIntersectionJunctionWeightWithLinesVotes(
+                        votingData));
+                   
                 }
             }
         
@@ -746,7 +962,27 @@ namespace pano {
         }
 
 
+        PIGraph BuildPIGraph(const PanoramicView & view, const std::vector<Vec3> & vps, int verticalVPId,
+            const std::vector<Classified<Line3>> & lines,
+            double bndPieceSplitAngleThres,
+            double bndPieceClassifyAngleThres,
+            double bndPieceBoundToLineAngleThres,
+            double intersectionAngleThreshold,
+            double incidenceAngleAlongDirectionThreshold,
+            double incidenceAngleVerticalDirectionThreshold) {
 
+            Imagei segs;
+            int nsegs = SegmentationForPIGraph(view, lines, segs, DegreesToRadians(5));
+
+            RemoveThinRegionInSegmentation(segs, 1, true);
+            RemoveSmallRegionInSegmentation(segs, 100, true);
+            RemoveDanglingPixelsInSegmentation(segs, true);
+            nsegs = DensifySegmentation(segs, true);
+
+            return BuildPIGraph(view, vps, verticalVPId, segs, lines, 
+                bndPieceSplitAngleThres, bndPieceClassifyAngleThres, bndPieceBoundToLineAngleThres,
+                intersectionAngleThreshold, incidenceAngleAlongDirectionThreshold, incidenceAngleVerticalDirectionThreshold);
+        }
 
 
 

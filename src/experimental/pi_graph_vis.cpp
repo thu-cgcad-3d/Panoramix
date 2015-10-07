@@ -6,7 +6,7 @@
 namespace pano {
     namespace experimental {
 
-
+#if 0
         double DepthOfVertexAt(const PIGraph & mg, int vert, const Vec3 & direction, const Point3 & eye = Origin()) {
             auto & v = mg.verts[vert];
             if (v.isSeg) {
@@ -25,20 +25,13 @@ namespace pano {
             const std::function<gui::Color(int vert)> & vertColor,
             const std::function<void(int vert)> & vertClick) {
 
-            auto sppCallbackFun = [&mg, &vertClick](gui::InteractionID iid,
-                const core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int> & spp) {
-                auto & v = mg.verts[spp.decoration];
-                std::cout << (v.isSeg ? "Seg" : "Line") << v.id << " is clicked" << std::endl;
-                vertClick(spp.decoration);
-            };
-
             gui::ResourceStore::set("texture", mg.view.image);
             for (int ccid : ccids) {
 
                 gui::SceneBuilder viz;
                 viz.installingOptions().discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;
                 std::vector<core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int>> spps;
-                std::vector<gui::Colored<core::Line3>> lines;
+                std::vector<core::Decorated<gui::Colored<core::Line3>, int>> lines;
 
                 auto & verts = mg.cc2verts.at(ccid);
 
@@ -76,14 +69,24 @@ namespace pano {
                             WARNNING("inf line");
                             continue;
                         }
-                        lines.push_back(gui::ColorAs(l, vertColor(vert)));
+                        lines.push_back(core::DecorateAs(gui::ColorAs(l, vertColor(vert)), vert));
                     }
                 }
 
-                viz.begin(spps/*, sppCallbackFun*/).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
+                viz.begin(spps, [&mg, &vertClick](gui::InteractionID iid,
+                    const core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int> & spp) {
+                    auto & v = mg.verts[spp.decoration];
+                    std::cout << "seg " << v.id << " dof: " << mg.seg2control[v.id].dof() << std::endl;
+                    vertClick(spp.decoration);
+                }).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
                 viz.installingOptions().discretizeOptions.color = gui::ColorTag::Magenta;
-                viz.installingOptions().lineWidth = 3.0;
-                viz.add(lines);
+                viz.installingOptions().lineWidth = 4.0;
+                viz.add(lines, [&mg, &vertClick](gui::InteractionID iid,
+                    const core::Decorated<gui::Colored<Line3>, int> & line) {
+                    auto & v = mg.verts[line.decoration];
+                    std::cout << "line " << v.id << " claz: " << mg.lines[v.id].claz << std::endl;
+                    vertClick(line.decoration);
+                });
 
                 std::vector<core::Decorated<gui::Colored<core::Line3>, std::pair<int, int>>> connectionLines;
                 std::vector<core::Point3> connectionLineEnds;
@@ -103,29 +106,29 @@ namespace pano {
                 }
 
                 viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
-                viz.installingOptions().lineWidth = 5.0;
+                viz.installingOptions().lineWidth = 1.0;
                 viz.begin(connectionLines, [&mg](gui::InteractionID iid,
                     const core::Decorated<gui::Colored<Line3>, std::pair<int, int>> & line) {
                     std::cout << "this is an anchor of edge connecting ";
                     auto & v1 = mg.verts[line.decoration.first];
                     auto & v2 = mg.verts[line.decoration.second];
                     if (v1.isSeg) {
-                        std::cout << "seg " << v1.id;
+                        std::cout << "seg " << v1.id << " dof: " << mg.seg2control[v1.id].dof() << std::endl;
                     } else {
-                        std::cout << "line " << v1.id;
+                        std::cout << "line " << v1.id << " claz: " << mg.lines[v1.id].claz << std::endl;
                     }
                     std::cout << " and ";
                     if (v2.isSeg) {
-                        std::cout << "seg " << v2.id;
+                        std::cout << "seg " << v2.id << " dof: " << mg.seg2control[v2.id].dof() << std::endl;
                     } else {
-                        std::cout << "line " << v2.id;
+                        std::cout << "line " << v2.id << " claz: " << mg.lines[v2.id].claz << std::endl;
                     }
                     std::cout << std::endl;
                 }).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
-                viz.installingOptions().pointSize = 8.0;
+                viz.installingOptions().pointSize = 2.0;
                 viz.begin(connectionLineEnds).shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints).end();
 
-                viz.show(true, false, gui::RenderOptions().cullFrontFace(false).cullBackFace(true).bwColor(0.7).bwTexColor(0.3)
+                viz.show(true, false, gui::RenderOptions().cullFrontFace(false).cullBackFace(true).bwColor(0.1).bwTexColor(0.9)
                     .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
             }
 
@@ -165,6 +168,8 @@ namespace pano {
                 .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
 
         }
+
+#endif
 
     }
 }

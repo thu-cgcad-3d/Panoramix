@@ -30,9 +30,10 @@ namespace panolyz {
 
     struct PredictOptions {
         bool useGroundTruthOcclusions;
+        bool useGC;
     };
     std::unique_ptr<ReconstructedModel> PredictionOfPanoramix(const std::string & impath, 
-        const PredictOptions & options, misc::Matlab & matlab);
+        const PredictOptions & options, misc::Matlab & matlab, const PILayoutAnnotation & anno);
     
     std::unique_ptr<ReconstructedModel> PredictionOfPanoContext(const std::string & impath,
         misc::Matlab & matlab);

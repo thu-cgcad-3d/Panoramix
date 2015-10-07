@@ -1,12 +1,14 @@
 #pragma once
 
-#include "../core/serialization.hpp"
+#include "../core/basic_types.hpp"
 #include "../core/utility.hpp"
+
 #include "pi_graph.hpp"
 
 namespace pano {
     namespace experimental {
         
+        using namespace pano::core;
 
         struct PILayoutAnnotation {
             Image originalImage;

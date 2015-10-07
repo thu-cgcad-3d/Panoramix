@@ -210,7 +210,7 @@ namespace pano {
                 return *this;
             }
 
-            void show(bool delay = 0, const std::string & winName = "Canvas") const {
+            void show(int delay = 0, const std::string & winName = "Canvas") const {
                 static int id = 0;
                 core::Image im = _image.clone();
                 if (im.channels() > 3){

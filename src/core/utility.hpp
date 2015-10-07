@@ -679,7 +679,7 @@ namespace pano {
         // see http://geomalgorithms.com/a07-_distance.html for explainations
         template <class T, int N>
         std::pair<T, std::pair<Point<T, N>, Point<T, N>>> DistanceBetweenTwoLines(
-            const Ray<T, N> & line1, const Ray<T, N> & line2) {
+            const Ray<T, N> & line1, const Ray<T, N> & line2, T * lambda1 = nullptr, T * lambda2 = nullptr) {
             
             auto u = normalize(line1.direction);
             auto v = normalize(line2.direction);
@@ -699,6 +699,9 @@ namespace pano {
 
             T sc = (b*e - c*d) / P;
             T tc = (a*e - b*d) / P;
+
+            if (lambda1) { *lambda1 = sc / norm(line1.direction); }
+            if (lambda2) { *lambda2 = tc / norm(line2.direction); }
             
             auto p1 = line1.anchor + sc * u;
             auto p2 = line2.anchor + tc * v;

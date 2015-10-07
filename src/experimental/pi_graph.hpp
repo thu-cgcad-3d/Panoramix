@@ -29,7 +29,8 @@ namespace pano {
         };
 
         // whether a bnd is an occlusion
-        enum class OcclusionRelation {
+        enum class SegRelation {
+            Coplanar,
             Connected,
             LeftIsFront,
             RightIsFront,
@@ -37,37 +38,11 @@ namespace pano {
         };
 
         // whether a line attaches a seg
-        enum class AttachmentRelation {
+        enum class SegLineRelation {
             Attached,
             Detached,
             Unknown
         };
-
-        // vertex in a constraint graph
-        struct Vertex {
-            bool isSeg; int id;
-            Vertex() : isSeg(false), id(-1) {}
-            Vertex(bool s, int i) : isSeg(s), id(i) {}
-            bool operator < (const Vertex & u) const { return std::tie(isSeg, id) < std::tie(u.isSeg, u.id); }
-            bool operator == (const Vertex & u) const { return std::tie(isSeg, id) == std::tie(u.isSeg, u.id); }
-            template <class Archiver>
-            void serialize(Archiver & ar) {
-                ar(isSeg, id);
-            }
-        };
-
-        // edge in a constraint graph
-        struct Edge {
-            int vert1, vert2;
-            std::vector<Vec3> anchors;
-            double weight;
-            Edge() : vert1(-1), vert2(-1), weight(0.0) {}
-            template <class Archiver>
-            void serialize(Archiver & ar) {
-                ar(vert1, vert2, anchors, weight);
-            }
-        };
-
 
         struct PIGraph {
             PanoramicView view;
@@ -80,7 +55,7 @@ namespace pano {
             std::vector<std::vector<int>> seg2bnds;
             std::vector<std::vector<int>> seg2linePieces;            
             std::vector<SegControl> seg2control;
-            std::vector<double> seg2area;
+            std::vector<double> seg2areaRatio;
             double fullArea;
             std::vector<Vec3> seg2center;
             std::vector<std::vector<std::vector<Vec3>>> seg2contours;
@@ -90,7 +65,7 @@ namespace pano {
             std::vector<double> linePiece2length;
             std::vector<int> linePiece2line;
             std::vector<int> linePiece2seg; // could be -1
-            std::vector<AttachmentRelation> linePiece2attachment; // for linePice2seg only, as for linePIece2bndPiece, see the bndPiece2occlusion
+            std::vector<SegLineRelation> linePiece2segLineRelation; // for linePice2seg only, as for linePIece2bndPiece, see the bndPiece2segRelation
             std::vector<int> linePiece2bndPiece; // could be -1 (either 2seg or 2bndPiece)
             std::vector<bool> linePiece2bndPieceInSameDirection;
             int nlinePieces() const { return linePiece2samples.size(); }
@@ -114,7 +89,7 @@ namespace pano {
             std::vector<int> bndPiece2classes;
             std::vector<int> bndPiece2bnd;
             std::vector<std::vector<int>> bndPiece2linePieces;
-            std::vector<OcclusionRelation> bndPiece2occlusion;
+            std::vector<SegRelation> bndPiece2segRelation;
             int nbndPieces() const { return bndPiece2dirs.size(); }
 
             // bnd (a CONTINUOUS boundary between TWO segs)
@@ -128,17 +103,6 @@ namespace pano {
             std::vector<std::vector<int>> junc2bnds;
             int njuncs() const { return junc2positions.size(); }
 
-            // constraint graph
-            std::vector<int> seg2vert;
-            std::vector<int> line2vert;
-            std::vector<Vertex> verts;
-            std::vector<Edge> edges;
-            int nccs;
-            std::vector<int> vert2cc;
-            std::map<int, std::vector<int>> cc2verts;
-            std::vector<int> ccidsBigToSmall;
-
-            // reconstructed
             std::vector<Plane3> seg2recPlanes;
             std::vector<Line3> line2recLines;
 
@@ -146,14 +110,13 @@ namespace pano {
             template <class Archiver>
             void serialize(Archiver & ar) {
                 ar(view, vps, verticalVPId);
-                ar(segs, nsegs, seg2bnds, seg2linePieces, seg2control, seg2area, fullArea, seg2center, seg2contours);
-                ar(linePiece2samples, linePiece2length, linePiece2line, linePiece2seg, linePiece2attachment, linePiece2bndPiece, linePiece2bndPieceInSameDirection);
+                ar(segs, nsegs, seg2bnds, seg2linePieces, seg2control, seg2areaRatio, fullArea, seg2center, seg2contours);
+                ar(linePiece2samples, linePiece2length, linePiece2line, linePiece2seg, linePiece2segLineRelation, linePiece2bndPiece, linePiece2bndPieceInSameDirection);
                 ar(lines, line2linePieces, line2lineRelations);
                 ar(lineRelation2anchor, lineRelation2lines, lineRelation2weight, lineRelation2IsIncidence);
-                ar(bndPiece2dirs, bndPiece2length, bndPiece2classes, bndPiece2bnd, bndPiece2linePieces, bndPiece2occlusion);
+                ar(bndPiece2dirs, bndPiece2length, bndPiece2classes, bndPiece2bnd, bndPiece2linePieces, bndPiece2segRelation);
                 ar(bnd2bndPieces, bnd2segs, bnd2juncs);
                 ar(junc2positions, junc2bnds);
-                ar(seg2vert, line2vert, verts, edges, nccs, vert2cc, cc2verts, ccidsBigToSmall);
                 ar(seg2recPlanes, line2recLines);
             }
         };

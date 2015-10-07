@@ -416,109 +416,109 @@ namespace pano {
 
 
 
-        // inverse depth optimization
-        RLGraphVars SolveVariablesWithoutBoundedAnchors(const RLGraph & mg,
-            const RLGraphControls & controls,
-            bool useWeights) {
+        //// inverse depth optimization
+        //RLGraphVars SolveVariablesWithoutBoundedAnchors(const RLGraph & mg,
+        //    const RLGraphControls & controls,
+        //    bool useWeights) {
 
-            assert(NumberOfComponentWeightedAnchors(controls) +
-                NumberOfComponentBoundedAnchors(controls) > 0);
+        //    assert(NumberOfComponentWeightedAnchors(controls) +
+        //        NumberOfComponentBoundedAnchors(controls) > 0);
 
-            RLGraphVars vars = MakeVariables(mg, controls);
+        //    RLGraphVars vars = MakeVariables(mg, controls);
 
-            SetClock();
+        //    SetClock();
 
-            auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
-            auto uh2eqStartPosition = MakeHandledTableForAllComponents<int>(mg);
-            auto bh2eqStartPosition = MakeHandledTableForAllConstraints<int>(mg);
+        //    auto uh2varStartPosition = MakeHandledTableForAllComponents<int>(mg);
+        //    auto uh2eqStartPosition = MakeHandledTableForAllComponents<int>(mg);
+        //    auto bh2eqStartPosition = MakeHandledTableForAllConstraints<int>(mg);
 
-            int varNum, consNum;
+        //    int varNum, consNum;
 
-            std::vector<EquationType> equationTypes;
-            std::vector<double> Xdata;
-            std::vector<double> Bdata;
-            std::vector<double> B1data, B2data;
-            std::vector<Eigen::Triplet<double>> Atriplets;
-            std::vector<Eigen::Triplet<double>> Wtriplets;
+        //    std::vector<EquationType> equationTypes;
+        //    std::vector<double> Xdata;
+        //    std::vector<double> Bdata;
+        //    std::vector<double> B1data, B2data;
+        //    std::vector<Eigen::Triplet<double>> Atriplets;
+        //    std::vector<Eigen::Triplet<double>> Wtriplets;
 
-            std::tie(varNum, consNum) = PrepareEverything(mg, controls, vars, uh2varStartPosition,
-                uh2eqStartPosition, bh2eqStartPosition, Xdata, Atriplets, Wtriplets, Bdata, B1data, B2data, equationTypes);
-
-
-            // matrices
-            Eigen::SparseMatrix<double> A;
-            {
-                Clock clock("form matrix A");
-                A.resize(consNum, varNum);
-                A.setFromTriplets(Atriplets.begin(), Atriplets.end());
-            }
-            Eigen::Map<const Eigen::VectorXd> B(Bdata.data(), Bdata.size());
+        //    std::tie(varNum, consNum) = PrepareEverything(mg, controls, vars, uh2varStartPosition,
+        //        uh2eqStartPosition, bh2eqStartPosition, Xdata, Atriplets, Wtriplets, Bdata, B1data, B2data, equationTypes);
 
 
-            Eigen::SparseMatrix<double> WA;
-            Eigen::VectorXd WB;
-            if (useWeights) {
-                Clock clock("form matrix WA");
-                Eigen::SparseMatrix<double> W;
-                W.resize(consNum, consNum);
-                W.setFromTriplets(Wtriplets.begin(), Wtriplets.end());
-                WA = W * A;
-                WB = W * B;
-            }
+        //    // matrices
+        //    Eigen::SparseMatrix<double> A;
+        //    {
+        //        Clock clock("form matrix A");
+        //        A.resize(consNum, varNum);
+        //        A.setFromTriplets(Atriplets.begin(), Atriplets.end());
+        //    }
+        //    Eigen::Map<const Eigen::VectorXd> B(Bdata.data(), Bdata.size());
 
-            static const bool useSPQR = true;
 
-            Eigen::VectorXd X;
-            if (!useSPQR) {
-                Clock clock("solve equations using Eigen::SparseQR");
+        //    Eigen::SparseMatrix<double> WA;
+        //    Eigen::VectorXd WB;
+        //    if (useWeights) {
+        //        Clock clock("form matrix WA");
+        //        Eigen::SparseMatrix<double> W;
+        //        W.resize(consNum, consNum);
+        //        W.setFromTriplets(Wtriplets.begin(), Wtriplets.end());
+        //        WA = W * A;
+        //        WB = W * B;
+        //    }
 
-                A.makeCompressed();
-                WA.makeCompressed();
+        //    static const bool useSPQR = true;
 
-                Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
-                static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
+        //    Eigen::VectorXd X;
+        //    if (!useSPQR) {
+        //        Clock clock("solve equations using Eigen::SparseQR");
 
-                solver.compute(useWeights ? WA : A);
+        //        A.makeCompressed();
+        //        WA.makeCompressed();
 
-                if (solver.info() != Eigen::Success) {
-                    assert(0);
-                    std::cout << "computation error" << std::endl;
-                    SHOULD_NEVER_BE_CALLED();
-                }
+        //        Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> solver;
+        //        static_assert(!(Eigen::SparseMatrix<double>::IsRowMajor), "COLAMDOrdering only supports column major");
 
-                X = solver.solve(useWeights ? WB : B);
-                if (solver.info() != Eigen::Success) {
-                    assert(0);
-                    std::cout << "solving error" << std::endl;
-                    SHOULD_NEVER_BE_CALLED();
-                }
-            } else {
-                Clock clock("solve equations using Eigen::SPQR");
+        //        solver.compute(useWeights ? WA : A);
 
-                Eigen::SPQR<Eigen::SparseMatrix<double, Eigen::ColMajor>> solver;
-                solver.compute(useWeights ? WA : A);
+        //        if (solver.info() != Eigen::Success) {
+        //            assert(0);
+        //            std::cout << "computation error" << std::endl;
+        //            SHOULD_NEVER_BE_CALLED();
+        //        }
 
-                if (solver.info() != Eigen::Success) {
-                    assert(0);
-                    std::cout << "computation error" << std::endl;
-                    SHOULD_NEVER_BE_CALLED();
-                }
+        //        X = solver.solve(useWeights ? WB : B);
+        //        if (solver.info() != Eigen::Success) {
+        //            assert(0);
+        //            std::cout << "solving error" << std::endl;
+        //            SHOULD_NEVER_BE_CALLED();
+        //        }
+        //    } else {
+        //        Clock clock("solve equations using Eigen::SPQR");
 
-                X = solver.solve(useWeights ? WB : B);
-                if (solver.info() != Eigen::Success) {
-                    assert(0);
-                    std::cout << "solving error" << std::endl;
-                    SHOULD_NEVER_BE_CALLED();
-                }
-            }
+        //        Eigen::SPQR<Eigen::SparseMatrix<double, Eigen::ColMajor>> solver;
+        //        solver.compute(useWeights ? WA : A);
 
-            {
-                Clock clock("install solved variables");
-                InstallVariables(mg, controls, uh2varStartPosition, X, vars);
-            }
-            NormalizeVariables(mg, controls, vars);
-            return vars;
-        }
+        //        if (solver.info() != Eigen::Success) {
+        //            assert(0);
+        //            std::cout << "computation error" << std::endl;
+        //            SHOULD_NEVER_BE_CALLED();
+        //        }
+
+        //        X = solver.solve(useWeights ? WB : B);
+        //        if (solver.info() != Eigen::Success) {
+        //            assert(0);
+        //            std::cout << "solving error" << std::endl;
+        //            SHOULD_NEVER_BE_CALLED();
+        //        }
+        //    }
+
+        //    {
+        //        Clock clock("install solved variables");
+        //        InstallVariables(mg, controls, uh2varStartPosition, X, vars);
+        //    }
+        //    NormalizeVariables(mg, controls, vars);
+        //    return vars;
+        //}
 
 
 

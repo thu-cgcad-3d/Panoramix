@@ -3,7 +3,7 @@
 
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
-#include <Eigen/SPQRSupport>
+//#include <Eigen/SPQRSupport>
 #include <unsupported/Eigen/NonLinearOptimization>
 #include <unsupported/Eigen/NumericalDiff>
 

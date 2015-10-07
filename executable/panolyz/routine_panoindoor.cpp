@@ -44,7 +44,7 @@ namespace panolyz {
 
             static const bool REFRESH = false;
 
-            if (0 || !Load(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId)) {
+            if (0 || !misc::LoadCache(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId)) {
                 view = CreatePanoramicView(image);
 
                 // collect lines in each view
@@ -92,7 +92,7 @@ namespace panolyz {
                 segmentsNum = DensifySegmentation(segmentedImage, true);
                 assert(IsDenseSegmentation(segmentedImage));
 
-                Save(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
+                misc::SaveCache(path, "pre", view, cams, lines, vps, segmentedImage, vertVPId);
             }
 
 
@@ -105,7 +105,7 @@ namespace panolyz {
             
             std::vector<PerspectiveCamera> hcams;
             std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
-            if (0 || !Load(path, "hcamsgcs", hcams, gcs)) {
+            if (0 || !misc::LoadCache(path, "hcamsgcs", hcams, gcs)) {
                 // extract gcs
                 hcams = CreateHorizontalPerspectiveCameras(view.camera, 16, 500, 500, 200);
                 //hcams = CreatePanoContextCameras(view.camera, 500, 400, 300);
@@ -117,13 +117,13 @@ namespace panolyz {
                     gcs[i].component.image = pgc;
                     gcs[i].score = abs(1.0 - normalize(hcams[i].forward()).dot(normalize(view.camera.up())));
                 }
-                Save(path, "hcamsgcs", hcams, gcs);
+                misc::SaveCache(path, "hcamsgcs", hcams, gcs);
             }
 
             Image5d gc;
-            if (0 || !Load(path, "gcmerged", gc)) {
+            if (0 || !misc::LoadCache(path, "gcmerged", gc)) {
                 gc = Combine(view.camera, gcs).image;
-                Save(path, "gcmerged", gc);
+                misc::SaveCache(path, "gcmerged", gc);
             }
 
             if (0){
@@ -137,7 +137,7 @@ namespace panolyz {
 
             // occ
             std::vector<Scored<Chain3>> occbnds;
-            if (REFRESH || !Load(path, "occ_panoindoor", occbnds)) {
+            if (REFRESH || !misc::LoadCache(path, "occ_panoindoor", occbnds)) {
                 for (int i = 0; i < hcams.size(); i++) {
                     auto pim = view.sampled(hcams[i]).image;
                     auto occ = AsDimensionConvertor(hcams[i]).toSpace(DetectOcclusionBoundary(matlab, pim));
@@ -145,7 +145,7 @@ namespace panolyz {
                         occbnds.push_back(soc);
                     }
                 }
-                Save(path, "occ_panoindoor", occbnds);
+                misc::SaveCache(path, "occ_panoindoor", occbnds);
             }
 
 
@@ -194,7 +194,7 @@ namespace panolyz {
             std::vector<std::vector<Vec3>> bndSamples;
             std::vector<int> bndClasses;
             std::vector<TStructure> tstructs;
-            if (1 || !Load(path, "segtopo2", segtopo, bndSamples, bndClasses, tstructs)) {
+            if (1 || !misc::LoadCache(path, "segtopo2", segtopo, bndSamples, bndClasses, tstructs)) {
                 segtopo = SegmentationTopo(segmentedImage, true);
                 bndSamples = SamplesOnBoundaries(segtopo, view.camera, DegreesToRadians(1));
                 bndClasses = ClassifyBoundaries(bndSamples, vps, DegreesToRadians(1.5));
@@ -207,7 +207,7 @@ namespace panolyz {
                     occts.push_back(tstructs[id]);
                 }
                 tstructs = std::move(occts);*/
-                Save(path, "segtopo2", segtopo, bndSamples, bndClasses/*, tstructs*/);
+                misc::SaveCache(path, "segtopo2", segtopo, bndSamples, bndClasses/*, tstructs*/);
             }
 
             //auto canvas = gui::MakeCanvas(Image3ub(image.size(), Vec3ub()));
@@ -238,20 +238,20 @@ namespace panolyz {
             std::vector<RegionHandle> rhs;
             std::vector<RegionBoundaryHandle> bhs;
 
-            if (1 || !Load(path, "mg_rhs_bhs", mg, rhs, bhs)) {
+            if (1 || !misc::LoadCache(path, "mg_rhs_bhs", mg, rhs, bhs)) {
                 for (int i = 0; i < cams.size(); i++) {
                     AppendLines(mg, lines[i], cams[i], vps);
                 }
                 std::tie(rhs, bhs) = AppendRegions(mg, segmentedImage, segtopo.bndpixels, segtopo.bnd2segs, 
                     view.camera, 0.03, 0.02, 4, 4, false);                
                 //rhs = AppendRegions(mg, segmentedImage, view.camera, 0.03, 0.02, 4, 4, false);
-                Save(path, "mg_rhs_bhs", mg, rhs, bhs);
+                misc::SaveCache(path, "mg_rhs_bhs", mg, rhs, bhs);
             }
 
 
             RLGraphControls controls;
             // initialize controls
-            if (1 || !Load(path, "controls", controls)) {
+            if (1 || !misc::LoadCache(path, "controls", controls)) {
 
                 controls = RLGraphControls(mg, vps);
                 AttachPrincipleDirectionConstraints(mg, controls, M_PI / 30.0, false);
@@ -341,7 +341,7 @@ namespace panolyz {
                 // set constraint weights
                 SetNecessaryConstraintWeightedAnchors(mg, controls);
 
-                Save(path, "controls", controls);
+                misc::SaveCache(path, "controls", controls);
             }
 
 

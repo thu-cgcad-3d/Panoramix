@@ -17,9 +17,9 @@ namespace pano {
 
 
         // solve equations
-        RLGraphVars SolveVariablesWithoutBoundedAnchors(const RLGraph & mg,
+        /*RLGraphVars SolveVariablesWithoutBoundedAnchors(const RLGraph & mg,
             const RLGraphControls & controls,
-            bool useWeights = false);
+            bool useWeights = false);*/
 
         void ResetToFullArmorAnchors(const RLGraph & mg, RLGraphControls & controls);
         void ResetToSampledArmorAnchors(const RLGraph & mg, RLGraphControls & controls, double sampleStepAngle);

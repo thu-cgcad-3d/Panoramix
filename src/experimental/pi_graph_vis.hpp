@@ -74,14 +74,14 @@ namespace pano {
         //void PrintConstriants(const PIGraph & mg);
 
 
-        // VisualizeReconstruction
-        void VisualizeReconstruction(const std::vector<int> & ccids, const PIGraph & mg,
-            const std::function<gui::Color(int vert)> & vertColor = core::ConstantFunctor<gui::Color>(gui::White),
-            const std::function<void(int vert)> & vertClick = core::ConstantFunctor<void>());
+        //// VisualizeReconstruction
+        //void VisualizeReconstruction(const std::vector<int> & ccids, const PIGraph & mg,
+        //    const std::function<gui::Color(int vert)> & vertColor = core::ConstantFunctor<gui::Color>(gui::White),
+        //    const std::function<void(int vert)> & vertClick = core::ConstantFunctor<void>());
 
 
-        // VisualizeLayoutAnnotation
-        void VisualizeLayoutAnnotation(const PILayoutAnnotation & anno);
+        //// VisualizeLayoutAnnotation
+        //void VisualizeLayoutAnnotation(const PILayoutAnnotation & anno);
 
     }
 }
