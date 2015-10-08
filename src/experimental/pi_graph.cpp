@@ -176,13 +176,14 @@ namespace pano {
 
 
         int SegmentationForPIGraph(const PanoramicView & view, const std::vector<Classified<Line3>> & lines,
-            Imagei & segs, double lineExtendAngle = DegreesToRadians(5)) {
+            Imagei & segs, double lineExtendAngle, double sigma, double c, double minSize,
+            int widthThresToRemoveThinRegions) {
 
-            auto & im = view.image;
+            Image3ub im = view.image;
             int width = im.cols;
             int height = im.rows;
             Image smoothed;
-            cv::GaussianBlur(im, smoothed, cv::Size(5, 5), 10.0f);
+            cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
 
             // register lines in RTree
             RTreeMap<Vec3, int> linesRTree;
@@ -199,13 +200,17 @@ namespace pano {
                 }
             }
 
+            // register pixel ind -> spatial direction
+            std::vector<Vec3> ind2dir(width * height);
+            for (auto it = im.begin(); it != im.end(); ++it) {
+                auto p = it.pos();
+                Vec3 dir = normalize(view.camera.toSpace(p));
+                ind2dir[Sub2Ind(p, width, height)] = dir;
+            }
+
+
             // pixel graph
-            // collect vertices
-            struct Vertex {
-                Vec3 weightedCenterDir;
-                double area;
-                std::vector<Vec3> outerSupporters;
-            };
+            using Vertex = double;
             std::vector<Vertex> vertices(width * height);
             float radius = width / 2.0 / M_PI;
             for (int y = 0; y < height; y++) {
@@ -217,10 +222,7 @@ namespace pano {
                 for (int x = 0; x < width; x++) {
                     Pixel p(x, y);
                     auto & v = vertices[Sub2Ind(p, width, height)];
-                    auto centerDir = normalize(view.camera.toSpace(p));
-                    v.weightedCenterDir = centerDir * area;
-                    v.area = area;
-                    v.outerSupporters = { centerDir };
+                    v = area;
                 }
             }
             // collect edges
@@ -230,10 +232,11 @@ namespace pano {
             };
             std::vector<Edge> edges;
             edges.reserve(4 * width * height);
+
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
                     Pixel p(x, y);
-                    Vec3 dir = normalize(view.camera.toSpace(p));
+                    Vec3 dir = ind2dir[Sub2Ind(p, width, height)];
                     std::set<int> nearbyLines;
                     linesRTree.search(BoundingBox(dir).expand(lineSampleAngle * 3), 
                         [&nearbyLines](const std::pair<Vec3, int> & lineSample) {
@@ -252,7 +255,7 @@ namespace pano {
                         }
                         xx = (xx + width) % width;
                         Pixel p2(xx, yy);
-                        Vec3 dir2 = normalize(view.camera.toSpace(p2));
+                        Vec3 dir2 = ind2dir[Sub2Ind(p2, width, height)];
 
                         bool isSeperatedByLine = false;
                         for (int lineid : nearbyLines) {
@@ -262,7 +265,6 @@ namespace pano {
                                 && DistanceAngleFromPointToLine(dir, line) < lineExtendAngle
                                 && DistanceAngleFromPointToLine(dir2, line) < lineExtendAngle) {
                                 isSeperatedByLine = true;
-                                //pixelsOnLines[lineid].push_back()
                                 break;
                             }
                         }
@@ -298,19 +300,8 @@ namespace pano {
             std::sort(edges.begin(), edges.end(), [](const Edge & e1, const Edge & e2) {
                 return e1.weight < e2.weight;
             });
-            
+           
 
-            // merge conditionally
-            auto joinFunc = [](const Vertex & va, const Vertex & vb) {
-                Vertex merged;
-                merged.weightedCenterDir = va.weightedCenterDir + vb.weightedCenterDir;
-                merged.area = va.area + vb.area;
-                // compute merged outer supporters
-
-                return merged;
-            };
-
-            static const double c = 100.0;
             std::vector<double> thresholds(vertices.size(), c);
             MergeFindSet<Vertex> mfset(vertices.begin(), vertices.end());
             for (int i = 0; i < edges.size(); i++) {
@@ -321,12 +312,11 @@ namespace pano {
                     continue;
                 }
                 if (edge.weight <= thresholds[a] && edge.weight <= thresholds[b]) {
-                    mfset.join(a, b, joinFunc);
+                    mfset.join(a, b);
                     a = mfset.find(a);
-                    thresholds[a] = edge.weight + c / mfset.data(a).area;
+                    thresholds[a] = edge.weight + c / mfset.data(a);
                 }
             }
-            static const double minSize = 200.0;
             while (true) {
                 bool merged = false;
                 for (int i = 0; i < edges.size(); i++) {
@@ -336,8 +326,8 @@ namespace pano {
                     if (a == b) {
                         continue;
                     }
-                    if (mfset.data(a).area < minSize || mfset.data(b).area < minSize) {
-                        mfset.join(a, b, joinFunc);
+                    if (mfset.data(a) < minSize || mfset.data(b) < minSize) {
+                        mfset.join(a, b);
                         merged = true;
                     }
                 }
@@ -359,8 +349,143 @@ namespace pano {
                 }
             }
 
-            return numCCs;
 
+            bool mergeThinRegions = false;
+            if (!mergeThinRegions) {
+                return numCCs;
+            }
+
+
+            
+            // now lets remove thin regions
+            Imageb insiders(segs.size(), false);
+            for (auto it = insiders.begin(); it != insiders.end(); ++it) {
+                auto p = it.pos();
+                int seg = segs(p);
+                bool isInside = true;
+                for (int x = -widthThresToRemoveThinRegions; x <= widthThresToRemoveThinRegions; x++) {
+                    if (!isInside) {
+                        break;
+                    }
+                    int xx = p.x + x;
+                    xx = (xx + width) % width;
+                    for (int y = -widthThresToRemoveThinRegions; y <= widthThresToRemoveThinRegions; y++) {
+                        if (!isInside) {
+                            break;
+                        }
+                        int yy = p.y + y;
+                        if (yy < 0 || yy > height - 1) {
+                            continue;
+                        }
+                        if (segs(yy, xx) != seg) {
+                            isInside = false;
+                        }
+                    }
+                }
+                *it = isInside;
+            }
+
+            DenseMatd precompte(widthThresToRemoveThinRegions * 2 + 1, widthThresToRemoveThinRegions * 2 + 1, 0.0);
+            for (int x = -widthThresToRemoveThinRegions; x <= widthThresToRemoveThinRegions; x++) {
+                for (int y = -widthThresToRemoveThinRegions; y <= widthThresToRemoveThinRegions; y++) {
+                    precompte(x + widthThresToRemoveThinRegions, y + widthThresToRemoveThinRegions) = sqrt(x * x + y * y);
+                }
+            }
+
+            std::vector<std::map<int, double>> distanceTable(width * height);
+            for (auto it = segs.begin(); it != segs.end(); ++it) {
+                auto p = it.pos();
+                if (insiders(p)) // consider near-boundary pixels only
+                    continue;
+                auto & dtable = distanceTable[p.x * height + p.y];
+
+                Vec3 dir = ind2dir[Sub2Ind(p, width, height)];
+                std::set<int> nearbyLines;
+                linesRTree.search(BoundingBox(dir).expand(std::max(lineSampleAngle * 3, widthThresToRemoveThinRegions * 3 / view.camera.focal())),
+                    [&nearbyLines](const std::pair<Vec3, int> & lineSample) {
+                    nearbyLines.insert(lineSample.second);
+                    return true;
+                });
+
+                for (int x = -widthThresToRemoveThinRegions; x <= widthThresToRemoveThinRegions; x++) {
+                    for (int y = -widthThresToRemoveThinRegions; y <= widthThresToRemoveThinRegions; y++) {
+                        int xx = p.x + x;
+                        xx = (xx + width) % width;
+                        int yy = p.y + y;
+                        if (yy < 0 || yy > height - 1) {
+                            continue;
+                        }
+                        Pixel curp(xx, yy);
+                        double distance = precompte(x + widthThresToRemoveThinRegions, y + widthThresToRemoveThinRegions);
+                        
+                        // check whether this is cut by line
+                        bool isSeperatedByLine = false;
+                        if (curp != p) {                           
+                            Vec3 curDir = ind2dir[Sub2Ind(curp, width, height)];
+                            for (int lineid : nearbyLines) {
+                                auto line = normalize(lines[lineid].component);
+                                Vec3 normal = normalize(line.first.cross(line.second));
+                                if (dir.dot(normal) * curDir.dot(normal) < -1e-10
+                                    && IsBetween(ProjectionOfPointOnLine(dir, line).ratio, 0.0, 1.0)
+                                    && IsBetween(ProjectionOfPointOnLine(curDir, line).ratio, 0.0, 1.0)) {
+                                    isSeperatedByLine = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (isSeperatedByLine) {
+                            continue;
+                        }
+
+
+                        if (insiders(curp)) { // curp is at certain regions
+                            int segid = segs(curp);
+                            if (!Contains(dtable, segid) || dtable.at(segid) > distance) {
+                                dtable[segid] = distance;
+                            }
+                        } else {
+                            auto & curdtable = distanceTable[curp.x * height + curp.y];
+                            // use dtable to update curdtable
+                            for (auto & dd : dtable) {
+                                if (!Contains(curdtable, dd.first) || curdtable.at(dd.first) > dd.second + distance) {
+                                    curdtable[dd.first] = dd.second + distance;
+                                }
+                            }
+                            // use curdtable to update dtable
+                            for (auto & dd : curdtable) {
+                                if (!Contains(dtable, dd.first) || dtable.at(dd.first) > dd.second + distance) {
+                                    dtable[dd.first] = dd.second + distance;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+
+            for (int x = 0; x < width; x++) {
+                for (int y = 0; y < height; y++) {
+                    int id = x * height + y;
+                    if (distanceTable[id].empty()) {
+                        continue;
+                    }
+                    int minDistSegId = -1;
+                    double minDist = std::numeric_limits<double>::infinity();
+                    for (auto & dd : distanceTable[id]) {
+                        if (dd.second < minDist) {
+                            minDistSegId = dd.first;
+                            minDist = dd.second;
+                        }
+                    }
+                    if (minDistSegId == -1) {
+                        minDistSegId = numCCs++;
+                    }
+                    segs(y, x) = minDistSegId;
+                }
+            }
+
+
+            return DensifySegmentation(segs, true);
         }
 
 
@@ -480,6 +605,7 @@ namespace pano {
             mg.line2linePieces.resize(nlines);
             mg.line2lineRelations.resize(nlines);
             mg.line2recLines.resize(nlines);
+
 
             std::map<std::set<int>, std::vector<int>> segs2juncs;
             std::vector<std::vector<int>> seg2juncs(nsegs);
@@ -856,6 +982,7 @@ namespace pano {
                             if (HasValue(conCenter, IsInfOrNaN<double>))
                                 continue;
 
+                            mg.lineRelations.push_back(LineRelation::Unknown);
                             mg.lineRelation2lines.emplace_back(i, j);
                             int lineRelationId = mg.lineRelation2lines.size() - 1;
                             mg.line2lineRelations[i].push_back(lineRelationId);
@@ -883,6 +1010,7 @@ namespace pano {
                             if (HasValue(conCenter, IsInfOrNaN<double>))
                                 continue;
 
+                            mg.lineRelations.push_back(LineRelation::Unknown);
                             mg.lineRelation2lines.emplace_back(i, j);
                             int lineRelationId = mg.lineRelation2lines.size() - 1;
                             mg.line2lineRelations[i].push_back(lineRelationId);

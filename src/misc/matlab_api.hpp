@@ -194,7 +194,7 @@ namespace pano {
         // the matlab engine
         class Matlab {
         public:
-            Matlab(const std::string & defaultDir = std::string());
+            Matlab(const std::string & defaultDir = std::string(), bool singleUse = false);
             ~Matlab();
 
             Matlab(Matlab && e);

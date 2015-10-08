@@ -1604,8 +1604,8 @@ namespace pano {
                     //-------------------------------------------------------------- 
                     //                            2                           2 
                     //    (e1x vz - 2 vx + e2x vz)  + (e1y vz - 2 vy + e2y vz)
-                    auto top = abs(e1y * vx - e2y * vx - e1x * vy + e2x * vy + e1x * e2y * vz - e2x * e1y * vz);
-                    auto bottom = sqrt((e1x * vz - vx * 2.0 + e2x * vz).square() + (e1y * vz - 2.0 * vy + e2y * vz).square());
+                    auto top = abs(e1y * vx - e2y * vx - e1x * vy + e2x * vy + e1x * e2y * vz - e2x * e1y * vz).eval();
+                    auto bottom = sqrt((e1x * vz - vx * 2.0 + e2x * vz).square() + (e1y * vz - 2.0 * vy + e2y * vz).square()).eval();
                     v = (top / bottom).matrix().transpose();
                 };
 
@@ -2258,18 +2258,18 @@ namespace pano {
                 int num = (int)edges.size();
                 Universe u = SegmentGraph(verticesSizes, edges, c);
 
-                bool merged = true;
-                while (merged) {
-                    merged = false;
+                //bool merged = true;
+                //while (merged) {
+                //    merged = false;
                     for (int i = 0; i < num; i++) {
                         int a = u.find(edges[i].a);
                         int b = u.find(edges[i].b);
                         if ((a != b) && ((u.size(a) < minSize) || (u.size(b) < minSize))) {
                             u.join(a, b);
-                            merged = true;
+                            //merged = true;
                         }
                     }
-                }
+                //}
 
                 numCCs = u.numSets();
                 std::unordered_map<int, int> compIntSet;
@@ -2796,7 +2796,7 @@ namespace pano {
                         continue;
                     }
                     int minDistSegId = -1;
-                    double minDist = std::numeric_limits<double>::max();
+                    double minDist = std::numeric_limits<double>::infinity();
                     for (auto & dd : distanceTable[id]) {
                         if (dd.second < minDist) {
                             minDistSegId = dd.first;

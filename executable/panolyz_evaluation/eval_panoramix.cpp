@@ -61,7 +61,8 @@ namespace panolyz {
             int nsegs;
 
 
-            if (1 || !misc::LoadCache(impath, "preparation", view, cams, line3s, vps, vertVPId, segs, nsegs)) {
+            bool refresh_preparation = false;
+            if (refresh_preparation || !misc::LoadCache(impath, "preparation", view, cams, line3s, vps, vertVPId, segs, nsegs)) {
                 view = CreatePanoramicView(image);
 
                 // collect lines in each view
@@ -106,14 +107,8 @@ namespace panolyz {
 
 
                 // estimate segs
-                SegmentationExtractor segmenter;
-                segmenter.params().algorithm = SegmentationExtractor::GraphCut;
-                segmenter.params().sigma = 10.0;
-                segmenter.params().c = 1.0;
-                segmenter.params().superpixelSizeSuggestion = 2000;
-                segmenter.params().useYUVColorSpace = true;
-                std::tie(segs, nsegs) = segmenter(view.image, rawLine3s, view.camera, DegreesToRadians(1));
-                RemoveThinRegionInSegmentation(segs, true);
+                nsegs = SegmentationForPIGraph(view, line3s, segs, DegreesToRadians(1));
+                RemoveThinRegionInSegmentation(segs, 1, true);
                 nsegs = DensifySegmentation(segs, true);
                 assert(IsDenseSegmentation(segs));
 
@@ -197,46 +192,42 @@ namespace panolyz {
 
 
             // build pigraph!
-            mg = BuildPIGraph(view, vps, vertVPId, segs, line3s,
-                DegreesToRadians(1), DegreesToRadians(1), DegreesToRadians(2),
-                DegreesToRadians(5), DegreesToRadians(60), DegreesToRadians(5));
+            bool refresh_mg_init = refresh_preparation || false;
+            if (refresh_mg_init || !misc::LoadCache(impath, "mg_init", mg)) {
+                mg = BuildPIGraph(view, vps, vertVPId, segs, line3s,
+                    DegreesToRadians(1), DegreesToRadians(1), DegreesToRadians(2),
+                    DegreesToRadians(5), DegreesToRadians(60), DegreesToRadians(5));
 
-            const auto printPIGraph = [&mg](int delay){
-                static const gui::ColorTable randColors = gui::CreateRandomColorTableWithSize(mg.nsegs);
-                static const gui::ColorTable rgbGrayColors = gui::RGBGreys;
-                auto pim = Print(mg,
-                    [&mg](int seg) -> gui::Color {
-                    return gui::White;
-                },
-                    [&mg](int lp) {
-                    return mg.linePiece2bndPiece[lp] == -1 ? gui::Red : gui::Black;
-                },
-                    [&mg](int bp) -> gui::Color {
-                    return gui::LightGray;
-                }, 1, 3);
-                cv::imshow("pigraph", Image3f(pim * 0.99f) + Image3f(mg.view.image / 255.0f * 0.01f));
-                cv::waitKey(delay);
-            };
+                const auto printPIGraph = [&mg](int delay) {
+                    static const gui::ColorTable randColors = gui::CreateRandomColorTableWithSize(mg.nsegs);
+                    static const gui::ColorTable rgbGrayColors = gui::RGBGreys;
+                    auto pim = Print(mg,
+                        [&mg](int seg) -> gui::Color {
+                        return gui::White;
+                    },
+                        [&mg](int lp) {
+                        return mg.linePiece2bndPiece[lp] == -1 ? gui::Red : gui::Black;
+                    },
+                        [&mg](int bp) -> gui::Color {
+                        return gui::LightGray;
+                    }, 1, 3);
+                    gui::AsCanvas(pim).show(delay, "pi graph");
+                };
 
-            printPIGraph(0);
-
-            // attach orientation constraints
-            AttachPrincipleDirectionConstraints(mg);
-            AttachWallConstraints(mg, M_PI / 60.0);
-            AttachGCConstraints(mg, gc);
+                printPIGraph(0);
+                misc::SaveCache(impath, "mg_init", mg);
+            }
 
 
             const auto printPIGraphControls = [&mg](int delay) {
                 const auto bpColor = [&mg](int bp) -> gui::Color {
                     auto occ = mg.bndPiece2segRelation[bp];
-                    if (occ == SegRelation::Coplanar) {
+                    if (occ == SegRelation::Connected) {
                         return gui::LightGray;
-                    } else if (occ == SegRelation::Connected) {
-                        return gui::Gray;
                     } else if (occ == SegRelation::LeftIsFront) {
-                        return gui::Color(gui::Red) * 0.6;
+                        return gui::Color(gui::Green);
                     } else {
-                        return gui::Color(gui::Blue) * 0.6;
+                        return gui::Color(gui::Blue);
                     }
                 };
                 const auto lpColor = [&mg, bpColor](int lp) -> gui::Color {
@@ -253,181 +244,41 @@ namespace panolyz {
                         return gui::Black;
                     }
                     if (c.orientationClaz != -1) {
-                        return ctable[c.orientationClaz];
+                        return ctable[c.orientationClaz].blendWith(gui::White, 0.5);
                     }
                     if (c.orientationNotClaz != -1) {
-                        return ctable[c.orientationNotClaz] * 0.7;
+                        return ctable[c.orientationNotClaz].blendWith(gui::White, 0.3);
                     }
                     return gui::White;
                 };
-                auto pim = Print(mg, segColor, ConstantFunctor<gui::Color>(gui::Transparent), bpColor, 2, 3);
-                cv::imshow("pigraph_controled", Image3f(pim * 0.99f) + Image3f(mg.view.image / 255.0f * 0.01f));
-                cv::waitKey(delay);
+                auto pim = Print(mg, segColor, ConstantFunctor<gui::Color>(gui::Transparent), bpColor, 1, 3);
+                gui::AsCanvas(pim).show(delay, "pi graph controled");
             };
 
-            printPIGraphControls(0);
-            DetectOcclusions2(mg);
-           
-
-            //// initialize connectivities
-            //for (int i = 0; i < mg.nbndPieces(); i++) {
-            //    mg.bndPiece2segRelation[i] = SegRelation::Coplanar;
-            //}
-            //for (int i = 0; i < mg.nlinePieces(); i++) {
-            //    mg.linePiece2segLineRelation[i] = SegLineRelation::Attached;
-            //}
-            //struct Vertex {
-            //    enum Type {
-            //        IsSeg,
-            //        IsLine
-            //    } type;
-            //    bool isSeg() const { return type == IsSeg; }
-            //    bool isLine() const { return type == IsLine; }
-            //    int id;
-            //};
-            //struct Edge {
-            //    int vert1, vert2;
-            //    enum Type {
-            //        SegSeg,
-            //        SegLine,
-            //        LineLine
-            //    } type;
-            //    int id; // SegSeg->bndPiece, SegLine->linePiece, LineLine->lineRelation
-            //    double weight;
-            //    double width;
-            //    std::vector<Vec3> anchors;
-            //};
-            //std::vector<Vertex> verts;
-            //std::vector<int> seg2vert(mg.nsegs, -1), line2vert(mg.nlines(), -1);
-            //std::vector<Edge> edges;
-            //std::vector<int> bndPiece2edge(mg.nbndPieces(), -1), linePiece2edge(mg.nlinePieces(), -1), lineRelation2edge(mg.nlineRelations(), -1);
-            //
-            //// build constraint graph
-            //{
-            //    // add verts
-            //    // add segs
-            //    for (int i = 0; i < mg.nsegs; i++) {
-            //        Vertex v;
-            //        v.type = Vertex::IsSeg;
-            //        v.id = i;
-            //        verts.push_back(v);
-            //        int vert = verts.size() - 1;
-            //        seg2vert[i] = vert;
-            //    }
-            //    // add lines
-            //    for (int i = 0; i < mg.nlines(); i++) {
-            //        Vertex v;
-            //        v.type = Vertex::IsLine;
-            //        v.id = i;
-            //        verts.push_back(v);
-            //        int vert = verts.size() - 1;
-            //        line2vert[i] = vert;
-            //    }
-            //    // add edges
-            //    // add bndPieces
-            //    static const double minAngleThresholdForAWideEdge = DegreesToRadians(5);
-            //    for (int i = 0; i < mg.nbndPieces(); i++) {
-            //        Edge e;
-            //        e.type = Edge::SegSeg;
-            //        e.id = i;
-            //        auto & segPair = mg.bnd2segs[mg.bndPiece2bnd[i]];
-            //        e.vert1 = seg2vert[segPair.first];
-            //        e.vert2 = seg2vert[segPair.second];
-            //        double len = mg.bndPiece2length[i];
-            //        e.width = len;
-            //        if (len >= minAngleThresholdForAWideEdge) {
-            //            e.anchors = { mg.bndPiece2dirs[i].front(), mg.bndPiece2dirs[i].back() };
-            //        } else {
-            //            e.anchors = { normalize(mg.bndPiece2dirs[i].front() + mg.bndPiece2dirs[i].back()) };
-            //        }
-            //        e.weight = 1.0;
-            //        edges.push_back(e);
-            //        int edge = edges.size() - 1;
-            //        bndPiece2edge[i] = edge;
-            //    }
-            //    // add linePieces
-            //    for (int i = 0; i < mg.nlinePieces(); i++) {
-            //        int bndPiece = mg.linePiece2bndPiece[i];
-            //        int line = mg.linePiece2line[i];
-            //        if (bndPiece == -1) {
-            //            int seg = mg.linePiece2seg[i];
-            //            assert(seg != -1);
-            //            Edge e;
-            //            e.type = Edge::SegLine;
-            //            e.id = i;
-            //            e.vert1 = seg2vert[seg];
-            //            e.vert2 = line2vert[line];
-            //            double len = mg.linePiece2length[i];
-            //            e.width = len;
-            //            if (len >= minAngleThresholdForAWideEdge) {
-            //                e.anchors = { mg.linePiece2samples[i].front(), mg.linePiece2samples[i].back() };
-            //            } else {
-            //                e.anchors = { normalize(mg.linePiece2samples[i].front() + mg.linePiece2samples[i].back()) };
-            //            }
-            //            e.weight = 1.0;
-            //            edges.push_back(e);
-            //            int edge = edges.size() - 1;
-            //            linePiece2edge[i] = edge;
-            //        } else {
-            //            int segPair[] = { -1, -1 };
-            //            std::tie(segPair[0], segPair[1]) = mg.bnd2segs[mg.bndPiece2bnd[bndPiece]];
-            //            for (int seg : segPair) {
-            //                Edge e;
-            //                e.type = Edge::SegLine;
-            //                e.id = i;
-            //                e.vert1 = seg2vert[seg];
-            //                e.vert2 = line2vert[line];
-            //                double len = mg.linePiece2length[i];
-            //                e.width = len;
-            //                if (len >= minAngleThresholdForAWideEdge) {
-            //                    e.anchors = { mg.linePiece2samples[i].front(), mg.linePiece2samples[i].back() };
-            //                } else {
-            //                    e.anchors = { normalize(mg.linePiece2samples[i].front() + mg.linePiece2samples[i].back()) };
-            //                }
-            //                e.weight = 1.0;
-            //                edges.push_back(e);
-            //                int edge = edges.size() - 1;
-            //                linePiece2edge[i] = edge;
-            //            }
-            //        }
-            //    }
-            //    // add lineRelations
-            //    for (int i = 0; i < mg.nlineRelations(); i++) {
-            //        Edge e;
-            //        e.type = Edge::LineLine;
-            //        e.id = i;
-            //        auto & linePair = mg.lineRelation2lines[i];
-            //        e.vert1 = line2vert[linePair.first];
-            //        e.vert2 = line2vert[linePair.second];
-            //        e.width = 1.0;
-            //        e.weight = 1.0;
-            //        edges.push_back(e);
-            //        int edge = edges.size() - 1;
-            //        lineRelation2edge[i] = edge;
-            //    }
-            //}
-            //// adjust weights 
-            //{
-
-            //}
 
 
-
-
-            while (true) {
-               
-
-                // fetch the largest cc(?)
-                // and optimze it
-                {
-
-
-                }
-
+            // attach orientation constraints
+            bool refresh_mg_oriented = refresh_mg_init || false;
+            if (refresh_mg_oriented || !misc::LoadCache(impath, "mg_oriented", mg)) {
+                AttachPrincipleDirectionConstraints(mg);
+                AttachWallConstraints(mg, M_PI / 60.0);
+                AttachGCConstraints(mg, gc);
+                printPIGraphControls(0);
+                misc::SaveCache(impath, "mg_oriented", mg);
             }
 
 
 
+            // detect occlusions
+            if (1 || !misc::LoadCache(impath, "mg_occdetected", mg)) {
+                DetectOcclusions2(mg);
+                printPIGraphControls(0);
+                misc::SaveCache(impath, "mg_occdetected", mg);
+            }
+
+
+            PIConstraintGraph cg(mg);
+            cg.reconstructLargestCC();
 
 
             // save to disk
@@ -438,23 +289,3 @@ namespace panolyz {
     }
 
 }
-
- //{
- //    auto cctable = gui::CreateRandomColorTableWithSize(mg.nccs);
- //    auto pim = Print(mg,
- //        [&mg, &cctable](int seg) -> gui::Color {
- //        int vert = mg.seg2vert[seg];
- //        if (vert == -1) return gui::Transparent;
- //        return cctable[mg.vert2cc[vert]];
- //    },
- //        [&mg, &cctable](int lp) -> gui::Color {
- //        int vert = mg.line2vert[mg.linePiece2line[lp]];
- //        if (vert == -1) return gui::Transparent;
- //        return cctable[mg.vert2cc[vert]];
- //    },
- //        [](int bp) -> gui::Color {
- //        return gui::LightGray;
- //    }, 1, 2);
- //    cv::imshow("pigraph_ccs", Image3f(pim * 0.99f) + Image3f(mg.view.image / 255.0f * 0.01f));
- //    cv::waitKey();
- //}

@@ -2,6 +2,7 @@
 
 #include "../core/basic_types.hpp"
 #include "../core/cameras.hpp"
+#include "../core/utility.hpp"
 
 #include "../gui/basic_types.hpp"
 
@@ -30,7 +31,6 @@ namespace pano {
 
         // whether a bnd is an occlusion
         enum class SegRelation {
-            Coplanar,
             Connected,
             LeftIsFront,
             RightIsFront,
@@ -39,6 +39,13 @@ namespace pano {
 
         // whether a line attaches a seg
         enum class SegLineRelation {
+            Attached,
+            Detached,
+            Unknown
+        };
+
+        // whether two line connects
+        enum class LineRelation {
             Attached,
             Detached,
             Unknown
@@ -77,6 +84,7 @@ namespace pano {
             int nlines() const { return lines.size(); }
 
             // lineRelation
+            std::vector<LineRelation> lineRelations;
             std::vector<Vec3> lineRelation2anchor;
             std::vector<std::pair<int, int>> lineRelation2lines;
             std::vector<double> lineRelation2weight;
@@ -113,13 +121,19 @@ namespace pano {
                 ar(segs, nsegs, seg2bnds, seg2linePieces, seg2control, seg2areaRatio, fullArea, seg2center, seg2contours);
                 ar(linePiece2samples, linePiece2length, linePiece2line, linePiece2seg, linePiece2segLineRelation, linePiece2bndPiece, linePiece2bndPieceInSameDirection);
                 ar(lines, line2linePieces, line2lineRelations);
-                ar(lineRelation2anchor, lineRelation2lines, lineRelation2weight, lineRelation2IsIncidence);
+                ar(lineRelations, lineRelation2anchor, lineRelation2lines, lineRelation2weight, lineRelation2IsIncidence);
                 ar(bndPiece2dirs, bndPiece2length, bndPiece2classes, bndPiece2bnd, bndPiece2linePieces, bndPiece2segRelation);
                 ar(bnd2bndPieces, bnd2segs, bnd2juncs);
                 ar(junc2positions, junc2bnds);
                 ar(seg2recPlanes, line2recLines);
             }
         };
+
+
+        int SegmentationForPIGraph(const PanoramicView & view, const std::vector<Classified<Line3>> & lines,
+            Imagei & segs, double lineExtendAngle = DegreesToRadians(5), 
+            double sigma = 10.0, double c = 1.0, double minSize = 200, 
+            int widthThresToRemoveThinRegions = 2);
 
         PIGraph BuildPIGraph(const PanoramicView & view, const std::vector<Vec3> & vps, int verticalVPId,
             const Imagei & segs, const std::vector<Classified<Line3>> & lines,

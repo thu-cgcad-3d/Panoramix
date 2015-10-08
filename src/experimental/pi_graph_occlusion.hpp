@@ -8,7 +8,8 @@ namespace pano {
         void DetectOcclusions2(PIGraph & mg, 
             double minAngleSizeOfLineInTJunction = DegreesToRadians(3),
             double lambdaShrinkForHLineDetectionInTJunction = 0.2,
-            double lambdaShrinkForVLineDetectionInTJunction = 0.1);
+            double lambdaShrinkForVLineDetectionInTJunction = 0.1,
+            double angleSizeForPixelsNearLines = DegreesToRadians(2));
 
     }
 }

@@ -6,15 +6,30 @@
 namespace pano {
     namespace experimental {
 
-#if 0
 
         namespace {
             template <class T>
             inline std::pair<T, T> MakeOrderedPair(const T & a, const T & b) {
                 return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
             }
+
+            int SwappedComponent(const Vec3 & orientation) {
+                for (int i = 0; i < 2; i++) {
+                    if (abs(orientation[i]) >= 1e-8) {
+                        return i;
+                    }
+                }
+                return 2;
+            }
+            inline double NonZeroize(double d) {
+                return d == 0.0 ? 1e-6 : d;
+            }
+
+
         }
 
+
+#if 0
         void BuildConstraintGraph(PIGraph & mg) {
             
             /// build the constraint graph
@@ -183,19 +198,7 @@ namespace pano {
 
         }
 
-        namespace {
-            int SwappedComponent(const Vec3 & orientation) {
-                for (int i = 0; i < 2; i++) {
-                    if (abs(orientation[i]) >= 1e-8) {
-                        return i;
-                    }
-                }
-                return 2;
-            }
-            inline double NonZeroize(double d) {
-                return d == 0.0 ? 1e-6 : d;
-            }
-        }
+
 
         int VertexDof(const PIGraph & mg, int vert) {
             auto & v = mg.verts[vert];
@@ -540,9 +543,7 @@ namespace pano {
         }
 
 
-
-
-
+#endif
 
 
         std::vector<double> VariableCoefficientsForInverseDepthAtDirection(const std::vector<Vec3> & vps, const SegControl & control, 
@@ -771,19 +772,167 @@ namespace pano {
 
 
 
+        PIConstraintGraph::PIConstraintGraph(PIGraph & g) 
+            : mg(g), seg2ent(g.nsegs, -1), line2ent(g.nlines(), -1) {
+
+            // add entities
+            // add segs
+            for (int i = 0; i < mg.nsegs; i++) {
+                Entity e;
+                e.type = Entity::IsSeg;
+                e.id = i;
+                entities.push_back(e);
+                int ent = entities.size() - 1;
+                seg2ent[i] = ent;
+            }
+            // add lines
+            for (int i = 0; i < mg.nlines(); i++) {
+                Entity e;
+                e.type = Entity::IsLine;
+                e.id = i;
+                entities.push_back(e);
+                int ent = entities.size() - 1;
+                line2ent[i] = ent;
+            }
+
+            // add constraints
+            // bndpieces, seg-seg
+            static const double minAngleThresholdForAWideEdge = DegreesToRadians(2);
+            for (int i = 0; i < mg.nbndPieces(); i++) {
+                if (mg.bndPiece2segRelation[i] != SegRelation::Connected) {
+                    continue;
+                }
+                Constraint connect;
+                connect.type = Constraint::Connection;
+                auto & segPair = mg.bnd2segs[mg.bndPiece2bnd[i]];
+                connect.ent1 = seg2ent[segPair.first];
+                connect.ent2 = seg2ent[segPair.second];
+                double len = mg.bndPiece2length[i];
+                connect.weight = len;
+                if (len >= minAngleThresholdForAWideEdge) {
+                    connect.anchors = { mg.bndPiece2dirs[i].front(), mg.bndPiece2dirs[i].back() };
+                } else {
+                    connect.anchors = { normalize(mg.bndPiece2dirs[i].front() + mg.bndPiece2dirs[i].back()) };
+                }
+                constraints.push_back(connect);
+                
+                // check whether this bp lies on a line
+                if (!mg.bndPiece2linePieces[i].empty()) {
+                    // if so, no planarity will be assigned
+                    continue;
+                }
+
+                // the coplanarity constraint
+                Constraint coplanar;
+                coplanar.type = Constraint::SegCoplanarity;
+                coplanar.ent1 = connect.ent1;
+                coplanar.ent2 = connect.ent2;
+                coplanar.weight = len;
+                constraints.push_back(coplanar);
+            }
+
+            // linepieces, seg-line
+            for (int i = 0; i < mg.nlinePieces(); i++) {
+                if (mg.linePiece2segLineRelation[i] == SegLineRelation::Detached) {
+                    continue;
+                }
+                int bndPiece = mg.linePiece2bndPiece[i];
+                int line = mg.linePiece2line[i];
+                if (bndPiece == -1) {
+                    int seg = mg.linePiece2seg[i];
+                    assert(seg != -1);
+                    Constraint c;
+                    c.type = Constraint::Connection;
+                    c.ent1 = seg2ent[seg];
+                    c.ent2 = line2ent[line];
+                    double len = mg.linePiece2length[i];
+                    c.weight = len;
+                    if (len >= minAngleThresholdForAWideEdge) {
+                        c.anchors = { mg.linePiece2samples[i].front(), mg.linePiece2samples[i].back() };
+                    } else {
+                        c.anchors = { normalize(mg.linePiece2samples[i].front() + mg.linePiece2samples[i].back()) };
+                    }
+                    constraints.push_back(c);
+                } else {
+                    int segPair[] = { -1, -1 };
+                    std::tie(segPair[0], segPair[1]) = mg.bnd2segs[mg.bndPiece2bnd[bndPiece]];
+                    auto segRelation = mg.bndPiece2segRelation[bndPiece];
+                    bool connected[] = {
+                        segRelation == SegRelation::Connected || segRelation == SegRelation::LeftIsFront,
+                        segRelation == SegRelation::Connected || segRelation == SegRelation::RightIsFront
+                    };
+                    for (int k = 0; k < 2; k++) {
+                        int seg = segPair[k];
+                        if (!connected[k]) {
+                            continue;
+                        }
+                        Constraint c;
+                        c.type = Constraint::Connection;
+                        c.ent1 = seg2ent[seg];
+                        c.ent2 = line2ent[line];
+                        double len = mg.linePiece2length[i];
+                        c.weight = len;
+                        if (len >= minAngleThresholdForAWideEdge) {
+                            c.anchors = { mg.linePiece2samples[i].front(), mg.linePiece2samples[i].back() };
+                        } else {
+                            c.anchors = { normalize(mg.linePiece2samples[i].front() + mg.linePiece2samples[i].back()) };
+                        }
+                        constraints.push_back(c);
+                    }
+                }
+            }
+
+            // linerelations, line-line
+            for (int i = 0; i < mg.nlineRelations(); i++) {
+                if (mg.lineRelations[i] == LineRelation::Detached) {
+                    continue;
+                }
+                Constraint c;
+                c.type = Constraint::Connection;
+                auto & linePair = mg.lineRelation2lines[i];
+                c.ent1 = line2ent[linePair.first];
+                c.ent2 = line2ent[linePair.second];
+                c.weight = 1.0;
+                constraints.push_back(c);
+            }
 
 
+            // cc
+            /// cc decompose on constriant graph
+            std::cout << "cc decomposition" << std::endl;
+            ent2cc.resize(entities.size(), -1);
+
+            std::vector<int> entids(entities.size());
+            std::iota(entids.begin(), entids.end(), 0);
+            nccs = core::ConnectedComponents(entids.begin(), entids.end(), [this](int entid) {
+                std::vector<int> neighbors;
+                for (auto & c : constraints) {
+                    if (c.ent1 == entid) {
+                        neighbors.push_back(c.ent2);
+                    } else if (c.ent2 == entid) {
+                        neighbors.push_back(c.ent1);
+                    }
+                }
+                return neighbors;
+            }, [this](int entid, int ccid) {
+                ent2cc[entid] = ccid;
+                cc2ents[ccid].push_back(entid);
+            });
+
+            std::cout << "nccs = " << nccs << std::endl;
 
 
+            // order ccs from large to small
+            ccsBigToSmall.resize(nccs);
+            std::iota(ccsBigToSmall.begin(), ccsBigToSmall.end(), 0);
+            std::sort(ccsBigToSmall.begin(), ccsBigToSmall.end(), [this](int a, int b) {
+                return cc2ents.at(a).size() > cc2ents.at(b).size();
+            });
+        }
 
-
-        void SolvePIGraphIteratively(PIGraph & mg, misc::Matlab & matlab) {
-
-            // set all 
+        void PIConstraintGraph::reconstructLargestCC() const {
 
         }
 
-
-#endif
     }
 }
