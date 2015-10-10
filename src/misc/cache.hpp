@@ -20,6 +20,8 @@ namespace pano {
             return pano::core::LoadFromDisk(CachePath() + Tagify(path) + "_" + what + ".cereal", ts...);
         }
 
+        std::string FolderOfFile(const std::string & filepath);
+
 
     }
 }

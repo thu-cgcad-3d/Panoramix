@@ -39,6 +39,8 @@ namespace panolyz {
     std::unique_ptr<ReconstructedModel> PredictionOfPanoramix(const std::string & impath,
         const PredictOptions & options, misc::Matlab & matlab, const PILayoutAnnotation & anno) {
 
+        std::cout << "folder is " << misc::FolderOfFile(impath) << std::endl;
+
         auto resultPath = PanoramixResultFilePath(impath, 0);
 
         PIGraph mg;
@@ -270,16 +272,26 @@ namespace panolyz {
 
 
             // detect occlusions
-            if (1 || !misc::LoadCache(impath, "mg_occdetected", mg)) {
+            bool refresh_mg_occdetected = refresh_mg_oriented || false;
+            if (refresh_mg_occdetected || !misc::LoadCache(impath, "mg_occdetected", mg)) {
                 DetectOcclusions2(mg);
                 printPIGraphControls(0);
                 misc::SaveCache(impath, "mg_occdetected", mg);
             }
 
 
-            PIConstraintGraph cg(mg);
-            cg.reconstructLargestCC();
+            PIConstraintGraph cg;
+            bool refresh_mg_reconstructed = refresh_mg_occdetected || true;
+            if (refresh_mg_reconstructed || !misc::LoadCache(impath, "mg_reconstructed", mg, cg)) {
+                cg = BuildPIConstraintGraph(mg, DegreesToRadians(1), DegreesToRadians(3));
+                double energy = Solve(mg, cg, matlab);
+                if (IsInfOrNaN(energy)) {
+                    std::cout << "solve failed" << std::endl;
+                }
+                misc::SaveCache(impath, "mg_reconstructed", mg, cg);
+            }
 
+            VisualizeReconstruction(cg, mg);
 
             // save to disk
             SaveToDisk(resultPath, mg);

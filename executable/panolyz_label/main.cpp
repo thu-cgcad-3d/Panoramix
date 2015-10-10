@@ -20,7 +20,7 @@ int main(int argc, char ** argv) {
     QString dir = "H:\\DataSet\\PanoContext";
     auto filenames = QFileDialog::getOpenFileNames(nullptr, QObject::tr("Select an image file"),
         dir,
-        QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
+        QObject::tr("Image Files (*.jpg;*.jpeg);;All Files (*.*)"));
 
     pano::misc::Matlab matlab;
 

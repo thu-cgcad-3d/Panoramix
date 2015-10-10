@@ -1,5 +1,6 @@
 #include "../gui/scene.hpp"
 #include "../core/algorithms.hpp"
+#include "../core/containers.hpp"
 
 #include "pi_graph_solve.hpp"
 
@@ -29,7 +30,200 @@ namespace pano {
         }
 
 
+
+
+
+
+        std::vector<double> InverseDepthCoefficientsOfSegAtDirection(const PIGraph & mg,
+            int seg, const Vec3 & direction) {
+            auto & control = mg.seg2control[seg];
+            if (control.dof() == 1) {
+                assert(IsFuzzyZero(norm(mg.seg2center[seg]) - 1.0, 1e-2));
+                Plane3 plane(mg.seg2center[seg], mg.vps[control.orientationClaz]);
+                // variable is 1.0/centerDepth
+                // corresponding coeff is 1.0/depthRatio
+                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                double depthRatio = norm(IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), direction), plane).position);
+                return std::vector<double>{1.0 / depthRatio};
+            } else if (control.dof() == 2) {
+                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                // -> 1.0/depth = ax + by + cz
+                // -> 1.0/depth = ax + by + (- o1a - o2b)/o3 * z = a(x-o1*z/o3) + b(y-o2*z/o3)
+                auto orientation = normalize(mg.vps[control.orientationNotClaz]);
+                int sc = SwappedComponent(orientation); // find a non zero component
+                Vec3 forientation = orientation;
+                std::swap(forientation[sc], forientation[2]);
+                Vec3 fdirection = direction;
+                std::swap(fdirection[sc], fdirection[2]);
+                return std::vector<double>{
+                    fdirection[0] - forientation[0] * fdirection[2] / forientation[2],
+                        fdirection[1] - forientation[1] * fdirection[2] / forientation[2]
+                };
+            } else {
+                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
+                // -> 1.0/depth = ax + by + cz
+                return std::vector<double>{direction[0], direction[1], direction[2]};
+            }
+        }
+
+        std::vector<double> InverseDepthCoefficientsOfLineAtDirection(const PIGraph & mg,
+            int line, const Vec3 & direction) {
+            int claz = mg.lines[line].claz;
+            auto & l = mg.lines[line].component;
+            if (claz >= 0 && claz < mg.vps.size()) {
+                Ray3 infLine(normalize(l.center()), mg.vps[claz]);
+                // variable is 1.0/centerDepth
+                // corresponding coeff is 1.0/depthRatio
+                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
+                double depthRatio = norm(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), direction), infLine).second.first);
+                return std::vector<double>{1.0 / depthRatio};
+            } else {
+                double theta = AngleBetweenDirections(normalize(l.first), normalize(l.second));
+                double phi = AngleBetweenDirections(normalize(l.first), direction);
+                /*           | sin(theta) | | p | | q |
+                len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                | p sin(phi) - q sin(phi - theta) |
+                */
+                // variables[0] -> 1/p
+                // variables[1] -> 1/q
+                double coeffFor1_p = -sin(phi - theta) / sin(theta);
+                double coeffFor1_q = sin(phi) / sin(theta);
+                assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
+                return std::vector<double>{coeffFor1_p, coeffFor1_q};
+            }
+        }
+
+
+
+        DenseMatd SegPlaneEquationCoefficients(const PIGraph & mg,
+            int seg) {
+            auto & control = mg.seg2control[seg];
+            if (control.dof() == 1) {
+                auto & center = mg.seg2center[seg];
+                auto & vp = mg.vps[control.orientationClaz];
+                assert(IsFuzzyZero(norm(center) - 1.0, 1e-2));
+                assert(IsFuzzyZero(norm(vp) - 1.0, 1e-2));
+                // variable is 1.0/centerDepth
+                //  let center = [cx, cy, cz], vp = [vx, vy, vz]
+                //  then the equation should be k vx x + k vy y + k vz z = 1
+                //  if the depth of center is Dc, then
+                //      k vx Dc cx + k vy Dc cy + k vz Dc cz = 1
+                //  and then k = 1.0 / (Dc*dot(v, c))
+                //  the equation coefficients thus are
+                //      k v* = v* / (Dc*dot(v, c))
+                //  therefore the equation coefficients corresponding to the variable (inverse center depth, 1.0/Dc) are
+                //      v* / dot(v, c)
+                DenseMatd coeffs(3, 1, 0.0);
+                for (int i = 0; i < 3; i++) {
+                    coeffs(i, 0) = vp[i] / vp.dot(center);
+                }
+                return coeffs;
+            } else if (control.dof() == 2) {
+                auto orientation = normalize(mg.vps[control.orientationNotClaz]);
+                int sc = SwappedComponent(orientation); // find a non zero component
+                Vec3 forientation = orientation;
+                std::swap(forientation[sc], forientation[2]);
+                // (a, b, c) \perp o => o1a + o2b + o3c = 0 => c =  (- o1a - o2b)/o3
+                DenseMatd coeffs(3, 2, 0.0);
+                coeffs(0, 0) = coeffs(1, 1) = 1;
+                coeffs(2, 0) = -forientation[0] / forientation[2];
+                coeffs(2, 1) = -forientation[1] / forientation[2];
+                for (int k = 0; k < 2; k++) {
+                    std::swap(coeffs(sc, k), coeffs(2, k));
+                }
+                return coeffs;
+            } else if (control.dof() == 3) {
+                return DenseMatd::eye(3, 3);
+            }
+        }
+
+
+        Plane3 SegInstance(const PIGraph & mg, const double * variables, int seg) {
+            auto & c = mg.seg2control[seg];
+            if (c.orientationClaz >= 0) {
+                return Plane3(mg.seg2center[seg] / NonZeroize(variables[0]), mg.vps[c.orientationClaz]);
+            } else if (c.orientationClaz == -1 && c.orientationNotClaz >= 0) {
+                double vs[] = { variables[0], variables[1], 0.0 }; // fake vs
+                // v1 * o1 + v2 * o2 + v3 * o3 = 0, since region.orientation is orthogonal to normal
+                auto orientation = normalize(mg.vps[c.orientationNotClaz]);
+                int c = SwappedComponent(orientation);
+                std::swap(orientation[c], orientation[2]); // now fake orientation
+                vs[2] = (-vs[0] * orientation[0] - vs[1] * orientation[1])
+                    / orientation[2];
+                std::swap(vs[c], vs[2]); // now real vs
+                return Plane3FromEquation(vs[0], vs[1], vs[2]);
+            } else /*if (region.type == MGUnary::RegionWithFixedNormal)*/ {
+                return Plane3FromEquation(variables[0], variables[1], variables[2]);
+            }
+        }
+
+        Line3 LineInstance(const PIGraph & mg, const double * variables, int line) {
+            auto & l = mg.lines[line];
+            if (l.claz >= 0 && l.claz < mg.vps.size()) {
+                Ray3 infLine(normalize(l.component.center()) / NonZeroize(variables[0]), mg.vps[l.claz]);
+                return Line3(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(l.component.first)), infLine).second.second,
+                    DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(l.component.second)), infLine).second.second);
+            } else /*if (line.type == MGUnary::LineFree)*/ {
+                /*           | sin(theta) | | p | | q |
+                len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
+                | p sin(phi) - q sin(phi - theta) |
+                */
+                // variables[0] -> 1/p
+                // variables[1] -> 1/q
+                return Line3(normalize(l.component.first) / NonZeroize(variables[0]), normalize(l.component.second) / NonZeroize(variables[1]));
+            }
+        }
+
+
+        int EntityDoF(const PIGraph & mg, const PIConstraintGraph & cg, int ent) {
+            auto & v = cg.entities[ent];
+            if (v.isSeg()) {
+                return mg.seg2control[v.id].dof();
+            } else {
+                return mg.lines[v.id].claz == -1 ? 2 : 1;
+            }
+        }
+
+        std::vector<double> InverseDepthCoefficientsAtDirection(const PIGraph & mg, 
+            const PIConstraintGraph::Entity & e, const Vec3 & direction) {
+            assert(IsFuzzyZero(norm(direction) - 1.0, 1e-2));
+            if (e.isSeg()) {
+                int seg = e.id;
+                return InverseDepthCoefficientsOfSegAtDirection(mg, seg, direction);
+            } else {
+                int line = e.id;
+                return InverseDepthCoefficientsOfLineAtDirection(mg, line, direction);
+            }
+        }
+
+
+
 #if 0
+
+
+        int VertexDof(const PIGraph & mg, int vert) {
+            auto & v = mg.verts[vert];
+            if (v.isSeg) {
+                return mg.seg2control[v.id].dof();
+            } else {
+                return mg.lines[v.id].claz == -1 ? 2 : 1;
+            }
+        }
+
+        std::vector<double> InverseDepthCoefficientsAtDirection(const PIGraph & mg, 
+            const Vertex & v, const Vec3 & direction) {
+            assert(IsFuzzyZero(norm(direction) - 1.0, 1e-2));
+            if (v.isSeg) {
+                int seg = v.id;
+                return InverseDepthCoefficientsOfSegAtDirection(mg, seg, direction);
+            } else {
+                int line = v.id;
+                return InverseDepthCoefficientsOfSegAtDirection(mg, line, direction);
+            }
+        }
+
+
+
         void BuildConstraintGraph(PIGraph & mg) {
             
             /// build the constraint graph
@@ -198,168 +392,6 @@ namespace pano {
 
         }
 
-
-
-        int VertexDof(const PIGraph & mg, int vert) {
-            auto & v = mg.verts[vert];
-            if (v.isSeg) {
-                return mg.seg2control[v.id].dof();
-            } else {
-                return mg.lines[v.id].claz == -1 ? 2 : 1;
-            }
-        }
-
-        std::vector<double> InverseDepthCoefficientsOfSegAtDirection(const PIGraph & mg,
-            int seg, const Vec3 & direction) {
-            auto & control = mg.seg2control[seg];
-            if (control.dof() == 1) {
-                assert(IsFuzzyZero(norm(mg.seg2center[seg]) - 1.0, 1e-2));
-                Plane3 plane(mg.seg2center[seg], mg.vps[control.orientationClaz]);
-                // variable is 1.0/centerDepth
-                // corresponding coeff is 1.0/depthRatio
-                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
-                double depthRatio = norm(IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), direction), plane).position);
-                return std::vector<double>{1.0 / depthRatio};
-            } else if (control.dof() == 2) {
-                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
-                // -> 1.0/depth = ax + by + cz
-                // -> 1.0/depth = ax + by + (- o1a - o2b)/o3 * z = a(x-o1*z/o3) + b(y-o2*z/o3)
-                auto orientation = normalize(mg.vps[control.orientationNotClaz]);
-                int sc = SwappedComponent(orientation); // find a non zero component
-                Vec3 forientation = orientation;
-                std::swap(forientation[sc], forientation[2]);
-                Vec3 fdirection = direction;
-                std::swap(fdirection[sc], fdirection[2]);
-                return std::vector<double>{
-                    fdirection[0] - forientation[0] * fdirection[2] / forientation[2],
-                        fdirection[1] - forientation[1] * fdirection[2] / forientation[2]
-                };
-            } else {
-                // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) = variables
-                // -> 1.0/depth = ax + by + cz
-                return std::vector<double>{direction[0], direction[1], direction[2]};
-            }
-        }
-
-        std::vector<double> InverseDepthCoefficientsOfLineAtDirection(const PIGraph & mg,
-            int line, const Vec3 & direction) {
-            int claz = mg.lines[line].claz;
-            auto & l = mg.lines[line].component;
-            if (claz >= 0 && claz < mg.vps.size()) {
-                Ray3 infLine(normalize(l.center()), mg.vps[claz]);
-                // variable is 1.0/centerDepth
-                // corresponding coeff is 1.0/depthRatio
-                // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth = centerDepth * depthRatio
-                double depthRatio = norm(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), direction), infLine).second.first);
-                return std::vector<double>{1.0 / depthRatio};
-            } else {
-                double theta = AngleBetweenDirections(normalize(l.first), normalize(l.second));
-                double phi = AngleBetweenDirections(normalize(l.first), direction);
-                /*           | sin(theta) | | p | | q |
-                len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
-                | p sin(phi) - q sin(phi - theta) |
-                */
-                // variables[0] -> 1/p
-                // variables[1] -> 1/q
-                double coeffFor1_p = -sin(phi - theta) / sin(theta);
-                double coeffFor1_q = sin(phi) / sin(theta);
-                assert(!IsInfOrNaN(coeffFor1_p) && !IsInfOrNaN(coeffFor1_q));
-                return std::vector<double>{coeffFor1_p, coeffFor1_q};
-            }
-        }
-
-
-        std::vector<double> InverseDepthCoefficientsAtDirection(const PIGraph & mg, 
-            const Vertex & v, const Vec3 & direction) {
-            assert(IsFuzzyZero(norm(direction) - 1.0, 1e-2));
-            if (v.isSeg) {
-                int seg = v.id;
-                return InverseDepthCoefficientsOfSegAtDirection(mg, seg, direction);
-            } else {
-                int line = v.id;
-                return InverseDepthCoefficientsOfSegAtDirection(mg, line, direction);
-            }
-        }
-
-        DenseMatd SegPlaneEquationCoefficients(const PIGraph & mg,
-            int seg) {
-            auto & control = mg.seg2control[seg];
-            if (control.dof() == 1) {
-                auto & center = mg.seg2center[seg];
-                auto & vp = mg.vps[control.orientationClaz];
-                assert(IsFuzzyZero(norm(center) - 1.0, 1e-2));
-                assert(IsFuzzyZero(norm(vp) - 1.0, 1e-2));
-                // variable is 1.0/centerDepth
-                //  let center = [cx, cy, cz], vp = [vx, vy, vz]
-                //  then the equation should be k vx x + k vy y + k vz z = 1
-                //  if the depth of center is Dc, then
-                //      k vx Dc cx + k vy Dc cy + k vz Dc cz = 1
-                //  and then k = 1.0 / (Dc*dot(v, c))
-                //  the equation coefficients thus are
-                //      k v* = v* / (Dc*dot(v, c))
-                //  therefore the equation coefficients corresponding to the variable (inverse center depth, 1.0/Dc) are
-                //      v* / dot(v, c)
-                DenseMatd coeffs(3, 1, 0.0);
-                for (int i = 0; i < 3; i++) {
-                    coeffs(i, 0) = vp[i] / vp.dot(center);
-                }
-                return coeffs;
-            } else if (control.dof() == 2) {
-                auto orientation = normalize(mg.vps[control.orientationNotClaz]);
-                int sc = SwappedComponent(orientation); // find a non zero component
-                Vec3 forientation = orientation;
-                std::swap(forientation[sc], forientation[2]);
-                // (a, b, c) \perp o => o1a + o2b + o3c = 0 => c =  (- o1a - o2b)/o3
-                DenseMatd coeffs(3, 2, 0.0);
-                coeffs(0, 0) = coeffs(1, 1) = 1;
-                coeffs(2, 0) = -forientation[0] / forientation[2];
-                coeffs(2, 1) = -forientation[1] / forientation[2];
-                for (int k = 0; k < 2; k++) {
-                    std::swap(coeffs(sc, k), coeffs(2, k));
-                }
-                return coeffs;
-            } else if (control.dof() == 3) {
-                return DenseMatd::eye(3, 3);
-            }
-        }
-
-
-        Plane3 SegInstance(const PIGraph & mg, const double * variables, int seg) {
-            auto & c = mg.seg2control[seg];
-            if (c.orientationClaz >= 0) {
-                return Plane3(mg.seg2center[seg] / NonZeroize(variables[0]), mg.vps[c.orientationClaz]);
-            } else if (c.orientationClaz == -1 && c.orientationNotClaz >= 0) {
-                double vs[] = { variables[0], variables[1], 0.0 }; // fake vs
-                // v1 * o1 + v2 * o2 + v3 * o3 = 0, since region.orientation is orthogonal to normal
-                auto orientation = normalize(mg.vps[c.orientationNotClaz]);
-                int c = SwappedComponent(orientation);
-                std::swap(orientation[c], orientation[2]); // now fake orientation
-                vs[2] = (-vs[0] * orientation[0] - vs[1] * orientation[1])
-                    / orientation[2];
-                std::swap(vs[c], vs[2]); // now real vs
-                return Plane3FromEquation(vs[0], vs[1], vs[2]);
-            } else /*if (region.type == MGUnary::RegionWithFixedNormal)*/ {
-                return Plane3FromEquation(variables[0], variables[1], variables[2]);
-            }
-        }
-
-        Line3 LineInstance(const PIGraph & mg, const double * variables, int line) {
-            auto & l = mg.lines[line];
-            if (l.claz >= 0 && l.claz < mg.vps.size()) {
-                Ray3 infLine(normalize(l.component.center()) / NonZeroize(variables[0]), mg.vps[l.claz]);
-                return Line3(DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(l.component.first)), infLine).second.second,
-                    DistanceBetweenTwoLines(Ray3(Point3(0, 0, 0), normalize(l.component.second)), infLine).second.second);
-            } else /*if (line.type == MGUnary::LineFree)*/ {
-                /*           | sin(theta) | | p | | q |
-                len:---------------------------------   => 1/len: [(1/q)sin(phi) - (1/p)sin(phi-theta)] / sin(theta)
-                | p sin(phi) - q sin(phi - theta) |
-                */
-                // variables[0] -> 1/p
-                // variables[1] -> 1/q
-                return Line3(normalize(l.component.first) / NonZeroize(variables[0]), normalize(l.component.second) / NonZeroize(variables[1]));
-            }
-        }
-        
 
 
 
@@ -772,8 +804,142 @@ namespace pano {
 
 
 
-        PIConstraintGraph::PIConstraintGraph(PIGraph & g) 
-            : mg(g), seg2ent(g.nsegs, -1), line2ent(g.nlines(), -1) {
+        // the staibility info
+        struct Stability {
+            virtual int dof() const = 0;
+            virtual void addAnchor(const Vec3 & anchor, double angleThres) = 0;
+            virtual Stability * clone() const = 0;
+            virtual void stablize() = 0;
+        };
+        struct SegDof3Stability : Stability {
+            std::vector<Vec3> supporters;
+            SegDof3Stability() {}
+            SegDof3Stability(const SegDof3Stability & s) = default;
+            virtual int dof() const override {
+                return 3 - supporters.size();
+            }
+            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
+                assert(supporters.size() <= 3);
+                if (supporters.empty()) {
+                    supporters.push_back(anchor);
+                } else if (supporters.size() == 1) {
+                    if (AngleBetweenDirections(supporters[0], anchor) > angleThres) {
+                        supporters.push_back(anchor);
+                    }
+                } else if (supporters.size() == 2) {
+                    auto proj = ProjectionOfPointOnLine(anchor, Line3(supporters[0], supporters[1])).position;
+                    if (AngleBetweenDirections(proj, anchor) > angleThres) {
+                        supporters.push_back(anchor);
+                    }
+                }
+            }
+            virtual Stability * clone() const override {
+                return new SegDof3Stability(*this);
+            }
+            virtual void stablize() override {
+                supporters.resize(3);
+            }
+        };
+        struct SegDof2Stability : Stability {
+            Vec3 axis;
+            std::vector<Vec3> supporters;
+            explicit SegDof2Stability(const Vec3 & a) : axis(a) {}
+            SegDof2Stability(const SegDof2Stability & s) = default;
+            virtual int dof() const override {
+                return 2 - supporters.size();
+            }
+            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
+                assert(supporters.size() <= 2);
+                if (supporters.empty()) {
+                    supporters.push_back(anchor);
+                } else if (supporters.size() == 1) {
+                    auto proj = DistanceFromPointToLine(anchor, Ray3(supporters[0], axis)).second;
+                    if (AngleBetweenDirections(proj, anchor) > angleThres) {
+                        supporters.push_back(anchor);
+                    }
+                }
+            }
+            virtual Stability * clone() const override {
+                return new SegDof2Stability(*this);
+            }
+            virtual void stablize() override {
+                supporters.resize(2);
+            }
+        };
+        struct SegDof1Stability : Stability {
+            bool stable;
+            SegDof1Stability() : stable(false) {}
+            SegDof1Stability(const SegDof1Stability & s) = default;
+            virtual int dof() const override { return stable ? 0 : 1; }
+            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
+                stable = true;
+            }
+            virtual Stability * clone() const override {
+                return new SegDof1Stability(*this);
+            }
+            virtual void stablize() override {
+                stable = true;
+            }
+        };
+
+        struct LineDof2Stability : Stability {
+            std::vector<Vec3> supporters;
+            LineDof2Stability() {}
+            LineDof2Stability(const LineDof2Stability & s) = default;
+            virtual int dof() const override {
+                return 2 - supporters.size();
+            }
+            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
+                assert(supporters.size() <= 2);
+                if (supporters.empty()) {
+                    supporters.push_back(anchor);
+                } else if (supporters.size() == 1) {
+                    if (AngleBetweenDirections(supporters[0], anchor) > angleThres) {
+                        supporters.push_back(anchor);
+                    }
+                }
+            }
+            virtual Stability * clone() const override {
+                return new LineDof2Stability(*this);
+            }
+            virtual void stablize() override {
+                supporters.resize(2);
+            }
+        };
+        struct LineDof1Stability : Stability {
+            bool stable;
+            LineDof1Stability() : stable(false) {}
+            LineDof1Stability(const LineDof1Stability & s) = default;
+            virtual int dof() const override { return stable ? 0 : 1; }
+            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
+                stable = true;
+            }
+            virtual Stability * clone() const override {
+                return new LineDof1Stability(*this);
+            }
+            virtual void stablize() override {
+                stable = true;
+            }
+        };
+
+
+
+
+
+        PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg, double minAngleThresForAWideEdge, double angleThresForColinearity) {
+            std::vector<std::unique_ptr<Stability>> ent2stab;
+
+            PIConstraintGraph cg;
+            cg.seg2ent.resize(mg.nsegs, -1);
+            cg.line2ent.resize(mg.nlines(), -1);
+
+            auto & seg2ent = cg.seg2ent;
+            auto & line2ent = cg.line2ent;
+            auto & entities = cg.entities;
+            auto & constraints = cg.constraints;
+
+            using Entity = PIConstraintGraph::Entity;
+            using Constraint = PIConstraintGraph::Constraint;
 
             // add entities
             // add segs
@@ -781,23 +947,43 @@ namespace pano {
                 Entity e;
                 e.type = Entity::IsSeg;
                 e.id = i;
+                e.size = mg.seg2areaRatio[i] * 100;
                 entities.push_back(e);
                 int ent = entities.size() - 1;
                 seg2ent[i] = ent;
+
+                int dof = mg.seg2control[i].dof();
+                if (dof == 1) {
+                    ent2stab.push_back(std::make_unique<SegDof1Stability>());
+                } else if (dof == 2) {
+                    ent2stab.push_back(std::make_unique<SegDof2Stability>(mg.vps[mg.seg2control[i].orientationNotClaz]));
+                } else {
+                    ent2stab.push_back(std::make_unique<SegDof3Stability>());
+                }
             }
             // add lines
             for (int i = 0; i < mg.nlines(); i++) {
                 Entity e;
                 e.type = Entity::IsLine;
                 e.id = i;
+                e.size = AngleBetweenDirections(mg.lines[i].component.first, mg.lines[i].component.second);
                 entities.push_back(e);
                 int ent = entities.size() - 1;
                 line2ent[i] = ent;
+
+                if (mg.lines[i].claz != -1) {
+                    ent2stab.push_back(std::make_unique<LineDof1Stability>());
+                } else {
+                    ent2stab.push_back(std::make_unique<LineDof2Stability>());
+                }
             }
+
+
+            std::vector<std::vector<int>> ent2cons(entities.size()); // enttity -> constraints
+
 
             // add constraints
             // bndpieces, seg-seg
-            static const double minAngleThresholdForAWideEdge = DegreesToRadians(2);
             for (int i = 0; i < mg.nbndPieces(); i++) {
                 if (mg.bndPiece2segRelation[i] != SegRelation::Connected) {
                     continue;
@@ -809,26 +995,37 @@ namespace pano {
                 connect.ent2 = seg2ent[segPair.second];
                 double len = mg.bndPiece2length[i];
                 connect.weight = len;
-                if (len >= minAngleThresholdForAWideEdge) {
+                if (len >= minAngleThresForAWideEdge) {
                     connect.anchors = { mg.bndPiece2dirs[i].front(), mg.bndPiece2dirs[i].back() };
+                    //connect.anchorOrientation = mg.bndPiece2classes[i];
                 } else {
                     connect.anchors = { normalize(mg.bndPiece2dirs[i].front() + mg.bndPiece2dirs[i].back()) };
+                    //connect.anchorOrientation = -1;
                 }
                 constraints.push_back(connect);
-                
+                int connectCon = constraints.size() - 1;
+                ent2cons[connect.ent1].push_back(connectCon);
+                ent2cons[connect.ent2].push_back(connectCon);
+
                 // check whether this bp lies on a line
                 if (!mg.bndPiece2linePieces[i].empty()) {
                     // if so, no planarity will be assigned
                     continue;
                 }
 
-                // the coplanarity constraint
-                Constraint coplanar;
-                coplanar.type = Constraint::SegCoplanarity;
-                coplanar.ent1 = connect.ent1;
-                coplanar.ent2 = connect.ent2;
-                coplanar.weight = len;
-                constraints.push_back(coplanar);
+                // the coplanarity constraint if there are no lines on the bndpiece
+                if (mg.bndPiece2linePieces[i].empty()) {
+                    Constraint coplanar;
+                    coplanar.type = Constraint::SegCoplanarity;
+                    coplanar.ent1 = connect.ent1;
+                    coplanar.ent2 = connect.ent2;
+                    coplanar.weight = len;
+                    //coplanar.anchorOrientation = -1;
+                    constraints.push_back(coplanar);
+                    int coplanarCon = constraints.size() - 1;
+                    ent2cons[coplanar.ent1].push_back(coplanarCon);
+                    ent2cons[coplanar.ent2].push_back(coplanarCon);
+                }
             }
 
             // linepieces, seg-line
@@ -847,12 +1044,17 @@ namespace pano {
                     c.ent2 = line2ent[line];
                     double len = mg.linePiece2length[i];
                     c.weight = len;
-                    if (len >= minAngleThresholdForAWideEdge) {
+                    if (len >= minAngleThresForAWideEdge) {
                         c.anchors = { mg.linePiece2samples[i].front(), mg.linePiece2samples[i].back() };
+                        //c.anchorOrientation = mg.lines[line].claz;
                     } else {
                         c.anchors = { normalize(mg.linePiece2samples[i].front() + mg.linePiece2samples[i].back()) };
+                        //c.anchorOrientation = -1;
                     }
                     constraints.push_back(c);
+                    int con = constraints.size() - 1;
+                    ent2cons[c.ent1].push_back(con);
+                    ent2cons[c.ent2].push_back(con);
                 } else {
                     int segPair[] = { -1, -1 };
                     std::tie(segPair[0], segPair[1]) = mg.bnd2segs[mg.bndPiece2bnd[bndPiece]];
@@ -872,12 +1074,17 @@ namespace pano {
                         c.ent2 = line2ent[line];
                         double len = mg.linePiece2length[i];
                         c.weight = len;
-                        if (len >= minAngleThresholdForAWideEdge) {
+                        if (len >= minAngleThresForAWideEdge) {
                             c.anchors = { mg.linePiece2samples[i].front(), mg.linePiece2samples[i].back() };
+                            //c.anchorOrientation = mg.lines[line].claz;
                         } else {
                             c.anchors = { normalize(mg.linePiece2samples[i].front() + mg.linePiece2samples[i].back()) };
+                            //c.anchorOrientation = -1;
                         }
                         constraints.push_back(c);
+                        int con = constraints.size() - 1;
+                        ent2cons[c.ent1].push_back(con);
+                        ent2cons[c.ent2].push_back(con);
                     }
                 }
             }
@@ -892,47 +1099,270 @@ namespace pano {
                 auto & linePair = mg.lineRelation2lines[i];
                 c.ent1 = line2ent[linePair.first];
                 c.ent2 = line2ent[linePair.second];
-                c.weight = 1.0;
+                c.weight = mg.lineRelation2weight[i];
+                c.anchors = { mg.lineRelation2anchor[i] };
+                //c.anchorOrientation = -1;
                 constraints.push_back(c);
+                int con = constraints.size() - 1;
+                ent2cons[c.ent1].push_back(con);
+                ent2cons[c.ent2].push_back(con);
             }
 
 
-            // cc
-            /// cc decompose on constriant graph
-            std::cout << "cc decomposition" << std::endl;
-            ent2cc.resize(entities.size(), -1);
 
-            std::vector<int> entids(entities.size());
-            std::iota(entids.begin(), entids.end(), 0);
-            nccs = core::ConnectedComponents(entids.begin(), entids.end(), [this](int entid) {
-                std::vector<int> neighbors;
-                for (auto & c : constraints) {
-                    if (c.ent1 == entid) {
-                        neighbors.push_back(c.ent2);
-                    } else if (c.ent2 == entid) {
-                        neighbors.push_back(c.ent1);
+
+
+
+            // select the largest dof1 ent as the root!
+            int root = -1;
+            int rootSize = 0;
+            for (int i = 0; i < entities.size(); i++) {
+                int sz = entities[i].size;
+                if (ent2stab[i]->dof() != 1) {
+                    continue;
+                }
+                if (sz > rootSize) {
+                    rootSize = sz;
+                    root = i;
+                }
+            }
+            if (root == -1) {
+                std::cout << "we can't find any entity whose dof is 1 !!!!!" << std::endl;
+                return cg;
+            }
+
+            std::cout << "root: " << root << std::endl;
+
+            std::set<int> entsCollected;
+            // initialize stabilities of entities
+            std::vector<std::unique_ptr<Stability>> ent2stabHere(entities.size());
+            for (int ent = 0; ent < entities.size(); ent++) {
+                ent2stabHere[ent] = std::unique_ptr<Stability>(ent2stab[ent]->clone());
+            }
+            ent2stabHere[root]->stablize();
+            assert(ent2stabHere[root]->dof() == 0);
+
+            MaxHeap<int, int, std::greater<int>> Q; // a min heap recording dofs
+            Q.push(root, ent2stabHere[root]->dof());
+            while (!Q.empty()) {
+                //std::cout << "Q.size(): " << Q.size() << std::endl;
+                int curEnt = Q.top();
+                int curEntDoF = ent2stabHere[curEnt]->dof();
+                if (curEntDoF != 0) { // all remaining adjacent entities are not stable, stop the search
+                    break;
+                }
+                Q.pop();
+                entsCollected.insert(curEnt);
+                for (int con : ent2cons[curEnt]) {
+                    auto & c = constraints[con];
+                    if (c.weight == 0.0) {
+                        continue;
+                    }
+                    int adjEnt = c.ent1 == curEnt ? c.ent2 : c.ent1;
+                    if (Contains(entsCollected, adjEnt)) {
+                        continue;
+                    }
+                    if (c.isConnection()) {
+                        for (auto & anchor : c.anchors) {
+                            ent2stabHere[adjEnt]->addAnchor(anchor, angleThresForColinearity);
+                        }
+                    } else if (c.isSegCoplanarity()) {
+                        assert(entities[adjEnt].isSeg());
+                        ent2stabHere[adjEnt]->stablize();
+                    }
+                    Q.pushOrSet(adjEnt, ent2stabHere[adjEnt]->dof());
+                }
+            }
+
+            cg.determinableEnts = std::move(entsCollected);
+ 
+            return cg;
+        }
+
+
+
+
+        double Solve(PIGraph & mg, const PIConstraintGraph & cg, misc::Matlab & matlab) {
+
+            auto & determinableEnts = cg.determinableEnts;
+
+            /// build varriables and equations
+
+            // vert start position in variable vector
+            std::vector<int> ent2varPosition(cg.entities.size(), -1);
+            std::vector<int> ent2nvar(cg.entities.size(), -1);
+            int nvars = 0;
+            for (int ent : determinableEnts) {
+                auto & e = cg.entities[ent];
+                int nvar = 0;
+                if (e.isSeg()) {
+                    int seg = e.id;
+                    auto & control = mg.seg2control[seg];
+                    nvar = control.dof();
+                } else {
+                    int line = e.id;
+                    int claz = mg.lines[line].claz;
+                    nvar = claz == -1 ? 2 : 1;
+                }
+                ent2nvar[ent] = nvar;
+                ent2varPosition[ent] = nvars;
+                nvars += nvar;
+            }
+
+            std::vector<int> relatedCons;
+            for (int i = 0; i < cg.constraints.size(); i++) {
+                auto & c = cg.constraints[i];
+                if (Contains(determinableEnts, c.ent1) && Contains(determinableEnts, c.ent2)) {
+                    relatedCons.push_back(i);
+                }
+            }
+
+            // connectivity term
+            // the elements of sparse matrix A
+            // inverse depths of vert1s on each anchor A1 * X
+            // inverse depths of vert2s on each anchor A2 * X
+            // weight on each anchor W
+            std::vector<SparseMatElementd> A1triplets, A2triplets;
+            std::vector<double> WA;
+            int eidA = 0;
+
+            // coplanarity term
+            std::vector<SparseMatElementd> C1triplets, C2triplets;
+            std::vector<double> WC;
+            int eidC = 0;
+
+            for (int i = 0; i < relatedCons.size(); i++) {
+                auto & constraint = cg.constraints[relatedCons[i]];
+                auto & entity1 = cg.entities[constraint.ent1];
+                auto & entity2 = cg.entities[constraint.ent2];
+                int varpos1 = ent2varPosition[constraint.ent1];
+                int varpos2 = ent2varPosition[constraint.ent2];
+
+                if (constraint.isConnection()) { // connections
+                    double eachWeight = sqrt(constraint.weight / constraint.anchors.size());
+                    for (auto & anchor : constraint.anchors) {
+                        auto coeffs1 = InverseDepthCoefficientsAtDirection(mg, entity1, anchor);
+                        for (int k = 0; k < coeffs1.size(); k++) {
+                            A1triplets.emplace_back(eidA, varpos1 + k, coeffs1[k]);
+                        }
+                        auto coeffs2 = InverseDepthCoefficientsAtDirection(mg, entity2, anchor);
+                        for (int k = 0; k < coeffs2.size(); k++) {
+                            A2triplets.emplace_back(eidA, varpos2 + k, coeffs2[k]);
+                        }
+                        WA.push_back(eachWeight);
+                        eidA++;
+                    }
+                } else { // coplanarities
+                    assert(entity1.isSeg() && entity2.isSeg());
+                    auto segPlaneCoeffs1 = SegPlaneEquationCoefficients(mg, entity1.id);
+                    assert(segPlaneCoeffs1.rows == 3);
+                    int dof1 = segPlaneCoeffs1.cols;
+                    auto segPlaneCoeffs2 = SegPlaneEquationCoefficients(mg, entity2.id);
+                    assert(segPlaneCoeffs2.rows == 3);
+                    int dof2 = segPlaneCoeffs2.cols;
+
+                    for (int k = 0; k < 3; k++) {
+                        for (int s = 0; s < segPlaneCoeffs1.cols; s++) {
+                            C1triplets.emplace_back(eidC, varpos1 + s, segPlaneCoeffs1(k, s));
+                        }
+                        for (int s = 0; s < segPlaneCoeffs2.cols; s++) {
+                            C2triplets.emplace_back(eidC, varpos2 + s, segPlaneCoeffs2(k, s));
+                        }
+                        WC.push_back(constraint.weight);
+                        eidC++;
                     }
                 }
-                return neighbors;
-            }, [this](int entid, int ccid) {
-                ent2cc[entid] = ccid;
-                cc2ents[ccid].push_back(entid);
-            });
+            }
+            int neqsA = eidA;
+            auto A1 = MakeSparseMatFromElements(neqsA, nvars, A1triplets.begin(), A1triplets.end());
+            auto A2 = MakeSparseMatFromElements(neqsA, nvars, A2triplets.begin(), A2triplets.end());
 
-            std::cout << "nccs = " << nccs << std::endl;
+            int neqsC = eidC;
+            auto C1 = MakeSparseMatFromElements(neqsC, nvars, C1triplets.begin(), C1triplets.end());
+            auto C2 = MakeSparseMatFromElements(neqsC, nvars, C2triplets.begin(), C2triplets.end());
 
 
-            // order ccs from large to small
-            ccsBigToSmall.resize(nccs);
-            std::iota(ccsBigToSmall.begin(), ccsBigToSmall.end(), 0);
-            std::sort(ccsBigToSmall.begin(), ccsBigToSmall.end(), [this](int a, int b) {
-                return cc2ents.at(a).size() > cc2ents.at(b).size();
-            });
+            matlab << "clear;";
+            matlab.setVar("A1", A1);
+            matlab.setVar("A2", A2);
+            matlab.setVar("C1", C1);
+            matlab.setVar("C2", C2);
+            matlab.setVar("WA", cv::Mat(WA));
+            matlab.setVar("WC", cv::Mat(WC));
+
+            matlab << "m = size(A1, 1);"; // number of connection equations
+            matlab << "n = size(A1, 2);"; // number of variables
+            matlab << "p = size(C1, 1);"; // number of coplanarity equations
+
+            matlab << "scale = 2.0;";
+
+            double minE = std::numeric_limits<double>::infinity();
+
+            std::vector<double> X;
+
+           
+            for (int k = 0; k < 100; k++) {
+                matlab << "D1D2 = ones(m, 1);"; //  current depths of anchors
+                matlab << "E1E2 = ones(p, 1);";
+
+                while (true) {
+
+                    matlab << "K = (A1 - A2) .* repmat(D1D2 .* WA, [1, n]);";
+                    matlab << "R = (C1 - C2) .* repmat(E1E2 .* WC, [1, n]);";
+                    matlab
+                        << "cvx_begin"
+                        << "variable X(n);"
+                        << "minimize sum_square(K * X) + sum_square(R * X)"
+                        << "subject to"
+                        << "    ones(m, 1) <= A1 * X <= ones(m, 1) * scale;"
+                        << "    ones(m, 1) <= A2 * X <= ones(m, 1) * scale;"
+                        << "cvx_end";
+                    matlab << "D1D2 = 1./ (A1 * X) ./ (A2 * X);";
+                    matlab << "D1D2 = abs(D1D2) / norm(D1D2);";
+                    matlab << "E1E2 = 1./ (C1 * X) ./ (C2 * X);";
+                    matlab << "E1E2 = E1E2 / norm(E1E2);";
+                    matlab << "K = (A1 - A2) .* repmat(D1D2 .* WA, [1, n]);";
+                    matlab << "R = (C1 - C2) .* repmat(E1E2 .* WC, [1, n]);";
+
+                    matlab << "e = sum_square(K * X) + sum_square(R * X);";
+                    double curE = matlab.var("e").scalar();
+                    std::cout << "e = " << curE << std::endl;
+                    if (IsInfOrNaN(curE)) {
+                        break;
+                    }
+                    if (curE < minE) {
+                        minE = curE;
+                        matlab << "X = 2 * X ./ median((A1 + A2) * X);";
+                        X = matlab.var("X").toCVMat();
+                    } else {
+                        break;
+                    }
+                }
+                if (!IsInfOrNaN(minE)) {
+                    break;
+                }
+                matlab << "scale = scale * 3;";
+            }
+
+
+            // install results
+            for (int ent : determinableEnts) {
+                int varpos = ent2varPosition[ent];
+                auto & e = cg.entities[ent];
+                if (e.isSeg()) {
+                    int seg = e.id;
+                    mg.seg2recPlanes[seg] = SegInstance(mg, X.data() + varpos, seg);
+                } else {
+                    int line = e.id;
+                    mg.line2recLines[line] = LineInstance(mg, X.data() + varpos, line);
+                }
+            }
+
+            return minE;
+
         }
 
-        void PIConstraintGraph::reconstructLargestCC() const {
-
-        }
+      
 
     }
 }

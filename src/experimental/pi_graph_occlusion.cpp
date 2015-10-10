@@ -891,13 +891,6 @@ namespace pano {
 
             std::cout << "building factor graph" << std::endl;
 
-            struct LineLabel {
-                bool connectLeft, connectRight;
-                bool operator == (LineLabel ll) const { return connectLeft == ll.connectLeft && connectRight == ll.connectRight; }
-                bool operator != (LineLabel ll) const { return !(*this == ll); }
-                LineLabel operator !() const { return LineLabel{ !connectLeft, !connectRight }; }
-                LineLabel leftRightSwapped() const { return LineLabel{ connectRight, connectLeft }; }
-            };
             std::vector<std::vector<LineLabel>> line2allowedLabels(mg.nlines());
             std::vector<ml::FactorGraph::VarHandle> line2vh(mg.nlines());
             std::map<ml::FactorGraph::VarHandle, int> vh2line;
@@ -916,12 +909,7 @@ namespace pano {
             // factors preparation
 
             // orientation consistency term between seg and line
-            struct LineLabelCost {
-                double connectLeftConnectRight;
-                double connectLeftDisconnectRight;
-                double disconnectLeftConnectRight;
-                double disconnectAll;
-            };
+           
             std::vector<LineLabelCost> line2labelCost(mg.nlines(), { 0, 1e-8, 1e-8, 1.0 });
 
             for (int line = 0; line < mg.nlines(); line++) {

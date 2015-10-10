@@ -1,3 +1,4 @@
+#include "../gui/qttools.hpp"
 #include "cache.hpp"
 
 namespace pano {
@@ -14,6 +15,13 @@ namespace pano {
 
         std::string CachePath() {
             return PROJECT_CACHE_DIR_STR"/";
+        }
+
+        std::string FolderOfFile(const std::string & filepath) {
+            QFileInfo finfo(QString::fromStdString(filepath));
+            if (!finfo.exists())
+                return std::string();
+            return finfo.absolutePath().toStdString();
         }
 
     }

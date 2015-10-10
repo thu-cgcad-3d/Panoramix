@@ -545,19 +545,19 @@ namespace pano {
 
 
         // max heap
-        template <class KeyT, class ScoreT = double, class KeyToIdT = std::unordered_map<KeyT, int>>
+        template <class KeyT, class ScoreT = double, class ScoreCompareT = std::less<ScoreT>, class KeyToIdT = std::unordered_map<KeyT, int>>
         class MaxHeap {            
         public:
             using iterator = typename std::vector<Scored<KeyT, ScoreT>>::iterator;
             using const_iterator = typename std::vector<Scored<KeyT, ScoreT>>::const_iterator;
             using value_type = Scored<KeyT, ScoreT>;
 
-            inline MaxHeap() {}
+            inline MaxHeap(const ScoreCompareT & cmp = ScoreCompareT()) : _scoreCompare(cmp) {}
             
             template <class IteratorT, 
             class = std::enable_if_t<
                 std::is_same<std::iterator_traits<IteratorT>::value_type, core::Scored<KeyT, ScoreT>>::value>>
-            inline MaxHeap(IteratorT begin, IteratorT end) {
+            inline MaxHeap(IteratorT begin, IteratorT end, const ScoreCompareT & cmp = ScoreCompareT()) : _scoreCompare(cmp) {
                 _data.reserve(std::distance(begin, end));
                 while (begin != end){
                     _data.push_back(*begin);
@@ -570,7 +570,8 @@ namespace pano {
             template <class IteratorT,
             class = std::enable_if_t<
                 std::is_same<std::iterator_traits<IteratorT>::value_type, KeyT>::value>>
-            inline MaxHeap(IteratorT vbegin, IteratorT vend, const ScoreT & defaultScore = ScoreT()) {
+            inline MaxHeap(IteratorT vbegin, IteratorT vend, const ScoreT & defaultScore = ScoreT(), 
+                const ScoreCompareT & cmp = ScoreCompareT()) : _scoreCompare(cmp) {
                 _data.reserve(std::distance(vbegin, vend));
                 while (vbegin != vend){
                     _data.push_back(core::ScoreAs(*vbegin, defaultScore));
@@ -624,7 +625,7 @@ namespace pano {
                 else if (newScore > oldScore){ // increase key
                     int id = _keyToId[key];
                     _data[id].score = newScore;
-                    while (id > 0 && _data[parentId(id)].score < _data[id].score){
+                    while (id > 0 && _scoreCompare(_data[parentId(id)].score, _data[id].score)){
                         swapKeys(id, parentId(id));
                         id = parentId(id);
                     }
@@ -640,7 +641,7 @@ namespace pano {
                 _data.push_back(e);
                 _keyToId[e.component] = _data.size() - 1;
                 int id = _data.size() - 1;
-                while (id > 0 && _data[parentId(id)].score < _data[id].score){
+                while (id > 0 && _scoreCompare(_data[parentId(id)].score, _data[id].score)){
                     swapKeys(id, parentId(id));
                     id = parentId(id);
                 }
@@ -649,6 +650,15 @@ namespace pano {
             inline void push(const KeyT & t, const ScoreT & s){
                 push(core::ScoreAs(t, s));
             }
+
+            inline void pushOrSet(const KeyT & key, const ScoreT & newScore) {
+                if (!contains(key)) {
+                    push(key, newScore);
+                } else {
+                    setScore(key, newScore);
+                }
+            }
+
             inline void clear(){ _data.clear(); _keyToId.clear(); }
             inline void swap(MaxHeap<KeyT, ScoreT> & h){ 
                 _data.swap(h._data); 
@@ -671,10 +681,10 @@ namespace pano {
                 auto l = leftId(id);
                 auto r = rightId(id);
                 int largest = id;
-                if (l < _data.size() && _data[id].score < _data[l].score){
+                if (l < _data.size() && _scoreCompare(_data[id].score, _data[l].score)){
                     largest = l;
                 }
-                if (r < _data.size() && _data[largest].score < _data[r].score){
+                if (r < _data.size() && _scoreCompare(_data[largest].score, _data[r].score)) {
                     largest = r;
                 }
                 if (largest != id){
@@ -692,10 +702,11 @@ namespace pano {
         private:
             std::vector<Scored<KeyT, ScoreT>> _data;
             KeyToIdT _keyToId;
+            ScoreCompareT _scoreCompare;
         };
 
-        template <class KeyT, class ScoreT, class KeyToIdT>
-        inline bool Contains(const MaxHeap<KeyT, ScoreT, KeyToIdT> & h, const KeyT & k){
+        template <class KeyT, class ScoreT, class ScoreCompareT, class KeyToIdT>
+        inline bool Contains(const MaxHeap<KeyT, ScoreT, ScoreCompareT, KeyToIdT> & h, const KeyT & k) {
             return h.contains(k);
         }
 
