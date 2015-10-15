@@ -232,8 +232,8 @@ namespace panolyz {
 
                 // estimate segs
                 nsegs = SegmentationForPIGraph(view, line3s, segs, DegreesToRadians(1), 0);
-                //RemoveThinRegionInSegmentation(segs, 1, true);
-                //nsegs = DensifySegmentation(segs, true);
+                RemoveThinRegionInSegmentation(segs, 1, true);
+                nsegs = DensifySegmentation(segs, true);
                 assert(IsDenseSegmentation(segs));
 
                 if (1) {
@@ -316,7 +316,7 @@ namespace panolyz {
 
 
             // build pigraph!
-            bool refresh_mg_init = refresh_preparation || true;
+            bool refresh_mg_init = refresh_preparation || false;
             if (refresh_mg_init || !misc::LoadCache(impath, "mg_init", mg)) {
                 std::cout << "########## refreshing mg init ###########" << std::endl;
 

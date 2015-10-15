@@ -539,7 +539,7 @@ namespace pano {
                     matlab << "K = (A1 - A2) .* repmat(D1D2 .* WA, [1, n]);";
                     matlab << "R = (C1 - C2) .* repmat(WC, [1, n]);";
                     
-                    static const std::string objectiveStr = "sum_square(K * X) * 1e8 + sum_square(R * X)";
+                    static const std::string objectiveStr = "sum_square(K * X) * 1e6 + sum_square(R * X)";
                     //static const std::string objectiveStr = "sum_square(K * X)";
 
                     matlab

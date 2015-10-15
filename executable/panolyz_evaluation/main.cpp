@@ -11,8 +11,8 @@ int main(int argc, char ** argv) {
     pano::misc::Matlab matlab;
     
     std::vector<std::string> impaths;
-    impaths = { "H:\\DataSet\\PanoContext\\bedroom\\pano_aaccxxpwmsdgvj\\pano_aaccxxpwmsdgvj.jpg" };
-    //pano::gui::PickImages("H:\\DataSet\\PanoContext\\bedroom\\", &impaths);
+    //impaths = { "H:\\DataSet\\PanoContext\\bedroom\\pano_aaccxxpwmsdgvj\\pano_aaccxxpwmsdgvj.jpg" };
+    pano::gui::PickImages("H:\\DataSet\\PanoContext\\bedroom\\", &impaths);
     auto directions = panolyz::FibonacciDirections(1000);
 
     for (auto & impath : impaths) {
