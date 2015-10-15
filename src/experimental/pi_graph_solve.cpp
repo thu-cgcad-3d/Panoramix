@@ -517,12 +517,9 @@ namespace pano {
             matlab.setVar("WA", cv::Mat(WA));
             matlab.setVar("WC", cv::Mat(WC));
 
-            SparseMatElementd X2RootTriplet[] = { SparseMatElementd(0, rootVarPos, 1.0) };
-            auto X2Root = MakeSparseMatFromElements(1, nvars, std::begin(X2RootTriplet), std::end(X2RootTriplet));
-            matlab.setVar("X2Root", X2Root);
-
-            //matlab << "WA = ones(size(WA));";
-            //matlab << "WC = ones(size(WC));";
+            //SparseMatElementd X2RootTriplet[] = { SparseMatElementd(0, rootVarPos, 1.0) };
+            //auto X2Root = MakeSparseMatFromElements(1, nvars, std::begin(X2RootTriplet), std::end(X2RootTriplet));
+            //matlab.setVar("X2Root", X2Root);
 
             matlab << "m = size(A1, 1);"; // number of connection equations
             matlab << "n = size(A1, 2);"; // number of variables
@@ -542,8 +539,8 @@ namespace pano {
                     matlab << "K = (A1 - A2) .* repmat(D1D2 .* WA, [1, n]);";
                     matlab << "R = (C1 - C2) .* repmat(WC, [1, n]);";
                     
-                    //static const std::string objectiveStr = "sum_square(K * X) + sum_square(R * X) * 0.01";
-                    static const std::string objectiveStr = "sum_square(K * X)";
+                    static const std::string objectiveStr = "sum_square(K * X) * 1e8 + sum_square(R * X)";
+                    //static const std::string objectiveStr = "sum_square(K * X)";
 
                     matlab
                         << "cvx_begin"

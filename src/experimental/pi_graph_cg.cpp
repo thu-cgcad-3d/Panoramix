@@ -352,7 +352,7 @@ namespace pano {
                 ent2cons[connect.ent2].push_back(connectCon);
 
                 // check whether this bp lies on a line
-                if (!mg.bndPiece2linePieces[i].empty()) {
+                if (!mg.bndPiece2linePieces[i].empty() || len < minAngleThresForAWideEdge) {
                     // if so, no planarity will be assigned
                     continue;
                 }
