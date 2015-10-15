@@ -11,12 +11,18 @@ int main(int argc, char ** argv) {
     pano::misc::Matlab matlab;
     
     std::vector<std::string> impaths;
-    pano::gui::PickImages("H:\\DataSet\\PanoContext\\bedroom\\", &impaths);
+    impaths = { "H:\\DataSet\\PanoContext\\bedroom\\pano_aaccxxpwmsdgvj\\pano_aaccxxpwmsdgvj.jpg" };
+    //pano::gui::PickImages("H:\\DataSet\\PanoContext\\bedroom\\", &impaths);
     auto directions = panolyz::FibonacciDirections(1000);
 
     for (auto & impath : impaths) {
         auto anno = pano::experimental::LoadOrInitializeNewLayoutAnnotation(impath);
         pano::experimental::SaveLayoutAnnotation(impath, anno);
+
+        //{ // for debug only
+        //    panolyz::DebugPIGraph(impath, matlab);
+        //    continue;
+        //}        
 
         //auto modelGT = panolyz::PredictionOfGT(impath);
         //modelGT->visualize(directions);

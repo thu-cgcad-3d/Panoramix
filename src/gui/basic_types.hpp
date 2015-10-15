@@ -172,16 +172,6 @@ namespace pano {
             inline ColorTable(ColorIteratorT begin, ColorIteratorT end, const Color & exceptColor = ColorTag::Transparent)
                 : _colors(begin, end), _exceptionalColor(exceptColor) {}
 
-
-            inline ColorTable(ColorTable && ctable) 
-                : _colors(std::move(ctable._colors)), _exceptionalColor(std::move(ctable._exceptionalColor)) {}
-            ColorTable & operator = (ColorTable && ctable) { 
-                _colors = std::move(ctable._colors); 
-                _exceptionalColor = std::move(ctable._exceptionalColor); 
-                return *this;
-            }
-
-
         public:
             const std::vector<Color> & colors() const { return _colors; }
             size_t size() const { return _colors.size(); }

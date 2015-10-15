@@ -618,44 +618,31 @@ namespace pano {
                 maxHeapify(0);
             }
             
-            void setScore(const KeyT & key, const ScoreT & newScore){
-                auto & oldScore = at(key);
-                if (oldScore == newScore)
-                    return;
-                else if (newScore > oldScore){ // increase key
-                    int id = _keyToId[key];
-                    _data[id].score = newScore;
-                    while (id > 0 && _scoreCompare(_data[parentId(id)].score, _data[id].score)){
+            void set(const KeyT & key, const ScoreT & newScore){
+                if (!contains(key)) {
+                    _data.push_back(ScoreAs(key, newScore));
+                    _keyToId[key] = _data.size() - 1;
+                    int id = _data.size() - 1;
+                    while (id > 0 && _scoreCompare(_data[parentId(id)].score, _data[id].score)) {
                         swapKeys(id, parentId(id));
                         id = parentId(id);
                     }
-                }
-                else{ // decrease key
-                    int id = _keyToId[key];
-                    _data[id].score = newScore;
-                    maxHeapify(id);
-                }
-            }
-            
-            void push(const Scored<KeyT, ScoreT> & e) {
-                _data.push_back(e);
-                _keyToId[e.component] = _data.size() - 1;
-                int id = _data.size() - 1;
-                while (id > 0 && _scoreCompare(_data[parentId(id)].score, _data[id].score)){
-                    swapKeys(id, parentId(id));
-                    id = parentId(id);
-                }
-            }
-            
-            inline void push(const KeyT & t, const ScoreT & s){
-                push(core::ScoreAs(t, s));
-            }
-
-            inline void pushOrSet(const KeyT & key, const ScoreT & newScore) {
-                if (!contains(key)) {
-                    push(key, newScore);
                 } else {
-                    setScore(key, newScore);
+                    auto & oldScore = at(key);
+                    if (oldScore == newScore)
+                        return;
+                    else if (_scoreCompare(oldScore, newScore)) { // increase key
+                        int id = _keyToId[key];
+                        _data[id].score = newScore;
+                        while (id > 0 && _scoreCompare(_data[parentId(id)].score, _data[id].score)) {
+                            swapKeys(id, parentId(id));
+                            id = parentId(id);
+                        }
+                    } else { // decrease key
+                        int id = _keyToId[key];
+                        _data[id].score = newScore;
+                        maxHeapify(id);
+                    }
                 }
             }
 

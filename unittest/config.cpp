@@ -52,10 +52,11 @@ int main(int argc, char * argv[], char * envp[]) {
    //testing::GTEST_FLAG(filter) = "BasicType.*";
    //testing::GTEST_FLAG(filter) = "Feature.OcclusionDetection";
    //testing::GTEST_FLAG(filter) = "ContainerTest.Dictionary";
+   testing::GTEST_FLAG(filter) = "ContainerTest.MaxHeap";
    //testing::GTEST_FLAG(filter) = "SingleView.ComputeSpatialRegionProperties";
    //testing::GTEST_FLAG(filter) = "Feature.ExtractSegmentationTopology";
    //testing::GTEST_FLAG(filter) = "Feature.RemoveThinRegionInSegmentation";
-   testing::GTEST_FLAG(filter) = "Feature.RemoveSmallRegionInSegmentation";
+   //testing::GTEST_FLAG(filter) = "Feature.RemoveSmallRegionInSegmentation";
    
    return RUN_ALL_TESTS();
 }

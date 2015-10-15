@@ -16,6 +16,7 @@ namespace pano {
                 subdivisionNums[0] = 32;
                 subdivisionNums[1] = 64;
             }
+
             EntityPtr entity;
             Color color;
             ColorTable colorTable;

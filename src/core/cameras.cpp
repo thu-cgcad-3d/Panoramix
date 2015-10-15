@@ -332,38 +332,38 @@ namespace pano {
 
         }
 
-        UniformSphericalCamera::UniformSphericalCamera(double focal, double angleRadius,
-            const Point3 & eye /*= Origin()*/, const Point3 & center /*= X()*/, const Vec3 & up /*= -Z()*/)
-            : _focal(focal), _screenRadius(UniformSphericalAngleToScreenLength(angleRadius, focal)),
-            _eye(eye), _center(center), _up(up) {
-            _xaxis = (_center - _eye); _xaxis /= core::norm(_xaxis);
-            _yaxis = _up.cross(_xaxis); _yaxis /= core::norm(_yaxis);
-            _zaxis = normalize(_xaxis.cross(_yaxis));
-        }
+        //UniformSphericalCamera::UniformSphericalCamera(double focal, double angleRadius,
+        //    const Point3 & eye /*= Origin()*/, const Point3 & center /*= X()*/, const Vec3 & up /*= -Z()*/)
+        //    : _focal(focal), _screenRadius(UniformSphericalAngleToScreenLength(angleRadius, focal)),
+        //    _eye(eye), _center(center), _up(up) {
+        //    _xaxis = (_center - _eye); _xaxis /= core::norm(_xaxis);
+        //    _yaxis = _up.cross(_xaxis); _yaxis /= core::norm(_yaxis);
+        //    _zaxis = normalize(_xaxis.cross(_yaxis));
+        //}
 
-        Point2 UniformSphericalCamera::toScreen(const Point3 & p3) const {
-            double yy = (p3 - _eye).dot(_yaxis);
-            double zz = (p3 - _eye).dot(_zaxis);
-            double a = sqrt(yy * yy + zz * zz);
-            yy /= a;
-            zz /= a;
-            double theta = AngleBetweenDirections(p3 - _eye, _center - _eye);
-            double len = UniformSphericalAngleToScreenLength(theta, _focal);
-            return Point2(_screenRadius + yy * len, _screenRadius + zz * len);
-        }
+        //Point2 UniformSphericalCamera::toScreen(const Point3 & p3) const {
+        //    double yy = (p3 - _eye).dot(_yaxis);
+        //    double zz = (p3 - _eye).dot(_zaxis);
+        //    double a = sqrt(yy * yy + zz * zz);
+        //    yy /= a;
+        //    zz /= a;
+        //    double theta = AngleBetweenDirections(p3 - _eye, _center - _eye);
+        //    double len = UniformSphericalAngleToScreenLength(theta, _focal);
+        //    return Point2(_screenRadius + yy * len, _screenRadius + zz * len);
+        //}
 
-        bool UniformSphericalCamera::isVisibleOnScreen(const Point3 & p3d) const {
-            Point2 p2 = toScreen(p3d);
-            return p2[0] >= 0 && p2[0] <= 2 * _screenRadius && p2[1] >= 0 && p2[1] <= 2 * _screenRadius;
-        }
+        //bool UniformSphericalCamera::isVisibleOnScreen(const Point3 & p3d) const {
+        //    Point2 p2 = toScreen(p3d);
+        //    return p2[0] >= 0 && p2[0] <= 2 * _screenRadius && p2[1] >= 0 && p2[1] <= 2 * _screenRadius;
+        //}
 
-        Point3 UniformSphericalCamera::toSpace(const Point2 & p2d) const {
-            Vec2 v2 = p2d - Point2(_screenRadius, _screenRadius);
-            Vec3 v3 = normalize(_yaxis * v2[0] + _zaxis * v2[1]);
-            double len = Distance(p2d, Point2(_screenRadius, _screenRadius));
-            double theta = UniformSphericalScreenLengthToAngle(len, _focal);
-            return v3 * sin(theta) * Distance(_eye, _center) + _center * cos(theta);
-        }
+        //Point3 UniformSphericalCamera::toSpace(const Point2 & p2d) const {
+        //    Vec2 v2 = p2d - Point2(_screenRadius, _screenRadius);
+        //    Vec3 v3 = normalize(_yaxis * v2[0] + _zaxis * v2[1]);
+        //    double len = Distance(p2d, Point2(_screenRadius, _screenRadius));
+        //    double theta = UniformSphericalScreenLengthToAngle(len, _focal);
+        //    return v3 * sin(theta) * Distance(_eye, _center) + _center * cos(theta);
+        //}
 
 
 

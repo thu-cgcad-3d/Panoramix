@@ -111,9 +111,6 @@ namespace pano {
             std::vector<std::vector<int>> junc2bnds;
             int njuncs() const { return junc2positions.size(); }
 
-            std::vector<Plane3> seg2recPlanes;
-            std::vector<Line3> line2recLines;
-
 
             template <class Archiver>
             void serialize(Archiver & ar) {
@@ -125,7 +122,6 @@ namespace pano {
                 ar(bndPiece2dirs, bndPiece2length, bndPiece2classes, bndPiece2bnd, bndPiece2linePieces, bndPiece2segRelation);
                 ar(bnd2bndPieces, bnd2segs, bnd2juncs);
                 ar(junc2positions, junc2bnds);
-                ar(seg2recPlanes, line2recLines);
             }
         };
 

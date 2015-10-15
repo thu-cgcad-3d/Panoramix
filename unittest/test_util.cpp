@@ -546,7 +546,7 @@ TEST(ContainerTest, MaxHeap){
 
     ASSERT_EQ(Q.size(), H.size());
 
-    int count = 0;
+    int count = ids.size() + 1;
     while (!Q.empty()){
         ASSERT_EQ(Q.size(), H.size());
         ASSERT_EQ(Q.top().score, H.topScore());
@@ -556,7 +556,7 @@ TEST(ContainerTest, MaxHeap){
         if (count % 2 == 0){
             double v = randf();
             Q.push(core::ScoreAs(count, v));
-            H.push(count, v);
+            H.set(count, v);
         }
 
         count++;
@@ -565,11 +565,11 @@ TEST(ContainerTest, MaxHeap){
     core::MaxHeap<int> HH;
     int N = 5000;
     for (int i = 0; i < N; i++){
-        HH.push(i, randf());
+        HH.set(i, randf());
     }
     for (int i = 0; i < N * 3; i++){
         int key = i % N;
-        HH.setScore(key, randf());
+        HH.set(key, randf());
         int topKey = HH.top();
         // assert topKey has the highest score
         for (int j = 0; j < N; j++){

@@ -359,7 +359,7 @@ namespace pano {
                 // copy indices to mxIndices
                 std::copy(cvIndices, cvIndices + im.dims, mxIndices);
                 for (mwIndex k = 0; k < channels; k++) {
-                    uint8_t * toDataHead = (*iter) + k * szForEachElem;
+                    uint8_t * toDataHead = (uint8_t*)(*iter) + k * szForEachElem;
                     mxIndices[im.dims] = k; // set the last indices
                     const uint8_t * fromDataHead = mad + mxCalcSingleSubscript(ma, im.dims + 1, mxIndices) * szForEachElem;
                     std::memcpy(toDataHead, fromDataHead, szForEachElem);

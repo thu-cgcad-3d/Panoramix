@@ -13,7 +13,7 @@ namespace pano {
             RLGraphPatch patch;
             MaxHeap<RHandle, double> heapr;
             MaxHeap<LHandle, double> heapl;
-            heapr.push(centerRh, 1.0);
+            heapr.set(centerRh, 1.0);
 
             auto & center = g.data(centerRh).normalizedCenter;
 
@@ -128,7 +128,7 @@ namespace pano {
                         continue;
                     }
                     double score = 1.0 / angleDist;
-                    heapr.push(rhcand, score);
+                    heapr.set(rhcand, score);
                 }
                 for (auto lhcand : lhcands) {
                     if (patch.contains(lhcand)) {
@@ -140,7 +140,7 @@ namespace pano {
                         continue;
                     }
                     double score = 1.0 / angleDist;
-                    heapl.push(lhcand, score);
+                    heapl.set(lhcand, score);
                 }
             }
 

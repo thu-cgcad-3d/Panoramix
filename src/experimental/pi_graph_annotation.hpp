@@ -64,6 +64,10 @@ namespace pano {
 
         void SaveLayoutAnnotation(const std::string & imagePath, const PILayoutAnnotation & anno);
 
+
+        PIGraph ConvertToPIGraph(const PILayoutAnnotation & anno);
+
+
     }
 }
 

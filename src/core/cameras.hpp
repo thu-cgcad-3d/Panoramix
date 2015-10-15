@@ -174,35 +174,35 @@ namespace pano {
 
 
 
-        // 
-        class UniformSphericalCamera {
-        public:
-            explicit UniformSphericalCamera(double focal = 250.0, double angleRadius = 0.2,
-                const Point3 & eye = Origin(),
-                const Point3 & center = X(),
-                const Vec3 & up = -Z());
+        //// 
+        //class UniformSphericalCamera {
+        //public:
+        //    explicit UniformSphericalCamera(double focal = 250.0, double angleRadius = 0.2,
+        //        const Point3 & eye = Origin(),
+        //        const Point3 & center = X(),
+        //        const Vec3 & up = -Z());
 
-            inline const Point3 & eye() const { return _eye; }
-            inline const Point3 & center() const { return _center; }
-            inline const Vec3 & up() const { return _up; }
-            inline Sizei screenSize() const { return Size(static_cast<int>(_screenRadius * 2), static_cast<int>(_screenRadius * 2)); }
-            Point2 toScreen(const Point3 & p3d) const;
-            inline HPoint2 toScreenInHPoint(const Point3 & p3d) const { return HPoint2(toScreen(p3d), 1.0); }
-            bool isVisibleOnScreen(const Point3 & p3d) const;
-            Point3 toSpace(const Point2 & p2d) const;
-            inline Point3 toSpace(const Pixel & p) const { toSpace(Vec2(p.x, p.y)); }
+        //    inline const Point3 & eye() const { return _eye; }
+        //    inline const Point3 & center() const { return _center; }
+        //    inline const Vec3 & up() const { return _up; }
+        //    inline Sizei screenSize() const { return Size(static_cast<int>(_screenRadius * 2), static_cast<int>(_screenRadius * 2)); }
+        //    Point2 toScreen(const Point3 & p3d) const;
+        //    inline HPoint2 toScreenInHPoint(const Point3 & p3d) const { return HPoint2(toScreen(p3d), 1.0); }
+        //    bool isVisibleOnScreen(const Point3 & p3d) const;
+        //    Point3 toSpace(const Point2 & p2d) const;
+        //    inline Point3 toSpace(const Pixel & p) const { toSpace(Vec2(p.x, p.y)); }
 
-        private:
-            double _focal;
-            double _screenRadius;
-            Vec3 _eye, _center, _up;
-            Vec3 _xaxis, _yaxis, _zaxis;
-            
-            template <class Archive> inline void serialize(Archive & ar) {
-                ar(_focal, _screenRadius, _eye, _center, _up);
-                ar(_xaxis, _yaxis, _zaxis);
-            }
-        };
+        //private:
+        //    double _focal;
+        //    double _screenRadius;
+        //    Vec3 _eye, _center, _up;
+        //    Vec3 _xaxis, _yaxis, _zaxis;
+        //    
+        //    template <class Archive> inline void serialize(Archive & ar) {
+        //        ar(_focal, _screenRadius, _eye, _center, _up);
+        //        ar(_xaxis, _yaxis, _zaxis);
+        //    }
+        //};
 
 
       

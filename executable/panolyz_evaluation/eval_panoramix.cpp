@@ -8,10 +8,131 @@
 
 #include "../../src/experimental/pi_graph_control.hpp"
 #include "../../src/experimental/pi_graph_occlusion.hpp"
-//#include "../../src/experimental/pi_graph_solve.hpp"
+#include "../../src/experimental/pi_graph_cg.hpp"
 #include "../../src/experimental/pi_graph_vis.hpp"
 
 namespace panolyz {
+
+
+    void DebugPIGraph(const std::string & impath, misc::Matlab & matlab) {
+         pano::experimental::PIGraph mg;
+
+       const auto printPIGraphControls = [&mg](int delay) {
+            const auto bpColor = [&mg](int bp) -> gui::Color {
+                auto occ = mg.bndPiece2segRelation[bp];
+                if (occ == SegRelation::Connected) {
+                    return gui::LightGray;
+                } else if (occ == SegRelation::LeftIsFront) {
+                    return gui::Color(gui::Green);
+                } else {
+                    return gui::Color(gui::Blue);
+                }
+            };
+            const auto lpColor = [&mg, bpColor](int lp) -> gui::Color {
+                if (mg.linePiece2bndPiece[lp] != -1) {
+                    return bpColor(mg.linePiece2bndPiece[lp]) * 0.9;
+                } else {
+                    return mg.linePiece2segLineRelation[lp] == SegLineRelation::Detached ? gui::Black : gui::LightGray;
+                }
+            };
+            const auto segColor = [&mg](int seg) -> gui::Color {
+                static const gui::ColorTable ctable = gui::ColorTableDescriptor::RGBGreys;
+                auto & c = mg.seg2control[seg];
+                if (!c.used) {
+                    return gui::Black;
+                }
+                if (c.orientationClaz != -1) {
+                    return ctable[c.orientationClaz].blendWith(gui::White, 0.5);
+                }
+                if (c.orientationNotClaz != -1) {
+                    return ctable[c.orientationNotClaz].blendWith(gui::White, 0.3);
+                }
+                return gui::White;
+            };
+            auto pim = Print(mg, segColor, ConstantFunctor<gui::Color>(gui::Transparent), bpColor, 1, 3);
+            gui::AsCanvas(pim).show(delay, "pi graph controled");
+        };
+
+       pano::misc::LoadCache(impath, "annomg2", mg);
+
+       PanoramicView view;
+       std::vector<Vec3> vps;
+       int verticalVPId;
+       pano::misc::LoadCache(impath, "tmp_view_vps_vertvpid", view, vps, verticalVPId);
+
+       // load lines
+       std::vector<Classified<Line3>> line3s;
+       {
+           View<PanoramicCamera, Image3ub> _view;
+           std::vector<PerspectiveCamera> _cams;
+           std::vector<Vec3> _vps;
+           int _vertVPId;
+           Imagei _segs;
+           int _nsegs;
+           misc::LoadCache(impath, "preparation", _view, _cams, line3s, _vps, _vertVPId, _segs, _nsegs);
+
+           std::sort(line3s.begin(), line3s.end(), 
+               [](const Classified<Line3> & a, const Classified<Line3> & b) {
+               return AngleBetweenDirections(a.component.first, a.component.second) >
+                   AngleBetweenDirections(b.component.first, b.component.second);
+           });
+           //line3s.erase(line3s.begin() + 0, line3s.end());
+           line3s.clear();
+       }
+
+       int nsegs;
+       Imagei segs;
+       nsegs = SegmentationForPIGraph(mg.view, line3s, segs, DegreesToRadians(1), 0);
+       mg = BuildPIGraph(mg.view, mg.vps, mg.verticalVPId, segs, line3s,
+           DegreesToRadians(1), DegreesToRadians(1), DegreesToRadians(2),
+           0.04, 0.1, 0.02);
+
+
+       /*if(0){
+           auto ctable = gui::CreateRandomColorTableWithSize(mg.nsegs);
+           Image segsim = ctable(mg.segs);
+           cv::imwrite("./segs.png", segsim);
+       }*/
+       /*if (1) {
+           Image segsim = cv::imread("./segs.png");
+           int nsegs;
+           Imagei segs;
+           nsegs = SegmentationForPIGraph(mg.view, {}, segs, 0, 0);
+           mg = BuildPIGraph(mg.view, mg.vps, mg.verticalVPId, segs, {},
+               DegreesToRadians(1), DegreesToRadians(1), DegreesToRadians(2),
+               DegreesToRadians(5), DegreesToRadians(60), DegreesToRadians(5));
+           pano::misc::SaveCache(impath, "annomg2", mg);
+       }*/
+
+
+        pano::experimental::AttachPrincipleDirectionConstraints(mg);
+        pano::experimental::AttachWallConstraints(mg, M_PI / 60.0);
+        pano::experimental::DetectOcclusions2(mg);
+
+        printPIGraphControls(0);
+
+        auto cg = pano::experimental::BuildPIConstraintGraph(mg, pano::core::DegreesToRadians(1), pano::core::DegreesToRadians(3));
+
+        //{ // reset cg.determinableEnts to include all ents
+        //    cg.determinableEnts.clear();
+        //    for (int i = 0; i < cg.entities.size(); i++) {
+        //        cg.determinableEnts.insert(i);
+        //    }
+        //    cg.consBetweenDeterminableEnts.clear();
+        //    for (int i = 0; i < cg.constraints.size(); i++) {
+        //        cg.consBetweenDeterminableEnts.insert(i);
+        //    }
+        //}
+
+
+        double energy = Solve(cg, matlab);
+
+        VisualizeReconstruction(cg, mg);
+
+        std::cout << "resulted energy: " << energy << std::endl;
+
+    }
+
 
     std::string PanoramixResultFilePath(const std::string & impath, int version) {
         return impath + ".panoramix." + std::to_string(version) + ".cereal";
@@ -28,7 +149,8 @@ namespace panolyz {
             p.x = WrapBetween(p.x, 0, mg.segs.cols);
             p.y = BoundBetween(p.y, 0, mg.segs.rows - 1);
             int seg = mg.segs(p);
-            return norm(IntersectionOfLineAndPlane(Ray3(Origin(), direction), mg.seg2recPlanes[seg]).position);
+            NOT_IMPLEMENTED_YET();
+            //return norm(IntersectionOfLineAndPlane(Ray3(Origin(), direction), mg.seg2recPlanes[seg]).position);
         }
         virtual void visualize(const std::vector<Vec3> & directions) const {
             //VisualizeReconstruction({ mg.ccidsBigToSmall.front() }, mg);
@@ -63,7 +185,7 @@ namespace panolyz {
             int nsegs;
 
 
-            bool refresh_preparation = false;
+            bool refresh_preparation = true;
             if (refresh_preparation || !misc::LoadCache(impath, "preparation", view, cams, line3s, vps, vertVPId, segs, nsegs)) {
                 view = CreatePanoramicView(image);
 
@@ -109,9 +231,9 @@ namespace panolyz {
 
 
                 // estimate segs
-                nsegs = SegmentationForPIGraph(view, line3s, segs, DegreesToRadians(1));
-                RemoveThinRegionInSegmentation(segs, 1, true);
-                nsegs = DensifySegmentation(segs, true);
+                nsegs = SegmentationForPIGraph(view, line3s, segs, DegreesToRadians(1), 0);
+                //RemoveThinRegionInSegmentation(segs, 1, true);
+                //nsegs = DensifySegmentation(segs, true);
                 assert(IsDenseSegmentation(segs));
 
                 if (1) {
@@ -194,11 +316,13 @@ namespace panolyz {
 
 
             // build pigraph!
-            bool refresh_mg_init = refresh_preparation || false;
+            bool refresh_mg_init = refresh_preparation || true;
             if (refresh_mg_init || !misc::LoadCache(impath, "mg_init", mg)) {
+                std::cout << "########## refreshing mg init ###########" << std::endl;
+
                 mg = BuildPIGraph(view, vps, vertVPId, segs, line3s,
                     DegreesToRadians(1), DegreesToRadians(1), DegreesToRadians(2),
-                    DegreesToRadians(5), DegreesToRadians(60), DegreesToRadians(5));
+                    0.04, 0.1, 0.02);
 
                 const auto printPIGraph = [&mg](int delay) {
                     static const gui::ColorTable randColors = gui::CreateRandomColorTableWithSize(mg.nsegs);
@@ -262,6 +386,7 @@ namespace panolyz {
             // attach orientation constraints
             bool refresh_mg_oriented = refresh_mg_init || false;
             if (refresh_mg_oriented || !misc::LoadCache(impath, "mg_oriented", mg)) {
+                std::cout << "########## refreshing mg oriented ###########" << std::endl;
                 AttachPrincipleDirectionConstraints(mg);
                 AttachWallConstraints(mg, M_PI / 60.0);
                 AttachGCConstraints(mg, gc);
@@ -274,6 +399,7 @@ namespace panolyz {
             // detect occlusions
             bool refresh_mg_occdetected = refresh_mg_oriented || false;
             if (refresh_mg_occdetected || !misc::LoadCache(impath, "mg_occdetected", mg)) {
+                std::cout << "########## refreshing mg occdetected ###########" << std::endl;
                 DetectOcclusions2(mg);
                 printPIGraphControls(0);
                 misc::SaveCache(impath, "mg_occdetected", mg);
@@ -283,8 +409,9 @@ namespace panolyz {
             PIConstraintGraph cg;
             bool refresh_mg_reconstructed = refresh_mg_occdetected || true;
             if (refresh_mg_reconstructed || !misc::LoadCache(impath, "mg_reconstructed", mg, cg)) {
+                std::cout << "########## refreshing mg reconstructed ###########" << std::endl;
                 cg = BuildPIConstraintGraph(mg, DegreesToRadians(1), DegreesToRadians(3));
-                double energy = Solve(mg, cg, matlab);
+                double energy = Solve(cg, matlab);
                 if (IsInfOrNaN(energy)) {
                     std::cout << "solve failed" << std::endl;
                 }

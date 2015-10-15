@@ -224,7 +224,7 @@ namespace pano {
                         D(0, 0) = cv::sum(zmx.mul(zmx)).val[0];
                         D(0, 1) = D(1, 0) = cv::sum(zmx.mul(zmy)).val[0];
                         D(1, 1) = cv::sum(zmy.mul(zmy)).val[0];
-                        cv::eigen(D, true, lambda, v);
+                        cv::eigen(D, lambda, v);
 
                         double theta = atan2(v.at<double>(0, 1), v.at<double>(0, 0));
                         double confidence = std::numeric_limits<double>::max();
@@ -2883,13 +2883,13 @@ namespace pano {
                         continue;
                     }
                     if (!adjacentRootSegs.contains(adjSeg)) {
-                        adjacentRootSegs.push(adjSeg, adj.second);
+                        adjacentRootSegs.set(adjSeg, adj.second);
                     } else {
-                        adjacentRootSegs.setScore(adjSeg, adjacentRootSegs.at(adjSeg) + adj.second);
+                        adjacentRootSegs.set(adjSeg, adjacentRootSegs.at(adjSeg) + adj.second);
                     }
                 }
                 if (adjacentRootSegs.empty()) {
-                    rootSegs.setScore(smallestRootSeg, - areaThres - 1);
+                    rootSegs.set(smallestRootSeg, -areaThres - 1);
                     continue;
                 }
 
@@ -2900,7 +2900,7 @@ namespace pano {
                 double newNegativeArea = rootSegs.at(rootSegForMerging) - smallestArea;
                 segParent[smallestRootSeg] = rootSegForMerging;
                 rootSegs.pop();               
-                rootSegs.setScore(rootSegForMerging, newNegativeArea);
+                rootSegs.set(rootSegForMerging, newNegativeArea);
             }
 
             std::map<int, int> root2new;

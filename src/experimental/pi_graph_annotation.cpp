@@ -260,5 +260,65 @@ namespace pano {
             SaveToDisk(annofinfo.absoluteFilePath().toStdString(), anno);
         }
 
+
+
+        PIGraph ConvertToPIGraph(const PILayoutAnnotation & anno) {
+            
+            std::vector<Polygon3> polygons(anno.nfaces());
+            for (int i = 0; i < anno.nfaces(); i++) {
+                auto & plane = anno.face2plane[i];
+                auto & poly = polygons[i];
+                poly.normal = plane.normal;
+                for (int c : anno.face2corners[i]) {
+                    Ray3 ray(Origin(), anno.corners[c]);
+                    poly.corners.push_back(IntersectionOfLineAndPlane(ray, plane).position);
+                }
+            }
+
+            View<PanoramicCamera, Image3ub> view = CreatePanoramicView(Image3ub(300, 600));
+
+            auto ctable = gui::CreateRandomColorTableWithSize(anno.nfaces());
+
+            for (auto it = view.image.begin(); it != view.image.end(); ++it) {
+                auto p = it.pos();
+                auto direction = view.camera.toSpace(p);
+                Ray3 ray(Origin(), direction);
+                double depth = std::numeric_limits<double>::infinity();
+                int faceid = -1;
+                for (int i = 0; i < anno.nfaces(); i++) {
+                    auto & poly = polygons[i];
+                    auto inter = IntersectionOfLineAndPolygon(ray, poly);
+                    if (inter.failed()) {
+                        continue;
+                    }
+                    double curDepth = norm(inter.unwrap());
+                    if (curDepth < depth) {
+                        depth = curDepth;
+                        faceid = i;
+                    }
+                }
+                *it = ctable[faceid];
+            }
+
+            
+
+            Imagei segs;
+            int nsegs;
+
+            // estimate segs
+            nsegs = SegmentationForPIGraph(view, {}, segs, DegreesToRadians(1));
+            RemoveThinRegionInSegmentation(segs, 1, true);
+            nsegs = DensifySegmentation(segs, true);
+            assert(IsDenseSegmentation(segs));
+            
+          
+            PIGraph mg = BuildPIGraph(view, anno.vps, anno.vertVPId, segs, {},
+                DegreesToRadians(1), DegreesToRadians(1), DegreesToRadians(2),
+                DegreesToRadians(5), DegreesToRadians(60), DegreesToRadians(5));
+
+            return mg;
+
+        }
+
     }
 }

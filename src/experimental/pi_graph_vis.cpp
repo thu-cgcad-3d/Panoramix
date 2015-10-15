@@ -10,15 +10,8 @@ namespace pano {
         double DepthOfVertexAt(const PIConstraintGraph & cg, const PIGraph & mg, int ent, 
             const Vec3 & direction, const Point3 & eye = Origin()) {
             auto & v = cg.entities[ent];
-            if (v.isSeg()) {
-                int seg = v.id;
-                auto & plane = mg.seg2recPlanes[seg];
-                return DepthAt(direction, plane, eye);
-            } else {
-                int line = v.id;
-                auto & l = mg.line2recLines[line];
-                return DepthAt(direction, l, eye);
-            }
+            auto & plane = v.supportingPlane.reconstructed;
+            return DepthAt(direction, plane, eye);
         }
 
 
@@ -54,7 +47,7 @@ namespace pano {
                         continue;
 
                     spp.projectionCenter = core::Point3(0, 0, 0);
-                    spp.plane = mg.seg2recPlanes[seg];
+                    spp.plane = v.supportingPlane.reconstructed;
                     if (HasValue(spp.plane, IsInfOrNaN<double>)) {
                         WARNNING("inf plane");
                         continue;
@@ -62,27 +55,70 @@ namespace pano {
                     spps.push_back(core::DecorateAs(std::move(gui::ColorAs(spp, vertColor(vert))), vert));
                 } else {
                     int line = v.id;
-                    auto & l = mg.line2recLines[line];
-                    if (HasValue(l, IsInfOrNaN<double>)) {
+                    auto & plane = v.supportingPlane.reconstructed;
+                    auto & projectedLine = mg.lines[line].component;
+                    Line3 reconstructedLine(IntersectionOfLineAndPlane(Ray3(Origin(), projectedLine.first), plane).position,
+                        IntersectionOfLineAndPlane(Ray3(Origin(), projectedLine.second), plane).position);
+                    if (HasValue(reconstructedLine, IsInfOrNaN<double>)) {
                         WARNNING("inf line");
                         continue;
                     }
-                    lines.push_back(core::DecorateAs(gui::ColorAs(l, vertColor(vert)), vert));
+                    lines.push_back(core::DecorateAs(gui::ColorAs(reconstructedLine, vertColor(vert)), vert));
                 }
             }
 
-            viz.begin(spps, [&mg, &cg, &vertClick](gui::InteractionID iid,
+            auto ent2string = [&mg, &cg](int ent) -> std::string {
+                auto & e = cg.entities[ent];
+                std::stringstream ss;
+                if (e.isSeg()) {
+                    ss << "seg " << e.id << " dof: " << mg.seg2control[e.id].dof();
+                } else {
+                    ss << "line " << e.id << " claz: " << mg.lines[e.id].claz;
+                }
+                return ss.str();
+            };
+            viz.begin(spps, [&mg, &cg, &vertClick, ent2string](gui::InteractionID iid,
                 const core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int> & spp) {
-                auto & v = cg.entities[spp.decoration];
-                std::cout << "seg " << v.id << " dof: " << mg.seg2control[v.id].dof() << std::endl;
-                vertClick(spp.decoration);
+                int ent = spp.decoration;
+                std::cout << ent2string(ent) << std::endl;
+                for (int cons : cg.ent2cons[ent]) {
+                    if (Contains(cg.consBetweenDeterminableEnts, cons)) {
+                        if (cg.constraints[cons].isConnection()) {
+                            std::cout << "connect with " 
+                                << ent2string(cg.constraints[cons].ent1 == ent ? cg.constraints[cons].ent2 : cg.constraints[cons].ent1) 
+                                << " using " 
+                                << cg.constraints[cons].anchors.size() 
+                                << " anchors, the weight is " << cg.constraints[cons].weight << std::endl;
+                        } else {
+                            std::cout << "coplanar with "
+                                << ent2string(cg.constraints[cons].ent1 == ent ? cg.constraints[cons].ent2 : cg.constraints[cons].ent1)
+                                << ", the weight is " << cg.constraints[cons].weight << std::endl;
+                        }
+                    }
+                }
+                vertClick(ent);
             }).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
             viz.installingOptions().discretizeOptions.color = gui::ColorTag::Magenta;
             viz.installingOptions().lineWidth = 4.0;
-            viz.add(lines, [&mg, &cg, &vertClick](gui::InteractionID iid,
+            viz.add(lines, [&mg, &cg, &vertClick, ent2string](gui::InteractionID iid,
                 const core::Decorated<gui::Colored<Line3>, int> & line) {
-                auto & v = cg.entities[line.decoration];
-                std::cout << "line " << v.id << " claz: " << mg.lines[v.id].claz << std::endl;
+                int ent = line.decoration;
+                std::cout << ent2string(ent) << std::endl;
+                for (int cons : cg.ent2cons[ent]) {
+                    if (Contains(cg.consBetweenDeterminableEnts, cons)) {
+                        if (cg.constraints[cons].isConnection()) {
+                            std::cout << "connect with "
+                                << ent2string(cg.constraints[cons].ent1 == ent ? cg.constraints[cons].ent2 : cg.constraints[cons].ent1)
+                                << " using "
+                                << cg.constraints[cons].anchors.size()
+                                << " anchors, the weight is " << cg.constraints[cons].weight << std::endl;
+                        } else {
+                            std::cout << "coplanar with "
+                                << ent2string(cg.constraints[cons].ent1 == ent ? cg.constraints[cons].ent2 : cg.constraints[cons].ent1)
+                                << ", the weight is " << cg.constraints[cons].weight << std::endl;
+                        }
+                    }
+                }
                 vertClick(line.decoration);
             });
 

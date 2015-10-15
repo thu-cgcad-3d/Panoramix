@@ -7,6 +7,7 @@
 #include "../../src/gui/canvas.hpp"
 
 #include "../../src/experimental/pi_graph_annotation.hpp"
+#include "../../src/experimental/pi_graph_occlusion.hpp"
 #include "../../src/experimental/pi_graph_solve.hpp"
 #include "../../src/experimental/pi_graph_vis.hpp"
 
@@ -32,6 +33,7 @@ namespace panolyz {
         bool useGroundTruthOcclusions;
         bool useGC;
     };
+    void DebugPIGraph(const std::string & impath, misc::Matlab & matlab);
     std::unique_ptr<ReconstructedModel> PredictionOfPanoramix(const std::string & impath, 
         const PredictOptions & options, misc::Matlab & matlab, const PILayoutAnnotation & anno);
     

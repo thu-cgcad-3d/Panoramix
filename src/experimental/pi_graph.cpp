@@ -183,7 +183,11 @@ namespace pano {
             int width = im.cols;
             int height = im.rows;
             Image smoothed;
-            cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
+            if (sigma > 0) {
+                cv::GaussianBlur(im, smoothed, cv::Size(5, 5), sigma);
+            } else {
+                smoothed = im.clone();
+            }
 
             // register lines in RTree
             RTreeMap<Vec3, int> linesRTree;
@@ -520,7 +524,6 @@ namespace pano {
             mg.seg2control.resize(nsegs);
             mg.seg2linePieces.resize(nsegs);
             mg.seg2contours.resize(nsegs);
-            mg.seg2recPlanes.resize(nsegs);
 
             mg.fullArea = 0.0;
             for (auto it = mg.segs.begin(); it != mg.segs.end(); ++it) {
@@ -601,10 +604,12 @@ namespace pano {
 
             // init lines
             mg.lines = lines;
+            for (auto & l : mg.lines) {
+                l.component = normalize(l.component);
+            }
             int nlines = lines.size();
             mg.line2linePieces.resize(nlines);
             mg.line2lineRelations.resize(nlines);
-            mg.line2recLines.resize(nlines);
 
 
             std::map<std::set<int>, std::vector<int>> segs2juncs;
@@ -1084,6 +1089,41 @@ namespace pano {
                         votingData));
                    
                 }
+            }
+
+
+            // normalize all directions
+            for (auto & ds : mg.bndPiece2dirs) {
+                for (auto & d : ds) {
+                    d = normalize(d);
+                }
+            }
+            for (auto & d : mg.junc2positions) {
+                d = normalize(d);
+            }
+            for (auto & ds : mg.linePiece2samples) {
+                for (auto & d : ds) {
+                    d = normalize(d);
+                }
+            }
+            for (auto & d : mg.lineRelation2anchor) {
+                d = normalize(d);
+            }
+            for (auto & l : mg.lines) {
+                l.component = normalize(l.component);
+            }
+            for (auto & d : mg.seg2center) {
+                d = normalize(d);
+            }
+            for (auto & dss : mg.seg2contours) {
+                for (auto & ds : dss) {
+                    for (auto & d : ds) {
+                        d = normalize(d);
+                    }
+                }
+            }
+            for (auto & vp : mg.vps) {
+                vp = normalize(vp);
             }
         
             return mg;
