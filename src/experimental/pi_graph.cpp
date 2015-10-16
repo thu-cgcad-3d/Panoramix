@@ -605,6 +605,9 @@ namespace pano {
             // init lines
             mg.lines = lines;
             for (auto & l : mg.lines) {
+                if (l.claz >= mg.vps.size()) {
+                    l.claz = -1;
+                }
                 l.component = normalize(l.component);
             }
             int nlines = lines.size();

@@ -47,32 +47,44 @@ namespace pano {
             std::vector<Entity> entities;
             std::vector<Constraint> constraints;
             std::vector<std::vector<int>> ent2cons;
+            std::vector<bool> cons2enabled;
 
             std::vector<int> seg2ent;
             std::vector<int> line2ent;
 
+            template <class Archiver>
+            inline void serialize(Archiver & ar) {
+                ar(entities, constraints, ent2cons, cons2enabled, seg2ent, line2ent);
+            }
+        };
+
+        struct PICGDeterminablePart {
             int rootEnt;
             std::set<int> determinableEnts;
             std::set<int> consBetweenDeterminableEnts;
-
+            bool empty() const { return rootEnt == -1; }
             template <class Archiver>
             inline void serialize(Archiver & ar) {
-                ar(entities, constraints, ent2cons, seg2ent, line2ent, 
-                    rootEnt, determinableEnts, consBetweenDeterminableEnts);
+                ar(rootEnt, determinableEnts, consBetweenDeterminableEnts);
             }
         };
 
 
         PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg,
-            double minAngleThresForAWideEdge, double angleThresForColinearity);
+            double minAngleThresForAWideEdge);
+
+        PICGDeterminablePart LocateDeterminablePart(const PIConstraintGraph & cg, double angleThres);
+
+
 
 
         PIConstraintGraph BuildPIConstraintGraph(const PILayoutAnnotation & anno,
             double minAngleThresForAWideEdge);
 
-
         PIConstraintGraph BuildPIConstraintGraphWithLines(const PILayoutAnnotation & anno,
             double minAngleThresForAWideEdge);
+
+
 
 
     }

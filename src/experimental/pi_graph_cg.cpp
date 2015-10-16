@@ -9,7 +9,9 @@ namespace pano {
                 auto p1 = ray.anchor;
                 auto p2 = ray.direction;
                 auto normal = p1.cross(p2);
-                return M_PI_2 - AngleBetweenUndirectedVectors(p, normal);
+                double angle = M_PI_2 - AngleBetweenUndirectedVectors(p, normal);
+                double angleToAnchor = AngleBetweenDirections(p, ray.anchor);
+                return std::min(angle, angleToAnchor);
             }
             template <class T, int N>
             bool IsFuzzyNormalized(const Vec<T, N> & v, T epsilon = 1e-3) {
@@ -106,147 +108,9 @@ namespace pano {
         }
 
 
-        // the staibility info
-        struct Stability {
-            virtual int dof() const = 0;
-            virtual void addAnchor(const Vec3 & anchor, double angleThres) = 0;
-            virtual Stability * clone() const = 0;
-            virtual void stablize() = 0;
-        };
-        bool supportersAreValid(const std::vector<Vec3> & supporters, double angleThres) {
-            for (int i = 0; i < supporters.size(); i++) {
-                for (int j = i + 1; j < supporters.size(); j++) {
-                    if (AngleBetweenDirections(supporters[i], supporters[j]) <= angleThres) {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        }
-        struct SegDof3Stability : Stability {
-            std::vector<Vec3> supporters;
-            SegDof3Stability() {}
-            SegDof3Stability(const SegDof3Stability & s) = default;
-            virtual int dof() const override {
-                return 3 - supporters.size();
-            }
-            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
-                assert(supporters.size() <= 3);
-                if (supporters.size() == 3) {
-                    return;
-                }
-                if (supporters.empty()) {
-                    supporters.push_back(anchor);
-                } else if (supporters.size() == 1) {
-                    if (AngleBetweenDirections(supporters[0], anchor) > angleThres) {
-                        supporters.push_back(anchor);
-                    }
-                } else if (supporters.size() == 2) {
-                    if (AngleDistanceBetweenPointAndRay(anchor, Line3(supporters[0], supporters[1]).ray()) > angleThres) {
-                        supporters.push_back(anchor);
-                    }
-                }
-                assert(supportersAreValid(supporters, angleThres));
-            }
-            virtual Stability * clone() const override {
-                return new SegDof3Stability(*this);
-            }
-            virtual void stablize() override {
-                supporters.resize(3);
-            }
-        };
-        struct SegDof2Stability : Stability {
-            Vec3 axis;
-            std::vector<Vec3> supporters;
-            explicit SegDof2Stability(const Vec3 & a) : axis(a) {}
-            SegDof2Stability(const SegDof2Stability & s) = default;
-            virtual int dof() const override {
-                return 2 - supporters.size();
-            }
-            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
-                assert(supporters.size() <= 2);
-                if (supporters.size() == 2) {
-                    return;
-                }
-                if (supporters.empty()) {
-                    supporters.push_back(anchor);
-                } else if (supporters.size() == 1) {
-                    if (AngleDistanceBetweenPointAndRay(anchor, Ray3(supporters[0], axis)) > angleThres) {
-                        supporters.push_back(anchor);
-                    }
-                }
-                assert(supportersAreValid(supporters, angleThres));
-            }
-            virtual Stability * clone() const override {
-                return new SegDof2Stability(*this);
-            }
-            virtual void stablize() override {
-                supporters.resize(2);
-            }
-        };
-        struct SegDof1Stability : Stability {
-            bool stable;
-            SegDof1Stability() : stable(false) {}
-            SegDof1Stability(const SegDof1Stability & s) = default;
-            virtual int dof() const override { return stable ? 0 : 1; }
-            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
-                stable = true;
-            }
-            virtual Stability * clone() const override {
-                return new SegDof1Stability(*this);
-            }
-            virtual void stablize() override {
-                stable = true;
-            }
-        };
 
-        struct LineDof2Stability : Stability {
-            std::vector<Vec3> supporters;
-            LineDof2Stability() {}
-            LineDof2Stability(const LineDof2Stability & s) = default;
-            virtual int dof() const override {
-                return 2 - supporters.size();
-            }
-            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
-                assert(supporters.size() <= 2);
-                if (supporters.empty()) {
-                    supporters.push_back(anchor);
-                } else if (supporters.size() == 1) {
-                    if (AngleBetweenDirections(supporters[0], anchor) > angleThres) {
-                        supporters.push_back(anchor);
-                    }
-                }
-            }
-            virtual Stability * clone() const override {
-                return new LineDof2Stability(*this);
-            }
-            virtual void stablize() override {
-                supporters.resize(2);
-            }
-        };
-        struct LineDof1Stability : Stability {
-            bool stable;
-            LineDof1Stability() : stable(false) {}
-            LineDof1Stability(const LineDof1Stability & s) = default;
-            virtual int dof() const override { return stable ? 0 : 1; }
-            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
-                stable = true;
-            }
-            virtual Stability * clone() const override {
-                return new LineDof1Stability(*this);
-            }
-            virtual void stablize() override {
-                stable = true;
-            }
-        };
-
-
-
-
-
-        PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg, double minAngleThresForAWideEdge, double angleThresForColinearity) {
-            std::vector<std::unique_ptr<Stability>> ent2stab;
-
+        PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg, double minAngleThresForAWideEdge) {
+           
             PIConstraintGraph cg;
             cg.seg2ent.resize(mg.nsegs, -1);
             cg.line2ent.resize(mg.nlines(), -1);
@@ -270,22 +134,17 @@ namespace pano {
                 auto & control = mg.seg2control[i];
                 e.supportingPlane.dof = mg.seg2control[i].dof();
                 e.supportingPlane.center = normalize(mg.seg2center[i]);
-                std::unique_ptr<Stability> stability;
                 if (e.supportingPlane.dof == 1) {
                     e.supportingPlane.toward = normalize(mg.vps[control.orientationClaz]);
                     if (e.supportingPlane.toward.dot(e.supportingPlane.center) < 0) {
                         e.supportingPlane.toward = -e.supportingPlane.toward;
                     }
-                    stability = std::make_unique<SegDof1Stability>();
                 } else if (e.supportingPlane.dof == 2) {
                     e.supportingPlane.along = normalize(mg.vps[control.orientationNotClaz]);
-                    stability = std::make_unique<SegDof2Stability>(mg.vps[mg.seg2control[i].orientationNotClaz]);
                 } else {
-                    stability = std::make_unique<SegDof3Stability>();
                 }
 
                 entities.push_back(e);
-                ent2stab.push_back(std::move(stability));
 
                 int ent = entities.size() - 1;
                 seg2ent[i] = ent;              
@@ -299,7 +158,6 @@ namespace pano {
 
                 e.supportingPlane.dof = mg.lines[i].claz != -1 ? 1 : 2;
                 e.supportingPlane.center = normalize(mg.lines[i].component.center());
-                std::unique_ptr<Stability> stability;
                 if (e.supportingPlane.dof == 1) {
                     const Vec3 & lineDirection = mg.vps[mg.lines[i].claz];
                     auto linePerp = normalize(mg.lines[i].component.center().cross(lineDirection));
@@ -307,17 +165,14 @@ namespace pano {
                     auto linePlaneNormal = lineDirection.cross(linePerp);                    
                     assert(IsFuzzyPerpendicular(linePlaneNormal, mg.vps[mg.lines[i].claz]));
                     e.supportingPlane.toward = normalize(linePlaneNormal);
-                    stability = std::make_unique<LineDof1Stability>();
                 } else {
                     const Vec3 & maybeLineDirection = mg.lines[i].component.direction();
                     auto linePerp = mg.lines[i].component.center().cross(maybeLineDirection);
                     assert(IsFuzzyPerpendicular(linePerp, maybeLineDirection));
                     e.supportingPlane.along = normalize(linePerp);
-                    stability = std::make_unique<LineDof2Stability>();
                 }
 
                 entities.push_back(e);
-                ent2stab.push_back(std::move(stability));
 
                 int ent = entities.size() - 1;
                 line2ent[i] = ent;
@@ -449,23 +304,137 @@ namespace pano {
             }
 
 
+            cg.cons2enabled.resize(constraints.size(), true);
+
+            return cg;
+        }
 
 
+        // the staibility info
+        struct Stability {
+            virtual int dof() const = 0;
+            virtual void addAnchor(const Vec3 & anchor, double angleThres) = 0;
+            virtual Stability * clone() const = 0;
+            virtual void stablize() = 0;
+        };
+        bool supportersAreValid(const std::vector<Vec3> & supporters, double angleThres) {
+            for (int i = 0; i < supporters.size(); i++) {
+                for (int j = i + 1; j < supporters.size(); j++) {
+                    if (AngleBetweenDirections(supporters[i], supporters[j]) <= angleThres) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        struct Dof3Stability : Stability {
+            std::vector<Vec3> supporters;
+            Dof3Stability() {}
+            Dof3Stability(const Dof3Stability & s) = default;
+            virtual int dof() const override {
+                return 3 - supporters.size();
+            }
+            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
+                assert(supporters.size() <= 3);
+                if (supporters.size() == 3) {
+                    return;
+                }
+                if (supporters.empty()) {
+                    supporters.push_back(anchor);
+                } else if (supporters.size() == 1) {
+                    if (AngleBetweenDirections(supporters[0], anchor) > angleThres) {
+                        supporters.push_back(anchor);
+                    }
+                } else if (supporters.size() == 2) {
+                    if (AngleDistanceBetweenPointAndRay(anchor, Line3(supporters[0], supporters[1]).ray()) > angleThres) {
+                        supporters.push_back(anchor);
+                    }
+                }
+                assert(supportersAreValid(supporters, angleThres));
+            }
+            virtual Stability * clone() const override {
+                return new Dof3Stability(*this);
+            }
+            virtual void stablize() override {
+                supporters.resize(3);
+            }
+        };
+        struct Dof2Stability : Stability {
+            Vec3 axis;
+            std::vector<Vec3> supporters;
+            explicit Dof2Stability(const Vec3 & a) : axis(a) {}
+            Dof2Stability(const Dof2Stability & s) = default;
+            virtual int dof() const override {
+                return 2 - supporters.size();
+            }
+            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
+                assert(supporters.size() <= 2);
+                if (supporters.size() == 2) {
+                    return;
+                }
+                if (supporters.empty()) {
+                    supporters.push_back(anchor);
+                } else if (supporters.size() == 1) {
+                    if (AngleDistanceBetweenPointAndRay(anchor, Ray3(supporters[0], axis)) > angleThres) {                        
+                        supporters.push_back(anchor);
+                    }
+                }
+                assert(supportersAreValid(supporters, angleThres));
+            }
+            virtual Stability * clone() const override {
+                return new Dof2Stability(*this);
+            }
+            virtual void stablize() override {
+                supporters.resize(2);
+            }
+        };
+        struct Dof1Stability : Stability {
+            bool stable;
+            Dof1Stability() : stable(false) {}
+            Dof1Stability(const Dof1Stability & s) = default;
+            virtual int dof() const override { return stable ? 0 : 1; }
+            virtual void addAnchor(const Vec3 & anchor, double angleThres) override {
+                stable = true;
+            }
+            virtual Stability * clone() const override {
+                return new Dof1Stability(*this);
+            }
+            virtual void stablize() override {
+                stable = true;
+            }
+        };
 
+     
+
+        PICGDeterminablePart LocateDeterminablePart(const PIConstraintGraph & cg, double angleThres) {
+            PICGDeterminablePart dp;
+
+            // collect ent stabilities
+            std::vector<std::unique_ptr<Stability>> ent2stab(cg.entities.size());
+            for (int ent = 0; ent < cg.entities.size(); ent++) {
+                auto & e = cg.entities[ent];
+                if (e.supportingPlane.dof == 1) {
+                    ent2stab[ent] = std::make_unique<Dof1Stability>();
+                } else if (e.supportingPlane.dof == 2) {
+                    ent2stab[ent] = std::make_unique<Dof2Stability>(e.supportingPlane.along);
+                } else if (e.supportingPlane.dof == 3) {
+                    ent2stab[ent] = std::make_unique<Dof3Stability>();
+                }
+            }
 
             // select the largest dof1 ent as the root!
             std::vector<int> rootCands;
-            for (int i = 0; i < entities.size(); i++) {
-                int sz = entities[i].size;
+            for (int i = 0; i < cg.entities.size(); i++) {
+                int sz = cg.entities[i].size;
                 if (ent2stab[i]->dof() != 1) {
                     continue;
                 }
                 rootCands.push_back(i);
             }
-            std::sort(rootCands.begin(), rootCands.end(), [&entities](int a, int b) {return entities[a].size > entities[b].size; });
+            std::sort(rootCands.begin(), rootCands.end(), [&cg](int a, int b) {return cg.entities[a].size > cg.entities[b].size; });
             if (rootCands.empty()) {
                 std::cout << "we can't find any entity whose dof is 1 !!!!!" << std::endl;
-                return cg;
+                return dp;
             }
 
             for (int root : rootCands) {
@@ -473,8 +442,8 @@ namespace pano {
                 std::set<int> entsCollected;
 
                 // initialize stabilities of entities
-                std::vector<std::unique_ptr<Stability>> ent2stabHere(entities.size());
-                for (int ent = 0; ent < entities.size(); ent++) {
+                std::vector<std::unique_ptr<Stability>> ent2stabHere(cg.entities.size());
+                for (int ent = 0; ent < cg.entities.size(); ent++) {
                     ent2stabHere[ent] = std::unique_ptr<Stability>(ent2stab[ent]->clone());
                 }
                 ent2stabHere[root]->stablize();
@@ -491,8 +460,11 @@ namespace pano {
                     assert(std::all_of(Q.begin(), Q.end(), [curEntDoF](const Scored<int, int> & ent) {return ent.score >= curEntDoF; }));
                     Q.pop();
                     entsCollected.insert(curEnt);
-                    for (int con : ent2cons[curEnt]) {
-                        auto & c = constraints[con];
+                    for (int con : cg.ent2cons[curEnt]) {
+                        if (!cg.cons2enabled[con]) {
+                            continue;
+                        }
+                        auto & c = cg.constraints[con];
                         if (c.weight == 0.0) {
                             continue;
                         }
@@ -502,33 +474,45 @@ namespace pano {
                         }
                         if (c.isConnection()) {
                             for (auto & anchor : c.anchors) {
-                                ent2stabHere[adjEnt]->addAnchor(anchor, angleThresForColinearity);
+                                ent2stabHere[adjEnt]->addAnchor(anchor, angleThres);
                             }
                         } else if (c.isCoplanarity()) {
-                            assert(entities[adjEnt].isSeg());
+                            assert(cg.entities[adjEnt].isSeg());
                             ent2stabHere[adjEnt]->stablize();
                         }
                         Q.set(adjEnt, ent2stabHere[adjEnt]->dof());
                     }
                 }
-                if (entsCollected.size() > entities.size() / 2) {
-                    cg.rootEnt = root;
-                    cg.determinableEnts = std::move(entsCollected);
+                if (entsCollected.size() > cg.entities.size() / 2) {
+                    dp.rootEnt = root;
+                    dp.determinableEnts = std::move(entsCollected);
                     break;
                 }
-
             }
 
-            cg.consBetweenDeterminableEnts.clear();
+            dp.consBetweenDeterminableEnts.clear();
             for (int i = 0; i < cg.constraints.size(); i++) {
                 auto & c = cg.constraints[i];
-                if (Contains(cg.determinableEnts, c.ent1) && Contains(cg.determinableEnts, c.ent2)) {
-                    cg.consBetweenDeterminableEnts.insert(i);
+                if (Contains(dp.determinableEnts, c.ent1) && Contains(dp.determinableEnts, c.ent2)) {
+                    dp.consBetweenDeterminableEnts.insert(i);
                 }
             }
 
-            return cg;
+            return dp;
+
         }
+
+
+
+
+
+
+
+
+
+
+
+
 
         PIConstraintGraph BuildPIConstraintGraph(const PILayoutAnnotation & anno, double minAngleThresForAWideEdge) {
 
@@ -645,17 +629,7 @@ namespace pano {
                 ent2cons[coplanar.ent2].push_back(coplanarCon);
             }
 
-
-            cg.rootEnt = -1;
-            for (int i = 0; i < cg.entities.size(); i++) {
-                if (cg.entities[i].supportingPlane.dof == 1) {
-                    cg.rootEnt = i;
-                }
-                cg.determinableEnts.insert(i);
-            }
-            for (int i = 0; i < cg.constraints.size(); i++) {
-                cg.consBetweenDeterminableEnts.insert(i);
-            }
+            cg.cons2enabled.resize(constraints.size(), true);
 
             return cg;
 
@@ -810,22 +784,12 @@ namespace pano {
                 ent2cons[coplanar.ent2].push_back(coplanarCon);
             }
 
-          
-
-            cg.rootEnt = -1;
-            for (int i = 0; i < cg.entities.size(); i++) {
-                if (cg.entities[i].supportingPlane.dof == 1) {
-                    cg.rootEnt = i;
-                }
-                cg.determinableEnts.insert(i);
-            }
-            for (int i = 0; i < cg.constraints.size(); i++) {
-                cg.consBetweenDeterminableEnts.insert(i);
-            }
+            cg.cons2enabled.resize(constraints.size(), true);
 
             return cg;
         }
 
+     
 
         
 

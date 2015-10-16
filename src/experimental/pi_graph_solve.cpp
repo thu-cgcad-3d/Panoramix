@@ -309,8 +309,6 @@ namespace pano {
             matlab << "m = size(A1, 1);"; // number of equations
             matlab << "n = size(A1, 2);"; // number of variables
 
-            //matlab << "scale = 100.0;";
-
             double minE = std::numeric_limits<double>::infinity();
 
             std::vector<double> X;
@@ -323,8 +321,6 @@ namespace pano {
                         << "variable X(n);"
                         << "minimize sum_square(K * X)"
                         << "subject to"
-                        //<< "    ones(m, 1) <= A1 * X <= ones(m, 1) * scale;"
-                        //<< "    ones(m, 1) <= A2 * X <= ones(m, 1) * scale;"
                         << "    ones(m, 1) <= A1 * X;"
                         << "    ones(m, 1) <= A2 * X;"
                         << "cvx_end";
@@ -360,13 +356,10 @@ namespace pano {
             }          
         }
 
-
-
-
-
         void ReconstructLayoutAnnotation2(PILayoutAnnotation & anno, misc::Matlab & matlab) {
             auto cg = BuildPIConstraintGraph(anno, 0);
-            Solve(cg, matlab);
+            auto dp = LocateDeterminablePart(cg, DegreesToRadians(3));
+            Solve(dp, cg, matlab);
             // install back as planes
             for (auto & e : cg.entities) {
                 Plane3 inst = e.supportingPlane.reconstructed;
@@ -375,9 +368,11 @@ namespace pano {
                 }
             }
         }
+
         void ReconstructLayoutAnnotation3(PILayoutAnnotation & anno, misc::Matlab & matlab) {
             auto cg = BuildPIConstraintGraphWithLines(anno, 0);
-            Solve(cg, matlab);
+            auto dp = LocateDeterminablePart(cg, DegreesToRadians(3));
+            Solve(dp, cg, matlab);
             // install back as planes
             for (auto & e : cg.entities) {
                 Plane3 inst = e.supportingPlane.reconstructed;
@@ -398,9 +393,9 @@ namespace pano {
 
 
 
-        double Solve(PIConstraintGraph & cg, misc::Matlab & matlab) {
+        double Solve(const PICGDeterminablePart & dp, PIConstraintGraph & cg, misc::Matlab & matlab) {
 
-            auto & determinableEnts = cg.determinableEnts;
+            auto & determinableEnts = dp.determinableEnts;
 
             /// build varriables and equations
 
@@ -416,7 +411,7 @@ namespace pano {
                 int nvar = e.supportingPlane.dof;
                 ent2nvar[ent] = nvar;
                 ent2varPosition[ent] = nvars;
-                if (ent == cg.rootEnt) {
+                if (ent == dp.rootEnt) {
                     assert(nvar == 1);
                     rootVarPos = nvars;
                 }
@@ -441,7 +436,7 @@ namespace pano {
             std::vector<double> WC;
             int eidC = 0;
 
-            for (int cons : cg.consBetweenDeterminableEnts) {
+            for (int cons : dp.consBetweenDeterminableEnts) {
                 auto & constraint = cg.constraints[cons];
                 auto & entity1 = cg.entities[constraint.ent1];
                 auto & entity2 = cg.entities[constraint.ent2];
@@ -504,6 +499,8 @@ namespace pano {
             int neqsA = eidA;
             matlab.setVar("A1", MakeSparseMatFromElements(neqsA, nvars, A1triplets.begin(), A1triplets.end()));
             matlab.setVar("A2", MakeSparseMatFromElements(neqsA, nvars, A2triplets.begin(), A2triplets.end()));
+            matlab << "A1(isnan(A1)) = 0;";
+            matlab << "A2(isnan(A2)) = 0;";
 
             int neqsC = eidC;
             if (neqsC != 0) {
@@ -512,14 +509,12 @@ namespace pano {
             } else {
                 matlab << "C1 = zeros(0, size(A1, 2));";
                 matlab << "C2 = zeros(0, size(A2, 2));";
-            }           
+            }    
+            matlab << "C1(isnan(C1)) = 0;";
+            matlab << "C2(isnan(C2)) = 0;";
         
             matlab.setVar("WA", cv::Mat(WA));
             matlab.setVar("WC", cv::Mat(WC));
-
-            //SparseMatElementd X2RootTriplet[] = { SparseMatElementd(0, rootVarPos, 1.0) };
-            //auto X2Root = MakeSparseMatFromElements(1, nvars, std::begin(X2RootTriplet), std::end(X2RootTriplet));
-            //matlab.setVar("X2Root", X2Root);
 
             matlab << "m = size(A1, 1);"; // number of connection equations
             matlab << "n = size(A1, 2);"; // number of variables
@@ -540,7 +535,6 @@ namespace pano {
                     matlab << "R = (C1 - C2) .* repmat(WC, [1, n]);";
                     
                     static const std::string objectiveStr = "sum_square(K * X) * 1e6 + sum_square(R * X)";
-                    //static const std::string objectiveStr = "sum_square(K * X)";
 
                     matlab
                         << "cvx_begin"
@@ -549,7 +543,6 @@ namespace pano {
                         << "subject to"
                         << "    ones(m, 1) <= A1 * X;"
                         << "    ones(m, 1) <= A2 * X;"
-                        //<< "    X2Root * X >= 1.0;"
                         << "cvx_end";
                     matlab << "D1D2 = 1./ (A1 * X) ./ (A2 * X);";
                     matlab << "D1D2 = abs(D1D2) / norm(D1D2);";
@@ -598,7 +591,52 @@ namespace pano {
 
         }
 
-      
+
+        int DisableUnsatisfiedConstraints(const PICGDeterminablePart & dp, PIConstraintGraph & cg, 
+            const std::function<bool(double distRankRatio, double avgDist)> & whichToDisable) {
+
+            std::vector<int> connections;
+            std::vector<double> cons2dist(cg.constraints.size(), -1.0);
+            for (int cons : dp.consBetweenDeterminableEnts) {
+                auto & c = cg.constraints[cons];
+                if (!c.isConnection()) {
+                    continue;
+                }
+                connections.push_back(cons);
+                double avgDist = 0.0;
+                auto & plane1 = cg.entities[c.ent1].supportingPlane.reconstructed;
+                auto & plane2 = cg.entities[c.ent2].supportingPlane.reconstructed;
+                for (auto & anchor : c.anchors) {
+                    double d1 = norm(IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position);
+                    double d2 = norm(IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position);
+                    avgDist += abs(d1 - d2);
+                }
+                avgDist /= c.anchors.size();
+                cons2dist[cons] = avgDist;
+            }            
+           
+            std::sort(connections.begin(), connections.end(), [&cg, &cons2dist](int cons1, int cons2) {
+                assert(cons2dist[cons1] > 0 && cons2dist[cons2] > 0);
+                return cons2dist[cons1] > cons2dist[cons2];
+            });
+
+            int disabledNum = 0;
+            for (int i = 0; i < connections.size(); i++) {
+                double distRankRatio = i / double(connections.size());
+                if (!cg.cons2enabled[connections[i]]) {
+                    continue;
+                }
+                double avgDist = cons2dist[connections[i]];
+                if (whichToDisable(distRankRatio, avgDist)) {
+                    cg.cons2enabled[connections[i]] = false;
+                    disabledNum++;
+                }
+            }
+            return disabledNum;
+        }
+
+
+        
 
     }
 }

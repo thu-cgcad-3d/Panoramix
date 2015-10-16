@@ -938,38 +938,6 @@ namespace pano {
                         }
                     }
                 }
-
-                //// consider linepiece-bndpiece connectivities
-                //for (int lp : lps) {                 
-                //    if (mg.linePiece2seg[lp] != -1) {
-                //        double weight = mg.linePiece2length[lp] * 10;
-                //        int seg = mg.linePiece2seg[lp];
-                //        auto & segControl = mg.seg2control[seg];
-                //        if (segControl.orientationClaz != -1 && segControl.orientationClaz == claz) {
-                //            labelCosts.connectLeftConnectRight += weight;
-                //            labelCosts.connectLeftDisconnectRight += weight;
-                //            labelCosts.disconnectLeftConnectRight += weight;
-                //        }
-                //    } else {
-                //        int bp = mg.linePiece2bndPiece[lp];
-                //        double weight = mg.bndPiece2length[bp] * 10;
-                //        int seg1, seg2;
-                //        std::tie(seg1, seg2) = mg.bnd2segs[mg.bndPiece2bnd[bp]];
-                //        if (!mg.linePiece2bndPieceInSameDirection[lp]) {
-                //            std::swap(seg1, seg2);
-                //        }
-                //        auto & segControl1 = mg.seg2control[seg1];
-                //        if (segControl1.orientationClaz != -1 && segControl1.orientationClaz == claz) {
-                //            labelCosts.connectLeftConnectRight += weight;
-                //            labelCosts.connectLeftDisconnectRight += weight;
-                //        }
-                //        auto & segControl2 = mg.seg2control[seg2];
-                //        if (segControl2.orientationClaz != -1 && segControl2.orientationClaz == claz) {
-                //            labelCosts.connectLeftConnectRight += weight;
-                //            labelCosts.disconnectLeftConnectRight += weight;
-                //        }
-                //    }
-                //}
             }
 
 

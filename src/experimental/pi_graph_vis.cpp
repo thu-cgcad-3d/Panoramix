@@ -15,7 +15,7 @@ namespace pano {
         }
 
 
-        void VisualizeReconstruction(const PIConstraintGraph & cg, const PIGraph & mg,
+        void VisualizeReconstruction(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg,
             const std::function<gui::Color(int vert)> & vertColor,
             const std::function<void(int vert)> & vertClick) {
 
@@ -26,7 +26,7 @@ namespace pano {
             std::vector<core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int>> spps;
             std::vector<core::Decorated<gui::Colored<core::Line3>, int>> lines;
 
-            for (int vert : cg.determinableEnts) {
+            for (int vert : dp.determinableEnts) {
                 auto & v = cg.entities[vert];
                 if (v.isSeg()) {
                     int seg = v.id;
@@ -77,12 +77,12 @@ namespace pano {
                 }
                 return ss.str();
             };
-            viz.begin(spps, [&mg, &cg, &vertClick, ent2string](gui::InteractionID iid,
+            viz.begin(spps, [&mg, &cg, &dp, &vertClick, ent2string](gui::InteractionID iid,
                 const core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int> & spp) {
                 int ent = spp.decoration;
                 std::cout << ent2string(ent) << std::endl;
                 for (int cons : cg.ent2cons[ent]) {
-                    if (Contains(cg.consBetweenDeterminableEnts, cons)) {
+                    if (Contains(dp.consBetweenDeterminableEnts, cons)) {
                         if (cg.constraints[cons].isConnection()) {
                             std::cout << "connect with " 
                                 << ent2string(cg.constraints[cons].ent1 == ent ? cg.constraints[cons].ent2 : cg.constraints[cons].ent1) 
@@ -100,12 +100,12 @@ namespace pano {
             }).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
             viz.installingOptions().discretizeOptions.color = gui::ColorTag::Magenta;
             viz.installingOptions().lineWidth = 4.0;
-            viz.add(lines, [&mg, &cg, &vertClick, ent2string](gui::InteractionID iid,
+            viz.add(lines, [&mg, &cg, &dp, &vertClick, ent2string](gui::InteractionID iid,
                 const core::Decorated<gui::Colored<Line3>, int> & line) {
                 int ent = line.decoration;
                 std::cout << ent2string(ent) << std::endl;
                 for (int cons : cg.ent2cons[ent]) {
-                    if (Contains(cg.consBetweenDeterminableEnts, cons)) {
+                    if (Contains(dp.consBetweenDeterminableEnts, cons)) {
                         if (cg.constraints[cons].isConnection()) {
                             std::cout << "connect with "
                                 << ent2string(cg.constraints[cons].ent1 == ent ? cg.constraints[cons].ent2 : cg.constraints[cons].ent1)
@@ -124,8 +124,9 @@ namespace pano {
 
             std::vector<core::Decorated<gui::Colored<core::Line3>, std::pair<int, int>>> connectionLines;
             std::vector<core::Point3> connectionLineEnds;
-            for (auto & e : cg.constraints) {
-                if (!Contains(cg.determinableEnts, e.ent1) || !Contains(cg.determinableEnts, e.ent2))
+            for (int cons : dp.consBetweenDeterminableEnts) {
+                auto & e = cg.constraints[cons];
+                if (!Contains(dp.determinableEnts, e.ent1) || !Contains(dp.determinableEnts, e.ent2))
                     continue;
                 int snum = cg.entities[e.ent1].isSeg() + cg.entities[e.ent2].isSeg();
                 auto & samples = e.anchors;
@@ -164,6 +165,13 @@ namespace pano {
 
             viz.show(true, false, gui::RenderOptions().cullFrontFace(false).cullBackFace(true).bwColor(0.1).bwTexColor(0.9)
                 .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
+
+        }
+
+
+
+        void VisualizeReconstruction2(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {
+            gui::ResourceStore::set("texture", mg.view.image);
 
         }
 
@@ -229,6 +237,7 @@ namespace pano {
                 .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
 
         }
+
 
 
     }

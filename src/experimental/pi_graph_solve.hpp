@@ -15,7 +15,10 @@ namespace pano {
         void ReconstructLayoutAnnotation3(PILayoutAnnotation & anno, misc::Matlab & matlab);
 
 
-        double Solve(PIConstraintGraph & cg, misc::Matlab & matlab);
+
+        double Solve(const PICGDeterminablePart & dp, PIConstraintGraph & cg, misc::Matlab & matlab);
+        int DisableUnsatisfiedConstraints(const PICGDeterminablePart & dp, PIConstraintGraph & cg, 
+            const std::function<bool(double distRankRatio, double avgDist)> & whichToDisable);
 
     }
 }

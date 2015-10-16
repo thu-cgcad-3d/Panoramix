@@ -23,6 +23,7 @@ namespace pano {
             double disconnectAll;
         };
 
+
         void DetectOcclusions2(PIGraph & mg, 
             double minAngleSizeOfLineInTJunction = DegreesToRadians(3),
             double lambdaShrinkForHLineDetectionInTJunction = 0.2,
