@@ -64,7 +64,7 @@ namespace panolyz {
             int nsegs;
 
 
-            bool refresh_preparation = false;
+            bool refresh_preparation = true;
             if (refresh_preparation || !misc::LoadCache(impath, "preparation", view, cams, line3s, vps, vertVPId, segs, nsegs)) {
                 view = CreatePanoramicView(image);
 
@@ -76,7 +76,7 @@ namespace panolyz {
                     auto pim = view.sampled(cams[i]).image;
                     LineSegmentExtractor lineExtractor;
                     lineExtractor.params().algorithm = LineSegmentExtractor::LSD;
-                    auto ls = lineExtractor(pim, 2, 300); // use pyramid
+                    auto ls = lineExtractor(pim); // use pyramid
                     for (auto & l : ls) {
                         rawLine2s.push_back(l);
                         rawLine3s.emplace_back(normalize(cams[i].toSpace(l.first)),
