@@ -33,10 +33,8 @@ namespace panolyz {
         bool useGroundTruthOcclusions;
         bool useGC;
     };
-    void DebugPIGraph(const std::string & impath, misc::Matlab & matlab);
     std::unique_ptr<ReconstructedModel> PredictionOfPanoramix(const std::string & impath, 
-        const PredictOptions & options, misc::Matlab & matlab, const PILayoutAnnotation & anno);
-    
+        const PredictOptions & options, misc::Matlab & matlab, const PILayoutAnnotation & anno);    
     std::unique_ptr<ReconstructedModel> PredictionOfPanoContext(const std::string & impath,
         misc::Matlab & matlab);
 

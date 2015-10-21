@@ -18,7 +18,12 @@ namespace pano {
 
         double Solve(const PICGDeterminablePart & dp, PIConstraintGraph & cg, misc::Matlab & matlab);
         int DisableUnsatisfiedConstraints(const PICGDeterminablePart & dp, PIConstraintGraph & cg, 
-            const std::function<bool(double distRankRatio, double avgDist)> & whichToDisable);
+            const std::function<bool(double distRankRatio, double avgDist, double maxDist)> & whichToDisable);
+
+
+
+
+
 
     }
 }

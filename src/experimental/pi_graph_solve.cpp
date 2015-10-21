@@ -593,10 +593,11 @@ namespace pano {
 
 
         int DisableUnsatisfiedConstraints(const PICGDeterminablePart & dp, PIConstraintGraph & cg, 
-            const std::function<bool(double distRankRatio, double avgDist)> & whichToDisable) {
+            const std::function<bool(double distRankRatio, double avgDist, double maxDist)> & whichToDisable) {
 
             std::vector<int> connections;
-            std::vector<double> cons2dist(cg.constraints.size(), -1.0);
+            std::vector<double> cons2avgDist(cg.constraints.size(), -1.0);
+            std::vector<double> cons2maxDist(cg.constraints.size(), -1.0);
             for (int cons : dp.consBetweenDeterminableEnts) {
                 auto & c = cg.constraints[cons];
                 if (!c.isConnection()) {
@@ -604,20 +605,23 @@ namespace pano {
                 }
                 connections.push_back(cons);
                 double avgDist = 0.0;
+                double maxDist = 0.0;
                 auto & plane1 = cg.entities[c.ent1].supportingPlane.reconstructed;
                 auto & plane2 = cg.entities[c.ent2].supportingPlane.reconstructed;
                 for (auto & anchor : c.anchors) {
                     double d1 = norm(IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position);
                     double d2 = norm(IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position);
                     avgDist += abs(d1 - d2);
+                    maxDist = std::max(maxDist, abs(d1 - d2));
                 }
                 avgDist /= c.anchors.size();
-                cons2dist[cons] = avgDist;
+                cons2avgDist[cons] = avgDist;
+                cons2maxDist[cons] = maxDist;
             }            
            
-            std::sort(connections.begin(), connections.end(), [&cg, &cons2dist](int cons1, int cons2) {
-                assert(cons2dist[cons1] > 0 && cons2dist[cons2] > 0);
-                return cons2dist[cons1] > cons2dist[cons2];
+            std::sort(connections.begin(), connections.end(), [&cg, &cons2avgDist](int cons1, int cons2) {
+                assert(cons2avgDist[cons1] > 0 && cons2avgDist[cons2] > 0);
+                return cons2avgDist[cons1] > cons2avgDist[cons2];
             });
 
             int disabledNum = 0;
@@ -626,8 +630,7 @@ namespace pano {
                 if (!cg.cons2enabled[connections[i]]) {
                     continue;
                 }
-                double avgDist = cons2dist[connections[i]];
-                if (whichToDisable(distRankRatio, avgDist)) {
+                if (whichToDisable(distRankRatio, cons2avgDist[connections[i]], cons2maxDist[connections[i]])) {
                     cg.cons2enabled[connections[i]] = false;
                     disabledNum++;
                 }

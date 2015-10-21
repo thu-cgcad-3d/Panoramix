@@ -160,10 +160,16 @@ namespace pano {
 
 
         void AttachPrincipleDirectionConstraints(PIGraph & mg) {
-            SetClock();
+            SetClock();            
             std::vector<std::vector<int>> peakySegs(mg.vps.size());
             for (int i = 0; i < mg.vps.size(); i++) {
-                peakySegs[i] = CollectSegsIntersectingDirection(mg.vps[i], true, mg, M_PI / 30.0);
+                //peakySegs[i] = CollectSegsIntersectingDirection(mg.vps[i], true, mg, M_PI / 30.0);
+                for (auto p : { ToPixel(mg.view.camera.toScreen(mg.vps[i])), ToPixel(mg.view.camera.toScreen(-mg.vps[i])) }) {
+                    p.x = WrapBetween(p.x, 0, mg.segs.cols);
+                    p.y = BoundBetween(p.y, 0, mg.segs.rows - 1);
+                    int seg = mg.segs(p);
+                    peakySegs[i].push_back(seg);
+                }
             }
             for (int i = 0; i < mg.vps.size(); i++) {
                 auto & vp = mg.vps[i];
@@ -172,7 +178,7 @@ namespace pano {
                     if (!mg.seg2control[seg].used) {
                         continue;
                     }
-                    MakeRegionPlaneToward(seg, i, mg);
+                    bool b = MakeRegionPlaneToward(seg, i, mg);
                     for (int lp : mg.seg2linePieces[seg]) {
                         if (mg.linePiece2samples[lp].size() < 2)
                             continue;
@@ -268,22 +274,25 @@ namespace pano {
 
                 if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.seg2center[seg].dot(up) < 0) { // lower
                     // assign horizontal constriant
-                    c.orientationClaz = mg.verticalVPId;
-                    c.orientationNotClaz = -1;
-                    c.used = true;
+                    //c.orientationClaz = mg.verticalVPId;
+                    //c.orientationNotClaz = -1;
+                    //c.used = true;
+                    MakeRegionPlaneToward(seg, mg.verticalVPId, mg);
                     continue;
                 }
                 if (maxid == ToUnderlying(GeometricContextIndex::CeilingOrSky)) {
-                    c.orientationClaz = mg.verticalVPId;
+                   /* c.orientationClaz = mg.verticalVPId;
                     c.orientationNotClaz = -1;
-                    c.used = true;
+                    c.used = true;*/
+                    MakeRegionPlaneToward(seg, mg.verticalVPId, mg);
                     continue;
                 }
                 double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
                 if (wallScore > 0.5 && mg.seg2center[seg].dot(up) < 0) {
-                    c.orientationClaz = -1;
+                    /*c.orientationClaz = -1;
                     c.orientationNotClaz = mg.verticalVPId;
-                    c.used = true;
+                    c.used = true;*/
+                    MakeRegionPlaneAlsoAlong(seg, mg.verticalVPId, mg);
                     continue;
                 }
             }

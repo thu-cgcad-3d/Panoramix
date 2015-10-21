@@ -28,7 +28,7 @@ int main(int argc, char ** argv) {
         auto anno = pano::experimental::LoadOrInitializeNewLayoutAnnotation(fname.toStdString());
         while (true) {
             pano::experimental::EditLayoutAnnotation(fname.toStdString(), anno);
-            pano::experimental::ReconstructLayoutAnnotation3(anno, matlab);
+            pano::experimental::ReconstructLayoutAnnotation(anno, matlab);
             pano::experimental::VisualizeLayoutAnnotation(anno);
             int selected = pano::gui::SelectFrom({ "Accept", "Edit Again", "Abandon" }, 
                 "Your decision?", 

@@ -15,7 +15,7 @@ namespace pano {
         }
 
 
-        void VisualizeReconstruction(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg,
+        void VisualizeReconstruction(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, bool showConnectionLines,
             const std::function<gui::Color(int vert)> & vertColor,
             const std::function<void(int vert)> & vertClick) {
 
@@ -100,7 +100,7 @@ namespace pano {
             }).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
             viz.installingOptions().discretizeOptions.color = gui::ColorTag::Magenta;
             viz.installingOptions().lineWidth = 4.0;
-            viz.add(lines, [&mg, &cg, &dp, &vertClick, ent2string](gui::InteractionID iid,
+            viz.add(lines/*, [&mg, &cg, &dp, &vertClick, ent2string](gui::InteractionID iid,
                 const core::Decorated<gui::Colored<Line3>, int> & line) {
                 int ent = line.decoration;
                 std::cout << ent2string(ent) << std::endl;
@@ -120,48 +120,41 @@ namespace pano {
                     }
                 }
                 vertClick(line.decoration);
-            });
+            }*/);
 
-            std::vector<core::Decorated<gui::Colored<core::Line3>, std::pair<int, int>>> connectionLines;
-            std::vector<core::Point3> connectionLineEnds;
-            for (int cons : dp.consBetweenDeterminableEnts) {
-                auto & e = cg.constraints[cons];
-                if (!Contains(dp.determinableEnts, e.ent1) || !Contains(dp.determinableEnts, e.ent2))
-                    continue;
-                int snum = cg.entities[e.ent1].isSeg() + cg.entities[e.ent2].isSeg();
-                auto & samples = e.anchors;
-                for (auto & ss : samples) {
-                    double d1 = DepthOfVertexAt(cg, mg, e.ent1, ss);
-                    double d2 = DepthOfVertexAt(cg, mg, e.ent2, ss);
-                    Line3 line(normalize(ss) * d1, normalize(ss) * d2);
-                    connectionLines.push_back(DecorateAs(gui::ColorAs(line, snum == 0 ? gui::Black : snum == 1 ? gui::Blue : gui::Yellow), std::make_pair(e.ent1, e.ent2)));
-                    connectionLineEnds.push_back(connectionLines.back().component.component.first);
-                    connectionLineEnds.push_back(connectionLines.back().component.component.second);
+
+            if (showConnectionLines) {
+                std::vector<core::Decorated<gui::Colored<core::Line3>, std::pair<int, int>>> connectionLines;
+                std::vector<core::Point3> connectionLineEnds;
+                for (int cons : dp.consBetweenDeterminableEnts) {
+                    auto & e = cg.constraints[cons];
+                    if (!Contains(dp.determinableEnts, e.ent1) || !Contains(dp.determinableEnts, e.ent2))
+                        continue;
+                    int snum = cg.entities[e.ent1].isSeg() + cg.entities[e.ent2].isSeg();
+                    auto & samples = e.anchors;
+                    for (auto & ss : samples) {
+                        double d1 = DepthOfVertexAt(cg, mg, e.ent1, ss);
+                        double d2 = DepthOfVertexAt(cg, mg, e.ent2, ss);
+                        Line3 line(normalize(ss) * d1, normalize(ss) * d2);
+                        connectionLines.push_back(DecorateAs(gui::ColorAs(line, snum == 0 ?
+                            gui::Black : snum == 1 ? gui::Blue : gui::Yellow), std::make_pair(e.ent1, e.ent2)));
+                        connectionLineEnds.push_back(connectionLines.back().component.component.first);
+                        connectionLineEnds.push_back(connectionLines.back().component.component.second);
+                    }
                 }
+
+                viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
+                viz.installingOptions().lineWidth = 3.0;
+                viz.begin(connectionLines, [&mg, &cg, ent2string](gui::InteractionID iid,
+                    const core::Decorated<gui::Colored<Line3>, std::pair<int, int>> & line) {
+                    std::cout << "this is an anchor of edge connecting ";
+                    auto & v1 = cg.entities[line.decoration.first];
+                    auto & v2 = cg.entities[line.decoration.second];
+                    std::cout << "connecting " << ent2string(line.decoration.first) << " and " << ent2string(line.decoration.second) << std::endl;
+                }).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
+                viz.installingOptions().pointSize = 5.0;
+                viz.begin(connectionLineEnds).shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints).end();
             }
-
-            viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
-            viz.installingOptions().lineWidth = 1.0;
-            viz.begin(connectionLines, [&mg, &cg](gui::InteractionID iid,
-                const core::Decorated<gui::Colored<Line3>, std::pair<int, int>> & line) {
-                std::cout << "this is an anchor of edge connecting ";
-                auto & v1 = cg.entities[line.decoration.first];
-                auto & v2 = cg.entities[line.decoration.second];
-                if (v1.isSeg()) {
-                    std::cout << "seg " << v1.id << " dof: " << mg.seg2control[v1.id].dof() << std::endl;
-                } else {
-                    std::cout << "line " << v1.id << " claz: " << mg.lines[v1.id].claz << std::endl;
-                }
-                std::cout << " and ";
-                if (v2.isSeg()) {
-                    std::cout << "seg " << v2.id << " dof: " << mg.seg2control[v2.id].dof() << std::endl;
-                } else {
-                    std::cout << "line " << v2.id << " claz: " << mg.lines[v2.id].claz << std::endl;
-                }
-                std::cout << std::endl;
-            }).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
-            viz.installingOptions().pointSize = 2.0;
-            viz.begin(connectionLineEnds).shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints).end();
 
             viz.show(true, false, gui::RenderOptions().cullFrontFace(false).cullBackFace(true).bwColor(0.1).bwTexColor(0.9)
                 .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));

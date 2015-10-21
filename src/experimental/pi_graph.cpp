@@ -503,6 +503,8 @@ namespace pano {
             double incidenceAngleAlongDirectionThreshold,
             double incidenceAngleVerticalDirectionThreshold) {
 
+            assert(incidenceAngleVerticalDirectionThreshold > bndPieceBoundToLineAngleThres);
+
             PIGraph mg;
             mg.view = view;
             int width = view.image.cols;

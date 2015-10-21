@@ -799,7 +799,7 @@ namespace pano {
 
 
         // assume that all oclcusions are described by lines
-        void DetectOcclusions2(PIGraph & mg, double minAngleSizeOfLineInTJunction,
+        std::map<int, LineLabel> DetectOcclusions2(PIGraph & mg, double minAngleSizeOfLineInTJunction,
             double lambdaShrinkForHLineDetectionInTJunction,
             double lambdaShrinkForVLineDetectionInTJunction,
             double angleSizeForPixelsNearLines) {
@@ -827,11 +827,11 @@ namespace pano {
 
             for (auto it = mg.segs.begin(); it != mg.segs.end(); ++it) {
                 Pixel p = it.pos();
-                double weight = cos((p.y - (height-1) / 2.0) / (height-1) * M_PI);
+                double weight = cos((p.y - (height - 1) / 2.0) / (height - 1) * M_PI);
                 Vec3 dir = normalize(mg.view.camera.toSpace(p));
                 int seg = *it;
-                lineSamplesTree.search(BoundingBox(dir).expand(angleSizeForPixelsNearLines * 3), 
-                    [&mg, &dir, &line2nearbyPixels, &line2nearbySegsWithLocalCenterDir, &line2nearbySegsWithWeight, 
+                lineSamplesTree.search(BoundingBox(dir).expand(angleSizeForPixelsNearLines * 3),
+                    [&mg, &dir, &line2nearbyPixels, &line2nearbySegsWithLocalCenterDir, &line2nearbySegsWithWeight,
                     angleSizeForPixelsNearLines, p, seg, weight](
                     const std::pair<Vec3, std::pair<Line3, int>> & lineSample) {
                     auto line = normalize(mg.lines[lineSample.second.second].component);
@@ -860,7 +860,7 @@ namespace pano {
             }
 
             auto paintLineWithNearbyPixels = [&mg, &line2nearbyPixels, &line2nearbySegsWithOnLeftFlag](
-                Image3f & pim, int line, 
+                Image3f & pim, int line,
                 const gui::Color & leftColor, const gui::Color & rightColor) {
                 auto & pixels = line2nearbyPixels[line];
                 auto & nearbySegsWithLeftFlags = line2nearbySegsWithOnLeftFlag[line];
@@ -874,7 +874,7 @@ namespace pano {
                     }
                 }
             };
-            if (true) {
+            if (false) {
                 auto pim = Print(mg, ConstantFunctor<gui::Color>(gui::White),
                     ConstantFunctor<gui::Color>(gui::Transparent),
                     ConstantFunctor<gui::Color>(gui::LightGray), 1, 2);
@@ -894,7 +894,7 @@ namespace pano {
             std::vector<std::vector<LineLabel>> line2allowedLabels(mg.nlines());
             std::vector<ml::FactorGraph::VarHandle> line2vh(mg.nlines());
             std::map<ml::FactorGraph::VarHandle, int> vh2line;
-            for (int line = 0; line < mg.nlines(); line++) {             
+            for (int line = 0; line < mg.nlines(); line++) {
                 if (mg.lines[line].claz == -1) {
                     continue;
                 }
@@ -909,7 +909,7 @@ namespace pano {
             // factors preparation
 
             // orientation consistency term between seg and line
-           
+
             std::vector<LineLabelCost> line2labelCost(mg.nlines(), { 0, 1e-8, 1e-8, 1.0 });
 
             for (int line = 0; line < mg.nlines(); line++) {
@@ -1003,7 +1003,7 @@ namespace pano {
             }
 
 
-            if (true) {
+            if (false) {
                 auto pim = Print(mg, ConstantFunctor<gui::Color>(gui::White),
                     [&line2labelCost, &mg](int lp) {
                     return gui::Transparent;
@@ -1051,14 +1051,14 @@ namespace pano {
                     const int * varlabels, size_t nvar, ml::FactorGraph::FactorCategoryId fcid, void * givenData)->double {
                     assert(nvar == 1);
                     auto & labelCosts = line2labelCost[line];
-                    
-                    double costSum = labelCosts.connectLeftConnectRight + 
+
+                    double costSum = labelCosts.connectLeftConnectRight +
                         labelCosts.connectLeftDisconnectRight +
-                        labelCosts.disconnectLeftConnectRight + 
+                        labelCosts.disconnectLeftConnectRight +
                         labelCosts.disconnectAll/* + 1e-3*/;
 
                     const LineLabel & label = line2allowedLabels[line][varlabels[0]];
-                    
+
                     double ret = 0.0;
                     if (label.connectLeft && label.connectRight) {
                         ret += labelCosts.connectLeftConnectRight;
@@ -1127,7 +1127,46 @@ namespace pano {
 
 
             if (true) {
-                auto pim = Print(mg, ConstantFunctor<gui::Color>(gui::White),
+                auto pim = Print(mg,
+                    [&line2nearbySegsWithOnLeftFlag, &line2allowedLabels, &line2vh, &bestLabels, &mg](int seg) -> gui::Color {
+                    return gui::White;
+                    //int line = 960;
+                    bool isSomeBackSeg = false;
+                    bool isSomeFrontSeg = false;
+                    for (int line = 0; line < mg.nlines(); line++) {
+                        auto vh = line2vh[line];
+                        if (vh.invalid()) {
+                            continue;
+                        }
+                        auto & lineLabel = line2allowedLabels[line][bestLabels[vh]];
+                        if (lineLabel.connectLeft && lineLabel.connectRight) {
+                            continue;
+                        }
+                        if (!lineLabel.connectLeft && !lineLabel.connectRight) {
+                            continue;
+                        }
+                        auto & nearbySegs = line2nearbySegsWithOnLeftFlag[line];
+                        if (Contains(nearbySegs, seg)) {
+                            if (nearbySegs.at(seg)) { // left
+                                (lineLabel.connectLeft ? isSomeFrontSeg : isSomeBackSeg) = true;
+                                continue;
+                            } else {
+                                (lineLabel.connectRight ? isSomeFrontSeg : isSomeBackSeg) = true;
+                                continue;
+                            }
+                        }
+                    }
+                    if (isSomeFrontSeg && !isSomeBackSeg) {
+                        return gui::Gray;
+                    }
+                    if (isSomeBackSeg && !isSomeFrontSeg) {
+                        return gui::Black;
+                    }
+                    if (isSomeBackSeg && isSomeFrontSeg) {
+                        return gui::Red;
+                    }
+                    return gui::White;
+                },
                     [&line2labelCost, &mg](int lp) {
                     return gui::Transparent;
                 }, ConstantFunctor<gui::Color>(gui::LightGray), 2, 3);
@@ -1154,6 +1193,9 @@ namespace pano {
                     if (vh.invalid()) {
                         continue;
                     }
+                    //if (line != 94 && line != 1006) {
+                    //    continue;
+                    //}
                     const LineLabel & label = line2allowedLabels[line][bestLabels[vh]];
                     if (label.connectLeft && !label.connectRight) {
                         drawLine(mg.lines[line].component, std::to_string(line), gui::Color(gui::Green));
@@ -1172,6 +1214,7 @@ namespace pano {
 
 
 
+
             // fill back labels
             // initialize all seg-seg, seg-line and line-line relations
             for (int bp = 0; bp < mg.nbndPieces(); bp++) {
@@ -1183,7 +1226,12 @@ namespace pano {
             for (int lr = 0; lr < mg.nlineRelations(); lr++) {
                 mg.lineRelations[lr] = LineRelation::Attached;
             }
+
+            auto & bpsegrelation1102 = mg.bndPiece2segRelation[1102];
+
+
             // set relations according to the occluding lines
+            std::map<int, LineLabel> cutline2label;
             for (int line = 0; line < mg.nlines(); line++) {
                 auto vh = line2vh[line];
                 if (vh.invalid()) {
@@ -1193,15 +1241,14 @@ namespace pano {
                 if (label.connectLeft && label.connectRight) {
                     continue;
                 }
-
-
                 if (!label.connectLeft && !label.connectRight) {
                     for (int lp : mg.line2linePieces[line]) {
                         mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
                     }
                     continue;
-                } 
-                
+                }
+
+                cutline2label.emplace(line, label);
                 std::set<int> leftSegs, rightSegs;
                 for (auto & pp : line2nearbySegsWithOnLeftFlag[line]) {
                     int seg = pp.first;
@@ -1213,6 +1260,27 @@ namespace pano {
                     }
                 }
 
+                // disconnect line-seg
+                if (label.connectLeft && !label.connectRight) {
+                    for (int lp : mg.line2linePieces[line]) {
+                        int seg = mg.linePiece2seg[lp];
+                        if (seg != -1 && Contains(rightSegs, seg)) {
+                            mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                        }
+                    }
+                } else if (!label.connectLeft && label.connectRight) {
+                    for (int lp : mg.line2linePieces[line]) {
+                        int seg = mg.linePiece2seg[lp];
+                        if (seg != -1 && Contains(leftSegs, seg)) {
+                            mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                        }
+                    }
+                }
+
+
+
+                // disconnect seg-seg
+                static const double affectSegRangeRatio = 1.0;
                 if (label.connectLeft && !label.connectRight) { // connect left side only
                     for (int frontSeg : leftSegs) {
                         for (int bnd : mg.seg2bnds[frontSeg]) {
@@ -1227,8 +1295,8 @@ namespace pano {
                                         auto & d1 = mg.bndPiece2dirs[bndPiece].front();
                                         auto & d2 = mg.bndPiece2dirs[bndPiece].back();
                                         auto & l = mg.lines[line].component;
-                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0);
-                                        if (AngleBetweenDirections(d1, l.center()) <= angleRadius && 
+                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0) * affectSegRangeRatio;
+                                        if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
                                             AngleBetweenDirections(d2, l.center()) <= angleRadius) {
                                             mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
                                         }
@@ -1238,7 +1306,7 @@ namespace pano {
                                         auto & d1 = mg.bndPiece2dirs[bndPiece].front();
                                         auto & d2 = mg.bndPiece2dirs[bndPiece].back();
                                         auto & l = mg.lines[line].component;
-                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0);
+                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0) * affectSegRangeRatio;
                                         if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
                                             AngleBetweenDirections(d2, l.center()) <= angleRadius) {
                                             mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
@@ -1262,7 +1330,7 @@ namespace pano {
                                         auto & d1 = mg.bndPiece2dirs[bndPiece].front();
                                         auto & d2 = mg.bndPiece2dirs[bndPiece].back();
                                         auto & l = mg.lines[line].component;
-                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0);
+                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0) * affectSegRangeRatio;
                                         if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
                                             AngleBetweenDirections(d2, l.center()) <= angleRadius) {
                                             mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
@@ -1273,7 +1341,7 @@ namespace pano {
                                         auto & d1 = mg.bndPiece2dirs[bndPiece].front();
                                         auto & d2 = mg.bndPiece2dirs[bndPiece].back();
                                         auto & l = mg.lines[line].component;
-                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0);
+                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0) * affectSegRangeRatio;
                                         if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
                                             AngleBetweenDirections(d2, l.center()) <= angleRadius) {
                                             mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
@@ -1284,8 +1352,42 @@ namespace pano {
                         }
                     }
                 }
-                
-                // line relations
+
+                // disconnect those escaped...
+                for (int lp : mg.line2linePieces[line]) {
+                    int bp = mg.linePiece2bndPiece[lp];
+                    if (bp != -1) {
+                        int seg1, seg2;
+                        std::tie(seg1, seg2) = mg.bnd2segs[mg.bndPiece2bnd[bp]];
+                        bool seg1left = Contains(leftSegs, seg1);
+                        bool seg1right = Contains(rightSegs, seg1);
+                        bool seg2left = Contains(leftSegs, seg2);
+                        bool seg2right = Contains(rightSegs, seg2);
+                        if (mg.bndPiece2segRelation[bp] != SegRelation::Connected) {
+                            continue;
+                        }
+                        if (label.connectLeft && !label.connectRight) {
+                            if (seg1left && seg2right) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::LeftIsFront;
+                            } else if (seg1right && seg2left) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::RightIsFront;
+                            } else {
+                                mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                            }
+                        } else if (!label.connectLeft && label.connectRight) {
+                            if (seg1left && seg2right) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::RightIsFront;
+                            } else if (seg1right && seg2left) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::LeftIsFront;
+                            } else {
+                                mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                            }
+                        }
+                    }
+                }
+
+
+                // disconnect line-line
                 for (int lr : mg.line2lineRelations[line]) {
                     int anotherLine = mg.lineRelation2lines[lr].first;
                     if (anotherLine == line) {
@@ -1299,8 +1401,115 @@ namespace pano {
                         !label.connectRight && anotherLineIsOnTheRightSide) {
                         mg.lineRelations[lr] = LineRelation::Detached;
                     }
-                }              
+                }
             }
+
+            // cut all other relations using cutlines
+            if (true) {
+                RTreeMap<Box3, int> cutLinePiecesTree;
+                static const double cutLinePieceAngle = DegreesToRadians(3);
+                for (auto & lineLabelPair : cutline2label) {
+                    int line = lineLabelPair.first;
+                    auto & l = mg.lines[line].component;
+                    double spanAngle = AngleBetweenDirections(l.first, l.second);
+                    Vec3 lastDir = l.first;
+                    for (double a = cutLinePieceAngle; a <= spanAngle; a += cutLinePieceAngle) {
+                        Vec3 dir = RotateDirection(l.first, l.second, a);
+                        Line3 linePieceInst(normalize(lastDir), normalize(dir));
+                        cutLinePiecesTree.emplace(BoundingBox(linePieceInst).expand(cutLinePieceAngle), line);
+                        lastDir = dir;
+                    }
+                }
+                const auto isCut = [&cutLinePiecesTree, &mg](const Line3 & connection) -> bool {
+                    bool isCutBySomeLine = false;
+                    double spanAngle = AngleBetweenDirections(connection.first, connection.second);
+                    for (double a = 0.0; a <= spanAngle; a += cutLinePieceAngle) {
+                        Vec3 dir = RotateDirection(connection.first, connection.second, a);
+                        cutLinePiecesTree.search(BoundingBox(normalize(dir)).expand(3 * cutLinePieceAngle),
+                            [&connection, &isCutBySomeLine, &mg](const std::pair<Box3, int> & cutLinePieceInst) {
+                            auto & cutLine = mg.lines[cutLinePieceInst.second].component;
+                            Vec3 vertDir = normalize(cutLine.first.cross(cutLine.second));
+                            if (connection.first.dot(vertDir) * connection.second.dot(vertDir) > 1e-5) {
+                                return true;
+                            }
+                            auto interp = normalize(IntersectionOfLineAndPlane(connection.ray(), Plane3(Origin(), vertDir)).position);
+                            if (cutLine.first.cross(interp).dot(cutLine.second.cross(interp)) > 1e-5) {
+                                return true;
+                            }
+                            isCutBySomeLine = true;
+                            return false;
+                        });
+                        if (isCutBySomeLine) {
+                            break;
+                        }
+                    }
+                    return isCutBySomeLine;
+                };
+
+
+                // line-line
+                for (int line = 0; line < mg.nlines(); line++) {
+                    if (Contains(cutline2label, line)) {
+                        continue;
+                    }
+                    // seg-bnd-bndpiece-line
+                    // seg-line
+                    for (int lp : mg.line2linePieces[line]) {
+                        if (mg.linePiece2segLineRelation[lp] == SegLineRelation::Detached) {
+                            continue;
+                        }
+                        int bp = mg.linePiece2bndPiece[lp];
+                        if (bp != -1) {
+                            if (mg.bndPiece2segRelation[bp] != SegRelation::Connected && mg.bndPiece2segRelation[bp] != SegRelation::Unknown) {
+                                continue;
+                            }
+                            int seg1, seg2;
+                            std::tie(seg1, seg2) = mg.bnd2segs[mg.bndPiece2bnd[bp]];
+                            bool cutRelationToLeft = isCut(normalize(Line3(mg.lines[line].component.center(), mg.seg2center[seg1])));
+                            bool cutRelationToRight = isCut(normalize(Line3(mg.lines[line].component.center(), mg.seg2center[seg2])));
+                            if (cutRelationToLeft && !cutRelationToRight) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::RightIsFront;
+                            } else if (!cutRelationToLeft && cutRelationToRight) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::LeftIsFront;
+                            } else if (cutRelationToLeft && cutRelationToRight) {
+                                mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                            }
+                        } else {
+                            int seg = mg.linePiece2seg[lp];
+                            assert(seg != -1);
+                            bool cutRelation = isCut(normalize(Line3(mg.lines[line].component.center(), mg.seg2center[seg])));
+                            if (cutRelation) {
+                                mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                            }
+                        }
+                    }
+                    // line-line
+                    for (int lr : mg.line2lineRelations[line]) {
+                        int anotherLine = mg.lineRelation2lines[lr].first;
+                        if (anotherLine == line) {
+                            anotherLine = mg.lineRelation2lines[lr].second;
+                        }
+                        auto & line1 = mg.lines[line].component;
+                        auto & line2 = mg.lines[anotherLine].component;
+                        auto nearest = DistanceBetweenTwoLines(line1, line2).second;
+                        bool cutRelation = isCut(normalize(Line3(nearest.first.position, nearest.second.position)));
+                        if (line == 94 && anotherLine == 1006 || line == 1006 && anotherLine == 94) {
+                            std::cout << "cutRelation of 94 and 1006 is " << cutRelation << std::endl;
+                        }
+                        if (cutRelation) {
+                            mg.lineRelations[lr] = LineRelation::Detached;
+                        }
+                    }
+                }
+
+                return cutline2label;
+            }
+        
+
+
+
+
+
 
         }
 
