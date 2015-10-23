@@ -64,7 +64,7 @@ namespace panolyz {
             int nsegs;
 
 
-            bool refresh_preparation = true;
+            bool refresh_preparation = false;
             if (refresh_preparation || !misc::LoadCache(impath, "preparation", view, cams, line3s, vps, vertVPId, segs, nsegs)) {
                 view = CreatePanoramicView(image);
 
@@ -356,7 +356,7 @@ namespace panolyz {
 
 
             // attach orientation constraints
-            bool refresh_mg_oriented = refresh_mg_init || true;
+            bool refresh_mg_oriented = refresh_mg_init || false;
             if (refresh_mg_oriented || !misc::LoadCache(impath, "mg_oriented", mg)) {
                 std::cout << "########## refreshing mg oriented ###########" << std::endl;
                 AttachPrincipleDirectionConstraints(mg);
@@ -370,10 +370,68 @@ namespace panolyz {
             printPIGraph(0, "oriented_lines_segs");
 
             // detect occlusions
-            bool refresh_mg_occdetected = refresh_mg_oriented || true;
+            bool refresh_lsw = refresh_mg_oriented || true;
+            std::vector<LineSidingWeight> lsw;
+            std::vector<std::array<std::set<int>, 2>> line2leftRightSegs;
+            if (refresh_lsw || !misc::LoadCache(impath, "lsw", lsw, line2leftRightSegs)) {
+                std::cout << "########## refreshing lsw ###########" << std::endl;
+                lsw = ComputeLinesSidingWeights(mg, DegreesToRadians(3), 0.2, 0.1, DegreesToRadians(5), &line2leftRightSegs);
+                misc::SaveCache(impath, "lsw", lsw, line2leftRightSegs);
+            }
+
+
+
+            if (true) {
+                auto pim = Print(mg, ConstantFunctor<gui::Color>(gui::White), 
+                    ConstantFunctor<gui::Color>(gui::Transparent), 
+                    ConstantFunctor<gui::Color>(gui::Gray), 2, 0);
+                auto drawLine = [&mg, &pim](const Line3 & line, const std::string & text, const gui::Color & color, bool withTeeth) {
+                    double angle = AngleBetweenDirections(line.first, line.second);
+                    std::vector<Pixel> ps;
+                    for (double a = 0.0; a <= angle; a += 0.01) {
+                        ps.push_back(ToPixel(mg.view.camera.toScreen(RotateDirection(line.first, line.second, a))));
+                    }
+                    for (int i = 1; i < ps.size(); i++) {
+                        auto p1 = ps[i - 1];
+                        auto p2 = ps[i];
+                        if (Distance(p1, p2) >= pim.cols / 2) {
+                            continue;
+                        }
+                        cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), p1, p2);
+                        cv::line(pim, p1, p2, (cv::Scalar)color / 255.0, 2);
+                        if (withTeeth) {
+                            auto teethp = ToPixel(RightPerpendicularDirectiion(ecast<double>(p2 - p1))) + p1;
+                            auto tp1 = p1, tp2 = teethp;
+                            cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), tp1, tp2);
+                            cv::line(pim, tp1, tp2, (cv::Scalar)color / 255.0, 1);
+                        }
+                    }
+                    //cv::circle(pim, ps.back(), 2.0, (cv::Scalar)color / 255.0, 2);
+                    if (!text.empty()) {
+                        cv::putText(pim, text, ps.back(), 1, 0.7, color);
+                    }
+                };
+                for (int line = 0; line < mg.nlines(); line++) {
+                    auto & ws = lsw[line];
+                    auto l = mg.lines[line].component;
+                    if (!ws.isOcclusion()) {
+                        drawLine(l, "", gui::Black, false);
+                    } else if (ws.onlyConnectLeft()) {
+                        drawLine(l, "", gui::Blue, true);
+                    } else if (ws.onlyConnectRight()) {
+                        drawLine(l.reversed(), "", gui::Blue, true);
+                    } else {
+                        drawLine(l, "", gui::Red, false);
+                    }
+                }
+                gui::AsCanvas(pim).show(0, "line labels");
+            }
+
+
+            bool refresh_mg_occdetected = refresh_lsw || true;
             if (refresh_mg_occdetected || !misc::LoadCache(impath, "mg_occdetected", mg)) {
                 std::cout << "########## refreshing mg occdetected ###########" << std::endl;
-                DetectOcclusions2(mg);
+                ApplyLinesSidingWeights(mg, lsw, line2leftRightSegs);
                 misc::SaveCache(impath, "mg_occdetected", mg);
             }
 

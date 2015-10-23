@@ -46,7 +46,7 @@ namespace pano {
             }
         };
 
-        void DetectOcclusions(PIGraph & mg) {
+        void DetectOcclusions_lecacy(PIGraph & mg) {
 
             ml::FactorGraph fg;
 
@@ -798,8 +798,34 @@ namespace pano {
         };
 
 
+
+        struct LineLabel {
+            bool connectLeft, connectRight;
+            bool operator == (LineLabel ll) const { return connectLeft == ll.connectLeft && connectRight == ll.connectRight; }
+            bool operator != (LineLabel ll) const { return !(*this == ll); }
+            LineLabel operator !() const { return LineLabel{ !connectLeft, !connectRight }; }
+            LineLabel leftRightSwapped() const { return LineLabel{ connectRight, connectLeft }; }
+            template <class Archiver>
+            void serialize(Archiver & ar) {
+                ar(connectLeft, connectRight);
+            }
+        };
+        struct LineLabelCost {
+            double connectLeftConnectRight;
+            double connectLeftDisconnectRight;
+            double disconnectLeftConnectRight;
+            double disconnectAll;
+            template <class Archiver>
+            void serialize(Archiver & ar) {
+                ar(connectLeftConnectRight, connectLeftDisconnectRight, disconnectLeftConnectRight, disconnectAll);
+            }
+        };
+
+
+
+
         // assume that all oclcusions are described by lines
-        std::map<int, LineLabel> DetectOcclusions2(PIGraph & mg, double minAngleSizeOfLineInTJunction,
+        void DetectOcclusions(PIGraph & mg, double minAngleSizeOfLineInTJunction,
             double lambdaShrinkForHLineDetectionInTJunction,
             double lambdaShrinkForVLineDetectionInTJunction,
             double angleSizeForPixelsNearLines) {
@@ -1502,16 +1528,650 @@ namespace pano {
                     }
                 }
 
-                return cutline2label;
             }
         
-
-
-
-
-
-
         }
+
+
+
+
+        std::vector<LineSidingWeight> ComputeLinesSidingWeights(const PIGraph & mg,
+            double minAngleSizeOfLineInTJunction /*= DegreesToRadians(3)*/,
+            double lambdaShrinkForHLineDetectionInTJunction /*= 0.2*/, 
+            double lambdaShrinkForVLineDetectionInTJunction /*= 0.1*/,
+            double angleSizeForPixelsNearLines /*= DegreesToRadians(2)*/,
+            std::vector<std::array<std::set<int>, 2>> * line2leftRightSegsPtr) {
+
+            int width = mg.segs.cols;
+            int height = mg.segs.rows;
+
+            RTreeMap<Vec3, std::pair<Line3, int>> lineSamplesTree;
+            for (int i = 0; i < mg.nlines(); i++) {
+                auto & line = mg.lines[i].component;
+                double spanAngle = AngleBetweenDirections(line.first, line.second);
+                for (double a = 0.0; a < spanAngle; a += angleSizeForPixelsNearLines / 3.0) {
+                    Vec3 sample1 = normalize(RotateDirection(line.first, line.second, a));
+                    Vec3 sample2 = normalize(RotateDirection(line.first, line.second, a + angleSizeForPixelsNearLines / 3.0));
+                    lineSamplesTree.emplace(normalize(sample1 + sample2), std::make_pair(Line3(sample1, sample2), i));
+                }
+            }
+
+            // collect lines' nearby pixels and segs
+            std::vector<std::set<Pixel, ComparePixel>> line2nearbyPixels(mg.nlines());
+            std::vector<std::map<int, Vec3>> line2nearbySegsWithLocalCenterDir(mg.nlines());
+            std::vector<std::map<int, bool>> line2nearbySegsWithOnLeftFlag(mg.nlines());
+            std::vector<std::map<int, double>> line2nearbySegsWithWeight(mg.nlines());
+
+            for (auto it = mg.segs.begin(); it != mg.segs.end(); ++it) {
+                Pixel p = it.pos();
+                double weight = cos((p.y - (height - 1) / 2.0) / (height - 1) * M_PI);
+                Vec3 dir = normalize(mg.view.camera.toSpace(p));
+                int seg = *it;
+                lineSamplesTree.search(BoundingBox(dir).expand(angleSizeForPixelsNearLines * 3),
+                    [&mg, &dir, &line2nearbyPixels, &line2nearbySegsWithLocalCenterDir, &line2nearbySegsWithWeight,
+                    angleSizeForPixelsNearLines, p, seg, weight](
+                    const std::pair<Vec3, std::pair<Line3, int>> & lineSample) {
+                    auto line = normalize(mg.lines[lineSample.second.second].component);
+                    // d(dir, line) < angleSizeForPixelsNearLines && lambda(dir, line) \in [0, 1]
+                    auto dirOnLine = DistanceFromPointToLine(dir, lineSample.second.first).second.position;
+                    double angleDist = AngleBetweenDirections(dir, dirOnLine);
+                    double lambda = ProjectionOfPointOnLine(dir, line).ratio; // the projected position on line
+                    if (angleDist < angleSizeForPixelsNearLines && IsBetween(lambda, 0.0, 1.0)) {
+                        line2nearbyPixels[lineSample.second.second].insert(p);
+                        auto & localCenterDir = line2nearbySegsWithLocalCenterDir[lineSample.second.second][seg];
+                        localCenterDir += dir * weight;
+                        double & segWeight = line2nearbySegsWithWeight[lineSample.second.second][seg];
+                        segWeight += weight * Gaussian(lambda - 0.5, 0.1); // the closer to the center, the more important it is!
+                    }
+                    return true;
+                });
+            }
+            for (int i = 0; i < mg.nlines(); i++) {
+                auto & nearbySegsWithLocalCenterDir = line2nearbySegsWithLocalCenterDir[i];
+                auto & line = mg.lines[i].component;
+                Vec3 lineRight = line.first.cross(line.second);
+                for (auto & segWithDir : nearbySegsWithLocalCenterDir) {
+                    Vec3 centerDir = normalize(segWithDir.second);
+                    bool onLeft = (centerDir - line.first).dot(lineRight) < 0;
+                    line2nearbySegsWithOnLeftFlag[i][segWithDir.first] = onLeft;
+                }
+            }
+
+
+            // collect lines' nearby tjunction legs
+            // {line-lineRelation-line} -> linePiece -> bndPiece, occlusion hints suggested by line's t-junction
+            std::vector<std::pair<int, int>> tjunctionLines; // [hline, vline]
+            std::vector<bool> tjunctionVLineLiesOnTheRightOfHLine;
+            for (int lineRelation = 0; lineRelation < mg.nlineRelations(); lineRelation++) {
+                if (mg.lineRelation2IsIncidence[lineRelation]) {
+                    continue;
+                }
+                int line1 = -1, line2 = -1;
+                std::tie(line1, line2) = mg.lineRelation2lines[lineRelation];
+                // whether this forms a t-junction?
+                if (mg.lines[line1].claz == mg.lines[line2].claz) {
+                    continue;
+                }
+                auto l1 = normalize(mg.lines[line1].component);
+                Vec3 n1 = normalize(l1.first.cross(l1.second));
+                auto l2 = normalize(mg.lines[line2].component);
+                Vec3 n2 = normalize(l2.first.cross(l2.second));
+                if (AngleBetweenUndirectedVectors(n1, n2) < DegreesToRadians(3)) {
+                    continue;
+                }
+
+                if (AngleBetweenDirections(l1.first, l1.second) < minAngleSizeOfLineInTJunction ||
+                    AngleBetweenDirections(l2.first, l2.second) < minAngleSizeOfLineInTJunction) {
+                    continue;
+                }
+
+                int hline = -1, vline = -1;
+                double lambda1 = 0, lambda2 = 0;
+                DistanceBetweenTwoLines(l1.ray(), l2.ray(), &lambda1, &lambda2);
+                const double shrinkRatio = lambdaShrinkForHLineDetectionInTJunction, shrinkRatio2 = lambdaShrinkForVLineDetectionInTJunction;
+                if (lambda1 < (1.0 - shrinkRatio) && lambda1 > shrinkRatio && (lambda2 < -shrinkRatio2 || lambda2 >(1.0 + shrinkRatio2))) {
+                    hline = line1; vline = line2;
+                } else if (lambda2 < (1.0 - shrinkRatio) && lambda2 > shrinkRatio && (lambda1 < -shrinkRatio2 || lambda1 >(1.0 + shrinkRatio2))) {
+                    hline = line2; vline = line1;
+                } else {
+                    continue;
+                }
+
+                // Q: what if three lines form a T structure, and the center lies between the two hlines?
+                // A: if the two hlines are close and are colinear, then they should have been merged after the line extraction step
+
+                tjunctionLines.emplace_back(hline, vline);
+                auto vlcenter = normalize(mg.lines[vline].component.center());
+                auto & hl = mg.lines[hline].component;
+                auto hlright = hl.first.cross(hl.second);
+                bool vlIsOnRightOfHl = (vlcenter - hl.first).dot(hlright) > 0;
+                tjunctionVLineLiesOnTheRightOfHLine.push_back(vlIsOnRightOfHl);
+            }
+            std::vector<std::array<int, 2>> tjunctionLeftRightNum(mg.nlines(), std::array<int, 2>{{0, 0}});
+            for (int i = 0; i < tjunctionLines.size(); i++) {
+                int hline = tjunctionLines[i].first;
+                int vline = tjunctionLines[i].second;
+                if (tjunctionVLineLiesOnTheRightOfHLine[i]) {
+                    tjunctionLeftRightNum[hline][1] += 1;
+                } else {
+                    tjunctionLeftRightNum[hline][0] += 1;
+                }
+            }
+
+
+
+            ml::FactorGraph fg;
+
+            std::cout << "building factor graph" << std::endl;
+
+            std::vector<std::array<ml::FactorGraph::VarHandle, 2>> line2vhConnectLeftRight(mg.nlines());
+            static const int LineLabelDisconnect = 0;
+            static const int LineLabelConnect = 1;
+
+            std::map<ml::FactorGraph::VarHandle, int> vh2line;
+            for (int line = 0; line < mg.nlines(); line++) {
+                if (mg.lines[line].claz == -1) {
+                    continue;
+                }
+                auto & l = mg.lines[line].component;
+                auto vhConnectLeft = fg.addVar(fg.addVarCategory(2, AngleBetweenDirections(l.first, l.second)));
+                line2vhConnectLeftRight[line][0] = vhConnectLeft;
+                vh2line[vhConnectLeft] = line;
+                auto vhConnectRight = fg.addVar(fg.addVarCategory(2, AngleBetweenDirections(l.first, l.second)));
+                line2vhConnectLeftRight[line][1] = vhConnectRight;
+                vh2line[vhConnectRight] = line;
+            }
+
+            // factors preparation
+
+         
+            // the cost if is connected on this side [left, right]
+            std::vector<std::array<double, 2>> line2labelConnectCostLeftRight(mg.nlines(), std::array<double, 2>{{ 0.0, 0.0 }});
+            // the cost if is disconnected on this side [left, right]
+            std::vector<std::array<double, 2>> line2labelDisconnectCostLeftRight(mg.nlines(), std::array<double, 2>{{ 0.0, 0.0 }});
+
+            for (int line = 0; line < mg.nlines(); line++) {
+                auto & vhs = line2vhConnectLeftRight[line];
+                static const bool vhIsLefts[] = { true, false };
+                
+                // {left, right}
+                for (int k = 0; k < 2; k++) {
+                    auto vh = vhs[k];
+                    bool vhIsLeft = vhIsLefts[k];
+
+                    if (vh.invalid()) {
+                        continue;
+                    }
+
+                    int claz = mg.lines[line].claz;
+                    auto & l = mg.lines[line].component;
+                    const auto & lps = mg.line2linePieces[line];
+
+                    // orientation consistency term between seg and line
+                    // consider nearby segs
+                    double wrongSegWeightSumThisSide = 0.0;
+                    for (auto & segAndWeight : line2nearbySegsWithWeight[line]) {
+                        int seg = segAndWeight.first;
+                        double weight = segAndWeight.second;
+                        bool onLeft = line2nearbySegsWithOnLeftFlag[line].at(seg);
+                        auto & segControl = mg.seg2control[seg];
+                        if (segControl.orientationClaz != -1 && segControl.orientationClaz == claz) {
+                            if (onLeft == vhIsLeft){
+                                wrongSegWeightSumThisSide += weight;
+                            }
+                        }
+                    }
+
+                    // consider lines
+                    int tjunctionNumThisSide = tjunctionLeftRightNum[line][k];
+                    
+                    // now compute the cost
+                    double & labelConnectCost = line2labelConnectCostLeftRight[line][k];
+                    double & labelDisconnectCost = line2labelDisconnectCostLeftRight[line][k];
+
+                    labelConnectCost = wrongSegWeightSumThisSide > 0 ? 1e3 : 0;
+                    labelDisconnectCost = Gaussian(tjunctionNumThisSide, 7.0) * 10.0 + 1.0;
+                }
+            }
+
+
+            // make factors
+            // data term
+            for (int line = 0; line < mg.nlines(); line++) {
+                auto & vhs = line2vhConnectLeftRight[line];
+                static const bool vhIsLefts[] = { true, false };
+
+                if (vhs[0].invalid() || vhs[1].invalid()) {
+                    continue;
+                }
+
+                // {left, right}
+                for (int k = 0; k < 2; k++) {
+                    auto vh = vhs[k];
+                    bool vhIsLeft = vhIsLefts[k];
+
+                    if (vh.invalid()) {
+                        continue;
+                    }
+                    double labelConnectCost = line2labelConnectCostLeftRight[line][k];
+                    double labelDisconnectCost = line2labelDisconnectCostLeftRight[line][k];
+
+                    int fc = fg.addFactorCategory([labelConnectCost, labelDisconnectCost,
+                        &mg, line](
+                        const int * varlabels, size_t nvar, ml::FactorGraph::FactorCategoryId fcid, void * givenData)->double {
+                        assert(nvar == 1);
+                        int label = varlabels[0];
+                        if (label == LineLabelConnect) {
+                            return labelConnectCost;
+                        }
+                        return labelDisconnectCost;
+                    }, 1.0);
+                    fg.addFactor({ vh }, fc);
+                }
+
+                // punish on both disconnected case
+                auto & l = mg.lines[line].component;
+                double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+                int fc = fg.addFactorCategory([lineAngleLen](const int * varlabels, size_t nvar,
+                    ml::FactorGraph::FactorCategoryId fcid, void * givenData) -> double {
+                    assert(nvar == 2);
+                    int label1 = varlabels[0], label2 = varlabels[1];
+                    if (label1 == LineLabelDisconnect && label2 == LineLabelDisconnect) {
+                        return 5.0;
+                    }
+                    return 0.0;
+                }, 1.0);
+                fg.addFactor({ vhs[0], vhs[1] }, fc);
+
+            }
+
+            // smooth term
+            for (int lineRelation = 0; lineRelation < mg.nlineRelations(); lineRelation++) {
+                if (!mg.lineRelation2IsIncidence[lineRelation]) {
+                    continue;
+                }
+                int line1, line2;
+                std::tie(line1, line2) = mg.lineRelation2lines[lineRelation];
+                auto vhs1 = line2vhConnectLeftRight[line1], vhs2 = line2vhConnectLeftRight[line2];
+                if (vhs1[0].invalid() || vhs1[1].invalid() || vhs2[0].invalid() || vhs2[1].invalid()) {
+                    continue;
+                }
+                auto & l1 = mg.lines[line1].component;
+                auto & l2 = mg.lines[line2].component;
+                auto nearest = DistanceBetweenTwoLines(l1, l2);
+                double angleDist = AngleBetweenDirections(nearest.second.first.position, nearest.second.second.position);
+                bool sameDirection = l1.first.cross(l1.second).dot(l2.first.cross(l2.second)) > 0;
+
+                if (!sameDirection) {
+                    std::swap(vhs2[0], vhs2[1]);
+                }
+
+                for (int k = 0; k < 2; k++) {
+                    auto vh1 = vhs1[k];
+                    auto vh2 = vhs2[k];
+                    int fc = fg.addFactorCategory([line1, line2, angleDist](
+                        const int * varlabels, size_t nvar, ml::FactorGraph::FactorCategoryId fcid, void * givenData)->double {
+                        assert(nvar == 2);
+                        int label1 = varlabels[0];
+                        int label2 = varlabels[1];
+                        if (label1 != label2) {
+                            return Gaussian(angleDist, DegreesToRadians(5)) * 20.0;
+                        }
+                        return 0.0;
+                    }, 1.0);
+                    fg.addFactor({ vh1, vh2 }, fc);
+                }
+            }
+
+
+
+            // solve
+            std::cout << "solving factor graph" << std::endl;
+
+            ml::FactorGraph::ResultTable bestLabels;
+            double minEnergy = std::numeric_limits<double>::infinity();
+            fg.solve(20, 10, [&bestLabels, &minEnergy](int epoch, double energy, double denergy, const ml::FactorGraph::ResultTable & results) -> bool {
+                std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
+                if (energy < minEnergy) {
+                    bestLabels = results;
+                    minEnergy = energy;
+                }
+                if (denergy / std::max(energy, 1.0) >= 1e-3) {
+                    return false;
+                }
+                return true;
+            });
+
+
+            std::vector<LineSidingWeight> lsw(mg.nlines(), LineSidingWeight{ 0.5, 0.5 });
+            for (int line = 0; line < mg.nlines(); line++) {
+                auto & vhs = line2vhConnectLeftRight[line];
+                if (vhs[0].invalid() || vhs[1].invalid()) {
+                    continue;
+                }
+                auto & lineSidingWeight = lsw[line];
+                bool connectLeft = bestLabels[vhs[0]] == LineLabelConnect;
+                bool connectRight = bestLabels[vhs[1]] == LineLabelConnect;
+                double connectLeftCost = line2labelConnectCostLeftRight[line][0],
+                    disconnectLeftCost = line2labelDisconnectCostLeftRight[line][0];
+                double connectRightCost = line2labelConnectCostLeftRight[line][1],
+                    disconnectRightCost = line2labelDisconnectCostLeftRight[line][1];
+                if (connectLeft && connectRight) {
+                    lineSidingWeight.leftWeightRatio = disconnectLeftCost + connectRightCost;
+                    lineSidingWeight.rightWeightRatio = disconnectRightCost + connectLeftCost;
+                    double costSum = lineSidingWeight.leftWeightRatio + lineSidingWeight.rightWeightRatio;
+                    lineSidingWeight.leftWeightRatio /= costSum;
+                    lineSidingWeight.rightWeightRatio /= costSum;
+                } else if (connectLeft) {
+                    lineSidingWeight.leftWeightRatio = 1.0;
+                    lineSidingWeight.rightWeightRatio = 0.0;
+                } else if (connectRight) {
+                    lineSidingWeight.rightWeightRatio = 1.0;
+                    lineSidingWeight.leftWeightRatio = 0.0;
+                } else {
+                    lineSidingWeight.rightWeightRatio = 0.0;
+                    lineSidingWeight.leftWeightRatio = 0.0;
+                }
+            }
+
+            if (line2leftRightSegsPtr) {
+                auto & line2leftRightSegs = *line2leftRightSegsPtr;
+                line2leftRightSegs.clear();
+                line2leftRightSegs.resize(mg.nlines());
+                for (int line = 0; line < mg.nlines(); line++) {
+                    for (auto & pp : line2nearbySegsWithOnLeftFlag[line]) {
+                        int seg = pp.first;
+                        bool onLeft = pp.second;
+                        line2leftRightSegs[line][onLeft ? 0 : 1].insert(seg);
+                    }
+                }
+            }
+
+            return lsw;
+        }
+
+
+
+        void ApplyLinesSidingWeights(PIGraph & mg, const std::vector<LineSidingWeight> & lsw, 
+            const std::vector<std::array<std::set<int>, 2>> & line2leftRightSegs) {
+
+            // fill back labels
+            // initialize all seg-seg, seg-line and line-line relations
+            for (int bp = 0; bp < mg.nbndPieces(); bp++) {
+                mg.bndPiece2segRelation[bp] = SegRelation::Connected;
+            }
+            for (int lp = 0; lp < mg.nlinePieces(); lp++) {
+                mg.linePiece2segLineRelation[lp] = SegLineRelation::Attached;
+            }
+            for (int lr = 0; lr < mg.nlineRelations(); lr++) {
+                mg.lineRelations[lr] = LineRelation::Attached;
+            }
+
+            // set relations according to the occluding lines
+            std::map<int, LineLabel> cutline2label;
+            for (int line = 0; line < mg.nlines(); line++) {
+                auto & lineSidingWeight = lsw[line];
+                if (lineSidingWeight.isLineDetached()) {
+                    for (int lp : mg.line2linePieces[line]) {
+                        mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                    }
+                    continue;
+                }
+                if (!lineSidingWeight.isOcclusion()) {                    
+                    continue;
+                }
+
+                cutline2label.emplace(line, LineLabel{ 
+                    lineSidingWeight.leftWeightRatio > 0, lineSidingWeight.rightWeightRatio > 0
+                });
+                const auto & leftSegs = line2leftRightSegs[line][0];
+                const auto & rightSegs = line2leftRightSegs[line][1];
+
+                // disconnect line-seg
+                if (lineSidingWeight.onlyConnectLeft()) {
+                    for (int lp : mg.line2linePieces[line]) {
+                        int seg = mg.linePiece2seg[lp];
+                        if (seg != -1 && Contains(rightSegs, seg)) {
+                            mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                        }
+                    }
+                } else if (lineSidingWeight.onlyConnectRight()) {
+                    for (int lp : mg.line2linePieces[line]) {
+                        int seg = mg.linePiece2seg[lp];
+                        if (seg != -1 && Contains(leftSegs, seg)) {
+                            mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                        }
+                    }
+                }
+
+
+
+                // disconnect seg-seg
+                static const double affectSegRangeRatio = 1.0;
+                if (lineSidingWeight.onlyConnectLeft()) { // connect left side only
+                    for (int frontSeg : leftSegs) {
+                        for (int bnd : mg.seg2bnds[frontSeg]) {
+                            int anotherSeg = mg.bnd2segs[bnd].first;
+                            if (anotherSeg == frontSeg) {
+                                anotherSeg = mg.bnd2segs[bnd].second;
+                            }
+                            if (Contains(rightSegs, anotherSeg)) {
+                                bool frontSegIsOnBndLeft = frontSeg == mg.bnd2segs[bnd].first;
+                                if (frontSegIsOnBndLeft) {
+                                    for (int bndPiece : mg.bnd2bndPieces[bnd]) {
+                                        auto & d1 = mg.bndPiece2dirs[bndPiece].front();
+                                        auto & d2 = mg.bndPiece2dirs[bndPiece].back();
+                                        auto & l = mg.lines[line].component;
+                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0) * affectSegRangeRatio;
+                                        if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
+                                            AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                                            mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
+                                        }
+                                    }
+                                } else {
+                                    for (int bndPiece : mg.bnd2bndPieces[bnd]) {
+                                        auto & d1 = mg.bndPiece2dirs[bndPiece].front();
+                                        auto & d2 = mg.bndPiece2dirs[bndPiece].back();
+                                        auto & l = mg.lines[line].component;
+                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0) * affectSegRangeRatio;
+                                        if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
+                                            AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                                            mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (lineSidingWeight.onlyConnectRight()) { // connect right side only
+                    for (int frontSeg : rightSegs) {
+                        for (int bnd : mg.seg2bnds[frontSeg]) {
+                            int anotherSeg = mg.bnd2segs[bnd].first;
+                            if (anotherSeg == frontSeg) {
+                                anotherSeg = mg.bnd2segs[bnd].second;
+                            }
+                            if (Contains(leftSegs, anotherSeg)) {
+                                bool frontSegIsOnBndLeft = frontSeg == mg.bnd2segs[bnd].first;
+                                if (frontSegIsOnBndLeft) {
+                                    for (int bndPiece : mg.bnd2bndPieces[bnd]) {
+                                        auto & d1 = mg.bndPiece2dirs[bndPiece].front();
+                                        auto & d2 = mg.bndPiece2dirs[bndPiece].back();
+                                        auto & l = mg.lines[line].component;
+                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0) * affectSegRangeRatio;
+                                        if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
+                                            AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                                            mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
+                                        }
+                                    }
+                                } else {
+                                    for (int bndPiece : mg.bnd2bndPieces[bnd]) {
+                                        auto & d1 = mg.bndPiece2dirs[bndPiece].front();
+                                        auto & d2 = mg.bndPiece2dirs[bndPiece].back();
+                                        auto & l = mg.lines[line].component;
+                                        double angleRadius = (AngleBetweenDirections(l.first, l.second) / 2.0) * affectSegRangeRatio;
+                                        if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
+                                            AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                                            mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // disconnect those escaped...
+                for (int lp : mg.line2linePieces[line]) {
+                    int bp = mg.linePiece2bndPiece[lp];
+                    if (bp != -1) {
+                        int seg1, seg2;
+                        std::tie(seg1, seg2) = mg.bnd2segs[mg.bndPiece2bnd[bp]];
+                        bool seg1left = Contains(leftSegs, seg1);
+                        bool seg1right = Contains(rightSegs, seg1);
+                        bool seg2left = Contains(leftSegs, seg2);
+                        bool seg2right = Contains(rightSegs, seg2);
+                        if (mg.bndPiece2segRelation[bp] != SegRelation::Connected) {
+                            continue;
+                        }
+                        if (lineSidingWeight.onlyConnectLeft()) {
+                            if (seg1left && seg2right) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::LeftIsFront;
+                            } else if (seg1right && seg2left) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::RightIsFront;
+                            } else {
+                                mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                            }
+                        } else if (lineSidingWeight.onlyConnectRight()) {
+                            if (seg1left && seg2right) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::RightIsFront;
+                            } else if (seg1right && seg2left) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::LeftIsFront;
+                            } else {
+                                mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                            }
+                        }
+                    }
+                }
+
+
+                // disconnect line-line
+                for (int lr : mg.line2lineRelations[line]) {
+                    int anotherLine = mg.lineRelation2lines[lr].first;
+                    if (anotherLine == line) {
+                        anotherLine = mg.lineRelation2lines[lr].second;
+                    }
+                    auto anotherLineCenter = normalize(mg.lines[anotherLine].component.center());
+                    auto & thisLine = mg.lines[line].component;
+                    auto thisLineRightSide = thisLine.first.cross(thisLine.second);
+                    bool anotherLineIsOnTheRightSide = (anotherLineCenter - thisLine.first).dot(thisLineRightSide) > 0;
+                    if (lineSidingWeight.leftWeightRatio == 0 && !anotherLineIsOnTheRightSide ||
+                        lineSidingWeight.rightWeightRatio == 0 && anotherLineIsOnTheRightSide) {
+                        mg.lineRelations[lr] = LineRelation::Detached;
+                    }
+                }
+            }
+
+            // cut all other relations using cutlines
+            if (true) {
+                RTreeMap<Box3, int> cutLinePiecesTree;
+                static const double cutLinePieceAngle = DegreesToRadians(3);
+                for (auto & lineLabelPair : cutline2label) {
+                    int line = lineLabelPair.first;
+                    auto & l = mg.lines[line].component;
+                    double spanAngle = AngleBetweenDirections(l.first, l.second);
+                    Vec3 lastDir = l.first;
+                    for (double a = cutLinePieceAngle; a <= spanAngle; a += cutLinePieceAngle) {
+                        Vec3 dir = RotateDirection(l.first, l.second, a);
+                        Line3 linePieceInst(normalize(lastDir), normalize(dir));
+                        cutLinePiecesTree.emplace(BoundingBox(linePieceInst).expand(cutLinePieceAngle), line);
+                        lastDir = dir;
+                    }
+                }
+                const auto isCut = [&cutLinePiecesTree, &mg](const Line3 & connection) -> bool {
+                    bool isCutBySomeLine = false;
+                    double spanAngle = AngleBetweenDirections(connection.first, connection.second);
+                    for (double a = 0.0; a <= spanAngle; a += cutLinePieceAngle) {
+                        Vec3 dir = RotateDirection(connection.first, connection.second, a);
+                        cutLinePiecesTree.search(BoundingBox(normalize(dir)).expand(3 * cutLinePieceAngle),
+                            [&connection, &isCutBySomeLine, &mg](const std::pair<Box3, int> & cutLinePieceInst) {
+                            auto & cutLine = mg.lines[cutLinePieceInst.second].component;
+                            Vec3 vertDir = normalize(cutLine.first.cross(cutLine.second));
+                            if (connection.first.dot(vertDir) * connection.second.dot(vertDir) > 1e-5) {
+                                return true;
+                            }
+                            auto interp = normalize(IntersectionOfLineAndPlane(connection.ray(), Plane3(Origin(), vertDir)).position);
+                            if (cutLine.first.cross(interp).dot(cutLine.second.cross(interp)) > 1e-5) {
+                                return true;
+                            }
+                            isCutBySomeLine = true;
+                            return false;
+                        });
+                        if (isCutBySomeLine) {
+                            break;
+                        }
+                    }
+                    return isCutBySomeLine;
+                };
+
+
+                // line-line
+                for (int line = 0; line < mg.nlines(); line++) {
+                    if (Contains(cutline2label, line)) {
+                        continue;
+                    }
+                    // seg-bnd-bndpiece-line
+                    // seg-line
+                    for (int lp : mg.line2linePieces[line]) {
+                        if (mg.linePiece2segLineRelation[lp] == SegLineRelation::Detached) {
+                            continue;
+                        }
+                        int bp = mg.linePiece2bndPiece[lp];
+                        if (bp != -1) {
+                            if (mg.bndPiece2segRelation[bp] != SegRelation::Connected && mg.bndPiece2segRelation[bp] != SegRelation::Unknown) {
+                                continue;
+                            }
+                            int seg1, seg2;
+                            std::tie(seg1, seg2) = mg.bnd2segs[mg.bndPiece2bnd[bp]];
+                            bool cutRelationToLeft = isCut(normalize(Line3(mg.lines[line].component.center(), mg.seg2center[seg1])));
+                            bool cutRelationToRight = isCut(normalize(Line3(mg.lines[line].component.center(), mg.seg2center[seg2])));
+                            if (cutRelationToLeft && !cutRelationToRight) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::RightIsFront;
+                            } else if (!cutRelationToLeft && cutRelationToRight) {
+                                mg.bndPiece2segRelation[bp] = SegRelation::LeftIsFront;
+                            } else if (cutRelationToLeft && cutRelationToRight) {
+                                mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                            }
+                        } else {
+                            int seg = mg.linePiece2seg[lp];
+                            assert(seg != -1);
+                            bool cutRelation = isCut(normalize(Line3(mg.lines[line].component.center(), mg.seg2center[seg])));
+                            if (cutRelation) {
+                                mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
+                            }
+                        }
+                    }
+                    // line-line
+                    for (int lr : mg.line2lineRelations[line]) {
+                        int anotherLine = mg.lineRelation2lines[lr].first;
+                        if (anotherLine == line) {
+                            anotherLine = mg.lineRelation2lines[lr].second;
+                        }
+                        auto & line1 = mg.lines[line].component;
+                        auto & line2 = mg.lines[anotherLine].component;
+                        auto nearest = DistanceBetweenTwoLines(line1, line2).second;
+                        bool cutRelation = isCut(normalize(Line3(nearest.first.position, nearest.second.position)));
+                        if (line == 94 && anotherLine == 1006 || line == 1006 && anotherLine == 94) {
+                            std::cout << "cutRelation of 94 and 1006 is " << cutRelation << std::endl;
+                        }
+                        if (cutRelation) {
+                            mg.lineRelations[lr] = LineRelation::Detached;
+                        }
+                    }
+                }
+
+            }
+        }
+
 
     }
 }
