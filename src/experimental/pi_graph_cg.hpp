@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pi_graph_control.hpp"
+#include "pi_graph_occlusion.hpp"
 #include "pi_graph_annotation.hpp"
 
 namespace pano {
@@ -72,6 +72,11 @@ namespace pano {
 
         PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg,
             double minAngleThresForAWideEdge);
+        PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg, 
+            const std::vector<LineSidingWeight> & lsw, 
+            const std::vector<std::array<std::set<int>, 2>> & line2leftRightSegs,
+            double minAngleThresForAWideEdge);
+
 
         PICGDeterminablePart LocateDeterminablePart(const PIConstraintGraph & cg, double angleThres);
 
@@ -84,8 +89,7 @@ namespace pano {
         PIConstraintGraph BuildPIConstraintGraphWithLines(const PILayoutAnnotation & anno,
             double minAngleThresForAWideEdge);
 
-
-
+     
 
     }
 }

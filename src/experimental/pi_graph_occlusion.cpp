@@ -1729,7 +1729,7 @@ namespace pano {
                     double & labelConnectCost = line2labelConnectCostLeftRight[line][k];
                     double & labelDisconnectCost = line2labelDisconnectCostLeftRight[line][k];
 
-                    labelConnectCost = wrongSegWeightSumThisSide > 0 ? 1e3 : 0;
+                    labelConnectCost = wrongSegWeightSumThisSide * 100;
                     labelDisconnectCost = Gaussian(tjunctionNumThisSide, 7.0) * 10.0 + 1.0;
                 }
             }
@@ -1815,7 +1815,7 @@ namespace pano {
                         int label1 = varlabels[0];
                         int label2 = varlabels[1];
                         if (label1 != label2) {
-                            return Gaussian(angleDist, DegreesToRadians(5)) * 20.0;
+                            return Gaussian(angleDist, DegreesToRadians(5)) * 40.0;
                         }
                         return 0.0;
                     }, 1.0);
@@ -1857,11 +1857,12 @@ namespace pano {
                 double connectRightCost = line2labelConnectCostLeftRight[line][1],
                     disconnectRightCost = line2labelDisconnectCostLeftRight[line][1];
                 if (connectLeft && connectRight) {
-                    lineSidingWeight.leftWeightRatio = disconnectLeftCost + connectRightCost;
-                    lineSidingWeight.rightWeightRatio = disconnectRightCost + connectLeftCost;
+                    lineSidingWeight.leftWeightRatio = disconnectLeftCost + connectRightCost + 1.0;
+                    lineSidingWeight.rightWeightRatio = disconnectRightCost + connectLeftCost + 1.0;
                     double costSum = lineSidingWeight.leftWeightRatio + lineSidingWeight.rightWeightRatio;
                     lineSidingWeight.leftWeightRatio /= costSum;
                     lineSidingWeight.rightWeightRatio /= costSum;
+                    assert(!IsInfOrNaN(lineSidingWeight.leftWeightRatio) && !IsInfOrNaN(lineSidingWeight.rightWeightRatio));
                 } else if (connectLeft) {
                     lineSidingWeight.leftWeightRatio = 1.0;
                     lineSidingWeight.rightWeightRatio = 0.0;

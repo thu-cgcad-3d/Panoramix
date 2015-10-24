@@ -3750,7 +3750,7 @@ namespace pano {
 
         Imagei ComputeOrientationMaps(const std::vector<Classified<Line2>> & lines,
             const std::vector<HPoint2> & vps, const Sizei & imSize){
-
+            SetClock();
             std::array<HPoint2, 3> vanishingPoints = { { vps[0], vps[1], vps[2] } };
             std::vector<Line2> ls; ls.reserve(lines.size());
             std::vector<int> lcs; lcs.reserve(lines.size());

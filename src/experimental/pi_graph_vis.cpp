@@ -163,8 +163,10 @@ namespace pano {
 
 
 
-        void VisualizeReconstruction2(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {
+        void VisualizeReconstructionCompact(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {
             gui::ResourceStore::set("texture", mg.view.image);
+
+        
 
         }
 

@@ -243,7 +243,7 @@ namespace pano {
             }
         }
 
-        void AttachGCConstraints(PIGraph & mg, const Image5d & gc) {
+        void AttachGCConstraints(PIGraph & mg, const Image5d & gc, double clutterThres, double wallThres) {
 
             auto up = normalize(mg.vps[mg.verticalVPId]);
             if (up.dot(-mg.view.camera.up()) < 0) {
@@ -268,7 +268,7 @@ namespace pano {
                 std::sort(orderedIds.begin(), orderedIds.end(), [&gcMean](size_t a, size_t b) {return gcMean[a] > gcMean[b]; });
 
                 size_t maxid = orderedIds.front();
-                if (maxid == ToUnderlying(GeometricContextIndex::ClutterOrPorous) && gcMean[maxid] < 0.5) {
+                if (maxid == ToUnderlying(GeometricContextIndex::ClutterOrPorous) && gcMean[maxid] < clutterThres) {
                     maxid = orderedIds[1];
                 }
 
@@ -288,7 +288,7 @@ namespace pano {
                     continue;
                 }
                 double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
-                if (wallScore > 0.5 && mg.seg2center[seg].dot(up) < 0) {
+                if (wallScore > wallThres && mg.seg2center[seg].dot(up) < 0) {
                     /*c.orientationClaz = -1;
                     c.orientationNotClaz = mg.verticalVPId;
                     c.used = true;*/

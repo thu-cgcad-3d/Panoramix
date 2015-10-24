@@ -24,7 +24,7 @@ namespace panolyz {
 
             std::vector<std::string> errorPaths;
 
-            misc::Matlab matlab;
+            misc::Matlab matlab("", true);
             gui::ForEachImageFromAFolder("H:\\DataSet\\", [&matlab, &errorPaths](const std::string & path) -> bool {
                 try {
                     std::cout << "processing image " << path << std::endl;

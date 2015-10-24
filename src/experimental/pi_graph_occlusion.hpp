@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pi_graph.hpp"
+#include "pi_graph_occlusion.hpp"
 
 namespace pano {
     namespace experimental {
@@ -21,6 +22,7 @@ namespace pano {
             bool isLineDetached() const { return leftWeightRatio == 0 && rightWeightRatio == 0; }
             bool onlyConnectLeft() const { return leftWeightRatio > 0 && rightWeightRatio == 0; }
             bool onlyConnectRight() const { return leftWeightRatio == 0 && rightWeightRatio > 0; }
+            double minWeightRatio() const { return std::min(leftWeightRatio, rightWeightRatio); }
             template <class Archiver>
             void serialize(Archiver & ar) {
                 ar(leftWeightRatio, rightWeightRatio);

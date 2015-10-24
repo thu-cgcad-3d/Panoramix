@@ -393,7 +393,7 @@ namespace pano {
 
 
 
-        double Solve(const PICGDeterminablePart & dp, PIConstraintGraph & cg, misc::Matlab & matlab) {
+        double Solve(const PICGDeterminablePart & dp, PIConstraintGraph & cg, misc::Matlab & matlab, int maxIter) {
 
             auto & determinableEnts = dp.determinableEnts;
 
@@ -529,12 +529,12 @@ namespace pano {
             {
                 matlab << "D1D2 = ones(m, 1);"; //  current depths of anchors
 
-                while (true) {
+                for(int t = 0; t < maxIter; t++) {
 
                     matlab << "K = (A1 - A2) .* repmat(D1D2 .* WA, [1, n]);";
                     matlab << "R = (C1 - C2) .* repmat(WC, [1, n]);";
                     
-                    static const std::string objectiveStr = "sum_square(K * X) * 1e6 + sum_square(R * X)";
+                    static const std::string objectiveStr = "sum_square(K * X) * 1e7 + sum_square(R * X)";
 
                     matlab
                         << "cvx_begin"
@@ -638,6 +638,103 @@ namespace pano {
             return disabledNum;
         }
 
+
+
+        int DisorientLines(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, PIGraph & mg) {
+            NOT_IMPLEMENTED_YET();
+        }
+
+
+        int DisorientSegs(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, PIGraph & mg) {
+            NOT_IMPLEMENTED_YET();
+        }
+
+
+
+
+
+        Imaged DepthMap(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {
+            Imaged depths(mg.view.image.size(), 0.0);
+            for (auto it = depths.begin(); it != depths.end(); ++it) {
+                auto pos = it.pos();
+                int seg = mg.segs(pos);
+                int ent = cg.seg2ent[seg];
+                if (ent == -1) {
+                    continue;
+                }
+                if (!Contains(dp.determinableEnts, ent)) {
+                    continue;
+                }
+                auto & plane = cg.entities[ent].supportingPlane.reconstructed;
+                Vec3 dir = normalize(mg.view.camera.toSpace(pos));
+                double depth = norm(IntersectionOfLineAndPlane(Ray3(Origin(), dir), plane).position);
+                *it = depth;
+            }
+            return depths;
+        }
+
+
+
+        std::vector<Polygon3> CompactModel(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {
+
+            // step 1
+            // smooth weird surfaces
+
+
+
+            std::vector<double> bndPiece2meanDist(mg.nbndPieces(), 0.0);
+            for (int bp = 0; bp < mg.nbndPieces(); bp++) {
+                auto segRelation = mg.bndPiece2segRelation[bp];
+                if (segRelation != SegRelation::Connected) {
+                    continue;
+                }
+                int bnd = mg.bndPiece2bnd[bp];
+                int seg1, seg2;
+                std::tie(seg1, seg2) = mg.bnd2segs[bnd];
+                int ent1 = cg.seg2ent[seg1];
+                int ent2 = cg.seg2ent[seg2];
+                if (ent1 == -1 || ent2 == -1) {
+                    continue;
+                }
+
+            }
+
+            struct Corner {
+                int bp;
+                Vec3 dir;
+                bool depthDetermined;
+                double depth;
+            };
+
+            std::vector<Polygon3> seg2polygon(mg.nsegs);
+            std::vector<bool> seg2goodPolygon(mg.nsegs, false);
+            for (int seg = 0; seg < mg.nsegs; seg++) {
+                int ent = cg.seg2ent[seg];
+                if (ent == -1) {
+                    continue;
+                }
+                if (!Contains(dp.determinableEnts, ent)) {
+                    continue;
+                }
+                auto & plane = cg.entities[ent].supportingPlane.reconstructed;
+                if (HasValue(plane, IsInfOrNaN<double>)) {
+                    continue;
+                }
+
+
+            }
+
+            NOT_IMPLEMENTED_YET();
+
+
+
+            // step 2
+            // make the compact polygons
+
+
+
+
+        }
 
         
 

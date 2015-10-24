@@ -79,7 +79,7 @@ namespace pano {
 
         // classify lines in 2d
         DenseMatd ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
-            double angleThreshold, double sigma, double scoreThreshold = 0.8,
+            double angleThreshold = M_PI / 3.0, double sigma = 0.1, double scoreThreshold = 0.8,
             double avoidVPDistanceThreshold = -1.0);
 
         // classify lines in 3d

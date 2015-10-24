@@ -139,8 +139,8 @@ namespace pano {
             const std::function<gui::Color(int vert)> & vertColor = core::ConstantFunctor<gui::Color>(gui::White),
             const std::function<void(int vert)> & vertClick = core::ConstantFunctor<void>());
 
-
-        void VisualizeReconstruction2(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg);
+        // the compact version
+        void VisualizeReconstructionCompact(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg);
 
 
 
