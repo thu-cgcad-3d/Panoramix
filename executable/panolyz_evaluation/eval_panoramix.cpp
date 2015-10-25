@@ -1,10 +1,11 @@
 
+#include <thread>
 #include "eval.hpp"
 
 #include "../../src/experimental/rl_graph_solver.hpp"
 #include "../../src/experimental/rl_graph_occlusion.hpp"
 #include "../../src/experimental/rl_graph_modeling.hpp"
-#include "../../src/experimental/tools.hpp"
+#include "../../src/experimental/rl_graph_vis.hpp"
 
 #include "../../src/experimental/pi_graph_control.hpp"
 #include "../../src/experimental/pi_graph_occlusion.hpp"
@@ -12,6 +13,19 @@
 #include "../../src/experimental/pi_graph_vis.hpp"
 
 namespace panolyz {
+
+    template <class FunT>
+    void ParallelRun(int n, FunT && fun) {
+        std::vector<std::thread> threads;
+        for (int i = 0; i < n; i++) {
+            threads.emplace_back(std::forward<FunT>(fun), i);
+        }
+        for (auto & t : threads) {
+            t.join();
+        }
+    }
+
+
 
     std::string PanoramixResultFilePath(const std::string & impath, int version) {
         return impath + ".panoramix." + std::to_string(version) + ".cereal";
@@ -49,14 +63,34 @@ namespace panolyz {
             // rebuild pigraph
             misc::Matlab matlab;
 
-            Image3ub originalImage = anno.rectifiedImage;
+            Image3ub image;
+            bool extendedOnTop, extendedOnBottom;
+            static const bool automaticallyRectifyIfNeeded = false;
+            if (0 || !misc::LoadCache(impath, "rectified", image, extendedOnTop, extendedOnBottom)) {
+                image = cv::imread(impath);
+                if (!automaticallyRectifyIfNeeded) {
+                    if (!gui::MakePanoramaByHand(image, &extendedOnTop, &extendedOnBottom)) {
+                        WARNNING("failed making panorama");
+                    }
+                } else {
+                    if (!MakePanorama(image, -1, &extendedOnTop, &extendedOnBottom)) {
+                        WARNNING("failed making panorama");
+                    }
+                }
+                misc::SaveCache(impath, "rectified", image, extendedOnTop, extendedOnBottom);
+            }
 
-            auto image = originalImage.clone();
+
+
+            //Image3ub originalImage = anno.rectifiedImage;
+
+            //auto image = originalImage.clone();
             ResizeToHeight(image, 700);
 
             /// prepare things!
             View<PanoramicCamera, Image3ub> view;
             std::vector<PerspectiveCamera> cams;
+            std::vector<std::vector<Classified<Line2>>> rawLine2s;
             std::vector<Classified<Line3>> line3s;
             std::vector<Vec3> vps;
             int vertVPId;
@@ -65,20 +99,20 @@ namespace panolyz {
 
 
             bool refresh_preparation = false;
-            if (refresh_preparation || !misc::LoadCache(impath, "preparation", view, cams, line3s, vps, vertVPId, segs, nsegs)) {
+            if (refresh_preparation || !misc::LoadCache(impath, "preparation", view, cams, rawLine2s, line3s, vps, vertVPId, segs, nsegs)) {
                 view = CreatePanoramicView(image);
 
                 // collect lines in each view
                 cams = CreateCubicFacedCameras(view.camera, image.rows, image.rows, image.rows * 0.4);
                 std::vector<Line3> rawLine3s;
-                std::vector<Line2> rawLine2s;
+                rawLine2s.resize(cams.size());
                 for (int i = 0; i < cams.size(); i++) {
                     auto pim = view.sampled(cams[i]).image;
                     LineSegmentExtractor lineExtractor;
                     lineExtractor.params().algorithm = LineSegmentExtractor::LSD;
                     auto ls = lineExtractor(pim); // use pyramid
+                    rawLine2s[i] = ClassifyEachAs(ls, -1);
                     for (auto & l : ls) {
-                        rawLine2s.push_back(l);
                         rawLine3s.emplace_back(normalize(cams[i].toSpace(l.first)),
                             normalize(cams[i].toSpace(l.second)));
                     }
@@ -87,8 +121,9 @@ namespace panolyz {
 
                 // estimate vp
                 line3s = ClassifyEachAs(rawLine3s, -1);
-                vps = EstimateVanishingPointsAndClassifyLines(line3s);
+                vps = EstimateVanishingPointsAndClassifyLines(line3s, nullptr, true);
                 vertVPId = NearestDirectionId(vps, Vec3(0, 0, 1));
+
 
                 if (0) {
                     gui::ColorTable ctable = gui::RGBGreys;
@@ -143,7 +178,39 @@ namespace panolyz {
                 }
 
                 // save
-                misc::SaveCache(impath, "preparation", view, cams, line3s, vps, vertVPId, segs, nsegs);
+                misc::SaveCache(impath, "preparation", view, cams, rawLine2s, line3s, vps, vertVPId, segs, nsegs);
+            }
+
+
+
+            // om
+            Image3ub omap;
+            bool refresh_omap = false;
+            if (false/*refresh_omap || !misc::LoadCache(impath, "omap", omap)*/) {
+                // estimate omaps
+                std::vector<View<PerspectiveCamera, Image3ub>> omaps(cams.size());
+                ParallelRun(cams.size(), [&](int i) {
+                    std::vector<HPoint2> hvps(vps.size());
+                    for (int k = 0; k < vps.size(); k++) {
+                        hvps[k] = cams[i].toScreenInHPoint(vps[k]);
+                    }
+                    // collect line 2ds in this view
+                    ClassifyLines(rawLine2s[i], hvps);
+
+                    Imagei omap = ComputeOrientationMaps(rawLine2s[i], hvps, cams[i].screenSize());
+                    std::vector<Imageub> omapChannels = { omap == 0, omap == 1, omap == 2 };
+                    Image3ub merged;
+                    cv::merge(omapChannels, merged);
+                    omaps[i] = View<PerspectiveCamera, Image3ub>(merged, cams[i]);
+                });
+                auto panoOmap = Combine(view.camera, omaps);
+                for (auto & p : panoOmap.image) {
+                    if ((p.val[0] > 0) + (p.val[1] > 0) + (p.val[2] > 0) > 1) {
+                        std::fill(p.val, std::end(p.val), 0);
+                    }
+                }
+                omap = panoOmap.image;
+                misc::SaveCache(impath, "omap", omap);
             }
 
 
@@ -183,12 +250,14 @@ namespace panolyz {
             }
             if (0 || !misc::LoadCache(impath, gcmergedFileName, gc)) {
                 gc = Combine(view.camera, gcs).image;
-                if (1) {
-                    std::vector<Imaged> gcChannels;
-                    cv::split(gc, gcChannels);
-                    gui::AsCanvas(ConvertToImage3d(gc)).show();
-                }
                 misc::SaveCache(impath, gcmergedFileName, gc);
+            }
+
+
+            if (0) {
+                std::vector<Imaged> gcChannels;
+                cv::split(gc, gcChannels);
+                gui::AsCanvas(ConvertToImage3d(gc)).show(1, "gc");
             }
 
 
@@ -203,6 +272,14 @@ namespace panolyz {
                 misc::SaveCache(impath, "mg_init", mg);
             }
 
+            bool refresh_line2leftRightSegs = refresh_mg_init || false;
+            std::vector<std::array<std::set<int>, 2>> line2leftRightSegs;
+            static const double angleDistForSegLineNeighborhood = DegreesToRadians(5);
+            if (refresh_line2leftRightSegs || !misc::LoadCache(impath, "line2leftRightSegs", line2leftRightSegs)) {
+                std::cout << "########## refreshing line2leftRightSegs ###########" << std::endl;
+                line2leftRightSegs = CollectSegsNearLines(mg, angleDistForSegLineNeighborhood);
+                misc::SaveCache(impath, "line2leftRightSegs", line2leftRightSegs);
+            }
 
 
             const auto printLines = [&mg, &impath](int delay, const std::string & saveAs) {
@@ -341,7 +418,7 @@ namespace panolyz {
 
             auto linesSegsIm = printPIGraph(0, "initial_lines_segs");
 
-            {
+            if(false){
                 Image3ub lsim = linesSegsIm * 255;
                 ReverseRows(lsim);
                 gui::SceneBuilder sb;
@@ -361,22 +438,21 @@ namespace panolyz {
                 std::cout << "########## refreshing mg oriented ###########" << std::endl;
                 AttachPrincipleDirectionConstraints(mg);
                 AttachWallConstraints(mg, M_PI / 60.0);
-                AttachGCConstraints(mg, gc);
+                AttachGCConstraints(mg, gc, 0.7, 0.7, true);
                 misc::SaveCache(impath, "mg_oriented", mg);
             }
 
-            printLines(0, "oriented_lines");
-            printOrientedSegs(0, "oriented_segs");
+            //printLines(0, "oriented_lines");
+            //printOrientedSegs(0, "oriented_segs");
             printPIGraph(0, "oriented_lines_segs");
 
             // detect occlusions
             bool refresh_lsw = refresh_mg_oriented || true;
             std::vector<LineSidingWeight> lsw;
-            std::vector<std::array<std::set<int>, 2>> line2leftRightSegs;
-            if (refresh_lsw || !misc::LoadCache(impath, "lsw", lsw, line2leftRightSegs)) {
+            if (refresh_lsw || !misc::LoadCache(impath, "lsw", lsw)) {
                 std::cout << "########## refreshing lsw ###########" << std::endl;
-                lsw = ComputeLinesSidingWeights(mg, DegreesToRadians(3), 0.2, 0.1, DegreesToRadians(5), &line2leftRightSegs);
-                misc::SaveCache(impath, "lsw", lsw, line2leftRightSegs);
+                lsw = ComputeLinesSidingWeights(mg, DegreesToRadians(3), 0.2, 0.1, angleDistForSegLineNeighborhood);
+                misc::SaveCache(impath, "lsw", lsw);
             }
 
 
@@ -399,8 +475,8 @@ namespace panolyz {
                         }
                         cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), p1, p2);
                         cv::line(pim, p1, p2, (cv::Scalar)color / 255.0, 2);
-                        if (withTeeth) {
-                            auto teethp = ToPixel(RightPerpendicularDirectiion(ecast<double>(p2 - p1))) + p1;
+                        if (withTeeth && i % 3 == 0) {
+                            auto teethp = ToPixel(RightPerpendicularDirectiion(ecast<double>(p2 - p1))) * 2 + p1;
                             auto tp1 = p1, tp2 = teethp;
                             cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), tp1, tp2);
                             cv::line(pim, tp1, tp2, (cv::Scalar)color / 255.0, 1);
@@ -408,7 +484,7 @@ namespace panolyz {
                     }
                     //cv::circle(pim, ps.back(), 2.0, (cv::Scalar)color / 255.0, 2);
                     if (!text.empty()) {
-                        cv::putText(pim, text, ps.back(), 1, 0.7, color);
+                        cv::putText(pim, text, ps.back() + Pixel(5, 0), 1, 0.7, color);
                     }
                 };
                 for (int line = 0; line < mg.nlines(); line++) {
@@ -417,21 +493,27 @@ namespace panolyz {
                     if (!ws.isOcclusion()) {
                         drawLine(l, "", gui::Black, false);
                     } else if (ws.onlyConnectLeft()) {
-                        drawLine(l, "", gui::Blue, true);
+                        drawLine(l, std::to_string(line), gui::Blue, true);
                     } else if (ws.onlyConnectRight()) {
-                        drawLine(l.reversed(), "", gui::Blue, true);
+                        drawLine(l.reversed(), std::to_string(line), gui::Blue, true);
                     } else {
-                        drawLine(l, "", gui::Red, false);
+                        drawLine(l, std::to_string(line), gui::Red, false);
                     }
                 }
                 gui::AsCanvas(pim).show(0, "line labels");
             }
 
 
-            bool refresh_mg_occdetected = refresh_lsw || true;
+            bool refresh_mg_occdetected = refresh_lsw || refresh_line2leftRightSegs || false;
             if (refresh_mg_occdetected || !misc::LoadCache(impath, "mg_occdetected", mg)) {
                 std::cout << "########## refreshing mg occdetected ###########" << std::endl;
-                ApplyLinesSidingWeights(mg, lsw, line2leftRightSegs);
+                ApplyLinesSidingWeights(mg, lsw, line2leftRightSegs, true);
+                if (anno.extendedOnTop) {
+                    DisableTopSeg(mg);
+                }
+                //if (anno.extendedOnBottom) {
+                //    DisableBottomSeg(mg);
+                //}
                 misc::SaveCache(impath, "mg_occdetected", mg);
             }
 
@@ -441,24 +523,30 @@ namespace panolyz {
             bool refresh_mg_reconstructed = refresh_mg_occdetected || true;
             if (refresh_mg_reconstructed || !misc::LoadCache(impath, "mg_reconstructed", mg, cg, dp)) {
                 std::cout << "########## refreshing mg reconstructed ###########" << std::endl;
+                cg = BuildPIConstraintGraph(mg, /*lsw, line2leftRightSegs, */DegreesToRadians(1));
                 
-                cg = BuildPIConstraintGraph(mg, DegreesToRadians(1));
-                
-                while (true) {
+                for(int i = 0; i < 2; i++) {
                     dp = LocateDeterminablePart(cg, DegreesToRadians(3));
-                    double energy = Solve(dp, cg, matlab);
+                    double energy = Solve(dp, cg, matlab, 5);
                     if (IsInfOrNaN(energy)) {
                         std::cout << "solve failed" << std::endl;
                         return nullptr;
                     }
+                    auto depthMap = DepthMap(dp, cg, mg);
+                    gui::AsCanvas(depthMap).show();
+
                     VisualizeReconstruction(dp, cg, mg, true);
-                    int disabledNum = DisableUnsatisfiedConstraints(dp, cg, [](double distRankRatio, double avgDist, double maxDist) {
+
+                   /* int disabledNum = DisableUnsatisfiedConstraints(dp, cg, [](double distRankRatio, double avgDist, double maxDist) {
                         return maxDist > 0.05;
                     });
                     std::cout << "disabled constraint num = " << disabledNum << std::endl;
                     if (disabledNum == 0) {
                         break;
-                    }
+                    }*/
+
+                    DisorientDanglingLines2(dp, cg, mg, 0.5);
+                    DisorientDanglingSegs(dp, cg, mg, 0.1);
                 }
 
                 misc::SaveCache(impath, "mg_reconstructed", mg, cg);

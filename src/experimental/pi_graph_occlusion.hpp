@@ -20,6 +20,8 @@ namespace pano {
             double rightWeightRatio;
             bool isOcclusion() const { return leftWeightRatio == 0 || rightWeightRatio == 0; }
             bool isLineDetached() const { return leftWeightRatio == 0 && rightWeightRatio == 0; }
+            bool connectLeft() const { return leftWeightRatio > 0; }
+            bool connectRight() const { return rightWeightRatio > 0; }
             bool onlyConnectLeft() const { return leftWeightRatio > 0 && rightWeightRatio == 0; }
             bool onlyConnectRight() const { return leftWeightRatio == 0 && rightWeightRatio > 0; }
             double minWeightRatio() const { return std::min(leftWeightRatio, rightWeightRatio); }
@@ -33,11 +35,14 @@ namespace pano {
             double minAngleSizeOfLineInTJunction = DegreesToRadians(3),
             double lambdaShrinkForHLineDetectionInTJunction = 0.2,
             double lambdaShrinkForVLineDetectionInTJunction = 0.1,
-            double angleSizeForPixelsNearLines = DegreesToRadians(2),
-            std::vector<std::array<std::set<int>, 2>> * line2leftRightSegsPtr = nullptr);
+            double angleSizeForPixelsNearLines = DegreesToRadians(2));
+
+        std::vector<std::array<std::set<int>, 2>> CollectSegsNearLines(const PIGraph & mg, 
+            double angleSizeForPixelsNearLines = DegreesToRadians(2));
 
         void ApplyLinesSidingWeights(PIGraph & mg, const std::vector<LineSidingWeight> & lsw, 
-            const std::vector<std::array<std::set<int>, 2>> & line2leftRightSegs);
+            const std::vector<std::array<std::set<int>, 2>> & line2leftRightSegs,
+            bool connectSegsOnDanglingLine);
 
 
 

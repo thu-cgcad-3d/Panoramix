@@ -85,7 +85,7 @@ namespace pano {
         // classify lines in 3d
         DenseMatd ClassifyLines(std::vector<Classified<Line3>> &lines, const std::vector<Vec3> & vps,
             double angleThreshold, double sigma, double scoreThreshold = 0.8, 
-            double avoidVPAngleThreshold = M_PI / 18.0);
+            double avoidVPAngleThreshold = M_PI / 18.0, double scoreAdvatangeRatio = 0.0);
 
         // MergeLines
         std::vector<Line3> MergeLines(const std::vector<Line3> & lines, double angleThres = 0.03, double mergeAngleThres = 0.0);
@@ -113,7 +113,8 @@ namespace pano {
         std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(const std::vector<PerspectiveCamera> & cams,
             std::vector<std::vector<Classified<Line2>>> & lineSegments, std::vector<DenseMatd> * lineVPScores = nullptr);
 
-        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(std::vector<Classified<Line3>> & lines, DenseMatd * lineVPScores = nullptr);
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(std::vector<Classified<Line3>> & lines, 
+            DenseMatd * lineVPScores = nullptr, bool dontClassifyUmbiguiousLines = false);
 
         // [vert, horiz1, horiz2, other]
         void OrderVanishingPoints(std::vector<Vec3> & vps, const Vec3 & verticalSeed = Z());

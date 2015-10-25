@@ -640,17 +640,148 @@ namespace pano {
 
 
 
-        int DisorientLines(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, PIGraph & mg) {
-            NOT_IMPLEMENTED_YET();
+        void DisorientDanglingLines(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double ratio) {
+            std::vector<double> line2meanConsDist(mg.nlines(), 0.0);
+            for (int line = 0; line < mg.nlines(); line++) {
+                int ent = cg.line2ent[line];
+                if (ent == -1) {
+                    continue;
+                }
+                if (!Contains(dp.determinableEnts, ent)) {
+                    continue;
+                }
+                if (cg.entities[ent].supportingPlane.dof == 2) {
+                    continue;
+                }
+                double distSum = 0.0;
+                int distCount = 0;
+                for (int cons : cg.ent2cons[ent]) {
+                    for (auto & anchor : cg.constraints[cons].anchors) {
+                        int ent1 = cg.constraints[cons].ent1;
+                        int ent2 = cg.constraints[cons].ent2;
+                        auto & plane1 = cg.entities[ent1].supportingPlane.reconstructed;
+                        auto & plane2 = cg.entities[ent2].supportingPlane.reconstructed;
+                        auto p1 = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position;
+                        auto p2 = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position;
+                        double dist = Distance(p1, p2);
+                        distSum += dist;
+                        distCount++;
+                    }
+                }
+                line2meanConsDist[line] = distSum / distCount;
+            }
+
+            std::vector<int> orderedLineIds(mg.nlines());
+            std::iota(orderedLineIds.begin(), orderedLineIds.end(), 0);
+            std::sort(orderedLineIds.begin(), orderedLineIds.end(), [&line2meanConsDist](int a, int b) {
+                return line2meanConsDist[a] > line2meanConsDist[b];
+            });
+
+            for (int i = 0; i < orderedLineIds.size() * ratio; i++) {
+                int line = orderedLineIds[i];
+                mg.lines[line].claz = -1;
+                int ent = cg.line2ent[line];
+                if (ent == -1) {
+                    continue;
+                }
+                cg.entities[ent].supportingPlane = PIConstraintGraph::Entity::SupportingPlane(mg.lines[line], mg.vps);
+            }
         }
 
 
-        int DisorientSegs(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, PIGraph & mg) {
-            NOT_IMPLEMENTED_YET();
+
+        void DisorientDanglingLines2(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double thresRatio) {
+            std::vector<double> line2meanSegDistRatio(mg.nlines(), 0.0);
+            for (int line = 0; line < mg.nlines(); line++) {
+                int ent = cg.line2ent[line];
+                if (ent == -1) {
+                    continue;
+                }
+                if (!Contains(dp.determinableEnts, ent)) {
+                    continue;
+                }
+                if (cg.entities[ent].supportingPlane.dof == 2) {
+                    continue;
+                }
+                double distSum = 0.0;
+                int distCount = 0;
+                for (int cons : cg.ent2cons[ent]) {
+                    for (auto & anchor : cg.constraints[cons].anchors) {
+                        int ent1 = cg.constraints[cons].ent1;
+                        int ent2 = cg.constraints[cons].ent2;
+                        if (cg.entities[ent1].isLine() && cg.entities[ent2].isLine()) {
+                            continue;
+                        }
+                        auto & plane1 = cg.entities[ent1].supportingPlane.reconstructed;
+                        auto & plane2 = cg.entities[ent2].supportingPlane.reconstructed;
+                        auto p1 = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position;
+                        auto p2 = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position;
+                        double dist = Distance(p1, p2);
+                        distSum += dist;
+                        distCount++;
+                    }
+                }
+                line2meanSegDistRatio[line] = distSum / std::max(distCount, 1) / 
+                    AngleBetweenDirections(mg.lines[line].component.first, mg.lines[line].component.second);
+            }
+
+            for (int line = 0; line < mg.nlines(); line++) {
+                if (line2meanSegDistRatio[line] < thresRatio) {
+                    continue;
+                }
+                mg.lines[line].claz = -1;
+                int ent = cg.line2ent[line];
+                if (ent == -1) {
+                    continue;
+                }
+                cg.entities[ent].supportingPlane = PIConstraintGraph::Entity::SupportingPlane(mg.lines[line], mg.vps);
+            }
         }
-
-
-
+        
+        void DisorientDanglingSegs(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double thresRatio) {
+            std::vector<double> seg2meanDistRatio(mg.nsegs, 0.0);
+            for (int seg = 0; seg < mg.nsegs; seg++) {
+                int ent = cg.seg2ent[seg];
+                if (ent == -1) {
+                    continue;
+                }
+                if (!Contains(dp.determinableEnts, ent)) {
+                    continue;
+                }
+                if (cg.entities[ent].supportingPlane.dof > 1) {
+                    continue;
+                }
+                double distSum = 0.0;
+                int distCount = 0;
+                for (int cons : cg.ent2cons[ent]) {
+                    for (auto & anchor : cg.constraints[cons].anchors) {
+                        int ent1 = cg.constraints[cons].ent1;
+                        int ent2 = cg.constraints[cons].ent2;
+                        auto & plane1 = cg.entities[ent1].supportingPlane.reconstructed;
+                        auto & plane2 = cg.entities[ent2].supportingPlane.reconstructed;
+                        auto p1 = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position;
+                        auto p2 = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position;
+                        double dist = Distance(p1, p2);
+                        distSum += dist;
+                        distCount++;
+                    }
+                }
+                seg2meanDistRatio[seg] = distSum / std::max(distCount, 1);
+            }
+            for (int seg = 0; seg < mg.nsegs; seg++) {
+                if (seg2meanDistRatio[seg] < thresRatio) {
+                    continue;
+                }
+                mg.seg2control[seg].orientationClaz = -1;
+                mg.seg2control[seg].orientationNotClaz = -1;
+                int ent = cg.seg2ent[seg];
+                if (ent == -1) {
+                    continue;
+                }
+                cg.entities[ent].supportingPlane = 
+                    PIConstraintGraph::Entity::SupportingPlane(mg.seg2control[seg], mg.seg2center[seg], mg.vps);
+            }
+        }
 
 
         Imaged DepthMap(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {

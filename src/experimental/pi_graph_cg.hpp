@@ -22,6 +22,9 @@ namespace pano {
                     Vec3 toward;
                     Vec3 along;
                     Plane3 reconstructed;
+                    SupportingPlane();
+                    explicit SupportingPlane(const SegControl & control, const Vec3 & center, const std::vector<Vec3> & vps);
+                    explicit SupportingPlane(const Classified<Line3> & line, const std::vector<Vec3> & vps);
                     DenseMatd matFromVarsToPlaneCoeffs() const;
                     template <class Archiver>
                     void serialize(Archiver & ar) { ar(dof, center, toward, along, reconstructed); }

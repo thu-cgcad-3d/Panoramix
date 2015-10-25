@@ -6,7 +6,7 @@
 #include "../core/clock.hpp"
 #include "../core/homo_graph.hpp"
 
-#include "tools.hpp"
+#include "rl_graph_vis.hpp"
 #include "rl_graph.hpp"
 #include "rl_graph_occlusion.hpp"
 

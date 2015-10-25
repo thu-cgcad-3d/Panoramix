@@ -19,24 +19,9 @@ int main(int argc, char ** argv) {
         auto anno = pano::experimental::LoadOrInitializeNewLayoutAnnotation(impath);
         pano::experimental::SaveLayoutAnnotation(impath, anno);
 
-        //{ // for debug only
-        //    panolyz::DebugPIGraph(impath, matlab);
-        //    continue;
-        //}        
-
-        //auto modelGT = panolyz::PredictionOfGT(impath);
-        //modelGT->visualize(directions);
-        
-        //auto modelPanoContext = panolyz::PredictionOfPanoContext(impath, matlab);
-        //modelPanoContext->visualize(directions);
-        // 0.35...
 
         panolyz::PredictOptions options;
 
-        //options.useGroundTruthOcclusions = false;
-        //options.useGC = true;
-        //auto modelPxWithoutGTOcc = panolyz::PredictionOfPanoramix(impath, options, matlab);
-        //modelPxWithoutGTOcc->visualize();
 
         options.useGroundTruthOcclusions = false;
         options.useGC = true;

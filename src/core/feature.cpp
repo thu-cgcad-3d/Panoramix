@@ -490,7 +490,7 @@ namespace pano {
 
 
         DenseMatd ClassifyLines(std::vector<Classified<Line3>> & lines, const std::vector<Vec3> & vps,
-            double angleThreshold, double sigma, double scoreThreshold, double avoidVPAngleThreshold) {
+            double angleThreshold, double sigma, double scoreThreshold, double avoidVPAngleThreshold, double scoreAdvatangeRatio) {
 
             size_t nlines = lines.size();
             size_t npoints = vps.size();
@@ -521,12 +521,14 @@ namespace pano {
 
                 // classify lines
                 lines[i].claz = -1;
-                double curscore = scoreThreshold;
-                for (int j = 0; j < npoints; j++){
-                    if (linescorestable(i, j) > curscore) {
-                        lines[i].claz = j;
-                        curscore = linescorestable(i, j);
-                    }
+                std::vector<double> scores(npoints, 0.0);
+                for (int j = 0; j < npoints; j++) {
+                    scores[j] = linescorestable(i, j);
+                }
+                int maxClaz = std::max_element(scores.begin(), scores.end()) - scores.begin();
+                std::sort(scores.begin(), scores.end(), std::greater<>());
+                if (scores.front() >= scoreThreshold && (npoints <= 1 || scores.front() - scores[1] >= scoreAdvatangeRatio)) {
+                    lines[i].claz = maxClaz;
                 }
             }
 
@@ -1033,7 +1035,8 @@ namespace pano {
         }
 
 
-        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(std::vector<Classified<Line3>> & lines, DenseMatd * lineVPScores) {
+        std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(std::vector<Classified<Line3>> & lines, DenseMatd * lineVPScores, 
+            bool dontClassifyUmbiguiousLines) {
             std::vector<Vec3> lineIntersections;
             
             std::vector<Line3> pureLines(lines.size());
@@ -1045,7 +1048,8 @@ namespace pano {
             auto vanishingPoints = FindOrthogonalPrinicipleDirections(inters, 1000, 500, true).unwrap();
             OrderVanishingPoints(vanishingPoints);
 
-            auto scores = ClassifyLines(lines, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0);
+            auto scores = ClassifyLines(lines, vanishingPoints, M_PI / 3.0, 0.1, 0.8, M_PI / 18.0, 
+                dontClassifyUmbiguiousLines ? 0.1 : 0.0);
             assert(scores.rows == lines.size() && scores.cols == vanishingPoints.size());
 
             if (lineVPScores) {

@@ -243,7 +243,7 @@ namespace pano {
             }
         }
 
-        void AttachGCConstraints(PIGraph & mg, const Image5d & gc, double clutterThres, double wallThres) {
+        void AttachGCConstraints(PIGraph & mg, const Image5d & gc, double clutterThres, double wallThres, bool onlyConsiderBottomHalf) {
 
             auto up = normalize(mg.vps[mg.verticalVPId]);
             if (up.dot(-mg.view.camera.up()) < 0) {
@@ -272,7 +272,7 @@ namespace pano {
                     maxid = orderedIds[1];
                 }
 
-                if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && mg.seg2center[seg].dot(up) < 0) { // lower
+                if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) && (!onlyConsiderBottomHalf || mg.seg2center[seg].dot(up) < 0)) { // lower
                     // assign horizontal constriant
                     //c.orientationClaz = mg.verticalVPId;
                     //c.orientationNotClaz = -1;
@@ -288,7 +288,7 @@ namespace pano {
                     continue;
                 }
                 double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
-                if (wallScore > wallThres && mg.seg2center[seg].dot(up) < 0) {
+                if (wallScore > wallThres && (!onlyConsiderBottomHalf || mg.seg2center[seg].dot(up) < 0)) {
                     /*c.orientationClaz = -1;
                     c.orientationNotClaz = mg.verticalVPId;
                     c.used = true;*/

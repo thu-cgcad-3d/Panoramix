@@ -1539,63 +1539,86 @@ namespace pano {
             double minAngleSizeOfLineInTJunction /*= DegreesToRadians(3)*/,
             double lambdaShrinkForHLineDetectionInTJunction /*= 0.2*/, 
             double lambdaShrinkForVLineDetectionInTJunction /*= 0.1*/,
-            double angleSizeForPixelsNearLines /*= DegreesToRadians(2)*/,
-            std::vector<std::array<std::set<int>, 2>> * line2leftRightSegsPtr) {
+            double angleSizeForPixelsNearLines /*= DegreesToRadians(2)*/) {
 
-            int width = mg.segs.cols;
-            int height = mg.segs.rows;
 
-            RTreeMap<Vec3, std::pair<Line3, int>> lineSamplesTree;
-            for (int i = 0; i < mg.nlines(); i++) {
-                auto & line = mg.lines[i].component;
-                double spanAngle = AngleBetweenDirections(line.first, line.second);
-                for (double a = 0.0; a < spanAngle; a += angleSizeForPixelsNearLines / 3.0) {
-                    Vec3 sample1 = normalize(RotateDirection(line.first, line.second, a));
-                    Vec3 sample2 = normalize(RotateDirection(line.first, line.second, a + angleSizeForPixelsNearLines / 3.0));
-                    lineSamplesTree.emplace(normalize(sample1 + sample2), std::make_pair(Line3(sample1, sample2), i));
+            std::vector<std::map<int, double>> line2leftSegsWithWeight(mg.nlines());
+            std::vector<std::map<int, double>> line2rightSegsWithWeight(mg.nlines());
+
+            // todo 
+            // use the sweep operation instead!!!!
+            //THERE_ARE_BUGS_HERE("Use the Sweep Operation to detect orientation violation between lines and segs!");
+
+            Imagei backproj(mg.segs.size(), 0);
+
+            for (int line = 0; line < mg.nlines(); line++) {
+                auto & l = mg.lines[line].component;
+                int claz = mg.lines[line].claz;
+                if (claz == -1) {
+                    continue;
                 }
-            }
-
-            // collect lines' nearby pixels and segs
-            std::vector<std::set<Pixel, ComparePixel>> line2nearbyPixels(mg.nlines());
-            std::vector<std::map<int, Vec3>> line2nearbySegsWithLocalCenterDir(mg.nlines());
-            std::vector<std::map<int, bool>> line2nearbySegsWithOnLeftFlag(mg.nlines());
-            std::vector<std::map<int, double>> line2nearbySegsWithWeight(mg.nlines());
-
-            for (auto it = mg.segs.begin(); it != mg.segs.end(); ++it) {
-                Pixel p = it.pos();
-                double weight = cos((p.y - (height - 1) / 2.0) / (height - 1) * M_PI);
-                Vec3 dir = normalize(mg.view.camera.toSpace(p));
-                int seg = *it;
-                lineSamplesTree.search(BoundingBox(dir).expand(angleSizeForPixelsNearLines * 3),
-                    [&mg, &dir, &line2nearbyPixels, &line2nearbySegsWithLocalCenterDir, &line2nearbySegsWithWeight,
-                    angleSizeForPixelsNearLines, p, seg, weight](
-                    const std::pair<Vec3, std::pair<Line3, int>> & lineSample) {
-                    auto line = normalize(mg.lines[lineSample.second.second].component);
-                    // d(dir, line) < angleSizeForPixelsNearLines && lambda(dir, line) \in [0, 1]
-                    auto dirOnLine = DistanceFromPointToLine(dir, lineSample.second.first).second.position;
-                    double angleDist = AngleBetweenDirections(dir, dirOnLine);
-                    double lambda = ProjectionOfPointOnLine(dir, line).ratio; // the projected position on line
-                    if (angleDist < angleSizeForPixelsNearLines && IsBetween(lambda, 0.0, 1.0)) {
-                        line2nearbyPixels[lineSample.second.second].insert(p);
-                        auto & localCenterDir = line2nearbySegsWithLocalCenterDir[lineSample.second.second][seg];
-                        localCenterDir += dir * weight;
-                        double & segWeight = line2nearbySegsWithWeight[lineSample.second.second][seg];
-                        segWeight += weight * Gaussian(lambda - 0.5, 0.1); // the closer to the center, the more important it is!
+                for (int vpid = 0; vpid < mg.vps.size(); vpid++) {
+                    if (vpid == claz) {
+                        continue;
                     }
-                    return true;
-                });
-            }
-            for (int i = 0; i < mg.nlines(); i++) {
-                auto & nearbySegsWithLocalCenterDir = line2nearbySegsWithLocalCenterDir[i];
-                auto & line = mg.lines[i].component;
-                Vec3 lineRight = line.first.cross(line.second);
-                for (auto & segWithDir : nearbySegsWithLocalCenterDir) {
-                    Vec3 centerDir = normalize(segWithDir.second);
-                    bool onLeft = (centerDir - line.first).dot(lineRight) < 0;
-                    line2nearbySegsWithOnLeftFlag[i][segWithDir.first] = onLeft;
+                    Vec3 vp = mg.vps[vpid];
+                    if (vp.dot(normalize(l.center())) < 0) {
+                        vp = -vp;
+                    }
+
+                    Vec3 lineRight = l.first.cross(l.second);
+                    bool onLeft = (vp - l.first).dot(lineRight) < 0;
+
+                    double lineAngleToVP = std::min(AngleBetweenDirections(l.first, vp), AngleBetweenDirections(l.second, vp));
+                    double sweepAngle = std::min(angleSizeForPixelsNearLines, lineAngleToVP - 1e-4);
+                    std::vector<Vec3> sweepQuad = { 
+                        normalize(l.first), normalize(l.second), 
+                        RotateDirection(l.second, vp, sweepAngle), 
+                        RotateDirection(l.first, vp, sweepAngle) 
+                    };
+                    Vec3 z = normalize(l.center());
+                    Vec3 y = normalize(normalize(l).direction());
+                    Vec3 x = normalize(y.cross(z));
+                    const double focal = mg.view.camera.focal() * 1.2;
+                    int w = std::ceil(tan(sweepAngle + 0.01) * focal * 2 * 1.5);
+                    int h = std::ceil((2 * tan(AngleBetweenDirections(l.first, l.second) / 2.0) + 0.01) * focal * 1.5);
+                    PerspectiveCamera pc(w, h, Point2(w / 2.0, h / 2.0), focal, Origin(), z, y);
+                    
+                    Imagei sampledSegs = MakeCameraSampler(pc, mg.view.camera)(mg.segs);
+
+                    std::vector<Point2i> quadProjs(4);
+                    for (int i = 0; i < 4; i++) {
+                        quadProjs[i] = pc.toScreen(sweepQuad[i]);
+                        //assert(IsBetween(quadProjs[i][0], 0, w - 1));
+                        //assert(IsBetween(quadProjs[i][1], 0, h - 1));
+                        quadProjs[i][0] = BoundBetween(quadProjs[i][0], 0, w);
+                        quadProjs[i][1] = BoundBetween(quadProjs[i][1], 0, w);
+                    }
+                    Imageub mask(pc.screenSize(), false);
+                    cv::fillConvexPoly(mask, quadProjs, true);
+
+                   /* if (line == 892 || line == 893 || line == 851 || line == 852) {
+                        Imagei proj = (Imagei)(MakeCameraSampler(mg.view.camera, pc)(mask));
+                        if (!onLeft) {
+                            proj = -proj;
+                        }
+                        backproj += (y.dot(mg.view.camera.up()) > 0 ? proj : -proj);
+                    }*/
+
+                    for (auto it = sampledSegs.begin(); it != sampledSegs.end(); ++it) {
+                        if (!mask(it.pos())) {
+                            continue;
+                        }
+                        int seg = *it;
+                        double lambda = (it.pos().y - h / 2.0) / h;
+                        (onLeft ? line2leftSegsWithWeight : line2rightSegsWithWeight)[line][seg] += Gaussian(lambda, 0.1);
+                    }
                 }
             }
+
+
+
+
 
 
             // collect lines' nearby tjunction legs
@@ -1692,12 +1715,11 @@ namespace pano {
 
             for (int line = 0; line < mg.nlines(); line++) {
                 auto & vhs = line2vhConnectLeftRight[line];
-                static const bool vhIsLefts[] = { true, false };
                 
                 // {left, right}
                 for (int k = 0; k < 2; k++) {
                     auto vh = vhs[k];
-                    bool vhIsLeft = vhIsLefts[k];
+                    bool vhIsLeft = k == 0;
 
                     if (vh.invalid()) {
                         continue;
@@ -1705,20 +1727,18 @@ namespace pano {
 
                     int claz = mg.lines[line].claz;
                     auto & l = mg.lines[line].component;
+                    double lineAngleLen = AngleBetweenDirections(l.first, l.second);
                     const auto & lps = mg.line2linePieces[line];
 
                     // orientation consistency term between seg and line
                     // consider nearby segs
                     double wrongSegWeightSumThisSide = 0.0;
-                    for (auto & segAndWeight : line2nearbySegsWithWeight[line]) {
+                    for (auto & segAndWeight : (vhIsLeft ? line2leftSegsWithWeight : line2rightSegsWithWeight)[line]) {
                         int seg = segAndWeight.first;
                         double weight = segAndWeight.second;
-                        bool onLeft = line2nearbySegsWithOnLeftFlag[line].at(seg);
                         auto & segControl = mg.seg2control[seg];
                         if (segControl.orientationClaz != -1 && segControl.orientationClaz == claz) {
-                            if (onLeft == vhIsLeft){
-                                wrongSegWeightSumThisSide += weight;
-                            }
+                            wrongSegWeightSumThisSide += weight;
                         }
                     }
 
@@ -1729,8 +1749,8 @@ namespace pano {
                     double & labelConnectCost = line2labelConnectCostLeftRight[line][k];
                     double & labelDisconnectCost = line2labelDisconnectCostLeftRight[line][k];
 
-                    labelConnectCost = wrongSegWeightSumThisSide * 100;
-                    labelDisconnectCost = Gaussian(tjunctionNumThisSide, 7.0) * 10.0 + 1.0;
+                    labelConnectCost = wrongSegWeightSumThisSide > 3 ? 100 : 0;
+                    labelDisconnectCost = Gaussian(tjunctionNumThisSide, 7.0) * 5.0;
                 }
             }
 
@@ -1800,6 +1820,9 @@ namespace pano {
                 auto & l2 = mg.lines[line2].component;
                 auto nearest = DistanceBetweenTwoLines(l1, l2);
                 double angleDist = AngleBetweenDirections(nearest.second.first.position, nearest.second.second.position);
+                auto n1 = l1.first.cross(l1.second);
+                auto n2 = l2.first.cross(l2.second);
+                double normalAngle = AngleBetweenUndirectedVectors(n1, n2);
                 bool sameDirection = l1.first.cross(l1.second).dot(l2.first.cross(l2.second)) > 0;
 
                 if (!sameDirection) {
@@ -1809,13 +1832,13 @@ namespace pano {
                 for (int k = 0; k < 2; k++) {
                     auto vh1 = vhs1[k];
                     auto vh2 = vhs2[k];
-                    int fc = fg.addFactorCategory([line1, line2, angleDist](
+                    int fc = fg.addFactorCategory([line1, line2, angleDist, normalAngle](
                         const int * varlabels, size_t nvar, ml::FactorGraph::FactorCategoryId fcid, void * givenData)->double {
                         assert(nvar == 2);
                         int label1 = varlabels[0];
                         int label2 = varlabels[1];
                         if (label1 != label2) {
-                            return Gaussian(angleDist, DegreesToRadians(5)) * 40.0;
+                            return Gaussian(normalAngle, DegreesToRadians(0.5)) * 100.0;
                         }
                         return 0.0;
                     }, 1.0);
@@ -1830,7 +1853,7 @@ namespace pano {
 
             ml::FactorGraph::ResultTable bestLabels;
             double minEnergy = std::numeric_limits<double>::infinity();
-            fg.solve(20, 10, [&bestLabels, &minEnergy](int epoch, double energy, double denergy, const ml::FactorGraph::ResultTable & results) -> bool {
+            fg.solve(5, 10, [&bestLabels, &minEnergy](int epoch, double energy, double denergy, const ml::FactorGraph::ResultTable & results) -> bool {
                 std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
                 if (energy < minEnergy) {
                     bestLabels = results;
@@ -1875,26 +1898,86 @@ namespace pano {
                 }
             }
 
-            if (line2leftRightSegsPtr) {
-                auto & line2leftRightSegs = *line2leftRightSegsPtr;
-                line2leftRightSegs.clear();
-                line2leftRightSegs.resize(mg.nlines());
-                for (int line = 0; line < mg.nlines(); line++) {
-                    for (auto & pp : line2nearbySegsWithOnLeftFlag[line]) {
-                        int seg = pp.first;
-                        bool onLeft = pp.second;
-                        line2leftRightSegs[line][onLeft ? 0 : 1].insert(seg);
-                    }
+            return lsw;
+        }
+
+
+        std::vector<std::array<std::set<int>, 2>> CollectSegsNearLines(const PIGraph & mg, double angleSizeForPixelsNearLines) {
+
+            int width = mg.segs.cols;
+            int height = mg.segs.rows;
+
+            RTreeMap<Vec3, std::pair<Line3, int>> lineSamplesTree;
+            for (int i = 0; i < mg.nlines(); i++) {
+                auto & line = mg.lines[i].component;
+                double spanAngle = AngleBetweenDirections(line.first, line.second);
+                for (double a = 0.0; a < spanAngle; a += angleSizeForPixelsNearLines / 3.0) {
+                    Vec3 sample1 = normalize(RotateDirection(line.first, line.second, a));
+                    Vec3 sample2 = normalize(RotateDirection(line.first, line.second, a + angleSizeForPixelsNearLines / 3.0));
+                    lineSamplesTree.emplace(normalize(sample1 + sample2), std::make_pair(Line3(sample1, sample2), i));
                 }
             }
 
-            return lsw;
+            // collect lines' nearby pixels and segs
+            std::vector<std::set<Pixel, ComparePixel>> line2nearbyPixels(mg.nlines());
+            std::vector<std::map<int, Vec3>> line2nearbySegsWithLocalCenterDir(mg.nlines());
+            std::vector<std::map<int, bool>> line2nearbySegsWithOnLeftFlag(mg.nlines());
+            std::vector<std::map<int, double>> line2nearbySegsWithWeight(mg.nlines());
+
+            for (auto it = mg.segs.begin(); it != mg.segs.end(); ++it) {
+                Pixel p = it.pos();
+                double weight = cos((p.y - (height - 1) / 2.0) / (height - 1) * M_PI);
+                Vec3 dir = normalize(mg.view.camera.toSpace(p));
+                int seg = *it;
+                lineSamplesTree.search(BoundingBox(dir).expand(angleSizeForPixelsNearLines * 3),
+                    [&mg, &dir, &line2nearbyPixels, &line2nearbySegsWithLocalCenterDir, &line2nearbySegsWithWeight,
+                    angleSizeForPixelsNearLines, p, seg, weight](
+                    const std::pair<Vec3, std::pair<Line3, int>> & lineSample) {
+                    auto line = normalize(mg.lines[lineSample.second.second].component);
+                    // d(dir, line) < angleSizeForPixelsNearLines && lambda(dir, line) \in [0, 1]
+                    auto dirOnLine = DistanceFromPointToLine(dir, lineSample.second.first).second.position;
+                    double angleDist = AngleBetweenDirections(dir, dirOnLine);
+                    double lambda = ProjectionOfPointOnLine(dir, line).ratio; // the projected position on line
+                    if (angleDist < angleSizeForPixelsNearLines && IsBetween(lambda, 0.0, 1.0)) {
+                        line2nearbyPixels[lineSample.second.second].insert(p);
+                        auto & localCenterDir = line2nearbySegsWithLocalCenterDir[lineSample.second.second][seg];
+                        localCenterDir += dir * weight;
+                        double & segWeight = line2nearbySegsWithWeight[lineSample.second.second][seg];
+                        segWeight += weight * Gaussian(lambda - 0.5, 0.1); // the closer to the center, the more important it is!
+                    }
+                    return true;
+                });
+            }
+            for (int i = 0; i < mg.nlines(); i++) {
+                auto & nearbySegsWithLocalCenterDir = line2nearbySegsWithLocalCenterDir[i];
+                auto & line = mg.lines[i].component;
+                Vec3 lineRight = line.first.cross(line.second);
+                for (auto & segWithDir : nearbySegsWithLocalCenterDir) {
+                    Vec3 centerDir = normalize(segWithDir.second);
+                    bool onLeft = (centerDir - line.first).dot(lineRight) < 0;
+                    line2nearbySegsWithOnLeftFlag[i][segWithDir.first] = onLeft;
+                }
+            }
+
+
+            std::vector<std::array<std::set<int>, 2>> line2leftRightSegs;
+            line2leftRightSegs.resize(mg.nlines());
+            for (int line = 0; line < mg.nlines(); line++) {
+                for (auto & pp : line2nearbySegsWithOnLeftFlag[line]) {
+                    int seg = pp.first;
+                    bool onLeft = pp.second;
+                    line2leftRightSegs[line][onLeft ? 0 : 1].insert(seg);
+                }
+            }
+
+            return line2leftRightSegs;
         }
 
 
 
         void ApplyLinesSidingWeights(PIGraph & mg, const std::vector<LineSidingWeight> & lsw, 
-            const std::vector<std::array<std::set<int>, 2>> & line2leftRightSegs) {
+            const std::vector<std::array<std::set<int>, 2>> & line2leftRightSegs,
+            bool connectSegsOnDanglingLine) {
 
             // fill back labels
             // initialize all seg-seg, seg-line and line-line relations
@@ -1916,7 +1999,9 @@ namespace pano {
                     for (int lp : mg.line2linePieces[line]) {
                         mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
                     }
-                    continue;
+                    if (connectSegsOnDanglingLine) {
+                        continue;
+                    }
                 }
                 if (!lineSidingWeight.isOcclusion()) {                    
                     continue;
@@ -1929,14 +2014,14 @@ namespace pano {
                 const auto & rightSegs = line2leftRightSegs[line][1];
 
                 // disconnect line-seg
-                if (lineSidingWeight.onlyConnectLeft()) {
+                if (!lineSidingWeight.connectRight()) {
                     for (int lp : mg.line2linePieces[line]) {
                         int seg = mg.linePiece2seg[lp];
                         if (seg != -1 && Contains(rightSegs, seg)) {
                             mg.linePiece2segLineRelation[lp] = SegLineRelation::Detached;
                         }
                     }
-                } else if (lineSidingWeight.onlyConnectRight()) {
+                } else if (!lineSidingWeight.connectLeft()) {
                     for (int lp : mg.line2linePieces[line]) {
                         int seg = mg.linePiece2seg[lp];
                         if (seg != -1 && Contains(leftSegs, seg)) {

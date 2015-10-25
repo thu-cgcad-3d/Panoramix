@@ -119,6 +119,39 @@ namespace pano {
             }
         }
 
+        PIConstraintGraph::Entity::SupportingPlane::SupportingPlane() : dof(0) {}
+
+        PIConstraintGraph::Entity::SupportingPlane::SupportingPlane(const SegControl & control, const Vec3 & c, const std::vector<Vec3> & vps) {
+            dof = control.dof();
+            center = normalize(c);
+            if (dof == 1) {
+                toward = normalize(vps[control.orientationClaz]);
+                if (toward.dot(center) < 0) {
+                    toward = -toward;
+                }
+            } else if (dof == 2) {
+                along = normalize(vps[control.orientationNotClaz]);
+            }
+        }
+
+        PIConstraintGraph::Entity::SupportingPlane::SupportingPlane(const Classified<Line3> & line, const std::vector<Vec3> & vps) {
+            dof = line.claz != -1 ? 1 : 2;
+            center = normalize(line.component.center());
+            if (dof == 1) {
+                const Vec3 & lineDirection = vps[line.claz];
+                auto linePerp = normalize(line.component.center().cross(lineDirection));
+                assert(abs(norm(linePerp) - 1.0) < 1e-2);
+                auto linePlaneNormal = lineDirection.cross(linePerp);
+                assert(IsFuzzyPerpendicular(linePlaneNormal, vps[line.claz]));
+                toward = normalize(linePlaneNormal);
+            } else {
+                const Vec3 & maybeLineDirection = line.component.direction();
+                auto linePerp = line.component.center().cross(maybeLineDirection);
+                assert(IsFuzzyPerpendicular(linePerp, maybeLineDirection));
+                along = normalize(linePerp);
+            }
+        }
+
 
 
         PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg, double minAngleThresForAWideEdge) {
@@ -148,18 +181,7 @@ namespace pano {
                 e.size = mg.seg2areaRatio[i] * 100;
 
                 auto & control = mg.seg2control[i];
-                e.supportingPlane.dof = mg.seg2control[i].dof();
-                e.supportingPlane.center = normalize(mg.seg2center[i]);
-                if (e.supportingPlane.dof == 1) {
-                    e.supportingPlane.toward = normalize(mg.vps[control.orientationClaz]);
-                    if (e.supportingPlane.toward.dot(e.supportingPlane.center) < 0) {
-                        e.supportingPlane.toward = -e.supportingPlane.toward;
-                    }
-                } else if (e.supportingPlane.dof == 2) {
-                    e.supportingPlane.along = normalize(mg.vps[control.orientationNotClaz]);
-                } else {
-                }
-
+                e.supportingPlane = PIConstraintGraph::Entity::SupportingPlane(control, mg.seg2center[i], mg.vps);
                 entities.push_back(e);
 
                 int ent = entities.size() - 1;
@@ -173,22 +195,7 @@ namespace pano {
                 e.id = i;
                 e.size = AngleBetweenDirections(mg.lines[i].component.first, mg.lines[i].component.second);
 
-                e.supportingPlane.dof = mg.lines[i].claz != -1 ? 1 : 2;
-                e.supportingPlane.center = normalize(mg.lines[i].component.center());
-                if (e.supportingPlane.dof == 1) {
-                    const Vec3 & lineDirection = mg.vps[mg.lines[i].claz];
-                    auto linePerp = normalize(mg.lines[i].component.center().cross(lineDirection));
-                    assert(abs(norm(linePerp) - 1.0) < 1e-2);
-                    auto linePlaneNormal = lineDirection.cross(linePerp);                    
-                    assert(IsFuzzyPerpendicular(linePlaneNormal, mg.vps[mg.lines[i].claz]));
-                    e.supportingPlane.toward = normalize(linePlaneNormal);
-                } else {
-                    const Vec3 & maybeLineDirection = mg.lines[i].component.direction();
-                    auto linePerp = mg.lines[i].component.center().cross(maybeLineDirection);
-                    assert(IsFuzzyPerpendicular(linePerp, maybeLineDirection));
-                    e.supportingPlane.along = normalize(linePerp);
-                }
-
+                e.supportingPlane = PIConstraintGraph::Entity::SupportingPlane(mg.lines[i], mg.vps);
                 entities.push_back(e);
 
                 int ent = entities.size() - 1;

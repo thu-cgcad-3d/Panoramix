@@ -21,9 +21,11 @@ namespace pano {
         int DisableUnsatisfiedConstraints(const PICGDeterminablePart & dp, PIConstraintGraph & cg, 
             const std::function<bool(double distRankRatio, double avgDist, double maxDist)> & whichToDisable);
 
-        int DisorientLines(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, PIGraph & mg);
-        int DisorientSegs(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, PIGraph & mg);
-
+        // disorient invalid entities according to current reconstuction
+        void DisorientDanglingLines(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double ratio);
+        
+        void DisorientDanglingLines2(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double thresRatio);
+        void DisorientDanglingSegs(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double thresRatio);
 
         Imaged DepthMap(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg);
 
