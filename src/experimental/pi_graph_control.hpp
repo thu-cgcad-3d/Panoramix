@@ -12,9 +12,8 @@ namespace pano {
         void DisableBottomSeg(PIGraph & mg);
 
         void AttachGCConstraints(PIGraph & mg, const Image5d & gc, 
-            double clutterThres = 0.7, double wallThres = 0.5, bool onlyConsiderBottomHalf = true);
-
-     
+            double clutterThres = 0.7, double wallThres = 0.5, 
+            bool onlyConsiderBottomHalf = true);     
  
     }
 }

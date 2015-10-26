@@ -107,7 +107,8 @@ namespace pano {
 
 
 
-        bool MakePanoramaByHand(Image & im, bool * extendedOnTop, bool * extendedOnBottom) {
+        bool MakePanoramaByHand(Image & im, bool * extendedOnTop, bool * extendedOnBottom,
+            bool * topIsPlanar, bool * bottomIsPlanar) {
             if (im.cols < im.rows * 2)
                 return false;
             if (im.cols == im.rows * 2) {
@@ -256,8 +257,27 @@ namespace pano {
             int panoHCenter = panoHCenterRatio * im.rows;
             std::cout << "hcenter ratio: " << panoHCenterRatio << std::endl;
             std::cout << "hcenter: " << panoHCenter << std::endl;
-            return MakePanorama(im, panoHCenter, extendedOnTop, extendedOnBottom);
 
+            auto result = MakePanorama(im, panoHCenter, extendedOnTop, extendedOnBottom);
+            if (!result) {
+                std::cerr << "input panorama shape is incorrect!" << std::endl;
+                return false;
+            }
+
+            if (extendedOnTop && topIsPlanar) {
+                int selected = pano::gui::SelectFrom({ "Is Planar", "Is Not Planar" },
+                    "Your decision?",
+                    "Is TOP Region Planar?", 0, 1);
+                *topIsPlanar = selected == 0;
+            }
+            if (extendedOnBottom && bottomIsPlanar) {
+                int selected = pano::gui::SelectFrom({ "Is Planar", "Is Not Planar" },
+                    "Your decision?",
+                    "Is BOTTOM Region Planar?", 0, 1);
+                *bottomIsPlanar = selected == 0;
+            }
+
+            return true;
         }
 
 

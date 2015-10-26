@@ -198,6 +198,7 @@ namespace pano {
 
         ColorTable CreateGreyColorTableWithSize(int sz);
         ColorTable CreateRandomColorTableWithSize(int sz, const Color & exceptColor = ColorTag::Transparent);
+        ColorTable CreateJetColorTableWithSize(int sz, const Color & exceptColor = ColorTag::Transparent);
 
 
         // render mode

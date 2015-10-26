@@ -22,7 +22,9 @@ namespace pano {
         void ForEachImageFromAFolder(const std::string & dir, const std::function<bool(const std::string & impath)> & fun);
 
 
-        bool MakePanoramaByHand(core::Image & im, bool * extendedOnTop = nullptr, bool * extendedOnBottom = nullptr);
+        bool MakePanoramaByHand(core::Image & im, 
+            bool * extendedOnTop = nullptr, bool * extendedOnBottom = nullptr,
+            bool * topIsPlanar = nullptr, bool * bottomIsPlanar = nullptr);
 
 
         void PaintWith(const std::function<core::Image()> & updater,

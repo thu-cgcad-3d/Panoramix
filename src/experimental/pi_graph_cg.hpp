@@ -74,7 +74,8 @@ namespace pano {
 
 
         PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg,
-            double minAngleThresForAWideEdge);
+            double minAngleThresForAWideEdge, double weightRatioForCoplanarityWithLines = 0.0);
+
         PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg, 
             const std::vector<LineSidingWeight> & lsw, 
             const std::vector<std::array<std::set<int>, 2>> & line2leftRightSegs,

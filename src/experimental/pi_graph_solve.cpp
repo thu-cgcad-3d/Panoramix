@@ -1,7 +1,10 @@
-#include "../gui/scene.hpp"
 #include "../core/algorithms.hpp"
 #include "../core/containers.hpp"
 
+#include "../gui/canvas.hpp"
+#include "../gui/scene.hpp"
+
+#include "pi_graph_vis.hpp"
 #include "pi_graph_solve.hpp"
 
 namespace pano {
@@ -191,6 +194,10 @@ namespace pano {
 
         void ReconstructLayoutAnnotation(PILayoutAnnotation & anno, misc::Matlab & matlab) {
             
+            if (anno.nfaces() == 0) {
+                return;
+            }
+
             // group faces as planes
             std::vector<int> face2plane(anno.nfaces());
             std::map<int, std::set<int>> plane2faces;
@@ -393,7 +400,8 @@ namespace pano {
 
 
 
-        double Solve(const PICGDeterminablePart & dp, PIConstraintGraph & cg, misc::Matlab & matlab, int maxIter) {
+        double Solve(const PICGDeterminablePart & dp, PIConstraintGraph & cg, misc::Matlab & matlab, 
+            int maxIter, double connectionWeightRatioOverCoplanarity) {
 
             auto & determinableEnts = dp.determinableEnts;
 
@@ -520,6 +528,7 @@ namespace pano {
             matlab << "n = size(A1, 2);"; // number of variables
             matlab << "p = size(C1, 1);"; // number of coplanarity equations
 
+            matlab.setVar("s", connectionWeightRatioOverCoplanarity);
 
             double minE = std::numeric_limits<double>::infinity();
 
@@ -534,7 +543,7 @@ namespace pano {
                     matlab << "K = (A1 - A2) .* repmat(D1D2 .* WA, [1, n]);";
                     matlab << "R = (C1 - C2) .* repmat(WC, [1, n]);";
                     
-                    static const std::string objectiveStr = "sum_square(K * X) * 1e7 + sum_square(R * X)";
+                    const std::string objectiveStr = "sum_square(K * X) * s + sum_square(R * X)";
 
                     matlab
                         << "cvx_begin"
@@ -738,6 +747,75 @@ namespace pano {
             }
         }
         
+
+        void DisorientDanglingLines3(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double disorientRatio, double thresRatio) {
+            if (disorientRatio == 0.0)
+                return;
+            std::vector<double> line2maxEndDistToNearestSeg(mg.nlines(), 0.0);
+            for (int line = 0; line < mg.nlines(); line++) {
+                int ent = cg.line2ent[line];
+                if (ent == -1) {
+                    continue;
+                }
+                if (!Contains(dp.determinableEnts, ent)) {
+                    continue;
+                }
+                auto & e = cg.entities[ent];
+                auto & sp = e.supportingPlane.reconstructed;
+
+                double & ndist = line2maxEndDistToNearestSeg[line];
+                for (Vec3 dir : {mg.lines[line].component.first, mg.lines[line].component.second}) {
+                    double distToThis = std::numeric_limits<double>::max();
+                    
+                    auto & linePlane = cg.entities[ent].supportingPlane.reconstructed;
+                    auto pOnLine = IntersectionOfLineAndPlane(Ray3(Origin(), dir), linePlane).position;
+                    for (int cons : cg.ent2cons[ent]) {
+                        int segEnt = cg.constraints[cons].ent1;
+                        if (segEnt == ent) {
+                            segEnt = cg.constraints[cons].ent2;
+                        }
+                        if (cg.entities[segEnt].isLine()) {
+                            continue;
+                        }
+                        for (auto & anchor : cg.constraints[cons].anchors) {                            
+                            auto & segPlane = cg.entities[segEnt].supportingPlane.reconstructed;
+                            auto pOnSegPlane = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), segPlane).position;
+                            double distance = Distance(pOnLine, pOnSegPlane);
+                            if (distance < distToThis) {
+                                distToThis = distance;
+                            }
+                        }
+                    }
+
+                    if (distToThis > ndist) {
+                        ndist = distToThis;
+                    }
+                }
+            }
+
+            std::vector<int> lineids(mg.nlines());
+            std::iota(lineids.begin(), lineids.end(), 0);
+            std::sort(lineids.begin(), lineids.end(), [line2maxEndDistToNearestSeg](int a, int b) {
+                return line2maxEndDistToNearestSeg[a] > line2maxEndDistToNearestSeg[b];
+            });
+
+            for (int i = 0; i < lineids.size() * disorientRatio; i++) {
+                int line = lineids[i];
+                double maxEndDist = line2maxEndDistToNearestSeg[line];
+                if (maxEndDist < thresRatio) {
+                    continue;
+                }
+                mg.lines[line].claz = -1;
+                int ent = cg.line2ent[line];
+                if (ent == -1) {
+                    continue;
+                }
+                cg.entities[ent].supportingPlane = PIConstraintGraph::Entity::SupportingPlane(mg.lines[line], mg.vps);
+            }
+
+        }
+
+
         void DisorientDanglingSegs(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double thresRatio) {
             std::vector<double> seg2meanDistRatio(mg.nsegs, 0.0);
             for (int seg = 0; seg < mg.nsegs; seg++) {
@@ -784,61 +862,9 @@ namespace pano {
         }
 
 
-        Imaged DepthMap(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {
-            Imaged depths(mg.view.image.size(), 0.0);
-            for (auto it = depths.begin(); it != depths.end(); ++it) {
-                auto pos = it.pos();
-                int seg = mg.segs(pos);
-                int ent = cg.seg2ent[seg];
-                if (ent == -1) {
-                    continue;
-                }
-                if (!Contains(dp.determinableEnts, ent)) {
-                    continue;
-                }
-                auto & plane = cg.entities[ent].supportingPlane.reconstructed;
-                Vec3 dir = normalize(mg.view.camera.toSpace(pos));
-                double depth = norm(IntersectionOfLineAndPlane(Ray3(Origin(), dir), plane).position);
-                *it = depth;
-            }
-            return depths;
-        }
-
-
-
-        std::vector<Polygon3> CompactModel(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {
-
-            // step 1
-            // smooth weird surfaces
-
-
-
-            std::vector<double> bndPiece2meanDist(mg.nbndPieces(), 0.0);
-            for (int bp = 0; bp < mg.nbndPieces(); bp++) {
-                auto segRelation = mg.bndPiece2segRelation[bp];
-                if (segRelation != SegRelation::Connected) {
-                    continue;
-                }
-                int bnd = mg.bndPiece2bnd[bp];
-                int seg1, seg2;
-                std::tie(seg1, seg2) = mg.bnd2segs[bnd];
-                int ent1 = cg.seg2ent[seg1];
-                int ent2 = cg.seg2ent[seg2];
-                if (ent1 == -1 || ent2 == -1) {
-                    continue;
-                }
-
-            }
-
-            struct Corner {
-                int bp;
-                Vec3 dir;
-                bool depthDetermined;
-                double depth;
-            };
-
-            std::vector<Polygon3> seg2polygon(mg.nsegs);
-            std::vector<bool> seg2goodPolygon(mg.nsegs, false);
+        void DisorientDanglingSegs2(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double thresRatio) {
+            
+            std::vector<bool> seg2determined(mg.nsegs, false);
             for (int seg = 0; seg < mg.nsegs; seg++) {
                 int ent = cg.seg2ent[seg];
                 if (ent == -1) {
@@ -847,27 +873,154 @@ namespace pano {
                 if (!Contains(dp.determinableEnts, ent)) {
                     continue;
                 }
-                auto & plane = cg.entities[ent].supportingPlane.reconstructed;
-                if (HasValue(plane, IsInfOrNaN<double>)) {
-                    continue;
+
+                double distSum = 0.0;
+                int distCount = 0;
+                for (int cons : cg.ent2cons[ent]) {
+                    int ent1 = cg.constraints[cons].ent1;
+                    int ent2 = cg.constraints[cons].ent2;
+                    auto & e1 = cg.entities[ent1];
+                    auto & e2 = cg.entities[ent2];
+                    if (e1.isLine() || e2.isLine()) {
+                        continue;
+                    }
+                    for (auto & anchor : cg.constraints[cons].anchors) {
+                        auto & plane1 = e1.supportingPlane.reconstructed;
+                        auto & plane2 = e2.supportingPlane.reconstructed;
+                        auto p1 = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position;
+                        auto p2 = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position;
+                        double dist = Distance(p1, p2);
+                        distSum += dist;
+                        distCount++;
+                    }
                 }
-
-
+                double distMean = distSum / distCount;
+                if (distMean <= thresRatio) {
+                    seg2determined[seg] = true;
+                }
             }
 
-            NOT_IMPLEMENTED_YET();
 
-
-
-            // step 2
-            // make the compact polygons
-
-
-
+            if (true) {
+                auto pim = Print(mg, [&seg2determined](int seg) {return seg2determined[seg] ? gui::Red : gui::White; },
+                    ConstantFunctor<gui::Color>(gui::Transparent),
+                    ConstantFunctor<gui::Color>(gui::Gray), 2, 0);
+                gui::AsCanvas(pim).show(0, "determined segs");
+            }
 
         }
-
         
+
+        void DisorientDanglingSegs3(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg,
+            double disorientRatio, double thresRatio) {
+
+            if (disorientRatio == 0.0) {
+                return;
+            }
+            std::vector<double> seg2maxCornerDistToNearestSeg(mg.nsegs, 0.0);
+            for (int seg = 0; seg < mg.nsegs; seg++) {
+                int ent = cg.seg2ent[seg];
+                if (ent == -1) {
+                    continue;
+                }
+                if (!Contains(dp.determinableEnts, ent)) {
+                    continue;
+                }
+                auto & e = cg.entities[ent];
+                auto & sp = e.supportingPlane.reconstructed;
+
+                double & ndist = seg2maxCornerDistToNearestSeg[seg];
+                for (int cons : cg.ent2cons[ent]) {
+                    for (auto & anchor : cg.constraints[cons].anchors) {
+                        int ent1 = cg.constraints[cons].ent1;
+                        int ent2 = cg.constraints[cons].ent2;
+                        auto & plane1 = cg.entities[ent1].supportingPlane.reconstructed;
+                        auto & plane2 = cg.entities[ent2].supportingPlane.reconstructed;
+                        auto p1 = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position;
+                        auto p2 = IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position;
+                        double dist = Distance(p1, p2);
+                        if (dist > ndist) {
+                            ndist = dist;
+                        }
+                    }
+                }
+
+                std::vector<int> segids(mg.nsegs);
+                std::iota(segids.begin(), segids.end(), 0);
+                std::sort(segids.begin(), segids.end(), [&seg2maxCornerDistToNearestSeg](int a, int b) {
+                    return seg2maxCornerDistToNearestSeg[a] > seg2maxCornerDistToNearestSeg[b];
+                });
+
+                for (int i = 0; i < mg.nsegs * disorientRatio; i++) {
+                    int seg = segids[i];
+                    if (seg2maxCornerDistToNearestSeg[seg] < thresRatio) {
+                        continue;
+                    }
+                    mg.seg2control[seg].orientationClaz = -1;
+                    mg.seg2control[seg].orientationNotClaz = -1;
+                    int ent = cg.seg2ent[seg];
+                    if (ent == -1) {
+                        continue;
+                    }
+                    cg.entities[ent].supportingPlane =
+                        PIConstraintGraph::Entity::SupportingPlane(mg.seg2control[seg], mg.seg2center[seg], mg.vps);
+                }
+            }
+        }
+
+
+        void OverorientSkewSegs(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, 
+            double angleThres, double positionAngleThres, double oriRatio) {
+            std::vector<Scored<int>> seg2oriHint(mg.nsegs, ScoreAs(-1, 0.0));
+
+            std::vector<int> segids;
+            for (int seg = 0; seg < mg.nsegs; seg++) {
+                int ent = cg.seg2ent[seg];
+                if (ent == -1) {
+                    continue;
+                }
+                if (!Contains(dp.determinableEnts, ent)) {
+                    continue;
+                }
+                auto center = mg.seg2center[seg];
+                auto & plane = cg.entities[ent].supportingPlane.reconstructed;
+
+                auto & hint = seg2oriHint[seg];
+                for (int k = 0; k < mg.vps.size(); k++) {
+                    auto & vp = mg.vps[k];
+                    double posAngle = AngleBetweenUndirectedVectors(center, vp);
+                    double normalAngle = AngleBetweenUndirectedVectors(plane.normal, vp);
+                    if (posAngle < positionAngleThres && normalAngle < angleThres) {
+                        double score = Gaussian(posAngle, positionAngleThres) + Gaussian(normalAngle, angleThres) * 10;
+                        if (score > hint.score) {
+                            hint.component = k;
+                            hint.score = score;
+                        }
+                    }
+                }
+
+                if (hint.score > 0) {
+                    segids.push_back(seg);
+                }
+            }
+
+
+            std::sort(segids.begin(), segids.end(), [&seg2oriHint](int a, int b) {
+                return seg2oriHint[a].score > seg2oriHint[b].score;
+            });
+
+            for (int i = 0; i < segids.size() * oriRatio; i++) {
+                int seg = segids[i];
+                mg.seg2control[seg].orientationClaz = seg2oriHint[seg].component;
+                mg.seg2control[seg].orientationNotClaz = -1;
+                int ent = cg.seg2ent[seg];
+                if (ent == -1) {
+                    continue;
+                }
+                cg.entities[ent].supportingPlane =
+                    PIConstraintGraph::Entity::SupportingPlane(mg.seg2control[seg], mg.seg2center[seg], mg.vps);
+            }            
+        }
 
     }
 }

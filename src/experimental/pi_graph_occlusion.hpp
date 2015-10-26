@@ -35,7 +35,9 @@ namespace pano {
             double minAngleSizeOfLineInTJunction = DegreesToRadians(3),
             double lambdaShrinkForHLineDetectionInTJunction = 0.2,
             double lambdaShrinkForVLineDetectionInTJunction = 0.1,
-            double angleSizeForPixelsNearLines = DegreesToRadians(2));
+            double angleSizeForPixelsNearLines = DegreesToRadians(2),
+            std::vector<std::map<int, double>> * line2leftSegsWithWeightPtr = nullptr,
+            std::vector<std::map<int, double>> * line2rightSegsWithWeightPtr = nullptr);
 
         std::vector<std::array<std::set<int>, 2>> CollectSegsNearLines(const PIGraph & mg, 
             double angleSizeForPixelsNearLines = DegreesToRadians(2));

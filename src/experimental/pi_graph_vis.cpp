@@ -163,6 +163,78 @@ namespace pano {
 
 
 
+
+
+        Imaged DepthMap(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, 
+            std::pair<double, double> * validDepthRange) {
+            Imaged depths(mg.view.image.size(), 0.0);
+            double minv = std::numeric_limits<double>::max();
+            double maxv = 0.0;
+            for (auto it = depths.begin(); it != depths.end(); ++it) {
+                auto pos = it.pos();
+                int seg = mg.segs(pos);
+                int ent = cg.seg2ent[seg];
+                if (ent == -1) {
+                    continue;
+                }
+                if (!Contains(dp.determinableEnts, ent)) {
+                    continue;
+                }
+                auto & plane = cg.entities[ent].supportingPlane.reconstructed;
+                Vec3 dir = normalize(mg.view.camera.toSpace(pos));
+                double depth = norm(IntersectionOfLineAndPlane(Ray3(Origin(), dir), plane).position);
+                if (depth < minv) {
+                    minv = depth;
+                }
+                if (depth > maxv) {
+                    maxv = depth;
+                }
+                *it = depth;
+            }
+            if (validDepthRange) {
+                validDepthRange->first = minv;
+                validDepthRange->second = maxv;
+            }
+            return depths;
+        }
+
+
+        Image3d SurfaceNormalMap(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {
+            Image3d snm(mg.view.image.size());
+            for (auto it = snm.begin(); it != snm.end(); ++it) {
+                auto pos = it.pos();
+                int seg = mg.segs(pos);
+                int ent = cg.seg2ent[seg];
+                if (ent == -1) {
+                    continue;
+                }
+                if (!Contains(dp.determinableEnts, ent)) {
+                    continue;
+                }
+                auto & plane = cg.entities[ent].supportingPlane.reconstructed;                
+                auto n = normalize(plane.normal);
+                *it = n;
+            }
+            return snm;
+        }
+
+
+
+
+        std::vector<Polygon3> CompactModel(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {
+
+            std::vector<Polygon3> compactPolygons;
+
+            
+
+            return compactPolygons;
+        }
+
+
+
+
+
+
         void VisualizeReconstructionCompact(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg) {
             gui::ResourceStore::set("texture", mg.view.image);
 
@@ -174,6 +246,10 @@ namespace pano {
 
 
         void VisualizeLayoutAnnotation(const PILayoutAnnotation & anno) {
+
+            if (anno.nfaces() == 0) {
+                return;
+            }
             
             gui::SceneBuilder viz;
             viz.installingOptions().discretizeOptions.colorTable = gui::ColorTableDescriptor::RGB;

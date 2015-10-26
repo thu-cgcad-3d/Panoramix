@@ -154,7 +154,7 @@ namespace pano {
 
 
 
-        PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg, double minAngleThresForAWideEdge) {
+        PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg, double minAngleThresForAWideEdge, double weightRatioForCoplanarityWithLines) {
            
             PIConstraintGraph cg;
             cg.seg2ent.resize(mg.nsegs, -1);
@@ -237,12 +237,13 @@ namespace pano {
                 }
 
                 // the coplanarity constraint if there are no lines on the bndpiece
-                if (mg.bndPiece2linePieces[i].empty()) {
+                //if (mg.bndPiece2linePieces[i].empty()) 
+                {
                     Constraint coplanar;
                     coplanar.type = Constraint::Coplanarity;
                     coplanar.ent1 = connect.ent1;
                     coplanar.ent2 = connect.ent2;
-                    coplanar.weight = len;
+                    coplanar.weight = len * (mg.bndPiece2linePieces[i].empty() ? 1.0 : weightRatioForCoplanarityWithLines);
                     //coplanar.anchorOrientation = -1;
                     constraints.push_back(coplanar);
                     int coplanarCon = constraints.size() - 1;

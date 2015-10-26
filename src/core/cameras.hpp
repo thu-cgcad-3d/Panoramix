@@ -75,6 +75,9 @@ namespace pano {
             void moveEyeWithCenterFixed(const Vec3 & t, const Sphere3 & target, bool distanceFixed = false, bool updateMat = true);
             void moveCenterWithEyeFixed(const Vec3 & t, bool updateMat = true);
 
+            // compare
+            bool operator == (const PerspectiveCamera & cam) const;
+
         protected:
             void updateMatrices();
 

@@ -200,7 +200,9 @@ namespace pano {
                 // rectify the image
                 std::cout << "rectifying image" << std::endl;
                 anno.rectifiedImage = anno.originalImage.clone();
-                gui::MakePanoramaByHand(anno.rectifiedImage, &anno.extendedOnTop, &anno.extendedOnBottom);
+                gui::MakePanoramaByHand(anno.rectifiedImage, 
+                    &anno.extendedOnTop, &anno.extendedOnBottom,
+                    &anno.topIsPlane, &anno.bottomIsPlane);
 
                 // create view
                 std::cout << "creating views" << std::endl;
@@ -210,7 +212,7 @@ namespace pano {
 
                 // collect lines
                 std::cout << "collecting lines" << std::endl;
-                auto cams = CreateCubicFacedCameras(anno.view.camera, image.rows, image.rows, image.rows * 0.4);
+                auto cams = CreateCubicFacedCameras(anno.view.camera, image.rows, image.rows, image.rows * 0.4); 
                 std::vector<Line3> rawLine3s;
                 for (int i = 0; i < cams.size(); i++) {
                     auto pim = anno.view.sampled(cams[i]).image;
@@ -222,7 +224,7 @@ namespace pano {
                             normalize(cams[i].toSpace(l.second)));
                     }
                 }
-                rawLine3s = MergeLines(rawLine3s, DegreesToRadians(1));
+                rawLine3s = MergeLines(rawLine3s, DegreesToRadians(1));                
 
                 // estimate vp and initially classify lines
                 std::cout << "estimating vps and clasifying lines" << std::endl;
@@ -233,7 +235,10 @@ namespace pano {
 
                 anno.vps = std::move(vps);
                 anno.vertVPId = vertVPId;
+                anno.lines = std::move(rawLine3s);
             }
+
+            anno.impath = imagePath;
 
             return anno;
         }

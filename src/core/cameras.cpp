@@ -211,6 +211,22 @@ namespace pano {
         }
 
 
+        bool PerspectiveCamera::operator == (const PerspectiveCamera & cam) const {
+           /* ar(_screenW, _screenH);
+            ar(_principlePoint);
+            ar(_focalxy, _near, _far);
+            ar(_eye, _center, _up);
+            ar(_viewMatrix, _projectionMatrix, _viewProjectionMatrix);*/
+            return std::tie(_screenW, _screenH, _principlePoint,
+                _focalxy, _near, _far, _eye, _center, _up,
+                _viewMatrix, _projectionMatrix, _viewProjectionMatrix) 
+                ==
+                std::tie(cam._screenW, cam._screenH, cam._principlePoint,
+                cam._focalxy, cam._near, cam._far, cam._eye, cam._center, cam._up,
+                cam._viewMatrix, cam._projectionMatrix, cam._viewProjectionMatrix);
+        }
+
+
 
 
 

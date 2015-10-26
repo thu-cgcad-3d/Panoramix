@@ -1539,7 +1539,9 @@ namespace pano {
             double minAngleSizeOfLineInTJunction /*= DegreesToRadians(3)*/,
             double lambdaShrinkForHLineDetectionInTJunction /*= 0.2*/, 
             double lambdaShrinkForVLineDetectionInTJunction /*= 0.1*/,
-            double angleSizeForPixelsNearLines /*= DegreesToRadians(2)*/) {
+            double angleSizeForPixelsNearLines /*= DegreesToRadians(2)*/,
+            std::vector<std::map<int, double>> * line2leftSegsWithWeightPtr,
+            std::vector<std::map<int, double>> * line2rightSegsWithWeightPtr) {
 
 
             std::vector<std::map<int, double>> line2leftSegsWithWeight(mg.nlines());
@@ -1548,8 +1550,6 @@ namespace pano {
             // todo 
             // use the sweep operation instead!!!!
             //THERE_ARE_BUGS_HERE("Use the Sweep Operation to detect orientation violation between lines and segs!");
-
-            Imagei backproj(mg.segs.size(), 0);
 
             for (int line = 0; line < mg.nlines(); line++) {
                 auto & l = mg.lines[line].component;
@@ -1592,32 +1592,30 @@ namespace pano {
                         //assert(IsBetween(quadProjs[i][0], 0, w - 1));
                         //assert(IsBetween(quadProjs[i][1], 0, h - 1));
                         quadProjs[i][0] = BoundBetween(quadProjs[i][0], 0, w);
-                        quadProjs[i][1] = BoundBetween(quadProjs[i][1], 0, w);
+                        quadProjs[i][1] = BoundBetween(quadProjs[i][1], 0, h);
                     }
                     Imageub mask(pc.screenSize(), false);
                     cv::fillConvexPoly(mask, quadProjs, true);
-
-                   /* if (line == 892 || line == 893 || line == 851 || line == 852) {
-                        Imagei proj = (Imagei)(MakeCameraSampler(mg.view.camera, pc)(mask));
-                        if (!onLeft) {
-                            proj = -proj;
-                        }
-                        backproj += (y.dot(mg.view.camera.up()) > 0 ? proj : -proj);
-                    }*/
 
                     for (auto it = sampledSegs.begin(); it != sampledSegs.end(); ++it) {
                         if (!mask(it.pos())) {
                             continue;
                         }
                         int seg = *it;
-                        double lambda = (it.pos().y - h / 2.0) / h;
-                        (onLeft ? line2leftSegsWithWeight : line2rightSegsWithWeight)[line][seg] += Gaussian(lambda, 0.1);
+                        double pixelDistToEyeSquared = Square(Distance(ecast<double>(it.pos()), pc.principlePoint())) + focal * focal;
+                        (onLeft ? line2leftSegsWithWeight : line2rightSegsWithWeight)[line][seg] += 
+                            1.0  * focal * focal / pixelDistToEyeSquared;
                     }
                 }
             }
 
 
-
+            if (line2leftSegsWithWeightPtr) {
+                *line2leftSegsWithWeightPtr = line2leftSegsWithWeight;
+            }
+            if (line2rightSegsWithWeightPtr) {
+                *line2rightSegsWithWeightPtr = line2rightSegsWithWeight;
+            }
 
 
 
@@ -1707,15 +1705,10 @@ namespace pano {
 
             // factors preparation
 
-         
-            // the cost if is connected on this side [left, right]
-            std::vector<std::array<double, 2>> line2labelConnectCostLeftRight(mg.nlines(), std::array<double, 2>{{ 0.0, 0.0 }});
-            // the cost if is disconnected on this side [left, right]
-            std::vector<std::array<double, 2>> line2labelDisconnectCostLeftRight(mg.nlines(), std::array<double, 2>{{ 0.0, 0.0 }});
-
+            std::vector<std::array<double, 2>> line2wrongSegWeightSum(mg.nlines(), std::array<double, 2>{{ 0.0, 0.0 }});
             for (int line = 0; line < mg.nlines(); line++) {
                 auto & vhs = line2vhConnectLeftRight[line];
-                
+
                 // {left, right}
                 for (int k = 0; k < 2; k++) {
                     auto vh = vhs[k];
@@ -1741,6 +1734,37 @@ namespace pano {
                             wrongSegWeightSumThisSide += weight;
                         }
                     }
+                    line2wrongSegWeightSum[line][k] = wrongSegWeightSumThisSide;
+                }
+            }
+
+         
+            // the cost if is connected on this side [left, right]
+            std::vector<std::array<double, 2>> line2labelConnectCostLeftRight(mg.nlines(), std::array<double, 2>{{ 0.0, 0.0 }});
+            // the cost if is disconnected on this side [left, right]
+            std::vector<std::array<double, 2>> line2labelDisconnectCostLeftRight(mg.nlines(), std::array<double, 2>{{ 0.0, 0.0 }});
+
+            for (int line = 0; line < mg.nlines(); line++) {
+                auto & vhs = line2vhConnectLeftRight[line];
+                
+                // {left, right}
+                for (int k = 0; k < 2; k++) {
+                    auto vh = vhs[k];
+                    bool vhIsLeft = k == 0;
+
+                    if (vh.invalid()) {
+                        continue;
+                    }
+
+                    int claz = mg.lines[line].claz;
+                    auto & l = mg.lines[line].component;
+                    double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+                    const auto & lps = mg.line2linePieces[line];
+
+                    // orientation consistency term between seg and line
+                    // consider nearby segs
+                    double wrongSegWeightSumThisSide = line2wrongSegWeightSum[line][k];
+                    double wrongSegWeightSumThatSide = line2wrongSegWeightSum[line][1 - k];
 
                     // consider lines
                     int tjunctionNumThisSide = tjunctionLeftRightNum[line][k];
@@ -1749,10 +1773,70 @@ namespace pano {
                     double & labelConnectCost = line2labelConnectCostLeftRight[line][k];
                     double & labelDisconnectCost = line2labelDisconnectCostLeftRight[line][k];
 
-                    labelConnectCost = wrongSegWeightSumThisSide > 3 ? 100 : 0;
-                    labelDisconnectCost = Gaussian(tjunctionNumThisSide, 7.0) * 5.0;
+                    labelConnectCost = wrongSegWeightSumThisSide / std::max(wrongSegWeightSumThatSide, 1e-5) * 100;
+                    labelDisconnectCost = Gaussian(tjunctionNumThisSide, 7.0) * 4.0 + 1.0;
                 }
             }
+
+
+
+
+
+            if (false) {
+                auto pim = Print(mg, ConstantFunctor<gui::Color>(gui::White),
+                    ConstantFunctor<gui::Color>(gui::Transparent),
+                    ConstantFunctor<gui::Color>(gui::Gray), 2, 0);
+                auto drawLine = [&mg, &pim](const Line3 & line, const std::string & text, const gui::Color & color, bool withTeeth) {
+                    double angle = AngleBetweenDirections(line.first, line.second);
+                    std::vector<Pixel> ps;
+                    for (double a = 0.0; a <= angle; a += 0.01) {
+                        ps.push_back(ToPixel(mg.view.camera.toScreen(RotateDirection(line.first, line.second, a))));
+                    }
+                    for (int i = 1; i < ps.size(); i++) {
+                        auto p1 = ps[i - 1];
+                        auto p2 = ps[i];
+                        if (Distance(p1, p2) >= pim.cols / 2) {
+                            continue;
+                        }
+                        cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), p1, p2);
+                        cv::line(pim, p1, p2, (cv::Scalar)color / 255.0, 2);
+                        if (withTeeth && i % 3 == 0) {
+                            auto teethp = ToPixel(RightPerpendicularDirectiion(ecast<double>(p2 - p1))) * 2 + p1;
+                            auto tp1 = p1, tp2 = teethp;
+                            cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), tp1, tp2);
+                            cv::line(pim, tp1, tp2, (cv::Scalar)color / 255.0, 1);
+                        }
+                    }
+                    //cv::circle(pim, ps.back(), 2.0, (cv::Scalar)color / 255.0, 2);
+                    if (!text.empty()) {
+                        cv::putText(pim, text, ps.back() + Pixel(5, 0), 1, 0.7, color);
+                    }
+                };
+                for (int line = 0; line < mg.nlines(); line++) {
+                    if (line2labelConnectCostLeftRight[line][0] == 0 && line2labelConnectCostLeftRight[line][1] == 0) {
+                        continue;
+                    }
+                    auto l = mg.lines[line].component;
+                    std::stringstream ss;
+                    ss.precision(2);
+                    ss << line << "-left[" 
+                        << line2labelConnectCostLeftRight[line][0] << "-" 
+                        << line2labelDisconnectCostLeftRight[line][0] << "]"
+                        << "-right["
+                        << line2labelConnectCostLeftRight[line][1] << "-"
+                        << line2labelDisconnectCostLeftRight[line][1] << "]";
+                    
+                    drawLine(l, ss.str(), gui::Black, false);
+                }
+                gui::AsCanvas(pim).show(0, "line costs");
+            }
+
+
+
+
+
+
+
 
 
             // make factors
@@ -1838,7 +1922,7 @@ namespace pano {
                         int label1 = varlabels[0];
                         int label2 = varlabels[1];
                         if (label1 != label2) {
-                            return Gaussian(normalAngle, DegreesToRadians(0.5)) * 100.0;
+                            return Gaussian(normalAngle, DegreesToRadians(0.5)) * 10.0;
                         }
                         return 0.0;
                     }, 1.0);

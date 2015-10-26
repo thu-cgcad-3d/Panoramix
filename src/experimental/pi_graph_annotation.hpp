@@ -11,14 +11,21 @@ namespace pano {
         using namespace pano::core;
 
         struct PILayoutAnnotation {
+            std::string impath; // ver1
+
             Image originalImage;
             Image rectifiedImage;
             bool extendedOnTop;
             bool extendedOnBottom;
 
+            bool topIsPlane; // ver1
+            bool bottomIsPlane; // ver1
+
             PanoramicView view;
             std::vector<Vec3> vps;
             int vertVPId;
+
+            std::vector<Line3> lines; // ver1
                         
             std::vector<Vec3> corners;            
             std::vector<std::pair<int, int>> border2corners; // from, to
@@ -50,8 +57,14 @@ namespace pano {
                     ar(view, vps, vertVPId);
                     ar(corners, border2corners, border2connected);
                     ar(face2corners, face2control, face2plane, coplanarFacePairs, clutters);
-                } else {
-                    NOT_IMPLEMENTED_YET();
+                } else if(version == 1) {
+                    ar(impath);
+                    ar(originalImage, rectifiedImage, extendedOnTop, extendedOnBottom);
+                    ar(topIsPlane, bottomIsPlane);
+                    ar(view, vps, vertVPId);
+                    ar(lines);
+                    ar(corners, border2corners, border2connected);
+                    ar(face2corners, face2control, face2plane, coplanarFacePairs, clutters);
                 }
             }
         };
@@ -65,13 +78,7 @@ namespace pano {
         void SaveLayoutAnnotation(const std::string & imagePath, const PILayoutAnnotation & anno);
 
 
-        PIGraph ConvertToPIGraph(const PILayoutAnnotation & anno);
-
-
     }
 }
 
-
-//CEREAL_CLASS_VERSION(pano::experimental::PIAnnotation, 0);
-
-CEREAL_CLASS_VERSION(pano::experimental::PILayoutAnnotation, 0);
+CEREAL_CLASS_VERSION(pano::experimental::PILayoutAnnotation, 1);
