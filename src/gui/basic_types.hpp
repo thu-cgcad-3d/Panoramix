@@ -196,7 +196,7 @@ namespace pano {
             Color _exceptionalColor;
         };
 
-        ColorTable CreateGreyColorTableWithSize(int sz);
+        ColorTable CreateGreyColorTableWithSize(int sz, const Color & exceptColor = ColorTag::Blue);
         ColorTable CreateRandomColorTableWithSize(int sz, const Color & exceptColor = ColorTag::Transparent);
         ColorTable CreateJetColorTableWithSize(int sz, const Color & exceptColor = ColorTag::Transparent);
 

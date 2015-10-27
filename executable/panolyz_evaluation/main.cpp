@@ -115,7 +115,8 @@ std::vector<Image7d> GeometricContext(const PILayoutAnnotation & anno, const std
 
 
 // proposed method
-std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vector<PerspectiveCamera> & testCams, misc::Matlab & matlab) {
+std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vector<PerspectiveCamera> & testCams, misc::Matlab & matlab, 
+    bool useGTOcclusions) {
     
     const auto & impath = anno.impath;
 
@@ -448,20 +449,26 @@ std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vecto
     //printPIGraph(0, "oriented_lines_segs");
 
     // detect occlusions
-    bool refresh_lsw = refresh_mg_oriented || false;
+    bool refresh_lsw = refresh_mg_oriented || true;
     std::vector<LineSidingWeight> lsw;
-    std::vector<std::map<int, double>> line2leftSegsWithWeight, line2rightSegsWithWeight;
-    if (refresh_lsw || !misc::LoadCache(impath, "lsw", lsw)) {
-        std::cout << "########## refreshing lsw ###########" << std::endl;
-        lsw = ComputeLinesSidingWeights(mg, DegreesToRadians(3), 0.2, 0.1,
-            angleDistForSegLineNeighborhood,
-            &line2leftSegsWithWeight, &line2rightSegsWithWeight);
-        misc::SaveCache(impath, "lsw", lsw);
+    //std::vector<std::map<int, double>> line2leftSegsWithWeight, line2rightSegsWithWeight;
+    if (!useGTOcclusions) {
+        if (refresh_lsw || !misc::LoadCache(impath, "lsw", lsw)) {
+            std::cout << "########## refreshing lsw ###########" << std::endl;
+            lsw = ComputeLinesSidingWeights(mg, DegreesToRadians(3), 0.2, 0.1,
+                angleDistForSegLineNeighborhood);
+            misc::SaveCache(impath, "lsw", lsw);
+        }
+    } else {
+        if (refresh_lsw || !misc::LoadCache(impath, "lsw_from_gt", lsw)) {
+            std::cout << "########## refreshing lsw from gt ###########" << std::endl;
+            lsw = ComputeLinesSidingWeightsFromAnnotation(mg, anno, DegreesToRadians(0.5), DegreesToRadians(8), 0.6);
+            misc::SaveCache(impath, "lsw_from_gt", lsw);
+        }
     }
 
 
-
-    if (false) {
+    if (true) {
         auto pim = Print(mg, ConstantFunctor<gui::Color>(gui::White),
             ConstantFunctor<gui::Color>(gui::Transparent),
             ConstantFunctor<gui::Color>(gui::Gray), 2, 0);
@@ -617,34 +624,25 @@ double ErrorOfSurfaceNormal(const Vec3 & gt, const Vec3 & cand) {
 
 int GeometricContextToLabel(const Vec7 & label) {
     // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
-    int labels[4];
-    std::iota(labels, labels + 4, 0);
-    std::sort(labels, labels + 4, [&label](int a, int b) {return label[a] > label[b]; });
+    int labels[5];
+    std::iota(labels, labels + 5, 0);
+    std::sort(labels, labels + 5, [&label](int a, int b) {return label[a] > label[b]; });
     int maxid = labels[0];
-    if (maxid == 5 || maxid == 6) {
-        maxid = labels[1];
-    }
-    if (maxid == 5 || maxid == 6) {
-        maxid = labels[2];
-    }
-    if (maxid == 4) {
-        maxid = 3;
-    }
     if (label[maxid] == 0.0) {
         return -1;
     }
     return maxid;
 }
 
-int SurfaceNormalToLabel(const Vec3 & normal, const Vec3 & up, const Vec3 & forward, const Vec3 & left, const Vec3 & right) {
+int SurfaceNormalToLabel(const Vec3 & normal, const Vec3 & up, const Vec3 & forward, const Vec3 & left) {
     if (norm(normal) == 0) {
         return -1;
     }
     // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
-    Vec3 dirs[] = { forward, left, right, up };
-    double angleToDirs[4];
-    for (int i = 0; i < 4; i++) {
-        angleToDirs[i] = AngleBetweenUndirectedVectors(dirs[i], normal);
+    Vec3 dirs[] = { forward, left, -left, -up, up };
+    double angleToDirs[5];
+    for (int i = 0; i < 5; i++) {
+        angleToDirs[i] = AngleBetweenDirections(dirs[i], normal);
     }
     return std::min_element(std::begin(angleToDirs), std::end(angleToDirs)) - std::begin(angleToDirs);
 }
@@ -667,7 +665,37 @@ int main(int argc, char ** argv) {
     bool pn_vs_om = false;
     bool pn_vs_gc = true;
 
+    bool consider_horizontal_cams_only = true;
+
     // cache mode
+    // cache gt
+    for (auto & impath : impaths) {
+        std::vector<PerspectiveCamera> testCams1;
+        std::vector<Image3d> gt1;
+        if (recache_gt || !misc::LoadCache(impath, "testCams1_gt1", testCams1, gt1)) {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            if (anno.nfaces() == 0) {
+                while (true) {
+                    pano::experimental::EditLayoutAnnotation(impath, anno);
+                    pano::experimental::ReconstructLayoutAnnotation(anno, matlab);
+                    pano::experimental::VisualizeLayoutAnnotation(anno);
+                    int selected = pano::gui::SelectFrom({ "Accept", "Edit Again", "Abandon" },
+                        "Your decision?",
+                        "Accept the edit, or edit it again, or just abandon the edit this time?", 0, 2);
+                    if (selected == 0) {
+                        pano::experimental::SaveLayoutAnnotation(impath, anno);
+                        break;
+                    } else if (selected == 2) {
+                        break;
+                    }
+                }
+            }
+            testCams1 = CreatePanoContextCameras(anno.view.camera);
+            gt1 = GT(anno, testCams1);
+            misc::SaveCache(impath, "testCams1_gt1", testCams1, gt1);
+        }
+    }
+
     // cache gc
     for (auto & impath : impaths) {
         std::vector<PerspectiveCamera> testCams1;
@@ -699,36 +727,20 @@ int main(int argc, char ** argv) {
         if (recache_pn || !misc::LoadCache(impath, "testCams1_pn1", testCams1, pn1)) {
             auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
             testCams1 = CreatePanoContextCameras(anno.view.camera);
-            pn1 = Panoramix(anno, testCams1, matlab);
+            pn1 = Panoramix(anno, testCams1, matlab, false);
             misc::SaveCache(impath, "testCams1_pn1", testCams1, pn1);
         }
     }
 
-    // cache pn
+    // cache pn_gtocc
     for (auto & impath : impaths) {
         std::vector<PerspectiveCamera> testCams1;
-        std::vector<Image3d> gt1;
-        if (recache_gt || !misc::LoadCache(impath, "testCams1_gt1", testCams1, gt1)) {
+        std::vector<Image3d> pngtocc1;
+        if (recache_pn || !misc::LoadCache(impath, "testCams1_pngtocc1", testCams1, pngtocc1)) {
             auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-            if (anno.nfaces() == 0) {
-                while (true) {
-                    pano::experimental::EditLayoutAnnotation(impath, anno);
-                    pano::experimental::ReconstructLayoutAnnotation(anno, matlab);
-                    pano::experimental::VisualizeLayoutAnnotation(anno);
-                    int selected = pano::gui::SelectFrom({ "Accept", "Edit Again", "Abandon" },
-                        "Your decision?",
-                        "Accept the edit, or edit it again, or just abandon the edit this time?", 0, 2);
-                    if (selected == 0) {
-                        pano::experimental::SaveLayoutAnnotation(impath, anno);
-                        break;
-                    } else if (selected == 2) {
-                        break;
-                    }
-                }
-            }
             testCams1 = CreatePanoContextCameras(anno.view.camera);
-            gt1 = GT(anno, testCams1);
-            misc::SaveCache(impath, "testCams1_gt1", testCams1, gt1);
+            pngtocc1 = Panoramix(anno, testCams1, matlab, true);
+            misc::SaveCache(impath, "testCams1_pngtocc1", testCams1, pngtocc1);
         }
     }
 
@@ -791,7 +803,7 @@ int main(int argc, char ** argv) {
 
     if (pn_vs_gc) {
 
-        auto ctable = gui::CreateRandomColorTableWithSize(4, gui::Transparent);
+        auto ctable = gui::CreateGreyColorTableWithSize(4);
         std::map<std::string, double> impath2errorpn, impath2errorgc;
 
         for (auto & impath : impaths) {
@@ -814,11 +826,16 @@ int main(int argc, char ** argv) {
             int npixels = 0;
             std::vector<Imagei> gcLabelsTable(testCams1.size()), pnLabelsTable(testCams1.size()), gtLabelsTable(testCams1.size());
             for (int i = 0; i < testCams1.size(); i++) {
+
                 auto & pn = pn1[i];
                 auto & gc = gc1[i];
                 auto & gt = gt1[i];
 
                 auto & cam = testCams1[i];
+                if (consider_horizontal_cams_only &&
+                    AngleBetweenUndirectedVectors(anno.view.camera.up(), cam.forward()) < DegreesToRadians(60)) {
+                    continue;
+                }
 
                 Imagei gcLabels(cam.screenSize(), -1);
                 Imagei pnLabels(cam.screenSize(), -1);
@@ -831,11 +848,11 @@ int main(int argc, char ** argv) {
                         continue;
                     }
 
-                    int gtLabel = SurfaceNormalToLabel(gtNormal, -cam.up(), cam.forward(), -cam.leftward(), -cam.rightward());
+                    int gtLabel = SurfaceNormalToLabel(gtNormal, cam.up(), cam.forward(), cam.leftward());
                     gtLabels(p) = gtLabel;
 
                     Vec3 pnNormal = pn(p); 
-                    int pnLabel = SurfaceNormalToLabel(pnNormal, -cam.up(), cam.forward(), -cam.leftward(), -cam.rightward());
+                    int pnLabel = SurfaceNormalToLabel(pnNormal, cam.up(), cam.forward(), cam.leftward());
                     Vec7 gcScores = gc(p);
                     int gcLabel = GeometricContextToLabel(gcScores);
 

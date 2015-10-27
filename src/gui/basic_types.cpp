@@ -310,14 +310,13 @@ namespace pano {
         }
 
 
-        ColorTable CreateGreyColorTableWithSize(int sz) {
-            auto exeptColor = ColorTag::Blue;
+        ColorTable CreateGreyColorTableWithSize(int sz, const Color & exceptColor) {
             core::Vec3 full(1, 1, 1);
             std::vector<Color> colors(sz);
             for (int i = 0; i < sz; i++){
                 colors[i] = Color(double(i) * full / double(sz));
             }
-            return ColorTable(colors, exeptColor);
+            return ColorTable(colors, exceptColor);
         }
 
         ColorTable CreateRandomColorTableWithSize(int sz, const Color & exceptColor) {

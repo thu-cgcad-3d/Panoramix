@@ -1986,6 +1986,144 @@ namespace pano {
         }
 
 
+
+        std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(const PIGraph & mg,
+            const PILayoutAnnotation & anno,
+            double sampleAngleStep,
+            double angleThres,
+            double ratioThres) {
+
+            assert(anno.nfaces() > 0);
+
+            std::vector<bool> occBorder2leftIsFront(anno.nborders(), false);           
+            RTreeMap<Box3, std::pair<Line3, int>> occBorderSamplesTree;
+            for (int border = 0; border < anno.nborders(); border++) {
+                if (anno.border2connected[border]) {
+                    continue;
+                }
+                auto & cs = anno.border2corners[border];
+                auto p1 = anno.corners[cs.first];
+                auto p2 = anno.corners[cs.second];
+                double spanAngle = AngleBetweenDirections(p1, p2);
+                for (double a = 0.0; a < spanAngle; a += sampleAngleStep) {
+                    Vec3 sample1 = normalize(RotateDirection(p1, p2, a));
+                    Vec3 sample2 = normalize(RotateDirection(p1, p2, a + sampleAngleStep));
+                    Line3 piece(sample1, sample2);
+                    occBorderSamplesTree.emplace(BoundingBox(piece), std::make_pair(piece, border));
+                }
+
+                // get the occluding side of this border
+                Line3 borderLine(anno.corners[cs.first], anno.corners[cs.second]);
+                std::vector<int> adjFaces;
+                for (int face = 0; face < anno.nfaces(); face++) {
+                    auto & faceCs = anno.face2corners[face];
+                    for (int k = 0; k < faceCs.size(); k++) {
+                        int c1 = faceCs[k];
+                        int c2 = faceCs[(k+1) % faceCs.size()];
+                        if (c1 == cs.first && c2 == cs.second || c1 == cs.second && c2 == cs.first) {
+                            adjFaces.push_back(face);
+                            break;
+                        }
+                    }
+                }
+                assert(adjFaces.size() == 2);
+
+                Vec3 rightOfBorderLine = normalize(borderLine.first.cross(borderLine.second));
+                std::vector<Scored<double>> rightDegree2depth;
+                for (int face : adjFaces) {
+                    auto & faceCs = anno.face2corners[face];
+                    Vec3 normal = anno.face2plane[face].normal;
+                    assert(normal != Origin());
+                    Vec3 x, y;
+                    std::tie(x, y) = ProposeXYDirectionsFromZDirection(normal);
+                    Vec3 dirInFace;
+                    TriangulatePolygon(faceCs.begin(), faceCs.end(), [normal, x, y, &anno](int c) -> Point2 {
+                        Vec3 corner = anno.corners[c];
+                        return Point2(corner.dot(x), corner.dot(y));
+                    }, [&anno, &cs, &dirInFace](int c1, int c2, int c3) {
+                        if (Contains({ cs.first, cs.second }, c1) + 
+                            Contains({ cs.first, cs.second }, c2) + 
+                            Contains({ cs.first, cs.second }, c3) >= 2) {
+                            dirInFace = normalize(anno.corners[c1 + c2 + c3 - cs.first - cs.second]);
+                        }
+                    });
+                    assert(dirInFace != Origin());
+                    double rightDegree = dirInFace.dot(rightOfBorderLine);
+                    double depthOnBorderOfFace = norm(IntersectionOfLineAndPlane(Ray3(Origin(), borderLine.center()), anno.face2plane[face]).position);
+                    assert(depthOnBorderOfFace > 0.0);
+                    rightDegree2depth.push_back(ScoreAs(depthOnBorderOfFace, rightDegree));
+                }
+                assert(rightDegree2depth.size() == 2);
+                std::sort(rightDegree2depth.begin(), rightDegree2depth.end());
+                double leftDepth = rightDegree2depth.front().component;
+                double rightDepth = rightDegree2depth.back().component;
+                occBorder2leftIsFront[border] = leftDepth < rightDepth;
+            }
+
+            std::vector<LineSidingWeight> lsw(mg.nlines(), LineSidingWeight{ 0.5, 0.5 });
+
+            for (int line = 0; line < mg.nlines(); line++) {
+                auto & l = mg.lines[line].component;
+                if (mg.lines[line].claz == -1) {
+                    continue;
+                }
+                auto p1 = l.first;
+                auto p2 = l.second;
+                double spanAngle = AngleBetweenDirections(l.first, l.second);
+                auto lineN = normalize(l.first.cross(l.second));
+                
+                std::map<int, int> nearbyBorder2count;
+                int count = 0;
+                for (double a = 0.0; a < spanAngle; a += sampleAngleStep) {
+                    Vec3 sample1 = normalize(RotateDirection(p1, p2, a));
+                    Vec3 sample2 = normalize(RotateDirection(p1, p2, a + sampleAngleStep));
+                    Line3 piece(sample1, sample2);
+                    occBorderSamplesTree.search(BoundingBox(piece).expand(sampleAngleStep * 2), [&lineN, &piece, angleThres, &nearbyBorder2count](const std::pair<Box3, std::pair<Line3, int>> & bdp) {
+                        auto & borderPiece = bdp.second.first;
+                        int border = bdp.second.second;
+                        auto borderN = normalize(borderPiece.first.cross(borderPiece.second));
+                        auto nearest = DistanceBetweenTwoLines(piece, borderPiece).second;
+                        double angleDist = AngleBetweenDirections(nearest.first.position, nearest.second.position);
+                        if (angleDist < angleThres) {
+                            nearbyBorder2count[border] ++;
+                        }
+                        return true;
+                    });
+                    count++;
+                }
+
+                int attachedBorder = -1;
+                int maxCount = count * ratioThres;
+                for (auto & pp : nearbyBorder2count) {
+                    if (pp.second > maxCount) {
+                        attachedBorder = pp.first;
+                    }
+                }
+
+                if (attachedBorder == -1) {
+                    continue;
+                }
+
+                Line3 borderLine(anno.corners[anno.border2corners[attachedBorder].first],
+                    anno.corners[anno.border2corners[attachedBorder].second]);
+                bool borderDirSameWithLine = lineN.dot(borderLine.first.cross(borderLine.second)) > 0;
+                bool leftIsFront = borderDirSameWithLine ? occBorder2leftIsFront[attachedBorder] : !occBorder2leftIsFront[attachedBorder];
+
+                if (leftIsFront) {
+                    lsw[line].leftWeightRatio = 1.0;
+                    lsw[line].rightWeightRatio = 0.0;
+                } else {
+                    lsw[line].leftWeightRatio = 0.0;
+                    lsw[line].rightWeightRatio = 1.0;
+                }
+            }
+
+            return lsw;
+        }
+
+
+
+
         std::vector<std::array<std::set<int>, 2>> CollectSegsNearLines(const PIGraph & mg, double angleSizeForPixelsNearLines) {
 
             int width = mg.segs.cols;

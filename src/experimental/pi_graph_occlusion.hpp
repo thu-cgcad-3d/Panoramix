@@ -6,7 +6,7 @@
 namespace pano {
     namespace experimental {
 
-
+        class PILayoutAnnotation;
 
         void DetectOcclusions(PIGraph & mg,
             double minAngleSizeOfLineInTJunction = DegreesToRadians(3),
@@ -38,6 +38,12 @@ namespace pano {
             double angleSizeForPixelsNearLines = DegreesToRadians(2),
             std::vector<std::map<int, double>> * line2leftSegsWithWeightPtr = nullptr,
             std::vector<std::map<int, double>> * line2rightSegsWithWeightPtr = nullptr);
+
+        std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(const PIGraph & mg,
+            const PILayoutAnnotation & anno, 
+            double sampleAngleStep = DegreesToRadians(0.5),
+            double angleThres = DegreesToRadians(2),
+            double ratioThres = 0.6);
 
         std::vector<std::array<std::set<int>, 2>> CollectSegsNearLines(const PIGraph & mg, 
             double angleSizeForPixelsNearLines = DegreesToRadians(2));
