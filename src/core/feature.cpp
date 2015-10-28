@@ -2979,6 +2979,35 @@ namespace pano {
         }
 
 
+        void RemoveEmbededRegionsInSegmentation(Imagei & segs, bool crossBorder) {
+            int nsegs = MinMaxValOfImage(segs).second + 1;
+            std::vector<std::set<int>> segNeighbors(nsegs);
+            for (int x = 0; x < segs.cols; x++) {
+                for (int y = 0; y < segs.rows; y++) {
+                    Pixel p(x, y);
+                    int seg1 = segs(p);
+                    Pixel nbs[] = { Pixel(x + 1, y), Pixel(x, y + 1), Pixel(x + 1, y + 1), Pixel(x - 1, y + 1) };
+                    for (auto & nb : nbs) {
+                        if (crossBorder) {
+                            nb.x = (nb.x + segs.cols) % segs.cols;
+                        }
+                        if (Contains(segs, nb)) {
+                            int seg2 = segs(nb);
+                            segNeighbors[seg1].insert(seg2);
+                            segNeighbors[seg2].insert(seg1);
+                        }
+                    }
+                }
+            }
+            for (int & s : segs) {
+                if (segNeighbors[s].size() == 1) {
+                    s = *segNeighbors[s].begin();
+                }
+            }
+        }
+
+
+
         int DensifySegmentation(Imagei & segs, bool crossBorder) {
 
             int width = segs.cols;

@@ -21,7 +21,8 @@ using namespace pano::experimental;
 
 
 
-std::vector<Image3d> GT(const PILayoutAnnotation & anno, const std::vector<PerspectiveCamera> & testCams) {
+std::vector<Imagei> GTFaceLabels(const PILayoutAnnotation & anno, const std::vector<PerspectiveCamera> & testCams) {
+    auto impath = anno.impath;
     std::vector<Polygon3> polygons(anno.nfaces());
     for (int i = 0; i < anno.nfaces(); i++) {
         auto & plane = anno.face2plane[i];
@@ -33,46 +34,46 @@ std::vector<Image3d> GT(const PILayoutAnnotation & anno, const std::vector<Persp
         }
     }
 
-    std::vector<Image3d> gts(testCams.size());
+    std::vector<Imagei> faceLabels(testCams.size());
     ParallelRun(testCams.size(), std::thread::hardware_concurrency(), [&](int i) {
-        std::cout << "computing gt surface normals - " << i << std::endl;
+        std::cout << "computing gt face label map - " << i << std::endl;
         auto & cam = testCams[i];
-        Image3d gt(cam.screenSize());
-        for (auto it = gt.begin(); it != gt.end(); ++it) {
+        Imagei faceLabelMap(cam.screenSize(), -1);
+        for (auto it = faceLabelMap.begin(); it != faceLabelMap.end(); ++it) {
             Vec3 direction = normalize(cam.toSpace(it.pos()));
             Ray3 ray(Origin(), direction);
             double depth = std::numeric_limits<double>::infinity();
             for (int i = 0; i < anno.nfaces(); i++) {
                 auto & poly = polygons[i];
                 auto inter = IntersectionOfLineAndPolygon(ray, poly);
-                if (inter.failed()) {
-                    continue;
+                if (!inter.failed()) {
+                    *it = i;
+                    break;
                 }
-                *it = normalize(poly.normal);
             }
         }
-        gts[i] = gt;
-
-        for (auto it = gt.begin(); it != gt.end(); ++it) {
-            if (*it == Origin()) {
+        for (auto it = faceLabelMap.begin(); it != faceLabelMap.end(); ++it) {
+            if (*it == -1) {
                 for (int dx = -1; dx <= 1; dx++) {
-                    if (*it != Origin()) {
+                    if (*it != -1) {
                         break;
                     }
                     for (int dy = -1; dy <= 1; dy++) {
                         auto p = it.pos() + Pixel(dx, dy);
-                        if (Contains(gt, p) && gt(p) != Origin()) {
-                            *it = gt(p);
+                        if (Contains(faceLabelMap, p) && faceLabelMap(p) != -1) {
+                            *it = faceLabelMap(p);
                             break;
                         }
                     }
                 }
             }
         }
+        faceLabels[i] = faceLabelMap;
     });
 
-    return gts;
+    return faceLabels;
 }
+
 
 
 
@@ -116,7 +117,7 @@ std::vector<Image7d> GeometricContext(const PILayoutAnnotation & anno, const std
 
 // proposed method
 std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vector<PerspectiveCamera> & testCams, misc::Matlab & matlab, 
-    bool useGTOcclusions) {
+    bool useGTOcclusions, bool showGUI) {
     
     const auto & impath = anno.impath;
 
@@ -182,6 +183,7 @@ std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vecto
         // estimate segs
         nsegs = SegmentationForPIGraph(view, line3s, segs, DegreesToRadians(1));
         RemoveThinRegionInSegmentation(segs, 1, true);
+        RemoveEmbededRegionsInSegmentation(segs, true);
         nsegs = DensifySegmentation(segs, true);
         assert(IsDenseSegmentation(segs));
 
@@ -449,7 +451,7 @@ std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vecto
     //printPIGraph(0, "oriented_lines_segs");
 
     // detect occlusions
-    bool refresh_lsw = refresh_mg_oriented || true;
+    bool refresh_lsw = refresh_mg_oriented || false;
     std::vector<LineSidingWeight> lsw;
     //std::vector<std::map<int, double>> line2leftSegsWithWeight, line2rightSegsWithWeight;
     if (!useGTOcclusions) {
@@ -468,7 +470,7 @@ std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vecto
     }
 
 
-    if (true) {
+    if (showGUI) {
         auto pim = Print(mg, ConstantFunctor<gui::Color>(gui::White),
             ConstantFunctor<gui::Color>(gui::Transparent),
             ConstantFunctor<gui::Color>(gui::Gray), 2, 0);
@@ -515,7 +517,7 @@ std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vecto
     }
 
 
-    bool refresh_mg_occdetected = refresh_lsw || refresh_line2leftRightSegs || true;
+    bool refresh_mg_occdetected = refresh_lsw || refresh_line2leftRightSegs || false;
     if (refresh_mg_occdetected || !misc::LoadCache(impath, "mg_occdetected", mg)) {
         std::cout << "########## refreshing mg occdetected ###########" << std::endl;
         ApplyLinesSidingWeights(mg, lsw, line2leftRightSegs, true);
@@ -534,7 +536,7 @@ std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vecto
     bool refresh_mg_reconstructed = refresh_mg_occdetected || true;
     if (refresh_mg_reconstructed || !misc::LoadCache(impath, "mg_reconstructed", mg, cg, dp)) {
         std::cout << "########## refreshing mg reconstructed ###########" << std::endl;
-        cg = BuildPIConstraintGraph(mg, DegreesToRadians(1), 0.2);
+        cg = BuildPIConstraintGraph(mg, DegreesToRadians(1), 0.01);
 
         for (int i = 0; i < 2; i++) {
             dp = LocateDeterminablePart(cg, DegreesToRadians(3));
@@ -544,32 +546,34 @@ std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vecto
                 return {};
             }
             
-            std::pair<double, double> validRange;
-            auto depthMap = DepthMap(dp, cg, mg, &validRange);
-            Imagei depthMapDisc = (depthMap - validRange.first) / (validRange.second - validRange.first) * 255;
-            auto jetctable = gui::CreateJetColorTableWithSize(MinMaxValOfImage(depthMapDisc).second + 1);
-            gui::AsCanvas(jetctable(depthMapDisc)).show(1, "depth map");
+            if (showGUI) {
+                std::pair<double, double> validRange;
+                auto depthMap = DepthMap(dp, cg, mg, &validRange);
+                Imagei depthMapDisc = (depthMap - validRange.first) / (validRange.second - validRange.first) * 255;
+                auto jetctable = gui::CreateJetColorTableWithSize(MinMaxValOfImage(depthMapDisc).second + 1);
+                gui::AsCanvas(jetctable(depthMapDisc)).show(1, "depth map");
 
-            auto surfaceNormalMap = SurfaceNormalMap(dp, cg, mg);
-            auto surfaceNormalMapForShow = surfaceNormalMap.clone();
-            for (auto & n : surfaceNormalMapForShow) {
-                auto nn = n;
-                for (int i = 0; i < mg.vps.size(); i++) {
-                    n[i] = abs(nn.dot(vps[i]));
+                auto surfaceNormalMap = SurfaceNormalMap(dp, cg, mg);
+                auto surfaceNormalMapForShow = surfaceNormalMap.clone();
+                for (auto & n : surfaceNormalMapForShow) {
+                    auto nn = n;
+                    for (int i = 0; i < mg.vps.size(); i++) {
+                        n[i] = abs(nn.dot(vps[i]));
+                    }
                 }
+                gui::AsCanvas(surfaceNormalMapForShow).show(0, "surface normal map");
+
+                VisualizeReconstructionCompact(dp, cg, mg, false);
+                VisualizeReconstruction(dp, cg, mg, false);
             }
-            gui::AsCanvas(surfaceNormalMapForShow).show(0, "surface normal map");
 
-            VisualizeReconstruction(dp, cg, mg, false);
-
-            DisorientDanglingLines3(dp, cg, mg, 0.05, 0.1);
-            DisorientDanglingSegs3(dp, cg, mg, 0.01, 0.1);
-            OverorientSkewSegs(dp, cg, mg, DegreesToRadians(3), DegreesToRadians(45), 0.5);
+           // DisorientDanglingLines3(dp, cg, mg, 0.05, 0.1);
+           // DisorientDanglingSegs3(dp, cg, mg, 0.01, 0.1);
+            OverorientSkewSegs(dp, cg, mg, DegreesToRadians(3), DegreesToRadians(45), 1.0);
         }
 
         misc::SaveCache(impath, "mg_reconstructed", mg, cg, dp);
     }  
-
 
     std::vector<Image3d> surfaceNormalMaps(testCams.size());
     ParallelRun(testCams.size(), std::thread::hardware_concurrency(), [&](int i){
@@ -582,15 +586,10 @@ std::vector<Image3d> Panoramix(const PILayoutAnnotation & anno, const std::vecto
             auto dir = normalize(cam.toSpace(p));
             auto pp = ToPixel(anno.view.camera.toScreen(dir));
             pp.x = WrapBetween(pp.x, 0, mg.segs.cols);
-            if (!Contains(mg.segs, pp)) {
-                continue;
-            }
+            pp.y = BoundBetween(pp.y, 0, mg.segs.rows - 1);
             int seg = mg.segs(pp);
             int ent = cg.seg2ent[seg];
-            if (ent == -1) {
-                continue;
-            }
-            if (!Contains(dp.determinableEnts, ent)) {
+            if (ent == -1 || !Contains(dp.determinableEnts, ent)) {
                 continue;
             }
             auto & plane = cg.entities[ent].supportingPlane.reconstructed;
@@ -652,14 +651,16 @@ int SurfaceNormalToLabel(const Vec3 & normal, const Vec3 & up, const Vec3 & forw
 int main(int argc, char ** argv) {
     
     gui::Singleton::InitGui();
-    misc::Matlab matlab("", true);
+    misc::Matlab matlab("", false);
     
     std::vector<std::string> impaths;
-    gui::PickImages("H:\\DataSet\\pi\\dataset\\selected\\", &impaths);    
+    gui::PickImages("H:\\DataSet\\pi\\dataset\\selected\\", &impaths);   
+
+    bool show_gui = true;
     
     bool recache_gc = false;
     bool recache_om = false;
-    bool recache_pn = false;
+    bool recache_pn = true;
     bool recache_gt = false;
 
     bool pn_vs_om = false;
@@ -669,9 +670,9 @@ int main(int argc, char ** argv) {
 
     // cache mode
     // cache gt
-    for (auto & impath : impaths) {
+    auto getCachedGT = [recache_gt, &matlab](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {
         std::vector<PerspectiveCamera> testCams1;
-        std::vector<Image3d> gt1;
+        std::vector<Imagei> gt1;
         if (recache_gt || !misc::LoadCache(impath, "testCams1_gt1", testCams1, gt1)) {
             auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
             if (anno.nfaces() == 0) {
@@ -691,13 +692,15 @@ int main(int argc, char ** argv) {
                 }
             }
             testCams1 = CreatePanoContextCameras(anno.view.camera);
-            gt1 = GT(anno, testCams1);
+            gt1 = GTFaceLabels(anno, testCams1);
             misc::SaveCache(impath, "testCams1_gt1", testCams1, gt1);
-        }
-    }
+        } 
+        assert(testCams == testCams1);
+        return gt1;
+    };
 
     // cache gc
-    for (auto & impath : impaths) {
+    auto getCachedGC = [recache_gc, &matlab](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {
         std::vector<PerspectiveCamera> testCams1;
         std::vector<Image7d> gc1;
         if (recache_gc || !misc::LoadCache(impath, "testCams1_gc1", testCams1, gc1)) {
@@ -706,10 +709,12 @@ int main(int argc, char ** argv) {
             gc1 = GeometricContext(anno, testCams1, matlab);
             misc::SaveCache(impath, "testCams1_gc1", testCams1, gc1);
         }
-    }
+        assert(testCams == testCams1);
+        return gc1;
+    };
 
     // cache om
-    for (auto & impath : impaths) {
+    auto getCachedOM = [recache_om](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {
         std::vector<PerspectiveCamera> testCams1;
         std::vector<Imagei> om1;
         if (recache_om || !misc::LoadCache(impath, "testCams1_om1", testCams1, om1)) {
@@ -718,31 +723,37 @@ int main(int argc, char ** argv) {
             om1 = OrientationMaps(anno, testCams1);
             misc::SaveCache(impath, "testCams1_om1", testCams1, om1);
         }
-    }
+        assert(testCams == testCams1);
+        return om1;
+    };
 
     // cache pn
-    for (auto & impath : impaths) {
+    auto getCachedPN = [recache_pn, &matlab, show_gui](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {
         std::vector<PerspectiveCamera> testCams1;
         std::vector<Image3d> pn1;
         if (recache_pn || !misc::LoadCache(impath, "testCams1_pn1", testCams1, pn1)) {
             auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
             testCams1 = CreatePanoContextCameras(anno.view.camera);
-            pn1 = Panoramix(anno, testCams1, matlab, false);
+            pn1 = Panoramix(anno, testCams1, matlab, false, show_gui);
             misc::SaveCache(impath, "testCams1_pn1", testCams1, pn1);
         }
-    }
+        assert(testCams == testCams1);
+        return pn1;
+    };
 
     // cache pn_gtocc
-    for (auto & impath : impaths) {
+    auto getCachedPNGtOcc = [recache_pn, &matlab, show_gui](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {
         std::vector<PerspectiveCamera> testCams1;
         std::vector<Image3d> pngtocc1;
         if (recache_pn || !misc::LoadCache(impath, "testCams1_pngtocc1", testCams1, pngtocc1)) {
             auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
             testCams1 = CreatePanoContextCameras(anno.view.camera);
-            pngtocc1 = Panoramix(anno, testCams1, matlab, true);
+            pngtocc1 = Panoramix(anno, testCams1, matlab, true, show_gui);
             misc::SaveCache(impath, "testCams1_pngtocc1", testCams1, pngtocc1);
         }
-    }
+        assert(testCams == testCams1);
+        return pngtocc1;
+    };
 
 
     // evaluate mode
@@ -811,14 +822,9 @@ int main(int argc, char ** argv) {
             std::vector<PerspectiveCamera> testCams1 = CreatePanoContextCameras(anno.view.camera);
 
             std::vector<PerspectiveCamera> testCamsA, testCamsB, testCamsC;
-            std::vector<Image3d> pn1;
-            misc::LoadCache(impath, "testCams1_pn1", testCamsA, pn1);
-            std::vector<Image7d> gc1;
-            misc::LoadCache(impath, "testCams1_gc1", testCamsB, gc1);
-            std::vector<Image3d> gt1;
-            misc::LoadCache(impath, "testCams1_gt1", testCamsC, gt1);
-
-            assert(testCams1 == testCamsA && testCams1 == testCamsB && testCams1 == testCamsC);
+            std::vector<Image3d> pn1 = getCachedPN(impath, testCams1);
+            std::vector<Image7d> gc1 = getCachedGC(impath, testCams1);
+            std::vector<Imagei> gt1 = getCachedGT(impath, testCams1);
 
             double error_pn = 0.0;
             double error_gc = 0.0;
@@ -843,7 +849,13 @@ int main(int argc, char ** argv) {
 
                 for (auto it = gt.begin(); it != gt.end(); ++it) {
                     auto p = it.pos();
-                    Vec3 gtNormal = *it;
+                    int gtFaceId = *it;
+                    if (gtFaceId == -1) {
+                        std::cout << "!!!gt face id is -1!!!!" << std::endl;
+                        continue;
+                    }                    
+
+                    Vec3 gtNormal = anno.face2plane[gtFaceId].normal;
                     if (norm(gtNormal) == 0) {
                         continue;
                     }
@@ -869,9 +881,11 @@ int main(int argc, char ** argv) {
                 pnLabelsTable[i] = pnLabels;
                 gtLabelsTable[i] = gtLabels;
 
-                gui::MakeCanvas(ctable(gcLabels)).show(1, "gcLabels");
-                gui::MakeCanvas(ctable(pnLabels)).show(1, "pnLabels");
-                gui::MakeCanvas(ctable(gtLabels)).show(0, "gtLabels");
+                if (show_gui) {
+                    gui::MakeCanvas(ctable(gcLabels)).show(1, "gcLabels");
+                    gui::MakeCanvas(ctable(pnLabels)).show(1, "pnLabels");
+                    gui::MakeCanvas(ctable(gtLabels)).show(0, "gtLabels");
+                }
             }
 
             error_pn /= npixels;

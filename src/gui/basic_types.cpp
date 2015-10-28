@@ -588,8 +588,8 @@ namespace pano {
                 "void main(void)\n"
                 "{\n"
                 "   lowp vec4 texColor = texture2D(tex, pixelTexCoord);\n"
-                "   gl_FragColor = (pixelColor * bwColor + texColor * bwTexColor)"
-                "       / (bwColor + bwTexColor);\n"
+                "   gl_FragColor = (pixelColor * 1.0 + texColor * 0.0)"
+                "     ;\n"
                 "   gl_FragColor.a = 1.0 - pixelSelection * 0.5;\n"
                 "}\n"
             };

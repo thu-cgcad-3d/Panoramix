@@ -136,7 +136,7 @@ namespace pano {
 
         // VisualizeReconstruction
         void VisualizeReconstruction(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, bool showConnectionLines = true,
-            const std::function<gui::Color(int vert)> & vertColor = core::ConstantFunctor<gui::Color>(gui::White),
+            const std::function<gui::Color(int vert)> & vertColor = core::ConstantFunctor<gui::Color>(gui::Black),
             const std::function<void(int vert)> & vertClick = core::ConstantFunctor<void>());
 
 
@@ -147,10 +147,10 @@ namespace pano {
 
 
         // get the CompactModel
-        std::vector<Polygon3> CompactModel(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg);
+        std::vector<Polygon3> CompactModel(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, double distThres);
 
         // the compact version
-        void VisualizeReconstructionCompact(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg);
+        void VisualizeReconstructionCompact(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, bool doModel);
 
 
 
