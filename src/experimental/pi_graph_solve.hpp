@@ -46,5 +46,10 @@ namespace pano {
         void OverorientSkewSegs(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, 
             double angleThres, double positionAngleThres, double oriRatio);
 
+
+
+
+
+
     }
 }

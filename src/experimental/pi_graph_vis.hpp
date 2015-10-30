@@ -141,14 +141,6 @@ namespace pano {
 
 
 
-        Imaged DepthMap(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, 
-            std::pair<double, double> * validDepthRange = nullptr);
-        Image3d SurfaceNormalMap(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg);
-
-
-        // get the CompactModel
-        std::vector<Polygon3> CompactModel(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, double distThres);
-
         // the compact version
         void VisualizeReconstructionCompact(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, bool doModel);
 
