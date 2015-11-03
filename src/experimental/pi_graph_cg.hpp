@@ -82,7 +82,7 @@ namespace pano {
             double minAngleThresForAWideEdge);
 
 
-        PICGDeterminablePart LocateDeterminablePart(const PIConstraintGraph & cg, double angleThres);
+        PICGDeterminablePart LocateDeterminablePart(const PIConstraintGraph & cg, double angleThres, bool connectAll);
 
 
 

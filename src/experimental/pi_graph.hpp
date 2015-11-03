@@ -81,6 +81,7 @@ namespace pano {
             std::vector<Classified<Line3>> lines;
             std::vector<std::vector<int>> line2linePieces;
             std::vector<std::vector<int>> line2lineRelations;
+            std::vector<bool> line2used;
             int nlines() const { return lines.size(); }
 
             // lineRelation

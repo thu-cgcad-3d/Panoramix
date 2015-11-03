@@ -21,6 +21,7 @@ namespace pano {
         }
 
         std::string FolderOfFile(const std::string & filepath);
+        std::string NameOfFile(const std::string & filepath);
 
 
     }

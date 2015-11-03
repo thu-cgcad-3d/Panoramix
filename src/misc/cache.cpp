@@ -24,5 +24,12 @@ namespace pano {
             return finfo.absolutePath().toStdString();
         }
 
+        std::string NameOfFile(const std::string & filepath) {
+            QFileInfo finfo(QString::fromStdString(filepath));
+            if (!finfo.exists())
+                return std::string();
+            return finfo.fileName().toStdString();
+        }
+
     }
 }

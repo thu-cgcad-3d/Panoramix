@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../src/core/clock.hpp"
+#include "../../src/misc/clock.hpp"
 #include "../../src/core/parallel.hpp"
 #include "../../src/misc/cache.hpp"
 
@@ -102,7 +102,7 @@ struct PanoramixReport {
 
 
 // run the main algorithm
-void RunPanoramix(
+PanoramixReport RunPanoramix(
     const PILayoutAnnotation & anno, 
     const PanoramixOptions & options,
     misc::Matlab & matlab, 
@@ -116,6 +116,9 @@ bool GetPanoramixResult(
     PIGraph & mg,
     PIConstraintGraph & cg,
     PICGDeterminablePart & dp);
+std::vector<LineSidingWeight> GetPanoramixOcclusionResult(
+    const PILayoutAnnotation & anno,
+    const PanoramixOptions & options);
 
 
 // get surface normal maps
@@ -136,7 +139,7 @@ std::vector<Image3d> GetSurfaceNormalMapsOfPanoramix(
     }
 
     std::vector<Image3d> surfaceNormalMaps(testCams.size());
-    ParallelRun(testCams.size(), std::thread::hardware_concurrency(), [&](int i) {
+    ParallelRun(testCams.size(), std::thread::hardware_concurrency() - 1, [&](int i) {
         std::cout << "computing surface normal map for panoramix on testCamera - " << i << std::endl;
         auto & map = surfaceNormalMaps[i];
         auto & cam = testCams[i];
@@ -163,7 +166,7 @@ std::vector<Image3d> GetSurfaceDepthMapsOfPanoramix(
     }
 
     std::vector<Image3d> surfaceDepthMaps(testCams.size());
-    ParallelRun(testCams.size(), std::thread::hardware_concurrency(), [&](int i) {
+    ParallelRun(testCams.size(), std::thread::hardware_concurrency() - 1, [&](int i) {
         std::cout << "computing surface normal map for panoramix on testCamera - " << i << std::endl;
         auto & map = surfaceDepthMaps[i];
         auto & cam = testCams[i];

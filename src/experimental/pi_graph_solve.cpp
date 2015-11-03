@@ -365,7 +365,7 @@ namespace pano {
 
         void ReconstructLayoutAnnotation2(PILayoutAnnotation & anno, misc::Matlab & matlab) {
             auto cg = BuildPIConstraintGraph(anno, 0);
-            auto dp = LocateDeterminablePart(cg, DegreesToRadians(3));
+            auto dp = LocateDeterminablePart(cg, DegreesToRadians(3), false);
             Solve(dp, cg, matlab);
             // install back as planes
             for (auto & e : cg.entities) {
@@ -378,7 +378,7 @@ namespace pano {
 
         void ReconstructLayoutAnnotation3(PILayoutAnnotation & anno, misc::Matlab & matlab) {
             auto cg = BuildPIConstraintGraphWithLines(anno, 0);
-            auto dp = LocateDeterminablePart(cg, DegreesToRadians(3));
+            auto dp = LocateDeterminablePart(cg, DegreesToRadians(3), false);
             Solve(dp, cg, matlab);
             // install back as planes
             for (auto & e : cg.entities) {
@@ -543,7 +543,7 @@ namespace pano {
                     matlab << "K = (A1 - A2) .* repmat(D1D2 .* WA, [1, n]);";
                     matlab << "R = (C1 - C2) .* repmat(WC, [1, n]);";
                     
-                    const std::string objectiveStr = "sum_square(K * X) * s + sum_square(R * X)";
+                    const std::string objectiveStr = "sum_square(K * X) * 1e6 + sum_square(R * X) * (1e6 / s)";
 
                     matlab
                         << "cvx_begin"
@@ -805,6 +805,10 @@ namespace pano {
                 if (maxEndDist < thresRatio) {
                     continue;
                 }
+                if (mg.lines[line].claz == -1) {
+                    mg.line2used[line] = false;
+                    continue;
+                }
                 mg.lines[line].claz = -1;
                 int ent = cg.line2ent[line];
                 if (ent == -1) {
@@ -951,9 +955,26 @@ namespace pano {
                     return seg2maxCornerDistToNearestSeg[a] > seg2maxCornerDistToNearestSeg[b];
                 });
 
-                for (int i = 0; i < mg.nsegs * disorientRatio; i++) {
+                int count = 0;
+                for (int i = 0; i < mg.nsegs; i++) {
                     int seg = segids[i];
                     if (seg2maxCornerDistToNearestSeg[seg] < thresRatio) {
+                        continue;
+                    }
+                    count++;
+                }
+
+                for (int i = 0; i < count * disorientRatio; i++) {                    
+                    int seg = segids[i];
+                    if (seg2maxCornerDistToNearestSeg[seg] < thresRatio) {
+                        continue;
+                    }
+                    auto & control = mg.seg2control[seg];
+                    if (!control.used) {
+                        continue;
+                    }
+                    if (control.orientationClaz == -1 && control.orientationNotClaz == -1) {
+                        control.used = false;
                         continue;
                     }
                     mg.seg2control[seg].orientationClaz = -1;

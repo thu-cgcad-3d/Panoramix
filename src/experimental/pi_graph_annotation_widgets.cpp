@@ -50,12 +50,12 @@ namespace pano {
                     update();
                 });
                 _actDrawBorder->setShortcut(tr("w"));
-                connect(_actDrawClutter = bas->addAction(tr("Draw Clutter")), &QAction::triggered, [this]() {
+              /*  connect(_actDrawClutter = bas->addAction(tr("Draw Clutter")), &QAction::triggered, [this]() {
                     _state = DrawingClutter;
                     clearStroke();
                     update();
                 });
-                _actDrawClutter->setShortcut(tr("e"));
+                _actDrawClutter->setShortcut(tr("e"));*/
                 connect(_actConnectCoplanarFaces = bas->addAction(tr("Connect Coplanar Faces")), &QAction::triggered, [this]() {
                     _state = ConnectCoplanarFaces;
                     clearStroke();
@@ -182,14 +182,14 @@ namespace pano {
             defaultAction->setCheckable(true);
             defaultAction->setChecked(_showLayouts);
             addAction(defaultAction);
-            connect(defaultAction = new QAction(tr("Show Clutters"), this), &QAction::triggered, [this](bool checked) {
+           /* connect(defaultAction = new QAction(tr("Show Clutters"), this), &QAction::triggered, [this](bool checked) {
                 _showClutters = checked;
                 update();
             });
             defaultAction->setShortcut(tr("2"));
             defaultAction->setCheckable(true);
             defaultAction->setChecked(_showClutters);
-            addAction(defaultAction);
+            addAction(defaultAction);*/
             connect(defaultAction = new QAction(tr("Show VPs"), this), &QAction::triggered, [this](bool checked) {
                 _showVPs = checked;
                 update();
@@ -279,7 +279,9 @@ namespace pano {
             _options.renderMode(gui::RenderModeFlag::All);
             _options.cullBackFace(false);
             _options.cullFrontFace(false);
-            
+            _options.bwColor(0.5);
+            _options.bwTexColor(0.5);
+
             rebuildLayoutScene();
             rebuildCluttersScene();
 
@@ -488,6 +490,7 @@ namespace pano {
                 _cornerPoints[i].component.color = gui::White;
                 _cornerPoints[i].decoration = i;
             }
+            sb.installingOptions().discretizeOptions.color = gui::White;
             sb.begin(_cornerPoints, [this](gui::InteractionID iid, const core::Decorated<Colored<Point3>, int> & point) {
                 std::cout << "corner " << point.decoration << " is clicked" << std::endl;
                 _cornerClicked = point.decoration;
@@ -554,8 +557,8 @@ namespace pano {
                 std::cout << std::endl;
             }).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).end();
             sb.installingOptions().discretizeOptions.color = gui::White;
-            sb.begin(facePolygonCenters).pointSize(10.0).shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints).end();
-            sb.begin(facePolygonCenterLines).lineWidth(1.0).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
+            //sb.begin(facePolygonCenters).pointSize(10.0).shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints).end();
+            //sb.begin(facePolygonCenterLines).lineWidth(1.0).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
 
             // coplanarFacePair
             _coplanarFacePairLines.clear();

@@ -68,7 +68,12 @@ PanoramixReport::PanoramixReport() {
 
 
 
-void RunPanoramix(
+static const double thetaTiny = DegreesToRadians(2);
+static const double thetaMid = DegreesToRadians(5);
+static const double thetaLarge = DegreesToRadians(15);
+
+
+PanoramixReport RunPanoramix(
     const PILayoutAnnotation & anno,
     const PanoramixOptions & options,
     misc::Matlab & matlab,
@@ -80,8 +85,6 @@ void RunPanoramix(
 #define STOP_TIME_RECORD(name) \
     report.time_##name = ElapsedInMS(start_##name); \
     std::cout << "refresh_"#name" time cost: " << report.time_##name << "ms" << std::endl
-
-
 
 
 
@@ -247,93 +250,23 @@ void RunPanoramix(
         START_TIME_RECORD(mg_init);
         mg = BuildPIGraph(view, vps, vertVPId, segs, line3s,
             DegreesToRadians(1), DegreesToRadians(1), DegreesToRadians(1),
-            0.04, DegreesToRadians(15), DegreesToRadians(2));
+            ///!!!0.04,
+            thetaTiny,
+            thetaLarge, 
+            thetaTiny);
         STOP_TIME_RECORD(mg_init);
         misc::SaveCache(identity, "mg_init", mg);
     }
 
     std::vector<std::array<std::set<int>, 2>> line2leftRightSegs;
-    static const double angleDistForSegLineNeighborhood = DegreesToRadians(5);
+    //static const double angleDistForSegLineNeighborhood = DegreesToRadians(5);
     if (options.refresh_line2leftRightSegs || !misc::LoadCache(identity, "line2leftRightSegs", line2leftRightSegs)) {
         std::cout << "########## refreshing line2leftRightSegs ###########" << std::endl;
         START_TIME_RECORD(line2leftRightSegs);
-        line2leftRightSegs = CollectSegsNearLines(mg, angleDistForSegLineNeighborhood * 2);
+        line2leftRightSegs = CollectSegsNearLines(mg, thetaMid * 2);
         STOP_TIME_RECORD(line2leftRightSegs);
         misc::SaveCache(identity, "line2leftRightSegs", line2leftRightSegs);
     }
-
-
-    const auto printLines = [&mg, &anno](int delay, const std::string & saveAs) {
-        static gui::ColorTable rgbColors = gui::RGBGreys;
-        rgbColors.exceptionalColor() = gui::Gray;
-        Image3ub image = mg.view.image.clone();
-        auto canvas = gui::AsCanvas(image);
-        for (auto & l : mg.lines) {
-            static const double sampleAngle = M_PI / 100.0;
-            auto & line = l.component;
-            int claz = l.claz;
-            if (claz >= mg.vps.size()) {
-                claz = -1;
-            }
-            double spanAngle = AngleBetweenDirections(line.first, line.second);
-            std::vector<Point2> ps; ps.reserve(spanAngle / sampleAngle);
-            for (double angle = 0.0; angle <= spanAngle; angle += sampleAngle) {
-                Vec3 dir = RotateDirection(line.first, line.second, angle);
-                ps.push_back(mg.view.camera.toScreen(dir));
-            }
-            for (int i = 1; i < ps.size(); i++) {
-                auto p1 = (ps[i - 1]);
-                auto p2 = (ps[i]);
-                if (Distance(p1, p2) >= mg.view.image.cols / 2) {
-                    continue;
-                }
-                canvas.thickness(3);
-                canvas.colorTable(rgbColors).add(gui::ClassifyAs(Line2(p1, p2), claz));
-            }
-        }
-        canvas.show(delay, "lines");
-        if (saveAs != "") {
-            cv::imwrite(saveAs, canvas.image());
-        }
-    };
-
-    const auto printOrientedSegs = [&mg, &identity](int delay, const std::string & saveAs) {
-        static const gui::ColorTable randColors = gui::CreateRandomColorTableWithSize(mg.nsegs);
-        static gui::ColorTable rgbColors = gui::RGBGreys;
-        rgbColors.exceptionalColor() = gui::Gray;
-        auto pim = Print2(mg,
-            [&mg](int seg, Pixel pos) -> gui::Color {
-            static const gui::ColorTable ctable = gui::ColorTableDescriptor::RGBGreys;
-            auto & c = mg.seg2control[seg];
-            if (!c.used) {
-                return gui::Black;
-            }
-            if (c.orientationClaz != -1) {
-                return ctable[c.orientationClaz].blendWith(gui::White, 0.3);
-            }
-            if (c.orientationNotClaz != -1) {
-                static const int w = 10;
-                if (IsBetween((pos.x + pos.y) % w, 0, w / 2 - 1)) {
-                    return ctable[c.orientationNotClaz].blendWith(gui::White, 0.3);
-                } else {
-                    return gui::White;
-                }
-            }
-            return gui::White;
-        },
-            [&mg](int lp) {
-            return gui::Transparent;
-        },
-            [&mg](int bp) -> gui::Color {
-            return gui::Gray;
-        }, 1, 0);
-        auto canvas = gui::AsCanvas(pim);
-        canvas.show(delay, "oriented segs");
-        if (saveAs != "") {
-            cv::imwrite(saveAs, Image3ub(canvas.image() * 255));
-        }
-        return canvas.image();
-    };
 
     const auto printPIGraph = [&mg, &identity](int delay, const std::string & saveAs) {
         static const gui::ColorTable randColors = gui::CreateRandomColorTableWithSize(mg.nsegs);
@@ -346,9 +279,9 @@ void RunPanoramix(
             if (!c.used) {
                 return gui::Black;
             }
-            //if (c.orientationClaz == 0) {
-            //    return gui::Red;
-            //}
+            /*if (c.orientationClaz == 0) {
+                return gui::Red;
+            }*/
             if (c.orientationClaz != -1) {
                 return ctable[c.orientationClaz].blendWith(gui::White, 0.3);
             }
@@ -366,7 +299,7 @@ void RunPanoramix(
             return gui::Transparent;
         },
             [&mg](int bp) -> gui::Color {
-            return gui::Gray;
+            return gui::Black;
         }, 1, 0);
         auto canvas = gui::AsCanvas(pim);
         for (auto & l : mg.lines) {
@@ -401,8 +334,42 @@ void RunPanoramix(
     };
 
 
+    static const std::string folder = "F:\\GitHub\\write-papers\\papers\\a\\figure\\experiments\\";
     if (false) {
-        Image3ub lsim = printPIGraph(0, "initial_lines_segs") * 255;
+        auto backup = mg;
+        AttachPrincipleDirectionConstraints(mg);
+        printPIGraph(0, folder + misc::NameOfFile(anno.impath) + options.algorithmOptionsTag() + ".principledirections.png");
+        mg = backup;
+        AttachWallConstraints(mg, M_PI / 60.0);
+        printPIGraph(0, folder + misc::NameOfFile(anno.impath) + options.algorithmOptionsTag() + ".wall.png");
+        mg = backup;
+        AttachGCConstraints(mg, gc, 0.7, 0.7, true);
+        printPIGraph(0, folder + misc::NameOfFile(anno.impath) + options.algorithmOptionsTag() + ".gc.png");
+        mg = backup;
+    }
+
+    // attach orientation constraints
+    if (options.refresh_mg_oriented || !misc::LoadCache(identity, "mg_oriented", mg)) {
+        std::cout << "########## refreshing mg oriented ###########" << std::endl;
+        START_TIME_RECORD(mg_oriented);
+        if (options.usePrincipleDirectionPrior) {
+            AttachPrincipleDirectionConstraints(mg);
+        }
+        if (options.useWallPrior) {
+            ///!!!AttachWallConstraints(mg, M_PI / 60.0);
+            AttachWallConstraints(mg, thetaTiny);
+        }
+        if (options.useGeometricContextPrior) {
+            AttachGCConstraints(mg, gc, 0.7, 0.7, true);
+        }
+        STOP_TIME_RECORD(mg_oriented);
+        misc::SaveCache(identity, "mg_oriented", mg);
+    }
+
+
+
+    if (true) {
+        Image3ub lsim = printPIGraph(0, "") * 255;
         ReverseRows(lsim);
         gui::SceneBuilder sb;
         gui::ResourceStore::set("tex", lsim);
@@ -414,38 +381,14 @@ void RunPanoramix(
     }
 
 
-
-    // attach orientation constraints
-    if (options.refresh_mg_oriented || !misc::LoadCache(identity, "mg_oriented", mg)) {
-        std::cout << "########## refreshing mg oriented ###########" << std::endl;
-        START_TIME_RECORD(mg_oriented);
-        if (options.usePrincipleDirectionPrior) {
-            AttachPrincipleDirectionConstraints(mg);
-        }
-        if (options.useWallPrior) {
-            AttachWallConstraints(mg, M_PI / 60.0);
-        }
-        if (options.useGeometricContextPrior) {
-            AttachGCConstraints(mg, gc, 0.7, 0.7, true);
-        }
-        STOP_TIME_RECORD(mg_oriented);
-        misc::SaveCache(identity, "mg_oriented", mg);
-    }
-
-    
-    const std::string folder = "F:\\GitHub\\write-papers\\papers\\a\\figure\\experiments\\";
-    printLines(0, folder + identity + ".oriented_lines.png");
-    printOrientedSegs(0, folder + identity + ".oriented_segs.png");
-    //printPIGraph(0, "oriented_lines_segs");
-
     // detect occlusions
     std::vector<LineSidingWeight> lsw;
     if (options.refresh_lsw || !misc::LoadCache(identity, "lsw", lsw)) {
         std::cout << "########## refreshing lsw ###########" << std::endl;
         START_TIME_RECORD(lsw);
         if (!options.useGTOcclusions) {
-            lsw = ComputeLinesSidingWeights(mg, DegreesToRadians(3), 0.2, 0.1,
-                angleDistForSegLineNeighborhood);
+            lsw = ComputeLinesSidingWeights2(mg, DegreesToRadians(3), 0.2, 0.1,
+                thetaMid);
         } else {
             lsw = ComputeLinesSidingWeightsFromAnnotation(mg, anno, DegreesToRadians(0.5), DegreesToRadians(8), 0.6);
         }
@@ -453,54 +396,104 @@ void RunPanoramix(
         misc::SaveCache(identity, "lsw", lsw);
     }
 
-
     if (showGUI) {
-        auto pim = Print(mg, ConstantFunctor<gui::Color>(gui::White),
-            ConstantFunctor<gui::Color>(gui::Transparent),
-            ConstantFunctor<gui::Color>(gui::Gray), 2, 0);
-        auto drawLine = [&mg, &pim](const Line3 & line, const std::string & text, const gui::Color & color, bool withTeeth) {
-            double angle = AngleBetweenDirections(line.first, line.second);
-            std::vector<Pixel> ps;
-            for (double a = 0.0; a <= angle; a += 0.04) {
-                ps.push_back(ToPixel(mg.view.camera.toScreen(RotateDirection(line.first, line.second, a))));
+        printPIGraph(0, folder + misc::NameOfFile(anno.impath) + options.algorithmOptionsTag() + ".lines_segs.png");
+    }
+    const auto drawLine = [&mg](Image3f & pim, const Line3 & line, const std::string & text, 
+        const gui::Color & color, bool withTeeth, int linewidth, double stepAngle) {
+        double angle = AngleBetweenDirections(line.first, line.second);
+        std::vector<Pixel> ps;
+        for (double a = 0.0; a <= angle; a += stepAngle) {
+            ps.push_back(ToPixel(mg.view.camera.toScreen(RotateDirection(line.first, line.second, a))));
+        }
+        for (int i = 1; i < ps.size(); i++) {
+            auto p1 = ps[i - 1];
+            auto p2 = ps[i];
+            if (Distance(p1, p2) >= pim.cols / 2) {
+                continue;
             }
-            for (int i = 1; i < ps.size(); i++) {
-                auto p1 = ps[i - 1];
-                auto p2 = ps[i];
-                if (Distance(p1, p2) >= pim.cols / 2) {
-                    continue;
-                }
-                cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), p1, p2);
-                cv::line(pim, p1, p2, (cv::Scalar)color / 255.0, 1);
-                if (withTeeth) {
-                    auto teethp = ToPixel(RightPerpendicularDirectiion(ecast<double>(p2 - p1))) + p1;
-                  /*  auto tp1 = p1, tp2 = teethp;
-                    cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), tp1, tp2);
-                    cv::line(pim, tp1, tp2, (cv::Scalar)color / 255.0, 1);*/
-                    std::vector<Pixel> triangle = { p1, teethp, p2 };
-                    cv::fillConvexPoly(pim, triangle, (cv::Scalar)color / 255.0);
-                }
-            }
-            //cv::circle(pim, ps.back(), 2.0, (cv::Scalar)color / 255.0, 2);
-            if (!text.empty()) {
-                //cv::putText(pim, text, ps.back() + Pixel(5, 0), 1, 0.7, color);
-            }
-        };
-        for (int line = 0; line < mg.nlines(); line++) {
-            auto & ws = lsw[line];
-            auto l = mg.lines[line].component;
-            if (!ws.isOcclusion()) {
-                drawLine(l, "", gui::Black, false);
-            } else if (ws.onlyConnectLeft()) {
-                drawLine(l, std::to_string(line), gui::Blue, true);
-            } else if (ws.onlyConnectRight()) {
-                drawLine(l.reversed(), std::to_string(line), gui::Blue, true);
-            } else {
-                drawLine(l, std::to_string(line), gui::Red, false);
+            cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), p1, p2);
+            cv::line(pim, p1, p2, (cv::Scalar)color / 255.0, linewidth);
+            if (withTeeth) {
+                auto teethp = ToPixel(RightPerpendicularDirectiion(ecast<double>(p2 - p1))) +
+                    ToPixel((ecast<double>(p1) + ecast<double>(p2)) / 2.0);
+                std::vector<Pixel> triangle = { p1, teethp, p2 };
+                cv::fillConvexPoly(pim, triangle, (cv::Scalar)color / 255.0);
             }
         }
-        gui::AsCanvas(pim).show(0, "line labels");
+        if (!text.empty()) {
+            cv::putText(pim, text, ps.back() + Pixel(5, 0), 1, 0.7, color);
+        }
+    };
+    if (showGUI) {
+        Image3f pim1;
+        {
+            static gui::ColorTable ctable = gui::RGBGreys;
+            ctable.exceptionalColor() = gui::Gray;
+            Image3f pim = mg.view.image.clone() / 255.0;
+            for (int line = 0; line < mg.nlines(); line++) {
+                auto & ws = lsw[line];
+                auto l = mg.lines[line].component;
+                drawLine(pim, l, "", ctable[mg.lines[line].claz], false, 3, 0.005);
+            }
+            cv::imwrite(folder + misc::NameOfFile(anno.impath) + options.algorithmOptionsTag() + ".oriented_lines.png",
+                Image3ub(pim * 255));
+            pim1 = pim;
+        }
+        Image3f pim2;
+        {
+            static const gui::ColorTable randColors = gui::CreateRandomColorTableWithSize(mg.nsegs);
+            auto pim = Print2(mg,
+                [&mg](int seg, Pixel pos) -> gui::Color {
+                static const gui::ColorTable ctable = gui::ColorTableDescriptor::RGBGreys;
+                auto & c = mg.seg2control[seg];
+                if (!c.used) {
+                    return gui::White; //// 
+                }
+                if (c.orientationClaz != -1) {
+                    return ctable[c.orientationClaz].blendWith(gui::White, 0.3);
+                }
+                if (c.orientationNotClaz != -1) {
+                    static const int w = 10;
+                    if (IsBetween((pos.x + pos.y) % w, 0, w / 2 - 1)) {
+                        return ctable[c.orientationNotClaz].blendWith(gui::White, 0.3);
+                    } else {
+                        return gui::White;
+                    }
+                }
+                return gui::White;
+            },
+                [&mg](int lp) {
+                return gui::Transparent;
+            },
+                [&mg](int bp) -> gui::Color {
+                return gui::Gray;
+            }, 1, 0);
+            for (int line = 0; line < mg.nlines(); line++) {
+                auto & ws = lsw[line];
+                auto l = mg.lines[line].component;
+                if (!ws.isOcclusion()) {
+                    continue;
+                } else if (ws.onlyConnectLeft()) {
+                    drawLine(pim, l, "", gui::Black, true, 1, 0.04);
+                } else if (ws.onlyConnectRight()) {
+                    drawLine(pim, l.reversed(), "", gui::Black, true, 1, 0.04);
+                } else {
+                    drawLine(pim, l, "", gui::Gray, false, 2, 0.005);
+                }
+            }
+            cv::imwrite(folder + misc::NameOfFile(anno.impath) + options.algorithmOptionsTag() + ".oriented_segs_occ.png",
+                Image3ub(pim * 255));
+            pim2 = pim;
+        }
+
+        Image3f bar(3, pim1.cols, Vec3f(1, 1, 1));
+        Image3f pim;
+        cv::vconcat(std::vector<Image3f>{pim1, bar, pim2}, pim);
+        cv::imwrite(folder + misc::NameOfFile(anno.impath) + options.algorithmOptionsTag() + ".combinedinfo.png",
+            Image3ub(pim * 255));
     }
+
 
 
     if (options.refresh_mg_occdetected || !misc::LoadCache(identity, "mg_occdetected", mg)) {
@@ -525,31 +518,66 @@ void RunPanoramix(
         START_TIME_RECORD(mg_reconstructed);
         cg = BuildPIConstraintGraph(mg, DegreesToRadians(1), 0.01);
 
-        bool hasSecondTime = options.looseLinesSecondTime || options.looseSegsSecondTime || options.restrictSegsSecondTime;
-        for (int i = 0; i < (hasSecondTime ? 2 : 1); i++) {
-            dp = LocateDeterminablePart(cg, DegreesToRadians(3));
-            
+        //bool hasSecondTime = options.looseLinesSecondTime || options.looseSegsSecondTime || options.restrictSegsSecondTime;
+        //for (int i = 0; i < (hasSecondTime ? 2 : 1); i++) {
+            dp = LocateDeterminablePart(cg, DegreesToRadians(3), false);            
             auto start = std::chrono::system_clock::now();
             double energy = Solve(dp, cg, matlab, 5, 1e6);
             report.time_solve_lp = ElapsedInMS(start);
-
             if (IsInfOrNaN(energy)) {
                 std::cout << "solve failed" << std::endl;
-                return;
-            }
-
-            if (options.looseLinesSecondTime) {
-                DisorientDanglingLines3(dp, cg, mg, 0.05, 0.1);
-            }
-            if (options.looseSegsSecondTime) {
-                DisorientDanglingSegs3(dp, cg, mg, 0.01, 0.1);
-            }
-            if (options.restrictSegsSecondTime) {
-                OverorientSkewSegs(dp, cg, mg, DegreesToRadians(3), DegreesToRadians(50), 1.0);
-            }
-        }
+                return report;
+            }           
+        //}
         STOP_TIME_RECORD(mg_reconstructed);
         misc::SaveCache(identity, "mg_reconstructed", mg, cg, dp);
+    }
+
+    if (options.refresh_mg_reconstructed || !misc::LoadCache(identity, "mg_reconstructed_connectall", mg, cg, dp)) {
+        std::cout << "########## refreshing mg reconstructed connectall ###########" << std::endl;
+        //START_TIME_RECORD(mg_reconstructed);
+        cg = BuildPIConstraintGraph(mg, DegreesToRadians(1), 0.01);
+
+        //bool hasSecondTime = options.looseLinesSecondTime || options.looseSegsSecondTime || options.restrictSegsSecondTime;
+        //for (int i = 0; i < (hasSecondTime ? 2 : 1); i++) {
+            dp = LocateDeterminablePart(cg, DegreesToRadians(3), true);
+            auto start = std::chrono::system_clock::now();
+            double energy = Solve(dp, cg, matlab, 5, 1e6);
+            report.time_solve_lp = ElapsedInMS(start);
+            if (IsInfOrNaN(energy)) {
+                std::cout << "solve failed" << std::endl;
+                return report;
+            }
+        //}
+        //STOP_TIME_RECORD(mg_reconstructed);
+        misc::SaveCache(identity, "mg_reconstructed_connectall", mg, cg, dp);
+    }
+
+    if (false) {
+        //if (options.looseLinesSecondTime) {
+        if (mg.line2used.empty()) {
+            mg.line2used.resize(mg.nlines(), true);
+        }
+            //DisorientDanglingLines3(dp, cg, mg, 0.01, 0.2);
+        //}
+        //if (options.looseSegsSecondTime) {
+            DisorientDanglingSegs3(dp, cg, mg, 0.01, 0.3);
+        //}
+        //if (options.restrictSegsSecondTime) {
+            //OverorientSkewSegs(dp, cg, mg, DegreesToRadians(3), DegreesToRadians(60), 0.2);
+        //}
+        cg = BuildPIConstraintGraph(mg, DegreesToRadians(1), 0.01);
+        dp = LocateDeterminablePart(cg, DegreesToRadians(3), true);
+
+        auto start = std::chrono::system_clock::now();
+        double energy = Solve(dp, cg, matlab, 5, 1e6);
+        report.time_solve_lp = ElapsedInMS(start);
+
+        if (IsInfOrNaN(energy)) {
+            std::cout << "solve failed" << std::endl;
+            return report;
+        }
+        misc::SaveCache(identity, "mg_reconstructed2", mg, cg, dp);
     }
 
     if (showGUI) {
@@ -557,24 +585,41 @@ void RunPanoramix(
         auto depthMap = SurfaceDepthMap(mg.view.camera, dp, cg, mg, &validRange);
         Imagei depthMapDisc = (depthMap - validRange.first) / (validRange.second - validRange.first) * 255;
         auto jetctable = gui::CreateJetColorTableWithSize(MinMaxValOfImage(depthMapDisc).second + 1);
-        gui::AsCanvas(jetctable(depthMapDisc)).show(1, "depth map");
+        cv::imwrite(folder + misc::NameOfFile(anno.impath) + options.algorithmOptionsTag() + ".depths.png",
+            jetctable(depthMapDisc));
 
         auto surfaceNormalMap = SurfaceNormalMap(mg.view.camera, dp, cg, mg, true);
         auto surfaceNormalMapForShow = surfaceNormalMap.clone();
         for (auto & n : surfaceNormalMapForShow) {
             auto nn = n;
-            for (int i = 0; i < mg.vps.size(); i++) {
+            for (int i = 0; i < 3; i++) {
                 n[i] = abs(nn.dot(vps[i]));
             }
         }
-        gui::AsCanvas(surfaceNormalMapForShow).show(0, "surface normal map");
+        cv::imwrite(folder + misc::NameOfFile(anno.impath) + options.algorithmOptionsTag() + ".surfacenormals.png",
+            surfaceNormalMapForShow * 255);
 
-        VisualizeReconstructionCompact(dp, cg, mg, false);
-        VisualizeReconstruction(dp, cg, mg, true);
+        VisualizeReconstruction(dp, cg, mg, false, [&cg, &mg](int ent)->gui::Color {
+            auto & e = cg.entities[ent];
+            if (e.isSeg()) {
+                auto nn = normalize(e.supportingPlane.reconstructed.normal);
+                Vec3 n;
+                for (int i = 0; i < 3; i++) {
+                    n[i] = abs(nn.dot(normalize(mg.vps[i])));
+                }
+                gui::Color color = normalize(n);
+                return color;
+            } else {
+                return gui::Black;
+            }
+        }, nullptr, false);
+        VisualizeReconstructionCompact(anno.rectifiedImage, dp, cg, mg, true);
     }
 
     report.succeeded = true;
     misc::SaveCache(identity, "report", report);
+
+    return report;    
 }
 
 bool GetPanoramixResult(
@@ -585,5 +630,14 @@ bool GetPanoramixResult(
     PICGDeterminablePart & dp) {
     auto identity = options.identityOfImage(anno.impath);
     return misc::LoadCache(identity, "mg_reconstructed", mg, cg, dp);
+}
+
+std::vector<LineSidingWeight> GetPanoramixOcclusionResult(
+    const PILayoutAnnotation & anno,
+    const PanoramixOptions & options) {
+    std::vector<LineSidingWeight> lsw;
+    auto identity = options.identityOfImage(anno.impath);
+    misc::LoadCache(identity, "lsw", lsw);
+    return lsw;
 }
 

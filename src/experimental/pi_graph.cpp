@@ -615,6 +615,7 @@ namespace pano {
             int nlines = lines.size();
             mg.line2linePieces.resize(nlines);
             mg.line2lineRelations.resize(nlines);
+            mg.line2used.resize(nlines, true);
 
 
             std::map<std::set<int>, std::vector<int>> segs2juncs;

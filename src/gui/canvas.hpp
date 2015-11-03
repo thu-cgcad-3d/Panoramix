@@ -210,7 +210,7 @@ namespace pano {
                 return *this;
             }
 
-            void show(int delay = 0, const std::string & winName = "Canvas") const {
+            const Canvas & show(int delay = 0, const std::string & winName = "Canvas") const {
                 static int id = 0;
                 core::Image im = _image.clone();
                 if (im.channels() > 3){
@@ -221,6 +221,11 @@ namespace pano {
                 }
                 cv::imshow(winName, im);
                 cv::waitKey(delay);
+                return *this;
+            }
+
+            void saveAs(const std::string & filename) const {
+                cv::imwrite(filename, _image);
             }
 
         private:

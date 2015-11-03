@@ -137,12 +137,14 @@ namespace pano {
         // VisualizeReconstruction
         void VisualizeReconstruction(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, bool showConnectionLines = true,
             const std::function<gui::Color(int vert)> & vertColor = core::ConstantFunctor<gui::Color>(gui::Black),
-            const std::function<void(int vert)> & vertClick = core::ConstantFunctor<void>());
+            const std::function<void(int vert)> & vertClick = core::ConstantFunctor<void>(),
+            bool doModal = true);
 
 
 
         // the compact version
-        void VisualizeReconstructionCompact(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, bool doModel);
+        void VisualizeReconstructionCompact(const Image & im, const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, 
+            bool doModel);
 
 
 

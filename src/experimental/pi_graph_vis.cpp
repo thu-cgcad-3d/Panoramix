@@ -18,7 +18,7 @@ namespace pano {
 
         void VisualizeReconstruction(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, bool showConnectionLines,
             const std::function<gui::Color(int vert)> & vertColor,
-            const std::function<void(int vert)> & vertClick) {
+            const std::function<void(int vert)> & vertClick, bool doModal) {
 
             gui::ResourceStore::set("texture", mg.view.image);
 
@@ -97,7 +97,9 @@ namespace pano {
                         }
                     }
                 }
-                vertClick(ent);
+                if (vertClick) {
+                    vertClick(ent);
+                }
             }).shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama).resource("texture").end();
             viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
             viz.installingOptions().lineWidth = 4.0;
@@ -157,8 +159,8 @@ namespace pano {
                 viz.begin(connectionLineEnds).shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints).end();
             }
 
-            viz.show(true, false, gui::RenderOptions().cullFrontFace(false).cullBackFace(true).bwColor(0.1).bwTexColor(0.9)
-                .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
+            viz.show(doModal, false, gui::RenderOptions().cullFrontFace(false).cullBackFace(true).bwColor(1.0).bwTexColor(0.0)
+                .camera(PerspectiveCamera(800, 800, Point2(400, 400), 600, Point3(2, 2, -2), Point3(0, 0, 0))));
 
         }
 
@@ -166,8 +168,8 @@ namespace pano {
 
 
 
-        void VisualizeReconstructionCompact(const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, bool doModel) {
-            gui::ResourceStore::set("texture", mg.view.image);
+        void VisualizeReconstructionCompact(const Image & im, const PICGDeterminablePart & dp, const PIConstraintGraph & cg, const PIGraph & mg, bool doModel) {
+            gui::ResourceStore::set("texture", im);
 
             auto compactPolygons = CompactModel(dp, cg, mg, 0.1);
             auto e = std::remove_if(compactPolygons.begin(), compactPolygons.end(),
@@ -199,8 +201,8 @@ namespace pano {
             viz.begin(lines).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
 
 
-            viz.show(doModel, false, gui::RenderOptions().cullFrontFace(true).cullBackFace(false).bwColor(0.1).bwTexColor(0.9)
-                .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300, Point3(1, 1, 1), Point3(0, 0, 0))));
+            viz.show(doModel, false, gui::RenderOptions().cullFrontFace(true).cullBackFace(false).bwColor(0.0).bwTexColor(1.0)
+                .camera(PerspectiveCamera(800, 800, Point2(400, 400), 600, Point3(2, 2, -2), Point3(0, 0, 0))));
         }
 
 

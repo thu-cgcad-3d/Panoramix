@@ -242,6 +242,9 @@ namespace pano {
                 // update seg planes
                 bool hasPlanesUpdated = false;
                 for (int seg = 0; seg < mg.nsegs; seg++) {
+                    if (!mg.seg2control[seg].used) {
+                        continue;
+                    }
                     auto & plane = seg2plane[seg];
                     if (plane.normal == Origin()) {
                         auto & cs = seg2corners[seg];
@@ -267,7 +270,7 @@ namespace pano {
                             });
                             // iterate all candidate planes to find the best that fit the most
                             Plane3 bestPlane;
-                            double bestScore = -1.0;
+                            double bestScore = 0.0;
                             for (auto & p1 : candContourTable[candContourIds[0]]) {
                                 for (auto & p2 : candContourTable[candContourIds[1]]) {
                                     for (auto & p3 : candContourTable[candContourIds[2]]) {
@@ -282,6 +285,12 @@ namespace pano {
                                                 if (DistanceFromPointToPlane(pRest, candPlane).first < distThres) {
                                                     candPlaneScore += 1.0;
                                                 }
+                                            }
+                                        }
+                                        for (int c : cs) {
+                                            double depth = norm(IntersectionOfLineAndPlane(Ray3(Origin(), corners[c].dir), candPlane).position);
+                                            if (depth > 2.0) {
+                                                candPlaneScore -= 3.0;
                                             }
                                         }
                                         if (std::any_of(mg.vps.begin(), mg.vps.end(), [&candPlane](const Vec3 & vp) {

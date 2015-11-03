@@ -487,6 +487,23 @@ namespace pano {
         }
 
 
+        MXA MXA::createString(const std::string & str, bool dos) {
+            return MXA(mxCreateString(str.c_str()), dos);
+        }
+
+        MXA MXA::createCellMatrix(int m, int n, bool dos) {
+            return MXA(mxCreateCellMatrix(m, n), dos);
+        }
+
+        MXA MXA::createStructMatrix(int m, int n, const std::vector<std::string> & fieldNames, bool dos) {
+            char const ** fieldNamesArray = new char const *[fieldNames.size()];
+            for (int i = 0; i < fieldNames.size(); i++) {
+                fieldNamesArray[i] = fieldNames[i].c_str();
+            }
+            MXA mxa(mxCreateStructMatrix(m, n, fieldNames.size(), fieldNamesArray), dos);
+            delete[] fieldNamesArray;
+            return mxa;
+        }
 
 
 

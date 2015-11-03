@@ -1,4 +1,5 @@
-
+#include <ctime>
+#include <tuple>
 #include "panoramix.hpp"
 
 
@@ -16,7 +17,7 @@ std::vector<Imagei> GTFaceLabels(const PILayoutAnnotation & anno, const std::vec
     }
 
     std::vector<Imagei> faceLabels(testCams.size());
-    ParallelRun(testCams.size(), std::thread::hardware_concurrency(), [&](int i) {
+    ParallelRun(testCams.size(), std::thread::hardware_concurrency()-1, [&](int i) {
         std::cout << "computing gt face label map - " << i << std::endl;
         auto & cam = testCams[i];
         Imagei faceLabelMap(cam.screenSize(), -1);
@@ -58,7 +59,7 @@ std::vector<Imagei> GTFaceLabels(const PILayoutAnnotation & anno, const std::vec
 
 std::vector<Imagei> OrientationMaps(const PILayoutAnnotation & anno, const std::vector<PerspectiveCamera> & testCams) {
     std::vector<Imagei> oms(testCams.size());
-    ParallelRun(testCams.size(), std::thread::hardware_concurrency(), [&](int i) {
+    ParallelRun(testCams.size(), std::thread::hardware_concurrency()-1, [&](int i) {
         std::vector<HPoint2> hvps(anno.vps.size());
         for (int k = 0; k < anno.vps.size(); k++) {
             hvps[k] = testCams[i].toScreenInHPoint(anno.vps[k]);
@@ -97,9 +98,6 @@ std::vector<Image7d> GeometricContext(const PILayoutAnnotation & anno, const std
 
 
 
-
-
-
 // evaluation helpers
 double ErrorOfSurfaceNormal(const Vec3 & gt, const Vec3 & cand) {
     if (norm(cand) == 0) {
@@ -109,15 +107,18 @@ double ErrorOfSurfaceNormal(const Vec3 & gt, const Vec3 & cand) {
 }
 
 
-int GeometricContextToLabel(const Vec7 & label) {
+int GeometricContextToLabel(const Vec7 & labelValues, double clutterThres) {
     // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
-    int labels[5];
-    std::iota(labels, labels + 5, 0);
-    std::sort(labels, labels + 5, [&label](int a, int b) {return label[a] > label[b]; });
-    int maxid = labels[0];
-    if (label[maxid] == 0.0) {
+    if (labelValues[5] >= clutterThres) {
         return -1;
     }
+    int labels[5];
+    std::iota(labels, labels + 5, 0);
+    std::sort(labels, labels + 5, [&labelValues](int a, int b) {return labelValues[a] > labelValues[b]; });
+    int maxid = labels[0];
+    //if (labelValues[maxid] < failIfLabelScoreLessThan) {
+    //    return -1;
+    //}
     return maxid;
 }
 
@@ -135,237 +136,27 @@ int SurfaceNormalToLabel(const Vec3 & normal, const Vec3 & up, const Vec3 & forw
 }
 
 
+std::vector<Imagei> BestFitCuboidSurfaceNormalLabels(const PILayoutAnnotation & anno, const std::vector<PerspectiveCamera> & testCams,
+    const std::vector<Imagei> & gtFaceSurfaceNormalLabels, Point3 & corner1, Point3 & corner2) {
+    assert(gtFaceLabels.size() == testCams.size());
+    
+}
+
+
 
 
 
 int main(int argc, char ** argv) {
     
     gui::Singleton::InitGui();
-    misc::Matlab matlab("", false);
+    misc::Matlab matlab("", true);
 
-    using TaskQueue = std::vector<std::function<Any(const std::string & impath)>>;
+    using TaskQueue = std::vector<std::function<misc::MXA(const std::string & impath)>>;
     TaskQueue activeQ;
 
     {
-        TaskQueue Q1;
-
-        // set tasks
-        // default
-        Q1.push_back([&matlab](const std::string & impath) -> Any {
-            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-            anno.impath = impath;
-
-            PanoramixOptions options;
-            options.useWallPrior = true;
-            options.usePrincipleDirectionPrior = true;
-            options.useGeometricContextPrior = true;
-
-            options.useGTOcclusions = false;
-            options.looseLinesSecondTime = false;
-            options.looseSegsSecondTime = false;
-            options.restrictSegsSecondTime = false;
-
-            options.refresh_preparation = false;
-            options.refresh_mg_init = options.refresh_preparation || false;
-            options.refresh_mg_oriented = options.refresh_mg_init || false;
-            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
-            options.refresh_lsw = options.refresh_mg_oriented || false;
-            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
-
-            RunPanoramix(anno, options, matlab, false);
-            return options;
-        });
-        // use gt occ
-        Q1.push_back([&matlab](const std::string & impath) -> Any {
-            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-            anno.impath = impath;
-
-            PanoramixOptions options;
-            options.useWallPrior = true;
-            options.usePrincipleDirectionPrior = true;
-            options.useGeometricContextPrior = true;
-
-            options.useGTOcclusions = true;
-            options.looseLinesSecondTime = false;
-            options.looseSegsSecondTime = false;
-            options.restrictSegsSecondTime = false;
-
-            options.refresh_preparation = false;
-            options.refresh_mg_init = options.refresh_preparation || false;
-            options.refresh_mg_oriented = options.refresh_mg_init || false;
-            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
-            options.refresh_lsw = options.refresh_mg_oriented || false;
-            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
-
-            RunPanoramix(anno, options, matlab, false);
-            return options;
-        });
-        // without wall
-        Q1.push_back([&matlab](const std::string & impath) -> Any {
-            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-            anno.impath = impath;
-
-            PanoramixOptions options;
-            options.useWallPrior = false;
-            options.usePrincipleDirectionPrior = true;
-            options.useGeometricContextPrior = true;
-
-            options.useGTOcclusions = false;
-            options.looseLinesSecondTime = false;
-            options.looseSegsSecondTime = false;
-            options.restrictSegsSecondTime = false;
-
-            options.refresh_preparation = false;
-            options.refresh_mg_init = options.refresh_preparation || false;
-            options.refresh_mg_oriented = options.refresh_mg_init || false;
-            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
-            options.refresh_lsw = options.refresh_mg_oriented || false;
-            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
-
-            RunPanoramix(anno, options, matlab, false);
-            return options;
-        });
-        // without principle direction
-        Q1.push_back([&matlab](const std::string & impath) -> Any {
-            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-            anno.impath = impath;
-
-            PanoramixOptions options;
-            options.useWallPrior = true;
-            options.usePrincipleDirectionPrior = false;
-            options.useGeometricContextPrior = true;
-
-            options.useGTOcclusions = false;
-            options.looseLinesSecondTime = false;
-            options.looseSegsSecondTime = false;
-            options.restrictSegsSecondTime = false;
-
-            options.refresh_preparation = false;
-            options.refresh_mg_init = options.refresh_preparation || false;
-            options.refresh_mg_oriented = options.refresh_mg_init || false;
-            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
-            options.refresh_lsw = options.refresh_mg_oriented || false;
-            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
-
-            RunPanoramix(anno, options, matlab, false);
-            return options;
-        });
-        // without gc!
-        Q1.push_back([&matlab](const std::string & impath) -> Any {
-            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-            anno.impath = impath;
-
-            PanoramixOptions options;
-            options.useWallPrior = true;
-            options.usePrincipleDirectionPrior = true;
-            options.useGeometricContextPrior = false;
-
-            options.useGTOcclusions = false;
-            options.looseLinesSecondTime = false;
-            options.looseSegsSecondTime = false;
-            options.restrictSegsSecondTime = false;
-
-            options.refresh_preparation = false;
-            options.refresh_mg_init = options.refresh_preparation || false;
-            options.refresh_mg_oriented = options.refresh_mg_init || false;
-            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
-            options.refresh_lsw = options.refresh_mg_oriented || false;
-            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
-
-            RunPanoramix(anno, options, matlab, false);
-            return options;
-        });
-        // without gc + gt occ !
-        Q1.push_back([&matlab](const std::string & impath) -> Any {
-            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-            anno.impath = impath;
-
-            PanoramixOptions options;
-            options.useWallPrior = true;
-            options.usePrincipleDirectionPrior = true;
-            options.useGeometricContextPrior = false;
-
-            options.useGTOcclusions = true;
-            options.looseLinesSecondTime = false;
-            options.looseSegsSecondTime = false;
-            options.restrictSegsSecondTime = false;
-
-            options.refresh_preparation = false;
-            options.refresh_mg_init = options.refresh_preparation || false;
-            options.refresh_mg_oriented = options.refresh_mg_init || false;
-            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
-            options.refresh_lsw = options.refresh_mg_oriented || false;
-            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
-
-            RunPanoramix(anno, options, matlab, false);
-            return options;
-        });
-        // only gc!
-        Q1.push_back([&matlab](const std::string & impath) -> Any {
-            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-            anno.impath = impath;
-
-            PanoramixOptions options;
-            options.useWallPrior = false;
-            options.usePrincipleDirectionPrior = false;
-            options.useGeometricContextPrior = true;
-
-            options.useGTOcclusions = false;
-            options.looseLinesSecondTime = false;
-            options.looseSegsSecondTime = false;
-            options.restrictSegsSecondTime = false;
-
-            options.refresh_preparation = false;
-            options.refresh_mg_init = options.refresh_preparation || false;
-            options.refresh_mg_oriented = options.refresh_mg_init || false;
-            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
-            options.refresh_lsw = options.refresh_mg_oriented || false;
-            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
-
-            RunPanoramix(anno, options, matlab, false);
-            return options;
-        });
-        // only gc + gt occ!
-        Q1.push_back([&matlab](const std::string & impath) -> Any {
-            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-            anno.impath = impath;
-
-            PanoramixOptions options;
-            options.useWallPrior = false;
-            options.usePrincipleDirectionPrior = false;
-            options.useGeometricContextPrior = true;
-
-            options.useGTOcclusions = true;
-            options.looseLinesSecondTime = false;
-            options.looseSegsSecondTime = false;
-            options.restrictSegsSecondTime = false;
-
-            options.refresh_preparation = false;
-            options.refresh_mg_init = options.refresh_preparation || false;
-            options.refresh_mg_oriented = options.refresh_mg_init || false;
-            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
-            options.refresh_lsw = options.refresh_mg_oriented || false;
-            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
-
-            RunPanoramix(anno, options, matlab, false);
-            return options;
-        });
-
-
-
-
-
-
-        TaskQueue Q2;
-        Q2.push_back([&matlab](const std::string & impath) -> Any {
+        TaskQueue Qtest;
+        Qtest.push_back([&matlab](const std::string & impath) -> misc::MXA {
             auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
             anno.impath = impath;
 
@@ -388,13 +179,538 @@ int main(int argc, char ** argv) {
             options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
             RunPanoramix(anno, options, matlab, true);
-
-            return options;
+            return misc::MXA();
         });
 
 
 
-        activeQ = Q2;
+
+        TaskQueue Qstore;
+
+        // set tasks
+        // default
+        Qstore.push_back([&matlab](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            PanoramixOptions options;
+            options.useWallPrior = true;
+            options.usePrincipleDirectionPrior = true;
+            options.useGeometricContextPrior = true;
+
+            options.useGTOcclusions = false;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || true;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+
+            RunPanoramix(anno, options, matlab, false);
+            return misc::MXA();
+        });
+        // use gt occ
+        Qstore.push_back([&matlab](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            PanoramixOptions options;
+            options.useWallPrior = true;
+            options.usePrincipleDirectionPrior = true;
+            options.useGeometricContextPrior = true;
+
+            options.useGTOcclusions = true;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || true;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+
+            RunPanoramix(anno, options, matlab, false);
+            return misc::MXA();
+        });
+        // without wall
+        Qstore.push_back([&matlab](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            PanoramixOptions options;
+            options.useWallPrior = false;
+            options.usePrincipleDirectionPrior = true;
+            options.useGeometricContextPrior = true;
+
+            options.useGTOcclusions = false;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || true;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+
+            RunPanoramix(anno, options, matlab, false);
+            return misc::MXA();
+        });
+        // without principle direction
+        Qstore.push_back([&matlab](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            PanoramixOptions options;
+            options.useWallPrior = true;
+            options.usePrincipleDirectionPrior = false;
+            options.useGeometricContextPrior = true;
+
+            options.useGTOcclusions = false;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || true;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+
+            RunPanoramix(anno, options, matlab, false);
+            return misc::MXA();
+        });
+        // without gc!
+        Qstore.push_back([&matlab](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            PanoramixOptions options;
+            options.useWallPrior = true;
+            options.usePrincipleDirectionPrior = true;
+            options.useGeometricContextPrior = false;
+
+            options.useGTOcclusions = false;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || true;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+
+            RunPanoramix(anno, options, matlab, false);
+            return misc::MXA();
+        });
+        // without gc + gt occ !
+        Qstore.push_back([&matlab](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            PanoramixOptions options;
+            options.useWallPrior = true;
+            options.usePrincipleDirectionPrior = true;
+            options.useGeometricContextPrior = false;
+
+            options.useGTOcclusions = true;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || true;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+
+            RunPanoramix(anno, options, matlab, false);
+            return misc::MXA();
+        });
+        // only gc!
+        Qstore.push_back([&matlab](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            PanoramixOptions options;
+            options.useWallPrior = false;
+            options.usePrincipleDirectionPrior = false;
+            options.useGeometricContextPrior = true;
+
+            options.useGTOcclusions = false;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || true;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+
+            RunPanoramix(anno, options, matlab, false);
+            return misc::MXA();
+        });
+        // only gc + gt occ!
+        Qstore.push_back([&matlab](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            PanoramixOptions options;
+            options.useWallPrior = false;
+            options.usePrincipleDirectionPrior = false;
+            options.useGeometricContextPrior = true;
+
+            options.useGTOcclusions = true;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || true;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+
+            RunPanoramix(anno, options, matlab, false);
+            return misc::MXA();
+        });
+
+
+
+
+
+
+        // cache gc
+        auto getCachedGC = [&matlab](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {
+            std::vector<PerspectiveCamera> testCams1;
+            std::vector<Image7d> gc1;
+            if (!misc::LoadCache(impath, "testCams1_gc1", testCams1, gc1)) {
+                auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+                testCams1 = CreatePanoContextCameras(anno.view.camera);
+                gc1 = GeometricContext(anno, testCams1, matlab);
+                misc::SaveCache(impath, "testCams1_gc1", testCams1, gc1);
+            }
+            assert(testCams == testCams1);
+            return gc1;
+        };
+
+        // cache om
+        auto getCachedOM = [](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {
+            std::vector<PerspectiveCamera> testCams1;
+            std::vector<Imagei> om1;
+            if (!misc::LoadCache(impath, "testCams1_om1", testCams1, om1)) {
+                auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+                testCams1 = CreatePanoContextCameras(anno.view.camera);
+                om1 = OrientationMaps(anno, testCams1);
+                misc::SaveCache(impath, "testCams1_om1", testCams1, om1);
+            }
+            assert(testCams == testCams1);
+            return om1;
+        };
+
+        //// cache cuboid
+        //auto getCachedCuboid = [](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {
+        //    std::vector<PerspectiveCamera> testCams1;
+        //    std::vector<Imagei> cb1;
+        //    if (!misc::LoadCache(impath, "testCams1_cb1", testCams1, cb1)) {
+        //        auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+        //        testCams1 = CreatePanoContextCameras(anno.view.camera);
+        //        om1 = OrientationMaps(anno, testCams1);
+        //        misc::SaveCache(impath, "testCams1_cb1", testCams1, cb1);
+        //    }
+        //    assert(testCams == testCams1);
+        //    return cb1;
+        //};
+
+
+
+
+        TaskQueue QshowModel;
+        QshowModel.push_back([&](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            bool consider_horizontal_cams_only = true;
+
+            PanoramixOptions options;
+            options.useWallPrior = true;
+            options.usePrincipleDirectionPrior = true;
+            options.useGeometricContextPrior = true;
+
+            options.useGTOcclusions = false;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || false;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || true;
+
+
+            RunPanoramix(anno, options, matlab, true);
+            return misc::MXA();
+        });
+
+
+
+
+
+
+        TaskQueue QcompareLabels;
+        QcompareLabels.push_back([&](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            bool consider_horizontal_cams_only = true;
+
+            PanoramixOptions options;
+            options.useWallPrior = true;
+            options.usePrincipleDirectionPrior = true;
+            options.useGeometricContextPrior = false;
+
+            options.useGTOcclusions = false;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || false;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || true;
+
+            std::vector<PerspectiveCamera> testCams;
+            std::vector<Imagei> gtData;
+            misc::LoadCache(impath, "testCams1_gt1", testCams, gtData);
+            std::vector<Image7d> gcData = getCachedGC(impath, testCams);
+
+            std::vector<int> selectedCamsIds;
+            std::vector<PerspectiveCamera> selectedCams;
+            for (int i = 0; i < testCams.size(); i++) {
+                if (consider_horizontal_cams_only &&
+                    AngleBetweenUndirectedVectors(anno.view.camera.up(), testCams[i].forward()) < DegreesToRadians(60)) {
+                    continue;
+                }
+                selectedCamsIds.push_back(i);
+                selectedCams.push_back(testCams[i]);
+            }
+            auto panoramixResults = GetSurfaceNormalMapsOfPanoramix(selectedCams, anno, options, matlab);
+
+            
+            double error_pn = 0.0;
+            double error_gc = 0.0;
+
+            int npixels = 0;
+            std::vector<double> completenessTable(selectedCamsIds.size(), 0);
+            for (int i = 0; i < selectedCamsIds.size(); i++) {
+
+                auto & pn = panoramixResults[i];
+
+                auto & gc = gcData[selectedCamsIds[i]];
+                auto & gt = gtData[selectedCamsIds[i]];
+
+                auto & cam = selectedCams[i];
+
+                Imagei gcLabels(cam.screenSize(), -1);
+                Imagei pnLabels(cam.screenSize(), -1);
+                Imagei gtLabels(cam.screenSize(), -1);
+
+                double & completeness = completenessTable[i];
+                for (auto it = gt.begin(); it != gt.end(); ++it) {
+                    auto p = it.pos();
+                    int gtFaceId = *it;
+                    if (gtFaceId == -1) {
+                        std::cout << "!!!gt face id is -1!!!!" << std::endl;
+                        continue;
+                    }
+
+                    Vec3 gtNormal = anno.face2plane[gtFaceId].normal;
+                    if (norm(gtNormal) == 0) {
+                        continue;
+                    }
+
+
+                    int gtLabel = SurfaceNormalToLabel(gtNormal, cam.up(), cam.forward(), cam.leftward());
+                    gtLabels(p) = gtLabel;
+
+                    Vec3 pnNormal = pn(p);
+                    int pnLabel = SurfaceNormalToLabel(pnNormal, cam.up(), cam.forward(), cam.leftward());
+
+                    Vec7 gcScores = gc(p);                    
+                    int gcLabel = GeometricContextToLabel(gcScores, 0.3);
+                    if (gcLabel == -1) {
+                        continue;
+                    }
+
+                    pnLabels(p) = pnLabel;
+                    gcLabels(p) = gcLabel;
+
+                    error_pn += pnLabel != gtLabel;
+                    error_gc += gcLabel != gtLabel;
+
+                    npixels++;
+                    completeness += 1.0 / (gt.cols * gt.rows);
+                }
+
+                std::cout << "completeness:" << completeness << std::endl;
+
+                if (false) {
+                    // 0: front, 1: left, 2: right, 3: floor, 4: ceiling, 5: clutter, 6: unknown
+                    std::vector<gui::Color> colors = { gui::Green, gui::Blue, gui::Blue, gui::Red, gui::Red, gui::White };
+                    gui::ColorTable ctable(colors);
+                    ctable.exceptionalColor() = gui::Black;
+                    const std::string path = "F:\\GitHub\\write-papers\\papers\\a\\figure\\experiments\\comparegc\\";
+                    //gui::MakeCanvas((Image3ub)anno.view.sampled(cam).image).saveAs(path + "im" + std::to_string(i) + ".png");
+                    gui::MakeCanvas(ctable(gcLabels)).show(1, "gcLabels");//.saveAs(path + "gc" + std::to_string(i) + ".png");
+                    gui::MakeCanvas(ctable(pnLabels)).show(1, "pnLabels");// .saveAs(path + "pn" + std::to_string(i) + ".png");
+                    gui::MakeCanvas(ctable(gtLabels)).show(0, "gtLabels");// .saveAs(path + "gt" + std::to_string(i) + ".png");
+                }
+            }
+
+            error_pn /= npixels;
+            error_gc /= npixels;
+
+            std::cout << std::endl << std::endl;
+            std::cout << "{{{{{{{{{  PN[" << error_pn << "] vs GC[" << error_gc << "]  }}}}}}}}}}}} on image\"" << impath << "\"" << std::endl;
+            std::cout << std::endl << std::endl;
+
+            DenseMatd pn_gc_error(3, 1, 0.0);
+            pn_gc_error(0, 0) = error_pn;
+            pn_gc_error(1, 0) = error_gc;
+            pn_gc_error(2, 0) = std::accumulate(completenessTable.begin(), completenessTable.end(), 0.0) / selectedCams.size();
+            return misc::MXA(pn_gc_error, false);
+        });
+
+
+
+        
+
+
+
+
+
+        TaskQueue Qstat;
+        Qstat.push_back([&](const std::string & impath) -> misc::MXA {
+            auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+            anno.impath = impath;
+
+            PanoramixOptions options;
+            options.useWallPrior = true;
+            options.usePrincipleDirectionPrior = true;
+            options.useGeometricContextPrior = true;
+
+            options.useGTOcclusions = false;
+            options.looseLinesSecondTime = false;
+            options.looseSegsSecondTime = false;
+            options.restrictSegsSecondTime = false;
+
+            options.refresh_preparation = false;
+            options.refresh_mg_init = options.refresh_preparation || false;
+            options.refresh_mg_oriented = options.refresh_mg_init || false;
+            options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+            options.refresh_lsw = options.refresh_mg_oriented || false;
+            options.refresh_mg_occdetected = options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+            options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+
+            PIGraph mg;
+            PIConstraintGraph cg;
+            PICGDeterminablePart dp;
+            GetPanoramixResult(anno, options, mg, cg, dp);           
+
+            std::map<std::string, double> resultData;
+
+            resultData["linesNum"] = mg.nlines();
+            for (int i = 0; i < mg.nlines(); i++) {
+                if (mg.lines[i].claz == -1) {
+                    resultData["line2sNum"] ++;
+                } else {
+                    resultData["line1sNum"] ++;
+                }
+            }
+            resultData["segsNum"] = mg.nsegs;
+            for (int i = 0; i < mg.nsegs; i++) {
+                int dof = mg.seg2control[i].dof();
+                if (dof == 1) {
+                    resultData["seg1sNum"]++;
+                } else if (dof == 2) {
+                    resultData["seg2sNum"]++;
+                } else {
+                    resultData["seg3sNum"]++;
+                }
+            }
+
+            resultData["entsNum"] = cg.entities.size();
+            resultData["consNum"] = cg.constraints.size();
+
+            resultData["determinableEntNum"] = dp.determinableEnts.size();
+            resultData["consNumBetweenDeterminableEnts"] = dp.consBetweenDeterminableEnts.size();
+
+            {
+                //// occlusion accuracy
+                //options.useGTOcclusions = false;
+                //auto lsw = GetPanoramixOcclusionResult(anno, options);
+                //options.useGTOcclusions = true;
+                //auto lswGT = GetPanoramixOcclusionResult(anno, options);
+                //assert(lsw.size() == lswGT.size());
+
+                //for (int i = 0; i < lsw.size(); i++) {
+                //    auto & w = lsw[i];
+                //    auto & wGT = lswGT[i];
+                //    double len = AngleBetweenDirections(mg.lines[i].component.first, mg.lines[i].component.second);
+                //    if (std::make_tuple(w.connectLeft(), w.connectRight()) != std::make_tuple(wGT.connectLeft(), wGT.connectRight())) {
+
+                //    }
+                //}
+
+                //options.useGTOcclusions = false;
+            }
+
+            std::vector<std::string> fieldNames;
+            for (auto & p : resultData) {
+                fieldNames.push_back(p.first);
+            }
+            auto result = misc::MXA::createStructMatrix(1, 1, fieldNames, false);
+            for (auto & p : resultData) {
+                result.setField(p.first, 0, misc::MXA(p.second));
+            }
+            return result;               
+        });
+
+
+
+
+
+
+
+        activeQ = Qtest;
     }
 
 
@@ -403,15 +719,26 @@ int main(int argc, char ** argv) {
     for (int i = 0; i < activeQ.size(); i++) {
         auto & task = activeQ[i];
         std::cout << "[[[[[[[[[ TASK " << i << "]]]]]]]]" << std::endl;
-        std::vector<double> results(impaths.size(), 0.0);
-        for (auto & impath : impaths) {
-            Clock clock = "Task " + std::to_string(i) + " on \"" + impath + "\"";
+
+        auto timeTag = misc::CurrentTimeString(true);
+        misc::MAT dataFile("F:\\GitHub\\write-papers\\papers\\a\\data\\task_" + std::to_string(i) + timeTag + ".mat", misc::MAT::Write);
+
+        misc::MXA impathsForTask = misc::MXA::createCellMatrix(impaths.size(), 1, true);
+        misc::MXA resultsForTask = misc::MXA::createCellMatrix(impaths.size(), 1, true);
+        for (int j = 0; j < impaths.size(); j++) {
+            auto & impath = impaths[j];
+            misc::Clock clock = "Task " + std::to_string(i) + " on \"" + impath + "\"";
             try {
-                task(impath);
+                misc::MXA result = task(impath);
+                impathsForTask.setCell(j, misc::MXA::createString(impath));
+                resultsForTask.setCell(j, std::move(result));
             } catch (...) {
                 std::cout << "############### ERROR #############" << std::endl;
             }
         }
+
+        dataFile.setVar("results", resultsForTask, false);
+        dataFile.setVar("impaths", impathsForTask, false);
     }
 
 
@@ -462,33 +789,6 @@ int main(int argc, char ** argv) {
     //    return gt1;
     //};
 
-    //// cache gc
-    //auto getCachedGC = [&recache_gc, &matlab](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {
-    //    std::vector<PerspectiveCamera> testCams1;
-    //    std::vector<Image7d> gc1;
-    //    if (recache_gc || !misc::LoadCache(impath, "testCams1_gc1", testCams1, gc1)) {
-    //        auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-    //        testCams1 = CreatePanoContextCameras(anno.view.camera);
-    //        gc1 = GeometricContext(anno, testCams1, matlab);
-    //        misc::SaveCache(impath, "testCams1_gc1", testCams1, gc1);
-    //    }
-    //    assert(testCams == testCams1);
-    //    return gc1;
-    //};
-
-    //// cache om
-    //auto getCachedOM = [&recache_om](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {
-    //    std::vector<PerspectiveCamera> testCams1;
-    //    std::vector<Imagei> om1;
-    //    if (recache_om || !misc::LoadCache(impath, "testCams1_om1", testCams1, om1)) {
-    //        auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
-    //        testCams1 = CreatePanoContextCameras(anno.view.camera);
-    //        om1 = OrientationMaps(anno, testCams1);
-    //        misc::SaveCache(impath, "testCams1_om1", testCams1, om1);
-    //    }
-    //    assert(testCams == testCams1);
-    //    return om1;
-    //};
 
     //// cache pn
     //auto getCachedPN = [&recache_pn, &matlab, &show_gui](const std::string & impath, const std::vector<PerspectiveCamera> & testCams) {

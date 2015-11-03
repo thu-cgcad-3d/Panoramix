@@ -1,5 +1,5 @@
 #include "../misc/eigen.hpp"
-#include "../core/clock.hpp"
+#include "../misc/clock.hpp"
 
 #include "rl_graph_solver.hpp"
 
@@ -1000,7 +1000,7 @@ namespace pano {
                     consD2triplets.begin(), consD2triplets.end()));
 
                 for (int ii = 0; ii < tryNum; ii++) {
-                    Clock clock("Solve LP");
+                    misc::Clock clock("Solve LP");
 
 
                     matlab

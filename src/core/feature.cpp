@@ -18,8 +18,8 @@ extern "C" {
 #include "feature.hpp"
 #include "utility.hpp"
 #include "containers.hpp"
-#include "clock.hpp"
 
+#include "../misc/clock.hpp"
 #include "../misc/matlab_api.hpp"
 #include "../misc/eigen.hpp"
 

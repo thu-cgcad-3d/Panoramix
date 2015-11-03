@@ -18,6 +18,12 @@ namespace pano {
             MXA & operator = (const MXA & a) = delete;
             virtual ~MXA();
 
+            static MXA createString(const std::string & str, bool dos = false);
+            static MXA createCellMatrix(int m, int n, bool dos = false);
+            static MXA createStructMatrix(int m, int n, 
+                const std::vector<std::string> & fieldNames, 
+                bool dos = false);
+
         public:
             MXA clone(bool dos = false) const;
             void * mxa() const { return _mxa; }

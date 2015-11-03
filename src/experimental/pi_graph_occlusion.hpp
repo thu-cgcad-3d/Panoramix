@@ -39,6 +39,15 @@ namespace pano {
             std::vector<std::map<int, double>> * line2leftSegsWithWeightPtr = nullptr,
             std::vector<std::map<int, double>> * line2rightSegsWithWeightPtr = nullptr);
 
+        std::vector<LineSidingWeight> ComputeLinesSidingWeights2(const PIGraph & mg,
+            double minAngleSizeOfLineInTJunction = DegreesToRadians(3),
+            double lambdaShrinkForHLineDetectionInTJunction = 0.2,
+            double lambdaShrinkForVLineDetectionInTJunction = 0.1,
+            double angleSizeForPixelsNearLines = DegreesToRadians(2),
+            std::vector<std::map<int, double>> * line2leftSegsWithWeightPtr = nullptr,
+            std::vector<std::map<int, double>> * line2rightSegsWithWeightPtr = nullptr);
+
+
         std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(const PIGraph & mg,
             const PILayoutAnnotation & anno, 
             double sampleAngleStep = DegreesToRadians(0.5),

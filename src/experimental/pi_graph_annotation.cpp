@@ -247,6 +247,7 @@ namespace pano {
             gui::Singleton::InitGui();
             PILayoutAnnotationWidget w;
             QString impath = QString::fromStdString(imagePath);
+            w.setWindowTitle(QObject::tr("Annotate Indoor Layouts"));
             w.setCurAnnotation(&anno, &impath);
             w.resize(900, 900);
             w.show();

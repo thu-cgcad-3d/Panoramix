@@ -189,6 +189,9 @@ namespace pano {
             }
             // add lines
             for (int i = 0; i < mg.nlines(); i++) {
+                if (!mg.line2used.empty() && !mg.line2used[i]) {
+                    continue;
+                }
 
                 Entity e;
                 e.type = Entity::IsLine;
@@ -227,6 +230,9 @@ namespace pano {
                 }
                 constraints.push_back(connect);
                 int connectCon = constraints.size() - 1;
+                if (connect.ent1 == -1 || connect.ent2 == -1) {
+                    continue;
+                }
                 ent2cons[connect.ent1].push_back(connectCon);
                 ent2cons[connect.ent2].push_back(connectCon);
 
@@ -798,7 +804,7 @@ namespace pano {
 
      
 
-        PICGDeterminablePart LocateDeterminablePart(const PIConstraintGraph & cg, double angleThres) {
+        PICGDeterminablePart LocateDeterminablePart(const PIConstraintGraph & cg, double angleThres, bool connectAll) {
             PICGDeterminablePart dp;
 
             // collect ent stabilities
@@ -864,13 +870,18 @@ namespace pano {
                         if (Contains(entsCollected, adjEnt)) {
                             continue;
                         }
-                        if (c.isConnection()) {
-                            for (auto & anchor : c.anchors) {
-                                ent2stabHere[adjEnt]->addAnchor(anchor, angleThres);
+
+                        if (connectAll) {
+                            ent2stabHere[adjEnt]->stablize(); ///////// !!!!!
+                        } else {
+                            if (c.isConnection()) {
+                                for (auto & anchor : c.anchors) {
+                                    ent2stabHere[adjEnt]->addAnchor(anchor, angleThres);
+                                }
+                            } else if (c.isCoplanarity()) {
+                                assert(cg.entities[adjEnt].isSeg());
+                                ent2stabHere[adjEnt]->stablize();
                             }
-                        } else if (c.isCoplanarity()) {
-                            assert(cg.entities[adjEnt].isSeg());
-                            ent2stabHere[adjEnt]->stablize();
                         }
                         Q.set(adjEnt, ent2stabHere[adjEnt]->dof());
                     }
