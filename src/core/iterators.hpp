@@ -159,36 +159,5 @@ MakeConditionalContainer(const ContainerT *cont_,
   return ConstConditionalContainerWrapper<ContainerT, ElementPredT>(cont_,
                                                                     elePred_);
 }
-
-// yield
-template <class T, class ProcessorT>
-class YieldIterator : public std::iterator<std::output_iterator_tag, T> {
-public:
-  struct Wrapper {
-    inline explicit Wrapper(const ProcessorT &p) : processor(p) {}
-    inline explicit Wrapper(ProcessorT &&p) : processor(std::move(p)) {}
-    inline Wrapper &operator=(const Wrapper &) = default;
-    inline Wrapper &operator=(const T &data) {
-      processor(data);
-      return *this;
-    }
-    ProcessorT processor;
-  };
-
-public:
-  inline explicit YieldIterator(const ProcessorT &p) : _w(p) {}
-  inline explicit YieldIterator(ProcessorT &&p) : _w(std::move(p)) {}
-  inline YieldIterator &operator++() { return *this; }
-  inline Wrapper &operator*() { return _w; }
-
-private:
-  Wrapper _w;
-};
-
-template <class T, class ProcessorT>
-inline YieldIterator<T, std::decay_t<ProcessorT>> MakeYield(ProcessorT &&p) {
-  return YieldIterator<T, std::decay_t<ProcessorT>>(
-      std::forward<ProcessorT>(p));
-}
 }
 }

@@ -763,7 +763,6 @@ OpenGLShaderSource::OpenGLShaderSource(OpenGLShaderSourceDescriptor d) {
 }
 
 namespace core {
-
 Box3 BoundingBox(const gui::SpatialProjectedPolygon &spp) {
   std::vector<Vec3> cs(spp.corners.size());
   for (int i = 0; i < spp.corners.size(); i++) {

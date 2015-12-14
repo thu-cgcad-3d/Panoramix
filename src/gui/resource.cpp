@@ -11,11 +11,12 @@ ResourcePtr MakeResource(const core::Image &image) {
 
   struct TextureResource : Resource {
     inline TextureResource(const core::Image &im)
-        : initialized(false), image(MakeQImage(im)),
-          texture(new QOpenGLTexture(QOpenGLTexture::Target2D)) {}
+        : initialized(false), image(im),
+          texture(new QOpenGLTexture(QOpenGLTexture::Target2D)), valid(true) {}
 
-    virtual bool isNull() const override { return image.isNull(); }
+    virtual bool isNull() const override { return image.empty(); }
     virtual void initialize() override {
+      assert(valid);
       if (initialized) {
         return;
       }
@@ -26,7 +27,8 @@ ResourcePtr MakeResource(const core::Image &image) {
         return;
       }
       Q_ASSERT(texture->textureId());
-      texture->setData(image.mirrored());
+      QImage mirrored = MakeQImage(image).mirrored();
+      texture->setData(mirrored);
       texture->setMinificationFilter(QOpenGLTexture::Linear);
       texture->setMagnificationFilter(QOpenGLTexture::Linear);
       texture->release();
@@ -44,12 +46,14 @@ ResourcePtr MakeResource(const core::Image &image) {
       return texture->isBound();
     }
     virtual ~TextureResource() {
+      valid = false;
       texture->destroy();
       delete texture;
     }
-    QImage image;
+    core::Image image;
     QOpenGLTexture *texture;
     bool initialized;
+    bool valid;
   };
 
   return std::make_shared<TextureResource>(image);
