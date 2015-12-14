@@ -59,6 +59,7 @@ include (LocateQtLibs)
 include (DefineAddToEnvPath)
 ADDTO_ENVPATH (Fundamental_PATH)
 ADDTO_ENVPATH (Qt_PATH)
+ADDTO_ENVPATH (MATLAB_PATH)
 
 
 # global definitions

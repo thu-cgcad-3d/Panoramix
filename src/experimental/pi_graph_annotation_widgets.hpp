@@ -1,81 +1,77 @@
 #pragma once
 
-#include <functional>
-#include <QtWidgets>
 #include <QtOpenGL>
+#include <QtWidgets>
+#include <functional>
 
 #include "../gui/scene.hpp"
 #include "pi_graph_annotation.hpp"
 
 namespace pano {
-    namespace experimental {
+namespace experimental {
 
-        class PILayoutAnnotationWidget : public QGLWidget {
-        public:
-            PILayoutAnnotationWidget(QWidget * parent = nullptr);
-            ~PILayoutAnnotationWidget();
+class PILayoutAnnotationWidget : public QGLWidget {
+public:
+  PILayoutAnnotationWidget(QWidget *parent = nullptr);
+  ~PILayoutAnnotationWidget();
 
-            void setCurAnnotation(PILayoutAnnotation * anno, const QString * imagePath);
+  void setCurAnnotation(PILayoutAnnotation *anno, const QString *imagePath);
 
-        protected:
-            virtual void paintEvent(QPaintEvent * e) override;
-            virtual void mousePressEvent(QMouseEvent * e) override;
-            virtual void mouseMoveEvent(QMouseEvent * e) override;
-            virtual void mouseReleaseEvent(QMouseEvent * e) override;
-            virtual void wheelEvent(QWheelEvent * e) override;
-            virtual void keyPressEvent(QKeyEvent * e) override;
+protected:
+  virtual void paintEvent(QPaintEvent *e) override;
+  virtual void mousePressEvent(QMouseEvent *e) override;
+  virtual void mouseMoveEvent(QMouseEvent *e) override;
+  virtual void mouseReleaseEvent(QMouseEvent *e) override;
+  virtual void wheelEvent(QWheelEvent *e) override;
+  virtual void keyPressEvent(QKeyEvent *e) override;
 
-        private:
-            void clearStroke();
+private:
+  void clearStroke();
 
-            void rebuildLayoutScene();
-            void rebuildCluttersScene();
-            void rebuildStrokeScene();
+  void rebuildLayoutScene();
+  void rebuildCluttersScene();
+  void rebuildStrokeScene();
 
-            void acceptClutter();
+  void acceptClutter();
 
-        private:
-            QPoint _lastPos;
+private:
+  QPoint _lastPos;
 
-            gui::Scene _imageScene;
+  gui::Scene _imageScene;
 
-            gui::Scene _layoutScene;
-            std::vector<Decorated<gui::Colored<Point3>, int>> _cornerPoints;
-            std::vector<Decorated<gui::Colored<Line3>, int>> _borderLines;
-            std::vector<Decorated<gui::Colored<Polygon3>, int>> _facePolygons;
-            std::vector<Decorated<Line3, int>> _coplanarFacePairLines;
-            
-            gui::Scene _cluttersScene;
-            std::vector<Decorated<Polygon3, int>> _clutterPolygons;
+  gui::Scene _layoutScene;
+  std::vector<Decorated<gui::Colored<Point3>, int>> _cornerPoints;
+  std::vector<Decorated<gui::Colored<Line3>, int>> _borderLines;
+  std::vector<Decorated<gui::Colored<Polygon3>, int>> _facePolygons;
+  std::vector<Decorated<Line3, int>> _coplanarFacePairLines;
 
-            gui::Scene _vpsScene;
-            gui::Scene _strokeScene;
+  gui::Scene _cluttersScene;
+  std::vector<Decorated<Polygon3, int>> _clutterPolygons;
 
-            gui::RenderOptions _options;
-            PILayoutAnnotation * _anno;
-            const QString * _imagePath;
+  gui::Scene _vpsScene;
+  gui::Scene _strokeScene;
 
-            enum State {
-                Pick, DrawingBorder, DrawingClutter, ConnectCoplanarFaces
-            };
-            State _state;
-            QAction * _actPick;
-            QAction * _actDrawBorder;
-            QAction * _actDrawClutter;
-            QAction * _actConnectCoplanarFaces;
+  gui::RenderOptions _options;
+  PILayoutAnnotation *_anno;
+  const QString *_imagePath;
 
-            Chain3 _stroke;
+  enum State { Pick, DrawingBorder, DrawingClutter, ConnectCoplanarFaces };
+  State _state;
+  QAction *_actPick;
+  QAction *_actDrawBorder;
+  QAction *_actDrawClutter;
+  QAction *_actConnectCoplanarFaces;
 
-            int _cornerClicked, _borderClicked, _faceClicked;
+  Chain3 _stroke;
 
-            int _lastHitCornerId;
-            int _lastHitFaceId;
+  int _cornerClicked, _borderClicked, _faceClicked;
 
-            bool _showLayouts;
-            bool _showClutters;
-            bool _showVPs;
-        };
+  int _lastHitCornerId;
+  int _lastHitFaceId;
 
-
-    }
+  bool _showLayouts;
+  bool _showClutters;
+  bool _showVPs;
+};
+}
 }

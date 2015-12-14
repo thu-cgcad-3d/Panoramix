@@ -10,6 +10,11 @@ find_package(MATLAB REQUIRED)
 #  MATLAB_MAT_LIBRARY:  path to libmat.lib # added
 #  MATLAB_ENG_LIBRARY: path to libeng.lib
 #  MATLAB_ROOT: path to Matlab's root directory
+if (WIN32)
+	if( CMAKE_SIZEOF_VOID_P MATCHES "8")
+		set (MATLAB_PATH ${MATLAB_ROOT}/bin/win64)
+	endif()
+endif ()
 list (APPEND MATLAB_INCLUDES ${MATLAB_INCLUDE_DIR})
 list (APPEND MATLAB_LIBS ${MATLAB_LIBRARIES})
 list (APPEND MATLAB_LIBS ${MATLAB_MAT_LIBRARY})

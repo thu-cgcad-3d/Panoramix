@@ -40,7 +40,7 @@
 SET(MATLAB_FOUND 0)
 IF(WIN32)
   # Search for a version of Matlab available, starting from the most modern one to older versions
-  FOREACH(MATVER "8.3" "8.2" "8.1" "7.14" "7.11" "7.10" "7.9" "7.8" "7.7" "7.6" "7.5" "7.4")
+  FOREACH(MATVER "8.6" "8.5" "8.4" "8.3" "8.2" "8.1" "7.14" "7.11" "7.10" "7.9" "7.8" "7.7" "7.6" "7.5" "7.4")
     IF((NOT DEFINED MATLAB_ROOT) 
         OR ("${MATLAB_ROOT}" STREQUAL "")
         OR ("${MATLAB_ROOT}" STREQUAL "/registry"))
@@ -52,6 +52,19 @@ IF(WIN32)
       OR ("${MATLAB_ROOT}" STREQUAL "")
       OR ("${MATLAB_ROOT}" STREQUAL "/registry"))
   ENDFOREACH(MATVER)
+
+  FOREACH(MATSERVERVER "2.3" "2.2" "2.1" "2.0")
+    IF((NOT DEFINED MATLAB_ROOT) 
+        OR ("${MATLAB_ROOT}" STREQUAL "")
+        OR ("${MATLAB_ROOT}" STREQUAL "/registry"))
+      GET_FILENAME_COMPONENT(MATLAB_ROOT
+        "[HKEY_LOCAL_MACHINE\\SOFTWARE\\MathWorks\\MATLAB Production Server\\${MATSERVERVER};MATLABROOT]"
+        ABSOLUTE)
+      SET(MATLAB_PRODUCTION_SERVER_VERSION ${MATSERVERVER})
+    ENDIF((NOT DEFINED MATLAB_ROOT) 
+      OR ("${MATLAB_ROOT}" STREQUAL "")
+      OR ("${MATLAB_ROOT}" STREQUAL "/registry"))
+  ENDFOREACH(MATSERVERVER)
   
   # Directory name depending on whether the Windows architecture is 32
   # bit or 64 bit
@@ -156,25 +169,25 @@ ELSE(WIN32)
   # Get path to the MEX libraries
   EXECUTE_PROCESS(
     #COMMAND find "${MATLAB_ROOT}/extern/lib" -name libmex${LIBRARY_EXTENSION} # Peter
-	COMMAND find "${MATLAB_ROOT}/bin" -name libmex${LIBRARY_EXTENSION} # Standard
+    COMMAND find "${MATLAB_ROOT}/bin" -name libmex${LIBRARY_EXTENSION} # Standard
     COMMAND xargs echo -n
     OUTPUT_VARIABLE MATLAB_MEX_LIBRARY
     )
   EXECUTE_PROCESS(
     #COMMAND find "${MATLAB_ROOT}/extern/lib" -name libmx${LIBRARY_EXTENSION} # Peter
-	COMMAND find "${MATLAB_ROOT}/bin" -name libmx${LIBRARY_EXTENSION} # Standard
+    COMMAND find "${MATLAB_ROOT}/bin" -name libmx${LIBRARY_EXTENSION} # Standard
     COMMAND xargs echo -n
     OUTPUT_VARIABLE MATLAB_MX_LIBRARY
     )
   EXECUTE_PROCESS(
     #COMMAND find "${MATLAB_ROOT}/extern/lib" -name libmat${LIBRARY_EXTENSION} # Peter
-	COMMAND find "${MATLAB_ROOT}/bin" -name libmat${LIBRARY_EXTENSION} # Standard
+    COMMAND find "${MATLAB_ROOT}/bin" -name libmat${LIBRARY_EXTENSION} # Standard
     COMMAND xargs echo -n
     OUTPUT_VARIABLE MATLAB_MAT_LIBRARY
     )
   EXECUTE_PROCESS(
     #COMMAND find "${MATLAB_ROOT}/extern/lib" -name libeng${LIBRARY_EXTENSION} # Peter
-	COMMAND find "${MATLAB_ROOT}/bin" -name libeng${LIBRARY_EXTENSION} # Standard
+    COMMAND find "${MATLAB_ROOT}/bin" -name libeng${LIBRARY_EXTENSION} # Standard
     COMMAND xargs echo -n
     OUTPUT_VARIABLE MATLAB_ENG_LIBRARY
     )

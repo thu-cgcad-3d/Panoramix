@@ -6,50 +6,55 @@
 #include "pi_graph_cg.hpp"
 
 namespace pano {
-    namespace experimental {
-        
-        void ReconstructLayoutAnnotation(PILayoutAnnotation & anno, misc::Matlab & matlab);
+namespace experimental {
 
-        // use general plane representation method
-        void ReconstructLayoutAnnotation2(PILayoutAnnotation & anno, misc::Matlab & matlab);
-        void ReconstructLayoutAnnotation3(PILayoutAnnotation & anno, misc::Matlab & matlab);
+void ReconstructLayoutAnnotation(PILayoutAnnotation &anno,
+                                 misc::Matlab &matlab);
 
+// use general plane representation method
+void ReconstructLayoutAnnotation2(PILayoutAnnotation &anno,
+                                  misc::Matlab &matlab);
+void ReconstructLayoutAnnotation3(PILayoutAnnotation &anno,
+                                  misc::Matlab &matlab);
 
+double Solve(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
+             misc::Matlab &matlab,
+             int maxIter = std::numeric_limits<int>::max(),
+             double connectionWeightRatioOverCoplanarity = 1e7);
 
-        double Solve(const PICGDeterminablePart & dp, PIConstraintGraph & cg, misc::Matlab & matlab, 
-            int maxIter = std::numeric_limits<int>::max(), double connectionWeightRatioOverCoplanarity = 1e7);
+int DisableUnsatisfiedConstraints(
+    const PICGDeterminablePart &dp, PIConstraintGraph &cg,
+    const std::function<bool(double distRankRatio, double avgDist,
+                             double maxDist)> &whichToDisable);
 
-        int DisableUnsatisfiedConstraints(const PICGDeterminablePart & dp, PIConstraintGraph & cg, 
-            const std::function<bool(double distRankRatio, double avgDist, double maxDist)> & whichToDisable);
+// disorient invalid entities according to current reconstuction
+void DisorientDanglingLines(const PICGDeterminablePart &dp,
+                            PIConstraintGraph &cg, PIGraph &mg, double ratio);
 
-        // disorient invalid entities according to current reconstuction
-        void DisorientDanglingLines(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double ratio);
-        
-        void DisorientDanglingLines2(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double thresRatio);
+void DisorientDanglingLines2(const PICGDeterminablePart &dp,
+                             PIConstraintGraph &cg, PIGraph &mg,
+                             double thresRatio);
 
-        void DisorientDanglingLines3(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, 
-            double disorientRatio, double thresRatio);
+void DisorientDanglingLines3(const PICGDeterminablePart &dp,
+                             PIConstraintGraph &cg, PIGraph &mg,
+                             double disorientRatio, double thresRatio);
 
+void DisorientDanglingSegs(const PICGDeterminablePart &dp,
+                           PIConstraintGraph &cg, PIGraph &mg,
+                           double thresRatio);
 
-        void DisorientDanglingSegs(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double thresRatio);
-        
-        // disorient those that are not compatible with neighbor segs
-        // also disconnect their connections with lines
-        void DisorientDanglingSegs2(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, double thresRatio);
+// disorient those that are not compatible with neighbor segs
+// also disconnect their connections with lines
+void DisorientDanglingSegs2(const PICGDeterminablePart &dp,
+                            PIConstraintGraph &cg, PIGraph &mg,
+                            double thresRatio);
 
+void DisorientDanglingSegs3(const PICGDeterminablePart &dp,
+                            PIConstraintGraph &cg, PIGraph &mg,
+                            double disorientRatio, double thresRatio);
 
-        void DisorientDanglingSegs3(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg,
-            double disorientRatio, double thresRatio);
-
-
-
-        void OverorientSkewSegs(const PICGDeterminablePart & dp, PIConstraintGraph & cg, PIGraph & mg, 
-            double angleThres, double positionAngleThres, double oriRatio);
-
-
-
-
-
-
-    }
+void OverorientSkewSegs(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
+                        PIGraph &mg, double angleThres,
+                        double positionAngleThres, double oriRatio);
+}
 }

@@ -7,28 +7,32 @@
 
 using namespace pano;
 
-TEST(Tuples, Invoke){
+TEST(Tuples, Invoke) {
 
-    static_assert(core::SequenceElement<2, core::Sequence<1, 2, 3, 4>>::value == 3, "");
-    static_assert(core::SequenceContainsElement<4, core::Sequence<4, 3, 2>>::value, "");
-    static_assert(core::TupleContainsType<float, std::tuple<bool, float, int>>::value, "");
-    static_assert(core::TypeFirstLocationInTuple<float, std::tuple<int, float, double>>::value == 1, "");
-    
-    auto args = std::make_tuple(1, 2, 3, 4, 5.0);
-    auto fun = [](int a, int b, int c, int d, double e) {
-        return (a + b + c + d + e) * 2.0;
-    };
-    
-    auto sumDoubled = core::Invoke(fun, args);
-    ASSERT_EQ(30, sumDoubled);
+  static_assert(
+      core::SequenceElement<2, core::Sequence<1, 2, 3, 4>>::value == 3, "");
+  static_assert(
+      core::SequenceContainsElement<4, core::Sequence<4, 3, 2>>::value, "");
+  static_assert(
+      core::TupleContainsType<float, std::tuple<bool, float, int>>::value, "");
+  static_assert(core::TypeFirstLocationInTuple<
+                    float, std::tuple<int, float, double>>::value == 1,
+                "");
 
-    auto fun2 = [](int a, int b, int c, int d, double e) {
-        std::cout << a << b << c << d << e << std::endl;
-    };
+  auto args = std::make_tuple(1, 2, 3, 4, 5.0);
+  auto fun = [](int a, int b, int c, int d, double e) {
+    return (a + b + c + d + e) * 2.0;
+  };
 
-    core::Invoke(fun2, args);
+  auto sumDoubled = core::Invoke(fun, args);
+  ASSERT_EQ(30, sumDoubled);
 
-    core::Invoke([](int a, double b){std::cout << a << b << std::endl; }, std::make_pair(5, 5.0));
+  auto fun2 = [](int a, int b, int c, int d, double e) {
+    std::cout << a << b << c << d << e << std::endl;
+  };
 
+  core::Invoke(fun2, args);
+
+  core::Invoke([](int a, double b) { std::cout << a << b << std::endl; },
+               std::make_pair(5, 5.0));
 }
-

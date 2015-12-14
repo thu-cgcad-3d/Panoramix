@@ -1,6 +1,7 @@
 #ifndef __MSAC_H__
 #define __MSAC_H__
 
+#include <opencv2/opencv.hpp>
 #include "cv.h"      
 #include "highgui.h" 
 #include "cxcore.h"  
