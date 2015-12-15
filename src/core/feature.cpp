@@ -24,7 +24,8 @@ extern "C" {
 #include "../misc/eigen.hpp"
 
 
-
+#pragma warning(disable : 4267)
+#pragma warning(disable : 4244)
 
 namespace pano {
     namespace core {
@@ -37,7 +38,7 @@ namespace pano {
             const int N = src.cols;
             const bool masked = !mask.empty();
 
-            cv::Mat block = 255 * cv::Mat_<uint8_t>::ones(Size(2 * sz + 1, 2 * sz + 1));
+            cv::Mat block = 255 * cv::Mat_<uint8_t>::ones(Sizei(2 * sz + 1, 2 * sz + 1));
             dst = cv::Mat::zeros(src.size(), src.type());
 
             // iterate over image blocks
@@ -61,7 +62,7 @@ namespace pano {
                     block(cv::Range(0, in.size()), cv::Range(0, jn.size())).copyTo(blockmask);
                     cv::Range iis(ic.start - in.start, std::min(ic.start - in.start + sz + 1, in.size()));
                     cv::Range jis(jc.start - jn.start, std::min(jc.start - jn.start + sz + 1, jn.size()));
-                    blockmask(iis, jis) = cv::Mat_<uint8_t>::zeros(Size(jis.size(), iis.size()));
+                    blockmask(iis, jis) = cv::Mat_<uint8_t>::zeros(Sizei(jis.size(), iis.size()));
                     minMaxLoc(src(in, jn), NULL, &vnmax, NULL, &ijmax, masked ? mask(in, jn).mul(blockmask) : blockmask);
                     cv::Point cn = ijmax + cv::Point(jn.start, in.start);
 
@@ -224,7 +225,7 @@ namespace pano {
                         D(0, 0) = cv::sum(zmx.mul(zmx)).val[0];
                         D(0, 1) = D(1, 0) = cv::sum(zmx.mul(zmy)).val[0];
                         D(1, 1) = cv::sum(zmy.mul(zmy)).val[0];
-                        cv::eigen(D, true, lambda, v);
+                        cv::eigen(D, lambda, v);
 
                         double theta = atan2(v.at<double>(0, 1), v.at<double>(0, 0));
                         double confidence = std::numeric_limits<double>::max();
@@ -452,8 +453,8 @@ namespace pano {
         DenseMatd ClassifyLines(std::vector<Classified<Line2>> &lines, const std::vector<HPoint2> & vps,
             double angleThreshold, double sigma, double scoreThreshold, double avoidVPDistanceThreshold){
 
-            size_t nlines = lines.size();
-            size_t npoints = vps.size();
+            int nlines = (int)lines.size();
+            int npoints = (int)vps.size();
             DenseMatd linescorestable(nlines, npoints, 0.0);
             for (int i = 0; i < nlines; i++) {
                 auto & line = lines[i];
@@ -492,12 +493,12 @@ namespace pano {
         DenseMatd ClassifyLines(std::vector<Classified<Line3>> & lines, const std::vector<Vec3> & vps,
             double angleThreshold, double sigma, double scoreThreshold, double avoidVPAngleThreshold) {
 
-            size_t nlines = lines.size();
-            size_t npoints = vps.size();
+            int nlines = (int)lines.size();
+            int npoints = (int)vps.size();
 
             DenseMatd linescorestable(nlines, npoints, 0.0);
 
-            for (size_t i = 0; i < nlines; i++){
+            for (int i = 0; i < nlines; i++){
                 const Vec3 & a = lines[i].component.first;
                 const Vec3 & b = lines[i].component.second;
                 Vec3 normab = a.cross(b);
@@ -560,7 +561,7 @@ namespace pano {
                     groups[nearestGroupId].first.push_back(i);
                 } else { // create a new group
                     groups.emplace_back(std::vector<int>{i}, n);
-                    lineNormals.emplace(n, groups.size() - 1);
+                    lineNormals.emplace(n, (int)groups.size() - 1);
                 }
             }
 
@@ -1792,7 +1793,7 @@ namespace pano {
                             x(k * 2 + 1) = acos(initialVP[2]);
                         }
                         
-                        int startPoses[] = { 0, lineMat1.cols(), lineMat1.cols() + lineMat2.cols() };
+                        int startPoses[] = { 0, (int)lineMat1.cols(), (int)lineMat1.cols() + (int)lineMat2.cols() };
                         auto costFunction = [&lineMat1, &lineMat2, &lineMat3, &startPoses, logMiddleFocal, &projCenter, &vps, &ids](const VectorXd & x, VectorXd & v){
                             // x: input, v: output
                             assert(x.size() == 6);

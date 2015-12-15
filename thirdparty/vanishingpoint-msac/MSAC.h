@@ -3,7 +3,8 @@
 
 #include "cv.h"      
 #include "highgui.h" 
-#include "cxcore.h"  
+#include "cxcore.h" 
+#include <opencv2/opencv.hpp>
 
 #include "errorNIETO.h"
 

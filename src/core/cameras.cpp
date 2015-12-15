@@ -196,7 +196,7 @@ namespace pano {
         }
 
         void PerspectiveCamera::moveCenterWithEyeFixed(const Vec3 & t, bool updateMat) {
-            float sc = std::max(screenSize().width, screenSize().height) * 0.2;
+            double sc = std::max(screenSize().width, screenSize().height) * 0.2;
             Vec3 tt = t * norm(eye() - center()) / sc;
 
             Vec3 xv = rightward();

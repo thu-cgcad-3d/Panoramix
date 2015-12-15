@@ -132,7 +132,7 @@ namespace pano {
                     std::swap(coeffs(sc, k), coeffs(2, k));
                 }
                 return coeffs;
-            } else if (control.dof() == 3) {
+            } else /*if (control.dof() == 3)*/ {
                 return DenseMatd::eye(3, 3);
             }
         }

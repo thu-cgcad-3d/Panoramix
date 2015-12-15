@@ -143,7 +143,7 @@ namespace pano {
                 const Vec3 & up = Vec3(0, 0, -1));
             explicit PartialPanoramicCamera(const PanoramicCamera & panoCam, int w = 500, int h = 500);
 
-            inline Sizei screenSize() const { return Size(static_cast<int>(_screenW), static_cast<int>(_screenH)); }
+            inline Sizei screenSize() const { return Sizei(static_cast<int>(_screenW), static_cast<int>(_screenH)); }
             inline double focal() const { return _focal; }
             inline const Point3 & eye() const { return _eye; }
             inline const Point3 & center() const { return _center; }
@@ -185,7 +185,7 @@ namespace pano {
             inline const Point3 & eye() const { return _eye; }
             inline const Point3 & center() const { return _center; }
             inline const Vec3 & up() const { return _up; }
-            inline Sizei screenSize() const { return Size(static_cast<int>(_screenRadius * 2), static_cast<int>(_screenRadius * 2)); }
+            inline Sizei screenSize() const { return Sizei(static_cast<int>(_screenRadius * 2), static_cast<int>(_screenRadius * 2)); }
             Point2 toScreen(const Point3 & p3d) const;
             inline HPoint2 toScreenInHPoint(const Point3 & p3d) const { return HPoint2(toScreen(p3d), 1.0); }
             bool isVisibleOnScreen(const Point3 & p3d) const;

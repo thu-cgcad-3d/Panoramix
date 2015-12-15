@@ -89,7 +89,7 @@ namespace pano {
                 cv::Mat m; toCVOutputArray(m, lastDimIsChannel); return m;
             }
 
-            operator float() const { return scalar(); }
+            operator float() const { return (float)scalar(); }
             operator double() const { return scalar(); }
             operator long double() const { return scalar(); }
 
