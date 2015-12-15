@@ -8,7 +8,7 @@ namespace experimental {
 
 std::vector<int> CollectSegsIntersectingDirection(const Vec3 &direction,
                                                   bool alsoConsiderBackward,
-                                                  const PIGraph &mg,
+                                                  const PIGraph<PanoramicCamera> &mg,
                                                   double rangeAngle) {
   // find peaky regions
   std::vector<int> peakySegs;
@@ -85,7 +85,7 @@ std::vector<int> CollectSegsIntersectingDirection(const Vec3 &direction,
 namespace {
 
 // returns false if confliction occurs
-bool MakeRegionPlaneUsable(int seg, bool usable, PIGraph &mg) {
+bool MakeRegionPlaneUsable(int seg, bool usable, PIGraph<PanoramicCamera> &mg) {
   auto &p = mg.seg2control[seg];
   if (p.used == usable)
     return true;
@@ -99,7 +99,7 @@ bool MakeRegionPlaneUsable(int seg, bool usable, PIGraph &mg) {
 }
 
 // returns false if confliction occurs
-bool MakeRegionPlaneToward(int seg, int normalVPId, PIGraph &mg) {
+bool MakeRegionPlaneToward(int seg, int normalVPId, PIGraph<PanoramicCamera> &mg) {
   auto &p = mg.seg2control[seg];
   if (!p.used)
     return true;
@@ -123,7 +123,7 @@ bool MakeRegionPlaneToward(int seg, int normalVPId, PIGraph &mg) {
 }
 
 // returns false if confliction occurs
-bool MakeRegionPlaneAlsoAlong(int seg, int alongVPId, PIGraph &mg) {
+bool MakeRegionPlaneAlsoAlong(int seg, int alongVPId, PIGraph<PanoramicCamera> &mg) {
   auto &p = mg.seg2control[seg];
   if (!p.used)
     return true;
@@ -157,7 +157,7 @@ bool MakeRegionPlaneAlsoAlong(int seg, int alongVPId, PIGraph &mg) {
 }
 }
 
-void AttachPrincipleDirectionConstraints(PIGraph &mg) {
+void AttachPrincipleDirectionConstraints(PIGraph<PanoramicCamera> &mg) {
   SetClock();
   std::vector<std::vector<int>> peakySegs(mg.vps.size());
   for (int i = 0; i < mg.vps.size(); i++) {
@@ -191,7 +191,7 @@ void AttachPrincipleDirectionConstraints(PIGraph &mg) {
   }
 }
 
-void AttachWallConstraints(PIGraph &mg, double rangeAngle) {
+void AttachWallConstraints(PIGraph<PanoramicCamera> &mg, double rangeAngle) {
   SetClock();
   auto &vertical = mg.vps[mg.verticalVPId];
 
@@ -221,7 +221,7 @@ void AttachWallConstraints(PIGraph &mg, double rangeAngle) {
   }
 }
 
-void DisableTopSeg(PIGraph &mg) {
+void DisableTopSeg(PIGraph<PanoramicCamera> &mg) {
   int topSeg = mg.segs(Pixel(0, 0));
   mg.seg2control[topSeg].used = false;
   for (int bnd : mg.seg2bnds[topSeg]) {
@@ -233,7 +233,7 @@ void DisableTopSeg(PIGraph &mg) {
   }
 }
 
-void DisableBottomSeg(PIGraph &mg) {
+void DisableBottomSeg(PIGraph<PanoramicCamera> &mg) {
   int bottomSeg = mg.segs(Pixel(0, mg.segs.rows - 1));
   mg.seg2control[bottomSeg].used = false;
   for (int bnd : mg.seg2bnds[bottomSeg]) {
@@ -245,7 +245,7 @@ void DisableBottomSeg(PIGraph &mg) {
   }
 }
 
-void AttachGCConstraints(PIGraph &mg, const Image5d &gc, double clutterThres,
+void AttachGCConstraints(PIGraph<PanoramicCamera> &mg, const Image5d &gc, double clutterThres,
                          double wallThres, bool onlyConsiderBottomHalf) {
 
   auto up = normalize(mg.vps[mg.verticalVPId]);

@@ -29,32 +29,32 @@ int DisableUnsatisfiedConstraints(
 
 // disorient invalid entities according to current reconstuction
 void DisorientDanglingLines(const PICGDeterminablePart &dp,
-                            PIConstraintGraph &cg, PIGraph &mg, double ratio);
+                            PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg, double ratio);
 
 void DisorientDanglingLines2(const PICGDeterminablePart &dp,
-                             PIConstraintGraph &cg, PIGraph &mg,
+                             PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
                              double thresRatio);
 
 void DisorientDanglingLines3(const PICGDeterminablePart &dp,
-                             PIConstraintGraph &cg, PIGraph &mg,
+                             PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
                              double disorientRatio, double thresRatio);
 
 void DisorientDanglingSegs(const PICGDeterminablePart &dp,
-                           PIConstraintGraph &cg, PIGraph &mg,
+                           PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
                            double thresRatio);
 
 // disorient those that are not compatible with neighbor segs
 // also disconnect their connections with lines
 void DisorientDanglingSegs2(const PICGDeterminablePart &dp,
-                            PIConstraintGraph &cg, PIGraph &mg,
+                            PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
                             double thresRatio);
 
 void DisorientDanglingSegs3(const PICGDeterminablePart &dp,
-                            PIConstraintGraph &cg, PIGraph &mg,
+                            PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
                             double disorientRatio, double thresRatio);
 
 void OverorientSkewSegs(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
-                        PIGraph &mg, double angleThres,
+                        PIGraph<PanoramicCamera> &mg, double angleThres,
                         double positionAngleThres, double oriRatio);
 }
 }

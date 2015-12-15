@@ -5,7 +5,7 @@ namespace experimental {
 
 std::vector<Polygon3> CompactModel(const PICGDeterminablePart &dp,
                                    const PIConstraintGraph &cg,
-                                   const PIGraph &mg, double distThres) {
+                                   const PIGraph<PanoramicCamera> &mg, double distThres) {
 
   struct Corner {
     int junction; //
@@ -378,7 +378,7 @@ std::vector<Polygon3> CompactModel(const PICGDeterminablePart &dp,
 
 std::vector<Vec3> ComputeSegNormals(const PICGDeterminablePart &dp,
                                     const PIConstraintGraph &cg,
-                                    const PIGraph &mg, bool smoothed) {
+                                    const PIGraph<PanoramicCamera> &mg, bool smoothed) {
   std::vector<Vec3> seg2normal(mg.nsegs);
   for (int seg = 0; seg < mg.nsegs; seg++) {
     if (!mg.seg2control[seg].used) {
@@ -447,7 +447,7 @@ std::vector<Vec3> ComputeSegNormals(const PICGDeterminablePart &dp,
 
 std::vector<Plane3> ComputeSegPlanes(const PICGDeterminablePart &dp,
                                      const PIConstraintGraph &cg,
-                                     const PIGraph &mg, bool smoothed) {
+                                     const PIGraph<PanoramicCamera> &mg, bool smoothed) {
   std::vector<Plane3> seg2planes(mg.nsegs);
   for (int seg = 0; seg < mg.nsegs; seg++) {
     if (!mg.seg2control[seg].used) {

@@ -8,7 +8,7 @@ namespace experimental {
 class PILayoutAnnotation;
 
 void DetectOcclusions(
-    PIGraph &mg, double minAngleSizeOfLineInTJunction = DegreesToRadians(3),
+    PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInTJunction = DegreesToRadians(3),
     double lambdaShrinkForHLineDetectionInTJunction = 0.2,
     double lambdaShrinkForVLineDetectionInTJunction = 0.1,
     double angleSizeForPixelsNearLines = DegreesToRadians(5));
@@ -39,7 +39,7 @@ struct LineSidingWeight {
 };
 
 std::vector<LineSidingWeight> ComputeLinesSidingWeights(
-    const PIGraph &mg,
+    const PIGraph<PanoramicCamera> &mg,
     double minAngleSizeOfLineInTJunction = DegreesToRadians(3),
     double lambdaShrinkForHLineDetectionInTJunction = 0.2,
     double lambdaShrinkForVLineDetectionInTJunction = 0.1,
@@ -48,7 +48,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
     std::vector<std::map<int, double>> *line2rightSegsWithWeightPtr = nullptr);
 
 std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
-    const PIGraph &mg,
+    const PIGraph<PanoramicCamera> &mg,
     double minAngleSizeOfLineInTJunction = DegreesToRadians(3),
     double lambdaShrinkForHLineDetectionInTJunction = 0.2,
     double lambdaShrinkForVLineDetectionInTJunction = 0.1,
@@ -57,16 +57,16 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
     std::vector<std::map<int, double>> *line2rightSegsWithWeightPtr = nullptr);
 
 std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
-    const PIGraph &mg, const PILayoutAnnotation &anno,
+    const PIGraph<PanoramicCamera> &mg, const PILayoutAnnotation &anno,
     double sampleAngleStep = DegreesToRadians(0.5),
     double angleThres = DegreesToRadians(2), double ratioThres = 0.6);
 
 std::vector<std::array<std::set<int>, 2>>
-CollectSegsNearLines(const PIGraph &mg,
+CollectSegsNearLines(const PIGraph<PanoramicCamera> &mg,
                      double angleSizeForPixelsNearLines = DegreesToRadians(2));
 
 void ApplyLinesSidingWeights(
-    PIGraph &mg, const std::vector<LineSidingWeight> &lsw,
+    PIGraph<PanoramicCamera> &mg, const std::vector<LineSidingWeight> &lsw,
     const std::vector<std::array<std::set<int>, 2>> &line2leftRightSegs,
     bool connectSegsOnDanglingLine);
 }

@@ -2,6 +2,13 @@
 
 #include "geometry.hpp"
 
+namespace cv {
+template <class T>
+inline bool operator<(const Point_<T> &a, const Point_<T> &b) {
+  return std::tie(a.x, a.y) < std::tie(b.x, b.y);
+}
+}
+
 namespace pano {
 namespace core {
 
@@ -133,6 +140,15 @@ template <class T> inline T Mean(const ImageOf<T> &im, const Imageub &mask) {
 
 template <class T> inline Pixel ToPixel(const Point<T, 2> &p) {
   return Pixel(static_cast<int>(p[0]), static_cast<int>(p[1]));
+}
+
+inline int Sub2Ind(const Pixel &p, int w, int h) { return p.x * h + p.y; }
+inline int Sub2Ind(const Pixel &p, const Sizei &sz) {
+  return Sub2Ind(p, sz.width, sz.height);
+}
+inline Pixel Ind2Sub(int ind, int w, int h) { return Pixel(ind / h, ind % h); }
+inline Pixel Ind2Sub(int ind, const Sizei &sz) {
+  return Ind2Sub(ind, sz.width, sz.height);
 }
 
 Pixel PixelFromGeoCoord(const GeoCoord &p, int longidiv, int latidiv);

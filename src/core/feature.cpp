@@ -2812,21 +2812,6 @@ operator()(const Image &im, const std::vector<Line3> &lines,
 
 #pragma endregion SegmentationExtractor
 
-namespace {
-
-struct ComparePixelLoc {
-  inline bool operator()(const Pixel &a, const Pixel &b) const {
-    if (a.x != b.x)
-      return a.x < b.x;
-    return a.y < b.y;
-  }
-};
-
-template <class T>
-inline std::pair<T, T> MakeOrderedPair(const T &a, const T &b) {
-  return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
-}
-}
 
 void RemoveThinRegionInSegmentation(Imagei &segs, int widthThres /*= 2.0*/,
                                     bool crossBorder /*= false*/) {
@@ -3197,7 +3182,7 @@ FindRegionBoundaries(const Imagei &segRegions, int connectionExtendSize,
                      bool simplifyStraightEdgePixels) {
 
   std::map<std::pair<int, int>, std::vector<std::vector<Pixel>>> boundaryEdges;
-  std::map<std::pair<int, int>, std::set<Pixel, ComparePixelLoc>>
+  std::map<std::pair<int, int>, std::set<Pixel>>
       boundaryPixels;
 
   int width = segRegions.cols;
@@ -3347,10 +3332,10 @@ void ExtractSegmentationTopology(const Imagei &segs,
   seg2juncs.resize(nsegs);
 
   std::map<std::set<int>, std::vector<int>> segs2juncs;
-  std::map<std::pair<int, int>, std::set<Pixel, ComparePixelLoc>>
+  std::map<std::pair<int, int>, std::set<Pixel>>
       segpair2pixels;
-  std::map<Pixel, std::set<int>, ComparePixelLoc> pixel2segs;
-  std::map<Pixel, int, ComparePixelLoc> pixel2junc;
+  std::map<Pixel, std::set<int>> pixel2segs;
+  std::map<Pixel, int> pixel2junc;
 
   for (auto it = segs.begin(); it != segs.end(); ++it) {
     auto p = it.pos();
@@ -3411,7 +3396,7 @@ void ExtractSegmentationTopology(const Imagei &segs,
             segpair2pixels.at(MakeOrderedPair(segi, segj));
         std::vector<Pixel> pixelsForThisBnd;
 
-        std::set<Pixel, ComparePixelLoc> visitedPixels;
+        std::set<Pixel> visitedPixels;
 
         // use BFS
         std::queue<Pixel> Q;

@@ -11,23 +11,15 @@
 namespace pano {
 namespace experimental {
 
-bool AllAlong(const std::vector<std::vector<Vec3>> &pts, const Vec3 &from,
-              const Vec3 &to, double angleThres) {
+namespace {
+template <class ContT>
+inline bool AllAlong(const ContT &pts, const Vec3 &from, const Vec3 &to,
+                     double angleThres) {
   auto n = normalize(from.cross(to));
-  return std::all_of(pts.begin(), pts.end(), [&n, &angleThres](
-                                                 const std::vector<Vec3> &ps) {
-    return std::all_of(ps.begin(), ps.end(), [&n, &angleThres](const Vec3 &p) {
-      return abs(M_PI_2 - AngleBetweenDirections(n, p)) < angleThres;
-    });
-  });
-}
-
-bool AllAlong(const std::vector<Vec3> &pts, const Vec3 &from, const Vec3 &to,
-              double angleThres) {
-  auto n = normalize(from.cross(to));
-  return std::all_of(pts.begin(), pts.end(), [&n, angleThres](const Vec3 &p) {
+  return core::AllOf<Vec3>(pts, [&n, angleThres](const Vec3 &p) {
     return abs(M_PI_2 - AngleBetweenDirections(n, p)) < angleThres;
   });
+}
 }
 
 struct SegLabel {
@@ -51,7 +43,7 @@ struct SegLabel {
   }
 };
 
-void DetectOcclusions_lecacy(PIGraph &mg) {
+void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
 
   ml::FactorGraph fg;
 
@@ -860,13 +852,6 @@ void DetectOcclusions_lecacy(PIGraph &mg) {
   }
 }
 
-struct ComparePixel {
-  inline bool operator()(const Pixel &a, const Pixel &b) const {
-    if (a.x != b.x)
-      return a.x < b.x;
-    return a.y < b.y;
-  }
-};
 
 struct LineLabel {
   bool connectLeft, connectRight;
@@ -894,7 +879,7 @@ struct LineLabelCost {
 };
 
 // assume that all oclcusions are described by lines
-void DetectOcclusions(PIGraph &mg, double minAngleSizeOfLineInTJunction,
+void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInTJunction,
                       double lambdaShrinkForHLineDetectionInTJunction,
                       double lambdaShrinkForVLineDetectionInTJunction,
                       double angleSizeForPixelsNearLines) {
@@ -917,7 +902,7 @@ void DetectOcclusions(PIGraph &mg, double minAngleSizeOfLineInTJunction,
   }
 
   // collect lines' nearby pixels and segs
-  std::vector<std::set<Pixel, ComparePixel>> line2nearbyPixels(mg.nlines());
+  std::vector<std::set<Pixel>> line2nearbyPixels(mg.nlines());
   std::vector<std::map<int, Vec3>> line2nearbySegsWithLocalCenterDir(
       mg.nlines());
   std::vector<std::map<int, bool>> line2nearbySegsWithOnLeftFlag(mg.nlines());
@@ -1667,7 +1652,7 @@ void DetectOcclusions(PIGraph &mg, double minAngleSizeOfLineInTJunction,
 }
 
 std::vector<LineSidingWeight> ComputeLinesSidingWeights(
-    const PIGraph &mg,
+    const PIGraph<PanoramicCamera> &mg,
     double minAngleSizeOfLineInTJunction /*= DegreesToRadians(3)*/,
     double lambdaShrinkForHLineDetectionInTJunction /*= 0.2*/,
     double lambdaShrinkForVLineDetectionInTJunction /*= 0.1*/,
@@ -2148,7 +2133,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
 }
 
 std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
-    const PIGraph &mg,
+    const PIGraph<PanoramicCamera> &mg,
     double minAngleSizeOfLineInTJunction /*= DegreesToRadians(3)*/,
     double lambdaShrinkForHLineDetectionInTJunction /*= 0.2*/,
     double lambdaShrinkForVLineDetectionInTJunction /*= 0.1*/,
@@ -2158,11 +2143,6 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
 
   std::vector<std::map<int, double>> line2leftSegsWithWeight(mg.nlines());
   std::vector<std::map<int, double>> line2rightSegsWithWeight(mg.nlines());
-
-  // todo
-  // use the sweep operation instead!!!!
-  // THERE_ARE_BUGS_HERE("Use the Sweep Operation to detect orientation
-  // violation between lines and segs!");
 
   for (int line = 0; line < mg.nlines(); line++) {
     auto &l = mg.lines[line].component;
@@ -2580,7 +2560,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
 }
 
 std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
-    const PIGraph &mg, const PILayoutAnnotation &anno, double sampleAngleStep,
+    const PIGraph<PanoramicCamera> &mg, const PILayoutAnnotation &anno, double sampleAngleStep,
     double angleThres, double ratioThres) {
 
   assert(anno.nfaces() > 0);
@@ -2731,7 +2711,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
 }
 
 std::vector<std::array<std::set<int>, 2>>
-CollectSegsNearLines(const PIGraph &mg, double angleSizeForPixelsNearLines) {
+CollectSegsNearLines(const PIGraph<PanoramicCamera> &mg, double angleSizeForPixelsNearLines) {
 
   int width = mg.segs.cols;
   int height = mg.segs.rows;
@@ -2751,7 +2731,7 @@ CollectSegsNearLines(const PIGraph &mg, double angleSizeForPixelsNearLines) {
   }
 
   // collect lines' nearby pixels and segs
-  std::vector<std::set<Pixel, ComparePixel>> line2nearbyPixels(mg.nlines());
+  std::vector<std::set<Pixel>> line2nearbyPixels(mg.nlines());
   std::vector<std::map<int, Vec3>> line2nearbySegsWithLocalCenterDir(
       mg.nlines());
   std::vector<std::map<int, bool>> line2nearbySegsWithOnLeftFlag(mg.nlines());
@@ -2818,7 +2798,7 @@ CollectSegsNearLines(const PIGraph &mg, double angleSizeForPixelsNearLines) {
 }
 
 void ApplyLinesSidingWeights(
-    PIGraph &mg, const std::vector<LineSidingWeight> &lsw,
+    PIGraph<PanoramicCamera> &mg, const std::vector<LineSidingWeight> &lsw,
     const std::vector<std::array<std::set<int>, 2>> &line2leftRightSegs,
     bool connectSegsOnDanglingLine) {
 

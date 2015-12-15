@@ -10,11 +10,11 @@
 namespace pano {
 namespace experimental {
 
-// Print PIGraph
+// Print PIGraph<PanoramicCamera>
 template <class SegColorerT = core::ConstantFunctor<gui::ColorTag>,
           class LinePieceColorerT = core::ConstantFunctor<gui::ColorTag>,
           class BndPieceColorerT = core::ConstantFunctor<gui::ColorTag>>
-inline Image3f Print(const PIGraph &mg,
+inline Image3f Print(const PIGraph<PanoramicCamera> &mg,
                      SegColorerT &&segColor = gui::Transparent,
                      LinePieceColorerT &&lpColor = gui::Transparent,
                      BndPieceColorerT &&bpColor = gui::Transparent,
@@ -65,11 +65,11 @@ inline Image3f Print(const PIGraph &mg,
   return rendered;
 }
 
-// Print PIGraph
+// Print PIGraph<PanoramicCamera>
 template <class SegColorerT = core::ConstantFunctor<gui::ColorTag>,
           class LinePieceColorerT = core::ConstantFunctor<gui::ColorTag>,
           class BndPieceColorerT = core::ConstantFunctor<gui::ColorTag>>
-inline Image3f Print2(const PIGraph &mg,
+inline Image3f Print2(const PIGraph<PanoramicCamera> &mg,
                       SegColorerT &&segColor = gui::Transparent,
                       LinePieceColorerT &&lpColor = gui::Transparent,
                       BndPieceColorerT &&bpColor = gui::Transparent,
@@ -121,12 +121,12 @@ inline Image3f Print2(const PIGraph &mg,
 }
 
 // Print Constraints
-// void PrintConstriants(const PIGraph & mg);
+// void PrintConstriants(const PIGraph<PanoramicCamera> & mg);
 
 // VisualizeReconstruction
 void VisualizeReconstruction(
     const PICGDeterminablePart &dp, const PIConstraintGraph &cg,
-    const PIGraph &mg, bool showConnectionLines = true,
+    const PIGraph<PanoramicCamera> &mg, bool showConnectionLines = true,
     const std::function<gui::Color(int vert)> &vertColor =
         core::ConstantFunctor<gui::Color>(gui::Black),
     const std::function<void(int vert)> &vertClick =
@@ -137,7 +137,7 @@ void VisualizeReconstruction(
 void VisualizeReconstructionCompact(const Image &im,
                                     const PICGDeterminablePart &dp,
                                     const PIConstraintGraph &cg,
-                                    const PIGraph &mg, bool doModel);
+                                    const PIGraph<PanoramicCamera> &mg, bool doModel);
 
 // VisualizeLayoutAnnotation
 void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,

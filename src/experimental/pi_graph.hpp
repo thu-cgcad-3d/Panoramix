@@ -7,7 +7,6 @@
 #include "../gui/basic_types.hpp"
 
 namespace pano {
-
 namespace experimental {
 
 using namespace pano::core;
@@ -40,8 +39,8 @@ enum class SegLineRelation { Attached, Detached, Unknown };
 // whether two line connects
 enum class LineRelation { Attached, Detached, Unknown };
 
-struct PIGraph {
-  PanoramicView view;
+template <class CameraT> struct PIGraph {
+  View<CameraT> view;
   std::vector<Vec3> vps;
   int verticalVPId;
 
@@ -62,9 +61,10 @@ struct PIGraph {
   std::vector<int> linePiece2line;
   std::vector<int> linePiece2seg; // could be -1
   std::vector<SegLineRelation>
-      linePiece2segLineRelation;       // for linePice2seg only, as for
-                                       // linePIece2bndPiece, see the
-                                       // bndPiece2segRelation
+      linePiece2segLineRelation; // for linePice2seg only, as for
+                                 // linePIece2bndPiece, see the
+                                 // bndPiece2segRelation
+
   std::vector<int> linePiece2bndPiece; // could be -1 (either 2seg or 2bndPiece)
   std::vector<bool> linePiece2bndPieceInSameDirection;
   int nlinePieces() const { return linePiece2samples.size(); }
@@ -129,24 +129,26 @@ int SegmentationForPIGraph(const PanoramicView &view,
                            double minSize = 200,
                            int widthThresToRemoveThinRegions = 2);
 
-PIGraph BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
-                     int verticalVPId, const Imagei &segs,
-                     const std::vector<Classified<Line3>> &lines,
-                     double bndPieceSplitAngleThres,
-                     double bndPieceClassifyAngleThres,
-                     double bndPieceBoundToLineAngleThres,
-                     double intersectionAngleThreshold,
-                     double incidenceAngleAlongDirectionThreshold,
-                     double incidenceAngleVerticalDirectionThreshold);
+PIGraph<PanoramicCamera> BuildPIGraph(
+    const PanoramicView &view, const std::vector<Vec3> &vps, int verticalVPId,
+    const Imagei &segs, const std::vector<Classified<Line3>> &lines,
+    double bndPieceSplitAngleThres, double bndPieceClassifyAngleThres,
+    double bndPieceBoundToLineAngleThres, double intersectionAngleThreshold,
+    double incidenceAngleAlongDirectionThreshold,
+    double incidenceAngleVerticalDirectionThreshold);
 
 // PerfectSegMaskView
 View<PartialPanoramicCamera, Imageub>
-PerfectSegMaskView(const PIGraph &mg, int seg, double focal = 100.0);
+PerfectSegMaskView(const PIGraph<PanoramicCamera> &mg, int seg,
+                   double focal = 100.0);
+View<PartialPanoramicCamera, Imageub>
+PerfectSegMaskView(const PIGraph<PerspectiveCamera> &mg, int seg,
+                   double focal = 100.0);
 
 // CollectFeatureMeanOnSegs
-template <class T, int N, class CameraT>
+template <class T, int N, class PIGraphCameraT, class CameraT>
 std::vector<Vec<T, N>>
-CollectFeatureMeanOnSegs(const PIGraph &mg, const CameraT &pcam,
+CollectFeatureMeanOnSegs(const PIGraph<PIGraphCameraT> &mg, const CameraT &pcam,
                          const ImageOf<Vec<T, N>> &feature) {
   std::vector<Vec<T, N>> featureMeanTable(mg.nsegs);
   for (int i = 0; i < mg.nsegs; i++) {

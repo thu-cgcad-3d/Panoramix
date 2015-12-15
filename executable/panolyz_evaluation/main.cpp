@@ -472,15 +472,15 @@ int main(int argc, char **argv) {
     options.notUseOcclusions = false;
 
     options.refresh_preparation = false;
-    options.refresh_mg_init = options.refresh_preparation || false;
+    options.refresh_mg_init = options.refresh_preparation || true;
     options.refresh_mg_oriented = options.refresh_mg_init || false;
     options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
     options.refresh_lsw = options.refresh_mg_oriented || false;
     options.refresh_mg_occdetected =
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-    options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+    options.refresh_mg_reconstructed = options.refresh_mg_occdetected || true;
 
-    RunPanoramix(anno, options, matlab, true, true);
+    RunPanoramix(anno, options, matlab, true, false);
     return misc::MXA();
   });
 
@@ -870,7 +870,7 @@ int main(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    PIGraph mg;
+    PIGraph<PanoramicCamera> mg;
     PIConstraintGraph cg;
     PICGDeterminablePart dp;
     GetPanoramixResult(anno, options, mg, cg, dp);

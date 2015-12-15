@@ -258,7 +258,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
   }
 
   // build pigraph!
-  PIGraph mg;
+  PIGraph<PanoramicCamera> mg;
   if (options.refresh_mg_init || !misc::LoadCache(identity, "mg_init", mg)) {
     std::cout << "########## refreshing mg init ###########" << std::endl;
     START_TIME_RECORD(mg_init);
@@ -736,8 +736,9 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
 }
 
 bool GetPanoramixResult(const PILayoutAnnotation &anno,
-                        const PanoramixOptions &options, PIGraph &mg,
-                        PIConstraintGraph &cg, PICGDeterminablePart &dp) {
+                        const PanoramixOptions &options,
+                        PIGraph<PanoramicCamera> &mg, PIConstraintGraph &cg,
+                        PICGDeterminablePart &dp) {
   auto identity = options.identityOfImage(anno.impath);
   return misc::LoadCache(identity, "mg_reconstructed", mg, cg, dp);
 }

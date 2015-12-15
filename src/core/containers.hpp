@@ -322,218 +322,6 @@ private:
   BoundingBoxFunctorT _getBoundingBox;
 };
 
-template <class T, int N> class VecSet {
-public:
-  inline explicit VecSet(const T &ir = Epsilon)
-      : _influenceRange(ir),
-        _rtree(std::make_shared<third_party::RTree<int, T, N>>()) {}
-  template <class IteratorT,
-            class = std::enable_if_t<std::is_same<
-                std::iterator_traits<IteratorT>::value_type, Vec<T, N>>::value>>
-  inline VecSet(IteratorT begin, IteratorT end, const T &ir = Epsilon)
-      : _influenceRange(ir),
-        _rtree(std::make_shared<third_party::RTree<int, T, N>>()) {
-    for (auto i = begin; i != end; ++i) {
-      insert(*i);
-    }
-  }
-
-  inline const T &influenceRange() const { return _influenceRange; }
-  inline int size() const { return _vecData.size(); }
-  inline void clear() {
-    _vecData.clear();
-    _rtree->RemoveAll();
-  }
-
-  using const_iterator = typename std::vector<Vec<T, N>>::const_iterator;
-  inline const_iterator begin() const { return _vecData.begin(); }
-  inline const_iterator end() const { return _vecData.end(); }
-  inline const_iterator cbegin() const { return _vecData.cbegin(); }
-  inline const_iterator cend() const { return _vecData.cend(); }
-
-  void insert(const Vec<T, N> &v) {
-    Box<T, N> box(v, v);
-    for (int i = 0; i < N; i++) {
-      box.minCorner[i] -= _influenceRange;
-      box.maxCorner[i] += _influenceRange;
-    }
-    bool existed = false;
-    _rtree->Search(box.minCorner.val, box.maxCorner.val,
-                   [this, &v, &existed](int storedId) {
-                     T dist = Distance(v, _vecData[storedId].front());
-                     if (dist <= _influenceRange) {
-                       existed = true;
-                       return false;
-                     }
-                     return true;
-                   });
-    if (!existed) {
-      _vecData.push_back(v);
-      _rtree->Insert(v.val, v.val, static_cast<int>(_vecData.size() - 1));
-    }
-  }
-
-private:
-  T _influenceRange;
-  std::vector<Vec<T, N>> _vecData;
-  std::shared_ptr<third_party::RTree<int, T, N>> _rtree;
-};
-
-template <class T, int N, class ValueT> class VecMap {
-public:
-  inline explicit VecMap(const T &ir = 1e-5)
-      : _influenceRange(ir),
-        _rtree(std::make_shared<third_party::RTree<int, T, N>>()) {}
-  template <class IteratorT, class = std::enable_if_t<std::is_same<
-                                 std::iterator_traits<IteratorT>::value_type,
-                                 std::pair<Vec<T, N>, ValueT>>::value>>
-  inline VecMap(IteratorT begin, IteratorT end, const T &ir = Epsilon)
-      : _influenceRange(ir),
-        _rtree(std::make_shared<third_party::RTree<int, T, N>>()) {
-    for (auto i = begin; i != end; ++i) {
-      insert(*i);
-    }
-  }
-
-  inline const T &influenceRange() const { return _influenceRange; }
-  inline int size() const { return _vecData.size(); }
-  inline void clear() {
-    _vecData.clear();
-    _rtree->RemoveAll();
-  }
-
-  using const_iterator =
-      typename std::vector<std::pair<Vec<T, N>, ValueT>>::const_iterator;
-  inline const_iterator begin() const { return _vecData.begin(); }
-  inline const_iterator end() const { return _vecData.end(); }
-  inline const_iterator cbegin() const { return _vecData.cbegin(); }
-  inline const_iterator cend() const { return _vecData.cend(); }
-
-  using iterator = typename std::vector<std::pair<Vec<T, N>, ValueT>>::iterator;
-  inline iterator begin() { return _vecData.begin(); }
-  inline iterator end() { return _vecData.end(); }
-
-  inline iterator find(const Vec<T, N> &v) const {
-    int nid = findNearestStoredIdByRTree(v);
-    return nid == -1 ? _vecData.end() : _vecData.begin() + nid;
-  }
-
-  inline bool contains(const Vec<T, N> &v) const {
-    return findNearestStoredIdByRTree(v) != -1;
-  }
-  inline const ValueT &at(const Vec<T, N> &v) const {
-    int nid = findNearestStoredIdByRTree(v);
-    assert(nid != -1);
-    return _vecData[nid].second;
-  }
-  inline const ValueT &operator[](const Vec<T, N> &v) const { return at(v); }
-  inline ValueT &operator[](const Vec<T, N> &v) {
-    return insert(std::make_pair(v, ValueT()))->second;
-  }
-
-  iterator insert(const std::pair<Vec<T, N>, ValueT> &d) {
-    int nid = findNearestStoredIdByRTree(d.first);
-    if (nid == -1) {
-      _vecData.emplace_back(d.first, d.second);
-      return _vecData.end() - 1;
-    } else {
-      _vecData[nid].second = d.second;
-      return _vecData.begin() + nid;
-    }
-  }
-
-private:
-  int findNearestStoredIdByRTree(const Vec<T, N> &v) const {
-    Box<T, N> box(v, v);
-    for (int i = 0; i < N; i++) {
-      box.minCorner[i] -= _influenceRange;
-      box.maxCorner[i] += _influenceRange;
-    }
-    int nearesetStoredId = -1;
-    T minDist = _influenceRange;
-    _rtree->Search(box.minCorner.val, box.maxCorner.val,
-                   [this, &v, &minDist, &nearesetStoredId](int storedId) {
-                     T dist = Distance(v, _vecData[storedId].first);
-                     if (dist <= minDist) {
-                       minDist = dist;
-                       nearesetStoredId = storedId;
-                     }
-                     return true;
-                   });
-    return nearesetStoredId;
-  }
-
-private:
-  T _influenceRange;
-  std::vector<std::pair<Vec<T, N>, ValueT>> _vecData;
-  std::shared_ptr<third_party::RTree<int, T, N>> _rtree;
-};
-
-template <class T, int N> class VecMultiSet {
-public:
-  inline explicit VecMultiSet(const T &ir = 1e-5)
-      : _influenceRange(ir), _fullSize(0),
-        _rtree(std::make_shared<third_party::RTree<int, T, N>>()) {}
-  template <class IteratorT,
-            class = std::enable_if_t<std::is_same<
-                std::iterator_traits<IteratorT>::value_type, Vec<T, N>>::value>>
-  inline VecMultiSet(IteratorT begin, IteratorT end, const T &ir = Epsilon)
-      : _influenceRange(ir), _fullSize(0),
-        _rtree(std::make_shared<third_party::RTree<int, T, N>>()) {
-    for (auto i = begin; i != end; ++i) {
-      insert(*i);
-    }
-  }
-
-  inline const T &influenceRange() const { return _influenceRange; }
-  inline int size() const { return _vecData.size(); }
-  inline int fullSize() const { return _fullSize; }
-  inline void clear() {
-    _fullSize = 0;
-    _vecData.clear();
-    _rtree->RemoveAll();
-  }
-
-  using const_iterator =
-      typename std::vector<std::vector<Vec<T, N>>>::const_iterator;
-  inline const_iterator begin() const { return _vecData.begin(); }
-  inline const_iterator end() const { return _vecData.end(); }
-  inline const_iterator cbegin() const { return _vecData.cbegin(); }
-  inline const_iterator cend() const { return _vecData.cend(); }
-
-  void insert(const Vec<T, N> &v) {
-    Box<T, N> box(v, v);
-    for (int i = 0; i < N; i++) {
-      box.minCorner[i] -= _influenceRange;
-      box.maxCorner[i] += _influenceRange;
-    }
-    int nearesetStoredId = -1;
-    T minDist = _influenceRange;
-    _rtree->Search(box.minCorner.val, box.maxCorner.val,
-                   [this, &v, &minDist, &nearesetStoredId](int storedId) {
-                     T dist = Distance(v, _vecData[storedId].front());
-                     if (dist <= minDist) {
-                       minDist = dist;
-                       nearesetStoredId = storedId;
-                     }
-                     return true;
-                   });
-    if (nearesetStoredId == -1) { // not storage at all
-      _vecData.emplace_back(1, v);
-      _rtree->Insert(v.val, v.val, static_cast<int>(_vecData.size() - 1));
-    } else {
-      _vecData[nearesetStoredId].push_back(v);
-    }
-    _fullSize++;
-  }
-
-private:
-  T _influenceRange;
-  int _fullSize;
-  std::vector<std::vector<Vec<T, N>>> _vecData;
-  std::shared_ptr<third_party::RTree<int, T, N>> _rtree;
-};
-
 // max heap
 template <class KeyT, class ScoreT = double,
           class ScoreCompareT = std::less<ScoreT>,
@@ -721,12 +509,9 @@ template <class T> class Dictionary {
     Node() : val(nullptr) {}
     explicit Node(size_t nc) : children(nc), val(nullptr) {}
     explicit Node(std::unique_ptr<T> v) : val(std::move(v)) {}
-    Node(Node &&n) : children(std::move(n.children)), val(std::move(n.val)) {}
+    Node(Node &&) = default;
     Node(const Node &) = delete;
-    Node &operator=(Node &&n) {
-      children = std::move(n.children), val = std::move(n.val);
-      return *this;
-    }
+    Node &operator=(Node &&) = default;
     Node &operator=(const Node &) = delete;
     template <class Archive> void serialize(Archive &ar) { ar(children, val); }
   };
@@ -737,19 +522,10 @@ public:
       : _nchildren(ncs), _root(nullptr), _size(0) {}
   explicit Dictionary(std::vector<size_t> &&ncs)
       : _nchildren(std::move(ncs)), _root(nullptr), _size(0) {}
-  Dictionary(Dictionary &&t)
-      : _nchildren(std::move(t._nchildren)), _root(std::move(t._root)),
-        _size(t._size) {
-    t._size = 0;
-  }
+  Dictionary(Dictionary &&) = default;
   Dictionary(const Dictionary &) = delete;
 
-  Dictionary &operator=(Dictionary &&t) {
-    _nchildren = std::move(t._nchildren);
-    _root = std::move(t._root);
-    std::swap(_size, t._size);
-    return *this;
-  }
+  Dictionary &operator=(Dictionary &&) = default;
   Dictionary &operator=(const Dictionary &) = delete;
 
 public:
@@ -852,6 +628,62 @@ private:
   std::vector<size_t> _nchildren;
   size_t _size;
   std::unique_ptr<Node> _root;
+};
+
+// MergeFindSet
+template <class T> class MergeFindSet {
+  struct Element {
+    int rank;
+    int parent;
+    T data;
+  };
+
+public:
+  MergeFindSet() {}
+  template <class IteratorT> MergeFindSet(IteratorT b, IteratorT e) {
+    init(b, e);
+  }
+
+  int setsCount() const { return _nsets; }
+  const T &data(int id) const { return _elements[id].data; }
+
+  int find(int x) {
+    int y = x;
+    while (y != _elements[y].parent)
+      y = _elements[y].parent;
+    _elements[x].parent = y;
+    return y;
+  }
+  template <class MergeFunT = std::plus<>>
+  void join(int x, int y, MergeFunT &&merge = MergeFunT()) {
+    if (_elements[x].rank > _elements[y].rank) {
+      _elements[y].parent = x;
+      _elements[x].data = merge(_elements[x].data, _elements[y].data);
+    } else {
+      _elements[x].parent = y;
+      _elements[y].data = merge(_elements[x].data, _elements[y].data);
+      if (_elements[x].rank == _elements[y].rank)
+        _elements[y].rank++;
+    }
+    _nsets--;
+  }
+
+private:
+  template <class IteratorT> void init(IteratorT b, IteratorT e) {
+    _elements.reserve(std::distance(b, e));
+    int i = 0;
+    _nsets = 0;
+    while (b != e) {
+      _elements.push_back(Element{0, i, *b});
+      ++b;
+      ++i;
+      ++_nsets;
+    }
+  }
+
+private:
+  int _nsets;
+  std::vector<Element> _elements;
 };
 }
 }

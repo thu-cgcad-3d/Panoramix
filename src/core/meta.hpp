@@ -204,6 +204,52 @@ struct IsContainer
     : std::integral_constant<bool, IsContainerImp<T>::value &&
                                        !IsNotContainerByHand<T>::value> {};
 
+// CountOf
+namespace {
+template <class T, class ContT>
+inline size_t CountOfImpl(const ContT &cont, const std::true_type &) {
+  return std::size(cont);
+}
+template <class T, class ContT>
+inline size_t CountOfImpl(const ContT &cont, const std::false_type &) {
+  static_assert(IsContainer<ContT>::value, "invalid type");
+  size_t s = 0;
+  for (auto &c : cont) {
+    s += CountOf<T>(c);
+  }
+  return s;
+}
+}
+template <class T, class ContT> inline size_t CountOf(const ContT &cont) {
+  static_assert(IsContainer<ContT>::value, "invalid type");
+  return CountOfImpl<T>(
+      cont, std::is_same<T, std::decay_t<decltype(*std::begin(cont))>>());
+}
+
+// AllOf
+namespace {
+template <class T, class ContT, class PredT>
+inline bool AllOfImpl(const ContT &cont, const std::true_type &, PredT pred) {
+  return std::all_of(std::begin(cont), std::end(cont), pred);
+}
+template <class T, class ContT, class PredT>
+inline bool AllOfImpl(const ContT &cont, const std::false_type &, PredT pred) {
+  static_assert(IsContainer<ContT>::value, "invalid type");
+  for (auto &c : cont) {
+    if (!AllOf<T>(c, pred)) {
+      return false;
+    }
+  }
+  return true;
+}
+}
+template <class T, class ContT, class PredT>
+inline bool AllOf(const ContT &cont, PredT pred) {
+  static_assert(IsContainer<ContT>::value, "invalid type");
+  return AllOfImpl<T>(
+      cont, std::is_same<T, std::decay_t<decltype(*std::begin(cont))>>(), pred);
+}
+
 // determine whether T can accepts ArgTs as arguments
 namespace {
 template <class T, class... ArgTs> struct IsCallableImp {

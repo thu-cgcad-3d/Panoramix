@@ -17,7 +17,7 @@ inline double DepthAt(const Vec3 &direction, const Line3 &line,
           .second.first);
 }
 
-double DepthOfVertexAt(const PIConstraintGraph &cg, const PIGraph &mg, int ent,
+double DepthOfVertexAt(const PIConstraintGraph &cg, const PIGraph<PanoramicCamera> &mg, int ent,
                        const Vec3 &direction, const Point3 &eye = Origin()) {
   auto &v = cg.entities[ent];
   auto &plane = v.supportingPlane.reconstructed;
@@ -26,7 +26,7 @@ double DepthOfVertexAt(const PIConstraintGraph &cg, const PIGraph &mg, int ent,
 
 void VisualizeReconstruction(
     const PICGDeterminablePart &dp, const PIConstraintGraph &cg,
-    const PIGraph &mg, bool showConnectionLines,
+    const PIGraph<PanoramicCamera> &mg, bool showConnectionLines,
     const std::function<gui::Color(int vert)> &vertColor,
     const std::function<void(int vert)> &vertClick, bool doModal) {
 
@@ -220,7 +220,7 @@ void VisualizeReconstruction(
 void VisualizeReconstructionCompact(const Image &im,
                                     const PICGDeterminablePart &dp,
                                     const PIConstraintGraph &cg,
-                                    const PIGraph &mg, bool doModel) {
+                                    const PIGraph<PanoramicCamera> &mg, bool doModel) {
   gui::ResourceStore::set("texture", im);
 
   auto compactPolygons = CompactModel(dp, cg, mg, 0.1);

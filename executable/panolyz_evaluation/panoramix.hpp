@@ -91,8 +91,9 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
 
 // get result
 bool GetPanoramixResult(const PILayoutAnnotation &anno,
-                        const PanoramixOptions &options, PIGraph &mg,
-                        PIConstraintGraph &cg, PICGDeterminablePart &dp);
+                        const PanoramixOptions &options,
+                        PIGraph<PanoramicCamera> &mg, PIConstraintGraph &cg,
+                        PICGDeterminablePart &dp);
 std::vector<LineSidingWeight>
 GetPanoramixOcclusionResult(const PILayoutAnnotation &anno,
                             const PanoramixOptions &options);
@@ -103,7 +104,7 @@ std::vector<Image3d> GetSurfaceNormalMapsOfPanoramix(
     const std::vector<CameraT> &testCams, const PILayoutAnnotation &anno,
     const PanoramixOptions &options, misc::Matlab &matlab) {
 
-  PIGraph mg;
+  PIGraph<PanoramicCamera> mg;
   PIConstraintGraph cg;
   PICGDeterminablePart dp;
   if (!GetPanoramixResult(anno, options, mg, cg, dp)) {
@@ -132,7 +133,7 @@ std::vector<Imaged> GetSurfaceDepthMapsOfPanoramix(
     const std::vector<CameraT> &testCams, const PILayoutAnnotation &anno,
     const PanoramixOptions &options, misc::Matlab &matlab) {
 
-  PIGraph mg;
+  PIGraph<PanoramicCamera> mg;
   PIConstraintGraph cg;
   PICGDeterminablePart dp;
   if (!GetPanoramixResult(anno, options, mg, cg, dp)) {

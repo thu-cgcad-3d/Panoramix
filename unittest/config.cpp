@@ -54,7 +54,7 @@ int main(int argc, char *argv[], char *envp[]) {
   // testing::GTEST_FLAG(filter) = "Camera.*";
   // testing::GTEST_FLAG(filter) = "Camera.UniformSphericalCamera";
   // testing::GTEST_FLAG(filter) = "UtilTest.PlaneIntersection";
-   testing::GTEST_FLAG(filter) = "Scene.LayeredShape3";
+  // testing::GTEST_FLAG(filter) = "Scene.LayeredShape3";
   // testing::GTEST_FLAG(filter) = "Scene.Interaction";
   // testing::GTEST_FLAG(filter) = "PPattern.*";
   // testing::GTEST_FLAG(filter) = "BasicType.*";
@@ -66,6 +66,7 @@ int main(int argc, char *argv[], char *envp[]) {
   // testing::GTEST_FLAG(filter) = "Feature.RemoveThinRegionInSegmentation";
   // testing::GTEST_FLAG(filter) = "Feature.RemoveSmallRegionInSegmentation";
   // testing::GTEST_FLAG(filter) = "Feature.SegmentationExtractorInPanorama";
+  testing::GTEST_FLAG(filter) = "Meta.WhatOf";
 
   return RUN_ALL_TESTS();
 }

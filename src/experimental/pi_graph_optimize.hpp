@@ -8,7 +8,7 @@ namespace experimental {
 // get the CompactModel
 std::vector<Polygon3> CompactModel(const PICGDeterminablePart &dp,
                                    const PIConstraintGraph &cg,
-                                   const PIGraph &mg, double distThres);
+                                   const PIGraph<PanoramicCamera> &mg, double distThres);
 
 template <class T> void FillHoles(ImageOf<T> &im, const Imageb &holeMask) {
   // fill the holes
@@ -49,11 +49,11 @@ template <class T> void FillHoles(ImageOf<T> &im, const Imageb &holeMask) {
 
 std::vector<Vec3> ComputeSegNormals(const PICGDeterminablePart &dp,
                                     const PIConstraintGraph &cg,
-                                    const PIGraph &mg, bool smoothed);
+                                    const PIGraph<PanoramicCamera> &mg, bool smoothed);
 
 template <class CameraT>
 Image3d SurfaceNormalMap(const CameraT &cam, const PICGDeterminablePart &dp,
-                         const PIConstraintGraph &cg, const PIGraph &mg,
+                         const PIConstraintGraph &cg, const PIGraph<PanoramicCamera> &mg,
                          bool smoothed) {
   auto seg2normal = ComputeSegNormals(dp, cg, mg, smoothed);
   Image3d snm(cam.screenSize());
@@ -71,11 +71,11 @@ Image3d SurfaceNormalMap(const CameraT &cam, const PICGDeterminablePart &dp,
 
 std::vector<Plane3> ComputeSegPlanes(const PICGDeterminablePart &dp,
                                      const PIConstraintGraph &cg,
-                                     const PIGraph &mg, bool smoothed);
+                                     const PIGraph<PanoramicCamera> &mg, bool smoothed);
 
 template <class CameraT>
 Imaged SurfaceDepthMap(const CameraT &cam, const PICGDeterminablePart &dp,
-                       const PIConstraintGraph &cg, const PIGraph &mg,
+                       const PIConstraintGraph &cg, const PIGraph<PanoramicCamera> &mg,
                        bool smoothed = true) {
   auto seg2plane = ComputeSegPlanes(dp, cg, mg, true);
   Imaged depths(cam.screenSize(), 0.0);

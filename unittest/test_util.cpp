@@ -476,7 +476,6 @@ TEST(UtilTest, EigenVectorsAndValues) {
 }
 
 TEST(ContainerTest, RTreeWrapperLargeData) {
-
   std::list<core::Line2> lines;
   std::generate_n(std::back_inserter(lines), 100000, []() {
     return core::Line2{core::Point2(std::rand(), std::rand()),
@@ -484,37 +483,6 @@ TEST(ContainerTest, RTreeWrapperLargeData) {
   });
   core::RTreeWrapper<core::Line2> rtree(lines.begin(), lines.end());
   EXPECT_EQ(lines.size(), rtree.size());
-}
-
-TEST(ContainerTest, VecSetAndVecMap) {
-
-  core::VecMultiSet<double, 3> s(0.1);
-  int N = 5000;
-  for (int i = 0; i < N; i++) {
-    s.insert(core::Vec3(randf(), randf(), randf()));
-  }
-
-  EXPECT_EQ(s.fullSize(), N);
-  for (auto &vs : s) {
-    for (auto &v : vs) {
-      ASSERT_LE(core::Distance(v, vs.front()), s.influenceRange());
-    }
-  }
-
-  core::VecMap<double, 3, std::vector<int>> m(0.1);
-  std::vector<core::Vec3> vecs(N);
-  std::generate(vecs.begin(), vecs.end(),
-                []() { return core::Vec3(randf(), randf(), randf()); });
-  for (int i = 0; i < N; i++) {
-    m[vecs[i]].push_back(i);
-  }
-
-  for (auto &g : m) {
-    for (int i : g.second) {
-      ASSERT_LE(core::Distance(vecs[i], vecs[g.second.front()]),
-                m.influenceRange());
-    }
-  }
 }
 
 TEST(ContainerTest, MaxHeap) {

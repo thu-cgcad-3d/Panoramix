@@ -36,3 +36,12 @@ TEST(Tuples, Invoke) {
   core::Invoke([](int a, double b) { std::cout << a << b << std::endl; },
                std::make_pair(5, 5.0));
 }
+
+TEST(Meta, WhatOf) {
+  std::vector<std::vector<std::string>> strs = {
+      {"a", "b"}, {"c"}, {"d", "e", "fg"}};
+  ASSERT_EQ(core::CountOf<std::string>(strs), 6);
+  ASSERT_EQ(core::CountOf<char>(strs), 7);
+  ASSERT_TRUE((core::AllOf<std::string>(strs, [](auto & str){return str != "0";})));
+  ASSERT_TRUE((!core::AllOf<std::string>(strs, [](auto & str){return str == "a";})));
+}

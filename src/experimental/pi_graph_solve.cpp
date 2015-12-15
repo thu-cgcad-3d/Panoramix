@@ -11,10 +11,6 @@ namespace pano {
 namespace experimental {
 
 namespace {
-template <class T>
-inline std::pair<T, T> MakeOrderedPair(const T &a, const T &b) {
-  return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
-}
 int SwappedComponent(const Vec3 &orientation) {
   for (int i = 0; i < 2; i++) {
     if (abs(orientation[i]) >= 1e-8) {
@@ -97,7 +93,7 @@ InverseDepthCoefficientsOfLineAtDirection(const std::vector<Vec3> &vps,
 }
 
 std::vector<double>
-InverseDepthCoefficientsAtDirection(const PIGraph &mg,
+InverseDepthCoefficientsAtDirection(const PIGraph<PanoramicCamera> &mg,
                                     const PIConstraintGraph::Entity &e,
                                     const Vec3 &direction) {
   assert(IsFuzzyZero(norm(direction) - 1.0, 1e-2));
@@ -154,7 +150,7 @@ DenseMatd SegPlaneEquationCoefficients(const std::vector<Vec3> &vps,
   }
 }
 
-Plane3 SegInstance(const PIGraph &mg, const double *variables, int nvar,
+Plane3 SegInstance(const PIGraph<PanoramicCamera> &mg, const double *variables, int nvar,
                    int seg) {
   DenseMatd k = SegPlaneEquationCoefficients(mg.vps, mg.seg2control[seg],
                                              mg.seg2center[seg]);
@@ -164,7 +160,7 @@ Plane3 SegInstance(const PIGraph &mg, const double *variables, int nvar,
   return Plane3FromEquation(p(0, 0), p(1, 0), p(2, 0));
 }
 
-Line3 LineInstance(const PIGraph &mg, const double *variables, int nvar,
+Line3 LineInstance(const PIGraph<PanoramicCamera> &mg, const double *variables, int nvar,
                    int line) {
   auto &l = mg.lines[line];
   if (l.claz >= 0 && l.claz < mg.vps.size()) {
@@ -674,7 +670,7 @@ int DisableUnsatisfiedConstraints(
 }
 
 void DisorientDanglingLines(const PICGDeterminablePart &dp,
-                            PIConstraintGraph &cg, PIGraph &mg, double ratio) {
+                            PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg, double ratio) {
   std::vector<double> line2meanConsDist(mg.nlines(), 0.0);
   for (int line = 0; line < mg.nlines(); line++) {
     int ent = cg.line2ent[line];
@@ -727,7 +723,7 @@ void DisorientDanglingLines(const PICGDeterminablePart &dp,
 }
 
 void DisorientDanglingLines2(const PICGDeterminablePart &dp,
-                             PIConstraintGraph &cg, PIGraph &mg,
+                             PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
                              double thresRatio) {
   std::vector<double> line2meanSegDistRatio(mg.nlines(), 0.0);
   for (int line = 0; line < mg.nlines(); line++) {
@@ -782,7 +778,7 @@ void DisorientDanglingLines2(const PICGDeterminablePart &dp,
 }
 
 void DisorientDanglingLines3(const PICGDeterminablePart &dp,
-                             PIConstraintGraph &cg, PIGraph &mg,
+                             PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
                              double disorientRatio, double thresRatio) {
   if (disorientRatio == 0.0)
     return;
@@ -860,7 +856,7 @@ void DisorientDanglingLines3(const PICGDeterminablePart &dp,
 }
 
 void DisorientDanglingSegs(const PICGDeterminablePart &dp,
-                           PIConstraintGraph &cg, PIGraph &mg,
+                           PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
                            double thresRatio) {
   std::vector<double> seg2meanDistRatio(mg.nsegs, 0.0);
   for (int seg = 0; seg < mg.nsegs; seg++) {
@@ -910,7 +906,7 @@ void DisorientDanglingSegs(const PICGDeterminablePart &dp,
 }
 
 void DisorientDanglingSegs2(const PICGDeterminablePart &dp,
-                            PIConstraintGraph &cg, PIGraph &mg,
+                            PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
                             double thresRatio) {
 
   std::vector<bool> seg2determined(mg.nsegs, false);
@@ -963,7 +959,7 @@ void DisorientDanglingSegs2(const PICGDeterminablePart &dp,
 }
 
 void DisorientDanglingSegs3(const PICGDeterminablePart &dp,
-                            PIConstraintGraph &cg, PIGraph &mg,
+                            PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
                             double disorientRatio, double thresRatio) {
 
   if (disorientRatio == 0.0) {
@@ -1043,7 +1039,7 @@ void DisorientDanglingSegs3(const PICGDeterminablePart &dp,
 }
 
 void OverorientSkewSegs(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
-                        PIGraph &mg, double angleThres,
+                        PIGraph<PanoramicCamera> &mg, double angleThres,
                         double positionAngleThres, double oriRatio) {
   std::vector<Scored<int>> seg2oriHint(mg.nsegs, ScoreAs(-1, 0.0));
 

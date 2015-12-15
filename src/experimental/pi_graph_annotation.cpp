@@ -275,7 +275,7 @@ void SaveTempLayoutAnnotation(const std::string &imagePath,
   SaveToDisk(annofinfo.absoluteFilePath().toStdString(), anno);
 }
 
-PIGraph ConvertToPIGraph(const PILayoutAnnotation &anno) {
+PIGraph<PanoramicCamera> ConvertToPIGraph(const PILayoutAnnotation &anno) {
 
   std::vector<Polygon3> polygons(anno.nfaces());
   for (int i = 0; i < anno.nfaces(); i++) {
@@ -323,7 +323,7 @@ PIGraph ConvertToPIGraph(const PILayoutAnnotation &anno) {
   nsegs = DensifySegmentation(segs, true);
   assert(IsDenseSegmentation(segs));
 
-  PIGraph mg = BuildPIGraph(view, anno.vps, anno.vertVPId, segs, {},
+  PIGraph<PanoramicCamera> mg = BuildPIGraph(view, anno.vps, anno.vertVPId, segs, {},
                             DegreesToRadians(1), DegreesToRadians(1),
                             DegreesToRadians(2), DegreesToRadians(5),
                             DegreesToRadians(60), DegreesToRadians(5));

@@ -69,11 +69,11 @@ struct PICGDeterminablePart {
 };
 
 PIConstraintGraph
-BuildPIConstraintGraph(const PIGraph &mg, double minAngleThresForAWideEdge,
+BuildPIConstraintGraph(const PIGraph<PanoramicCamera> &mg, double minAngleThresForAWideEdge,
                        double weightRatioForCoplanarityWithLines = 0.0);
 
 PIConstraintGraph BuildPIConstraintGraph(
-    const PIGraph &mg, const std::vector<LineSidingWeight> &lsw,
+    const PIGraph<PanoramicCamera> &mg, const std::vector<LineSidingWeight> &lsw,
     const std::vector<std::array<std::set<int>, 2>> &line2leftRightSegs,
     double minAngleThresForAWideEdge);
 

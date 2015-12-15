@@ -13,129 +13,67 @@ namespace pano {
 
 namespace experimental {
 
-namespace {
-
-template <class T> inline size_t ElementsNum(const std::vector<T> &v) {
-  return v.size();
-}
-
-template <class T>
-inline size_t ElementsNum(const std::vector<std::vector<T>> &v) {
-  size_t n = 0;
-  for (auto &vv : v) {
-    n += vv.size();
-  }
-  return n;
-}
-
-template <class T> inline double ChainLength(const std::vector<T> &v) {
-  double len = 0;
-  for (int i = 1; i < v.size(); i++) {
-    len += Distance(v[i - 1], v[i]);
-  }
-  return len;
-}
-
-template <class T>
-inline double ChainLength(const std::vector<std::vector<T>> &v) {
-  double len = 0;
-  for (const auto &vv : v) {
-    for (int i = 1; i < vv.size(); i++) {
-      len += Distance(vv[i - 1], vv[i]);
-    }
-  }
-  return len;
-}
-
-template <class T>
-inline std::pair<T, T> MakeOrderedPair(const T &a, const T &b) {
-  return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
-}
-
-bool AllAlong(const std::vector<std::vector<Vec3>> &pts, const Vec3 &from,
-              const Vec3 &to, double angleThres) {
+// AllAlong
+template <class ContT>
+inline bool AllAlong(const ContT &pts, const Vec3 &from, const Vec3 &to,
+                     double angleThres) {
   auto n = normalize(from.cross(to));
-  return std::all_of(pts.begin(), pts.end(), [&n, &angleThres](
-                                                 const std::vector<Vec3> &ps) {
-    return std::all_of(ps.begin(), ps.end(), [&n, &angleThres](const Vec3 &p) {
-      return abs(M_PI_2 - AngleBetweenDirections(n, p)) < angleThres;
-    });
-  });
-}
-
-bool AllAlong(const std::vector<Vec3> &pts, const Vec3 &from, const Vec3 &to,
-              double angleThres) {
-  auto n = normalize(from.cross(to));
-  return std::all_of(pts.begin(), pts.end(), [&n, angleThres](const Vec3 &p) {
+  return core::AllOf<Vec3>(pts, [&n, angleThres](const Vec3 &p) {
     return abs(M_PI_2 - AngleBetweenDirections(n, p)) < angleThres;
   });
 }
 
-struct ComparePixel {
-  inline bool operator()(const Pixel &a, const Pixel &b) const {
-    if (a.x != b.x)
-      return a.x < b.x;
-    return a.y < b.y;
+// RectifyPixel
+inline bool RectifyPixel(Pixel &p, const PanoramicCamera &cam) {
+  if (p.y < 0 || p.y >= cam.screenSize().height) {
+    return false;
   }
-};
-
-int Sub2Ind(const Pixel &p, int w, int h) { return p.x * h + p.y; }
-Pixel Ind2Sub(int ind, int w, int h) { return Pixel(ind / h, ind % h); }
+  p.x = (p.x + cam.screenSize().width) % cam.screenSize().width;
+  return true;
+}
+inline bool RectifyPixel(Pixel &p, const PerspectiveCamera &cam) {
+  return p.x >= 0 && p.x < cam.screenSize().width && p.y >= 0 &&
+         p.y < cam.screenSize().height;
 }
 
-template <class T> class MergeFindSet {
-  struct Element {
-    int rank;
-    int parent;
-    T data;
-  };
-
-public:
-  template <class IteratorT> MergeFindSet(IteratorT b, IteratorT e) {
-    init(b, e);
-  }
-
-  int setsCount() const { return _nsets; }
-  const T &data(int id) const { return _elements[id].data; }
-
-  int find(int x) {
-    int y = x;
-    while (y != _elements[y].parent)
-      y = _elements[y].parent;
-    _elements[x].parent = y;
-    return y;
-  }
-  template <class MergeFunT = std::plus<>>
-  void join(int x, int y, MergeFunT &&merge = MergeFunT()) {
-    if (_elements[x].rank > _elements[y].rank) {
-      _elements[y].parent = x;
-      _elements[x].data = merge(_elements[x].data, _elements[y].data);
-    } else {
-      _elements[x].parent = y;
-      _elements[y].data = merge(_elements[x].data, _elements[y].data);
-      if (_elements[x].rank == _elements[y].rank)
-        _elements[y].rank++;
+// ForEachNeighborhoodPixel
+template <class FunT>
+inline void ForEachNeighborhoodPixel(const Pixel &p, int dx1, int dx2, int dy1,
+                                     int dy2, const PanoramicCamera &cam,
+                                     FunT fun) {
+  int w = cam.screenSize().width;
+  int h = cam.screenSize().height;
+  for (int x = p.x + dx1; x <= p.x + dx2; x++) {
+    if (x < 0) {
+      x += w;
     }
-    _nsets--;
-  }
-
-private:
-  template <class IteratorT> void init(IteratorT b, IteratorT e) {
-    _elements.reserve(std::distance(b, e));
-    int i = 0;
-    _nsets = 0;
-    while (b != e) {
-      _elements.push_back(Element{0, i, *b});
-      ++b;
-      ++i;
-      ++_nsets;
+    x = x % w;
+    for (int y = p.y + dy1; y <= p.y + dy2; y++) {
+      if (y < 0 || y >= h) {
+        continue;
+      }
+      fun(Pixel(x, y));
     }
   }
-
-private:
-  int _nsets;
-  std::vector<Element> _elements;
-};
+}
+template <class FunT>
+inline void ForEachNeighborhoodPixel(const Pixel &p, int dx1, int dx2, int dy1,
+                                     int dy2, const PerspectiveCamera &cam,
+                                     FunT fun) {
+  int w = cam.screenSize().width;
+  int h = cam.screenSize().height;
+  for (int x = p.x + dx1; x <= p.x + dx2; x++) {
+    if (x < 0 || x >= w) {
+      continue;
+    }
+    for (int y = p.y + dy1; y <= p.y + dy2; y++) {
+      if (y < 0 || y >= h) {
+        continue;
+      }
+      fun(Pixel(x, y));
+    }
+  }
+}
 
 inline double ColorDistance(const Vec3 &a, const Vec3 &b, bool useYUV) {
   static const Mat3 RGB2YUV(0.299, 0.587, 0.114, -0.14713, -0.28886, 0.436,
@@ -484,20 +422,24 @@ int SegmentationForPIGraph(const PanoramicView &view,
   return DensifySegmentation(segs, true);
 }
 
-PIGraph BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
-                     int verticalVPId, const Imagei &segs,
-                     const std::vector<Classified<Line3>> &lines,
-                     double bndPieceSplitAngleThres,
-                     double bndPieceClassifyAngleThres,
-                     double bndPieceBoundToLineAngleThres,
-                     double intersectionAngleThreshold,
-                     double incidenceAngleAlongDirectionThreshold,
-                     double incidenceAngleVerticalDirectionThreshold) {
+double PixelWeight(const PanoramicCamera &cam, const Pixel &p) {
+  return cos((p.y - cam.screenSize().height / 2.0) / cam.screenSize().height *
+             M_PI);
+}
+double PixelWeight(const PerspectiveCamera &cam, const Pixel &p) { return 1.0; }
+
+PIGraph<PanoramicCamera> BuildPIGraph(
+    const PanoramicView &view, const std::vector<Vec3> &vps, int verticalVPId,
+    const Imagei &segs, const std::vector<Classified<Line3>> &lines,
+    double bndPieceSplitAngleThres, double bndPieceClassifyAngleThres,
+    double bndPieceBoundToLineAngleThres, double intersectionAngleThreshold,
+    double incidenceAngleAlongDirectionThreshold,
+    double incidenceAngleVerticalDirectionThreshold) {
 
   assert(incidenceAngleVerticalDirectionThreshold >
          bndPieceBoundToLineAngleThres);
 
-  PIGraph mg;
+  PIGraph<PanoramicCamera> mg;
   mg.view = view;
   int width = view.image.cols;
   int height = view.image.rows;
@@ -520,7 +462,7 @@ PIGraph BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
 
   mg.fullArea = 0.0;
   for (auto it = mg.segs.begin(); it != mg.segs.end(); ++it) {
-    double weight = cos((it.pos().y - height / 2.0) / height * M_PI);
+    double weight = PixelWeight(view.camera, it.pos());
     mg.seg2areaRatio[*it] += weight;
     mg.fullArea += weight;
   }
@@ -529,7 +471,6 @@ PIGraph BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
     auto &control = mg.seg2control[i];
     control.orientationClaz = control.orientationNotClaz = -1;
     control.used = true;
-    auto &center = mg.seg2center[i];
   }
   for (int i = 0; i < nsegs; i++) {
     Image regionMask = (mg.segs == i);
@@ -545,61 +486,86 @@ PIGraph BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
 
     Vec3 centerDirection(0, 0, 0);
     std::vector<Vec3> directions;
-    directions.reserve(ElementsNum(contours));
+    directions.reserve(CountOf<Pixel>(contours));
     for (auto &cs : contours) {
       for (auto &c : cs) {
         directions.push_back(normalize(view.camera.toSpace(c)));
         centerDirection += directions.back();
       }
     }
-    centerDirection /= norm(centerDirection);
-    // get max angle distance from center direction
-    double radiusAngle = 0.0;
-    for (auto &d : directions) {
-      double a = AngleBetweenDirections(centerDirection, d);
-      if (radiusAngle < a) {
-        radiusAngle = a;
-      }
+    if (centerDirection != Origin()) {
+      centerDirection /= norm(centerDirection);
     }
 
-    // perform a more precise sample !
-    int newSampleSize = view.camera.focal() * radiusAngle * 2 + 2;
-    PartialPanoramicCamera sCam(
-        newSampleSize, newSampleSize, view.camera.focal(), view.camera.eye(),
-        centerDirection,
-        ProposeXYDirectionsFromZDirection(centerDirection).second);
-    Imagei sampledSegmentedRegions = MakeCameraSampler(sCam, view.camera)(segs);
+    static constexpr bool _inPerspectiveMode =
+        std::is_same<std::decay_t<decltype(view.camera)>,
+                     PerspectiveCamera>::value;
 
-    // collect better contours
-    contours.clear();
-    regionMask = (sampledSegmentedRegions == i);
-    cv::findContours(regionMask, contours, CV_RETR_EXTERNAL,
-                     CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the
-                                              // outer contours
-    std::sort(contours.begin(), contours.end(),
-              [](const std::vector<Pixel> &ca, const std::vector<Pixel> &cb) {
-                return ca.size() > cb.size();
-              });
-
-    auto iter =
-        std::find_if(contours.begin(), contours.end(),
-                     [](const std::vector<Pixel> &c) { return c.size() <= 2; });
-    contours.erase(iter, contours.end());
-
-    mg.seg2contours[i].resize(contours.size());
-    mg.seg2center[i] = Origin();
-    for (int j = 0; j < contours.size(); j++) {
-      auto &cs = mg.seg2contours[i][j];
-      cs.reserve(contours[j].size());
-      for (auto &p : contours[j]) {
-        cs.push_back(normalize(sCam.toSpace(p)));
-        mg.seg2center[i] += cs.back();
+    if (_inPerspectiveMode) {
+      // perspecive mode
+      mg.seg2contours[i].resize(contours.size());
+      mg.seg2center[i] = centerDirection;
+      for (int j = 0; j < contours.size(); j++) {
+        auto &cs = mg.seg2contours[i][j];
+        cs.reserve(contours[j].size());
+        for (auto &p : contours[j]) {
+          cs.push_back(normalize(view.camera.toSpace(p)));
+        }
       }
-    }
-    if (mg.seg2center[i] != Origin()) {
-      mg.seg2center[i] /= norm(mg.seg2center[i]);
+
     } else {
-      mg.seg2center[i] = normalize(centerDirection);
+
+      // panoramic mode
+      // get max angle distance from center direction
+      double radiusAngle = 0.0;
+      for (auto &d : directions) {
+        double a = AngleBetweenDirections(centerDirection, d);
+        if (radiusAngle < a) {
+          radiusAngle = a;
+        }
+      }
+
+      // perform a more precise sample !
+      int newSampleSize = view.camera.focal() * radiusAngle * 2 + 2;
+      PartialPanoramicCamera sCam(
+          newSampleSize, newSampleSize, view.camera.focal(), view.camera.eye(),
+          centerDirection,
+          ProposeXYDirectionsFromZDirection(centerDirection).second);
+      Imagei sampledSegmentedRegions =
+          MakeCameraSampler(sCam, view.camera)(segs);
+
+      // collect better contours
+      contours.clear();
+      regionMask = (sampledSegmentedRegions == i);
+      cv::findContours(
+          regionMask, contours, CV_RETR_EXTERNAL,
+          CV_CHAIN_APPROX_SIMPLE); // CV_RETR_EXTERNAL: get only the
+                                   // outer contours
+      std::sort(contours.begin(), contours.end(),
+                [](const std::vector<Pixel> &ca, const std::vector<Pixel> &cb) {
+                  return ca.size() > cb.size();
+                });
+
+      auto iter = std::find_if(
+          contours.begin(), contours.end(),
+          [](const std::vector<Pixel> &c) { return c.size() <= 2; });
+      contours.erase(iter, contours.end());
+
+      mg.seg2contours[i].resize(contours.size());
+      mg.seg2center[i] = Origin();
+      for (int j = 0; j < contours.size(); j++) {
+        auto &cs = mg.seg2contours[i][j];
+        cs.reserve(contours[j].size());
+        for (auto &p : contours[j]) {
+          cs.push_back(normalize(sCam.toSpace(p)));
+          mg.seg2center[i] += cs.back();
+        }
+      }
+      if (mg.seg2center[i] != Origin()) {
+        mg.seg2center[i] /= norm(mg.seg2center[i]);
+      } else {
+        mg.seg2center[i] = normalize(centerDirection);
+      }
     }
   }
 
@@ -616,27 +582,37 @@ PIGraph BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
   mg.line2lineRelations.resize(nlines);
   mg.line2used.resize(nlines, true);
 
+
+  // analyze segs, bnds, juncs ...
   std::map<std::set<int>, std::vector<int>> segs2juncs;
   std::vector<std::vector<int>> seg2juncs(nsegs);
-  std::map<std::pair<int, int>, std::set<Pixel, ComparePixel>> segpair2pixels;
+  std::map<std::pair<int, int>, std::set<Pixel>> segpair2pixels;
 
-  std::map<Pixel, std::set<int>, ComparePixel> pixel2segs;
-  std::map<Pixel, int, ComparePixel> pixel2junc;
+  std::map<Pixel, std::set<int>> pixel2segs;
+  std::map<Pixel, int> pixel2junc;
 
   std::vector<Pixel> juncPositions;
   std::vector<std::vector<int>> junc2segs;
 
   std::cout << "recording pixels" << std::endl;
+  assert(segs.size() == view.camera.screenSize());
   for (auto it = segs.begin(); it != segs.end(); ++it) {
     auto p = it.pos();
 
+    /// todo
+
     // seg ids related
-    std::set<int> idset = {segs(p), segs(Pixel((p.x + 1) % segs.cols, p.y))};
-    if (p.y <
-        height - 1) { // note that the top/bottom borders cannot be crossed!
-      idset.insert(segs(Pixel(p.x, p.y + 1)));
-      idset.insert(segs(Pixel((p.x + 1) % segs.cols, p.y + 1)));
-    }
+    //std::set<int> idset = {segs(p), segs(Pixel((p.x + 1) % segs.cols, p.y))};
+    //if (p.y <
+    //    height - 1) { // note that the top/bottom borders cannot be crossed!
+    //  idset.insert(segs(Pixel(p.x, p.y + 1)));
+    //  idset.insert(segs(Pixel((p.x + 1) % segs.cols, p.y + 1)));
+    //}
+
+    std::set<int> idset;
+    ForEachNeighborhoodPixel(
+        p, 0, 1, 0, 1, view.camera,
+        [&idset, &segs](const Pixel &np) { idset.insert(segs(np)); });
 
     if (idset.size() <= 1) {
       continue;
@@ -692,11 +668,9 @@ PIGraph BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
             segpair2pixels.at(MakeOrderedPair(segi, segj));
 
         std::vector<Pixel> pixelsForThisBnd;
-        std::set<Pixel, ComparePixel> visitedPixels;
+        std::set<Pixel> visitedPixels;
 
         // use dfs
-        // std::stack<Pixel> Q;
-        // Q.push(juncpos);
         int saySegIIsOnLeft = 0, saySegIIsOnRight = 0;
         pixelsForThisBnd.push_back(juncpos);
         visitedPixels.insert(juncpos);
@@ -1150,15 +1124,14 @@ PIGraph BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
   return mg;
 }
 
-PIGraph BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
-                     int verticalVPId,
-                     const std::vector<Classified<Line3>> &lines,
-                     double bndPieceSplitAngleThres,
-                     double bndPieceClassifyAngleThres,
-                     double bndPieceBoundToLineAngleThres,
-                     double intersectionAngleThreshold,
-                     double incidenceAngleAlongDirectionThreshold,
-                     double incidenceAngleVerticalDirectionThreshold) {
+PIGraph<PanoramicCamera>
+BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
+             int verticalVPId, const std::vector<Classified<Line3>> &lines,
+             double bndPieceSplitAngleThres, double bndPieceClassifyAngleThres,
+             double bndPieceBoundToLineAngleThres,
+             double intersectionAngleThreshold,
+             double incidenceAngleAlongDirectionThreshold,
+             double incidenceAngleVerticalDirectionThreshold) {
 
   Imagei segs;
   int nsegs = SegmentationForPIGraph(view, lines, segs, DegreesToRadians(5));
@@ -1175,8 +1148,11 @@ PIGraph BuildPIGraph(const PanoramicView &view, const std::vector<Vec3> &vps,
                       incidenceAngleVerticalDirectionThreshold);
 }
 
+// PerfectSegMaskView
+namespace details {
+template <class CameraT>
 View<PartialPanoramicCamera, Imageub>
-PerfectSegMaskView(const PIGraph &mg, int seg, double focal) {
+PerfectSegMaskViewImpl(const PIGraph<CameraT> &mg, int seg, double focal) {
   auto &contours = mg.seg2contours[seg];
   double radiusAngle = 0.0;
   for (auto &cs : contours) {
@@ -1207,7 +1183,20 @@ PerfectSegMaskView(const PIGraph &mg, int seg, double focal) {
   cv::fillPoly(mask, contourProjs, (uint8_t)1);
   return View<PartialPanoramicCamera, Imageub>{mask, ppc};
 }
+}
 
+View<PartialPanoramicCamera, Imageub>
+PerfectSegMaskView(const PIGraph<PanoramicCamera> &mg, int seg, double focal) {
+  return details::PerfectSegMaskViewImpl(mg, seg, focal);
+}
+
+View<PartialPanoramicCamera, Imageub>
+PerfectSegMaskView(const PIGraph<PerspectiveCamera> &mg, int seg,
+                   double focal) {
+  return details::PerfectSegMaskViewImpl(mg, seg, focal);
+}
+
+// Junction weights
 float IncidenceJunctionWeight(bool acrossViews) {
   return acrossViews ? 10.0f : 7.0f;
 }
