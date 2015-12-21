@@ -1,27 +1,27 @@
 #include "gtest/gtest.h"
 
 #include "../src/gui/singleton.hpp"
-#include "config.hpp"
+#include "panoramix.unittest.hpp"
 
 namespace pano {
 namespace test {
 
-std::string ProjectDataDirStrings::Base = PROJECT_TEST_DATA_DIR_STR;
-std::string ProjectDataDirStrings::Normal = PROJECT_TEST_DATA_DIR_STR "/normal";
+std::string ProjectDataDirStrings::Base = PANORAMIX_TEST_DATA_DIR_STR;
+std::string ProjectDataDirStrings::Normal = PANORAMIX_TEST_DATA_DIR_STR "/normal";
 std::string ProjectDataDirStrings::PanoramaIndoor =
-    PROJECT_TEST_DATA_DIR_STR "/panorama/indoor";
+    PANORAMIX_TEST_DATA_DIR_STR "/panorama/indoor";
 std::string ProjectDataDirStrings::PanoramaOutdoor =
-    PROJECT_TEST_DATA_DIR_STR "/panorama/outdoor";
+    PANORAMIX_TEST_DATA_DIR_STR "/panorama/outdoor";
 std::string ProjectDataDirStrings::Serialization =
-    PROJECT_TEST_DATA_DIR_STR "/serialization";
+    PANORAMIX_TEST_DATA_DIR_STR "/serialization";
 std::string ProjectDataDirStrings::LocalManhattan =
-    PROJECT_TEST_DATA_DIR_STR "/localmanh";
+    PANORAMIX_TEST_DATA_DIR_STR "/localmanh";
 std::string ProjectDataDirStrings::MeshSMF =
-    PROJECT_TEST_DATA_DIR_STR "/mesh/smf";
+    PANORAMIX_TEST_DATA_DIR_STR "/mesh/smf";
 std::string ProjectDataDirStrings::Scripts =
-    PROJECT_TEST_DATA_DIR_STR "/scripts";
+    PANORAMIX_TEST_DATA_DIR_STR "/scripts";
 std::string ProjectDataDirStrings::BPTests =
-    PROJECT_TEST_DATA_DIR_STR "/bptests";
+    PANORAMIX_TEST_DATA_DIR_STR "/bptests";
 }
 }
 
@@ -66,7 +66,7 @@ int main(int argc, char *argv[], char *envp[]) {
   // testing::GTEST_FLAG(filter) = "Feature.RemoveThinRegionInSegmentation";
   // testing::GTEST_FLAG(filter) = "Feature.RemoveSmallRegionInSegmentation";
   // testing::GTEST_FLAG(filter) = "Feature.SegmentationExtractorInPanorama";
-  testing::GTEST_FLAG(filter) = "Meta.WhatOf";
+  // testing::GTEST_FLAG(filter) = "Meta.WhatOf";
 
   return RUN_ALL_TESTS();
 }

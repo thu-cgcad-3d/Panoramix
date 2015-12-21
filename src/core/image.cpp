@@ -37,6 +37,14 @@ void ResizeToHeight(Image &im, int height) {
              cv::Size(static_cast<int>(im.cols * height / im.rows), height));
 }
 
+void ResizeToArea(Image &im, int area) {
+  if (im.rows * im.cols == area)
+    return;
+  double ratio = sqrt(area / double(im.rows * im.cols));
+  cv::resize(im, im, cv::Size(static_cast<int>(im.cols * ratio),
+                              static_cast<int>(im.rows * ratio)));
+}
+
 void ResizeToMakeWidthUnder(Image &im, int widthUpperBound) {
   if (im.cols <= widthUpperBound)
     return;

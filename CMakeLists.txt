@@ -1,82 +1,122 @@
-cmake_minimum_required (VERSION 2.8.12)
-
-# project name
-set (PROJECT_NAME Panoramix)
-string (TOUPPER ${PROJECT_NAME} PROJECT_NAME_UPPER) # upper case name
-
-# project version
-set (PROJECT_VERSION_MAJOR 0)
-set (PROJECT_VERSION_MINOR 2)
-set (PROJECT_VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR})
+project (Panoramix)
+cmake_minimum_required (VERSION 3.0.0)
 
 set (CMAKE_ALLOW_LOOSE_CONSTRUCTS true)
-
-
-project (${PROJECT_NAME})
-enable_testing ()
-
-### env setting ###
-# set cmake module paths
 list (APPEND CMAKE_MODULE_PATH 
-	${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/ 
-	${CMAKE_CURRENT_SOURCE_DIR}/cmake/scripts/
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/ 
 )
 
-
-### compiler setting ###
 if (NOT DEFINED MSVC)
-	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
 endif ()
 
+set (DEPENDENCY_INCLUDES "")
+set (DEPENDENCY_LIBS "")
+set (DEPENDENCY_BIN_PATHS "")
 
-### 3rd party libs setting ###
-# get MATLAB libs [optional]
-set (USE_MATLAB true CACHE BOOL "Whether using MATLAB")
-include (LocateMATLABLibs)
-if (MATLAB_ROOT)
-	set(MATLAB_RELEASE ${MATLAB_ROOT})
-	set(MATLAB_CODE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/matlab CACHE PATH "Directory of MATLAB code")
+
+
+# add eigen
+find_package(Eigen3 REQUIRED)
+list (APPEND DEPENDENCY_INCLUDES ${EIGEN3_INCLUDE_DIR})
+
+# add cereal
+find_package(Cereal REQUIRED)
+list (APPEND DEPENDENCY_INCLUDES ${CEREAL_INCLUDE_DIR})
+
+# add opencv
+find_package(OpenCV REQUIRED)
+list (APPEND DEPENDENCY_INCLUDES ${OpenCV_INCLUDE_DIRS})
+list (APPEND DEPENDENCY_LIBS ${OpenCV_LIBS})
+if (DEFINED _OpenCV_LIB_PATH)
+    list (APPEND DEPENDENCY_BINS_PATHS ${_OpenCV_LIB_PATH})
 endif ()
 
+# add matlab
+find_package(MATLAB REQUIRED)
+#  MATLAB_INCLUDE_DIR: include path for mex.h, engine.h
+#  MATLAB_LIBRARIES:   required libraries: libmex, etc
+#  MATLAB_MEX_LIBRARY: path to libmex.lib
+#  MATLAB_MX_LIBRARY:  path to libmx.lib
+#  MATLAB_MAT_LIBRARY:  path to libmat.lib # added
+#  MATLAB_ENG_LIBRARY: path to libeng.lib
+#  MATLAB_ROOT: path to Matlab's root directory
+list (APPEND DEPENDENCY_INCLUDES ${MATLAB_INCLUDE_DIR})
+list (APPEND DEPENDENCY_LIBS ${MATLAB_LIBRARIES})
+list (APPEND DEPENDENCY_LIBS ${MATLAB_MAT_LIBRARY})
 
-# get fundamental libs
-include (LocateFundamentalLibs)
-
-
-# get CUDA libs [optional]
-set (USE_CUDA true CACHE BOOL "Whether using CUDA")
-include (LocateCUDALibs)
-
-
-
-# get Qt libs
+# add_qt
 set (Qt_DIR "" CACHE PATH "Qt root directory here")
 set (Qt_MODULES_REQUIRED Core Gui Widgets OpenGL)
-include (LocateQtLibs)
+list (APPEND CMAKE_PREFIX_PATH ${Qt_DIR})
+set(CMAKE_INCLUDE_CURRENT_DIR on)
+set (Qt_PATH ${Qt_DIR}/bin)
+set (Qt_INCLUDES "")
+set (Qt_LIBS "")
+foreach (_M ${Qt_MODULES_REQUIRED})
+    find_package ("Qt5${_M}" REQUIRED)
+    string(COMPARE EQUAL ${_M} OpenGL _IsOpenGL)
+    if(${_IsOpenGL})
+        #find_package (GLUT REQUIRED)
+        find_package (OPENGL REQUIRED)
+        #list(APPEND Qt_INCLUDES ${GLUT_INCLUDE_DIR})
+        list(APPEND Qt_INCLUDES ${OPENGL_INCLUDE_DIR})
+        list(APPEND Qt_LIBS ${OPENGL_LIBRARIES})
+    endif()
+    list(APPEND Qt_LIBS "Qt5::${_M}")
+endforeach()
+list (APPEND DEPENDENCY_INCLUDES ${Qt_INCLUDES})
+list (APPEND DEPENDENCY_LIBS ${Qt_LIBS})
+list (APPEND DEPENDENCY_BINS_PATHS ${Qt_PATH})
 
 
-# set path env
-include (DefineAddToEnvPath)
-ADDTO_ENVPATH (Fundamental_PATH)
-ADDTO_ENVPATH (Qt_PATH)
-ADDTO_ENVPATH (MATLAB_PATH)
 
-
-# global definitions
-include (DefineCompilerMacros)
+get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
+message (STATUS "test data directory: " ${TEST_DATA_DIR})
+get_filename_component(CACHE_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cache/" REALPATH)
+message (STATUS "default cache data directory: " ${CACHE_DATA_DIR})
+get_filename_component(MATLAB_CODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/matlab/" REALPATH)
+message (STATUS "matlab code directory: " ${MATLAB_CODE_DIR})
+if (MSVC)
+    add_definitions ( "/D_USE_MATH_DEFINES")
+    add_definitions ("/DNOMINMAX")
+    add_definitions ( "/DPANORAMIX_TEST_DATA_DIR_STR=\"${TEST_DATA_DIR}\"" )
+    add_definitions ( "/DPANORAMIX_CACHE_DATA_DIR_STR=\"${CACHE_DATA_DIR}\"" )
+    add_definitions ( "/DPANORAMIX_MATLAB_CODE_DIR_STR=\"${MATLAB_CODE_DIR}\"" )
+else ()
+    add_definitions ( "-DPANORAMIX_TEST_DATA_DIR_STR=\"${TEST_DATA_DIR}\"" )
+    add_definitions ( "-DPANORAMIX_CACHE_DATA_DIR_STR=\"${CACHE_DATA_DIR}\"" )
+    add_definitions ( "-DPANORAMIX_MATLAB_CODE_DIR_STR=\"${MATLAB_CODE_DIR}\"" )
+endif ()
 
 
 # include third party codes
 add_subdirectory ("thirdparty")
-list (APPEND Fundamental_INCLUDES ${ThirdParty_INCLUDES})
-list (APPEND Fundamental_LIBS ${ThirdParty_LIBS})
+list (APPEND DEPENDENCY_INCLUDES ${ThirdParty_INCLUDES})
+list (APPEND DEPENDENCY_LIBS ${ThirdParty_LIBS})
 
 
-# data dir
-get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
-message (STATUS "test data directory: " ${TEST_DATA_DIR})
-get_filename_component(CACHE_DIR "D:/STORAGE/CACHE/Panoramix" REALPATH)
-message (STATUS "cache directory: " ${CACHE_DIR})
+list (APPEND DEPENDENCY_INCLUDES ".")
+include_directories (${DEPENDENCY_INCLUDES})
+
+
+# panoramix_add_executable
+macro(panoramix_add_executable BIN_NAME)
+    if (CUDA_TOOLKIT_INCLUDE)
+        cuda_add_executable(${BIN_NAME} ${ARGN})
+    else()
+        add_executable(${BIN_NAME} ${ARGN})
+    endif()
+endmacro()
+# panoramix_add_library
+macro(panoramix_add_library BIN_NAME)
+    if (CUDA_TOOLKIT_INCLUDE)
+        cuda_add_library(${BIN_NAME} ${ARGN})
+    else()
+        add_library(${BIN_NAME} ${ARGN})
+    endif()
+endmacro()
+
 
 
 # the libs
@@ -84,10 +124,6 @@ add_subdirectory (src lib)
 
 
 # executable
-add_subdirectory (unittest unittest)
 add_subdirectory (executable executable)
-if (${USE_MATLAB})
-	#add_subdirectory(mex mex)
-endif()
 
 

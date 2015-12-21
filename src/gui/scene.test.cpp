@@ -1,13 +1,13 @@
-#include "../src/gui/canvas.hpp"
-#include "../src/gui/discretization.hpp"
-#include "../src/gui/scene.hpp"
+#include "canvas.hpp"
+#include "discretization.hpp"
+#include "scene.hpp"
 #include "gtest/gtest.h"
 
 #include <iostream>
 #include <random>
 #include <string>
 
-#include "config.hpp"
+#include "../panoramix.unittest.hpp"
 
 using namespace pano;
 using namespace test;

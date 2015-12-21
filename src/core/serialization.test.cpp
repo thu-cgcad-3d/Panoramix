@@ -1,10 +1,10 @@
-#include "../src/core/basic_types.hpp"
-#include "../src/core/forest.hpp"
-#include "../src/core/homo_graph.hpp"
+#include "basic_types.hpp"
+#include "forest.hpp"
+#include "homo_graph.hpp"
 
 #include <random>
 
-#include "config.hpp"
+#include "../panoramix.unittest.hpp"
 
 using namespace pano;
 using namespace test;

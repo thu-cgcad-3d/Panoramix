@@ -3236,8 +3236,8 @@ FindRegionBoundaries(const Imagei &segRegions, int connectionExtendSize,
         Pixel next = curTail;
         next.x += xdirs[i];
         next.y += ydirs[i];
-        if (!IsBetween(next.x, 0, width - 1) ||
-            !IsBetween(next.y, 0, height - 1))
+        if (!IsBetween(next.x, 0, width) ||
+            !IsBetween(next.y, 0, height))
           continue;
         if (pixels.find(next) ==
             pixels.end()) // not a boundary pixel or already recorded

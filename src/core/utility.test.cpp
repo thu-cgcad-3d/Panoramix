@@ -1,13 +1,13 @@
-#include "../src/core/algorithms.hpp"
-#include "../src/core/any.hpp"
-#include "../src/core/containers.hpp"
-#include "../src/core/iterators.hpp"
-#include "../src/core/utility.hpp"
+#include "algorithms.hpp"
+#include "any.hpp"
+#include "containers.hpp"
+#include "iterators.hpp"
+#include "utility.hpp"
 
 #include <list>
 #include <random>
 
-#include "config.hpp"
+#include "../panoramix.unittest.hpp"
 
 using namespace pano;
 

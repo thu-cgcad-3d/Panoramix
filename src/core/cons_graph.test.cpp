@@ -1,7 +1,7 @@
-#include "../src/core/basic_types.hpp"
-#include "../src/core/cons_graph.hpp"
+#include "basic_types.hpp"
+#include "cons_graph.hpp"
 
-#include "config.hpp"
+#include "../panoramix.unittest.hpp"
 
 using namespace pano;
 using namespace test;

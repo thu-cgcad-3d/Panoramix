@@ -305,7 +305,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
           }
           if (c.orientationNotClaz != -1) {
             static const int w = 10;
-            if (IsBetween((pos.x + pos.y) % w, 0, w / 2 - 1)) {
+            if (IsBetween((pos.x + pos.y) % w, 0, w / 2)) {
               return ctable[c.orientationNotClaz].blendWith(gui::White, 0.3);
             } else {
               return gui::White;
@@ -496,7 +496,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
             }
             if (c.orientationNotClaz != -1) {
               static const int w = 10;
-              if (IsBetween((pos.x + pos.y) % w, 0, w / 2 - 1)) {
+              if (IsBetween((pos.x + pos.y) % w, 0, w / 2)) {
                 return ctable[c.orientationNotClaz].blendWith(gui::White, 0.3);
               } else {
                 return gui::White;
@@ -513,7 +513,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
           auto p = it.pos();
           for (auto p2 : {Pixel(p.x + 1, p.y), Pixel(p.x, p.y + 1),
                           Pixel(p.x + 1, p.y + 1), Pixel(p.x - 1, p.y + 1)}) {
-            if (!IsBetween(p2.y, 0, mg.segs.rows - 1)) {
+            if (!IsBetween(p2.y, 0, mg.segs.rows)) {
               continue;
             }
             p2.x = WrapBetween(p2.x, 0, mg.segs.cols);

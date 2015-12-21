@@ -1,6 +1,6 @@
-#include "../src/core/basic_types.hpp"
-#include "../src/core/utility.hpp"
-#include "config.hpp"
+#include "basic_types.hpp"
+#include "utility.hpp"
+#include "../panoramix.unittest.hpp"
 
 #include <Eigen/Dense>
 #include <iostream>

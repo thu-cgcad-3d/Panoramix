@@ -1709,8 +1709,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       std::vector<Point2i> quadProjs(4);
       for (int i = 0; i < 4; i++) {
         quadProjs[i] = pc.toScreen(sweepQuad[i]);
-        // assert(IsBetween(quadProjs[i][0], 0, w - 1));
-        // assert(IsBetween(quadProjs[i][1], 0, h - 1));
+        // assert(IsBetween(quadProjs[i][0], 0, w));
+        // assert(IsBetween(quadProjs[i][1], 0, h));
         quadProjs[i][0] = BoundBetween(quadProjs[i][0], 0, w);
         quadProjs[i][1] = BoundBetween(quadProjs[i][1], 0, h);
       }
@@ -2185,8 +2185,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       std::vector<Point2i> quadProjs(4);
       for (int i = 0; i < 4; i++) {
         quadProjs[i] = pc.toScreen(sweepQuad[i]);
-        // assert(IsBetween(quadProjs[i][0], 0, w - 1));
-        // assert(IsBetween(quadProjs[i][1], 0, h - 1));
+        // assert(IsBetween(quadProjs[i][0], 0));
+        // assert(IsBetween(quadProjs[i][1], 0));
         quadProjs[i][0] = BoundBetween(quadProjs[i][0], 0, w);
         quadProjs[i][1] = BoundBetween(quadProjs[i][1], 0, h);
       }

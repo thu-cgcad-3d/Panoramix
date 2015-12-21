@@ -13,7 +13,9 @@ std::string Tagify(const std::string &path) {
   return tag;
 }
 
-std::string CachePath() { return PROJECT_CACHE_DIR_STR "/"; }
+static std::string _cachePath = PANORAMIX_CACHE_DATA_DIR_STR "/";
+std::string CachePath() { return _cachePath; }
+void SetCachePath(const std::string &path) { _cachePath = path; }
 
 std::string FolderOfFile(const std::string &filepath) {
   QFileInfo finfo(QString::fromStdString(filepath));

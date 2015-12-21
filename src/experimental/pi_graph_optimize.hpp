@@ -31,7 +31,7 @@ template <class T> void FillHoles(ImageOf<T> &im, const Imageb &holeMask) {
         Pixel ps[] = {Pixel(p.x + dd, p.y + d), Pixel(p.x + dd, p.y - d),
                       Pixel(p.x + d, p.y + dd), Pixel(p.x - d, p.y + dd)};
         for (auto pp : ps) {
-          if (!IsBetween(pp.y, 0, im.rows - 1)) {
+          if (!IsBetween(pp.y, 0, im.rows)) {
             continue;
           }
           pp.x = WrapBetween(pp.x, 0, im.cols);

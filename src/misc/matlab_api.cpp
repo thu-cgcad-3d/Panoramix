@@ -4,12 +4,7 @@
 
 #include "matlab_api.hpp"
 
-#ifndef USE_MATLAB
-#error USE_MATLAB flag required
-#endif
-
 namespace pano {
-
 namespace misc {
 
 // template helpers
@@ -20,19 +15,21 @@ template <int ID> struct RMXID { using type = void; };
 
 #define CONNECT_CLASSID(T, id)                                                 \
   template <> struct RMXType<T> { static const mxClassID ClassID = id; };      \
-  template <> struct RMXID<id> { using type = T; }
+  template <> struct RMXID<id> { using type = T; };
 
-CONNECT_CLASSID(mxLogical, mxLOGICAL_CLASS);
-CONNECT_CLASSID(double, mxDOUBLE_CLASS);
-CONNECT_CLASSID(float, mxSINGLE_CLASS);
-CONNECT_CLASSID(int8_t, mxINT8_CLASS);
-CONNECT_CLASSID(int16_t, mxINT16_CLASS);
-CONNECT_CLASSID(int32_t, mxINT32_CLASS);
-CONNECT_CLASSID(int64_t, mxINT64_CLASS);
-CONNECT_CLASSID(uint8_t, mxUINT8_CLASS);
-CONNECT_CLASSID(uint16_t, mxUINT16_CLASS);
-CONNECT_CLASSID(uint32_t, mxUINT32_CLASS);
-CONNECT_CLASSID(uint64_t, mxUINT64_CLASS);
+CONNECT_CLASSID(mxLogical, mxLOGICAL_CLASS)
+CONNECT_CLASSID(double, mxDOUBLE_CLASS)
+CONNECT_CLASSID(float, mxSINGLE_CLASS)
+CONNECT_CLASSID(int8_t, mxINT8_CLASS)
+CONNECT_CLASSID(int16_t, mxINT16_CLASS)
+CONNECT_CLASSID(int32_t, mxINT32_CLASS)
+CONNECT_CLASSID(int64_t, mxINT64_CLASS)
+CONNECT_CLASSID(uint8_t, mxUINT8_CLASS)
+CONNECT_CLASSID(uint16_t, mxUINT16_CLASS)
+CONNECT_CLASSID(uint32_t, mxUINT32_CLASS)
+CONNECT_CLASSID(uint64_t, mxUINT64_CLASS)
+
+#undef CONNECT_CLASSID
 
 template <typename T>
 inline mxArray *CreateNumericMatrix(const T *d, int m, int n) {
@@ -653,7 +650,7 @@ Matlab::Matlab(const std::string &defaultDir, bool singleUse)
       engEvalString(static_cast<::Engine *>(_eng),
                     ("cd " + defaultDir + "; startup; pwd").c_str());
     } else {
-      (*this) << (std::string("cd ") + MATLAB_CODE_DIR + "; startup; pwd");
+      (*this) << (std::string("cd ") + PANORAMIX_MATLAB_CODE_DIR_STR + "; startup; pwd");
     }
     std::cout << _buffer << std::endl;
   }

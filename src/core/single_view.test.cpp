@@ -1,11 +1,11 @@
-#include "../src/core/cameras.hpp"
-#include "../src/core/feature.hpp"
-#include "../src/core/single_view.hpp"
-#include "../src/core/utility.hpp"
-#include "../src/gui/canvas.hpp"
-#include "../src/gui/utility.hpp"
+#include "../core/cameras.hpp"
+#include "../core/feature.hpp"
+#include "../core/single_view.hpp"
+#include "../core/utility.hpp"
+#include "../gui/canvas.hpp"
+#include "../gui/utility.hpp"
 
-#include "config.hpp"
+#include "../panoramix.unittest.hpp"
 
 using namespace pano;
 using namespace core;

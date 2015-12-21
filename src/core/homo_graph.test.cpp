@@ -1,9 +1,10 @@
-#include "../src/core/forest.hpp"
-#include "../src/core/homo_graph.hpp"
-#include "../src/core/iterators.hpp"
-#include "../src/core/utility.hpp"
-#include "../src/gui/scene.hpp"
-#include "config.hpp"
+#include "../core/forest.hpp"
+#include "../core/homo_graph.hpp"
+#include "../core/iterators.hpp"
+#include "../core/utility.hpp"
+#include "../gui/scene.hpp"
+
+#include "../panoramix.unittest.hpp"
 
 using namespace pano;
 using namespace test;

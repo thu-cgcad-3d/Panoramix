@@ -8,6 +8,7 @@ namespace misc {
 std::string Tagify(const std::string &path);
 
 std::string CachePath();
+void SetCachePath(const std::string &path);
 
 template <class StringT, class... Ts>
 inline bool SaveCache(const std::string &path, StringT &&what, Ts &&... ts) {

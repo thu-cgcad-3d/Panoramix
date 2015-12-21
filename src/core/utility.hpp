@@ -9,6 +9,50 @@
 namespace pano {
 namespace core {
 
+// PrintTo
+inline std::ostream &PrintTo(std::ostream &os) { return os; }
+template <class T, class... Ts>
+inline std::ostream &PrintTo(std::ostream &os, const T &arg,
+                             const Ts &... args) {
+  os << arg;
+  return PrintTo(os, args...);
+}
+// PrintToWithSeperator
+template <class SepT>
+inline std::ostream &PrintToWithSeperator(std::ostream &os, SepT &&sep) {
+  return os;
+}
+template <class SepT, class T>
+inline std::ostream &PrintToWithSeperator(std::ostream &os, SepT &&sep,
+                                          const T &arg) {
+  return os << arg;
+}
+template <class SepT, class T, class... Ts>
+inline std::ostream &PrintToWithSeperator(std::ostream &os, SepT &&sep,
+                                          const T &arg, const Ts &... args) {
+  os << arg << sep;
+  return PrintToWithSeperator(os, sep, args...);
+}
+
+// Print
+template <class... Ts> inline std::ostream &Print(const Ts &... args) {
+  return PrintTo(std::cout, args...);
+}
+// PrintWithSeperator
+template <class SepT, class... Ts>
+inline std::ostream &PrintWithSeperator(SepT &&sep, const Ts &... args) {
+  return PrintToWithSeperator(std::cout, sep, args...);
+}
+// Println
+template <class... Ts> inline std::ostream &Println(const Ts &... args) {
+  return Print(args...) << std::endl;
+}
+// PrintWithSeperator
+template <class SepT, class... Ts>
+inline std::ostream &PrintlnWithSeperator(SepT &&sep, const Ts &... args) {
+  return PrintToWithSeperator(std::cout, sep, args...) << std::endl;
+}
+
 // test value
 // can be used to check whether NaN exists by invoking: HasValue(a, std::isnan)
 template <class TesterT> inline bool HasValue(double v, const TesterT &tester) {
@@ -176,7 +220,6 @@ template <class T, class K> inline T Gaussian(T x, K sigma) {
 template <class T, class K> inline T Pitfall(T x, K sigma) {
   return abs(x) <= sigma ? Square(x / sigma) : 1;
 }
-
 
 // entropy [-factor, 0]
 template <class IteratorT, class T = double>
@@ -447,10 +490,25 @@ inline int DiracDelta(const T &v,
   return std::abs(v) <= epsilon ? 1 : 0;
 }
 
-// [low, high]
+namespace {
+// [low, high] for float v
+template <class T, class K1, class K2>
+inline bool IsBetweenPrivate(const T &v, const K1 &low, const K2 &high,
+                             const std::true_type &floatBnd) {
+  return !(v < low) && !(high < v);
+}
+// [low, high) for nonfloat v
+template <class T, class K1, class K2>
+inline bool IsBetweenPrivate(const T &v, const K1 &low, const K2 &high,
+                             const std::false_type &floatBnd) {
+  return !(v < low) && v < high;
+}
+}
+
+// [low, high] for float v, [low, high) for nonfloat v
 template <class T, class K1, class K2>
 inline bool IsBetween(const T &v, const K1 &low, const K2 &high) {
-  return !(v < low) && !(high < v);
+  return IsBetweenPrivate(v, low, high, std::is_floating_point<T>());
 }
 
 // [low, high]
@@ -462,7 +520,6 @@ inline T BoundBetween(const T &v, const K1 &low, const K2 &high) {
 }
 
 namespace {
-
 template <class T>
 T WrapBetweenPrivate(const T &input, const T &low, const T &high,
                      const std::false_type &) {

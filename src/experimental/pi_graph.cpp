@@ -43,12 +43,14 @@ inline void ForEachNeighborhoodPixel(const Pixel &p, int dx1, int dx2, int dy1,
                                      FunT fun) {
   int w = cam.screenSize().width;
   int h = cam.screenSize().height;
-  for (int x = p.x + dx1; x <= p.x + dx2; x++) {
+  for (int xx = p.x + dx1; xx <= p.x + dx2; xx++) {
+    int x = xx;
     if (x < 0) {
       x += w;
     }
     x = x % w;
-    for (int y = p.y + dy1; y <= p.y + dy2; y++) {
+    for (int yy = p.y + dy1; yy <= p.y + dy2; yy++) {
+      int y = yy;
       if (y < 0 || y >= h) {
         continue;
       }
@@ -97,6 +99,13 @@ inline double DistanceAngleFromPointToLine(const Point3 &p, const Line3 &l) {
   return AngleBetweenDirections(p, n.second.position);
 }
 
+double PixelWeight(const PanoramicCamera &cam, const Pixel &p) {
+  return cos((p.y - cam.screenSize().height / 2.0) / cam.screenSize().height *
+             M_PI);
+}
+double PixelWeight(const PerspectiveCamera &cam, const Pixel &p) { return 1.0; }
+
+
 int SegmentationForPIGraph(const PanoramicView &view,
                            const std::vector<Classified<Line3>> &lines,
                            Imagei &segs, double lineExtendAngle, double sigma,
@@ -140,17 +149,17 @@ int SegmentationForPIGraph(const PanoramicView &view,
   // pixel graph
   using Vertex = double;
   std::vector<Vertex> vertices(width * height);
-  float radius = width / 2.0 / M_PI;
+  //float radius = width / 2.0 / M_PI;
   for (int y = 0; y < height; y++) {
-    float longitude = (y - height / 2.0f) / radius;
-    float area = cos(longitude);
-    if (area < 1e-9) {
-      area = 1e-9;
-    }
+    //float longitude = (y - height / 2.0f) / radius;
+    //float area = cos(longitude);
+    //if (area < 1e-9) {
+    //  area = 1e-9;
+    //}
     for (int x = 0; x < width; x++) {
       Pixel p(x, y);
       auto &v = vertices[Sub2Ind(p, width, height)];
-      v = area;
+      v = PixelWeight(view.camera, p);
     }
   }
   // collect edges
@@ -422,11 +431,6 @@ int SegmentationForPIGraph(const PanoramicView &view,
   return DensifySegmentation(segs, true);
 }
 
-double PixelWeight(const PanoramicCamera &cam, const Pixel &p) {
-  return cos((p.y - cam.screenSize().height / 2.0) / cam.screenSize().height *
-             M_PI);
-}
-double PixelWeight(const PerspectiveCamera &cam, const Pixel &p) { return 1.0; }
 
 PIGraph<PanoramicCamera> BuildPIGraph(
     const PanoramicView &view, const std::vector<Vec3> &vps, int verticalVPId,
@@ -436,6 +440,9 @@ PIGraph<PanoramicCamera> BuildPIGraph(
     double incidenceAngleAlongDirectionThreshold,
     double incidenceAngleVerticalDirectionThreshold) {
 
+  static constexpr bool _inPerspectiveMode =
+      std::is_same<std::decay_t<decltype(view.camera)>,
+                   PerspectiveCamera>::value;
   assert(incidenceAngleVerticalDirectionThreshold >
          bndPieceBoundToLineAngleThres);
 
@@ -496,10 +503,6 @@ PIGraph<PanoramicCamera> BuildPIGraph(
     if (centerDirection != Origin()) {
       centerDirection /= norm(centerDirection);
     }
-
-    static constexpr bool _inPerspectiveMode =
-        std::is_same<std::decay_t<decltype(view.camera)>,
-                     PerspectiveCamera>::value;
 
     if (_inPerspectiveMode) {
       // perspecive mode
@@ -582,8 +585,20 @@ PIGraph<PanoramicCamera> BuildPIGraph(
   mg.line2lineRelations.resize(nlines);
   mg.line2used.resize(nlines, true);
 
-
   // analyze segs, bnds, juncs ...
+  // collect real border pixels
+  std::set<Pixel> realBorderPixels;
+  if (_inPerspectiveMode) {
+    for (int x = 0; x < width; x++) {
+      realBorderPixels.insert(Pixel(x, 0));
+      realBorderPixels.insert(Pixel(x, height - 1));
+    }
+    for (int y = 0; y < height; y++) {
+      realBorderPixels.insert(Pixel(0, y));
+      realBorderPixels.insert(Pixel(width - 1, y));
+    }
+  }
+
   std::map<std::set<int>, std::vector<int>> segs2juncs;
   std::vector<std::vector<int>> seg2juncs(nsegs);
   std::map<std::pair<int, int>, std::set<Pixel>> segpair2pixels;
@@ -599,11 +614,9 @@ PIGraph<PanoramicCamera> BuildPIGraph(
   for (auto it = segs.begin(); it != segs.end(); ++it) {
     auto p = it.pos();
 
-    /// todo
-
     // seg ids related
-    //std::set<int> idset = {segs(p), segs(Pixel((p.x + 1) % segs.cols, p.y))};
-    //if (p.y <
+    // std::set<int> idset = {segs(p), segs(Pixel((p.x + 1) % segs.cols, p.y))};
+    // if (p.y <
     //    height - 1) { // note that the top/bottom borders cannot be crossed!
     //  idset.insert(segs(Pixel(p.x, p.y + 1)));
     //  idset.insert(segs(Pixel((p.x + 1) % segs.cols, p.y + 1)));
@@ -726,11 +739,10 @@ PIGraph<PanoramicCamera> BuildPIGraph(
           for (int kk = 0; kk < 4; kk++) {
             int k = (lastDirId + kk + 3) % 4;
             auto nextp = curp + Pixel(dxs[k], dys[k]);
-            nextp.x = (nextp.x + width) % width;
 
-            if (nextp.y >= height ||
-                nextp.y <
-                    0) { // note that the top/bottom borders cannot be crossed!
+            if (!RectifyPixel(nextp, view.camera)) { // note that the top/bottom
+                                                     // borders cannot be
+                                                     // crossed!
               continue;
             }
             if (!Contains(pixelsForThisSegPair, nextp)) {
@@ -741,9 +753,9 @@ PIGraph<PanoramicCamera> BuildPIGraph(
             }
 
             auto rightp = curp + Pixel(rightdxs[k], rightdys[k]);
-            rightp.x = (rightp.x + width) % width;
+            RectifyPixel(rightp, view.camera);
             auto leftp = curp + Pixel(leftdxs[k], leftdys[k]);
-            leftp.x = (leftp.x + width) % width;
+            RectifyPixel(leftp, view.camera);
             if (Contains(segs, rightp) && Contains(segs, leftp)) {
               if (segs(rightp) == segi && segs(leftp) == segj) {
                 saySegIIsOnRight++;

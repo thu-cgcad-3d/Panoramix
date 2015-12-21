@@ -117,6 +117,7 @@ template <class T> inline void ReverseRows(ImageOf<T> &im) {
 
 void ResizeToWidth(Image &im, int width);
 void ResizeToHeight(Image &im, int height);
+void ResizeToArea(Image & im, int area);
 void ResizeToMakeWidthUnder(Image &im, int widthUpperBound);
 void ResizeToMakeHeightUnder(Image &im, int heightUpperBound);
 bool MayBeAPanorama(const Image &im);

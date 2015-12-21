@@ -1,7 +1,7 @@
-#include "../src/core/cameras.hpp"
-#include "../src/gui/canvas.hpp"
+#include "cameras.hpp"
+#include "../gui/canvas.hpp"
 
-#include "config.hpp"
+#include "../panoramix.unittest.hpp"
 
 using namespace pano;
 using namespace test;

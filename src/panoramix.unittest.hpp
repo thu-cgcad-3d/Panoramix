@@ -1,5 +1,4 @@
-#ifndef PANORAMIX_TESTS_CONFIG_HPP
-#define PANORAMIX_TESTS_CONFIG_HPP
+#pragma once
 
 #include <chrono>
 #include <iostream>
@@ -23,5 +22,3 @@ struct ProjectDataDirStrings {
 };
 }
 }
-
-#endif

@@ -1,7 +1,7 @@
-#include "../src/core/utility.hpp"
-#include "../src/gui/basic_types.hpp"
-#include "../src/ml/factor_graph.hpp"
-#include "config.hpp"
+#include "../core/utility.hpp"
+#include "../gui/basic_types.hpp"
+#include "factor_graph.hpp"
+#include "../panoramix.unittest.hpp"
 
 using namespace pano;
 using namespace test;

@@ -1,12 +1,12 @@
-#include "../src/core/cameras.hpp"
-#include "../src/core/feature.hpp"
-#include "../src/core/utility.hpp"
-#include "../src/gui/canvas.hpp"
-#include "../src/gui/utility.hpp"
+#include "cameras.hpp"
+#include "feature.hpp"
+#include "utility.hpp"
+#include "../gui/canvas.hpp"
+#include "../gui/utility.hpp"
 
-#include "../src/experimental/pi_graph.hpp"
+#include "../experimental/pi_graph.hpp"
 
-#include "config.hpp"
+#include "../panoramix.unittest.hpp"
 
 using namespace pano;
 using namespace test;

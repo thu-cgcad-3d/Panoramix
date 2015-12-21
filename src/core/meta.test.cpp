@@ -1,6 +1,6 @@
-#include "../src/core/meta.hpp"
+#include "../core/meta.hpp"
 
-#include "config.hpp"
+#include "../panoramix.unittest.hpp"
 
 #include <iostream>
 #include <random>
