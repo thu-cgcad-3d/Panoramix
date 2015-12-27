@@ -1,0 +1,3 @@
+PATH=$(PATH);C:\Tools\OpenCV\3.0.0y\x64\vc14\bin;C:/Tools/Qt/5.5/msvc2015_64_opengl_desktop/bin;C:/Program Files/MATLAB/MATLAB Production Server/R2015a/bin/win64;
+
+--platformpluginpath C:\Tools\Qt\5.5\msvc2015_64_opengl_desktop\plugins\platforms

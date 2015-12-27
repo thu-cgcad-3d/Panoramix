@@ -1,0 +1,5 @@
+file (GLOB SOURCES "." *.cpp *.hpp)
+include_directories (${DEPENDENCY_INCLUDES})
+panoramix_add_executable (Panolyz_LineDrawing ${SOURCES})
+target_link_libraries (Panolyz_LineDrawing Panoramix ${DEPENDENCY_LIBS})
+set_property(TARGET Panolyz_LineDrawing PROPERTY FOLDER "Panoramix.Executable")
