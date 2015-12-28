@@ -245,5 +245,9 @@ template <class T> inline Canvas<T> MakeCanvas(const ImageOf<T> &im) {
 }
 
 using Canvas3ub = Canvas<Vec3ub>;
+
+
+
+
 }
 }

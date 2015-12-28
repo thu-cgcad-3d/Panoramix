@@ -81,6 +81,9 @@ core::Mat<float, 4, 4> MakeCoreMatrix(const QMatrix4x4 &m);
 template <class T> inline QPointF MakeQPointF(const core::Point<T, 2> &p) {
   return QPointF(static_cast<float>(p[0]), static_cast<float>(p[1]));
 }
+inline core::Point<qreal, 2> MakeCorePoint(const QPointF &p) {
+  return core::Point<qreal, 2>(p.x(), p.y());
+}
 inline QPoint MakeQPoint(const core::Pixel &p) { return QPoint(p.x, p.y); }
 
 // size
@@ -89,6 +92,18 @@ inline QSizeF MakeQSizeF(const core::Size &sz) {
 }
 inline QSize MakeQSize(const core::Sizei &sz) {
   return QSize(sz.width, sz.height);
+}
+inline core::Sizei MakeCoreSize(const QSize & sz) {
+    return core::Sizei(sz.width(), sz.height());
+}
+
+// lines
+template <class T> inline QLineF MakeQLineF(const core::Line<T, 2> &line) {
+  return QLineF(MakeQPointF(line.first), MakeQPointF(line.second));
+}
+inline core::Line<qreal, 2> MakeCoreLine(const QLineF &line) {
+  return core::Line<qreal, 2>(MakeCorePoint(line.p1()),
+                              MakeCorePoint(line.p2()));
 }
 
 // image

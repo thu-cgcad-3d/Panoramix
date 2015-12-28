@@ -44,7 +44,7 @@ inline QVector<QRgb> MakeColorTable() {
 }
 }
 
-QImage MakeQImage(const cv::Mat &inMat) {
+QImage MakeQImage(const core::Image &inMat) {
   switch (inMat.type()) {
   // 8-bit, 4 channel
   case CV_8UC4:
