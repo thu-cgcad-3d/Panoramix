@@ -159,10 +159,10 @@ inline Color ColorFromImage(const core::Image &im, core::Pixel p) {
 // keep sync with Qt::PenStyle
 enum PenStyle {
   NoPen,
-  SolidLine, // 1	A plain line.
-  DashLine, // 2	Dashes separated by a few pixels.
-  DotLine, // 3	Dots separated by a few pixels.
-  DashDotLine, // 4	Alternate dots and dashes.
+  SolidLine,      // 1	A plain line.
+  DashLine,       // 2	Dashes separated by a few pixels.
+  DotLine,        // 3	Dots separated by a few pixels.
+  DashDotLine,    // 4	Alternate dots and dashes.
   DashDotDotLine, // 5	One dash, two dots, one dash, two dots.
   CustomDashLine
 };
@@ -215,10 +215,12 @@ public:
   const Color &exceptionalColor() const { return _exceptionalColor; }
   Color &exceptionalColor() { return _exceptionalColor; }
   const Color &operator[](int claz) const {
-    return claz < 0 ? _exceptionalColor : _colors[claz];
+    return claz < 0 || claz >= _colors.size() ? _exceptionalColor
+                                              : _colors[claz];
   }
   Color &operator[](int claz) {
-    return claz < 0 ? _exceptionalColor : _colors[claz];
+    return claz < 0 || claz >= _colors.size() ? _exceptionalColor
+                                              : _colors[claz];
   }
   bool empty() const { return _colors.empty(); }
 
@@ -324,15 +326,16 @@ Box3 BoundingBox(const gui::SpatialProjectedPolygon &spp);
 }
 
 #define DECL_PROPERTY(claz, type, name)                                        \
+  \
 private:                                                                       \
   type _##name;                                                                \
-                                                                               \
+  \
 public:                                                                        \
   inline const type &name() const { return _##name; }                          \
-                                                                               \
+  \
 public:                                                                        \
   inline type &name() { return _##name; }                                      \
-                                                                               \
+  \
 public:                                                                        \
   inline claz &name(const type &v) {                                           \
     _##name = v;                                                               \

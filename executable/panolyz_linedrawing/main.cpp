@@ -101,8 +101,8 @@ LineDrawing<Point3> LoadLineDrawing(const std::string &filename,
 }
 
 template <class FunT>
-LineDrawing<Point2> Transform(const LineDrawing<Point3> &in, const FunT &fun) {
-  LineDrawing<Point2> out;
+auto Transform(const LineDrawing<Point3> &in, const FunT &fun) {
+  LineDrawing<typename FunctionTraits<FunT>::ResultType> out;
   out.vertPositions.resize(in.vertPositions.size());
   std::transform(in.vertPositions.begin(), in.vertPositions.end(),
                  out.vertPositions.begin(), fun);
@@ -112,162 +112,85 @@ LineDrawing<Point2> Transform(const LineDrawing<Point3> &in, const FunT &fun) {
   return out;
 }
 
-int DISABLED_main(int argc, char **argv) {
+int main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Cache\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
+  std::string name = "tritower";
   std::string folder = "F:\\DataSets\\linedrawing_"
-                       "dataset\\DatabaseFile\\bigHouse\\";
+                       "dataset\\DatabaseFile\\" +
+                       name + "\\";
   auto drawing =
-      LoadLineDrawing(folder + "bigHouse_cy.3dr", folder + "bigHouse.gt");
+      LoadLineDrawing(folder + name + "_cy.3dr", folder + name + ".gt");
+  auto sphere = BoundingBoxOfContainer(drawing.vertPositions).outerSphere();
+  double scale = sphere.radius;
 
-  gui::SceneBuilder sb;
-  sb.installingOptions().defaultShaderSource =
-      gui::OpenGLShaderSourceDescriptor::XLines;
-  sb.installingOptions().discretizeOptions.color = gui::Black;
-  sb.installingOptions().lineWidth = 3.0;
-  double scale =
-      BoundingBoxOfContainer(drawing.vertPositions).outerSphere().radius;
-  for (auto &l : drawing.line2verts) {
-    Line3 line3(drawing.vertPositions[l.first],
-                drawing.vertPositions[l.second]);
-    sb.add(line3 / scale);
+  {
+    gui::SceneBuilder sb;
+    sb.installingOptions().defaultShaderSource =
+        gui::OpenGLShaderSourceDescriptor::XLines;
+    sb.installingOptions().discretizeOptions.color = gui::Black;
+    sb.installingOptions().lineWidth = 3.0;
+    for (auto &l : drawing.line2verts) {
+      Line3 line3(drawing.vertPositions[l.first],
+                  drawing.vertPositions[l.second]);
+      sb.add(line3 / scale);
+    }
+    sb.show(true, true, gui::RenderOptions()
+                            .backgroundColor(gui::White)
+                            .renderMode(gui::Lines));
   }
-  sb.show(
-      true, true,
-      gui::RenderOptions().backgroundColor(gui::White).renderMode(gui::Lines));
+
+  // generate perspective 2d line drawing
+  PerspectiveCamera cam(500, 500, Point2(250, 250), 200,
+                        sphere.center + Vec3(1, 1, 1) * sphere.radius * 2,
+                        sphere.center);
+  auto drawing2d = Transform(
+      drawing, [&cam](const Point3 &p) { return cat(cam.toScreen(p), 0.0); });
+
+  //
+  std::vector<Classified<Line2>> lines(drawing2d.line2verts.size());
+  for (int i = 0; i < drawing2d.line2verts.size(); i++) {
+    auto &p1 = drawing2d.vertPositions[drawing2d.line2verts[i].first];
+    auto &p2 = drawing2d.vertPositions[drawing2d.line2verts[i].second];
+    lines[i].component.first = Point2(p1[0], p1[1]);
+    lines[i].component.second = Point2(p2[0], p2[1]);
+    lines[i].claz = -1;
+  }
 
   VanishingPointsDetector vpd;
-  return 0;
-}
+  vpd.params().algorithm = VanishingPointsDetector::TardifSimplified;
+  std::vector<HPoint2> vps;
+  double focal = 0;
+  auto result = vpd(lines, cam.screenSize());
+  if (result.failed()) {
+    return 0;
+  }
+  std::tie(vps, focal) = result.unwrap();
 
-void DrawOn(const Image &im, std::vector<Classified<Line2>> &lines) {
-  class Widget : public QWidget {
-  public:
-    Widget(const Image &im, std::vector<Classified<Line2>> &lines,
-           QWidget *p = nullptr)
-        : QWidget(p), _im(gui::MakeQImage(im)), _lines(lines),
-          _isDrawing(false) {
-      setMouseTracking(true);
-      setMinimumSize(_im.size());
-      setMaximumSize(_im.size());
-      estimateVPs();
+  {
+    double scale =
+        BoundingBoxOfContainer(drawing2d.vertPositions).outerSphere().radius;
+    gui::SceneBuilder sb;
+    sb.installingOptions().defaultShaderSource =
+        gui::OpenGLShaderSourceDescriptor::XLines;
+    sb.installingOptions().discretizeOptions.color = gui::Black;
+    sb.installingOptions().lineWidth = 3.0;
+    sb.installingOptions().discretizeOptions.colorTable = gui::RGB;
+    sb.installingOptions().discretizeOptions.colorTable.exceptionalColor() =
+        gui::Black;
+    std::vector<Classified<Line3>> line3s(lines.size());
+    for (int i = 0; i < lines.size(); i++) {
+      line3s[i].component.first = cat(lines[i].component.first / scale, 0.0);
+      line3s[i].component.second = cat(lines[i].component.second / scale, 0.0);
+      line3s[i].claz = lines[i].claz;
     }
-
-  protected:
-    virtual void paintEvent(QPaintEvent *e) override {
-      QPainter painter(this);
-      painter.setRenderHint(QPainter::Antialiasing);
-      painter.drawImage(QPoint(), _im);
-
-      if (!_vpFailed) {
-        static const QColor _colors[] = {Qt::red, Qt::green, Qt::blue};
-        for (int i = 0; i < _lines.size(); i++) {
-          int claz = _lines[i].claz;
-          if (claz == -1 || claz >= 3) {
-            continue;
-          }
-          auto p1 = ToPixel(_vps[claz].value());
-          auto p2 = ToPixel(_lines[i].component.center());
-          cv::clipLine(cv::Rect(Point2i(), Point2i(width(), height())), p1, p2);
-          painter.setPen(QPen(_colors[claz], 1, Qt::DotLine));
-          painter.drawLine(gui::MakeQPoint(p1), gui::MakeQPoint(p2));
-        }
-      }
-
-      painter.setPen(QPen(Qt::black, 2));
-      std::vector<QLineF> lines(_lines.size());
-      for (int i = 0; i < _lines.size(); i++) {
-        lines[i] = gui::MakeQLineF(_lines[i].component);
-      }
-      painter.drawLines(lines.data(), lines.size());
-      if (_isDrawing) {
-        painter.setPen(QPen(Qt::black, 2, Qt::DashLine));
-        painter.drawLine(_lastP, _curP);
-      }
-    }
-    virtual void mousePressEvent(QMouseEvent *e) override {
-      _curP = e->pos();
-      if (_isDrawing) {
-        _lines.emplace_back(ClassifyAs(
-            Line2(gui::MakeCorePoint(_lastP), gui::MakeCorePoint(_curP)), -1));
-        estimateVPs();
-        _isDrawing = false;
-      } else {
-        _lastP = e->pos();
-        _isDrawing = true;
-      }
-      update();
-    }
-    virtual void mouseMoveEvent(QMouseEvent *e) override {
-      _curP = e->pos();
-      update();
-    }
-    virtual void mouseReleaseEvent(QMouseEvent *e) override {}
-
-  private:
-    void estimateVPs() {
-      if (_lines.size() <= 3) {
-        return;
-      }
-      auto result = _vpd(_lines, gui::MakeCoreSize(_im.size()));
-      _vpFailed = result.failed();
-      if (!_vpFailed) {
-        std::tie(_vps, _focal) = result.unwrap();
-      }
-    }
-
-  private:
-    QImage _im;
-    std::vector<Classified<Line2>> &_lines;
-    QPointF _lastP;
-    QPointF _curP;
-    bool _isDrawing;
-
-    bool _vpFailed;
-    std::vector<HPoint2> _vps;
-    double _focal;
-    VanishingPointsDetector _vpd;
-  };
-
-  auto temp = im.clone();
-  Widget w(temp, lines);
-  w.show();
-  gui::Singleton::ContinueGui();
-}
-
-int DISABLED_main(int argc, char **argv) {
-  gui::Singleton::InitGui(argc, argv);
-  misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
-  std::string path;
-  auto im =
-      gui::PickAnImage(PANORAMIX_TEST_DATA_DIR_STR "\\localmanh\\", &path);
-  ResizeToArea(im, 500 * 500);
-  // Imageb edge;
-  // cv::Canny(im, edge, 100, 300);
-  // cv::imshow("im", im);
-  // cv::imshow("edge", edge);
-  // cv::waitKey();
-
-  std::vector<Classified<Line2>> lines;
-  DrawOn(im, lines);
-
-  misc::SaveCache(path, "im_lines", im, lines);
-
-  return 0;
-}
-
-int main(int argc, char **argv) {
-  gui::Singleton::InitGui(argc, argv);
-  misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
-  std::string path;
-  gui::PickAnImage(PANORAMIX_TEST_DATA_DIR_STR "\\localmanh\\", &path);
-  core::Image im;
-  std::vector<Classified<Line2>> lines;
-  misc::LoadCache(path, "im_lines", im, lines);
-
-  DrawOn(im, lines);
+    sb.add(line3s);
+    sb.show(true, true, gui::RenderOptions()
+                            .backgroundColor(gui::White)
+                            .renderMode(gui::Lines));
+  }
 
   return 0;
 }

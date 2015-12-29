@@ -121,6 +121,12 @@ inline void Discretize(TriMesh &mesh, const core::Point<T, 3> &p,
 }
 
 template <class T>
+inline void Discretize(TriMesh &mesh, const core::Point<T, 2> &p,
+                       const DiscretizeOptions &o) {
+  Discretize(mesh, core::cat(p, 0.0), o);
+}
+
+template <class T>
 inline void Discretize(TriMesh &mesh, const core::Line<T, 3> &l,
                        const DiscretizeOptions &o) {
   TriMesh::Vertex v1, v2;
@@ -129,6 +135,14 @@ inline void Discretize(TriMesh &mesh, const core::Line<T, 3> &l,
   v2.position = core::cat(core::ecast<float>(l.second), 1.0f);
   v2.color = o.color;
   mesh.addIsolatedLine(v1, v2, o.entity);
+}
+
+template <class T>
+inline void Discretize(TriMesh &mesh, const core::Line<T, 2> &l,
+                       const DiscretizeOptions &o) {
+  Discretize(
+      mesh, core::Line<T, 3>(core::cat(l.first, 0.0), core::cat(l.second, 0.0)),
+      o);
 }
 
 template <class T>
