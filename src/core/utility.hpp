@@ -1261,9 +1261,8 @@ void MakeTriFacedSphere(AddVertex3FunT &&addVertex, AddTriFaceFunT &&addFace,
 }
 
 // make an icosahedron
-template <class AddVertex3FunT, class AddTriFaceFunT = Dummy>
-void MakeIcosahedron(AddVertex3FunT &&addVertex,
-                     AddTriFaceFunT &&addFace = AddTriFaceFunT()) {
+template <class AddVertex3FunT, class AddTriFaceFunT>
+void MakeIcosahedron(AddVertex3FunT &&addVertex, AddTriFaceFunT &&addFace) {
   using VertHandle = decltype(addVertex(0.0f, 0.0f, 0.0f));
   // create a basic icosahedron
   static const float t = (1.0f + std::sqrt(5.0f)) / 2.0f;

@@ -31,18 +31,30 @@ template <class T>
 using SceneObjectCallbackFunction = void(InteractionID, T &data);
 
 struct RenderOptions {
-  DECL_PROPERTY(RenderOptions, std::string, winName);
-  DECL_PROPERTY(RenderOptions, Color, backgroundColor);
-  DECL_PROPERTY(RenderOptions, RenderModeFlags, renderMode);
-  DECL_PROPERTY(RenderOptions, core::PerspectiveCamera, camera);
-  DECL_PROPERTY(RenderOptions, float, bwColor);
-  DECL_PROPERTY(RenderOptions, float, bwTexColor);
-  DECL_PROPERTY(RenderOptions, bool, cullFrontFace);
-  DECL_PROPERTY(RenderOptions, bool, cullBackFace);
-  DECL_PROPERTY(RenderOptions, float, panoramaHoriCenterRatio);
-  DECL_PROPERTY(RenderOptions, float, panoramaAspectRatio);
-  DECL_PROPERTY(RenderOptions, core::Point3, panoramaProjectionCenter);
-
+#define DECL_PROPERTY(type, name)                                              \
+  \
+private:                                                                       \
+  type _##name;                                                                \
+  \
+public:                                                                        \
+  inline const type &name() const { return _##name; }                          \
+  inline type &name() { return _##name; }                                      \
+  inline RenderOptions &name(const type &v) {                                  \
+    _##name = v;                                                               \
+    return *this;                                                              \
+  }
+  DECL_PROPERTY(std::string, winName)
+  DECL_PROPERTY(Color, backgroundColor)
+  DECL_PROPERTY(RenderModeFlags, renderMode)
+  DECL_PROPERTY(core::PerspectiveCamera, camera)
+  DECL_PROPERTY(float, bwColor)
+  DECL_PROPERTY(float, bwTexColor)
+  DECL_PROPERTY(bool, cullFrontFace)
+  DECL_PROPERTY(bool, cullBackFace)
+  DECL_PROPERTY(float, panoramaHoriCenterRatio)
+  DECL_PROPERTY(float, panoramaAspectRatio)
+  DECL_PROPERTY(core::Point3, panoramaProjectionCenter)
+#undef DECL_PROPERTY
   RenderOptions();
 };
 
@@ -440,8 +452,8 @@ public:
 
   SceneWidget *createWidget(const RenderOptions &options,
                             QWidget *parent = nullptr);
-  void show(bool doModal = true, bool autoSetCamera = true,
-            const RenderOptions &options = RenderOptions());
+  RenderOptions show(bool doModal = true, bool autoSetCamera = true,
+                     const RenderOptions &options = RenderOptions());
 
 private:
   SceneObjectInstallingOptions _installingOptions;

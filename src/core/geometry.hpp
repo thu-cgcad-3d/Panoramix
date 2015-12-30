@@ -56,8 +56,6 @@ using Vec5f = Vec<float, 5>;
 using Vec7 = Vec<double, 7>;
 using Vec7f = Vec<float, 7>;
 
-template <class T> struct IsVecOrPoint : no {};
-template <class T, int N> struct IsVecOrPoint<Point<T, N>> : yes {};
 template <class T, int N> struct IsNotContainerByHand<Point<T, N>> : yes {};
 
 // matrix

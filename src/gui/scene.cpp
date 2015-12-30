@@ -1109,8 +1109,8 @@ SceneWidget *SceneBuilder::createWidget(const RenderOptions &options,
   return new SceneWidget(scene(), options, parent);
 }
 
-void SceneBuilder::show(bool doModal, bool autoSetCamera,
-                        const RenderOptions &options) {
+RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
+                                 const RenderOptions &options) {
   auto app = Singleton::InitGui();
   SceneWidget *w = createWidget(options);
 
@@ -1153,6 +1153,7 @@ void SceneBuilder::show(bool doModal, bool autoSetCamera,
   if (doModal) {
     Singleton::ContinueGui();
   }
+  return w->options;
 }
 
 void SceneBuilder::clear() {

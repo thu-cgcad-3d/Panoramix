@@ -54,6 +54,8 @@ public:
   DECL_MXARRAY_MEMBERFUNCTION_IS(Int64)
   DECL_MXARRAY_MEMBERFUNCTION_IS(Uint64)
 
+#undef DECL_MXARRAY_MEMBERFUNCTION_IS
+
   template <class T> bool is() const { return false; }
   template <> bool is<double>() const { return isDouble(); }
   template <> bool is<float>() const { return isSingle(); }

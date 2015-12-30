@@ -2,11 +2,13 @@
 
 #include "../core/any.hpp"
 #include "../core/basic_types.hpp"
-#include "../core/mesh.hpp"
 
 #include "basic_types.hpp"
 
 namespace pano {
+namespace core {
+template <class VertDataT, class HalfDataT, class FaceDataT> class Mesh;
+}
 namespace gui {
 
 // discretize options
@@ -258,11 +260,11 @@ void Discretize(TriMesh &mesh, const core::Mesh<core::Point<T, 3>, H, F> &m,
     TriMesh::Vertex v;
     v.position = core::cat(vv.data, (T)1.0);
     v.color = o.color;
-    vhandles[vv.hd.id] = mesh.addVertex(v, true, o.entity);
+    vhandles[vv.topo.hd.id] = mesh.addVertex(v, true, o.entity);
   }
   for (auto &hh : m.halfedges()) {
-    auto vh1 = hd.topo.from();
-    auto vh2 = hd.topo.to();
+    auto vh1 = hh.topo.from();
+    auto vh2 = hh.topo.to();
     mesh.addLine(vhandles[vh1.id], vhandles[vh2.id], o.entity);
   }
   for (auto &ff : m.faces()) {

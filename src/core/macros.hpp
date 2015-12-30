@@ -11,6 +11,9 @@
 namespace pano {
 namespace core {
 
+#define CONCAT_IMPL(x, y) x##y
+#define MACRO_CONCAT(x, y) CONCAT_IMPL(x, y)
+
 #define FORCEINLINE __forceinline
 
 // macros describing function implementations

@@ -6,15 +6,16 @@
 namespace pano {
 namespace core {
 
-/**
-* @brief Topology structs
-*/
+// the mesh class
 struct VertTopo;
 struct HalfTopo;
 struct FaceTopo;
 struct VertTopo {
   Handle<VertTopo> hd;
   HandleArray<HalfTopo> halfedges;
+  template <class Archive> inline void serialize(Archive &ar) {
+    ar(hd, halfedges);
+  }
 };
 struct HalfTopo {
   Handle<HalfTopo> hd;
@@ -25,27 +26,42 @@ struct HalfTopo {
   inline const Handle<VertTopo> &to() const { return endVertices[1]; }
   Handle<HalfTopo> opposite;
   Handle<FaceTopo> face;
+  template <class Archive> inline void serialize(Archive &ar) {
+    ar(hd, endVertices, opposite, face);
+  }
 };
 struct FaceTopo {
   Handle<FaceTopo> hd;
   HandleArray<HalfTopo> halfedges;
+  template <class Archive> inline void serialize(Archive &ar) {
+    ar(hd, halfedges);
+  }
 };
 
-/**
-* @brief The Mesh class, halfedge structure
-*/
 template <class VertDataT, class HalfDataT = Dummy, class FaceDataT = Dummy>
 class Mesh {
-
 public:
-  inline Mesh() {}
+  static const int LayerNum = 2;
+
+  using VertData = VertDataT;
+  using HalfData = HalfDataT;
+  using FaceData = FaceDataT;
 
   using VertHandle = Handle<VertTopo>;
   using HalfHandle = Handle<HalfTopo>;
   using FaceHandle = Handle<FaceTopo>;
+
   using VertsTable = TripletArray<VertTopo, VertDataT>;
   using HalfsTable = TripletArray<HalfTopo, HalfDataT>;
   using FacesTable = TripletArray<FaceTopo, FaceDataT>;
+
+  using VertExistsPred = TripletExistsPred<VertTopo, VertDataT>;
+  using HalfExistsPred = TripletExistsPred<HalfTopo, HalfDataT>;
+  using FaceExistsPred = TripletExistsPred<FaceTopo, FaceDataT>;
+
+  using Vertex = typename VertsTable::value_type;
+  using HalfEdge = typename HalfsTable::value_type;
+  using Face = typename FacesTable::value_type;
 
   inline VertsTable &internalVertices() { return _verts; }
   inline HalfsTable &internalHalfEdges() { return _halfs; }
@@ -54,12 +70,30 @@ public:
   inline const HalfsTable &internalHalfEdges() const { return _halfs; }
   inline const FacesTable &internalFaces() const { return _faces; }
 
-  inline auto vertices() { return MakeConditionalContainer(&_verts); }
-  inline auto halfedges() { return MakeConditionalContainer(&_halfs); }
-  inline auto faces() { return MakeConditionalContainer(&_faces); }
-  inline auto vertices() const { return MakeConditionalContainer(&_verts); }
-  inline auto halfedges() const { return MakeConditionalContainer(&_halfs); }
-  inline auto faces() const { return MakeConditionalContainer(&_faces); }
+  inline ConditionalContainerWrapper<VertsTable, VertExistsPred> vertices() {
+    return ConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts);
+  }
+  inline ConditionalContainerWrapper<HalfsTable, HalfExistsPred> halfedges() {
+    return ConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs);
+  }
+  inline ConditionalContainerWrapper<FacesTable, FaceExistsPred> faces() {
+    return ConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces);
+  }
+  inline ConstConditionalContainerWrapper<VertsTable, VertExistsPred>
+  vertices() const {
+    return ConstConditionalContainerWrapper<VertsTable, VertExistsPred>(
+        &_verts);
+  }
+  inline ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred>
+  halfedges() const {
+    return ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred>(
+        &_halfs);
+  }
+  inline ConstConditionalContainerWrapper<FacesTable, FaceExistsPred>
+  faces() const {
+    return ConstConditionalContainerWrapper<FacesTable, FaceExistsPred>(
+        &_faces);
+  }
 
   inline VertTopo &topo(VertHandle v) { return _verts[v.id].topo; }
   inline HalfTopo &topo(HalfHandle h) { return _halfs[h.id].topo; }
@@ -76,27 +110,47 @@ public:
   inline const FaceDataT &data(FaceHandle f) const { return _faces[f.id].data; }
 
   VertHandle addVertex(const VertDataT &vd = VertDataT()) {
-    _verts.push_back({{{_verts.size()}, {}}, true, vd});
+    VertTopo topo;
+    topo.hd.id = _verts.size();
+    _verts.emplace_back(std::move(topo), vd, true);
     return _verts.back().topo.hd;
   }
   HalfHandle addEdge(VertHandle from, VertHandle to,
                      const HalfDataT &hd = HalfDataT(),
-                     const HalfDataT &hdrev = HalfDataT()) {
+                     const HalfDataT &hdrev = HalfDataT(),
+                     bool mergeDuplicateEdge = true) {
     if (from == to) {
       return HalfHandle();
     }
     // find existed halfedge
-    HalfHandle hh = findEdge(from, to);
-    if (hh.valid()) {
-      _halfs[hh.id].data = hd;
-      _halfs[_halfs[hh.id].topo.opposite.id].data = hdrev;
-      return hh;
+    if (mergeDuplicateEdge) {
+      HalfHandle hh = findEdge(from, to);
+      if (hh.valid()) {
+        _halfs[hh.id].data = hd;
+        _halfs[_halfs[hh.id].topo.opposite.id].data = hdrev;
+        return hh;
+      }
     }
 
     HalfHandle hh1(_halfs.size());
-    _halfs.push_back({{{_halfs.size()}, {from, to}, {-1}, {-1}}, true, hd});
+    Triplet<HalfTopo, HalfDataT> ht;
+    ht.topo.hd.id = _halfs.size();
+    ht.topo.from() = from;
+    ht.topo.to() = to;
+    ht.exists = true;
+    ht.data = hd;
+    //_halfs.push_back({ { { _halfs.size() }, { from, to }, { -1 }, { -1 } },
+    // true, hd });
+    _halfs.push_back(ht);
     HalfHandle hh2(_halfs.size());
-    _halfs.push_back({{{_halfs.size()}, {to, from}, {-1}, {-1}}, true, hdrev});
+    ht.topo.hd.id = _halfs.size();
+    ht.topo.from() = to;
+    ht.topo.to() = from;
+    ht.exists = true;
+    ht.data = hdrev;
+    //_halfs.push_back({ { { _halfs.size() }, { to, from }, { -1 }, { -1 } },
+    // true, hdrev });
+    _halfs.push_back(ht);
 
     _halfs[hh1.id].topo.opposite = hh2;
     _halfs[hh2.id].topo.opposite = hh1;
@@ -107,7 +161,13 @@ public:
   }
   FaceHandle addFace(const HandleArray<HalfTopo> &halfedges,
                      const FaceDataT &fd = FaceDataT()) {
-    _faces.push_back({{{_faces.size()}, halfedges}, true, fd});
+    Triplet<FaceTopo, FaceDataT> ft;
+    ft.topo.hd.id = _faces.size();
+    ft.topo.halfedges = halfedges;
+    ft.exists = true;
+    ft.data = fd;
+    //_faces.push_back({ { { _faces.size() }, halfedges }, true, fd });
+    _faces.push_back(ft);
     for (HalfHandle hh : halfedges) {
       _halfs[hh.id].topo.face = _faces.back().topo.hd;
     }
@@ -119,7 +179,7 @@ public:
     assert(vertices.size() >= 3);
     HalfHandle hh = findEdge(vertices.back(), vertices.front());
     auto verts = vertices;
-    if (hh.valid() && autoflip) {
+    if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip) {
       std::reverse(verts.begin(), verts.end());
     }
 
@@ -129,9 +189,48 @@ public:
     }
     return addFace(halfs, fd);
   }
+  template <class VertHandleIteratorT,
+            class = std::enable_if_t<std::is_same<
+                std::iterator_traits<VertHandleIteratorT>::value_type,
+                VertHandle>::value>>
+  FaceHandle addFace(VertHandleIteratorT vhBegin, VertHandleIteratorT vhEnd,
+                     bool autoflip = true, const FaceDataT &fd = FaceDataT()) {
+    HandleArray<HalfTopo> halfs;
+    HalfHandle hh = findEdge(vertices.back(), vertices.front());
+    HandleArray<VertTopo> verts(vhBegin, vhEnd);
+    assert(verts.size() >= 3);
+    if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip) {
+      std::reverse(verts.begin(), verts.end());
+    }
+
+    for (size_t i = 0; i < verts.size(); i++) {
+      size_t inext = (i + 1) % verts.size();
+      halfs.push_back(addEdge(verts[i], verts[inext]));
+    }
+    return addFace(halfs, fd);
+  }
+  FaceHandle addFace(VertHandle v1, VertHandle v2, VertHandle v3,
+                     bool autoflip = true, const FaceDataT &fd = FaceDataT()) {
+    HalfHandle hh = findEdge(v3, v1);
+    if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip) {
+      std::swap(v1, v3);
+    }
+    return addFace({addEdge(v1, v2), addEdge(v2, v3), addEdge(v3, v1)}, fd);
+  }
+  FaceHandle addFace(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4,
+                     bool autoflip = true, const FaceDataT &fd = FaceDataT()) {
+    HalfHandle hh = findEdge(v4, v1);
+    if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip) {
+      std::swap(v1, v4);
+    }
+    return addFace(
+        {addEdge(v1, v2), addEdge(v2, v3), addEdge(v3, v4), addEdge(v4, v1)},
+        fd);
+  }
 
   HalfHandle findEdge(VertHandle from, VertHandle to) const {
     for (HalfHandle hh : _verts[from.id].topo.halfedges) {
+      assert(_halfs[hh.id].topo.endVertices[0] == from);
       if (_halfs[hh.id].topo.endVertices[1] == to) {
         return hh;
       }
@@ -144,15 +243,15 @@ public:
   inline bool removed(VertHandle v) const { return !_verts[v.id].exists; }
 
   inline void remove(FaceHandle f) {
-    if (f.isInValid() || removed(f))
+    if (f.invalid() || removed(f))
       return;
     _faces[f.id].exists = false;
-    for (HalfHandle hh : _faces[f.id].topo.halfedges) {
-      _halfs[hh.id].topo.face.reset();
+    for (auto &hh : _faces[f.id].topo.halfedges) {
+      hh.reset();
     }
   }
   inline void remove(HalfHandle e) {
-    if (h.isInValid() || removed(h))
+    if (h.invalid() || removed(h))
       return;
     HalfHandle hop = _halfs[h.id].topo.opposite;
     _halfs[h.id].exists = false;
@@ -160,19 +259,25 @@ public:
 
     remove(_halfs[h.id].topo.face);
     remove(_halfs[hop.id].topo.face);
+
+    _halfs[h.id].topo.from().reset();
+    _halfs[hop.id].topo.to().reset();
+    _halfs[h.id].topo.face.reset();
+    _halfs[hop.id].topo.face.reset();
   }
   inline void remove(VertHandle v) {
-    if (v.isInValid() || removed(v))
+    if (v.invalid() || removed(v))
       return;
     _verts[v.id].exists = false;
     for (HalfHandle hh : _verts[v.id].topo.halfedges)
       remove(hh);
+    _verts[v.id].topo.halfedges.clear();
   }
 
   Mesh &unite(const Mesh &m) {
-    std::vector<VertHandle> vtable(m.internalVertices().size());
-    std::vector<HalfHandle> htable(m.internalHalfEdges().size());
-    std::vector<FaceHandle> ftable(m.internalFaces().size());
+    std::vector<VertHandle> vtable(m.Vertices().size());
+    std::vector<HalfHandle> htable(m.HalfEdges().size());
+    std::vector<FaceHandle> ftable(m.Faces().size());
 
     for (auto v : m.vertices()) {
       vtable[v.topo.hd.id] = addVertex(v.data);
@@ -197,15 +302,13 @@ public:
     return *this;
   }
 
-  /**
-   * @brief garbage collection
-   */
+  // garbage collection
   template <class VertHandlePtrContainerT = HandlePtrArray<VertTopo>,
             class HalfHandlePtrContainerT = HandlePtrArray<HalfTopo>,
             class FaceHandlePtrContainerT = HandlePtrArray<FaceTopo>>
-  void gc(const VertHandlePtrContainerT &vps = {},
-          const HalfHandlePtrContainerT &hps = {},
-          const FaceHandlePtrContainerT &fps = {}) {
+  void gc(const VertHandlePtrContainerT &vps = VertHandlePtrContainerT(),
+          const HalfHandlePtrContainerT &hps = HalfHandlePtrContainerT(),
+          const FaceHandlePtrContainerT &fps = FaceHandlePtrContainerT()) {
     std::vector<VertHandle> vnlocs;
     std::vector<HalfHandle> hnlocs;
     std::vector<FaceHandle> fnlocs;
@@ -246,15 +349,201 @@ public:
     _faces.clear();
   }
 
+  template <class Archive> inline void serialize(Archive &ar) {
+    ar(_verts, _halfs, _faces);
+  }
+
 private:
   VertsTable _verts;
   HalfsTable _halfs;
   FacesTable _faces;
 };
 
-/**
-  * @brief SearchAndAddFaces
-  */
+
+// DepthFirstSearch
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class ConstVertexCallbackT // bool callback(const Mesh & m, VertH v)
+          >
+bool DepthFirstSearch(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                      ConstVertexCallbackT vCallBack) {
+  using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
+  using VertH = typename MeshType::VertHandle;
+  using HalfH = typename MeshType::HalfHandle;
+  using FaceH = typename MeshType::FaceHandle;
+
+  static const std::function<bool(const MeshType &, VertH, std::vector<bool> &,
+                                  ConstVertexCallbackT)>
+      depthFirstSearchOneTree = [](const MeshType &mesh, VertH root,
+                                   std::vector<bool> &vertVisited,
+                                   ConstVertexCallbackT vCallBack) {
+
+        assert(root.isValid() && !mesh.removed(root));
+        if (vertVisited[root.id])
+          return true;
+        if (!vCallBack(mesh, root))
+          return false;
+        vertVisited[root.id] = true;
+        auto &halves = mesh.topo(root).halfedges;
+        for (auto hh : halves) {
+          if (mesh.removed(hh))
+            continue;
+          auto vh = mesh.topo(hh).to();
+          if (!depthFirstSearchOneTree(mesh, vh, vertVisited, vCallBack))
+            return false;
+        }
+        return true;
+      };
+
+  std::vector<bool> visited(mesh.internalVertices().size(), false);
+  while (true) {
+    VertH root;
+    for (auto &h : mesh.vertices()) {
+      if (!visited[h.topo.hd.id]) {
+        root = h.topo.hd;
+        break;
+      }
+    }
+    if (root.invalid())
+      break;
+    if (!depthFirstSearchOneTree(mesh, root, vCallBack, visited))
+      break;
+  }
+}
+
+// DepthFirstSearch
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class VertexCallbackT // bool callback(const Mesh & m, VertH v)
+          >
+bool DepthFirstSearch(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                      VertexCallbackT vCallBack) {
+  using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
+  using VertH = typename MeshType::VertHandle;
+  using HalfH = typename MeshType::HalfHandle;
+  using FaceH = typename MeshType::FaceHandle;
+
+  static const std::function<bool(MeshType &, VertH, std::vector<bool> &,
+                                  VertexCallbackT)>
+      depthFirstSearchOneTree = [](MeshType &mesh, VertH root,
+                                   std::vector<bool> &vertVisited,
+                                   VertexCallbackT vCallBack) {
+
+        assert(root.isValid() && !mesh.removed(root));
+        if (vertVisited[root.id])
+          return true;
+        if (!vCallBack(mesh, root))
+          return false;
+        vertVisited[root.id] = true;
+        auto &halves = mesh.topo(root).halfedges;
+        for (auto hh : halves) {
+          if (mesh.removed(hh))
+            continue;
+          auto vh = mesh.topo(hh).to();
+          if (!depthFirstSearchOneTree(mesh, vh, vertVisited, vCallBack))
+            return false;
+        }
+        return true;
+      };
+
+  std::vector<bool> visited(mesh.internalVertices().size(), false);
+  while (true) {
+    VertH root;
+    for (auto &h : mesh.vertices()) {
+      if (!visited[h.topo.hd.id]) {
+        root = h.topo.hd;
+        break;
+      }
+    }
+    if (root.invalid())
+      break;
+    if (!depthFirstSearchOneTree(mesh, root, visited, vCallBack))
+      break;
+  }
+}
+
+// ConnectedComponents
+template <
+    class VertDataT, class HalfDataT, class FaceDataT,
+    class ConstVertexTypeRecorderT // record(const MeshT & m, VertH v, int ccid)
+    >
+int ConnectedComponents(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                        ConstVertexTypeRecorderT vtr) {
+  using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
+  using VertH = typename MeshType::VertHandle;
+  using HalfH = typename MeshType::HalfHandle;
+  using FaceH = typename MeshType::FaceHandle;
+
+  static const std::function<bool(const MeshType &, VertH, std::vector<bool> &,
+                                  ConstVertexTypeRecorderT, int)>
+      depthFirstSearchOneTree = [](const MeshType &mesh, VertH root,
+                                   std::vector<bool> &vertVisited,
+                                   ConstVertexTypeRecorderT vtr, int cid) {
+
+        assert(root.isValid() && !mesh.removed(root));
+        if (vertVisited[root.id])
+          return true;
+        vtr(mesh, root, cid);
+        vertVisited[root.id] = true;
+        auto &halves = mesh.topo(root).halfedges;
+        for (auto hh : halves) {
+          if (mesh.removed(hh))
+            continue;
+          auto vh = mesh.topo(hh).to();
+          if (!depthFirstSearchOneTree(mesh, vh, vertVisited, vtr, cid))
+            return false;
+        }
+        return true;
+      };
+
+  std::vector<bool> visited(mesh.internalVertices().size(), false);
+  int cid = 0;
+  while (true) {
+    VertH root;
+    for (auto &h : mesh.vertices()) {
+      if (!visited[h.topo.hd.id]) {
+        root = h.topo.hd;
+        break;
+      }
+    }
+    if (root.invalid())
+      break;
+
+    depthFirstSearchOneTree(mesh, root, visited, vtr, cid);
+    cid++;
+  }
+  return cid;
+}
+
+// RemoveDanglingComponents
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void RemoveDanglingComponents(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
+  using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
+  using VertH = typename MeshType::VertHandle;
+  using HalfH = typename MeshType::HalfHandle;
+  using FaceH = typename MeshType::FaceHandle;
+
+  std::vector<int> cdegrees(mesh.internalVertices().size(), 0);
+  std::vector<int> danglcs;
+  while (true) {
+    std::fill(cdegrees.begin(), cdegrees.end(), 0);
+    for (auto &he : mesh.halfedges()) {
+      cdegrees[he.topo.from().id]++;
+    }
+    danglcs.clear();
+    for (size_t i = 0; i < cdegrees.size(); i++) {
+      if (cdegrees[i] < 2) {
+        danglcs.push_back(i);
+      }
+    }
+    if (danglcs.empty()) {
+      break;
+    }
+    for (int danglc : danglcs) {
+      mesh.remove(VertH(danglc));
+    }
+  }
+}
+
+// SearchAndAddFaces
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class EdgeParallelScorerT, // (const MeshT & mesh, HalfH h1, HalfH h2)
                                      // -> double
@@ -450,7 +739,7 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
 
   auto printMasterList = [&mesh,
                           &faceLoopArr](const std::list<LoopPtr> &masterList) {
-    std::cout << "masterList/workingCopy:" << std::endl;
+    /*std::cout << "masterList/workingCopy:" << std::endl;
     for (LoopPtr l : masterList) {
       std::cout << "[" << l->priority << "(";
       for (HalfH h : l->halfArr) {
@@ -469,7 +758,7 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
       std::cout << mesh.topo(l->halfArr.back()).to().id;
       std::cout << ")]";
     }
-    std::cout << std::endl;
+    std::cout << std::endl;*/
   };
 
   // insert into master list in priority's descending order
@@ -507,7 +796,7 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
     double result = std::accumulate(values.begin(), nend, 0.0) /
                     std::distance(values.begin(), nend);
     result = result == 0 ? 0.1 : result;
-    std::cout << "matting value: " << result << std::endl;
+    // std::cout << "matting value: " << result << std::endl;
     return result;
   };
 
@@ -602,7 +891,7 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
       [&half2loop, &mesh, &faceLoopArr, connectLoop, insertIntoMasterList,
        emsk](std::list<LoopPtr> &masterList) {
 
-        std::cout << "fouce connection ..." << std::endl;
+        // std::cout << "fouce connection ..." << std::endl;
 
         if (masterList.empty())
           return 0;
@@ -656,7 +945,7 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                                     connectLoop,
                                     emsk](std::list<LoopPtr> &masterList) {
 
-    std::cout << "merge ..." << std::endl;
+    // std::cout << "merge ..." << std::endl;
 
     if (masterList.empty())
       return 0;
@@ -712,7 +1001,7 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                                insertIntoMasterList, mattingValue,
                                emsk](std::list<LoopPtr> &masterList) {
 
-    std::cout << "try best merge ..." << std::endl;
+    // std::cout << "try best merge ..." << std::endl;
     if (masterList.empty()) {
       std::cout << "current list is empty!" << std::endl;
       return 0;
@@ -771,7 +1060,7 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
       }
     }
 
-    if (bestEndvh.isInValid())
+    if (bestEndvh.invalid())
       return 0;
 
     masterList.remove(loop);
@@ -893,9 +1182,7 @@ Label_End:
   }
 }
 
-/**
- * @brief SearchAndAddFaces
- */
+// SearchAndAddFaces
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
@@ -933,6 +1220,7 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   }
 }
 
+// MakeTetrahedron
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakeTetrahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   mesh.clear();
@@ -947,6 +1235,7 @@ void MakeTetrahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   mesh.addFace({v2, v4, v3});
 }
 
+// MakeQuadFacedCube
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakeQuadFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   /*
@@ -979,6 +1268,7 @@ void MakeQuadFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   mesh.addFace({v4, v3, v7, v8});
 }
 
+// MakeTriFacedCube
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakeTriFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   /*
@@ -1017,6 +1307,7 @@ void MakeTriFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   addTriFace(v4, v3, v7, v8);
 }
 
+// MakeIcosahedron
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakeIcosahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   mesh.clear();

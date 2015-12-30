@@ -5,6 +5,8 @@
 namespace pano {
 namespace gui {
 
+using namespace pano::core;
+
 // color
 enum ColorTag {
   Transparent,
@@ -266,11 +268,6 @@ inline RenderModeFlags operator|(RenderModeFlag f1, RenderModeFlag f2) {
 
 // opengl shader source
 enum class OpenGLShaderSourceDescriptor {
-  DefaultPoints,
-  DefaultLines,
-  DefaultTriangles,
-  Panorama,
-
   XPoints,
   XLines,
   XTriangles,
@@ -324,20 +321,3 @@ namespace core {
 Box3 BoundingBox(const gui::SpatialProjectedPolygon &spp);
 }
 }
-
-#define DECL_PROPERTY(claz, type, name)                                        \
-  \
-private:                                                                       \
-  type _##name;                                                                \
-  \
-public:                                                                        \
-  inline const type &name() const { return _##name; }                          \
-  \
-public:                                                                        \
-  inline type &name() { return _##name; }                                      \
-  \
-public:                                                                        \
-  inline claz &name(const type &v) {                                           \
-    _##name = v;                                                               \
-    return *this;                                                              \
-  }

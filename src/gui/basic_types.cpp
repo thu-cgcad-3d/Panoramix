@@ -411,120 +411,6 @@ ColorTable CreateJetColorTableWithSize(int sz, const Color &exceptColor) {
 // opengl shader source
 const std::pair<std::string, std::string> &
 PredefinedShaderSource(OpenGLShaderSourceDescriptor name) {
-
-  static const std::pair<std::string, std::string> defaultPointsShaderSource = {
-      "#version 120\n"
-      "attribute highp vec4 position;\n"
-      "attribute highp vec3 normal;\n"
-      "attribute lowp vec4 color;\n"
-      "attribute lowp vec2 texCoord;\n"
-      "uniform highp mat4 matrix;\n"
-      "uniform float pointSize;\n"
-      "varying vec4 pixelColor;\n"
-      "void main(void)\n"
-      "{\n"
-      "    gl_Position = matrix * position;\n"
-      "    gl_PointSize = pointSize;\n"
-      "    pixelColor = color;\n"
-      "}\n",
-
-      "#version 120\n"
-      "varying lowp vec4 pixelColor;\n"
-      "void main(void)\n"
-      "{\n"
-      "   gl_FragColor = pixelColor;\n"
-      "   float distance = length(gl_PointCoord - vec2(0.5));\n"
-      "   if(distance > 0.4 && distance <= 0.5)\n"
-      "       gl_FragColor.a = 1.0 - (distance - 0.4) * 0.1;\n"
-      "   else if(distance > 0.5)\n"
-      "       discard;\n"
-      "}\n"};
-
-  static const std::pair<std::string, std::string> defaultLinesShaderSource = {
-      "#version 120\n"
-      "attribute lowp vec4 position;\n"
-      "attribute lowp vec3 normal;\n"
-      "attribute lowp vec4 color;\n"
-      "attribute lowp vec2 texCoord;\n"
-      "uniform highp mat4 matrix;\n"
-      "uniform float pointSize;\n"
-      "varying vec4 pixelColor;\n"
-      "void main(void)\n"
-      "{\n"
-      "    gl_Position = matrix * position;\n"
-      "    pixelColor = color;\n"
-      "}\n",
-
-      "#version 120\n"
-      "varying lowp vec4 pixelColor;\n"
-      "void main(void)\n"
-      "{\n"
-      "    gl_FragColor = pixelColor;\n"
-      "}\n"};
-
-  static const std::pair<std::string, std::string>
-      defaultTrianglesShaderSource = {
-          "#version 120\n"
-          "attribute highp vec4 position;\n"
-          "attribute highp vec3 normal;\n"
-          "attribute lowp vec4 color;\n"
-          "attribute lowp vec2 texCoord;\n"
-          "uniform highp mat4 matrix;\n"
-          "uniform float pointSize;\n"
-          "varying vec4 pixelColor;\n"
-          "void main(void)\n"
-          "{\n"
-          "    gl_Position = matrix * position;\n"
-          "    highp vec4 transformedNormal = viewMatrix * modelMatrix * "
-          "vec4(normal, 1.0);\n"
-          "    highp vec3 transformedNormal3 = transformedNormal.xyz / "
-          "transformedNormal.w;\n"
-          "    pixelColor = abs(dot(transformedNormal3 / "
-          "length(transformedNormal), vec3(1.0, 0.0, 0.0))) * vec4(1.0, 1.0, "
-          "1.0, 1.0);\n"
-          "}\n",
-
-          "#version 120\n"
-          "varying lowp vec4 pixelColor;\n"
-          "void main(void)\n"
-          "{\n"
-          "    gl_FragColor = pixelColor;\n"
-          "}\n"};
-
-  static const std::pair<std::string, std::string> panoramaShaderSource = {
-      "#version 120\n"
-      "attribute highp vec3 position;\n"
-      "attribute highp vec3 normal;\n"
-      "attribute highp vec4 color;\n"
-      "uniform highp mat4 matrix;\n"
-      "varying highp vec3 pixelPosition;\n"
-      "varying highp vec3 pixelNormal;\n"
-      "varying highp vec4 pixelColor;\n"
-      "void main(void)\n"
-      "{\n"
-      "    pixelPosition = position.xyz;\n"
-      "    pixelNormal = normal;\n"
-      "    pixelColor = color;\n"
-      "    gl_Position = matrix * vec4(position, 1.0);\n"
-      "}\n",
-
-      // 3.14159265358979323846264338327950288
-      "uniform sampler2D tex;\n"
-      "uniform highp vec3 panoramaCenter;\n"
-      "varying highp vec3 pixelPosition;\n"
-      "varying highp vec3 pixelNormal;\n"
-      "varying highp vec4 pixelColor;\n"
-      "void main(void)\n"
-      "{\n"
-      "    highp vec3 direction = pixelPosition - panoramaCenter;\n"
-      "    highp float longi = atan(direction.y, direction.x);\n"
-      "    highp float lati = asin(direction.z / length(direction));\n"
-      "    highp vec2 texCoord = vec2(longi / 3.1415926535897932 / 2.0 + 0.5, "
-      "- lati / 3.1415926535897932 + 0.5);\n"
-      "    gl_FragColor = texture2D(tex, texCoord) * 1.0 + pixelColor * 0.0;\n"
-      "    gl_FragColor.a = 0.7;\n"
-      "}\n"};
-
   static const std::pair<std::string, std::string> xPointsShaderSource = {
       "#version 130\n"
 
@@ -735,15 +621,6 @@ PredefinedShaderSource(OpenGLShaderSourceDescriptor name) {
       "}\n"};
 
   switch (name) {
-  case OpenGLShaderSourceDescriptor::DefaultPoints:
-    return defaultPointsShaderSource;
-  case OpenGLShaderSourceDescriptor::DefaultLines:
-    return defaultLinesShaderSource;
-  case OpenGLShaderSourceDescriptor::DefaultTriangles:
-    return defaultTrianglesShaderSource;
-  case OpenGLShaderSourceDescriptor::Panorama:
-    return panoramaShaderSource;
-
   case OpenGLShaderSourceDescriptor::XPoints:
     return xPointsShaderSource;
   case OpenGLShaderSourceDescriptor::XLines:
@@ -753,7 +630,7 @@ PredefinedShaderSource(OpenGLShaderSourceDescriptor name) {
   case OpenGLShaderSourceDescriptor::XPanorama:
     return xPanoramaShaderSource;
   default:
-    return defaultTrianglesShaderSource;
+    return xTrianglesShaderSource;
   }
 }
 

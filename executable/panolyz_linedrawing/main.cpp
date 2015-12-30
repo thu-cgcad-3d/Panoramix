@@ -22,8 +22,6 @@ using namespace pano;
 using namespace pano::core;
 using namespace pano::experimental;
 
-#define CONCAT_IMPL(x, y) x##y
-#define MACRO_CONCAT(x, y) CONCAT_IMPL(x, y)
 #define DISABLED_main MACRO_CONCAT(main_, __COUNTER__)
 
 int main(int argc, char **argv) {
@@ -31,7 +29,7 @@ int main(int argc, char **argv) {
   misc::SetCachePath("D:\\Cache\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
-  std::string name = "tritower";
+  std::string name = "bigHouse";
   std::string folder = "F:\\DataSets\\linedrawing_"
                        "dataset\\DatabaseFile\\" +
                        name + "\\";
@@ -40,6 +38,9 @@ int main(int argc, char **argv) {
   auto sphere = BoundingBoxOfContainer(drawing.vertPositions).outerSphere();
   double scale = sphere.radius;
 
+  PerspectiveCamera cam(500, 500, Point2(250, 250), 200,
+                        sphere.center + Vec3(1, 1, 1) * sphere.radius * 2,
+                        sphere.center);
   {
     gui::SceneBuilder sb;
     sb.installingOptions().defaultShaderSource =
@@ -52,14 +53,12 @@ int main(int argc, char **argv) {
       sb.add(line3 / scale);
     }
     sb.show(true, true, gui::RenderOptions()
-                            .backgroundColor(gui::White)
-                            .renderMode(gui::Lines));
+                                  .backgroundColor(gui::White)
+                                  .renderMode(gui::Lines))
+              .camera();
   }
 
   // generate perspective 2d line drawing
-  PerspectiveCamera cam(500, 500, Point2(250, 250), 200,
-                        sphere.center + Vec3(1, 1, 1) * sphere.radius * 2,
-                        sphere.center);
   auto drawing2d = Transform(drawing, [&cam](const Point3 &p) -> Point3 {
     return cat(cam.toScreen(p), 0.0);
   });

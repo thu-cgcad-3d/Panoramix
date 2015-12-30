@@ -67,6 +67,7 @@ int main(int argc, char *argv[], char *envp[]) {
   // testing::GTEST_FLAG(filter) = "Feature.RemoveSmallRegionInSegmentation";
   // testing::GTEST_FLAG(filter) = "Feature.SegmentationExtractorInPanorama";
   // testing::GTEST_FLAG(filter) = "Meta.WhatOf";
+  testing::GTEST_FLAG(filter) = "Mesh.Basic";
 
   return RUN_ALL_TESTS();
 }
