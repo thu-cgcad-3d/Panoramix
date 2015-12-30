@@ -10,6 +10,7 @@
 #include "../../src/gui/singleton.hpp"
 #include "../../src/gui/utility.hpp"
 
+#include "../../src/experimental/line_drawing.hpp"
 #include "../../src/experimental/pi_graph_annotation.hpp"
 #include "../../src/experimental/pi_graph_cg.hpp"
 #include "../../src/experimental/pi_graph_control.hpp"
@@ -24,93 +25,6 @@ using namespace pano::experimental;
 #define CONCAT_IMPL(x, y) x##y
 #define MACRO_CONCAT(x, y) CONCAT_IMPL(x, y)
 #define DISABLED_main MACRO_CONCAT(main_, __COUNTER__)
-
-template <class PointT> struct LineDrawing {
-  std::vector<PointT> vertPositions;
-  std::vector<std::pair<int, int>> line2verts;
-  std::vector<std::vector<int>> face2verts;
-  DenseMatd vertAdjMat;
-};
-
-LineDrawing<Point3> LoadLineDrawing(const std::string &filename,
-                                    const std::string &gtfilename) {
-  LineDrawing<Point3> drawing;
-
-  std::ifstream ifs(filename);
-  if (!ifs.is_open()) {
-    return drawing;
-  }
-
-  int lineNum = 0;
-  ifs >> lineNum;
-  std::vector<Line2> lineMatrix(lineNum);
-  for (int i = 0; i < lineNum; i++) {
-    ifs >> lineMatrix[i].first[0] >> lineMatrix[i].first[1] >>
-        lineMatrix[i].second[0] >> lineMatrix[i].second[1];
-  }
-
-  int vertexNum = 0;
-  ifs >> vertexNum;
-  drawing.vertAdjMat = DenseMat<bool>::zeros(vertexNum, vertexNum);
-  for (int i = 0; i < vertexNum; i++) {
-    for (int j = 0; j < vertexNum; j++) {
-      ifs >> drawing.vertAdjMat(i, j);
-    }
-  }
-
-  int faceNum = 0;
-  ifs >> faceNum;
-  drawing.face2verts.resize(faceNum);
-  std::string line;
-  std::getline(ifs, line);
-  for (int i = 0; i < faceNum; i++) {
-    std::getline(ifs, line);
-    std::istringstream ss(line);
-    int vnum = 0;
-    ss >> vnum;
-    if (vnum == 0) {
-      continue;
-    }
-    int id = 0;
-    for (int k = 0; k < vnum; k++) {
-      ss >> id;
-      drawing.face2verts[i].push_back(id);
-    }
-  }
-
-  int dummy = 0;
-  ifs >> dummy >> dummy;
-  drawing.line2verts.resize(lineNum);
-  for (int i = 0; i < lineNum; i++) {
-    ifs >> drawing.line2verts[i].first >> drawing.line2verts[i].second;
-  }
-
-  ifs.close();
-  ifs.open(gtfilename);
-  if (!ifs.is_open()) {
-    return drawing;
-  }
-  drawing.vertPositions.resize(vertexNum);
-  for (int k = 0; k < 3; k++) {
-    for (int i = 0; i < vertexNum; i++) {
-      ifs >> drawing.vertPositions[i][k];
-    }
-  }
-
-  return drawing;
-}
-
-template <class FunT>
-auto Transform(const LineDrawing<Point3> &in, const FunT &fun) {
-  LineDrawing<typename FunctionTraits<FunT>::ResultType> out;
-  out.vertPositions.resize(in.vertPositions.size());
-  std::transform(in.vertPositions.begin(), in.vertPositions.end(),
-                 out.vertPositions.begin(), fun);
-  out.line2verts = in.line2verts;
-  out.face2verts = in.face2verts;
-  out.vertAdjMat = in.vertAdjMat.clone();
-  return out;
-}
 
 int main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
@@ -146,8 +60,9 @@ int main(int argc, char **argv) {
   PerspectiveCamera cam(500, 500, Point2(250, 250), 200,
                         sphere.center + Vec3(1, 1, 1) * sphere.radius * 2,
                         sphere.center);
-  auto drawing2d = Transform(
-      drawing, [&cam](const Point3 &p) { return cat(cam.toScreen(p), 0.0); });
+  auto drawing2d = Transform(drawing, [&cam](const Point3 &p) -> Point3 {
+    return cat(cam.toScreen(p), 0.0);
+  });
 
   //
   std::vector<Classified<Line2>> lines(drawing2d.line2verts.size());

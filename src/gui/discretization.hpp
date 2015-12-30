@@ -2,6 +2,8 @@
 
 #include "../core/any.hpp"
 #include "../core/basic_types.hpp"
+#include "../core/mesh.hpp"
+
 #include "basic_types.hpp"
 
 namespace pano {
@@ -246,6 +248,32 @@ void Discretize(TriMesh &mesh, const core::Polygon<T, 3> &p,
 
 void Discretize(TriMesh &mesh, const SpatialProjectedPolygon &spp,
                 const DiscretizeOptions &o);
+
+template <class T, class H, class F>
+void Discretize(TriMesh &mesh, const core::Mesh<core::Point<T, 3>, H, F> &m,
+                const DiscretizeOptions &o) {
+  using MeshType = core::Mesh<core::Point<T, 3>, H, F>;
+  std::vector<TriMesh::VertHandle> vhandles(m.internalVertices().size());
+  for (auto &vv : m.vertices()) {
+    TriMesh::Vertex v;
+    v.position = core::cat(vv.data, (T)1.0);
+    v.color = o.color;
+    vhandles[vv.hd.id] = mesh.addVertex(v, true, o.entity);
+  }
+  for (auto &hh : m.halfedges()) {
+    auto vh1 = hd.topo.from();
+    auto vh2 = hd.topo.to();
+    mesh.addLine(vhandles[vh1.id], vhandles[vh2.id], o.entity);
+  }
+  for (auto &ff : m.faces()) {
+    std::vector<TriMesh::VertHandle> vhs;
+    vhs.reserve(ff.topo.halfedges.size());
+    for (auto &h : ff.topo.halfedges) {
+      vhs.push_back(m.topo(h).to().id);
+    }
+    mesh.addPolygon(vhs, o.entity);
+  }
+}
 
 template <class T, class E>
 void Discretize(TriMesh &mesh, const core::TransformedIn3D<T, E> &t,
