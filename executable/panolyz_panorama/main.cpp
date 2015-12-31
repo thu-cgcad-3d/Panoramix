@@ -182,6 +182,7 @@ int SurfaceNormalToLabel(const Vec3 &normal, const Vec3 &up,
 int main(int argc, char **argv) {
 
   gui::Singleton::InitGui(argc, argv);
+  misc::SetCachePath("E:\\STORAGE\\CACHE\\Panoramix\\");
   misc::Matlab matlab("", false);
 
   using TaskQueue =

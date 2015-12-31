@@ -4,7 +4,7 @@
 #include "../core/meta.hpp"
 #include "../core/utility.hpp"
 
-#include "basic_types.hpp"
+#include "color.hpp"
 
 namespace pano {
 namespace gui {

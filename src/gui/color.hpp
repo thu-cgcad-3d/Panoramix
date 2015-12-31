@@ -187,6 +187,20 @@ enum ColorTableDescriptor {
   RGBGreys
 };
 
+template <class T> struct Colored {
+  T component;
+  Color color;
+
+  template <class Archive> inline void serialize(Archive &ar) {
+    ar(component, color);
+  }
+};
+
+template <class T>
+inline Colored<std::decay_t<T>> ColorAs(T &&comp, const Color &color) {
+  return Colored<std::decay_t<T>>{std::forward<T>(comp), color};
+}
+
 class ColorTable {
 public:
   inline ColorTable() : _exceptionalColor(ColorTag::Transparent) {}
@@ -224,6 +238,15 @@ public:
     return claz < 0 || claz >= _colors.size() ? _exceptionalColor
                                               : _colors[claz];
   }
+  template <class T, class ClassT>
+  Colored<T> operator()(const Classified<T, ClassT> &c) const {
+    return ColorAs(std::forward<T>(c.component), (*this)[c.claz]);
+  }
+  template <class T, class ClassT>
+  Colored<T> operator()(Classified<T, ClassT> &&c) const {
+    return ColorAs(std::move(c.component), (*this)[c.claz]);
+  }
+
   bool empty() const { return _colors.empty(); }
 
   core::Image3ub operator()(const core::Imagei &indexIm) const;
@@ -252,72 +275,5 @@ ColorTable CreateRandomColorTableWithSize(
 ColorTable
 CreateJetColorTableWithSize(int sz,
                             const Color &exceptColor = ColorTag::Transparent);
-
-// render mode
-using RenderModeFlags = int8_t;
-enum RenderModeFlag : RenderModeFlags {
-  None = 0,
-  Points = 1,
-  Lines = 1 << 1,
-  Triangles = 1 << 2,
-  All = (1 << 3) - 1
-};
-inline RenderModeFlags operator|(RenderModeFlag f1, RenderModeFlag f2) {
-  return static_cast<RenderModeFlags>(f1) | static_cast<RenderModeFlags>(f2);
-}
-
-// opengl shader source
-enum class OpenGLShaderSourceDescriptor {
-  XPoints,
-  XLines,
-  XTriangles,
-  XPanorama
-};
-
-class OpenGLShaderSource {
-public:
-  OpenGLShaderSource(OpenGLShaderSourceDescriptor d =
-                         OpenGLShaderSourceDescriptor::XTriangles);
-
-  template <class StringT1, class StringT2>
-  OpenGLShaderSource(StringT1 &&vs, StringT2 &&fs)
-      : _vshaderSrc(std::forward<StringT1>(vs)),
-        _fshaderSrc(std::forward<StringT2>(fs)) {}
-
-  const std::string &vertexShaderSource() const { return _vshaderSrc; }
-  const std::string &fragmentShaderSource() const { return _fshaderSrc; }
-
-  template <class Archive> inline void serialize(Archive &ar) {
-    ar(_vshaderSrc, _fshaderSrc);
-  }
-
-private:
-  std::string _vshaderSrc, _fshaderSrc;
-};
-
-// spatial projected polygon for panorama reconstruction
-struct SpatialProjectedPolygon {
-  std::vector<core::Vec3> corners;
-  core::Point3 projectionCenter;
-  core::Plane3 plane;
-};
-
-template <class T> struct Colored {
-  T component;
-  Color color;
-
-  template <class Archive> inline void serialize(Archive &ar) {
-    ar(component, color);
-  }
-};
-
-template <class T>
-inline Colored<std::decay_t<T>> ColorAs(T &&comp, const Color &color) {
-  return Colored<std::decay_t<T>>{std::forward<T>(comp), color};
-}
-}
-
-namespace core {
-Box3 BoundingBox(const gui::SpatialProjectedPolygon &spp);
 }
 }

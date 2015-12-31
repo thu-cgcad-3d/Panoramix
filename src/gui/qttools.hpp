@@ -6,7 +6,7 @@
 #include <Eigen/Core>
 
 #include "../core/basic_types.hpp"
-#include "basic_types.hpp"
+#include "color.hpp"
 
 namespace pano {
 namespace gui {

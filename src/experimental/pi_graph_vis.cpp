@@ -33,8 +33,7 @@ void VisualizeReconstruction(
   gui::ResourceStore::set("texture", mg.view.image);
 
   gui::SceneBuilder viz;
-  viz.installingOptions().discretizeOptions.colorTable =
-      gui::ColorTableDescriptor::RGB;
+  viz.installingOptions().discretizeOptions.colorTable(gui::ColorTableDescriptor::RGB);
   std::vector<core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int>>
       spps;
   std::vector<core::Decorated<gui::Colored<core::Line3>, int>> lines;
@@ -132,7 +131,7 @@ void VisualizeReconstruction(
       .shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
       .resource("texture")
       .end();
-  viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
+  viz.installingOptions().discretizeOptions.color(gui::ColorTag::Black);
   viz.installingOptions().lineWidth = 4.0;
   viz.begin(
          lines /*, [&mg, &cg, &dp, &vertClick, ent2string](gui::InteractionID iid,
@@ -185,7 +184,7 @@ void VisualizeReconstruction(
       }
     }
 
-    viz.installingOptions().discretizeOptions.color = gui::ColorTag::Black;
+    viz.installingOptions().discretizeOptions.color(gui::ColorTag::Black);
     viz.installingOptions().lineWidth = 3.0;
     viz.begin(connectionLines,
               [&mg, &cg,
@@ -232,8 +231,7 @@ void VisualizeReconstructionCompact(const Image &im,
   compactPolygons.erase(e, compactPolygons.end());
 
   gui::SceneBuilder viz;
-  viz.installingOptions().discretizeOptions.colorTable =
-      gui::ColorTableDescriptor::RGB;
+  viz.installingOptions().discretizeOptions.colorTable(gui::ColorTableDescriptor::RGB);
   viz.begin(compactPolygons /*, sppCallbackFun*/)
       .shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
       .resource("texture")
@@ -360,8 +358,7 @@ void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,
   }
 
   gui::SceneBuilder viz;
-  viz.installingOptions().discretizeOptions.colorTable =
-      gui::ColorTableDescriptor::RGB;
+  viz.installingOptions().discretizeOptions.colorTable(gui::ColorTableDescriptor::RGB);
   std::vector<core::Decorated<gui::Colored<Polygon3>, int>> spps;
   // std::vector<core::Decorated<gui::Colored<Polygon3>, int>> pps;
 

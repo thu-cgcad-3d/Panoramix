@@ -284,8 +284,7 @@ void PILayoutAnnotationWidget::setCurAnnotation(PILayoutAnnotation *anno,
   sb.clear();
   gui::ColorTable rgb = gui::RGBGreys;
   for (int i = 0; i < anno->vps.size(); i++) {
-    sb.installingOptions().discretizeOptions.color =
-        rgb[i].blendWith(gui::White, 0.4);
+    sb.installingOptions().discretizeOptions.color(rgb[i].blendWith(gui::White, 0.4));
     sb.begin(normalize(anno->vps[i]) * visualDepthVP)
         .shaderSource(OpenGLShaderSourceDescriptor::XPoints)
         .pointSize(40)
@@ -519,7 +518,7 @@ void PILayoutAnnotationWidget::rebuildLayoutScene() {
     _cornerPoints[i].component.color = gui::White;
     _cornerPoints[i].decoration = i;
   }
-  sb.installingOptions().discretizeOptions.color = gui::White;
+  sb.installingOptions().discretizeOptions.color(gui::White);
   sb.begin(_cornerPoints,
            [this](gui::InteractionID iid,
                   const core::Decorated<Colored<Point3>, int> &point) {
@@ -607,7 +606,7 @@ void PILayoutAnnotationWidget::rebuildLayoutScene() {
            })
       .shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
       .end();
-  sb.installingOptions().discretizeOptions.color = gui::White;
+  sb.installingOptions().discretizeOptions.color(gui::White);
   // sb.begin(facePolygonCenters).pointSize(10.0).shaderSource(gui::OpenGLShaderSourceDescriptor::XPoints).end();
   // sb.begin(facePolygonCenterLines).lineWidth(1.0).shaderSource(gui::OpenGLShaderSourceDescriptor::XLines).end();
 
@@ -621,7 +620,7 @@ void PILayoutAnnotationWidget::rebuildLayoutScene() {
         visualDepthFaceCoplanarLine);
     _coplanarFacePairLines[i].decoration = i;
   }
-  sb.installingOptions().discretizeOptions.color = gui::White;
+  sb.installingOptions().discretizeOptions.color(gui::White);
   /* sb.begin(_coplanarFacePairLines, [this](gui::InteractionID iid, const
    Decorated<Line3, int> & line) {
        std::cout << "face " << _anno->coplanarFacePairs[line.decoration].first
@@ -643,7 +642,7 @@ void PILayoutAnnotationWidget::rebuildCluttersScene() {
     }
   }
   SceneBuilder sb;
-  sb.installingOptions().discretizeOptions.color = gui::Black;
+  sb.installingOptions().discretizeOptions.color(gui::Black);
   sb.begin(_clutterPolygons)
       .shaderSource(gui::OpenGLShaderSourceDescriptor::XTriangles)
       .end();
@@ -656,7 +655,7 @@ void PILayoutAnnotationWidget::rebuildStrokeScene() {
   sb.installingOptions().defaultShaderSource =
       gui::OpenGLShaderSourceDescriptor::XLines;
   sb.installingOptions().lineWidth = 20.0;
-  sb.installingOptions().discretizeOptions.color = gui::Black;
+  sb.installingOptions().discretizeOptions.color(gui::Black);
 
   sb.add(_stroke);
   _strokeScene = sb.scene();

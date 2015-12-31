@@ -226,7 +226,7 @@ void DepthFirstSearch(
   struct {
     bool operator()(Vert root, std::map<Vert, bool, VertCompareT> &vVisited,
                     NeighborVertsContainerGetterT vNeighborsGetter,
-                    VertCallbackT vCallback) {
+                    VertCallbackT vCallback) const {
       if (vVisited[root])
         return true;
       if (!vCallback(root))

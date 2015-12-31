@@ -70,27 +70,24 @@ public:
   inline const HalfsTable &internalHalfEdges() const { return _halfs; }
   inline const FacesTable &internalFaces() const { return _faces; }
 
-  inline ConditionalContainerWrapper<VertsTable, VertExistsPred> vertices() {
+  inline auto vertices() {
     return ConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts);
   }
-  inline ConditionalContainerWrapper<HalfsTable, HalfExistsPred> halfedges() {
+  inline auto halfedges() {
     return ConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs);
   }
-  inline ConditionalContainerWrapper<FacesTable, FaceExistsPred> faces() {
+  inline auto faces() {
     return ConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces);
   }
-  inline ConstConditionalContainerWrapper<VertsTable, VertExistsPred>
-  vertices() const {
+  inline auto vertices() const {
     return ConstConditionalContainerWrapper<VertsTable, VertExistsPred>(
         &_verts);
   }
-  inline ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred>
-  halfedges() const {
+  inline auto halfedges() const {
     return ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred>(
         &_halfs);
   }
-  inline ConstConditionalContainerWrapper<FacesTable, FaceExistsPred>
-  faces() const {
+  inline auto faces() const {
     return ConstConditionalContainerWrapper<FacesTable, FaceExistsPred>(
         &_faces);
   }
@@ -359,7 +356,6 @@ private:
   FacesTable _faces;
 };
 
-
 // DepthFirstSearch
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class ConstVertexCallbackT // bool callback(const Mesh & m, VertH v)
@@ -371,28 +367,28 @@ bool DepthFirstSearch(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   using HalfH = typename MeshType::HalfHandle;
   using FaceH = typename MeshType::FaceHandle;
 
-  static const std::function<bool(const MeshType &, VertH, std::vector<bool> &,
-                                  ConstVertexCallbackT)>
-      depthFirstSearchOneTree = [](const MeshType &mesh, VertH root,
-                                   std::vector<bool> &vertVisited,
-                                   ConstVertexCallbackT vCallBack) {
+  struct {
+    bool operator()(const MeshType &mesh, VertH root,
+                    std::vector<bool> &vertVisited,
+                    ConstVertexCallbackT vCallBack) const {
 
-        assert(root.isValid() && !mesh.removed(root));
-        if (vertVisited[root.id])
-          return true;
-        if (!vCallBack(mesh, root))
-          return false;
-        vertVisited[root.id] = true;
-        auto &halves = mesh.topo(root).halfedges;
-        for (auto hh : halves) {
-          if (mesh.removed(hh))
-            continue;
-          auto vh = mesh.topo(hh).to();
-          if (!depthFirstSearchOneTree(mesh, vh, vertVisited, vCallBack))
-            return false;
-        }
+      assert(root.valid() && !mesh.removed(root));
+      if (vertVisited[root.id])
         return true;
-      };
+      if (!vCallBack(mesh, root))
+        return false;
+      vertVisited[root.id] = true;
+      auto &halves = mesh.topo(root).halfedges;
+      for (auto hh : halves) {
+        if (mesh.removed(hh))
+          continue;
+        auto vh = mesh.topo(hh).to();
+        if (!(*this)(mesh, vh, vertVisited, vCallBack))
+          return false;
+      }
+      return true;
+    };
+  } depthFirstSearchOneTree;
 
   std::vector<bool> visited(mesh.internalVertices().size(), false);
   while (true) {
@@ -421,28 +417,27 @@ bool DepthFirstSearch(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   using HalfH = typename MeshType::HalfHandle;
   using FaceH = typename MeshType::FaceHandle;
 
-  static const std::function<bool(MeshType &, VertH, std::vector<bool> &,
-                                  VertexCallbackT)>
-      depthFirstSearchOneTree = [](MeshType &mesh, VertH root,
-                                   std::vector<bool> &vertVisited,
-                                   VertexCallbackT vCallBack) {
+  struct {
+    bool operator()(MeshType &mesh, VertH root, std::vector<bool> &vertVisited,
+                    VertexCallbackT vCallBack) const {
 
-        assert(root.isValid() && !mesh.removed(root));
-        if (vertVisited[root.id])
-          return true;
-        if (!vCallBack(mesh, root))
-          return false;
-        vertVisited[root.id] = true;
-        auto &halves = mesh.topo(root).halfedges;
-        for (auto hh : halves) {
-          if (mesh.removed(hh))
-            continue;
-          auto vh = mesh.topo(hh).to();
-          if (!depthFirstSearchOneTree(mesh, vh, vertVisited, vCallBack))
-            return false;
-        }
+      assert(root.valid() && !mesh.removed(root));
+      if (vertVisited[root.id])
         return true;
-      };
+      if (!vCallBack(mesh, root))
+        return false;
+      vertVisited[root.id] = true;
+      auto &halves = mesh.topo(root).halfedges;
+      for (auto hh : halves) {
+        if (mesh.removed(hh))
+          continue;
+        auto vh = mesh.topo(hh).to();
+        if (!(*this)(mesh, vh, vertVisited, vCallBack))
+          return false;
+      }
+      return true;
+    };
+  } depthFirstSearchOneTree;
 
   std::vector<bool> visited(mesh.internalVertices().size(), false);
   while (true) {
@@ -472,27 +467,27 @@ int ConnectedComponents(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   using HalfH = typename MeshType::HalfHandle;
   using FaceH = typename MeshType::FaceHandle;
 
-  static const std::function<bool(const MeshType &, VertH, std::vector<bool> &,
-                                  ConstVertexTypeRecorderT, int)>
-      depthFirstSearchOneTree = [](const MeshType &mesh, VertH root,
-                                   std::vector<bool> &vertVisited,
-                                   ConstVertexTypeRecorderT vtr, int cid) {
+  struct {
+    bool operator()(const MeshType &mesh, VertH root,
+                    std::vector<bool> &vertVisited,
+                    ConstVertexTypeRecorderT vtr, int cid) const {
 
-        assert(root.isValid() && !mesh.removed(root));
-        if (vertVisited[root.id])
-          return true;
-        vtr(mesh, root, cid);
-        vertVisited[root.id] = true;
-        auto &halves = mesh.topo(root).halfedges;
-        for (auto hh : halves) {
-          if (mesh.removed(hh))
-            continue;
-          auto vh = mesh.topo(hh).to();
-          if (!depthFirstSearchOneTree(mesh, vh, vertVisited, vtr, cid))
-            return false;
-        }
+      assert(root.valid() && !mesh.removed(root));
+      if (vertVisited[root.id])
         return true;
-      };
+      vtr(mesh, root, cid);
+      vertVisited[root.id] = true;
+      auto &halves = mesh.topo(root).halfedges;
+      for (auto hh : halves) {
+        if (mesh.removed(hh))
+          continue;
+        auto vh = mesh.topo(hh).to();
+        if (!(*this)(mesh, vh, vertVisited, vtr, cid))
+          return false;
+      }
+      return true;
+    };
+  } depthFirstSearchOneTree;
 
   std::vector<bool> visited(mesh.internalVertices().size(), false);
   int cid = 0;

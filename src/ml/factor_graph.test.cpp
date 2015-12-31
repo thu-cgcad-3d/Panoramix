@@ -1,5 +1,6 @@
 #include "../core/utility.hpp"
-#include "../gui/basic_types.hpp"
+#include "../gui/color.hpp"
+#include "../gui/shader.hpp"
 #include "factor_graph.hpp"
 #include "../panoramix.unittest.hpp"
 

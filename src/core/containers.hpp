@@ -654,7 +654,7 @@ public:
     _elements[x].parent = y;
     return y;
   }
-  template <class MergeFunT = std::plus<>>
+  template <class MergeFunT = std::plus<T>>
   void join(int x, int y, MergeFunT &&merge = MergeFunT()) {
     if (_elements[x].rank > _elements[y].rank) {
       _elements[y].parent = x;

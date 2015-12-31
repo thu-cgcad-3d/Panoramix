@@ -35,8 +35,7 @@ int main(int argc, char **argv) {
                        name + "\\";
   auto drawing =
       LoadLineDrawing(folder + name + "_cy.3dr", folder + name + ".gt");
-  auto sphere = BoundingBoxOfContainer(drawing.vertPositions).outerSphere();
-  double scale = sphere.radius;
+  auto sphere = BoundingBox(drawing).outerSphere();
 
   PerspectiveCamera cam(500, 500, Point2(250, 250), 200,
                         sphere.center + Vec3(1, 1, 1) * sphere.radius * 2,
@@ -45,14 +44,10 @@ int main(int argc, char **argv) {
     gui::SceneBuilder sb;
     sb.installingOptions().defaultShaderSource =
         gui::OpenGLShaderSourceDescriptor::XLines;
-    sb.installingOptions().discretizeOptions.color = gui::Black;
+    sb.installingOptions().discretizeOptions.color(gui::Black);
     sb.installingOptions().lineWidth = 3.0;
-    for (auto &l : drawing.line2verts) {
-      Line3 line3(drawing.vertPositions[l.first],
-                  drawing.vertPositions[l.second]);
-      sb.add(line3 / scale);
-    }
-    sb.show(true, true, gui::RenderOptions()
+    sb.add(ToMesh(drawing));
+    cam = sb.show(true, true, gui::RenderOptions()
                                   .backgroundColor(gui::White)
                                   .renderMode(gui::Lines))
               .camera();
@@ -64,10 +59,10 @@ int main(int argc, char **argv) {
   });
 
   //
-  std::vector<Classified<Line2>> lines(drawing2d.line2verts.size());
-  for (int i = 0; i < drawing2d.line2verts.size(); i++) {
-    auto &p1 = drawing2d.vertPositions[drawing2d.line2verts[i].first];
-    auto &p2 = drawing2d.vertPositions[drawing2d.line2verts[i].second];
+  std::vector<Classified<Line2>> lines(drawing2d.line2corners.size());
+  for (int i = 0; i < drawing2d.line2corners.size(); i++) {
+    auto &p1 = drawing2d.corners[drawing2d.line2corners[i].first];
+    auto &p2 = drawing2d.corners[drawing2d.line2corners[i].second];
     lines[i].component.first = Point2(p1[0], p1[1]);
     lines[i].component.second = Point2(p2[0], p2[1]);
     lines[i].claz = -1;
@@ -84,20 +79,18 @@ int main(int argc, char **argv) {
   std::tie(vps, focal) = result.unwrap();
 
   {
-    double scale =
-        BoundingBoxOfContainer(drawing2d.vertPositions).outerSphere().radius;
     gui::SceneBuilder sb;
     sb.installingOptions().defaultShaderSource =
         gui::OpenGLShaderSourceDescriptor::XLines;
-    sb.installingOptions().discretizeOptions.color = gui::Black;
+    sb.installingOptions().discretizeOptions.color(gui::Black);
     sb.installingOptions().lineWidth = 3.0;
-    sb.installingOptions().discretizeOptions.colorTable = gui::RGB;
-    sb.installingOptions().discretizeOptions.colorTable.exceptionalColor() =
+    sb.installingOptions().discretizeOptions.colorTable(gui::RGB);
+    sb.installingOptions().discretizeOptions.colorTable().exceptionalColor() =
         gui::Black;
     std::vector<Classified<Line3>> line3s(lines.size());
     for (int i = 0; i < lines.size(); i++) {
-      line3s[i].component.first = cat(lines[i].component.first / scale, 0.0);
-      line3s[i].component.second = cat(lines[i].component.second / scale, 0.0);
+      line3s[i].component.first = cat(lines[i].component.first, 0.0);
+      line3s[i].component.second = cat(lines[i].component.second, 0.0);
       line3s[i].claz = lines[i].claz;
     }
     sb.add(line3s);

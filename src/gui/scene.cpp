@@ -51,7 +51,7 @@ template <class StructT, class T, int N,
           class = std::enable_if_t<std::is_arithmetic<T>::value>>
 inline void SetAttributeArray(QOpenGLShaderProgram *program,
                               const char *attributeName,
-                              const core::Vec<T, N> &firstVector) {
+                              const Vec<T, N> &firstVector) {
   program->setAttributeArray(attributeName, OpenGLDataTraits<T>::GLType,
                              &firstVector, N, sizeof(StructT));
 }
@@ -66,9 +66,9 @@ inline void DrawElements(GLenum mode, const std::vector<T> &indices) {
 RenderOptions::RenderOptions()
     : _winName("Scene"), _backgroundColor(ColorTag::White),
       _renderMode(RenderModeFlag::All),
-      _camera(core::PerspectiveCamera(500, 500, core::Point2(250, 250), 250,
-                                      {1.0, 1.0, 1.0}, {0.0, 0.0, 0.0},
-                                      {0.0, 0.0, 1.0})),
+      _camera(PerspectiveCamera(500, 500, Point2(250, 250), 250,
+                                {1.0, 1.0, 1.0}, {0.0, 0.0, 0.0},
+                                {0.0, 0.0, 1.0})),
       _bwColor(.3), _bwTexColor(0.7), _cullFrontFace(true),
       _cullBackFace(false), _panoramaProjectionCenter(0, 0, 0),
       _panoramaHoriCenterRatio(0.5f), _panoramaAspectRatio(0.5f) {}
@@ -91,7 +91,7 @@ public:
 
 SceneObject::SceneObject()
     : _shaderSource(OpenGLShaderSourceDescriptor::XLines),
-      _modelMat(core::Mat4::eye()) {
+      _modelMat(Mat4::eye()) {
   _internal = new SceneObjectInternal;
   _lineWidth = 2.0;
   _pointSize = 5.0;
@@ -99,7 +99,7 @@ SceneObject::SceneObject()
 }
 
 SceneObject::SceneObject(const OpenGLShaderSource &shaderSource)
-    : _shaderSource(shaderSource), _modelMat(core::Mat4::eye()) {
+    : _shaderSource(shaderSource), _modelMat(Mat4::eye()) {
   _internal = new SceneObjectInternal;
   _lineWidth = 2.0;
   _pointSize = 5.0;
@@ -166,7 +166,7 @@ void SceneObject::initialize() const {
 }
 
 void SceneObject::render(const RenderOptions &options,
-                         const core::Mat4f &thisModelMatrix) const {
+                         const Mat4f &thisModelMatrix) const {
   if (_mesh.vertices.empty())
     return;
 
@@ -186,7 +186,7 @@ void SceneObject::render(const RenderOptions &options,
   glLineWidth(_lineWidth);
   glPointSize(_pointSize);
 
-  // assert(thisModelMatrix == core::Mat4f::eye());
+  // assert(thisModelMatrix == Mat4f::eye());
 
   program->setUniformValue("panoramaCenter",
                            MakeQVec(options.panoramaProjectionCenter()));
@@ -274,7 +274,7 @@ void SceneObject::setEntitySelection(EntityPtr ent, bool selected) {
 }
 
 void SceneObject::switchEntitySelection(EntityPtr ent) {
-  if (core::Contains(_selectedEntities, ent)) {
+  if (Contains(_selectedEntities, ent)) {
     setEntitySelection(ent, false);
   } else {
     setEntitySelection(ent, true);
@@ -293,7 +293,7 @@ public:
   template <class EntityT> class SceneObjectMeshEntityIndexer {
   public:
     inline SceneObjectMeshEntityIndexer() {}
-    inline SceneObjectMeshEntityIndexer(std::map<EntityT, core::Box3> &&bbox)
+    inline SceneObjectMeshEntityIndexer(std::map<EntityT, Box3> &&bbox)
         : calculatedBoundingBox(std::move(bbox)) {
       rtree = std::make_unique<third_party::RTree<EntityT, double, 3>>();
       // insert bboxes
@@ -318,30 +318,30 @@ public:
     SceneObjectMeshEntityIndexer &
     operator=(const SceneObjectMeshEntityIndexer &) = delete;
 
-    inline core::Box3 operator()(const EntityT &mti) const {
+    inline Box3 operator()(const EntityT &mti) const {
       return calculatedBoundingBox.at(mti);
     }
     template <class CallbackFunctorT>
-    inline int search(const core::Box3 &b, CallbackFunctorT &&callback) const {
+    inline int search(const Box3 &b, CallbackFunctorT &&callback) const {
       return rtree->Search(b.minCorner.val, b.maxCorner.val,
                            std::forward<CallbackFunctorT>(callback));
     }
     inline bool empty() const { return !rtree || rtree->Count() == 0; }
 
   private:
-    std::map<EntityT, core::Box3> calculatedBoundingBox;
+    std::map<EntityT, Box3> calculatedBoundingBox;
     std::unique_ptr<third_party::RTree<EntityT, double, 3>> rtree;
   };
 
-  std::map<SceneObjectHandle, core::Mat4f> calculatedModelMatrices;
-  std::map<SceneObjectHandle, core::Box3> calculatedBoundingBoxes;
+  std::map<SceneObjectHandle, Mat4f> calculatedModelMatrices;
+  std::map<SceneObjectHandle, Box3> calculatedBoundingBoxes;
   std::map<SceneObjectHandle, std::vector<Point3>> transformedVerticesPositions;
 
   SceneObjectMeshEntityIndexer<SceneObjectMeshTriangle> triangles;
   SceneObjectMeshEntityIndexer<SceneObjectMeshLine> lines;
   SceneObjectMeshEntityIndexer<SceneObjectMeshPoint> points;
 
-  core::Box3 boundingBox;
+  Box3 boundingBox;
 };
 
 Scene::Scene() {}
@@ -395,11 +395,10 @@ void Scene::update() {
       SceneObject *ro = _tree.data(h).get();
       // update model matrix
       if (_tree.isRoot(h)) { // is root
-        assert(!core::Contains(_internal->calculatedModelMatrices, h));
+        assert(!Contains(_internal->calculatedModelMatrices, h));
         _internal->calculatedModelMatrices[h] = ro->modelMatrix();
       } else {
-        assert(core::Contains(_internal->calculatedModelMatrices,
-                              _tree.parent(h)));
+        assert(Contains(_internal->calculatedModelMatrices, _tree.parent(h)));
         _internal->calculatedModelMatrices[h] =
             _internal->calculatedModelMatrices.at(_tree.parent(h)) *
             ro->modelMatrix();
@@ -461,8 +460,8 @@ void Scene::update() {
   _internal->points = std::move(pointBoxes);
 
   _internal->boundingBox =
-      core::BoundingBoxOfPairRange(_internal->calculatedBoundingBoxes.begin(),
-                                   _internal->calculatedBoundingBoxes.end());
+      BoundingBoxOfPairRange(_internal->calculatedBoundingBoxes.begin(),
+                             _internal->calculatedBoundingBoxes.end());
 }
 
 const Box3 &Scene::boundingBox() const { return _internal->boundingBox; }
@@ -471,18 +470,18 @@ Box3 Scene::boundingBoxOfObject(SceneObjectHandle h) const {
   return _internal->calculatedBoundingBoxes.at(h);
 }
 
-core::Box3 Scene::boundingBoxOfTriangleInObjectMesh(
+Box3 Scene::boundingBoxOfTriangleInObjectMesh(
     const SceneObjectMeshTriangle &omt) const {
   return _internal->triangles(omt);
 }
 
-core::Box3
-Scene::boundingBoxOfLineInObjectMesh(const SceneObjectMeshLine &oml) const {
+Box3 Scene::boundingBoxOfLineInObjectMesh(
+    const SceneObjectMeshLine &oml) const {
   return _internal->lines(oml);
 }
 
-core::Box3
-Scene::boundingBoxOfPointInObjectMesh(const SceneObjectMeshPoint &omp) const {
+Box3 Scene::boundingBoxOfPointInObjectMesh(
+    const SceneObjectMeshPoint &omp) const {
   return _internal->points(omp);
 }
 
@@ -591,7 +590,7 @@ bool TriangleIntersection(const Vec<TT, 3> &V1, // Triangle vertices
 
 SceneObjectMeshTriangle
 Scene::pickTriangleOnScreen(const RenderOptions &options,
-                            const core::Point2 &pOnScreen) const {
+                            const Point2 &pOnScreen) const {
 
   if (null() || _internal->triangles.empty()) {
     return SceneObjectMeshTriangle();
@@ -664,9 +663,8 @@ Scene::pickTriangleOnScreen(const RenderOptions &options,
   return nearest;
 }
 
-SceneObjectMeshLine
-Scene::pickLineOnScreen(const RenderOptions &options,
-                        const core::Point2 &pOnScreen) const {
+SceneObjectMeshLine Scene::pickLineOnScreen(const RenderOptions &options,
+                                            const Point2 &pOnScreen) const {
 
   if (null() || _internal->lines.empty()) {
     return SceneObjectMeshLine();
@@ -740,9 +738,8 @@ Scene::pickLineOnScreen(const RenderOptions &options,
   return nearest;
 }
 
-SceneObjectMeshPoint
-Scene::pickPointOnScreen(const RenderOptions &options,
-                         const core::Point2 &pOnScreen) const {
+SceneObjectMeshPoint Scene::pickPointOnScreen(const RenderOptions &options,
+                                              const Point2 &pOnScreen) const {
 
   if (null() || _internal->points.empty()) {
     return SceneObjectMeshPoint();
@@ -811,8 +808,7 @@ Scene::pickPointOnScreen(const RenderOptions &options,
   return nearest;
 }
 
-void Scene::pickOnScreen(const RenderOptions &options,
-                         const core::Point2 &pOnScreen,
+void Scene::pickOnScreen(const RenderOptions &options, const Point2 &pOnScreen,
                          SceneObjectMeshTriangle &t, SceneObjectMeshLine &l,
                          SceneObjectMeshPoint &p) const {
   t.first.reset();
@@ -830,9 +826,8 @@ void Scene::pickOnScreen(const RenderOptions &options,
     t = pickTriangleOnScreen(options, pOnScreen);
 }
 
-std::set<SceneObjectEntity>
-Scene::pickOnScreen(const RenderOptions &options,
-                    const core::Point2 &pOnScreen) const {
+std::set<SceneObjectEntity> Scene::pickOnScreen(const RenderOptions &options,
+                                                const Point2 &pOnScreen) const {
   SceneObjectMeshPoint p;
   SceneObjectMeshLine l;
   SceneObjectMeshTriangle t;
@@ -874,17 +869,19 @@ PerspectiveCamera Scene::perfectView(int width, int height,
   PerspectiveCamera camera;
   auto sphere = boundingBox().outerSphere();
   camera.setUp(up, false);
-  camera.resizeScreen(core::Size(width, height), false);
+  camera.resizeScreen(Size(width, height), false);
   camera.focusOn(sphere, true);
   return camera;
 }
 
+// SceneWidget
 class SceneWidget : public QGLWidget {
 public:
-  RenderOptions options;
+  std::shared_ptr<RenderOptions> options;
   Scene scene;
 
-  SceneWidget(Scene &&v, const RenderOptions &ro, QWidget *parent = nullptr)
+  SceneWidget(Scene &&v, std::shared_ptr<RenderOptions> ro,
+              QWidget *parent = nullptr)
       : QGLWidget(parent), options(ro), scene(std::move(v)) {
     setMouseTracking(true);
     setAutoBufferSwap(false);
@@ -900,7 +897,7 @@ protected:
     glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
     glGetIntegerv(GL_SAMPLES, &samples);
     qDebug("Have %d buffers and %d samples", bufs, samples);
-    qglClearColor(MakeQColor(options.backgroundColor()));
+    qglClearColor(MakeQColor(options->backgroundColor()));
     scene.initialize();
   }
 
@@ -908,21 +905,21 @@ protected:
     QPainter painter;
     painter.begin(this);
     painter.beginNativePainting();
-    qglClearColor(MakeQColor(options.backgroundColor()));
+    qglClearColor(MakeQColor(options->backgroundColor()));
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    core::PerspectiveCamera &camera = options.camera();
-    camera.resizeScreen(core::Size(width(), height()));
+    PerspectiveCamera &camera = options->camera();
+    camera.resizeScreen(Size(width(), height()));
 
-    scene.render(options);
+    scene.render(*options);
 
     painter.endNativePainting();
     swapBuffers();
   }
 
   void resizeGL(int w, int h) {
-    core::PerspectiveCamera &camera = options.camera();
-    camera.resizeScreen(core::Size(w, h));
+    PerspectiveCamera &camera = options->camera();
+    camera.resizeScreen(Size(w, h));
     camera.setFocal(std::max(width(), height()));
     glViewport(0, 0, w, h);
   }
@@ -930,9 +927,9 @@ protected:
 public:
   void autoSetCamera() {
     auto sphere = scene.boundingBox().outerSphere();
-    options.camera().resizeScreen(core::Size(width(), height()), false);
-    options.camera().setFocal(std::max(width(), height()));
-    options.camera().focusOn(sphere, true);
+    options->camera().resizeScreen(Size(width(), height()), false);
+    options->camera().setFocal(std::max(width(), height()));
+    options->camera().focusOn(sphere, true);
     update();
   }
 
@@ -945,7 +942,7 @@ protected:
       setCursor(Qt::SizeAllCursor);
     else if (e->buttons() & Qt::LeftButton) {
       auto ents =
-          scene.pickOnScreen(options, core::Point2(e->pos().x(), e->pos().y()));
+          scene.pickOnScreen(*options, Point2(e->pos().x(), e->pos().y()));
       if (e->modifiers() & Qt::ControlModifier) {
         for (auto &ent : ents) {
           scene.switchSelect(ent);
@@ -967,19 +964,21 @@ protected:
     auto sphere = scene.boundingBox().outerSphere();
     if ((e->buttons() & Qt::RightButton) &&
         !(e->modifiers() & Qt::ShiftModifier)) {
-      core::Vec3 trans = t.x() * options.camera().rightward() +
-                         t.y() * options.camera().upward();
-      trans *= 0.02;
-      options.camera().moveEyeWithCenterFixed(trans, sphere, true, true);
+      Vec3 trans = t.x() * options->camera().rightward() +
+                   t.y() * options->camera().upward();
+      trans *=
+          0.02 * Distance(options->camera().eye(), options->camera().center());
+      options->camera().moveEyeWithCenterFixed(trans, sphere, true, true);
       setCursor(Qt::ClosedHandCursor);
       update();
     } else if ((e->buttons() & Qt::MidButton) ||
                ((e->buttons() & Qt::RightButton) &&
                 (e->modifiers() & Qt::ShiftModifier))) {
-      core::Vec3 trans = t.x() * options.camera().rightward() +
-                         t.y() * options.camera().upward();
-      trans *= 0.02;
-      options.camera().translate(trans, sphere, true);
+      Vec3 trans = t.x() * options->camera().rightward() +
+                   t.y() * options->camera().upward();
+      trans *=
+          0.02 * Distance(options->camera().eye(), options->camera().center());
+      options->camera().translate(trans, sphere, true);
       update();
     }
     _lastPos = e->pos();
@@ -988,10 +987,9 @@ protected:
   virtual void wheelEvent(QWheelEvent *e) override {
     auto sphere = scene.boundingBox().outerSphere();
     double d = e->delta() / 10;
-    double dist =
-        core::Distance(options.camera().eye(), options.camera().center());
-    core::Vec3 trans = d * dist / 1000.0 * options.camera().forward();
-    options.camera().moveEyeWithCenterFixed(trans, sphere, false, true);
+    double dist = Distance(options->camera().eye(), options->camera().center());
+    Vec3 trans = d * dist / 1000.0 * options->camera().forward();
+    options->camera().moveEyeWithCenterFixed(trans, sphere, false, true);
     update();
   }
 
@@ -1009,7 +1007,7 @@ private:
 
 namespace {
 template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>>
-QWidget *MakeGuiAgent(core::Noted<T> &value, QWidget *parent = nullptr) {
+QWidget *MakeGuiAgent(Noted<T> &value, QWidget *parent = nullptr) {
   QDoubleSpinBox *spinBox = new QDoubleSpinBox(parent);
   spinBox->setValue(value.component);
   spinBox->setSingleStep(0.01);
@@ -1025,7 +1023,7 @@ QWidget *MakeGuiAgent(core::Noted<T> &value, QWidget *parent = nullptr) {
   return spinBox;
 }
 
-QWidget *MakeGuiAgent(core::Noted<bool> &value, QWidget *parent = nullptr) {
+QWidget *MakeGuiAgent(Noted<bool> &value, QWidget *parent = nullptr) {
   QCheckBox *checkBox = new QCheckBox(parent);
   checkBox->setCheckable(true);
   checkBox->setChecked(value.component);
@@ -1035,12 +1033,12 @@ QWidget *MakeGuiAgent(core::Noted<bool> &value, QWidget *parent = nullptr) {
   return checkBox;
 }
 
-QWidget *MakeGuiAgent(core::Noted<Color> &value, QWidget *parent = nullptr) {
+QWidget *MakeGuiAgent(Noted<Color> &value, QWidget *parent = nullptr) {
   NOT_IMPLEMENTED_YET();
 }
 
 template <class... Ts>
-void PopUpDialog(QWidget *parent, core::Noted<Ts> &... values) {
+void PopUpDialog(QWidget *parent, Noted<Ts> &... values) {
   QString names[] = {QString::fromStdString(values.note)...};
   QWidget *agents[] = {MakeGuiAgent(values, nullptr)...};
   QDialog dialog;
@@ -1054,24 +1052,22 @@ void PopUpDialog(QWidget *parent, core::Noted<Ts> &... values) {
 }
 
 void PopUpGui(RenderOptions &options, QWidget *widget) {
-  core::Noted<float> bwColor =
-      core::NoteAs(options.bwColor(), "Blend Weight of Color");
-  core::Noted<float> bwTexColor =
-      core::NoteAs(options.bwTexColor(), "Blend Weight of Texture Color");
-  core::Noted<bool> cullFrontFace =
-      core::NoteAs(options.cullFrontFace(), "Cull Front Face");
-  core::Noted<bool> cullBackFace =
-      core::NoteAs(options.cullBackFace(), "Cull Back Face");
-  core::Noted<bool> showPoints = core::NoteAs<bool>(
+  Noted<float> bwColor = NoteAs(options.bwColor(), "Blend Weight of Color");
+  Noted<float> bwTexColor =
+      NoteAs(options.bwTexColor(), "Blend Weight of Texture Color");
+  Noted<bool> cullFrontFace =
+      NoteAs(options.cullFrontFace(), "Cull Front Face");
+  Noted<bool> cullBackFace = NoteAs(options.cullBackFace(), "Cull Back Face");
+  Noted<bool> showPoints = NoteAs<bool>(
       options.renderMode() & RenderModeFlag::Points, "Show Points");
-  core::Noted<bool> showLines = core::NoteAs<bool>(
-      options.renderMode() & RenderModeFlag::Lines, "Show Lines");
-  core::Noted<bool> showFaces = core::NoteAs<bool>(
+  Noted<bool> showLines =
+      NoteAs<bool>(options.renderMode() & RenderModeFlag::Lines, "Show Lines");
+  Noted<bool> showFaces = NoteAs<bool>(
       options.renderMode() & RenderModeFlag::Triangles, "Show Faces");
-  core::Noted<float> panoramaHoriCenterRatio = core::NoteAs(
+  Noted<float> panoramaHoriCenterRatio = NoteAs(
       options.panoramaHoriCenterRatio(), "Panorama Horizon Center Ratio");
-  core::Noted<float> panoramaAspectRatio = core::NoteAs(
-      options.panoramaAspectRatio(), "Panorama Aspect Ratio (h/w)");
+  Noted<float> panoramaAspectRatio =
+      NoteAs(options.panoramaAspectRatio(), "Panorama Aspect Ratio (h/w)");
 
   PopUpDialog(widget, bwColor, bwTexColor, cullFrontFace, cullBackFace,
               showPoints, showLines, showFaces, panoramaHoriCenterRatio,
@@ -1089,12 +1085,12 @@ void PopUpGui(RenderOptions &options, QWidget *widget) {
 }
 
 SceneBuilder::SceneBuilder() {
-  _installingOptions.discretizeOptions.color = ColorTag::Black;
-  _installingOptions.discretizeOptions.colorTable =
-      ColorTableDescriptor::AllColors;
-  _installingOptions.discretizeOptions.isolatedTriangles = false;
-  _installingOptions.discretizeOptions.subdivisionNums[0] = 32;
-  _installingOptions.discretizeOptions.subdivisionNums[1] = 64;
+  _installingOptions.discretizeOptions.color(ColorTag::Black);
+  _installingOptions.discretizeOptions.colorTable(
+      ColorTableDescriptor::AllColors);
+  _installingOptions.discretizeOptions.isolatedTriangles(false);
+  _installingOptions.discretizeOptions.subdivisionNumU(32);
+  _installingOptions.discretizeOptions.subdivisionNumV(64);
   _installingOptions.defaultShaderSource =
       OpenGLShaderSourceDescriptor::XTriangles;
   _installingOptions.pointSize = 10.0;
@@ -1106,7 +1102,9 @@ SceneBuilder::SceneBuilder(const SceneObjectInstallingOptions &defaultO)
 
 SceneWidget *SceneBuilder::createWidget(const RenderOptions &options,
                                         QWidget *parent) {
-  return new SceneWidget(scene(), options, parent);
+  return new SceneWidget(
+      scene(), std::shared_ptr<RenderOptions>(new RenderOptions(options)),
+      parent);
 }
 
 RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
@@ -1129,7 +1127,7 @@ RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
   auto menuView = mwin->menuBar()->addMenu(QObject::tr("View"));
   auto actionSettings = menuView->addAction(QObject::tr("Settings"));
   QObject::connect(actionSettings, &QAction::triggered, [w]() {
-    PopUpGui(w->options, w);
+    PopUpGui(*w->options, w);
     w->update();
   });
   auto menuAbout = mwin->menuBar()->addMenu(QObject::tr("About"));
@@ -1149,11 +1147,12 @@ RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
   if (autoSetCamera) {
     w->autoSetCamera();
   }
+  auto adjusted = w->options;
   mwin->show();
   if (doModal) {
     Singleton::ContinueGui();
   }
-  return w->options;
+  return *adjusted;
 }
 
 void SceneBuilder::clear() {

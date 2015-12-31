@@ -5,7 +5,8 @@
 #include "../core/meta.hpp"
 #include "../core/utility.hpp"
 
-#include "basic_types.hpp"
+#include "color.hpp"
+#include "shader.hpp"
 #include "discretization.hpp"
 #include "resource.hpp"
 
@@ -14,12 +15,25 @@ class QWidget;
 namespace pano {
 namespace gui {
 
+// render mode
+using RenderModeFlags = int8_t;
+enum RenderModeFlag : RenderModeFlags {
+  None = 0,
+  Points = 1,
+  Lines = 1 << 1,
+  Triangles = 1 << 2,
+  All = (1 << 3) - 1
+};
+inline RenderModeFlags operator|(RenderModeFlag f1, RenderModeFlag f2) {
+  return static_cast<RenderModeFlags>(f1) | static_cast<RenderModeFlags>(f2);
+}
+
 enum InteractionID { ClickLeftButton, PressSpace, Unknown };
 
 // building visual objects
 class SceneObject;
 using SceneObjectPtr = std::shared_ptr<SceneObject>;
-using SceneObjectTree = core::Forest<SceneObjectPtr>;
+using SceneObjectTree = Forest<SceneObjectPtr>;
 
 using SceneObjectHandle = SceneObjectTree::NodeHandle;
 using SceneObjectMeshTriangle =
@@ -46,14 +60,14 @@ public:                                                                        \
   DECL_PROPERTY(std::string, winName)
   DECL_PROPERTY(Color, backgroundColor)
   DECL_PROPERTY(RenderModeFlags, renderMode)
-  DECL_PROPERTY(core::PerspectiveCamera, camera)
+  DECL_PROPERTY(PerspectiveCamera, camera)
   DECL_PROPERTY(float, bwColor)
   DECL_PROPERTY(float, bwTexColor)
   DECL_PROPERTY(bool, cullFrontFace)
   DECL_PROPERTY(bool, cullBackFace)
   DECL_PROPERTY(float, panoramaHoriCenterRatio)
   DECL_PROPERTY(float, panoramaAspectRatio)
-  DECL_PROPERTY(core::Point3, panoramaProjectionCenter)
+  DECL_PROPERTY(Point3, panoramaProjectionCenter)
 #undef DECL_PROPERTY
   RenderOptions();
 };
@@ -74,11 +88,11 @@ public:
 
   // render with given camera
   void render(const RenderOptions &options,
-              const core::Mat4f &thisModelMatrix) const;
+              const Mat4f &thisModelMatrix) const;
 
   // model matrix
-  core::Mat4f &modelMatrix() { return _modelMat; }
-  const core::Mat4f &modelMatrix() const { return _modelMat; }
+  Mat4f &modelMatrix() { return _modelMat; }
+  const Mat4f &modelMatrix() const { return _modelMat; }
 
   // mesh
   TriMesh &mesh() { return _mesh; }
@@ -91,7 +105,7 @@ public:
     return _selectedEntities;
   }
   inline bool entityIsSelected(EntityPtr ent) const {
-    return core::Contains(_selectedEntities, ent);
+    return Contains(_selectedEntities, ent);
   }
 
   // resource
@@ -138,7 +152,7 @@ public:
   inline void setSelectable(bool s) { _selectable = s; }
 
 protected:
-  core::Mat4f _modelMat;
+  Mat4f _modelMat;
 
   TriMesh _mesh;
 
@@ -170,7 +184,7 @@ std::shared_ptr<SceneObject> Visualize(const T &data,
   std::shared_ptr<SceneObject> vo = std::make_shared<SceneObject>();
 
   auto dopt = o.discretizeOptions;
-  dopt.entity = &data;
+  dopt.entity(&data);
   Discretize(vo->mesh(), data, dopt);
 
   vo->setShaderSource(o.defaultShaderSource);
@@ -188,7 +202,7 @@ std::shared_ptr<SceneObject> Visualize(const T &data,
 
   auto dopt = o.discretizeOptions;
   for (auto &e : data) {
-    dopt.entity = &e;
+    dopt.entity(&e);
     Discretize(vo->mesh(), e, dopt);
   }
 
@@ -207,7 +221,7 @@ std::shared_ptr<SceneObject> Visualize(T &data, FunT &&fun,
   std::shared_ptr<SceneObject> vo = std::make_shared<SceneObject>();
 
   auto dopt = o.discretizeOptions;
-  dopt.entity = nullptr;
+  dopt.entity(nullptr);
   Discretize(vo->mesh(), data, dopt);
 
   vo->setShaderSource(o.defaultShaderSource);
@@ -239,7 +253,7 @@ std::shared_ptr<SceneObject> Visualize(T &data, FunT &&fun,
 
   auto dopt = o.discretizeOptions;
   for (auto &e : data) {
-    dopt.entity = &e;
+    dopt.entity(&e);
     Discretize(vo->mesh(), e, dopt);
   }
 
@@ -291,14 +305,14 @@ public:
       n.data->clearSelection();
   }
 
-  const core::Box3 &boundingBox() const;
-  core::Box3 boundingBoxOfObject(SceneObjectHandle h) const;
+  const Box3 &boundingBox() const;
+  Box3 boundingBoxOfObject(SceneObjectHandle h) const;
 
-  core::Box3
+  Box3
   boundingBoxOfTriangleInObjectMesh(const SceneObjectMeshTriangle &omt) const;
-  core::Box3
+  Box3
   boundingBoxOfLineInObjectMesh(const SceneObjectMeshLine &oml) const;
-  core::Box3
+  Box3
   boundingBoxOfPointInObjectMesh(const SceneObjectMeshPoint &omp) const;
 
   void initialize() const;
@@ -306,11 +320,11 @@ public:
 
   SceneObjectMeshTriangle
   pickTriangleOnScreen(const RenderOptions &options,
-                       const core::Point2 &pOnScreen) const;
+                       const Point2 &pOnScreen) const;
   SceneObjectMeshLine pickLineOnScreen(const RenderOptions &options,
-                                       const core::Point2 &pOnScreen) const;
+                                       const Point2 &pOnScreen) const;
   SceneObjectMeshPoint pickPointOnScreen(const RenderOptions &options,
-                                         const core::Point2 &pOnScreen) const;
+                                         const Point2 &pOnScreen) const;
 
   inline SceneObjectEntity entityOfTriangle(SceneObjectMeshTriangle t) const {
     if (t.first.invalid())
@@ -328,20 +342,20 @@ public:
     return {t.first, _tree.data(t.first)->mesh().entPoints.at(t.second)};
   }
 
-  void pickOnScreen(const RenderOptions &options, const core::Point2 &pOnScreen,
+  void pickOnScreen(const RenderOptions &options, const Point2 &pOnScreen,
                     SceneObjectMeshTriangle &t, SceneObjectMeshLine &l,
                     SceneObjectMeshPoint &p) const;
   std::set<SceneObjectEntity> pickOnScreen(const RenderOptions &options,
-                                           const core::Point2 &pOnScreen) const;
+                                           const Point2 &pOnScreen) const;
 
   void invokeCallbackFunctions(InteractionID iid,
                                const std::set<SceneObjectEntity> &ents,
                                bool selectedOnly = true) const;
   void invokeCallbackFunctionsOnAllSelected(InteractionID iid) const;
 
-  core::PerspectiveCamera
+  PerspectiveCamera
   perfectView(int width, int height,
-              const core::Vec3 &up = core::Vec3(0, 0, 1)) const;
+              const Vec3 &up = Vec3(0, 0, 1)) const;
 
 private:
   void update();
@@ -377,14 +391,14 @@ public:
 
   template <class T> inline SceneBuilder &add(const T &data) {
     _tree.add(_activeOH,
-              Visualize(data, _installingOptions, core::IsContainer<T>()));
+              Visualize(data, _installingOptions, IsContainer<T>()));
     return *this;
   }
   template <class T, class FunT> inline SceneBuilder &add(T &data, FunT &&fun) {
     _tree.add(
         _activeOH,
         Visualize(data, std::forward<FunT>(fun), _installingOptions,
-                  std::integral_constant<bool, core::IsContainer<T>::value>()));
+                  std::integral_constant<bool, IsContainer<T>::value>()));
     return *this;
   }
 
@@ -392,7 +406,7 @@ public:
     _activeOH = _tree.add(
         _activeOH,
         Visualize(data, _installingOptions,
-                  std::integral_constant<bool, core::IsContainer<T>::value>()));
+                  std::integral_constant<bool, IsContainer<T>::value>()));
     return *this;
   }
 
@@ -401,7 +415,7 @@ public:
     _activeOH = _tree.add(
         _activeOH,
         Visualize(data, std::forward<FunT>(fun), _installingOptions,
-                  std::integral_constant<bool, core::IsContainer<T>::value>()));
+                  std::integral_constant<bool, IsContainer<T>::value>()));
     return *this;
   }
 
@@ -425,13 +439,13 @@ public:
     return *this;
   }
 
-  inline SceneBuilder &rotate(const core::Vec3 &axis, double angle) {
+  inline SceneBuilder &rotate(const Vec3 &axis, double angle) {
     auto &mat = activeObject().modelMatrix();
     // rotate
-    auto a = core::normalize(axis);
+    auto a = normalize(axis);
     double l = a[0], m = a[1], n = a[2];
     double cosv = cos(angle), sinv = sin(angle);
-    core::Mat4f rot(
+    Mat4f rot(
         l * l * (1 - cosv) + cosv, m * l * (1 - cosv) - n * sinv,
         n * l * (1 - cosv) + m * sinv, 0, l * m * (1 - cosv) + n * sinv,
         m * m * (1 - cosv) + cosv, n * m * (1 - cosv) - l * sinv, 0,

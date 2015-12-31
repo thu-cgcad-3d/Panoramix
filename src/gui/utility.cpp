@@ -4,12 +4,28 @@
 
 #include "../core/cameras.hpp"
 
+#include "color.hpp"
 #include "qttools.hpp"
 #include "scene.hpp"
+#include "shader.hpp"
 #include "singleton.hpp"
 #include "utility.hpp"
 
 namespace pano {
+namespace core {
+Box3 BoundingBox(const gui::SpatialProjectedPolygon &spp) {
+  std::vector<Vec3> cs(spp.corners.size());
+  for (int i = 0; i < spp.corners.size(); i++) {
+    cs[i] =
+        IntersectionOfLineAndPlane(
+            Ray3(spp.projectionCenter, spp.corners[i] - spp.projectionCenter),
+            spp.plane)
+            .position;
+  }
+  return BoundingBoxOfContainer(cs);
+}
+}
+
 namespace gui {
 
 using namespace core;
@@ -39,26 +55,26 @@ int SelectFrom(const std::vector<std::string> &strs, const std::string &title,
   return -1;
 }
 
-core::Image PickAnImage(const std::string &dir, std::string *picked) {
+Image PickAnImage(const std::string &dir, std::string *picked) {
   Singleton::InitGui();
   auto filename = QFileDialog::getOpenFileName(
       nullptr, QObject::tr("Select an image file"), QString::fromStdString(dir),
       QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
   if (filename.isEmpty())
-    return core::Image();
+    return Image();
   if (picked) {
     *picked = filename.toStdString();
   }
   return cv::imread(filename.toStdString());
 }
 
-std::vector<core::Image> PickImages(const std::string &dir,
-                                    std::vector<std::string> *picked) {
+std::vector<Image> PickImages(const std::string &dir,
+                              std::vector<std::string> *picked) {
   Singleton::InitGui();
   auto filenames = QFileDialog::getOpenFileNames(
       nullptr, QObject::tr("Select an image file"), QString::fromStdString(dir),
       QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
-  std::vector<core::Image> ims;
+  std::vector<Image> ims;
   for (auto &filename : filenames) {
     ims.push_back(cv::imread(filename.toStdString()));
   }
@@ -158,8 +174,8 @@ bool MakePanoramaByHand(Image &im, bool *extendedOnTop, bool *extendedOnBottom,
     }
 
     void resizeGL(int w, int h) {
-      core::PerspectiveCamera &camera = _options.camera();
-      camera.resizeScreen(core::Size(w, h));
+      PerspectiveCamera &camera = _options.camera();
+      camera.resizeScreen(Size(w, h));
       glViewport(0, 0, w, h);
     }
 
@@ -169,8 +185,8 @@ bool MakePanoramaByHand(Image &im, bool *extendedOnTop, bool *extendedOnBottom,
       qglClearColor(MakeQColor(_options.backgroundColor()));
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-      core::PerspectiveCamera &camera = _options.camera();
-      camera.resizeScreen(core::Size(width(), height()));
+      PerspectiveCamera &camera = _options.camera();
+      camera.resizeScreen(Size(width(), height()));
 
       _scene.render(_options);
 
@@ -349,7 +365,7 @@ protected:
     _moved = false;
     if (e->buttons() & Qt::LeftButton) {
       if (_activePenId == -1) { // pick
-        processPick(core::Point2(e->pos().x(), e->pos().y()));
+        processPick(Point2(e->pos().x(), e->pos().y()));
         return;
       }
       _stroke << e->pos();
@@ -380,7 +396,7 @@ protected:
     unsetCursor();
     if (_activePenId == -1)
       return;
-    std::vector<core::Point2> points(_stroke.size());
+    std::vector<Point2> points(_stroke.size());
     for (int i = 0; i < _stroke.size(); i++) {
       points[i][0] = _stroke[i].x();
       points[i][1] = _stroke[i].y();
@@ -393,9 +409,8 @@ protected:
     update();
   }
 
-  virtual void processStroke(const std::vector<core::Point2> &stroke,
-                             int penId) = 0;
-  virtual void processPick(const core::Point2 &p) {}
+  virtual void processStroke(const std::vector<Point2> &stroke, int penId) = 0;
+  virtual void processPick(const Point2 &p) {}
 
 protected:
   QPolygonF _stroke;
@@ -406,11 +421,10 @@ protected:
   QCursor _penCursor;
 };
 
-void PaintWith(
-    const std::function<core::Image()> &updater,
-    const std::vector<PenConfig> &penConfigs,
-    const std::function<bool(const std::vector<core::Point2> &polyline,
-                             int penId)> &callback) {
+void PaintWith(const std::function<Image()> &updater,
+               const std::vector<PenConfig> &penConfigs,
+               const std::function<bool(const std::vector<Point2> &polyline,
+                                        int penId)> &callback) {
 
   Singleton::InitGui();
 
@@ -419,9 +433,8 @@ void PaintWith(
 
   public:
     explicit Widget(
-        const std::function<core::Image()> &up,
-        const std::vector<PenConfig> &pc,
-        const std::function<bool(const std::vector<core::Point2> &, int)> &cb)
+        const std::function<Image()> &up, const std::vector<PenConfig> &pc,
+        const std::function<bool(const std::vector<Point2> &, int)> &cb)
         : BaseClass(pc), _updater(up), _callback(cb) {
       _scale = 1.0;
       updateImage();
@@ -502,7 +515,7 @@ void PaintWith(
              _image.rect().center();
     }
 
-    void processStroke(const std::vector<core::Point2> &stroke, int penId) {
+    void processStroke(const std::vector<Point2> &stroke, int penId) {
       if (_callback(stroke, penId)) {
         updateImage();
         update();
@@ -514,8 +527,8 @@ void PaintWith(
     double _scale;
     QPointF _translate;
     QPoint _lastPos;
-    std::function<core::Image()> _updater;
-    std::function<bool(const std::vector<core::Point2> &polyline, int penId)>
+    std::function<Image()> _updater;
+    std::function<bool(const std::vector<Point2> &polyline, int penId)>
         _callback;
   };
 
@@ -559,8 +572,8 @@ void VisualizeWithPanoramicOperation(const Scene &scene,
     }
 
     void resizeGL(int w, int h) {
-      core::PerspectiveCamera &camera = _options.camera();
-      camera.resizeScreen(core::Size(w, h));
+      PerspectiveCamera &camera = _options.camera();
+      camera.resizeScreen(Size(w, h));
       glViewport(0, 0, w, h);
     }
 
@@ -570,8 +583,8 @@ void VisualizeWithPanoramicOperation(const Scene &scene,
       qglClearColor(MakeQColor(_options.backgroundColor()));
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-      core::PerspectiveCamera &camera = _options.camera();
-      camera.resizeScreen(core::Size(width(), height()));
+      PerspectiveCamera &camera = _options.camera();
+      camera.resizeScreen(Size(width(), height()));
 
       _scene.render(_options);
 
@@ -617,10 +630,10 @@ void VisualizeWithPanoramicOperation(const Scene &scene,
 
     void keyPressEvent(QKeyEvent *e) override { BaseClass::keyPressEvent(e); }
 
-    virtual void processStroke(const std::vector<core::Point2> &stroke,
+    virtual void processStroke(const std::vector<Point2> &stroke,
                                int penId) override {}
 
-    virtual void processPick(const core::Point2 &p) override {
+    virtual void processPick(const Point2 &p) override {
       _scene.invokeCallbackFunctions(gui::InteractionID::ClickLeftButton,
                                      _scene.pickOnScreen(_options, p), false);
     }
@@ -637,9 +650,9 @@ void VisualizeWithPanoramicOperation(const Scene &scene,
   Singleton::ContinueGui();
 }
 
-void DrawChainsInPanorama(const core::PanoramicView &view,
+void DrawChainsInPanorama(const PanoramicView &view,
                           const std::vector<PenConfig> &penConfigs,
-                          std::vector<core::Chain3> &chains) {
+                          std::vector<Chain3> &chains) {
   using namespace pano::core;
 
   Singleton::InitGui();
@@ -649,8 +662,7 @@ void DrawChainsInPanorama(const core::PanoramicView &view,
 
   public:
     explicit Widget(const std::vector<PenConfig> &pc, const PanoramicView &v,
-                    std::vector<core::Chain3> &chains,
-                    QWidget *parent = nullptr)
+                    std::vector<Chain3> &chains, QWidget *parent = nullptr)
         : BaseClass(pc, parent), _view(v), _chains(chains),
           _selectedCornerId(-1) {
 
@@ -694,8 +706,8 @@ void DrawChainsInPanorama(const core::PanoramicView &view,
     }
 
     void resizeGL(int w, int h) {
-      core::PerspectiveCamera &camera = _options.camera();
-      camera.resizeScreen(core::Size(w, h));
+      PerspectiveCamera &camera = _options.camera();
+      camera.resizeScreen(Size(w, h));
       glViewport(0, 0, w, h);
     }
 
@@ -707,7 +719,7 @@ void DrawChainsInPanorama(const core::PanoramicView &view,
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
       auto &camera = _options.camera();
-      camera.resizeScreen(core::Size(width(), height()));
+      camera.resizeScreen(Size(width(), height()));
 
       _scene.render(_options);
 
@@ -845,10 +857,9 @@ void DrawChainsInPanorama(const core::PanoramicView &view,
   Singleton::ContinueGui();
 }
 
-void VisualizeAll(const core::View<core::PanoramicCamera, core::Image3ub> &view,
-                  const std::vector<core::Classified<core::Line3>> &lines,
-                  const core::Imagei &segs, int nsegs,
-                  const core::Image5d &gc) {
+void VisualizeAll(const View<PanoramicCamera, Image3ub> &view,
+                  const std::vector<Classified<Line3>> &lines,
+                  const Imagei &segs, int nsegs, const Image5d &gc) {
 
   using namespace core;
 
@@ -862,7 +873,7 @@ void VisualizeAll(const core::View<core::PanoramicCamera, core::Image3ub> &view,
 
   public:
     explicit Widget(const PanoramicView &v,
-                    const std::vector<core::Classified<core::Line3>> &lines,
+                    const std::vector<Classified<Line3>> &lines,
                     QWidget *parent = nullptr)
         : BaseClass(parent), _view(v), _lines(lines) {
 
@@ -900,8 +911,8 @@ void VisualizeAll(const core::View<core::PanoramicCamera, core::Image3ub> &view,
     }
 
     void resizeGL(int w, int h) {
-      core::PerspectiveCamera &camera = _options.camera();
-      camera.resizeScreen(core::Size(w, h));
+      PerspectiveCamera &camera = _options.camera();
+      camera.resizeScreen(Size(w, h));
       glViewport(0, 0, w, h);
     }
 
@@ -913,7 +924,7 @@ void VisualizeAll(const core::View<core::PanoramicCamera, core::Image3ub> &view,
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
       auto &camera = _options.camera();
-      camera.resizeScreen(core::Size(width(), height()));
+      camera.resizeScreen(Size(width(), height()));
 
       _scene.render(_options);
 
@@ -976,7 +987,7 @@ void VisualizeAll(const core::View<core::PanoramicCamera, core::Image3ub> &view,
     PanoramicView _view;
     Scene _scene;
     RenderOptions _options;
-    const std::vector<core::Classified<core::Line3>> &_lines;
+    const std::vector<Classified<Line3>> &_lines;
   };
 
   Widget w(PanoramicView(segim, view.camera), lines);

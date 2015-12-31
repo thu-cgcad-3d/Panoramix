@@ -14,8 +14,26 @@ using no = std::false_type;
 
 struct Dummy {
   template <class... ParamTs> void operator()(ParamTs &&... params) const {}
-  template <class Archive> inline void serialize(Archive &ar) {}
 };
+
+template <class T> inline const Dummy &operator+(const Dummy &d, const T &) {
+  return d;
+}
+template <class T> inline const Dummy &operator+(const T &, const Dummy &d) {
+  return d;
+}
+template <class T> inline const Dummy &operator-(const Dummy &d, const T &) {
+  return d;
+}
+template <class T> inline const Dummy &operator-(const T &, const Dummy &d) {
+  return d;
+}
+template <class T> inline const Dummy &operator*(const Dummy &d, const T &) {
+  return d;
+}
+template <class T> inline const Dummy &operator*(const T &, const Dummy &d) {
+  return d;
+}
 
 template <class... T> struct AlwaysFalse {
   enum { value = false };

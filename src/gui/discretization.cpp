@@ -15,6 +15,10 @@ inline Vec3 ToVec3Affine(const Vec4 &v4) {
 inline Vec2 ToVec2(const Vec3 &v3) { return Vec2(v3[0], v3[1]); }
 }
 
+DiscretizeOptions::DiscretizeOptions()
+    : _color(0, 0, 0, 1), _isolatedTriangles(false), _subdivisionNumU(32),
+      _subdivisionNumV(64) {}
+
 // tri mesh implementation
 TriMesh::Vertex::Vertex()
     : position(0, 0, 0, 1), normal(0, 0, 0), color(0, 0, 0, 1), texCoord(0, 0) {
@@ -36,8 +40,8 @@ TriMesh::VertHandle TriMesh::addVertex(const core::Point3 &p,
                                        bool asPoint) {
   TriMesh::Vertex v;
   v.position = cat(p, 1.0);
-  v.color = o.color;
-  return addVertex(v, asPoint, o.entity);
+  v.color = o.color();
+  return addVertex(v, asPoint, o.entity());
 }
 
 TriMesh::VertHandle TriMesh::addVertex(const core::Point3 &p,
@@ -47,8 +51,8 @@ TriMesh::VertHandle TriMesh::addVertex(const core::Point3 &p,
   TriMesh::Vertex v;
   v.position = cat(p, 1.0);
   v.normal = normal;
-  v.color = o.color;
-  return addVertex(v, asPoint, o.entity);
+  v.color = o.color();
+  return addVertex(v, asPoint, o.entity());
 }
 
 size_t TriMesh::numerOfPoints() const { return iPoints.size(); }
@@ -205,7 +209,7 @@ void Discretize(TriMesh &mesh, const core::LayeredShape3 &m,
               [&angles](int a, int b) { return angles[a] < angles[b]; });
   }
 
-  mesh.addPolygon(vhs.front(), o.entity);
+  mesh.addPolygon(vhs.front(), o.entity());
   for (int i = 1; i < m.size(); i++) {
     // find nearest two vertices in last layer
     if (vhs[i].empty()) {
@@ -223,7 +227,7 @@ void Discretize(TriMesh &mesh, const core::LayeredShape3 &m,
       if (anglea < angleb) {
         int newa = (a + 1) % lastids.size();
         mesh.addTriangle(lastVhs[lastids[a]], thisVhs[thisids[b]],
-                         lastVhs[lastids[newa]], o.entity);
+                         lastVhs[lastids[newa]], o.entity());
         a = newa;
         double newanglea = lastAngles[lastids[newa]];
         if (newanglea < anglea) {
@@ -233,7 +237,7 @@ void Discretize(TriMesh &mesh, const core::LayeredShape3 &m,
       } else {
         int newb = (b + 1) % thisids.size();
         mesh.addTriangle(thisVhs[thisids[b]], thisVhs[thisids[newb]],
-                         lastVhs[lastids[a]], o.entity);
+                         lastVhs[lastids[a]], o.entity());
         b = newb;
         double newangleb = thisAngles[thisids[newb]];
         if (newangleb < angleb) {
@@ -245,14 +249,14 @@ void Discretize(TriMesh &mesh, const core::LayeredShape3 &m,
   }
 
   std::reverse(vhs.back().begin(), vhs.back().end());
-  mesh.addPolygon(vhs.back(), o.entity);
+  mesh.addPolygon(vhs.back(), o.entity());
 }
 
 void Discretize(TriMesh &mesh, const core::Sphere3 &s,
                 const DiscretizeOptions &o) {
-  int m = o.subdivisionNums[0];
-  int n = o.subdivisionNums[1];
-  if (!o.isolatedTriangles) {
+  int m = o.subdivisionNumU();
+  int n = o.subdivisionNumV();
+  if (!o.isolatedTriangles()) {
     mesh.vertices.reserve(mesh.vertices.size() + m * n);
     std::vector<std::vector<TriMesh::VertHandle>> vhs(
         m, std::vector<TriMesh::VertHandle>(n));
@@ -268,16 +272,16 @@ void Discretize(TriMesh &mesh, const core::Sphere3 &s,
         TriMesh::Vertex v;
         v.position = point;
         v.texCoord = {xratio, yratio};
-        v.color = o.color;
-        vhs[i][j] = mesh.addVertex(v, false, o.entity);
+        v.color = o.color();
+        vhs[i][j] = mesh.addVertex(v, false, o.entity());
       }
     }
     for (int i = 1; i < m; i++) {
       int previ = i == 0 ? m - 1 : i - 1;
       for (int j = 0; j < n; j++) {
         int prevj = j == 0 ? n - 1 : j - 1;
-        mesh.addTriangle(vhs[i][j], vhs[i][prevj], vhs[previ][prevj], o.entity);
-        mesh.addTriangle(vhs[i][j], vhs[previ][prevj], vhs[previ][j], o.entity);
+        mesh.addTriangle(vhs[i][j], vhs[i][prevj], vhs[previ][prevj], o.entity());
+        mesh.addTriangle(vhs[i][j], vhs[previ][prevj], vhs[previ][j], o.entity());
       }
     }
   } else {
@@ -295,7 +299,7 @@ void Discretize(TriMesh &mesh, const core::Sphere3 &s,
         TriMesh::Vertex v;
         v.position = point;
         v.texCoord = {xratio, yratio};
-        v.color = o.color;
+        v.color = o.color();
         vs[i][j] = v;
       }
     }
@@ -304,9 +308,9 @@ void Discretize(TriMesh &mesh, const core::Sphere3 &s,
       for (int j = 0; j < n; j++) {
         int prevj = j == 0 ? n - 1 : j - 1;
         mesh.addIsolatedTriangle(vs[i][j], vs[i][prevj], vs[previ][prevj],
-                                 o.entity);
+                                 o.entity());
         mesh.addIsolatedTriangle(vs[i][j], vs[previ][prevj], vs[previ][j],
-                                 o.entity);
+                                 o.entity());
       }
     }
   }
@@ -324,10 +328,10 @@ void Discretize(TriMesh &mesh, const SpatialProjectedPolygon &spp,
     TriMesh::Vertex v;
     v.position = cat(cs[i], 1.0);
     v.normal = spp.plane.normal;
-    v.color = o.color;
-    vhandles[i] = mesh.addVertex(v, false, o.entity);
+    v.color = o.color();
+    vhandles[i] = mesh.addVertex(v, false, o.entity());
   }
-  mesh.addPolygon(vhandles, o.entity);
+  mesh.addPolygon(vhandles, o.entity());
 }
 }
 }

@@ -4,7 +4,8 @@
 #include "../core/cameras.hpp"
 #include "../core/utility.hpp"
 
-#include "../gui/basic_types.hpp"
+#include "../gui/color.hpp"
+#include "../gui/shader.hpp"
 
 namespace pano {
 namespace experimental {
