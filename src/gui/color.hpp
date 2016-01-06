@@ -40,21 +40,21 @@ public:
 
   // from vec4
   template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
-  inline Color(const core::Vec<T, 4> &v) : _rgba(v) {}
+  inline Color(const Vec<T, 4> &v) : _rgba(v) {}
 
   template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>,
             class = void>
-  inline Color(const core::Vec<T, 4> &v) : _rgba(v * 255) {}
+  inline Color(const Vec<T, 4> &v) : _rgba(v * 255) {}
 
   // from vec3
   template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
-  inline Color(const core::Vec<T, 3> &v, T a = 255)
+  inline Color(const Vec<T, 3> &v, T a = 255)
       : _rgba(static_cast<int>(v[0]), static_cast<int>(v[1]),
               static_cast<int>(v[2]), a) {}
 
   template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>,
             class = void>
-  inline Color(const core::Vec<T, 3> &v, T a = 1.0)
+  inline Color(const Vec<T, 3> &v, T a = 1.0)
       : _rgba(static_cast<int>(v[0] * 255), static_cast<int>(v[1] * 255),
               static_cast<int>(v[2] * 255), a * 255) {}
 
@@ -83,26 +83,26 @@ public:
 
   // to vec4
   template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
-  inline operator core::Vec<T, 4>() const {
+  inline operator Vec<T, 4>() const {
     return _rgba;
   }
 
   template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>,
             class = void>
-  inline operator core::Vec<T, 4>() const {
-    return _rgba / 255.0;
+  inline operator Vec<T, 4>() const {
+    return Vec<T, 4>(_rgba) / 255.0;
   }
 
   // to vec3
   template <class T, class = std::enable_if_t<std::is_integral<T>::value>>
-  inline operator core::Vec<T, 3>() const {
-    return core::Vec<T, 3>(_rgba[0], _rgba[1], _rgba[2]);
+  inline operator Vec<T, 3>() const {
+    return Vec<T, 3>(_rgba[0], _rgba[1], _rgba[2]);
   }
 
   template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>,
             class = void>
-  inline operator core::Vec<T, 3>() const {
-    return core::Vec<T, 3>(_rgba[0] / 255.0, _rgba[1] / 255.0,
+  inline operator Vec<T, 3>() const {
+    return Vec<T, 3>(_rgba[0] / 255.0, _rgba[1] / 255.0,
                            _rgba[2] / 255.0);
   }
 
@@ -128,7 +128,7 @@ public:
   template <class Archive> inline void serialize(Archive &ar) { ar(_rgba); }
 
 private:
-  core::Vec4i _rgba;
+  Vec4i _rgba;
 };
 
 template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
@@ -153,7 +153,7 @@ inline Color operator/(const Color &c, T d) {
 std::ostream &operator<<(std::ostream &os, ColorTag ct);
 Color ColorFromHSV(double h, double s, double v, double a = 1.0);
 Color RandomColor();
-inline Color ColorFromImage(const core::Image &im, core::Pixel p) {
+inline Color ColorFromImage(const Image &im, Pixel p) {
   return Color(im.ptr(p.y, p.x), im.type());
 }
 
@@ -249,7 +249,7 @@ public:
 
   bool empty() const { return _colors.empty(); }
 
-  core::Image3ub operator()(const core::Imagei &indexIm) const;
+  Image3ub operator()(const Imagei &indexIm) const;
 
   const Color &roundedAt(int claz) const {
     return claz < 0 ? _exceptionalColor : _colors[claz % _colors.size()];

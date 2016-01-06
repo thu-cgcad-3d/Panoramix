@@ -69,9 +69,10 @@ RenderOptions::RenderOptions()
       _camera(PerspectiveCamera(500, 500, Point2(250, 250), 250,
                                 {1.0, 1.0, 1.0}, {0.0, 0.0, 0.0},
                                 {0.0, 0.0, 1.0})),
-      _bwColor(.3), _bwTexColor(0.7), _cullFrontFace(true),
-      _cullBackFace(false), _panoramaProjectionCenter(0, 0, 0),
-      _panoramaHoriCenterRatio(0.5f), _panoramaAspectRatio(0.5f) {}
+      _fixUpDirectionInCameraMove(true), _bwColor(.3), _bwTexColor(0.7),
+      _cullFrontFace(true), _cullBackFace(false),
+      _panoramaProjectionCenter(0, 0, 0), _panoramaHoriCenterRatio(0.5f),
+      _panoramaAspectRatio(0.5f) {}
 
 class SceneObjectInternal {
 public:
@@ -968,7 +969,8 @@ protected:
                    t.y() * options->camera().upward();
       trans *=
           0.02 * Distance(options->camera().eye(), options->camera().center());
-      options->camera().moveEyeWithCenterFixed(trans, sphere, true, true);
+      options->camera().moveEyeWithCenterFixed(
+          trans, sphere, true, true, options->fixUpDirectionInCameraMove());
       setCursor(Qt::ClosedHandCursor);
       update();
     } else if ((e->buttons() & Qt::MidButton) ||

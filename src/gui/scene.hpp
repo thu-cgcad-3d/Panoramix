@@ -61,6 +61,7 @@ public:                                                                        \
   DECL_PROPERTY(Color, backgroundColor)
   DECL_PROPERTY(RenderModeFlags, renderMode)
   DECL_PROPERTY(PerspectiveCamera, camera)
+  DECL_PROPERTY(bool, fixUpDirectionInCameraMove)
   DECL_PROPERTY(float, bwColor)
   DECL_PROPERTY(float, bwTexColor)
   DECL_PROPERTY(bool, cullFrontFace)

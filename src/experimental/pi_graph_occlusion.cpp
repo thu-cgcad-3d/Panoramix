@@ -1,6 +1,6 @@
 #include "../core/containers.hpp"
 #include "../core/utility.hpp"
-#include "../ml/factor_graph.hpp"
+#include "../core/factor_graph.hpp"
 
 #include "../gui/canvas.hpp"
 
@@ -45,16 +45,16 @@ struct SegLabel {
 
 void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
 
-  ml::FactorGraph fg;
+  core::FactorGraph fg;
 
   std::cout << "building factor graph" << std::endl;
 
   //// vars
 
   // segs
-  std::vector<ml::FactorGraph::VarHandle> seg2vh(mg.nsegs);
+  std::vector<core::FactorGraph::VarHandle> seg2vh(mg.nsegs);
   std::vector<std::vector<SegLabel>> seg2allowedLabels(mg.nsegs);
-  std::map<ml::FactorGraph::VarHandle, int> vh2seg;
+  std::map<core::FactorGraph::VarHandle, int> vh2seg;
   for (int i = 0; i < mg.nsegs; i++) {
     auto &c = mg.seg2control[i];
     if (!c.used)
@@ -84,10 +84,10 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
     LeftIsFront = (int)SegRelation::LeftIsFront,
     RightIsFront = (int)SegRelation::RightIsFront
   };
-  std::vector<ml::FactorGraph::VarHandle> bndPiece2vh(mg.nbndPieces());
+  std::vector<core::FactorGraph::VarHandle> bndPiece2vh(mg.nbndPieces());
   std::vector<std::vector<BndPieceLabel>> bndPiece2allowedLabels(
       mg.nbndPieces());
-  std::map<ml::FactorGraph::VarHandle, int> vh2bndPiece;
+  std::map<core::FactorGraph::VarHandle, int> vh2bndPiece;
   for (int i = 0; i < mg.nbndPieces(); i++) {
     std::vector<BndPieceLabel> allowedLabels;
     double c_i = mg.bndPiece2length[i];
@@ -112,10 +112,10 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
     Attached = (int)SegLineRelation::Attached,
     Detached = (int)SegLineRelation::Detached
   };
-  std::vector<ml::FactorGraph::VarHandle> linePiece2vh(mg.nlinePieces());
+  std::vector<core::FactorGraph::VarHandle> linePiece2vh(mg.nlinePieces());
   std::vector<std::vector<LinePieceLabel>> linePiece2allowedLabels(
       mg.nlinePieces());
-  std::map<ml::FactorGraph::VarHandle, int> vh2linePiece;
+  std::map<core::FactorGraph::VarHandle, int> vh2linePiece;
   for (int i = 0; i < mg.nlinePieces(); i++) {
     std::vector<LinePieceLabel> allowedLabels;
     if (mg.linePiece2segLineRelation[i] != SegLineRelation::Unknown) {
@@ -141,7 +141,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
     }
     int fc = fg.addFactorCategory(
         [seg, &seg2allowedLabels, &mg](const int *varlabels, size_t nvar,
-                                       ml::FactorGraph::FactorCategoryId fcid,
+                                       core::FactorGraph::FactorCategoryId fcid,
                                        void *givenData) -> double {
           assert(nvar == 1);
           return 0.0;
@@ -158,7 +158,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
     int fc = fg.addFactorCategory(
         [bndPiece, &bndPiece2allowedLabels, &mg](
             const int *varlabels, size_t nvar,
-            ml::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
           assert(nvar == 1);
           BndPieceLabel label = bndPiece2allowedLabels[bndPiece][varlabels[0]];
           double len = mg.bndPiece2length[bndPiece];
@@ -183,7 +183,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
     int fc = fg.addFactorCategory(
         [linePiece, &linePiece2allowedLabels, &mg](
             const int *varlabels, size_t nvar,
-            ml::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
           assert(nvar == 1);
           LinePieceLabel label =
               linePiece2allowedLabels[linePiece][varlabels[0]];
@@ -228,7 +228,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
     int fc = fg.addFactorCategory(
         [seg, linePiece, &seg2allowedLabels, &linePiece2allowedLabels, &mg,
          &costBetweenSegAndLine](const int *varlabels, size_t nvar,
-                                 ml::FactorGraph::FactorCategoryId fcid,
+                                 core::FactorGraph::FactorCategoryId fcid,
                                  void *givenData) -> double {
           assert(nvar == 2);
           const SegLabel &seglabel = seg2allowedLabels[seg][varlabels[0]];
@@ -260,7 +260,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
         [seg1, seg2, bndPiece, linePiece, line, &seg2allowedLabels,
          &bndPiece2allowedLabels, &linePiece2allowedLabels, &mg,
          &costBetweenSegAndLine](const int *varlabels, size_t nvar,
-                                 ml::FactorGraph::FactorCategoryId fcid,
+                                 core::FactorGraph::FactorCategoryId fcid,
                                  void *givenData) -> double {
           assert(nvar == 4); // 0-seg1 1-seg2 2-bndPiece 3-linePiece
           int segs[] = {seg1, seg2};
@@ -426,7 +426,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
       int fc = fg.addFactorCategory(
           [bp, bpRightCanNeverBeFrontVoteSum, bpLeftCanNeverBeFrontVoteSum, &mg,
            &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
-                                    ml::FactorGraph::FactorCategoryId fcid,
+                                    core::FactorGraph::FactorCategoryId fcid,
                                     void *givenData) -> double {
             assert(nvar == 1);
             BndPieceLabel label = bndPiece2allowedLabels[bp][varlabels[0]];
@@ -460,7 +460,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
       int fc = fg.addFactorCategory(
           [seg1, seg2, bndPiece, &mg, &seg2allowedLabels,
            &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
-                                    ml::FactorGraph::FactorCategoryId fcid,
+                                    core::FactorGraph::FactorCategoryId fcid,
                                     void *givenData) -> double {
             assert(nvar == 3);
 
@@ -537,7 +537,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
   //            int fc = fg.addFactorCategory([seg, bndPiece, bndPiecesNum, &mg,
   //            &seg2allowedLabels, &bndPiece2allowedLabels](
   //                const int * varlabels, size_t nvar,
-  //                ml::FactorGraph::FactorCategoryId fcid, void * givenData) {
+  //                core::FactorGraph::FactorCategoryId fcid, void * givenData) {
   //                assert(nvar == 2);
   //                auto seglabel = seg2allowedLabels[seg][varlabels[0]];
   //                BndPieceLabel bndPieceLabel =
@@ -573,7 +573,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
               int fc = fg.addFactorCategory([seg, bndPiece,
   surroundingBndPiecesLen, &mg, &seg2allowedLabels, &bndPiece2allowedLabels](
                   const int * varlabels, size_t nvar,
-                  ml::FactorGraph::FactorCategoryId fcid, void * givenData) {
+                  core::FactorGraph::FactorCategoryId fcid, void * givenData) {
                   assert(nvar == 2);
                   auto seglabel = seg2allowedLabels[seg][varlabels[0]];
                   BndPieceLabel bndPieceLabel =
@@ -621,7 +621,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
         int fc = fg.addFactorCategory(
             [linePiece1, linePiece2, bndPiece1, bndPiece2, sameDirection, &mg,
              &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
-                                      ml::FactorGraph::FactorCategoryId fcid,
+                                      core::FactorGraph::FactorCategoryId fcid,
                                       void *givenData) {
 
               assert(nvar == 2);
@@ -669,7 +669,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
         int fc = fg.addFactorCategory(
             [bndPiece, linePiece, &mg, &bndPiece2allowedLabels,
              &linePiece2allowedLabels](const int *varlabels, size_t nvar,
-                                       ml::FactorGraph::FactorCategoryId fcid,
+                                       core::FactorGraph::FactorCategoryId fcid,
                                        void *givenData) {
 
               assert(nvar == 2);
@@ -708,7 +708,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
       int fc = fg.addFactorCategory(
           [bndPiece1, bndPiece2, &mg, &bndPiece2allowedLabels](
               const int *varlabels, size_t nvar,
-              ml::FactorGraph::FactorCategoryId fcid, void *givenData) {
+              core::FactorGraph::FactorCategoryId fcid, void *givenData) {
 
             assert(nvar == 2);
             BndPieceLabel bndPieceLabel1 =
@@ -747,7 +747,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
 
     std::vector<int> bndPieces(bnds.size());
     std::vector<bool> bndPiecesTowardJunc(bnds.size(), false);
-    std::vector<ml::FactorGraph::VarHandle> bpvhs(bnds.size());
+    std::vector<core::FactorGraph::VarHandle> bpvhs(bnds.size());
 
     double bndPieceLenSum = 0.0;
 
@@ -767,7 +767,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
     int fc = fg.addFactorCategory(
         [bndPieceLenSum, bndPieces, bndPiecesTowardJunc, &mg,
          &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
-                                  ml::FactorGraph::FactorCategoryId fcid,
+                                  core::FactorGraph::FactorCategoryId fcid,
                                   void *givenData) {
 
           assert(nvar == bndPieces.size() &&
@@ -814,11 +814,11 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
   // solve
   std::cout << "solving factor graph" << std::endl;
 
-  ml::FactorGraph::ResultTable bestLabels;
+  core::FactorGraph::ResultTable bestLabels;
   double minEnergy = std::numeric_limits<double>::infinity();
   fg.solve(1000, 10, [&bestLabels, &minEnergy](
                          int epoch, double energy, double denergy,
-                         const ml::FactorGraph::ResultTable &results) -> bool {
+                         const core::FactorGraph::ResultTable &results) -> bool {
     std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
     if (energy < minEnergy) {
       bestLabels = results;
@@ -979,13 +979,13 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     gui::AsCanvas(pim).show();
   }
 
-  ml::FactorGraph fg;
+  core::FactorGraph fg;
 
   std::cout << "building factor graph" << std::endl;
 
   std::vector<std::vector<LineLabel>> line2allowedLabels(mg.nlines());
-  std::vector<ml::FactorGraph::VarHandle> line2vh(mg.nlines());
-  std::map<ml::FactorGraph::VarHandle, int> vh2line;
+  std::vector<core::FactorGraph::VarHandle> line2vh(mg.nlines());
+  std::map<core::FactorGraph::VarHandle, int> vh2line;
   for (int line = 0; line < mg.nlines(); line++) {
     if (mg.lines[line].claz == -1) {
       continue;
@@ -1160,7 +1160,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     int fc = fg.addFactorCategory(
         [&line2labelCost, &mg, &line2allowedLabels, line](
             const int *varlabels, size_t nvar,
-            ml::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
           assert(nvar == 1);
           auto &labelCosts = line2labelCost[line];
 
@@ -1212,7 +1212,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     int fc = fg.addFactorCategory(
         [&line2allowedLabels, line1, line2, sameDirection, weight](
             const int *varlabels, size_t nvar,
-            ml::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
           assert(nvar == 2);
           const LineLabel &label1 = line2allowedLabels[line1][varlabels[0]];
           const LineLabel &label2 = line2allowedLabels[line2][varlabels[1]];
@@ -1229,11 +1229,11 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
   // solve
   std::cout << "solving factor graph" << std::endl;
 
-  ml::FactorGraph::ResultTable bestLabels;
+  core::FactorGraph::ResultTable bestLabels;
   double minEnergy = std::numeric_limits<double>::infinity();
   fg.solve(20, 10, [&bestLabels, &minEnergy](
                        int epoch, double energy, double denergy,
-                       const ml::FactorGraph::ResultTable &results) -> bool {
+                       const core::FactorGraph::ResultTable &results) -> bool {
     std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
     if (energy < minEnergy) {
       bestLabels = results;
@@ -1811,16 +1811,16 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
     }
   }
 
-  ml::FactorGraph fg;
+  core::FactorGraph fg;
 
   std::cout << "building factor graph" << std::endl;
 
-  std::vector<std::array<ml::FactorGraph::VarHandle, 2>>
+  std::vector<std::array<core::FactorGraph::VarHandle, 2>>
       line2vhConnectLeftRight(mg.nlines());
   static const int LineLabelDisconnect = 0;
   static const int LineLabelConnect = 1;
 
-  std::map<ml::FactorGraph::VarHandle, int> vh2line;
+  std::map<core::FactorGraph::VarHandle, int> vh2line;
   for (int line = 0; line < mg.nlines(); line++) {
     if (mg.lines[line].claz == -1) {
       continue;
@@ -1993,7 +1993,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       int fc = fg.addFactorCategory(
           [labelConnectCost, labelDisconnectCost, &mg,
            line](const int *varlabels, size_t nvar,
-                 ml::FactorGraph::FactorCategoryId fcid,
+                 core::FactorGraph::FactorCategoryId fcid,
                  void *givenData) -> double {
             assert(nvar == 1);
             int label = varlabels[0];
@@ -2011,7 +2011,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
     double lineAngleLen = AngleBetweenDirections(l.first, l.second);
     int fc = fg.addFactorCategory(
         [lineAngleLen](const int *varlabels, size_t nvar,
-                       ml::FactorGraph::FactorCategoryId fcid,
+                       core::FactorGraph::FactorCategoryId fcid,
                        void *givenData) -> double {
           assert(nvar == 2);
           int label1 = varlabels[0], label2 = varlabels[1];
@@ -2059,7 +2059,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       int fc = fg.addFactorCategory(
           [line1, line2, angleDist,
            normalAngle](const int *varlabels, size_t nvar,
-                        ml::FactorGraph::FactorCategoryId fcid,
+                        core::FactorGraph::FactorCategoryId fcid,
                         void *givenData) -> double {
             assert(nvar == 2);
             int label1 = varlabels[0];
@@ -2077,11 +2077,11 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
   // solve
   std::cout << "solving factor graph" << std::endl;
 
-  ml::FactorGraph::ResultTable bestLabels;
+  core::FactorGraph::ResultTable bestLabels;
   double minEnergy = std::numeric_limits<double>::infinity();
   fg.solve(5, 10, [&bestLabels, &minEnergy](
                       int epoch, double energy, double denergy,
-                      const ml::FactorGraph::ResultTable &results) -> bool {
+                      const core::FactorGraph::ResultTable &results) -> bool {
     std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
     if (energy < minEnergy) {
       bestLabels = results;
@@ -2287,16 +2287,16 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
     }
   }
 
-  ml::FactorGraph fg;
+  core::FactorGraph fg;
 
   std::cout << "building factor graph" << std::endl;
 
-  std::vector<std::array<ml::FactorGraph::VarHandle, 2>>
+  std::vector<std::array<core::FactorGraph::VarHandle, 2>>
       line2vhConnectLeftRight(mg.nlines());
   static const int LineLabelDisconnect = 0;
   static const int LineLabelConnect = 1;
 
-  std::map<ml::FactorGraph::VarHandle, int> vh2line;
+  std::map<core::FactorGraph::VarHandle, int> vh2line;
   for (int line = 0; line < mg.nlines(); line++) {
     if (mg.lines[line].claz == -1) {
       continue;
@@ -2417,7 +2417,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       int fc = fg.addFactorCategory(
           [labelConnectCost, labelDisconnectCost, &mg,
            line](const int *varlabels, size_t nvar,
-                 ml::FactorGraph::FactorCategoryId fcid,
+                 core::FactorGraph::FactorCategoryId fcid,
                  void *givenData) -> double {
             assert(nvar == 1);
             int label = varlabels[0];
@@ -2435,7 +2435,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
     double lineAngleLen = AngleBetweenDirections(l.first, l.second);
     int fc = fg.addFactorCategory(
         [lineAngleLen](const int *varlabels, size_t nvar,
-                       ml::FactorGraph::FactorCategoryId fcid,
+                       core::FactorGraph::FactorCategoryId fcid,
                        void *givenData) -> double {
           assert(nvar == 2);
           int label1 = varlabels[0], label2 = varlabels[1];
@@ -2486,7 +2486,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       int fc = fg.addFactorCategory(
           [line1, line2, angleDist,
            normalAngle](const int *varlabels, size_t nvar,
-                        ml::FactorGraph::FactorCategoryId fcid,
+                        core::FactorGraph::FactorCategoryId fcid,
                         void *givenData) -> double {
             assert(nvar == 2);
             int label1 = varlabels[0];
@@ -2504,11 +2504,11 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
   // solve
   std::cout << "solving factor graph" << std::endl;
 
-  ml::FactorGraph::ResultTable bestLabels;
+  core::FactorGraph::ResultTable bestLabels;
   double minEnergy = std::numeric_limits<double>::infinity();
   fg.solve(5, 10, [&bestLabels, &minEnergy](
                       int epoch, double energy, double denergy,
-                      const ml::FactorGraph::ResultTable &results) -> bool {
+                      const core::FactorGraph::ResultTable &results) -> bool {
     std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
     if (energy < minEnergy) {
       bestLabels = results;

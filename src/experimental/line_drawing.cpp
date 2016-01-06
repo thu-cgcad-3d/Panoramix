@@ -54,6 +54,7 @@ LineDrawing<Point2> LoadLineDrawing(const std::string &filename) {
   for (int i = 0; i < lineNum; i++) {
     ifs >> drawing.line2corners[i].first >> drawing.line2corners[i].second;
   }
+  drawing.line2type.resize(lineNum, SolidLine);
 
   ifs.close();
 
@@ -118,6 +119,7 @@ LineDrawing<Point3> LoadLineDrawing(const std::string &filename,
   for (int i = 0; i < lineNum; i++) {
     ifs >> drawing.line2corners[i].first >> drawing.line2corners[i].second;
   }
+  drawing.line2type.resize(lineNum, SolidLine);
 
   ifs.close();
   ifs.open(gtfilename);
@@ -134,10 +136,8 @@ LineDrawing<Point3> LoadLineDrawing(const std::string &filename,
   return drawing;
 }
 
-void SearchFace(LineDrawing<Point2>& drawing) {
-    // convert to mesh
-
+void SearchFace(LineDrawing<Point2> &drawing) {
+  // convert to mesh
 }
-    
 }
 }

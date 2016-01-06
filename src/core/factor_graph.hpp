@@ -2,12 +2,12 @@
 
 #include <type_traits>
 
-#include "../core/basic_types.hpp"
-#include "../core/homo_graph.hpp"
-#include "../core/iterators.hpp"
+#include "basic_types.hpp"
+#include "homo_graph.hpp"
+#include "iterators.hpp"
 
 namespace pano {
-namespace ml {
+namespace core {
 
 class FactorGraph {
 public:
@@ -26,10 +26,10 @@ public:
     double c_i;
   };
 
-  using Topology = core::HomogeneousGraph0x<VarCategoryId, FactorCategoryId>;
-  using VarHandle = core::HandleOfTypeAtLevel<Topology, 0>;
-  using FactorHandle = core::HandleOfTypeAtLevel<Topology, 1>;
-  using ResultTable = core::HandledTable<VarHandle, int>;
+  using Topology = HomogeneousGraph0x<VarCategoryId, FactorCategoryId>;
+  using VarHandle = HandleOfTypeAtLevel<Topology, 0>;
+  using FactorHandle = HandleOfTypeAtLevel<Topology, 1>;
+  using ResultTable = HandledTable<VarHandle, int>;
 
   using SimpleCallbackFunction = std::function<bool(int epoch, double energy)>;
   using CallbackFunction = std::function<bool(

@@ -202,11 +202,14 @@ void PerspectiveCamera::translate(const Vec3 &t, const Sphere3 &target,
 void PerspectiveCamera::moveEyeWithCenterFixed(const Vec3 &t,
                                                const Sphere3 &target,
                                                bool distanceFixed,
-                                               bool updateMat) {
+                                               bool updateMat, bool upFixed) {
   double dist = norm(_eye - _center);
   _eye += t;
   if (distanceFixed) {
     _eye = normalize(_eye - _center) * dist + _center;
+  }
+  if (!upFixed) {
+    _up = rightward().cross(forward());
   }
   AdjustNearAndFar(_near, _far, target, _eye);
   if (updateMat)

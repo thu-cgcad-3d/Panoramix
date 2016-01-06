@@ -26,7 +26,7 @@ struct PerspectiveOptions {
 int main(int argc, char **argv) {
 
   gui::Singleton::InitGui(argc, argv);
-  misc::SetCachePath("D:\\Cache\\Panoramix\\Perspective\\");
+  misc::SetCachePath("D:\\Panoramix\\Perspective\\");
   misc::Matlab matlab;
 
   PerspectiveOptions options;

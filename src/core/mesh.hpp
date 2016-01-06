@@ -38,18 +38,16 @@ struct FaceTopo {
   }
 };
 
+using VertHandle = Handle<VertTopo>;
+using HalfHandle = Handle<HalfTopo>;
+using FaceHandle = Handle<FaceTopo>;
+
 template <class VertDataT, class HalfDataT = Dummy, class FaceDataT = Dummy>
 class Mesh {
 public:
-  static const int LayerNum = 2;
-
   using VertData = VertDataT;
   using HalfData = HalfDataT;
   using FaceData = FaceDataT;
-
-  using VertHandle = Handle<VertTopo>;
-  using HalfHandle = Handle<HalfTopo>;
-  using FaceHandle = Handle<FaceTopo>;
 
   using VertsTable = TripletArray<VertTopo, VertDataT>;
   using HalfsTable = TripletArray<HalfTopo, HalfDataT>;
@@ -119,41 +117,76 @@ public:
     if (from == to) {
       return HalfHandle();
     }
-    // find existed halfedge
+
+    HalfHandle hh1;
+    HalfHandle hh2;
     if (mergeDuplicateEdge) {
-      HalfHandle hh = findEdge(from, to);
-      if (hh.valid()) {
-        _halfs[hh.id].data = hd;
-        _halfs[_halfs[hh.id].topo.opposite.id].data = hdrev;
-        return hh;
-      }
+      hh1 = findEdge(from, to);
+      hh2 = findEdge(to, from);
     }
 
-    HalfHandle hh1(_halfs.size());
-    Triplet<HalfTopo, HalfDataT> ht;
-    ht.topo.hd.id = _halfs.size();
-    ht.topo.from() = from;
-    ht.topo.to() = to;
-    ht.exists = true;
-    ht.data = hd;
-    //_halfs.push_back({ { { _halfs.size() }, { from, to }, { -1 }, { -1 } },
-    // true, hd });
-    _halfs.push_back(ht);
-    HalfHandle hh2(_halfs.size());
-    ht.topo.hd.id = _halfs.size();
-    ht.topo.from() = to;
-    ht.topo.to() = from;
-    ht.exists = true;
-    ht.data = hdrev;
-    //_halfs.push_back({ { { _halfs.size() }, { to, from }, { -1 }, { -1 } },
-    // true, hdrev });
-    _halfs.push_back(ht);
+    if (hh1.invalid()) {
+      hh1 = HalfHandle(_halfs.size());
+      Triplet<HalfTopo, HalfDataT> ht;
+      ht.topo.hd.id = _halfs.size();
+      ht.topo.from() = from;
+      ht.topo.to() = to;
+      ht.exists = true;
+      ht.data = hd;
+      _halfs.push_back(ht);
+      _verts[from.id].topo.halfedges.push_back(hh1);
+    }
+    if (hh2.invalid()) {
+      hh2 = HalfHandle(_halfs.size());
+      Triplet<HalfTopo, HalfDataT> ht;
+      ht.topo.hd.id = _halfs.size();
+      ht.topo.from() = to;
+      ht.topo.to() = from;
+      ht.exists = true;
+      ht.data = hdrev;
+      _halfs.push_back(ht);
+      _verts[to.id].topo.halfedges.push_back(hh2);
+    }
 
     _halfs[hh1.id].topo.opposite = hh2;
     _halfs[hh2.id].topo.opposite = hh1;
 
-    _verts[from.id].topo.halfedges.push_back(hh1);
-    _verts[to.id].topo.halfedges.push_back(hh2);
+    //// find existed halfedge
+    // if (mergeDuplicateEdge) {
+    //  HalfHandle hh = findEdge(from, to);
+    //  if (hh.valid()) {
+    //    _halfs[hh.id].data = hd;
+    //    _halfs[_halfs[hh.id].topo.opposite.id].data = hdrev;
+    //    return hh;
+    //  }
+    //}
+
+    // HalfHandle hh1(_halfs.size());
+    // Triplet<HalfTopo, HalfDataT> ht;
+    // ht.topo.hd.id = _halfs.size();
+    // ht.topo.from() = from;
+    // ht.topo.to() = to;
+    // ht.exists = true;
+    // ht.data = hd;
+    ////_halfs.push_back({ { { _halfs.size() }, { from, to }, { -1 }, { -1 } },
+    //// true, hd });
+    //_halfs.push_back(ht);
+    // HalfHandle hh2(_halfs.size());
+    // ht.topo.hd.id = _halfs.size();
+    // ht.topo.from() = to;
+    // ht.topo.to() = from;
+    // ht.exists = true;
+    // ht.data = hdrev;
+    ////_halfs.push_back({ { { _halfs.size() }, { to, from }, { -1 }, { -1 } },
+    //// true, hdrev });
+    //_halfs.push_back(ht);
+
+    //_halfs[hh1.id].topo.opposite = hh2;
+    //_halfs[hh2.id].topo.opposite = hh1;
+
+    //_verts[from.id].topo.halfedges.push_back(hh1);
+    //_verts[to.id].topo.halfedges.push_back(hh2);
+
     return hh1;
   }
   FaceHandle addFace(const HandleArray<HalfTopo> &halfedges,
@@ -174,10 +207,17 @@ public:
                      bool autoflip = true, const FaceDataT &fd = FaceDataT()) {
     HandleArray<HalfTopo> halfs;
     assert(vertices.size() >= 3);
-    HalfHandle hh = findEdge(vertices.back(), vertices.front());
     auto verts = vertices;
-    if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip) {
-      std::reverse(verts.begin(), verts.end());
+
+    if (autoflip) {
+      for (size_t i = 0; i < verts.size(); i++) {
+        size_t inext = (i + 1) % verts.size();
+        HalfHandle hh = findEdge(verts[i], verts[inext]);
+        if (hh.valid() && _halfs[hh.id].topo.face.valid()) {
+          std::reverse(verts.begin(), verts.end());
+          break;
+        }
+      }
     }
 
     for (size_t i = 0; i < verts.size(); i++) {
@@ -193,13 +233,19 @@ public:
   FaceHandle addFace(VertHandleIteratorT vhBegin, VertHandleIteratorT vhEnd,
                      bool autoflip = true, const FaceDataT &fd = FaceDataT()) {
     HandleArray<HalfTopo> halfs;
-    HalfHandle hh = findEdge(vertices.back(), vertices.front());
     HandleArray<VertTopo> verts(vhBegin, vhEnd);
     assert(verts.size() >= 3);
-    if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip) {
-      std::reverse(verts.begin(), verts.end());
-    }
 
+    if (autoflip) {
+      for (size_t i = 0; i < verts.size(); i++) {
+        size_t inext = (i + 1) % verts.size();
+        HalfHandle hh = findEdge(verts[i], verts[inext]);
+        if (hh.valid() && _halfs[hh.id].topo.face.valid()) {
+          std::reverse(verts.begin(), verts.end());
+          break;
+        }
+      }
+    }
     for (size_t i = 0; i < verts.size(); i++) {
       size_t inext = (i + 1) % verts.size();
       halfs.push_back(addEdge(verts[i], verts[inext]));
@@ -233,6 +279,13 @@ public:
       }
     }
     return HalfHandle();
+  }
+
+  size_t degree(VertHandle v) const {
+    return _verts[v.id].topo.halfedges.size();
+  }
+  size_t degree(FaceHandle f) const {
+    return _faces[f.id].topo.halfedges.size();
   }
 
   inline bool removed(FaceHandle f) const { return !_faces[f.id].exists; }
@@ -413,9 +466,9 @@ template <class VertDataT, class HalfDataT, class FaceDataT,
 bool DepthFirstSearch(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                       VertexCallbackT vCallBack) {
   using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
-  using VertH = typename MeshType::VertHandle;
-  using HalfH = typename MeshType::HalfHandle;
-  using FaceH = typename MeshType::FaceHandle;
+  using VertH = VertHandle;
+  using HalfH = HalfHandle;
+  using FaceH = FaceHandle;
 
   struct {
     bool operator()(MeshType &mesh, VertH root, std::vector<bool> &vertVisited,
@@ -463,9 +516,9 @@ template <
 int ConnectedComponents(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                         ConstVertexTypeRecorderT vtr) {
   using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
-  using VertH = typename MeshType::VertHandle;
-  using HalfH = typename MeshType::HalfHandle;
-  using FaceH = typename MeshType::FaceHandle;
+  using VertH = VertHandle;
+  using HalfH = HalfHandle;
+  using FaceH = FaceHandle;
 
   struct {
     bool operator()(const MeshType &mesh, VertH root,
@@ -538,7 +591,7 @@ void RemoveDanglingComponents(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   }
 }
 
-// SearchAndAddFaces
+// SearchAndAddFaces (liqi's method)
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class EdgeParallelScorerT, // (const MeshT & mesh, HalfH h1, HalfH h2)
                                      // -> double
@@ -547,9 +600,9 @@ template <class VertDataT, class HalfDataT, class FaceDataT,
 void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                        EdgeParallelScorerT epj, EdgeMaskerT emsk) {
   using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
-  using VertH = typename MeshType::VertHandle;
-  using HalfH = typename MeshType::HalfHandle;
-  using FaceH = typename MeshType::FaceHandle;
+  using VertH = VertHandle;
+  using HalfH = HalfHandle;
+  using FaceH = FaceHandle;
 
   // the loop struct for each half edge
   struct Loop {
@@ -1177,13 +1230,13 @@ Label_End:
   }
 }
 
-// SearchAndAddFaces
+// SearchAndAddFaces (liqi's method)
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
-  using VertH = typename MeshType::VertHandle;
-  using HalfH = typename MeshType::HalfHandle;
-  using FaceH = typename MeshType::FaceHandle;
+  using VertH = VertHandle;
+  using HalfH = HalfHandle;
+  using FaceH = FaceHandle;
 
   auto eParallelJudger = [](const MeshType &mesh, HalfH h1, HalfH h2) {
     VertH h1v1 = mesh.topo(h1).from();
@@ -1215,6 +1268,250 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   }
 }
 
+// ConstructInternalLoopFrom (liqi)
+// IntersectFunT: (HalfHandle)
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class IntersectFunT>
+auto ConstructInternalLoopFrom(
+    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, Handle<HalfTopo> initial,
+    IntersectFunT intersectFun) {
+
+  if (mesh.degree(mesh.topo(initial).from()) < 4 ||
+      mesh.degree(mesh.topo(initial).to()) < 4) {
+    return std::list<HalfHandle>();
+  }
+
+  VertHandle startV = mesh.topo(initial).from();
+  std::queue<std::list<HalfHandle>> Q;
+  Q.push({initial});
+
+  while (!Q.empty()) {
+    auto curPath = std::move(Q.front());
+    Q.pop();
+
+    // if curPath is closed?
+    if (mesh.topo(curPath.back()).to() == startV) {
+      return curPath;
+    }
+
+    VertHandle endV = mesh.topo(curPath.back()).to();
+    std::vector<HalfHandle> validNextHs;
+    for (HalfHandle nexth : mesh.topo(endV).halfedges) {
+      // next edge should not coincide with current path
+      if (Contains(curPath, nexth) ||
+          Contains(curPath, mesh.topo(nexth).opposite)) {
+        continue;
+      }
+
+      // next end vertex's degree should >= 4
+      VertHandle vh = mesh.topo(nexth).to();
+      if (mesh.degree(vh) < 4) {
+        continue;
+      }
+
+      // next end vertex should not lie on current path (except the startV)
+      bool hasSharedVert = false;
+      for (HalfHandle h : curPath) {
+        VertHandle v = mesh.topo(h).to();
+        assert(v != startV);
+        if (v == vh) {
+          hasSharedVert = true;
+          break;
+        }
+      }
+      if (hasSharedVert) {
+        continue;
+      }
+
+      // next edge should not share any face with current path
+      FaceHandle fh = mesh.topo(nexth).face;
+      FaceHandle fhoppo = mesh.topo(mesh.topo(nexth).opposite).face;
+      bool hasSharedFace = false;
+      for (HalfHandle h : curPath) {
+        FaceHandle fh2 = mesh.topo(h).face;
+        FaceHandle fhoppo2 = mesh.topo(mesh.topo(h).opposite).face;
+        if (fh == fh2 || fh == fhoppo2 || fhoppo == fh2 || fhoppo == fhoppo2) {
+          hasSharedFace = true;
+          break;
+        }
+      }
+      if (hasSharedFace) {
+        continue;
+      }
+
+      // next edge should not intersect current path
+      bool hasIntersection = false;
+      for (HalfHandle h : curPath) {
+        if (intersectFun(h, nexth)) {
+          hasIntersection = true;
+          break;
+        }
+      }
+      if (hasIntersection) {
+        continue;
+      }
+
+      validNextHs.push_back(nexth);
+    }
+
+    if (validNextHs.size() == 1) {
+      curPath.push_back(validNextHs.front());
+      Q.push(std::move(curPath));
+    } else {
+      for (HalfHandle nexth : validNextHs) {
+        auto nextPath = curPath;
+        nextPath.push_back(nexth);
+        Q.push(std::move(nextPath));
+      }
+    }
+  }
+
+  return std::list<HalfHandle>();
+}
+
+// DecomposeOnInternalLoop (liqi)
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class HalfHandleIterT, class FD1 = FaceDataT, class FD2 = FaceDataT>
+std::pair<Handle<FaceTopo>, Handle<FaceTopo>>
+DecomposeOnInternalLoop(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                        HalfHandleIterT loopBegin, HalfHandleIterT loopEnd,
+                        FD1 &&faceData = FD1(), FD2 &&oppoFaceData = FD2()) {
+
+  if (loopBegin == loopEnd) {
+    return std::pair<Handle<FaceTopo>, Handle<FaceTopo>>();
+  }
+
+  HandleArray<HalfTopo> loop(loopBegin, loopEnd);
+  assert(mesh.topo(loop.front()).from() == mesh.topo(loop.back()).to());
+
+  std::vector<VertHandle> thisVhs;
+  std::vector<VertHandle> anotherVhs;
+  thisVhs.reserve(loop.size());
+  anotherVhs.reserve(loop.size());
+
+  for (int i = 0; i < loop.size(); i++) {
+    HalfHandle hh = loop[i];
+    HalfHandle nexth = loop[(i + 1) % loop.size()];
+
+    VertHandle vh = mesh.topo(hh).to();
+    thisVhs.push_back(vh);
+    assert(mesh.degree(vh) >= 4);
+    VertHandle vh2 = mesh.addVertex(mesh.data(vh));
+    anotherVhs.push_back(vh2);
+
+    // find all related half edges that DO NOT lie on the loop side
+    std::set<HalfHandle> relatedHsNotOnLoopSide = {mesh.topo(hh).opposite};
+    while (true) {
+      bool newHFound = false;
+      for (HalfHandle relatedH : mesh.topo(vh).halfedges) {
+        // whether relatedH DOES NOT lie on the loop side?
+        if (Contains(relatedHsNotOnLoopSide, relatedH)) {
+          continue;
+        }
+        if (Contains(loop, relatedH)) {
+          continue;
+        }
+        for (const HalfHandle &hNotOnLoopSide : relatedHsNotOnLoopSide) {
+          if (mesh.topo(mesh.topo(relatedH).opposite).face ==
+              mesh.topo(hNotOnLoopSide).face) {
+            relatedHsNotOnLoopSide.insert(relatedH);
+            newHFound = true;
+            break;
+          }
+        }
+      }
+      if (!newHFound) {
+        break;
+      }
+    }
+
+    // redirect the relatedHsNotOnLoopSide to the newly added vh2
+    for (const HalfHandle &hNotOnLoopSide : relatedHsNotOnLoopSide) {
+      assert(mesh.topo(hNotOnLoopSide).from() == vh);
+      mesh.topo(hNotOnLoopSide).from() = vh2;
+      HalfHandle oppoH = mesh.topo(hNotOnLoopSide).opposite;
+      assert(mesh.topo(oppoH).to() == vh);
+      if (oppoH != hh) { // not on the loop
+        mesh.topo(oppoH).to() = vh2;
+      }
+    }
+    mesh.topo(mesh.topo(nexth).opposite).to() = vh2;
+
+    mesh.topo(vh).halfedges.erase(
+        std::remove_if(mesh.topo(vh).halfedges.begin(),
+                       mesh.topo(vh).halfedges.end(),
+                       [&relatedHsNotOnLoopSide](HalfHandle h) {
+                         return Contains(relatedHsNotOnLoopSide, h);
+                       }),
+        mesh.topo(vh).halfedges.end());
+    mesh.topo(vh2).halfedges.insert(mesh.topo(vh2).halfedges.begin(),
+                                    relatedHsNotOnLoopSide.begin(),
+                                    relatedHsNotOnLoopSide.end());
+  }
+
+  for (auto &hh : loop) {
+    // detach opposites
+    HalfHandle oppoh = mesh.topo(hh).opposite;
+    mesh.topo(oppoh).opposite.reset();
+    mesh.topo(hh).opposite.reset();
+  }
+
+  // add the cut faces
+  FaceHandle fh1 = mesh.addFace(thisVhs.begin(), thisVhs.end(), true,
+                                std::forward<FD1>(faceData));
+  FaceHandle fh2 = mesh.addFace(anotherVhs.begin(), anotherVhs.end(), true,
+                                std::forward<FD2>(oppoFaceData));
+  return std::make_pair(fh1, fh2);
+}
+
+// AssertEdgesAreStiched
+template <class VertDataT, class HalfDataT, class FaceDataT>
+inline void
+AssertEdgesAreStiched(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
+  for (auto &ht : mesh.halfedges()) {
+    assert(ht.topo.opposite.valid() && ht.topo.face.valid() &&
+           ht.topo.from().valid() && ht.topo.to().valid() &&
+           Contains(mesh.topo(ht.topo.from()).halfedges, ht.topo.hd) &&
+           Contains(mesh.topo(ht.topo.face).halfedges, ht.topo.hd) &&
+           mesh.topo(ht.topo.opposite).opposite == ht.topo.hd);
+  }
+}
+
+// DecomposeAll
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class IntersectFunT>
+void DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                  IntersectFunT intersectFun) {
+  AssertEdgesAreStiched(mesh);
+  while (true) {
+    std::list<HalfHandle> minLoop;
+    for (int i = 0; i < mesh.internalHalfEdges().size(); i++) {
+      HalfHandle hh(i);
+      if (mesh.removed(hh)) {
+        continue;
+      }
+      auto loop = ConstructInternalLoopFrom(mesh, hh, intersectFun);
+      if (!loop.empty()) {
+        if (minLoop.empty() || loop.size() < minLoop.size()) {
+          minLoop = std::move(loop);
+        }
+      }
+    }
+    if (!minLoop.empty()) {
+      for (auto &ht : mesh.halfedges()) {
+        assert(ht.topo.opposite.valid() && ht.topo.face.valid() &&
+               ht.topo.from().valid() && ht.topo.to().valid() &&
+               Contains(mesh.topo(ht.topo.from()).halfedges, ht.topo.hd) &&
+               Contains(mesh.topo(ht.topo.face).halfedges, ht.topo.hd) &&
+               mesh.topo(ht.topo.opposite).opposite == ht.topo.hd);
+      }
+      DecomposeOnInternalLoop(mesh, std::begin(minLoop), std::end(minLoop));
+    } else {
+      break;
+    }
+  }
+}
+
 // MakeTetrahedron
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakeTetrahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
@@ -1235,11 +1532,11 @@ template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakeQuadFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   /*
    *       4 ----- 5
-          /		/|
+          /		  /|
          0 ----- 1 |
-         |	   | |
-         | 7	   | 6  -- x
-         |	   |/
+         |	     | |
+         | 7	 | 6  -- x
+         |	     |/
          3 ----- 2
         /
        y

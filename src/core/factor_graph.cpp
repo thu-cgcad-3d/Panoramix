@@ -1,14 +1,12 @@
 #include <Eigen/Dense>
 #include <Eigen/StdVector>
 
-#include "../core/cons_graph.hpp"
-#include "../core/utility.hpp"
+#include "cons_graph.hpp"
+#include "utility.hpp"
 #include "factor_graph.hpp"
 
 namespace pano {
-namespace ml {
-
-using namespace core;
+namespace core {
 
 bool FactorGraph::valid() const {
   for (auto &v : _graph.elements<0>()) {

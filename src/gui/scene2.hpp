@@ -14,13 +14,13 @@ namespace pano {
 namespace gui {
 using namespace pano::core;
 
-class Renderable {
+class RenderableObject {
 public:
-  ~Renderable();
+  ~RenderableObject();
 
-protected:
-  Mat4f _modelMat;
-  TriMesh _mesh;
+public:
+  Mat4f modelMat;
+  TriMesh mesh;
 };
 
 class Light {
@@ -36,9 +36,13 @@ public:
 
 class Scene {
 public:
+  Scene() {}
+  
+
 public:
-  std::vector<Light> lights;
-  std::vector<PerspectiveCamera> cams;
+  std::vector<std::unique_ptr<RenderableObject>> objects;
+  std::vector<std::unique_ptr<Light>> lights;
+  std::unique_ptr<PerspectiveCamera> cam;
 };
 }
 }
