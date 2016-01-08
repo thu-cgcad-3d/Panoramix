@@ -1,3 +1,6 @@
+#include "../misc/eigen.hpp"
+#include <Eigen/SVD>
+
 #include "../core/mesh.hpp"
 #include "line_drawing.hpp"
 
@@ -136,8 +139,6 @@ LineDrawing<Point3> LoadLineDrawing(const std::string &filename,
   return drawing;
 }
 
-void SearchFace(LineDrawing<Point2> &drawing) {
-  // convert to mesh
-}
+
 }
 }

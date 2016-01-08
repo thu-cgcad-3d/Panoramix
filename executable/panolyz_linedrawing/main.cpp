@@ -121,17 +121,12 @@ int main(int argc, char **argv) {
       return true;
     }
     return false;
-   /* Line3 line1(mesh2d.data(mesh2d.topo(h1).from()),
-                mesh2d.data(mesh2d.topo(h1).to()));
-    Line3 line2(mesh2d.data(mesh2d.topo(h2).from()),
-                mesh2d.data(mesh2d.topo(h2).to()));
-    return DistanceBetweenTwoLines(line1, line2).first == 0;*/
   });
   std::map<VertHandle, int> vh2ccid;
   int ncc2 =
       ConnectedComponents(mesh2d, [&vh2ccid](const auto &mesh, VertHandle vh,
                                              int ccid) { vh2ccid[vh] = ccid; });
-  std::cout << ncc2 << " connected components after decomposition" << '\n';
+  std::cout << ncc2 << " connected components after decomposition\n";
 
   {
     gui::SceneBuilder sb;
@@ -157,14 +152,23 @@ int main(int argc, char **argv) {
               .camera();
   }
 
-  //
-  std::vector<Classified<Line2>> lines(drawing2d.line2corners.size());
-  for (int i = 0; i < drawing2d.line2corners.size(); i++) {
-    auto &p1 = drawing2d.corners[drawing2d.line2corners[i].first];
-    auto &p2 = drawing2d.corners[drawing2d.line2corners[i].second];
-    lines[i].component.first = Point2(p1[0], p1[1]);
-    lines[i].component.second = Point2(p2[0], p2[1]);
-    lines[i].claz = -1;
+  auto subs = ExtractSubMeshes(mesh2d);
+  HandledTable<FaceHandle, Plane3> facePlanes(mesh2d.internalFaces().size());
+  ParallelRun(subs.size(), std::thread::hardware_concurrency() - 1, 3,
+              [&mesh2d, &subs, &facePlanes](int i) {
+                Reconstruct(mesh2d, subs[i],
+                            [](auto &&fh2planeEq) -> double {
+                    // fh2planeEq: (FaceHandle)[i] -> double
+                            });
+              });
+//
+std::vector<Classified<Line2>> lines(drawing2d.line2corners.size());
+for (int i = 0; i < drawing2d.line2corners.size(); i++) {
+  auto &p1 = drawing2d.corners[drawing2d.line2corners[i].first];
+  auto &p2 = drawing2d.corners[drawing2d.line2corners[i].second];
+  lines[i].component.first = Point2(p1[0], p1[1]);
+  lines[i].component.second = Point2(p2[0], p2[1]);
+  lines[i].claz = -1;
   }
 
   VanishingPointsDetector vpd;

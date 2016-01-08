@@ -1,6 +1,7 @@
 #pragma once
 
 #include "algorithms.hpp"
+#include "containers.hpp"
 #include "handle.hpp"
 
 namespace pano {
@@ -408,6 +409,34 @@ private:
   HalfsTable _halfs;
   FacesTable _faces;
 };
+
+using Mesh2 = Mesh<Point2>;
+using Mesh3 = Mesh<Point3>;
+
+// DepthFirstSearchOneTree
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class ConstVertexCallbackT // bool callback(const Mesh & m, VertH v)
+          >
+bool DepthFirstSearchOneTree(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                             VertHandle root, ConstVertexCallbackT vCallBack) {
+  using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
+  using VertH = typename MeshType::VertHandle;
+  using HalfH = typename MeshType::HalfHandle;
+  using FaceH = typename MeshType::FaceHandle;
+
+  assert(root.valid() && !mesh.removed(root));
+  if (!vCallBack(mesh, root))
+    return false;
+  auto &halves = mesh.topo(root).halfedges;
+  for (auto hh : halves) {
+    if (mesh.removed(hh))
+      continue;
+    auto vh = mesh.topo(hh).to();
+    if (!DepthFirstSearchOneTree(mesh, vh, vCallBack))
+      return false;
+  }
+  return true;
+}
 
 // DepthFirstSearch
 template <class VertDataT, class HalfDataT, class FaceDataT,
@@ -1271,10 +1300,10 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 // ConstructInternalLoopFrom (liqi)
 // IntersectFunT: (HalfHandle)
 template <class VertDataT, class HalfDataT, class FaceDataT,
-          class IntersectFunT>
+          class HalfEdgeIntersectFunT>
 auto ConstructInternalLoopFrom(
     const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, Handle<HalfTopo> initial,
-    IntersectFunT intersectFun) {
+    HalfEdgeIntersectFunT intersectFun) {
 
   if (mesh.degree(mesh.topo(initial).from()) < 4 ||
       mesh.degree(mesh.topo(initial).to()) < 4) {
@@ -1479,9 +1508,9 @@ AssertEdgesAreStiched(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 
 // DecomposeAll
 template <class VertDataT, class HalfDataT, class FaceDataT,
-          class IntersectFunT>
+          class HalfEdgeIntersectFunT>
 void DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-                  IntersectFunT intersectFun) {
+                  HalfEdgeIntersectFunT intersectFun) {
   AssertEdgesAreStiched(mesh);
   while (true) {
     std::list<HalfHandle> minLoop;
@@ -1498,18 +1527,66 @@ void DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
       }
     }
     if (!minLoop.empty()) {
-      for (auto &ht : mesh.halfedges()) {
-        assert(ht.topo.opposite.valid() && ht.topo.face.valid() &&
-               ht.topo.from().valid() && ht.topo.to().valid() &&
-               Contains(mesh.topo(ht.topo.from()).halfedges, ht.topo.hd) &&
-               Contains(mesh.topo(ht.topo.face).halfedges, ht.topo.hd) &&
-               mesh.topo(ht.topo.opposite).opposite == ht.topo.hd);
-      }
       DecomposeOnInternalLoop(mesh, std::begin(minLoop), std::end(minLoop));
     } else {
       break;
     }
   }
+}
+
+// FindUpperBoundOfDRF
+// HalfEdgeColinearFunT: (HalfEdgeIterT hhsBegin, HalfEdgeIterT hhsEnd)
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class HalfEdgeColinearFunT, class FaceHandleIterT>
+int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                        FaceHandleIterT fhsBegin, FaceHandleIterT fhsEnd,
+                        HalfEdgeColinearFunT colinearFun) {
+  if (fhsBegin == fhsEnd) {
+    return 0;
+  }
+
+  assert(std::all_of(fhsBegin, fhsEnd, [&mesh, fhsBegin,
+                                        fhsEnd](FaceHandle fh) -> bool {
+    return std::all_of(
+        mesh.topo(fh).halfedges.begin(), mesh.topo(fh).halfedges.end(),
+        [&mesh, fhsBegin, fhsEnd](HalfHandle hh) -> bool {
+          return std::any_of(fhsBegin, fhsEnd, [&mesh, hh](FaceHandle fh) -> bool {
+            return fh == mesh.topo(mesh.topo(hh).opposite).face;
+          });
+        });
+  }));
+
+  int ub = 3;
+  std::set<FaceHandle> notInserted(std::next(fhsBegin), fhsEnd);
+  while (!notInserted.empty()) {
+    FaceHandle curfh;
+    std::vector<HalfHandle> curhhs;
+    for (auto it = std::next(fhsBegin); it != fhsEnd; ++it) {
+      FaceHandle fh = *it;
+      if (!Contains(notInserted, fh)) {
+        continue;
+      }
+      std::vector<HalfHandle> hhs;
+      for (HalfHandle hh : mesh.topo(fh).halfedges) {
+        HalfHandle oppohh = mesh.topo(hh).opposite;
+        FaceHandle oppoface = mesh.topo(oppohh).face;
+        if (!Contains(notInserted, oppoface)) {
+          hhs.push_back(hh);
+        }
+      }
+      if (!hhs.empty()) {
+        curfh = fh;
+        curhhs = std::move(hhs);
+        break;
+      }
+    }
+    assert(curfh.valid() && "the faces are not all connected!");
+    if (colinearFun(curhhs.begin(), curhhs.end())) {
+      ub++;
+    }
+    notInserted.erase(curfh);
+  }
+  return ub;
 }
 
 // MakeTetrahedron
