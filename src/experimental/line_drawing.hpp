@@ -210,15 +210,15 @@ ExtractSubMeshes(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
 }
 
 // Reconstruct (TPAMI 2008, Plane Based Optimization ... )
-// - PlaneObjectiveFunT: (std::unordered_map<FaceHandle, Plane3>) -> double
+// - PlaneObjectiveFunT: (((FaceHandle)[int]->double) fh2planeeq, double*
+// scores) -> void
 // - VertDataToDirectionFunT: (VertDataT) -> Vec3
 template <class VertDataT, class HalfDataT, class FaceDataT,
-          class PlaneObjectiveFunT, class LineObjectiveFunT,
+          class PlaneObjectiveFunT,
           class VertDataToDirectionFunT = std::identity<VertDataT>>
 std::unordered_map<FaceHandle, Plane3>
 Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-            const SubMesh &sub, PlaneObjectiveFunT planes2score,
-            LineObjectiveFunT lines2score,
+            const SubMesh &sub, PlaneObjectiveFunT planes2scores, int scoresNum,
             VertDataToDirectionFunT vert2dir = VertDataToDirectionFunT(),
             int drfSlack = 2) {
 
@@ -229,9 +229,7 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   int nedges = nhalves / 2;
   int nfaces = sub.fhs.size();
 
-  int nequations =
-      nedges *
-      2; // not same in the paper (nedges * 2 - nverts), equations here is more
+  int nequations = nedges * 2 - nverts;
   int nvars = nfaces * 3;
 
   // order faces
@@ -247,9 +245,9 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   MatrixXd P = MatrixXd::Zero(nequations, nvars);
   int eid = 0;
   for (VertHandle vh : sub.vhs) {
-    for (HalfHandle hh :
-         mesh.topo(vh)
-             .halfedges) { // not same in the paper, equations here is one more
+    auto &hhs = mesh.topo(vh).halfedges;
+    for (auto it = std::next(hhs.begin()); it != hhs.end()++ it) {
+      auto hh = *it;
       assert(Contains(sub.hhs, hh));
       HalfHandle oppohh = mesh.topo(hh).opposite;
       FaceHandle fh1 = mesh.topo(hh).face;
@@ -279,14 +277,19 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   assert(H.cols() == sub.drfub + drfSlack && H.rows() == nvars);
 
   auto functor = misc::MakeGenericNumericDiffFunctor<double>(
-      [](const auto &x, auto &v) {
-        
+      [&planes2scores, &H, &fh2varStart](const VectorXd &x, VectorXd &v) {
+        VectorXd planeEqVec = H * x;
+        planes2scores(
+            [&planeEqVec, &fh2varStart](FaceHandle fh) -> const double * {
+              return planeEqVec.data() + fh2varStart.at(fh);
+            },
+            v.data());
       },
-      H.cols(), );
+      H.cols(), scoresNum);
   LevenbergMarquardt<decltype(functor), double> lm(functor);
 
   // initialize vars
-  VectorXd X = VectorXd::Zero(nvars);
+  VectorXd X = VectorXd::Ones(H.cols());
 
   // solve
   lm.minimize(X);

@@ -445,5 +445,42 @@ int ConnectedComponents(
 
   return cid;
 }
+
+// SimulatedAnnealing
+// - EnergyFunT: (StateT)->Scalar
+// - TemperatureFunT: (int iter)->Scalar
+// - NeighborFunT: (StateT)->StateT
+// - StopFunT: (int iter, Scalar energy) -> bool
+template <class StateT, class EnergyFunT, class TemperatureFunT,
+          class NeighborFunT, class StopFunT, class RNG>
+void SimulatedAnnealing(StateT &state, EnergyFunT energyFun,
+                        TemperatureFunT temperatureFun,
+                        NeighborFunT neighborFun, StopFunT shouldStop,
+                        RNG &&rng) {
+
+  std::uniform_real_distribution<double> dist(0.0, 1.0);
+  auto energy = energyFun(state);
+  int i = 0;
+
+  while (true) {
+    if (shouldStop(i, energy)) {
+      break;
+    }
+
+    double temperature = temperatureFun(i);
+    StateT newState = neighborFun(state);
+    auto newEnergy = energyFun(newState);
+    double prob = 1.0;
+    if (energy <= newEnergy) {
+      prob = exp(-(newEnergy - energy) / temperature);
+    }
+    if (prob >= dist(rng)) {
+      state = newState;
+      energy = newEnergy;
+    }
+
+    ++i;
+  }
+}
 }
 }
