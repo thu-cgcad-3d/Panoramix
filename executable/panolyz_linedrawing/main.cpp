@@ -70,6 +70,240 @@ void AddToScene(gui::SceneBuilder &sb, const Mesh<Point3> &m,
   }
 }
 
+template <class HalfColorerFunT, class FaceColorerFunT>
+void AddToScene(gui::SceneBuilder &sb, const Mesh<Point3> &m,
+                const SubMesh &sub, HalfColorerFunT colorHalf,
+                FaceColorerFunT colorFace) {
+  sb.installingOptions().lineWidth = 10.0;
+  sb.installingOptions().defaultShaderSource =
+      gui::OpenGLShaderSourceDescriptor::XLines;
+  for (auto &h : m.halfedges()) {
+    if (!Contains(sub.hhs, h.topo.hd))
+      continue;
+    Line3 line(m.data(h.topo.from()), m.data(h.topo.to()));
+    auto hh = h.topo.hd;
+    auto fh = h.topo.face;
+    auto oppohh = h.topo.opposite;
+    auto oppofh = oppohh.valid() ? m.topo(oppohh).face : FaceHandle();
+    bool hasFace = fh.valid();
+    bool hasOppo = oppohh.valid();
+    gui::Color color = colorHalf(hh);
+    if (!hasFace && hasOppo) {
+      color = gui::Red;
+    } else if (hasFace && !hasOppo) {
+      color = gui::Blue;
+    } else if (!hasFace && !hasOppo) {
+      color = gui::Yellow;
+    }
+    sb.add(gui::ColorAs(line, color), [hh, fh, oppohh, oppofh](auto &...) {
+      std::cout << "halfedge id: " << hh.id
+                << ", opposite halfedge id: " << oppohh.id
+                << ", face id: " << fh.id << ", opposite face id: " << oppofh.id
+                << '\n';
+    });
+  }
+  sb.installingOptions().defaultShaderSource =
+      gui::OpenGLShaderSourceDescriptor::XTriangles;
+  for (auto &f : m.faces()) {
+    if (!Contains(sub.fhs, f.topo.hd))
+      continue;
+    Polygon3 poly;
+    for (auto h : f.topo.halfedges) {
+      auto v = m.topo(h).to();
+      poly.corners.push_back(m.data(v));
+    }
+    assert(poly.corners.size() > 2);
+    poly.normal = (poly.corners[0] - poly.corners[1])
+                      .cross(poly.corners[0] - poly.corners[2]);
+    auto fh = f.topo.hd;
+    sb.add(gui::ColorAs(poly, colorFace(f.topo.hd)),
+           [fh](auto &...) { std::cout << "face id: " << fh.id << '\n'; });
+  }
+}
+
+template <class FaceHandleToPlaneEqFunT>
+double ComputeEnergy(const Mesh2 &meshProjected, const SubMesh &sub,
+                     const PerspectiveCamera &cam,
+                     FaceHandleToPlaneEqFunT fh2planeEq) {
+  int angleNum = sub.hhs.size();
+  // fh2planeEq: (FaceHandle)[i] -> double
+  std::map<VertHandle, Point3> vpositions;
+  std::map<VertHandle, int> vfacedegrees;
+  for (VertHandle vh : sub.vhs) {
+    vpositions[vh] = Vec3();
+    vfacedegrees[vh] = 0;
+  }
+  for (FaceHandle fh : sub.fhs) {
+    decltype(auto) planeEq = fh2planeEq(fh);
+    Plane3 plane = Plane3FromEquation(planeEq[0], planeEq[1], planeEq[2]);
+    if (HasValue(plane, IsInfOrNaN<double>)) {
+      return std::numeric_limits<double>::infinity();
+    }
+    for (HalfHandle hh : meshProjected.topo(fh).halfedges) {
+      VertHandle vh = meshProjected.topo(hh).to();
+      const Point2 &p2d = meshProjected.data(vh);
+      auto dir = normalize(cam.direction(p2d));
+      Point3 p3d =
+          IntersectionOfLineAndPlane(Ray3(cam.eye(), dir), plane).position;
+      vpositions[vh] += p3d;
+      vfacedegrees[vh]++;
+    }
+  }
+  for (auto vhpos : vpositions) {
+    vhpos.second /= vfacedegrees.at(vhpos.first);
+  }
+
+  double faceMSDA = 0.0;
+  int faceMSDANum = 0;
+
+  double vertexMSDA = 0.0;
+  int vertexMSDANum = 0;
+
+  std::map<VertHandle, std::vector<double>> vh2angles;
+  for (FaceHandle fh : sub.fhs) {
+    auto &loophhs = meshProjected.topo(fh).halfedges;
+    std::vector<double> faceAngles(loophhs.size(), 0.0);
+    for (int k = 0; k < loophhs.size(); k++) {
+      int knext = (k + 1) % loophhs.size();
+      HalfHandle hh1 = loophhs[k];
+      HalfHandle hh2 = loophhs[knext];
+      assert(meshProjected.topo(hh1).to() == meshProjected.topo(hh2).from());
+      VertHandle v1 = meshProjected.topo(hh1).from();
+      VertHandle v2 = meshProjected.topo(hh1).to();
+      VertHandle v3 = meshProjected.topo(hh2).to();
+      auto &p1 = vpositions.at(v1);
+      auto &p2 = vpositions.at(v2);
+      auto &p3 = vpositions.at(v3);
+      double angle = AngleBetweenDirections(p1 - p2, p3 - p2);
+      faceAngles[k] = angle;
+      vh2angles[v2].push_back(angle);
+    }
+    double faceMeanAngle =
+        std::accumulate(faceAngles.begin(), faceAngles.end(), 0.0) /
+        faceAngles.size();
+    for (double a : faceAngles) {
+      faceMSDA += Square(a - faceMeanAngle);
+      faceMSDANum++;
+    }
+  }
+  faceMSDA /= faceMSDANum;
+
+  for (auto &vhangles : vh2angles) {
+    VertHandle vh = vhangles.first;
+    auto &angles = vhangles.second;
+    double vertMeanAngle =
+        std::accumulate(angles.begin(), angles.end(), 0.0) / angles.size();
+    for (double a : angles) {
+      vertexMSDA += Square(a - vertMeanAngle);
+      vertexMSDANum++;
+    }
+  }
+  vertexMSDA /= vertexMSDANum;
+
+  double energy = faceMSDA + vertexMSDA;
+  std::cout << "energy: " << energy << "\n";
+  return energy;
+}
+
+int DISABLED_main(int argc, char **argv) {
+  gui::Singleton::InitGui(argc, argv);
+  misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
+
+  Mesh3 meshGT;
+  MakeQuadFacedCube(meshGT);
+
+  auto sphere = BoundingBoxOfContainer(meshGT.vertices()).outerSphere();
+  PerspectiveCamera cam(500, 500, Point2(250, 250), 200,
+                        sphere.center + Vec3(1, 2, 3) * sphere.radius * 2,
+                        sphere.center);
+  {
+    gui::SceneBuilder sb;
+    sb.installingOptions().defaultShaderSource =
+        gui::OpenGLShaderSourceDescriptor::XTriangles;
+    sb.installingOptions().discretizeOptions.color(gui::Black);
+    sb.installingOptions().lineWidth = 0.1;
+    const gui::ColorTable ctable =
+        gui::CreateRandomColorTableWithSize(meshGT.internalFaces().size());
+    AddToScene(sb, meshGT, ConstantFunctor<gui::Color>(gui::Black),
+               [&ctable](FaceHandle fh) { return ctable[fh.id]; });
+    sb.show(true, false, gui::RenderOptions()
+                             .camera(cam)
+                             .backgroundColor(gui::White)
+                             .renderMode(gui::All)
+                             .bwTexColor(0.0)
+                             .bwColor(1.0)
+                             .fixUpDirectionInCameraMove(false)
+                             .cullBackFace(false)
+                             .cullFrontFace(false));
+  }
+
+  Mesh2 meshProjected = Transform(
+      meshGT, [&cam](const Point3 &p) -> Point2 { return cam.toScreen(p); });
+
+  auto subs = ExtractSubMeshes(meshProjected,
+                               [](auto hhsBegin, auto hhsEnd) -> bool {
+                                 if (std::distance(hhsBegin, hhsEnd) <= 1)
+                                   return true;
+                                 return false;
+                               },
+                               10);
+  auto &sub = subs.front();
+
+  auto energyFun = [&meshProjected, &cam, &sub](auto &&fh2planeEq) -> double {
+    return ComputeEnergy(meshProjected, sub, cam, fh2planeEq);
+  };
+
+  auto planes = Reconstruct2(
+      meshProjected, sub, energyFun,
+      [&cam](const Vec2 &p2d) -> Vec3 { return normalize(cam.direction(p2d)); },
+      0, 10000);
+  HandledTable<FaceHandle, Plane3> facePlanes(
+      meshProjected.internalFaces().size());
+  auto meshReconstructed = Transform(
+      meshProjected, [](const Point2 &) -> Point3 { return Point3(); });
+  for (auto &fhplane : planes) {
+    facePlanes[fhplane.first] = fhplane.second;
+  }
+
+  // compute corners using planes
+  for (auto &vh : sub.vhs) {
+    for (auto hh : meshProjected.topo(vh).halfedges) {
+      FaceHandle fh = meshProjected.topo(hh).face;
+      auto &plane = facePlanes[fh];
+      auto p =
+          IntersectionOfLineAndPlane(
+              Ray3(cam.eye(), cam.direction(meshProjected.data(vh))), plane)
+              .position;
+      meshReconstructed.data(vh) += p;
+    }
+    meshReconstructed.data(vh) /=
+        (double)meshProjected.topo(vh).halfedges.size();
+  }
+
+  {
+    gui::SceneBuilder sb;
+    sb.installingOptions().defaultShaderSource =
+        gui::OpenGLShaderSourceDescriptor::XTriangles;
+    sb.installingOptions().discretizeOptions.color(gui::Black);
+    sb.installingOptions().lineWidth = 0.1;
+    const gui::ColorTable ctable = gui::CreateRandomColorTableWithSize(
+        meshReconstructed.internalFaces().size());
+    AddToScene(sb, meshReconstructed, ConstantFunctor<gui::Color>(gui::Black),
+               [&ctable](FaceHandle fh) { return ctable[fh.id]; });
+    sb.show(true, false, gui::RenderOptions()
+                             .camera(cam)
+                             .backgroundColor(gui::White)
+                             .renderMode(gui::All)
+                             .bwTexColor(0.0)
+                             .bwColor(1.0)
+                             .fixUpDirectionInCameraMove(false)
+                             .cullBackFace(false)
+                             .cullFrontFace(false));
+  }
+
+  return 0;
+}
+
 int main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
@@ -79,44 +313,44 @@ int main(int argc, char **argv) {
   std::string folder = "F:\\DataSets\\linedrawing_"
                        "dataset\\DatabaseFile\\" +
                        name + "\\";
-  auto drawing =
+  auto drawing3d =
       LoadLineDrawing(folder + name + "_cy.3dr", folder + name + ".gt");
-  auto sphere = BoundingBox(drawing).outerSphere();
+  auto meshGT = ToMesh(drawing3d);
+  auto sphere = BoundingBox(drawing3d).outerSphere();
 
   PerspectiveCamera cam(500, 500, Point2(250, 250), 200,
-                        sphere.center + Vec3(1, 1, 1) * sphere.radius * 2,
+                        sphere.center + Vec3(1, 2, 3) * sphere.radius,
                         sphere.center);
   {
     gui::SceneBuilder sb;
     sb.installingOptions().defaultShaderSource =
         gui::OpenGLShaderSourceDescriptor::XTriangles;
     sb.installingOptions().discretizeOptions.color(gui::Black);
-    sb.installingOptions().lineWidth = 3.0;
-    // todo, debug the mesh faces
-    auto mesh = ToMesh(drawing);
+    sb.installingOptions().lineWidth = 0.1;
+    auto mesh = ToMesh(drawing3d);
     const gui::ColorTable ctable =
         gui::CreateRandomColorTableWithSize(mesh.internalFaces().size());
     AddToScene(sb, mesh, ConstantFunctor<gui::Color>(gui::Black),
                [&ctable](FaceHandle fh) { return ctable[fh.id]; });
-    cam = sb.show(true, true, gui::RenderOptions()
-                                  .backgroundColor(gui::White)
-                                  .renderMode(gui::Lines)
-                                  .bwTexColor(0.0)
-                                  .bwColor(1.0)
-                                  .fixUpDirectionInCameraMove(false)
-                                  .cullBackFace(false)
-                                  .cullFrontFace(false))
+    cam = sb.show(true, false, gui::RenderOptions()
+                                   .camera(cam)
+                                   .backgroundColor(gui::White)
+                                   .renderMode(gui::Triangles)
+                                   .bwTexColor(0.0)
+                                   .bwColor(1.0)
+                                   .fixUpDirectionInCameraMove(false)
+                                   .cullBackFace(false)
+                                   .cullFrontFace(false))
               .camera();
   }
 
   // generate perspective 2d line drawing
-  auto drawing2d = Transform(drawing, [&cam](const Point3 &p) -> Point3 {
-    return cat(cam.toScreen(p), 0.0);
-  });
+  auto drawing = Transform(
+      drawing3d, [&cam](const Point3 &p) -> Point2 { return cam.toScreen(p); });
 
-  auto mesh2d = ToMesh(drawing2d);
-  int ncc = ConnectedComponents(mesh2d, [](auto &&...) {});
-  DecomposeAll(mesh2d, [&mesh2d](HalfHandle h1, HalfHandle h2) -> bool {
+  auto mesh = ToMesh(drawing);
+  int ncc = ConnectedComponents(mesh, [](auto &&...) {});
+  DecomposeAll(mesh, [&mesh](HalfHandle h1, HalfHandle h2) -> bool {
     if (h1 == h2) {
       return true;
     }
@@ -124,9 +358,75 @@ int main(int argc, char **argv) {
   });
   std::map<VertHandle, int> vh2ccid;
   int ncc2 =
-      ConnectedComponents(mesh2d, [&vh2ccid](const auto &mesh, VertHandle vh,
-                                             int ccid) { vh2ccid[vh] = ccid; });
+      ConnectedComponents(mesh, [&vh2ccid](const auto &mesh, VertHandle vh,
+                                           int ccid) { vh2ccid[vh] = ccid; });
   std::cout << ncc2 << " connected components after decomposition\n";
+
+  if (false) {
+    gui::SceneBuilder sb;
+    sb.installingOptions().defaultShaderSource =
+        gui::OpenGLShaderSourceDescriptor::XLines;
+    sb.installingOptions().discretizeOptions.color(gui::Black);
+    sb.installingOptions().lineWidth = 0.1;
+    gui::ColorTable ctable = gui::CreateRandomColorTableWithSize(ncc2);
+    ctable.exceptionalColor() = gui::Black;
+    auto mesh3 = Transform(
+        mesh, [](const Point2 &p2) -> Point3 { return cat(p2, 0.0); });
+    AddToScene(sb, mesh3,
+               [&mesh3, &vh2ccid, &ctable](HalfHandle hh) {
+                 return ctable[vh2ccid.at(mesh3.topo(hh).from())];
+               },
+               [](FaceHandle fh) { return gui::Transparent; });
+    sb.show(true, true, gui::RenderOptions()
+                            .backgroundColor(gui::White)
+                            .renderMode(gui::Lines)
+                            .bwTexColor(0.0)
+                            .bwColor(1.0)
+                            .fixUpDirectionInCameraMove(false)
+                            .cullBackFace(false)
+                            .cullFrontFace(false));
+  }
+
+  auto subs = ExtractSubMeshes(mesh,
+                               [](auto hhsBegin, auto hhsEnd) -> bool {
+                                 return std::distance(hhsBegin, hhsEnd) <= 1;
+                               },
+                               1);
+  HandledTable<FaceHandle, Plane3> facePlanes(mesh.internalFaces().size());
+  auto meshReconstructed =
+      Transform(mesh, [](const Point2 &) -> Point3 { return Point3(); });
+
+  ParallelRun(
+      1, std::thread::hardware_concurrency() - 1, 1,
+      [&mesh, &meshReconstructed, &meshGT, &subs, &facePlanes, &cam](int i) {
+        const SubMesh &sub = subs[i];
+        int angleNum = sub.hhs.size();
+
+        auto energyFun = [&mesh, &cam, &sub](auto &&fh2planeEq) -> double {
+          return ComputeEnergy(mesh, sub, cam, fh2planeEq);
+        };
+        auto planes = Reconstruct2(mesh, sub, energyFun,
+                                   [&cam](const Vec2 &p2d) -> Vec3 {
+                                     return normalize(cam.direction(p2d));
+                                   },
+                                   0, 250000);
+        for (auto &fhplane : planes) {
+          facePlanes[fhplane.first] = fhplane.second;
+        }
+
+        // compute corners using planes
+        for (auto &vh : sub.vhs) {
+          for (auto hh : mesh.topo(vh).halfedges) {
+            FaceHandle fh = mesh.topo(hh).face;
+            auto &plane = facePlanes[fh];
+            auto p = IntersectionOfLineAndPlane(
+                         Ray3(cam.eye(), cam.direction(mesh.data(vh))), plane)
+                         .position;
+            meshReconstructed.data(vh) += p;
+          }
+          meshReconstructed.data(vh) /= (double)mesh.topo(vh).halfedges.size();
+        }
+      });
 
   {
     gui::SceneBuilder sb;
@@ -134,75 +434,66 @@ int main(int argc, char **argv) {
         gui::OpenGLShaderSourceDescriptor::XLines;
     sb.installingOptions().discretizeOptions.color(gui::Black);
     sb.installingOptions().lineWidth = 1.0;
-    gui::ColorTable ctable = gui::CreateRandomColorTableWithSize(ncc2);
-    ctable.exceptionalColor() = gui::Black;
-    AddToScene(sb, mesh2d,
-               [&mesh2d, &vh2ccid, &ctable](HalfHandle hh) {
-                 return ctable[vh2ccid.at(mesh2d.topo(hh).from())];
+    const gui::ColorTable ctable =
+        gui::CreateRandomColorTableWithSize(mesh.internalFaces().size());
+    AddToScene(sb, meshReconstructed, subs.front(),
+               [&meshReconstructed, &vh2ccid, &ctable](HalfHandle hh) {
+                 return gui::Black;
                },
-               [](FaceHandle fh) { return gui::Transparent; });
-    cam = sb.show(true, true, gui::RenderOptions()
-                                  .backgroundColor(gui::White)
-                                  .renderMode(gui::Lines)
-                                  .bwTexColor(0.0)
-                                  .bwColor(1.0)
-                                  .fixUpDirectionInCameraMove(false)
-                                  .cullBackFace(false)
-                                  .cullFrontFace(false))
-              .camera();
-  }
-
-  auto subs = ExtractSubMeshes(mesh2d);
-  HandledTable<FaceHandle, Plane3> facePlanes(mesh2d.internalFaces().size());
-  ParallelRun(subs.size(), std::thread::hardware_concurrency() - 1, 3,
-              [&mesh2d, &subs, &facePlanes](int i) {
-                Reconstruct(mesh2d, subs[i],
-                            [](auto &&fh2planeEq) -> double {
-                    // fh2planeEq: (FaceHandle)[i] -> double
-                            });
-              });
-//
-std::vector<Classified<Line2>> lines(drawing2d.line2corners.size());
-for (int i = 0; i < drawing2d.line2corners.size(); i++) {
-  auto &p1 = drawing2d.corners[drawing2d.line2corners[i].first];
-  auto &p2 = drawing2d.corners[drawing2d.line2corners[i].second];
-  lines[i].component.first = Point2(p1[0], p1[1]);
-  lines[i].component.second = Point2(p2[0], p2[1]);
-  lines[i].claz = -1;
-  }
-
-  VanishingPointsDetector vpd;
-  vpd.params().algorithm = VanishingPointsDetector::TardifSimplified;
-  std::vector<HPoint2> vps;
-  double focal = 0;
-  auto result = vpd(lines, cam.screenSize());
-  if (result.failed()) {
-    return 0;
-  }
-  std::tie(vps, focal) = result.unwrap();
-
-  {
-    gui::SceneBuilder sb;
-    sb.installingOptions().defaultShaderSource =
-        gui::OpenGLShaderSourceDescriptor::XLines;
-    sb.installingOptions()
-        .discretizeOptions.color(gui::Black)
-        .colorTable(gui::RGB);
-    sb.installingOptions().discretizeOptions.colorTable().exceptionalColor() =
-        gui::Black;
-    sb.installingOptions().lineWidth = 3.0;
-    std::vector<Classified<Line3>> line3s(lines.size());
-    for (int i = 0; i < lines.size(); i++) {
-      line3s[i].component.first = cat(lines[i].component.first, 0.0);
-      line3s[i].component.second = cat(lines[i].component.second, 0.0);
-      line3s[i].claz = lines[i].claz;
-    }
-    sb.add(line3s);
+               [&ctable](FaceHandle fh) { return ctable[fh.id]; });
     sb.show(true, true, gui::RenderOptions()
                             .backgroundColor(gui::White)
-                            .renderMode(gui::Lines)
-                            .fixUpDirectionInCameraMove(false));
+                            .renderMode(gui::All)
+                            .bwTexColor(0.0)
+                            .bwColor(1.0)
+                            .fixUpDirectionInCameraMove(false)
+                            .cullBackFace(false)
+                            .cullFrontFace(false));
   }
+
+  //
+  /*
+ std::vector<Classified<Line2>> lines(drawing.line2corners.size());
+ for (int i = 0; i < drawing.line2corners.size(); i++) {
+   auto &p1 = drawing.corners[drawing.line2corners[i].first];
+   auto &p2 = drawing.corners[drawing.line2corners[i].second];
+   lines[i].component.first = p1;
+   lines[i].component.second = p2;
+   lines[i].claz = -1;
+ }
+
+ VanishingPointsDetector vpd;
+ vpd.params().algorithm = VanishingPointsDetector::TardifSimplified;
+ std::vector<HPoint2> vps;
+ double focal = 0;
+ auto result = vpd(lines, cam.screenSize());
+ if (result.failed()) {
+   return 0;
+ }
+ std::tie(vps, focal) = result.unwrap();
+
+ {
+   gui::SceneBuilder sb;
+   sb.installingOptions().defaultShaderSource =
+       gui::OpenGLShaderSourceDescriptor::XLines;
+   sb.installingOptions()
+       .discretizeOptions.color(gui::Black)
+       .colorTable(gui::RGB);
+   sb.installingOptions().discretizeOptions.colorTable().exceptionalColor() =
+       gui::Black;
+   sb.installingOptions().lineWidth = 3.0;
+   std::vector<Classified<Line3>> line3s(lines.size());
+   for (int i = 0; i < lines.size(); i++) {
+     line3s[i].component.first = cat(lines[i].component.first, 0.0);
+     line3s[i].component.second = cat(lines[i].component.second, 0.0);
+     line3s[i].claz = lines[i].claz;
+   }
+   sb.add(line3s);
+   sb.show(true, true, gui::RenderOptions()
+                           .backgroundColor(gui::White)
+                           .renderMode(gui::Lines)
+                           .fixUpDirectionInCameraMove(false));
+ }*/
 
   return 0;
 }

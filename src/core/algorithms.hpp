@@ -449,38 +449,56 @@ int ConnectedComponents(
 // SimulatedAnnealing
 // - EnergyFunT: (StateT)->Scalar
 // - TemperatureFunT: (int iter)->Scalar
-// - NeighborFunT: (StateT)->StateT
-// - StopFunT: (int iter, Scalar energy) -> bool
+// - NeighborsFunT: (StateT, int iter, (StateT)->void )
+template <class T> struct DefaultTemperatureFunctor {
+  DefaultTemperatureFunctor(T t0) : t0(t0) {}
+  inline T operator()(int iter) const { return t0 / iter; }
+  T t0;
+};
 template <class StateT, class EnergyFunT, class TemperatureFunT,
-          class NeighborFunT, class StopFunT, class RNG>
-void SimulatedAnnealing(StateT &state, EnergyFunT energyFun,
+          class NeighborsFunT, class RNG>
+int SimulatedAnnealing(StateT &state, EnergyFunT energyFun,
                         TemperatureFunT temperatureFun,
-                        NeighborFunT neighborFun, StopFunT shouldStop,
+                        NeighborsFunT neighborsFun,
                         RNG &&rng) {
 
   std::uniform_real_distribution<double> dist(0.0, 1.0);
-  auto energy = energyFun(state);
+  double energy = energyFun(state);
   int i = 0;
 
   while (true) {
-    if (shouldStop(i, energy)) {
+    double temperature = temperatureFun(i);
+
+    StateT newStateWithLowestEnergy;
+    double lowestEnergy = std::numeric_limits<double>::infinity();
+    bool hasNewState = false;
+    neighborsFun(state, i, [&newStateWithLowestEnergy, &lowestEnergy,
+                            &hasNewState, &energyFun](auto &&newState) {
+      double newEnergy = energyFun(newState);
+      if (newEnergy < lowestEnergy) {
+        newStateWithLowestEnergy = newState;
+        lowestEnergy = newEnergy;
+        hasNewState = true;
+      }
+    });
+
+    if (!hasNewState) {
       break;
     }
 
-    double temperature = temperatureFun(i);
-    StateT newState = neighborFun(state);
-    auto newEnergy = energyFun(newState);
     double prob = 1.0;
-    if (energy <= newEnergy) {
-      prob = exp(-(newEnergy - energy) / temperature);
+    if (energy <= lowestEnergy) {
+      prob = exp(-(lowestEnergy - energy) / temperature);
     }
     if (prob >= dist(rng)) {
-      state = newState;
-      energy = newEnergy;
+      state = newStateWithLowestEnergy;
+      energy = lowestEnergy;
     }
 
     ++i;
   }
+
+  return i;
 }
 }
 }

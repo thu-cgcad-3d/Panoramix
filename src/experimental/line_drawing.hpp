@@ -3,6 +3,8 @@
 #include "../core/basic_types.hpp"
 #include "../core/mesh.hpp"
 
+#include "../misc/eigen.hpp"
+
 namespace pano {
 namespace experimental {
 
@@ -148,13 +150,19 @@ struct SubMesh {
   std::unordered_set<HalfHandle> hhs;
   std::unordered_set<FaceHandle> fhs;
   int drfub;
+  template <class ArchiverT> void serialize(ArchiverT &ar) {
+    ar(vhs, hhs, fhs, drfub);
+  }
 };
 
 // ExtractSubMeshes
-template <class VertDataT, class HalfDataT, class FaceDataT>
+// - HalfEdgeColinearFunT: (HalfEdgeIterT hhsBegin, HalfEdgeIterT hhsEnd) ->
+// bool
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class HalfEdgeColinearFunT>
 std::vector<SubMesh>
 ExtractSubMeshes(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-                 int drfTryNum = 10) {
+                 HalfEdgeColinearFunT colinearFun, int drfTryNum = 10) {
   using MeshT = Mesh<VertDataT, HalfDataT, FaceDataT>;
   std::unordered_map<int, std::unordered_set<VertHandle>> cc2vhs;
   HandledTable<VertHandle, int> vh2ccid(mesh.internalVertices().size(), -1);
@@ -193,13 +201,7 @@ ExtractSubMeshes(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
     subMeshes[i].drfub = 0;
     for (int k = 0; k < drfTryNum; k++) {
       std::shuffle(fhs.begin(), fhs.end(), rng);
-      int ub = FindUpperBoundOfDRF(mesh, fhs.begin(), fhs.end(),
-                                   [](auto hhsBegin, auto hhsEnd) -> bool {
-                                     if (hhsBegin == hhsEnd) {
-                                       return true;
-                                     }
-                                     // todo
-                                   });
+      int ub = FindUpperBoundOfDRF(mesh, fhs.begin(), fhs.end(), colinearFun);
       if (subMeshes[i].drfub < ub) {
         subMeshes[i].drfub = ub;
       }
@@ -218,7 +220,8 @@ template <class VertDataT, class HalfDataT, class FaceDataT,
           class VertDataToDirectionFunT = std::identity<VertDataT>>
 std::unordered_map<FaceHandle, Plane3>
 Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-            const SubMesh &sub, PlaneObjectiveFunT planes2scores, int scoresNum,
+            const SubMesh &sub, int nenergyTerms,
+            PlaneObjectiveFunT planes2energyTerms,
             VertDataToDirectionFunT vert2dir = VertDataToDirectionFunT(),
             int drfSlack = 2) {
 
@@ -246,7 +249,7 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   int eid = 0;
   for (VertHandle vh : sub.vhs) {
     auto &hhs = mesh.topo(vh).halfedges;
-    for (auto it = std::next(hhs.begin()); it != hhs.end()++ it) {
+    for (auto it = std::next(hhs.begin()); it != hhs.end(); ++it) {
       auto hh = *it;
       assert(Contains(sub.hhs, hh));
       HalfHandle oppohh = mesh.topo(hh).opposite;
@@ -277,15 +280,16 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   assert(H.cols() == sub.drfub + drfSlack && H.rows() == nvars);
 
   auto functor = misc::MakeGenericNumericDiffFunctor<double>(
-      [&planes2scores, &H, &fh2varStart](const VectorXd &x, VectorXd &v) {
+      [&planes2energyTerms, &H, &fh2varStart](const VectorXd &x, VectorXd &v) {
         VectorXd planeEqVec = H * x;
-        planes2scores(
+        planeEqVec.normalize();
+        planes2energyTerms(
             [&planeEqVec, &fh2varStart](FaceHandle fh) -> const double * {
               return planeEqVec.data() + fh2varStart.at(fh);
             },
             v.data());
       },
-      H.cols(), scoresNum);
+      H.cols(), nenergyTerms);
   LevenbergMarquardt<decltype(functor), double> lm(functor);
 
   // initialize vars
@@ -305,7 +309,119 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   }
   return planes;
 }
+
+
+// Reconstruct (TPAMI 2008, Plane Based Optimization ... )
+// - PlaneObjectiveFunT: ( ((FaceHandle)[int]->double) fh2planeeq) -> double
+// - VertDataToDirectionFunT: (VertDataT) -> Vec3
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class PlaneObjectiveFunT,
+          class VertDataToDirectionFunT = std::identity<VertDataT>>
+std::unordered_map<FaceHandle, Plane3>
+Reconstruct2(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+            const SubMesh &sub,
+            PlaneObjectiveFunT planes2energy,
+            VertDataToDirectionFunT vert2dir = VertDataToDirectionFunT(),
+            int drfSlack = 2, int maxIters = 10000) {
+
+  using namespace Eigen;
+
+  int nverts = sub.vhs.size();
+  int nhalves = sub.hhs.size();
+  int nedges = nhalves / 2;
+  int nfaces = sub.fhs.size();
+
+  int nequations = nedges * 2 - nverts;
+  int nvars = nfaces * 3;
+
+  // order faces
+  std::vector<FaceHandle> fhs(sub.fhs.begin(), sub.fhs.end());
+  std::unordered_map<FaceHandle, int> fh2varStart;
+  int varid = 0;
+  for (FaceHandle fh : fhs) {
+    fh2varStart[fh] = varid;
+    varid += 3;
+  }
+
+  // construct projection matrix P
+  MatrixXd P = MatrixXd::Zero(nequations, nvars);
+  int eid = 0;
+  for (VertHandle vh : sub.vhs) {
+    auto &hhs = mesh.topo(vh).halfedges;
+    for (auto it = std::next(hhs.begin()); it != hhs.end(); ++it) {
+      auto hh = *it;
+      assert(Contains(sub.hhs, hh));
+      HalfHandle oppohh = mesh.topo(hh).opposite;
+      FaceHandle fh1 = mesh.topo(hh).face;
+      FaceHandle fh2 = mesh.topo(oppohh).face;
+      int varStartId1 = fh2varStart.at(fh1);
+      int varStartId2 = fh2varStart.at(fh2);
+      assert(varStartId1 != -1 && varStartId2 != -1);
+
+      auto p = normalize(vert2dir(mesh.data(vh)));
+      for (int i = 0; i < 3; i++) {
+        P(eid, varStartId1 + i) = p[i];
+        P(eid, varStartId2 + i) = -p[i];
+      }
+      eid++;
+    }
+  }
+
+  // perform SVD on P
+  // P = USV^t
+  JacobiSVD<MatrixXd> svd(P, ComputeFullV);
+  auto deltas = svd.singularValues(); // decreasing order defaultly
+  auto V = svd.matrixV();
+  assert(V.cols() == nvars);
+  assert(sub.drfub + drfSlack <= nvars);
+  // see Algorithm 2 of the paper
+  MatrixXd H = V.rightCols(sub.drfub + drfSlack);
+  assert(H.cols() == sub.drfub + drfSlack && H.rows() == nvars);
+
+  // initialize vars
+  VectorXd X = VectorXd::Ones(H.cols());
+
+  std::default_random_engine rng;
+  SimulatedAnnealing(
+      X,
+      [&planes2energy, &H, &fh2varStart](const VectorXd &curX) -> double {
+        VectorXd planeEqVec = H * curX;
+        planeEqVec /= planeEqVec.cwiseAbs().maxCoeff();
+        return planes2energy(
+            [&planeEqVec, &fh2varStart](FaceHandle fh) -> const double * {
+              return planeEqVec.data() + fh2varStart.at(fh);
+            });
+      },
+      [](int iter) { return std::max(1.0 / log(iter + 5), 1e-10); }, // temperature
+      [maxIters](VectorXd curX, int iter, auto &&forEachNeighborFun) {
+        if (iter >= maxIters) {
+          return;
+        }
+        double step = 1e-3;
+        for (int i = 0; i < curX.size(); i++) {
+          double curXHere = curX[i];
+          curX[i] = curXHere + step;
+          forEachNeighborFun(curX);
+          curX[i] = curXHere - step;
+          forEachNeighborFun(curX);
+          curX[i] = curXHere;
+        }
+      },
+      rng);
+
+  // convert to planes
+  std::unordered_map<FaceHandle, Plane3> planes;
+  VectorXd planeEqVec = H * X;
+  for (FaceHandle fh : fhs) {
+    int varStart = fh2varStart[fh];
+    planes[fh] =
+        Plane3FromEquation(planeEqVec[varStart], planeEqVec[varStart + 1],
+                           planeEqVec[varStart + 2]);
+  }
+  return planes;
 }
+}
+
 
 namespace core {
 template <class PointT>

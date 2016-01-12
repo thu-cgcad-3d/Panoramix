@@ -151,43 +151,6 @@ public:
 
     _halfs[hh1.id].topo.opposite = hh2;
     _halfs[hh2.id].topo.opposite = hh1;
-
-    //// find existed halfedge
-    // if (mergeDuplicateEdge) {
-    //  HalfHandle hh = findEdge(from, to);
-    //  if (hh.valid()) {
-    //    _halfs[hh.id].data = hd;
-    //    _halfs[_halfs[hh.id].topo.opposite.id].data = hdrev;
-    //    return hh;
-    //  }
-    //}
-
-    // HalfHandle hh1(_halfs.size());
-    // Triplet<HalfTopo, HalfDataT> ht;
-    // ht.topo.hd.id = _halfs.size();
-    // ht.topo.from() = from;
-    // ht.topo.to() = to;
-    // ht.exists = true;
-    // ht.data = hd;
-    ////_halfs.push_back({ { { _halfs.size() }, { from, to }, { -1 }, { -1 } },
-    //// true, hd });
-    //_halfs.push_back(ht);
-    // HalfHandle hh2(_halfs.size());
-    // ht.topo.hd.id = _halfs.size();
-    // ht.topo.from() = to;
-    // ht.topo.to() = from;
-    // ht.exists = true;
-    // ht.data = hdrev;
-    ////_halfs.push_back({ { { _halfs.size() }, { to, from }, { -1 }, { -1 } },
-    //// true, hdrev });
-    //_halfs.push_back(ht);
-
-    //_halfs[hh1.id].topo.opposite = hh2;
-    //_halfs[hh2.id].topo.opposite = hh1;
-
-    //_verts[from.id].topo.halfedges.push_back(hh1);
-    //_verts[to.id].topo.halfedges.push_back(hh2);
-
     return hh1;
   }
   FaceHandle addFace(const HandleArray<HalfTopo> &halfedges,
@@ -412,6 +375,46 @@ private:
 
 using Mesh2 = Mesh<Point2>;
 using Mesh3 = Mesh<Point3>;
+
+// Transform
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class TransformVertFunT,
+          class TransformHalfFunT = std::identity<HalfDataT>,
+          class TransformFaceFunT = std::identity<FaceDataT>>
+auto Transform(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+               TransformVertFunT transVert,
+               TransformHalfFunT transHalf = TransformHalfFunT(),
+               TransformFaceFunT transFace = TransformFaceFunT()) {
+  using ToVertDataT =
+      std::decay_t<typename FunctionTraits<TransformVertFunT>::ResultType>;
+  using ToHalfDataT =
+      std::decay_t<typename FunctionTraits<TransformHalfFunT>::ResultType>;
+  using ToFaceDataT =
+      std::decay_t<typename FunctionTraits<TransformFaceFunT>::ResultType>;
+  Mesh<ToVertDataT, ToHalfDataT, ToFaceDataT> toMesh;
+  toMesh.internalVertices().reserve(mesh.internalVertices().size());
+  toMesh.internalHalfEdges().reserve(mesh.internalHalfEdges().size());
+  toMesh.internalFaces().reserve(mesh.internalFaces().size());
+  std::transform(mesh.internalVertices().begin(), mesh.internalVertices().end(),
+                 std::back_inserter(toMesh.internalVertices()),
+                 [transVert](auto &&from) {
+                   return Triplet<VertTopo, ToVertDataT>(
+                       from.topo, transVert(from.data), from.exists);
+                 });
+  std::transform(
+      mesh.internalHalfEdges().begin(), mesh.internalHalfEdges().end(),
+      std::back_inserter(toMesh.internalHalfEdges()), [transHalf](auto &&from) {
+        return Triplet<HalfTopo, ToHalfDataT>(from.topo, transHalf(from.data),
+                                              from.exists);
+      });
+  std::transform(mesh.internalFaces().begin(), mesh.internalFaces().end(),
+                 std::back_inserter(toMesh.internalFaces()),
+                 [transFace](auto &&from) {
+                   return Triplet<FaceTopo, ToFaceDataT>(
+                       from.topo, transFace(from.data), from.exists);
+                 });
+  return toMesh;
+}
 
 // DepthFirstSearchOneTree
 template <class VertDataT, class HalfDataT, class FaceDataT,
@@ -1535,7 +1538,7 @@ void DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
 }
 
 // FindUpperBoundOfDRF
-// HalfEdgeColinearFunT: (HalfEdgeIterT hhsBegin, HalfEdgeIterT hhsEnd)
+// - HalfEdgeColinearFunT: (HalfEdgeIterT hhsBegin, HalfEdgeIterT hhsEnd) -> bool
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class HalfEdgeColinearFunT, class FaceHandleIterT>
 int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
@@ -1545,16 +1548,17 @@ int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
     return 0;
   }
 
-  assert(std::all_of(fhsBegin, fhsEnd, [&mesh, fhsBegin,
-                                        fhsEnd](FaceHandle fh) -> bool {
-    return std::all_of(
-        mesh.topo(fh).halfedges.begin(), mesh.topo(fh).halfedges.end(),
-        [&mesh, fhsBegin, fhsEnd](HalfHandle hh) -> bool {
-          return std::any_of(fhsBegin, fhsEnd, [&mesh, hh](FaceHandle fh) -> bool {
-            return fh == mesh.topo(mesh.topo(hh).opposite).face;
-          });
-        });
-  }));
+  assert(std::all_of(
+      fhsBegin, fhsEnd, [&mesh, fhsBegin, fhsEnd](FaceHandle fh) -> bool {
+        return std::all_of(
+            mesh.topo(fh).halfedges.begin(), mesh.topo(fh).halfedges.end(),
+            [&mesh, fhsBegin, fhsEnd](HalfHandle hh) -> bool {
+              return std::any_of(
+                  fhsBegin, fhsEnd, [&mesh, hh](FaceHandle fh) -> bool {
+                    return fh == mesh.topo(mesh.topo(hh).opposite).face;
+                  });
+            });
+      }));
 
   int ub = 3;
   std::set<FaceHandle> notInserted(std::next(fhsBegin), fhsEnd);
@@ -1562,10 +1566,13 @@ int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
     FaceHandle curfh;
     std::vector<HalfHandle> curhhs;
     for (auto it = std::next(fhsBegin); it != fhsEnd; ++it) {
+      // check each face ...
       FaceHandle fh = *it;
+      // ... that is not inserted yet
       if (!Contains(notInserted, fh)) {
         continue;
       }
+      // collect its connection halfedges with inserted faces
       std::vector<HalfHandle> hhs;
       for (HalfHandle hh : mesh.topo(fh).halfedges) {
         HalfHandle oppohh = mesh.topo(hh).opposite;
@@ -1574,10 +1581,10 @@ int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
           hhs.push_back(hh);
         }
       }
-      if (!hhs.empty()) {
+      // record the face that connect with inserted faces on the most halfedges
+      if (!hhs.empty() && hhs.size() > curhhs.size()) {
         curfh = fh;
-        curhhs = std::move(hhs);
-        break;
+        curhhs = std::move(hhs);        
       }
     }
     assert(curfh.valid() && "the faces are not all connected!");

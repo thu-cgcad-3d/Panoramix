@@ -409,16 +409,14 @@ inline auto BoundingBox(const Decorated<T, D> &s)
 
 // return null box if s.enabled == false
 template <class T>
-inline auto BoundingBox(const Enabled<T> &s)
-    -> decltype(BoundingBox(s.component)) {
+inline auto BoundingBox(const Enabled<T> &s) {
   using BoxType = decltype(BoundingBox(s.component));
   return s.enabled ? BoundingBox(s.component) : BoxType();
 }
 
 // bounding box of range
 template <class IteratorT>
-auto BoundingBoxOfRange(IteratorT begin, IteratorT end)
-    -> decltype(BoundingBox(*begin)) {
+auto BoundingBoxOfRange(IteratorT begin, IteratorT end) {
   using BoxType = decltype(BoundingBox(*begin));
   BoxType box; // a null box
   while (begin != end) {
@@ -431,21 +429,18 @@ auto BoundingBoxOfRange(IteratorT begin, IteratorT end)
 
 // bounding box of container
 template <class ContainerT>
-inline auto BoundingBoxOfContainer(const ContainerT &cont)
-    -> decltype(BoundingBoxOfRange(std::begin(cont), std::end(cont))) {
+inline auto BoundingBoxOfContainer(const ContainerT &cont) {
   return BoundingBoxOfRange(std::begin(cont), std::end(cont));
 }
 
 template <class T>
-inline auto BoundingBoxOfContainer(std::initializer_list<T> ilist)
-    -> decltype(BoundingBox(*ilist.begin())) {
+inline auto BoundingBoxOfContainer(std::initializer_list<T> ilist) {
   return BoundingBoxOfRange(ilist.begin(), ilist.end());
 }
 
 // bounding box of pair-range
 template <class PairIteratorT>
-auto BoundingBoxOfPairRange(PairIteratorT begin, PairIteratorT end)
-    -> decltype(BoundingBox((*begin).second)) {
+auto BoundingBoxOfPairRange(PairIteratorT begin, PairIteratorT end) {
   using BoxType = decltype(BoundingBox((*begin).second));
   BoxType box;
   while (begin != end) {
@@ -459,8 +454,7 @@ auto BoundingBoxOfPairRange(PairIteratorT begin, PairIteratorT end)
 // the default bounding box functor
 struct DefaultBoundingBoxFunctor {
   template <class T>
-  inline auto operator()(const T &t) const
-      -> decltype(BoundingBox(std::declval<T>())) {
+  inline auto operator()(const T &t) const {
     return BoundingBox(t);
   }
 };
