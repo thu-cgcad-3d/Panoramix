@@ -348,7 +348,9 @@ template <class T> inline Plane<T, 3> Plane3FromEquation(const Vec<T, 3> &equ) {
   return Plane3FromEquation(equ[0], equ[1], equ[2]);
 }
 template <class T> inline Vec<T, 3> Plane3ToEquation(const Plane<T, 3> &p) {
-  return p.normal / p.anchor.dot(p.normal);
+  auto dotv = p.anchor.dot(p.normal);
+  assert(dotv != 0.0);
+  return p.normal / dotv;
 }
 
 // line

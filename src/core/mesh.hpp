@@ -1718,16 +1718,14 @@ void MakeIcosahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
     the = the + the72;
   }
 
-  typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle vs[12];
+  VertHandle vs[12];
   for (int i = 0; i < 12; i++)
     vs[i] = mesh.addVertex(
         VertDataT(vertices[i][0], vertices[i][1], vertices[i][2]));
 
   static auto polygon = [&](int a, int b, int c) {
-    // mesh.addFace({vs[a], vs[b], vs[c]});
-    mesh.addEdge(vs[a], vs[b]);
-    mesh.addEdge(vs[b], vs[c]);
-    mesh.addEdge(vs[c], vs[a]);
+    VertHandle vhs[] = {vs[a], vs[b], vs[c]};
+    mesh.addFace(vhs, vhs + 3, true);
   };
 
   /* map vertices to 20 faces */
@@ -1736,11 +1734,6 @@ void MakeIcosahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   polygon(0, 3, 4);
   polygon(0, 4, 5);
   polygon(0, 5, 1);
-  polygon(11, 6, 7);
-  polygon(11, 7, 8);
-  polygon(11, 8, 9);
-  polygon(11, 9, 10);
-  polygon(11, 10, 6);
   polygon(1, 2, 6);
   polygon(2, 3, 7);
   polygon(3, 4, 8);
@@ -1751,6 +1744,51 @@ void MakeIcosahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   polygon(8, 9, 4);
   polygon(9, 10, 5);
   polygon(10, 6, 1);
+  polygon(11, 6, 7);
+  polygon(11, 7, 8);
+  polygon(11, 8, 9);
+  polygon(11, 9, 10);
+  polygon(11, 10, 6);
+}
+
+// MakePrism
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void MakePrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
+               int height) {
+  mesh.clear();
+  double angleStep = M_PI * 2.0 / nsides;
+  std::vector<VertHandle> vhs1(nsides), vhs2(nsides);
+  for (int i = 0; i < nsides; i++) {
+    double angle = angleStep * i;
+    double x = cos(angle), y = sin(angle);
+    vhs1[i] = mesh.addVertex(VertDataT(x, y, 0));
+    vhs2[i] = mesh.addVertex(VertDataT(x, y, height));
+  }
+  for (int i = 0; i < nsides; i++) {
+    mesh.addFace(
+        {vhs1[i], vhs1[(i + 1) % nsides], vhs2[(i + 1) % nsides], vhs2[i]});
+  }
+  mesh.addFace(vhs1.begin(), vhs1.end(), true);
+  mesh.addFace(vhs2.begin(), vhs2.end(), true);
+}
+
+// MakeCone
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void MakeCone(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
+              int height) {
+  mesh.clear();
+  double angleStep = M_PI * 2.0 / nsides;
+  VertHandle topVh = mesh.addVertex(VertDataT(0, 0, height));
+  std::vector<VertHandle> vhs(nsides);
+  for (int i = 0; i < nsides; i++) {
+    double angle = angleStep * i;
+    double x = cos(angle), y = sin(angle);
+    vhs[i] = mesh.addVertex(VertDataT(x, y, 0));
+  }
+  for (int i = 0; i < nsides; i++) {
+    mesh.addFace({vhs[i], vhs[(i + 1) % nsides], topVh});
+  }
+  mesh.addFace(vhs.begin(), vhs.end(), true);
 }
 }
 }

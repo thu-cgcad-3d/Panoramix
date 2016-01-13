@@ -5,6 +5,8 @@
 
 #include "../misc/eigen.hpp"
 
+#include "optimization.hpp"
+
 namespace pano {
 namespace experimental {
 
@@ -392,12 +394,12 @@ Reconstruct2(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
               return planeEqVec.data() + fh2varStart.at(fh);
             });
       },
-      [](int iter) { return std::max(1.0 / log(iter + 5), 1e-10); }, // temperature
+      [](int iter) { return std::max(1.0 / log(log(iter + 2)), 1e-10); }, // temperature
       [maxIters](VectorXd curX, int iter, auto &&forEachNeighborFun) {
         if (iter >= maxIters) {
           return;
         }
-        double step = 1e-3;
+        double step = std::max(1.0 / sqrt(iter + 2), 1e-10);
         for (int i = 0; i < curX.size(); i++) {
           double curXHere = curX[i];
           curX[i] = curXHere + step;

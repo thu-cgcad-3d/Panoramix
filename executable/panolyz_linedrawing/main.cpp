@@ -121,9 +121,15 @@ void AddToScene(gui::SceneBuilder &sb, const Mesh<Point3> &m,
   }
 }
 
+struct EnergyWeights {
+  double vertMSDAWeight;
+  double faceMSDAWeight;
+  double faceAngleWeight;
+};
+
 template <class FaceHandleToPlaneEqFunT>
-double ComputeEnergy(const Mesh2 &meshProjected, const SubMesh &sub,
-                     const PerspectiveCamera &cam,
+double ComputeEnergy(const Mesh2 &mesh, const SubMesh &sub,
+                     const PerspectiveCamera &cam, const EnergyWeights &weights,
                      FaceHandleToPlaneEqFunT fh2planeEq) {
   int angleNum = sub.hhs.size();
   // fh2planeEq: (FaceHandle)[i] -> double
@@ -139,9 +145,9 @@ double ComputeEnergy(const Mesh2 &meshProjected, const SubMesh &sub,
     if (HasValue(plane, IsInfOrNaN<double>)) {
       return std::numeric_limits<double>::infinity();
     }
-    for (HalfHandle hh : meshProjected.topo(fh).halfedges) {
-      VertHandle vh = meshProjected.topo(hh).to();
-      const Point2 &p2d = meshProjected.data(vh);
+    for (HalfHandle hh : mesh.topo(fh).halfedges) {
+      VertHandle vh = mesh.topo(hh).to();
+      const Point2 &p2d = mesh.data(vh);
       auto dir = normalize(cam.direction(p2d));
       Point3 p3d =
           IntersectionOfLineAndPlane(Ray3(cam.eye(), dir), plane).position;
@@ -161,16 +167,16 @@ double ComputeEnergy(const Mesh2 &meshProjected, const SubMesh &sub,
 
   std::map<VertHandle, std::vector<double>> vh2angles;
   for (FaceHandle fh : sub.fhs) {
-    auto &loophhs = meshProjected.topo(fh).halfedges;
+    auto &loophhs = mesh.topo(fh).halfedges;
     std::vector<double> faceAngles(loophhs.size(), 0.0);
     for (int k = 0; k < loophhs.size(); k++) {
       int knext = (k + 1) % loophhs.size();
       HalfHandle hh1 = loophhs[k];
       HalfHandle hh2 = loophhs[knext];
-      assert(meshProjected.topo(hh1).to() == meshProjected.topo(hh2).from());
-      VertHandle v1 = meshProjected.topo(hh1).from();
-      VertHandle v2 = meshProjected.topo(hh1).to();
-      VertHandle v3 = meshProjected.topo(hh2).to();
+      assert(mesh.topo(hh1).to() == mesh.topo(hh2).from());
+      VertHandle v1 = mesh.topo(hh1).from();
+      VertHandle v2 = mesh.topo(hh1).to();
+      VertHandle v3 = mesh.topo(hh2).to();
       auto &p1 = vpositions.at(v1);
       auto &p2 = vpositions.at(v2);
       auto &p3 = vpositions.at(v3);
@@ -200,22 +206,33 @@ double ComputeEnergy(const Mesh2 &meshProjected, const SubMesh &sub,
   }
   vertexMSDA /= vertexMSDANum;
 
-  double energy = faceMSDA + vertexMSDA;
-  std::cout << "energy: " << energy << "\n";
+  double faceAngleEnergy = 0.0;
+  for (auto &hh : sub.hhs) {
+    auto fh1 = mesh.topo(hh).face;
+    auto planeEq1 = fh2planeEq(fh1);
+    auto fh2 = mesh.topo(mesh.topo(hh).opposite).face;
+    auto planeEq2 = fh2planeEq(fh2);
+    double angle = AngleBetweenUndirectedVectors(
+        Vec3(planeEq1[0], planeEq1[1], planeEq1[2]),
+        Vec3(planeEq2[0], planeEq2[1], planeEq2[2]));
+    assert(!IsInfOrNaN(angle));
+    faceAngleEnergy += Square(angle - M_PI_2);
+  }
+  faceAngleEnergy /= sub.hhs.size();
+
+  double energy = faceMSDA * weights.faceMSDAWeight +
+                  vertexMSDA * weights.vertMSDAWeight +
+                  faceAngleEnergy * weights.faceAngleWeight;
+  // std::cout << "energy: " << energy << "\n";
   return energy;
 }
 
-int DISABLED_main(int argc, char **argv) {
-  gui::Singleton::InitGui(argc, argv);
-  misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
-
-  Mesh3 meshGT;
-  MakeQuadFacedCube(meshGT);
-
+void TestOnMesh(const Mesh3 &meshGT, int maxIters,
+                const EnergyWeights &weights) {
   auto sphere = BoundingBoxOfContainer(meshGT.vertices()).outerSphere();
-  PerspectiveCamera cam(500, 500, Point2(250, 250), 200,
-                        sphere.center + Vec3(1, 2, 3) * sphere.radius * 2,
-                        sphere.center);
+  PerspectiveCamera projCam(500, 500, Point2(250, 250), 200,
+                            sphere.center + Vec3(1, 2, 3) * sphere.radius * 2,
+                            sphere.center);
   {
     gui::SceneBuilder sb;
     sb.installingOptions().defaultShaderSource =
@@ -226,37 +243,66 @@ int DISABLED_main(int argc, char **argv) {
         gui::CreateRandomColorTableWithSize(meshGT.internalFaces().size());
     AddToScene(sb, meshGT, ConstantFunctor<gui::Color>(gui::Black),
                [&ctable](FaceHandle fh) { return ctable[fh.id]; });
-    sb.show(true, false, gui::RenderOptions()
-                             .camera(cam)
-                             .backgroundColor(gui::White)
-                             .renderMode(gui::All)
-                             .bwTexColor(0.0)
-                             .bwColor(1.0)
-                             .fixUpDirectionInCameraMove(false)
-                             .cullBackFace(false)
-                             .cullFrontFace(false));
+    projCam = sb.show(true, false, gui::RenderOptions()
+                                       .camera(projCam)
+                                       .backgroundColor(gui::White)
+                                       .renderMode(gui::All)
+                                       .bwTexColor(0.0)
+                                       .bwColor(1.0)
+                                       .fixUpDirectionInCameraMove(false)
+                                       .cullBackFace(false)
+                                       .cullFrontFace(false))
+                  .camera();
   }
 
-  Mesh2 meshProjected = Transform(
-      meshGT, [&cam](const Point3 &p) -> Point2 { return cam.toScreen(p); });
+  Mesh2 meshProjected =
+      Transform(meshGT, [&projCam](const Point3 &p) -> Point2 {
+        return projCam.toScreen(p);
+      });
+
+  PerspectiveCamera cam = projCam;
+  cam.setEye(Origin(), false);
+  cam.setCenter(X(), true);
 
   auto subs = ExtractSubMeshes(meshProjected,
                                [](auto hhsBegin, auto hhsEnd) -> bool {
-                                 if (std::distance(hhsBegin, hhsEnd) <= 1)
-                                   return true;
-                                 return false;
+                                 return std::distance(hhsBegin, hhsEnd) <= 1;
                                },
                                10);
   auto &sub = subs.front();
 
-  auto energyFun = [&meshProjected, &cam, &sub](auto &&fh2planeEq) -> double {
-    return ComputeEnergy(meshProjected, sub, cam, fh2planeEq);
+  int count = 0;
+  auto energyFun = [&meshProjected, &cam, &sub, &weights,
+                    &count](auto &&fh2planeEq) -> double {
+    double e = ComputeEnergy(meshProjected, sub, cam, weights, fh2planeEq);
+    if ((count++) % 30000 == 1) {
+      std::cout << "energy: " << e << '\n';
+    }
+    return e;
   };
+
+  double gtEnergy = energyFun([&meshGT, &meshProjected, &projCam,
+                               &cam](FaceHandle fh) -> Vec3 {
+    Point3 ps[3];
+    for (int i = 0; i < 3; i++) {
+      auto p3 = meshGT.data(meshGT.topo(meshGT.topo(fh).halfedges[i]).to());
+      double depthGT = Distance(p3, projCam.eye());
+
+      auto dir = normalize(cam.direction(meshProjected.data(
+          meshProjected.topo(meshProjected.topo(fh).halfedges[i]).to())));
+      ps[i] = dir * depthGT;
+    }
+    auto plane = Plane3From3Points(ps[0], ps[1], ps[2]);
+    auto eq = Plane3ToEquation(plane);
+    assert(!HasValue(eq, IsInfOrNaN<double>));
+    return eq;
+  });
+  std::cout << "GT Energy: " << gtEnergy << '\n';
 
   auto planes = Reconstruct2(
       meshProjected, sub, energyFun,
       [&cam](const Vec2 &p2d) -> Vec3 { return normalize(cam.direction(p2d)); },
-      0, 10000);
+      0, maxIters);
   HandledTable<FaceHandle, Plane3> facePlanes(
       meshProjected.internalFaces().size());
   auto meshReconstructed = Transform(
@@ -290,21 +336,39 @@ int DISABLED_main(int argc, char **argv) {
         meshReconstructed.internalFaces().size());
     AddToScene(sb, meshReconstructed, ConstantFunctor<gui::Color>(gui::Black),
                [&ctable](FaceHandle fh) { return ctable[fh.id]; });
-    sb.show(true, false, gui::RenderOptions()
-                             .camera(cam)
-                             .backgroundColor(gui::White)
-                             .renderMode(gui::All)
-                             .bwTexColor(0.0)
-                             .bwColor(1.0)
-                             .fixUpDirectionInCameraMove(false)
-                             .cullBackFace(false)
-                             .cullFrontFace(false));
+    sb.show(true, true, gui::RenderOptions()
+                            .backgroundColor(gui::White)
+                            .renderMode(gui::All)
+                            .bwTexColor(0.0)
+                            .bwColor(1.0)
+                            .fixUpDirectionInCameraMove(false)
+                            .cullBackFace(false)
+                            .cullFrontFace(false));
   }
+}
+
+int main(int argc, char **argv) {
+  gui::Singleton::InitGui(argc, argv);
+  misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
+
+  Mesh3 meshGT;
+  // MakeQuadFacedCube(meshGT);
+
+  // MakeQuadFacedCube(meshGT);
+  //MakePrism(meshGT, 3, 2);
+  MakeCone(meshGT, 4, 2);
+
+  EnergyWeights weights;
+  weights.vertMSDAWeight = 1.0;
+  weights.faceMSDAWeight = 1.0;
+  weights.faceAngleWeight = 1.0;
+
+  TestOnMesh(meshGT, 1000000, weights);
 
   return 0;
 }
 
-int main(int argc, char **argv) {
+int DISABLED_main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
@@ -401,9 +465,13 @@ int main(int argc, char **argv) {
       [&mesh, &meshReconstructed, &meshGT, &subs, &facePlanes, &cam](int i) {
         const SubMesh &sub = subs[i];
         int angleNum = sub.hhs.size();
-
-        auto energyFun = [&mesh, &cam, &sub](auto &&fh2planeEq) -> double {
-          return ComputeEnergy(mesh, sub, cam, fh2planeEq);
+        EnergyWeights weights;
+        weights.vertMSDAWeight = 1.0;
+        weights.faceMSDAWeight = 1.0;
+        weights.faceAngleWeight = 1.0;
+        auto energyFun = [&mesh, &cam, &sub,
+                          &weights](auto &&fh2planeEq) -> double {
+          return ComputeEnergy(mesh, sub, cam, weights, fh2planeEq);
         };
         auto planes = Reconstruct2(mesh, sub, energyFun,
                                    [&cam](const Vec2 &p2d) -> Vec3 {
