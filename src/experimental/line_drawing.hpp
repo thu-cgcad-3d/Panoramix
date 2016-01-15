@@ -399,7 +399,7 @@ Reconstruct2(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
         if (iter >= maxIters) {
           return;
         }
-        double step = std::max(1.0 / sqrt(iter + 2), 1e-10);
+        double step = std::max(1.0 / log(iter + 2), 1e-10);
         for (int i = 0; i < curX.size(); i++) {
           double curXHere = curX[i];
           curX[i] = curXHere + step;

@@ -352,18 +352,17 @@ int main(int argc, char **argv) {
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
 
   Mesh3 meshGT;
-  // MakeQuadFacedCube(meshGT);
-
-  // MakeQuadFacedCube(meshGT);
-  //MakePrism(meshGT, 3, 2);
-  MakeCone(meshGT, 4, 2);
+  //MakeTetrahedron(meshGT);
+  //MakeQuadFacedCube(meshGT);
+  MakePrism(meshGT, 15, 2.5);
+  //MakeCone(meshGT, 4, 2);
 
   EnergyWeights weights;
   weights.vertMSDAWeight = 1.0;
   weights.faceMSDAWeight = 1.0;
   weights.faceAngleWeight = 1.0;
 
-  TestOnMesh(meshGT, 1000000, weights);
+  TestOnMesh(meshGT, 30000, weights);
 
   return 0;
 }
@@ -426,7 +425,7 @@ int DISABLED_main(int argc, char **argv) {
                                            int ccid) { vh2ccid[vh] = ccid; });
   std::cout << ncc2 << " connected components after decomposition\n";
 
-  if (false) {
+  if (true) {
     gui::SceneBuilder sb;
     sb.installingOptions().defaultShaderSource =
         gui::OpenGLShaderSourceDescriptor::XLines;
@@ -436,11 +435,15 @@ int DISABLED_main(int argc, char **argv) {
     ctable.exceptionalColor() = gui::Black;
     auto mesh3 = Transform(
         mesh, [](const Point2 &p2) -> Point3 { return cat(p2, 0.0); });
-    AddToScene(sb, mesh3,
-               [&mesh3, &vh2ccid, &ctable](HalfHandle hh) {
-                 return ctable[vh2ccid.at(mesh3.topo(hh).from())];
-               },
-               [](FaceHandle fh) { return gui::Transparent; });
+    AddToScene(
+        sb, mesh3,
+        [&mesh3, &vh2ccid, &ctable](HalfHandle hh) {
+          return ctable[vh2ccid.at(mesh3.topo(hh).from())];
+        },
+        [&mesh3, &ctable, &vh2ccid](FaceHandle fh) {
+          return ctable[vh2ccid[mesh3.topo(mesh3.topo(fh).halfedges.front())
+                                    .to()]];
+        });
     sb.show(true, true, gui::RenderOptions()
                             .backgroundColor(gui::White)
                             .renderMode(gui::Lines)
@@ -518,50 +521,6 @@ int DISABLED_main(int argc, char **argv) {
                             .cullBackFace(false)
                             .cullFrontFace(false));
   }
-
-  //
-  /*
- std::vector<Classified<Line2>> lines(drawing.line2corners.size());
- for (int i = 0; i < drawing.line2corners.size(); i++) {
-   auto &p1 = drawing.corners[drawing.line2corners[i].first];
-   auto &p2 = drawing.corners[drawing.line2corners[i].second];
-   lines[i].component.first = p1;
-   lines[i].component.second = p2;
-   lines[i].claz = -1;
- }
-
- VanishingPointsDetector vpd;
- vpd.params().algorithm = VanishingPointsDetector::TardifSimplified;
- std::vector<HPoint2> vps;
- double focal = 0;
- auto result = vpd(lines, cam.screenSize());
- if (result.failed()) {
-   return 0;
- }
- std::tie(vps, focal) = result.unwrap();
-
- {
-   gui::SceneBuilder sb;
-   sb.installingOptions().defaultShaderSource =
-       gui::OpenGLShaderSourceDescriptor::XLines;
-   sb.installingOptions()
-       .discretizeOptions.color(gui::Black)
-       .colorTable(gui::RGB);
-   sb.installingOptions().discretizeOptions.colorTable().exceptionalColor() =
-       gui::Black;
-   sb.installingOptions().lineWidth = 3.0;
-   std::vector<Classified<Line3>> line3s(lines.size());
-   for (int i = 0; i < lines.size(); i++) {
-     line3s[i].component.first = cat(lines[i].component.first, 0.0);
-     line3s[i].component.second = cat(lines[i].component.second, 0.0);
-     line3s[i].claz = lines[i].claz;
-   }
-   sb.add(line3s);
-   sb.show(true, true, gui::RenderOptions()
-                           .backgroundColor(gui::White)
-                           .renderMode(gui::Lines)
-                           .fixUpDirectionInCameraMove(false));
- }*/
 
   return 0;
 }

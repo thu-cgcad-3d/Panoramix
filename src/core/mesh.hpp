@@ -1538,7 +1538,8 @@ void DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
 }
 
 // FindUpperBoundOfDRF
-// - HalfEdgeColinearFunT: (HalfEdgeIterT hhsBegin, HalfEdgeIterT hhsEnd) -> bool
+// - HalfEdgeColinearFunT: (HalfEdgeIterT hhsBegin, HalfEdgeIterT hhsEnd) ->
+// bool
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class HalfEdgeColinearFunT, class FaceHandleIterT>
 int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
@@ -1584,7 +1585,7 @@ int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
       // record the face that connect with inserted faces on the most halfedges
       if (!hhs.empty() && hhs.size() > curhhs.size()) {
         curfh = fh;
-        curhhs = std::move(hhs);        
+        curhhs = std::move(hhs);
       }
     }
     assert(curfh.valid() && "the faces are not all connected!");
@@ -1754,7 +1755,7 @@ void MakeIcosahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 // MakePrism
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakePrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
-               int height) {
+               double height) {
   mesh.clear();
   double angleStep = M_PI * 2.0 / nsides;
   std::vector<VertHandle> vhs1(nsides), vhs2(nsides);
@@ -1775,7 +1776,7 @@ void MakePrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
 // MakeCone
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakeCone(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
-              int height) {
+              double height) {
   mesh.clear();
   double angleStep = M_PI * 2.0 / nsides;
   VertHandle topVh = mesh.addVertex(VertDataT(0, 0, height));
