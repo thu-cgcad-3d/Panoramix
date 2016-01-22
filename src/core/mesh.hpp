@@ -1791,5 +1791,27 @@ void MakeCone(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
   }
   mesh.addFace(vhs.begin(), vhs.end(), true);
 }
+
+// MakeStarPrism
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void MakeStarPrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
+                   double innerRadius, double outerRadius, double height) {
+  mesh.clear();
+  double angleStep = M_PI / nsides;
+  std::vector<VertHandle> vhs1(nsides * 2), vhs2(nsides * 2);
+  for (int i = 0; i < nsides * 2; i++) {
+    double angle = angleStep * i;
+    double r = i % 2 == 0 ? innerRadius : outerRadius;
+    double x = cos(angle) * r, y = sin(angle) * r;
+    vhs1[i] = mesh.addVertex(VertDataT(x, y, 0));
+    vhs2[i] = mesh.addVertex(VertDataT(x, y, height));
+  }
+  for (int i = 0; i < nsides * 2; i++) {
+    mesh.addFace({vhs1[i], vhs1[(i + 1) % (nsides * 2)],
+                  vhs2[(i + 1) % (nsides * 2)], vhs2[i]});
+  }
+  mesh.addFace(vhs1.begin(), vhs1.end(), true);
+  mesh.addFace(vhs2.begin(), vhs2.end(), true);
+}
 }
 }

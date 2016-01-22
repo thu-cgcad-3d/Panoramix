@@ -10,7 +10,8 @@ enum class OpenGLShaderSourceDescriptor {
   XPoints,
   XLines,
   XTriangles,
-  XPanorama
+  XPanorama,
+  XPhong
 };
 
 class OpenGLShaderSource {

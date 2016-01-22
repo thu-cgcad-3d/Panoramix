@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
   options.refresh_mg_init = false;
 
   std::vector<std::string> dirs;
-  auto images = gui::PickImages("H:\\GitHub\\Panoramix\\data\\normal", &dirs);
+  auto images = gui::PickImages("F:\\DataSets\\CVPR2016EXT", &dirs);
 
   for (int i = 0; i < dirs.size(); i++) {
     Image3ub original = images[i];
@@ -68,20 +68,21 @@ int main(int argc, char **argv) {
       }
       view = result.unwrap();
 
-      if (false) {
-        gui::AsCanvas(im)
-            .colorTable(gui::ColorTableDescriptor::RGBGreys)
-            .thickness(2.0)
-            .add(line2s)
-            .show();
-      }
-
       SegmentationExtractor segmenter;
       segmenter.params().algorithm = SegmentationExtractor::GraphCut;
       std::tie(segs, nsegs) = segmenter(im, false);
 
       misc::SaveCache(dir, "preparation", view, line3s, line2s, vps, focal,
                       segs, nsegs);
+    }
+
+    if (true) {
+      gui::AsCanvas(im)
+          .colorTable(gui::ColorTableDescriptor::RGBGreys)
+          .thickness(2.0)
+          .add(line2s)
+          .show();
+      gui::MakeCanvas(gui::CreateRandomColorTableWithSize(nsegs)(segs)).show();
     }
 
     Image5d gc;
@@ -93,8 +94,7 @@ int main(int argc, char **argv) {
     // build pi graph
     PIGraph<PerspectiveCamera> mg;
     if (options.refresh_mg_init || !misc::LoadCache(dir, "mg_init", mg)) {
-        //mg = BuildPIGraph()
+      // mg = BuildPIGraph()
     }
-
   }
 }

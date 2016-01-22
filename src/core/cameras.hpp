@@ -6,6 +6,11 @@
 namespace pano {
 namespace core {
 
+// OrthogonalCamera
+class OrthogonalCamera {
+
+};
+
 // perspective camera
 class PerspectiveCamera {
 public:
@@ -195,7 +200,6 @@ private:
   }
   friend class cereal::access;
 };
-
 
 namespace {
 template <class T> struct IsCameraImpl {

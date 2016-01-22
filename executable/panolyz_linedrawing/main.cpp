@@ -299,7 +299,7 @@ void TestOnMesh(const Mesh3 &meshGT, int maxIters,
   });
   std::cout << "GT Energy: " << gtEnergy << '\n';
 
-  auto planes = Reconstruct2(
+  auto planes = Reconstruct(
       meshProjected, sub, energyFun,
       [&cam](const Vec2 &p2d) -> Vec3 { return normalize(cam.direction(p2d)); },
       0, maxIters);
@@ -354,8 +354,9 @@ int main(int argc, char **argv) {
   Mesh3 meshGT;
   //MakeTetrahedron(meshGT);
   //MakeQuadFacedCube(meshGT);
-  MakePrism(meshGT, 15, 2.5);
+  //MakePrism(meshGT, 5, 2.5);
   //MakeCone(meshGT, 4, 2);
+  MakeStarPrism(meshGT, 6, 0.5, 1.0, 2.0);
 
   EnergyWeights weights;
   weights.vertMSDAWeight = 1.0;
@@ -476,7 +477,7 @@ int DISABLED_main(int argc, char **argv) {
                           &weights](auto &&fh2planeEq) -> double {
           return ComputeEnergy(mesh, sub, cam, weights, fh2planeEq);
         };
-        auto planes = Reconstruct2(mesh, sub, energyFun,
+        auto planes = Reconstruct(mesh, sub, energyFun,
                                    [&cam](const Vec2 &p2d) -> Vec3 {
                                      return normalize(cam.direction(p2d));
                                    },

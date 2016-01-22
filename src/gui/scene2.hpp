@@ -11,8 +11,9 @@
 #include "resource.hpp"
 
 namespace pano {
-namespace gui {
+namespace gui2 {
 using namespace pano::core;
+using namespace pano::gui;
 
 class RenderableObject {
 public:

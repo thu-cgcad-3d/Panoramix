@@ -233,7 +233,7 @@ void VisualizeReconstructionCompact(const Image &im,
   gui::SceneBuilder viz;
   viz.installingOptions().discretizeOptions.colorTable(gui::ColorTableDescriptor::RGB);
   viz.begin(compactPolygons /*, sppCallbackFun*/)
-      .shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
+      .shaderSource(gui::OpenGLShaderSourceDescriptor::XPhong)
       .resource("texture")
       .end();
 
@@ -362,7 +362,9 @@ void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,
   std::vector<core::Decorated<gui::Colored<Polygon3>, int>> spps;
   // std::vector<core::Decorated<gui::Colored<Polygon3>, int>> pps;
 
-  gui::ResourceStore::set("texture", anno.rectifiedImage);
+  Image3ub reversedIm = anno.rectifiedImage.clone();
+  ReverseRows(reversedIm);
+  gui::ResourceStore::set("texture", reversedIm);
   for (int face = 0; face < anno.nfaces(); face++) {
     auto &polygon = face2polygon[face];
     if (polygon.normal == Origin() || polygon.corners.empty()) {

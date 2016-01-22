@@ -31,6 +31,7 @@ struct PanoramixOptions {
   bool looseSegsSecondTime;
   bool restrictSegsSecondTime;
   bool notUseOcclusions;
+  //bool notUseCoplanarity;
 
   static const std::string parseOption(bool b);
   std::string algorithmOptionsTag() const;

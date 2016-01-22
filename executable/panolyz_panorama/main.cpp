@@ -473,13 +473,13 @@ int main(int argc, char **argv) {
     options.notUseOcclusions = false;
 
     options.refresh_preparation = false;
-    options.refresh_mg_init = options.refresh_preparation || true;
+    options.refresh_mg_init = options.refresh_preparation || false;
     options.refresh_mg_oriented = options.refresh_mg_init || false;
     options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
     options.refresh_lsw = options.refresh_mg_oriented || false;
     options.refresh_mg_occdetected =
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-    options.refresh_mg_reconstructed = options.refresh_mg_occdetected || true;
+    options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
     RunPanoramix(anno, options, matlab, true, false);
     return misc::MXA();
@@ -1563,7 +1563,7 @@ int main(int argc, char **argv) {
 
   if (true) {
     std::vector<std::string> impaths;
-    gui::PickImages("H:\\DataSet\\pi\\dataset\\selected\\", &impaths);
+    gui::PickImages("F:\\DataSets\\pi\\dataset\\selected\\", &impaths);
     for (int i = 0; i < activeQ.size(); i++) {
       auto &task = activeQ[i];
       std::cout << "[[[[[[[[[ TASK " << i << "]]]]]]]]" << std::endl;

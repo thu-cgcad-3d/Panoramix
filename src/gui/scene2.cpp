@@ -2,6 +2,6 @@
 
 namespace pano {
 namespace gui {
-RenderableObject::~RenderableObject() {}
+//RenderableObject::~RenderableObject() {}
 }
 }

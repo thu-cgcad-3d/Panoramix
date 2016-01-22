@@ -213,105 +213,6 @@ ExtractSubMeshes(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   return subMeshes;
 }
 
-// Reconstruct (TPAMI 2008, Plane Based Optimization ... )
-// - PlaneObjectiveFunT: (((FaceHandle)[int]->double) fh2planeeq, double*
-// scores) -> void
-// - VertDataToDirectionFunT: (VertDataT) -> Vec3
-template <class VertDataT, class HalfDataT, class FaceDataT,
-          class PlaneObjectiveFunT,
-          class VertDataToDirectionFunT = std::identity<VertDataT>>
-std::unordered_map<FaceHandle, Plane3>
-Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-            const SubMesh &sub, int nenergyTerms,
-            PlaneObjectiveFunT planes2energyTerms,
-            VertDataToDirectionFunT vert2dir = VertDataToDirectionFunT(),
-            int drfSlack = 2) {
-
-  using namespace Eigen;
-
-  int nverts = sub.vhs.size();
-  int nhalves = sub.hhs.size();
-  int nedges = nhalves / 2;
-  int nfaces = sub.fhs.size();
-
-  int nequations = nedges * 2 - nverts;
-  int nvars = nfaces * 3;
-
-  // order faces
-  std::vector<FaceHandle> fhs(sub.fhs.begin(), sub.fhs.end());
-  std::unordered_map<FaceHandle, int> fh2varStart;
-  int varid = 0;
-  for (FaceHandle fh : fhs) {
-    fh2varStart[fh] = varid;
-    varid += 3;
-  }
-
-  // construct projection matrix P
-  MatrixXd P = MatrixXd::Zero(nequations, nvars);
-  int eid = 0;
-  for (VertHandle vh : sub.vhs) {
-    auto &hhs = mesh.topo(vh).halfedges;
-    for (auto it = std::next(hhs.begin()); it != hhs.end(); ++it) {
-      auto hh = *it;
-      assert(Contains(sub.hhs, hh));
-      HalfHandle oppohh = mesh.topo(hh).opposite;
-      FaceHandle fh1 = mesh.topo(hh).face;
-      FaceHandle fh2 = mesh.topo(oppohh).face;
-      int varStartId1 = fh2varStart.at(fh1);
-      int varStartId2 = fh2varStart.at(fh2);
-      assert(varStartId1 != -1 && varStartId2 != -1);
-
-      auto p = normalize(vert2dir(mesh.data(vh)));
-      for (int i = 0; i < 3; i++) {
-        P(eid, varStartId1 + i) = p[i];
-        P(eid, varStartId2 + i) = -p[i];
-      }
-      eid++;
-    }
-  }
-
-  // perform SVD on P
-  // P = USV^t
-  JacobiSVD<MatrixXd> svd(P, ComputeFullV);
-  auto deltas = svd.singularValues(); // decreasing order defaultly
-  auto V = svd.matrixV();
-  assert(V.cols() == nvars);
-  assert(sub.drfub + drfSlack <= nvars);
-  // see Algorithm 2 of the paper
-  MatrixXd H = V.rightCols(sub.drfub + drfSlack);
-  assert(H.cols() == sub.drfub + drfSlack && H.rows() == nvars);
-
-  auto functor = misc::MakeGenericNumericDiffFunctor<double>(
-      [&planes2energyTerms, &H, &fh2varStart](const VectorXd &x, VectorXd &v) {
-        VectorXd planeEqVec = H * x;
-        planeEqVec.normalize();
-        planes2energyTerms(
-            [&planeEqVec, &fh2varStart](FaceHandle fh) -> const double * {
-              return planeEqVec.data() + fh2varStart.at(fh);
-            },
-            v.data());
-      },
-      H.cols(), nenergyTerms);
-  LevenbergMarquardt<decltype(functor), double> lm(functor);
-
-  // initialize vars
-  VectorXd X = VectorXd::Ones(H.cols());
-
-  // solve
-  lm.minimize(X);
-
-  // convert to planes
-  std::unordered_map<FaceHandle, Plane3> planes;
-  VectorXd planeEqVec = H * X;
-  for (FaceHandle fh : fhs) {
-    int varStart = fh2varStart[fh];
-    planes[fh] =
-        Plane3FromEquation(planeEqVec[varStart], planeEqVec[varStart + 1],
-                           planeEqVec[varStart + 2]);
-  }
-  return planes;
-}
-
 
 // Reconstruct (TPAMI 2008, Plane Based Optimization ... )
 // - PlaneObjectiveFunT: ( ((FaceHandle)[int]->double) fh2planeeq) -> double
@@ -320,7 +221,7 @@ template <class VertDataT, class HalfDataT, class FaceDataT,
           class PlaneObjectiveFunT,
           class VertDataToDirectionFunT = std::identity<VertDataT>>
 std::unordered_map<FaceHandle, Plane3>
-Reconstruct2(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
             const SubMesh &sub,
             PlaneObjectiveFunT planes2energy,
             VertDataToDirectionFunT vert2dir = VertDataToDirectionFunT(),

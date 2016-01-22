@@ -5,8 +5,6 @@
 namespace pano {
 namespace gui {
 
-
-
 // opengl shader source
 const std::pair<std::string, std::string> &
 PredefinedShaderSource(OpenGLShaderSourceDescriptor name) {
@@ -219,6 +217,55 @@ PredefinedShaderSource(OpenGLShaderSourceDescriptor name) {
       "    gl_FragColor.a = 1.0 - pixelSelection * 0.5;\n"
       "}\n"};
 
+  static const std::pair<std::string, std::string> xPhongShaderSource = {
+      "#version 130\n"
+
+      "attribute highp vec3 position;\n"
+      "attribute highp vec3 normal;\n"
+      "attribute highp vec4 color;\n"
+      "attribute uint isSelected;\n"
+
+      "uniform highp mat4 viewMatrix;\n"
+      "uniform highp mat4 modelMatrix;\n"
+      "uniform highp mat4 projectionMatrix;\n"
+
+      "out highp vec3 pixelPositionTransformed;\n"
+      "out highp vec3 pixelNormalTransformed;\n"
+      "out highp vec4 pixelColor;\n"
+      "out lowp float pixelSelection;\n"
+
+      "void main(void)\n"
+      "{\n"
+      "    vec4 posTrans = viewMatrix * modelMatrix * vec4(position, 1.0);\n"
+      "    pixelPositionTransformed = posTrans.xyz / posTrans.w;\n"
+      "    vec4 normalTrans = viewMatrix * modelMatrix * vec4(normal, 1.0);\n"
+      "    pixelNormalTransformed = normalTrans.xyz / normalTrans.w;\n"
+      "    pixelColor = color;\n"
+      "    gl_Position = projectionMatrix * posTrans;\n"
+      "    pixelSelection = isSelected == 0u ? 0.0 : 1.0;\n"
+      "}\n",
+
+      // 3.14159265358979323846264338327950288
+      "#version 130\n"
+
+      "in highp vec3 pixelPositionTransformed;\n"
+      "in highp vec3 pixelNormalTransformed;\n"
+      "in highp vec4 pixelColor;\n"
+      "in lowp float pixelSelection;\n"
+
+      "void main(void)\n"
+      "{\n"
+      "    vec3 lightDir = normalize(vec3(5.0, 5.0, 5.0) - pixelPositionTransformed);\n"
+      "    vec4 ambient = vec4(1.0, 0.0, 0.0, 1.0);\n"
+      "    vec4 diffuse = vec4(1.0, 1.0, 1.0, 1.0);\n"
+      "    vec4 specular = vec4(1.0, 1.0, 1.0, 1.0);\n"
+      "    gl_FragColor = 0.0 * ambient + "
+      "       1.0 * pow(abs(dot(lightDir, normalize(pixelNormalTransformed))), 2) * diffuse + "
+      "       .8 * pow(abs(dot(reflect(lightDir, normalize(pixelNormalTransformed)), - "
+      "            normalize(pixelPositionTransformed))), 100) * specular;\n"
+      "    gl_FragColor.a = 1.0 - pixelSelection * 0.5;\n"
+      "}\n"};
+
   switch (name) {
   case OpenGLShaderSourceDescriptor::XPoints:
     return xPointsShaderSource;
@@ -228,6 +275,8 @@ PredefinedShaderSource(OpenGLShaderSourceDescriptor name) {
     return xTrianglesShaderSource;
   case OpenGLShaderSourceDescriptor::XPanorama:
     return xPanoramaShaderSource;
+  case OpenGLShaderSourceDescriptor::XPhong:
+    return xPhongShaderSource;
   default:
     return xTrianglesShaderSource;
   }
