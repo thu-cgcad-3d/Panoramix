@@ -365,14 +365,18 @@ EstimateVanishingPointsAndClassifyLines(std::vector<Classified<Line3>> &lines,
   return vanishingPoints;
 }
 
-void OrderVanishingPoints(std::vector<Vec3> &vps,
-                          const Vec3 &verticalSeed /*= Z()*/) {
+std::vector<int> OrderVanishingPoints(std::vector<Vec3> &vps,
+                                      const Vec3 &verticalSeed /*= Z()*/) {
   assert(vps.size() >= 1);
+  std::vector<int> new2old(vps.size());
+  std::iota(new2old.begin(), new2old.end(), 0);
   int vertId = NearestDirectionId(vps, verticalSeed);
   std::swap(vps[0], vps[vertId]);
+  std::swap(new2old[0], new2old[vertId]);
   for (int i = 1; i < vps.size(); i++) {
     if (IsFuzzyPerpendicular(vps[0], vps[i])) {
       std::swap(vps[1], vps[i]);
+      std::swap(new2old[1], new2old[i]);
       break;
     }
   }
@@ -380,9 +384,11 @@ void OrderVanishingPoints(std::vector<Vec3> &vps,
     if (IsFuzzyPerpendicular(vps[0], vps[i]) &&
         IsFuzzyPerpendicular(vps[1], vps[i])) {
       std::swap(vps[2], vps[i]);
+      std::swap(new2old[2], new2old[i]);
       break;
     }
   }
+  return new2old;
 }
 
 #pragma region VanishingPointsDetector

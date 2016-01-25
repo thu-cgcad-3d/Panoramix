@@ -205,6 +205,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = true;
     options.refresh_mg_init = options.refresh_preparation || false;
@@ -238,6 +239,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || true;
@@ -267,6 +269,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || true;
@@ -296,6 +299,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || true;
@@ -325,6 +329,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || true;
@@ -354,6 +359,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || true;
@@ -383,6 +389,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || true;
@@ -412,6 +419,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || true;
@@ -441,6 +449,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || true;
@@ -454,6 +463,39 @@ int main(int argc, char **argv) {
     RunPanoramix(anno, options, matlab, false);
     return misc::MXA();
   });
+
+  // no coplanarity
+  TaskQueue QstoreNoCop;
+  QstoreNoCop.push_back([&matlab](const std::string &impath) -> misc::MXA {
+    auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+    anno.impath = impath;
+
+    PanoramixOptions options;
+    options.useWallPrior = true;
+    options.usePrincipleDirectionPrior = true;
+    options.useGeometricContextPrior = true;
+
+    options.useGTOcclusions = false;
+    options.looseLinesSecondTime = false;
+    options.looseSegsSecondTime = false;
+    options.restrictSegsSecondTime = false;
+
+    options.notUseOcclusions = false;
+    options.notUseCoplanarity = true;
+
+    options.refresh_preparation = false;
+    options.refresh_mg_init = options.refresh_preparation || true;
+    options.refresh_mg_oriented = options.refresh_mg_init || false;
+    options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+    options.refresh_lsw = options.refresh_mg_oriented || false;
+    options.refresh_mg_occdetected =
+        options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+    options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+
+    RunPanoramix(anno, options, matlab, false);
+    return misc::MXA();
+  });
+
 
   TaskQueue QshowModel;
   QshowModel.push_back([&](const std::string &impath) -> misc::MXA {
@@ -471,6 +513,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || false;
@@ -479,7 +522,7 @@ int main(int argc, char **argv) {
     options.refresh_lsw = options.refresh_mg_oriented || false;
     options.refresh_mg_occdetected =
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-    options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
+    options.refresh_mg_reconstructed = options.refresh_mg_occdetected || true;
 
     RunPanoramix(anno, options, matlab, true, false);
     return misc::MXA();
@@ -584,6 +627,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || false;
@@ -719,6 +763,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = false;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || false;
@@ -861,6 +906,7 @@ int main(int argc, char **argv) {
     options.restrictSegsSecondTime = false;
 
     options.notUseOcclusions = false;
+    options.notUseCoplanarity = true;
 
     options.refresh_preparation = false;
     options.refresh_mg_init = options.refresh_preparation || false;
@@ -874,7 +920,13 @@ int main(int argc, char **argv) {
     PIGraph<PanoramicCamera> mg;
     PIConstraintGraph cg;
     PICGDeterminablePart dp;
-    GetPanoramixResult(anno, options, mg, cg, dp);
+
+   
+    bool succ = GetPanoramixResult(anno, options, mg, cg, dp);
+    if (!succ) {
+        std::cout << "failed in " << impath << std::endl;
+        return misc::MXA();
+    }
 
     std::map<std::string, double> resultData;
 
@@ -1322,6 +1374,7 @@ int main(int argc, char **argv) {
       options.restrictSegsSecondTime = false;
 
       options.notUseOcclusions = false;
+      options.notUseCoplanarity = false;
 
       options.refresh_preparation = false;
       options.refresh_mg_init = options.refresh_preparation || false;
@@ -1351,6 +1404,7 @@ int main(int argc, char **argv) {
       options.restrictSegsSecondTime = false;
 
       options.notUseOcclusions = true;
+      options.notUseCoplanarity = false;
 
       options.refresh_preparation = false;
       options.refresh_mg_init = options.refresh_preparation || false;
@@ -1381,6 +1435,7 @@ int main(int argc, char **argv) {
       options.restrictSegsSecondTime = false;
 
       options.notUseOcclusions = false;
+      options.notUseCoplanarity = false;
 
       options.refresh_preparation = false;
       options.refresh_mg_init = options.refresh_preparation || false;
@@ -1433,6 +1488,7 @@ int main(int argc, char **argv) {
       options.restrictSegsSecondTime = false;
 
       options.notUseOcclusions = false;
+      options.notUseCoplanarity = false;
 
       options.refresh_preparation = false;
       options.refresh_mg_init = options.refresh_preparation || false;
@@ -1453,6 +1509,50 @@ int main(int argc, char **argv) {
     auto results = misc::MXA::createStructMatrix(1, 1, {"pnDepthGTOcc"}, false);
     results.setField("pnDepthGTOcc", 0, pnDepthGTOcc);
     misc::SaveCache(impath, "pano_pnDepthGTOcc", pnDepthGTOcc);
+
+    return results;
+  });
+
+  TaskQueue QcomputePanoNoCopDepth;
+  QcomputePanoNoCopDepth.push_back([&](const std::string &impath) -> misc::MXA {
+    auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
+    PanoramicCamera cam = anno.view.camera;
+
+    Imaged pnDepthNoCop;
+    // pn depth gt occ
+    {
+      PanoramixOptions options;
+      options.useWallPrior = true;
+      options.usePrincipleDirectionPrior = true;
+      options.useGeometricContextPrior = true;
+
+      options.useGTOcclusions = false;
+      options.looseLinesSecondTime = false;
+      options.looseSegsSecondTime = false;
+      options.restrictSegsSecondTime = false;
+
+      options.notUseOcclusions = false;
+      options.notUseCoplanarity = true;
+
+      options.refresh_preparation = false;
+      options.refresh_mg_init = options.refresh_preparation || false;
+      options.refresh_mg_oriented = options.refresh_mg_init || false;
+      options.refresh_line2leftRightSegs = options.refresh_mg_init || false;
+      options.refresh_lsw = options.refresh_mg_oriented || false;
+      options.refresh_mg_occdetected =
+          options.refresh_lsw || options.refresh_line2leftRightSegs || false;
+      options.refresh_mg_reconstructed =
+          options.refresh_mg_occdetected || false;
+
+      pnDepthNoCop =
+          GetSurfaceDepthMapsOfPanoramix(std::vector<PanoramicCamera>{cam},
+                                         anno, options, matlab)
+              .front();
+    }
+
+    auto results = misc::MXA::createStructMatrix(1, 1, {"pnDepthNoCop"}, false);
+    results.setField("pnDepthNoCop", 0, pnDepthNoCop);
+    misc::SaveCache(impath, "pano_pnDepthNoCop", pnDepthNoCop);
 
     return results;
   });
@@ -1569,8 +1669,9 @@ int main(int argc, char **argv) {
       std::cout << "[[[[[[[[[ TASK " << i << "]]]]]]]]" << std::endl;
 
       auto timeTag = misc::CurrentTimeString(true);
-      // misc::MAT dataFile("F:\\GitHub\\write-papers\\papers\\a\\data\\task_" +
-      // std::to_string(i) + timeTag + ".mat", misc::MAT::Write_7_3);
+      misc::MAT dataFile("F:\\GitHub\\write-papers\\papers\\a\\data\\task_" +
+                             std::to_string(i) + timeTag + ".mat",
+                         misc::MAT::Write_7_3);
 
       misc::MXA impathsForTask =
           misc::MXA::createCellMatrix(impaths.size(), 1, true);
@@ -1580,17 +1681,17 @@ int main(int argc, char **argv) {
         auto &impath = impaths[j];
         misc::Clock clock =
             "Task " + std::to_string(i) + " on \"" + impath + "\"";
-        // try {
-        misc::MXA result = task(impath);
-        impathsForTask.setCell(j, misc::MXA::createString(impath));
-        resultsForTask.setCell(j, std::move(result));
-        //} catch (...) {
-        //    std::cout << "############### ERROR #############" << std::endl;
-        //}
+        try {
+          misc::MXA result = task(impath);
+          impathsForTask.setCell(j, misc::MXA::createString(impath));
+          resultsForTask.setCell(j, std::move(result));
+        } catch (...) {
+          std::cout << "############### ERROR #############" << std::endl;
+        }
       }
 
-      // dataFile.setVar("results", resultsForTask, false);
-      // dataFile.setVar("impaths", impathsForTask, false);
+      dataFile.setVar("results", resultsForTask, false);
+      dataFile.setVar("impaths", impathsForTask, false);
     }
   }
 

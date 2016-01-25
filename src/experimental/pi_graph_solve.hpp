@@ -20,7 +20,8 @@ void ReconstructLayoutAnnotation3(PILayoutAnnotation &anno,
 double Solve(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
              misc::Matlab &matlab,
              int maxIter = std::numeric_limits<int>::max(),
-             double connectionWeightRatioOverCoplanarity = 1e7);
+             double connectionWeightRatioOverCoplanarity = 1e7,
+             bool useCoplanarity = true);
 
 int DisableUnsatisfiedConstraints(
     const PICGDeterminablePart &dp, PIConstraintGraph &cg,

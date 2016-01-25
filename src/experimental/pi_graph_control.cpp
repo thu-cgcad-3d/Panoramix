@@ -6,10 +6,9 @@
 namespace pano {
 namespace experimental {
 
-std::vector<int> CollectSegsIntersectingDirection(const Vec3 &direction,
-                                                  bool alsoConsiderBackward,
-                                                  const PIGraph<PanoramicCamera> &mg,
-                                                  double rangeAngle) {
+std::vector<int> CollectSegsIntersectingDirection(
+    const Vec3 &direction, bool alsoConsiderBackward,
+    const PIGraph<PanoramicCamera> &mg, double rangeAngle) {
   // find peaky regions
   std::vector<int> peakySegs;
   for (int i = 0; i < mg.nsegs; i++) {
@@ -99,7 +98,8 @@ bool MakeRegionPlaneUsable(int seg, bool usable, PIGraph<PanoramicCamera> &mg) {
 }
 
 // returns false if confliction occurs
-bool MakeRegionPlaneToward(int seg, int normalVPId, PIGraph<PanoramicCamera> &mg) {
+bool MakeRegionPlaneToward(int seg, int normalVPId,
+                           PIGraph<PanoramicCamera> &mg) {
   auto &p = mg.seg2control[seg];
   if (!p.used)
     return true;
@@ -123,7 +123,8 @@ bool MakeRegionPlaneToward(int seg, int normalVPId, PIGraph<PanoramicCamera> &mg
 }
 
 // returns false if confliction occurs
-bool MakeRegionPlaneAlsoAlong(int seg, int alongVPId, PIGraph<PanoramicCamera> &mg) {
+bool MakeRegionPlaneAlsoAlong(int seg, int alongVPId,
+                              PIGraph<PanoramicCamera> &mg) {
   auto &p = mg.seg2control[seg];
   if (!p.used)
     return true;
@@ -245,15 +246,19 @@ void DisableBottomSeg(PIGraph<PanoramicCamera> &mg) {
   }
 }
 
-void AttachGCConstraints(PIGraph<PanoramicCamera> &mg, const Image5d &gc, double clutterThres,
-                         double wallThres, bool onlyConsiderBottomHalf) {
+namespace {
+template <class CameraT>
+void AttachGCConstraintsTemplated(PIGraph<PanoramicCamera> &mg,
+                                  const View<CameraT, Image5d> &gc,
+                                  double clutterThres, double wallThres,
+                                  bool onlyConsiderBottomHalf) {
 
   auto up = normalize(mg.vps[mg.verticalVPId]);
   if (up.dot(-mg.view.camera.up()) < 0) {
     up = -up;
   }
 
-  auto gcMeanOnSegs = CollectFeatureMeanOnSegs(mg, mg.view.camera, gc);
+  auto gcMeanOnSegs = CollectFeatureMeanOnSegs(mg, gc.camera, gc.image);
   for (int seg = 0; seg < mg.nsegs; seg++) {
     auto &c = mg.seg2control[seg];
     if (!c.used) {
@@ -281,30 +286,37 @@ void AttachGCConstraints(PIGraph<PanoramicCamera> &mg, const Image5d &gc, double
 
     if (maxid == ToUnderlying(GeometricContextIndex::FloorOrGround) &&
         (!onlyConsiderBottomHalf || mg.seg2center[seg].dot(up) < 0)) { // lower
-      // assign horizontal constriant
-      // c.orientationClaz = mg.verticalVPId;
-      // c.orientationNotClaz = -1;
-      // c.used = true;
       MakeRegionPlaneToward(seg, mg.verticalVPId, mg);
       continue;
     }
     if (maxid == ToUnderlying(GeometricContextIndex::CeilingOrSky)) {
-      /* c.orientationClaz = mg.verticalVPId;
-       c.orientationNotClaz = -1;
-       c.used = true;*/
       MakeRegionPlaneToward(seg, mg.verticalVPId, mg);
       continue;
     }
     double wallScore = gcMean[ToUnderlying(GeometricContextIndex::Vertical)];
     if (wallScore > wallThres &&
         (!onlyConsiderBottomHalf || mg.seg2center[seg].dot(up) < 0)) {
-      /*c.orientationClaz = -1;
-      c.orientationNotClaz = mg.verticalVPId;
-      c.used = true;*/
       MakeRegionPlaneAlsoAlong(seg, mg.verticalVPId, mg);
       continue;
     }
   }
+}
+}
+
+void AttachGCConstraints(PIGraph<PanoramicCamera> &mg,
+                         const View<PanoramicCamera, Image5d> &gc,
+                         double clutterThres, double wallThres,
+                         bool onlyConsiderBottomHalf) {
+  AttachGCConstraintsTemplated(mg, gc, clutterThres, wallThres,
+                               onlyConsiderBottomHalf);
+}
+
+void AttachGCConstraints(PIGraph<PanoramicCamera> &mg,
+                         const View<PerspectiveCamera, Image5d> &gc,
+                         double clutterThres, double wallThres,
+                         bool onlyConsiderBottomHalf) {
+  AttachGCConstraintsTemplated(mg, gc, clutterThres, wallThres,
+                               onlyConsiderBottomHalf);
 }
 }
 }

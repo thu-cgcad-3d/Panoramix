@@ -138,6 +138,14 @@ PIGraph<PanoramicCamera> BuildPIGraph(
     double incidenceAngleAlongDirectionThreshold,
     double incidenceAngleVerticalDirectionThreshold);
 
+PIGraph<PerspectiveCamera> BuildPIGraph(
+    const PerspectiveView &view, const std::vector<Vec3> &vps, int verticalVPId,
+    const Imagei &segs, const std::vector<Classified<Line3>> &lines,
+    double bndPieceSplitAngleThres, double bndPieceClassifyAngleThres,
+    double bndPieceBoundToLineAngleThres, double intersectionAngleThreshold,
+    double incidenceAngleAlongDirectionThreshold,
+    double incidenceAngleVerticalDirectionThreshold);
+
 // PerfectSegMaskView
 View<PartialPanoramicCamera, Imageub>
 PerfectSegMaskView(const PIGraph<PanoramicCamera> &mg, int seg,

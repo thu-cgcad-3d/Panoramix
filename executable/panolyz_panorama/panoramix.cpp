@@ -22,6 +22,9 @@ std::string PanoramixOptions::algorithmOptionsTag() const {
   if (notUseOcclusions) {
     ss << "noocc";
   }
+  if (notUseCoplanarity) {
+    ss << "_nocop";
+  }
   return ss.str();
 }
 
@@ -42,6 +45,7 @@ void PanoramixOptions::print() const {
   std::cout << " restrictSegsSecondTime = " << restrictSegsSecondTime
             << std::endl;
   std::cout << " notUseOcclusions = " << notUseOcclusions << std::endl;
+  std::cout << " notUseCoplanarity = " << notUseCoplanarity << std::endl;
   std::cout << "------------------------------" << std::endl;
   std::cout << " refresh_preparation = " << refresh_preparation << std::endl;
   std::cout << " refresh_mg_init = " << refresh_mg_init << std::endl;
@@ -596,7 +600,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
     // for (int i = 0; i < (hasSecondTime ? 2 : 1); i++) {
     dp = LocateDeterminablePart(cg, DegreesToRadians(3), false);
     auto start = std::chrono::system_clock::now();
-    double energy = Solve(dp, cg, matlab, 5, 1e6);
+    double energy = Solve(dp, cg, matlab, 5, 1e6, !options.notUseCoplanarity);
     report.time_solve_lp = ElapsedInMS(start);
     if (IsInfOrNaN(energy)) {
       std::cout << "solve failed" << std::endl;
@@ -619,7 +623,8 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
   //    //for (int i = 0; i < (hasSecondTime ? 2 : 1); i++) {
   //        dp = LocateDeterminablePart(cg, DegreesToRadians(3), true);
   //        auto start = std::chrono::system_clock::now();
-  //        double energy = Solve(dp, cg, matlab, 5, 1e6);
+  //        double energy = Solve(dp, cg, matlab, 5, 1e6,
+  //        !options.notUseCoplanarity);
   //        report.time_solve_lp = ElapsedInMS(start);
   //        if (IsInfOrNaN(energy)) {
   //            std::cout << "solve failed" << std::endl;
@@ -648,7 +653,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
     dp = LocateDeterminablePart(cg, DegreesToRadians(3), true);
 
     auto start = std::chrono::system_clock::now();
-    double energy = Solve(dp, cg, matlab, 5, 1e6);
+    double energy = Solve(dp, cg, matlab, 5, 1e6, !options.notUseCoplanarity);
     report.time_solve_lp = ElapsedInMS(start);
 
     if (IsInfOrNaN(energy)) {

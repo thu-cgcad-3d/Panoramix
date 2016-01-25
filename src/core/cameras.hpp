@@ -6,11 +6,6 @@
 namespace pano {
 namespace core {
 
-// OrthogonalCamera
-class OrthogonalCamera {
-
-};
-
 // perspective camera
 class PerspectiveCamera {
 public:

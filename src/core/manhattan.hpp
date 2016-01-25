@@ -31,8 +31,35 @@ std::vector<Vec3> EstimateVanishingPointsAndClassifyLines(
     bool dontClassifyUmbiguiousLines = false);
 
 // [vert, horiz1, horiz2, other]
-void OrderVanishingPoints(std::vector<Vec3> &vps,
-                          const Vec3 &verticalSeed = Z());
+std::vector<int> OrderVanishingPoints(std::vector<Vec3> &vps,
+                                      const Vec3 &verticalSeed = Z());
+
+namespace {
+template <class T>
+inline int AssignNewClass(const std::vector<int> &new2old,
+                          std::vector<Classified<T>> &cs) {
+  for (auto &c : cs) {
+    for (int i = 0; i < new2old.size(); i++) {
+      if (new2old[i] == c.claz) {
+        c.claz = i;
+        break;
+      }
+    }
+  }
+  return 0;
+}
+}
+// [vert, horiz1, horiz2, other]
+template <class T, class... Ts>
+std::vector<int> OrderVanishingPoints(std::vector<Vec3> &vps,
+                                      const Vec3 &verticalSeed,
+                                      std::vector<Classified<T>> &first,
+                                      std::vector<Classified<Ts>> &... others) {
+  auto new2old = OrderVanishingPoints(vps, verticalSeed);
+  int dummy[] = {AssignNewClass(new2old, first),
+                 AssignNewClass(new2old, others)...};
+  return new2old;
+}
 
 // compute pp and focal from 3 orthogonal vps
 std::pair<Point2, double>

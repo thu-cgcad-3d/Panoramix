@@ -31,7 +31,8 @@ struct PanoramixOptions {
   bool looseSegsSecondTime;
   bool restrictSegsSecondTime;
   bool notUseOcclusions;
-  //bool notUseCoplanarity;
+
+  bool notUseCoplanarity;
 
   static const std::string parseOption(bool b);
   std::string algorithmOptionsTag() const;
@@ -52,7 +53,7 @@ struct PanoramixOptions {
   template <class Archiver> void serialize(Archiver &ar) {
     ar(useWallPrior, usePrincipleDirectionPrior, useGeometricContextPrior,
        useGTOcclusions, looseLinesSecondTime, looseSegsSecondTime,
-       restrictSegsSecondTime, notUseOcclusions);
+       restrictSegsSecondTime, notUseOcclusions, notUseCoplanarity);
     ar(refresh_preparation, refresh_mg_init, refresh_line2leftRightSegs,
        refresh_mg_oriented, refresh_lsw, refresh_mg_occdetected,
        refresh_mg_reconstructed);

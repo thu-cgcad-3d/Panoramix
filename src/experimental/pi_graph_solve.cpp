@@ -404,7 +404,7 @@ void ReconstructLayoutAnnotation3(PILayoutAnnotation &anno,
 
 double Solve(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
              misc::Matlab &matlab, int maxIter,
-             double connectionWeightRatioOverCoplanarity) {
+             double connectionWeightRatioOverCoplanarity, bool useCoplanarity) {
 
   auto &determinableEnts = dp.determinableEnts;
 
@@ -563,7 +563,9 @@ double Solve(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
       matlab << "R = (C1 - C2) .* repmat(WC, [1, n]);";
 
       const std::string objectiveStr =
-          "sum_square(K * X) * 1e6 + sum_square(R * X) * (1e6 / s)";
+          useCoplanarity
+              ? "sum_square(K * X) * 1e6 + sum_square(R * X) * (1e6 / s)"
+              : "sum_square(K * X) * 1e6";
 
       matlab << "cvx_begin"
              << "variable X(n);" << ("minimize " + objectiveStr + ";")
