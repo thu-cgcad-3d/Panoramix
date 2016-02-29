@@ -1301,7 +1301,7 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 }
 
 // ConstructInternalLoopFrom (liqi)
-// IntersectFunT: (HalfHandle)
+// IntersectFunT: (HalfHandle, HalfHandle) -> bool
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class HalfEdgeIntersectFunT>
 auto ConstructInternalLoopFrom(
@@ -1510,6 +1510,7 @@ AssertEdgesAreStiched(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 }
 
 // DecomposeAll
+// IntersectFunT: (HalfHandle, HalfHandle) -> bool
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class HalfEdgeIntersectFunT>
 void DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
@@ -1813,5 +1814,34 @@ void MakeStarPrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
   mesh.addFace(vhs1.begin(), vhs1.end(), true);
   mesh.addFace(vhs2.begin(), vhs2.end(), true);
 }
+
+// MakeMeshProxy
+template <class VertDataT, class HalfDataT, class FaceDataT>
+Mesh<VertHandle, HalfHandle, FaceHandle>
+MakeMeshProxy(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
+  Mesh<VertHandle, HalfHandle, FaceHandle> proxy;
+  proxy.internalVertices().reserve(mesh.internalVertices().size());
+  proxy.internalHalfEdges().reserve(mesh.internalHalfEdges().size());
+  proxy.internalFaces().reserve(mesh.internalFaces().size());
+  for (int i = 0; i < mesh.internalVertices().size(); i++) {
+    auto &from = mesh.internalVertices()[i];
+    proxy.internalVertices().emplace_back(from.topo, from.topo.hd, from.exists);
+  }
+  for (int i = 0; i < mesh.internalHalfEdges().size(); i++) {
+    auto &from = mesh.internalHalfEdges()[i];
+    proxy.internalHalfEdges().emplace_back(from.topo, from.topo.hd,
+                                           from.exists);
+  }
+  for (int i = 0; i < mesh.internalFaces().size(); i++) {
+    auto &from = mesh.internalFaces()[i];
+    proxy.internalFaces().emplace_back(from.topo, from.topo.hd, from.exists);
+  }
+  return proxy;
+}
+
+// LoadFromObjFile
+Mesh<Point3> LoadFromObjFile(const std::string & fname);
+
+
 }
 }

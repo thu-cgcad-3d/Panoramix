@@ -347,7 +347,7 @@ void TestOnMesh(const Mesh3 &meshGT, int maxIters,
   }
 }
 
-int main(int argc, char **argv) {
+int DISABLED_main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
 
@@ -374,7 +374,7 @@ int DISABLED_main(int argc, char **argv) {
   misc::Matlab matlab;
 
   std::string name = "tritower";
-  std::string folder = "F:\\DataSets\\linedrawing_"
+  std::string folder = "I:\\F.Projects\\Projects\\DataSets\\linedrawing_"
                        "dataset\\DatabaseFile\\" +
                        name + "\\";
   auto drawing3d =
