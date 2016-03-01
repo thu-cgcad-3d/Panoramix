@@ -328,14 +328,15 @@ template <class TopoT, class DataT> struct Triplet {
   bool exists;
   DataT data;
   inline Triplet() {}
-  inline Triplet(const TopoT &t, const DataT &d, bool e = true)
-      : topo(t), exists(e), data(d) {}
-  inline Triplet(const TopoT &t, DataT &&d, bool e = true)
-      : topo(t), exists(e), data(std::forward<DataT>(d)) {}
+  template <class TopoTT, class DataTT>
+  inline Triplet(TopoTT &&t, DataTT &&d, bool e = true)
+      : topo(std::forward<TopoTT>(t)), exists(e),
+        data(std::forward<DataTT>(d)) {}
   template <class Archive> inline void serialize(Archive &ar) {
     ar(topo, exists, data);
   }
 };
+
 template <class TopoT, class DataT> struct TripletExistsPred {
   inline bool operator()(const Triplet<TopoT, DataT> &t) const {
     return t.exists;

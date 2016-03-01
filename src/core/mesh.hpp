@@ -105,15 +105,16 @@ public:
   inline const HalfDataT &data(HalfHandle h) const { return _halfs[h.id].data; }
   inline const FaceDataT &data(FaceHandle f) const { return _faces[f.id].data; }
 
-  VertHandle addVertex(const VertDataT &vd = VertDataT()) {
+  template <class VDT = VertDataT> VertHandle addVertex(VDT &&vd = VDT()) {
     VertTopo topo;
     topo.hd.id = _verts.size();
-    _verts.emplace_back(std::move(topo), vd, true);
+    _verts.emplace_back(std::move(topo), std::forward<VDT>(vd), true);
     return _verts.back().topo.hd;
   }
-  HalfHandle addEdge(VertHandle from, VertHandle to,
-                     const HalfDataT &hd = HalfDataT(),
-                     const HalfDataT &hdrev = HalfDataT(),
+
+  template <class HDT = HalfDataT, class HDRevT = HDT>
+  HalfHandle addEdge(VertHandle from, VertHandle to, HDT &&hd = HDT(),
+                     HDRevT &&hdrev = HDRevT(),
                      bool mergeDuplicateEdge = true) {
     if (from == to) {
       return HalfHandle();
@@ -133,7 +134,7 @@ public:
       ht.topo.from() = from;
       ht.topo.to() = to;
       ht.exists = true;
-      ht.data = hd;
+      ht.data = std::forward<HDT>(hd);
       _halfs.push_back(ht);
       _verts[from.id].topo.halfedges.push_back(hh1);
     }
@@ -144,7 +145,7 @@ public:
       ht.topo.from() = to;
       ht.topo.to() = from;
       ht.exists = true;
-      ht.data = hdrev;
+      ht.data = std::forward<HDRevT>(hdrev);
       _halfs.push_back(ht);
       _verts[to.id].topo.halfedges.push_back(hh2);
     }
@@ -153,13 +154,14 @@ public:
     _halfs[hh2.id].topo.opposite = hh1;
     return hh1;
   }
-  FaceHandle addFace(const HandleArray<HalfTopo> &halfedges,
-                     const FaceDataT &fd = FaceDataT()) {
+
+  template <class FDT = FaceDataT>
+  FaceHandle addFace(const HandleArray<HalfTopo> &halfedges, FDT &&fd = FDT()) {
     Triplet<FaceTopo, FaceDataT> ft;
     ft.topo.hd.id = _faces.size();
     ft.topo.halfedges = halfedges;
     ft.exists = true;
-    ft.data = fd;
+    ft.data = std::forward<FDT>(fd);
     //_faces.push_back({ { { _faces.size() }, halfedges }, true, fd });
     _faces.push_back(ft);
     for (HalfHandle hh : halfedges) {
@@ -167,8 +169,10 @@ public:
     }
     return _faces.back().topo.hd;
   }
+
+  template <class FDT = FaceDataT>
   FaceHandle addFace(const HandleArray<VertTopo> &vertices,
-                     bool autoflip = true, const FaceDataT &fd = FaceDataT()) {
+                     bool autoflip = true, FDT &&fd = FDT()) {
     HandleArray<HalfTopo> halfs;
     assert(vertices.size() >= 3);
     auto verts = vertices;
@@ -188,14 +192,14 @@ public:
       size_t inext = (i + 1) % verts.size();
       halfs.push_back(addEdge(verts[i], verts[inext]));
     }
-    return addFace(halfs, fd);
+    return addFace(halfs, std::forward<FDT>(fd));
   }
-  template <class VertHandleIteratorT,
+  template <class VertHandleIteratorT, class FDT = FaceDataT,
             class = std::enable_if_t<std::is_same<
                 std::iterator_traits<VertHandleIteratorT>::value_type,
                 VertHandle>::value>>
   FaceHandle addFace(VertHandleIteratorT vhBegin, VertHandleIteratorT vhEnd,
-                     bool autoflip = true, const FaceDataT &fd = FaceDataT()) {
+                     bool autoflip = true, FDT &&fd = FDT()) {
     HandleArray<HalfTopo> halfs;
     HandleArray<VertTopo> verts(vhBegin, vhEnd);
     assert(verts.size() >= 3);
@@ -214,25 +218,30 @@ public:
       size_t inext = (i + 1) % verts.size();
       halfs.push_back(addEdge(verts[i], verts[inext]));
     }
-    return addFace(halfs, fd);
+    return addFace(halfs, std::forward<FDT>(fd));
   }
+
+  template <class FDT = FaceDataT>
   FaceHandle addFace(VertHandle v1, VertHandle v2, VertHandle v3,
-                     bool autoflip = true, const FaceDataT &fd = FaceDataT()) {
+                     bool autoflip = true, FDT &&fd = FDT()) {
     HalfHandle hh = findEdge(v3, v1);
     if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip) {
       std::swap(v1, v3);
     }
-    return addFace({addEdge(v1, v2), addEdge(v2, v3), addEdge(v3, v1)}, fd);
+    return addFace({addEdge(v1, v2), addEdge(v2, v3), addEdge(v3, v1)},
+                   std::forward<FDT>(fd));
   }
+
+  template <class FDT = FaceDataT>
   FaceHandle addFace(VertHandle v1, VertHandle v2, VertHandle v3, VertHandle v4,
-                     bool autoflip = true, const FaceDataT &fd = FaceDataT()) {
+                     bool autoflip = true, FDT &&fd = FDT()) {
     HalfHandle hh = findEdge(v4, v1);
     if (hh.valid() && _halfs[hh.id].topo.face.valid() && autoflip) {
       std::swap(v1, v4);
     }
     return addFace(
         {addEdge(v1, v2), addEdge(v2, v3), addEdge(v3, v4), addEdge(v4, v1)},
-        fd);
+        std::forward<FDT>(fd));
   }
 
   HalfHandle findEdge(VertHandle from, VertHandle to) const {
@@ -1428,7 +1437,8 @@ DecomposeOnInternalLoop(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
     VertHandle vh = mesh.topo(hh).to();
     thisVhs.push_back(vh);
     assert(mesh.degree(vh) >= 4);
-    VertHandle vh2 = mesh.addVertex(mesh.data(vh));
+    auto d = mesh.data(vh);
+    VertHandle vh2 = mesh.addVertex(d);
     anotherVhs.push_back(vh2);
 
     // find all related half edges that DO NOT lie on the loop side
@@ -1840,8 +1850,6 @@ MakeMeshProxy(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 }
 
 // LoadFromObjFile
-Mesh<Point3> LoadFromObjFile(const std::string & fname);
-
-
+Mesh<Point3> LoadFromObjFile(const std::string &fname);
 }
 }

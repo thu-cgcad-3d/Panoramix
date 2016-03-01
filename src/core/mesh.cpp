@@ -35,7 +35,8 @@ Mesh<Point3> LoadFromObjFile(const std::string &fname) {
           vhs.push_back(VertHandle(vid - 1));
         }
         if (!vhs.empty()) {
-          mesh.addFace(vhs, false);
+          auto fh = mesh.addFace(vhs, false);
+          assert(fh.valid());
         }
       }
     }

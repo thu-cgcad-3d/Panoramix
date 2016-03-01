@@ -152,6 +152,9 @@ struct SubMesh {
   std::unordered_set<HalfHandle> hhs;
   std::unordered_set<FaceHandle> fhs;
   int drfub;
+  bool contains(VertHandle h) const {return Contains(vhs, h); }
+  bool contains(HalfHandle h) const {return Contains(hhs, h); }
+  bool contains(FaceHandle h) const {return Contains(fhs, h); }
   template <class ArchiverT> void serialize(ArchiverT &ar) {
     ar(vhs, hhs, fhs, drfub);
   }
