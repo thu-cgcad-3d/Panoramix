@@ -143,6 +143,30 @@ MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
   return itersOut;
 }
 
+//// DBSCAN
+//template <class IteratorT, class DistanceT,
+//          class DistanceFunctorT = DefaultDistanceFunctor,
+//          class BoundingBoxFunctorT = DefaultBoundingBoxFunctor>
+//void DBSCAN(IteratorT begin, IteratorT end, DistanceT thres,
+//            DistanceFunctorT &&distFun = DistanceFunctorT(),
+//            BoundingBoxFunctorT &&getBoundingBox = BoundingBoxFunctorT()) {
+//  if (begin == end) {
+//    return;
+//  }
+//
+//  using BoxType = decltype(getBoundingBox(*begin));
+//  using T = typename BoxType::Type;
+//  static const int N = BoxType::Dimension;
+//
+//  third_party::RTree<IteratorT, T, N> rtree;
+//   for (auto i = begin; i != end; ++i) {
+//    Box<T, N> box = getBoundingBox(*i);
+//    for (int k = 0; k < N; k++) { // extend the box
+//      box.minCorner[k] -= thres * 2;
+//      box.maxCorner[k] += thres * 2;
+//    }
+//}
+
 // Minimum Spanning Tree
 // EdgeVertsGetterT(Edge e)->std::pair<Vert,Vert>
 // EdgeCompareOnWeightT(Edge e1, Edge e2)->bool

@@ -382,7 +382,7 @@ inline double UniformSphericalScreenLengthToAngle(double len, double focal) {
 //    double a = sqrt(yy * yy + zz * zz);
 //    yy /= a;
 //    zz /= a;
-//    double theta = AngleBetweenDirections(p3 - _eye, _center - _eye);
+//    double theta = AngleBetweenDirected(p3 - _eye, _center - _eye);
 //    double len = UniformSphericalAngleToScreenLength(theta, _focal);
 //    return Point2(_screenRadius + yy * len, _screenRadius + zz * len);
 //}
@@ -422,7 +422,7 @@ std::vector<PerspectiveCamera> CreateHorizontalPerspectiveCameras(
     int height, double focal, double angleThreshold) {
   std::vector<PerspectiveCamera> cams;
   for (int i = 0; i < dirs.size(); i++) {
-    if (AngleBetweenUndirectedVectors(dirs[i], panoCam.up()) < angleThreshold) {
+    if (AngleBetweenUndirected(dirs[i], panoCam.up()) < angleThreshold) {
       continue;
     }
     cams.emplace_back(width, height, Point2(width, height) / 2.0, focal,

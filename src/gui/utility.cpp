@@ -16,11 +16,9 @@ namespace core {
 Box3 BoundingBox(const gui::SpatialProjectedPolygon &spp) {
   std::vector<Vec3> cs(spp.corners.size());
   for (int i = 0; i < spp.corners.size(); i++) {
-    cs[i] =
-        IntersectionOfLineAndPlane(
-            Ray3(spp.projectionCenter, spp.corners[i] - spp.projectionCenter),
-            spp.plane)
-            .position;
+    cs[i] = Intersection(
+        Ray3(spp.projectionCenter, spp.corners[i] - spp.projectionCenter),
+        spp.plane);
   }
   return BoundingBoxOfContainer(cs);
 }
@@ -777,7 +775,7 @@ void DrawChainsInPanorama(const PanoramicView &view,
           // any existing corner?
           _selectedCornerId = -1;
           for (int i = 0; i < c.size(); i++) {
-            double a = AngleBetweenDirections(c[i], d);
+            double a = AngleBetweenDirected(c[i], d);
             if (a < angle) {
               _selectedCornerId = i;
               angle = a;
@@ -790,7 +788,7 @@ void DrawChainsInPanorama(const PanoramicView &view,
             int nid = -1;
             for (int i = 0; i < c.size(); i++) {
               auto nn = DistanceFromPointToLine(d, c.edge(i)).second.position;
-              double a = AngleBetweenDirections(d, nn);
+              double a = AngleBetweenDirected(d, nn);
               if (a < angle) {
                 angle = a;
                 nid = i;

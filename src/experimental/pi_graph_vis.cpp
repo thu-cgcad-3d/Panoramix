@@ -8,7 +8,7 @@ namespace experimental {
 
 inline double DepthAt(const Vec3 &direction, const Plane3 &plane,
                       const Point3 &eye = Point3(0, 0, 0)) {
-  return norm(IntersectionOfLineAndPlane(Ray3(eye, direction), plane).position);
+  return norm(Intersection(Ray3(eye, direction), plane));
 }
 inline double DepthAt(const Vec3 &direction, const Line3 &line,
                       const Point3 &eye = Point3(0, 0, 0)) {
@@ -54,7 +54,7 @@ void VisualizeReconstruction(
           contours.front().begin(), contours.front().end(),
           std::back_inserter(spp.corners),
           [](const core::Vec3 &a, const core::Vec3 &b) -> bool {
-            return core::AngleBetweenDirections(a, b) > 0.0;
+            return core::AngleBetweenDirected(a, b) > 0.0;
           });
       if (spp.corners.size() < 3)
         continue;
@@ -72,11 +72,8 @@ void VisualizeReconstruction(
       auto &plane = v.supportingPlane.reconstructed;
       auto &projectedLine = mg.lines[line].component;
       Line3 reconstructedLine(
-          IntersectionOfLineAndPlane(Ray3(Origin(), projectedLine.first), plane)
-              .position,
-          IntersectionOfLineAndPlane(Ray3(Origin(), projectedLine.second),
-                                     plane)
-              .position);
+          Intersection(Ray3(Origin(), projectedLine.first), plane),
+          Intersection(Ray3(Origin(), projectedLine.second), plane));
       if (HasValue(reconstructedLine, IsInfOrNaN<double>)) {
         WARNNING("inf line");
         continue;
@@ -245,11 +242,8 @@ void VisualizeReconstructionCompact(const Image &im,
       auto &plane = v.supportingPlane.reconstructed;
       auto &projectedLine = mg.lines[line].component;
       Line3 reconstructedLine(
-          IntersectionOfLineAndPlane(Ray3(Origin(), projectedLine.first), plane)
-              .position,
-          IntersectionOfLineAndPlane(Ray3(Origin(), projectedLine.second),
-                                     plane)
-              .position);
+          Intersection(Ray3(Origin(), projectedLine.first), plane),
+          Intersection(Ray3(Origin(), projectedLine.second), plane));
       if (HasValue(reconstructedLine, IsInfOrNaN<double>)) {
         WARNNING("inf line");
         continue;
@@ -296,9 +290,8 @@ void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,
       for (int face : corner2faces[corner]) {
         auto &plane = anno.face2plane[face];
         if (plane.normal != Origin()) {
-          double depth = norm(IntersectionOfLineAndPlane(
-                                  Ray3(Origin(), anno.corners[corner]), plane)
-                                  .position);
+          double depth =
+              norm(Intersection(Ray3(Origin(), anno.corners[corner]), plane));
           faceDepths[face] = depth;
         }
       }
@@ -349,10 +342,8 @@ void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,
       auto &poly = face2polygon[face];
       poly.normal = anno.face2plane[face].normal;
       for (int corner : anno.face2corners[face]) {
-        poly.corners.push_back(
-            IntersectionOfLineAndPlane(Ray3(Origin(), anno.corners[corner]),
-                                       anno.face2plane[face])
-                .position);
+        poly.corners.push_back(Intersection(
+            Ray3(Origin(), anno.corners[corner]), anno.face2plane[face]));
       }
     }
   }

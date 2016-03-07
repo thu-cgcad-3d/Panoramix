@@ -24,16 +24,6 @@ template <class Tag> struct Handle {
   template <class Archive> inline void serialize(Archive &ar) { ar(id); }
 };
 
-template <class ValueT, int N = Dynamic> struct SizedContainer {
-  using type = std::array<ValueT, N>;
-};
-
-template <class ValueT> struct SizedContainer<ValueT, Dynamic> {
-  using type = std::vector<ValueT>;
-};
-
-template <class ValueT, int N = Dynamic>
-using SizedContainerType = typename SizedContainer<ValueT, N>::type;
 
 template <class Tag> using HandleArray = std::vector<Handle<Tag>>;
 template <class Tag> using HandlePtrArray = std::vector<Handle<Tag> *>;

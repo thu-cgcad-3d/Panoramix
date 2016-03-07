@@ -261,6 +261,10 @@ public:
     return _faces[f.id].topo.halfedges.size();
   }
 
+  HalfHandle firstHalf(HalfHandle hh) const {
+    return topo(hh).opposite < hh ? topo(hh).opposite : hh;
+  }
+
   inline bool removed(FaceHandle f) const { return !_faces[f.id].exists; }
   inline bool removed(HalfHandle e) const { return !_halfs[e.id].exists; }
   inline bool removed(VertHandle v) const { return !_verts[v.id].exists; }
@@ -1521,11 +1525,24 @@ AssertEdgesAreStiched(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 
 // DecomposeAll
 // IntersectFunT: (HalfHandle, HalfHandle) -> bool
+// CompareLoopT: (Container of HalfHandle, Container of HalfHandle) -> bool, if
+// first loop is better, return true, otherwise false
+namespace {
+struct CompareLoopDefault {
+  template <class LoopT1, class LoopT2>
+  inline bool operator()(const LoopT1 &l1, const LoopT2 &l2) const {
+    return l1.size() < l2.size();
+  }
+};
+}
 template <class VertDataT, class HalfDataT, class FaceDataT,
-          class HalfEdgeIntersectFunT>
-void DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-                  HalfEdgeIntersectFunT intersectFun) {
+          class HalfEdgeIntersectFunT, class CompareLoopT = CompareLoopDefault>
+std::vector<std::pair<FaceHandle, FaceHandle>>
+DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+             HalfEdgeIntersectFunT intersectFun,
+             CompareLoopT compareLoop = CompareLoopT()) {
   AssertEdgesAreStiched(mesh);
+  std::vector<std::pair<FaceHandle, FaceHandle>> cutFaces;
   while (true) {
     std::list<HalfHandle> minLoop;
     for (int i = 0; i < mesh.internalHalfEdges().size(); i++) {
@@ -1535,17 +1552,22 @@ void DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
       }
       auto loop = ConstructInternalLoopFrom(mesh, hh, intersectFun);
       if (!loop.empty()) {
-        if (minLoop.empty() || loop.size() < minLoop.size()) {
+        if (minLoop.empty() || compareLoop(loop, minLoop)) {
           minLoop = std::move(loop);
         }
       }
     }
     if (!minLoop.empty()) {
-      DecomposeOnInternalLoop(mesh, std::begin(minLoop), std::end(minLoop));
+      auto newFaces =
+          DecomposeOnInternalLoop(mesh, std::begin(minLoop), std::end(minLoop));
+      if (newFaces.first.valid() && newFaces.second.valid()) {
+        cutFaces.push_back(newFaces);
+      }
     } else {
       break;
     }
   }
+  return cutFaces;
 }
 
 // FindUpperBoundOfDRF

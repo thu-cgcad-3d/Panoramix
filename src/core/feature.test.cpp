@@ -308,14 +308,14 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
         continue;
       if (abs(line3norms[j].dot(vp1)) < 0.01)
         continue;
-      double dist = DistanceBetweenTwoLines(line2s[i], line2s[j]).first;
+      double dist = Distance(line2s[i], line2s[j]);
       auto &n1 = line3norms[i];
       auto &n2 = line3norms[j];
       auto inter = n1.cross(n2);
       auto interp = cam.toScreen(inter);
       double dd = 40;
-      if (dist < dd && DistanceFromPointToLine(interp, line2s[i]).first < dd &&
-          DistanceFromPointToLine(interp, line2s[j]).first < dd) {
+      if (dist < dd && Distance(interp, line2s[i]) < dd &&
+          Distance(interp, line2s[j]) < dd) {
         pairs.emplace_back(i, j);
       }
     }

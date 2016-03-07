@@ -18,8 +18,8 @@ inline double AngleDistanceBetweenPointAndRay(const Vec3 &p, const Ray3 &ray) {
   auto p1 = ray.anchor;
   auto p2 = ray.direction;
   auto normal = p1.cross(p2);
-  double angle = M_PI_2 - AngleBetweenUndirectedVectors(p, normal);
-  double angleToAnchor = AngleBetweenDirections(p, ray.anchor);
+  double angle = M_PI_2 - AngleBetweenUndirected(p, normal);
+  double angleToAnchor = AngleBetweenDirected(p, ray.anchor);
   return std::min(angle, angleToAnchor);
 }
 template <class T, int N>
@@ -201,7 +201,7 @@ BuildPIConstraintGraph(const PIGraph<PanoramicCamera> &mg, double minAngleThresF
     Entity e;
     e.type = Entity::IsLine;
     e.id = i;
-    e.size = AngleBetweenDirections(mg.lines[i].component.first,
+    e.size = AngleBetweenDirected(mg.lines[i].component.first,
                                     mg.lines[i].component.second);
 
     e.supportingPlane =
@@ -409,7 +409,7 @@ PIConstraintGraph BuildPIConstraintGraph(
     Entity e;
     e.type = Entity::IsLine;
     e.id = i;
-    e.size = AngleBetweenDirections(mg.lines[i].component.first,
+    e.size = AngleBetweenDirected(mg.lines[i].component.first,
                                     mg.lines[i].component.second);
 
     e.supportingPlane.dof = mg.lines[i].claz != -1 ? 1 : 2;
@@ -501,7 +501,7 @@ PIConstraintGraph BuildPIConstraintGraph(
     static const double cutLinePieceAngle = DegreesToRadians(3);
     for (int line = 0; line < mg.nlines(); line++) {
       auto &l = mg.lines[line].component;
-      double spanAngle = AngleBetweenDirections(l.first, l.second);
+      double spanAngle = AngleBetweenDirected(l.first, l.second);
       Vec3 lastDir = l.first;
       for (double a = cutLinePieceAngle; a <= spanAngle;
            a += cutLinePieceAngle) {
@@ -518,7 +518,7 @@ PIConstraintGraph BuildPIConstraintGraph(
         const std::vector<int> &withdrawedLines) -> double {
       double wr = 1.0;
       double spanAngle =
-          AngleBetweenDirections(connection.first, connection.second);
+          AngleBetweenDirected(connection.first, connection.second);
       for (double a = 0.0; a <= spanAngle; a += cutLinePieceAngle) {
         Vec3 dir = RotateDirection(connection.first, connection.second, a);
         linePiecesTree.search(
@@ -537,10 +537,8 @@ PIConstraintGraph BuildPIConstraintGraph(
                   1e-5) { // not crossed
                 return true;
               }
-              auto interp =
-                  normalize(IntersectionOfLineAndPlane(
-                                connection.ray(), Plane3(Origin(), vertDir))
-                                .position);
+              auto interp = normalize(
+                  Intersection(connection.ray(), Plane3(Origin(), vertDir)));
               if (cutLine.first.cross(interp).dot(
                       cutLine.second.cross(interp)) > 1e-5) { // not crossed
                 return true;
@@ -760,7 +758,7 @@ bool supportersAreValid(const std::vector<Vec3> &supporters,
                         double angleThres) {
   for (int i = 0; i < supporters.size(); i++) {
     for (int j = i + 1; j < supporters.size(); j++) {
-      if (AngleBetweenDirections(supporters[i], supporters[j]) <= angleThres) {
+      if (AngleBetweenDirected(supporters[i], supporters[j]) <= angleThres) {
         return false;
       }
     }
@@ -780,7 +778,7 @@ struct Dof3Stability : Stability {
     if (supporters.empty()) {
       supporters.push_back(anchor);
     } else if (supporters.size() == 1) {
-      if (AngleBetweenDirections(supporters[0], anchor) > angleThres) {
+      if (AngleBetweenDirected(supporters[0], anchor) > angleThres) {
         supporters.push_back(anchor);
       }
     } else if (supporters.size() == 2) {
@@ -1026,7 +1024,7 @@ PIConstraintGraph BuildPIConstraintGraph(const PILayoutAnnotation &anno,
     connect.ent1 = seg2ent[segPair.first];
     connect.ent2 = seg2ent[segPair.second];
     double len =
-        AngleBetweenDirections(anno.corners[anno.border2corners[i].first],
+        AngleBetweenDirected(anno.corners[anno.border2corners[i].first],
                                anno.corners[anno.border2corners[i].second]);
     connect.weight = len;
     if (len >= minAngleThresForAWideEdge) {

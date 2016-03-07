@@ -19,7 +19,6 @@ int SwappedComponent(const Vec3 &orientation) {
   }
   return 2;
 }
-inline double NonZeroize(double d) { return d == 0.0 ? 1e-6 : d; }
 }
 
 std::vector<double> InverseDepthCoefficientsOfSegAtDirection(
@@ -32,8 +31,7 @@ std::vector<double> InverseDepthCoefficientsOfSegAtDirection(
     // so that 1.0/depth = 1.0/centerDepth * 1.0/depthRatio -> depth =
     // centerDepth * depthRatio
     double depthRatio =
-        norm(IntersectionOfLineAndPlane(Ray3(Point3(0, 0, 0), direction), plane)
-                 .position);
+        norm(Intersection(Ray3(Point3(0, 0, 0), direction), plane));
     return std::vector<double>{1.0 / depthRatio};
   } else if (control.dof() == 2) {
     // depth = 1.0 / (ax + by + cz) where (x, y, z) = direction, (a, b, c) =
@@ -76,8 +74,8 @@ InverseDepthCoefficientsOfLineAtDirection(const std::vector<Vec3> &vps,
     return std::vector<double>{1.0 / depthRatio};
   } else {
     double theta =
-        AngleBetweenDirections(normalize(l.first), normalize(l.second));
-    double phi = AngleBetweenDirections(normalize(l.first), direction);
+        AngleBetweenDirected(normalize(l.first), normalize(l.second));
+    double phi = AngleBetweenDirected(normalize(l.first), direction);
     /*           | sin(theta) | | p | | q |
     len:---------------------------------   => 1/len: [(1/q)sin(phi) -
     (1/p)sin(phi-theta)] / sin(theta)
@@ -638,10 +636,8 @@ int DisableUnsatisfiedConstraints(
     auto &plane1 = cg.entities[c.ent1].supportingPlane.reconstructed;
     auto &plane2 = cg.entities[c.ent2].supportingPlane.reconstructed;
     for (auto &anchor : c.anchors) {
-      double d1 = norm(
-          IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position);
-      double d2 = norm(
-          IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position);
+      double d1 = norm(Intersection(Ray3(Origin(), anchor), plane1));
+      double d2 = norm(Intersection(Ray3(Origin(), anchor), plane2));
       avgDist += abs(d1 - d2);
       maxDist = std::max(maxDist, abs(d1 - d2));
     }
@@ -693,10 +689,8 @@ void DisorientDanglingLines(const PICGDeterminablePart &dp,
         int ent2 = cg.constraints[cons].ent2;
         auto &plane1 = cg.entities[ent1].supportingPlane.reconstructed;
         auto &plane2 = cg.entities[ent2].supportingPlane.reconstructed;
-        auto p1 =
-            IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position;
-        auto p2 =
-            IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position;
+        auto p1 = Intersection(Ray3(Origin(), anchor), plane1);
+        auto p2 = Intersection(Ray3(Origin(), anchor), plane2);
         double dist = Distance(p1, p2);
         distSum += dist;
         distCount++;
@@ -750,10 +744,8 @@ void DisorientDanglingLines2(const PICGDeterminablePart &dp,
         }
         auto &plane1 = cg.entities[ent1].supportingPlane.reconstructed;
         auto &plane2 = cg.entities[ent2].supportingPlane.reconstructed;
-        auto p1 =
-            IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position;
-        auto p2 =
-            IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position;
+        auto p1 = Intersection(Ray3(Origin(), anchor), plane1);
+        auto p2 = Intersection(Ray3(Origin(), anchor), plane2);
         double dist = Distance(p1, p2);
         distSum += dist;
         distCount++;
@@ -761,7 +753,7 @@ void DisorientDanglingLines2(const PICGDeterminablePart &dp,
     }
     line2meanSegDistRatio[line] =
         distSum / std::max(distCount, 1) /
-        AngleBetweenDirections(mg.lines[line].component.first,
+        AngleBetweenDirected(mg.lines[line].component.first,
                                mg.lines[line].component.second);
   }
 
@@ -802,8 +794,7 @@ void DisorientDanglingLines3(const PICGDeterminablePart &dp,
       double distToThis = std::numeric_limits<double>::max();
 
       auto &linePlane = cg.entities[ent].supportingPlane.reconstructed;
-      auto pOnLine =
-          IntersectionOfLineAndPlane(Ray3(Origin(), dir), linePlane).position;
+      auto pOnLine = Intersection(Ray3(Origin(), dir), linePlane);
       for (int cons : cg.ent2cons[ent]) {
         int segEnt = cg.constraints[cons].ent1;
         if (segEnt == ent) {
@@ -814,9 +805,7 @@ void DisorientDanglingLines3(const PICGDeterminablePart &dp,
         }
         for (auto &anchor : cg.constraints[cons].anchors) {
           auto &segPlane = cg.entities[segEnt].supportingPlane.reconstructed;
-          auto pOnSegPlane =
-              IntersectionOfLineAndPlane(Ray3(Origin(), anchor), segPlane)
-                  .position;
+          auto pOnSegPlane = Intersection(Ray3(Origin(), anchor), segPlane);
           double distance = Distance(pOnLine, pOnSegPlane);
           if (distance < distToThis) {
             distToThis = distance;
@@ -880,10 +869,8 @@ void DisorientDanglingSegs(const PICGDeterminablePart &dp,
         int ent2 = cg.constraints[cons].ent2;
         auto &plane1 = cg.entities[ent1].supportingPlane.reconstructed;
         auto &plane2 = cg.entities[ent2].supportingPlane.reconstructed;
-        auto p1 =
-            IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position;
-        auto p2 =
-            IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position;
+        auto p1 = Intersection(Ray3(Origin(), anchor), plane1);
+        auto p2 = Intersection(Ray3(Origin(), anchor), plane2);
         double dist = Distance(p1, p2);
         distSum += dist;
         distCount++;
@@ -934,10 +921,8 @@ void DisorientDanglingSegs2(const PICGDeterminablePart &dp,
       for (auto &anchor : cg.constraints[cons].anchors) {
         auto &plane1 = e1.supportingPlane.reconstructed;
         auto &plane2 = e2.supportingPlane.reconstructed;
-        auto p1 =
-            IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position;
-        auto p2 =
-            IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position;
+        auto p1 = Intersection(Ray3(Origin(), anchor), plane1);
+        auto p2 = Intersection(Ray3(Origin(), anchor), plane2);
         double dist = Distance(p1, p2);
         distSum += dist;
         distCount++;
@@ -986,10 +971,8 @@ void DisorientDanglingSegs3(const PICGDeterminablePart &dp,
         int ent2 = cg.constraints[cons].ent2;
         auto &plane1 = cg.entities[ent1].supportingPlane.reconstructed;
         auto &plane2 = cg.entities[ent2].supportingPlane.reconstructed;
-        auto p1 =
-            IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane1).position;
-        auto p2 =
-            IntersectionOfLineAndPlane(Ray3(Origin(), anchor), plane2).position;
+        auto p1 = Intersection(Ray3(Origin(), anchor), plane1);
+        auto p2 = Intersection(Ray3(Origin(), anchor), plane2);
         double dist = Distance(p1, p2);
         if (dist > ndist) {
           ndist = dist;
@@ -1060,8 +1043,8 @@ void OverorientSkewSegs(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
     auto &hint = seg2oriHint[seg];
     for (int k = 0; k < mg.vps.size(); k++) {
       auto &vp = mg.vps[k];
-      double posAngle = AngleBetweenUndirectedVectors(center, vp);
-      double normalAngle = AngleBetweenUndirectedVectors(plane.normal, vp);
+      double posAngle = AngleBetweenUndirected(center, vp);
+      double normalAngle = AngleBetweenUndirected(plane.normal, vp);
       if (posAngle < positionAngleThres && normalAngle < angleThres) {
         double score = Gaussian(posAngle, positionAngleThres) +
                        Gaussian(normalAngle, angleThres) * 10;

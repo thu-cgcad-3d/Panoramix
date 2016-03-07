@@ -93,8 +93,7 @@ Imaged SurfaceDepthMap(const CameraT &cam, const PICGDeterminablePart &dp,
       continue;
     }
     Vec3 dir = normalize(cam.toSpace(pos));
-    double depth =
-        norm(IntersectionOfLineAndPlane(Ray3(Origin(), dir), plane).position);
+    double depth = norm(Intersection(Ray3(Origin(), dir), plane));
     if (depth < minv) {
       minv = depth;
     }

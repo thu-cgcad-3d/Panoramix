@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
         for (auto &l : line3s) {
           static const double sampleAngle = M_PI / 100.0;
           auto &line = l.component;
-          double spanAngle = AngleBetweenDirections(line.first, line.second);
+          double spanAngle = AngleBetweenDirected(line.first, line.second);
           std::vector<Point2> ps;
           ps.reserve(spanAngle / sampleAngle);
           for (double angle = 0.0; angle <= spanAngle; angle += sampleAngle) {
@@ -215,7 +215,7 @@ int main(int argc, char **argv) {
         if (claz >= mg.vps.size()) {
           claz = -1;
         }
-        double spanAngle = AngleBetweenDirections(line.first, line.second);
+        double spanAngle = AngleBetweenDirected(line.first, line.second);
         std::vector<Point2> ps;
         ps.reserve(spanAngle / sampleAngle);
         for (double angle = 0.0; angle <= spanAngle; angle += sampleAngle) {

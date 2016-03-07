@@ -98,12 +98,45 @@ void AddToScene(gui::SceneBuilder &sb,
   }
 }
 
+inline std::vector<Point2> PossibleKeyVanishingPoints(const Chain2 &chain) {
+  assert(chain.size() > 2);
+  if (chain.size() == 3) {
+    return {};
+  }
+  if (chain.size() == 4) {
+    return {Intersection(chain.edge(0).ray(), chain.edge(2).ray()),
+            Intersection(chain.edge(1).ray(), chain.edge(3).ray())};
+  }
+  if (chain.size() % 2 == 0) {
+    std::vector<Point2> vps;
+    vps.reserve(chain.size() * chain.size() / 4);
+    for (int i = 0; i < chain.size() / 2; i++) {
+      for (int j = i + 1; j < i + chain.size() / 2; j++) {
+        vps.push_back(Intersection(Line2(chain.at(i), chain.at(j)).ray(),
+                                   Line2(chain.at(i + chain.size() / 2),
+                                         chain.at(j + chain.size() / 2))
+                                       .ray()));
+      }
+    }
+    return vps;
+  } else {
+    std::vector<Point2> vps;
+    for (int i = 0; i < chain.size(); i++) {
+      for (int j = i + 1; j < chain.size(); j++) {
+        vps.push_back(Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
+      }
+    }
+    return vps;
+  }
+}
+
 int main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
 
-  std::string name = "towerx";
-  std::string camName = "cam1";
+  std::string name = "hex";
+  std::string camName = "cam2";
+  bool resetCam = false;
 
   std::string objFile = "H:\\GitHub\\Panoramix\\data\\linedrawing\\" + name +
                         "\\" + name + ".obj";
@@ -115,8 +148,14 @@ int main(int argc, char **argv) {
   auto meshProxy = MakeMeshProxy(mesh);
 
   // decompose
-  DecomposeAll(meshProxy,
-               [](HalfHandle hh1, HalfHandle hh2) -> bool { return false; });
+  auto cutFacePairs = DecomposeAll(
+      meshProxy, [](HalfHandle hh1, HalfHandle hh2) -> bool { return false; });
+  std::unordered_map<FaceHandle, FaceHandle> cutFace2Another;
+  for (auto &cutFacePair : cutFacePairs) {
+    cutFace2Another[cutFacePair.first] = cutFacePair.second;
+    cutFace2Another[cutFacePair.second] = cutFacePair.first;
+  }
+
   auto subMeshes = ExtractSubMeshes(meshProxy,
                                     [](auto hhbegin, auto hhend) -> bool {
                                       return std::distance(hhbegin, hhend) <= 1;
@@ -125,7 +164,7 @@ int main(int argc, char **argv) {
   Println("found ", subMeshes.size(), " subMeshes");
 
   PerspectiveCamera cam;
-  if (!LoadFromDisk(camFile, cam)) {
+  if (!LoadFromDisk(camFile, cam) || resetCam) {
     auto sphere = BoundingBoxOfContainer(mesh.vertices()).outerSphere();
     PerspectiveCamera projCam(500, 500, Point2(250, 250), 200,
                               sphere.center + Vec3(1, 2, 3) * sphere.radius * 2,
@@ -158,7 +197,7 @@ int main(int argc, char **argv) {
     }
 
     // show each subMesh
-    if (false) {
+    if (true) {
       for (int i = 0; i < subMeshes.size(); i++) {
         Println("subMesh - ", i);
         gui::SceneBuilder sb;
@@ -216,18 +255,130 @@ int main(int argc, char **argv) {
   auto mesh2d = Transform(
       mesh, [&cam](const Point3 &p) -> Point2 { return cam.toScreen(p); });
 
+  // add offset noise
+  Vec2 offsetNoise = Vec2(20, -20);
+  for (auto &v : mesh2d.vertices()) {
+    v.data += offsetNoise;
+  }
+
   {
     Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
     auto canvas = gui::MakeCanvas(im);
     canvas.color(gui::Black);
     canvas.thickness(2);
     for (auto &h : mesh2d.halfedges()) {
-      auto p1 = mesh2d.data(h.topo.from());
-      auto p2 = mesh2d.data(h.topo.to());
+      auto &p1 = mesh2d.data(h.topo.from());
+      auto &p2 = mesh2d.data(h.topo.to());
       canvas.add(Line2(p1, p2));
     }
     canvas.show(0, "mesh2d");
   }
 
-  // build the graph
+  auto point2dAt = [&mesh2d, &meshProxy](VertHandle vhInProxy) -> Point2 {
+    return mesh2d.data(meshProxy.data(vhInProxy));
+  };
+  auto line2dAt = [&mesh2d, &meshProxy,
+                   point2dAt](HalfHandle hhInProxy) -> Line2 {
+    return Line2(point2dAt(meshProxy.topo(hhInProxy).from()),
+                 point2dAt(meshProxy.topo(hhInProxy).to()));
+  };
+
+  Box2 box = BoundingBoxOfContainer(mesh2d.vertices());
+  double scale = box.outerSphere().radius;
+
+  struct PPFocalCandidate {
+    Point2 pp;
+    double focal;
+  };
+
+  std::vector<PPFocalCandidate> ppFocalCandidates;
+  ppFocalCandidates.reserve(subMeshes.size() * 3);
+
+  for (int subMeshId = 0; subMeshId < subMeshes.size(); subMeshId++) {
+    // collect edge intersections in each face
+    std::vector<Point2> interps;
+    for (auto fh : subMeshes[subMeshId].fhs) {
+      auto &hhs = meshProxy.topo(fh).halfedges;
+      Chain2 corners;
+      for (auto hh : hhs) {
+        corners.append(point2dAt(meshProxy.topo(hh).to()));
+      }
+      auto keyVPs = PossibleKeyVanishingPoints(corners);
+      interps.insert(interps.end(), keyVPs.begin(), keyVPs.end());
+    }
+
+    for (int i = 0; i < interps.size(); i++) {
+      const Point2 &p1 = interps[i];
+      for (int j = i + 1; j < interps.size(); j++) {
+        const Point2 &p2 = interps[j];
+        for (int k = j + 1; k < interps.size(); k++) {
+          const Point2 &p3 = interps[k];
+          // compute pp and focal
+          Point2 pp;
+          double focal = 0.0;
+          std::tie(pp, focal) = ComputePrinciplePointAndFocalLength(p1, p2, p3);
+          if (HasValue(pp, IsInfOrNaN<double>) || IsInfOrNaN(focal)) {
+            continue;
+          }
+          if (!IsBetween(focal, scale / 5.0, scale * 5.0) ||
+              Distance(pp, box.center()) > scale * 2.0) {
+            continue;
+          }
+          ppFocalCandidates.push_back(PPFocalCandidate{pp, focal});
+        }
+      }
+    }
+  }
+
+  std::sort(ppFocalCandidates.begin(), ppFocalCandidates.end(),
+            [](auto &a, auto &b) { return a.focal < b.focal; });
+
+  std::vector<std::pair<std::set<int>, PPFocalCandidate>> ppFocalIdGroups;
+  { // dbscan
+    std::vector<int> ppFocalId2group(ppFocalCandidates.size(), -1);
+    int ngroups = 0;
+    RTreeMap<Vec3, int> ppFocalIdTree;
+    for (int i = 0; i < ppFocalCandidates.size(); i++) {
+      Vec3 coordinate =
+          cat(ppFocalCandidates[i].pp, ppFocalCandidates[i].focal);
+      const double thres = scale / 50.0;
+      ppFocalIdTree.search(BoundingBox(coordinate).expand(thres * 2),
+                           [&coordinate, thres, i, &ppFocalId2group](
+                               const std::pair<Vec3, int> &cand) {
+                             if (Distance(cand.first, coordinate) <= thres) {
+                               ppFocalId2group[i] =
+                                   ppFocalId2group[cand.second];
+                               return false;
+                             }
+                             return true;
+                           });
+      if (ppFocalId2group[i] == -1) {
+        ppFocalId2group[i] = ngroups++;
+      }
+      ppFocalIdTree.emplace(coordinate, i);
+    }
+
+    ppFocalIdGroups.resize(ngroups);
+    for (auto &g : ppFocalIdGroups) {
+      g.second.focal = 0.0;
+      g.second.pp = Point2();
+    }
+    for (int i = 0; i < ppFocalId2group.size(); i++) {
+      auto &g = ppFocalIdGroups[ppFocalId2group[i]];
+      g.first.insert(i);
+      g.second.focal += ppFocalCandidates[i].focal;
+      g.second.pp += ppFocalCandidates[i].pp;
+    }
+    for (auto &g : ppFocalIdGroups) {
+      g.second.focal /= g.first.size();
+      g.second.pp /= double(g.first.size());
+    }
+
+    std::sort(
+        ppFocalIdGroups.begin(), ppFocalIdGroups.end(),
+        [](auto &g1, auto &g2) { return g1.first.size() > g2.first.size(); });
+  }
+
+
+
 }

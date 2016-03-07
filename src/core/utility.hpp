@@ -1,8 +1,9 @@
 #pragma once
 
-#include "rtree.h"
 #include <Eigen/Dense>
 #include <iterator>
+
+#include "rtree.h"
 
 #include "basic_types.hpp"
 
@@ -130,6 +131,12 @@ inline bool HasValue(std::initializer_list<T> list, const TesterT &tester) {
 template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>>
 inline bool IsInfOrNaN(const T &v) {
   return std::isinf(v) || std::isnan(v);
+}
+
+template <class T> inline T NonZeroize(T d, T epsilon = 1e-6) {
+  assert(epsilon >= 0);
+  return -epsilon < d && d < 0 ? -epsilon
+                               : (0 < d && d < +epsilon ? +epsilon : d);
 }
 
 // contains
@@ -408,8 +415,7 @@ inline auto BoundingBox(const Decorated<T, D> &s)
 }
 
 // return null box if s.enabled == false
-template <class T>
-inline auto BoundingBox(const Enabled<T> &s) {
+template <class T> inline auto BoundingBox(const Enabled<T> &s) {
   using BoxType = decltype(BoundingBox(s.component));
   return s.enabled ? BoundingBox(s.component) : BoxType();
 }
@@ -453,8 +459,7 @@ auto BoundingBoxOfPairRange(PairIteratorT begin, PairIteratorT end) {
 
 // the default bounding box functor
 struct DefaultBoundingBoxFunctor {
-  template <class T>
-  inline auto operator()(const T &t) const {
+  template <class T> inline auto operator()(const T &t) const {
     return BoundingBox(t);
   }
 };
@@ -620,17 +625,24 @@ ProposeXYDirectionsFromZDirection(const Vec<T, 3> &z) {
 
 // returns [0, pi]
 template <class T, int N>
-inline T AngleBetweenDirections(const Vec<T, N> &v1, const Vec<T, N> &v2) {
+inline T AngleBetweenDirected(const Vec<T, N> &v1, const Vec<T, N> &v2) {
   auto s = v1.dot(v2) / norm(v1) / norm(v2);
   return s >= 1.0 - 1e-9 ? 0.0 : (s <= -1.0 + 1e-9 ? M_PI : acos(s));
 }
 
 // returns [0, pi/2]
 template <class T, int N>
-inline T AngleBetweenUndirectedVectors(const Vec<T, N> &v1,
-                                       const Vec<T, N> &v2) {
+inline T AngleBetweenUndirected(const Vec<T, N> &v1, const Vec<T, N> &v2) {
   auto s = abs(v1.dot(v2) / norm(v1) / norm(v2));
   return s >= 1.0 ? 0.0 : acos(s);
+}
+
+template <class T>
+inline T SignedAngle(const Vec<T, 2> &from, const Vec<T, 2> &to,
+                     bool clockwiseAsPositive = true) {
+  double angle = atan2(-from(0) * to(1) + to(0) * from(1),
+                       from(1) * to(1) + from(0) * to(0));
+  return clockwiseAsPositive ? angle : -angle;
 }
 
 template <class T, int N>
@@ -645,15 +657,6 @@ inline bool IsFuzzyPerpendicular(const Vec<T, N> &v1, const Vec<T, N> &v2,
                                  const T &epsilon = 0.1) {
   auto s = v1.dot(v2) / norm(v1) / norm(v2);
   return abs(s) <= epsilon;
-}
-
-template <class T>
-inline T SignedAngleBetweenDirections(const Vec<T, 2> &from,
-                                      const Vec<T, 2> &to,
-                                      bool clockwiseAsPositive = true) {
-  double angle = atan2(-from(0) * to(1) + to(0) * from(1),
-                       from(1) * to(1) + from(0) * to(0));
-  return clockwiseAsPositive ? angle : -angle;
 }
 
 // for lines and points
@@ -677,6 +680,15 @@ std::pair<T, Point<T, N>> DistanceFromPointToLine(const Point<T, N> &p,
   return std::make_pair(norm(p - root), root);
 }
 
+template <class T, int N>
+inline T Distance(const Point<T, N> &p, const Ray<T, N> &line) {
+  return DistanceFromPointToLine(p, line).first;
+}
+template <class T, int N>
+inline T Distance(const Ray<T, N> &line, const Point<T, N> &p) {
+  return DistanceFromPointToLine(p, line).first;
+}
+
 // returns signed distance
 template <class T>
 T SignedDistanceFromPointToLine(const Point<T, 2> &p, const Ray<T, 2> &line) {
@@ -695,6 +707,15 @@ DistanceFromPointToLine(const Point<T, N> &p, const Line<T, N> &line) {
   projRatio = BoundBetween(projRatio, 0, 1);
   PositionOnLine<T, N> pos(line, projRatio);
   return std::make_pair(norm(p - pos.position), pos);
+}
+
+template <class T, int N>
+inline T Distance(const Point<T, N> &p, const Line<T, N> &line) {
+  return DistanceFromPointToLine(p, line).first;
+}
+template <class T, int N>
+inline T Distance(const Line<T, N> &line, const Point<T, N> &p) {
+  return DistanceFromPointToLine(p, line).first;
 }
 
 // returns (distance, (nearest point on line1, nearest point on line2))
@@ -733,6 +754,24 @@ DistanceBetweenTwoLines(const Ray<T, N> &line1, const Ray<T, N> &line2,
   auto p1 = line1.anchor + sc * u;
   auto p2 = line2.anchor + tc * v;
   return std::make_pair(Distance(p1, p2), std::make_pair(p1, p2));
+}
+
+template <class T, int N>
+inline T Distance(const Ray<T, N> &line1, const Ray<T, N> &line2) {
+  return DistanceBetweenTwoLines(line1, line2).first;
+}
+
+template <class T>
+inline Point<T, 2> Intersection(const Ray<T, 2> &line1,
+                                const Ray<T, 2> &line2) {
+  auto eq1 = GetCoeffs(line1);
+  auto eq2 = GetCoeffs(line2);
+  auto hinterp = eq1.cross(eq2);
+  if (hinterp == Origin<3, T>()) { // lines overlapped
+    hinterp[0] = -eq1[1];
+    hinterp[1] = eq1[0];
+  }
+  return Point<T, 2>(hinterp[0], hinterp[1]) / NonZeroize(hinterp[2], 1e-10);
 }
 
 // returns (distance, (nearest position on line1, nearest position on line2))
@@ -808,6 +847,11 @@ DistanceBetweenTwoLines(const Line<T, N> &line1, const Line<T, N> &line2) {
   return std::make_pair(dist, std::make_pair(pos1, pos2));
 }
 
+template <class T, int N>
+inline T Distance(const Line<T, N> &line1, const Line<T, N> &line2) {
+  return DistanceBetweenTwoLines(line1, line2).first;
+}
+
 // intersecton between line and plane
 template <class T, int N>
 PositionOnLine<T, N> IntersectionOfLineAndPlane(const Ray<T, N> &line,
@@ -817,6 +861,19 @@ PositionOnLine<T, N> IntersectionOfLineAndPlane(const Ray<T, N> &line,
   return PositionOnLine<T, N>(line, lambda);
 }
 
+template <class T, int N>
+inline Point<T, N> Intersection(const Ray<T, N> &line,
+                                const Plane<T, N> &plane) {
+  return IntersectionOfLineAndPlane(line, plane).position;
+}
+
+template <class T, int N>
+inline Point<T, N> Intersection(const Plane<T, N> &plane,
+                                const Ray<T, N> &line) {
+  return IntersectionOfLineAndPlane(line, plane).position;
+}
+
+// intersection o
 template <class T>
 Failable<Ray<T, 3>> IntersectionOfPlaneAndPlane(const Plane<T, 3> &p1,
                                                 const Plane<T, 3> &p2) {

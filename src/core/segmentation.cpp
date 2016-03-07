@@ -403,7 +403,7 @@ std::pair<Imagei, Image> SegmentImage(const Image &im, float sigma, float c,
   Imagei linesOccupation(im.size(), -1);
   for (int i = 0; i < lines.size(); i++) {
     auto &l = lines[i];
-    double spanAngle = AngleBetweenDirections(l.first, l.second);
+    double spanAngle = AngleBetweenDirected(l.first, l.second);
     std::vector<std::vector<Pixel>> pline(1);
     for (double a = 0.0; a <= spanAngle; a += 0.01) {
       auto direction = RotateDirection(l.first, l.second, a);

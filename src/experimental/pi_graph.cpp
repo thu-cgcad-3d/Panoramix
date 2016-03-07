@@ -20,7 +20,7 @@ inline bool AllAlong(const ContT &pts, const Vec3 &from, const Vec3 &to,
                      double angleThres) {
   auto n = normalize(from.cross(to));
   return core::AllOf<Vec3>(pts, [&n, angleThres](const Vec3 &p) {
-    return abs(M_PI_2 - AngleBetweenDirections(n, p)) < angleThres;
+    return abs(M_PI_2 - AngleBetweenDirected(n, p)) < angleThres;
   });
 }
 
@@ -97,7 +97,7 @@ inline double PixelDiff(const Image3ub &im, const cv::Point &p1,
 
 inline double DistanceAngleFromPointToLine(const Point3 &p, const Line3 &l) {
   auto n = DistanceFromPointToLine(p, l);
-  return AngleBetweenDirections(p, n.second.position);
+  return AngleBetweenDirected(p, n.second.position);
 }
 
 double PixelWeight(const PanoramicCamera &cam, const Pixel &p) {
@@ -130,7 +130,7 @@ int SegmentationForPIGraph(const PanoramicView &view,
       continue;
     }
     auto &line = lines[i].component;
-    double spanAngle = AngleBetweenDirections(line.first, line.second);
+    double spanAngle = AngleBetweenDirected(line.first, line.second);
     for (double a = 0.0; a <= spanAngle + lineSampleAngle / 2;
          a += lineSampleAngle) {
       auto direction = RotateDirection(line.first, line.second, a);
@@ -522,7 +522,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
       // get max angle distance from center direction
       double radiusAngle = 0.0;
       for (auto &d : directions) {
-        double a = AngleBetweenDirections(centerDirection, d);
+        double a = AngleBetweenDirected(centerDirection, d);
         if (radiusAngle < a) {
           radiusAngle = a;
         }
@@ -792,7 +792,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
       auto &pixel = bndPixels[i][j];
       auto dir = normalize(view.camera.toSpace(pixel));
       if (smoothedDirs.empty() ||
-          AngleBetweenDirections(smoothedDirs.back(), dir) >= bndSampleAngle) {
+          AngleBetweenDirected(smoothedDirs.back(), dir) >= bndSampleAngle) {
         smoothedDirs.push_back(dir);
       }
     }
@@ -846,7 +846,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
   for (int i = 0; i < mg.bndPiece2dirs.size(); i++) {
     auto &piece = mg.bndPiece2dirs[i];
     for (int j = 1; j < piece.size(); j++) {
-      mg.bndPiece2length[i] += AngleBetweenDirections(piece[j - 1], piece[j]);
+      mg.bndPiece2length[i] += AngleBetweenDirected(piece[j - 1], piece[j]);
     }
   }
   mg.bndPiece2linePieces.resize(mg.bndPiece2dirs.size());
@@ -865,7 +865,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
   for (int i = 0; i < mg.lines.size(); i++) {
     auto &line = mg.lines[i];
     double angle =
-        AngleBetweenDirections(line.component.first, line.component.second);
+        AngleBetweenDirected(line.component.first, line.component.second);
     for (double a = 0; a <= angle; a += lineSampleAngle) {
       Vec3 sample = normalize(
           RotateDirection(line.component.first, line.component.second, a));
@@ -893,7 +893,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
                 std::max(bndSampleAngle, bndPieceBoundToLineAngleThres) * 3),
             [&d, &minAngleDist,
              &nearestBndPiece](const std::pair<Vec3, int> &bndPieceD) {
-              double angleDist = AngleBetweenDirections(bndPieceD.first, d);
+              double angleDist = AngleBetweenDirected(bndPieceD.first, d);
               if (angleDist < minAngleDist) {
                 minAngleDist = angleDist;
                 nearestBndPiece = bndPieceD.second;
@@ -911,7 +911,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
            j == samples.size() - 1) &&
           !(lastDetectedBndPiece == -1 && lastDetectedSeg == -1);
       if (neighborChanged) {
-        double len = AngleBetweenDirections(collectedSamples.front(),
+        double len = AngleBetweenDirected(collectedSamples.front(),
                                             collectedSamples.back());
         if (collectedSamples.size() >= 2) {
           if (lastDetectedBndPiece != -1) { // line piece bound to bnd piece
@@ -964,7 +964,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
       Vec3 nj = normalize(linej.first.cross(linej.second));
 
       auto nearest = DistanceBetweenTwoLines(linei, linej);
-      double d = AngleBetweenDirections(nearest.second.first.position,
+      double d = AngleBetweenDirected(nearest.second.first.position,
                                         nearest.second.second.position);
 
       if (clazi == clazj && clazi >= 0) { // incidences for classified lines
@@ -975,11 +975,11 @@ PIGraph<PanoramicCamera> BuildPIGraph(
 
         auto &vp = vps[clazi];
 
-        if (AngleBetweenDirections(vp, conCenter) < intersectionAngleThreshold)
+        if (AngleBetweenDirected(vp, conCenter) < intersectionAngleThreshold)
           continue;
 
         if (d < incidenceAngleAlongDirectionThreshold &&
-            AngleBetweenUndirectedVectors(ni, nj) <
+            AngleBetweenUndirected(ni, nj) <
                 incidenceAngleVerticalDirectionThreshold) {
           // LineRelationData lrd;
           // lrd.type = LineRelationData::Type::Incidence;
@@ -1006,10 +1006,8 @@ PIGraph<PanoramicCamera> BuildPIGraph(
         if (d < intersectionAngleThreshold) {
           auto conCenter = normalize(ni.cross(nj));
 
-          if (DistanceFromPointToLine(conCenter, linei).first >
-                  intersectionAngleThreshold * 4 ||
-              DistanceFromPointToLine(conCenter, linej).first >
-                  intersectionAngleThreshold * 4)
+          if (Distance(conCenter, linei) > intersectionAngleThreshold * 4 ||
+              Distance(conCenter, linej) > intersectionAngleThreshold * 4)
             continue;
 
           // LineRelationData lrd;
@@ -1065,7 +1063,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
         Vec3 center2vp = normalize(center.cross(vp));
         Vec3 center2pos = normalize(center.cross(mg.lineRelation2anchor[i]));
 
-        double angle = AngleBetweenUndirectedVectors(center2vp, center2pos);
+        double angle = AngleBetweenUndirected(center2vp, center2pos);
         double angleSmall = angle > M_PI_2 ? (M_PI - angle) : angle;
         if (IsInfOrNaN(angleSmall))
           continue;
@@ -1080,8 +1078,8 @@ PIGraph<PanoramicCamera> BuildPIGraph(
         double projRatio = BoundBetween(proj.ratio, 0.0, 1.0);
 
         Vec3 lined = line.first.cross(line.second);
-        double lineSpanAngle = AngleBetweenDirections(line.first, line.second);
-        if (AngleBetweenDirections(center2vp, lined) <
+        double lineSpanAngle = AngleBetweenDirected(line.first, line.second);
+        if (AngleBetweenDirected(center2vp, lined) <
             M_PI_2) { // first-second-vp
           votingData(claz, TowardsVanishingPoint) +=
               angleScore * lineSpanAngle * (1 - projRatio);
@@ -1228,7 +1226,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
       // get max angle distance from center direction
       double radiusAngle = 0.0;
       for (auto &d : directions) {
-        double a = AngleBetweenDirections(centerDirection, d);
+        double a = AngleBetweenDirected(centerDirection, d);
         if (radiusAngle < a) {
           radiusAngle = a;
         }
@@ -1490,7 +1488,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
       auto &pixel = bndPixels[i][j];
       auto dir = normalize(view.camera.toSpace(pixel));
       if (smoothedDirs.empty() ||
-          AngleBetweenDirections(smoothedDirs.back(), dir) >= bndSampleAngle) {
+          AngleBetweenDirected(smoothedDirs.back(), dir) >= bndSampleAngle) {
         smoothedDirs.push_back(dir);
       }
     }
@@ -1544,7 +1542,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
   for (int i = 0; i < mg.bndPiece2dirs.size(); i++) {
     auto &piece = mg.bndPiece2dirs[i];
     for (int j = 1; j < piece.size(); j++) {
-      mg.bndPiece2length[i] += AngleBetweenDirections(piece[j - 1], piece[j]);
+      mg.bndPiece2length[i] += AngleBetweenDirected(piece[j - 1], piece[j]);
     }
   }
   mg.bndPiece2linePieces.resize(mg.bndPiece2dirs.size());
@@ -1563,7 +1561,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
   for (int i = 0; i < mg.lines.size(); i++) {
     auto &line = mg.lines[i];
     double angle =
-        AngleBetweenDirections(line.component.first, line.component.second);
+        AngleBetweenDirected(line.component.first, line.component.second);
     for (double a = 0; a <= angle; a += lineSampleAngle) {
       Vec3 sample = normalize(
           RotateDirection(line.component.first, line.component.second, a));
@@ -1591,7 +1589,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
                 std::max(bndSampleAngle, bndPieceBoundToLineAngleThres) * 3),
             [&d, &minAngleDist,
              &nearestBndPiece](const std::pair<Vec3, int> &bndPieceD) {
-              double angleDist = AngleBetweenDirections(bndPieceD.first, d);
+              double angleDist = AngleBetweenDirected(bndPieceD.first, d);
               if (angleDist < minAngleDist) {
                 minAngleDist = angleDist;
                 nearestBndPiece = bndPieceD.second;
@@ -1609,7 +1607,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
            j == samples.size() - 1) &&
           !(lastDetectedBndPiece == -1 && lastDetectedSeg == -1);
       if (neighborChanged) {
-        double len = AngleBetweenDirections(collectedSamples.front(),
+        double len = AngleBetweenDirected(collectedSamples.front(),
                                             collectedSamples.back());
         if (collectedSamples.size() >= 2) {
           if (lastDetectedBndPiece != -1) { // line piece bound to bnd piece
@@ -1662,7 +1660,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
       Vec3 nj = normalize(linej.first.cross(linej.second));
 
       auto nearest = DistanceBetweenTwoLines(linei, linej);
-      double d = AngleBetweenDirections(nearest.second.first.position,
+      double d = AngleBetweenDirected(nearest.second.first.position,
                                         nearest.second.second.position);
 
       if (clazi == clazj && clazi >= 0) { // incidences for classified lines
@@ -1673,11 +1671,11 @@ PIGraph<PanoramicCamera> BuildPIGraph(
 
         auto &vp = vps[clazi];
 
-        if (AngleBetweenDirections(vp, conCenter) < intersectionAngleThreshold)
+        if (AngleBetweenDirected(vp, conCenter) < intersectionAngleThreshold)
           continue;
 
         if (d < incidenceAngleAlongDirectionThreshold &&
-            AngleBetweenUndirectedVectors(ni, nj) <
+            AngleBetweenUndirected(ni, nj) <
                 incidenceAngleVerticalDirectionThreshold) {
           // LineRelationData lrd;
           // lrd.type = LineRelationData::Type::Incidence;
@@ -1704,10 +1702,8 @@ PIGraph<PanoramicCamera> BuildPIGraph(
         if (d < intersectionAngleThreshold) {
           auto conCenter = normalize(ni.cross(nj));
 
-          if (DistanceFromPointToLine(conCenter, linei).first >
-                  intersectionAngleThreshold * 4 ||
-              DistanceFromPointToLine(conCenter, linej).first >
-                  intersectionAngleThreshold * 4)
+          if (Distance(conCenter, linei) > intersectionAngleThreshold * 4 ||
+              Distance(conCenter, linej) > intersectionAngleThreshold * 4)
             continue;
 
           // LineRelationData lrd;
@@ -1763,7 +1759,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
         Vec3 center2vp = normalize(center.cross(vp));
         Vec3 center2pos = normalize(center.cross(mg.lineRelation2anchor[i]));
 
-        double angle = AngleBetweenUndirectedVectors(center2vp, center2pos);
+        double angle = AngleBetweenUndirected(center2vp, center2pos);
         double angleSmall = angle > M_PI_2 ? (M_PI - angle) : angle;
         if (IsInfOrNaN(angleSmall))
           continue;
@@ -1778,8 +1774,8 @@ PIGraph<PanoramicCamera> BuildPIGraph(
         double projRatio = BoundBetween(proj.ratio, 0.0, 1.0);
 
         Vec3 lined = line.first.cross(line.second);
-        double lineSpanAngle = AngleBetweenDirections(line.first, line.second);
-        if (AngleBetweenDirections(center2vp, lined) <
+        double lineSpanAngle = AngleBetweenDirected(line.first, line.second);
+        if (AngleBetweenDirected(center2vp, lined) <
             M_PI_2) { // first-second-vp
           votingData(claz, TowardsVanishingPoint) +=
               angleScore * lineSpanAngle * (1 - projRatio);
@@ -1889,7 +1885,7 @@ PerfectSegMaskViewImpl(const PIGraph<CameraT> &mg, int seg, double focal) {
   double radiusAngle = 0.0;
   for (auto &cs : contours) {
     for (auto &c : cs) {
-      double angle = AngleBetweenDirections(mg.seg2center[seg], c);
+      double angle = AngleBetweenDirected(mg.seg2center[seg], c);
       if (angle > radiusAngle) {
         radiusAngle = angle;
       }

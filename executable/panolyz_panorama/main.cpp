@@ -14,7 +14,7 @@ std::vector<Imagei> GTFaceLabels(const PILayoutAnnotation &anno,
     poly.normal = plane.normal;
     for (int c : anno.face2corners[i]) {
       Ray3 ray(Origin(), anno.corners[c]);
-      poly.corners.push_back(IntersectionOfLineAndPlane(ray, plane).position);
+      poly.corners.push_back(Intersection(ray, plane));
     }
   }
 
@@ -107,7 +107,7 @@ FilterHorizontalCameras(const PILayoutAnnotation &anno,
                         const std::vector<PerspectiveCamera> &cams) {
   std::vector<int> selected;
   for (int i = 0; i < cams.size(); i++) {
-    if (AngleBetweenUndirectedVectors(
+    if (AngleBetweenUndirected(
             anno.view.camera.up(), cams[i].forward()) < DegreesToRadians(60)) {
       continue;
     }
@@ -120,7 +120,7 @@ double ErrorOfSurfaceNormal(const Vec3 &gt, const Vec3 &cand) {
   if (norm(cand) == 0) {
     return M_PI_2;
   }
-  return AngleBetweenUndirectedVectors(gt, cand);
+  return AngleBetweenUndirected(gt, cand);
 }
 
 int GeometricContextToLabel(const Vec7 &labelValues, double clutterThres) {
@@ -149,7 +149,7 @@ int SurfaceNormalToLabel(const Vec3 &normal, const Vec3 &up,
   Vec3 dirs[] = {forward, left, -left, -up, up};
   double angleToDirs[5];
   for (int i = 0; i < 5; i++) {
-    angleToDirs[i] = AngleBetweenDirections(dirs[i], normal);
+    angleToDirs[i] = AngleBetweenDirected(dirs[i], normal);
   }
   return std::min_element(std::begin(angleToDirs), std::end(angleToDirs)) -
          std::begin(angleToDirs);
@@ -165,7 +165,7 @@ int SurfaceNormalToLabel(const Vec3 &normal, const Vec3 &up,
   Vec3 dirs[] = {forward, left, -left, -up, up};
   double angleToDirs[5];
   for (int i = 0; i < 5; i++) {
-    angleToDirs[i] = AngleBetweenUndirectedVectors(dirs[i], normal);
+    angleToDirs[i] = AngleBetweenUndirected(dirs[i], normal);
   }
   int result =
       std::min_element(std::begin(angleToDirs), std::end(angleToDirs)) -
@@ -1250,8 +1250,7 @@ int main(int argc, char **argv) {
         poly.normal = plane.normal;
         for (int c : anno.face2corners[i]) {
           Ray3 ray(Origin(), anno.corners[c]);
-          poly.corners.push_back(
-              IntersectionOfLineAndPlane(ray, plane).position);
+          poly.corners.push_back(Intersection(ray, plane));
         }
       }
       for (auto it = gtPanoFaceIds.begin(); it != gtPanoFaceIds.end(); ++it) {
@@ -1306,7 +1305,7 @@ int main(int argc, char **argv) {
         auto &plane = anno.face2plane[faceId];
         auto dir = normalize(cam.toSpace(it.pos()));
         Ray3 ray(Origin(), dir);
-        double depth = norm(IntersectionOfLineAndPlane(ray, plane).position);
+        double depth = norm(Intersection(ray, plane));
         *it = depth;
       }
     }
@@ -1637,7 +1636,7 @@ int main(int argc, char **argv) {
       Line3 line;
       line.first = anno.corners[anno.border2corners[i].first];
       line.second = anno.corners[anno.border2corners[i].second];
-      double angle = AngleBetweenDirections(line.first, line.second);
+      double angle = AngleBetweenDirected(line.first, line.second);
       std::vector<Pixel> ps;
       double stepAngle = 0.001;
       for (double a = 0.0; a <= angle; a += stepAngle) {

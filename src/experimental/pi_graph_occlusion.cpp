@@ -17,7 +17,7 @@ inline bool AllAlong(const ContT &pts, const Vec3 &from, const Vec3 &to,
                      double angleThres) {
   auto n = normalize(from.cross(to));
   return core::AllOf<Vec3>(pts, [&n, angleThres](const Vec3 &p) {
-    return abs(M_PI_2 - AngleBetweenDirections(n, p)) < angleThres;
+    return abs(M_PI_2 - AngleBetweenDirected(n, p)) < angleThres;
   });
 }
 }
@@ -306,12 +306,12 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
     Vec3 n1 = normalize(l1.first.cross(l1.second));
     auto l2 = normalize(mg.lines[line2].component);
     Vec3 n2 = normalize(l2.first.cross(l2.second));
-    if (AngleBetweenUndirectedVectors(n1, n2) < DegreesToRadians(3)) {
+    if (AngleBetweenUndirected(n1, n2) < DegreesToRadians(3)) {
       continue;
     }
 
-    if (AngleBetweenDirections(l1.first, l1.second) < DegreesToRadians(3) ||
-        AngleBetweenDirections(l2.first, l2.second) < DegreesToRadians(3)) {
+    if (AngleBetweenDirected(l1.first, l1.second) < DegreesToRadians(3) ||
+        AngleBetweenDirected(l2.first, l2.second) < DegreesToRadians(3)) {
       continue;
     }
 
@@ -365,7 +365,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
     };
     const auto drawLine = [&mg, &pim](const Line3 &line,
                                       const gui::Color &color) {
-      double angle = AngleBetweenDirections(line.first, line.second);
+      double angle = AngleBetweenDirected(line.first, line.second);
       std::vector<Pixel> ps;
       for (double a = 0.0; a <= angle; a += 0.01) {
         ps.push_back(ToPixel(mg.view.camera.toScreen(
@@ -401,7 +401,7 @@ void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
   for (int i = 0; i < tjunctionLines.size(); i++) {
     auto &votes = tjunctionHLine2votes[tjunctionLines[i].first];
     auto &vl = mg.lines[tjunctionLines[i].second].component;
-    double vllen = AngleBetweenDirections(vl.first, vl.second);
+    double vllen = AngleBetweenDirected(vl.first, vl.second);
     if (tjunctionVLineLiesOnTheRightOfHLine[i]) {
       votes.rightCanNeverBeFrontVoteSum += vllen;
     } else {
@@ -890,7 +890,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
   RTreeMap<Vec3, std::pair<Line3, int>> lineSamplesTree;
   for (int i = 0; i < mg.nlines(); i++) {
     auto &line = mg.lines[i].component;
-    double spanAngle = AngleBetweenDirections(line.first, line.second);
+    double spanAngle = AngleBetweenDirected(line.first, line.second);
     for (double a = 0.0; a < spanAngle;
          a += angleSizeForPixelsNearLines / 3.0) {
       Vec3 sample1 = normalize(RotateDirection(line.first, line.second, a));
@@ -921,7 +921,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
           auto line = normalize(mg.lines[lineSample.second.second].component);
           auto dirOnLine = DistanceFromPointToLine(dir, lineSample.second.first)
                                .second.position;
-          double angleDist = AngleBetweenDirections(dir, dirOnLine);
+          double angleDist = AngleBetweenDirected(dir, dirOnLine);
           double lambda = ProjectionOfPointOnLine(dir, line)
                               .ratio; // the projected position on line
           if (angleDist < angleSizeForPixelsNearLines &&
@@ -994,7 +994,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     std::vector<LineLabel> allowedLabels = {
         {true, true}, {true, false}, {false, true}, {false, false}};
     auto vh = fg.addVar(fg.addVarCategory(
-        allowedLabels.size(), AngleBetweenDirections(l.first, l.second)));
+        allowedLabels.size(), AngleBetweenDirected(l.first, l.second)));
     line2vh[line] = vh;
     vh2line[vh] = line;
     line2allowedLabels[line] = std::move(allowedLabels);
@@ -1054,13 +1054,13 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     Vec3 n1 = normalize(l1.first.cross(l1.second));
     auto l2 = normalize(mg.lines[line2].component);
     Vec3 n2 = normalize(l2.first.cross(l2.second));
-    if (AngleBetweenUndirectedVectors(n1, n2) < DegreesToRadians(3)) {
+    if (AngleBetweenUndirected(n1, n2) < DegreesToRadians(3)) {
       continue;
     }
 
-    if (AngleBetweenDirections(l1.first, l1.second) <
+    if (AngleBetweenDirected(l1.first, l1.second) <
             minAngleSizeOfLineInTJunction ||
-        AngleBetweenDirections(l2.first, l2.second) <
+        AngleBetweenDirected(l2.first, l2.second) <
             minAngleSizeOfLineInTJunction) {
       continue;
     }
@@ -1098,7 +1098,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
   for (int i = 0; i < tjunctionLines.size(); i++) {
     auto &labelCosts = line2labelCost[tjunctionLines[i].first];
     auto &vl = mg.lines[tjunctionLines[i].second].component;
-    double vllen = AngleBetweenDirections(vl.first, vl.second);
+    double vllen = AngleBetweenDirected(vl.first, vl.second);
     double weight = Gaussian(vllen, DegreesToRadians(10)) * DegreesToRadians(5);
     if (tjunctionVLineLiesOnTheRightOfHLine[i]) {
       labelCosts.disconnectLeftConnectRight += vllen;
@@ -1114,7 +1114,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
               ConstantFunctor<gui::Color>(gui::LightGray), 2, 3);
     const auto drawLine = [&mg, &pim](
         const Line3 &line, const gui::Color &color, const std::string &text) {
-      double angle = AngleBetweenDirections(line.first, line.second);
+      double angle = AngleBetweenDirected(line.first, line.second);
       std::vector<Pixel> ps;
       for (double a = 0.0; a <= angle; a += 0.01) {
         ps.push_back(ToPixel(mg.view.camera.toScreen(
@@ -1203,7 +1203,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     auto &l1 = mg.lines[line1].component;
     auto &l2 = mg.lines[line2].component;
     auto nearest = DistanceBetweenTwoLines(l1, l2);
-    double angleDist = AngleBetweenDirections(nearest.second.first.position,
+    double angleDist = AngleBetweenDirected(nearest.second.first.position,
                                               nearest.second.second.position);
     double weight = Gaussian(angleDist, DegreesToRadians(5));
     bool sameDirection =
@@ -1293,7 +1293,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
         ConstantFunctor<gui::Color>(gui::LightGray), 2, 3);
     auto drawLine = [&mg, &pim](const Line3 &line, const std::string &text,
                                 gui::Color &color) {
-      double angle = AngleBetweenDirections(line.first, line.second);
+      double angle = AngleBetweenDirected(line.first, line.second);
       std::vector<Pixel> ps;
       for (double a = 0.0; a <= angle; a += 0.01) {
         ps.push_back(ToPixel(mg.view.camera.toScreen(
@@ -1415,10 +1415,10 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
                 }
               }
@@ -1428,10 +1428,10 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
                 }
               }
@@ -1455,10 +1455,10 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
                 }
               }
@@ -1468,10 +1468,10 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
                 }
               }
@@ -1540,7 +1540,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     for (auto &lineLabelPair : cutline2label) {
       int line = lineLabelPair.first;
       auto &l = mg.lines[line].component;
-      double spanAngle = AngleBetweenDirections(l.first, l.second);
+      double spanAngle = AngleBetweenDirected(l.first, l.second);
       Vec3 lastDir = l.first;
       for (double a = cutLinePieceAngle; a <= spanAngle;
            a += cutLinePieceAngle) {
@@ -1555,7 +1555,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                         &mg](const Line3 &connection) -> bool {
       bool isCutBySomeLine = false;
       double spanAngle =
-          AngleBetweenDirections(connection.first, connection.second);
+          AngleBetweenDirected(connection.first, connection.second);
       for (double a = 0.0; a <= spanAngle; a += cutLinePieceAngle) {
         Vec3 dir = RotateDirection(connection.first, connection.second, a);
         cutLinePiecesTree.search(
@@ -1569,10 +1569,8 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                   1e-5) {
                 return true;
               }
-              auto interp =
-                  normalize(IntersectionOfLineAndPlane(
-                                connection.ray(), Plane3(Origin(), vertDir))
-                                .position);
+              auto interp = normalize(
+                  Intersection(connection.ray(), Plane3(Origin(), vertDir)));
               if (cutLine.first.cross(interp)
                       .dot(cutLine.second.cross(interp)) > 1e-5) {
                 return true;
@@ -1686,8 +1684,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       Vec3 lineRight = l.first.cross(l.second);
       bool onLeft = (vp - l.first).dot(lineRight) < 0;
 
-      double lineAngleToVP = std::min(AngleBetweenDirections(l.first, vp),
-                                      AngleBetweenDirections(l.second, vp));
+      double lineAngleToVP = std::min(AngleBetweenDirected(l.first, vp),
+                                      AngleBetweenDirected(l.second, vp));
       double sweepAngle =
           std::min(angleSizeForPixelsNearLines, lineAngleToVP - 1e-4);
       std::vector<Vec3> sweepQuad = {normalize(l.first), normalize(l.second),
@@ -1699,7 +1697,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       const double focal = mg.view.camera.focal() * 1.2;
       int w = std::ceil(tan(sweepAngle + 0.01) * focal * 2 * 1.5);
       int h = std::ceil(
-          (2 * tan(AngleBetweenDirections(l.first, l.second) / 2.0) + 0.01) *
+          (2 * tan(AngleBetweenDirected(l.first, l.second) / 2.0) + 0.01) *
           focal * 1.5);
       PerspectiveCamera pc(w, h, Point2(w / 2.0, h / 2.0), focal, Origin(), z,
                            y);
@@ -1759,13 +1757,13 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
     Vec3 n1 = normalize(l1.first.cross(l1.second));
     auto l2 = normalize(mg.lines[line2].component);
     Vec3 n2 = normalize(l2.first.cross(l2.second));
-    if (AngleBetweenUndirectedVectors(n1, n2) < DegreesToRadians(3)) {
+    if (AngleBetweenUndirected(n1, n2) < DegreesToRadians(3)) {
       continue;
     }
 
-    if (AngleBetweenDirections(l1.first, l1.second) <
+    if (AngleBetweenDirected(l1.first, l1.second) <
             minAngleSizeOfLineInTJunction ||
-        AngleBetweenDirections(l2.first, l2.second) <
+        AngleBetweenDirected(l2.first, l2.second) <
             minAngleSizeOfLineInTJunction) {
       continue;
     }
@@ -1827,11 +1825,11 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
     }
     auto &l = mg.lines[line].component;
     auto vhConnectLeft = fg.addVar(
-        fg.addVarCategory(2, AngleBetweenDirections(l.first, l.second)));
+        fg.addVarCategory(2, AngleBetweenDirected(l.first, l.second)));
     line2vhConnectLeftRight[line][0] = vhConnectLeft;
     vh2line[vhConnectLeft] = line;
     auto vhConnectRight = fg.addVar(
-        fg.addVarCategory(2, AngleBetweenDirections(l.first, l.second)));
+        fg.addVarCategory(2, AngleBetweenDirected(l.first, l.second)));
     line2vhConnectLeftRight[line][1] = vhConnectRight;
     vh2line[vhConnectRight] = line;
   }
@@ -1854,7 +1852,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
 
       int claz = mg.lines[line].claz;
       auto &l = mg.lines[line].component;
-      double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+      double lineAngleLen = AngleBetweenDirected(l.first, l.second);
       const auto &lps = mg.line2linePieces[line];
 
       // orientation consistency term between seg and line
@@ -1895,7 +1893,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
 
       int claz = mg.lines[line].claz;
       auto &l = mg.lines[line].component;
-      double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+      double lineAngleLen = AngleBetweenDirected(l.first, l.second);
       const auto &lps = mg.line2linePieces[line];
 
       // orientation consistency term between seg and line
@@ -1922,7 +1920,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
                      ConstantFunctor<gui::Color>(gui::Gray), 2, 0);
     auto drawLine = [&mg, &pim](const Line3 &line, const std::string &text,
                                 const gui::Color &color, bool withTeeth) {
-      double angle = AngleBetweenDirections(line.first, line.second);
+      double angle = AngleBetweenDirected(line.first, line.second);
       std::vector<Pixel> ps;
       for (double a = 0.0; a <= angle; a += 0.01) {
         ps.push_back(ToPixel(mg.view.camera.toScreen(
@@ -2008,7 +2006,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
 
     // punish on both disconnected case
     auto &l = mg.lines[line].component;
-    double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+    double lineAngleLen = AngleBetweenDirected(l.first, l.second);
     int fc = fg.addFactorCategory(
         [lineAngleLen](const int *varlabels, size_t nvar,
                        core::FactorGraph::FactorCategoryId fcid,
@@ -2041,11 +2039,11 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
     auto &l1 = mg.lines[line1].component;
     auto &l2 = mg.lines[line2].component;
     auto nearest = DistanceBetweenTwoLines(l1, l2);
-    double angleDist = AngleBetweenDirections(nearest.second.first.position,
+    double angleDist = AngleBetweenDirected(nearest.second.first.position,
                                               nearest.second.second.position);
     auto n1 = l1.first.cross(l1.second);
     auto n2 = l2.first.cross(l2.second);
-    double normalAngle = AngleBetweenUndirectedVectors(n1, n2);
+    double normalAngle = AngleBetweenUndirected(n1, n2);
     bool sameDirection =
         l1.first.cross(l1.second).dot(l2.first.cross(l2.second)) > 0;
 
@@ -2162,8 +2160,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       Vec3 lineRight = l.first.cross(l.second);
       bool onLeft = (vp - l.first).dot(lineRight) < 0;
 
-      double lineAngleToVP = std::min(AngleBetweenDirections(l.first, vp),
-                                      AngleBetweenDirections(l.second, vp));
+      double lineAngleToVP = std::min(AngleBetweenDirected(l.first, vp),
+                                      AngleBetweenDirected(l.second, vp));
       double sweepAngle =
           std::min(angleSizeForPixelsNearLines, lineAngleToVP - 1e-4);
       std::vector<Vec3> sweepQuad = {normalize(l.first), normalize(l.second),
@@ -2175,7 +2173,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       const double focal = mg.view.camera.focal() * 1.2;
       int w = std::ceil(tan(sweepAngle + 0.01) * focal * 2 * 1.5);
       int h = std::ceil(
-          (2 * tan(AngleBetweenDirections(l.first, l.second) / 2.0) + 0.01) *
+          (2 * tan(AngleBetweenDirected(l.first, l.second) / 2.0) + 0.01) *
           focal * 1.5);
       PerspectiveCamera pc(w, h, Point2(w / 2.0, h / 2.0), focal, Origin(), z,
                            y);
@@ -2235,13 +2233,13 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
     Vec3 n1 = normalize(l1.first.cross(l1.second));
     auto l2 = normalize(mg.lines[line2].component);
     Vec3 n2 = normalize(l2.first.cross(l2.second));
-    if (AngleBetweenUndirectedVectors(n1, n2) < DegreesToRadians(3)) {
+    if (AngleBetweenUndirected(n1, n2) < DegreesToRadians(3)) {
       continue;
     }
 
-    if (AngleBetweenDirections(l1.first, l1.second) <
+    if (AngleBetweenDirected(l1.first, l1.second) <
             minAngleSizeOfLineInTJunction ||
-        AngleBetweenDirections(l2.first, l2.second) <
+        AngleBetweenDirected(l2.first, l2.second) <
             minAngleSizeOfLineInTJunction) {
       continue;
     }
@@ -2303,11 +2301,11 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
     }
     auto &l = mg.lines[line].component;
     auto vhConnectLeft = fg.addVar(
-        fg.addVarCategory(2, AngleBetweenDirections(l.first, l.second)));
+        fg.addVarCategory(2, AngleBetweenDirected(l.first, l.second)));
     line2vhConnectLeftRight[line][0] = vhConnectLeft;
     vh2line[vhConnectLeft] = line;
     auto vhConnectRight = fg.addVar(
-        fg.addVarCategory(2, AngleBetweenDirections(l.first, l.second)));
+        fg.addVarCategory(2, AngleBetweenDirected(l.first, l.second)));
     line2vhConnectLeftRight[line][1] = vhConnectRight;
     vh2line[vhConnectRight] = line;
   }
@@ -2330,7 +2328,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
 
       int claz = mg.lines[line].claz;
       auto &l = mg.lines[line].component;
-      double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+      double lineAngleLen = AngleBetweenDirected(l.first, l.second);
       const auto &lps = mg.line2linePieces[line];
 
       // orientation consistency term between seg and line
@@ -2371,7 +2369,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
 
       int claz = mg.lines[line].claz;
       auto &l = mg.lines[line].component;
-      double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+      double lineAngleLen = AngleBetweenDirected(l.first, l.second);
       const auto &lps = mg.line2linePieces[line];
 
       // orientation consistency term between seg and line
@@ -2432,7 +2430,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
 
     // punish on both disconnected case
     auto &l = mg.lines[line].component;
-    double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+    double lineAngleLen = AngleBetweenDirected(l.first, l.second);
     int fc = fg.addFactorCategory(
         [lineAngleLen](const int *varlabels, size_t nvar,
                        core::FactorGraph::FactorCategoryId fcid,
@@ -2468,11 +2466,11 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
     auto &l1 = mg.lines[line1].component;
     auto &l2 = mg.lines[line2].component;
     auto nearest = DistanceBetweenTwoLines(l1, l2);
-    double angleDist = AngleBetweenDirections(nearest.second.first.position,
+    double angleDist = AngleBetweenDirected(nearest.second.first.position,
                                               nearest.second.second.position);
     auto n1 = l1.first.cross(l1.second);
     auto n2 = l2.first.cross(l2.second);
-    double normalAngle = AngleBetweenUndirectedVectors(n1, n2);
+    double normalAngle = AngleBetweenUndirected(n1, n2);
     bool sameDirection =
         l1.first.cross(l1.second).dot(l2.first.cross(l2.second)) > 0;
 
@@ -2574,7 +2572,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
     auto &cs = anno.border2corners[border];
     auto p1 = anno.corners[cs.first];
     auto p2 = anno.corners[cs.second];
-    double spanAngle = AngleBetweenDirections(p1, p2);
+    double spanAngle = AngleBetweenDirected(p1, p2);
     for (double a = 0.0; a < spanAngle; a += sampleAngleStep) {
       Vec3 sample1 = normalize(RotateDirection(p1, p2, a));
       Vec3 sample2 = normalize(RotateDirection(p1, p2, a + sampleAngleStep));
@@ -2627,10 +2625,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
           });
       assert(dirInFace != Origin());
       double rightDegree = dirInFace.dot(rightOfBorderLine);
-      double depthOnBorderOfFace =
-          norm(IntersectionOfLineAndPlane(Ray3(Origin(), borderLine.center()),
-                                          anno.face2plane[face])
-                   .position);
+      double depthOnBorderOfFace = norm(Intersection(
+          Ray3(Origin(), borderLine.center()), anno.face2plane[face]));
       assert(depthOnBorderOfFace > 0.0);
       rightDegree2depth.push_back(ScoreAs(depthOnBorderOfFace, rightDegree));
     }
@@ -2650,7 +2646,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
     }
     auto p1 = l.first;
     auto p2 = l.second;
-    double spanAngle = AngleBetweenDirections(l.first, l.second);
+    double spanAngle = AngleBetweenDirected(l.first, l.second);
     auto lineN = normalize(l.first.cross(l.second));
 
     std::map<int, int> nearbyBorder2count;
@@ -2668,7 +2664,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
             auto borderN =
                 normalize(borderPiece.first.cross(borderPiece.second));
             auto nearest = DistanceBetweenTwoLines(piece, borderPiece).second;
-            double angleDist = AngleBetweenDirections(nearest.first.position,
+            double angleDist = AngleBetweenDirected(nearest.first.position,
                                                       nearest.second.position);
             if (angleDist < angleThres) {
               nearbyBorder2count[border]++;
@@ -2719,7 +2715,7 @@ CollectSegsNearLines(const PIGraph<PanoramicCamera> &mg, double angleSizeForPixe
   RTreeMap<Vec3, std::pair<Line3, int>> lineSamplesTree;
   for (int i = 0; i < mg.nlines(); i++) {
     auto &line = mg.lines[i].component;
-    double spanAngle = AngleBetweenDirections(line.first, line.second);
+    double spanAngle = AngleBetweenDirected(line.first, line.second);
     for (double a = 0.0; a < spanAngle;
          a += angleSizeForPixelsNearLines / 3.0) {
       Vec3 sample1 = normalize(RotateDirection(line.first, line.second, a));
@@ -2752,7 +2748,7 @@ CollectSegsNearLines(const PIGraph<PanoramicCamera> &mg, double angleSizeForPixe
           // [0, 1]
           auto dirOnLine = DistanceFromPointToLine(dir, lineSample.second.first)
                                .second.position;
-          double angleDist = AngleBetweenDirections(dir, dirOnLine);
+          double angleDist = AngleBetweenDirected(dir, dirOnLine);
           double lambda = ProjectionOfPointOnLine(dir, line)
                               .ratio; // the projected position on line
           if (angleDist < angleSizeForPixelsNearLines &&
@@ -2870,10 +2866,10 @@ void ApplyLinesSidingWeights(
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
                 }
               }
@@ -2883,10 +2879,10 @@ void ApplyLinesSidingWeights(
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
                 }
               }
@@ -2909,10 +2905,10 @@ void ApplyLinesSidingWeights(
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
                 }
               }
@@ -2922,10 +2918,10 @@ void ApplyLinesSidingWeights(
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
                 }
               }
@@ -2996,7 +2992,7 @@ void ApplyLinesSidingWeights(
     for (auto &lineLabelPair : cutline2label) {
       int line = lineLabelPair.first;
       auto &l = mg.lines[line].component;
-      double spanAngle = AngleBetweenDirections(l.first, l.second);
+      double spanAngle = AngleBetweenDirected(l.first, l.second);
       Vec3 lastDir = l.first;
       for (double a = cutLinePieceAngle; a <= spanAngle;
            a += cutLinePieceAngle) {
@@ -3011,7 +3007,7 @@ void ApplyLinesSidingWeights(
                         &mg](const Line3 &connection) -> bool {
       bool isCutBySomeLine = false;
       double spanAngle =
-          AngleBetweenDirections(connection.first, connection.second);
+          AngleBetweenDirected(connection.first, connection.second);
       for (double a = 0.0; a <= spanAngle; a += cutLinePieceAngle) {
         Vec3 dir = RotateDirection(connection.first, connection.second, a);
         cutLinePiecesTree.search(
@@ -3025,10 +3021,8 @@ void ApplyLinesSidingWeights(
                   1e-5) {
                 return true;
               }
-              auto interp =
-                  normalize(IntersectionOfLineAndPlane(
-                                connection.ray(), Plane3(Origin(), vertDir))
-                                .position);
+              auto interp = normalize(
+                  Intersection(connection.ray(), Plane3(Origin(), vertDir)));
               if (cutLine.first.cross(interp)
                       .dot(cutLine.second.cross(interp)) > 1e-5) {
                 return true;

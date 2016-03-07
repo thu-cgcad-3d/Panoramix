@@ -380,8 +380,7 @@ ComputeLineIntersections(const std::vector<Line2> &lines,
                    .cross(cv::Vec3d(lines[i].second[0], lines[i].second[1], 1));
     for (int j = i + 1; j < lnum; j++) {
       if (minDistanceOfLinePairs < std::numeric_limits<double>::max()) {
-        if (DistanceBetweenTwoLines(lines[i], lines[j]).first <
-            minDistanceOfLinePairs)
+        if (Distance(lines[i], lines[j]) < minDistanceOfLinePairs)
           continue;
       }
 
@@ -433,7 +432,7 @@ ComputeLineIntersections(const std::vector<Line3> &lines,
     for (int j = i + 1; j < lnum; j++) {
       auto nearest = DistanceBetweenTwoLines(lines[i], lines[j]).second;
       if (minAngleDistanceBetweenLinePairs < M_PI &&
-          AngleBetweenDirections(nearest.first.position,
+          AngleBetweenDirected(nearest.first.position,
                                  nearest.second.position) <
               minAngleDistanceBetweenLinePairs)
         continue;
@@ -472,17 +471,16 @@ DenseMatd ClassifyLines(std::vector<Classified<Line2>> &lines,
     for (int j = 0; j < vps.size(); j++) {
       auto &point = vps[j];
       double angle =
-          std::min(AngleBetweenDirections(
+          std::min(AngleBetweenDirected(
                        line.component.direction(),
                        (point - HPoint2(line.component.center())).numerator),
-                   AngleBetweenDirections(
+                   AngleBetweenDirected(
                        -line.component.direction(),
                        (point - HPoint2(line.component.center())).numerator));
       double score = exp(-(angle / angleThreshold) * (angle / angleThreshold) /
                          sigma / sigma / 2);
       if (avoidVPDistanceThreshold >= 0.0 &&
-          DistanceFromPointToLine(point.value(), line.component).first <
-              avoidVPDistanceThreshold) {
+          Distance(point.value(), line.component) < avoidVPDistanceThreshold) {
         linescorestable(i, j) = -1.0;
       } else {
         linescorestable(i, j) = (angle > angleThreshold) ? 0 : score;
@@ -525,12 +523,9 @@ DenseMatd ClassifyLines(std::vector<Classified<Line3>> &lines,
       double score = exp(-(angle / angleThreshold) * (angle / angleThreshold) /
                          sigma / sigma / 2);
       if (avoidVPAngleThreshold >= 0.0 &&
-          std::min(DistanceFromPointToLine(normalize(point),
-                                           normalize(lines[i].component))
-                       .first,
-                   DistanceFromPointToLine(normalize(-point),
-                                           normalize(lines[i].component))
-                       .first) <
+          std::min(Distance(normalize(point), normalize(lines[i].component)),
+                   Distance(normalize(-point),
+                            normalize(lines[i].component))) <
               2.0 * sin(avoidVPAngleThreshold /
                         2.0)) { // avoid that a line belongs to its nearby vp
         linescorestable(i, j) = -1.0;
@@ -572,7 +567,7 @@ std::vector<Line3> MergeLines(const std::vector<Line3> &lines,
     lineNormals.search(
         BoundingBox(n).expand(angleThres * 3),
         [&nearestGroupId, &minAngle, &n](const std::pair<Vec3, int> &ln) {
-          double angle = AngleBetweenUndirectedVectors(ln.first, n);
+          double angle = AngleBetweenUndirected(ln.first, n);
           if (angle < minAngle) {
             minAngle = angle;
             nearestGroupId = ln.second;
@@ -592,7 +587,7 @@ std::vector<Line3> MergeLines(const std::vector<Line3> &lines,
   auto calcWeightedNormal = [&lines](int lineid) {
     auto &line = lines[lineid];
     return normalize(line.first.cross(line.second)) *
-           AngleBetweenDirections(line.first, line.second);
+           AngleBetweenDirected(line.first, line.second);
   };
   for (auto &g : groups) {
     auto &lineids = g.first;
@@ -840,7 +835,7 @@ Image6d MergeGeometricContextLabelsHedau(const Image7d &rawgc,
                                          const Vec3 &forward,
                                          const Vec3 &hvp1) {
   Image6d result(rawgc.size(), Vec<double, 6>());
-  double angle = AngleBetweenUndirectedVectors(forward, hvp1);
+  double angle = AngleBetweenUndirected(forward, hvp1);
   for (auto it = result.begin(); it != result.end(); ++it) {
     auto &p = rawgc(it.pos());
     auto &resultv = *it;
@@ -875,7 +870,7 @@ Image6d MergeGeometricContextLabelsHoiem(const Image7d &rawgc,
                                          const Vec3 &forward,
                                          const Vec3 &hvp1) {
   Image6d result(rawgc.size(), Vec<double, 6>());
-  double angle = AngleBetweenUndirectedVectors(forward, hvp1);
+  double angle = AngleBetweenUndirected(forward, hvp1);
   for (auto it = result.begin(); it != result.end(); ++it) {
     auto &p = rawgc(it.pos());
     auto &resultv = *it;

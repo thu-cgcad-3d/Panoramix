@@ -149,8 +149,7 @@ double ComputeEnergy(const Mesh2 &mesh, const SubMesh &sub,
       VertHandle vh = mesh.topo(hh).to();
       const Point2 &p2d = mesh.data(vh);
       auto dir = normalize(cam.direction(p2d));
-      Point3 p3d =
-          IntersectionOfLineAndPlane(Ray3(cam.eye(), dir), plane).position;
+      Point3 p3d = Intersection(Ray3(cam.eye(), dir), plane);
       vpositions[vh] += p3d;
       vfacedegrees[vh]++;
     }
@@ -180,7 +179,7 @@ double ComputeEnergy(const Mesh2 &mesh, const SubMesh &sub,
       auto &p1 = vpositions.at(v1);
       auto &p2 = vpositions.at(v2);
       auto &p3 = vpositions.at(v3);
-      double angle = AngleBetweenDirections(p1 - p2, p3 - p2);
+      double angle = AngleBetweenDirected(p1 - p2, p3 - p2);
       faceAngles[k] = angle;
       vh2angles[v2].push_back(angle);
     }
@@ -212,7 +211,7 @@ double ComputeEnergy(const Mesh2 &mesh, const SubMesh &sub,
     auto planeEq1 = fh2planeEq(fh1);
     auto fh2 = mesh.topo(mesh.topo(hh).opposite).face;
     auto planeEq2 = fh2planeEq(fh2);
-    double angle = AngleBetweenUndirectedVectors(
+    double angle = AngleBetweenUndirected(
         Vec3(planeEq1[0], planeEq1[1], planeEq1[2]),
         Vec3(planeEq2[0], planeEq2[1], planeEq2[2]));
     assert(!IsInfOrNaN(angle));
@@ -316,10 +315,8 @@ void TestOnMesh(const Mesh3 &meshGT, int maxIters,
     for (auto hh : meshProjected.topo(vh).halfedges) {
       FaceHandle fh = meshProjected.topo(hh).face;
       auto &plane = facePlanes[fh];
-      auto p =
-          IntersectionOfLineAndPlane(
-              Ray3(cam.eye(), cam.direction(meshProjected.data(vh))), plane)
-              .position;
+      auto p = Intersection(
+          Ray3(cam.eye(), cam.direction(meshProjected.data(vh))), plane);
       meshReconstructed.data(vh) += p;
     }
     meshReconstructed.data(vh) /=
@@ -491,9 +488,8 @@ int DISABLED_main(int argc, char **argv) {
           for (auto hh : mesh.topo(vh).halfedges) {
             FaceHandle fh = mesh.topo(hh).face;
             auto &plane = facePlanes[fh];
-            auto p = IntersectionOfLineAndPlane(
-                         Ray3(cam.eye(), cam.direction(mesh.data(vh))), plane)
-                         .position;
+            auto p = Intersection(Ray3(cam.eye(), cam.direction(mesh.data(vh))),
+                                  plane);
             meshReconstructed.data(vh) += p;
           }
           meshReconstructed.data(vh) /= (double)mesh.topo(vh).halfedges.size();

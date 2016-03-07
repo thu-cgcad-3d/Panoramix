@@ -86,8 +86,8 @@ void PILayoutAnnotation::regenerateFaces() {
       auto &dir2 = corners[c2];
       Vec2 dirproj1((dir1 - dir).dot(x), (dir1 - dir).dot(y));
       Vec2 dirproj2((dir2 - dir).dot(x), (dir2 - dir).dot(y));
-      return SignedAngleBetweenDirections(Vec2(1, 0), dirproj1) <
-             SignedAngleBetweenDirections(Vec2(1, 0), dirproj2);
+      return SignedAngle(Vec2(1, 0), dirproj1) <
+             SignedAngle(Vec2(1, 0), dirproj2);
     });
   }
 
@@ -284,7 +284,7 @@ PIGraph<PanoramicCamera> ConvertToPIGraph(const PILayoutAnnotation &anno) {
     poly.normal = plane.normal;
     for (int c : anno.face2corners[i]) {
       Ray3 ray(Origin(), anno.corners[c]);
-      poly.corners.push_back(IntersectionOfLineAndPlane(ray, plane).position);
+      poly.corners.push_back(Intersection(ray, plane));
     }
   }
 

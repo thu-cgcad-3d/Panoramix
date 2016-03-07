@@ -106,7 +106,7 @@ inline std::vector<Vec<To, N>> ecast(const std::vector<Vec<From, N>> &v) {
 }
 
 template <class T, int M, int N>
-inline Vec<T, M + N> cat(const Vec<T, M> &a, const Vec<T, N> &b) {
+inline Vec<T, M + N> cat(const Mat<T, M, 1> &a, const Mat<T, N, 1> &b) {
   Vec<T, M + N> ab;
   std::copy(a.val, a.val + M, ab.val);
   std::copy(b.val, b.val + N, ab.val + M);
@@ -114,7 +114,7 @@ inline Vec<T, M + N> cat(const Vec<T, M> &a, const Vec<T, N> &b) {
 }
 
 template <class T, int M, class K>
-inline Vec<T, M + 1> cat(const Vec<T, M> &a, const K &b) {
+inline Vec<T, M + 1> cat(const Mat<T, M, 1> &a, const K &b) {
   Vec<T, M + 1> ab;
   std::copy(a.val, a.val + M, ab.val);
   ab[M] = b;
@@ -122,7 +122,7 @@ inline Vec<T, M + 1> cat(const Vec<T, M> &a, const K &b) {
 }
 
 template <class T, int M, class K>
-inline Vec<T, M + 1> cat(const K &a, const Vec<T, M> &b) {
+inline Vec<T, M + 1> cat(const K &a, const Mat<T, M, 1> &b) {
   Vec<T, M + 1> ab;
   ab.val[0] = a;
   std::copy(b.val, b.val + M, ab.val + 1);
@@ -454,6 +454,12 @@ template <class T, int N> struct Chain {
   std::vector<Point<T, N>> points;
   bool closed;
 
+  Chain() : closed(true) {}
+  explicit Chain(const std::vector<Point<T, N>> &ps, bool c = true)
+      : points(ps), closed(c) {}
+  explicit Chain(std::vector<Point<T, N>> &&ps, bool c = true)
+      : points(std::move(ps)), closed(c) {}
+
   const Point<T, N> &at(size_t i) const { return points.at(i % points.size()); }
   const Point<T, N> &prev(size_t i) const {
     return points.at((i - 1 + points.size()) % points.size());
@@ -589,6 +595,10 @@ template <class T, int N> struct Box {
   Box(const Point<T, N> &c1, const Point<T, N> &c2)
       : minCorner(AllMinOf(c1, c2)), maxCorner(AllMaxOf(c1, c2)),
         isNull(false) {}
+  template <class = std::enable_if_t<N == 1>>
+  Box(const T &c1, const T &c2)
+      : minCorner(std::min(c1, c2)), maxCorner(std::max(c1, c2)),
+        isNull(false) {}
 
   Point<T, N> corner(std::initializer_list<bool> isMaxes) const {
     Point<T, N> c;
@@ -602,6 +612,14 @@ template <class T, int N> struct Box {
 
   Vec<T, N> size() const { return maxCorner - minCorner; }
   T size(size_t i) const { return maxCorner[i] - minCorner[i]; }
+  T volume() const {
+    T v = 1.0;
+    for (int i = 0; i < N; i++) {
+      v *= (maxCorner[i] - minCorner[i]);
+    }
+    return v;
+  }
+
   Point<T, N> center() const { return (maxCorner + minCorner) * (0.5); }
   Sphere<T, N> outerSphere() const {
     return Sphere<T, N>{center(),
@@ -660,6 +678,7 @@ inline Box<T, N> operator|(const Box<T, N> &b1, const Box<T, N> &b2) {
   Box<T, N> b12 = b1;
   return b12 |= b2;
 }
+using Box1 = Box<double, 1>;
 using Box2 = Box<double, 2>;
 using Box3 = Box<double, 3>;
 
