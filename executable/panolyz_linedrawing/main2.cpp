@@ -1,5 +1,6 @@
 #include <QtWidgets>
 
+#include "../../src/core/factor_graph.hpp"
 #include "../../src/core/parallel.hpp"
 #include "../../src/misc/cache.hpp"
 #include "../../src/misc/clock.hpp"
@@ -108,25 +109,27 @@ inline std::vector<Point2> PossibleKeyVanishingPoints(const Chain2 &chain) {
             Intersection(chain.edge(1).ray(), chain.edge(3).ray())};
   }
   if (chain.size() % 2 == 0) {
-    std::vector<Point2> vps;
-    vps.reserve(chain.size() * chain.size() / 4);
+    std::vector<Point2> vpPositions;
+    vpPositions.reserve(chain.size() * chain.size() / 4);
     for (int i = 0; i < chain.size() / 2; i++) {
       for (int j = i + 1; j < i + chain.size() / 2; j++) {
-        vps.push_back(Intersection(Line2(chain.at(i), chain.at(j)).ray(),
-                                   Line2(chain.at(i + chain.size() / 2),
-                                         chain.at(j + chain.size() / 2))
-                                       .ray()));
+        vpPositions.push_back(
+            Intersection(Line2(chain.at(i), chain.at(j)).ray(),
+                         Line2(chain.at(i + chain.size() / 2),
+                               chain.at(j + chain.size() / 2))
+                             .ray()));
       }
     }
-    return vps;
+    return vpPositions;
   } else {
-    std::vector<Point2> vps;
+    std::vector<Point2> vpPositions;
     for (int i = 0; i < chain.size(); i++) {
       for (int j = i + 1; j < chain.size(); j++) {
-        vps.push_back(Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
+        vpPositions.push_back(
+            Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
       }
     }
-    return vps;
+    return vpPositions;
   }
 }
 
@@ -135,7 +138,7 @@ int main(int argc, char **argv) {
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
 
   std::string name = "hex";
-  std::string camName = "cam2";
+  std::string camName = "cam1";
   bool resetCam = false;
 
   std::string objFile = "H:\\GitHub\\Panoramix\\data\\linedrawing\\" + name +
@@ -291,6 +294,7 @@ int main(int argc, char **argv) {
     double focal;
   };
 
+  // collect pp focal candidates
   std::vector<PPFocalCandidate> ppFocalCandidates;
   ppFocalCandidates.reserve(subMeshes.size() * 3);
 
@@ -333,8 +337,9 @@ int main(int argc, char **argv) {
   std::sort(ppFocalCandidates.begin(), ppFocalCandidates.end(),
             [](auto &a, auto &b) { return a.focal < b.focal; });
 
-  std::vector<std::pair<std::set<int>, PPFocalCandidate>> ppFocalIdGroups;
-  { // dbscan
+  // naive clustering
+  std::vector<std::pair<std::set<int>, PPFocalCandidate>> ppFocalGroups;
+  {
     std::vector<int> ppFocalId2group(ppFocalCandidates.size(), -1);
     int ngroups = 0;
     RTreeMap<Vec3, int> ppFocalIdTree;
@@ -342,43 +347,356 @@ int main(int argc, char **argv) {
       Vec3 coordinate =
           cat(ppFocalCandidates[i].pp, ppFocalCandidates[i].focal);
       const double thres = scale / 50.0;
+      // find the nearest ppFocal sample point
+      int nearestPPFocalCandId = -1;
+      double minDist = thres;
       ppFocalIdTree.search(BoundingBox(coordinate).expand(thres * 2),
-                           [&coordinate, thres, i, &ppFocalId2group](
-                               const std::pair<Vec3, int> &cand) {
-                             if (Distance(cand.first, coordinate) <= thres) {
-                               ppFocalId2group[i] =
-                                   ppFocalId2group[cand.second];
-                               return false;
+                           [&nearestPPFocalCandId, &minDist,
+                            &coordinate](const std::pair<Vec3, int> &cand) {
+                             double dist = Distance(cand.first, coordinate);
+                             if (dist < minDist) {
+                               minDist = dist;
+                               nearestPPFocalCandId = cand.second;
                              }
                              return true;
                            });
-      if (ppFocalId2group[i] == -1) {
+      if (nearestPPFocalCandId != -1) { // if found, assign to the same group
+        ppFocalId2group[i] = ppFocalId2group[nearestPPFocalCandId];
+      } else { // otherwise, create a new group
         ppFocalId2group[i] = ngroups++;
       }
       ppFocalIdTree.emplace(coordinate, i);
     }
 
-    ppFocalIdGroups.resize(ngroups);
-    for (auto &g : ppFocalIdGroups) {
+    ppFocalGroups.resize(ngroups);
+    for (auto &g : ppFocalGroups) {
       g.second.focal = 0.0;
       g.second.pp = Point2();
     }
     for (int i = 0; i < ppFocalId2group.size(); i++) {
-      auto &g = ppFocalIdGroups[ppFocalId2group[i]];
+      auto &g = ppFocalGroups[ppFocalId2group[i]];
       g.first.insert(i);
       g.second.focal += ppFocalCandidates[i].focal;
       g.second.pp += ppFocalCandidates[i].pp;
     }
-    for (auto &g : ppFocalIdGroups) {
+    for (auto &g : ppFocalGroups) {
       g.second.focal /= g.first.size();
       g.second.pp /= double(g.first.size());
     }
 
     std::sort(
-        ppFocalIdGroups.begin(), ppFocalIdGroups.end(),
+        ppFocalGroups.begin(), ppFocalGroups.end(),
         [](auto &g1, auto &g2) { return g1.first.size() > g2.first.size(); });
   }
 
+  // record edges
+  std::vector<std::pair<HalfHandle, HalfHandle>> edge2hhs;
+  std::vector<Line2> edge2line;
+  HandledTable<HalfHandle, int> hh2edge(mesh2d.internalHalfEdges().size(), -1);
+  int nedges = 0;
+  {
+    for (auto &h : mesh2d.halfedges()) {
+      auto hh = h.topo.hd;
+      auto oppohh = h.topo.opposite;
+      if (hh2edge[hh] == -1 && hh2edge[oppohh] == -1) {
+        hh2edge[hh] = hh2edge[oppohh] = nedges;
+        nedges++;
+        edge2hhs.push_back(MakeOrderedPair(hh, oppohh));
+        edge2line.push_back(Line2(mesh2d.data(mesh2d.topo(hh).from()),
+                                  mesh2d.data(mesh2d.topo(hh).to())));
+      }
+    }
+    assert(edge2hhs.size() == nedges && edge2line.size() == nedges);
+  }
 
+  // collect edge intersections
+  std::vector<Point2> intersections;
+  std::vector<std::pair<int, int>> intersection2edges;
+  {
+    intersections.reserve(nedges * (nedges - 1) / 2);
+    intersection2edges.reserve(nedges * (nedges - 1) / 2);
+    for (int i = 0; i < nedges; i++) {
+      const Line2 &linei = edge2line[i];
+      for (int j = i + 1; j < nedges; j++) {
+        const Line2 &linej = edge2line[j];
+        Point2 interp = Intersection(linei.ray(), linej.ray());
+        if (std::min(Distance(interp, linei), Distance(interp, linej)) <=
+            scale / 10.0) {
+          continue;
+        }
+        intersections.push_back(interp);
+        intersection2edges.emplace_back(i, j);
+      }
+    }
+    assert(intersections.size() == intersection2edges.size());
+  }
 
+  // get vpPositions from the intersections
+  std::vector<Point2> vpPositions;
+  int nvps = 0;
+  {
+    std::vector<int> intersection2vp(intersections.size(), -1);
+    RTreeMap<Point2, int> intersectionTree;
+    for (int i = 0; i < intersections.size(); i++) {
+      const double thres = scale / 50.0;
+      auto &p = intersections[i];
+      int nearestIntersectionId = -1;
+      double minDist = thres;
+      intersectionTree.search(
+          BoundingBox(p).expand(thres * 2),
+          [&nearestIntersectionId, &minDist,
+           &p](const std::pair<Point2, int> &locationAndIntersectionId) {
+            double dist = Distance(locationAndIntersectionId.first, p);
+            if (dist < minDist) {
+              minDist = dist;
+              nearestIntersectionId = locationAndIntersectionId.second;
+            }
+            return true;
+          });
+      if (nearestIntersectionId != -1) {
+        intersection2vp[i] = intersection2vp[nearestIntersectionId];
+      } else {
+        intersection2vp[i] = nvps++;
+      }
+      intersectionTree.emplace(p, i);
+    }
+
+    vpPositions.resize(nvps, Origin<2>());
+    std::vector<std::set<int>> vp2intersections(nvps);
+    for (int i = 0; i < intersection2vp.size(); i++) {
+      int vpid = intersection2vp[i];
+      vpPositions[vpid] += intersections[i];
+      vp2intersections[vpid].insert(i);
+    }
+    for (int i = 0; i < nvps; i++) {
+      vpPositions[i] /= double(vp2intersections[i].size());
+    }
+  }
+
+  // regroup edges to vpPositions
+  struct EVPBinding {
+    int edgeId;
+    int vpId;
+    double angle;
+  };
+  std::vector<EVPBinding> evps;
+  std::vector<std::set<int>> vp2evps(nvps);
+  std::vector<std::vector<int>> edge2evps(nedges);
+
+  {
+    evps.reserve(nvps * 2);
+    for (int vp = 0; vp < nvps; vp++) {
+      auto &vpPos = vpPositions[vp];
+      for (int edge = 0; edge < nedges; edge++) {
+        auto &line = edge2line[edge];
+        double angle =
+            AngleBetweenUndirected(line.direction(), vpPos - line.center());
+        static const double theta = DegreesToRadians(3);
+        if (angle >= theta) {
+          continue;
+        }
+        evps.push_back(EVPBinding{edge, vp, angle});
+        int evp = evps.size() - 1;
+        vp2evps[vp].insert(evp);
+        edge2evps[edge].push_back(evp);
+      }
+    }
+    std::vector<int> orderedVPIds(nvps);
+    std::iota(orderedVPIds.begin(), orderedVPIds.end(), 0);
+    std::sort(orderedVPIds.begin(), orderedVPIds.end(),
+              [&vp2evps](int vpid1, int vpid2) {
+                return vp2evps[vpid1].size() > vp2evps[vpid2].size();
+              });
+    std::vector<Point2> orderedVPs(nvps);
+    std::vector<std::set<int>> orderedVP2bindings(nvps);
+    for (int i = 0; i < nvps; i++) {
+      orderedVPs[i] = vpPositions[orderedVPIds[i]];
+      orderedVP2bindings[i] = std::move(vp2evps[orderedVPIds[i]]);
+    }
+    for (auto &b : evps) {
+      b.vpId = std::find(orderedVPIds.begin(), orderedVPIds.end(), b.vpId) -
+               orderedVPIds.begin();
+    }
+    vpPositions = std::move(orderedVPs);
+    vp2evps = std::move(orderedVP2bindings);
+  }
+
+  //std::vector<std::set<int>> vp2edges(nvps);
+  //for (int i = 0; i < nvps; i++) {
+  //  for (int b : vp2evps[i]) {
+  //    vp2edges[i].insert(evps[b].edgeId);
+  //  }
+  //}
+  //std::vector<double> vp2weights(nvps, 0.0);
+  //for (int i = 0; i < nvps; i++) {
+  //  for (int edge : vp2edges[i]) {
+  //    vp2weights[i] += edge2line[edge].length();
+  //  }
+  //}
+
+  // construct a factor graph to optimize edge-vp bindings
+  FactorGraph fg;
+  {
+    std::vector<FactorGraph::VarHandle> edge2vh(nedges);
+    for (int edge = 0; edge < nedges; edge++) {
+      auto vc = fg.addVarCategory(edge2evps[edge].size() + 1, 1.0);
+      edge2vh[edge] = fg.addVar(vc);
+    }
+
+    // potential 1: the edge should bind to some vp (?)
+    for (int edge = 0; edge < nedges; edge++) {
+      auto vh = edge2vh[edge];
+      auto &relatedEVPs = edge2evps[edge];
+      auto fc = fg.addFactorCategory(
+          [&evps, &relatedEVPs](const int *varlabels, size_t nvar,
+                                FactorGraph::FactorCategoryId fcid,
+                                void *givenData) -> double {
+            assert(nvar == 1);
+            int label = varlabels[0];
+            assert(label <= relatedEVPs.size());
+            if (label == relatedEVPs.size()) { // not bind to any vp
+              return 1.0;
+            }
+            auto &bd = evps[relatedEVPs[label]];
+            // todo
+            return 1.0 - Gaussian(bd.angle, DegreesToRadians(3));
+          },
+          1.0);
+      fg.addFactor({vh}, fc);
+    }
+
+    // potential 2: two adjacent edges should not bind to a same vp
+    for (auto &f : mesh2d.faces()) {
+      auto &hhs = f.topo.halfedges;
+      for (int i = 0; i < hhs.size(); i++) {
+        auto hh1 = hhs[i];
+        auto hh2 = hhs[(i + 1) % hhs.size()];
+        int edge1 = hh2edge[hh1];
+        int edge2 = hh2edge[hh2];
+        auto vh1 = edge2vh[edge1];
+        auto vh2 = edge2vh[edge2];
+        auto fc = fg.addFactorCategory(
+            [&evps, &edge2evps, edge1, edge2](
+                const int *varlabels, size_t nvar,
+                FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+              assert(nvar == 2);
+              int bindedVP1 = varlabels[0] == edge2evps[edge1].size()
+                                  ? -1
+                                  : (evps[edge2evps[edge1][varlabels[0]]].vpId);
+              int bindedVP2 = varlabels[1] == edge2evps[edge2].size()
+                                  ? -1
+                                  : (evps[edge2evps[edge2][varlabels[1]]].vpId);
+              // todo
+              if (bindedVP1 == -1 || bindedVP2 == -1) {
+                return 0;
+              }
+              if (bindedVP1 == bindedVP2) {
+                return 10.0;
+              }
+              return 0.0;
+            },
+            1.0);
+        fg.addFactor({vh1, vh2}, fc);
+      }
+    }
+
+    // potential 3: the vpPositions of edges sharing a same face should lie on
+    // the same
+    // line (the vanishing line of the face)
+    for (auto &f : mesh2d.faces()) {
+      auto &hhs = f.topo.halfedges;
+      std::vector<FactorGraph::VarHandle> vhs;
+      vhs.reserve(hhs.size());
+      for (auto hh : hhs) {
+        vhs.push_back(edge2vh[hh2edge[hh]]);
+      }
+      auto fc = fg.addFactorCategory(
+          [&evps, &edge2evps, &hhs, &vpPositions](
+              const int *varlabels, size_t nvar,
+              FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+            // todo
+
+          },
+          1.0);
+      fg.addFactor(vhs.begin(), vhs.end(), fc);
+    }
+
+    // potential 4: a vp is good only when edges are bound to it!
+    // a vp should be with either no edges or >= 3 edges
+    for (int vpid = 0; vpid < nvps; vpid++) {
+      std::vector<FactorGraph::VarHandle> relatedVhs;
+      relatedVhs.reserve(vp2evps[vpid].size());
+      for (int bind : vp2evps[vpid]) {
+        int edge = evps[bind].edgeId;
+        relatedVhs.push_back(edge2vh[edge]);
+      }
+      auto fc = fg.addFactorCategory(
+          [&edge2evps, &evps, vpid, &vp2evps](
+              const int *varlabels, size_t nvar,
+              FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+            int bindedEdges = 0;
+            auto &bindings = vp2evps[vpid];
+            int i = 0;
+            assert(nvar == bindings.size());
+            for (auto it = bindings.begin(); it != bindings.end(); ++it, ++i) {
+              int bind = *it;
+              int edge = evps[bind].edgeId;
+              int edgeLabel = varlabels[i];
+              if (edgeLabel == edge2evps[edge].size()) {
+                continue; // not bound to any vp
+              }
+              int edgeBindedVPId = evps[edge2evps[edge][edgeLabel]].vpId;
+              if (edgeBindedVPId == vpid) {
+                bindedEdges++;
+              }
+            }
+            // todo
+            if (bindedEdges == 1 || bindedEdges == 2) {
+              return 10.0;
+            }
+            return 0.0;
+          },
+          1.0);
+      fg.addFactor(relatedVhs.begin(), relatedVhs.end(), fc);
+    }
+  }
+
+  if (true) {
+    for (int i = 0; i < nvps; i++) {
+      Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
+      auto canvas = gui::MakeCanvas(im);
+      canvas.color(gui::LightGray);
+      canvas.thickness(2);
+      for (auto &line : edge2line) {
+        canvas.add(line);
+      }
+      canvas.color(gui::Gray);
+      canvas.thickness(1);
+      for (int binding : vp2evps[i]) {
+        int edge = evps[binding].edgeId;
+        canvas.add(edge2line[edge].ray());
+      }
+      canvas.color(gui::Black);
+      for (int binding : vp2evps[i]) {
+        int edge = evps[binding].edgeId;
+        canvas.add(edge2line[edge]);
+      }
+      canvas.show(0, "vp_" + std::to_string(i));
+    }
+  }
+
+  for (int configId = 0;
+       configId < std::min(5ull, ppFocalGroups.size()) &&
+       ppFocalGroups[configId].first.size() * 10 >= ppFocalCandidates.size();
+       configId++) {
+
+    double focal = ppFocalGroups[configId].second.focal;
+    auto &pp = ppFocalGroups[configId].second.pp;
+
+    PerspectiveCamera curCam(cam.screenWidth(), cam.screenHeight(), pp, focal);
+    std::vector<Vec3> vp2dir(nvps);
+    for (int i = 0; i < nvps; i++) {
+      vp2dir[i] = curCam.direction(vpPositions[i]);
+    }
+  }
 }
