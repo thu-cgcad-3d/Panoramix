@@ -439,8 +439,7 @@ int ConnectedComponents(
         Vert v = Q.front();
         Q.pop();
         vTypeRecorder(v, cid);
-        auto vNeighborsContainer = vNeighborsGetter(v);
-        for (const auto &vv : vNeighborsContainer) {
+        for (const auto &vv : vNeighborsGetter(v)) {
           if (vVisited.at(vv))
             continue;
           Q.push(vv);
