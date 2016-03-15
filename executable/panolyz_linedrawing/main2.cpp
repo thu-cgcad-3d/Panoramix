@@ -389,8 +389,6 @@ int main(int argc, char **argv) {
         [](auto &g1, auto &g2) { return g1.first.size() > g2.first.size(); });
   }
 
-
-
   // record edges
   std::vector<std::pair<HalfHandle, HalfHandle>> edge2hhs;
   std::vector<Line2> edge2line;
@@ -415,9 +413,7 @@ int main(int argc, char **argv) {
   // get vpPositions from the intersections
   std::vector<Point2> vpPositions;
   int nvps = 0;
-  std::vector<std::vector<Scored<int>>> edge2OrderedVPAndAngles(
-      nedges);
-  std::vector<std::vector<int>> vp2edges;
+  std::vector<std::vector<Scored<int>>> edge2OrderedVPAndAngles(nedges);
   {
     std::vector<Point2> intersections;
     std::vector<std::pair<int, int>> intersection2edges;
@@ -500,8 +496,6 @@ int main(int argc, char **argv) {
           rawVP2newVP[rawVP] = newVP;
         });
 
-
-
     vpPositions.resize(nvps, Origin<2>());
     std::vector<std::set<int>> vp2intersections(nvps);
     for (int i = 0; i < intersection2Rawvp.size(); i++) {
@@ -530,13 +524,35 @@ int main(int argc, char **argv) {
         }
         double angle =
             AngleBetweenUndirected(line.direction(), vpPos - line.center());
-        static const double theta = DegreesToRadians(3);
+        static const double theta = DegreesToRadians(5); ////// TODO
         if (angle >= theta) {
           continue;
         }
         vp2edgeWithAngles[vp][edge] = angle;
       }
       vpIsGood[vp] = vp2edgeWithAngles[vp].size() >= 3;
+    }
+
+    if (false) {
+      for (int i = 0; i < std::min(10, nvps); i++) {
+        Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
+        auto canvas = gui::MakeCanvas(im);
+        canvas.color(gui::LightGray);
+        canvas.thickness(2);
+        for (auto &line : edge2line) {
+          canvas.add(line);
+        }
+        canvas.color(gui::Gray);
+        canvas.thickness(1);
+        for (auto &edgeWithAngle : vp2edgeWithAngles[i]) {
+          canvas.add(edge2line[edgeWithAngle.first].ray());
+        }
+        canvas.color(gui::Black);
+        for (auto &edgeWithAngle : vp2edgeWithAngles[i]) {
+          canvas.add(edge2line[edgeWithAngle.first]);
+        }
+        canvas.show(0, "before removing bad vps: raw vp_" + std::to_string(i));
+      }
     }
 
     // remove bad vps
@@ -566,19 +582,33 @@ int main(int argc, char **argv) {
       std::sort(vpAndAngles.begin(), vpAndAngles.end());
     }
 
-    // construct vp2edges
-    vp2edges.resize(nvps);
-    for (int vp = 0; vp < nvps; vp++) {
-      for (auto &edgeWithAngle : vp2edgeWithAngles[vp]) {
-        vp2edges[vp].push_back(edgeWithAngle.first);
+    if (true) {
+      for (int i = 0; i < std::min(10, nvps); i++) {
+        Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
+        auto canvas = gui::MakeCanvas(im);
+        canvas.color(gui::LightGray);
+        canvas.thickness(2);
+        for (auto &line : edge2line) {
+          canvas.add(line);
+        }
+        canvas.color(gui::Gray);
+        canvas.thickness(2);
+        for (auto &edgeWithAngle : vp2edgeWithAngles[i]) {
+          canvas.add(edge2line[edgeWithAngle.first].ray());
+        }
+        canvas.color(gui::Black);
+        for (auto &edgeWithAngle : vp2edgeWithAngles[i]) {
+          canvas.add(edge2line[edgeWithAngle.first]);
+        }
+        canvas.show(0, "raw vp_" + std::to_string(i));
       }
     }
   }
 
   // construct a factor graph to optimize edge-vp bindings
   FactorGraph fg;
+  std::vector<FactorGraph::VarHandle> edge2vh(nedges);
   {
-    std::vector<FactorGraph::VarHandle> edge2vh(nedges);
     for (int edge = 0; edge < nedges; edge++) {
       auto vc =
           fg.addVarCategory(edge2OrderedVPAndAngles[edge].size() + 1, 1.0);
@@ -590,24 +620,29 @@ int main(int argc, char **argv) {
       auto vh = edge2vh[edge];
       auto &relatedVPAndAngles = edge2OrderedVPAndAngles[edge];
       auto fc = fg.addFactorCategory(
-          [&relatedVPAndAngles](const int *varlabels, size_t nvar,
-                                FactorGraph::FactorCategoryId fcid,
-                                void *givenData) -> double {
+          [&relatedVPAndAngles, nedges](const int *varlabels, size_t nvar,
+                                        FactorGraph::FactorCategoryId fcid,
+                                        void *givenData) -> double {
             assert(nvar == 1);
             int label = varlabels[0];
             assert(label <= relatedVPAndAngles.size());
+            const double K = 50.0 / nedges;
             if (label == relatedVPAndAngles.size()) { // not bind to any vp
-              return 1.0;
+              return K;
             }
             double angle = relatedVPAndAngles[label].score;
             assert(!IsInfOrNaN(angle));
-            return 1.0 - Gaussian(angle, DegreesToRadians(3));
+            return (1.0 - Gaussian(angle, DegreesToRadians(3))) * K;
           },
           1.0);
       fg.addFactor({vh}, fc);
     }
 
-    // potential 2: two adjacent edges should not bind to a same vp
+    // potential 2: two adjacent edges should not bind to a near vp
+    int ncorners = 0;
+    for (auto &f : mesh2d.faces()) {
+      ncorners += f.topo.halfedges.size();
+    }
     for (auto &f : mesh2d.faces()) {
       auto &hhs = f.topo.halfedges;
       for (int i = 0; i < hhs.size(); i++) {
@@ -620,22 +655,28 @@ int main(int argc, char **argv) {
         auto vh1 = edge2vh[edge1];
         auto vh2 = edge2vh[edge2];
         auto fc = fg.addFactorCategory(
-            [edge1, edge2, &relatedVPAndAngles1, &relatedVPAndAngles2](
-                const int *varlabels, size_t nvar,
-                FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+            [edge1, edge2, &relatedVPAndAngles1, &relatedVPAndAngles2,
+             &vpPositions, ncorners, scale](const int *varlabels, size_t nvar,
+                                            FactorGraph::FactorCategoryId fcid,
+                                            void *givenData) -> double {
               assert(nvar == 2);
-              int bindedVP1 = varlabels[0] == relatedVPAndAngles1.size()
-                                  ? -1
-                                  : (relatedVPAndAngles1[varlabels[0]].component);
-              int bindedVP2 = varlabels[1] == relatedVPAndAngles2.size()
-                                  ? -1
-                                  : (relatedVPAndAngles2[varlabels[1]].component);
-              // todo
+              int bindedVP1 =
+                  varlabels[0] == relatedVPAndAngles1.size()
+                      ? -1
+                      : (relatedVPAndAngles1[varlabels[0]].component);
+              int bindedVP2 =
+                  varlabels[1] == relatedVPAndAngles2.size()
+                      ? -1
+                      : (relatedVPAndAngles2[varlabels[1]].component);
               if (bindedVP1 == -1 || bindedVP2 == -1) {
                 return 0;
               }
-              if (bindedVP1 == bindedVP2) {
-                return 10.0;
+              auto &vpPos1 = vpPositions[bindedVP1];
+              auto &vpPos2 = vpPositions[bindedVP2];
+              const double thres = scale / 10.0;
+              const double K = 10.0 / ncorners;
+              if (Distance(vpPos1, vpPos2) < thres) { // todo
+                return K;
               }
               return 0.0;
             },
@@ -647,6 +688,14 @@ int main(int argc, char **argv) {
     // potential 3: the vpPositions of edges sharing a same face should lie on
     // the same
     // line (the vanishing line of the face)
+    int ntris = 0;
+    for (auto &f : mesh2d.faces()) {
+      auto &hhs = f.topo.halfedges;
+      if (hhs.size() <= 3) {
+        continue;
+      }
+      ntris = hhs.size() > 4 ? (2 * hhs.size()) : hhs.size();
+    }
     for (auto &f : mesh2d.faces()) {
       auto &hhs = f.topo.halfedges;
       if (hhs.size() <= 3) {
@@ -659,10 +708,10 @@ int main(int argc, char **argv) {
           int edge = hh2edge[hhs[i]];
           int nextEdge = hh2edge[hhs[(i + gap) % hhs.size()]];
           auto fc = fg.addFactorCategory(
-              [&edge2OrderedVPAndAngles, &vpPositions, prevEdge, edge,
-               nextEdge](const int *varlabels, size_t nvar,
-                         FactorGraph::FactorCategoryId fcid,
-                         void *givenData) -> double {
+              [&edge2OrderedVPAndAngles, &vpPositions, prevEdge, edge, nextEdge,
+               ntris](const int *varlabels, size_t nvar,
+                      FactorGraph::FactorCategoryId fcid,
+                      void *givenData) -> double {
                 assert(nvar == 3);
                 int vp1 =
                     varlabels[0] == edge2OrderedVPAndAngles[prevEdge].size()
@@ -694,104 +743,78 @@ int main(int argc, char **argv) {
                     AngleBetweenUndirected(vpPositions[vp1] - vpPositions[vp2],
                                            vpPositions[vp3] - vpPositions[vp2]);
                 assert(!IsInfOrNaN(angle));
-                return (1.0 - Gaussian(angle, DegreesToRadians(10))) * 10.0;
+                const double K = 30.0 / ntris;
+                return (1.0 - Gaussian(angle, DegreesToRadians(10))) * K;
               },
               1.0);
           fg.addFactor({edge2vh[prevEdge], edge2vh[edge], edge2vh[nextEdge]},
                        fc);
         }
       }
-      //auto fc = fg.addFactorCategory(
-      //    [&edge2OrderedVPAndAngles, &hhs, &vpPositions, &hh2edge](
-      //        const int *varlabels, size_t nvar,
-      //        FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
-      //      assert(hhs.size() == nvar);
-      //      std::vector<int> relatedVPs;
-      //      for (int i = 0; i < hhs.size(); i++) {
-      //        int edge = hh2edge[hhs[i]];
-      //        if (varlabels[i] ==
-      //            edge2OrderedVPAndAngles[edge].size()) { // this edge has no vp
-      //          continue;
-      //        }
-      //        int vp = edge2OrderedVPAndAngles[edge][varlabels[i]].component;
-      //        relatedVPs.push_back(vp);
-      //      }
-      //      if (std::set<int>(relatedVPs.begin(), relatedVPs.end()).size() <=
-      //          2) {
-      //        return 0.0;
-      //      }
-      //      // measure whether the vps are on the same line?
-      //      double angleSum = 0.0;
-      //      int angleNum = 0;
-      //      for (int i = 0; i < relatedVPs.size(); i++) {
-      //        int prevVPId =
-      //            relatedVPs[(i + relatedVPs.size() - 1) % relatedVPs.size()];
-      //        int curVPId = relatedVPs[i];
-      //        int nextVPId = relatedVPs[(i + 1) % relatedVPs.size()];
-
-      //        if (prevVPId == curVPId || curVPId == nextVPId) {
-      //          continue;
-      //        }
-      //        double angle = AngleBetweenUndirected(
-      //            vpPositions[prevVPId] - vpPositions[curVPId],
-      //            vpPositions[nextVPId] - vpPositions[curVPId]);
-      //        angleSum += angle;
-      //        angleNum++;
-      //      }
-      //      assert(angleNum > 0);
-      //      double angleMean = angleSum / angleNum;
-      //      return (1.0 - Gaussian(angleMean, DegreesToRadians(10))) * 10.0;
-      //    },
-      //    1.0);
-      //fg.addFactor(vhs.begin(), vhs.end(), fc);
     }
 
-    // potential 4: a vp is good only when edges are bound to it!
-    // a vp should be with either no edges or >= 3 edges
-    for (int vpid = 0; vpid < nvps; vpid++) {
-      std::vector<FactorGraph::VarHandle> relatedVhs;
-      relatedVhs.reserve(vp2edges[vpid].size());
-      for (int edge : vp2edges[vpid]) {
-        relatedVhs.push_back(edge2vh[edge]);
-      }
-      auto fc = fg.addFactorCategory(
-          [&edge2OrderedVPAndAngles, vpid, &vp2edges](
-              const int *varlabels, size_t nvar,
-              FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
-            int bindedEdges = 0;
-            auto &relatedEdges = vp2edges[vpid];
-            assert(nvar == relatedEdges.size());
-            for (int i = 0; i < relatedEdges.size(); i++) {
-              int edge = relatedEdges[i];
-              int edgeLabel = varlabels[i];
-              if (edgeLabel == edge2OrderedVPAndAngles[edge].size()) {
-                continue; // not bound to any vp
-              }
-              int edgeBindedVPId = edge2OrderedVPAndAngles[edge][edgeLabel].component;
-              if (edgeBindedVPId == vpid) {
-                bindedEdges++;
-              }
-            }
-            // todo
-            if (bindedEdges == 1 || bindedEdges == 2) {
-              return 10.0;
-            }
-            return 0.0;
-          },
-          1.0);
-      fg.addFactor(relatedVhs.begin(), relatedVhs.end(), fc);
-    }
+    //// potential 4: a vp is good only when edges are bound to it!
+    //// a vp should be with either no edges or >= 3 edges
+    // for (int vpid = 0; vpid < nvps; vpid++) {
+    //  std::vector<FactorGraph::VarHandle> relatedVhs;
+    //  relatedVhs.reserve(vp2edges[vpid].size());
+    //  for (int edge : vp2edges[vpid]) {
+    //    relatedVhs.push_back(edge2vh[edge]);
+    //  }
+    //  auto fc = fg.addFactorCategory(
+    //      [&edge2OrderedVPAndAngles, vpid, &vp2edges](
+    //          const int *varlabels, size_t nvar,
+    //          FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+    //        int bindedEdges = 0;
+    //        auto &relatedEdges = vp2edges[vpid];
+    //        assert(nvar == relatedEdges.size());
+    //        for (int i = 0; i < relatedEdges.size(); i++) {
+    //          int edge = relatedEdges[i];
+    //          int edgeLabel = varlabels[i];
+    //          if (edgeLabel == edge2OrderedVPAndAngles[edge].size()) {
+    //            continue; // not bound to any vp
+    //          }
+    //          int edgeBindedVPId =
+    //          edge2OrderedVPAndAngles[edge][edgeLabel].component;
+    //          if (edgeBindedVPId == vpid) {
+    //            bindedEdges++;
+    //          }
+    //        }
+    //        // todo
+    //        if (bindedEdges == 1 || bindedEdges == 2) {
+    //          return 10.0;
+    //        }
+    //        return 0.0;
+    //      },
+    //      1.0);
+    //  fg.addFactor(relatedVhs.begin(), relatedVhs.end(), fc);
+    //}
   }
 
   // solve the factor graph
-  fg.solve(100, 1, [](int epoch, double energy, double denergy,
-                       const FactorGraph::ResultTable &results) -> bool {
-    Println("epoch: ", epoch, "  energy: ", energy);
-    return true;
-  });
+  auto result =
+      fg.solve(5, 1, [](int epoch, double energy, double denergy,
+                        const FactorGraph::ResultTable &results) -> bool {
+        Println("epoch: ", epoch, "  energy: ", energy);
+        return true;
+      });
+
+  std::vector<int> optimizedEdge2VP(nedges, -1);
+  std::vector<std::vector<int>> optimizedVP2Edges(nvps);
+  for (int edge = 0; edge < nedges; edge++) {
+    int id = result[edge2vh[edge]];
+    if (id == edge2OrderedVPAndAngles[edge].size()) {
+        continue;
+    }
+    optimizedEdge2VP[edge] = edge2OrderedVPAndAngles[edge][id].component;
+    optimizedVP2Edges[optimizedEdge2VP[edge]].push_back(edge);
+  }
 
   if (true) {
     for (int i = 0; i < nvps; i++) {
+      if (optimizedVP2Edges[i].size() <= 2) {
+        continue;
+      }
       Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
       auto canvas = gui::MakeCanvas(im);
       canvas.color(gui::LightGray);
@@ -800,15 +823,15 @@ int main(int argc, char **argv) {
         canvas.add(line);
       }
       canvas.color(gui::Gray);
-      canvas.thickness(1);
-      for (int edge : vp2edges[i]) {
+      canvas.thickness(2);
+      for (int edge : optimizedVP2Edges[i]) {
         canvas.add(edge2line[edge].ray());
       }
       canvas.color(gui::Black);
-      for (int edge : vp2edges[i]) {
+      for (int edge : optimizedVP2Edges[i]) {
         canvas.add(edge2line[edge]);
       }
-      canvas.show(0, "vp_" + std::to_string(i));
+      canvas.show(0, "optimized vp_" + std::to_string(i));
     }
   }
 
