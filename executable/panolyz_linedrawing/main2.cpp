@@ -146,11 +146,13 @@ int main(int argc, char **argv) {
   std::string camFile = "H:\\GitHub\\Panoramix\\data\\linedrawing\\" + name +
                         "\\" + name + ".obj." + camName + ".cereal";
 
-  auto mesh = LoadFromObjFile(objFile);
 
+  //// [Load Mesh]
+  auto mesh = LoadFromObjFile(objFile);
   auto meshProxy = MakeMeshProxy(mesh);
 
-  // decompose
+
+  //// [Decompose]
   auto cutFacePairs = DecomposeAll(
       meshProxy, [](HalfHandle hh1, HalfHandle hh2) -> bool { return false; });
   std::unordered_map<FaceHandle, FaceHandle> cutFace2Another;
@@ -158,7 +160,6 @@ int main(int argc, char **argv) {
     cutFace2Another[cutFacePair.first] = cutFacePair.second;
     cutFace2Another[cutFacePair.second] = cutFacePair.first;
   }
-
   auto subMeshes = ExtractSubMeshes(meshProxy,
                                     [](auto hhbegin, auto hhend) -> bool {
                                       return std::distance(hhbegin, hhend) <= 1;
@@ -166,6 +167,8 @@ int main(int argc, char **argv) {
                                     10);
   Println("found ", subMeshes.size(), " subMeshes");
 
+
+  //// [Load Camera]
   PerspectiveCamera cam;
   if (!LoadFromDisk(camFile, cam) || resetCam) {
     auto sphere = BoundingBoxOfContainer(mesh.vertices()).outerSphere();
@@ -254,6 +257,7 @@ int main(int argc, char **argv) {
     SaveToDisk(camFile, cam);
   }
 
+  //// [Make 2D Mesh]
   // convert to 2d
   auto mesh2d = Transform(
       mesh, [&cam](const Point3 &p) -> Point2 { return cam.toScreen(p); });
@@ -264,7 +268,7 @@ int main(int argc, char **argv) {
     v.data += offsetNoise;
   }
 
-  {
+  if(true){
     Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
     auto canvas = gui::MakeCanvas(im);
     canvas.color(gui::Black);
@@ -277,6 +281,8 @@ int main(int argc, char **argv) {
     canvas.show(0, "mesh2d");
   }
 
+
+  //// [Estimate PP & Focal Candidates from 2D Mesh]
   auto point2dAt = [&mesh2d, &meshProxy](VertHandle vhInProxy) -> Point2 {
     return mesh2d.data(meshProxy.data(vhInProxy));
   };
@@ -285,7 +291,6 @@ int main(int argc, char **argv) {
     return Line2(point2dAt(meshProxy.topo(hhInProxy).from()),
                  point2dAt(meshProxy.topo(hhInProxy).to()));
   };
-
   Box2 box = BoundingBoxOfContainer(mesh2d.vertices());
   double scale = box.outerSphere().radius;
 
@@ -336,7 +341,6 @@ int main(int argc, char **argv) {
 
   std::sort(ppFocalCandidates.begin(), ppFocalCandidates.end(),
             [](auto &a, auto &b) { return a.focal < b.focal; });
-
   // naive clustering
   std::vector<std::pair<std::set<int>, PPFocalCandidate>> ppFocalGroups;
   {
@@ -389,6 +393,9 @@ int main(int argc, char **argv) {
         [](auto &g1, auto &g2) { return g1.first.size() > g2.first.size(); });
   }
 
+
+
+  //// [Orient Edges]
   // record edges
   std::vector<std::pair<HalfHandle, HalfHandle>> edge2hhs;
   std::vector<Line2> edge2line;
@@ -582,7 +589,7 @@ int main(int argc, char **argv) {
       std::sort(vpAndAngles.begin(), vpAndAngles.end());
     }
 
-    if (true) {
+    if (false) {
       for (int i = 0; i < std::min(10, nvps); i++) {
         Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
         auto canvas = gui::MakeCanvas(im);
@@ -606,6 +613,7 @@ int main(int argc, char **argv) {
   }
 
   // construct a factor graph to optimize edge-vp bindings
+
   FactorGraph fg;
   std::vector<FactorGraph::VarHandle> edge2vh(nedges);
   {
@@ -810,9 +818,19 @@ int main(int argc, char **argv) {
     optimizedVP2Edges[optimizedEdge2VP[edge]].push_back(edge);
   }
 
-  if (true) {
+  // invalidate the edge bindings for vps who have only 1 or 2 edges
+  for (int vp = 0; vp < nvps; vp++) {
+    if (optimizedVP2Edges[vp].size() <= 2) {
+      for (int edge : optimizedVP2Edges[vp]) {
+        optimizedEdge2VP[edge] = -1;
+      }
+      optimizedVP2Edges[vp].clear();
+    }
+  }
+
+  if (true) { // show line classification results
     for (int i = 0; i < nvps; i++) {
-      if (optimizedVP2Edges[i].size() <= 2) {
+      if (optimizedVP2Edges[i].empty()) {
         continue;
       }
       Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
@@ -835,6 +853,13 @@ int main(int argc, char **argv) {
     }
   }
 
+  
+
+  //// []
+
+
+
+
   for (int configId = 0;
        configId < std::min(5ull, ppFocalGroups.size()) &&
        ppFocalGroups[configId].first.size() * 10 >= ppFocalCandidates.size();
@@ -848,5 +873,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < nvps; i++) {
       vp2dir[i] = curCam.direction(vpPositions[i]);
     }
+
+    
   }
 }
