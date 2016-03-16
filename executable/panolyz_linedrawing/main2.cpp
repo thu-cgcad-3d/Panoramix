@@ -146,11 +146,9 @@ int main(int argc, char **argv) {
   std::string camFile = "H:\\GitHub\\Panoramix\\data\\linedrawing\\" + name +
                         "\\" + name + ".obj." + camName + ".cereal";
 
-
   //// [Load Mesh]
   auto mesh = LoadFromObjFile(objFile);
   auto meshProxy = MakeMeshProxy(mesh);
-
 
   //// [Decompose]
   auto cutFacePairs = DecomposeAll(
@@ -167,7 +165,6 @@ int main(int argc, char **argv) {
                                     10);
   Println("found ", subMeshes.size(), " subMeshes");
 
-
   //// [Load Camera]
   PerspectiveCamera cam;
   if (!LoadFromDisk(camFile, cam) || resetCam) {
@@ -179,10 +176,10 @@ int main(int argc, char **argv) {
     const gui::ColorTable ctable =
         gui::CreateRandomColorTableWithSize(subMeshes.size());
 
-    HandledTable<HalfHandle, int> hh2subMeshId(
+    HandledTable<HalfHandle, int> hhProxy2subMeshId(
         meshProxy.internalHalfEdges().size(), -1);
     for (auto &h : meshProxy.halfedges()) {
-      int &id = hh2subMeshId[h.topo.hd];
+      int &id = hhProxy2subMeshId[h.topo.hd];
       for (int i = 0; i < subMeshes.size(); i++) {
         if (subMeshes[i].contains(h.topo.hd)) {
           id = i;
@@ -190,10 +187,10 @@ int main(int argc, char **argv) {
         }
       }
     }
-    HandledTable<FaceHandle, int> fh2subMeshId(meshProxy.internalFaces().size(),
-                                               -1);
+    HandledTable<FaceHandle, int> fhProxy2subMeshId(
+        meshProxy.internalFaces().size(), -1);
     for (auto &f : meshProxy.faces()) {
-      int &id = fh2subMeshId[f.topo.hd];
+      int &id = fhProxy2subMeshId[f.topo.hd];
       for (int i = 0; i < subMeshes.size(); i++) {
         if (subMeshes[i].contains(f.topo.hd)) {
           id = i;
@@ -215,9 +212,9 @@ int main(int argc, char **argv) {
             sb, meshProxy,
             [&subMeshes, i](auto h) { return subMeshes[i].contains(h); },
             [&mesh](VertHandle vh) { return mesh.data(vh); },
-            [&hh2subMeshId, &ctable](HalfHandle hh) { return gui::Black; },
-            [&fh2subMeshId, &ctable](FaceHandle fh) {
-              return ctable[fh2subMeshId[fh]];
+            [&hhProxy2subMeshId, &ctable](HalfHandle hh) { return gui::Black; },
+            [&fhProxy2subMeshId, &ctable](FaceHandle fh) {
+              return ctable[fhProxy2subMeshId[fh]];
             });
         sb.show(true, false, gui::RenderOptions()
                                  .camera(projCam)
@@ -237,12 +234,13 @@ int main(int argc, char **argv) {
           gui::OpenGLShaderSourceDescriptor::XTriangles;
       sb.installingOptions().discretizeOptions.color(gui::Black);
       sb.installingOptions().lineWidth = 0.03;
-      AddToScene(sb, meshProxy, [](auto) { return true; },
-                 [&mesh](VertHandle vh) { return mesh.data(vh); },
-                 [&hh2subMeshId, &ctable](HalfHandle hh) { return gui::Black; },
-                 [&fh2subMeshId, &ctable](FaceHandle fh) {
-                   return ctable[fh2subMeshId[fh]];
-                 });
+      AddToScene(
+          sb, meshProxy, [](auto) { return true; },
+          [&mesh](VertHandle vh) { return mesh.data(vh); },
+          [&hhProxy2subMeshId, &ctable](HalfHandle hh) { return gui::Black; },
+          [&fhProxy2subMeshId, &ctable](FaceHandle fh) {
+            return ctable[fhProxy2subMeshId[fh]];
+          });
       cam = sb.show(true, false, gui::RenderOptions()
                                      .camera(projCam)
                                      .backgroundColor(gui::White)
@@ -268,7 +266,7 @@ int main(int argc, char **argv) {
     v.data += offsetNoise;
   }
 
-  if(true){
+  if (true) {
     Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
     auto canvas = gui::MakeCanvas(im);
     canvas.color(gui::Black);
@@ -280,7 +278,6 @@ int main(int argc, char **argv) {
     }
     canvas.show(0, "mesh2d");
   }
-
 
   //// [Estimate PP & Focal Candidates from 2D Mesh]
   auto point2dAt = [&mesh2d, &meshProxy](VertHandle vhInProxy) -> Point2 {
@@ -393,27 +390,26 @@ int main(int argc, char **argv) {
         [](auto &g1, auto &g2) { return g1.first.size() > g2.first.size(); });
   }
 
-
-
   //// [Orient Edges]
   // record edges
-  std::vector<std::pair<HalfHandle, HalfHandle>> edge2hhs;
+  std::vector<std::pair<HalfHandle, HalfHandle>> edge2hh2ds;
   std::vector<Line2> edge2line;
-  HandledTable<HalfHandle, int> hh2edge(mesh2d.internalHalfEdges().size(), -1);
+  HandledTable<HalfHandle, int> hh2d2edge(mesh2d.internalHalfEdges().size(),
+                                          -1);
   int nedges = 0;
   {
     for (auto &h : mesh2d.halfedges()) {
       auto hh = h.topo.hd;
       auto oppohh = h.topo.opposite;
-      if (hh2edge[hh] == -1 && hh2edge[oppohh] == -1) {
-        hh2edge[hh] = hh2edge[oppohh] = nedges;
+      if (hh2d2edge[hh] == -1 && hh2d2edge[oppohh] == -1) {
+        hh2d2edge[hh] = hh2d2edge[oppohh] = nedges;
         nedges++;
-        edge2hhs.push_back(MakeOrderedPair(hh, oppohh));
+        edge2hh2ds.push_back(MakeOrderedPair(hh, oppohh));
         edge2line.push_back(Line2(mesh2d.data(mesh2d.topo(hh).from()),
                                   mesh2d.data(mesh2d.topo(hh).to())));
       }
     }
-    assert(edge2hhs.size() == nedges && edge2line.size() == nedges);
+    assert(edge2hh2ds.size() == nedges && edge2line.size() == nedges);
   }
 
   // collect edge intersections and
@@ -612,254 +608,263 @@ int main(int argc, char **argv) {
     }
   }
 
-  // construct a factor graph to optimize edge-vp bindings
+  std::vector<int> edge2vp;
+  std::vector<std::vector<int>> vp2edges;
 
-  FactorGraph fg;
-  std::vector<FactorGraph::VarHandle> edge2vh(nedges);
-  {
-    for (int edge = 0; edge < nedges; edge++) {
-      auto vc =
-          fg.addVarCategory(edge2OrderedVPAndAngles[edge].size() + 1, 1.0);
-      edge2vh[edge] = fg.addVar(vc);
-    }
+  if (!misc::LoadCache(objFile + "-" + camName, "edge2vp_vp2edges", edge2vp,
+                       vp2edges)) {
+    edge2vp.resize(nedges, -1);
+    vp2edges.resize(nvps);
 
-    // potential 1: the edge should bind to some vp, should prefer better scored
-    for (int edge = 0; edge < nedges; edge++) {
-      auto vh = edge2vh[edge];
-      auto &relatedVPAndAngles = edge2OrderedVPAndAngles[edge];
-      auto fc = fg.addFactorCategory(
-          [&relatedVPAndAngles, nedges](const int *varlabels, size_t nvar,
-                                        FactorGraph::FactorCategoryId fcid,
-                                        void *givenData) -> double {
-            assert(nvar == 1);
-            int label = varlabels[0];
-            assert(label <= relatedVPAndAngles.size());
-            const double K = 50.0 / nedges;
-            if (label == relatedVPAndAngles.size()) { // not bind to any vp
-              return K;
-            }
-            double angle = relatedVPAndAngles[label].score;
-            assert(!IsInfOrNaN(angle));
-            return (1.0 - Gaussian(angle, DegreesToRadians(3))) * K;
-          },
-          1.0);
-      fg.addFactor({vh}, fc);
-    }
+    // construct a factor graph to optimize edge-vp bindings
+    FactorGraph fg;
+    std::vector<FactorGraph::VarHandle> edge2vh(nedges);
+    {
+      for (int edge = 0; edge < nedges; edge++) {
+        auto vc =
+            fg.addVarCategory(edge2OrderedVPAndAngles[edge].size() + 1, 1.0);
+        edge2vh[edge] = fg.addVar(vc);
+      }
 
-    // potential 2: two adjacent edges should not bind to a near vp
-    int ncorners = 0;
-    for (auto &f : mesh2d.faces()) {
-      ncorners += f.topo.halfedges.size();
-    }
-    for (auto &f : mesh2d.faces()) {
-      auto &hhs = f.topo.halfedges;
-      for (int i = 0; i < hhs.size(); i++) {
-        auto hh1 = hhs[i];
-        auto hh2 = hhs[(i + 1) % hhs.size()];
-        int edge1 = hh2edge[hh1];
-        int edge2 = hh2edge[hh2];
-        auto &relatedVPAndAngles1 = edge2OrderedVPAndAngles[edge1];
-        auto &relatedVPAndAngles2 = edge2OrderedVPAndAngles[edge2];
-        auto vh1 = edge2vh[edge1];
-        auto vh2 = edge2vh[edge2];
+      // potential 1: the edge should bind to some vp, should prefer better
+      // scored
+      for (int edge = 0; edge < nedges; edge++) {
+        auto vh = edge2vh[edge];
+        auto &relatedVPAndAngles = edge2OrderedVPAndAngles[edge];
         auto fc = fg.addFactorCategory(
-            [edge1, edge2, &relatedVPAndAngles1, &relatedVPAndAngles2,
-             &vpPositions, ncorners, scale](const int *varlabels, size_t nvar,
-                                            FactorGraph::FactorCategoryId fcid,
-                                            void *givenData) -> double {
-              assert(nvar == 2);
-              int bindedVP1 =
-                  varlabels[0] == relatedVPAndAngles1.size()
-                      ? -1
-                      : (relatedVPAndAngles1[varlabels[0]].component);
-              int bindedVP2 =
-                  varlabels[1] == relatedVPAndAngles2.size()
-                      ? -1
-                      : (relatedVPAndAngles2[varlabels[1]].component);
-              if (bindedVP1 == -1 || bindedVP2 == -1) {
-                return 0;
-              }
-              auto &vpPos1 = vpPositions[bindedVP1];
-              auto &vpPos2 = vpPositions[bindedVP2];
-              const double thres = scale / 10.0;
-              const double K = 10.0 / ncorners;
-              if (Distance(vpPos1, vpPos2) < thres) { // todo
+            [&relatedVPAndAngles, nedges](const int *varlabels, size_t nvar,
+                                          FactorGraph::FactorCategoryId fcid,
+                                          void *givenData) -> double {
+              assert(nvar == 1);
+              int label = varlabels[0];
+              assert(label <= relatedVPAndAngles.size());
+              const double K = 50.0 / nedges;
+              if (label == relatedVPAndAngles.size()) { // not bind to any vp
                 return K;
               }
-              return 0.0;
+              double angle = relatedVPAndAngles[label].score;
+              assert(!IsInfOrNaN(angle));
+              return (1.0 - Gaussian(angle, DegreesToRadians(3))) * K;
             },
             1.0);
-        fg.addFactor({vh1, vh2}, fc);
+        fg.addFactor({vh}, fc);
       }
-    }
 
-    // potential 3: the vpPositions of edges sharing a same face should lie on
-    // the same
-    // line (the vanishing line of the face)
-    int ntris = 0;
-    for (auto &f : mesh2d.faces()) {
-      auto &hhs = f.topo.halfedges;
-      if (hhs.size() <= 3) {
-        continue;
+      // potential 2: two adjacent edges should not bind to a near vp
+      int ncorners = 0;
+      for (auto &f : mesh2d.faces()) {
+        ncorners += f.topo.halfedges.size();
       }
-      ntris = hhs.size() > 4 ? (2 * hhs.size()) : hhs.size();
-    }
-    for (auto &f : mesh2d.faces()) {
-      auto &hhs = f.topo.halfedges;
-      if (hhs.size() <= 3) {
-        continue;
-      }
-      for (int i = 0; i < hhs.size(); i++) {
-        int maxGap = hhs.size() > 4 ? 2 : 1;
-        for (int gap = 1; gap <= maxGap; gap++) {
-          int prevEdge = hh2edge[hhs[(i + hhs.size() - gap) % hhs.size()]];
-          int edge = hh2edge[hhs[i]];
-          int nextEdge = hh2edge[hhs[(i + gap) % hhs.size()]];
+      for (auto &f : mesh2d.faces()) {
+        auto &hhs = f.topo.halfedges;
+        for (int i = 0; i < hhs.size(); i++) {
+          auto hh1 = hhs[i];
+          auto hh2 = hhs[(i + 1) % hhs.size()];
+          int edge1 = hh2d2edge[hh1];
+          int edge2 = hh2d2edge[hh2];
+          auto &relatedVPAndAngles1 = edge2OrderedVPAndAngles[edge1];
+          auto &relatedVPAndAngles2 = edge2OrderedVPAndAngles[edge2];
+          auto vh1 = edge2vh[edge1];
+          auto vh2 = edge2vh[edge2];
           auto fc = fg.addFactorCategory(
-              [&edge2OrderedVPAndAngles, &vpPositions, prevEdge, edge, nextEdge,
-               ntris](const int *varlabels, size_t nvar,
+              [edge1, edge2, &relatedVPAndAngles1, &relatedVPAndAngles2,
+               &vpPositions, ncorners,
+               scale](const int *varlabels, size_t nvar,
                       FactorGraph::FactorCategoryId fcid,
                       void *givenData) -> double {
-                assert(nvar == 3);
-                int vp1 =
-                    varlabels[0] == edge2OrderedVPAndAngles[prevEdge].size()
+                assert(nvar == 2);
+                int bindedVP1 =
+                    varlabels[0] == relatedVPAndAngles1.size()
                         ? -1
-                        : (edge2OrderedVPAndAngles[prevEdge][varlabels[0]]
-                               .component);
-                if (vp1 == -1) {
-                  return 0.0;
-                }
-                int vp2 = varlabels[1] == edge2OrderedVPAndAngles[edge].size()
-                              ? -1
-                              : (edge2OrderedVPAndAngles[edge][varlabels[1]]
-                                     .component);
-                if (vp2 == -1) {
-                  return 0.0;
-                }
-                int vp3 =
-                    varlabels[2] == edge2OrderedVPAndAngles[nextEdge].size()
+                        : (relatedVPAndAngles1[varlabels[0]].component);
+                int bindedVP2 =
+                    varlabels[1] == relatedVPAndAngles2.size()
                         ? -1
-                        : (edge2OrderedVPAndAngles[nextEdge][varlabels[2]]
-                               .component);
-                if (vp3 == -1) {
-                  return 0.0;
+                        : (relatedVPAndAngles2[varlabels[1]].component);
+                if (bindedVP1 == -1 || bindedVP2 == -1) {
+                  return 0;
                 }
-                if (vp1 == vp2 || vp2 == vp3 || vp1 == vp3) {
-                  return 0.0;
+                auto &vpPos1 = vpPositions[bindedVP1];
+                auto &vpPos2 = vpPositions[bindedVP2];
+                const double thres = scale / 10.0;
+                const double K = 10.0 / ncorners;
+                if (Distance(vpPos1, vpPos2) < thres) { // todo
+                  return K;
                 }
-                double angle =
-                    AngleBetweenUndirected(vpPositions[vp1] - vpPositions[vp2],
-                                           vpPositions[vp3] - vpPositions[vp2]);
-                assert(!IsInfOrNaN(angle));
-                const double K = 30.0 / ntris;
-                return (1.0 - Gaussian(angle, DegreesToRadians(10))) * K;
+                return 0.0;
               },
               1.0);
-          fg.addFactor({edge2vh[prevEdge], edge2vh[edge], edge2vh[nextEdge]},
-                       fc);
+          fg.addFactor({vh1, vh2}, fc);
         }
       }
+
+      // potential 3: the vpPositions of edges sharing a same face should lie on
+      // the same
+      // line (the vanishing line of the face)
+      int ntris = 0;
+      for (auto &f : mesh2d.faces()) {
+        auto &hhs = f.topo.halfedges;
+        if (hhs.size() <= 3) {
+          continue;
+        }
+        ntris = hhs.size() > 4 ? (2 * hhs.size()) : hhs.size();
+      }
+      for (auto &f : mesh2d.faces()) {
+        auto &hhs = f.topo.halfedges;
+        if (hhs.size() <= 3) {
+          continue;
+        }
+        for (int i = 0; i < hhs.size(); i++) {
+          int maxGap = hhs.size() > 4 ? 2 : 1;
+          for (int gap = 1; gap <= maxGap; gap++) {
+            int prevEdge = hh2d2edge[hhs[(i + hhs.size() - gap) % hhs.size()]];
+            int edge = hh2d2edge[hhs[i]];
+            int nextEdge = hh2d2edge[hhs[(i + gap) % hhs.size()]];
+            auto fc = fg.addFactorCategory(
+                [&edge2OrderedVPAndAngles, &vpPositions, prevEdge, edge,
+                 nextEdge, ntris](const int *varlabels, size_t nvar,
+                                  FactorGraph::FactorCategoryId fcid,
+                                  void *givenData) -> double {
+                  assert(nvar == 3);
+                  int vp1 =
+                      varlabels[0] == edge2OrderedVPAndAngles[prevEdge].size()
+                          ? -1
+                          : (edge2OrderedVPAndAngles[prevEdge][varlabels[0]]
+                                 .component);
+                  if (vp1 == -1) {
+                    return 0.0;
+                  }
+                  int vp2 = varlabels[1] == edge2OrderedVPAndAngles[edge].size()
+                                ? -1
+                                : (edge2OrderedVPAndAngles[edge][varlabels[1]]
+                                       .component);
+                  if (vp2 == -1) {
+                    return 0.0;
+                  }
+                  int vp3 =
+                      varlabels[2] == edge2OrderedVPAndAngles[nextEdge].size()
+                          ? -1
+                          : (edge2OrderedVPAndAngles[nextEdge][varlabels[2]]
+                                 .component);
+                  if (vp3 == -1) {
+                    return 0.0;
+                  }
+                  if (vp1 == vp2 || vp2 == vp3 || vp1 == vp3) {
+                    return 0.0;
+                  }
+                  double angle = AngleBetweenUndirected(
+                      vpPositions[vp1] - vpPositions[vp2],
+                      vpPositions[vp3] - vpPositions[vp2]);
+                  assert(!IsInfOrNaN(angle));
+                  const double K = 30.0 / ntris;
+                  return (1.0 - Gaussian(angle, DegreesToRadians(10))) * K;
+                },
+                1.0);
+            fg.addFactor({edge2vh[prevEdge], edge2vh[edge], edge2vh[nextEdge]},
+                         fc);
+          }
+        }
+      }
+
+      //// potential 4: a vp is good only when edges are bound to it!
+      //// a vp should be with either no edges or >= 3 edges
+      // for (int vpid = 0; vpid < nvps; vpid++) {
+      //  std::vector<FactorGraph::VarHandle> relatedVhs;
+      //  relatedVhs.reserve(vp2edges[vpid].size());
+      //  for (int edge : vp2edges[vpid]) {
+      //    relatedVhs.push_back(edge2vh[edge]);
+      //  }
+      //  auto fc = fg.addFactorCategory(
+      //      [&edge2OrderedVPAndAngles, vpid, &vp2edges](
+      //          const int *varlabels, size_t nvar,
+      //          FactorGraph::FactorCategoryId fcid, void *givenData) -> double
+      //          {
+      //        int bindedEdges = 0;
+      //        auto &relatedEdges = vp2edges[vpid];
+      //        assert(nvar == relatedEdges.size());
+      //        for (int i = 0; i < relatedEdges.size(); i++) {
+      //          int edge = relatedEdges[i];
+      //          int edgeLabel = varlabels[i];
+      //          if (edgeLabel == edge2OrderedVPAndAngles[edge].size()) {
+      //            continue; // not bound to any vp
+      //          }
+      //          int edgeBindedVPId =
+      //          edge2OrderedVPAndAngles[edge][edgeLabel].component;
+      //          if (edgeBindedVPId == vpid) {
+      //            bindedEdges++;
+      //          }
+      //        }
+      //        // todo
+      //        if (bindedEdges == 1 || bindedEdges == 2) {
+      //          return 10.0;
+      //        }
+      //        return 0.0;
+      //      },
+      //      1.0);
+      //  fg.addFactor(relatedVhs.begin(), relatedVhs.end(), fc);
+      //}
     }
 
-    //// potential 4: a vp is good only when edges are bound to it!
-    //// a vp should be with either no edges or >= 3 edges
-    // for (int vpid = 0; vpid < nvps; vpid++) {
-    //  std::vector<FactorGraph::VarHandle> relatedVhs;
-    //  relatedVhs.reserve(vp2edges[vpid].size());
-    //  for (int edge : vp2edges[vpid]) {
-    //    relatedVhs.push_back(edge2vh[edge]);
-    //  }
-    //  auto fc = fg.addFactorCategory(
-    //      [&edge2OrderedVPAndAngles, vpid, &vp2edges](
-    //          const int *varlabels, size_t nvar,
-    //          FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
-    //        int bindedEdges = 0;
-    //        auto &relatedEdges = vp2edges[vpid];
-    //        assert(nvar == relatedEdges.size());
-    //        for (int i = 0; i < relatedEdges.size(); i++) {
-    //          int edge = relatedEdges[i];
-    //          int edgeLabel = varlabels[i];
-    //          if (edgeLabel == edge2OrderedVPAndAngles[edge].size()) {
-    //            continue; // not bound to any vp
-    //          }
-    //          int edgeBindedVPId =
-    //          edge2OrderedVPAndAngles[edge][edgeLabel].component;
-    //          if (edgeBindedVPId == vpid) {
-    //            bindedEdges++;
-    //          }
-    //        }
-    //        // todo
-    //        if (bindedEdges == 1 || bindedEdges == 2) {
-    //          return 10.0;
-    //        }
-    //        return 0.0;
-    //      },
-    //      1.0);
-    //  fg.addFactor(relatedVhs.begin(), relatedVhs.end(), fc);
-    //}
-  }
+    // solve the factor graph
+    auto result =
+        fg.solve(5, 1, [](int epoch, double energy, double denergy,
+                          const FactorGraph::ResultTable &results) -> bool {
+          Println("epoch: ", epoch, "  energy: ", energy);
+          return true;
+        });
 
-  // solve the factor graph
-  auto result =
-      fg.solve(5, 1, [](int epoch, double energy, double denergy,
-                        const FactorGraph::ResultTable &results) -> bool {
-        Println("epoch: ", epoch, "  energy: ", energy);
-        return true;
-      });
-
-  std::vector<int> optimizedEdge2VP(nedges, -1);
-  std::vector<std::vector<int>> optimizedVP2Edges(nvps);
-  for (int edge = 0; edge < nedges; edge++) {
-    int id = result[edge2vh[edge]];
-    if (id == edge2OrderedVPAndAngles[edge].size()) {
+    for (int edge = 0; edge < nedges; edge++) {
+      int id = result[edge2vh[edge]];
+      if (id == edge2OrderedVPAndAngles[edge].size()) {
         continue;
+      }
+      edge2vp[edge] = edge2OrderedVPAndAngles[edge][id].component;
+      vp2edges[edge2vp[edge]].push_back(edge);
     }
-    optimizedEdge2VP[edge] = edge2OrderedVPAndAngles[edge][id].component;
-    optimizedVP2Edges[optimizedEdge2VP[edge]].push_back(edge);
+
+    // invalidate the edge bindings for vps who have only 1 or 2 edges
+    for (int vp = 0; vp < nvps; vp++) {
+      if (vp2edges[vp].size() <= 2) {
+        for (int edge : vp2edges[vp]) {
+          edge2vp[edge] = -1;
+        }
+        vp2edges[vp].clear();
+      }
+    }
+
+    if (true) { // show line classification results
+      for (int i = 0; i < nvps; i++) {
+        if (vp2edges[i].empty()) {
+          continue;
+        }
+        Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
+        auto canvas = gui::MakeCanvas(im);
+        canvas.color(gui::LightGray);
+        canvas.thickness(2);
+        for (auto &line : edge2line) {
+          canvas.add(line);
+        }
+        canvas.color(gui::Gray);
+        canvas.thickness(2);
+        for (int edge : vp2edges[i]) {
+          canvas.add(edge2line[edge].ray());
+        }
+        canvas.color(gui::Black);
+        for (int edge : vp2edges[i]) {
+          canvas.add(edge2line[edge]);
+        }
+        canvas.show(0, "optimized vp_" + std::to_string(i));
+      }
+    }
+
+    misc::SaveCache(objFile + "-" + camName, "edge2vp_vp2edges", edge2vp,
+                    vp2edges);
   }
 
-  // invalidate the edge bindings for vps who have only 1 or 2 edges
-  for (int vp = 0; vp < nvps; vp++) {
-    if (optimizedVP2Edges[vp].size() <= 2) {
-      for (int edge : optimizedVP2Edges[vp]) {
-        optimizedEdge2VP[edge] = -1;
-      }
-      optimizedVP2Edges[vp].clear();
-    }
-  }
+  assert(edge2vp.size() == nedges);
+  assert(vp2edges.size() == nvps);
 
-  if (true) { // show line classification results
-    for (int i = 0; i < nvps; i++) {
-      if (optimizedVP2Edges[i].empty()) {
-        continue;
-      }
-      Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
-      auto canvas = gui::MakeCanvas(im);
-      canvas.color(gui::LightGray);
-      canvas.thickness(2);
-      for (auto &line : edge2line) {
-        canvas.add(line);
-      }
-      canvas.color(gui::Gray);
-      canvas.thickness(2);
-      for (int edge : optimizedVP2Edges[i]) {
-        canvas.add(edge2line[edge].ray());
-      }
-      canvas.color(gui::Black);
-      for (int edge : optimizedVP2Edges[i]) {
-        canvas.add(edge2line[edge]);
-      }
-      canvas.show(0, "optimized vp_" + std::to_string(i));
-    }
-  }
-
-  
-
-  //// []
-
-
-
-
+  // for each pp focal candidate
   for (int configId = 0;
        configId < std::min(5ull, ppFocalGroups.size()) &&
        ppFocalGroups[configId].first.size() * 10 >= ppFocalCandidates.size();
@@ -874,6 +879,187 @@ int main(int argc, char **argv) {
       vp2dir[i] = curCam.direction(vpPositions[i]);
     }
 
-    
+
+
+
+#if 0
+    //// [Orient Edges As Much As Possible]
+    HandledTable<FaceHandle, Vec3> fh2d2normal(mesh2d.internalFaces().size(),
+                                               Origin());
+    std::vector<Vec3> edge2dir(nedges, Origin());
+    for (int edge = 0; edge < nedges; edge++) {
+      int vp = edge2vp[edge];
+      if (vp != -1) {
+        edge2dir[edge] = normalize(vp2dir[vp]);
+      }
+    }
+    while (true) {
+      bool moreEdgesAreOriented = false;
+      // update face orientations
+      for (auto &f : mesh2d.faces()) {
+        auto &hhs = f.topo.halfedges;
+        std::vector<Vec3> dirs;
+        for (auto hh : hhs) {
+          int edge = hh2d2edge[hh];
+          auto &dir = edge2dir[edge];
+          if (dir == Origin()) {
+            continue;
+          }
+          static const double theta = DegreesToRadians(3);
+          if (std::all_of(dirs.begin(), dirs.end(), [&dir](const Vec3 &d) {
+                return AngleBetweenUndirected(d, dir) > theta;
+              })) {
+            dirs.push_back(dir);
+          }
+        }
+        if (dirs.size() >= 2) {
+          // the orientation of this face can be determined
+          Vec3 faceNormal = normalize(dirs[0].cross(dirs[1]));
+          fh2d2normal[f.topo.hd] = faceNormal;
+
+          // update other undetermined edges
+          for (auto hh : hhs) {
+            int edge = hh2d2edge[hh];
+            auto &dir = edge2dir[edge];
+            if (dir == Origin()) {
+              auto &line = edge2line[edge];
+              Vec3 normalOfLineProjPlane =
+                  normalize(curCam.direction(line.first)
+                                .cross(curCam.direction(line.second)));
+              Vec3 edgeDir = normalize(faceNormal.cross(normalOfLineProjPlane));
+              edge2dir[edge] = edgeDir;
+              moreEdgesAreOriented = true;
+            }
+          }
+        }
+      }
+
+      if (!moreEdgesAreOriented) {
+        break;
+      }
+    }
+
+    if (true) { // show determined edges
+      std::vector<bool> edge2determined(nedges, false);
+      for (int edge = 0; edge < nedges; edge++) {
+        edge2determined[edge] = edge2dir[edge] != Origin();
+      }
+      Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
+      auto canvas = gui::MakeCanvas(im);
+      canvas.thickness(2);
+      for (int edge = 0; edge < nedges; edge++) {
+        canvas.color(edge2determined[edge] ? gui::Black : gui::LightGray);
+        canvas.add(edge2line[edge]);
+      }
+      canvas.show(0, "determined edges");
+    }
+
+    // optimize within each subMesh
+    std::vector<std::map<VertHandle, double>> subMesh2vhProxyDepths(
+        subMeshes.size());
+    for (int i = 0; i < subMeshes.size(); i++) {
+      auto &subMesh = subMeshes[i];
+      if (subMesh.vhs.empty()) {
+        continue;
+      }
+      std::map<VertHandle, double> vhProxy2depth;
+      vhProxy2depth[*subMesh.vhs.begin()] = 1.0;
+
+      while (true) {
+        bool moreVertexIsAnchored = false; 
+
+        // check each oriented edge for possible extensions
+        for (auto &hhProxy : subMesh.hhs) {
+          HalfHandle hh2d = meshProxy.data(hhProxy);
+          if (hh2d.invalid()) {
+            hh2d = meshProxy.data(meshProxy.topo(hhProxy).opposite);
+            assert(hh2d.valid());
+          }
+          int edge = hh2d2edge[hh2d];
+          if (edge2dir[edge] == Origin()) {
+            continue;
+          }
+          const Vec3 &edgeDir = edge2dir[edge];
+          VertHandle vhProxy1 = meshProxy.topo(hhProxy).from();
+          Vec3 dir1 = normalize(
+              curCam.direction(mesh2d.data(meshProxy.data(vhProxy1))));
+          VertHandle vhProxy2 = meshProxy.topo(hhProxy).to();
+          Vec3 dir2 = normalize(
+              curCam.direction(mesh2d.data(meshProxy.data(vhProxy2))));
+          if (Contains(vhProxy2depth, vhProxy1) &&
+              !Contains(vhProxy2depth,
+                        vhProxy2)) { // compute vh2's depth based on vh1's
+            Point3 p1 = dir1 * vhProxy2depth.at(vhProxy1);
+            Ray3 edgeRay(p1, edgeDir);
+            Point3 p2 =
+                DistanceBetweenTwoLines(edgeRay, Ray3(curCam.eye(), dir2))
+                    .second.first;
+            vhProxy2depth[vhProxy2] = norm(p2);
+            moreVertexIsAnchored = true;
+          }
+          if (Contains(vhProxy2depth, vhProxy2) &&
+              !Contains(vhProxy2depth,
+                        vhProxy1)) { // compute vh1's depth based on vh2's
+            Point3 p2 = dir2 * vhProxy2depth.at(vhProxy2);
+            Ray3 edgeRay(p2, edgeDir);
+            Point3 p1 =
+                DistanceBetweenTwoLines(edgeRay, Ray3(curCam.eye(), dir1))
+                    .second.first;
+            vhProxy2depth[vhProxy1] = norm(p1);
+            moreVertexIsAnchored = true;
+          }
+        }
+
+        // check each oriented face for possible extensions
+        for (auto &fhProxy : subMesh.fhs) {
+          FaceHandle fh2d = meshProxy.data(fhProxy);
+          if (fh2d.invalid()) { // TODO ! we should use the planarity of the
+                                // cutting face
+            continue;
+          }
+          if (fh2d2normal[fh2d] == Origin()) {
+            continue;
+          }
+          const Vec3 &faceNormal = fh2d2normal[fh2d];
+          // find any anchor
+          Point3 anchor = Origin();
+          auto &hhProxies = meshProxy.topo(fhProxy).halfedges;
+          for (auto hhProxy : hhProxies) {
+            VertHandle vhProxy = meshProxy.topo(hhProxy).to();
+            if (Contains(vhProxy2depth, vhProxy)) {
+              Vec3 dir = normalize(
+                  curCam.direction(mesh2d.data(meshProxy.data(vhProxy))));
+              anchor = dir * vhProxy2depth.at(vhProxy);
+              break;
+            }
+          }
+          if (anchor == Origin()) { // not found any determined anchor
+            continue;
+          }
+          Plane3 plane(anchor, faceNormal);
+          for (auto hhProxy : hhProxies) {
+            VertHandle vhProxy = meshProxy.topo(hhProxy).to();
+            if (!Contains(vhProxy2depth, vhProxy)) {
+              Vec3 dir = normalize(
+                  curCam.direction(mesh2d.data(meshProxy.data(vhProxy))));
+              Point3 p = Intersection(Ray3(curCam.eye(), dir), plane);
+              vhProxy2depth[vhProxy] = norm(p);
+              moreVertexIsAnchored = true;
+            }
+          }
+        }
+
+        if (!moreVertexIsAnchored) {
+          break;
+        }
+      }
+    }
+
+#endif
+
+
+
+
+
   }
 }
