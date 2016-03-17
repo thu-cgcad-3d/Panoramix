@@ -490,7 +490,7 @@ double Solve(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
         WA.push_back(eachWeight);
         eidA++;
       }
-    } else { // coplanarities
+    } else if (constraint.isCoplanarity()) { // coplanarities
       assert(entity1.isSeg() && entity2.isSeg());
       // [3 x k1]
       auto &matFromVarsToPlaneCoeffs1 =

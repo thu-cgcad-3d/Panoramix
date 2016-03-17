@@ -17,6 +17,7 @@ void ReconstructLayoutAnnotation2(PILayoutAnnotation &anno,
 void ReconstructLayoutAnnotation3(PILayoutAnnotation &anno,
                                   misc::Matlab &matlab);
 
+
 double Solve(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
              misc::Matlab &matlab,
              int maxIter = std::numeric_limits<int>::max(),

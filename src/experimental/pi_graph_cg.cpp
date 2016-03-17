@@ -1,4 +1,6 @@
 #include "../core/containers.hpp"
+
+#include "pi_graph_annotation.hpp"
 #include "pi_graph_cg.hpp"
 
 namespace pano {

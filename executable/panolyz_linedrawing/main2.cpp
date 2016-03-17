@@ -136,6 +136,7 @@ inline std::vector<Point2> PossibleKeyVanishingPoints(const Chain2 &chain) {
 int main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
+  misc::Matlab matlab;
 
   std::string name = "hex";
   std::string camName = "cam1";
@@ -879,9 +880,6 @@ int main(int argc, char **argv) {
       vp2dir[i] = curCam.direction(vpPositions[i]);
     }
 
-
-
-
 #if 0
     //// [Orient Edges As Much As Possible]
     HandledTable<FaceHandle, Vec3> fh2d2normal(mesh2d.internalFaces().size(),
@@ -1057,9 +1055,205 @@ int main(int argc, char **argv) {
 
 #endif
 
+    // [Reconstruct]
+    {
+      // entity
+      using SupportingPlane = PIConstraintGraph::Entity::SupportingPlane;
+      struct EntityBase {
+          SupportingPlane supportingPlane;
+          EntityBase(const SupportingPlane &sp) : supportingPlane(sp) {}
+          virtual FaceHandle fhProxy() const { return FaceHandle(); }
+          virtual int edge() const { return -1; }
+          bool isFace() const { return fhProxy().valid(); }
+          bool isEdge() const { return edge() != -1; }
+      };
+      struct FaceEntity : EntityBase {
+        FaceHandle fh;
+        FaceEntity(FaceHandle fh, const Vec3 &center)
+            : EntityBase(SupportingPlane(SegControl{-1, -1}, center, {})), fh(fh) {}
+        virtual FaceHandle fhProxy() const override { return fh; }
+      };
+      struct EdgeEntity : EntityBase {
+        int e;
+        EdgeEntity(int e, const Classified<Line3> &line,
+                   const std::vector<Vec3> &vp2dir)
+            : EntityBase(SupportingPlane(line, vp2dir)), e(e) {}
+        virtual int edge() const override { return e; }
+      };
+
+      std::vector<std::unique_ptr<EntityBase>> entities;
+
+      std::vector<int> edge2ent(nedges, -1);
+      HandledTable<FaceHandle, int> fhProxy2ent(
+          meshProxy.internalFaces().size(), -1);
+
+      // install supporting planes from edges and faces
+      // from edges
+      for (int edge = 0; edge < nedges; edge++) {
+        auto &line2 = edge2line[edge];
+        Line3 line3(normalize(curCam.direction(line2.first)),
+                    normalize(curCam.direction(line2.second)));
+        entities.push_back(std::make_unique<EdgeEntity>(edge, line3, vp2dir));
+        int ent = entities.size() - 1;
+        edge2ent[edge] = ent;
+      }
+      // from faces
+      for (auto &f : meshProxy.faces()) {
+        Point2 center2 = Origin<2>();
+        for (auto hh : f.topo.halfedges) {
+          center2 += mesh2d.data(meshProxy.data(meshProxy.topo(hh).to()));
+        }
+        center2 /= double(f.topo.halfedges.size());
+        entities.push_back(std::make_unique<FaceEntity>(
+            f.topo.hd, normalize(curCam.direction(center2))));
+        int ent = entities.size() - 1;
+        fhProxy2ent[f.topo.hd] = ent;
+      }
+
+      // install connections
+      std::map<std::pair<int, int>, std::vector<Vec3>> ents2anchors;
+      for (auto &f : meshProxy.faces()) {
+        for (auto hhProxy : f.topo.halfedges) {
+          HalfHandle hh2d = meshProxy.data(hhProxy);
+          if (hh2d.invalid()) {
+            hh2d = meshProxy.data(meshProxy.topo(hhProxy).opposite);
+          }
+          assert(hh2d.valid());
+          int edge = hh2d2edge[hh2d];
+
+          auto &line2 = edge2line[edge];
+          ents2anchors[std::make_pair(edge2ent[edge], fhProxy2ent[f.topo.hd])] =
+              {normalize(curCam.direction(line2.first)),
+               normalize(curCam.direction(line2.second))};
+        }
+      }
+
+      // install face angles constraints
+      std::vector<std::pair<int, int>> adjFaceEnts;
+      for (auto &half : meshProxy.halfedges()) {
+        FaceHandle fh1 = half.topo.face;
+        FaceHandle fh2 = meshProxy.topo(half.topo.opposite).face;
+        int faceEnt1 = fhProxy2ent[fh1];
+        int faceEnt2 = fhProxy2ent[fh2];
+        // if (faceEnt1 < faceEnt2) {
+        adjFaceEnts.emplace_back(faceEnt1, faceEnt2);
+        //}
+      }
+      int nadjFaces = adjFaceEnts.size();
+
+      // Start Building Matrices
+      // vert start position in variable vector
+      std::vector<int> ent2varPosition(entities.size(), -1);
+      std::vector<int> ent2nvar(entities.size(), -1);
+      std::vector<DenseMatd> ent2matFromVarToPlaneCoeffs(entities.size());
+      std::vector<int> var2ent;
+      int nvars = 0;
+      for (int ent = 0; ent < entities.size(); ent ++) {
+        auto &e = *entities[ent];
+        int nvar = e.supportingPlane.dof;
+        ent2nvar[ent] = nvar;
+        ent2varPosition[ent] = nvars;
+        ent2matFromVarToPlaneCoeffs[ent] =
+            e.supportingPlane.matFromVarsToPlaneCoeffs();
+        var2ent.insert(var2ent.end(), (size_t)nvar, ent);
+        nvars += nvar;
+      }
 
 
+      // P : [(3 * nents) x nvars]
+      // P * X -> plane coefficients
+      int nents = entities.size();
+      std::vector<SparseMatElementd> Ptriplets;
+      for (int ent = 0; ent < entities.size(); ent++) {
+        int varpos = ent2varPosition[ent];
+        // [3 x k]
+        auto &matFromVarsToPlaneCoeffs = ent2matFromVarToPlaneCoeffs[ent];
+        assert(matFromVarsToPlaneCoeffs.rows == 3 &&
+               matFromVarsToPlaneCoeffs.cols == ent2nvar[ent]);
+        for (int i = 0; i < 3; i++) {
+          for (int j = 0; j < matFromVarsToPlaneCoeffs.cols; j++) {
+            Ptriplets.emplace_back(i + ent * 3, varpos + j,
+                                   matFromVarsToPlaneCoeffs(i, j));
+          }
+        }
+      }
 
+      // A1 : [anchornum x (3 * nents)]
+      // A2 : [anchornum x (3 * nents)]
+      // A1 * P * X -> inversed anchor depths (left side)
+      // A2 * P * X -> inversed anchor depths (right side)
+      std::vector<SparseMatElementd> A1triplets, A2triplets;
+      int anchorId = 0;
+      for (auto &cons : ents2anchors) {
+        int ent1 = cons.first.first;
+        int ent2 = cons.first.second;
 
+        auto &anchors = cons.second;
+        for (auto &anchor : anchors) {
+          auto nanchor = normalize(anchor);
+          for (int k = 0; k < 3; k++) {
+            A1triplets.emplace_back(anchorId, k + ent1 * 3, nanchor[k]);
+            A2triplets.emplace_back(anchorId, k + ent2 * 3, nanchor[k]);
+          }
+          anchorId++;
+        }
+      }
+      int nanchors = anchorId;
+
+      // J1: [(3 * nadjFaces) x (3 * nents)]
+      // J1: [(3 * nadjFaces) x (3 * nents)]
+      // J1 * P * X -> plane coefficients at edges (left side)
+      // J2 * P * X -> plane coefficients at edges (right side)
+      std::vector<SparseMatElementd> J1triplets, J2triplets;
+      for (int i = 0; i < nadjFaces; i++) {
+        int ent1 = adjFaceEnts[i].first;
+        int ent2 = adjFaceEnts[i].second;
+        for (int k = 0; k < 3; k++) {
+          J1triplets.emplace_back(k + i * 3, k + ent1 * 3, 1);
+          J2triplets.emplace_back(k + i * 3, k + ent2 * 3, 1);
+        }
+      }
+
+      // solve!
+      matlab << "clear()";
+      matlab.setVar("P", MakeSparseMatFromElements(3 * nents, nvars,
+                                                   Ptriplets.begin(),
+                                                   Ptriplets.end()));
+      matlab.setVar("A1", MakeSparseMatFromElements(nanchors, 3 * nents,
+                                                    A1triplets.begin(),
+                                                    A1triplets.end()));
+      matlab.setVar("A2", MakeSparseMatFromElements(nanchors, 3 * nents,
+                                                    A2triplets.begin(),
+                                                    A2triplets.end()));
+      matlab.setVar("J1", MakeSparseMatFromElements(3 * nadjFaces, 3 * nents,
+                                                    J1triplets.begin(),
+                                                    J1triplets.end()));
+      matlab.setVar("J2", MakeSparseMatFromElements(3 * nadjFaces, 3 * nents,
+                                                    J2triplets.begin(),
+                                                    J2triplets.end()));
+
+      matlab << "K1 = A1 * P;";
+      matlab << "K2 = A2 * P;";
+
+      matlab.setVar("nvars", nvars);
+      matlab.setVar("nents", nents);
+      matlab.setVar("nanchors", nanchors);
+
+      double minE = std::numeric_limits<double>::infinity();
+
+      std::vector<double> X;
+
+      static const int maxIter = 10;
+      matlab << "XK1K2X = ones(nanchors, 1);";
+      // todo
+      //matlab << ""
+      for (int t = 0; t < maxIter; t++) {
+        matlab << "ConnetionsMat = (K1 - K2) ./ repmat(XK1K2X, [1 nvars]);";
+        //matlab << "AnglesMat = "
+        matlab << "cvx_begin";
+        matlab << "variable X(nvars);";
+        //matlab << "minimize ConnetionsMat * X + ";
+      }
+    }
   }
 }

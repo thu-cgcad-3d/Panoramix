@@ -1,6 +1,5 @@
 #pragma once
 
-#include "pi_graph_annotation.hpp"
 #include "pi_graph_occlusion.hpp"
 
 namespace pano {
@@ -23,6 +22,7 @@ struct PIConstraintGraph {
                                const std::vector<Vec3> &vps);
       explicit SupportingPlane(const Classified<Line3> &line,
                                const std::vector<Vec3> &vps);
+
       DenseMatd matFromVarsToPlaneCoeffs() const;
       template <class Archiver> void serialize(Archiver &ar) {
         ar(dof, center, toward, along, reconstructed);
@@ -80,11 +80,15 @@ PIConstraintGraph BuildPIConstraintGraph(
 PICGDeterminablePart LocateDeterminablePart(const PIConstraintGraph &cg,
                                             double angleThres, bool connectAll);
 
+
+// from annotation
+class PILayoutAnnotation;
 PIConstraintGraph BuildPIConstraintGraph(const PILayoutAnnotation &anno,
                                          double minAngleThresForAWideEdge);
 
 PIConstraintGraph
 BuildPIConstraintGraphWithLines(const PILayoutAnnotation &anno,
                                 double minAngleThresForAWideEdge);
+
 }
 }
