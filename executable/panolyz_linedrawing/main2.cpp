@@ -1093,7 +1093,8 @@ int main(int argc, char **argv) {
         auto &line2 = edge2line[edge];
         Line3 line3(normalize(curCam.direction(line2.first)),
                     normalize(curCam.direction(line2.second)));
-        entities.push_back(std::make_unique<EdgeEntity>(edge, line3, vp2dir));
+        entities.push_back(std::make_unique<EdgeEntity>(
+            edge, ClassifyAs(line3, edge2vp[edge]), vp2dir));
         int ent = entities.size() - 1;
         edge2ent[edge] = ent;
       }
@@ -1232,27 +1233,53 @@ int main(int argc, char **argv) {
                                                     J2triplets.begin(),
                                                     J2triplets.end()));
 
-      matlab << "K1 = A1 * P;";
-      matlab << "K2 = A2 * P;";
-
       matlab.setVar("nvars", nvars);
       matlab.setVar("nents", nents);
       matlab.setVar("nanchors", nanchors);
+      matlab.setVar("nadjFaces", nadjFaces);
 
       double minE = std::numeric_limits<double>::infinity();
 
       std::vector<double> X;
 
       static const int maxIter = 10;
-      matlab << "XK1K2X = ones(nanchors, 1);";
-      // todo
-      //matlab << ""
+      matlab << "PHI = ones(nanchors, 1);";
+      matlab << "DELTA = ones(3, nadjFaces);";
+      matlab << "AvgCos = 0;";
+
       for (int t = 0; t < maxIter; t++) {
-        matlab << "ConnetionsMat = (K1 - K2) ./ repmat(XK1K2X, [1 nvars]);";
-        //matlab << "AnglesMat = "
-        matlab << "cvx_begin";
+        matlab << "cvx_begin quiet";
         matlab << "variable X(nvars);";
-        //matlab << "minimize ConnetionsMat * X + ";
+        matlab << "minimize "
+                  "1e6 * sum_square(((A1 - A2) * P * X) ./ PHI) + "
+                  "sum_square(dot(reshape(J1 * P * X, [3 nadjFaces]), "
+                  "DELTA) - AvgCos);"; // todo
+        matlab << "subject to";
+        matlab << " ones(nanchors, 1) <= A1 * P * X;";
+        matlab << " ones(nanchors, 1) <= A2 * P * X;";
+        matlab << "cvx_end";
+
+        matlab << "PHI = (A1 * P * X) .* (A2 * P * X);";
+        matlab << "PHI = abs(PHI) / norm(PHI);";
+
+        matlab << "Planes1 = reshape(J1 * P * X, [3 nadjFaces]);";
+        matlab << "Planes2 = reshape(J2 * P * X, [3 nadjFaces]);";
+        matlab << "DELTA = Planes2 ./ "
+                  "sqrt(repmat(dot(Planes1, Planes1) .* "
+                  "dot(Planes2, Planes2), "
+                  "[3 1]));"; 
+        matlab << "AvgCos = mean(dot(Planes1, Planes2));";
+
+        matlab << "e = "
+                  "sum_square(((A1 - A2) * P * X) ./ PHI) + "
+                  "sum_square(dot(reshape(J1 * P * X, [3 nadjFaces]), "
+                  "DELTA) - AvgCos);";
+
+        double curEnergy = matlab.var("e");
+        Println("cur energy - ", curEnergy);
+        if (IsInfOrNaN(curEnergy)) {
+          break;
+        }
       }
     }
   }
