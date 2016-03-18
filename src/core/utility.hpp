@@ -889,6 +889,8 @@ Failable<Ray<T, 3>> IntersectionOfPlaneAndPlane(const Plane<T, 3> &p1,
 }
 
 // triangulate polygon
+// VertPoint2GetterT: (Vert) -> Point2
+// AddTriFaceFunT: (Vert, Vert, Vert) -> void
 template <class VertIteratorT, class VertPoint2GetterT, class AddTriFaceFunT>
 int TriangulatePolygon(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
                        VertPoint2GetterT &&getPoint2,

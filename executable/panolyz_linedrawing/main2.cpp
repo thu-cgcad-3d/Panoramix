@@ -165,6 +165,13 @@ int main(int argc, char **argv) {
                                     },
                                     10);
   Println("found ", subMeshes.size(), " subMeshes");
+  HandledTable<FaceHandle, int> fhProxy2subMeshId(
+      meshProxy.internalFaces().size(), -1);
+  for (int i = 0; i < subMeshes.size(); i++) {
+    for (auto fh : subMeshes[i].fhs) {
+      fhProxy2subMeshId[fh] = i;
+    }
+  }
 
   //// [Load Camera]
   PerspectiveCamera cam;
@@ -1093,18 +1100,22 @@ int main(int argc, char **argv) {
         auto &line2 = edge2line[edge];
         Line3 line3(normalize(curCam.direction(line2.first)),
                     normalize(curCam.direction(line2.second)));
-        entities.push_back(std::make_unique<EdgeEntity>(
-            edge, ClassifyAs(line3, edge2vp[edge]), vp2dir));
+        int vp = edge2vp[edge];
+        entities.push_back(
+            std::make_unique<EdgeEntity>(edge, ClassifyAs(line3, vp), vp2dir));
         int ent = entities.size() - 1;
         edge2ent[edge] = ent;
       }
       // from faces
+      HandledTable<FaceHandle, Point2> fhProxy2center2d(
+          meshProxy.internalFaces().size());
       for (auto &f : meshProxy.faces()) {
         Point2 center2 = Origin<2>();
         for (auto hh : f.topo.halfedges) {
           center2 += mesh2d.data(meshProxy.data(meshProxy.topo(hh).to()));
         }
         center2 /= double(f.topo.halfedges.size());
+        fhProxy2center2d[f.topo.hd] = center2;
         entities.push_back(std::make_unique<FaceEntity>(
             f.topo.hd, normalize(curCam.direction(center2))));
         int ent = entities.size() - 1;
@@ -1131,14 +1142,63 @@ int main(int argc, char **argv) {
 
       // install face angles constraints
       std::vector<std::pair<int, int>> adjFaceEnts;
+      std::vector<int> adjFace2SubMeshId;
+      std::vector<bool> adjFaceOverlapInView;
       for (auto &half : meshProxy.halfedges()) {
         FaceHandle fh1 = half.topo.face;
         FaceHandle fh2 = meshProxy.topo(half.topo.opposite).face;
+
+        int subMeshId1 = fhProxy2subMeshId[fh1];
+        int subMeshId2 = fhProxy2subMeshId[fh2];
+        assert(subMeshId1 != -1 && subMeshId2 != -1 &&
+               subMeshId1 == subMeshId2);
         int faceEnt1 = fhProxy2ent[fh1];
         int faceEnt2 = fhProxy2ent[fh2];
-        // if (faceEnt1 < faceEnt2) {
         adjFaceEnts.emplace_back(faceEnt1, faceEnt2);
-        //}
+        adjFace2SubMeshId.push_back(subMeshId1);
+
+        // judge the siding status of the two faces
+        VertHandle vh1 = half.topo.from();
+        VertHandle vh2 = half.topo.to();
+        Line2 line(mesh2d.data(meshProxy.data(vh1)),
+                   mesh2d.data(meshProxy.data(vh2)));
+        // get a faceCorner which can form a triangle with line that is inside
+        // the face polygon
+        Point2 faceCorners[2] = {Origin<2>(), Origin<2>()};
+        int id = 0;
+        for (FaceHandle fh : {fh1, fh2}) {
+          TriangulatePolygon(
+              meshProxy.topo(fh).halfedges.begin(),
+              meshProxy.topo(fh).halfedges.end(),
+              [&meshProxy, &mesh2d](HalfHandle hhProxy) -> const Point2 & {
+                return mesh2d.data(
+                    meshProxy.data(meshProxy.topo(hhProxy).to()));
+              },
+              [&meshProxy, &mesh2d, &faceCorners, id, vh1,
+               vh2](HalfHandle hhProxy1, HalfHandle hhProxy2,
+                    HalfHandle hhProxy3) {
+                VertHandle vhs[] = {meshProxy.topo(hhProxy1).to(),
+                                    meshProxy.topo(hhProxy2).to(),
+                                    meshProxy.topo(hhProxy3).to()};
+                if (MakeOrderedPair(vh1, vh2) ==
+                    MakeOrderedPair(vhs[0], vhs[1])) {
+                  faceCorners[id] = mesh2d.data(meshProxy.data(vhs[2]));
+                } else if (MakeOrderedPair(vh1, vh2) ==
+                           MakeOrderedPair(vhs[1], vhs[2])) {
+                  faceCorners[id] = mesh2d.data(meshProxy.data(vhs[0]));
+                } else if (MakeOrderedPair(vh1, vh2) ==
+                           MakeOrderedPair(vhs[2], vhs[0])) {
+                  faceCorners[id] = mesh2d.data(meshProxy.data(vhs[1]));
+                }
+              });
+          assert(faceCorners[id] != Origin<2>());
+          id++;
+        }
+
+        bool onSameSide = IsOnLeftSide(faceCorners[0], line.first, line.second) ==
+                          IsOnLeftSide(faceCorners[1], line.first, line.second);
+
+        adjFaceOverlapInView.push_back(onSameSide);
       }
       int nadjFaces = adjFaceEnts.size();
 
@@ -1160,19 +1220,19 @@ int main(int argc, char **argv) {
         nvars += nvar;
       }
 
-
       // P : [(3 * nents) x nvars]
       // P * X -> plane coefficients
       int nents = entities.size();
       std::vector<SparseMatElementd> Ptriplets;
-      for (int ent = 0; ent < entities.size(); ent++) {
+      for (int ent = 0; ent < nents; ent++) {
         int varpos = ent2varPosition[ent];
         // [3 x k]
         auto &matFromVarsToPlaneCoeffs = ent2matFromVarToPlaneCoeffs[ent];
         assert(matFromVarsToPlaneCoeffs.rows == 3 &&
                matFromVarsToPlaneCoeffs.cols == ent2nvar[ent]);
         for (int i = 0; i < 3; i++) {
-          for (int j = 0; j < matFromVarsToPlaneCoeffs.cols; j++) {
+          for (int j = 0; j < ent2nvar[ent]; j++) {
+            assert(varpos + j < nvars);
             Ptriplets.emplace_back(i + ent * 3, varpos + j,
                                    matFromVarsToPlaneCoeffs(i, j));
           }
@@ -1191,7 +1251,7 @@ int main(int argc, char **argv) {
 
         auto &anchors = cons.second;
         for (auto &anchor : anchors) {
-          auto nanchor = normalize(anchor);
+          Vec3 nanchor = normalize(anchor);
           for (int k = 0; k < 3; k++) {
             A1triplets.emplace_back(anchorId, k + ent1 * 3, nanchor[k]);
             A2triplets.emplace_back(anchorId, k + ent2 * 3, nanchor[k]);
@@ -1214,6 +1274,8 @@ int main(int argc, char **argv) {
           J2triplets.emplace_back(k + i * 3, k + ent2 * 3, 1);
         }
       }
+      std::vector<double> J12Signs;
+      // todo
 
       // solve!
       matlab << "clear()";
@@ -1248,12 +1310,15 @@ int main(int argc, char **argv) {
       matlab << "AvgCos = 0;";
 
       for (int t = 0; t < maxIter; t++) {
+        const std::string objective =
+            "1e5 * sum_square(((A1 - A2) * P * X) ./ PHI)"
+            " + "
+            "sum_square(dot(reshape(J1 * P * X, [3 nadjFaces]), "
+            "DELTA) - AvgCos)";
+
         matlab << "cvx_begin quiet";
         matlab << "variable X(nvars);";
-        matlab << "minimize "
-                  "1e6 * sum_square(((A1 - A2) * P * X) ./ PHI) + "
-                  "sum_square(dot(reshape(J1 * P * X, [3 nadjFaces]), "
-                  "DELTA) - AvgCos);"; // todo
+        matlab << "minimize " + objective + ";";
         matlab << "subject to";
         matlab << " ones(nanchors, 1) <= A1 * P * X;";
         matlab << " ones(nanchors, 1) <= A2 * P * X;";
@@ -1270,10 +1335,7 @@ int main(int argc, char **argv) {
                   "[3 1]));"; 
         matlab << "AvgCos = mean(dot(Planes1, Planes2));";
 
-        matlab << "e = "
-                  "sum_square(((A1 - A2) * P * X) ./ PHI) + "
-                  "sum_square(dot(reshape(J1 * P * X, [3 nadjFaces]), "
-                  "DELTA) - AvgCos);";
+        matlab << "e = " + objective + ";";
 
         double curEnergy = matlab.var("e");
         Println("cur energy - ", curEnergy);
