@@ -873,6 +873,7 @@ int main(int argc, char **argv) {
   assert(vp2edges.size() == nvps);
 
   // for each pp focal candidate
+  std::vector<Mesh3> reconstructions;
   for (int configId = 0;
        configId < std::min(5ull, ppFocalGroups.size()) &&
        ppFocalGroups[configId].first.size() * 10 >= ppFocalCandidates.size();
@@ -1063,21 +1064,22 @@ int main(int argc, char **argv) {
 #endif
 
     // [Reconstruct]
-    {
+    { // get the vh2d2reconstructedPosition data
       // entity
       using SupportingPlane = PIConstraintGraph::Entity::SupportingPlane;
       struct EntityBase {
-          SupportingPlane supportingPlane;
-          EntityBase(const SupportingPlane &sp) : supportingPlane(sp) {}
-          virtual FaceHandle fhProxy() const { return FaceHandle(); }
-          virtual int edge() const { return -1; }
-          bool isFace() const { return fhProxy().valid(); }
-          bool isEdge() const { return edge() != -1; }
+        SupportingPlane supportingPlane;
+        EntityBase(const SupportingPlane &sp) : supportingPlane(sp) {}
+        virtual FaceHandle fhProxy() const { return FaceHandle(); }
+        virtual int edge() const { return -1; }
+        bool isFace() const { return fhProxy().valid(); }
+        bool isEdge() const { return edge() != -1; }
       };
       struct FaceEntity : EntityBase {
         FaceHandle fh;
         FaceEntity(FaceHandle fh, const Vec3 &center)
-            : EntityBase(SupportingPlane(SegControl{-1, -1}, center, {})), fh(fh) {}
+            : EntityBase(SupportingPlane(SegControl{-1, -1}, center, {})),
+              fh(fh) {}
         virtual FaceHandle fhProxy() const override { return fh; }
       };
       struct EdgeEntity : EntityBase {
@@ -1122,85 +1124,88 @@ int main(int argc, char **argv) {
         fhProxy2ent[f.topo.hd] = ent;
       }
 
-      // install connections
-      std::map<std::pair<int, int>, std::vector<Vec3>> ents2anchors;
-      for (auto &f : meshProxy.faces()) {
-        for (auto hhProxy : f.topo.halfedges) {
-          HalfHandle hh2d = meshProxy.data(hhProxy);
-          if (hh2d.invalid()) {
-            hh2d = meshProxy.data(meshProxy.topo(hhProxy).opposite);
-          }
-          assert(hh2d.valid());
-          int edge = hh2d2edge[hh2d];
+      //// install connections
+      // std::map<std::pair<int, int>, std::vector<Vec3>> ents2anchors;
+      // for (auto &f : meshProxy.faces()) {
+      //  for (auto hhProxy : f.topo.halfedges) {
+      //    HalfHandle hh2d = meshProxy.data(hhProxy);
+      //    if (hh2d.invalid()) {
+      //      hh2d = meshProxy.data(meshProxy.topo(hhProxy).opposite);
+      //    }
+      //    assert(hh2d.valid());
+      //    int edge = hh2d2edge[hh2d];
 
-          auto &line2 = edge2line[edge];
-          ents2anchors[std::make_pair(edge2ent[edge], fhProxy2ent[f.topo.hd])] =
-              {normalize(curCam.direction(line2.first)),
-               normalize(curCam.direction(line2.second))};
-        }
-      }
+      //    auto &line2 = edge2line[edge];
+      //    ents2anchors[std::make_pair(edge2ent[edge], fhProxy2ent[f.topo.hd])]
+      //    =
+      //        {normalize(curCam.direction(line2.first)),
+      //         normalize(curCam.direction(line2.second))};
+      //  }
+      //}
 
-      // install face angles constraints
-      std::vector<std::pair<int, int>> adjFaceEnts;
-      std::vector<int> adjFace2SubMeshId;
-      std::vector<bool> adjFaceOverlapInView;
-      for (auto &half : meshProxy.halfedges()) {
-        FaceHandle fh1 = half.topo.face;
-        FaceHandle fh2 = meshProxy.topo(half.topo.opposite).face;
+      //// install face angles constraints
+      // std::vector<std::pair<int, int>> adjFaceEnts;
+      // std::vector<int> adjFace2SubMeshId;
+      // std::vector<bool> adjFaceOverlapInView;
+      // for (auto &half : meshProxy.halfedges()) {
+      //  FaceHandle fh1 = half.topo.face;
+      //  FaceHandle fh2 = meshProxy.topo(half.topo.opposite).face;
 
-        int subMeshId1 = fhProxy2subMeshId[fh1];
-        int subMeshId2 = fhProxy2subMeshId[fh2];
-        assert(subMeshId1 != -1 && subMeshId2 != -1 &&
-               subMeshId1 == subMeshId2);
-        int faceEnt1 = fhProxy2ent[fh1];
-        int faceEnt2 = fhProxy2ent[fh2];
-        adjFaceEnts.emplace_back(faceEnt1, faceEnt2);
-        adjFace2SubMeshId.push_back(subMeshId1);
+      //  int subMeshId1 = fhProxy2subMeshId[fh1];
+      //  int subMeshId2 = fhProxy2subMeshId[fh2];
+      //  assert(subMeshId1 != -1 && subMeshId2 != -1 &&
+      //         subMeshId1 == subMeshId2);
+      //  int faceEnt1 = fhProxy2ent[fh1];
+      //  int faceEnt2 = fhProxy2ent[fh2];
+      //  adjFaceEnts.emplace_back(faceEnt1, faceEnt2);
+      //  adjFace2SubMeshId.push_back(subMeshId1);
 
-        // judge the siding status of the two faces
-        VertHandle vh1 = half.topo.from();
-        VertHandle vh2 = half.topo.to();
-        Line2 line(mesh2d.data(meshProxy.data(vh1)),
-                   mesh2d.data(meshProxy.data(vh2)));
-        // get a faceCorner which can form a triangle with line that is inside
-        // the face polygon
-        Point2 faceCorners[2] = {Origin<2>(), Origin<2>()};
-        int id = 0;
-        for (FaceHandle fh : {fh1, fh2}) {
-          TriangulatePolygon(
-              meshProxy.topo(fh).halfedges.begin(),
-              meshProxy.topo(fh).halfedges.end(),
-              [&meshProxy, &mesh2d](HalfHandle hhProxy) -> const Point2 & {
-                return mesh2d.data(
-                    meshProxy.data(meshProxy.topo(hhProxy).to()));
-              },
-              [&meshProxy, &mesh2d, &faceCorners, id, vh1,
-               vh2](HalfHandle hhProxy1, HalfHandle hhProxy2,
-                    HalfHandle hhProxy3) {
-                VertHandle vhs[] = {meshProxy.topo(hhProxy1).to(),
-                                    meshProxy.topo(hhProxy2).to(),
-                                    meshProxy.topo(hhProxy3).to()};
-                if (MakeOrderedPair(vh1, vh2) ==
-                    MakeOrderedPair(vhs[0], vhs[1])) {
-                  faceCorners[id] = mesh2d.data(meshProxy.data(vhs[2]));
-                } else if (MakeOrderedPair(vh1, vh2) ==
-                           MakeOrderedPair(vhs[1], vhs[2])) {
-                  faceCorners[id] = mesh2d.data(meshProxy.data(vhs[0]));
-                } else if (MakeOrderedPair(vh1, vh2) ==
-                           MakeOrderedPair(vhs[2], vhs[0])) {
-                  faceCorners[id] = mesh2d.data(meshProxy.data(vhs[1]));
-                }
-              });
-          assert(faceCorners[id] != Origin<2>());
-          id++;
-        }
+      //  // judge the siding status of the two faces
+      //  VertHandle vh1 = half.topo.from();
+      //  VertHandle vh2 = half.topo.to();
+      //  Line2 line(mesh2d.data(meshProxy.data(vh1)),
+      //             mesh2d.data(meshProxy.data(vh2)));
+      //  // get a faceCorner which can form a triangle with line that is inside
+      //  // the face polygon
+      //  Point2 faceCorners[2] = {Origin<2>(), Origin<2>()};
+      //  int id = 0;
+      //  for (FaceHandle fh : {fh1, fh2}) {
+      //    TriangulatePolygon(
+      //        meshProxy.topo(fh).halfedges.begin(),
+      //        meshProxy.topo(fh).halfedges.end(),
+      //        [&meshProxy, &mesh2d](HalfHandle hhProxy) -> const Point2 & {
+      //          return mesh2d.data(
+      //              meshProxy.data(meshProxy.topo(hhProxy).to()));
+      //        },
+      //        [&meshProxy, &mesh2d, &faceCorners, id, vh1,
+      //         vh2](HalfHandle hhProxy1, HalfHandle hhProxy2,
+      //              HalfHandle hhProxy3) {
+      //          VertHandle vhs[] = {meshProxy.topo(hhProxy1).to(),
+      //                              meshProxy.topo(hhProxy2).to(),
+      //                              meshProxy.topo(hhProxy3).to()};
+      //          if (MakeOrderedPair(vh1, vh2) ==
+      //              MakeOrderedPair(vhs[0], vhs[1])) {
+      //            faceCorners[id] = mesh2d.data(meshProxy.data(vhs[2]));
+      //          } else if (MakeOrderedPair(vh1, vh2) ==
+      //                     MakeOrderedPair(vhs[1], vhs[2])) {
+      //            faceCorners[id] = mesh2d.data(meshProxy.data(vhs[0]));
+      //          } else if (MakeOrderedPair(vh1, vh2) ==
+      //                     MakeOrderedPair(vhs[2], vhs[0])) {
+      //            faceCorners[id] = mesh2d.data(meshProxy.data(vhs[1]));
+      //          }
+      //        });
+      //    assert(faceCorners[id] != Origin<2>());
+      //    id++;
+      //  }
 
-        bool onSameSide = IsOnLeftSide(faceCorners[0], line.first, line.second) ==
-                          IsOnLeftSide(faceCorners[1], line.first, line.second);
+      //  bool onSameSide = IsOnLeftSide(faceCorners[0], line.first,
+      //  line.second) ==
+      //                    IsOnLeftSide(faceCorners[1], line.first,
+      //                    line.second);
 
-        adjFaceOverlapInView.push_back(onSameSide);
-      }
-      int nadjFaces = adjFaceEnts.size();
+      //  adjFaceOverlapInView.push_back(onSameSide);
+      //}
+      // int nadjFaces = adjFaceEnts.size();
 
       // Start Building Matrices
       // vert start position in variable vector
@@ -1209,7 +1214,7 @@ int main(int argc, char **argv) {
       std::vector<DenseMatd> ent2matFromVarToPlaneCoeffs(entities.size());
       std::vector<int> var2ent;
       int nvars = 0;
-      for (int ent = 0; ent < entities.size(); ent ++) {
+      for (int ent = 0; ent < entities.size(); ent++) {
         auto &e = *entities[ent];
         int nvar = e.supportingPlane.dof;
         ent2nvar[ent] = nvar;
@@ -1239,110 +1244,284 @@ int main(int argc, char **argv) {
         }
       }
 
-      // A1 : [anchornum x (3 * nents)]
-      // A2 : [anchornum x (3 * nents)]
-      // A1 * P * X -> inversed anchor depths (left side)
-      // A2 * P * X -> inversed anchor depths (right side)
-      std::vector<SparseMatElementd> A1triplets, A2triplets;
-      int anchorId = 0;
-      for (auto &cons : ents2anchors) {
-        int ent1 = cons.first.first;
-        int ent2 = cons.first.second;
+      // anchorPositions: [nanchors x 3]
+      int nanchors = 0;
+      std::vector<SparseMatElementd> anchorPositions;
+      HandledTable<VertHandle, int> vhProxy2anchor(
+          meshProxy.internalVertices().size(), -1);
+      for (auto &vert : meshProxy.vertices()) {
+        auto vh2d = vert.data;
+        Vec3 anchor = normalize(curCam.direction(mesh2d.data(vh2d)));
+        for (int i = 0; i < 3; i++) {
+          anchorPositions.emplace_back(nanchors, i, anchor[i]);
+        }
+        vhProxy2anchor[vert.topo.hd] = nanchors;
+        nanchors++;
+      }
 
-        auto &anchors = cons.second;
-        for (auto &anchor : anchors) {
-          Vec3 nanchor = normalize(anchor);
-          for (int k = 0; k < 3; k++) {
-            A1triplets.emplace_back(anchorId, k + ent1 * 3, nanchor[k]);
-            A2triplets.emplace_back(anchorId, k + ent2 * 3, nanchor[k]);
+      // connection2anchor: [nconnection -> nanchors],
+      // connection2leftEnt, connection2rightEnt:
+      // [nconnection -> nents]
+      std::vector<double> connection2anchor, connection2leftEnt,
+          connection2rightEnt;
+      // angleHead2anchor, angleTailA2anchor, angleTailB2anchor
+      std::vector<double> angleHead2anchor, angleTailA2anchor,
+          angleTailB2anchor;
+      // angle2faceEnt
+      std::vector<double> angle2faceEnt;
+
+      int nconnections = 0;
+      int nangles = 0;
+      for (auto &f : meshProxy.faces()) {
+        auto &hhProxies = f.topo.halfedges;
+        for (int i = 0; i < hhProxies.size(); i++) {
+          auto hhProxy = hhProxies[i];
+          HalfHandle hh2d = meshProxy.data(hhProxy);
+          if (hh2d.invalid()) {
+            hh2d = meshProxy.data(meshProxy.topo(hhProxy).opposite);
           }
-          anchorId++;
-        }
-      }
-      int nanchors = anchorId;
+          assert(hh2d.valid());
+          int edge = hh2d2edge[hh2d];
+          int edgeEnt = edge2ent[edge];
+          int faceEnt = fhProxy2ent[f.topo.hd];
 
-      // J1: [(3 * nadjFaces) x (3 * nents)]
-      // J1: [(3 * nadjFaces) x (3 * nents)]
-      // J1 * P * X -> plane coefficients at edges (left side)
-      // J2 * P * X -> plane coefficients at edges (right side)
-      std::vector<SparseMatElementd> J1triplets, J2triplets;
-      for (int i = 0; i < nadjFaces; i++) {
-        int ent1 = adjFaceEnts[i].first;
-        int ent2 = adjFaceEnts[i].second;
-        for (int k = 0; k < 3; k++) {
-          J1triplets.emplace_back(k + i * 3, k + ent1 * 3, 1);
-          J2triplets.emplace_back(k + i * 3, k + ent2 * 3, 1);
+          // connection2leftEnt.emplace_back(nconnections, edgeEnt, 1);
+          connection2leftEnt.push_back(edgeEnt);
+          // connection2rightEnt.emplace_back(nconnections, faceEnt, 1);
+          connection2rightEnt.push_back(faceEnt);
+
+          VertHandle curVhProxy = meshProxy.topo(hhProxy).to();
+          int curAnchorId = vhProxy2anchor[curVhProxy];
+
+          // connection2anchor.emplace_back(nconnections, curAnchorId, 1);
+          connection2anchor.push_back(curAnchorId);
+
+          int prevAnchorId = vhProxy2anchor[meshProxy.topo(hhProxy).from()];
+          int nextAnchorId = vhProxy2anchor
+              [meshProxy.topo(hhProxies[(i + 1) % hhProxies.size()]).to()];
+
+          angleHead2anchor.push_back(curAnchorId);
+          angleTailA2anchor.push_back(prevAnchorId);
+          angleTailB2anchor.push_back(nextAnchorId);
+          angle2faceEnt.push_back(faceEnt);
+
+          nconnections++;
+          nangles++;
         }
       }
-      std::vector<double> J12Signs;
-      // todo
+      assert(angle2faceEnt.size() == nangles);
 
       // solve!
       matlab << "clear()";
+
+      // matrices
       matlab.setVar("P", MakeSparseMatFromElements(3 * nents, nvars,
                                                    Ptriplets.begin(),
                                                    Ptriplets.end()));
-      matlab.setVar("A1", MakeSparseMatFromElements(nanchors, 3 * nents,
-                                                    A1triplets.begin(),
-                                                    A1triplets.end()));
-      matlab.setVar("A2", MakeSparseMatFromElements(nanchors, 3 * nents,
-                                                    A2triplets.begin(),
-                                                    A2triplets.end()));
-      matlab.setVar("J1", MakeSparseMatFromElements(3 * nadjFaces, 3 * nents,
-                                                    J1triplets.begin(),
-                                                    J1triplets.end()));
-      matlab.setVar("J2", MakeSparseMatFromElements(3 * nadjFaces, 3 * nents,
-                                                    J2triplets.begin(),
-                                                    J2triplets.end()));
+      matlab.setVar("AnchorPositions", MakeSparseMatFromElements(
+                                           nanchors, 3, anchorPositions.begin(),
+                                           anchorPositions.end()));
+      // index mappings
+      matlab.setVar("connection2anchor", DenseMatd(connection2anchor));
+      matlab.setVar("connection2leftEnt", DenseMatd(connection2leftEnt));
+      matlab.setVar("connection2rightEnt", DenseMatd(connection2rightEnt));
 
+      matlab.setVar("angleHead2anchor", DenseMatd(angleHead2anchor));
+      matlab.setVar("angleTailA2anchor", DenseMatd(angleTailA2anchor));
+      matlab.setVar("angleTailB2anchor", DenseMatd(angleTailB2anchor));
+      matlab.setVar("angle2faceEnt", DenseMatd(angle2faceEnt));
+
+      // sizes
       matlab.setVar("nvars", nvars);
       matlab.setVar("nents", nents);
       matlab.setVar("nanchors", nanchors);
-      matlab.setVar("nadjFaces", nadjFaces);
+      matlab.setVar("nconnections", nconnections);
+      matlab.setVar("nangles", nangles);
+
 
       double minE = std::numeric_limits<double>::infinity();
-
-      std::vector<double> X;
-
+      matlab << "FinalX = zeros(nvars, 1);";
       static const int maxIter = 10;
-      matlab << "PHI = ones(nanchors, 1);";
-      matlab << "DELTA = ones(3, nadjFaces);";
-      matlab << "AvgCos = 0;";
+
+      matlab
+          << "Prev_InverseDepthsOnLeftOfConnections = ones(nconnections, 1);";
+      matlab
+          << "Prev_InverseDepthsOnRightOfConnections = ones(nconnections, 1);";
+
+      matlab << "Prev_Scalar1 = ones(nangles, 1);";
+      matlab << "Prev_Scalar2 = ones(nangles, 1);";
+      matlab << "Prev_Scalar3 = ones(nangles, 1);";
+      // matlab << "Prev_AvgAngleCos = zeros(nangles, 1);";
 
       for (int t = 0; t < maxIter; t++) {
-        const std::string objective =
-            "1e5 * sum_square(((A1 - A2) * P * X) ./ PHI)"
-            " + "
-            "sum_square(dot(reshape(J1 * P * X, [3 nadjFaces]), "
-            "DELTA) - AvgCos)";
-
-        matlab << "cvx_begin quiet";
+        matlab << "cvx_begin";
         matlab << "variable X(nvars);";
-        matlab << "minimize " + objective + ";";
+
+        matlab << "PlaneEqs = reshape(P * X, [3 nents])';"; // [nents x 3]
+
+        matlab << "PlaneEqsOnLeftOfConnections = "
+                  "PlaneEqs(connection2leftEnt + 1, :);";
+        matlab << "PlaneEqsOnRightOfConnections = "
+                  "PlaneEqs(connection2rightEnt + 1, :);";
+
+        matlab << "ConnectionPositions = "
+                  "AnchorPositions(connection2anchor + 1, :);";
+        matlab << "InverseDepthsOnLeftOfConnections = "
+                  "dot(PlaneEqsOnLeftOfConnections, ConnectionPositions, 2);";
+        matlab << "InverseDepthsOnRightOfConnections = "
+                  "dot(PlaneEqsOnRightOfConnections, ConnectionPositions, 2);";
+
+        // energy of connections
+        matlab << "EnergyOfConnections = "
+                  "sum_square((InverseDepthsOnLeftOfConnections - "
+                  "InverseDepthsOnRightOfConnections) ./ "
+                  "Prev_InverseDepthsOnLeftOfConnections ./ "
+                  "Prev_InverseDepthsOnRightOfConnections);";
+
+        matlab << "PlaneEqsOfAngles = PlaneEqs(angle2faceEnt + 1, :);";
+
+        matlab << "AngleHeadPositions = "
+                  "AnchorPositions(angleHead2anchor + 1, :);";
+        matlab << "AngleTailAPositions = "
+                  "AnchorPositions(angleTailA2anchor + 1, :);";
+        matlab << "AngleTailBPositions = "
+                  "AnchorPositions(angleTailB2anchor + 1, :);";
+
+        // m : AngleTailAPositions
+        // n : AngleTailBPositions
+        matlab << "Scalar1 = dot(AngleHeadPositions, PlaneEqsOfAngles, 2);";
+        matlab << "Scalar2 = dot(AngleTailBPositions, PlaneEqsOfAngles, 2);";
+        matlab << "Scalar3 = dot(AngleTailAPositions, PlaneEqsOfAngles, 2);";
+
+        // px : AngleHeadPositions(:, 1)
+        // py : AngleHeadPositions(:, 2)
+        // pz : AngleHeadPositions(:, 3)
+
+        // mx : AngleTailAPositions(:, 1)
+        // my : AngleTailAPositions(:, 2)
+        // mz : AngleTailAPositions(:, 3)
+
+        // nx : AngleTailBPositions(:, 1)
+        // ny : AngleTailBPositions(:, 2)
+        // nz : AngleTailBPositions(:, 3)
+
+        // / mx   px \ / nx   px \   / my   py \ / ny   py \   / mz   pz \ / nz   pz \
+        // | -- - -- | | -- - -- | + | -- - -- | | -- - -- | + | -- - -- | | -- - -- |
+        // \ #3   #1 / \ #2   #1 /   \ #3   #1 / \ #2   #1 /   \ #3   #1 / \ #2
+        // #1 /
+        matlab << "InnerProdNumerator1 = "
+                  "(Scalar1 .* AngleTailAPositions(:, 1) - "
+                  " Scalar3 .* AngleHeadPositions(:, 1)) .*"
+                  "(Prev_Scalar1 .* AngleTailBPositions(:, 1) - "
+                  "Prev_Scalar2 .* AngleHeadPositions(:, 1));";
+        matlab << "InnerProdNumerator2 = "
+                  "(Scalar1 .* AngleTailAPositions(:, 2) - "
+                  " Scalar3 .* AngleHeadPositions(:, 2)) .*"
+                  "(Prev_Scalar1 .* AngleTailBPositions(:, 2) - "
+                  "Prev_Scalar2 .* AngleHeadPositions(:, 2));";
+        matlab << "InnerProdNumerator3 = "
+                  "(Scalar1 .* AngleTailAPositions(:, 3) - "
+                  " Scalar3 .* AngleHeadPositions(:, 3)) .*"
+                  "(Prev_Scalar1 .* AngleTailBPositions(:, 3) - "
+                  "Prev_Scalar2 .* AngleHeadPositions(:, 3));";
+
+        matlab << "AngleCosines = "
+                  "(InnerProdNumerator1 + InnerProdNumerator2 + "
+                  "InnerProdNumerator3) "
+                  "./ Prev_Scalar1 ./ Prev_Scalar1 "
+                  "./ Prev_Scalar2 ./ Prev_Scalar3;";
+
+        // restrict face angles to be orhtogonal, aka, cosine values to be
+        // zero
+        matlab << "EnergyOfOrthogonalFaceAngles = sum_square(AngleCosines);";
+
+        // energy
+        matlab << "ObjectiveEnergy = EnergyOfConnections;"; /*+ "
+                  "0.0 * EnergyOfOrthogonalFaceAngles;";*/
+
+        matlab << "minimize ObjectiveEnergy";
         matlab << "subject to";
-        matlab << " ones(nanchors, 1) <= A1 * P * X;";
-        matlab << " ones(nanchors, 1) <= A2 * P * X;";
+        matlab << "   ones(nconnections, 1) <= "
+                  "InverseDepthsOnLeftOfConnections;";
+        matlab << "   ones(nconnections, 1) <= "
+                  "InverseDepthsOnRightOfConnections;";
         matlab << "cvx_end";
 
-        matlab << "PHI = (A1 * P * X) .* (A2 * P * X);";
-        matlab << "PHI = abs(PHI) / norm(PHI);";
+        matlab << "Prev_InverseDepthsOnLeftOfConnections = "
+                  "InverseDepthsOnLeftOfConnections ./ "
+                  "norm(InverseDepthsOnLeftOfConnections);";
+        matlab << "Prev_InverseDepthsOnRightOfConnections = "
+                  "InverseDepthsOnRightOfConnections ./ "
+                  "norm(InverseDepthsOnRightOfConnections);";
+        matlab << "Prev_Scalar1 = Scalar1;";
+        matlab << "Prev_Scalar2 = Scalar2;";
+        matlab << "Prev_Scalar3 = Scalar3;";
 
-        matlab << "Planes1 = reshape(J1 * P * X, [3 nadjFaces]);";
-        matlab << "Planes2 = reshape(J2 * P * X, [3 nadjFaces]);";
-        matlab << "DELTA = Planes2 ./ "
-                  "sqrt(repmat(dot(Planes1, Planes1) .* "
-                  "dot(Planes2, Planes2), "
-                  "[3 1]));"; 
-        matlab << "AvgCos = mean(dot(Planes1, Planes2));";
-
-        matlab << "e = " + objective + ";";
-
-        double curEnergy = matlab.var("e");
+        double curEnergy = matlab.var("ObjectiveEnergy");
         Println("cur energy - ", curEnergy);
         if (IsInfOrNaN(curEnergy)) {
           break;
         }
+        if (curEnergy < minE) {
+          minE = curEnergy;
+          matlab << "FinalX = 2 * X ./ median(InverseDepthsOnLeftOfConnections + "
+                    "InverseDepthsOnRightOfConnections);";
+          matlab << "norm(FinalX)";
+        }
       }
+
+      // use the solved X to recover supporting planes in each ent
+      matlab << "PlaneEqsVector = P * FinalX;"; // [nents*3 x 1]
+      DenseMatd planeEqsVector = matlab.var("PlaneEqsVector");
+      for (int ent = 0; ent < nents; ent++) {
+        auto &entity = *entities[ent];
+        entity.supportingPlane.reconstructed = Plane3FromEquation(
+            planeEqsVector(ent * 3 + 0), planeEqsVector(ent * 3 + 1),
+            planeEqsVector(ent * 3 + 2));
+      }
+
+      // reconstruct vertex positions
+      Mesh3 curReconstruction =
+          Transform(mesh2d, [](const Point2 &) { return Origin(); });
+      HandledTable<VertHandle, int> vh2d2faceProxyCount(
+          mesh2d.internalVertices().size(), 0);
+      for (auto &faceProxy : meshProxy.faces()) {
+        auto fhProxy = faceProxy.topo.hd;
+        int ent = fhProxy2ent[fhProxy];
+        const Plane3 &plane = entities[ent]->supportingPlane.reconstructed;
+        for (auto hhProxy : faceProxy.topo.halfedges) {
+          VertHandle vhProxy = meshProxy.topo(hhProxy).to();
+          VertHandle vh2d = meshProxy.data(vhProxy);
+          Vec3 direction = normalize(curCam.direction(mesh2d.data(vh2d)));
+          Point3 position = Intersection(Ray3(curCam.eye(), direction), plane);
+          curReconstruction.data(vh2d) += position;
+          vh2d2faceProxyCount[vh2d]++;
+        }
+      }
+      for (auto &vert : curReconstruction.vertices()) {
+        vert.data /= double(vh2d2faceProxyCount[vert.topo.hd]);
+      }
+
+      if (true) { // show current reconstruction
+        gui::SceneBuilder sb;
+        sb.installingOptions().defaultShaderSource =
+            gui::OpenGLShaderSourceDescriptor::XTriangles;
+        sb.installingOptions().discretizeOptions.color(gui::Black);
+        sb.installingOptions().lineWidth = 0.03;
+        AddToScene(sb, curReconstruction, [](auto) { return true; },
+                   [](const Point3 &pos) { return pos; },
+                   [](HalfHandle hh) { return gui::Black; },
+                   [](FaceHandle fh) { return gui::Transparent; });
+        sb.show(true, true, gui::RenderOptions()
+                                .backgroundColor(gui::White)
+                                .renderMode(gui::All)
+                                .bwTexColor(0.0)
+                                .bwColor(1.0)
+                                .fixUpDirectionInCameraMove(false)
+                                .cullBackFace(false)
+                                .cullFrontFace(false));
+      }
+      reconstructions.push_back(std::move(curReconstruction));
     }
   }
 }
