@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
   misc::Matlab matlab;
 
   std::string name = "hex";
-  std::string camName = "cam1";
+  std::string camName = "cam2";
   bool resetCam = false;
 
   std::string objFile = "H:\\GitHub\\Panoramix\\data\\linedrawing\\" + name +
@@ -876,7 +876,7 @@ int main(int argc, char **argv) {
   std::vector<Mesh3> reconstructions;
   for (int configId = 0;
        configId < std::min(5ull, ppFocalGroups.size()) &&
-       ppFocalGroups[configId].first.size() * 10 >= ppFocalCandidates.size();
+       ppFocalGroups[configId].first.size() * 30 >= ppFocalCandidates.size();
        configId++) {
 
     double focal = ppFocalGroups[configId].second.focal;
@@ -1070,6 +1070,7 @@ int main(int argc, char **argv) {
       struct EntityBase {
         SupportingPlane supportingPlane;
         EntityBase(const SupportingPlane &sp) : supportingPlane(sp) {}
+        virtual ~EntityBase() {}
         virtual FaceHandle fhProxy() const { return FaceHandle(); }
         virtual int edge() const { return -1; }
         bool isFace() const { return fhProxy().valid(); }
@@ -1080,6 +1081,7 @@ int main(int argc, char **argv) {
         FaceEntity(FaceHandle fh, const Vec3 &center)
             : EntityBase(SupportingPlane(SegControl{-1, -1}, center, {})),
               fh(fh) {}
+        virtual ~FaceEntity() {}
         virtual FaceHandle fhProxy() const override { return fh; }
       };
       struct EdgeEntity : EntityBase {
@@ -1087,6 +1089,7 @@ int main(int argc, char **argv) {
         EdgeEntity(int e, const Classified<Line3> &line,
                    const std::vector<Vec3> &vp2dir)
             : EntityBase(SupportingPlane(line, vp2dir)), e(e) {}
+        virtual ~EdgeEntity() {}
         virtual int edge() const override { return e; }
       };
 
@@ -1285,27 +1288,28 @@ int main(int argc, char **argv) {
           int edgeEnt = edge2ent[edge];
           int faceEnt = fhProxy2ent[f.topo.hd];
 
-          // connection2leftEnt.emplace_back(nconnections, edgeEnt, 1);
-          connection2leftEnt.push_back(edgeEnt);
-          // connection2rightEnt.emplace_back(nconnections, faceEnt, 1);
-          connection2rightEnt.push_back(faceEnt);
-
           VertHandle curVhProxy = meshProxy.topo(hhProxy).to();
           int curAnchorId = vhProxy2anchor[curVhProxy];
-
-          // connection2anchor.emplace_back(nconnections, curAnchorId, 1);
-          connection2anchor.push_back(curAnchorId);
-
           int prevAnchorId = vhProxy2anchor[meshProxy.topo(hhProxy).from()];
+          assert(meshProxy.topo(hhProxies[(i + hhProxies.size() - 1) %
+                                          hhProxies.size()])
+                     .to() == meshProxy.topo(hhProxy).from());
           int nextAnchorId = vhProxy2anchor
               [meshProxy.topo(hhProxies[(i + 1) % hhProxies.size()]).to()];
+
+          connection2leftEnt.push_back(edgeEnt);
+          connection2rightEnt.push_back(faceEnt);
+          connection2anchor.push_back(curAnchorId);
+          connection2leftEnt.push_back(edgeEnt);
+          connection2rightEnt.push_back(faceEnt);
+          connection2anchor.push_back(prevAnchorId);
 
           angleHead2anchor.push_back(curAnchorId);
           angleTailA2anchor.push_back(prevAnchorId);
           angleTailB2anchor.push_back(nextAnchorId);
           angle2faceEnt.push_back(faceEnt);
 
-          nconnections++;
+          nconnections+=2;
           nangles++;
         }
       }
@@ -1341,7 +1345,7 @@ int main(int argc, char **argv) {
 
       double minE = std::numeric_limits<double>::infinity();
       matlab << "FinalX = zeros(nvars, 1);";
-      static const int maxIter = 10;
+      static const int maxIter = 30;
 
       matlab
           << "Prev_InverseDepthsOnLeftOfConnections = ones(nconnections, 1);";
@@ -1357,89 +1361,99 @@ int main(int argc, char **argv) {
         matlab << "cvx_begin";
         matlab << "variable X(nvars);";
 
-        matlab << "PlaneEqs = reshape(P * X, [3 nents])';"; // [nents x 3]
+        auto constructProblem = [&matlab](const std::string &objectiveVarName) {
+          matlab << "PlaneEqs = reshape(P * X, [3 nents])';"; // [nents x 3]
 
-        matlab << "PlaneEqsOnLeftOfConnections = "
-                  "PlaneEqs(connection2leftEnt + 1, :);";
-        matlab << "PlaneEqsOnRightOfConnections = "
-                  "PlaneEqs(connection2rightEnt + 1, :);";
+          matlab << "PlaneEqsOnLeftOfConnections = "
+                    "PlaneEqs(connection2leftEnt + 1, :);";
+          matlab << "PlaneEqsOnRightOfConnections = "
+                    "PlaneEqs(connection2rightEnt + 1, :);";
 
-        matlab << "ConnectionPositions = "
-                  "AnchorPositions(connection2anchor + 1, :);";
-        matlab << "InverseDepthsOnLeftOfConnections = "
-                  "dot(PlaneEqsOnLeftOfConnections, ConnectionPositions, 2);";
-        matlab << "InverseDepthsOnRightOfConnections = "
-                  "dot(PlaneEqsOnRightOfConnections, ConnectionPositions, 2);";
+          matlab << "ConnectionPositions = "
+                    "AnchorPositions(connection2anchor + 1, :);";
+          matlab << "InverseDepthsOnLeftOfConnections = "
+                    "dot(PlaneEqsOnLeftOfConnections, ConnectionPositions, 2);";
+          matlab
+              << "InverseDepthsOnRightOfConnections = "
+                 "dot(PlaneEqsOnRightOfConnections, ConnectionPositions, 2);";
 
-        // energy of connections
-        matlab << "EnergyOfConnections = "
-                  "sum_square((InverseDepthsOnLeftOfConnections - "
-                  "InverseDepthsOnRightOfConnections) ./ "
-                  "Prev_InverseDepthsOnLeftOfConnections ./ "
-                  "Prev_InverseDepthsOnRightOfConnections);";
+          // energy of connections
+          matlab << "EnergyOfConnections = "
+                    "sum_square((InverseDepthsOnLeftOfConnections - "
+                    "InverseDepthsOnRightOfConnections) ./ "
+                    "Prev_InverseDepthsOnLeftOfConnections ./ "
+                    "Prev_InverseDepthsOnRightOfConnections);";
+          const std::string trueEnergyOfConnectionsExpr =
+              "sum_square((InverseDepthsOnLeftOfConnections - "
+              "InverseDepthsOnRightOfConnections) ./ "
+              "InverseDepthsOnLeftOfConnections ./ "
+              "InverseDepthsOnRightOfConnections)";
 
-        matlab << "PlaneEqsOfAngles = PlaneEqs(angle2faceEnt + 1, :);";
+          matlab << "PlaneEqsOfAngles = PlaneEqs(angle2faceEnt + 1, :);";
 
-        matlab << "AngleHeadPositions = "
-                  "AnchorPositions(angleHead2anchor + 1, :);";
-        matlab << "AngleTailAPositions = "
-                  "AnchorPositions(angleTailA2anchor + 1, :);";
-        matlab << "AngleTailBPositions = "
-                  "AnchorPositions(angleTailB2anchor + 1, :);";
+          matlab << "AngleHeadPositions = "
+                    "AnchorPositions(angleHead2anchor + 1, :);";
+          matlab << "AngleTailAPositions = "
+                    "AnchorPositions(angleTailA2anchor + 1, :);";
+          matlab << "AngleTailBPositions = "
+                    "AnchorPositions(angleTailB2anchor + 1, :);";
 
-        // m : AngleTailAPositions
-        // n : AngleTailBPositions
-        matlab << "Scalar1 = dot(AngleHeadPositions, PlaneEqsOfAngles, 2);";
-        matlab << "Scalar2 = dot(AngleTailBPositions, PlaneEqsOfAngles, 2);";
-        matlab << "Scalar3 = dot(AngleTailAPositions, PlaneEqsOfAngles, 2);";
+          // m : AngleTailAPositions
+          // n : AngleTailBPositions
+          matlab << "Scalar1 = dot(AngleHeadPositions, PlaneEqsOfAngles, 2);";
+          matlab << "Scalar2 = dot(AngleTailBPositions, PlaneEqsOfAngles, 2);";
+          matlab << "Scalar3 = dot(AngleTailAPositions, PlaneEqsOfAngles, 2);";
 
-        // px : AngleHeadPositions(:, 1)
-        // py : AngleHeadPositions(:, 2)
-        // pz : AngleHeadPositions(:, 3)
+          // px : AngleHeadPositions(:, 1)
+          // py : AngleHeadPositions(:, 2)
+          // pz : AngleHeadPositions(:, 3)
 
-        // mx : AngleTailAPositions(:, 1)
-        // my : AngleTailAPositions(:, 2)
-        // mz : AngleTailAPositions(:, 3)
+          // mx : AngleTailAPositions(:, 1)
+          // my : AngleTailAPositions(:, 2)
+          // mz : AngleTailAPositions(:, 3)
 
-        // nx : AngleTailBPositions(:, 1)
-        // ny : AngleTailBPositions(:, 2)
-        // nz : AngleTailBPositions(:, 3)
+          // nx : AngleTailBPositions(:, 1)
+          // ny : AngleTailBPositions(:, 2)
+          // nz : AngleTailBPositions(:, 3)
 
-        // / mx   px \ / nx   px \   / my   py \ / ny   py \   / mz   pz \ / nz   pz \
+          // / mx   px \ / nx   px \   / my   py \ / ny   py \   / mz   pz \ / nz   pz \
         // | -- - -- | | -- - -- | + | -- - -- | | -- - -- | + | -- - -- | | -- - -- |
-        // \ #3   #1 / \ #2   #1 /   \ #3   #1 / \ #2   #1 /   \ #3   #1 / \ #2
-        // #1 /
-        matlab << "InnerProdNumerator1 = "
-                  "(Scalar1 .* AngleTailAPositions(:, 1) - "
-                  " Scalar3 .* AngleHeadPositions(:, 1)) .*"
-                  "(Prev_Scalar1 .* AngleTailBPositions(:, 1) - "
-                  "Prev_Scalar2 .* AngleHeadPositions(:, 1));";
-        matlab << "InnerProdNumerator2 = "
-                  "(Scalar1 .* AngleTailAPositions(:, 2) - "
-                  " Scalar3 .* AngleHeadPositions(:, 2)) .*"
-                  "(Prev_Scalar1 .* AngleTailBPositions(:, 2) - "
-                  "Prev_Scalar2 .* AngleHeadPositions(:, 2));";
-        matlab << "InnerProdNumerator3 = "
-                  "(Scalar1 .* AngleTailAPositions(:, 3) - "
-                  " Scalar3 .* AngleHeadPositions(:, 3)) .*"
-                  "(Prev_Scalar1 .* AngleTailBPositions(:, 3) - "
-                  "Prev_Scalar2 .* AngleHeadPositions(:, 3));";
+          // \ #3   #1 / \ #2   #1 /   \ #3   #1 / \ #2   #1 /   \ #3   #1 / \
+          // #2
+          // #1 /
+          matlab << "AngleCosineNumerator1 = "
+                    "(Scalar1 .* AngleTailAPositions(:, 1) - "
+                    " Scalar3 .* AngleHeadPositions(:, 1)) .*"
+                    "(Prev_Scalar1 .* AngleTailBPositions(:, 1) - "
+                    "Prev_Scalar2 .* AngleHeadPositions(:, 1));";
+          matlab << "AngleCosineNumerator2 = "
+                    "(Scalar1 .* AngleTailAPositions(:, 2) - "
+                    " Scalar3 .* AngleHeadPositions(:, 2)) .*"
+                    "(Prev_Scalar1 .* AngleTailBPositions(:, 2) - "
+                    "Prev_Scalar2 .* AngleHeadPositions(:, 2));";
+          matlab << "AngleCosineNumerator3 = "
+                    "(Scalar1 .* AngleTailAPositions(:, 3) - "
+                    " Scalar3 .* AngleHeadPositions(:, 3)) .*"
+                    "(Prev_Scalar1 .* AngleTailBPositions(:, 3) - "
+                    "Prev_Scalar2 .* AngleHeadPositions(:, 3));";
 
-        matlab << "AngleCosines = "
-                  "(InnerProdNumerator1 + InnerProdNumerator2 + "
-                  "InnerProdNumerator3) "
-                  "./ Prev_Scalar1 ./ Prev_Scalar1 "
-                  "./ Prev_Scalar2 ./ Prev_Scalar3;";
+          matlab << "AngleCosines = "
+                    "(AngleCosineNumerator1 + AngleCosineNumerator2 + "
+                    "AngleCosineNumerator3) "
+                    "./ Prev_Scalar1 ./ Prev_Scalar1 "
+                    "./ Prev_Scalar2 ./ Prev_Scalar3;";
 
-        // restrict face angles to be orhtogonal, aka, cosine values to be
-        // zero
-        matlab << "EnergyOfOrthogonalFaceAngles = sum_square(AngleCosines);";
+          // restrict face angles to be orhtogonal, aka, cosine values to be
+          // zero
+          matlab << "EnergyOfOrthogonalFaceAngles = sum_square(AngleCosines);";
 
-        // energy
-        matlab << "ObjectiveEnergy = EnergyOfConnections;"; /*+ "
-                  "0.0 * EnergyOfOrthogonalFaceAngles;";*/
+          // energy
+          matlab << (objectiveVarName + " = 1e3 * EnergyOfConnections + "
+                                        "EnergyOfOrthogonalFaceAngles;");
+        };
 
-        matlab << "minimize ObjectiveEnergy";
+        constructProblem("ObjectiveEnergy");
+        matlab << "minimize 1e3 * ObjectiveEnergy";
         matlab << "subject to";
         matlab << "   ones(nconnections, 1) <= "
                   "InverseDepthsOnLeftOfConnections;";
@@ -1457,7 +1471,9 @@ int main(int argc, char **argv) {
         matlab << "Prev_Scalar2 = Scalar2;";
         matlab << "Prev_Scalar3 = Scalar3;";
 
-        double curEnergy = matlab.var("ObjectiveEnergy");
+        constructProblem("TrueObjectiveEnergy");
+
+        double curEnergy = matlab.var("TrueObjectiveEnergy");
         Println("cur energy - ", curEnergy);
         if (IsInfOrNaN(curEnergy)) {
           break;
@@ -1478,6 +1494,26 @@ int main(int argc, char **argv) {
         entity.supportingPlane.reconstructed = Plane3FromEquation(
             planeEqsVector(ent * 3 + 0), planeEqsVector(ent * 3 + 1),
             planeEqsVector(ent * 3 + 2));
+      }
+
+      if (true) {
+        // show reconstructed edge lines directly
+        gui::SceneBuilder sb;
+        sb.installingOptions().defaultShaderSource =
+            gui::OpenGLShaderSourceDescriptor::XLines;
+        sb.installingOptions().discretizeOptions.color(gui::Black);
+        sb.installingOptions().lineWidth = 10;
+        for (int edge = 0; edge < nedges; edge++) {
+          auto &line2 = edge2line[edge];
+          auto &plane = entities[edge2ent[edge]]->supportingPlane.reconstructed;
+          Line3 line3(
+              Intersection(Ray3(curCam.eye(), curCam.direction(line2.first)),
+                           plane),
+              Intersection(Ray3(curCam.eye(), curCam.direction(line2.second)),
+                           plane));
+          sb.add(line3);
+        }
+        sb.show(true, true);
       }
 
       // reconstruct vertex positions
@@ -1507,11 +1543,14 @@ int main(int argc, char **argv) {
         sb.installingOptions().defaultShaderSource =
             gui::OpenGLShaderSourceDescriptor::XTriangles;
         sb.installingOptions().discretizeOptions.color(gui::Black);
-        sb.installingOptions().lineWidth = 0.03;
+        sb.installingOptions().lineWidth = 10;
         AddToScene(sb, curReconstruction, [](auto) { return true; },
                    [](const Point3 &pos) { return pos; },
                    [](HalfHandle hh) { return gui::Black; },
-                   [](FaceHandle fh) { return gui::Transparent; });
+                   [](FaceHandle fh) {
+                     return gui::Color(
+                         Vec3i(rand() % 256, rand() % 256, rand() % 256));
+                   });
         sb.show(true, true, gui::RenderOptions()
                                 .backgroundColor(gui::White)
                                 .renderMode(gui::All)
@@ -1524,4 +1563,6 @@ int main(int argc, char **argv) {
       reconstructions.push_back(std::move(curReconstruction));
     }
   }
+
+
 }
