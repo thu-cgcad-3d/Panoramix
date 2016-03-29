@@ -57,9 +57,7 @@ foreach (_M ${Qt_MODULES_REQUIRED})
     find_package ("Qt5${_M}" REQUIRED)
     string(COMPARE EQUAL ${_M} OpenGL _IsOpenGL)
     if(${_IsOpenGL})
-        #find_package (GLUT REQUIRED)
         find_package (OPENGL REQUIRED)
-        #list(APPEND Qt_INCLUDES ${GLUT_INCLUDE_DIR})
         list(APPEND Qt_INCLUDES ${OPENGL_INCLUDE_DIR})
         list(APPEND Qt_LIBS ${OPENGL_LIBRARIES})
     endif()
@@ -68,6 +66,10 @@ endforeach()
 list (APPEND DEPENDENCY_INCLUDES ${Qt_INCLUDES})
 list (APPEND DEPENDENCY_LIBS ${Qt_LIBS})
 list (APPEND DEPENDENCY_BINS_PATHS ${Qt_PATH})
+if (MSVC)
+    message (WARNING 
+        "do not forget to add QT_QPA_PLATFORM_PLUGIN_PATH=${Qt_DIR}/plugins/platforms to env")
+endif ()
 
 
 

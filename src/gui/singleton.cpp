@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QtGui>
 #include <QtOpenGL>
+//#include <QtPlugin>
 
 #include "qttools.hpp"
 #include "singleton.hpp"
@@ -26,6 +27,8 @@ void Singleton::SetCmdArgs(int argc, char **argv, char **envp) {
 QApplication *Singleton::InitGui(int argc, char **argv) {
   if (qApp)
     return qApp;
+
+  //Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
   Q_INIT_RESOURCE(gui);
   _argc = argc;
   _argv = argv;

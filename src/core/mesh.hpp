@@ -1507,6 +1507,40 @@ DecomposeOnInternalLoop(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                                 std::forward<FD1>(faceData));
   FaceHandle fh2 = mesh.addFace(anotherVhs.begin(), anotherVhs.end(), true,
                                 std::forward<FD2>(oppoFaceData));
+  // copy halfedge data
+  assert(thisVhs.size() == anotherVhs.size());
+  for (int i = 0; i < anotherVhs.size(); i++) {
+    VertHandle anotherVh1 = anotherVhs[i];
+    VertHandle anotherVh2 = anotherVhs[(i + 1) % anotherVhs.size()];
+    HalfHandle anotherHH;
+    for (HalfHandle hh : mesh.topo(anotherVh1).halfedges) {
+      if (mesh.topo(hh).to() == anotherVh2) {
+        anotherHH = hh;
+        break;
+      }
+    }
+    if (mesh.topo(anotherHH).face != fh1 && mesh.topo(anotherHH).face != fh2) {
+      anotherHH = mesh.topo(anotherHH).opposite;
+    }
+    assert(mesh.topo(anotherHH).face == fh1 ||
+           mesh.topo(anotherHH).face == fh2);
+    VertHandle thisVh1 = thisVhs[i];
+    VertHandle thisVh2 = thisVhs[(i + 1) % thisVhs.size()];
+    HalfHandle thisHH;
+    for (HalfHandle hh : mesh.topo(thisVh1).halfedges) {
+      if (mesh.topo(hh).to() == thisVh2) {
+        thisHH = hh;
+        break;
+      }
+    }
+    if (mesh.topo(thisHH).face != fh1 && mesh.topo(thisHH).face != fh2) {
+      thisHH = mesh.topo(thisHH).opposite;
+    }
+    assert(mesh.topo(thisHH).face == fh1 || mesh.topo(thisHH).face == fh2);
+    assert(anotherHH.valid() && thisHH.valid());
+    mesh.data(anotherHH) = mesh.data(mesh.topo(thisHH).opposite);
+    mesh.data(thisHH) = mesh.data(mesh.topo(anotherHH).opposite);
+  }
   return std::make_pair(fh1, fh2);
 }
 

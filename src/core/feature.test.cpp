@@ -98,7 +98,7 @@ TEST(Feature, SegmentationExtractorInPanorama) {
            core::Y());
 
   static const std::string folder =
-      "F:\\GitHub\\write-papers\\papers\\a\\figure\\supp\\";
+      "H:\\GitHub\\write-papers\\papers\\a\\figure\\supp\\";
 
   double alpha = 0.7;
   double beta = 1 - alpha;
@@ -107,13 +107,13 @@ TEST(Feature, SegmentationExtractorInPanorama) {
       gui::CreateRandomColorTableWithSize(nsegs, gui::Transparent)(segs);
   imsegs = imsegs * alpha + im * beta;
 
-  gui::AsCanvas(im).saveAs(folder + "pano.png");
-  gui::AsCanvas(core::MakeView(im, cam).sampled(cam1).image)
-      .show()
-      .saveAs(folder + "pano_polar1.png");
-  gui::AsCanvas(core::MakeView(im, cam).sampled(cam2).image)
-      .show()
-      .saveAs(folder + "pano_polar2.png");
+  //gui::AsCanvas(im).saveAs(folder + "pano.png");
+  //gui::AsCanvas(core::MakeView(im, cam).sampled(cam1).image)
+  //    .show()
+  //    .saveAs(folder + "pano_polar1.png");
+  //gui::AsCanvas(core::MakeView(im, cam).sampled(cam2).image)
+  //    .show()
+  //    .saveAs(folder + "pano_polar2.png");
 
   // gui::AsCanvas(imsegs).show().saveAs(folder + "panosegs.png");
   // gui::AsCanvas(core::MakeView(imsegs,

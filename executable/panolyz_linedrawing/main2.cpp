@@ -133,18 +133,125 @@ inline std::vector<Point2> PossibleKeyVanishingPoints(const Chain2 &chain) {
   }
 }
 
+
+struct EnergyWeights {
+  double vertMSDAWeight;
+  double faceMSDAWeight;
+  double faceAngleWeight;
+};
+
+template <class FaceHandleToPlaneEqFunT>
+double ComputeEnergy(const Mesh2 &mesh, const SubMesh &sub,
+                     const PerspectiveCamera &cam, const EnergyWeights &weights,
+                     FaceHandleToPlaneEqFunT fh2planeEq) {
+  int angleNum = sub.hhs.size();
+  // fh2planeEq: (FaceHandle)[i] -> double
+  std::map<VertHandle, Point3> vpositions;
+  std::map<VertHandle, int> vfacedegrees;
+  for (VertHandle vh : sub.vhs) {
+    vpositions[vh] = Vec3();
+    vfacedegrees[vh] = 0;
+  }
+  for (FaceHandle fh : sub.fhs) {
+    decltype(auto) planeEq = fh2planeEq(fh);
+    Plane3 plane = Plane3FromEquation(planeEq[0], planeEq[1], planeEq[2]);
+    if (HasValue(plane, IsInfOrNaN<double>)) {
+      return std::numeric_limits<double>::infinity();
+    }
+    for (HalfHandle hh : mesh.topo(fh).halfedges) {
+      VertHandle vh = mesh.topo(hh).to();
+      const Point2 &p2d = mesh.data(vh);
+      auto dir = normalize(cam.direction(p2d));
+      Point3 p3d = Intersection(Ray3(cam.eye(), dir), plane);
+      vpositions[vh] += p3d;
+      vfacedegrees[vh]++;
+    }
+  }
+  for (auto vhpos : vpositions) {
+    vhpos.second /= vfacedegrees.at(vhpos.first);
+  }
+
+  double faceMSDA = 0.0;
+  int faceMSDANum = 0;
+
+  double vertexMSDA = 0.0;
+  int vertexMSDANum = 0;
+
+  std::map<VertHandle, std::vector<double>> vh2angles;
+  for (FaceHandle fh : sub.fhs) {
+    auto &loophhs = mesh.topo(fh).halfedges;
+    std::vector<double> faceAngles(loophhs.size(), 0.0);
+    for (int k = 0; k < loophhs.size(); k++) {
+      int knext = (k + 1) % loophhs.size();
+      HalfHandle hh1 = loophhs[k];
+      HalfHandle hh2 = loophhs[knext];
+      assert(mesh.topo(hh1).to() == mesh.topo(hh2).from());
+      VertHandle v1 = mesh.topo(hh1).from();
+      VertHandle v2 = mesh.topo(hh1).to();
+      VertHandle v3 = mesh.topo(hh2).to();
+      auto &p1 = vpositions.at(v1);
+      auto &p2 = vpositions.at(v2);
+      auto &p3 = vpositions.at(v3);
+      double angle = AngleBetweenDirected(p1 - p2, p3 - p2);
+      faceAngles[k] = angle;
+      vh2angles[v2].push_back(angle);
+    }
+    double faceMeanAngle =
+        std::accumulate(faceAngles.begin(), faceAngles.end(), 0.0) /
+        faceAngles.size();
+    for (double a : faceAngles) {
+      faceMSDA += Square(a - faceMeanAngle);
+      faceMSDANum++;
+    }
+  }
+  faceMSDA /= faceMSDANum;
+
+  for (auto &vhangles : vh2angles) {
+    VertHandle vh = vhangles.first;
+    auto &angles = vhangles.second;
+    double vertMeanAngle =
+        std::accumulate(angles.begin(), angles.end(), 0.0) / angles.size();
+    for (double a : angles) {
+      vertexMSDA += Square(a - vertMeanAngle);
+      vertexMSDANum++;
+    }
+  }
+  vertexMSDA /= vertexMSDANum;
+
+  double faceAngleEnergy = 0.0;
+  for (auto &hh : sub.hhs) {
+    auto fh1 = mesh.topo(hh).face;
+    auto planeEq1 = fh2planeEq(fh1);
+    auto fh2 = mesh.topo(mesh.topo(hh).opposite).face;
+    auto planeEq2 = fh2planeEq(fh2);
+    double angle = AngleBetweenUndirected(
+        Vec3(planeEq1[0], planeEq1[1], planeEq1[2]),
+        Vec3(planeEq2[0], planeEq2[1], planeEq2[2]));
+    assert(!IsInfOrNaN(angle));
+    faceAngleEnergy += Square(angle - M_PI_2);
+  }
+  faceAngleEnergy /= sub.hhs.size();
+
+  double energy = faceMSDA * weights.faceMSDAWeight +
+                  vertexMSDA * weights.vertMSDAWeight +
+                  faceAngleEnergy * weights.faceAngleWeight;
+  // std::cout << "energy: " << energy << "\n";
+  return energy;
+}
+
+
 int main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
   std::string name = "hex";
-  std::string camName = "cam2";
+  std::string camName = "cam";
   bool resetCam = false;
 
-  std::string objFile = "H:\\GitHub\\Panoramix\\data\\linedrawing\\" + name +
+  std::string objFile = "F:\\LineDrawings\\" + name +
                         "\\" + name + ".obj";
-  std::string camFile = "H:\\GitHub\\Panoramix\\data\\linedrawing\\" + name +
+  std::string camFile = "F:\\LineDrawings\\" + name +
                         "\\" + name + ".obj." + camName + ".cereal";
 
   //// [Load Mesh]
@@ -154,6 +261,14 @@ int main(int argc, char **argv) {
   //// [Decompose]
   auto cutFacePairs = DecomposeAll(
       meshProxy, [](HalfHandle hh1, HalfHandle hh2) -> bool { return false; });
+  // check validity
+  for (auto &hProxy : meshProxy.halfedges()) {
+    HalfHandle hh = hProxy.data;
+    if (hh.invalid()) {
+      hh = meshProxy.data(hProxy.topo.opposite);
+    }
+    assert(hh.valid());
+  }
   std::unordered_map<FaceHandle, FaceHandle> cutFace2Another;
   for (auto &cutFacePair : cutFacePairs) {
     cutFace2Another[cutFacePair.first] = cutFacePair.second;
@@ -830,9 +945,9 @@ int main(int argc, char **argv) {
       vp2edges[edge2vp[edge]].push_back(edge);
     }
 
-    // invalidate the edge bindings for vps who have only 1 or 2 edges
+    // invalidate the edge bindings for vps who have <= 3 edges
     for (int vp = 0; vp < nvps; vp++) {
-      if (vp2edges[vp].size() <= 2) {
+      if (vp2edges[vp].size() <= 3) { //
         for (int edge : vp2edges[vp]) {
           edge2vp[edge] = -1;
         }
@@ -888,180 +1003,12 @@ int main(int argc, char **argv) {
       vp2dir[i] = curCam.direction(vpPositions[i]);
     }
 
-#if 0
-    //// [Orient Edges As Much As Possible]
-    HandledTable<FaceHandle, Vec3> fh2d2normal(mesh2d.internalFaces().size(),
-                                               Origin());
-    std::vector<Vec3> edge2dir(nedges, Origin());
-    for (int edge = 0; edge < nedges; edge++) {
-      int vp = edge2vp[edge];
-      if (vp != -1) {
-        edge2dir[edge] = normalize(vp2dir[vp]);
-      }
-    }
-    while (true) {
-      bool moreEdgesAreOriented = false;
-      // update face orientations
-      for (auto &f : mesh2d.faces()) {
-        auto &hhs = f.topo.halfedges;
-        std::vector<Vec3> dirs;
-        for (auto hh : hhs) {
-          int edge = hh2d2edge[hh];
-          auto &dir = edge2dir[edge];
-          if (dir == Origin()) {
-            continue;
-          }
-          static const double theta = DegreesToRadians(3);
-          if (std::all_of(dirs.begin(), dirs.end(), [&dir](const Vec3 &d) {
-                return AngleBetweenUndirected(d, dir) > theta;
-              })) {
-            dirs.push_back(dir);
-          }
-        }
-        if (dirs.size() >= 2) {
-          // the orientation of this face can be determined
-          Vec3 faceNormal = normalize(dirs[0].cross(dirs[1]));
-          fh2d2normal[f.topo.hd] = faceNormal;
 
-          // update other undetermined edges
-          for (auto hh : hhs) {
-            int edge = hh2d2edge[hh];
-            auto &dir = edge2dir[edge];
-            if (dir == Origin()) {
-              auto &line = edge2line[edge];
-              Vec3 normalOfLineProjPlane =
-                  normalize(curCam.direction(line.first)
-                                .cross(curCam.direction(line.second)));
-              Vec3 edgeDir = normalize(faceNormal.cross(normalOfLineProjPlane));
-              edge2dir[edge] = edgeDir;
-              moreEdgesAreOriented = true;
-            }
-          }
-        }
-      }
+    // [Initialize Reconstruction]
+    {
 
-      if (!moreEdgesAreOriented) {
-        break;
-      }
     }
 
-    if (true) { // show determined edges
-      std::vector<bool> edge2determined(nedges, false);
-      for (int edge = 0; edge < nedges; edge++) {
-        edge2determined[edge] = edge2dir[edge] != Origin();
-      }
-      Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
-      auto canvas = gui::MakeCanvas(im);
-      canvas.thickness(2);
-      for (int edge = 0; edge < nedges; edge++) {
-        canvas.color(edge2determined[edge] ? gui::Black : gui::LightGray);
-        canvas.add(edge2line[edge]);
-      }
-      canvas.show(0, "determined edges");
-    }
-
-    // optimize within each subMesh
-    std::vector<std::map<VertHandle, double>> subMesh2vhProxyDepths(
-        subMeshes.size());
-    for (int i = 0; i < subMeshes.size(); i++) {
-      auto &subMesh = subMeshes[i];
-      if (subMesh.vhs.empty()) {
-        continue;
-      }
-      std::map<VertHandle, double> vhProxy2depth;
-      vhProxy2depth[*subMesh.vhs.begin()] = 1.0;
-
-      while (true) {
-        bool moreVertexIsAnchored = false; 
-
-        // check each oriented edge for possible extensions
-        for (auto &hhProxy : subMesh.hhs) {
-          HalfHandle hh2d = meshProxy.data(hhProxy);
-          if (hh2d.invalid()) {
-            hh2d = meshProxy.data(meshProxy.topo(hhProxy).opposite);
-            assert(hh2d.valid());
-          }
-          int edge = hh2d2edge[hh2d];
-          if (edge2dir[edge] == Origin()) {
-            continue;
-          }
-          const Vec3 &edgeDir = edge2dir[edge];
-          VertHandle vhProxy1 = meshProxy.topo(hhProxy).from();
-          Vec3 dir1 = normalize(
-              curCam.direction(mesh2d.data(meshProxy.data(vhProxy1))));
-          VertHandle vhProxy2 = meshProxy.topo(hhProxy).to();
-          Vec3 dir2 = normalize(
-              curCam.direction(mesh2d.data(meshProxy.data(vhProxy2))));
-          if (Contains(vhProxy2depth, vhProxy1) &&
-              !Contains(vhProxy2depth,
-                        vhProxy2)) { // compute vh2's depth based on vh1's
-            Point3 p1 = dir1 * vhProxy2depth.at(vhProxy1);
-            Ray3 edgeRay(p1, edgeDir);
-            Point3 p2 =
-                DistanceBetweenTwoLines(edgeRay, Ray3(curCam.eye(), dir2))
-                    .second.first;
-            vhProxy2depth[vhProxy2] = norm(p2);
-            moreVertexIsAnchored = true;
-          }
-          if (Contains(vhProxy2depth, vhProxy2) &&
-              !Contains(vhProxy2depth,
-                        vhProxy1)) { // compute vh1's depth based on vh2's
-            Point3 p2 = dir2 * vhProxy2depth.at(vhProxy2);
-            Ray3 edgeRay(p2, edgeDir);
-            Point3 p1 =
-                DistanceBetweenTwoLines(edgeRay, Ray3(curCam.eye(), dir1))
-                    .second.first;
-            vhProxy2depth[vhProxy1] = norm(p1);
-            moreVertexIsAnchored = true;
-          }
-        }
-
-        // check each oriented face for possible extensions
-        for (auto &fhProxy : subMesh.fhs) {
-          FaceHandle fh2d = meshProxy.data(fhProxy);
-          if (fh2d.invalid()) { // TODO ! we should use the planarity of the
-                                // cutting face
-            continue;
-          }
-          if (fh2d2normal[fh2d] == Origin()) {
-            continue;
-          }
-          const Vec3 &faceNormal = fh2d2normal[fh2d];
-          // find any anchor
-          Point3 anchor = Origin();
-          auto &hhProxies = meshProxy.topo(fhProxy).halfedges;
-          for (auto hhProxy : hhProxies) {
-            VertHandle vhProxy = meshProxy.topo(hhProxy).to();
-            if (Contains(vhProxy2depth, vhProxy)) {
-              Vec3 dir = normalize(
-                  curCam.direction(mesh2d.data(meshProxy.data(vhProxy))));
-              anchor = dir * vhProxy2depth.at(vhProxy);
-              break;
-            }
-          }
-          if (anchor == Origin()) { // not found any determined anchor
-            continue;
-          }
-          Plane3 plane(anchor, faceNormal);
-          for (auto hhProxy : hhProxies) {
-            VertHandle vhProxy = meshProxy.topo(hhProxy).to();
-            if (!Contains(vhProxy2depth, vhProxy)) {
-              Vec3 dir = normalize(
-                  curCam.direction(mesh2d.data(meshProxy.data(vhProxy))));
-              Point3 p = Intersection(Ray3(curCam.eye(), dir), plane);
-              vhProxy2depth[vhProxy] = norm(p);
-              moreVertexIsAnchored = true;
-            }
-          }
-        }
-
-        if (!moreVertexIsAnchored) {
-          break;
-        }
-      }
-    }
-
-#endif
 
     // [Reconstruct]
     { // get the vh2d2reconstructedPosition data

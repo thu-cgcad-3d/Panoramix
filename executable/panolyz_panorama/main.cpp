@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
 
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("E:\\STORAGE\\CACHE\\Panoramix\\");
-  misc::Matlab matlab("", false);
+  misc::Matlab matlab;
 
   using TaskQueue =
       std::vector<std::function<misc::MXA(const std::string &impath)>>;
@@ -524,7 +524,7 @@ int main(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || true;
 
-    RunPanoramix(anno, options, matlab, true, false);
+    RunPanoramix(anno, options, matlab, true, true);
     return misc::MXA();
   });
 
@@ -1662,15 +1662,15 @@ int main(int argc, char **argv) {
 
   if (true) {
     std::vector<std::string> impaths;
-    gui::PickImages("F:\\DataSets\\pi\\dataset\\selected\\", &impaths);
+    gui::PickImages("F:\\PanoContext\\", &impaths);
     for (int i = 0; i < activeQ.size(); i++) {
       auto &task = activeQ[i];
       std::cout << "[[[[[[[[[ TASK " << i << "]]]]]]]]" << std::endl;
 
       auto timeTag = misc::CurrentTimeString(true);
-      misc::MAT dataFile("F:\\GitHub\\write-papers\\papers\\a\\data\\task_" +
+      /*misc::MAT dataFile("F:\\GitHub\\write-papers\\papers\\a\\data\\task_" +
                              std::to_string(i) + timeTag + ".mat",
-                         misc::MAT::Write_7_3);
+                         misc::MAT::Write_7_3);*/
 
       misc::MXA impathsForTask =
           misc::MXA::createCellMatrix(impaths.size(), 1, true);
@@ -1689,8 +1689,8 @@ int main(int argc, char **argv) {
         }
       }
 
-      dataFile.setVar("results", resultsForTask, false);
-      dataFile.setVar("impaths", impathsForTask, false);
+      /*dataFile.setVar("results", resultsForTask, false);
+      dataFile.setVar("impaths", impathsForTask, false);*/
     }
   }
 

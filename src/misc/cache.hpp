@@ -24,5 +24,6 @@ inline bool LoadCache(const std::string &path, StringT &&what, Ts &... ts) {
 
 std::string FolderOfFile(const std::string &filepath);
 std::string NameOfFile(const std::string &filepath);
+void MakeDir(const std::string dir);
 }
 }

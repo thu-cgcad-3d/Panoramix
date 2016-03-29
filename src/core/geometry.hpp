@@ -113,16 +113,16 @@ inline Vec<T, M + N> cat(const Mat<T, M, 1> &a, const Mat<T, N, 1> &b) {
   return ab;
 }
 
-template <class T, int M, class K>
-inline Vec<T, M + 1> cat(const Mat<T, M, 1> &a, const K &b) {
+template <class T, int M>
+inline Vec<T, M + 1> cat(const Mat<T, M, 1> &a, const T &b) {
   Vec<T, M + 1> ab;
   std::copy(a.val, a.val + M, ab.val);
   ab[M] = b;
   return ab;
 }
 
-template <class T, int M, class K>
-inline Vec<T, M + 1> cat(const K &a, const Mat<T, M, 1> &b) {
+template <class T, int M>
+inline Vec<T, M + 1> cat(const T &a, const Mat<T, M, 1> &b) {
   Vec<T, M + 1> ab;
   ab.val[0] = a;
   std::copy(b.val, b.val + M, ab.val + 1);

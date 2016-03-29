@@ -30,5 +30,12 @@ std::string NameOfFile(const std::string &filepath) {
     return std::string();
   return finfo.fileName().toStdString();
 }
+
+void MakeDir(const std::string d) {
+  QDir dir = QDir::root();
+  if (!dir.mkpath(QString::fromStdString(d))) {
+    std::cerr << ("Failed making directory of \"" + d + "\"") << std::endl;
+  }
+}
 }
 }
