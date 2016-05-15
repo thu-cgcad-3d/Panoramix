@@ -4,6 +4,7 @@
 #include "iterators.hpp"
 #include "utility.hpp"
 
+#include <vector>
 #include <list>
 #include <random>
 
@@ -91,15 +92,15 @@ TEST(MiscTest, Failable) {
 
 TEST(UtilTest, HasValue) {
 
-  std::vector<core::Ratio<core::Line2, double>> hlines = {
+  std::vector<std::pair<core::Line2, double>> hlines = {
       {{{1.0, 2.0}, {4.0, 5.0}}, 0.0},
       {{{1.0, 2.0}, {NAN, 5.0}}, 0.0},
       {{{1.0, 2.0}, {0.0, 5.0}}, 0.0},
       {{{1.0, 2.0}, {4.0, 5.0}}, 0.0},
       {{{1.0, 2.0}, {4.0, 5.0}}, 0.0}};
 
-  ASSERT_TRUE(core::HasValue(hlines, std::isnan<double>));
-  ASSERT_FALSE(core::HasValue(hlines, std::isinf<double>));
+  ASSERT_TRUE(core::HasValue(hlines, [](auto e){return std::isnan(e);}));
+  ASSERT_FALSE(core::HasValue(hlines, [](auto e){return std::isinf(e);}));
 }
 
 TEST(UtilTest, Distance) {
@@ -562,9 +563,8 @@ TEST(ContainerTest, Dictionary) {
 TEST(AlgorithmsTest, ForeachCompatible) {
   std::list<double> data = {1.0, 2.0, 3.0, 5.0, 6.0, 7.0};
   std::list<double> selected;
-  core::ForeachCompatibleWithLastElement(
-      data.begin(), data.end(), std::back_inserter(selected),
-      [](double a, double b) { return abs(a - b) >= 1.5; });
+  core::FilterBy(data.begin(), data.end(), std::back_inserter(selected),
+                 [](double a, double b) { return abs(a - b) >= 1.5; });
   std::list<double> groundTruth = {1.0, 3.0, 5.0, 7.0};
   ASSERT_TRUE(selected == groundTruth);
 }

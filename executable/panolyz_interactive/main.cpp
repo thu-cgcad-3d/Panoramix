@@ -5,9 +5,9 @@
 #include "../../src/misc/clock.hpp"
 
 #include "../../src/gui/canvas.hpp"
+#include "../../src/gui/qttools.hpp"
 #include "../../src/gui/singleton.hpp"
 #include "../../src/gui/utility.hpp"
-#include "../../src/gui/qttools.hpp"
 
 #include "../../src/experimental/pi_graph_annotation.hpp"
 #include "../../src/experimental/pi_graph_cg.hpp"
@@ -16,10 +16,7 @@
 #include "../../src/experimental/pi_graph_optimize.hpp"
 #include "../../src/experimental/pi_graph_vis.hpp"
 
-#define CONCAT_IMPL(x, y) x##y
-#define MACRO_CONCAT(x, y) CONCAT_IMPL(x, y)
 #define DISABLED_main MACRO_CONCAT(main_, __COUNTER__)
-
 
 using namespace pano;
 using namespace pano::core;
@@ -124,8 +121,11 @@ int main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Panoramix\\Interactive\\");
   std::string path;
-  auto im =
-      gui::PickAnImage(PANORAMIX_TEST_DATA_DIR_STR "\\house\\", &path);
+  auto im = gui::PickAnImage(PANORAMIX_TEST_DATA_DIR_STR "\\house\\", &path);
+  if (im.empty()) {
+    return 0;
+  }
+
   ResizeToArea(im, 500 * 500);
 
   std::vector<Classified<Line2>> lines;
@@ -140,6 +140,10 @@ int DISABLED_main(int argc, char **argv) {
   misc::SetCachePath("D:\\Panoramix\\Interactive\\");
   std::string path;
   gui::PickAnImage(PANORAMIX_TEST_DATA_DIR_STR "\\house\\", &path);
+  if (path.empty()) {
+    return 0;
+  }
+
   core::Image im;
   std::vector<Classified<Line2>> lines;
   misc::LoadCache(path, "im_lines", im, lines);
@@ -147,7 +151,6 @@ int DISABLED_main(int argc, char **argv) {
   DrawOn(im, lines);
 
   // split regions by lines
-
 
   return 0;
 }

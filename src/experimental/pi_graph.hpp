@@ -158,7 +158,7 @@ PerfectSegMaskView(const PIGraph<PerspectiveCamera> &mg, int seg,
 template <class T, int N, class PIGraphCameraT, class CameraT>
 std::vector<Vec<T, N>>
 CollectFeatureMeanOnSegs(const PIGraph<PIGraphCameraT> &mg, const CameraT &pcam,
-                         const ImageOf<Vec<T, N>> &feature) {
+                         const Image_<Vec<T, N>> &feature) {
   std::vector<Vec<T, N>> featureMeanTable(mg.nsegs);
   for (int i = 0; i < mg.nsegs; i++) {
     auto regionMaskView = PerfectSegMaskView(mg, i, 100.0);

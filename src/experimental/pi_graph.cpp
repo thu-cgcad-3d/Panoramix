@@ -1452,7 +1452,7 @@ PIGraph<PanoramicCamera> BuildPIGraph(
             RectifyPixel(rightp, view.camera);
             auto leftp = curp + Pixel(leftdxs[k], leftdys[k]);
             RectifyPixel(leftp, view.camera);
-            if (Contains(segs, rightp) && Contains(segs, leftp)) {
+            if (Contains(segs.size(), rightp) && Contains(segs.size(), leftp)) {
               if (segs(rightp) == segi && segs(leftp) == segj) {
                 saySegIIsOnRight++;
               } else if (segs(rightp) == segj && segs(leftp) == segi) {

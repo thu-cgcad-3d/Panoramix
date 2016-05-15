@@ -10,7 +10,7 @@ std::vector<Polygon3> CompactModel(const PICGDeterminablePart &dp,
                                    const PIConstraintGraph &cg,
                                    const PIGraph<PanoramicCamera> &mg, double distThres);
 
-template <class T> void FillHoles(ImageOf<T> &im, const Imageb &holeMask) {
+template <class T> void FillHoles(Image_<T> &im, const Imageb &holeMask) {
   // fill the holes
   for (auto it = im.begin(); it != im.end(); ++it) {
     auto p = it.pos();

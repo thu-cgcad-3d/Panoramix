@@ -159,7 +159,7 @@ using HPoint4 = HPoint<double, 4>;
 
 // matrix transform
 template <class T> Mat<T, 3, 3> MakeMat3Rotate(const Vec<T, 3> &axis, T angle) {
-  auto a = core::normalize(axis);
+  auto a = normalize(axis);
   double l = a[0], m = a[1], n = a[2];
   double cosv = cos(angle), sinv = sin(angle);
   return Mat<T, 3, 3>(l * l * (1 - cosv) + cosv, m * l * (1 - cosv) - n * sinv,
@@ -171,7 +171,7 @@ template <class T> Mat<T, 3, 3> MakeMat3Rotate(const Vec<T, 3> &axis, T angle) {
 }
 
 template <class T> Mat<T, 4, 4> MakeMat4Rotate(const Vec<T, 3> &axis, T angle) {
-  auto a = core::normalize(axis);
+  auto a = normalize(axis);
   double l = a[0], m = a[1], n = a[2];
   double cosv = cos(angle), sinv = sin(angle);
   return Mat<T, 4, 4>(
@@ -275,8 +275,9 @@ template <class Archive> inline void serialize(Archive &ar, GeoCoord &gc) {
 using KeyPoint = cv::KeyPoint;
 
 // size
-using Size = cv::Size2f;
-using Sizei = cv::Size2i;
+template <class T> using Size_ = cv::Size_<T>;
+using Size = Size_<float>;
+using Sizei = Size_<int>;
 
 // infinite line
 template <class T, int N> struct Ray {

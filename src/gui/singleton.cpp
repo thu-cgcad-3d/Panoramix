@@ -1,7 +1,6 @@
 #include <QApplication>
 #include <QtGui>
 #include <QtOpenGL>
-//#include <QtPlugin>
 
 #include "qttools.hpp"
 #include "singleton.hpp"
@@ -28,10 +27,22 @@ QApplication *Singleton::InitGui(int argc, char **argv) {
   if (qApp)
     return qApp;
 
+  auto p = qgetenv("QT_QPA_PLATFORM_PLUGIN_PATH");
+  std::cout << "QT_QPA_PLATFORM_PLUGIN_PATH=" << p.toStdString() << std::endl;
+
   //Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
   Q_INIT_RESOURCE(gui);
+  //Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin)
   _argc = argc;
   _argv = argv;
+
+  //QTextCodec *xcodec = QTextCodec::codecForLocale();
+  //QString exeDir = xcodec->toUnicode(QByteArray(argv[0]));
+  //// qt has a bug in 5.2.1(windows)? so I use setLibraryPaths
+  //QApplication::setLibraryPaths(QApplication::libraryPaths()
+  //                              << QFileInfo(exeDir).path());
+
+  //QCoreApplication::addLibraryPath("./");
   QApplication *app = new QApplication(argc, argv);
 
   defaultIcon = QIcon(":/icons/icon.png");

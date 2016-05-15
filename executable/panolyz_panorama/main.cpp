@@ -45,7 +45,7 @@ std::vector<Imagei> GTFaceLabels(const PILayoutAnnotation &anno,
               }
               for (int dy = -1; dy <= 1; dy++) {
                 auto p = it.pos() + Pixel(dx, dy);
-                if (Contains(faceLabelMap, p) && faceLabelMap(p) != -1) {
+                if (Contains(faceLabelMap.size(), p) && faceLabelMap(p) != -1) {
                   *it = faceLabelMap(p);
                   break;
                 }
@@ -1274,7 +1274,7 @@ int main(int argc, char **argv) {
             }
             for (int dy = -1; dy <= 1; dy++) {
               auto p = it.pos() + Pixel(dx, dy);
-              if (Contains(gtPanoFaceIds, p) && gtPanoFaceIds(p) != -1) {
+              if (Contains(gtPanoFaceIds.size(), p) && gtPanoFaceIds(p) != -1) {
                 *it = gtPanoFaceIds(p);
                 break;
               }

@@ -63,13 +63,13 @@ std::vector<int> CollectSegsIntersectingDirection(
         if (intersected)
           break;
         auto pp = Pixel(p.x + x, p.y + y);
-        if (Contains(mask, pp) && mask(pp)) {
+        if (Contains(mask.size(), pp) && mask(pp)) {
           peakySegs.push_back(i);
           intersected = true;
         }
         if (alsoConsiderBackward) {
           auto pp2 = Pixel(p2.x + x, p2.y + y);
-          if (Contains(mask, pp2) && mask(pp2)) {
+          if (Contains(mask.size(), pp2) && mask(pp2)) {
             peakySegs.push_back(i);
             intersected = true;
           }

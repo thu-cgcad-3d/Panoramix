@@ -216,7 +216,8 @@ private:
 // the matlab engine
 class Matlab {
 public:
-  Matlab(const std::string &defaultDir = std::string(), bool singleUse = false);
+  Matlab(const std::string &defaultDir = std::string(), bool singleUse = false,
+         bool printMsg = true);
   ~Matlab();
 
   Matlab(Matlab &&e);
@@ -230,6 +231,7 @@ public:
   bool run(const std::string &cmd) const;
   std::string lastMessage() const;
   bool errorLastRun() const;
+  void setPrintMessage(bool b) { _printMessage = b; }
 
   MXA var(const std::string &name) const;
   bool setVar(const std::string &name, const MXA &mxa);
@@ -241,6 +243,7 @@ public:
 private:
   char *_buffer;
   void *_eng;
+  bool _printMessage;
 };
 }
 }

@@ -403,7 +403,7 @@ std::vector<Vec3> ComputeSegNormals(const PICGDeterminablePart &dp,
               continue;
             }
             p2.x = (p2.x + mg.segs.cols) % mg.segs.cols;
-            if (!Contains(mg.segs, p2)) {
+            if (!Contains(mg.segs.size(), p2)) {
               continue;
             }
             int seg1 = mg.segs(p1);
@@ -471,7 +471,7 @@ std::vector<Plane3> ComputeSegPlanes(const PICGDeterminablePart &dp,
               continue;
             }
             p2.x = (p2.x + mg.segs.cols) % mg.segs.cols;
-            if (!Contains(mg.segs, p2)) {
+            if (!Contains(mg.segs.size(), p2)) {
               continue;
             }
             int seg1 = mg.segs(p1);

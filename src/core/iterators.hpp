@@ -17,25 +17,25 @@ namespace pano {
 namespace core {
 
 //// ITERATORS
-template <class IteratorT, class T>
+template <class IterT, class T>
 struct IsIteratorOfType
-    : std::is_same<typename std::iterator_traits<IteratorT>::value_type, T> {};
+    : std::is_same<typename std::iterator_traits<IterT>::value_type, T> {};
 
 template <class ContainerT, class T>
 struct IsContainerOfType
     : IsIteratorOfType<decltype(std::begin(std::declval<ContainerT>())), T> {};
 
 // range
-template <class IteratorT> struct Range {
-  IteratorT b, e;
-  Range(IteratorT bb, IteratorT ee) : b(bb), e(ee) {}
+template <class IterT> struct Range {
+  IterT b, e;
+  Range(IterT bb, IterT ee) : b(bb), e(ee) {}
   template <class ContainerT>
   explicit Range(ContainerT &&cont) : b(std::begin(cont)), e(std::end(cont)) {}
-  IteratorT begin() const { return b; }
-  IteratorT end() const { return e; }
+  IterT begin() const { return b; }
+  IterT end() const { return e; }
 
   template <class FunT> inline void forEach(FunT &&fun) const {
-    IteratorT i = b;
+    IterT i = b;
     while (i != e) {
       fun(*i);
       ++i;
@@ -46,17 +46,17 @@ template <class IteratorT> struct Range {
 // element of container MUST support PredT(ele) -> bool
 // ConditionalIterator will automatically skip elements which DO NOT satisfy
 // PredT in iteration
-template <class IteratorT, class PredT>
+template <class IterT, class PredT>
 class ConditionalIterator
     : public std::iterator<
           std::forward_iterator_tag,
-          typename std::iterator_traits<IteratorT>::value_type,
-          typename std::iterator_traits<IteratorT>::difference_type,
-          typename std::iterator_traits<IteratorT>::pointer,
-          typename std::iterator_traits<IteratorT>::reference> {
+          typename std::iterator_traits<IterT>::value_type,
+          typename std::iterator_traits<IterT>::difference_type,
+          typename std::iterator_traits<IterT>::pointer,
+          typename std::iterator_traits<IterT>::reference> {
 
 public:
-  using Iterator = IteratorT;
+  using Iterator = IterT;
 
   inline ConditionalIterator(Iterator it_, Iterator end_, PredT pred_ = PredT())
       : _it(it_), _end(end_), _pred(pred_) {
@@ -87,8 +87,8 @@ public:
   inline Iterator internalIterator() const { return _it; }
 
 private:
-  IteratorT _it;
-  IteratorT _end;
+  IterT _it;
+  IterT _end;
   PredT _pred;
 };
 

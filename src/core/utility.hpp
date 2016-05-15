@@ -46,23 +46,23 @@ inline std::ostream &PrintWithSeperator(SepT &&sep, const Ts &... args) {
 }
 // Println
 template <class... Ts> inline std::ostream &Println(const Ts &... args) {
-  return Print(args...) << std::endl;
+  return Print(args...) << '\n';
 }
 // PrintWithSeperator
 template <class SepT, class... Ts>
 inline std::ostream &PrintlnWithSeperator(SepT &&sep, const Ts &... args) {
-  return PrintToWithSeperator(std::cout, sep, args...) << std::endl;
+  return PrintToWithSeperator(std::cout, sep, args...) << '\n';
 }
 
 // test value
 // can be used to check whether NaN exists by invoking: HasValue(a, std::isnan)
-template <class TesterT> inline bool HasValue(double v, const TesterT &tester) {
+template <class TesterT> inline bool HasValue(double v, TesterT tester) {
   return tester(v);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Vec<T, N> &v, const TesterT &tester) {
+inline bool HasValue(const Vec<T, N> &v, TesterT tester) {
   for (int i = 0; i < N; i++) {
     if (tester(v[i]))
       return true;
@@ -71,48 +71,48 @@ inline bool HasValue(const Vec<T, N> &v, const TesterT &tester) {
 }
 
 template <class T, class S, class TesterT>
-inline bool HasValue(const Ratio<T, S> &r, const TesterT &tester) {
+inline bool HasValue(const Ratio<T, S> &r, TesterT tester) {
   return HasValue(r.numerator, tester) || HasValue(r.denominator, tester);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Line<T, N> &v, const TesterT &tester) {
+inline bool HasValue(const Line<T, N> &v, TesterT tester) {
   return HasValue(v.first, tester) || HasValue(v.second, tester);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Ray<T, N> &v, const TesterT &tester) {
+inline bool HasValue(const Ray<T, N> &v, TesterT tester) {
   return HasValue(v.anchor, tester) || HasValue(v.direction, tester);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Plane<T, N> &p, const TesterT &tester) {
+inline bool HasValue(const Plane<T, N> &p, TesterT tester) {
   return HasValue(p.anchor, tester) || HasValue(p.normal, tester);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Sphere<T, N> &s, const TesterT &tester) {
-  return HasValue(s.center) || tester(s.radius);
+inline bool HasValue(const Sphere<T, N> &s, TesterT tester) {
+  return HasValue(s.center, tester) || HasValue(s.radius, tester);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Box<T, N> &b, const TesterT &tester) {
+inline bool HasValue(const Box<T, N> &b, TesterT tester) {
   return HasValue(b.minCorner, tester) || HasValue(b.maxCorner, tester);
 }
 
 template <class T1, class T2, class TesterT>
-inline bool HasValue(const std::pair<T1, T2> &p, const TesterT &tester) {
-  return HasValue(p.first) || HasValue(p.second);
+inline bool HasValue(const std::pair<T1, T2> &p, TesterT tester) {
+  return HasValue(p.first, tester) || HasValue(p.second, tester);
 }
 
 template <class T, class AllocT, class TesterT>
-inline bool HasValue(const std::vector<T, AllocT> &v, const TesterT &tester) {
-  for (auto &e : v) {
+inline bool HasValue(const std::vector<T, AllocT> &v, TesterT tester) {
+  for (auto &&e : v) {
     if (HasValue(e, tester))
       return true;
   }
@@ -120,8 +120,8 @@ inline bool HasValue(const std::vector<T, AllocT> &v, const TesterT &tester) {
 }
 
 template <class T, class TesterT>
-inline bool HasValue(std::initializer_list<T> list, const TesterT &tester) {
-  for (auto &e : list) {
+inline bool HasValue(std::initializer_list<T> list, TesterT tester) {
+  for (auto &&e : list) {
     if (HasValue(e, tester))
       return true;
   }
@@ -175,19 +175,25 @@ inline bool Contains(const std::unordered_set<KeyT, HasherT, KeyeqT, AllocT> &m,
   return m.find(k) != m.end();
 }
 
-inline bool Contains(const Image &im, const Pixel &pixel) {
-  return 0 <= pixel.x && pixel.x < im.cols && 0 <= pixel.y && pixel.y < im.rows;
-}
+//inline bool Contains(const Image &im, const Pixel &pixel) {
+//  return 0 <= pixel.x && pixel.x < im.cols && 0 <= pixel.y && pixel.y < im.rows;
+//}
+//template <class T> bool Contains(const Image_<T> &im, const Pixel &pixel) {
+//  return 0 <= pixel.x && pixel.x < im.cols && 0 <= pixel.y && pixel.y < im.rows;
+//}
 
-template <class T> bool Contains(const ImageOf<T> &im, const Pixel &pixel) {
-  return 0 <= pixel.x && pixel.x < im.cols && 0 <= pixel.y && pixel.y < im.rows;
+template <class T>
+inline std::enable_if_t<std::is_integral<T>::value, bool>
+Contains(const Size_<T> &sz, const Pixel &pixel) {
+  return 0 <= pixel.x && pixel.x < sz.width && 0 <= pixel.y &&
+         pixel.y < sz.height;
 }
 
 bool Contains(const Polygon3 &poly, const Point2 &p);
 
 // all same
-template <class IteratorT, class EqualT = std::equal_to<void>>
-inline bool AllSameInRange(IteratorT begin, IteratorT end,
+template <class IterT, class EqualT = std::equal_to<void>>
+inline bool AllSameInRange(IterT begin, IterT end,
                            EqualT eq = EqualT()) {
   for (auto i = begin; i != end; ++i) {
     if (!eq(*i, *begin))
@@ -229,8 +235,8 @@ template <class T, class K> inline T Pitfall(T x, K sigma) {
 }
 
 // entropy [-factor, 0]
-template <class IteratorT, class T = double>
-inline T EntropyOfRange(IteratorT begin, IteratorT end, const T &factor = 1.0) {
+template <class IterT, class T = double>
+inline T EntropyOfRange(IterT begin, IterT end, const T &factor = 1.0) {
   T e = 0;
   while (begin != end) {
     auto &v = *begin;
@@ -421,8 +427,8 @@ template <class T> inline auto BoundingBox(const Enabled<T> &s) {
 }
 
 // bounding box of range
-template <class IteratorT>
-auto BoundingBoxOfRange(IteratorT begin, IteratorT end) {
+template <class IterT>
+auto BoundingBoxOfRange(IterT begin, IterT end) {
   using BoxType = decltype(BoundingBox(*begin));
   BoxType box; // a null box
   while (begin != end) {
@@ -445,8 +451,8 @@ inline auto BoundingBoxOfContainer(std::initializer_list<T> ilist) {
 }
 
 // bounding box of pair-range
-template <class PairIteratorT>
-auto BoundingBoxOfPairRange(PairIteratorT begin, PairIteratorT end) {
+template <class PairIterT>
+auto BoundingBoxOfPairRange(PairIterT begin, PairIterT end) {
   using BoxType = decltype(BoundingBox((*begin).second));
   BoxType box;
   while (begin != end) {
@@ -891,12 +897,12 @@ Failable<Ray<T, 3>> IntersectionOfPlaneAndPlane(const Plane<T, 3> &p1,
 // triangulate polygon
 // VertPoint2GetterT: (Vert) -> Point2
 // AddTriFaceFunT: (Vert, Vert, Vert) -> void
-template <class VertIteratorT, class VertPoint2GetterT, class AddTriFaceFunT>
-int TriangulatePolygon(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+template <class VertIterT, class VertPoint2GetterT, class AddTriFaceFunT>
+int TriangulatePolygon(VertIterT vertsBegin, VertIterT vertsEnd,
                        VertPoint2GetterT &&getPoint2,
                        AddTriFaceFunT &&addFace) {
 
-  using VHandleT = typename std::iterator_traits<VertIteratorT>::value_type;
+  using VHandleT = typename std::iterator_traits<VertIterT>::value_type;
   std::deque<std::vector<VHandleT>> vhGroupQ;
   vhGroupQ.emplace_back(vertsBegin, vertsEnd);
 

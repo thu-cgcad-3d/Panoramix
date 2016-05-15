@@ -66,7 +66,5 @@ namespace core {
 #define WARNNING(...)                                                          \
   std::cout << "[WARNNING!] #######" << (std::string("  ") + __VA_ARGS__)      \
             << " #######" << std::endl
-
-#define pano_unstable
 }
 }

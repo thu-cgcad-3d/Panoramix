@@ -323,8 +323,8 @@ inline void Discretize(TriMesh &mesh, const Decorated<T, D> &d,
   Discretize(mesh, d.component, o);
 }
 
-template <class IteratorT>
-inline void DiscretizeRange(TriMesh &mesh, IteratorT begin, IteratorT end,
+template <class IterT>
+inline void DiscretizeRange(TriMesh &mesh, IterT begin, IterT end,
                             const DiscretizeOptions &o) {
   auto oo = o;
   while (begin != end) {

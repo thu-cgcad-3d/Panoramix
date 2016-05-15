@@ -96,8 +96,8 @@ public:
                        [](VarHandle vh) { return vh.valid(); }));
     return _graph.add<1>(vhs, fc);
   }
-  template <class IteratorT>
-  FactorHandle addFactor(IteratorT vhsBegin, IteratorT vhsEnd,
+  template <class IterT>
+  FactorHandle addFactor(IterT vhsBegin, IterT vhsEnd,
                          FactorCategoryId fc) {
     assert(
         std::all_of(vhsBegin, vhsEnd, [](VarHandle vh) { return vh.valid(); }));

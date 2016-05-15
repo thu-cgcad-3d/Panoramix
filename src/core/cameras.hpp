@@ -22,39 +22,35 @@ public:
                     const Vec3 &up = Vec3(0, 0, -1), double nearPlane = 0.01,
                     double farPlane = 1e4);
 
-  inline Sizei screenSize() const {
+  Sizei screenSize() const {
     return Sizei(static_cast<int>(_screenW), static_cast<int>(_screenH));
   }
-  inline double screenWidth() const { return _screenW; }
-  inline double screenHeight() const { return _screenH; }
-  inline const Point2 &principlePoint() const { return _principlePoint; }
-  inline double aspect() const { return double(_screenW) / double(_screenH); }
-  inline double focalX() const { return _focalxy[0]; }
-  inline double focalY() const { return _focalxy[1]; }
-  inline double focal() const {
+  double screenWidth() const { return _screenW; }
+  double screenHeight() const { return _screenH; }
+  const Point2 &principlePoint() const { return _principlePoint; }
+  double aspect() const { return double(_screenW) / double(_screenH); }
+  double focalX() const { return _focalxy[0]; }
+  double focalY() const { return _focalxy[1]; }
+  double focal() const {
     assert(_focalxy[0] == _focalxy[1]);
     return _focalxy[0];
   }
-  inline const Point3 &eye() const { return _eye; }
-  inline const Point3 &center() const { return _center; }
-  inline const Vec3 &up() const { return _up; }
-  inline double nearPlane() const { return _near; }
-  inline double farPlane() const { return _far; }
+  const Point3 &eye() const { return _eye; }
+  const Point3 &center() const { return _center; }
+  const Vec3 &up() const { return _up; }
+  double nearPlane() const { return _near; }
+  double farPlane() const { return _far; }
   Point2 toScreen(const Point3 &p3d) const;
   bool isVisibleOnScreen(const Point3 &p3d) const;
   HPoint2 toScreenInHPoint(const Point3 &p3d) const;
   Point3 toSpace(const Point2 &p2d) const;
-  inline Point3 toSpace(const Pixel &p) const {
-    return toSpace(Point2(p.x, p.y));
-  }
-  inline Vec3 direction(const Point2 &p2d) const { return toSpace(p2d) - _eye; }
-  inline Vec3 direction(const Pixel &p) const { return direction(p); }
+  Point3 toSpace(const Pixel &p) const { return toSpace(Point2(p.x, p.y)); }
+  Vec3 direction(const Point2 &p2d) const { return toSpace(p2d) - _eye; }
+  Vec3 direction(const Pixel &p) const { return direction(p); }
 
-  inline const Mat4 &viewMatrix() const { return _viewMatrix; }
-  inline const Mat4 &projectionMatrix() const { return _projectionMatrix; }
-  inline const Mat4 &viewProjectionMatrix() const {
-    return _viewProjectionMatrix;
-  }
+  const Mat4 &viewMatrix() const { return _viewMatrix; }
+  const Mat4 &projectionMatrix() const { return _projectionMatrix; }
+  const Mat4 &viewProjectionMatrix() const { return _viewProjectionMatrix; }
 
   // operations
   void resizeScreen(const Size &sz, bool updateMat = true);
@@ -69,12 +65,12 @@ public:
                            bool updateMat = true);
 
   // advanced functions
-  inline Vec3 forward() const { return normalize(_center - _eye); }
-  inline Vec3 backward() const { return normalize(_eye - _center); }
-  inline Vec3 upward() const { return normalize(_up); }
-  inline Vec3 downward() const { return -upward(); }
-  inline Vec3 leftward() const { return normalize(_up.cross(forward())); }
-  inline Vec3 rightward() const { return -leftward(); }
+  Vec3 forward() const { return normalize(_center - _eye); }
+  Vec3 backward() const { return normalize(_eye - _center); }
+  Vec3 upward() const { return normalize(_up); }
+  Vec3 downward() const { return -upward(); }
+  Vec3 leftward() const { return normalize(_up.cross(forward())); }
+  Vec3 rightward() const { return -leftward(); }
 
   void focusOn(const Sphere3 &target, bool updateMat = true);
   void translate(const Vec3 &t, const Sphere3 &target, bool updateMat = true);
@@ -97,7 +93,7 @@ protected:
   Vec3 _eye, _center, _up;
   Mat4 _viewMatrix, _projectionMatrix, _viewProjectionMatrix;
 
-  template <class Archive> inline void serialize(Archive &ar) {
+  template <class Archive> void serialize(Archive &ar) {
     ar(_screenW, _screenH);
     ar(_principlePoint);
     ar(_focalxy, _near, _far);
@@ -115,33 +111,31 @@ public:
                            const Point3 &center = Vec3(1, 0, 0),
                            const Vec3 &up = Vec3(0, 0, 1));
 
-  inline Sizei screenSize() const {
+  Sizei screenSize() const {
     return Sizei(static_cast<int>(_focal * 2 * M_PI),
                  static_cast<int>(_focal * M_PI));
   }
-  inline double focal() const { return _focal; }
-  inline const Point3 &eye() const { return _eye; }
-  inline const Point3 &center() const { return _center; }
-  inline const Vec3 &up() const { return _up; }
+  double focal() const { return _focal; }
+  const Point3 &eye() const { return _eye; }
+  const Point3 &center() const { return _center; }
+  const Vec3 &up() const { return _up; }
   Point2 toScreen(const Point3 &p3d) const;
   bool isVisibleOnScreen(const Point3 &p3d) const { return true; }
-  inline HPoint2 toScreenInHPoint(const Point3 &p3d) const {
+  HPoint2 toScreenInHPoint(const Point3 &p3d) const {
     return HPoint2(toScreen(p3d), 1.0);
   }
   Point3 toSpace(const Point2 &p2d) const;
-  inline Point3 toSpace(const Pixel &p) const {
-    return toSpace(Vec2(p.x, p.y));
-  }
-  inline Point3 toSpace(const HPoint2 &p) const { return toSpace(p.value()); }
+  Point3 toSpace(const Pixel &p) const { return toSpace(Vec2(p.x, p.y)); }
+  Point3 toSpace(const HPoint2 &p) const { return toSpace(p.value()); }
   Vec3 direction(const Point2 &p2d) const;
-  inline Vec3 direction(const Pixel &p) const { return direction(p); }
+  Vec3 direction(const Pixel &p) const { return direction(p); }
 
 private:
   double _focal;
   Vec3 _eye, _center, _up;
   Vec3 _xaxis, _yaxis, _zaxis;
 
-  template <class Archive> inline void serialize(Archive &ar) {
+  template <class Archive> void serialize(Archive &ar) {
     ar(_focal);
     ar(_eye, _center, _up);
     ar(_xaxis, _yaxis, _zaxis);
@@ -159,24 +153,22 @@ public:
   explicit PartialPanoramicCamera(const PanoramicCamera &panoCam, int w = 500,
                                   int h = 500);
 
-  inline Sizei screenSize() const {
+  Sizei screenSize() const {
     return Size(static_cast<int>(_screenW), static_cast<int>(_screenH));
   }
-  inline double focal() const { return _focal; }
-  inline const Point3 &eye() const { return _eye; }
-  inline const Point3 &center() const { return _center; }
-  inline const Vec3 &up() const { return _up; }
+  double focal() const { return _focal; }
+  const Point3 &eye() const { return _eye; }
+  const Point3 &center() const { return _center; }
+  const Vec3 &up() const { return _up; }
   Point2 toScreen(const Point3 &p3d) const;
   bool isVisibleOnScreen(const Point3 &p3d) const;
-  inline HPoint2 toScreenInHPoint(const Point3 &p3d) const {
+  HPoint2 toScreenInHPoint(const Point3 &p3d) const {
     return HPoint2(toScreen(p3d), 1.0);
   }
   Point3 toSpace(const Point2 &p2d) const;
-  inline Point3 toSpace(const Pixel &p) const {
-    return toSpace(Vec2(p.x, p.y));
-  }
+  Point3 toSpace(const Pixel &p) const { return toSpace(Vec2(p.x, p.y)); }
   Vec3 direction(const Point2 &p2d) const;
-  inline Vec3 direction(const Pixel &p) const { return direction(p); }
+  Vec3 direction(const Pixel &p) const { return direction(p); }
   PanoramicCamera toPanoramic() const {
     return PanoramicCamera(_focal, _eye, _center, _up);
   }
@@ -187,7 +179,7 @@ private:
   Vec3 _eye, _center, _up;
   Vec3 _xaxis, _yaxis, _zaxis;
 
-  template <class Archive> inline void serialize(Archive &ar) {
+  template <class Archive> void serialize(Archive &ar) {
     ar(_screenW, _screenH);
     ar(_focal);
     ar(_eye, _center, _up);
@@ -262,18 +254,18 @@ public:
   }
 
   template <class T>
-  ImageOf<T> operator()(const ImageOf<T> &inputIm,
+  Image_<T> operator()(const Image_<T> &inputIm,
                         int borderMode = cv::BORDER_REPLICATE,
                         const T &borderValue = T()) const {
-    ImageOf<T> outputIm;
+    Image_<T> outputIm;
     cv::remap(inputIm, outputIm, _mapx, _mapy, cv::INTER_NEAREST, borderMode,
               borderValue);
     return outputIm;
   }
 
   template <class T, int N, class = std::enable_if_t<(N <= 4)>>
-  ImageOf<Vec<T, N>>
-  operator()(const ImageOf<Vec<T, N>> &inputIm,
+  Image_<Vec<T, N>>
+  operator()(const Image_<Vec<T, N>> &inputIm,
              int borderMode = cv::BORDER_REPLICATE,
              const Vec<T, N> &borderValue = Vec<T, N>()) const {
     Image outputIm;
@@ -287,8 +279,8 @@ public:
   }
 
   template <class T, int N, class = std::enable_if_t<(N > 4)>, class = void>
-  ImageOf<Vec<T, N>>
-  operator()(const ImageOf<Vec<T, N>> &inputIm,
+  Image_<Vec<T, N>>
+  operator()(const Image_<Vec<T, N>> &inputIm,
              int borderMode = cv::BORDER_REPLICATE,
              const Vec<T, N> &borderValue = Vec<T, N>()) const {
     std::vector<Image> channels;
@@ -298,7 +290,7 @@ public:
       cv::remap(c, c, _mapx, _mapy, cv::INTER_NEAREST, borderMode,
                 borderValue[i]);
     }
-    ImageOf<Vec<T, N>> result;
+    Image_<Vec<T, N>> result;
     cv::merge(channels, result);
     return result;
   }
@@ -310,7 +302,7 @@ private:
 };
 
 template <class OutCameraT, class InCameraT>
-inline CameraSampler<std::decay_t<OutCameraT>, std::decay_t<InCameraT>>
+CameraSampler<std::decay_t<OutCameraT>, std::decay_t<InCameraT>>
 MakeCameraSampler(OutCameraT &&outCam, InCameraT &&inCam) {
   return CameraSampler<std::decay_t<OutCameraT>, std::decay_t<InCameraT>>(
       std::forward<OutCameraT>(outCam), std::forward<InCameraT>(inCam));
@@ -446,12 +438,12 @@ struct View {
   View(const ImageT &im, const CameraT &cam) : image(im), camera(cam) {}
   View(const View<CameraT, Image> &v) : image(v.image), camera(v.camera) {}
   template <class T>
-  View(const View<CameraT, ImageOf<T>> &v) : image(v.image), camera(v.camera) {}
+  View(const View<CameraT, Image_<T>> &v) : image(v.image), camera(v.camera) {}
 
   template <
       class AnotherCameraT,
       class = std::enable_if_t<IsCamera<std::decay_t<AnotherCameraT>>::value>>
-  inline View<std::decay_t<AnotherCameraT>, ImageT>
+  View<std::decay_t<AnotherCameraT>, ImageT>
   sampled(AnotherCameraT &&cam) const {
     View<std::decay_t<AnotherCameraT>, ImageT> v;
     v.image = MakeCameraSampler(cam, camera)(image);
@@ -471,13 +463,13 @@ View<CameraT, ImageT> MakeView(const ImageT &im, const CameraT &c) {
 template <class OutCameraT, class InCameraT, class T,
           class = std::enable_if_t<IsCamera<std::decay_t<InCameraT>>::value &&
                                    IsCamera<std::decay_t<OutCameraT>>::value>>
-View<OutCameraT, ImageOf<T>>
+View<OutCameraT, Image_<T>>
 Combine(const OutCameraT &camera,
-        const std::vector<View<InCameraT, ImageOf<T>>> &views) {
+        const std::vector<View<InCameraT, Image_<T>>> &views) {
   if (views.empty()) {
-    return View<OutCameraT, ImageOf<T>>();
+    return View<OutCameraT, Image_<T>>();
   }
-  ImageOf<T> converted = ImageOf<T>::zeros(camera.screenSize());
+  Image_<T> converted = Image_<T>::zeros(camera.screenSize());
   static const int channels = cv::DataType<T>::channels;
   Imagef counts(camera.screenSize(), 0.0f);
   for (int i = 0; i < views.size(); i++) {
@@ -486,9 +478,9 @@ Combine(const OutCameraT &camera,
     converted += piece;
     counts += sampler(Imagef::ones(views[i].image.size()), cv::BORDER_CONSTANT);
   }
-  View<OutCameraT, ImageOf<T>> v;
+  View<OutCameraT, Image_<T>> v;
   v.camera = camera;
-  v.image = ImageOf<T>::zeros(camera.screenSize());
+  v.image = Image_<T>::zeros(camera.screenSize());
   for (auto it = converted.begin(); it != converted.end(); ++it) {
     float count = counts(it.pos());
     v.image(it.pos()) = *it / std::max(count, 1.0f);
@@ -499,15 +491,15 @@ Combine(const OutCameraT &camera,
 template <class OutCameraT, class InCameraT, class T, class W,
           class = std::enable_if_t<IsCamera<std::decay_t<InCameraT>>::value &&
                                    IsCamera<std::decay_t<OutCameraT>>::value>>
-View<OutCameraT, ImageOf<T>>
+View<OutCameraT, Image_<T>>
 Combine(const OutCameraT &camera,
-        const std::vector<Weighted<View<InCameraT, ImageOf<T>>, W>> &views) {
+        const std::vector<Weighted<View<InCameraT, Image_<T>>, W>> &views) {
   if (views.empty()) {
-    return View<OutCameraT, ImageOf<T>>();
+    return View<OutCameraT, Image_<T>>();
   }
   static const int channels = cv::DataType<T>::channels;
   using channel_type = typename cv::DataType<T>::channel_type;
-  ImageOf<T> converted = ImageOf<T>::zeros(camera.screenSize());
+  Image_<T> converted = Image_<T>::zeros(camera.screenSize());
   Imagef counts(camera.screenSize(), 0.0f);
   for (int i = 0; i < views.size(); i++) {
     auto sampler = MakeCameraSampler(camera, views[i].component.camera);
@@ -519,9 +511,9 @@ Combine(const OutCameraT &camera,
         sampler(Imagef(views[i].component.image.size(), views[i].weight()),
                 cv::BORDER_CONSTANT);
   }
-  View<OutCameraT, ImageOf<T>> v;
+  View<OutCameraT, Image_<T>> v;
   v.camera = camera;
-  v.image = ImageOf<T>::zeros(camera.screenSize());
+  v.image = Image_<T>::zeros(camera.screenSize());
   for (auto it = converted.begin(); it != converted.end(); ++it) {
     float count = counts(it.pos());
     v.image(it.pos()) = *it / std::max(count, 1.0f);
@@ -530,9 +522,9 @@ Combine(const OutCameraT &camera,
 }
 
 template <class CameraT, class InCameraT, class T>
-T MeanInMask(const View<InCameraT, ImageOf<T>> &source,
+T MeanInMask(const View<InCameraT, Image_<T>> &source,
              const View<CameraT, Imageub> &maskView) {
-  ImageOf<T> converted = source.sampled(maskView.camera).image;
+  Image_<T> converted = source.sampled(maskView.camera).image;
   int votes = 0;
   T featureSum;
   for (auto it = maskView.image.begin(); it != maskView.image.end(); ++it) {
@@ -577,10 +569,10 @@ inline PanoramicView CreatePanoramicView(const Image &panorama,
                        CreatePanoramicCamera(panorama, eye, center, up));
 }
 template <class T>
-inline View<PanoramicCamera, ImageOf<T>> CreatePanoramicView(
-    const ImageOf<T> &panorama, const Point3 &eye = Point3(0, 0, 0),
+View<PanoramicCamera, Image_<T>> CreatePanoramicView(
+    const Image_<T> &panorama, const Point3 &eye = Point3(0, 0, 0),
     const Point3 &center = Point3(1, 0, 0), const Vec3 &up = Vec3(0, 0, 1)) {
-  return View<PanoramicCamera, ImageOf<T>>(
+  return View<PanoramicCamera, Image_<T>>(
       panorama, CreatePanoramicCamera(panorama, eye, center, up));
 }
 
@@ -600,8 +592,8 @@ inline Failable<PerspectiveView> CreatePerspectiveView(
   return PerspectiveView(perspectiveImage, cam.unwrap());
 }
 template <class T>
-inline Failable<View<PerspectiveCamera, ImageOf<T>>> CreatePerspectiveView(
-    const ImageOf<T> &perspectiveImage, const Point3 &eye = Point3(0, 0, 0),
+Failable<View<PerspectiveCamera, Image_<T>>> CreatePerspectiveView(
+    const Image_<T> &perspectiveImage, const Point3 &eye = Point3(0, 0, 0),
     const Point3 &center = Point3(1, 0, 0), const Vec3 &up = Vec3(0, 0, -1),
     const LineSegmentExtractor &lse = LineSegmentExtractor(),
     const VanishingPointsDetector &vpd = VanishingPointsDetector(),
@@ -612,7 +604,7 @@ inline Failable<View<PerspectiveCamera, ImageOf<T>>> CreatePerspectiveView(
                                      vpd, line3s, line2s, vps, focal);
   if (cam.failed())
     return nullptr;
-  return View<PerspectiveCamera, ImageOf<T>>(perspectiveImage, cam.unwrap());
+  return View<PerspectiveCamera, Image_<T>>(perspectiveImage, cam.unwrap());
 }
 
 inline PerspectiveView CreatePerspectiveView(
@@ -624,11 +616,11 @@ inline PerspectiveView CreatePerspectiveView(
       CreatePerspectiveCamera(perspectiveImage, vps, eye, center, up));
 }
 template <class T>
-inline View<PerspectiveCamera, ImageOf<T>> CreatePerspectiveView(
-    const ImageOf<T> &perspectiveImage, const std::vector<HPoint2> &vps,
+View<PerspectiveCamera, Image_<T>> CreatePerspectiveView(
+    const Image_<T> &perspectiveImage, const std::vector<HPoint2> &vps,
     const Point3 &eye = Point3(0, 0, 0), const Point3 &center = Point3(1, 0, 0),
     const Vec3 &up = Vec3(0, 0, -1)) {
-  return View<PerspectiveCamera, ImageOf<T>>(
+  return View<PerspectiveCamera, Image_<T>>(
       perspectiveImage,
       CreatePerspectiveCamera(perspectiveImage, vps, eye, center, up));
 }
@@ -641,14 +633,14 @@ Failable<View<CameraT>> CreateView(const Image &image,
 
 template <class CameraT, class T,
           class = std::enable_if_t<IsCamera<CameraT>::value>>
-Failable<View<CameraT, ImageOf<T>>>
-CreateView(const ImageOf<T> &image, const Point3 &eye = Point3(0, 0, 0),
+Failable<View<CameraT, Image_<T>>>
+CreateView(const Image_<T> &image, const Point3 &eye = Point3(0, 0, 0),
            const Point3 &center = Point3(1, 0, 0),
            const Vec3 &up = Vec3(0, 0, -1)) {
   auto v = CreateView<CameraT>((const Image &)image, eye, center, up);
   if (v.failed())
     return nullptr;
-  return View<CameraT, ImageOf<T>>(image, v.unwrap.camera);
+  return View<CameraT, Image_<T>>(image, v.unwrap.camera);
 }
 
 template <>

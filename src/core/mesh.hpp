@@ -194,11 +194,11 @@ public:
     }
     return addFace(halfs, std::forward<FDT>(fd));
   }
-  template <class VertHandleIteratorT, class FDT = FaceDataT,
+  template <class VertHandleIterT, class FDT = FaceDataT,
             class = std::enable_if_t<std::is_same<
-                std::iterator_traits<VertHandleIteratorT>::value_type,
+                std::iterator_traits<VertHandleIterT>::value_type,
                 VertHandle>::value>>
-  FaceHandle addFace(VertHandleIteratorT vhBegin, VertHandleIteratorT vhEnd,
+  FaceHandle addFace(VertHandleIterT vhBegin, VertHandleIterT vhEnd,
                      bool autoflip = true, FDT &&fd = FDT()) {
     HandleArray<HalfTopo> halfs;
     HandleArray<VertTopo> verts(vhBegin, vhEnd);

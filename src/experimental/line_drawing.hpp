@@ -287,33 +287,51 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   // initialize vars
   VectorXd X = VectorXd::Ones(H.cols());
 
-  std::default_random_engine rng;
-  SimulatedAnnealing(
-      X,
-      [&planes2energy, &H, &fh2varStart](const VectorXd &curX) -> double {
-        VectorXd planeEqVec = H * curX;
-        planeEqVec /= planeEqVec.cwiseAbs().maxCoeff();
-        return planes2energy(
-            [&planeEqVec, &fh2varStart](FaceHandle fh) -> const double * {
-              return planeEqVec.data() + fh2varStart.at(fh);
-            });
-      },
-      [](int iter) { return std::max(1.0 / log(log(iter + 2)), 1e-10); }, // temperature
-      [maxIters](VectorXd curX, int iter, auto &&forEachNeighborFun) {
-        if (iter >= maxIters) {
-          return;
-        }
-        double step = std::max(1.0 / log(iter + 2), 1e-10);
-        for (int i = 0; i < curX.size(); i++) {
-          double curXHere = curX[i];
-          curX[i] = curXHere + step;
-          forEachNeighborFun(curX);
-          curX[i] = curXHere - step;
-          forEachNeighborFun(curX);
-          curX[i] = curXHere;
-        }
-      },
-      rng);
+  static const bool use_simulated_annealing = false;
+  //if (use_simulated_annealing) {
+    std::default_random_engine rng;
+    SimulatedAnnealing(
+        X,
+        [&planes2energy, &H, &fh2varStart](const VectorXd &curX) -> double {
+          VectorXd planeEqVec = H * curX;
+          planeEqVec /= planeEqVec.cwiseAbs().maxCoeff();
+          return planes2energy(
+              [&planeEqVec, &fh2varStart](FaceHandle fh) -> const double * {
+                return planeEqVec.data() + fh2varStart.at(fh);
+              });
+        },
+        [](int iter) {
+          return std::max(1.0 / log(log(iter + 2)), 1e-10);
+        }, // temperature
+        [maxIters](VectorXd curX, int iter, auto &&forEachNeighborFun) {
+          if (iter >= maxIters) {
+            return;
+          }
+          double step = std::max(1.0 / log(iter + 2), 1e-10);
+          for (int i = 0; i < curX.size(); i++) {
+            double curXHere = curX[i];
+            curX[i] = curXHere + step;
+            forEachNeighborFun(curX);
+            curX[i] = curXHere - step;
+            forEachNeighborFun(curX);
+            curX[i] = curXHere;
+          }
+        },
+        rng);
+  //} else {
+    auto functor = misc::MakeGenericNumericDiffFunctor<double>(
+        [&planes2energy, &H, &fh2varStart](const VectorXd &curX, VectorXd &e) {
+          VectorXd planeEqVec = H * curX;
+          planeEqVec /= planeEqVec.cwiseAbs().maxCoeff();
+          e[0] = planes2energy(
+              [&planeEqVec, &fh2varStart](FaceHandle fh) -> const double * {
+                return planeEqVec.data() + fh2varStart.at(fh);
+              });
+        },
+        X.size(), 1);
+    LevenbergMarquardt<decltype(functor)> lm(std::move(functor));
+    lm.minimize(X);
+  //}
 
   // convert to planes
   std::unordered_map<FaceHandle, Plane3> planes;

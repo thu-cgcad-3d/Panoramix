@@ -41,8 +41,8 @@ template <class Tag, int L> struct Topo<Tag, L, Dynamic> {
       int id, std::initializer_list<HandleOfTypeAtLevel<Tag, Level - 1>> ls)
       : hd(id), lowers(ls) {}
 
-  template <class IteratorT>
-  explicit inline Topo(int id, IteratorT lsBegin, IteratorT lsEnd)
+  template <class IterT>
+  explicit inline Topo(int id, IterT lsBegin, IterT lsEnd)
       : hd(id), lowers(lsBegin, lsEnd) {}
 
   template <class Archive> inline void serialize(Archive &ar) {
@@ -231,9 +231,9 @@ public:
     return HandleOfTypeAtLevel<Tag, Level>(id);
   }
 
-  template <int Level, class IteratorT>
+  template <int Level, class IterT>
   HandleOfTypeAtLevel<Tag, Level>
-  add(IteratorT dependsBegin, IteratorT dependsEnd,
+  add(IterT dependsBegin, IterT dependsEnd,
       const typename LayerContentTypeStruct<Level>::type::DataType &d) {
     int id = static_cast<int>(internalElements<Level>().size());
     internalElements<Level>().emplace_back(
@@ -247,9 +247,9 @@ public:
     return HandleOfTypeAtLevel<Tag, Level>(id);
   }
 
-  template <int Level, class IteratorT>
+  template <int Level, class IterT>
   HandleOfTypeAtLevel<Tag, Level>
-  add(IteratorT dependsBegin, IteratorT dependsEnd,
+  add(IterT dependsBegin, IterT dependsEnd,
       typename LayerContentTypeStruct<Level>::type::DataType &&d) {
     int id = static_cast<int>(internalElements<Level>().size());
     internalElements<Level>().emplace_back(

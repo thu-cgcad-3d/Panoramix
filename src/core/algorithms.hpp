@@ -7,15 +7,14 @@ namespace pano {
 namespace core {
 
 // generic algorithms
-template <class IteratorT, class OutIteratorT, class IsCompatibleFunT>
-void ForeachCompatibleWithLastElement(IteratorT begin, IteratorT end,
-                                      OutIteratorT out,
-                                      IsCompatibleFunT &&isCompWithLast) {
+template <class IterT, class OutIterT, class IsCompatibleFunT>
+void FilterBy(IterT begin, IterT end, OutIterT out,
+              IsCompatibleFunT &&isCompWithLast) {
   if (begin == end)
     return;
   *out = *begin;
   ++out;
-  IteratorT lastIter = begin;
+  IterT lastIter = begin;
   ++begin;
   while (begin != end) {
     if (isCompWithLast(*lastIter, *begin)) {
@@ -30,16 +29,16 @@ void ForeachCompatibleWithLastElement(IteratorT begin, IteratorT end,
 // merge, rearrange the input array
 // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
 // returns the begin iterators of merged groups
-template <class IteratorT, class IterOutIteratorT, class DistanceT,
+template <class IterT, class IterOutIterT, class DistanceT,
           class DistanceFunctorT = DefaultDistanceFunctor>
-IterOutIteratorT
-MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
+IterOutIterT
+MergeNearNaive(IterT begin, IterT end, IterOutIterT itersOut,
                std::true_type, DistanceT thres,
                DistanceFunctorT &&distFun = DistanceFunctorT()) {
   if (begin == end)
     return itersOut;
 
-  std::vector<IteratorT> gBegins(1, begin);
+  std::vector<IterT> gBegins(1, begin);
   for (auto i = std::next(begin); i != end; ++i) {
     DistanceT minDist = std::numeric_limits<DistanceT>::max();
     auto nearestGBeginIter = gBegins.end();
@@ -68,17 +67,17 @@ MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
 // merge, without rearrangement
 // DistanceFunctorT(a, b) -> DistanceT : compute the distance from a to b
 // returns the iterators pointing to group leaders
-template <class IteratorT, class IterOutIteratorT, class DistanceT,
+template <class IterT, class IterOutIterT, class DistanceT,
           class DistanceFunctorT = DefaultDistanceFunctor>
-IterOutIteratorT
-MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
+IterOutIterT
+MergeNearNaive(IterT begin, IterT end, IterOutIterT itersOut,
                std::false_type, DistanceT thres,
                DistanceFunctorT &&distFun = DistanceFunctorT()) {
   if (begin == end)
     return itersOut;
 
   *(itersOut++) = begin;
-  std::vector<IteratorT> gBegins(1, begin);
+  std::vector<IterT> gBegins(1, begin);
   for (auto i = std::next(begin); i != end; ++i) {
     auto giter = gBegins.begin();
     for (; giter != gBegins.end(); ++giter) {
@@ -101,11 +100,11 @@ MergeNearNaive(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
 // DistanceFunctorT(a, b) -> ? : compute the distance from a to b
 // BoundingBoxFunctorT(a) -> Box<?,?> : compute the bounding box of a
 // returns the iterators pointing to group leaders
-template <class IteratorT, class IterOutIteratorT, class DistanceT,
+template <class IterT, class IterOutIterT, class DistanceT,
           class DistanceFunctorT = DefaultDistanceFunctor,
           class BoundingBoxFunctorT = DefaultBoundingBoxFunctor>
-IterOutIteratorT
-MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
+IterOutIterT
+MergeNearRTree(IterT begin, IterT end, IterOutIterT itersOut,
                std::false_type, DistanceT thres,
                DistanceFunctorT &&distFun = DistanceFunctorT(),
                BoundingBoxFunctorT &&getBoundingBox = BoundingBoxFunctorT()) {
@@ -117,7 +116,7 @@ MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
   using T = typename BoxType::Type;
   static const int N = BoxType::Dimension;
 
-  third_party::RTree<IteratorT, T, N> rtree;
+  third_party::RTree<IterT, T, N> rtree;
   for (auto i = begin; i != end; ++i) {
     Box<T, N> box = getBoundingBox(*i);
     for (int k = 0; k < N; k++) { // extend the box
@@ -127,7 +126,7 @@ MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
     // search in RTree
     int foundCount = 0;
     rtree.Search(box.minCorner.val, box.maxCorner.val,
-                 [distFun, i, thres, &foundCount](IteratorT it) {
+                 [distFun, i, thres, &foundCount](IterT it) {
                    if (distFun(*i, *it) <= thres) {
                      foundCount++;
                      return false;
@@ -144,10 +143,10 @@ MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
 }
 
 //// DBSCAN
-//template <class IteratorT, class DistanceT,
+// template <class IterT, class DistanceT,
 //          class DistanceFunctorT = DefaultDistanceFunctor,
 //          class BoundingBoxFunctorT = DefaultBoundingBoxFunctor>
-//void DBSCAN(IteratorT begin, IteratorT end, DistanceT thres,
+// void DBSCAN(IterT begin, IterT end, DistanceT thres,
 //            DistanceFunctorT &&distFun = DistanceFunctorT(),
 //            BoundingBoxFunctorT &&getBoundingBox = BoundingBoxFunctorT()) {
 //  if (begin == end) {
@@ -158,7 +157,7 @@ MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
 //  using T = typename BoxType::Type;
 //  static const int N = BoxType::Dimension;
 //
-//  third_party::RTree<IteratorT, T, N> rtree;
+//  third_party::RTree<IterT, T, N> rtree;
 //   for (auto i = begin; i != end; ++i) {
 //    Box<T, N> box = getBoundingBox(*i);
 //    for (int k = 0; k < N; k++) { // extend the box
@@ -173,21 +172,21 @@ MergeNearRTree(IteratorT begin, IteratorT end, IterOutIteratorT itersOut,
 //     determins whether weight of e1 is lower than weight of e2
 // VertCompareT(Vert v1, Vert v2)->bool
 //     used in std::map to register set id of vertices
-template <class VertIteratorT, class EdgeIteratorT, class EdgeVertsGetterT,
-          class EdgeOutputIteratorT, class EdgeCompareOnWeightT,
+template <class VertIterT, class EdgeIterT, class EdgeVertsGetterT,
+          class EdgeOutputIterT, class EdgeCompareOnWeightT,
           class VertCompareT = std::less<
-              typename std::iterator_traits<VertIteratorT>::value_type>>
-void MinimumSpanningTree(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-                         EdgeIteratorT edgesBegin, EdgeIteratorT edgesEnd,
-                         EdgeOutputIteratorT MSTedges,
+              typename std::iterator_traits<VertIterT>::value_type>>
+void MinimumSpanningTree(VertIterT vertsBegin, VertIterT vertsEnd,
+                         EdgeIterT edgesBegin, EdgeIterT edgesEnd,
+                         EdgeOutputIterT MSTedges,
                          EdgeVertsGetterT &&vertsGetter,
                          EdgeCompareOnWeightT &&edgeCompareOnWeight,
                          VertCompareT &&vertCompare = VertCompareT()) {
 
   using Edge =
-      typename std::iterator_traits<typename EdgeIteratorT>::value_type;
+      typename std::iterator_traits<typename EdgeIterT>::value_type;
   using Vert =
-      typename std::iterator_traits<typename VertIteratorT>::value_type;
+      typename std::iterator_traits<typename VertIterT>::value_type;
   static_assert(
       std::is_same<
           std::decay_t<decltype(std::get<0>(vertsGetter(*edgesBegin)))>,
@@ -225,17 +224,17 @@ void MinimumSpanningTree(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
 }
 
 // DepthFirstSearch
-template <class VertIteratorT, class NeighborVertsContainerGetterT,
+template <class VertIterT, class NeighborVertsContainerGetterT,
           class VertCallbackT,
           class VertCompareT = std::less<
-              typename std::iterator_traits<VertIteratorT>::value_type>>
+              typename std::iterator_traits<VertIterT>::value_type>>
 void DepthFirstSearch(
-    VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+    VertIterT vertsBegin, VertIterT vertsEnd,
     NeighborVertsContainerGetterT &&neighborVertsContainerGetter,
     VertCallbackT &&vertCallback, VertCompareT &&vertCompare = VertCompareT()) {
 
   using Vert =
-      typename std::iterator_traits<typename VertIteratorT>::value_type;
+      typename std::iterator_traits<typename VertIterT>::value_type;
   static_assert(
       std::is_same<
           Vert, std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(
@@ -283,17 +282,17 @@ void DepthFirstSearch(
 }
 
 // BreadthFirstSearch
-template <class VertIteratorT, class NeighborVertsContainerGetterT,
+template <class VertIterT, class NeighborVertsContainerGetterT,
           class VertCallbackT,
           class VertCompareT = std::less<
-              typename std::iterator_traits<VertIteratorT>::value_type>>
+              typename std::iterator_traits<VertIterT>::value_type>>
 void BreadthFirstSearch(
-    VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+    VertIterT vertsBegin, VertIterT vertsEnd,
     NeighborVertsContainerGetterT neighborVertsContainerGetter,
     VertCallbackT vertCallback, VertCompareT vertCompare = VertCompareT()) {
 
   using Vert =
-      typename std::iterator_traits<typename VertIteratorT>::value_type;
+      typename std::iterator_traits<typename VertIterT>::value_type;
   static_assert(
       std::is_same<
           Vert, std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(
@@ -347,18 +346,18 @@ void BreadthFirstSearch(
 }
 
 // Topological Sort (using Depth First Search)
-template <class VertIteratorT, class VertOutIteratorT,
+template <class VertIterT, class VertOutIterT,
           class PredecessorVertsContainerGetterT,
           class VertCompareT = std::less<
-              typename std::iterator_traits<VertIteratorT>::value_type>>
+              typename std::iterator_traits<VertIterT>::value_type>>
 void TopologicalSort(
-    VertIteratorT vertsBegin, VertIteratorT vertsEnd,
-    VertOutIteratorT sortedVertsBegin,
+    VertIterT vertsBegin, VertIterT vertsEnd,
+    VertOutIterT sortedVertsBegin,
     PredecessorVertsContainerGetterT predecessorVertsContainerGetter,
     VertCompareT vertCompare = VertCompareT()) {
 
   using Vert =
-      typename std::iterator_traits<typename VertIteratorT>::value_type;
+      typename std::iterator_traits<typename VertIterT>::value_type;
   static_assert(
       std::is_same<Vert, std::decay_t<decltype(
                              *std::begin(predecessorVertsContainerGetter(
@@ -373,7 +372,7 @@ void TopologicalSort(
   struct {
     void operator()(
         Vert root, std::map<Vert, bool, VertCompareT> &vVisited,
-        VertOutIteratorT sortedVertsOut,
+        VertOutIterT sortedVertsOut,
         PredecessorVertsContainerGetterT predecessorVertsContainerGetter) {
       if (vVisited[root])
         return;
@@ -404,18 +403,18 @@ void TopologicalSort(
 }
 
 // Connected Components
-template <class VertIteratorT, class NeighborVertsContainerGetterT,
+template <class VertIterT, class NeighborVertsContainerGetterT,
           class VertexTypeRecorderT,
           class VertCompareT = std::less<
-              typename std::iterator_traits<VertIteratorT>::value_type>>
+              typename std::iterator_traits<VertIterT>::value_type>>
 int ConnectedComponents(
-    VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+    VertIterT vertsBegin, VertIterT vertsEnd,
     NeighborVertsContainerGetterT neighborVertsContainerGetter,
     VertexTypeRecorderT vertTypeRecorder,
     VertCompareT vertCompare = VertCompareT()) {
 
   using Vert =
-      typename std::iterator_traits<typename VertIteratorT>::value_type;
+      typename std::iterator_traits<typename VertIterT>::value_type;
   static_assert(
       std::is_same<
           Vert, std::decay_t<decltype(*std::begin(neighborVertsContainerGetter(

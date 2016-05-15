@@ -758,7 +758,7 @@ ComputeStraightness(const std::vector<std::vector<Pixel>> &edges,
 }
 
 
-ImageOf<Vec<double, 7>> ComputeRawGeometricContext(misc::Matlab &matlab,
+Image_<Vec<double, 7>> ComputeRawGeometricContext(misc::Matlab &matlab,
                                                    const Image &im,
                                                    bool outdoor,
                                                    bool useHedauForIndoor) {
@@ -775,7 +775,7 @@ ImageOf<Vec<double, 7>> ComputeRawGeometricContext(misc::Matlab &matlab,
     matlab << (std::string("slabelConfMap = panoramix_wrapper_gc(im, ") +
                (outdoor ? "true" : "false") + ");");
   }
-  ImageOf<Vec<double, 7>> gc;
+  Image_<Vec<double, 7>> gc;
   gc = matlab.var("slabelConfMap");
   assert(gc.channels() == 7);
   assert(gc.size() == im.size());
