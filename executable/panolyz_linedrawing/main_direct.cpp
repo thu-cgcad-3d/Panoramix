@@ -342,7 +342,7 @@ void TestOnMesh(const Mesh3 &meshGT, int maxIters,
   }
 }
 
-int main(int argc, char **argv) {
+int DISABLED_main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
 

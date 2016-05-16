@@ -155,6 +155,17 @@ struct SubMesh {
   bool contains(VertHandle h) const {return Contains(vhs, h); }
   bool contains(HalfHandle h) const {return Contains(hhs, h); }
   bool contains(FaceHandle h) const {return Contains(fhs, h); }
+
+  std::unordered_set<VertHandle> fundamental_vhs;
+  std::vector<FaceHandle> ordered_fhs;
+  template <class VT, class HT, class FT, class VertColinearFunT>
+  void ComputeVertexFaceDependencies(const Mesh<VT, HT, FT> &mesh,
+                                     VertColinearFunT vhs_colinear_fun) {
+    ordered_fhs = std::vector<FaceHandle>(fhs.begin(), fhs.end());
+    fundamental_vhs = SortFacesWithPlanarityDependency(
+        mesh, ordered_fhs.begin(), ordered_fhs.end(), vhs_colinear_fun);
+  }
+
   template <class ArchiverT> void serialize(ArchiverT &ar) {
     ar(vhs, hhs, fhs, drfub);
   }

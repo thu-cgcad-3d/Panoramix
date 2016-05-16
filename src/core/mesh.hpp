@@ -376,6 +376,19 @@ public:
     _faces.clear();
   }
 
+  template <class T>
+  HandledTable<VertHandle, T> createVertexTable(const T &v) const {
+    return HandledTable<VertHandle, T>(_verts.size(), v);
+  }
+  template <class T>
+  HandledTable<HalfHandle, T> createHalfEdgeTable(const T &v) const {
+    return HandledTable<HalfHandle, T>(_halfs.size(), v);
+  }
+  template <class T>
+  HandledTable<FaceHandle, T> createFaceTable(const T &v) const {
+    return HandledTable<FaceHandle, T>(_faces.size(), v);
+  }
+
   template <class Archive> inline void serialize(Archive &ar) {
     ar(_verts, _halfs, _faces);
   }
@@ -1662,6 +1675,136 @@ int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
     notInserted.erase(curfh);
   }
   return ub;
+}
+
+// SortFacesWithPlanarityDependency
+// - VertColinearFunT: (VertHandleIterT vhs_begin, VertHandleIterT vhs_end) ->
+// bool
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class VertColinearFunT, class FaceHandleIterT,
+          class FaceDependencyCallbackFunT = Dummy>
+std::unordered_set<VertHandle> SortFacesWithPlanarityDependency(
+    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+    FaceHandleIterT fhs_begin, FaceHandleIterT fhs_end,
+    VertColinearFunT vhs_colinear_fun,
+    FaceDependencyCallbackFunT face_dependency_callback_fun =
+        FaceDependencyCallbackFunT()) {
+
+  std::unordered_set<VertHandle> fundamental_anchors;
+  std::unordered_set<VertHandle> vhs_determined;
+  std::unordered_set<FaceHandle> fhs_not_determined(fhs_begin, fhs_end);
+  size_t nfhs = fhs_not_determined.size();
+
+  std::vector<FaceHandle> ordered_fhs;
+  ordered_fhs.reserve(fhs_not_determined.size());
+
+  while (!fhs_not_determined.empty()) {
+    FaceHandle next_fh = *fhs_not_determined.begin(); 
+    std::unordered_set<VertHandle> next_vhs;
+    for (FaceHandle fh : fhs_not_determined) {
+      // locate all the determined vhs
+      std::unordered_set<VertHandle> vhs;
+      for (HalfHandle hh : mesh.topo(fh).halfedges) {
+        VertHandle vh = mesh.topo(hh).from();
+        if (Contains(vhs_determined, vh)) {
+          vhs.insert(vh);
+        }
+      }
+      // locate only the face that connect with determined faces on the most
+      // verts
+      if (vhs.size() > next_vhs.size()) {
+        next_fh = fh;
+        next_vhs = std::move(vhs);
+      }
+    }
+
+    std::unordered_set<VertHandle> vhs_tobe_anchored;
+    if (vhs_colinear_fun(next_vhs.begin(), next_vhs.end())) {
+      // we need other vhs to support current face
+      // find other vhs
+      auto &next_hhs = mesh.topo(next_fh).halfedges;
+      if (next_vhs.empty()) {
+        // no vhs determined at all
+        bool found = false;
+        for (int i1 = 0; !found && i1 < next_hhs.size(); i1++) {
+          VertHandle vh1 = mesh.topo(next_hhs[i1]).from();
+          for (int i2 = i1 + 1; !found && i2 < next_hhs.size(); i2++) {
+            VertHandle vh2 = mesh.topo(next_hhs[i2]).from();
+            if (vh1 == vh2) {
+              continue;
+            }
+            for (int i3 = i2 + 1; !found && i3 < next_hhs.size(); i3++) {
+              VertHandle vh3 = mesh.topo(next_hhs[i3]).from();
+              if (vh1 == vh3 || vh2 == vh3) {
+                continue;
+              }
+              VertHandle vhs[] = {vh1, vh2, vh3};
+              if (!vhs_colinear_fun(vhs, vhs + 3)) {
+                found = true;
+                vhs_tobe_anchored.insert({vh1, vh2, vh3});
+              }
+            }
+          }
+        }
+      } else if (next_vhs.size() == 1) {
+        bool found = false;
+        VertHandle vh1 = *next_vhs.begin();
+        for (int i2 = 0; !found && i2 < next_hhs.size(); i2++) {
+          VertHandle vh2 = mesh.topo(next_hhs[i2]).from();
+          if (vh1 == vh2) {
+            continue;
+          }
+          for (int i3 = i2 + 1; !found && i3 < next_hhs.size(); i3++) {
+            VertHandle vh3 = mesh.topo(next_hhs[i3]).from();
+            if (vh1 == vh3 || vh2 == vh3) {
+              continue;
+            }
+            VertHandle vhs[] = {vh1, vh2, vh3};
+            if (!vhs_colinear_fun(vhs, vhs + 3)) {
+              found = true;
+              vhs_tobe_anchored.insert({vh2, vh3});
+            }
+          }
+        }
+      } else {
+        bool found = false;
+        VertHandle vh1 = *next_vhs.begin();
+        VertHandle vh2 = *std::next(next_vhs.begin());
+        for (int i3 = 0; !found && i3 < next_hhs.size(); i3++) {
+          VertHandle vh3 = mesh.topo(next_hhs[i3]).from();
+          if (vh1 == vh3 || vh2 == vh3) {
+            continue;
+          }
+          VertHandle vhs[] = {vh1, vh2, vh3};
+          if (!vhs_colinear_fun(vhs, vhs + 3)) {
+            found = true;
+            vhs_tobe_anchored.insert({vh3});
+          }
+        }
+      }
+
+      assert(!vhs_tobe_anchored.empty() && "degenerated faces/edges occurs");
+    }
+
+	next_vhs.insert(vhs_tobe_anchored.begin(), vhs_tobe_anchored.end());
+	face_dependency_callback_fun(next_fh, next_vhs.begin(), next_vhs.end());
+
+    fundamental_anchors.insert(vhs_tobe_anchored.begin(),
+                               vhs_tobe_anchored.end());
+    fhs_not_determined.erase(next_fh);
+    ordered_fhs.push_back(next_fh);
+
+    // update vhs_determined
+    for (HalfHandle hh : mesh.topo(next_fh).halfedges) {
+      VertHandle vh = mesh.topo(hh).from();
+      vhs_determined.insert(vh);
+    }
+  }
+
+  assert(nfhs == ordered_fhs.size());
+  std::copy(ordered_fhs.begin(), ordered_fhs.end(), fhs_begin);
+
+  return fundamental_anchors;
 }
 
 // MakeTetrahedron
