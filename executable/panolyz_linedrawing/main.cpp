@@ -694,31 +694,42 @@ void OptimizeWithoutOrientations(
     const Mesh2 &mesh2d, const std::vector<SubMesh> &sub_meshs) {
   using namespace Eigen;
 
-  HandledTable<VertHandle, Point3> vh_proxy2position =
-      mesh_proxy.createVertexTable(Point3());
 
   for (const SubMesh &sub : sub_meshs) {
-    std::vector<VertHandle> vh_proxies(sub.fundamental_vhs.begin(),
-                                       sub.fundamental_vhs.end());
+    std::vector<VertHandle> fundamental_vhs(sub.fundamental_vhs.begin(),
+                                            sub.fundamental_vhs.end());
+	size_t nvars = fundamental_vhs.size();
     std::unordered_map<VertHandle, int> vh_proxy2position;
-    for (int pos = 0; pos < vh_proxies.size(); pos++) {
-      vh_proxy2position[vh_proxies[pos]] = pos;
+    for (int pos = 0; pos < nvars; pos++) {
+      vh_proxy2position[fundamental_vhs[pos]] = pos;
     }
 
-    VectorXd inversed_depths(sub.fundamental_vhs.size());
+    VectorXd inversed_depths(nvars);
     // initilize inversed_depths using current reconstruction
-    for (int i = 0; i < inversed_depths.size(); i++) {
+    for (int i = 0; i < nvars; i++) {
       inversed_depths[i] =
           1.0 /
-          Distance(cur_reconstruction.data(mesh_proxy.data(vh_proxies[i])),
+          Distance(cur_reconstruction.data(mesh_proxy.data(fundamental_vhs[i])),
                    cur_cam.eye());
     }
     assert(!inversed_depths.hasNaN());
 
-    // build matrix for each face in current sub using the dependency
+	VectorXd initial_inversed_depths = inversed_depths;
+
+    // build matrix for each vertex and face in current sub using the dependency
     // information
-    std::map<FaceHandle, SparseMatrix<double>> fh_proxy2matrix;
-    std::unordered_set<VertHandle> vh_proxy_determined = sub.fundamental_vhs;
+    std::map<VertHandle, RowVectorXd>
+        vh_proxy2matrix; // inversed_depth of vh = matrix * X
+    std::map<FaceHandle, Matrix3Xd>
+        fh_proxy2matrix; // plane equation of fh = matrix * X
+	
+	// insert the matrices of fundamental vhs
+    for (VertHandle vh_proxy : sub.fundamental_vhs) {
+      auto &mat = vh_proxy2matrix[vh_proxy];
+      mat = RowVectorXd::Zero(1, inversed_depths.size());
+      mat(0, vh_proxy2position[vh_proxy]) = 1;
+    }
+
     for (FaceHandle fh_proxy : sub.ordered_fhs) {
       // pick three determined adjacent vhs
       auto &hhs = mesh_proxy.topo(fh_proxy).halfedges;
@@ -730,17 +741,17 @@ void OptimizeWithoutOrientations(
 	  bool found = false;
       for (int i1 = 0; !found && i1 < hhs.size(); i1++) {
         VertHandle vh1 = mesh_proxy.topo(hhs[i1]).from();
-        if (!Contains(vh_proxy_determined, vh1)) {
+        if (!Contains(vh_proxy2matrix, vh1)) {
           continue;
         }
         for (int i2 = i1 + 1; !found && i2 < hhs.size(); i2++) {
           VertHandle vh2 = mesh_proxy.topo(hhs[i2]).from();
-          if (!Contains(vh_proxy_determined, vh2)) {
+          if (!Contains(vh_proxy2matrix, vh2)) {
             continue;
           }
           for (int i3 = i2 + 1; !found && i3 < hhs.size(); i3++) {
             VertHandle vh3 = mesh_proxy.topo(hhs[i3]).from();
-            if (!Contains(vh_proxy_determined, vh3)) {
+            if (!Contains(vh_proxy2matrix, vh3)) {
               continue;
             }
 
@@ -778,35 +789,51 @@ void OptimizeWithoutOrientations(
         } // for (int i2 = i1 + 1; i2 < hhs.size(); i2++)
       } // for (int i1 = 0; i1 < hhs.size(); i1++)
 
+	  // matrix A = [x1 y1 z1]
+	  //			[x2 y2 z2]
+	  //			[x3 y3 z3]
+	  // [plane eq] = A^-1 * [id1 id2 id3]^T
+
       assert(best_matrix_abs_det > 0);
-      Matrix3d best_matrix_inversed = best_matrix.inverse();
-      std::vector<Eigen::Triplet<double>> sp_mat_triplets;
+
+      // collect the matrices of three vhs
+      Matrix3Xd vh_matrices = Matrix3Xd::Zero(3, nvars);
+      vh_matrices << vh_proxy2matrix.at(best_dependencies[0]),
+          vh_proxy2matrix.at(best_dependencies[1]),
+          vh_proxy2matrix.at(best_dependencies[2]);
+
       for (int row = 0; row < 3; row++) {
-        for (int col = 0; col < 3; col++) {
-          sp_mat_triplets.emplace_back(
-              row, vh_proxy2position.at(best_dependencies[col]),
-              best_matrix_inversed(row, col));
-        }
+        assert(vh_matrices.row(row) ==
+               vh_proxy2matrix.at(best_dependencies[row]));
       }
 
-      fh_proxy2matrix[fh_proxy].resize(3, vh_proxies.size());
-      fh_proxy2matrix[fh_proxy].setFromTriplets(sp_mat_triplets.begin(),
-                                                sp_mat_triplets.end());
+      // 3 x nvars
+      fh_proxy2matrix[fh_proxy] = best_matrix.inverse() * vh_matrices;
+	  // best_matrix.fullPivLu().solve(vh_matrices);
 
-      // update vh_proxy_determined
+      // update all the related vh matrices
       for (HalfHandle hh : hhs) {
-        vh_proxy_determined.insert(mesh_proxy.topo(hh).from());
+        VertHandle vh = mesh_proxy.topo(hh).from();
+        if (Contains(vh_proxy2matrix, vh)) {
+          continue;
+        }
+        Vec3 vhdir =
+            cur_reconstruction.data(mesh_proxy.data(vh)) - cur_cam.eye();
+        RowVector3d vhdir_mat =
+            RowVector3d(vhdir[0], vhdir[1], vhdir[2]).normalized();
+        // 1 x nvars
+        vh_proxy2matrix[vh] = vhdir_mat * fh_proxy2matrix[fh_proxy];
       }
     } //  for (FaceHandle fh_proxy : sub.ordered_fhs)
 
     // use LM algorithm
     auto energy_fun =
-        [&mesh_proxy, &sub, &cur_reconstruction, &fh_proxy2matrix,
+        [&mesh_proxy, &sub, &cur_reconstruction, &fh_proxy2matrix, &vh_proxy2matrix,
          &cur_cam](const VectorXd &cur_inversed_depths) -> std::vector<double> {
       EnergyWeights weights;
       weights.faceAngleWeight = 1.0;
-      weights.faceMSDAWeight = 1e3;
-      weights.vertMSDAWeight = 1e3;
+      weights.faceMSDAWeight = 1e5;
+      weights.vertMSDAWeight = 1e4;
       return ComputeEnergy(
           mesh_proxy, sub, weights,
           [&mesh_proxy, &cur_reconstruction](VertHandle vh_proxy) -> Vec3 {
@@ -822,8 +849,11 @@ void OptimizeWithoutOrientations(
     };
     // compute initial energy terms
     auto initial_energy_terms = energy_fun(inversed_depths);
-    double initial_energy = std::accumulate(initial_energy_terms.begin(),
-                                            initial_energy_terms.end(), 0.0);
+    double initial_energy = 0.0;
+    for (double term : initial_energy_terms) {
+      initial_energy += Square(term);
+    }
+
     core::Println("initial energy = ", initial_energy);
 
     auto functor = misc::MakeGenericNumericDiffFunctor<double>(
@@ -835,8 +865,53 @@ void OptimizeWithoutOrientations(
 
     LevenbergMarquardt<decltype(functor)> lm(functor);
     lm.minimize(inversed_depths);
+	inversed_depths.normalize();
 
+    auto final_energy_terms = energy_fun(inversed_depths);
+    double final_energy = 0.0;
+    for (double term : final_energy_terms) {
+      final_energy += Square(term);
+    }
 
+    core::Println("final energy = ", final_energy);
+
+    // show results
+	{
+      gui::SceneBuilder sb;
+      sb.installingOptions().defaultShaderSource =
+          gui::OpenGLShaderSourceDescriptor::XTriangles;
+      sb.installingOptions().discretizeOptions.color(gui::Black);
+      sb.installingOptions().lineWidth = 10;
+
+      for (HalfHandle hh : sub.hhs) {
+        VertHandle vh1 = mesh_proxy.topo(hh).from();
+        VertHandle vh2 = mesh_proxy.topo(hh).to();
+        Point3 p1 = normalize(cur_reconstruction.data(mesh_proxy.data(vh1))) /
+                    (vh_proxy2matrix.at(vh1) * initial_inversed_depths);
+        Point3 p2 = normalize(cur_reconstruction.data(mesh_proxy.data(vh2))) /
+                    (vh_proxy2matrix.at(vh2) * initial_inversed_depths);
+        sb.add(Line3(p1, p2));
+      }
+      sb.show(false, true, gui::RenderOptions().winName("Before Optimization"));
+    }
+    {
+      gui::SceneBuilder sb;
+      sb.installingOptions().defaultShaderSource =
+          gui::OpenGLShaderSourceDescriptor::XTriangles;
+      sb.installingOptions().discretizeOptions.color(gui::Black);
+      sb.installingOptions().lineWidth = 10;
+
+      for (HalfHandle hh : sub.hhs) {
+        VertHandle vh1 = mesh_proxy.topo(hh).from();
+        VertHandle vh2 = mesh_proxy.topo(hh).to();
+        Point3 p1 = normalize(cur_reconstruction.data(mesh_proxy.data(vh1))) /
+                    (vh_proxy2matrix.at(vh1) * inversed_depths);
+        Point3 p2 = normalize(cur_reconstruction.data(mesh_proxy.data(vh2))) /
+                    (vh_proxy2matrix.at(vh2) * inversed_depths);
+        sb.add(Line3(p1, p2));
+      }
+      sb.show(true, true, gui::RenderOptions().winName("After Optimization"));
+    }
   }
 }
 

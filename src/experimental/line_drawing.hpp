@@ -2,6 +2,7 @@
 
 #include "../core/basic_types.hpp"
 #include "../core/mesh.hpp"
+#include "../core/mesh_util.hpp"
 
 #include "../misc/eigen.hpp"
 
