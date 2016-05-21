@@ -43,6 +43,10 @@ template <class IterT> struct Range {
   }
 };
 
+template <class IterT> Range<IterT> MakeRange(IterT b, IterT e) {
+  return Range<IterT>(b, e);
+}
+
 // element of container MUST support PredT(ele) -> bool
 // ConditionalIterator will automatically skip elements which DO NOT satisfy
 // PredT in iteration

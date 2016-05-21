@@ -356,8 +356,173 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   }
   return planes;
 }
-}
 
+// EstimatePerspectiveDepths
+// Vert2InitialDepthFunT: (VertT vert) -> double
+// Face2RelatedVertsFunT: (FaceT face) -> std::vector<VertT>
+// Vert2RowVector3dFunT: (VertT vert) -> Eigen::RowVector3d
+// EnergyFunT: (((FaceT face) -> Eigen::Vector3d) face2equation, ((VertT vert) -> double) vert2depth) -> Eigen::VectorXd
+template <class VertT, class FaceT, class Vert2InitialDepthFunT,
+          class Face2RelatedVertsFunT, class Vert2RowVector3dFunT,
+          class EnergyFunT>
+Eigen::VectorXd
+EstimatePerspectiveDepths(const std::vector<VertT> &fundamental_verts,
+                          const std::vector<FaceT> &ordered_faces,
+                          Vert2InitialDepthFunT vert2initial_depth,
+                          Face2RelatedVertsFunT face2related_verts,
+                          Vert2RowVector3dFunT vert2direction,
+                          EnergyFunT energy_fun,
+	 std::map<VertT, Eigen::RowVectorXd> * v2matrix_ptr = nullptr,
+	std::map<FaceT, Eigen::Matrix3Xd> * f2matrix_ptr = nullptr) {
+
+  using namespace Eigen;
+  size_t nvars = fundamental_verts.size();
+
+  VectorXd inversed_depths = VectorXd::Zero(fundamental_verts.size());
+  for (int pos = 0; pos < nvars; pos++) {
+    inversed_depths[pos] = 1.0 / vert2initial_depth(fundamental_verts[pos]);
+  }
+
+  std::unordered_map<VertT, int> v2position;
+  for (int pos = 0; pos < nvars; pos++) {
+    v2position[fundamental_verts[pos]] = pos;
+  }
+
+  // build matrix for each vertex and face in current sub using the dependency
+  // information
+  std::map<VertT, RowVectorXd> v2matrix; // inversed_depth of vh = matrix * X
+  std::map<FaceT, Matrix3Xd> f2matrix;   // plane equation of fh = matrix * X
+
+  // insert the matrices of fundamental verts
+  for (const VertT &v : fundamental_verts) {
+    auto &mat = v2matrix[v];
+    mat = RowVectorXd::Zero(1, nvars);
+    mat(0, v2position[v]) = 1;
+  }
+
+  for (const FaceT &f : ordered_faces) {
+    // pick three determined adjacent verts
+    auto related_verts = face2related_verts(f);
+
+    Matrix3d best_matrix = Matrix3d::Zero();
+    double best_matrix_abs_det = 0.0;
+    VertT best_dependencies[3];
+
+    bool found = false;
+    for (int i1 = 0; !found && i1 < related_verts.size(); i1++) {
+      const VertT &v1 = related_verts[i1];
+      if (!Contains(v2matrix, v1)) {
+        continue;
+      }
+      RowVector3d dir1 = vert2direction(v1).normalized();
+      for (int i2 = i1 + 1; !found && i2 < related_verts.size(); i2++) {
+        const VertT &v2 = related_verts[i2];
+        if (!Contains(v2matrix, v2)) {
+          continue;
+        }
+        RowVector3d dir2 = vert2direction(v2).normalized();
+        for (int i3 = i2 + 1; !found && i3 < related_verts.size(); i3++) {
+          const VertT &v3 = related_verts[i3];
+          if (!Contains(v2matrix, v3)) {
+            continue;
+          }
+          RowVector3d dir3 = vert2direction(v3).normalized();
+
+          Matrix3d matrix = Matrix3d::Zero();
+          matrix << dir1, dir2, dir3;
+
+          double abs_det = abs(matrix.determinant());
+          if (abs_det > best_matrix_abs_det) {
+            best_matrix = matrix;
+            best_matrix_abs_det = abs_det;
+            best_dependencies[0] = v1;
+            best_dependencies[1] = v2;
+            best_dependencies[2] = v3;
+            if (best_matrix_abs_det > 0.1) {
+              found = true;
+            }
+          }
+        } // for (int i3 = i2 + 1; i3 < hhs.size(); i3++)
+      }   // for (int i2 = i1 + 1; i2 < hhs.size(); i2++)
+    }     // for (int i1 = 0; i1 < hhs.size(); i1++)
+
+    // matrix A = [x1 y1 z1]
+    //			[x2 y2 z2]
+    //			[x3 y3 z3]
+    // [plane eq] = A^-1 * [id1 id2 id3]^T
+
+    assert(best_matrix_abs_det > 0);
+
+    // collect the matrices of three vhs
+    Matrix3Xd vmatrices = Matrix3Xd::Zero(3, nvars);
+    vmatrices << v2matrix.at(best_dependencies[0]),
+        v2matrix.at(best_dependencies[1]), v2matrix.at(best_dependencies[2]);
+
+    for (int row = 0; row < 3; row++) {
+      assert(vmatrices.row(row) == v2matrix.at(best_dependencies[row]));
+    }
+
+    // 3 x nvars
+    f2matrix[f] = best_matrix.inverse() * vmatrices;
+    // best_matrix.fullPivLu().solve(vh_matrices);
+
+    // update all the related vh matrices
+    for (const VertT &v : related_verts) {
+      if (Contains(v2matrix, v)) {
+        continue;
+      }
+      RowVector3d dir = vert2direction(v).normalized();
+      // 1 x nvars
+      v2matrix[v] = dir * f2matrix[f];
+    }
+  } //  for (FaceHandle fh_proxy : sub.ordered_fhs)
+
+  // use LM algorithm
+  auto energy_wrapper_fun = [&f2matrix, &v2matrix,
+                             &energy_fun](const VectorXd &X) -> VectorXd {
+    return energy_fun(
+        [&](const FaceT &face) -> Vector3d { return f2matrix.at(face) * X; },
+        [&](const VertT &vert) -> double {
+          return 1.0 / (v2matrix.at(vert) * X);
+        });
+  };
+
+  auto initial_energy_terms = energy_wrapper_fun(inversed_depths);
+
+  double initial_energy = 0.0;
+  for (int k = 0; k < initial_energy_terms.size(); k++) {
+    initial_energy += Square(initial_energy_terms[k]);
+  }
+  Println("initial energy = ", initial_energy);
+
+  auto functor = misc::MakeGenericNumericDiffFunctor<double>(
+      [&energy_wrapper_fun](const VectorXd &curX, VectorXd &e) {
+        e = energy_wrapper_fun(curX);
+      },
+      inversed_depths.size(), initial_energy_terms.size());
+
+  LevenbergMarquardt<decltype(functor)> lm(functor);
+  lm.minimize(inversed_depths);
+  inversed_depths.normalize();
+
+  auto final_energy_terms = energy_wrapper_fun(inversed_depths);
+  double final_energy = 0.0;
+  for (int k = 0; k < final_energy_terms.size(); k++) {
+    final_energy += Square(final_energy_terms[k]);
+  }
+
+  core::Println("final energy = ", final_energy);
+
+  if (v2matrix_ptr) {
+    *v2matrix_ptr = std::move(v2matrix);
+  }
+  if (f2matrix_ptr) {
+    *f2matrix_ptr = std::move(f2matrix);
+  }
+
+  return inversed_depths;
+}
+}
 
 namespace core {
 template <class PointT>
