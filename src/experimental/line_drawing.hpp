@@ -365,15 +365,14 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
 template <class VertT, class FaceT, class Vert2InitialDepthFunT,
           class Face2RelatedVertsFunT, class Vert2RowVector3dFunT,
           class EnergyFunT>
-Eigen::VectorXd
-EstimatePerspectiveDepths(const std::vector<VertT> &fundamental_verts,
-                          const std::vector<FaceT> &ordered_faces,
-                          Vert2InitialDepthFunT vert2initial_depth,
-                          Face2RelatedVertsFunT face2related_verts,
-                          Vert2RowVector3dFunT vert2direction,
-                          EnergyFunT energy_fun,
-	 std::map<VertT, Eigen::RowVectorXd> * v2matrix_ptr = nullptr,
-	std::map<FaceT, Eigen::Matrix3Xd> * f2matrix_ptr = nullptr) {
+Eigen::VectorXd EstimatePerspectiveDepths(
+    const std::vector<VertT> &fundamental_verts,
+    const std::vector<FaceT> &ordered_faces,
+    Vert2InitialDepthFunT vert2initial_depth,
+    Face2RelatedVertsFunT face2related_verts,
+    Vert2RowVector3dFunT vert2direction, EnergyFunT energy_fun,
+    std::map<VertT, Eigen::RowVectorXd> *v2matrix_ptr = nullptr,
+    std::map<FaceT, Eigen::Matrix3Xd> *f2matrix_ptr = nullptr) {
 
   using namespace Eigen;
   size_t nvars = fundamental_verts.size();
@@ -481,10 +480,10 @@ EstimatePerspectiveDepths(const std::vector<VertT> &fundamental_verts,
   auto energy_wrapper_fun = [&f2matrix, &v2matrix,
                              &energy_fun](const VectorXd &X) -> VectorXd {
     return energy_fun(
-        [&](const FaceT &face) -> Vector3d { return f2matrix.at(face) * X; },
         [&](const VertT &vert) -> double {
           return 1.0 / (v2matrix.at(vert) * X);
-        });
+        },
+        [&](const FaceT &face) -> Vector3d { return f2matrix.at(face) * X; });
   };
 
   auto initial_energy_terms = energy_wrapper_fun(inversed_depths);
@@ -502,6 +501,7 @@ EstimatePerspectiveDepths(const std::vector<VertT> &fundamental_verts,
       inversed_depths.size(), initial_energy_terms.size());
 
   LevenbergMarquardt<decltype(functor)> lm(functor);
+  lm.parameters.maxfev = 10000;
   lm.minimize(inversed_depths);
   inversed_depths.normalize();
 

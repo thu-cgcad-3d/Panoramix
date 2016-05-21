@@ -109,78 +109,54 @@ inline std::vector<Point2> PossibleKeyVanishingPoints(const Chain2 &chain) {
             Intersection(chain.edge(1).ray(), chain.edge(3).ray())};
   }
   if (chain.size() % 2 == 0) {
-    std::vector<Point2> vpPositions;
-    vpPositions.reserve(chain.size() * chain.size() / 4);
+    std::vector<Point2> vp_positions;
+    vp_positions.reserve(chain.size() * chain.size() / 4);
     for (int i = 0; i < chain.size() / 2; i++) {
       for (int j = i + 1; j < i + chain.size() / 2; j++) {
-        vpPositions.push_back(
+        vp_positions.push_back(
             Intersection(Line2(chain.at(i), chain.at(j)).ray(),
                          Line2(chain.at(i + chain.size() / 2),
                                chain.at(j + chain.size() / 2))
                              .ray()));
       }
     }
-    return vpPositions;
+    return vp_positions;
   } else {
-    std::vector<Point2> vpPositions;
+    std::vector<Point2> vp_positions;
     for (int i = 0; i < chain.size(); i++) {
       for (int j = i + 1; j < chain.size(); j++) {
-        vpPositions.push_back(
+        vp_positions.push_back(
             Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
       }
     }
-    return vpPositions;
+    return vp_positions;
   }
 }
 
 
 struct EnergyWeights {
-  double vertMSDAWeight;
-  double faceMSDAWeight;
-  double faceAngleWeight;
-  double allMSDAWeight;
+  double vert_msda_weight;
+  double face_msda_weight;
+  double face_angle_weight;
+  double all_msda_weight;
 };
 
 template <class VT, class HT, class FT, class FaceHandleIterT,
-          class VertHandleToDirFunT, class FaceHandleToPlaneEqFunT>
-std::vector<double>
-ComputeEnergy(const Mesh<VT, HT, FT> &mesh, FaceHandleIterT fhs_begin,
-              FaceHandleIterT fhs_end, const EnergyWeights &weights,
-              VertHandleToDirFunT vh2dir, FaceHandleToPlaneEqFunT fh2planeEq,
-              const Point3 &eye = Point3()) {
+          class VertHandleToPoint3FunT, class FaceHandleToVec3EquationFunT,
+          class VertHandle2BeIgnoredFunT>
+std::vector<double> ComputeEnergy(
+    const Mesh<VT, HT, FT> &mesh, FaceHandleIterT fhs_begin,
+    FaceHandleIterT fhs_end, const EnergyWeights &weights,
+    VertHandleToPoint3FunT vh2point3, FaceHandleToVec3EquationFunT fh2vec3_eq,
+    VertHandle2BeIgnoredFunT vh2ignored, const Point3 &eye = Point3()) {
   using namespace Eigen;
-  std::vector<double> energyTerms;
+  std::vector<double> energy_terms;
 
-  // fh2planeEq: (FaceHandle)[i] -> double
-  std::map<VertHandle, Point3> vpositions;
-  std::map<VertHandle, int> vfacedegrees;
-  //for (VertHandle vh : sub.vhs) {
-  //  vpositions[vh] = Vec3();
-  //  vfacedegrees[vh] = 0;
-  //}
-  for (FaceHandle fh : MakeRange(fhs_begin, fhs_end)) {
-    decltype(auto) planeEq = fh2planeEq(fh);
-    Plane3 plane = Plane3FromEquation(planeEq[0], planeEq[1], planeEq[2]);
-    if(HasValue(plane, IsInfOrNaN<double>)) {
-		return {};
-    }
-    for (HalfHandle hh : mesh.topo(fh).halfedges) {
-      VertHandle vh = mesh.topo(hh).to();
-	  Vec3 dir = normalize(vh2dir(vh));
-      Point3 p3d = Intersection(Ray3(eye, dir), plane);
-      vpositions[vh] += p3d;
-      vfacedegrees[vh]++;
-    }
-  }
-  for (auto vhpos : vpositions) {
-    vhpos.second /= vfacedegrees.at(vhpos.first);
-  }
-
-  std::vector<double> allAngles;
+  std::vector<double> all_angles;
   std::map<VertHandle, std::vector<double>> vh2angles;
   for (FaceHandle fh : MakeRange(fhs_begin, fhs_end)) {
     auto &loophhs = mesh.topo(fh).halfedges;
-    std::vector<double> faceAngles(loophhs.size(), 0.0);
+    std::vector<double> face_angles(loophhs.size(), 0.0);
     for (int k = 0; k < loophhs.size(); k++) {
       int knext = (k + 1) % loophhs.size();
       HalfHandle hh1 = loophhs[k];
@@ -189,66 +165,72 @@ ComputeEnergy(const Mesh<VT, HT, FT> &mesh, FaceHandleIterT fhs_begin,
       VertHandle v1 = mesh.topo(hh1).from();
       VertHandle v2 = mesh.topo(hh1).to();
       VertHandle v3 = mesh.topo(hh2).to();
-      auto &p1 = vpositions.at(v1);
-      auto &p2 = vpositions.at(v2);
-      auto &p3 = vpositions.at(v3);
+
+      if (vh2ignored(v2)) {
+        continue;
+      }
+
+      auto &p1 = vh2point3(v1);
+      auto &p2 = vh2point3(v2);
+      auto &p3 = vh2point3(v3);
       double angle = AngleBetweenDirected(p1 - p2, p3 - p2);
-      faceAngles[k] = angle;
+      face_angles[k] = angle;
       vh2angles[v2].push_back(angle);
-	  allAngles.push_back(angle);
+      all_angles.push_back(angle);
     }
-    double faceMeanAngle =
-        std::accumulate(faceAngles.begin(), faceAngles.end(), 0.0) /
-        faceAngles.size();
-    for (double a : faceAngles) {
-      energyTerms.push_back((a - faceMeanAngle) * weights.faceMSDAWeight / faceAngles.size());
+    double face_mean_angle =
+        std::accumulate(face_angles.begin(), face_angles.end(), 0.0) /
+        face_angles.size();
+    for (double a : face_angles) {
+      energy_terms.push_back((a - face_mean_angle) * weights.face_msda_weight /
+                             face_angles.size());
     }
   }
 
   for (auto &vhangles : vh2angles) {
     VertHandle vh = vhangles.first;
     auto &angles = vhangles.second;
-    double vertMeanAngle =
+    double vert_mean_angle =
         std::accumulate(angles.begin(), angles.end(), 0.0) / angles.size();
     for (double a : angles) {
-      energyTerms.push_back((a - vertMeanAngle) * weights.vertMSDAWeight /
-                            angles.size());
+      energy_terms.push_back((a - vert_mean_angle) * weights.vert_msda_weight /
+                             angles.size());
     }
   }
 
-  double allMeanAngle =
-      std::accumulate(allAngles.begin(), allAngles.end(), 0.0) /
-      allAngles.size();
-  for (double a : allAngles) {
-    energyTerms.push_back((a - allMeanAngle) * weights.allMSDAWeight /
-                          allAngles.size());
+  double all_mean_angle =
+      std::accumulate(all_angles.begin(), all_angles.end(), 0.0) /
+      all_angles.size();
+  for (double a : all_angles) {
+    energy_terms.push_back((a - all_mean_angle) * weights.all_msda_weight /
+                           all_angles.size());
   }
 
-  std::vector<HalfHandle> validHhs;
+  std::vector<HalfHandle> valid_hhs;
   for (auto &h : mesh.halfedges()) {
     auto hh = h.topo.hd;
     auto fh1 = mesh.topo(hh).face;
     auto fh2 = mesh.topo(mesh.topo(hh).opposite).face;
     if (std::find(fhs_begin, fhs_end, fh1) != fhs_end &&
         std::find(fhs_begin, fhs_end, fh2) != fhs_end) {
-      validHhs.push_back(hh);
+      valid_hhs.push_back(hh);
     }
   }
 
-  for (auto &hh : validHhs) {
+  for (auto &hh : valid_hhs) {
     auto fh1 = mesh.topo(hh).face;
-    auto planeEq1 = fh2planeEq(fh1);
+    auto planeEq1 = fh2vec3_eq(fh1);
     auto fh2 = mesh.topo(mesh.topo(hh).opposite).face;
-    auto planeEq2 = fh2planeEq(fh2);
-    double angle =
-        AngleBetweenUndirected(Vec3(planeEq1[0], planeEq1[1], planeEq1[2]),
-                               Vec3(planeEq2[0], planeEq2[1], planeEq2[2]));
-    assert(!IsInfOrNaN(angle));
-    energyTerms.push_back((angle - M_PI_2) * weights.faceAngleWeight /
-                          validHhs.size());
+    auto planeEq2 = fh2vec3_eq(fh2);
+    double cos_angle =
+        normalize(Vec3(planeEq1[0], planeEq1[1], planeEq1[2]))
+            .dot(normalize(Vec3(planeEq2[0], planeEq2[1], planeEq2[2])));
+    assert(!IsInfOrNaN(cos_angle));
+    energy_terms.push_back((cos_angle)*weights.face_angle_weight /
+                           valid_hhs.size());
   }
 
-  return energyTerms;
+  return energy_terms;
 }
 
 // ReconstructWithOrientations
@@ -256,8 +238,8 @@ Mesh3 ReconstructWithOrientations(
     const std::vector<Line2> &edge2line, const std::vector<int> &edge2vp,
     const std::vector<Vec3> &vp2dir,
     const HandledTable<HalfHandle, int> &hh2d2edge,
-    const PerspectiveCamera &curCam,
-    const Mesh<VertHandle, HalfHandle, FaceHandle> &meshProxy,
+    const PerspectiveCamera &cur_cam,
+    const Mesh<VertHandle, HalfHandle, FaceHandle> &mesh_proxy,
     const Mesh2 &mesh2d, misc::Matlab &matlab) {
 
   int nedges = edge2line.size();
@@ -294,15 +276,15 @@ Mesh3 ReconstructWithOrientations(
   std::vector<std::unique_ptr<EntityBase>> entities;
 
   std::vector<int> edge2ent(nedges, -1);
-  HandledTable<FaceHandle, int> fhProxy2ent(meshProxy.internalFaces().size(),
+  HandledTable<FaceHandle, int> fhProxy2ent(mesh_proxy.internalFaces().size(),
                                             -1);
 
   // install supporting planes from edges and faces
   // from edges
   for (int edge = 0; edge < nedges; edge++) {
     auto &line2 = edge2line[edge];
-    Line3 line3(normalize(curCam.direction(line2.first)),
-                normalize(curCam.direction(line2.second)));
+    Line3 line3(normalize(cur_cam.direction(line2.first)),
+                normalize(cur_cam.direction(line2.second)));
     int vp = edge2vp[edge];
     entities.push_back(
         std::make_unique<EdgeEntity>(edge, ClassifyAs(line3, vp), vp2dir));
@@ -311,27 +293,27 @@ Mesh3 ReconstructWithOrientations(
   }
   // from faces
   HandledTable<FaceHandle, Point2> fhProxy2center2d(
-      meshProxy.internalFaces().size());
-  for (auto &f : meshProxy.faces()) {
+      mesh_proxy.internalFaces().size());
+  for (auto &f : mesh_proxy.faces()) {
     Point2 center2 = Origin<2>();
     for (auto hh : f.topo.halfedges) {
-      center2 += mesh2d.data(meshProxy.data(meshProxy.topo(hh).to()));
+      center2 += mesh2d.data(mesh_proxy.data(mesh_proxy.topo(hh).to()));
     }
     center2 /= double(f.topo.halfedges.size());
     fhProxy2center2d[f.topo.hd] = center2;
     entities.push_back(std::make_unique<FaceEntity>(
-        f.topo.hd, normalize(curCam.direction(center2))));
+        f.topo.hd, normalize(cur_cam.direction(center2))));
     int ent = entities.size() - 1;
     fhProxy2ent[f.topo.hd] = ent;
   }
 
   //// install connections
   // std::map<std::pair<int, int>, std::vector<Vec3>> ents2anchors;
-  // for (auto &f : meshProxy.faces()) {
+  // for (auto &f : mesh_proxy.faces()) {
   //  for (auto hhProxy : f.topo.halfedges) {
-  //    HalfHandle hh2d = meshProxy.data(hhProxy);
+  //    HalfHandle hh2d = mesh_proxy.data(hhProxy);
   //    if (hh2d.invalid()) {
-  //      hh2d = meshProxy.data(meshProxy.topo(hhProxy).opposite);
+  //      hh2d = mesh_proxy.data(mesh_proxy.topo(hhProxy).opposite);
   //    }
   //    assert(hh2d.valid());
   //    int edge = hh2d2edge[hh2d];
@@ -339,8 +321,8 @@ Mesh3 ReconstructWithOrientations(
   //    auto &line2 = edge2line[edge];
   //    ents2anchors[std::make_pair(edge2ent[edge], fhProxy2ent[f.topo.hd])]
   //    =
-  //        {normalize(curCam.direction(line2.first)),
-  //         normalize(curCam.direction(line2.second))};
+  //        {normalize(cur_cam.direction(line2.first)),
+  //         normalize(cur_cam.direction(line2.second))};
   //  }
   //}
 
@@ -348,9 +330,9 @@ Mesh3 ReconstructWithOrientations(
   // std::vector<std::pair<int, int>> adjFaceEnts;
   // std::vector<int> adjFace2SubMeshId;
   // std::vector<bool> adjFaceOverlapInView;
-  // for (auto &half : meshProxy.halfedges()) {
+  // for (auto &half : mesh_proxy.halfedges()) {
   //  FaceHandle fh1 = half.topo.face;
-  //  FaceHandle fh2 = meshProxy.topo(half.topo.opposite).face;
+  //  FaceHandle fh2 = mesh_proxy.topo(half.topo.opposite).face;
 
   //  bool onSameSide = IsOnLeftSide(faceCorners[0], line.first,
   //  line.second) ==
@@ -402,10 +384,10 @@ Mesh3 ReconstructWithOrientations(
   int nanchors = 0;
   std::vector<SparseMatElementd> anchorPositions;
   HandledTable<VertHandle, int> vhProxy2anchor(
-      meshProxy.internalVertices().size(), -1);
-  for (auto &vert : meshProxy.vertices()) {
+      mesh_proxy.internalVertices().size(), -1);
+  for (auto &vert : mesh_proxy.vertices()) {
     auto vh2d = vert.data;
-    Vec3 anchor = normalize(curCam.direction(mesh2d.data(vh2d)));
+    Vec3 anchor = normalize(cur_cam.direction(mesh2d.data(vh2d)));
     for (int i = 0; i < 3; i++) {
       anchorPositions.emplace_back(nanchors, i, anchor[i]);
     }
@@ -425,27 +407,27 @@ Mesh3 ReconstructWithOrientations(
 
   int nconnections = 0;
   int nangles = 0;
-  for (auto &f : meshProxy.faces()) {
+  for (auto &f : mesh_proxy.faces()) {
     auto &hhProxies = f.topo.halfedges;
     for (int i = 0; i < hhProxies.size(); i++) {
       auto hhProxy = hhProxies[i];
-      HalfHandle hh2d = meshProxy.data(hhProxy);
+      HalfHandle hh2d = mesh_proxy.data(hhProxy);
       if (hh2d.invalid()) {
-        hh2d = meshProxy.data(meshProxy.topo(hhProxy).opposite);
+        hh2d = mesh_proxy.data(mesh_proxy.topo(hhProxy).opposite);
       }
       assert(hh2d.valid());
       int edge = hh2d2edge[hh2d];
       int edgeEnt = edge2ent[edge];
       int faceEnt = fhProxy2ent[f.topo.hd];
 
-      VertHandle curVhProxy = meshProxy.topo(hhProxy).to();
+      VertHandle curVhProxy = mesh_proxy.topo(hhProxy).to();
       int curAnchorId = vhProxy2anchor[curVhProxy];
-      int prevAnchorId = vhProxy2anchor[meshProxy.topo(hhProxy).from()];
-      assert(meshProxy
+      int prevAnchorId = vhProxy2anchor[mesh_proxy.topo(hhProxy).from()];
+      assert(mesh_proxy
                  .topo(hhProxies[(i + hhProxies.size() - 1) % hhProxies.size()])
-                 .to() == meshProxy.topo(hhProxy).from());
+                 .to() == mesh_proxy.topo(hhProxy).from());
       int nextAnchorId =
-          vhProxy2anchor[meshProxy.topo(hhProxies[(i + 1) % hhProxies.size()])
+          vhProxy2anchor[mesh_proxy.topo(hhProxies[(i + 1) % hhProxies.size()])
                              .to()];
 
       connection2leftEnt.push_back(edgeEnt);
@@ -655,9 +637,9 @@ Mesh3 ReconstructWithOrientations(
       auto &line2 = edge2line[edge];
       auto &plane = entities[edge2ent[edge]]->supportingPlane.reconstructed;
       Line3 line3(
-          Intersection(Ray3(curCam.eye(), curCam.direction(line2.first)),
+          Intersection(Ray3(cur_cam.eye(), cur_cam.direction(line2.first)),
                        plane),
-          Intersection(Ray3(curCam.eye(), curCam.direction(line2.second)),
+          Intersection(Ray3(cur_cam.eye(), cur_cam.direction(line2.second)),
                        plane));
       sb.add(line3);
     }
@@ -669,15 +651,15 @@ Mesh3 ReconstructWithOrientations(
       Transform(mesh2d, [](const Point2 &) { return Origin(); });
   HandledTable<VertHandle, int> vh2d2faceProxyCount(
       mesh2d.internalVertices().size(), 0);
-  for (auto &faceProxy : meshProxy.faces()) {
+  for (auto &faceProxy : mesh_proxy.faces()) {
     auto fhProxy = faceProxy.topo.hd;
     int ent = fhProxy2ent[fhProxy];
     const Plane3 &plane = entities[ent]->supportingPlane.reconstructed;
     for (auto hhProxy : faceProxy.topo.halfedges) {
-      VertHandle vhProxy = meshProxy.topo(hhProxy).to();
-      VertHandle vh2d = meshProxy.data(vhProxy);
-      Vec3 direction = normalize(curCam.direction(mesh2d.data(vh2d)));
-      Point3 position = Intersection(Ray3(curCam.eye(), direction), plane);
+      VertHandle vhProxy = mesh_proxy.topo(hhProxy).to();
+      VertHandle vh2d = mesh_proxy.data(vhProxy);
+      Vec3 direction = normalize(cur_cam.direction(mesh2d.data(vh2d)));
+      Point3 position = Intersection(Ray3(cur_cam.eye(), direction), plane);
       curReconstruction.data(vh2d) += position;
       vh2d2faceProxyCount[vh2d]++;
     }
@@ -715,18 +697,19 @@ Mesh3 ReconstructWithOrientations(
 void OptimizeWithoutOrientations(
     Mesh3 &cur_reconstruction, const PerspectiveCamera &cur_cam,
     const Mesh<VertHandle, HalfHandle, FaceHandle> &mesh_proxy,
-	const std::vector<SubMesh> &sub_meshs) {
+    const std::vector<SubMesh> &submeshes,
+    const std::unordered_set<VertHandle> &non_corner_vh_proxies) {
   using namespace Eigen;
 
-   { // show together
-    auto color_table = gui::CreateRandomColorTableWithSize(sub_meshs.size());
+  { // show together
+    auto color_table = gui::CreateRandomColorTableWithSize(submeshes.size());
     gui::SceneBuilder sb;
     sb.installingOptions().defaultShaderSource =
         gui::OpenGLShaderSourceDescriptor::XLines;
     sb.installingOptions().lineWidth = 10;
-    for (int i = 0; i < sub_meshs.size(); i++) {
+    for (int i = 0; i < submeshes.size(); i++) {
       sb.installingOptions().discretizeOptions.color(color_table[i]);
-      for (HalfHandle hh : sub_meshs[i].hhs) {
+      for (HalfHandle hh : submeshes[i].hhs) {
         VertHandle vh1 = mesh_proxy.topo(hh).from();
         VertHandle vh2 = mesh_proxy.topo(hh).to();
         Point3 p1 = cur_reconstruction.data(mesh_proxy.data(vh1));
@@ -739,13 +722,18 @@ void OptimizeWithoutOrientations(
                             .fixUpDirectionInCameraMove(false));
   }
 
+  EnergyWeights weights;
+  weights.face_angle_weight = 1e2;
+  weights.face_msda_weight = 1e1;
+  weights.vert_msda_weight = 1e1;
+  weights.all_msda_weight = 1e5;
 
   std::vector<std::map<VertHandle, double>> vh_proxy2inversed_depth(
-      sub_meshs.size());
+      submeshes.size());
 
   // optimize in each submesh first
-  for (int i = 0; i < sub_meshs.size(); i++) {
-    auto &sub = sub_meshs[i];
+  for (int i = 0; i < submeshes.size(); i++) {
+    auto &sub = submeshes[i];
     std::vector<VertHandle> fundamental_vhs(sub.fundamental_vhs.begin(),
                                             sub.fundamental_vhs.end());
     std::map<VertHandle, RowVectorXd> v2matrix;
@@ -774,20 +762,22 @@ void OptimizeWithoutOrientations(
           return RowVector3d(dir[0], dir[1], dir[2]).normalized();
         },
         // energy_fun
-        [&mesh_proxy, &sub, &cur_reconstruction, &cur_cam](
-            auto &&face2equation, auto &&vert2depth) -> VectorXd {
-          EnergyWeights weights;
-          weights.faceAngleWeight = 1e3;
-          weights.faceMSDAWeight = 0;
-          weights.vertMSDAWeight = 0;
-          weights.allMSDAWeight = 1;
+        [&mesh_proxy, &sub, &cur_reconstruction, &cur_cam, &weights,
+         &non_corner_vh_proxies](auto &&vert2depth,
+                                 auto &&face2eq) -> VectorXd {
           auto energy_terms = ComputeEnergy(
               mesh_proxy, sub.fhs.begin(), sub.fhs.end(), weights,
-              [&mesh_proxy, &cur_reconstruction](VertHandle vh_proxy) -> Vec3 {
+              [&mesh_proxy, &cur_reconstruction,
+               &vert2depth](VertHandle vh_proxy) -> Point3 {
                 return normalize(
-                    cur_reconstruction.data(mesh_proxy.data(vh_proxy)));
+                           cur_reconstruction.data(mesh_proxy.data(vh_proxy))) *
+                       vert2depth(vh_proxy);
               },
-              face2equation, cur_cam.eye());
+              face2eq,
+              [&non_corner_vh_proxies](VertHandle vh_proxy) -> bool {
+                return Contains(non_corner_vh_proxies, vh_proxy);
+              },
+              cur_cam.eye());
           return VectorXd::Map(energy_terms.data(), energy_terms.size());
         },
         &v2matrix, &f2matrix);
@@ -824,14 +814,14 @@ void OptimizeWithoutOrientations(
   }
 
   { // show together
-    auto color_table = gui::CreateRandomColorTableWithSize(sub_meshs.size());
+    auto color_table = gui::CreateRandomColorTableWithSize(submeshes.size());
     gui::SceneBuilder sb;
     sb.installingOptions().defaultShaderSource =
         gui::OpenGLShaderSourceDescriptor::XLines;
     sb.installingOptions().lineWidth = 10;
     for (int i = 0; i < vh_proxy2inversed_depth.size(); i++) {
       sb.installingOptions().discretizeOptions.color(color_table[i]);
-      for (HalfHandle hh : sub_meshs[i].hhs) {
+      for (HalfHandle hh : submeshes[i].hhs) {
         VertHandle vh1 = mesh_proxy.topo(hh).from();
         VertHandle vh2 = mesh_proxy.topo(hh).to();
         Point3 p1 = normalize(cur_reconstruction.data(mesh_proxy.data(vh1))) /
@@ -850,18 +840,28 @@ void OptimizeWithoutOrientations(
             [](auto &&a, auto &&b) { return a.size() > b.size(); });
   while (vh_proxy2inversed_depth.size() > 1) {
     auto &group1 = vh_proxy2inversed_depth[0];
-    auto &group2 = vh_proxy2inversed_depth[1];
+
     // find common vhs
     std::vector<std::pair<VertHandle, VertHandle>> common_vh_proxies;
-    for (auto &v_id1 : group1) {
-      VertHandle vh_proxy1 = v_id1.first;
-      for (auto &v_id2 : group2) {
-        VertHandle vh_proxy2 = v_id2.first;
-        if (mesh_proxy.data(vh_proxy1) == mesh_proxy.data(vh_proxy2)) {
-          common_vh_proxies.emplace_back(vh_proxy1, vh_proxy2);
+    int group2id = 0;
+    for (group2id = 1; group2id < vh_proxy2inversed_depth.size(); group2id++) {
+      auto &group2 = vh_proxy2inversed_depth[group2id];
+      for (auto &v_id1 : group1) {
+        VertHandle vh_proxy1 = v_id1.first;
+        for (auto &v_id2 : group2) {
+          VertHandle vh_proxy2 = v_id2.first;
+          if (mesh_proxy.data(vh_proxy1) == mesh_proxy.data(vh_proxy2)) {
+            common_vh_proxies.emplace_back(vh_proxy1, vh_proxy2);
+          }
         }
       }
+      if (!common_vh_proxies.empty()) {
+        break;
+      }
     }
+    auto &group2 = vh_proxy2inversed_depth[group2id];
+    assert(!common_vh_proxies.empty());
+
     double inversed_depths_mean1 = 0.0;
     double inversed_depths_mean2 = 0.0;
     for (auto &p : common_vh_proxies) {
@@ -891,42 +891,44 @@ void OptimizeWithoutOrientations(
                             (v_id2.second - inversed_depths_mean2) *
                                 inversed_depths_sigma1 / inversed_depths_sigma2;
     }
-	// erase group2
-	std::swap(group2, vh_proxy2inversed_depth.back());
-	vh_proxy2inversed_depth.pop_back();
+    // erase group2
+    std::swap(group2, vh_proxy2inversed_depth.back());
+    vh_proxy2inversed_depth.pop_back();
   }
 
   HandledTable<VertHandle, double> vh2inversed_depth =
-      cur_reconstruction.createVertexTable(-1.0);
+      cur_reconstruction.createVertexTable(0.0);
   HandledTable<VertHandle, int> vh2vh_proxy_count =
       cur_reconstruction.createVertexTable(0);
-  for (auto & v_id : vh_proxy2inversed_depth.front()) {
-	  VertHandle vh = mesh_proxy.data(v_id.first);
-	  double inv_depth = v_id.second;
-	  vh2inversed_depth[vh] += inv_depth;
-	  vh2vh_proxy_count[vh] ++;
+  for (auto &v_id : vh_proxy2inversed_depth.front()) {
+    VertHandle vh = mesh_proxy.data(v_id.first);
+    double inv_depth = v_id.second;
+    vh2inversed_depth[vh] += inv_depth;
+    vh2vh_proxy_count[vh]++;
   }
-  for (auto & v : cur_reconstruction.vertices()) {
+  for (auto &v : cur_reconstruction.vertices()) {
     vh2inversed_depth[v.topo.hd] /= vh2vh_proxy_count[v.topo.hd];
   }
   {
-      gui::SceneBuilder sb;
-      sb.installingOptions().defaultShaderSource =
-          gui::OpenGLShaderSourceDescriptor::XTriangles;
-      sb.installingOptions().discretizeOptions.color(gui::Black);
-      sb.installingOptions().lineWidth = 10;
+    gui::SceneBuilder sb;
+    sb.installingOptions().defaultShaderSource =
+        gui::OpenGLShaderSourceDescriptor::XTriangles;
+    sb.installingOptions().discretizeOptions.color(gui::Black);
+    sb.installingOptions().lineWidth = 10;
 
-      for (auto &h : cur_reconstruction.halfedges()) {
-        HalfHandle hh = h.topo.hd;
-        VertHandle vh1 = cur_reconstruction.topo(hh).from();
-        VertHandle vh2 = cur_reconstruction.topo(hh).to();
-        Point3 p1 = normalize(cur_reconstruction.data(vh1)) / vh2inversed_depth[vh1];
-        Point3 p2 = normalize(cur_reconstruction.data(vh2)) / vh2inversed_depth[vh2];
-        sb.add(Line3(p1, p2));
-      }
-      sb.show(true, true,
-              gui::RenderOptions().winName("Before Holistic Optimization"));
+    for (auto &h : cur_reconstruction.halfedges()) {
+      HalfHandle hh = h.topo.hd;
+      VertHandle vh1 = cur_reconstruction.topo(hh).from();
+      VertHandle vh2 = cur_reconstruction.topo(hh).to();
+      Point3 p1 =
+          normalize(cur_reconstruction.data(vh1)) / vh2inversed_depth[vh1];
+      Point3 p2 =
+          normalize(cur_reconstruction.data(vh2)) / vh2inversed_depth[vh2];
+      sb.add(Line3(p1, p2));
     }
+    sb.show(true, true,
+            gui::RenderOptions().winName("Before Holistic Optimization"));
+  }
 
 
   // holistic optimization
@@ -981,20 +983,64 @@ void OptimizeWithoutOrientations(
           return RowVector3d(dir[0], dir[1], dir[2]).normalized();
         },
         // energy_fun
-        [&cur_reconstruction, &cur_cam, &fhs](auto &&face2equation,
-                                              auto &&vert2depth) -> VectorXd {
-          EnergyWeights weights;
-          weights.faceAngleWeight = 0.1;
-          weights.faceMSDAWeight = 1e4;
-          weights.vertMSDAWeight = 1e4;
-          weights.allMSDAWeight = 1e3;
-
-          auto energy_terms =
-              ComputeEnergy(cur_reconstruction, fhs.begin(), fhs.end(), weights,
-                            [&cur_reconstruction](VertHandle vh) -> Vec3 {
-                              return normalize(cur_reconstruction.data(vh));
-                            },
-                            face2equation, cur_cam.eye());
+        [&cur_reconstruction, &mesh_proxy, &cur_cam, &submeshes, &weights,
+         &non_corner_vh_proxies](auto &&vh2depth, auto &&fh2eq) -> VectorXd {
+          std::vector<double> energy_terms;
+          for (auto &submesh : submeshes) {
+            auto energy_terms_submesh = ComputeEnergy(
+                mesh_proxy, submesh.fhs.begin(), submesh.fhs.end(), weights,
+                [&cur_reconstruction, &mesh_proxy,
+                 &vh2depth](VertHandle vh_proxy) -> Point3 {
+                  VertHandle vh = mesh_proxy.data(vh_proxy);
+                  return normalize(cur_reconstruction.data(vh)) * vh2depth(vh);
+                },
+                [&cur_reconstruction, &mesh_proxy, &vh2depth, &fh2eq,
+                 &non_corner_vh_proxies](FaceHandle fh_proxy) -> Vector3d {
+                  FaceHandle fh = mesh_proxy.data(fh_proxy);
+                  if (fh.valid()) {
+                    return fh2eq(fh);
+                  } else {
+                    auto &hh_proxies = mesh_proxy.topo(fh_proxy).halfedges;
+                    assert(hh_proxies.size() >= 3);
+                    for (int i1 = 0; i1 < hh_proxies.size(); i1++) {
+                      VertHandle vh1 = mesh_proxy.data(
+                          mesh_proxy.topo(hh_proxies[i1]).from());
+                      Point3 point1 = normalize(cur_reconstruction.data(vh1)) *
+                                      vh2depth(vh1);
+                      for (int i2 = i1 + 1; i2 < hh_proxies.size(); i2++) {
+                        VertHandle vh2 = mesh_proxy.data(
+                            mesh_proxy.topo(hh_proxies[i2]).from());
+                        Point3 point2 =
+                            normalize(cur_reconstruction.data(vh2)) *
+                            vh2depth(vh2);
+                        for (int i3 = i2 + 1; i3 < hh_proxies.size(); i3++) {
+                          VertHandle vh3 = mesh_proxy.data(
+                              mesh_proxy.topo(hh_proxies[i3]).from());
+                          Point3 point3 =
+                              normalize(cur_reconstruction.data(vh3)) *
+                              vh2depth(vh3);
+                          Vec3 eq = Plane3ToEquation(
+                              Plane3From3Points(point1, point2, point3));
+                          if (norm(eq) > 1e-5 && !HasValue(eq, [](auto &v) {
+                                return IsInfOrNaN(v);
+                              })) {
+                            return Vector3d(eq[0], eq[1], eq[2]);
+                          }
+                        }
+                      }
+                    }
+					assert(false && "degenerated face!");
+                    return Vector3d::Zero();
+                  }
+                },
+                [&non_corner_vh_proxies](VertHandle vh_proxy) -> bool {
+                  return Contains(non_corner_vh_proxies, vh_proxy);
+                },
+                cur_cam.eye());
+            energy_terms.insert(energy_terms.end(),
+                                energy_terms_submesh.begin(),
+                                energy_terms_submesh.end());
+          }
           return VectorXd::Map(energy_terms.data(), energy_terms.size());
         },
         &v2matrix, &f2matrix);
@@ -1016,8 +1062,8 @@ void OptimizeWithoutOrientations(
                     (v2matrix.at(vh2) * inversed_depths);
         sb.add(Line3(p1, p2));
       }
-      sb.show(true, true,
-              gui::RenderOptions().winName("After Holistic Optimization"));
+      sb.show(true, false, gui::RenderOptions().camera(cur_cam).winName(
+                               "After Holistic Optimization"));
     }
   }
 }
@@ -1028,28 +1074,28 @@ auto main(int argc, char **argv, char **env) -> int {
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
-  std::string name = "tower";
-  //std::string name = "hex";
-  std::string camName = "cam1";
-  bool resetCam = false;
+  //static const std::string name = "tower";
+  static const std::string name = "hex";
+  static const std::string cam_name = "cam1";
+  static constexpr bool resetCam = false;
 
-  std::string objFile = "F:\\LineDrawings\\manifold\\" + name +
+  std::string obj_file_name = "F:\\LineDrawings\\manifold\\" + name +
                         "\\" + name + ".obj";
   std::string camFile = "F:\\LineDrawings\\manifold\\" + name +
-                        "\\" + name + ".obj." + camName + ".cereal";
+                        "\\" + name + ".obj." + cam_name + ".cereal";
 
   //// [Load Mesh]
-  auto mesh = LoadFromObjFile(objFile);
-  auto meshProxy = MakeMeshProxy(mesh);
+  auto mesh = LoadFromObjFile(obj_file_name);
+  auto mesh_proxy = MakeMeshProxy(mesh);
 
   //// [Decompose]
   auto cutFacePairs = DecomposeAll(
-      meshProxy, [](HalfHandle hh1, HalfHandle hh2) -> bool { return false; });
+      mesh_proxy, [](HalfHandle hh1, HalfHandle hh2) -> bool { return false; });
   // check validity
-  for (auto &hProxy : meshProxy.halfedges()) {
+  for (auto &hProxy : mesh_proxy.halfedges()) {
     HalfHandle hh = hProxy.data;
     if (hh.invalid()) {
-      hh = meshProxy.data(hProxy.topo.opposite);
+      hh = mesh_proxy.data(hProxy.topo.opposite);
     }
     assert(hh.valid());
   }
@@ -1058,16 +1104,16 @@ auto main(int argc, char **argv, char **env) -> int {
     cutFace2Another[cutFacePair.first] = cutFacePair.second;
     cutFace2Another[cutFacePair.second] = cutFacePair.first;
   }
-  auto subMeshes = ExtractSubMeshes(meshProxy,
+  auto submeshes = ExtractSubMeshes(mesh_proxy,
                                     [](auto hhbegin, auto hhend) -> bool {
                                       return std::distance(hhbegin, hhend) <= 1;
                                     },
                                     10);
-  Println("found ", subMeshes.size(), " subMeshes");
+  Println("found ", submeshes.size(), " submeshes");
   HandledTable<FaceHandle, int> fhProxy2subMeshId(
-      meshProxy.internalFaces().size(), -1);
-  for (int i = 0; i < subMeshes.size(); i++) {
-    for (auto fh : subMeshes[i].fhs) {
+      mesh_proxy.internalFaces().size(), -1);
+  for (int i = 0; i < submeshes.size(); i++) {
+    for (auto fh : submeshes[i].fhs) {
       fhProxy2subMeshId[fh] = i;
     }
   }
@@ -1081,25 +1127,25 @@ auto main(int argc, char **argv, char **env) -> int {
                               sphere.center);
 
     const gui::ColorTable ctable =
-        gui::CreateRandomColorTableWithSize(subMeshes.size());
+        gui::CreateRandomColorTableWithSize(submeshes.size());
 
     HandledTable<HalfHandle, int> hhProxy2subMeshId(
-        meshProxy.internalHalfEdges().size(), -1);
-    for (auto &h : meshProxy.halfedges()) {
+        mesh_proxy.internalHalfEdges().size(), -1);
+    for (auto &h : mesh_proxy.halfedges()) {
       int &id = hhProxy2subMeshId[h.topo.hd];
-      for (int i = 0; i < subMeshes.size(); i++) {
-        if (subMeshes[i].contains(h.topo.hd)) {
+      for (int i = 0; i < submeshes.size(); i++) {
+        if (submeshes[i].contains(h.topo.hd)) {
           id = i;
           break;
         }
       }
     }
     HandledTable<FaceHandle, int> fhProxy2subMeshId(
-        meshProxy.internalFaces().size(), -1);
-    for (auto &f : meshProxy.faces()) {
+        mesh_proxy.internalFaces().size(), -1);
+    for (auto &f : mesh_proxy.faces()) {
       int &id = fhProxy2subMeshId[f.topo.hd];
-      for (int i = 0; i < subMeshes.size(); i++) {
-        if (subMeshes[i].contains(f.topo.hd)) {
+      for (int i = 0; i < submeshes.size(); i++) {
+        if (submeshes[i].contains(f.topo.hd)) {
           id = i;
           break;
         }
@@ -1108,7 +1154,7 @@ auto main(int argc, char **argv, char **env) -> int {
 
     // show each subMesh
     if (true) {
-      for (int i = 0; i < subMeshes.size(); i++) {
+      for (int i = 0; i < submeshes.size(); i++) {
         Println("subMesh - ", i);
         gui::SceneBuilder sb;
         sb.installingOptions().defaultShaderSource =
@@ -1116,8 +1162,8 @@ auto main(int argc, char **argv, char **env) -> int {
         sb.installingOptions().discretizeOptions.color(gui::Black);
         sb.installingOptions().lineWidth = 0.03;
         AddToScene(
-            sb, meshProxy,
-            [&subMeshes, i](auto h) { return subMeshes[i].contains(h); },
+            sb, mesh_proxy,
+            [&submeshes, i](auto h) { return submeshes[i].contains(h); },
             [&mesh](VertHandle vh) { return mesh.data(vh); },
             [&hhProxy2subMeshId, &ctable](HalfHandle hh) { return gui::Black; },
             [&fhProxy2subMeshId, &ctable](FaceHandle fh) {
@@ -1142,7 +1188,7 @@ auto main(int argc, char **argv, char **env) -> int {
       sb.installingOptions().discretizeOptions.color(gui::Black);
       sb.installingOptions().lineWidth = 0.03;
       AddToScene(
-          sb, meshProxy, [](auto) { return true; },
+          sb, mesh_proxy, [](auto) { return true; },
           [&mesh](VertHandle vh) { return mesh.data(vh); },
           [&hhProxy2subMeshId, &ctable](HalfHandle hh) { return gui::Black; },
           [&fhProxy2subMeshId, &ctable](FaceHandle fh) {
@@ -1187,20 +1233,20 @@ auto main(int argc, char **argv, char **env) -> int {
   }
 
   // analyze the fh/vh dependencies in each subMesh
-  for (int subMeshId = 0; subMeshId < subMeshes.size(); subMeshId++) {
+  for (int submesh_id = 0; submesh_id < submeshes.size(); submesh_id++) {
     // find the vhs that should serve as anchoring variables
     // and sort the order of the fhs to be determined
-    subMeshes[subMeshId].ComputeVertexFaceDependencies(
-        meshProxy, [&meshProxy, &mesh2d](auto vhs_begin, auto vhs_end) -> bool {
+    submeshes[submesh_id].ComputeVertexFaceDependencies(
+        mesh_proxy, [&mesh_proxy, &mesh2d](auto vhs_begin, auto vhs_end) -> bool {
           // whether these vhs are colinear?
           if (std::distance(vhs_begin, vhs_end) < 3) {
             return true;
           }
-          const Point2 &p0 = mesh2d.data(meshProxy.data(*vhs_begin++));
-          const Point2 &p1 = mesh2d.data(meshProxy.data(*vhs_begin++));
+          const Point2 &p0 = mesh2d.data(mesh_proxy.data(*vhs_begin++));
+          const Point2 &p1 = mesh2d.data(mesh_proxy.data(*vhs_begin++));
           Vec2 dir = normalize(p1 - p0);
           while (vhs_begin != vhs_end) {
-            const Point2 &pi = mesh2d.data(meshProxy.data(*vhs_begin++));
+            const Point2 &pi = mesh2d.data(mesh_proxy.data(*vhs_begin++));
             Vec2 diri = normalize(pi - p0);
             if (!IsFuzzyParallel(dir, diri, 1e-6)) {
               return false;
@@ -1210,14 +1256,51 @@ auto main(int argc, char **argv, char **env) -> int {
         });
   }
 
+  // find all vh proxies lying on an edge
+  std::unordered_set<VertHandle> non_corner_vh_proxies;
+  for (auto &v : mesh_proxy.vertices()) {
+    VertHandle vh = v.data;
+    const Point2 &phere = mesh2d.data(vh);
+    auto &hh_proxies = v.topo.halfedges;
+
+    bool parallel_edge_found = false;
+    for (int i = 0; !parallel_edge_found && i < hh_proxies.size(); i++) {
+      VertHandle another_vhi =
+          mesh_proxy.data(mesh_proxy.topo(hh_proxies[i]).to());
+      if (another_vhi == vh) {
+        another_vhi = mesh_proxy.data(mesh_proxy.topo(hh_proxies[i]).from());
+      }
+      assert(another_vhi != vh);
+      const Point2 &ptherei = mesh2d.data(another_vhi);
+
+      for (int j = i + 1; !parallel_edge_found && j < hh_proxies.size(); j++) {
+        VertHandle another_vhj =
+            mesh_proxy.data(mesh_proxy.topo(hh_proxies[j]).to());
+        if (another_vhj == vh) {
+          another_vhj = mesh_proxy.data(mesh_proxy.topo(hh_proxies[j]).from());
+        }
+        assert(another_vhj != vh);
+        const Point2 &ptherej = mesh2d.data(another_vhj);
+
+        if (IsFuzzyZero(AngleBetweenDirected(ptherei - phere, ptherej - phere) -
+                            M_PI,
+                        1e-8)) {
+          non_corner_vh_proxies.insert(v.topo.hd);
+          parallel_edge_found = true;
+		  break;
+        }
+      }
+    }
+  }
+
   //// [Estimate PP & Focal Candidates from 2D Mesh]
-  auto point2dAtProxy = [&mesh2d, &meshProxy](VertHandle vhInProxy) -> Point2 {
-    return mesh2d.data(meshProxy.data(vhInProxy));
+  auto point2dAtProxy = [&mesh2d, &mesh_proxy](VertHandle vhInProxy) -> Point2 {
+    return mesh2d.data(mesh_proxy.data(vhInProxy));
   };
-  auto line2dAtProxy = [&mesh2d, &meshProxy,
+  auto line2dAtProxy = [&mesh2d, &mesh_proxy,
                         point2dAtProxy](HalfHandle hhInProxy) -> Line2 {
-    return Line2(point2dAtProxy(meshProxy.topo(hhInProxy).from()),
-                 point2dAtProxy(meshProxy.topo(hhInProxy).to()));
+    return Line2(point2dAtProxy(mesh_proxy.topo(hhInProxy).from()),
+                 point2dAtProxy(mesh_proxy.topo(hhInProxy).to()));
   };
   Box2 box = BoundingBoxOfContainer(mesh2d.vertices());
   double scale = box.outerSphere().radius;
@@ -1228,17 +1311,17 @@ auto main(int argc, char **argv, char **env) -> int {
   };
 
   // collect pp focal candidates
-  std::vector<PPFocalCandidate> ppFocalCandidates;
-  ppFocalCandidates.reserve(subMeshes.size() * 3);
+  std::vector<PPFocalCandidate> pp_focal_candidates;
+  pp_focal_candidates.reserve(submeshes.size() * 3);
 
-  for (int subMeshId = 0; subMeshId < subMeshes.size(); subMeshId++) {
+  for (int submesh_id = 0; submesh_id < submeshes.size(); submesh_id++) {
     // collect edge intersections in each face
     std::vector<Point2> interps;
-    for (auto fhProxy : subMeshes[subMeshId].fhs) {
-      auto &hhProxys = meshProxy.topo(fhProxy).halfedges;
+    for (auto fhProxy : submeshes[submesh_id].fhs) {
+      auto &hhProxys = mesh_proxy.topo(fhProxy).halfedges;
       Chain2 corners;
       for (auto hhProxy : hhProxys) {
-        corners.append(point2dAtProxy(meshProxy.topo(hhProxy).to()));
+        corners.append(point2dAtProxy(mesh_proxy.topo(hhProxy).to()));
       }
       auto keyVPs = PossibleKeyVanishingPoints(corners);
       interps.insert(interps.end(), keyVPs.begin(), keyVPs.end());
@@ -1261,23 +1344,23 @@ auto main(int argc, char **argv, char **env) -> int {
               Distance(pp, box.center()) > scale * 2.0) {
             continue;
           }
-          ppFocalCandidates.push_back(PPFocalCandidate{pp, focal});
+          pp_focal_candidates.push_back(PPFocalCandidate{pp, focal});
         }
       }
     }
   }
 
-  std::sort(ppFocalCandidates.begin(), ppFocalCandidates.end(),
+  std::sort(pp_focal_candidates.begin(), pp_focal_candidates.end(),
             [](auto &a, auto &b) { return a.focal < b.focal; });
   // naive clustering
-  std::vector<std::pair<std::set<int>, PPFocalCandidate>> ppFocalGroups;
+  std::vector<std::pair<std::set<int>, PPFocalCandidate>> pp_focal_groups;
   {
-    std::vector<int> ppFocalId2group(ppFocalCandidates.size(), -1);
+    std::vector<int> ppFocalId2group(pp_focal_candidates.size(), -1);
     int ngroups = 0;
     RTreeMap<Vec3, int> ppFocalIdTree;
-    for (int i = 0; i < ppFocalCandidates.size(); i++) {
+    for (int i = 0; i < pp_focal_candidates.size(); i++) {
       Vec3 coordinate =
-          cat(ppFocalCandidates[i].pp, ppFocalCandidates[i].focal);
+          cat(pp_focal_candidates[i].pp, pp_focal_candidates[i].focal);
       const double thres = scale / 50.0;
       // find the nearest ppFocal sample point
       int nearestPPFocalCandId = -1;
@@ -1300,24 +1383,24 @@ auto main(int argc, char **argv, char **env) -> int {
       ppFocalIdTree.emplace(coordinate, i);
     }
 
-    ppFocalGroups.resize(ngroups);
-    for (auto &g : ppFocalGroups) {
+    pp_focal_groups.resize(ngroups);
+    for (auto &g : pp_focal_groups) {
       g.second.focal = 0.0;
       g.second.pp = Point2();
     }
     for (int i = 0; i < ppFocalId2group.size(); i++) {
-      auto &g = ppFocalGroups[ppFocalId2group[i]];
+      auto &g = pp_focal_groups[ppFocalId2group[i]];
       g.first.insert(i);
-      g.second.focal += ppFocalCandidates[i].focal;
-      g.second.pp += ppFocalCandidates[i].pp;
+      g.second.focal += pp_focal_candidates[i].focal;
+      g.second.pp += pp_focal_candidates[i].pp;
     }
-    for (auto &g : ppFocalGroups) {
+    for (auto &g : pp_focal_groups) {
       g.second.focal /= g.first.size();
       g.second.pp /= double(g.first.size());
     }
 
     std::sort(
-        ppFocalGroups.begin(), ppFocalGroups.end(),
+        pp_focal_groups.begin(), pp_focal_groups.end(),
         [](auto &g1, auto &g2) { return g1.first.size() > g2.first.size(); });
   }
 
@@ -1344,10 +1427,10 @@ auto main(int argc, char **argv, char **env) -> int {
   }
 
   // collect edge intersections and
-  // get vpPositions from the intersections
-  std::vector<Point2> vpPositions;
+  // get vp_positions from the intersections
+  std::vector<Point2> vp_positions;
   int nvps = 0;
-  std::vector<std::vector<Scored<int>>> edge2OrderedVPAndAngles(nedges);
+  std::vector<std::vector<Scored<int>>> edge2ordered_vp_and_angles(nedges);
   {
     std::vector<Point2> intersections;
     std::vector<std::pair<int, int>> intersection2edges;
@@ -1430,25 +1513,25 @@ auto main(int argc, char **argv, char **env) -> int {
           rawVP2newVP[rawVP] = newVP;
         });
 
-    vpPositions.resize(nvps, Origin<2>());
+    vp_positions.resize(nvps, Origin<2>());
     std::vector<std::set<int>> vp2intersections(nvps);
     for (int i = 0; i < intersection2Rawvp.size(); i++) {
       int rawVP = intersection2Rawvp[i];
       int newVP = rawVP2newVP[rawVP];
-      vpPositions[newVP] += intersections[i]; // TODO: what if some
+      vp_positions[newVP] += intersections[i]; // TODO: what if some
                                               // intersections are oppsite far
                                               // points?
       vp2intersections[newVP].insert(i);
     }
     for (int i = 0; i < nvps; i++) {
-      vpPositions[i] /= double(vp2intersections[i].size());
+      vp_positions[i] /= double(vp2intersections[i].size());
     }
 
     // initial edge vp bindings
     std::vector<std::map<int, double>> vp2edgeWithAngles(nvps);
     std::vector<bool> vpIsGood(nvps, true);
     for (int vp = 0; vp < nvps; vp++) {
-      auto &vpPos = vpPositions[vp];
+      auto &vpPos = vp_positions[vp];
       for (int edge = 0; edge < nedges; edge++) {
         auto &line = edge2line[edge];
         double lambda = ProjectionOfPointOnLine(vpPos, line).ratio;
@@ -1493,15 +1576,15 @@ auto main(int argc, char **argv, char **env) -> int {
     int newvp = 0;
     for (int oldvp = 0; oldvp < nvps; oldvp++) {
       if (vpIsGood[oldvp]) {
-        // update vpPositions
+        // update vp_positions
         // update vp2edgeWithAngles
-        vpPositions[newvp] = vpPositions[oldvp];
+        vp_positions[newvp] = vp_positions[oldvp];
         vp2edgeWithAngles[newvp] = std::move(vp2edgeWithAngles[oldvp]);
         newvp++;
       }
     }
     nvps = newvp;
-    vpPositions.resize(nvps);
+    vp_positions.resize(nvps);
     vp2edgeWithAngles.resize(nvps);
 
     // construct edge2OrderedVPs
@@ -1509,10 +1592,10 @@ auto main(int argc, char **argv, char **env) -> int {
       for (auto &edgeAndAngle : vp2edgeWithAngles[vp]) {
         int edge = edgeAndAngle.first;
         double angle = edgeAndAngle.second;
-        edge2OrderedVPAndAngles[edge].push_back(ScoreAs(vp, angle));
+        edge2ordered_vp_and_angles[edge].push_back(ScoreAs(vp, angle));
       }
     }
-    for (auto &vpAndAngles : edge2OrderedVPAndAngles) {
+    for (auto &vpAndAngles : edge2ordered_vp_and_angles) {
       std::sort(vpAndAngles.begin(), vpAndAngles.end());
     }
 
@@ -1544,7 +1627,7 @@ auto main(int argc, char **argv, char **env) -> int {
 
   // factor graph
   if (false ||
-      !misc::LoadCache(objFile + "-" + camName, "edge2vp_vp2edges", edge2vp,
+      !misc::LoadCache(obj_file_name + "-" + cam_name, "edge2vp_vp2edges", edge2vp,
                        vp2edges)) {
     edge2vp.resize(nedges, -1);
     vp2edges.resize(nvps);
@@ -1555,7 +1638,7 @@ auto main(int argc, char **argv, char **env) -> int {
     {
       for (int edge = 0; edge < nedges; edge++) {
         auto vc =
-            fg.addVarCategory(edge2OrderedVPAndAngles[edge].size() + 1, 1.0);
+            fg.addVarCategory(edge2ordered_vp_and_angles[edge].size() + 1, 1.0);
         edge2vh[edge] = fg.addVar(vc);
       }
 
@@ -1563,7 +1646,7 @@ auto main(int argc, char **argv, char **env) -> int {
       // scored
       for (int edge = 0; edge < nedges; edge++) {
         auto vh = edge2vh[edge];
-        auto &relatedVPAndAngles = edge2OrderedVPAndAngles[edge];
+        auto &relatedVPAndAngles = edge2ordered_vp_and_angles[edge];
         auto fc = fg.addFactorCategory(
             [&relatedVPAndAngles, nedges](const int *varlabels, size_t nvar,
                                           FactorGraph::FactorCategoryId fcid,
@@ -1595,13 +1678,13 @@ auto main(int argc, char **argv, char **env) -> int {
           auto hh2 = hhs[(i + 1) % hhs.size()];
           int edge1 = hh2d2edge[hh1];
           int edge2 = hh2d2edge[hh2];
-          auto &relatedVPAndAngles1 = edge2OrderedVPAndAngles[edge1];
-          auto &relatedVPAndAngles2 = edge2OrderedVPAndAngles[edge2];
+          auto &relatedVPAndAngles1 = edge2ordered_vp_and_angles[edge1];
+          auto &relatedVPAndAngles2 = edge2ordered_vp_and_angles[edge2];
           auto vh1 = edge2vh[edge1];
           auto vh2 = edge2vh[edge2];
           auto fc = fg.addFactorCategory(
               [edge1, edge2, &relatedVPAndAngles1, &relatedVPAndAngles2,
-               &vpPositions, ncorners,
+               &vp_positions, ncorners,
                scale](const int *varlabels, size_t nvar,
                       FactorGraph::FactorCategoryId fcid,
                       void *givenData) -> double {
@@ -1617,8 +1700,8 @@ auto main(int argc, char **argv, char **env) -> int {
                 if (bindedVP1 == -1 || bindedVP2 == -1) {
                   return 0;
                 }
-                auto &vpPos1 = vpPositions[bindedVP1];
-                auto &vpPos2 = vpPositions[bindedVP2];
+                auto &vpPos1 = vp_positions[bindedVP1];
+                auto &vpPos2 = vp_positions[bindedVP2];
                 const double thres = scale / 10.0;
                 const double K = 10.0 / ncorners;
                 if (Distance(vpPos1, vpPos2) < thres) { // todo
@@ -1631,7 +1714,7 @@ auto main(int argc, char **argv, char **env) -> int {
         }
       }
 
-      // potential 3: the vpPositions of edges sharing a same face should lie on
+      // potential 3: the vp_positions of edges sharing a same face should lie on
       // the same
       // line (the vanishing line of the face)
       int ntris = 0;
@@ -1654,30 +1737,30 @@ auto main(int argc, char **argv, char **env) -> int {
             int edge = hh2d2edge[hhs[i]];
             int nextEdge = hh2d2edge[hhs[(i + gap) % hhs.size()]];
             auto fc = fg.addFactorCategory(
-                [&edge2OrderedVPAndAngles, &vpPositions, prevEdge, edge,
+                [&edge2ordered_vp_and_angles, &vp_positions, prevEdge, edge,
                  nextEdge, ntris](const int *varlabels, size_t nvar,
                                   FactorGraph::FactorCategoryId fcid,
                                   void *givenData) -> double {
                   assert(nvar == 3);
                   int vp1 =
-                      varlabels[0] == edge2OrderedVPAndAngles[prevEdge].size()
+                      varlabels[0] == edge2ordered_vp_and_angles[prevEdge].size()
                           ? -1
-                          : (edge2OrderedVPAndAngles[prevEdge][varlabels[0]]
+                          : (edge2ordered_vp_and_angles[prevEdge][varlabels[0]]
                                  .component);
                   if (vp1 == -1) {
                     return 0.0;
                   }
-                  int vp2 = varlabels[1] == edge2OrderedVPAndAngles[edge].size()
+                  int vp2 = varlabels[1] == edge2ordered_vp_and_angles[edge].size()
                                 ? -1
-                                : (edge2OrderedVPAndAngles[edge][varlabels[1]]
+                                : (edge2ordered_vp_and_angles[edge][varlabels[1]]
                                        .component);
                   if (vp2 == -1) {
                     return 0.0;
                   }
                   int vp3 =
-                      varlabels[2] == edge2OrderedVPAndAngles[nextEdge].size()
+                      varlabels[2] == edge2ordered_vp_and_angles[nextEdge].size()
                           ? -1
-                          : (edge2OrderedVPAndAngles[nextEdge][varlabels[2]]
+                          : (edge2ordered_vp_and_angles[nextEdge][varlabels[2]]
                                  .component);
                   if (vp3 == -1) {
                     return 0.0;
@@ -1686,8 +1769,8 @@ auto main(int argc, char **argv, char **env) -> int {
                     return 0.0;
                   }
                   double angle = AngleBetweenUndirected(
-                      vpPositions[vp1] - vpPositions[vp2],
-                      vpPositions[vp3] - vpPositions[vp2]);
+                      vp_positions[vp1] - vp_positions[vp2],
+                      vp_positions[vp3] - vp_positions[vp2]);
                   assert(!IsInfOrNaN(angle));
                   const double K = 30.0 / ntris;
                   return (1.0 - Gaussian(angle, DegreesToRadians(10))) * K;
@@ -1708,7 +1791,7 @@ auto main(int argc, char **argv, char **env) -> int {
       //    relatedVhs.push_back(edge2vh[edge]);
       //  }
       //  auto fc = fg.addFactorCategory(
-      //      [&edge2OrderedVPAndAngles, vpid, &vp2edges](
+      //      [&edge2ordered_vp_and_angles, vpid, &vp2edges](
       //          const int *varlabels, size_t nvar,
       //          FactorGraph::FactorCategoryId fcid, void *givenData) -> double
       //          {
@@ -1718,11 +1801,11 @@ auto main(int argc, char **argv, char **env) -> int {
       //        for (int i = 0; i < relatedEdges.size(); i++) {
       //          int edge = relatedEdges[i];
       //          int edgeLabel = varlabels[i];
-      //          if (edgeLabel == edge2OrderedVPAndAngles[edge].size()) {
+      //          if (edgeLabel == edge2ordered_vp_and_angles[edge].size()) {
       //            continue; // not bound to any vp
       //          }
       //          int edgeBindedVPId =
-      //          edge2OrderedVPAndAngles[edge][edgeLabel].component;
+      //          edge2ordered_vp_and_angles[edge][edgeLabel].component;
       //          if (edgeBindedVPId == vpid) {
       //            bindedEdges++;
       //          }
@@ -1748,10 +1831,10 @@ auto main(int argc, char **argv, char **env) -> int {
 
     for (int edge = 0; edge < nedges; edge++) {
       int id = result[edge2vh[edge]];
-      if (id == edge2OrderedVPAndAngles[edge].size()) {
+      if (id == edge2ordered_vp_and_angles[edge].size()) {
         continue;
       }
-      edge2vp[edge] = edge2OrderedVPAndAngles[edge][id].component;
+      edge2vp[edge] = edge2ordered_vp_and_angles[edge][id].component;
       vp2edges[edge2vp[edge]].push_back(edge);
     }
 
@@ -1765,7 +1848,7 @@ auto main(int argc, char **argv, char **env) -> int {
       }
     }
 
-    misc::SaveCache(objFile + "-" + camName, "edge2vp_vp2edges", edge2vp,
+    misc::SaveCache(obj_file_name + "-" + cam_name, "edge2vp_vp2edges", edge2vp,
                     vp2edges);
   }
 
@@ -1799,29 +1882,36 @@ auto main(int argc, char **argv, char **env) -> int {
 
   // for each pp focal candidate
   std::vector<Mesh3> reconstructions;
-  for (int configId = 0;
-       configId < std::min(5ull, ppFocalGroups.size()) &&
-       ppFocalGroups[configId].first.size() * 30 >= ppFocalCandidates.size();
-       configId++) {
+  for (int config_id = 0;
+       config_id < std::min(5ull, pp_focal_groups.size()) &&
+       pp_focal_groups[config_id].first.size() * 30 >= pp_focal_candidates.size();
+       config_id++) {
 
-    double focal = ppFocalGroups[configId].second.focal;
-    auto &pp = ppFocalGroups[configId].second.pp;
+    double focal = pp_focal_groups[config_id].second.focal;
+    auto &pp = pp_focal_groups[config_id].second.pp;
 
-    PerspectiveCamera curCam(cam.screenWidth(), cam.screenHeight(), pp, focal);
+    PerspectiveCamera cur_cam(cam.screenWidth(), cam.screenHeight(), pp, focal);
     std::vector<Vec3> vp2dir(nvps);
     for (int i = 0; i < nvps; i++) {
-      vp2dir[i] = curCam.direction(vpPositions[i]);
+      vp2dir[i] = cur_cam.direction(vp_positions[i]);
     }
 
-    auto meshReconstructed =
-        ReconstructWithOrientations(edge2line, edge2vp, vp2dir, hh2d2edge,
-                                    curCam, meshProxy, mesh2d, matlab);
+    Mesh3 mesh_reconstructed;
+    static const bool no_orientation_estimation = false;
+    if (!no_orientation_estimation) {
+      mesh_reconstructed =
+          ReconstructWithOrientations(edge2line, edge2vp, vp2dir, hh2d2edge,
+                                      cur_cam, mesh_proxy, mesh2d, matlab);
+    } else {
+      mesh_reconstructed =
+          Transform(mesh2d, [&cur_cam](const Point2 &p) -> Point3 {
+            return normalize(cur_cam.direction(p));
+          });
+    }
+    OptimizeWithoutOrientations(mesh_reconstructed, cur_cam, mesh_proxy,
+                                submeshes, non_corner_vh_proxies);
 
-    // optimize without orientations
-    OptimizeWithoutOrientations(meshReconstructed, curCam, meshProxy,
-                                subMeshes);
-
-    reconstructions.push_back(std::move(meshReconstructed));
+    reconstructions.push_back(std::move(mesh_reconstructed));
   }
 
   return 0;
