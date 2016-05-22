@@ -158,10 +158,10 @@ FactorGraph::ResultTable FactorGraph::solve(int maxEpoch, int innerLoopNum,
   }
 
   // initialize marginals
-  core::HandledTable<VarHandle, VectorXd> varMarginals(
+  core::HandledTable<VarHandle, VectorXd> var_marginals(
       _graph.internalElements<0>().size());
   for (auto &v : _graph.elements<0>()) {
-    varMarginals[v.topo.hd] = VectorXd::Zero(_varCategories[v.data].nlabels);
+    var_marginals[v.topo.hd] = VectorXd::Zero(_varCategories[v.data].nlabels);
   }
 
   double lastE = std::numeric_limits<double>::infinity();
@@ -267,19 +267,19 @@ FactorGraph::ResultTable FactorGraph::solve(int maxEpoch, int innerLoopNum,
     // marginalize on variables
     // reset marginals
     for (auto &v : _graph.elements<0>()) {
-      varMarginals[v.topo.hd].setZero();
+      var_marginals[v.topo.hd].setZero();
     }
     for (auto &f2v : messages.constraints<F2VMessage>()) {
       MGVHandle vh = f2v.topo.component<1>();
-      varMarginals[messages.data(vh).h] += f2v.data.values;
-      assert(varMarginals[messages.data(vh).h].maxCoeff() <
+      var_marginals[messages.data(vh).h] += f2v.data.values;
+      assert(var_marginals[messages.data(vh).h].maxCoeff() <
              std::numeric_limits<double>::infinity());
     }
     // get result
     for (auto &v : _graph.elements<0>()) {
       int label = -1;
       double curCost = std::numeric_limits<double>::infinity();
-      const VectorXd &marginal = varMarginals[v.topo.hd];
+      const VectorXd &marginal = var_marginals[v.topo.hd];
       for (int i = 0; i < marginal.size(); i++) {
         assert(!core::IsInfOrNaN(marginal[i]));
         if (marginal[i] < curCost) {

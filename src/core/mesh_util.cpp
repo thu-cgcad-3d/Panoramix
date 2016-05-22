@@ -7,6 +7,9 @@ Mesh<Point3> LoadFromObjFile(const std::string &fname) {
   std::ifstream ifs(fname);
   if (ifs.is_open()) {
     std::string line;
+
+	std::vector<std::vector<VertHandle>> face2vhs; 
+
     while (std::getline(ifs, line)) {
       if (line.empty()) {
         continue;
@@ -35,10 +38,49 @@ Mesh<Point3> LoadFromObjFile(const std::string &fname) {
           vhs.push_back(VertHandle(vid - 1));
         }
         if (!vhs.empty()) {
-          auto fh = mesh.addFace(vhs, true);
-          assert(fh.valid());
+			face2vhs.push_back(std::move(vhs));
         }
       }
+    }
+
+    // add face
+    std::set<std::pair<VertHandle, VertHandle>> vhpairs_inserted;
+    while (!face2vhs.empty()) {
+      // find a face sharing any edge with inserted face
+      int face_id = 0;
+      bool should_inverse = false;
+      for (; face_id < face2vhs.size(); face_id++) {
+        auto &vhs = face2vhs[face_id];
+        for (int i = 0; i < vhs.size(); i++) {
+          VertHandle vh1 = vhs[i];
+          VertHandle vh2 = vhs[(i + 1) % vhs.size()];
+          if (Contains(vhpairs_inserted, std::make_pair(vh1, vh2))) {
+            // current halfedge is already occupied
+            // inverse current face loop
+            should_inverse = true;
+            break;
+          } else if (Contains(vhpairs_inserted, std::make_pair(vh2, vh1))) {
+            should_inverse = false;
+            break;
+          }
+        }
+      }
+      if (face_id == face2vhs.size()) {
+        face_id = 0;
+      }
+      auto &vhs = face2vhs[face_id];
+      if (should_inverse) {
+        std::reverse(vhs.begin(), vhs.end());
+      }
+      mesh.addFace(vhs, false);
+      for (int i = 0; i < vhs.size(); i++) {
+        VertHandle vh1 = vhs[i];
+        VertHandle vh2 = vhs[(i + 1) % vhs.size()];
+        vhpairs_inserted.emplace(vh1, vh2);
+      }
+      // remove inserted face
+      std::swap(face2vhs[face_id], face2vhs.back());
+      face2vhs.pop_back();
     }
   }
   return mesh;

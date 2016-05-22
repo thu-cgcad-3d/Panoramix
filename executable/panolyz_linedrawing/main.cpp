@@ -99,7 +99,7 @@ void AddToScene(gui::SceneBuilder &sb,
   }
 }
 
-inline std::vector<Point2> PossibleKeyVanishingPoints(const Chain2 &chain) {
+std::vector<Point2> PossibleKeyVanishingPoints(const Chain2 &chain) {
   assert(chain.size() > 2);
   if (chain.size() == 3) {
     return {};
@@ -132,6 +132,387 @@ inline std::vector<Point2> PossibleKeyVanishingPoints(const Chain2 &chain) {
     return vp_positions;
   }
 }
+
+struct PPFocalCandidate {
+  Point2 pp;
+  double focal;
+};
+
+// EstimateCameraParameters
+std::vector<std::pair<std::set<int>, PPFocalCandidate>> EstimateCameraParameters(
+    const Mesh2 &mesh2d,
+    const Mesh<VertHandle, HalfHandle, FaceHandle> &mesh_proxy,
+    const std::vector<SubMesh> &submeshes) {
+  //// [Estimate PP & Focal Candidates from 2D Mesh]
+  auto point2dAtProxy = [&mesh2d, &mesh_proxy](VertHandle vhInProxy) -> Point2 {
+    return mesh2d.data(mesh_proxy.data(vhInProxy));
+  };
+  auto line2dAtProxy = [&mesh2d, &mesh_proxy,
+                        point2dAtProxy](HalfHandle hhInProxy) -> Line2 {
+    return Line2(point2dAtProxy(mesh_proxy.topo(hhInProxy).from()),
+                 point2dAtProxy(mesh_proxy.topo(hhInProxy).to()));
+  };
+  Box2 box = BoundingBoxOfContainer(mesh2d.vertices());
+  double scale = box.outerSphere().radius;
+
+  // collect pp focal candidates
+  std::vector<PPFocalCandidate> pp_focal_candidates;
+  pp_focal_candidates.reserve(submeshes.size() * 3);
+
+  for (int submesh_id = 0; submesh_id < submeshes.size(); submesh_id++) {
+    // collect edge intersections in each face
+    std::vector<Point2> interps;
+    for (auto fh_proxy : submeshes[submesh_id].fhs) {
+      auto &hh_proxies = mesh_proxy.topo(fh_proxy).halfedges;
+      Chain2 corners;
+      for (auto hh_proxy : hh_proxies) {
+        corners.append(point2dAtProxy(mesh_proxy.topo(hh_proxy).to()));
+      }
+      auto key_vps = PossibleKeyVanishingPoints(corners);
+      interps.insert(interps.end(), key_vps.begin(), key_vps.end());
+    }
+
+    for (int i = 0; i < interps.size(); i++) {
+      const Point2 &p1 = interps[i];
+      for (int j = i + 1; j < interps.size(); j++) {
+        const Point2 &p2 = interps[j];
+        for (int k = j + 1; k < interps.size(); k++) {
+          const Point2 &p3 = interps[k];
+          // compute pp and focal
+          Point2 pp;
+          double focal = 0.0;
+          std::tie(pp, focal) = ComputePrinciplePointAndFocalLength(p1, p2, p3);
+          if (HasValue(pp, IsInfOrNaN<double>) || IsInfOrNaN(focal)) {
+            continue;
+          }
+          if (!IsBetween(focal, scale / 5.0, scale * 5.0) ||
+              Distance(pp, box.center()) > scale * 2.0) {
+            continue;
+          }
+          pp_focal_candidates.push_back(PPFocalCandidate{pp, focal});
+        }
+      }
+    }
+  }
+
+  std::sort(pp_focal_candidates.begin(), pp_focal_candidates.end(),
+            [](auto &a, auto &b) { return a.focal < b.focal; });
+  // naive clustering
+  std::vector<std::pair<std::set<int>, PPFocalCandidate>> pp_focal_groups;
+  {
+    std::vector<int> ppFocalId2group(pp_focal_candidates.size(), -1);
+    int ngroups = 0;
+    RTreeMap<Vec3, int> ppFocalIdTree;
+    for (int i = 0; i < pp_focal_candidates.size(); i++) {
+      Vec3 coordinate =
+          cat(pp_focal_candidates[i].pp, pp_focal_candidates[i].focal);
+      const double thres = scale / 50.0;
+      // find the nearest ppFocal sample point
+      int nearestPPFocalCandId = -1;
+      double min_dist = thres;
+      ppFocalIdTree.search(BoundingBox(coordinate).expand(thres * 2),
+                           [&nearestPPFocalCandId, &min_dist,
+                            &coordinate](const std::pair<Vec3, int> &cand) {
+                             double dist = Distance(cand.first, coordinate);
+                             if (dist < min_dist) {
+                               min_dist = dist;
+                               nearestPPFocalCandId = cand.second;
+                             }
+                             return true;
+                           });
+      if (nearestPPFocalCandId != -1) { // if found, assign to the same group
+        ppFocalId2group[i] = ppFocalId2group[nearestPPFocalCandId];
+      } else { // otherwise, create a new group
+        ppFocalId2group[i] = ngroups++;
+      }
+      ppFocalIdTree.emplace(coordinate, i);
+    }
+
+    pp_focal_groups.resize(ngroups);
+    for (auto &g : pp_focal_groups) {
+      g.second.focal = 0.0;
+      g.second.pp = Point2();
+    }
+    for (int i = 0; i < ppFocalId2group.size(); i++) {
+      auto &g = pp_focal_groups[ppFocalId2group[i]];
+      g.first.insert(i);
+      g.second.focal += pp_focal_candidates[i].focal;
+      g.second.pp += pp_focal_candidates[i].pp;
+    }
+    for (auto &g : pp_focal_groups) {
+      g.second.focal /= g.first.size();
+      g.second.pp /= double(g.first.size());
+    }
+
+    std::sort(
+        pp_focal_groups.begin(), pp_focal_groups.end(),
+        [](auto &g1, auto &g2) { return g1.first.size() > g2.first.size(); });
+  }
+
+  return pp_focal_groups;
+}
+
+// EstimateVanishingPoints
+std::vector<Point2> EstimateVanishingPoints(
+    const Mesh2 &mesh2d, const Sizei &drawing_size,
+    HandledTable<HalfHandle, int> *hh2d2edge_ptr = nullptr,
+    std::vector<std::map<int, double>> *vp2edge_with_angles_ptr = nullptr,
+    std::vector<std::vector<Scored<int>>> *edge2ordered_vp_and_angles_ptr =
+        nullptr,
+    std::vector<Line2> *edge2line_ptr = nullptr) {
+
+  Box2 box = BoundingBoxOfContainer(mesh2d.vertices());
+  double scale = box.outerSphere().radius;
+
+  std::vector<std::pair<HalfHandle, HalfHandle>> edge2hh2ds;
+  std::vector<Line2> edge2line;
+  HandledTable<HalfHandle, int> hh2d2edge(mesh2d.internalHalfEdges().size(),
+                                          -1);
+
+  int nedges = 0;
+  {
+    for (auto &h : mesh2d.halfedges()) {
+      auto hh = h.topo.hd;
+      auto oppohh = h.topo.opposite;
+      if (hh2d2edge[hh] == -1 && hh2d2edge[oppohh] == -1) {
+        hh2d2edge[hh] = hh2d2edge[oppohh] = nedges;
+        nedges++;
+        edge2hh2ds.push_back(MakeOrderedPair(hh, oppohh));
+        edge2line.push_back(Line2(mesh2d.data(mesh2d.topo(hh).from()),
+                                  mesh2d.data(mesh2d.topo(hh).to())));
+      }
+    }
+    assert(edge2hh2ds.size() == nedges && edge2line.size() == nedges);
+  }
+
+  std::vector<Point2> vp_positions;
+  int nvps = 0;
+  std::vector<std::vector<Scored<int>>> edge2ordered_vp_and_angles(nedges);
+
+  std::vector<Point2> intersections;
+  std::vector<std::pair<int, int>> intersection2edges;
+  intersections.reserve(nedges * (nedges - 1) / 2);
+  intersection2edges.reserve(nedges * (nedges - 1) / 2);
+  for (int i = 0; i < nedges; i++) {
+    const Line2 &linei = edge2line[i];
+    for (int j = i + 1; j < nedges; j++) {
+      const Line2 &linej = edge2line[j];
+      Point2 interp = Intersection(linei.ray(), linej.ray());
+      if (IsFuzzyParallel(linei.direction(), linej.direction(), 1e-8)) {
+        interp = normalize(linei.direction()) * 1e8;
+      }
+      if (std::min(Distance(interp, linei), Distance(interp, linej)) <=
+          scale / 10.0) {
+        continue;
+      }
+      intersections.push_back(interp);
+      intersection2edges.emplace_back(i, j);
+    }
+  }
+  assert(intersections.size() == intersection2edges.size());
+
+  std::vector<int> intersection2raw_vp(intersections.size(), -1);
+  RTreeMap<Point2, int> intersection_tree;
+  for (int i = 0; i < intersections.size(); i++) {
+    const double thres = scale / 30.0;
+    auto &p = intersections[i];
+    int nearest_intersection_id = -1;
+    double min_dist = thres;
+    intersection_tree.search(
+        BoundingBox(p).expand(thres * 2),
+        [&nearest_intersection_id, &min_dist,
+         &p](const std::pair<Point2, int> &location_and_intersection_id) {
+          double dist = Distance(location_and_intersection_id.first, p);
+          if (dist < min_dist) {
+            min_dist = dist;
+            nearest_intersection_id = location_and_intersection_id.second;
+          }
+          return true;
+        });
+    if (nearest_intersection_id != -1) {
+      intersection2raw_vp[i] = intersection2raw_vp[nearest_intersection_id];
+    } else {
+      intersection2raw_vp[i] = nvps++;
+    }
+    intersection_tree.emplace(p, i);
+  }
+
+  // further merge vps
+  // if any two vps share two or more edges, merge them
+  std::vector<std::set<int>> raw_vp2edges(nvps);
+  for (int i = 0; i < intersection2raw_vp.size(); i++) {
+    int vpid = intersection2raw_vp[i];
+    raw_vp2edges[vpid].insert(i);
+  }
+  std::vector<std::set<int>> raw_vp2raw_vp_should_merge(nvps);
+  for (int vp1 = 0; vp1 < nvps; vp1++) {
+    auto &edges1 = raw_vp2edges[vp1];
+    for (int vp2 = vp1 + 1; vp2 < nvps; vp2++) {
+      auto &edges2 = raw_vp2edges[vp2];
+      std::set<int> common_edges;
+      std::set_intersection(edges1.begin(), edges1.end(), edges2.begin(),
+                            edges2.end(),
+                            std::inserter(common_edges, common_edges.begin()));
+      if (common_edges.size() >= 2) {
+        raw_vp2raw_vp_should_merge[vp1].insert(vp2);
+        raw_vp2raw_vp_should_merge[vp2].insert(vp1);
+      }
+    }
+  }
+  std::map<int, std::set<int>> new_vp2raw_vps;
+  std::vector<int> raw_vp2new_vp(nvps, -1);
+  std::vector<int> raw_vp_ids(nvps);
+  std::iota(raw_vp_ids.begin(), raw_vp_ids.end(), 0);
+  nvps = ConnectedComponents(
+      raw_vp_ids.begin(), raw_vp_ids.end(),
+      [&raw_vp2raw_vp_should_merge](int vp) -> const std::set<int> & {
+        return raw_vp2raw_vp_should_merge.at(vp);
+      },
+      [&new_vp2raw_vps, &raw_vp2new_vp](int raw_vp, int newVP) {
+        new_vp2raw_vps[newVP].insert(raw_vp);
+        raw_vp2new_vp[raw_vp] = newVP;
+      });
+
+  vp_positions.resize(nvps, Origin<2>());
+  std::vector<std::set<int>> vp2intersections(nvps);
+  for (int i = 0; i < intersection2raw_vp.size(); i++) {
+    int raw_vp = intersection2raw_vp[i];
+    int newVP = raw_vp2new_vp[raw_vp];
+    vp_positions[newVP] += intersections[i]; // TODO: what if some
+                                             // intersections are oppsite far
+                                             // points?
+    vp2intersections[newVP].insert(i);
+  }
+  for (int i = 0; i < nvps; i++) {
+    vp_positions[i] /= double(vp2intersections[i].size());
+    assert(!HasValue(vp_positions[i], [](auto &&e) { return IsInfOrNaN(e); }));
+  }
+  // erase invalid vp_positions
+  vp_positions.erase(std::remove_if(vp_positions.begin(), vp_positions.end(),
+                                    [](const Point2 &pos) {
+                                      return IsInfOrNaN(pos[0]) ||
+                                             IsInfOrNaN(pos[1]);
+                                    }),
+                     vp_positions.end());
+  nvps = vp_positions.size();
+
+  // initial edge vp bindings
+  std::vector<std::map<int, double>> vp2edge_with_angles(nvps);
+  std::vector<bool> vp_is_good(nvps, true);
+  for (int vp = 0; vp < nvps; vp++) {
+    auto &vp_pos = vp_positions[vp];
+    for (int edge = 0; edge < nedges; edge++) {
+      auto &line = edge2line[edge];
+      double lambda = ProjectionOfPointOnLine(vp_pos, line).ratio;
+      static const double thres = 0.1;
+      if (lambda >= -thres && lambda <= 1.0 + thres) {
+        continue;
+      }
+      double angle =
+          AngleBetweenUndirected(line.direction(), vp_pos - line.center());
+      assert(!IsInfOrNaN(angle));
+      static const double theta = DegreesToRadians(5); ////// TODO
+      if (angle >= theta) {
+        continue;
+      }
+      vp2edge_with_angles[vp][edge] = angle;
+    }
+    vp_is_good[vp] = vp2edge_with_angles[vp].size() >= 3;
+  }
+
+  if (false) {
+    for (int i = 0; i < std::min(10, nvps); i++) {
+      Image3ub im(drawing_size, Vec3ub(255, 255, 255));
+      auto canvas = gui::MakeCanvas(im);
+      canvas.color(gui::LightGray);
+      canvas.thickness(2);
+      for (auto &line : edge2line) {
+        canvas.add(line);
+      }
+      canvas.color(gui::Gray);
+      canvas.thickness(1);
+      for (auto &edge_with_angle : vp2edge_with_angles[i]) {
+        canvas.add(edge2line[edge_with_angle.first].ray());
+      }
+      canvas.color(gui::Black);
+      for (auto &edge_with_angle : vp2edge_with_angles[i]) {
+        canvas.add(edge2line[edge_with_angle.first]);
+      }
+      canvas.show(0, "before removing bad vps: raw vp_" + std::to_string(i));
+    }
+  }
+
+  // remove bad vps
+  int newvp = 0;
+  for (int oldvp = 0; oldvp < nvps; oldvp++) {
+    if (vp_is_good[oldvp]) {
+      // update vp_positions
+      // update vp2edge_with_angles
+      vp_positions[newvp] = vp_positions[oldvp];
+      vp2edge_with_angles[newvp] = std::move(vp2edge_with_angles[oldvp]);
+      newvp++;
+    }
+  }
+  nvps = newvp;
+  vp_positions.resize(nvps);
+  vp2edge_with_angles.resize(nvps);
+
+  // construct edge2OrderedVPs
+  for (int vp = 0; vp < nvps; vp++) {
+    for (auto &edgeAndAngle : vp2edge_with_angles[vp]) {
+      int edge = edgeAndAngle.first;
+      double angle = edgeAndAngle.second;
+      edge2ordered_vp_and_angles[edge].push_back(ScoreAs(vp, angle));
+    }
+  }
+  for (auto &vp_and_angles : edge2ordered_vp_and_angles) {
+    std::sort(vp_and_angles.begin(), vp_and_angles.end());
+  }
+
+  if (false) {
+    for (int i = 0; i < std::min(10, nvps); i++) {
+      Image3ub im(drawing_size, Vec3ub(255, 255, 255));
+      auto canvas = gui::MakeCanvas(im);
+      canvas.color(gui::LightGray);
+      canvas.thickness(2);
+      for (auto &line : edge2line) {
+        canvas.add(line);
+      }
+      canvas.color(gui::Gray);
+      canvas.thickness(2);
+      for (auto &edge_with_angle : vp2edge_with_angles[i]) {
+        canvas.add(edge2line[edge_with_angle.first].ray());
+      }
+      canvas.color(gui::Black);
+      for (auto &edge_with_angle : vp2edge_with_angles[i]) {
+        canvas.add(edge2line[edge_with_angle.first]);
+      }
+      canvas.show(0, "raw vp_" + std::to_string(i));
+    }
+  }
+
+  if (hh2d2edge_ptr) {
+    *hh2d2edge_ptr = std::move(hh2d2edge);
+  }
+  if (vp2edge_with_angles_ptr) {
+    *vp2edge_with_angles_ptr = std::move(vp2edge_with_angles);
+  }
+  if (edge2ordered_vp_and_angles_ptr) {
+    *edge2ordered_vp_and_angles_ptr = std::move(edge2ordered_vp_and_angles);
+  }
+  if (edge2line_ptr) {
+    *edge2line_ptr = std::move(edge2line);
+  }
+  return vp_positions;
+}
+
+// EstimateEdgeOrientations
+void EstimateEdgeOrientations() {
+	// todo
+}
+
+
+
 
 
 struct EnergyWeights {
@@ -206,14 +587,23 @@ std::vector<double> ComputeEnergy(
                            all_angles.size());
   }
 
-  std::vector<HalfHandle> valid_hhs;
-  for (auto &h : mesh.halfedges()) {
-    auto hh = h.topo.hd;
-    auto fh1 = mesh.topo(hh).face;
-    auto fh2 = mesh.topo(mesh.topo(hh).opposite).face;
-    if (std::find(fhs_begin, fhs_end, fh1) != fhs_end &&
-        std::find(fhs_begin, fhs_end, fh2) != fhs_end) {
-      valid_hhs.push_back(hh);
+  std::set<HalfHandle> valid_hhs;
+  //for (auto &h : mesh.halfedges()) {
+  //  auto hh = h.topo.hd;
+  //  auto fh1 = mesh.topo(hh).face;
+  //  auto fh2 = mesh.topo(mesh.topo(hh).opposite).face;
+  //  if (std::find(fhs_begin, fhs_end, fh1) != fhs_end &&
+  //      std::find(fhs_begin, fhs_end, fh2) != fhs_end) {
+  //    valid_hhs.push_back(hh);
+  //  }
+  //}
+  for (FaceHandle fh1 : MakeRange(fhs_begin, fhs_end)) {
+    for (HalfHandle hh : mesh.topo(fh1).halfedges) {
+      HalfHandle oppohh = mesh.topo(hh).opposite;
+      if (Contains(MakeRange(fhs_begin, fhs_end), mesh.topo(oppohh).face)) {
+        valid_hhs.insert(hh);
+        valid_hhs.insert(oppohh);
+      }
     }
   }
 
@@ -252,9 +642,9 @@ Mesh3 ReconstructWithOrientations(
     SupportingPlane supportingPlane;
     EntityBase(const SupportingPlane &sp) : supportingPlane(sp) {}
     virtual ~EntityBase() {}
-    virtual FaceHandle fhProxy() const { return FaceHandle(); }
+    virtual FaceHandle fh_proxy() const { return FaceHandle(); }
     virtual int edge() const { return -1; }
-    bool isFace() const { return fhProxy().valid(); }
+    bool isFace() const { return fh_proxy().valid(); }
     bool isEdge() const { return edge() != -1; }
   };
   struct FaceEntity : EntityBase {
@@ -262,7 +652,7 @@ Mesh3 ReconstructWithOrientations(
     FaceEntity(FaceHandle fh, const Vec3 &center)
         : EntityBase(SupportingPlane(SegControl{-1, -1}, center, {})), fh(fh) {}
     virtual ~FaceEntity() {}
-    virtual FaceHandle fhProxy() const override { return fh; }
+    virtual FaceHandle fh_proxy() const override { return fh; }
   };
   struct EdgeEntity : EntityBase {
     int e;
@@ -310,10 +700,10 @@ Mesh3 ReconstructWithOrientations(
   //// install connections
   // std::map<std::pair<int, int>, std::vector<Vec3>> ents2anchors;
   // for (auto &f : mesh_proxy.faces()) {
-  //  for (auto hhProxy : f.topo.halfedges) {
-  //    HalfHandle hh2d = mesh_proxy.data(hhProxy);
+  //  for (auto hh_proxy : f.topo.halfedges) {
+  //    HalfHandle hh2d = mesh_proxy.data(hh_proxy);
   //    if (hh2d.invalid()) {
-  //      hh2d = mesh_proxy.data(mesh_proxy.topo(hhProxy).opposite);
+  //      hh2d = mesh_proxy.data(mesh_proxy.topo(hh_proxy).opposite);
   //    }
   //    assert(hh2d.valid());
   //    int edge = hh2d2edge[hh2d];
@@ -410,22 +800,22 @@ Mesh3 ReconstructWithOrientations(
   for (auto &f : mesh_proxy.faces()) {
     auto &hhProxies = f.topo.halfedges;
     for (int i = 0; i < hhProxies.size(); i++) {
-      auto hhProxy = hhProxies[i];
-      HalfHandle hh2d = mesh_proxy.data(hhProxy);
+      auto hh_proxy = hhProxies[i];
+      HalfHandle hh2d = mesh_proxy.data(hh_proxy);
       if (hh2d.invalid()) {
-        hh2d = mesh_proxy.data(mesh_proxy.topo(hhProxy).opposite);
+        hh2d = mesh_proxy.data(mesh_proxy.topo(hh_proxy).opposite);
       }
       assert(hh2d.valid());
       int edge = hh2d2edge[hh2d];
       int edgeEnt = edge2ent[edge];
       int faceEnt = fhProxy2ent[f.topo.hd];
 
-      VertHandle curVhProxy = mesh_proxy.topo(hhProxy).to();
+      VertHandle curVhProxy = mesh_proxy.topo(hh_proxy).to();
       int curAnchorId = vhProxy2anchor[curVhProxy];
-      int prevAnchorId = vhProxy2anchor[mesh_proxy.topo(hhProxy).from()];
+      int prevAnchorId = vhProxy2anchor[mesh_proxy.topo(hh_proxy).from()];
       assert(mesh_proxy
                  .topo(hhProxies[(i + hhProxies.size() - 1) % hhProxies.size()])
-                 .to() == mesh_proxy.topo(hhProxy).from());
+                 .to() == mesh_proxy.topo(hh_proxy).from());
       int nextAnchorId =
           vhProxy2anchor[mesh_proxy.topo(hhProxies[(i + 1) % hhProxies.size()])
                              .to()];
@@ -652,11 +1042,11 @@ Mesh3 ReconstructWithOrientations(
   HandledTable<VertHandle, int> vh2d2faceProxyCount(
       mesh2d.internalVertices().size(), 0);
   for (auto &faceProxy : mesh_proxy.faces()) {
-    auto fhProxy = faceProxy.topo.hd;
-    int ent = fhProxy2ent[fhProxy];
+    auto fh_proxy = faceProxy.topo.hd;
+    int ent = fhProxy2ent[fh_proxy];
     const Plane3 &plane = entities[ent]->supportingPlane.reconstructed;
-    for (auto hhProxy : faceProxy.topo.halfedges) {
-      VertHandle vhProxy = mesh_proxy.topo(hhProxy).to();
+    for (auto hh_proxy : faceProxy.topo.halfedges) {
+      VertHandle vhProxy = mesh_proxy.topo(hh_proxy).to();
       VertHandle vh2d = mesh_proxy.data(vhProxy);
       Vec3 direction = normalize(cur_cam.direction(mesh2d.data(vh2d)));
       Point3 position = Intersection(Ray3(cur_cam.eye(), direction), plane);
@@ -785,6 +1175,7 @@ void OptimizeWithoutOrientations(
     if (inversed_depths.mean() < 0) {
       inversed_depths = -inversed_depths;
     }
+	assert((inversed_depths.array() > 0.0).all());
 
     if (true) {
       gui::SceneBuilder sb;
@@ -860,7 +1251,7 @@ void OptimizeWithoutOrientations(
       }
     }
     auto &group2 = vh_proxy2inversed_depth[group2id];
-    assert(!common_vh_proxies.empty());
+    ASSERT_OR_PANIC(!common_vh_proxies.empty());
 
     double inversed_depths_mean1 = 0.0;
     double inversed_depths_mean2 = 0.0;
@@ -890,6 +1281,7 @@ void OptimizeWithoutOrientations(
       group1[v_id2.first] = inversed_depths_mean1 +
                             (v_id2.second - inversed_depths_mean2) *
                                 inversed_depths_sigma1 / inversed_depths_sigma2;
+	  assert(group1[v_id2.first] > 0.0);
     }
     // erase group2
     std::swap(group2, vh_proxy2inversed_depth.back());
@@ -908,6 +1300,7 @@ void OptimizeWithoutOrientations(
   }
   for (auto &v : cur_reconstruction.vertices()) {
     vh2inversed_depth[v.topo.hd] /= vh2vh_proxy_count[v.topo.hd];
+	assert(vh2inversed_depth[v.topo.hd] > 0.0);
   }
   {
     gui::SceneBuilder sb;
@@ -926,8 +1319,10 @@ void OptimizeWithoutOrientations(
           normalize(cur_reconstruction.data(vh2)) / vh2inversed_depth[vh2];
       sb.add(Line3(p1, p2));
     }
-    sb.show(true, true,
-            gui::RenderOptions().winName("Before Holistic Optimization"));
+    sb.show(true, false, gui::RenderOptions()
+                             .camera(cur_cam)
+                             .winName("Before Holistic Optimization")
+                             .fixUpDirectionInCameraMove(false));
   }
 
 
@@ -1029,7 +1424,7 @@ void OptimizeWithoutOrientations(
                         }
                       }
                     }
-					assert(false && "degenerated face!");
+					ASSERT_OR_PANIC(false && "degenerated face!");
                     return Vector3d::Zero();
                   }
                 },
@@ -1044,6 +1439,11 @@ void OptimizeWithoutOrientations(
           return VectorXd::Map(energy_terms.data(), energy_terms.size());
         },
         &v2matrix, &f2matrix);
+
+    if (inversed_depths.mean() < 0) {
+      inversed_depths = -inversed_depths;
+    }
+	assert((inversed_depths.array() > 0.0).all());
 
     {
       gui::SceneBuilder sb;
@@ -1062,8 +1462,10 @@ void OptimizeWithoutOrientations(
                     (v2matrix.at(vh2) * inversed_depths);
         sb.add(Line3(p1, p2));
       }
-      sb.show(true, false, gui::RenderOptions().camera(cur_cam).winName(
-                               "After Holistic Optimization"));
+      sb.show(true, false, gui::RenderOptions()
+                               .camera(cur_cam)
+                               .winName("After Holistic Optimization")
+                               .fixUpDirectionInCameraMove(false));
     }
   }
 }
@@ -1074,35 +1476,73 @@ auto main(int argc, char **argv, char **env) -> int {
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
+  //static const std::string name = "gate";
+  //static const std::string name = "towerx";
   //static const std::string name = "tower";
   static const std::string name = "hex";
+  //static const std::string name = "triangle";
+  //static const std::string name = "twotriangles";
+  //static const std::string name = "bridge";
+
   static const std::string cam_name = "cam1";
-  static constexpr bool resetCam = false;
+  static constexpr bool reset_cam = false;
 
   std::string obj_file_name = "F:\\LineDrawings\\manifold\\" + name +
                         "\\" + name + ".obj";
-  std::string camFile = "F:\\LineDrawings\\manifold\\" + name +
+  std::string cam_file = "F:\\LineDrawings\\manifold\\" + name +
                         "\\" + name + ".obj." + cam_name + ".cereal";
 
   //// [Load Mesh]
   auto mesh = LoadFromObjFile(obj_file_name);
+
+  if (true) { // show original mesh
+    gui::SceneBuilder sb;
+    sb.installingOptions().defaultShaderSource =
+        gui::OpenGLShaderSourceDescriptor::XLines;
+    sb.installingOptions().lineWidth = 3;
+    for (auto &h : mesh.halfedges()) {
+      auto line = Line3(mesh.data(h.topo.from()), mesh.data(h.topo.to()));
+      if (h.topo.face.valid() && mesh.topo(h.topo.opposite).face.valid()) {
+        sb.installingOptions().discretizeOptions.color(gui::Red);
+        sb.add(line);
+      } else {
+        sb.installingOptions().discretizeOptions.color(gui::Black);
+        sb.add(line);
+      }
+    }
+   /* sb.installingOptions().defaultShaderSource =
+        gui::OpenGLShaderSourceDescriptor::XPoints;
+    sb.installingOptions().pointSize = 20.0;
+    sb.add(mesh.data(mesh.topo(HalfHandle(23)).from()));
+    sb.add(mesh.data(mesh.topo(HalfHandle(23)).to()));*/
+
+    sb.show(true, true, gui::RenderOptions()
+                            .backgroundColor(gui::White)
+                            .renderMode(gui::All)
+                            .bwTexColor(0.0)
+                            .bwColor(1.0)
+                            .fixUpDirectionInCameraMove(false)
+                            .cullBackFace(false)
+                            .cullFrontFace(false));
+  }
+
   auto mesh_proxy = MakeMeshProxy(mesh);
 
   //// [Decompose]
-  auto cutFacePairs = DecomposeAll(
+  auto cut_face_pairs = DecomposeAll(
       mesh_proxy, [](HalfHandle hh1, HalfHandle hh2) -> bool { return false; });
   // check validity
-  for (auto &hProxy : mesh_proxy.halfedges()) {
-    HalfHandle hh = hProxy.data;
+  for (auto &h : mesh_proxy.halfedges()) {
+    HalfHandle hh = h.data;
     if (hh.invalid()) {
-      hh = mesh_proxy.data(hProxy.topo.opposite);
+      hh = mesh_proxy.data(h.topo.opposite);
     }
     assert(hh.valid());
   }
-  std::unordered_map<FaceHandle, FaceHandle> cutFace2Another;
-  for (auto &cutFacePair : cutFacePairs) {
-    cutFace2Another[cutFacePair.first] = cutFacePair.second;
-    cutFace2Another[cutFacePair.second] = cutFacePair.first;
+  std::unordered_map<FaceHandle, FaceHandle> cut_face2another;
+  for (auto &cut_face_pair : cut_face_pairs) {
+    cut_face2another[cut_face_pair.first] = cut_face_pair.second;
+    cut_face2another[cut_face_pair.second] = cut_face_pair.first;
   }
   auto submeshes = ExtractSubMeshes(mesh_proxy,
                                     [](auto hhbegin, auto hhend) -> bool {
@@ -1110,17 +1550,17 @@ auto main(int argc, char **argv, char **env) -> int {
                                     },
                                     10);
   Println("found ", submeshes.size(), " submeshes");
-  HandledTable<FaceHandle, int> fhProxy2subMeshId(
+  HandledTable<FaceHandle, int> fh_proxy2submesh_id(
       mesh_proxy.internalFaces().size(), -1);
   for (int i = 0; i < submeshes.size(); i++) {
     for (auto fh : submeshes[i].fhs) {
-      fhProxy2subMeshId[fh] = i;
+      fh_proxy2submesh_id[fh] = i;
     }
   }
 
   //// [Load Camera]
   PerspectiveCamera cam;
-  if (!LoadFromDisk(camFile, cam) || resetCam) {
+  if (!LoadFromDisk(cam_file, cam) || reset_cam) {
     auto sphere = BoundingBoxOfContainer(mesh.vertices()).outerSphere();
     PerspectiveCamera projCam(500, 500, Point2(250, 250), 200,
                               sphere.center + Vec3(1, 2, 3) * sphere.radius * 2,
@@ -1140,10 +1580,10 @@ auto main(int argc, char **argv, char **env) -> int {
         }
       }
     }
-    HandledTable<FaceHandle, int> fhProxy2subMeshId(
+    HandledTable<FaceHandle, int> fh_proxy2submesh_id(
         mesh_proxy.internalFaces().size(), -1);
     for (auto &f : mesh_proxy.faces()) {
-      int &id = fhProxy2subMeshId[f.topo.hd];
+      int &id = fh_proxy2submesh_id[f.topo.hd];
       for (int i = 0; i < submeshes.size(); i++) {
         if (submeshes[i].contains(f.topo.hd)) {
           id = i;
@@ -1166,8 +1606,8 @@ auto main(int argc, char **argv, char **env) -> int {
             [&submeshes, i](auto h) { return submeshes[i].contains(h); },
             [&mesh](VertHandle vh) { return mesh.data(vh); },
             [&hhProxy2subMeshId, &ctable](HalfHandle hh) { return gui::Black; },
-            [&fhProxy2subMeshId, &ctable](FaceHandle fh) {
-              return ctable[fhProxy2subMeshId[fh]];
+            [&fh_proxy2submesh_id, &ctable](FaceHandle fh) {
+              return ctable[fh_proxy2submesh_id[fh]];
             });
         sb.show(true, false, gui::RenderOptions()
                                  .camera(projCam)
@@ -1191,8 +1631,8 @@ auto main(int argc, char **argv, char **env) -> int {
           sb, mesh_proxy, [](auto) { return true; },
           [&mesh](VertHandle vh) { return mesh.data(vh); },
           [&hhProxy2subMeshId, &ctable](HalfHandle hh) { return gui::Black; },
-          [&fhProxy2subMeshId, &ctable](FaceHandle fh) {
-            return ctable[fhProxy2subMeshId[fh]];
+          [&fh_proxy2submesh_id, &ctable](FaceHandle fh) {
+            return ctable[fh_proxy2submesh_id[fh]];
           });
       cam = sb.show(true, false, gui::RenderOptions()
                                      .camera(projCam)
@@ -1205,7 +1645,7 @@ auto main(int argc, char **argv, char **env) -> int {
                                      .cullFrontFace(false))
                 .camera();
     }
-    SaveToDisk(camFile, cam);
+    SaveToDisk(cam_file, cam);
   }
 
   //// [Make 2D Mesh]
@@ -1287,348 +1727,40 @@ auto main(int argc, char **argv, char **env) -> int {
                         1e-8)) {
           non_corner_vh_proxies.insert(v.topo.hd);
           parallel_edge_found = true;
-		  break;
+          break;
         }
       }
     }
   }
 
-  //// [Estimate PP & Focal Candidates from 2D Mesh]
-  auto point2dAtProxy = [&mesh2d, &mesh_proxy](VertHandle vhInProxy) -> Point2 {
-    return mesh2d.data(mesh_proxy.data(vhInProxy));
-  };
-  auto line2dAtProxy = [&mesh2d, &mesh_proxy,
-                        point2dAtProxy](HalfHandle hhInProxy) -> Line2 {
-    return Line2(point2dAtProxy(mesh_proxy.topo(hhInProxy).from()),
-                 point2dAtProxy(mesh_proxy.topo(hhInProxy).to()));
-  };
-  Box2 box = BoundingBoxOfContainer(mesh2d.vertices());
-  double scale = box.outerSphere().radius;
-
-  struct PPFocalCandidate {
-    Point2 pp;
-    double focal;
-  };
-
-  // collect pp focal candidates
-  std::vector<PPFocalCandidate> pp_focal_candidates;
-  pp_focal_candidates.reserve(submeshes.size() * 3);
-
-  for (int submesh_id = 0; submesh_id < submeshes.size(); submesh_id++) {
-    // collect edge intersections in each face
-    std::vector<Point2> interps;
-    for (auto fhProxy : submeshes[submesh_id].fhs) {
-      auto &hhProxys = mesh_proxy.topo(fhProxy).halfedges;
-      Chain2 corners;
-      for (auto hhProxy : hhProxys) {
-        corners.append(point2dAtProxy(mesh_proxy.topo(hhProxy).to()));
-      }
-      auto keyVPs = PossibleKeyVanishingPoints(corners);
-      interps.insert(interps.end(), keyVPs.begin(), keyVPs.end());
-    }
-
-    for (int i = 0; i < interps.size(); i++) {
-      const Point2 &p1 = interps[i];
-      for (int j = i + 1; j < interps.size(); j++) {
-        const Point2 &p2 = interps[j];
-        for (int k = j + 1; k < interps.size(); k++) {
-          const Point2 &p3 = interps[k];
-          // compute pp and focal
-          Point2 pp;
-          double focal = 0.0;
-          std::tie(pp, focal) = ComputePrinciplePointAndFocalLength(p1, p2, p3);
-          if (HasValue(pp, IsInfOrNaN<double>) || IsInfOrNaN(focal)) {
-            continue;
-          }
-          if (!IsBetween(focal, scale / 5.0, scale * 5.0) ||
-              Distance(pp, box.center()) > scale * 2.0) {
-            continue;
-          }
-          pp_focal_candidates.push_back(PPFocalCandidate{pp, focal});
-        }
-      }
-    }
-  }
-
-  std::sort(pp_focal_candidates.begin(), pp_focal_candidates.end(),
-            [](auto &a, auto &b) { return a.focal < b.focal; });
-  // naive clustering
-  std::vector<std::pair<std::set<int>, PPFocalCandidate>> pp_focal_groups;
-  {
-    std::vector<int> ppFocalId2group(pp_focal_candidates.size(), -1);
-    int ngroups = 0;
-    RTreeMap<Vec3, int> ppFocalIdTree;
-    for (int i = 0; i < pp_focal_candidates.size(); i++) {
-      Vec3 coordinate =
-          cat(pp_focal_candidates[i].pp, pp_focal_candidates[i].focal);
-      const double thres = scale / 50.0;
-      // find the nearest ppFocal sample point
-      int nearestPPFocalCandId = -1;
-      double minDist = thres;
-      ppFocalIdTree.search(BoundingBox(coordinate).expand(thres * 2),
-                           [&nearestPPFocalCandId, &minDist,
-                            &coordinate](const std::pair<Vec3, int> &cand) {
-                             double dist = Distance(cand.first, coordinate);
-                             if (dist < minDist) {
-                               minDist = dist;
-                               nearestPPFocalCandId = cand.second;
-                             }
-                             return true;
-                           });
-      if (nearestPPFocalCandId != -1) { // if found, assign to the same group
-        ppFocalId2group[i] = ppFocalId2group[nearestPPFocalCandId];
-      } else { // otherwise, create a new group
-        ppFocalId2group[i] = ngroups++;
-      }
-      ppFocalIdTree.emplace(coordinate, i);
-    }
-
-    pp_focal_groups.resize(ngroups);
-    for (auto &g : pp_focal_groups) {
-      g.second.focal = 0.0;
-      g.second.pp = Point2();
-    }
-    for (int i = 0; i < ppFocalId2group.size(); i++) {
-      auto &g = pp_focal_groups[ppFocalId2group[i]];
-      g.first.insert(i);
-      g.second.focal += pp_focal_candidates[i].focal;
-      g.second.pp += pp_focal_candidates[i].pp;
-    }
-    for (auto &g : pp_focal_groups) {
-      g.second.focal /= g.first.size();
-      g.second.pp /= double(g.first.size());
-    }
-
-    std::sort(
-        pp_focal_groups.begin(), pp_focal_groups.end(),
-        [](auto &g1, auto &g2) { return g1.first.size() > g2.first.size(); });
-  }
+  auto pp_focal_groups =
+      EstimateCameraParameters(mesh2d, mesh_proxy, submeshes);
 
   //// [Orient Edges]
-  // record edges
-  std::vector<std::pair<HalfHandle, HalfHandle>> edge2hh2ds;
+  HandledTable<HalfHandle, int> hh2d2edge;
+  std::vector<std::map<int, double>> vp2edge_with_angles;
+  std::vector<std::vector<Scored<int>>> edge2ordered_vp_and_angles;
   std::vector<Line2> edge2line;
-  HandledTable<HalfHandle, int> hh2d2edge(mesh2d.internalHalfEdges().size(),
-                                          -1);
-  int nedges = 0;
-  {
-    for (auto &h : mesh2d.halfedges()) {
-      auto hh = h.topo.hd;
-      auto oppohh = h.topo.opposite;
-      if (hh2d2edge[hh] == -1 && hh2d2edge[oppohh] == -1) {
-        hh2d2edge[hh] = hh2d2edge[oppohh] = nedges;
-        nedges++;
-        edge2hh2ds.push_back(MakeOrderedPair(hh, oppohh));
-        edge2line.push_back(Line2(mesh2d.data(mesh2d.topo(hh).from()),
-                                  mesh2d.data(mesh2d.topo(hh).to())));
-      }
-    }
-    assert(edge2hh2ds.size() == nedges && edge2line.size() == nedges);
-  }
+  auto vp_positions = EstimateVanishingPoints(
+      mesh2d, cam.screenSize(), &hh2d2edge, &vp2edge_with_angles,
+      &edge2ordered_vp_and_angles, &edge2line);
+
+  int nvps = vp_positions.size();
+  int nedges = edge2ordered_vp_and_angles.size();
+
 
   // collect edge intersections and
   // get vp_positions from the intersections
-  std::vector<Point2> vp_positions;
-  int nvps = 0;
-  std::vector<std::vector<Scored<int>>> edge2ordered_vp_and_angles(nedges);
-  {
-    std::vector<Point2> intersections;
-    std::vector<std::pair<int, int>> intersection2edges;
-    intersections.reserve(nedges * (nedges - 1) / 2);
-    intersection2edges.reserve(nedges * (nedges - 1) / 2);
-    for (int i = 0; i < nedges; i++) {
-      const Line2 &linei = edge2line[i];
-      for (int j = i + 1; j < nedges; j++) {
-        const Line2 &linej = edge2line[j];
-        Point2 interp = Intersection(linei.ray(), linej.ray());
-        if (std::min(Distance(interp, linei), Distance(interp, linej)) <=
-            scale / 10.0) {
-          continue;
-        }
-        intersections.push_back(interp);
-        intersection2edges.emplace_back(i, j);
-      }
-    }
-    assert(intersections.size() == intersection2edges.size());
-
-    std::vector<int> intersection2Rawvp(intersections.size(), -1);
-    RTreeMap<Point2, int> intersectionTree;
-    for (int i = 0; i < intersections.size(); i++) {
-      const double thres = scale / 30.0;
-      auto &p = intersections[i];
-      int nearestIntersectionId = -1;
-      double minDist = thres;
-      intersectionTree.search(
-          BoundingBox(p).expand(thres * 2),
-          [&nearestIntersectionId, &minDist,
-           &p](const std::pair<Point2, int> &locationAndIntersectionId) {
-            double dist = Distance(locationAndIntersectionId.first, p);
-            if (dist < minDist) {
-              minDist = dist;
-              nearestIntersectionId = locationAndIntersectionId.second;
-            }
-            return true;
-          });
-      if (nearestIntersectionId != -1) {
-        intersection2Rawvp[i] = intersection2Rawvp[nearestIntersectionId];
-      } else {
-        intersection2Rawvp[i] = nvps++;
-      }
-      intersectionTree.emplace(p, i);
-    }
-
-    // further merge vps
-    // if any two vps share two or more edges, merge them
-    std::vector<std::set<int>> rawVP2edges(nvps);
-    for (int i = 0; i < intersection2Rawvp.size(); i++) {
-      int vpid = intersection2Rawvp[i];
-      rawVP2edges[vpid].insert(i);
-    }
-    std::vector<std::set<int>> rawVp2rawVpShouldMerge(nvps);
-    for (int vp1 = 0; vp1 < nvps; vp1++) {
-      auto &edges1 = rawVP2edges[vp1];
-      for (int vp2 = vp1 + 1; vp2 < nvps; vp2++) {
-        auto &edges2 = rawVP2edges[vp2];
-        std::set<int> commonEdges;
-        std::set_intersection(edges1.begin(), edges1.end(), edges2.begin(),
-                              edges2.end(),
-                              std::inserter(commonEdges, commonEdges.begin()));
-        if (commonEdges.size() >= 2) {
-          rawVp2rawVpShouldMerge[vp1].insert(vp2);
-          rawVp2rawVpShouldMerge[vp2].insert(vp1);
-        }
-      }
-    }
-    std::map<int, std::set<int>> newVP2rawVPs;
-    std::vector<int> rawVP2newVP(nvps, -1);
-    std::vector<int> rawVPIds(nvps);
-    std::iota(rawVPIds.begin(), rawVPIds.end(), 0);
-    nvps = ConnectedComponents(
-        rawVPIds.begin(), rawVPIds.end(),
-        [&rawVp2rawVpShouldMerge](int vp) -> const std::set<int> & {
-          return rawVp2rawVpShouldMerge.at(vp);
-        },
-        [&newVP2rawVPs, &rawVP2newVP](int rawVP, int newVP) {
-          newVP2rawVPs[newVP].insert(rawVP);
-          rawVP2newVP[rawVP] = newVP;
-        });
-
-    vp_positions.resize(nvps, Origin<2>());
-    std::vector<std::set<int>> vp2intersections(nvps);
-    for (int i = 0; i < intersection2Rawvp.size(); i++) {
-      int rawVP = intersection2Rawvp[i];
-      int newVP = rawVP2newVP[rawVP];
-      vp_positions[newVP] += intersections[i]; // TODO: what if some
-                                              // intersections are oppsite far
-                                              // points?
-      vp2intersections[newVP].insert(i);
-    }
-    for (int i = 0; i < nvps; i++) {
-      vp_positions[i] /= double(vp2intersections[i].size());
-    }
-
-    // initial edge vp bindings
-    std::vector<std::map<int, double>> vp2edgeWithAngles(nvps);
-    std::vector<bool> vpIsGood(nvps, true);
-    for (int vp = 0; vp < nvps; vp++) {
-      auto &vpPos = vp_positions[vp];
-      for (int edge = 0; edge < nedges; edge++) {
-        auto &line = edge2line[edge];
-        double lambda = ProjectionOfPointOnLine(vpPos, line).ratio;
-        static const double thres = 0.1;
-        if (lambda >= -thres && lambda <= 1.0 + thres) {
-          continue;
-        }
-        double angle =
-            AngleBetweenUndirected(line.direction(), vpPos - line.center());
-        static const double theta = DegreesToRadians(5); ////// TODO
-        if (angle >= theta) {
-          continue;
-        }
-        vp2edgeWithAngles[vp][edge] = angle;
-      }
-      vpIsGood[vp] = vp2edgeWithAngles[vp].size() >= 3;
-    }
-
-    if (false) {
-      for (int i = 0; i < std::min(10, nvps); i++) {
-        Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
-        auto canvas = gui::MakeCanvas(im);
-        canvas.color(gui::LightGray);
-        canvas.thickness(2);
-        for (auto &line : edge2line) {
-          canvas.add(line);
-        }
-        canvas.color(gui::Gray);
-        canvas.thickness(1);
-        for (auto &edgeWithAngle : vp2edgeWithAngles[i]) {
-          canvas.add(edge2line[edgeWithAngle.first].ray());
-        }
-        canvas.color(gui::Black);
-        for (auto &edgeWithAngle : vp2edgeWithAngles[i]) {
-          canvas.add(edge2line[edgeWithAngle.first]);
-        }
-        canvas.show(0, "before removing bad vps: raw vp_" + std::to_string(i));
-      }
-    }
-
-    // remove bad vps
-    int newvp = 0;
-    for (int oldvp = 0; oldvp < nvps; oldvp++) {
-      if (vpIsGood[oldvp]) {
-        // update vp_positions
-        // update vp2edgeWithAngles
-        vp_positions[newvp] = vp_positions[oldvp];
-        vp2edgeWithAngles[newvp] = std::move(vp2edgeWithAngles[oldvp]);
-        newvp++;
-      }
-    }
-    nvps = newvp;
-    vp_positions.resize(nvps);
-    vp2edgeWithAngles.resize(nvps);
-
-    // construct edge2OrderedVPs
-    for (int vp = 0; vp < nvps; vp++) {
-      for (auto &edgeAndAngle : vp2edgeWithAngles[vp]) {
-        int edge = edgeAndAngle.first;
-        double angle = edgeAndAngle.second;
-        edge2ordered_vp_and_angles[edge].push_back(ScoreAs(vp, angle));
-      }
-    }
-    for (auto &vpAndAngles : edge2ordered_vp_and_angles) {
-      std::sort(vpAndAngles.begin(), vpAndAngles.end());
-    }
-
-    if (false) {
-      for (int i = 0; i < std::min(10, nvps); i++) {
-        Image3ub im(cam.screenSize(), Vec3ub(255, 255, 255));
-        auto canvas = gui::MakeCanvas(im);
-        canvas.color(gui::LightGray);
-        canvas.thickness(2);
-        for (auto &line : edge2line) {
-          canvas.add(line);
-        }
-        canvas.color(gui::Gray);
-        canvas.thickness(2);
-        for (auto &edgeWithAngle : vp2edgeWithAngles[i]) {
-          canvas.add(edge2line[edgeWithAngle.first].ray());
-        }
-        canvas.color(gui::Black);
-        for (auto &edgeWithAngle : vp2edgeWithAngles[i]) {
-          canvas.add(edge2line[edgeWithAngle.first]);
-        }
-        canvas.show(0, "raw vp_" + std::to_string(i));
-      }
-    }
-  }
+  Box2 box = BoundingBoxOfContainer(mesh2d.vertices());
+  double scale = box.outerSphere().radius;
 
   std::vector<int> edge2vp;
   std::vector<std::vector<int>> vp2edges;
 
   // factor graph
-  if (false ||
-      !misc::LoadCache(obj_file_name + "-" + cam_name, "edge2vp_vp2edges", edge2vp,
-                       vp2edges)) {
+  if (true ||
+      !misc::LoadCache(obj_file_name + "-" + cam_name, "edge2vp_vp2edges",
+                       edge2vp, vp2edges)) {
     edge2vp.resize(nedges, -1);
     vp2edges.resize(nvps);
 
@@ -1714,7 +1846,8 @@ auto main(int argc, char **argv, char **env) -> int {
         }
       }
 
-      // potential 3: the vp_positions of edges sharing a same face should lie on
+      // potential 3: the vp_positions of edges sharing a same face should lie
+      // on
       // the same
       // line (the vanishing line of the face)
       int ntris = 0;
@@ -1743,22 +1876,25 @@ auto main(int argc, char **argv, char **env) -> int {
                                   void *givenData) -> double {
                   assert(nvar == 3);
                   int vp1 =
-                      varlabels[0] == edge2ordered_vp_and_angles[prevEdge].size()
+                      varlabels[0] ==
+                              edge2ordered_vp_and_angles[prevEdge].size()
                           ? -1
                           : (edge2ordered_vp_and_angles[prevEdge][varlabels[0]]
                                  .component);
                   if (vp1 == -1) {
                     return 0.0;
                   }
-                  int vp2 = varlabels[1] == edge2ordered_vp_and_angles[edge].size()
-                                ? -1
-                                : (edge2ordered_vp_and_angles[edge][varlabels[1]]
-                                       .component);
+                  int vp2 =
+                      varlabels[1] == edge2ordered_vp_and_angles[edge].size()
+                          ? -1
+                          : (edge2ordered_vp_and_angles[edge][varlabels[1]]
+                                 .component);
                   if (vp2 == -1) {
                     return 0.0;
                   }
                   int vp3 =
-                      varlabels[2] == edge2ordered_vp_and_angles[nextEdge].size()
+                      varlabels[2] ==
+                              edge2ordered_vp_and_angles[nextEdge].size()
                           ? -1
                           : (edge2ordered_vp_and_angles[nextEdge][varlabels[2]]
                                  .component);
@@ -1793,7 +1929,8 @@ auto main(int argc, char **argv, char **env) -> int {
       //  auto fc = fg.addFactorCategory(
       //      [&edge2ordered_vp_and_angles, vpid, &vp2edges](
       //          const int *varlabels, size_t nvar,
-      //          FactorGraph::FactorCategoryId fcid, void *givenData) -> double
+      //          FactorGraph::FactorCategoryId fcid, void *givenData) ->
+      //          double
       //          {
       //        int bindedEdges = 0;
       //        auto &relatedEdges = vp2edges[vpid];
@@ -1884,7 +2021,7 @@ auto main(int argc, char **argv, char **env) -> int {
   std::vector<Mesh3> reconstructions;
   for (int config_id = 0;
        config_id < std::min(5ull, pp_focal_groups.size()) &&
-       pp_focal_groups[config_id].first.size() * 30 >= pp_focal_candidates.size();
+       pp_focal_groups[config_id].first.size() * 30 >= pp_focal_groups.size();
        config_id++) {
 
     double focal = pp_focal_groups[config_id].second.focal;

@@ -357,30 +357,24 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   return planes;
 }
 
-// EstimatePerspectiveDepths
-// Vert2InitialDepthFunT: (VertT vert) -> double
-// Face2RelatedVertsFunT: (FaceT face) -> std::vector<VertT>
-// Vert2RowVector3dFunT: (VertT vert) -> Eigen::RowVector3d
-// EnergyFunT: (((FaceT face) -> Eigen::Vector3d) face2equation, ((VertT vert) -> double) vert2depth) -> Eigen::VectorXd
-template <class VertT, class FaceT, class Vert2InitialDepthFunT,
-          class Face2RelatedVertsFunT, class Vert2RowVector3dFunT,
-          class EnergyFunT>
-Eigen::VectorXd EstimatePerspectiveDepths(
+// ConstructPerspectiveTransformMatrices
+template <class VertT, class FaceT, class Face2RelatedVertsFunT,
+          class Vert2RowVector3dFunT>
+void ConstructPerspectiveTransformMatrices(
     const std::vector<VertT> &fundamental_verts,
     const std::vector<FaceT> &ordered_faces,
-    Vert2InitialDepthFunT vert2initial_depth,
     Face2RelatedVertsFunT face2related_verts,
-    Vert2RowVector3dFunT vert2direction, EnergyFunT energy_fun,
-    std::map<VertT, Eigen::RowVectorXd> *v2matrix_ptr = nullptr,
-    std::map<FaceT, Eigen::Matrix3Xd> *f2matrix_ptr = nullptr) {
+    Vert2RowVector3dFunT vert2direction,
+    std::map<VertHandle, Eigen::RowVectorXd>
+        &v2matrix, // inversed_depth of vh = matrix * X
+    std::map<FaceHandle, Eigen::Matrix3Xd>
+        &f2matrix // plane equation of fh = matrix * X
+    ) {
+  v2matrix.clear();
+  f2matrix.clear();
 
   using namespace Eigen;
   size_t nvars = fundamental_verts.size();
-
-  VectorXd inversed_depths = VectorXd::Zero(fundamental_verts.size());
-  for (int pos = 0; pos < nvars; pos++) {
-    inversed_depths[pos] = 1.0 / vert2initial_depth(fundamental_verts[pos]);
-  }
 
   std::unordered_map<VertT, int> v2position;
   for (int pos = 0; pos < nvars; pos++) {
@@ -389,8 +383,6 @@ Eigen::VectorXd EstimatePerspectiveDepths(
 
   // build matrix for each vertex and face in current sub using the dependency
   // information
-  std::map<VertT, RowVectorXd> v2matrix; // inversed_depth of vh = matrix * X
-  std::map<FaceT, Matrix3Xd> f2matrix;   // plane equation of fh = matrix * X
 
   // insert the matrices of fundamental verts
   for (const VertT &v : fundamental_verts) {
@@ -475,15 +467,57 @@ Eigen::VectorXd EstimatePerspectiveDepths(
       v2matrix[v] = dir * f2matrix[f];
     }
   } //  for (FaceHandle fh_proxy : sub.ordered_fhs)
+}
+
+// EstimatePerspectiveDepths
+// Vert2InitialDepthFunT: (VertT vert) -> double
+// Face2RelatedVertsFunT: (FaceT face) -> std::vector<VertT>
+// Vert2RowVector3dFunT: (VertT vert) -> Eigen::RowVector3d
+// EnergyFunT: (((FaceT face) -> Eigen::Vector3d) face2equation, ((VertT vert) -> double) vert2depth) -> Eigen::VectorXd
+template <class VertT, class FaceT, class Vert2InitialDepthFunT,
+          class Face2RelatedVertsFunT, class Vert2RowVector3dFunT,
+          class EnergyFunT>
+Eigen::VectorXd EstimatePerspectiveDepths(
+    const std::vector<VertT> &fundamental_verts,
+    const std::vector<FaceT> &ordered_faces,
+    Vert2InitialDepthFunT vert2initial_depth,
+    Face2RelatedVertsFunT face2related_verts,
+    Vert2RowVector3dFunT vert2direction, EnergyFunT energy_fun,
+    std::map<VertT, Eigen::RowVectorXd> *v2matrix_ptr = nullptr,
+    std::map<FaceT, Eigen::Matrix3Xd> *f2matrix_ptr = nullptr) {
+
+  using namespace Eigen;
+  size_t nvars = fundamental_verts.size();
+
+  VectorXd inversed_depths = VectorXd::Zero(fundamental_verts.size());
+  for (int pos = 0; pos < nvars; pos++) {
+    inversed_depths[pos] = 1.0 / vert2initial_depth(fundamental_verts[pos]);
+  }
+
+  std::unordered_map<VertT, int> v2position;
+  for (int pos = 0; pos < nvars; pos++) {
+    v2position[fundamental_verts[pos]] = pos;
+  }
+
+  // build matrix for each vertex and face in current sub using the dependency
+  // information
+  std::map<VertT, RowVectorXd> v2matrix; // inversed_depth of vh = matrix * X
+  std::map<FaceT, Matrix3Xd> f2matrix;   // plane equation of fh = matrix * X
+
+  ConstructPerspectiveTransformMatrices(fundamental_verts, ordered_faces,
+                                        face2related_verts, vert2direction,
+                                        v2matrix, f2matrix);
 
   // use LM algorithm
   auto energy_wrapper_fun = [&f2matrix, &v2matrix,
                              &energy_fun](const VectorXd &X) -> VectorXd {
     return energy_fun(
-        [&](const VertT &vert) -> double {
-          return 1.0 / (v2matrix.at(vert) * X);
+        [&v2matrix, &X](const VertT &vert) -> double {
+          return 1.0 / (v2matrix.at(vert) * X.normalized().cwiseAbs());
         },
-        [&](const FaceT &face) -> Vector3d { return f2matrix.at(face) * X; });
+        [&f2matrix, &X](const FaceT &face) -> Vector3d {
+          return f2matrix.at(face) * X.normalized().cwiseAbs();
+        });
   };
 
   auto initial_energy_terms = energy_wrapper_fun(inversed_depths);
@@ -503,7 +537,7 @@ Eigen::VectorXd EstimatePerspectiveDepths(
   LevenbergMarquardt<decltype(functor)> lm(functor);
   lm.parameters.maxfev = 10000;
   lm.minimize(inversed_depths);
-  inversed_depths.normalize();
+  inversed_depths = inversed_depths.normalized().cwiseAbs();
 
   auto final_energy_terms = energy_wrapper_fun(inversed_depths);
   double final_energy = 0.0;
