@@ -450,6 +450,9 @@ inline void serialize(Archive &ar, PositionOnLine<T, N> &p) {
 using PositionOnLine2 = PositionOnLine<double, 2>;
 using PositionOnLine3 = PositionOnLine<double, 3>;
 
+template <class T, int N>
+T AngleBetweenUndirected(const Vec<T, N> &v1, const Vec<T, N> &v2);
+
 // chain
 template <class T, int N> struct Chain {
   std::vector<Point<T, N>> points;

@@ -11,6 +11,7 @@
 #include "../../src/gui/utility.hpp"
 
 #include "../../src/experimental/line_drawing.hpp"
+#include "../../src/experimental/mesh_advanced_util.hpp"
 #include "../../src/experimental/pi_graph_annotation.hpp"
 #include "../../src/experimental/pi_graph_cg.hpp"
 #include "../../src/experimental/pi_graph_control.hpp"

@@ -66,6 +66,11 @@ std::pair<Point2, double>
 ComputePrinciplePointAndFocalLength(const Point2 &vp1, const Point2 &vp2,
                                     const Point2 &vp3);
 
+// ComputePrinciplePointAndFocalLengthCandidates
+std::vector<Scored<std::pair<Point2, double>>>
+ComputePrinciplePointAndFocalLengthCandidates(
+    const std::vector<std::vector<Line2>> &line_groups);
+
 // 2d vanishing point detection
 class VanishingPointsDetector {
 public:
@@ -117,5 +122,9 @@ Imagei ComputeOrientationMaps(const std::vector<Classified<Line2>> &lines,
 
 // ConvertToImage3d
 Image3d ConvertToImage3d(const Image5d &gc);
+
+
+
+
 }
 }

@@ -54,20 +54,19 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
             VertDataToDirectionFunT vert2dir = VertDataToDirectionFunT(),
             int drfSlack = 2, int maxIters = 10000);
 
-// ConstructPerspectiveTransformMatrices
+// ConstructSingleViewTransformMatrices
+// v2matrix: inversed_depth of vh = matrix * X
+// f2matrix: plane equation of fh = matrix * X
 template <class VertT, class FaceT, class Face2RelatedVertsFunT,
           class Vert2Vec3FunT>
-void ConstructPerspectiveTransformMatrices(
+void ConstructSingleViewTransformMatrices(
     const std::vector<VertT> &fundamental_verts,
     const std::vector<FaceT> &ordered_faces,
     Face2RelatedVertsFunT face2related_verts, Vert2Vec3FunT vert2direction,
-    std::map<VertHandle, DenseMatd>
-        &v2matrix, // inversed_depth of vh = matrix * X
-    std::map<FaceHandle, DenseMatd>
-        &f2matrix // plane equation of fh = matrix * X
-    );
+    std::map<VertHandle, DenseMatd> &v2matrix,
+    std::map<FaceHandle, DenseMatd> &f2matrix);
 
-// EstimatePerspectiveInversedDepths
+// EstimateSingleViewInversedDepths
 // Vert2InitialDepthFunT: (VertT vert) -> double
 // Face2RelatedVertsFunT: (FaceT face) -> std::vector<VertT>
 // Vert2Vec3FunT: (VertT vert) -> Vec3
@@ -77,12 +76,17 @@ void ConstructPerspectiveTransformMatrices(
 template <class VertT, class FaceT, class Vert2InitialDepthFunT,
           class EnergyFunT>
 DenseMatd
-EstimatePerspectiveInversedDepths(const std::map<VertT, DenseMatd> &v2matrix_cv,
-                                  const std::map<FaceT, DenseMatd> &f2matrix_cv,
+EstimateSingleViewInversedDepths(const std::map<VertT, DenseMatd> &v2matrix,
+                                  const std::map<FaceT, DenseMatd> &f2matrix,
                                   Vert2InitialDepthFunT vert2initial_depth,
                                   EnergyFunT energy_fun);
 }
 }
+
+
+
+
+
 
 ////////////////////////////////////////////////
 //// implementations
@@ -270,10 +274,10 @@ Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   return planes;
 }
 
-// ConstructPerspectiveTransformMatrices
+// ConstructSingleViewTransformMatrices
 template <class VertT, class FaceT, class Face2RelatedVertsFunT,
           class Vert2Vec3FunT>
-void ConstructPerspectiveTransformMatrices(
+void ConstructSingleViewTransformMatrices(
     const std::vector<VertT> &fundamental_verts,
     const std::vector<FaceT> &ordered_faces,
     Face2RelatedVertsFunT face2related_verts, Vert2Vec3FunT vert2direction,
@@ -386,7 +390,8 @@ void ConstructPerspectiveTransformMatrices(
   } //  for (FaceHandle fh_proxy : sub.ordered_fhs)
 }
 
-// EstimatePerspectiveInversedDepths
+
+// EstimateSingleViewInversedDepths
 // Vert2InitialDepthFunT: (VertT vert) -> double
 // Face2RelatedVertsFunT: (FaceT face) -> std::vector<VertT>
 // Vert2Vec3FunT: (VertT vert) -> Vec3
@@ -396,59 +401,46 @@ void ConstructPerspectiveTransformMatrices(
 template <class VertT, class FaceT, class Vert2InitialDepthFunT,
           class EnergyFunT>
 DenseMatd
-EstimatePerspectiveInversedDepths(const std::map<VertT, DenseMatd> &v2matrix_cv,
-                                  const std::map<FaceT, DenseMatd> &f2matrix_cv,
-                                  Vert2InitialDepthFunT vert2initial_depth,
-                                  EnergyFunT energy_fun) {
+EstimateSingleViewInversedDepths(const std::map<VertT, DenseMatd> &v2matrix_cv,
+                                 const std::map<FaceT, DenseMatd> &f2matrix_cv,
+                                 Vert2InitialDepthFunT vert2initial_depth,
+                                 EnergyFunT energy_fun) {
 
   using namespace Eigen;
+
+  size_t nverts = v2matrix_cv.size();
+  size_t nfaces = f2matrix_cv.size();
+
   assert(!v2matrix_cv.empty());
   size_t nvars = v2matrix_cv.begin()->second.cols;
-
-  std::vector<VertT> fundamental_verts;
-  fundamental_verts.reserve(nvars);
+  assert(nvars <= nverts);
   for (auto &vm : v2matrix_cv) {
     assert(vm.second.cols == nvars);
-    int one_num = 0;
-    int zero_num = 0;
-    for (double e : vm.second) {
-      if (e == 0.0) {
-        zero_num++;
-      } else if (e == 1.0) {
-        one_num++;
-      }
-    }
-    if (one_num == 1 && zero_num == nvars - 1) {
-      fundamental_verts.push_back(vm.first);
-    }
   }
-  assert(fundamental_verts.size() == nvars);
-
   for (auto &fm : f2matrix_cv) {
     assert(fm.second.cols == nvars);
   }
 
-  VectorXd inversed_depths = VectorXd::Zero(nvars);
-  for (int pos = 0; pos < nvars; pos++) {
-    inversed_depths[pos] = 1.0 / vert2initial_depth(fundamental_verts[pos]);
-  }
-
-  std::unordered_map<VertT, int> v2position;
-  for (int pos = 0; pos < nvars; pos++) {
-    v2position[fundamental_verts[pos]] = pos;
-  }
-
+  MatrixXd all_v_matrix = MatrixXd::Zero(nverts, nvars);
+  VectorXd all_v_inversed_depths = VectorXd::Zero(nverts);
   std::map<VertT, RowVectorXd> v2matrix; // inversed_depth of vh = matrix * X
   for (auto &vm : v2matrix_cv) {
     const DenseMatd &m_cv = vm.second;
-    assert(m_cv.isContinuous());
     assert(m_cv.cols == nvars);
     RowVectorXd m = RowVectorXd::Zero(nvars);
     for (int i = 0; i < nvars; i++) {
       m[i] = m_cv(0, i);
     }
+    all_v_matrix.row(v2matrix.size()) = m;
+    all_v_inversed_depths[v2matrix.size()] = 1.0 / vert2initial_depth(vm.first);
     v2matrix[vm.first] = std::move(m);
   }
+  // all_v_inversed_depths = all_v_matrix * inversed_depths
+  // -> inversed_depths = 
+  VectorXd inversed_depths =
+      all_v_matrix.fullPivLu().solve(all_v_inversed_depths).normalized();
+  assert(inversed_depths.size() == nvars);
+
   std::map<FaceT, Matrix3Xd> f2matrix; // plane equation of fh = matrix * X
   for (auto &fm : f2matrix_cv) {
     const DenseMatd &m_cv = fm.second;
@@ -462,6 +454,11 @@ EstimatePerspectiveInversedDepths(const std::map<VertT, DenseMatd> &v2matrix_cv,
     f2matrix[fm.first] = std::move(m);
   }
 
+
+
+
+
+
   // use LM algorithm
   auto energy_wrapper_fun = [&f2matrix, &v2matrix,
                              &energy_fun](const VectorXd &X) -> VectorXd {
@@ -473,9 +470,9 @@ EstimatePerspectiveInversedDepths(const std::map<VertT, DenseMatd> &v2matrix_cv,
           RowVector3d eq = f2matrix.at(face) * X.normalized().cwiseAbs();
           return Vec3(eq[0], eq[1], eq[2]);
         });
-    Println("cur energy = ",
+    /*Println("cur energy = ",
             std::accumulate(energy_terms.begin(), energy_terms.end(), 0.0,
-                            [](double e, double t) { return e + t * t; }));
+                            [](double e, double t) { return e + t * t; }));*/
     return VectorXd::Map(energy_terms.data(), energy_terms.size());
   };
 

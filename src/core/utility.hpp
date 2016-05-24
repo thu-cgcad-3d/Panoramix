@@ -665,6 +665,28 @@ inline bool IsFuzzyPerpendicular(const Vec<T, N> &v1, const Vec<T, N> &v2,
   return abs(s) <= epsilon;
 }
 
+template <class PointIterT, class T>
+inline bool IsFuzzyColinear(PointIterT points_begin, PointIterT points_end,
+                            const T &epsilon = 0.1) {
+  if (points_begin == points_end) {
+    return true;
+  }
+  using PointT = typename std::iterator_traits<PointIterT>::value_type;
+  PointT dir = PointT();
+  PointT first_point = *points_begin;
+  while (points_begin != points_end && dir == PointT()) {
+    dir = *points_begin - first_point;
+    ++points_begin;
+  }
+  while (points_begin != points_end) {
+    if (!IsFuzzyParallel(dir, *points_begin - first_point, epsilon)) {
+      return false;
+    }
+    ++points_begin;
+  }
+  return true;
+}
+
 // for lines and points
 // returns projection position
 template <class T, int N>
@@ -766,6 +788,7 @@ template <class T, int N>
 inline T Distance(const Ray<T, N> &line1, const Ray<T, N> &line2) {
   return DistanceBetweenTwoLines(line1, line2).first;
 }
+
 
 template <class T>
 inline Point<T, 2> Intersection(const Ray<T, 2> &line1,

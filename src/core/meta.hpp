@@ -12,6 +12,9 @@ namespace core {
 using yes = std::true_type;
 using no = std::false_type;
 
+// void_t
+template <class...> using void_t = void;
+
 struct Dummy {
   template <class... ParamTs> void operator()(ParamTs &&... params) const {}
 };

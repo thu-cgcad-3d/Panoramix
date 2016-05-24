@@ -25,6 +25,15 @@ template <class ContainerT, class T>
 struct IsContainerOfType
     : IsIteratorOfType<decltype(std::begin(std::declval<ContainerT>())), T> {};
 
+// IsIterator
+template <class T, class = void> struct IsIterator : no {};
+template <class T>
+struct IsIterator<
+    T, void_t<typename T::iterator_category, typename T::value_type,
+                   typename T::difference_type, typename T::pointer,
+                   typename T::reference>> : yes {};
+template <class T> struct IsIterator<T *> : yes {};
+
 // range
 template <class IterT> struct Range {
   IterT b, e;
@@ -45,6 +54,97 @@ template <class IterT> struct Range {
 
 template <class IterT> Range<IterT> MakeRange(IterT b, IterT e) {
   return Range<IterT>(b, e);
+}
+
+// TransformIterator
+template <class T, class IterT, class FunT>
+class TransformIterator
+    : public std::iterator<
+          typename std::iterator_traits<IterT>::iterator_category, T,
+          typename std::iterator_traits<IterT>::difference_type> {
+  static_assert(IsIterator<IterT>::value, "IterT must be an iterator type");
+
+public:
+  using difference_type = typename std::iterator_traits<IterT>::difference_type;
+
+  constexpr TransformIterator() : current(), fun() {}
+  template <class F>
+  constexpr TransformIterator(IterT it, F &&f)
+      : current(it), fun(std::forward<F>(f)) {}
+  constexpr IterT base() const { return current; }
+
+  decltype(auto) operator*() const { return fun(*current); }
+  decltype(auto) operator-> () const { return &(**this); }
+
+  TransformIterator &operator++() {
+    ++current;
+    return *this;
+  }
+  TransformIterator &operator++(int) {
+    auto tmp = *this;
+    ++current;
+    return tmp;
+  }
+  TransformIterator &operator--() {
+    --current;
+    return *this;
+  }
+  TransformIterator &operator--(int) {
+    auto tmp = *this;
+    --current;
+    return tmp;
+  }
+
+  TransformIterator &operator+=(difference_type off) { // increment by integer
+    current += off;
+    return (*this);
+  }
+  TransformIterator
+  operator+(difference_type off) const { // return this + integer
+    return (TransformIterator(current + off, fun));
+  }
+
+  TransformIterator &operator-=(difference_type off) { // decrement by integer
+    current -= off;
+    return (*this);
+  }
+  TransformIterator
+  operator-(difference_type off) const { // return this - integer
+    return (TransformIterator(current - off, fun));
+  }
+
+protected:
+  IterT current;
+  FunT fun;
+};
+
+template <class T, class IterT, class FunT>
+constexpr bool operator==(const TransformIterator<T, IterT, FunT> &i1,
+                          const TransformIterator<T, IterT, FunT> &i2) {
+  return i1.base() == i2.base();
+}
+template <class T, class IterT, class FunT>
+constexpr bool operator!=(const TransformIterator<T, IterT, FunT> &i1,
+                          const TransformIterator<T, IterT, FunT> &i2) {
+  return !(i1 == i2);
+}
+template <class T, class IterT, class FunT>
+constexpr bool operator<(const TransformIterator<T, IterT, FunT> &i1,
+                         const TransformIterator<T, IterT, FunT> &i2) {
+  return i1.base() < i2.base();
+}
+
+template <class T, class IterT, class FunT>
+constexpr auto operator-(const TransformIterator<T, IterT, FunT> &i1,
+                         const TransformIterator<T, IterT, FunT> &i2) {
+  return i1.base() - i2.base();
+}
+
+// MakeTransformIterator
+template <class IterT, class FunT>
+constexpr auto MakeTransformIterator(IterT it, FunT f) {
+  using value_t = std::decay_t<decltype(f(*it))>;
+  return TransformIterator<value_t, IterT, FunT>(it, f);
 }
 
 // element of container MUST support PredT(ele) -> bool

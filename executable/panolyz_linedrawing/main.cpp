@@ -12,7 +12,7 @@
 #include "../../src/gui/utility.hpp"
 
 #include "../../src/experimental/line_drawing.hpp"
-#include "../../src/experimental/mesh_util.hpp"
+#include "../../src/experimental/mesh_advanced_util.hpp"
 #include "../../src/experimental/pi_graph_annotation.hpp"
 #include "../../src/experimental/pi_graph_cg.hpp"
 #include "../../src/experimental/pi_graph_control.hpp"
@@ -112,23 +112,20 @@ std::vector<Point2> PossibleKeyVanishingPoints(const Chain2 &chain) {
   if (chain.size() % 2 == 0) {
     std::vector<Point2> vp_positions;
     vp_positions.reserve(chain.size() * chain.size() / 4);
-    for (int i = 0; i < chain.size() / 2; i++) {
-      for (int j = i + 1; j < i + chain.size() / 2; j++) {
-        vp_positions.push_back(
-            Intersection(Line2(chain.at(i), chain.at(j)).ray(),
-                         Line2(chain.at(i + chain.size() / 2),
-                               chain.at(j + chain.size() / 2))
-                             .ray()));
-      }
+	for (int i = 0; i < chain.size(); i++) {
+      int j = (i + chain.size() / 2) % chain.size();
+      vp_positions.push_back(
+          Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
     }
     return vp_positions;
   } else {
     std::vector<Point2> vp_positions;
     for (int i = 0; i < chain.size(); i++) {
-      for (int j = i + 1; j < chain.size(); j++) {
-        vp_positions.push_back(
-            Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
-      }
+      int j = (i + chain.size() / 2) % chain.size();
+      vp_positions.push_back(
+          Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
+      vp_positions.push_back(
+          Intersection(chain.edge(i).ray(), chain.edge(j + 1).ray()));
     }
     return vp_positions;
   }
@@ -170,7 +167,20 @@ std::vector<std::pair<std::set<int>, PPFocalCandidate>> EstimateCameraParameters
         corners.append(point2dAtProxy(mesh_proxy.topo(hh_proxy).to()));
       }
       auto key_vps = PossibleKeyVanishingPoints(corners);
-      interps.insert(interps.end(), key_vps.begin(), key_vps.end());
+      // remove all vps that lie on certain lines
+      for (auto &key_vp : key_vps) {
+        bool overlaped = false;
+        for (int i = 0; i < corners.size(); i++) {
+          Line2 edge = corners.edge(i);
+          if (Distance(key_vp, edge) < 1e-3) {
+            overlaped = true;
+            break;
+          }
+        }
+        if (!overlaped) {
+          interps.push_back(key_vp);
+        }
+      }
     }
 
     for (int i = 0; i < interps.size(); i++) {
@@ -187,7 +197,7 @@ std::vector<std::pair<std::set<int>, PPFocalCandidate>> EstimateCameraParameters
             continue;
           }
           if (!IsBetween(focal, scale / 5.0, scale * 5.0) ||
-              Distance(pp, box.center()) > scale * 2.0) {
+              Distance(pp, box.center()) > scale) {
             continue;
           }
           pp_focal_candidates.push_back(PPFocalCandidate{pp, focal});
@@ -1351,25 +1361,17 @@ void OptimizeWithoutOrientations(
     for (auto &f : cur_reconstruction.faces()) {
       fhs.push_back(f.topo.hd);
     }
-	// get fundamental vhs and sort fhs
+    // get fundamental vhs and sort fhs
     auto fundamental_vhs_set = SortFacesWithPlanarityDependency(
         cur_reconstruction, fhs.begin(), fhs.end(),
         [&cur_reconstruction](auto vhs_begin, auto vhs_end) -> bool {
-          // whether these vhs are colinear?
-          if (std::distance(vhs_begin, vhs_end) < 3) {
-            return true;
-          }
-          const Point3 &p0 = cur_reconstruction.data(*vhs_begin++);
-          const Point3 &p1 = cur_reconstruction.data(*vhs_begin++);
-          Vec3 dir = normalize(p1 - p0);
-          while (vhs_begin != vhs_end) {
-            const Point3 &pi = cur_reconstruction.data(*vhs_begin++);
-            Vec3 diri = normalize(pi - p0);
-            if (!IsFuzzyParallel(dir, diri, 1e-6)) {
-              return false;
-            }
-          }
-          return true;
+          auto trans_fun =
+              [&cur_reconstruction](VertHandle vh) -> const Point3 & {
+            return cur_reconstruction.data(vh);
+          };
+          return IsFuzzyColinear(MakeTransformIterator(vhs_begin, trans_fun),
+                                 MakeTransformIterator(vhs_end, trans_fun),
+                                 1e-6);
         });
 
     std::vector<VertHandle> fundamental_vhs(fundamental_vhs_set.begin(),
@@ -1378,7 +1380,7 @@ void OptimizeWithoutOrientations(
 	// get v2matrix and f2matrix
     std::map<VertHandle, DenseMatd> v2matrix;
     std::map<FaceHandle, DenseMatd> f2matrix;
-    ConstructPerspectiveTransformMatrices(
+    ConstructSingleViewTransformMatrices(
         fundamental_vhs, fhs, // face2related_verts
         [&cur_reconstruction](FaceHandle fh) -> std::vector<VertHandle> {
           std::vector<VertHandle> related_vhs;
@@ -1393,81 +1395,86 @@ void OptimizeWithoutOrientations(
         },
         v2matrix, f2matrix);
 
-    DenseMatd inversed_depths_vector = EstimatePerspectiveInversedDepths(
-        v2matrix, f2matrix,
-        // vert2initial_depth
-        [&cur_reconstruction, &cur_cam](VertHandle vh) -> double {
-          //return 1.0 / vh2inversed_depth[vh];
-          return Distance(cur_reconstruction.data(vh), cur_cam.eye());
-        },
-        // energy_fun
-        [&cur_reconstruction, &mesh_proxy, &cur_cam, &submeshes, &weights,
-         &non_corner_vh_proxies](auto &&vh2depth,
-                                 auto &&fh2eq) -> std::vector<double> {
-          std::vector<double> energy_terms;
-          for (auto &submesh : submeshes) {
-            auto energy_terms_submesh = ComputeEnergy(
-                mesh_proxy, submesh.fhs.begin(), submesh.fhs.end(), weights,
-                [&cur_reconstruction, &mesh_proxy,
-                 &vh2depth](VertHandle vh_proxy) -> Point3 {
-                  VertHandle vh = mesh_proxy.data(vh_proxy);
-                  return normalize(cur_reconstruction.data(vh)) * vh2depth(vh);
-                },
-                [&cur_reconstruction, &mesh_proxy, &vh2depth, &fh2eq,
-                 &non_corner_vh_proxies](FaceHandle fh_proxy) -> Vec3 {
-                  FaceHandle fh = mesh_proxy.data(fh_proxy);
-                  if (fh.valid()) {
-                    return fh2eq(fh);
-                  } else {
-                    auto &hh_proxies = mesh_proxy.topo(fh_proxy).halfedges;
-                    assert(hh_proxies.size() >= 3);
-                    for (int i1 = 0; i1 < hh_proxies.size(); i1++) {
-                      VertHandle vh1 = mesh_proxy.data(
-                          mesh_proxy.topo(hh_proxies[i1]).from());
-                      Point3 point1 = normalize(cur_reconstruction.data(vh1)) *
-                                      vh2depth(vh1);
-                      for (int i2 = i1 + 1; i2 < hh_proxies.size(); i2++) {
-                        VertHandle vh2 = mesh_proxy.data(
-                            mesh_proxy.topo(hh_proxies[i2]).from());
-                        Point3 point2 =
-                            normalize(cur_reconstruction.data(vh2)) *
-                            vh2depth(vh2);
-                        for (int i3 = i2 + 1; i3 < hh_proxies.size(); i3++) {
-                          VertHandle vh3 = mesh_proxy.data(
-                              mesh_proxy.topo(hh_proxies[i3]).from());
-                          Point3 point3 =
-                              normalize(cur_reconstruction.data(vh3)) *
-                              vh2depth(vh3);
-                          Vec3 eq = Plane3ToEquation(
-                              Plane3From3Points(point1, point2, point3));
-                          if (norm(eq) > 1e-5 && !HasValue(eq, [](auto &v) {
-                                return IsInfOrNaN(v);
-                              })) {
-                            return eq;
+    DenseMatd inversed_depths_vector;
+    {
+      inversed_depths_vector = EstimateSingleViewInversedDepths(
+          v2matrix, f2matrix,
+          // vert2initial_depth
+          [&cur_reconstruction, &cur_cam](VertHandle vh) -> double {
+            // return 1.0 / vh2inversed_depth[vh];
+            return Distance(cur_reconstruction.data(vh), cur_cam.eye());
+          },
+          // energy_fun
+          [&cur_reconstruction, &mesh_proxy, &cur_cam, &submeshes, &weights,
+           &non_corner_vh_proxies](auto &&vh2depth,
+                                   auto &&fh2eq) -> std::vector<double> {
+            std::vector<double> energy_terms;
+            for (auto &submesh : submeshes) {
+              auto energy_terms_submesh = ComputeEnergy(
+                  mesh_proxy, submesh.fhs.begin(), submesh.fhs.end(), weights,
+                  [&cur_reconstruction, &mesh_proxy,
+                   &vh2depth](VertHandle vh_proxy) -> Point3 {
+                    VertHandle vh = mesh_proxy.data(vh_proxy);
+                    return normalize(cur_reconstruction.data(vh)) *
+                           vh2depth(vh);
+                  },
+                  [&cur_reconstruction, &mesh_proxy, &vh2depth, &fh2eq,
+                   &non_corner_vh_proxies](FaceHandle fh_proxy) -> Vec3 {
+                    FaceHandle fh = mesh_proxy.data(fh_proxy);
+                    if (fh.valid()) {
+                      return fh2eq(fh);
+                    } else {
+                      auto &hh_proxies = mesh_proxy.topo(fh_proxy).halfedges;
+                      assert(hh_proxies.size() >= 3);
+                      for (int i1 = 0; i1 < hh_proxies.size(); i1++) {
+                        VertHandle vh1 = mesh_proxy.data(
+                            mesh_proxy.topo(hh_proxies[i1]).from());
+                        Point3 point1 =
+                            normalize(cur_reconstruction.data(vh1)) *
+                            vh2depth(vh1);
+                        for (int i2 = i1 + 1; i2 < hh_proxies.size(); i2++) {
+                          VertHandle vh2 = mesh_proxy.data(
+                              mesh_proxy.topo(hh_proxies[i2]).from());
+                          Point3 point2 =
+                              normalize(cur_reconstruction.data(vh2)) *
+                              vh2depth(vh2);
+                          for (int i3 = i2 + 1; i3 < hh_proxies.size(); i3++) {
+                            VertHandle vh3 = mesh_proxy.data(
+                                mesh_proxy.topo(hh_proxies[i3]).from());
+                            Point3 point3 =
+                                normalize(cur_reconstruction.data(vh3)) *
+                                vh2depth(vh3);
+                            Vec3 eq = Plane3ToEquation(
+                                Plane3From3Points(point1, point2, point3));
+                            if (norm(eq) > 1e-5 && !HasValue(eq, [](auto &v) {
+                                  return IsInfOrNaN(v);
+                                })) {
+                              return eq;
+                            }
                           }
                         }
                       }
+                      ASSERT_OR_PANIC(false && "degenerated face!");
+                      return Vec3();
                     }
-					ASSERT_OR_PANIC(false && "degenerated face!");
-                    return Vec3();
-                  }
-                },
-                [&non_corner_vh_proxies](VertHandle vh_proxy) -> bool {
-                  return Contains(non_corner_vh_proxies, vh_proxy);
-                },
-                cur_cam.eye());
-            energy_terms.insert(energy_terms.end(),
-                                energy_terms_submesh.begin(),
-                                energy_terms_submesh.end());
-          }
-          return energy_terms;
-        });
+                  },
+                  [&non_corner_vh_proxies](VertHandle vh_proxy) -> bool {
+                    return Contains(non_corner_vh_proxies, vh_proxy);
+                  },
+                  cur_cam.eye());
+              energy_terms.insert(energy_terms.end(),
+                                  energy_terms_submesh.begin(),
+                                  energy_terms_submesh.end());
+            }
+            return energy_terms;
+          });
 
-    assert(std::all_of(inversed_depths_vector.begin(),
-                       inversed_depths_vector.end(),
-                       [](double e) { return e > 0; }));
+      assert(std::all_of(inversed_depths_vector.begin(),
+                         inversed_depths_vector.end(),
+                         [](double e) { return e > 0; }));
+    }
 
-    if(true){
+    if (true) {
       gui::SceneBuilder sb;
       sb.installingOptions().defaultShaderSource =
           gui::OpenGLShaderSourceDescriptor::XTriangles;
@@ -1500,7 +1507,7 @@ std::map<VertT, double> PerspectiveReconstruction(
     const std::map<VertT, DenseMatd> &v2matrix,
     const std::map<FaceT, DenseMatd> &f2matrix, const std::vector<Vec3> &vps,
     const std::map<std::pair<VertT, VertT>, int> &vpair2vp,
-    Face2RelatedVertsFunT face2related_verts, misc::Matlab &matlab) {
+    misc::Matlab &matlab) {
 
   assert(!v2matrix.empty());
   int nvars = v2matrix->begin()->second.cols;
@@ -1579,9 +1586,9 @@ auto main(int argc, char **argv, char **env) -> int {
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
-  // static const std::string name = "gate";
+   static const std::string name = "gate";
   // static const std::string name = "towerx";
-  static const std::string name = "tower";
+  // static const std::string name = "tower";
   // static const std::string name = "hex";
   // static const std::string name = "triangle";
   // static const std::string name = "twotriangles";
@@ -1627,8 +1634,12 @@ auto main(int argc, char **argv, char **env) -> int {
   auto mesh_proxy = MakeMeshProxy(mesh);
 
   //// [Decompose]
-  auto cut_face_pairs = DecomposeAll(
-      mesh_proxy, [](HalfHandle hh1, HalfHandle hh2) -> bool { return false; });
+  auto cut_face_pairs =
+      DecomposeAll(mesh_proxy, [](HalfHandle hh1, HalfHandle hh2) -> bool {
+        // TODO: fix this
+        return false;
+      });
+
   // check validity
   for (auto &h : mesh_proxy.halfedges()) {
     HalfHandle hh = h.data;
@@ -1746,6 +1757,7 @@ auto main(int argc, char **argv, char **env) -> int {
     SaveToDisk(cam_file, cam);
   }
 
+  Println("gt camera: focal = ", cam.focal(), " pp = ", cam.principlePoint());
   //// [Make 2D Mesh]
   // convert to 2d
   auto mesh2d = Transform(
@@ -1768,30 +1780,6 @@ auto main(int argc, char **argv, char **env) -> int {
       canvas.add(Line2(p1, p2));
     }
     canvas.show(0, "mesh2d");
-  }
-
-  // analyze the fh/vh dependencies in each subMesh
-  for (int submesh_id = 0; submesh_id < submeshes.size(); submesh_id++) {
-    // find the vhs that should serve as anchoring variables
-    // and sort the order of the fhs to be determined
-    submeshes[submesh_id].ComputeVertexFaceDependencies(
-        mesh_proxy, [&mesh_proxy, &mesh2d](auto vhs_begin, auto vhs_end) -> bool {
-          // whether these vhs are colinear?
-          if (std::distance(vhs_begin, vhs_end) < 3) {
-            return true;
-          }
-          const Point2 &p0 = mesh2d.data(mesh_proxy.data(*vhs_begin++));
-          const Point2 &p1 = mesh2d.data(mesh_proxy.data(*vhs_begin++));
-          Vec2 dir = normalize(p1 - p0);
-          while (vhs_begin != vhs_end) {
-            const Point2 &pi = mesh2d.data(mesh_proxy.data(*vhs_begin++));
-            Vec2 diri = normalize(pi - p0);
-            if (!IsFuzzyParallel(dir, diri, 1e-6)) {
-              return false;
-            }
-          }
-          return true;
-        });
   }
 
   // find all vh proxies lying on an edge
@@ -1890,10 +1878,29 @@ auto main(int argc, char **argv, char **env) -> int {
   assert(edge2vp.size() == nedges);
   assert(vp2edges.size() == nvps);
 
-  std::map<VertHandle, Vec3> vh_proxy2dir;
-  std::map<VertHandle, DenseMatd> vh_proxy2matrix;
-  std::map<FaceHandle, DenseMatd> fh_proxy2matrix;
-  // TODO: construct matrices
+  // analyze the fh/vh dependencies in each subMesh
+  for (int submesh_id = 0; submesh_id < submeshes.size(); submesh_id++) {
+    // find the vhs that should serve as anchoring variables
+    // and sort the order of the fhs to be determined
+    submeshes[submesh_id].ComputeVertexFaceDependencies(
+        mesh_proxy, [&mesh_proxy, &mesh2d](auto vhs_begin, auto vhs_end) -> bool {
+          // whether these vhs are colinear?
+          if (std::distance(vhs_begin, vhs_end) < 3) {
+            return true;
+          }
+          const Point2 &p0 = mesh2d.data(mesh_proxy.data(*vhs_begin++));
+          const Point2 &p1 = mesh2d.data(mesh_proxy.data(*vhs_begin++));
+          Vec2 dir = normalize(p1 - p0);
+          while (vhs_begin != vhs_end) {
+            const Point2 &pi = mesh2d.data(mesh_proxy.data(*vhs_begin++));
+            Vec2 diri = normalize(pi - p0);
+            if (!IsFuzzyParallel(dir, diri, 1e-6)) {
+              return false;
+            }
+          }
+          return true;
+        });
+  }
 
 
   // for each pp focal candidate
@@ -1905,6 +1912,7 @@ auto main(int argc, char **argv, char **env) -> int {
 
     double focal = pp_focal_groups[config_id].second.focal;
     auto &pp = pp_focal_groups[config_id].second.pp;
+	Println("current camera: focal = ", focal, " pp = ", pp);
 
     PerspectiveCamera cur_cam(cam.screenWidth(), cam.screenHeight(), pp, focal);
     std::vector<Vec3> vp2dir(nvps);
@@ -1912,8 +1920,14 @@ auto main(int argc, char **argv, char **env) -> int {
       vp2dir[i] = cur_cam.direction(vp_positions[i]);
     }
 
-	// TODO: call PerspectiveReconstruction
-	// 
+    // collect directions and matrices
+    HandledTable<VertHandle, Vec3> vh2dir = mesh2d.createVertexTable(Vec3());
+    std::map<VertHandle, DenseMatd> vh_proxy2matrix;
+    std::map<FaceHandle, DenseMatd> fh_proxy2matrix;
+    // TODO: construct matrices
+
+    // TODO: call PerspectiveReconstruction
+    //
 
     Mesh3 mesh_reconstructed;
     static const bool no_orientation_estimation = false;
