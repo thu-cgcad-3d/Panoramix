@@ -2,6 +2,8 @@
 
 #include "../core/basic_types.hpp"
 
+#include "eigen.hpp"
+
 namespace pano {
 namespace misc {
 
@@ -87,6 +89,10 @@ public:
   MXA(const std::string &string, bool dos = false);
   MXA(const cv::SparseMat &m, bool dos = false);
   MXA(cv::InputArray m, bool dos = false);
+
+  template <class T, int M, int N, int O, int MaxM, int MaxN>
+  MXA(const Eigen::Matrix<T, M, N, O, MaxM, MaxN> &m, bool dos = false)
+      : MXA(ToCVMat(m), dos) {}
 
   double scalar() const;
   std::string toString() const;

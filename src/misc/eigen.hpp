@@ -3,12 +3,25 @@
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include <Eigen/StdVector>
-//#include <Eigen/SPQRSupport>
+
 #include <unsupported/Eigen/NonLinearOptimization>
 #include <unsupported/Eigen/NumericalDiff>
 
+#include "../core/basic_types.hpp"
+
 namespace pano {
 namespace misc {
+
+template <class T, int M, int N, int O, int MaxM, int MaxN>
+core::DenseMat<T> ToCVMat(const Eigen::Matrix<T, M, N, O, MaxM, MaxN> &m) {
+  core::DenseMat<T> result(m.rows(), m.cols());
+  for (int i = 0; i < m.rows(); i++) {
+    for (int j = 0; j < m.cols(); j++) {
+      result(i, j) = m(i, j);
+    }
+  }
+  return result;
+}
 
 // Generic functor
 template <class InternalFunctorT, class T, int NX = Eigen::Dynamic,

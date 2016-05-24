@@ -15,7 +15,173 @@ template <class VertDataT, class HalfDataT, class FaceDataT,
 auto Transform(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                TransformVertFunT transVert,
                TransformHalfFunT transHalf = TransformHalfFunT(),
-               TransformFaceFunT transFace = TransformFaceFunT()) {
+               TransformFaceFunT transFace = TransformFaceFunT());
+
+// DepthFirstSearchOneTree
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class ConstVertexCallbackT // bool callback(const Mesh & m, VertH v)
+          >
+bool DepthFirstSearchOneTree(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                             VertHandle root, ConstVertexCallbackT vCallBack);
+
+// DepthFirstSearch
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class ConstVertexCallbackT // bool callback(const Mesh & m, VertH v)
+          >
+bool DepthFirstSearch(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                      ConstVertexCallbackT vCallBack);
+
+// DepthFirstSearch
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class VertexCallbackT // bool callback(const Mesh & m, VertH v)
+          >
+bool DepthFirstSearch(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                      VertexCallbackT vCallBack);
+
+// ConnectedComponents
+template <
+    class VertDataT, class HalfDataT, class FaceDataT,
+    class ConstVertexTypeRecorderT // record(const MeshT & m, VertH v, int ccid)
+    >
+int ConnectedComponents(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                        ConstVertexTypeRecorderT vtr);
+
+// RemoveDanglingComponents
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void RemoveDanglingComponents(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
+
+// SearchAndAddFaces (liqi's method)
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class EdgeParallelScorerT, // (const MeshT & mesh, HalfH h1, HalfH h2)
+                                     // -> double
+          class EdgeMaskerT          // (const MeshT & mesh, HalfH h) -> bool
+          >
+void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                       EdgeParallelScorerT epj, EdgeMaskerT emsk);
+
+// SearchAndAddFaces (liqi's method)
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
+
+// ConstructInternalLoopFrom (liqi)
+// IntersectFunT: (HalfHandle, HalfHandle) -> bool
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class HalfEdgeIntersectFunT>
+auto ConstructInternalLoopFrom(
+    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, Handle<HalfTopo> initial,
+    HalfEdgeIntersectFunT intersectFun);
+
+// DecomposeOnInternalLoop (liqi)
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class HalfHandleIterT, class FD1 = FaceDataT, class FD2 = FaceDataT>
+std::pair<Handle<FaceTopo>, Handle<FaceTopo>>
+DecomposeOnInternalLoop(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                        HalfHandleIterT loopBegin, HalfHandleIterT loopEnd,
+                        FD1 &&faceData = FD1(), FD2 &&oppoFaceData = FD2());
+
+// AssertEdgesAreStiched
+template <class VertDataT, class HalfDataT, class FaceDataT>
+inline void
+AssertEdgesAreStiched(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
+
+namespace {
+struct CompareLoopDefault {
+  template <class LoopT1, class LoopT2>
+  inline bool operator()(const LoopT1 &l1, const LoopT2 &l2) const {
+    return l1.size() < l2.size();
+  }
+};
+}
+
+// DecomposeAll
+// IntersectFunT: (HalfHandle, HalfHandle) -> bool
+// CompareLoopT: (Container of HalfHandle, Container of HalfHandle) -> bool, if
+// first loop is better, return true, otherwise false
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class HalfEdgeIntersectFunT, class CompareLoopT = CompareLoopDefault>
+std::vector<std::pair<FaceHandle, FaceHandle>>
+DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+             HalfEdgeIntersectFunT intersectFun,
+             CompareLoopT compareLoop = CompareLoopT());
+
+// FindUpperBoundOfDRF
+// - HalfEdgeColinearFunT: (HalfEdgeIterT hhsBegin, HalfEdgeIterT hhsEnd) ->
+// bool
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class HalfEdgeColinearFunT, class FaceHandleIterT>
+int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+                        FaceHandleIterT fhsBegin, FaceHandleIterT fhsEnd,
+                        HalfEdgeColinearFunT colinearFun);
+
+// SortFacesWithPlanarityDependency
+// - VertColinearFunT: (VertHandleIterT vhs_begin, VertHandleIterT vhs_end) ->
+// bool
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class VertColinearFunT, class FaceHandleIterT,
+          class FaceDependencyCallbackFunT = Dummy>
+std::unordered_set<VertHandle> SortFacesWithPlanarityDependency(
+    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+    FaceHandleIterT fhs_begin, FaceHandleIterT fhs_end,
+    VertColinearFunT vhs_colinear_fun,
+    FaceDependencyCallbackFunT face_dependency_callback_fun =
+        FaceDependencyCallbackFunT());
+
+// MakeTetrahedron
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void MakeTetrahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
+
+// MakeQuadFacedCube
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void MakeQuadFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
+
+// MakeTriFacedCube
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void MakeTriFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
+
+// MakeIcosahedron
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void MakeIcosahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
+
+// MakePrism
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void MakePrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
+               double height);
+
+// MakeCone
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void MakeCone(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
+              double height);
+
+// MakeStarPrism
+template <class VertDataT, class HalfDataT, class FaceDataT>
+void MakeStarPrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
+                   double innerRadius, double outerRadius, double height);
+
+// MakeMeshProxy
+template <class VertDataT, class HalfDataT, class FaceDataT>
+Mesh<VertHandle, HalfHandle, FaceHandle>
+MakeMeshProxy(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
+
+// LoadFromObjFile
+Mesh<Point3> LoadFromObjFile(const std::string &fname);
+}
+}
+
+
+
+////////////////////////////////////////////////
+//// implementations
+////////////////////////////////////////////////
+namespace pano {
+namespace core {
+
+// Transform
+template <class VertDataT, class HalfDataT, class FaceDataT,
+          class TransformVertFunT, class TransformHalfFunT,
+          class TransformFaceFunT>
+auto Transform(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+               TransformVertFunT transVert, TransformHalfFunT transHalf,
+               TransformFaceFunT transFace) {
   using ToVertDataT =
       std::decay_t<typename FunctionTraits<TransformVertFunT>::ResultType>;
   using ToHalfDataT =
@@ -1034,11 +1200,11 @@ auto ConstructInternalLoopFrom(
 
 // DecomposeOnInternalLoop (liqi)
 template <class VertDataT, class HalfDataT, class FaceDataT,
-          class HalfHandleIterT, class FD1 = FaceDataT, class FD2 = FaceDataT>
+          class HalfHandleIterT, class FD1, class FD2>
 std::pair<Handle<FaceTopo>, Handle<FaceTopo>>
 DecomposeOnInternalLoop(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                         HalfHandleIterT loopBegin, HalfHandleIterT loopEnd,
-                        FD1 &&faceData = FD1(), FD2 &&oppoFaceData = FD2()) {
+                        FD1 &&faceData, FD2 &&oppoFaceData) {
 
   if (loopBegin == loopEnd) {
     return std::pair<Handle<FaceTopo>, Handle<FaceTopo>>();
@@ -1179,20 +1345,11 @@ AssertEdgesAreStiched(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 // IntersectFunT: (HalfHandle, HalfHandle) -> bool
 // CompareLoopT: (Container of HalfHandle, Container of HalfHandle) -> bool, if
 // first loop is better, return true, otherwise false
-namespace {
-struct CompareLoopDefault {
-  template <class LoopT1, class LoopT2>
-  inline bool operator()(const LoopT1 &l1, const LoopT2 &l2) const {
-    return l1.size() < l2.size();
-  }
-};
-}
 template <class VertDataT, class HalfDataT, class FaceDataT,
-          class HalfEdgeIntersectFunT, class CompareLoopT = CompareLoopDefault>
+          class HalfEdgeIntersectFunT, class CompareLoopT>
 std::vector<std::pair<FaceHandle, FaceHandle>>
 DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-             HalfEdgeIntersectFunT intersectFun,
-             CompareLoopT compareLoop = CompareLoopT()) {
+             HalfEdgeIntersectFunT intersectFun, CompareLoopT compareLoop) {
   AssertEdgesAreStiched(mesh);
   std::vector<std::pair<FaceHandle, FaceHandle>> cutFaces;
   while (true) {
@@ -1287,13 +1444,12 @@ int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
 // bool
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class VertColinearFunT, class FaceHandleIterT,
-          class FaceDependencyCallbackFunT = Dummy>
+          class FaceDependencyCallbackFunT>
 std::unordered_set<VertHandle> SortFacesWithPlanarityDependency(
     const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
     FaceHandleIterT fhs_begin, FaceHandleIterT fhs_end,
     VertColinearFunT vhs_colinear_fun,
-    FaceDependencyCallbackFunT face_dependency_callback_fun =
-        FaceDependencyCallbackFunT()) {
+    FaceDependencyCallbackFunT face_dependency_callback_fun) {
 
   std::unordered_set<VertHandle> fundamental_anchors;
   std::unordered_set<VertHandle> vhs_determined;
@@ -1304,7 +1460,7 @@ std::unordered_set<VertHandle> SortFacesWithPlanarityDependency(
   ordered_fhs.reserve(fhs_not_determined.size());
 
   while (!fhs_not_determined.empty()) {
-    FaceHandle next_fh = *fhs_not_determined.begin(); 
+    FaceHandle next_fh = *fhs_not_determined.begin();
     std::unordered_set<VertHandle> next_vhs;
     for (FaceHandle fh : fhs_not_determined) {
       // locate all the determined vhs
@@ -1391,8 +1547,8 @@ std::unordered_set<VertHandle> SortFacesWithPlanarityDependency(
       assert(!vhs_tobe_anchored.empty() && "degenerated faces/edges occurs");
     }
 
-	next_vhs.insert(vhs_tobe_anchored.begin(), vhs_tobe_anchored.end());
-	face_dependency_callback_fun(next_fh, next_vhs.begin(), next_vhs.end());
+    next_vhs.insert(vhs_tobe_anchored.begin(), vhs_tobe_anchored.end());
+    face_dependency_callback_fun(next_fh, next_vhs.begin(), next_vhs.end());
 
     fundamental_anchors.insert(vhs_tobe_anchored.begin(),
                                vhs_tobe_anchored.end());
@@ -1411,11 +1567,6 @@ std::unordered_set<VertHandle> SortFacesWithPlanarityDependency(
 
   return fundamental_anchors;
 }
-
-
-
-
-
 
 // MakeTetrahedron
 template <class VertDataT, class HalfDataT, class FaceDataT>
@@ -1657,8 +1808,5 @@ MakeMeshProxy(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   }
   return proxy;
 }
-
-// LoadFromObjFile
-Mesh<Point3> LoadFromObjFile(const std::string &fname);
 }
 }

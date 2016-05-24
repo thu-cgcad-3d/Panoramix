@@ -12,6 +12,7 @@
 #include "../../src/gui/utility.hpp"
 
 #include "../../src/experimental/line_drawing.hpp"
+#include "../../src/experimental/mesh_util.hpp"
 #include "../../src/experimental/pi_graph_annotation.hpp"
 #include "../../src/experimental/pi_graph_cg.hpp"
 #include "../../src/experimental/pi_graph_control.hpp"
@@ -507,13 +508,239 @@ std::vector<Point2> EstimateVanishingPoints(
 }
 
 // EstimateEdgeOrientations
-void EstimateEdgeOrientations() {
-	// todo
+void EstimateEdgeOrientations(
+    const Mesh2 &mesh2d, const std::vector<Point2> &vp_positions,
+    const HandledTable<HalfHandle, int> &hh2d2edge,
+    const std::vector<std::map<int, double>> &vp2edge_with_angles,
+    const std::vector<std::vector<Scored<int>>> &edge2ordered_vp_and_angles,
+    std::vector<int> &edge2vp, std::vector<std::vector<int>> &vp2edges) {
+
+  Box2 box = BoundingBoxOfContainer(mesh2d.vertices());
+  double scale = box.outerSphere().radius;
+
+  int nedges = edge2ordered_vp_and_angles.size();
+  int nvps = vp2edge_with_angles.size();
+  edge2vp.resize(nedges, -1);
+  vp2edges.resize(nvps);
+
+  // construct a factor graph to optimize edge-vp bindings
+  FactorGraph fg;
+  std::vector<FactorGraph::VarHandle> edge2vh(nedges);
+  {
+    for (int edge = 0; edge < nedges; edge++) {
+      auto vc =
+          fg.addVarCategory(edge2ordered_vp_and_angles[edge].size() + 1, 1.0);
+      edge2vh[edge] = fg.addVar(vc);
+    }
+
+    // potential 1: the edge should bind to some vp, should prefer better
+    // scored
+    for (int edge = 0; edge < nedges; edge++) {
+      auto vh = edge2vh[edge];
+      auto &relatedVPAndAngles = edge2ordered_vp_and_angles[edge];
+      auto fc = fg.addFactorCategory(
+          [&relatedVPAndAngles, nedges](const int *varlabels, size_t nvar,
+                                        FactorGraph::FactorCategoryId fcid,
+                                        void *givenData) -> double {
+            assert(nvar == 1);
+            int label = varlabels[0];
+            assert(label <= relatedVPAndAngles.size());
+            const double K = 50.0 / nedges;
+            if (label == relatedVPAndAngles.size()) { // not bind to any vp
+              return K;
+            }
+            double angle = relatedVPAndAngles[label].score;
+            assert(!IsInfOrNaN(angle));
+            return (1.0 - Gaussian(angle, DegreesToRadians(3))) * K;
+          },
+          1.0);
+      fg.addFactor({vh}, fc);
+    }
+
+    // potential 2: two adjacent edges should not bind to a near vp
+    int ncorners = 0;
+    for (auto &f : mesh2d.faces()) {
+      ncorners += f.topo.halfedges.size();
+    }
+    for (auto &f : mesh2d.faces()) {
+      auto &hhs = f.topo.halfedges;
+      for (int i = 0; i < hhs.size(); i++) {
+        auto hh1 = hhs[i];
+        auto hh2 = hhs[(i + 1) % hhs.size()];
+        int edge1 = hh2d2edge[hh1];
+        int edge2 = hh2d2edge[hh2];
+        auto &relatedVPAndAngles1 = edge2ordered_vp_and_angles[edge1];
+        auto &relatedVPAndAngles2 = edge2ordered_vp_and_angles[edge2];
+        auto vh1 = edge2vh[edge1];
+        auto vh2 = edge2vh[edge2];
+        auto fc = fg.addFactorCategory(
+            [edge1, edge2, &relatedVPAndAngles1, &relatedVPAndAngles2,
+             &vp_positions, ncorners, scale](const int *varlabels, size_t nvar,
+                                             FactorGraph::FactorCategoryId fcid,
+                                             void *givenData) -> double {
+              assert(nvar == 2);
+              int bindedVP1 =
+                  varlabels[0] == relatedVPAndAngles1.size()
+                      ? -1
+                      : (relatedVPAndAngles1[varlabels[0]].component);
+              int bindedVP2 =
+                  varlabels[1] == relatedVPAndAngles2.size()
+                      ? -1
+                      : (relatedVPAndAngles2[varlabels[1]].component);
+              if (bindedVP1 == -1 || bindedVP2 == -1) {
+                return 0;
+              }
+              auto &vpPos1 = vp_positions[bindedVP1];
+              auto &vpPos2 = vp_positions[bindedVP2];
+              const double thres = scale / 10.0;
+              const double K = 10.0 / ncorners;
+              if (Distance(vpPos1, vpPos2) < thres) { // todo
+                return K;
+              }
+              return 0.0;
+            },
+            1.0);
+        fg.addFactor({vh1, vh2}, fc);
+      }
+    }
+
+    // potential 3: the vp_positions of edges sharing a same face should lie
+    // on
+    // the same
+    // line (the vanishing line of the face)
+    int ntris = 0;
+    for (auto &f : mesh2d.faces()) {
+      auto &hhs = f.topo.halfedges;
+      if (hhs.size() <= 3) {
+        continue;
+      }
+      ntris = hhs.size() > 4 ? (2 * hhs.size()) : hhs.size();
+    }
+    for (auto &f : mesh2d.faces()) {
+      auto &hhs = f.topo.halfedges;
+      if (hhs.size() <= 3) {
+        continue;
+      }
+      for (int i = 0; i < hhs.size(); i++) {
+        int maxGap = hhs.size() > 4 ? 2 : 1;
+        for (int gap = 1; gap <= maxGap; gap++) {
+          int prevEdge = hh2d2edge[hhs[(i + hhs.size() - gap) % hhs.size()]];
+          int edge = hh2d2edge[hhs[i]];
+          int nextEdge = hh2d2edge[hhs[(i + gap) % hhs.size()]];
+          auto fc = fg.addFactorCategory(
+              [&edge2ordered_vp_and_angles, &vp_positions, prevEdge, edge,
+               nextEdge, ntris](const int *varlabels, size_t nvar,
+                                FactorGraph::FactorCategoryId fcid,
+                                void *givenData) -> double {
+                assert(nvar == 3);
+                int vp1 =
+                    varlabels[0] == edge2ordered_vp_and_angles[prevEdge].size()
+                        ? -1
+                        : (edge2ordered_vp_and_angles[prevEdge][varlabels[0]]
+                               .component);
+                if (vp1 == -1) {
+                  return 0.0;
+                }
+                int vp2 =
+                    varlabels[1] == edge2ordered_vp_and_angles[edge].size()
+                        ? -1
+                        : (edge2ordered_vp_and_angles[edge][varlabels[1]]
+                               .component);
+                if (vp2 == -1) {
+                  return 0.0;
+                }
+                int vp3 =
+                    varlabels[2] == edge2ordered_vp_and_angles[nextEdge].size()
+                        ? -1
+                        : (edge2ordered_vp_and_angles[nextEdge][varlabels[2]]
+                               .component);
+                if (vp3 == -1) {
+                  return 0.0;
+                }
+                if (vp1 == vp2 || vp2 == vp3 || vp1 == vp3) {
+                  return 0.0;
+                }
+                double angle = AngleBetweenUndirected(
+                    vp_positions[vp1] - vp_positions[vp2],
+                    vp_positions[vp3] - vp_positions[vp2]);
+                assert(!IsInfOrNaN(angle));
+                const double K = 30.0 / ntris;
+                return (1.0 - Gaussian(angle, DegreesToRadians(10))) * K;
+              },
+              1.0);
+          fg.addFactor({edge2vh[prevEdge], edge2vh[edge], edge2vh[nextEdge]},
+                       fc);
+        }
+      }
+    }
+
+    //// potential 4: a vp is good only when edges are bound to it!
+    //// a vp should be with either no edges or >= 3 edges
+    // for (int vpid = 0; vpid < nvps; vpid++) {
+    //  std::vector<FactorGraph::VarHandle> relatedVhs;
+    //  relatedVhs.reserve(vp2edges[vpid].size());
+    //  for (int edge : vp2edges[vpid]) {
+    //    relatedVhs.push_back(edge2vh[edge]);
+    //  }
+    //  auto fc = fg.addFactorCategory(
+    //      [&edge2ordered_vp_and_angles, vpid, &vp2edges](
+    //          const int *varlabels, size_t nvar,
+    //          FactorGraph::FactorCategoryId fcid, void *givenData) ->
+    //          double
+    //          {
+    //        int bindedEdges = 0;
+    //        auto &relatedEdges = vp2edges[vpid];
+    //        assert(nvar == relatedEdges.size());
+    //        for (int i = 0; i < relatedEdges.size(); i++) {
+    //          int edge = relatedEdges[i];
+    //          int edgeLabel = varlabels[i];
+    //          if (edgeLabel == edge2ordered_vp_and_angles[edge].size()) {
+    //            continue; // not bound to any vp
+    //          }
+    //          int edgeBindedVPId =
+    //          edge2ordered_vp_and_angles[edge][edgeLabel].component;
+    //          if (edgeBindedVPId == vpid) {
+    //            bindedEdges++;
+    //          }
+    //        }
+    //        // todo
+    //        if (bindedEdges == 1 || bindedEdges == 2) {
+    //          return 10.0;
+    //        }
+    //        return 0.0;
+    //      },
+    //      1.0);
+    //  fg.addFactor(relatedVhs.begin(), relatedVhs.end(), fc);
+    //}
+  }
+
+  // solve the factor graph
+  auto result =
+      fg.solve(5, 1, [](int epoch, double energy, double denergy,
+                        const FactorGraph::ResultTable &results) -> bool {
+        Println("epoch: ", epoch, "  energy: ", energy);
+        return true;
+      });
+
+  for (int edge = 0; edge < nedges; edge++) {
+    int id = result[edge2vh[edge]];
+    if (id == edge2ordered_vp_and_angles[edge].size()) {
+      continue;
+    }
+    edge2vp[edge] = edge2ordered_vp_and_angles[edge][id].component;
+    vp2edges[edge2vp[edge]].push_back(edge);
+  }
+
+  // invalidate the edge bindings for vps who have <= 3 edges
+  for (int vp = 0; vp < nvps; vp++) {
+    if (vp2edges[vp].size() <= 3) { //
+      for (int edge : vp2edges[vp]) {
+        edge2vp[edge] = -1;
+      }
+      vp2edges[vp].clear();
+    }
+  }
 }
-
-
-
-
 
 struct EnergyWeights {
   double vert_msda_weight;
@@ -1058,7 +1285,7 @@ Mesh3 ReconstructWithOrientations(
     vert.data /= double(vh2d2faceProxyCount[vert.topo.hd]);
   }
 
-  if (true) { // show current reconstruction
+  if (false) { // show current reconstruction
     gui::SceneBuilder sb;
     sb.installingOptions().defaultShaderSource =
         gui::OpenGLShaderSourceDescriptor::XTriangles;
@@ -1091,7 +1318,7 @@ void OptimizeWithoutOrientations(
     const std::unordered_set<VertHandle> &non_corner_vh_proxies) {
   using namespace Eigen;
 
-  { // show together
+  if(false){ // show together
     auto color_table = gui::CreateRandomColorTableWithSize(submeshes.size());
     gui::SceneBuilder sb;
     sb.installingOptions().defaultShaderSource =
@@ -1118,220 +1345,13 @@ void OptimizeWithoutOrientations(
   weights.vert_msda_weight = 1e1;
   weights.all_msda_weight = 1e5;
 
-  std::vector<std::map<VertHandle, double>> vh_proxy2inversed_depth(
-      submeshes.size());
-
-  // optimize in each submesh first
-  for (int i = 0; i < submeshes.size(); i++) {
-    auto &sub = submeshes[i];
-    std::vector<VertHandle> fundamental_vhs(sub.fundamental_vhs.begin(),
-                                            sub.fundamental_vhs.end());
-    std::map<VertHandle, RowVectorXd> v2matrix;
-    std::map<FaceHandle, Matrix3Xd> f2matrix;
-
-    auto inversed_depths = EstimatePerspectiveDepths(
-        fundamental_vhs, sub.ordered_fhs,
-        // vert2initial_depth
-        [&mesh_proxy, &cur_reconstruction,
-         &cur_cam](VertHandle vh_proxy) -> double {
-          return Distance(cur_reconstruction.data(mesh_proxy.data(vh_proxy)),
-                          cur_cam.eye());
-        },
-        // face2related_verts
-        [&mesh_proxy](FaceHandle fh_proxy) -> std::vector<VertHandle> {
-          std::vector<VertHandle> related_vh_proxies;
-          for (HalfHandle hh : mesh_proxy.topo(fh_proxy).halfedges) {
-            related_vh_proxies.push_back(mesh_proxy.topo(hh).from());
-          }
-          return related_vh_proxies;
-        },
-        // vert2direction
-        [&cur_reconstruction, &mesh_proxy,
-         &cur_cam](VertHandle vh_proxy) -> RowVector3d {
-          Vec3 dir = cur_reconstruction.data(mesh_proxy.data(vh_proxy));
-          return RowVector3d(dir[0], dir[1], dir[2]).normalized();
-        },
-        // energy_fun
-        [&mesh_proxy, &sub, &cur_reconstruction, &cur_cam, &weights,
-         &non_corner_vh_proxies](auto &&vert2depth,
-                                 auto &&face2eq) -> VectorXd {
-          auto energy_terms = ComputeEnergy(
-              mesh_proxy, sub.fhs.begin(), sub.fhs.end(), weights,
-              [&mesh_proxy, &cur_reconstruction,
-               &vert2depth](VertHandle vh_proxy) -> Point3 {
-                return normalize(
-                           cur_reconstruction.data(mesh_proxy.data(vh_proxy))) *
-                       vert2depth(vh_proxy);
-              },
-              face2eq,
-              [&non_corner_vh_proxies](VertHandle vh_proxy) -> bool {
-                return Contains(non_corner_vh_proxies, vh_proxy);
-              },
-              cur_cam.eye());
-          return VectorXd::Map(energy_terms.data(), energy_terms.size());
-        },
-        &v2matrix, &f2matrix);
-
-    if (inversed_depths.mean() < 0) {
-      inversed_depths = -inversed_depths;
-    }
-	assert((inversed_depths.array() > 0.0).all());
-
-    if (true) {
-      gui::SceneBuilder sb;
-      sb.installingOptions().defaultShaderSource =
-          gui::OpenGLShaderSourceDescriptor::XTriangles;
-      sb.installingOptions().discretizeOptions.color(gui::Black);
-      sb.installingOptions().lineWidth = 10;
-
-      for (HalfHandle hh : sub.hhs) {
-        VertHandle vh1 = mesh_proxy.topo(hh).from();
-        VertHandle vh2 = mesh_proxy.topo(hh).to();
-        Point3 p1 = normalize(cur_reconstruction.data(mesh_proxy.data(vh1))) /
-                    (v2matrix.at(vh1) * inversed_depths);
-        Point3 p2 = normalize(cur_reconstruction.data(mesh_proxy.data(vh2))) /
-                    (v2matrix.at(vh2) * inversed_depths);
-        sb.add(Line3(p1, p2));
-      }
-      sb.show(true, false, gui::RenderOptions().camera(cur_cam).winName(
-                               "After Optimization"));
-    }
-
-    // install
-    for (VertHandle vh_proxy : sub.vhs) {
-      vh_proxy2inversed_depth[i][vh_proxy] =
-          v2matrix.at(vh_proxy) * inversed_depths;
-    }
-  }
-
-  { // show together
-    auto color_table = gui::CreateRandomColorTableWithSize(submeshes.size());
-    gui::SceneBuilder sb;
-    sb.installingOptions().defaultShaderSource =
-        gui::OpenGLShaderSourceDescriptor::XLines;
-    sb.installingOptions().lineWidth = 10;
-    for (int i = 0; i < vh_proxy2inversed_depth.size(); i++) {
-      sb.installingOptions().discretizeOptions.color(color_table[i]);
-      for (HalfHandle hh : submeshes[i].hhs) {
-        VertHandle vh1 = mesh_proxy.topo(hh).from();
-        VertHandle vh2 = mesh_proxy.topo(hh).to();
-        Point3 p1 = normalize(cur_reconstruction.data(mesh_proxy.data(vh1))) /
-                    vh_proxy2inversed_depth[i].at(vh1);
-        Point3 p2 = normalize(cur_reconstruction.data(mesh_proxy.data(vh2))) /
-                    vh_proxy2inversed_depth[i].at(vh2);
-        sb.add(Line3(p1, p2));
-      }
-    }
-    sb.show(true, false, gui::RenderOptions().camera(cur_cam).winName(
-                             "Together After Optimization"));
-  }
-
-  // merge them together
-  std::sort(vh_proxy2inversed_depth.begin(), vh_proxy2inversed_depth.end(),
-            [](auto &&a, auto &&b) { return a.size() > b.size(); });
-  while (vh_proxy2inversed_depth.size() > 1) {
-    auto &group1 = vh_proxy2inversed_depth[0];
-
-    // find common vhs
-    std::vector<std::pair<VertHandle, VertHandle>> common_vh_proxies;
-    int group2id = 0;
-    for (group2id = 1; group2id < vh_proxy2inversed_depth.size(); group2id++) {
-      auto &group2 = vh_proxy2inversed_depth[group2id];
-      for (auto &v_id1 : group1) {
-        VertHandle vh_proxy1 = v_id1.first;
-        for (auto &v_id2 : group2) {
-          VertHandle vh_proxy2 = v_id2.first;
-          if (mesh_proxy.data(vh_proxy1) == mesh_proxy.data(vh_proxy2)) {
-            common_vh_proxies.emplace_back(vh_proxy1, vh_proxy2);
-          }
-        }
-      }
-      if (!common_vh_proxies.empty()) {
-        break;
-      }
-    }
-    auto &group2 = vh_proxy2inversed_depth[group2id];
-    ASSERT_OR_PANIC(!common_vh_proxies.empty());
-
-    double inversed_depths_mean1 = 0.0;
-    double inversed_depths_mean2 = 0.0;
-    for (auto &p : common_vh_proxies) {
-      inversed_depths_mean1 += group1.at(p.first);
-      inversed_depths_mean2 += group2.at(p.second);
-    }
-    inversed_depths_mean1 /= common_vh_proxies.size();
-    inversed_depths_mean2 /= common_vh_proxies.size();
-
-    double inversed_depths_sigma1 = 0.0;
-    double inversed_depths_sigma2 = 0.0;
-    for (auto &p : common_vh_proxies) {
-      inversed_depths_sigma1 +=
-          Square(group1.at(p.first) - inversed_depths_mean1);
-      inversed_depths_sigma2 +=
-          Square(group2.at(p.second) - inversed_depths_mean2);
-    }
-    inversed_depths_sigma1 =
-        sqrt(inversed_depths_sigma1 / common_vh_proxies.size());
-    inversed_depths_sigma2 =
-        sqrt(inversed_depths_sigma2 / common_vh_proxies.size());
-
-    // merge group2 into group1
-    for (auto &v_id2 : group2) {
-      assert(!Contains(group1, v_id2.first));
-      group1[v_id2.first] = inversed_depths_mean1 +
-                            (v_id2.second - inversed_depths_mean2) *
-                                inversed_depths_sigma1 / inversed_depths_sigma2;
-	  assert(group1[v_id2.first] > 0.0);
-    }
-    // erase group2
-    std::swap(group2, vh_proxy2inversed_depth.back());
-    vh_proxy2inversed_depth.pop_back();
-  }
-
-  HandledTable<VertHandle, double> vh2inversed_depth =
-      cur_reconstruction.createVertexTable(0.0);
-  HandledTable<VertHandle, int> vh2vh_proxy_count =
-      cur_reconstruction.createVertexTable(0);
-  for (auto &v_id : vh_proxy2inversed_depth.front()) {
-    VertHandle vh = mesh_proxy.data(v_id.first);
-    double inv_depth = v_id.second;
-    vh2inversed_depth[vh] += inv_depth;
-    vh2vh_proxy_count[vh]++;
-  }
-  for (auto &v : cur_reconstruction.vertices()) {
-    vh2inversed_depth[v.topo.hd] /= vh2vh_proxy_count[v.topo.hd];
-	assert(vh2inversed_depth[v.topo.hd] > 0.0);
-  }
-  {
-    gui::SceneBuilder sb;
-    sb.installingOptions().defaultShaderSource =
-        gui::OpenGLShaderSourceDescriptor::XTriangles;
-    sb.installingOptions().discretizeOptions.color(gui::Black);
-    sb.installingOptions().lineWidth = 10;
-
-    for (auto &h : cur_reconstruction.halfedges()) {
-      HalfHandle hh = h.topo.hd;
-      VertHandle vh1 = cur_reconstruction.topo(hh).from();
-      VertHandle vh2 = cur_reconstruction.topo(hh).to();
-      Point3 p1 =
-          normalize(cur_reconstruction.data(vh1)) / vh2inversed_depth[vh1];
-      Point3 p2 =
-          normalize(cur_reconstruction.data(vh2)) / vh2inversed_depth[vh2];
-      sb.add(Line3(p1, p2));
-    }
-    sb.show(true, false, gui::RenderOptions()
-                             .camera(cur_cam)
-                             .winName("Before Holistic Optimization")
-                             .fixUpDirectionInCameraMove(false));
-  }
-
-
   // holistic optimization
   {
     std::vector<FaceHandle> fhs;
     for (auto &f : cur_reconstruction.faces()) {
       fhs.push_back(f.topo.hd);
     }
+	// get fundamental vhs and sort fhs
     auto fundamental_vhs_set = SortFacesWithPlanarityDependency(
         cur_reconstruction, fhs.begin(), fhs.end(),
         [&cur_reconstruction](auto vhs_begin, auto vhs_end) -> bool {
@@ -1355,31 +1375,35 @@ void OptimizeWithoutOrientations(
     std::vector<VertHandle> fundamental_vhs(fundamental_vhs_set.begin(),
                                             fundamental_vhs_set.end());
 
-    std::map<VertHandle, RowVectorXd> v2matrix;
-    std::map<FaceHandle, Matrix3Xd> f2matrix;
-
-    auto inversed_depths = EstimatePerspectiveDepths(
-        fundamental_vhs, fhs,
-        // vert2initial_depth
-        [&vh2inversed_depth](VertHandle vh) -> double {
-          return 1.0 / vh2inversed_depth[vh];
-        },
-        // face2related_verts
+	// get v2matrix and f2matrix
+    std::map<VertHandle, DenseMatd> v2matrix;
+    std::map<FaceHandle, DenseMatd> f2matrix;
+    ConstructPerspectiveTransformMatrices(
+        fundamental_vhs, fhs, // face2related_verts
         [&cur_reconstruction](FaceHandle fh) -> std::vector<VertHandle> {
           std::vector<VertHandle> related_vhs;
           for (HalfHandle hh : cur_reconstruction.topo(fh).halfedges) {
             related_vhs.push_back(cur_reconstruction.topo(hh).from());
           }
           return related_vhs;
-        },
-        // vert2direction
-        [&cur_reconstruction, &cur_cam](VertHandle vh) -> RowVector3d {
+        }, // vert2direction
+        [&cur_reconstruction, &cur_cam](VertHandle vh) -> Vec3 {
           Vec3 dir = cur_reconstruction.data(vh);
-          return RowVector3d(dir[0], dir[1], dir[2]).normalized();
+          return normalize(dir);
+        },
+        v2matrix, f2matrix);
+
+    DenseMatd inversed_depths_vector = EstimatePerspectiveInversedDepths(
+        v2matrix, f2matrix,
+        // vert2initial_depth
+        [&cur_reconstruction, &cur_cam](VertHandle vh) -> double {
+          //return 1.0 / vh2inversed_depth[vh];
+          return Distance(cur_reconstruction.data(vh), cur_cam.eye());
         },
         // energy_fun
         [&cur_reconstruction, &mesh_proxy, &cur_cam, &submeshes, &weights,
-         &non_corner_vh_proxies](auto &&vh2depth, auto &&fh2eq) -> VectorXd {
+         &non_corner_vh_proxies](auto &&vh2depth,
+                                 auto &&fh2eq) -> std::vector<double> {
           std::vector<double> energy_terms;
           for (auto &submesh : submeshes) {
             auto energy_terms_submesh = ComputeEnergy(
@@ -1390,7 +1414,7 @@ void OptimizeWithoutOrientations(
                   return normalize(cur_reconstruction.data(vh)) * vh2depth(vh);
                 },
                 [&cur_reconstruction, &mesh_proxy, &vh2depth, &fh2eq,
-                 &non_corner_vh_proxies](FaceHandle fh_proxy) -> Vector3d {
+                 &non_corner_vh_proxies](FaceHandle fh_proxy) -> Vec3 {
                   FaceHandle fh = mesh_proxy.data(fh_proxy);
                   if (fh.valid()) {
                     return fh2eq(fh);
@@ -1419,13 +1443,13 @@ void OptimizeWithoutOrientations(
                           if (norm(eq) > 1e-5 && !HasValue(eq, [](auto &v) {
                                 return IsInfOrNaN(v);
                               })) {
-                            return Vector3d(eq[0], eq[1], eq[2]);
+                            return eq;
                           }
                         }
                       }
                     }
 					ASSERT_OR_PANIC(false && "degenerated face!");
-                    return Vector3d::Zero();
+                    return Vec3();
                   }
                 },
                 [&non_corner_vh_proxies](VertHandle vh_proxy) -> bool {
@@ -1436,16 +1460,14 @@ void OptimizeWithoutOrientations(
                                 energy_terms_submesh.begin(),
                                 energy_terms_submesh.end());
           }
-          return VectorXd::Map(energy_terms.data(), energy_terms.size());
-        },
-        &v2matrix, &f2matrix);
+          return energy_terms;
+        });
 
-    if (inversed_depths.mean() < 0) {
-      inversed_depths = -inversed_depths;
-    }
-	assert((inversed_depths.array() > 0.0).all());
+    assert(std::all_of(inversed_depths_vector.begin(),
+                       inversed_depths_vector.end(),
+                       [](double e) { return e > 0; }));
 
-    {
+    if(true){
       gui::SceneBuilder sb;
       sb.installingOptions().defaultShaderSource =
           gui::OpenGLShaderSourceDescriptor::XTriangles;
@@ -1457,17 +1479,98 @@ void OptimizeWithoutOrientations(
         VertHandle vh1 = cur_reconstruction.topo(hh).from();
         VertHandle vh2 = cur_reconstruction.topo(hh).to();
         Point3 p1 = normalize(cur_reconstruction.data(vh1)) /
-                    (v2matrix.at(vh1) * inversed_depths);
+                    DenseMatd(v2matrix.at(vh1) * inversed_depths_vector)(0, 0);
         Point3 p2 = normalize(cur_reconstruction.data(vh2)) /
-                    (v2matrix.at(vh2) * inversed_depths);
+                    DenseMatd(v2matrix.at(vh2) * inversed_depths_vector)(0, 0);
         sb.add(Line3(p1, p2));
       }
-      sb.show(true, false, gui::RenderOptions()
+      sb.show(true, true, gui::RenderOptions()
                                .camera(cur_cam)
                                .winName("After Holistic Optimization")
                                .fixUpDirectionInCameraMove(false));
     }
   }
+}
+
+
+// PerspectiveReconstruction
+template <class VertT, class FaceT, class Face2RelatedVertsFunT>
+std::map<VertT, double> PerspectiveReconstruction(
+	const std::map<VertT, Vec3> & v2dir,
+    const std::map<VertT, DenseMatd> &v2matrix,
+    const std::map<FaceT, DenseMatd> &f2matrix, const std::vector<Vec3> &vps,
+    const std::map<std::pair<VertT, VertT>, int> &vpair2vp,
+    Face2RelatedVertsFunT face2related_verts, misc::Matlab &matlab) {
+
+  assert(!v2matrix.empty());
+  int nvars = v2matrix->begin()->second.cols;
+  assert(nvars > 0);
+  for (auto &vm : v2matrix) {
+    assert(vm.second.cols == nvars);
+  }
+  for (auto &fm : f2matrix) {
+    assert(fm.second.cols == nvars);
+  }
+
+  int nverts = v2matrix.size();
+  int nfaces = f2matrix.size();
+
+  std::map<VertT, int> vert2position;
+  DenseMatd verts_mat(v2matrix.size(), 3);
+  for (auto & vm : v2matrix) {
+	verts_mat.row(vert2position.size()).setTo(vm.second);
+    vert2position[vm.first] = vert2position.size();
+  }
+  std::map<FaceT, int> face2positon;
+  DenseMatd faces_mat(f2matrix.size() * 3, 3);
+  for (auto & fm : f2matrix) {
+    faces_mat
+        .rowRange(
+            cv::Range(face2positon.size() * 3, face2positon.size() * 3 + 3))
+        .setTo(fm.second);
+    face2positon[fm.first] = face2positon.size();
+  }
+
+  matlab.setVar("nverts", nverts);
+  matlab.setVar("nfaces", nfaces);
+  matlab.setVar("verts_mat", verts_mat);
+  matlab.setVar("faces_mat", faces_mat);
+
+  int nvpairs = vpair2vp.size();
+  DenseMati vpair_lefts(npairs), vpair_rights(npairs);
+  DenseMati vpair_vpids(npairs);
+  DenseMatd vpair_ratios(npairs);
+  int vpair_i = 0;
+  for (auto &vpair_vpid : vpair2vp) {
+    vpair_lefts[vpair_i] = vert2position.at(vpair_vpid.first.first);
+    vpair_rights[vpair_i] = vert2position.at(vpair_vpid.first.second);
+    vpair_vpids[vpair_i] = vpair_vpid.second;
+
+	// compute ratio
+	Vec3 vp = normalize(vps[vpair_vpid.second]);
+	Vec3 dir1 = normalize(v2dir.at(vpair_vpid.first.first));
+	Vec3 dir2 = normalize(v2dir.at(vpair_vpid.first.second));
+	Ray3 ray1(dir1, vp);
+	Ray3 ray2(Origin(), dir2);
+	Point3 interp = Intersection(ray1, ray2);
+	double ratio = norm(interp);
+	vpair_ratios[vpair_i] = ratio;
+
+	vpair_i ++;
+  }
+
+  matlab.setVar("nvpairs", nvpairs);
+  matlab.setVar("vpair_lefts", vpair_lefts);
+  matlab.setVar("vpair_rights", vpair_rights);
+  matlab.setVar("vpair_vpids", vpair_vpids);
+  matlab.setVar("vpair_ratios", vpair_ratios);
+
+  matlab.setVar("vps", vps);
+  // TODO:
+  
+  std::map<VertT, double> vert2depth;
+  // TODO:
+  return vert2depth;
 }
 
 auto main(int argc, char **argv, char **env) -> int {
@@ -1476,12 +1579,12 @@ auto main(int argc, char **argv, char **env) -> int {
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
-  //static const std::string name = "gate";
-  //static const std::string name = "towerx";
-  //static const std::string name = "tower";
-  static const std::string name = "hex";
-  //static const std::string name = "triangle";
-  //static const std::string name = "twotriangles";
+  // static const std::string name = "gate";
+  // static const std::string name = "towerx";
+  static const std::string name = "tower";
+  // static const std::string name = "hex";
+  // static const std::string name = "triangle";
+  // static const std::string name = "twotriangles";
   //static const std::string name = "bridge";
 
   static const std::string cam_name = "cam1";
@@ -1510,11 +1613,6 @@ auto main(int argc, char **argv, char **env) -> int {
         sb.add(line);
       }
     }
-   /* sb.installingOptions().defaultShaderSource =
-        gui::OpenGLShaderSourceDescriptor::XPoints;
-    sb.installingOptions().pointSize = 20.0;
-    sb.add(mesh.data(mesh.topo(HalfHandle(23)).from()));
-    sb.add(mesh.data(mesh.topo(HalfHandle(23)).to()));*/
 
     sb.show(true, true, gui::RenderOptions()
                             .backgroundColor(gui::White)
@@ -1569,10 +1667,10 @@ auto main(int argc, char **argv, char **env) -> int {
     const gui::ColorTable ctable =
         gui::CreateRandomColorTableWithSize(submeshes.size());
 
-    HandledTable<HalfHandle, int> hhProxy2subMeshId(
+    HandledTable<HalfHandle, int> hh_proxy2submesh_id(
         mesh_proxy.internalHalfEdges().size(), -1);
     for (auto &h : mesh_proxy.halfedges()) {
-      int &id = hhProxy2subMeshId[h.topo.hd];
+      int &id = hh_proxy2submesh_id[h.topo.hd];
       for (int i = 0; i < submeshes.size(); i++) {
         if (submeshes[i].contains(h.topo.hd)) {
           id = i;
@@ -1605,7 +1703,7 @@ auto main(int argc, char **argv, char **env) -> int {
             sb, mesh_proxy,
             [&submeshes, i](auto h) { return submeshes[i].contains(h); },
             [&mesh](VertHandle vh) { return mesh.data(vh); },
-            [&hhProxy2subMeshId, &ctable](HalfHandle hh) { return gui::Black; },
+            [&hh_proxy2submesh_id, &ctable](HalfHandle hh) { return gui::Black; },
             [&fh_proxy2submesh_id, &ctable](FaceHandle fh) {
               return ctable[fh_proxy2submesh_id[fh]];
             });
@@ -1630,7 +1728,7 @@ auto main(int argc, char **argv, char **env) -> int {
       AddToScene(
           sb, mesh_proxy, [](auto) { return true; },
           [&mesh](VertHandle vh) { return mesh.data(vh); },
-          [&hhProxy2subMeshId, &ctable](HalfHandle hh) { return gui::Black; },
+          [&hh_proxy2submesh_id, &ctable](HalfHandle hh) { return gui::Black; },
           [&fh_proxy2submesh_id, &ctable](FaceHandle fh) {
             return ctable[fh_proxy2submesh_id[fh]];
           });
@@ -1654,9 +1752,9 @@ auto main(int argc, char **argv, char **env) -> int {
       mesh, [&cam](const Point3 &p) -> Point2 { return cam.toScreen(p); });
 
   // add offset noise
-  Vec2 offsetNoise = Vec2(20, -20);
+  Vec2 offset_noise = Vec2(20, -20);
   for (auto &v : mesh2d.vertices()) {
-    v.data += offsetNoise;
+    v.data += offset_noise;
   }
 
   if (true) {
@@ -1736,7 +1834,7 @@ auto main(int argc, char **argv, char **env) -> int {
   auto pp_focal_groups =
       EstimateCameraParameters(mesh2d, mesh_proxy, submeshes);
 
-  //// [Orient Edges]
+  //// estimate vanishing points
   HandledTable<HalfHandle, int> hh2d2edge;
   std::vector<std::map<int, double>> vp2edge_with_angles;
   std::vector<std::vector<Scored<int>>> edge2ordered_vp_and_angles;
@@ -1748,243 +1846,18 @@ auto main(int argc, char **argv, char **env) -> int {
   int nvps = vp_positions.size();
   int nedges = edge2ordered_vp_and_angles.size();
 
-
   // collect edge intersections and
   // get vp_positions from the intersections
-  Box2 box = BoundingBoxOfContainer(mesh2d.vertices());
-  double scale = box.outerSphere().radius;
-
   std::vector<int> edge2vp;
   std::vector<std::vector<int>> vp2edges;
 
   // factor graph
-  if (true ||
+  if (false ||
       !misc::LoadCache(obj_file_name + "-" + cam_name, "edge2vp_vp2edges",
                        edge2vp, vp2edges)) {
-    edge2vp.resize(nedges, -1);
-    vp2edges.resize(nvps);
-
-    // construct a factor graph to optimize edge-vp bindings
-    FactorGraph fg;
-    std::vector<FactorGraph::VarHandle> edge2vh(nedges);
-    {
-      for (int edge = 0; edge < nedges; edge++) {
-        auto vc =
-            fg.addVarCategory(edge2ordered_vp_and_angles[edge].size() + 1, 1.0);
-        edge2vh[edge] = fg.addVar(vc);
-      }
-
-      // potential 1: the edge should bind to some vp, should prefer better
-      // scored
-      for (int edge = 0; edge < nedges; edge++) {
-        auto vh = edge2vh[edge];
-        auto &relatedVPAndAngles = edge2ordered_vp_and_angles[edge];
-        auto fc = fg.addFactorCategory(
-            [&relatedVPAndAngles, nedges](const int *varlabels, size_t nvar,
-                                          FactorGraph::FactorCategoryId fcid,
-                                          void *givenData) -> double {
-              assert(nvar == 1);
-              int label = varlabels[0];
-              assert(label <= relatedVPAndAngles.size());
-              const double K = 50.0 / nedges;
-              if (label == relatedVPAndAngles.size()) { // not bind to any vp
-                return K;
-              }
-              double angle = relatedVPAndAngles[label].score;
-              assert(!IsInfOrNaN(angle));
-              return (1.0 - Gaussian(angle, DegreesToRadians(3))) * K;
-            },
-            1.0);
-        fg.addFactor({vh}, fc);
-      }
-
-      // potential 2: two adjacent edges should not bind to a near vp
-      int ncorners = 0;
-      for (auto &f : mesh2d.faces()) {
-        ncorners += f.topo.halfedges.size();
-      }
-      for (auto &f : mesh2d.faces()) {
-        auto &hhs = f.topo.halfedges;
-        for (int i = 0; i < hhs.size(); i++) {
-          auto hh1 = hhs[i];
-          auto hh2 = hhs[(i + 1) % hhs.size()];
-          int edge1 = hh2d2edge[hh1];
-          int edge2 = hh2d2edge[hh2];
-          auto &relatedVPAndAngles1 = edge2ordered_vp_and_angles[edge1];
-          auto &relatedVPAndAngles2 = edge2ordered_vp_and_angles[edge2];
-          auto vh1 = edge2vh[edge1];
-          auto vh2 = edge2vh[edge2];
-          auto fc = fg.addFactorCategory(
-              [edge1, edge2, &relatedVPAndAngles1, &relatedVPAndAngles2,
-               &vp_positions, ncorners,
-               scale](const int *varlabels, size_t nvar,
-                      FactorGraph::FactorCategoryId fcid,
-                      void *givenData) -> double {
-                assert(nvar == 2);
-                int bindedVP1 =
-                    varlabels[0] == relatedVPAndAngles1.size()
-                        ? -1
-                        : (relatedVPAndAngles1[varlabels[0]].component);
-                int bindedVP2 =
-                    varlabels[1] == relatedVPAndAngles2.size()
-                        ? -1
-                        : (relatedVPAndAngles2[varlabels[1]].component);
-                if (bindedVP1 == -1 || bindedVP2 == -1) {
-                  return 0;
-                }
-                auto &vpPos1 = vp_positions[bindedVP1];
-                auto &vpPos2 = vp_positions[bindedVP2];
-                const double thres = scale / 10.0;
-                const double K = 10.0 / ncorners;
-                if (Distance(vpPos1, vpPos2) < thres) { // todo
-                  return K;
-                }
-                return 0.0;
-              },
-              1.0);
-          fg.addFactor({vh1, vh2}, fc);
-        }
-      }
-
-      // potential 3: the vp_positions of edges sharing a same face should lie
-      // on
-      // the same
-      // line (the vanishing line of the face)
-      int ntris = 0;
-      for (auto &f : mesh2d.faces()) {
-        auto &hhs = f.topo.halfedges;
-        if (hhs.size() <= 3) {
-          continue;
-        }
-        ntris = hhs.size() > 4 ? (2 * hhs.size()) : hhs.size();
-      }
-      for (auto &f : mesh2d.faces()) {
-        auto &hhs = f.topo.halfedges;
-        if (hhs.size() <= 3) {
-          continue;
-        }
-        for (int i = 0; i < hhs.size(); i++) {
-          int maxGap = hhs.size() > 4 ? 2 : 1;
-          for (int gap = 1; gap <= maxGap; gap++) {
-            int prevEdge = hh2d2edge[hhs[(i + hhs.size() - gap) % hhs.size()]];
-            int edge = hh2d2edge[hhs[i]];
-            int nextEdge = hh2d2edge[hhs[(i + gap) % hhs.size()]];
-            auto fc = fg.addFactorCategory(
-                [&edge2ordered_vp_and_angles, &vp_positions, prevEdge, edge,
-                 nextEdge, ntris](const int *varlabels, size_t nvar,
-                                  FactorGraph::FactorCategoryId fcid,
-                                  void *givenData) -> double {
-                  assert(nvar == 3);
-                  int vp1 =
-                      varlabels[0] ==
-                              edge2ordered_vp_and_angles[prevEdge].size()
-                          ? -1
-                          : (edge2ordered_vp_and_angles[prevEdge][varlabels[0]]
-                                 .component);
-                  if (vp1 == -1) {
-                    return 0.0;
-                  }
-                  int vp2 =
-                      varlabels[1] == edge2ordered_vp_and_angles[edge].size()
-                          ? -1
-                          : (edge2ordered_vp_and_angles[edge][varlabels[1]]
-                                 .component);
-                  if (vp2 == -1) {
-                    return 0.0;
-                  }
-                  int vp3 =
-                      varlabels[2] ==
-                              edge2ordered_vp_and_angles[nextEdge].size()
-                          ? -1
-                          : (edge2ordered_vp_and_angles[nextEdge][varlabels[2]]
-                                 .component);
-                  if (vp3 == -1) {
-                    return 0.0;
-                  }
-                  if (vp1 == vp2 || vp2 == vp3 || vp1 == vp3) {
-                    return 0.0;
-                  }
-                  double angle = AngleBetweenUndirected(
-                      vp_positions[vp1] - vp_positions[vp2],
-                      vp_positions[vp3] - vp_positions[vp2]);
-                  assert(!IsInfOrNaN(angle));
-                  const double K = 30.0 / ntris;
-                  return (1.0 - Gaussian(angle, DegreesToRadians(10))) * K;
-                },
-                1.0);
-            fg.addFactor({edge2vh[prevEdge], edge2vh[edge], edge2vh[nextEdge]},
-                         fc);
-          }
-        }
-      }
-
-      //// potential 4: a vp is good only when edges are bound to it!
-      //// a vp should be with either no edges or >= 3 edges
-      // for (int vpid = 0; vpid < nvps; vpid++) {
-      //  std::vector<FactorGraph::VarHandle> relatedVhs;
-      //  relatedVhs.reserve(vp2edges[vpid].size());
-      //  for (int edge : vp2edges[vpid]) {
-      //    relatedVhs.push_back(edge2vh[edge]);
-      //  }
-      //  auto fc = fg.addFactorCategory(
-      //      [&edge2ordered_vp_and_angles, vpid, &vp2edges](
-      //          const int *varlabels, size_t nvar,
-      //          FactorGraph::FactorCategoryId fcid, void *givenData) ->
-      //          double
-      //          {
-      //        int bindedEdges = 0;
-      //        auto &relatedEdges = vp2edges[vpid];
-      //        assert(nvar == relatedEdges.size());
-      //        for (int i = 0; i < relatedEdges.size(); i++) {
-      //          int edge = relatedEdges[i];
-      //          int edgeLabel = varlabels[i];
-      //          if (edgeLabel == edge2ordered_vp_and_angles[edge].size()) {
-      //            continue; // not bound to any vp
-      //          }
-      //          int edgeBindedVPId =
-      //          edge2ordered_vp_and_angles[edge][edgeLabel].component;
-      //          if (edgeBindedVPId == vpid) {
-      //            bindedEdges++;
-      //          }
-      //        }
-      //        // todo
-      //        if (bindedEdges == 1 || bindedEdges == 2) {
-      //          return 10.0;
-      //        }
-      //        return 0.0;
-      //      },
-      //      1.0);
-      //  fg.addFactor(relatedVhs.begin(), relatedVhs.end(), fc);
-      //}
-    }
-
-    // solve the factor graph
-    auto result =
-        fg.solve(5, 1, [](int epoch, double energy, double denergy,
-                          const FactorGraph::ResultTable &results) -> bool {
-          Println("epoch: ", epoch, "  energy: ", energy);
-          return true;
-        });
-
-    for (int edge = 0; edge < nedges; edge++) {
-      int id = result[edge2vh[edge]];
-      if (id == edge2ordered_vp_and_angles[edge].size()) {
-        continue;
-      }
-      edge2vp[edge] = edge2ordered_vp_and_angles[edge][id].component;
-      vp2edges[edge2vp[edge]].push_back(edge);
-    }
-
-    // invalidate the edge bindings for vps who have <= 3 edges
-    for (int vp = 0; vp < nvps; vp++) {
-      if (vp2edges[vp].size() <= 3) { //
-        for (int edge : vp2edges[vp]) {
-          edge2vp[edge] = -1;
-        }
-        vp2edges[vp].clear();
-      }
-    }
-
+    EstimateEdgeOrientations(mesh2d, vp_positions, hh2d2edge,
+                             vp2edge_with_angles, edge2ordered_vp_and_angles,
+                             edge2vp, vp2edges);
     misc::SaveCache(obj_file_name + "-" + cam_name, "edge2vp_vp2edges", edge2vp,
                     vp2edges);
   }
@@ -2017,6 +1890,12 @@ auto main(int argc, char **argv, char **env) -> int {
   assert(edge2vp.size() == nedges);
   assert(vp2edges.size() == nvps);
 
+  std::map<VertHandle, Vec3> vh_proxy2dir;
+  std::map<VertHandle, DenseMatd> vh_proxy2matrix;
+  std::map<FaceHandle, DenseMatd> fh_proxy2matrix;
+  // TODO: construct matrices
+
+
   // for each pp focal candidate
   std::vector<Mesh3> reconstructions;
   for (int config_id = 0;
@@ -2032,6 +1911,9 @@ auto main(int argc, char **argv, char **env) -> int {
     for (int i = 0; i < nvps; i++) {
       vp2dir[i] = cur_cam.direction(vp_positions[i]);
     }
+
+	// TODO: call PerspectiveReconstruction
+	// 
 
     Mesh3 mesh_reconstructed;
     static const bool no_orientation_estimation = false;
