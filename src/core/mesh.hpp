@@ -14,29 +14,25 @@ struct FaceTopo;
 struct VertTopo {
   Handle<VertTopo> hd;
   HandleArray<HalfTopo> halfedges;
-  template <class Archive> inline void serialize(Archive &ar) {
-    ar(hd, halfedges);
-  }
+  template <class Archive> void serialize(Archive &ar) { ar(hd, halfedges); }
 };
 struct HalfTopo {
   Handle<HalfTopo> hd;
   Handle<VertTopo> endVertices[2];
-  inline Handle<VertTopo> &from() { return endVertices[0]; }
-  inline Handle<VertTopo> &to() { return endVertices[1]; }
-  inline const Handle<VertTopo> &from() const { return endVertices[0]; }
-  inline const Handle<VertTopo> &to() const { return endVertices[1]; }
+  Handle<VertTopo> &from() { return endVertices[0]; }
+  Handle<VertTopo> &to() { return endVertices[1]; }
+  const Handle<VertTopo> &from() const { return endVertices[0]; }
+  const Handle<VertTopo> &to() const { return endVertices[1]; }
   Handle<HalfTopo> opposite;
   Handle<FaceTopo> face;
-  template <class Archive> inline void serialize(Archive &ar) {
+  template <class Archive> void serialize(Archive &ar) {
     ar(hd, endVertices, opposite, face);
   }
 };
 struct FaceTopo {
   Handle<FaceTopo> hd;
   HandleArray<HalfTopo> halfedges;
-  template <class Archive> inline void serialize(Archive &ar) {
-    ar(hd, halfedges);
-  }
+  template <class Archive> void serialize(Archive &ar) { ar(hd, halfedges); }
 };
 
 using VertHandle = Handle<VertTopo>;
@@ -62,54 +58,37 @@ public:
   using HalfEdge = typename HalfsTable::value_type;
   using Face = typename FacesTable::value_type;
 
-  inline VertsTable &internalVertices() { return _verts; }
-  inline HalfsTable &internalHalfEdges() { return _halfs; }
-  inline FacesTable &internalFaces() { return _faces; }
-  inline const VertsTable &internalVertices() const { return _verts; }
-  inline const HalfsTable &internalHalfEdges() const { return _halfs; }
-  inline const FacesTable &internalFaces() const { return _faces; }
+  VertsTable &internalVertices() { return _verts; }
+  HalfsTable &internalHalfEdges() { return _halfs; }
+  FacesTable &internalFaces() { return _faces; }
+  const VertsTable &internalVertices() const { return _verts; }
+  const HalfsTable &internalHalfEdges() const { return _halfs; }
+  const FacesTable &internalFaces() const { return _faces; }
 
-  inline auto vertices() {
-    // return ConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts);
-    return MakeConditionalRange(_verts.begin(), _verts.end(), VertExistsPred());
+  auto vertices() { return MakeConditionalRange(_verts, VertExistsPred()); }
+  auto halfedges() { return MakeConditionalRange(_halfs, HalfExistsPred()); }
+  auto faces() { return MakeConditionalRange(_faces, FaceExistsPred()); }
+  auto vertices() const {
+    return MakeConditionalRange(_verts, VertExistsPred());
   }
-  inline auto halfedges() {
-    // return ConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs);
-    return MakeConditionalRange(_halfs.begin(), _halfs.end(), HalfExistsPred());
+  auto halfedges() const {
+    return MakeConditionalRange(_halfs, HalfExistsPred());
   }
-  inline auto faces() {
-    // return ConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces);
-    return MakeConditionalRange(_faces.begin(), _faces.end(), FaceExistsPred());
-  }
-  inline auto vertices() const {
-    /*return ConstConditionalContainerWrapper<VertsTable, VertExistsPred>(
-        &_verts);*/
-    return MakeConditionalRange(_verts.begin(), _verts.end(), VertExistsPred());
-  }
-  inline auto halfedges() const {
-    // return ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred>(
-    //    &_halfs);
-    return MakeConditionalRange(_halfs.begin(), _halfs.end(), HalfExistsPred());
-  }
-  inline auto faces() const {
-    // return ConstConditionalContainerWrapper<FacesTable, FaceExistsPred>(
-    //    &_faces);
-    return MakeConditionalRange(_faces.begin(), _faces.end(), FaceExistsPred());
-  }
+  auto faces() const { return MakeConditionalRange(_faces, FaceExistsPred()); }
 
-  inline VertTopo &topo(VertHandle v) { return _verts[v.id].topo; }
-  inline HalfTopo &topo(HalfHandle h) { return _halfs[h.id].topo; }
-  inline FaceTopo &topo(FaceHandle f) { return _faces[f.id].topo; }
-  inline const VertTopo &topo(VertHandle v) const { return _verts[v.id].topo; }
-  inline const HalfTopo &topo(HalfHandle h) const { return _halfs[h.id].topo; }
-  inline const FaceTopo &topo(FaceHandle f) const { return _faces[f.id].topo; }
+  VertTopo &topo(VertHandle v) { return _verts[v.id].topo; }
+  HalfTopo &topo(HalfHandle h) { return _halfs[h.id].topo; }
+  FaceTopo &topo(FaceHandle f) { return _faces[f.id].topo; }
+  const VertTopo &topo(VertHandle v) const { return _verts[v.id].topo; }
+  const HalfTopo &topo(HalfHandle h) const { return _halfs[h.id].topo; }
+  const FaceTopo &topo(FaceHandle f) const { return _faces[f.id].topo; }
 
-  inline VertDataT &data(VertHandle v) { return _verts[v.id].data; }
-  inline HalfDataT &data(HalfHandle h) { return _halfs[h.id].data; }
-  inline FaceDataT &data(FaceHandle f) { return _faces[f.id].data; }
-  inline const VertDataT &data(VertHandle v) const { return _verts[v.id].data; }
-  inline const HalfDataT &data(HalfHandle h) const { return _halfs[h.id].data; }
-  inline const FaceDataT &data(FaceHandle f) const { return _faces[f.id].data; }
+  VertDataT &data(VertHandle v) { return _verts[v.id].data; }
+  HalfDataT &data(HalfHandle h) { return _halfs[h.id].data; }
+  FaceDataT &data(FaceHandle f) { return _faces[f.id].data; }
+  const VertDataT &data(VertHandle v) const { return _verts[v.id].data; }
+  const HalfDataT &data(HalfHandle h) const { return _halfs[h.id].data; }
+  const FaceDataT &data(FaceHandle f) const { return _faces[f.id].data; }
 
   template <class VDT = VertDataT> VertHandle addVertex(VDT &&vd = VDT()) {
     VertTopo topo;
@@ -201,9 +180,9 @@ public:
     return addFace(halfs, std::forward<FDT>(fd));
   }
   template <class VertHandleIterT, class FDT = FaceDataT,
-            class = std::enable_if_t<std::is_same<
-                std::iterator_traits<VertHandleIterT>::value_type,
-                VertHandle>::value>>
+            class = std::enable_if_t<
+                std::is_same<std::iterator_traits<VertHandleIterT>::value_type,
+                             VertHandle>::value>>
   FaceHandle addFace(VertHandleIterT vhBegin, VertHandleIterT vhEnd,
                      bool autoflip = true, FDT &&fd = FDT()) {
     HandleArray<HalfTopo> halfs;
@@ -271,11 +250,11 @@ public:
     return topo(hh).opposite < hh ? topo(hh).opposite : hh;
   }
 
-  inline bool removed(FaceHandle f) const { return !_faces[f.id].exists; }
-  inline bool removed(HalfHandle e) const { return !_halfs[e.id].exists; }
-  inline bool removed(VertHandle v) const { return !_verts[v.id].exists; }
+  bool removed(FaceHandle f) const { return !_faces[f.id].exists; }
+  bool removed(HalfHandle e) const { return !_halfs[e.id].exists; }
+  bool removed(VertHandle v) const { return !_verts[v.id].exists; }
 
-  inline void remove(FaceHandle f) {
+  void remove(FaceHandle f) {
     if (f.invalid() || removed(f))
       return;
     _faces[f.id].exists = false;
@@ -283,7 +262,7 @@ public:
       hh.reset();
     }
   }
-  inline void remove(HalfHandle e) {
+  void remove(HalfHandle e) {
     if (h.invalid() || removed(h))
       return;
     HalfHandle hop = _halfs[h.id].topo.opposite;
@@ -298,7 +277,7 @@ public:
     _halfs[h.id].topo.face.reset();
     _halfs[hop.id].topo.face.reset();
   }
-  inline void remove(VertHandle v) {
+  void remove(VertHandle v) {
     if (v.invalid() || removed(v))
       return;
     _verts[v.id].exists = false;
@@ -395,7 +374,7 @@ public:
     return HandledTable<FaceHandle, T>(_faces.size(), v);
   }
 
-  template <class Archive> inline void serialize(Archive &ar) {
+  template <class Archive> void serialize(Archive &ar) {
     ar(_verts, _halfs, _faces);
   }
 
@@ -407,6 +386,5 @@ private:
 
 using Mesh2 = Mesh<Point2>;
 using Mesh3 = Mesh<Point3>;
-
 }
 }
