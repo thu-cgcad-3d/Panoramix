@@ -204,9 +204,8 @@ std::vector<Polygon3> CompactModel(const PICGDeterminablePart &dp,
       for (int seg : segs) {
         auto &plane = seg2plane[seg];
         if (plane.normal != Origin()) {
-          double depth = norm(IntersectionOfLineAndPlane(
-                                  Ray3(Origin(), corners[corner].dir), plane)
-                                  .position);
+          double depth =
+              norm(Intersection(Ray3(Origin(), corners[corner].dir), plane));
           segDepths[seg] = depth;
         }
       }
@@ -295,17 +294,15 @@ std::vector<Polygon3> CompactModel(const PICGDeterminablePart &dp,
                   }
                 }
                 for (int c : cs) {
-                  double depth =
-                      norm(IntersectionOfLineAndPlane(
-                               Ray3(Origin(), corners[c].dir), candPlane)
-                               .position);
+                  double depth = norm(
+                      Intersection(Ray3(Origin(), corners[c].dir), candPlane));
                   if (depth > 2.0) {
                     candPlaneScore -= 3.0;
                   }
                 }
                 if (std::any_of(mg.vps.begin(), mg.vps.end(),
                                 [&candPlane](const Vec3 &vp) {
-                                  return AngleBetweenUndirectedVectors(
+                                  return AngleBetweenUndirected(
                                              vp, candPlane.normal) <
                                          DegreesToRadians(5);
                                 })) {
@@ -364,8 +361,7 @@ std::vector<Polygon3> CompactModel(const PICGDeterminablePart &dp,
       if (depth > 0) {
         compact.corners[k] = dir * depth;
       } else {
-        compact.corners[k] =
-            IntersectionOfLineAndPlane(Ray3(Origin(), dir), plane).position;
+        compact.corners[k] = Intersection(Ray3(Origin(), dir), plane);
       }
     }
     if (compact.normal.dot(compact.corners.front()) < 0) {
@@ -407,7 +403,7 @@ std::vector<Vec3> ComputeSegNormals(const PICGDeterminablePart &dp,
               continue;
             }
             p2.x = (p2.x + mg.segs.cols) % mg.segs.cols;
-            if (!Contains(mg.segs, p2)) {
+            if (!Contains(mg.segs.size(), p2)) {
               continue;
             }
             int seg1 = mg.segs(p1);
@@ -475,7 +471,7 @@ std::vector<Plane3> ComputeSegPlanes(const PICGDeterminablePart &dp,
               continue;
             }
             p2.x = (p2.x + mg.segs.cols) % mg.segs.cols;
-            if (!Contains(mg.segs, p2)) {
+            if (!Contains(mg.segs.size(), p2)) {
               continue;
             }
             int seg1 = mg.segs(p1);

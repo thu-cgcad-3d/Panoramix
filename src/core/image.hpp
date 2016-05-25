@@ -14,62 +14,62 @@ namespace core {
 
 using Image = cv::Mat;
 
-template <class T> using ImageOf = cv::Mat_<T>;
-using Imageb = ImageOf<bool>;
-using Image3b = ImageOf<Vec<bool, 3>>;
-using Imageub = ImageOf<uint8_t>;
-using Image3ub = ImageOf<Vec<uint8_t, 3>>;
-using Imagei = ImageOf<int>;
-using Image3i = ImageOf<Vec<int, 3>>;
-using Imagef = ImageOf<float>;
-using Image3f = ImageOf<Vec<float, 3>>;
-using Imaged = ImageOf<double>;
-using Image3d = ImageOf<Vec<double, 3>>;
-using Image5d = ImageOf<Vec<double, 5>>;
-using Image6d = ImageOf<Vec<double, 6>>;
-using Image7d = ImageOf<Vec<double, 7>>;
+template <class T> using Image_ = cv::Mat_<T>;
+using Imageb = Image_<bool>;
+using Image3b = Image_<Vec<bool, 3>>;
+using Imageub = Image_<uint8_t>;
+using Image3ub = Image_<Vec<uint8_t, 3>>;
+using Imagei = Image_<int>;
+using Image3i = Image_<Vec<int, 3>>;
+using Imagef = Image_<float>;
+using Image3f = Image_<Vec<float, 3>>;
+using Imaged = Image_<double>;
+using Image3d = Image_<Vec<double, 3>>;
+using Image5d = Image_<Vec<double, 5>>;
+using Image6d = Image_<Vec<double, 6>>;
+using Image7d = Image_<Vec<double, 7>>;
 
-template <> struct IsNotContainerByHand<Image> : yes {};
-template <class T> struct IsNotContainerByHand<ImageOf<T>> : yes {};
+template <> struct MarkedAsNonContainer<Image> : yes {};
+template <class T> struct MarkedAsNonContainer<Image_<T>> : yes {};
 
 namespace {
 template <class To, class From>
-inline ImageOf<To> VecCastPrivate(const ImageOf<From> &im, std::false_type) {
-  ImageOf<To> cim(im.size());
+inline Image_<To> VecCastPrivate(const Image_<From> &im, std::false_type) {
+  Image_<To> cim(im.size());
   for (auto it = im.begin(); it != im.end(); ++it) {
     cim(it.pos()) = static_cast<To>(*it);
   }
   return cim;
 }
 template <class To>
-inline ImageOf<To> VecCastPrivate(const ImageOf<To> &v, std::true_type) {
+inline Image_<To> VecCastPrivate(const Image_<To> &v, std::true_type) {
   return v.clone();
 }
 
 template <class To, class From, int N>
-inline ImageOf<Vec<To, N>> VecCastPrivate(const ImageOf<Vec<From, N>> &im,
+inline Image_<Vec<To, N>> VecCastPrivate(const Image_<Vec<From, N>> &im,
                                           std::false_type) {
-  ImageOf<Vec<To, N>> cim(im.size());
+  Image_<Vec<To, N>> cim(im.size());
   for (auto it = im.begin(); it != im.end(); ++it) {
     cim(it.pos()) = ecast<To>(*it);
   }
   return cim;
 }
 template <class To, int N>
-inline ImageOf<Vec<To, N>> VecCastPrivate(const ImageOf<Vec<To, N>> &v,
+inline Image_<Vec<To, N>> VecCastPrivate(const Image_<Vec<To, N>> &v,
                                           std::true_type) {
   return v.clone();
 }
 }
 
 template <class To, class From>
-inline ImageOf<To> ecast(const ImageOf<From> &v) {
+inline Image_<To> ecast(const Image_<From> &v) {
   return VecCastPrivate<To>(
       v, std::integral_constant<bool, std::is_same<To, From>::value>());
 }
 
 template <class To, class From, int N>
-inline ImageOf<Vec<To, N>> ecast(const ImageOf<Vec<From, N>> &v) {
+inline Image_<Vec<To, N>> ecast(const Image_<Vec<From, N>> &v) {
   return VecCastPrivate<To>(
       v, std::integral_constant<bool, std::is_same<To, From>::value>());
 }
@@ -80,11 +80,11 @@ template <class T> inline Vec<T, 2> ecast(const Pixel &p) {
 }
 
 template <class T = Vec<uint8_t, 3>>
-inline ImageOf<T> ImageRead(const std::string &filename) {
+inline Image_<T> ImageRead(const std::string &filename) {
   return cv::imread(filename);
 }
 template <class T>
-inline bool ImageWrite(const std::string &filename, const ImageOf<T> &im) {
+inline bool ImageWrite(const std::string &filename, const Image_<T> &im) {
   return cv::imwrite(filename, im);
 }
 
@@ -99,7 +99,7 @@ void ClipToSquare(Image &im);
 Imageb ClipToDisk(Image &im);
 Imageb Rotate(Image &im, double angle);
 
-template <class T> inline void ReverseCols(ImageOf<T> &im) {
+template <class T> inline void ReverseCols(Image_<T> &im) {
   for (int i = 0; i < im.cols / 2; i++) {
     for (int k = 0; k < im.rows; k++) {
       std::swap(im(k, i), im(k, im.cols - 1 - i));
@@ -107,7 +107,7 @@ template <class T> inline void ReverseCols(ImageOf<T> &im) {
   }
 }
 
-template <class T> inline void ReverseRows(ImageOf<T> &im) {
+template <class T> inline void ReverseRows(Image_<T> &im) {
   for (int i = 0; i < im.rows / 2; i++) {
     for (int k = 0; k < im.cols; k++) {
       std::swap(im(i, k), im(im.rows - 1 - i, k));
@@ -126,7 +126,7 @@ bool MakePanorama(Image &im, int horiCenter = -1, bool *extendedOnTop = nullptr,
 
 std::pair<Pixel, Pixel> MinMaxLocOfImage(const Image &im);
 std::pair<double, double> MinMaxValOfImage(const Image &im);
-template <class T> inline T Mean(const ImageOf<T> &im, const Imageub &mask) {
+template <class T> inline T Mean(const Image_<T> &im, const Imageub &mask) {
   T sum = T();
   int count = 0;
   for (auto it = im.begin(); it != im.end(); ++it) {
@@ -171,12 +171,12 @@ template <class T> struct SparseMatElement {
   inline SparseMatElement(int r, int c, T v) : row(r), col(c), value(v) {}
 };
 using SparseMatElementd = SparseMatElement<double>;
-template <class SparseMatElementIteratorT,
+template <class SparseMatElementIterT,
           class T = typename std::iterator_traits<
-              SparseMatElementIteratorT>::value_type::ValueType>
+              SparseMatElementIterT>::value_type::ValueType>
 inline SparseMat<T> MakeSparseMatFromElements(int row, int col,
-                                              SparseMatElementIteratorT &&begin,
-                                              SparseMatElementIteratorT &&end) {
+                                              SparseMatElementIterT &&begin,
+                                              SparseMatElementIterT &&end) {
   int dims[] = {row, col};
   SparseMat<T> mat(2, dims);
   while (begin != end) {

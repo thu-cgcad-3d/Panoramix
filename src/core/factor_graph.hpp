@@ -1,135 +1,79 @@
 #pragma once
 
-#include <type_traits>
-
 #include "basic_types.hpp"
-#include "homo_graph.hpp"
-#include "iterators.hpp"
 
 namespace pano {
 namespace core {
+struct FactorCategory {
+  using CostFunction = std::function<double(const std::vector<int> &var_labels,
+                                            void *additional_data)>;
+  CostFunction cost;
+  double c_alpha;
+};
+struct VarCategory {
+  size_t nlabels;
+  double c_i;
+};
 
+// factor graph
 class FactorGraph {
-public:
-  using FactorCategoryId = int;
-  using VarCategoryId = int;
-  using CostFunction =
-      std::function<double(const int *varlabels, size_t nvar,
-                           FactorCategoryId fcid, void *givenData)>;
+  std::vector<FactorCategory> factor_cats_;
+  std::vector<VarCategory> var_cats_;
 
-  struct FactorCategory {
-    CostFunction costs;
-    double c_alpha;
-  };
-  struct VarCategory {
-    size_t nlabels;
-    double c_i;
-  };
+  std::vector<int> var2cat_;
+  std::vector<std::set<int>> var2factors_;
 
-  using Topology = HomogeneousGraph0x<VarCategoryId, FactorCategoryId>;
-  using VarHandle = HandleOfTypeAtLevel<Topology, 0>;
-  using FactorHandle = HandleOfTypeAtLevel<Topology, 1>;
-  using ResultTable = HandledTable<VarHandle, int>;
-
-  using SimpleCallbackFunction = std::function<bool(int epoch, double energy)>;
-  using CallbackFunction = std::function<bool(
-      int epoch, double energy, double denergy, const ResultTable &results)>;
+  std::vector<int> factor2cat_;
+  std::vector<std::vector<int>> factor2vars_;
 
 public:
-  void reserveVarCategories(size_t cap) { _varCategories.reserve(cap); }
-  void reserveFactorCategories(size_t cap) { _factorCategories.reserve(cap); }
+  void reserveFactorCategories(size_t cap);
+  void reserveVarCategories(size_t cap);
 
-  VarCategoryId addVarCategory(VarCategory &&vc) {
-    _varCategories.push_back(std::move(vc));
-    return _varCategories.size() - 1;
-  }
-  VarCategoryId addVarCategory(const VarCategory &vc) {
-    _varCategories.push_back(vc);
-    return _varCategories.size() - 1;
-  }
-  VarCategoryId addVarCategory(size_t nlabels, double c_i) {
-    assert(nlabels > 0);
-    return addVarCategory(VarCategory{nlabels, c_i});
-  }
+  // returns var_cat
+  int addVarCategory(size_t nlabels, double c_i);
+  // returns factor_cat
+  int addFactorCategory(FactorCategory::CostFunction cost, double c_alpha);
 
-  const VarCategory &varCategory(VarCategoryId vid) const {
-    return _varCategories.at(vid);
-  }
-  VarCategory &varCategory(VarCategoryId vid) { return _varCategories.at(vid); }
+  void reserveFactors(size_t cap);
+  void reserveVars(size_t cap);
 
-  FactorCategoryId addFactorCategory(FactorCategory &&fc) {
-    _factorCategories.push_back(std::move(fc));
-    return _factorCategories.size() - 1;
-  }
-  FactorCategoryId addFactorCategory(const FactorCategory &fc) {
-    _factorCategories.push_back(fc);
-    return _factorCategories.size() - 1;
-  }
-  template <class FunT>
-  FactorCategoryId addFactorCategory(FunT &&costFun, double c_alpha) {
-    _factorCategories.push_back(
-        FactorCategory{std::forward<FunT>(costFun), c_alpha});
-    return _factorCategories.size() - 1;
-  }
+  // returns var
+  int addVar(int var_cat);
+  // returns factor
+  int addFactor(int factor_cat, const std::vector<int> &vars);
+  int addFactor(int factor_cat, std::vector<int> &&vars);
+  int addFactor(int factor_cat, std::initializer_list<int> vars);
 
-  const FactorCategory &factorCategory(FactorCategoryId fid) const {
-    return _factorCategories.at(fid);
-  }
-  FactorCategory &factorCategory(FactorCategoryId fid) {
-    return _factorCategories.at(fid);
-  }
+  inline size_t nvars() const { return var2cat_.size(); }
+  inline size_t nfactors() const { return factor2cat_.size(); }
 
-  void reserveVars(size_t cap) { _graph.internalElements<0>().reserve(cap); }
-  void reserveFactors(size_t cap) { _graph.internalElements<1>().reserve(cap); }
-
-  VarHandle addVar(VarCategoryId vc) { return _graph.add(vc); }
-  const VarCategory &varCategory(VarHandle vh) const {
-    return _varCategories.at(_graph.data(vh));
-  }
-  VarCategory &varCategory(VarHandle vh) {
-    return _varCategories.at(_graph.data(vh));
-  }
-
-  FactorHandle addFactor(std::initializer_list<VarHandle> vhs,
-                         FactorCategoryId fc) {
-    assert(std::all_of(vhs.begin(), vhs.end(),
-                       [](VarHandle vh) { return vh.valid(); }));
-    return _graph.add<1>(vhs, fc);
-  }
-  template <class IteratorT>
-  FactorHandle addFactor(IteratorT vhsBegin, IteratorT vhsEnd,
-                         FactorCategoryId fc) {
-    assert(
-        std::all_of(vhsBegin, vhsEnd, [](VarHandle vh) { return vh.valid(); }));
-    return _graph.add<1>(vhsBegin, vhsEnd, fc);
-  }
-  const FactorCategory &factorCategory(FactorHandle fh) const {
-    return _factorCategories.at(_graph.data(fh));
-  }
-  FactorCategory &factorCategory(FactorHandle fh) {
-    return _factorCategories.at(_graph.data(fh));
-  }
-
-  void clear() {
-    _varCategories.clear();
-    _factorCategories.clear();
-    _graph.clear();
-  }
+  void clear();
   bool valid() const;
-  double energy(const ResultTable &labels, void *givenData = nullptr) const;
+
+  double cost(const std::vector<int> &var_labels,
+              void *additional_data = nullptr) const;
 
   // convex belief propagation
-  ResultTable solve(int maxEpoch, int innerLoopNum = 10,
-                    const CallbackFunction &callback = nullptr,
-                    void *givenData = nullptr) const;
-  ResultTable solveWithSimpleCallback(int maxEpoch, int innerLoopNum,
-                                      const SimpleCallbackFunction &callback,
-                                      void *givenData = nullptr) const;
+  std::vector<int>
+  solve(int max_epoch, int inner_loop_num = 10,
+        std::function<bool(int epoch, double energy, double denergy,
+                           const std::vector<int> &cur_best_var_labels)>
+            callback = nullptr,
+        void *additional_data = nullptr) const;
 
-private:
-  std::vector<VarCategory> _varCategories;
-  std::vector<FactorCategory> _factorCategories;
-  Topology _graph;
+  template <class CallbackFunT>
+  auto solve(int max_epoch, int inner_loop_num, CallbackFunT callback,
+             void *additional_data = nullptr) const
+      -> decltype(callback(0, 0.0), std::vector<int>()) {
+    return solve(
+        max_epoch, inner_loop_num,
+        [callback](int epoch, double energy, double denergy,
+                   const std::vector<int> &cur_best_var_labels) -> bool {
+          return callback(epoch, energy);
+        },
+        additional_data);
+  }
 };
 }
 }

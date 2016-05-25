@@ -4,7 +4,6 @@
 
 namespace pano {
 namespace core {
-
 // failable result
 template <class T> class Failable {
 public:
@@ -69,7 +68,6 @@ inline Failable<T> AsResult(T &&v) {
 }
 
 namespace std {
-
 template <class T>
 void swap(pano::core::Failable<T> &a, pano::core::Failable<T> &b) {
   a.swap(b);

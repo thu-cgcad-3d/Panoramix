@@ -4,6 +4,7 @@
 #include "iterators.hpp"
 #include "utility.hpp"
 
+#include <vector>
 #include <list>
 #include <random>
 
@@ -91,15 +92,15 @@ TEST(MiscTest, Failable) {
 
 TEST(UtilTest, HasValue) {
 
-  std::vector<core::Ratio<core::Line2, double>> hlines = {
+  std::vector<std::pair<core::Line2, double>> hlines = {
       {{{1.0, 2.0}, {4.0, 5.0}}, 0.0},
       {{{1.0, 2.0}, {NAN, 5.0}}, 0.0},
       {{{1.0, 2.0}, {0.0, 5.0}}, 0.0},
       {{{1.0, 2.0}, {4.0, 5.0}}, 0.0},
       {{{1.0, 2.0}, {4.0, 5.0}}, 0.0}};
 
-  ASSERT_TRUE(core::HasValue(hlines, std::isnan<double>));
-  ASSERT_FALSE(core::HasValue(hlines, std::isinf<double>));
+  ASSERT_TRUE(core::HasValue(hlines, [](auto e){return std::isnan(e);}));
+  ASSERT_FALSE(core::HasValue(hlines, [](auto e){return std::isinf(e);}));
 }
 
 TEST(UtilTest, Distance) {
@@ -234,21 +235,19 @@ TEST(UtilTest, SubscriptAndIndex) {
   }
 }
 
-TEST(UtilTest, AngleBetweenDirections) {
+TEST(UtilTest, AngleBetweenDirected) {
   core::Vec2 v1(1, 0), v2(1, 1);
-  ASSERT_DOUBLE_EQ(M_PI_4, core::AngleBetweenDirections(v1, v2));
-  ASSERT_DOUBLE_EQ(M_PI_4, core::SignedAngleBetweenDirections(v1, v2, false));
-  ASSERT_DOUBLE_EQ(-M_PI_4, core::SignedAngleBetweenDirections(v1, v2, true));
-  ASSERT_DOUBLE_EQ(-M_PI_4, core::SignedAngleBetweenDirections(v1, v2));
+  ASSERT_DOUBLE_EQ(M_PI_4, core::AngleBetweenDirected(v1, v2));
+  ASSERT_DOUBLE_EQ(M_PI_4, core::SignedAngle(v1, v2, false));
+  ASSERT_DOUBLE_EQ(-M_PI_4, core::SignedAngle(v1, v2, true));
+  ASSERT_DOUBLE_EQ(-M_PI_4, core::SignedAngle(v1, v2));
   core::Vec2 v3(-1, -1);
-  ASSERT_DOUBLE_EQ(-M_PI_4 * 3,
-                   core::SignedAngleBetweenDirections(v1, v3, false));
-  ASSERT_DOUBLE_EQ(M_PI_4 * 3,
-                   core::SignedAngleBetweenDirections(v1, v3, true));
-  ASSERT_FLOAT_EQ(M_PI, core::AngleBetweenDirections(v2, v3));
+  ASSERT_DOUBLE_EQ(-M_PI_4 * 3, core::SignedAngle(v1, v3, false));
+  ASSERT_DOUBLE_EQ(M_PI_4 * 3, core::SignedAngle(v1, v3, true));
+  ASSERT_FLOAT_EQ(M_PI, core::AngleBetweenDirected(v2, v3));
   ASSERT_DOUBLE_EQ(
-      0.0, core::AngleBetweenDirections(core::Vec3(1.0, 1.9, 0.1),
-                                        core::Vec3(1.0, 1.9, 0.1000000001)));
+      0.0, core::AngleBetweenDirected(core::Vec3(1.0, 1.9, 0.1),
+                                      core::Vec3(1.0, 1.9, 0.1000000001)));
 }
 
 TEST(UtilTest, DistanceFromPointToLine) {
@@ -259,13 +258,11 @@ TEST(UtilTest, DistanceFromPointToLine) {
   for (double x = -3; x <= 3; x += 0.5) {
     core::Point3 p(x, 1, 0);
     if (x < -1) {
-      ASSERT_DOUBLE_EQ(core::norm(l.second - p),
-                       core::DistanceFromPointToLine(p, l).first);
+      ASSERT_DOUBLE_EQ(core::norm(l.second - p), core::Distance(p, l));
     } else if (x > 1) {
-      ASSERT_DOUBLE_EQ(core::norm(l.first - p),
-                       core::DistanceFromPointToLine(p, l).first);
+      ASSERT_DOUBLE_EQ(core::norm(l.first - p), core::Distance(p, l));
     } else {
-      ASSERT_DOUBLE_EQ(1, core::DistanceFromPointToLine(p, l).first);
+      ASSERT_DOUBLE_EQ(1, core::Distance(p, l));
     }
     ASSERT_DOUBLE_EQ(
         1, core::norm(core::ProjectionOfPointOnLine(p, l).position - p));
@@ -297,60 +294,56 @@ TEST(UtilTest, DistanceBetweenTwoLines) {
   core::Line3 l1 = {{1, 0, 0}, {-1, 0, 0}};
   core::Line3 l2 = {{0, 1, 1}, {0, -1, 1}};
   core::Line3 l3 = {{0, 2, 1}, {0, 3, 1}};
-  ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l2).first);
-  ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l2.reversed()).first);
-  ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1.reversed(), l2).first);
+  ASSERT_DOUBLE_EQ(1, core::Distance(l1, l2));
+  ASSERT_DOUBLE_EQ(1, core::Distance(l1, l2.reversed()));
+  ASSERT_DOUBLE_EQ(1, core::Distance(l1.reversed(), l2));
+  ASSERT_DOUBLE_EQ(core::norm(l3.first - l1.center()), core::Distance(l1, l3));
   ASSERT_DOUBLE_EQ(core::norm(l3.first - l1.center()),
-                   core::DistanceBetweenTwoLines(l1, l3).first);
+                   core::Distance(l1.reversed(), l3));
   ASSERT_DOUBLE_EQ(core::norm(l3.first - l1.center()),
-                   core::DistanceBetweenTwoLines(l1.reversed(), l3).first);
-  ASSERT_DOUBLE_EQ(core::norm(l3.first - l1.center()),
-                   core::DistanceBetweenTwoLines(l1, l3.reversed()).first);
+                   core::Distance(l1, l3.reversed()));
 
   double dd = 1;
-  ASSERT_DOUBLE_EQ(dd,
-                   core::DistanceBetweenTwoLines(
-                       core::Line3{{0, 0, 0}, {1, 0, 0}},
-                       core::Line3{{0, 0, dd}, {1, 0, dd + 0.01}}.reversed())
-                       .first);
-  ASSERT_DOUBLE_EQ(dd, core::DistanceBetweenTwoLines(
-                           core::Line3{{0, 0, 0}, {1, 0, 0}},
-                           core::Line3{{0, 0, dd}, {1, 0, dd}}.reversed())
-                           .first);
+  ASSERT_DOUBLE_EQ(
+      dd,
+      core::Distance(core::Line3{{0, 0, 0}, {1, 0, 0}},
+                     core::Line3{{0, 0, dd}, {1, 0, dd + 0.01}}.reversed()));
+  ASSERT_DOUBLE_EQ(
+      dd, core::Distance(core::Line3{{0, 0, 0}, {1, 0, 0}},
+                         core::Line3{{0, 0, dd}, {1, 0, dd}}.reversed()));
 
   core::Line3 l4 = {{1, 1, 0}, {-1, 1, 0}};
-  ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l4).first);
-  ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l4.reversed()).first);
-  ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1.reversed(), l4).first);
+  ASSERT_DOUBLE_EQ(1, core::Distance(l1, l4));
+  ASSERT_DOUBLE_EQ(1, core::Distance(l1, l4.reversed()));
+  ASSERT_DOUBLE_EQ(1, core::Distance(l1.reversed(), l4));
 
   core::Line3 l5 = {{2, 1, 0}, {3, 1, 0}};
+  ASSERT_DOUBLE_EQ(core::norm(l1.first, l5.first), core::Distance(l1, l5));
   ASSERT_DOUBLE_EQ(core::norm(l1.first, l5.first),
-                   core::DistanceBetweenTwoLines(l1, l5).first);
+                   core::Distance(l1.reversed(), l5));
   ASSERT_DOUBLE_EQ(core::norm(l1.first, l5.first),
-                   core::DistanceBetweenTwoLines(l1.reversed(), l5).first);
-  ASSERT_DOUBLE_EQ(core::norm(l1.first, l5.first),
-                   core::DistanceBetweenTwoLines(l1, l5.reversed()).first);
+                   core::Distance(l1, l5.reversed()));
 
   core::Line3 l6 = {{2, 1, 0}, {-2, 1, 0}};
-  ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l6).first);
-  ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1, l6.reversed()).first);
-  ASSERT_DOUBLE_EQ(1, core::DistanceBetweenTwoLines(l1.reversed(), l6).first);
+  ASSERT_DOUBLE_EQ(1, core::Distance(l1, l6));
+  ASSERT_DOUBLE_EQ(1, core::Distance(l1, l6.reversed()));
+  ASSERT_DOUBLE_EQ(1, core::Distance(l1.reversed(), l6));
 
   core::Line3 l7 = {{0, 0, 1}, {1, 0, 1}};
   core::Line3 l8 = {{0, 1, 0}, {0, 2, 0}};
-  ASSERT_DOUBLE_EQ(sqrt(2.0), core::DistanceBetweenTwoLines(l7, l8).first);
+  ASSERT_DOUBLE_EQ(sqrt(2.0), core::Distance(l7, l8));
 
   core::Line3 l9 = {{1, 0, 1}, {0, 0, 1}};
   core::Line3 l10 = {{0, 2, 0}, {0, 1, 0}};
-  ASSERT_DOUBLE_EQ(sqrt(2.0), core::DistanceBetweenTwoLines(l7, l10).first);
-  ASSERT_DOUBLE_EQ(sqrt(2.0), core::DistanceBetweenTwoLines(l9, l8).first);
-  ASSERT_DOUBLE_EQ(sqrt(2.0), core::DistanceBetweenTwoLines(l9, l10).first);
+  ASSERT_DOUBLE_EQ(sqrt(2.0), core::Distance(l7, l10));
+  ASSERT_DOUBLE_EQ(sqrt(2.0), core::Distance(l9, l8));
+  ASSERT_DOUBLE_EQ(sqrt(2.0), core::Distance(l9, l10));
 
-  ASSERT_DOUBLE_EQ(0, core::DistanceBetweenTwoLines(l7, l7).first);
-  ASSERT_DOUBLE_EQ(0, core::DistanceBetweenTwoLines(l10, l10).first);
+  ASSERT_DOUBLE_EQ(0, core::Distance(l7, l7));
+  ASSERT_DOUBLE_EQ(0, core::Distance(l10, l10));
 
-  ASSERT_DOUBLE_EQ(0, core::DistanceBetweenTwoLines(l7, l9).first);
-  ASSERT_DOUBLE_EQ(0, core::DistanceBetweenTwoLines(l8, l10).first);
+  ASSERT_DOUBLE_EQ(0, core::Distance(l7, l9));
+  ASSERT_DOUBLE_EQ(0, core::Distance(l8, l10));
 
   {
     core::Line3 a = {
@@ -570,9 +563,8 @@ TEST(ContainerTest, Dictionary) {
 TEST(AlgorithmsTest, ForeachCompatible) {
   std::list<double> data = {1.0, 2.0, 3.0, 5.0, 6.0, 7.0};
   std::list<double> selected;
-  core::ForeachCompatibleWithLastElement(
-      data.begin(), data.end(), std::back_inserter(selected),
-      [](double a, double b) { return abs(a - b) >= 1.5; });
+  core::FilterBy(data.begin(), data.end(), std::back_inserter(selected),
+                 [](double a, double b) { return abs(a - b) >= 1.5; });
   std::list<double> groundTruth = {1.0, 3.0, 5.0, 7.0};
   ASSERT_TRUE(selected == groundTruth);
 }

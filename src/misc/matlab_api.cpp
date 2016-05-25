@@ -632,8 +632,8 @@ bool MAT::removeVar(const std::string &name) {
   return matDeleteVariable(static_cast<::MATFile *>(_fp), name.c_str()) == 0;
 }
 
-Matlab::Matlab(const std::string &defaultDir, bool singleUse)
-    : _eng(nullptr), _buffer(nullptr) {
+Matlab::Matlab(const std::string &defaultDir, bool singleUse, bool printMsg)
+    : _eng(nullptr), _buffer(nullptr), _printMessage(printMsg) {
   static const int bufferSize = 1024;
   if (singleUse) {
     _eng = engOpenSingleUse(nullptr, nullptr, nullptr);
@@ -645,21 +645,28 @@ Matlab::Matlab(const std::string &defaultDir, bool singleUse)
     _buffer = new char[bufferSize];
     std::memset(_buffer, 0, bufferSize);
     engOutputBuffer(static_cast<::Engine *>(_eng), _buffer, bufferSize);
-    std::cout << "Matlab Engine Launched" << std::endl;
+    if (_printMessage) {
+      std::cout << "Matlab Engine Launched" << std::endl;
+    }
     if (!defaultDir.empty()) {
       engEvalString(static_cast<::Engine *>(_eng),
                     ("cd " + defaultDir + "; startup; pwd").c_str());
     } else {
-      (*this) << (std::string("cd ") + PANORAMIX_MATLAB_CODE_DIR_STR + "; startup; pwd");
+      (*this) << (std::string("cd ") + PANORAMIX_MATLAB_CODE_DIR_STR +
+                  "; startup; pwd");
     }
-    std::cout << _buffer << std::endl;
+    if (_printMessage) {
+      std::cout << _buffer << std::endl;
+    }
   }
 }
 
 Matlab::~Matlab() {
   if (_eng) {
     engClose(static_cast<::Engine *>(_eng));
-    std::cout << "Matlab Engine Closed" << std::endl;
+    if (_printMessage) {
+      std::cout << "Matlab Engine Closed" << std::endl;
+    }
   }
   delete[] _buffer;
   _eng = nullptr;
@@ -683,7 +690,7 @@ bool Matlab::started() const { return _eng != nullptr; }
 
 bool Matlab::run(const std::string &cmd) const {
   bool ret = engEvalString(static_cast<::Engine *>(_eng), cmd.c_str()) == 0;
-  if (strlen(_buffer) > 0) {
+  if (_printMessage && strlen(_buffer) > 0) {
     std::cout << "[Message when executing '" << cmd << "']:\n" << _buffer
               << std::endl;
   }

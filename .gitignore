@@ -17,3 +17,8 @@ matlab/*.mexw64
 matlab/temp.mat
 Panoramix.sublime-project
 *.cereal
+*.blend1
+/data/serialization/pano2.json
+/matlab/LineDrawingMatrices.mat
+/matlab/matlab.mat
+/todo.txt

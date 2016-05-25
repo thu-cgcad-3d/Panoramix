@@ -2,6 +2,8 @@
 
 #include "../core/basic_types.hpp"
 
+#include "eigen.hpp"
+
 namespace pano {
 namespace misc {
 
@@ -87,6 +89,10 @@ public:
   MXA(const std::string &string, bool dos = false);
   MXA(const cv::SparseMat &m, bool dos = false);
   MXA(cv::InputArray m, bool dos = false);
+
+  template <class T, int M, int N, int O, int MaxM, int MaxN>
+  MXA(const Eigen::Matrix<T, M, N, O, MaxM, MaxN> &m, bool dos = false)
+      : MXA(ToCVMat(m), dos) {}
 
   double scalar() const;
   std::string toString() const;
@@ -216,7 +222,8 @@ private:
 // the matlab engine
 class Matlab {
 public:
-  Matlab(const std::string &defaultDir = std::string(), bool singleUse = false);
+  Matlab(const std::string &defaultDir = std::string(), bool singleUse = false,
+         bool printMsg = true);
   ~Matlab();
 
   Matlab(Matlab &&e);
@@ -230,6 +237,7 @@ public:
   bool run(const std::string &cmd) const;
   std::string lastMessage() const;
   bool errorLastRun() const;
+  void setPrintMessage(bool b) { _printMessage = b; }
 
   MXA var(const std::string &name) const;
   bool setVar(const std::string &name, const MXA &mxa);
@@ -241,6 +249,7 @@ public:
 private:
   char *_buffer;
   void *_eng;
+  bool _printMessage;
 };
 }
 }

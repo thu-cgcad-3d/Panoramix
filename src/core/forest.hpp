@@ -40,17 +40,11 @@ public:
     return _nodes[h.id].topo.parent;
   }
 
-  inline ConstConditionalContainerWrapper<TripletArray<ForestTopo, T>,
-                                          NodeExistsPred>
-  nodes() const {
-    return ConstConditionalContainerWrapper<TripletArray<ForestTopo, T>,
-                                            NodeExistsPred>(&_nodes);
+  auto nodes() const {
+    return MakeConditionalRange(_nodes.begin(), _nodes.end(), NodeExistsPred());
   }
-  inline ConditionalContainerWrapper<TripletArray<ForestTopo, T>,
-                                     NodeExistsPred>
-  nodes() {
-    return ConditionalContainerWrapper<TripletArray<ForestTopo, T>,
-                                       NodeExistsPred>(&_nodes);
+  auto nodes() {
+    return MakeConditionalRange(_nodes.begin(), _nodes.end(), NodeExistsPred());
   }
   inline const TripletArray<ForestTopo, T> &internalNodes() const {
     return _nodes;

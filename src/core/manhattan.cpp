@@ -150,7 +150,7 @@ Failable<std::vector<Vec3>> FindOrthogonalPrinicipleDirections(
     int vertVPId = -1;
     double minAngle = std::numeric_limits<double>::max();
     for (int i = 0; i < vps.size(); i++) {
-      double a = AngleBetweenUndirectedVectors(vps[i], verticalSeed);
+      double a = AngleBetweenUndirected(vps[i], verticalSeed);
       if (a < minAngle) {
         vertVPId = i;
         minAngle = a;
@@ -181,7 +181,7 @@ Failable<std::vector<Vec3>> FindOrthogonalPrinicipleDirections(
 
       bool tooCloseToExistingVP = false;
       for (int i = 0; i < vps.size(); i++) {
-        if (AngleBetweenUndirectedVectors(vps[i], vec1) <
+        if (AngleBetweenUndirected(vps[i], vec1) <
             minAngleToCurHorizontalVPs) {
           tooCloseToExistingVP = true;
           break;
@@ -206,7 +206,7 @@ int NearestDirectionId(const std::vector<Vec3> &directions,
   int vid = -1;
   double minAngle = M_PI;
   for (int i = 0; i < directions.size(); i++) {
-    double angle = AngleBetweenUndirectedVectors(directions[i], verticalSeed);
+    double angle = AngleBetweenUndirected(directions[i], verticalSeed);
     if (angle < minAngle) {
       vid = i;
       minAngle = angle;
@@ -407,20 +407,34 @@ inline Vec<T, 3> PerpendicularRootOfLineEquation(const Vec<T, 3> &lineeq) {
 std::pair<Point2, double>
 ComputePrinciplePointAndFocalLength(const Point2 &vp1, const Point2 &vp2,
                                     const Point2 &vp3) {
-  /* lambda = dot(vp1 - vp3, vp2 - vp3, 2) . / ...
-  ((vp1(:, 1) - vp2(:, 1)).*(vp1(:, 2) - vp3(:, 2)) - ...
-  (vp1(:, 1) - vp3(:, 1)).*(vp1(:, 2) - vp2(:, 2)));
-  principalPoint(infcounts == 0, :) = vp3 + (vp1(:, [2 1]) - vp2(:, [2 1])).*...
-  [-lambda lambda];
-  focalLength(infcounts == 0) = ...
-  sqrt(-dot(vp1 - principalPoint(infcounts == 0, :), ...
-  vp2 - principalPoint(infcounts == 0, :), 2));*/
   auto lambda =
       (vp1 - vp3).dot(vp2 - vp3) / ((vp1(0) - vp2(0)) * (vp1(1) - vp3(1)) -
                                     (vp1(0) - vp3(0)) * (vp1(1) - vp2(1)));
   Point2 pp = vp3 + PerpendicularDirection(vp1 - vp2) * lambda;
   double focalLength = sqrt(abs(-(vp1 - pp).dot(vp2 - pp)));
   return std::make_pair(pp, focalLength);
+}
+
+std::vector<Scored<std::pair<Point2, double>>>
+ComputePrinciplePointAndFocalLengthCandidates(
+    const std::vector<std::vector<Line2>> &line_groups) {
+  //// [Estimate PP & Focal Candidates from 2D Line Groups]
+  Box2 box;
+  for (auto &g : line_groups) {
+    box |= BoundingBoxOfContainer(g);
+  }
+  double scale = box.outerSphere().radius;
+
+  std::vector<Scored<std::pair<Point2, double>>> pp_focal_candidates;
+  pp_focal_candidates.reserve(line_groups.size() * 3);
+
+  for (auto & group : line_groups) {
+    // collect edge intersections in each face
+    std::vector<Point2> interps;
+
+  }
+
+  NOT_IMPLEMENTED_YET();
 }
 
 namespace {
@@ -443,7 +457,7 @@ Imaged LinesVotesToPoints(const std::vector<HPoint2> &points,
     // project point on line
     double proj = mid2vp.dot(normalize(line.direction()));
     bool liesOnLine = abs(proj) <= line.length() / 2.0;
-    double angle = AngleBetweenUndirectedVectors(mid2vp, line.direction());
+    double angle = AngleBetweenUndirected(mid2vp, line.direction());
 
     double score = 0.0;
     if (angle >= angleThreshold)
@@ -487,8 +501,6 @@ ComputeProjectionCenterAndFocalLength(const std::vector<Point2> &vp1s,
                                       const Point2 &vp3) {
   assert(vp1s.size() == vp2s.size());
   std::vector<std::pair<Point2, double>> ppAndFocals(vp1s.size());
-
-  THERE_ARE_BOTTLENECKS_HERE("use Eigen::Map!");
 
   using namespace Eigen;
   Array<double, Eigen::Dynamic, 2> vp1m, vp2m;
@@ -628,7 +640,7 @@ RefineIntersectionsAndProjectToSpace(const std::vector<HPoint2> &intersections,
     Vec3 inter = normalize(VectorFromHPoint(intersections[i], fakeFocal));
     if (rtreeRecorder.contains(
             inter, [&angleThres](const Vec3 &a, const Vec3 &b) {
-              return AngleBetweenDirections(a, b) < angleThres;
+              return AngleBetweenDirected(a, b) < angleThres;
             })) {
       continue;
     }
@@ -1163,7 +1175,7 @@ VanishingPointsDetector::operator()(const std::vector<Line2> &lines,
                 Vec3(cos(x(k * 2)) * sin(x(k * 2 + 1)),
                      sin(x[k * 2]) * sin(x[k * 2 + 1]), cos(x[k * 2 + 1]));
             maxOutAngle = std::max(
-                maxOutAngle, AngleBetweenUndirectedVectors(
+                maxOutAngle, AngleBetweenUndirected(
                                  VectorFromHPoint(vps[ids[k]]), currentVPs[k]));
           }
           for (int k = 0; k < 3; k++) {

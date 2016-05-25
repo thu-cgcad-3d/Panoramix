@@ -522,8 +522,8 @@ void Scene::render(const RenderOptions &options) const {
 
   for (auto &n : _tree.nodes()) {
     if (n.exists) {
-      _tree.data(n.topo.hd)
-          ->render(options, _internal->calculatedModelMatrices.at(n.topo.hd));
+      _tree.data(n.topo.hd)->render(
+          options, _internal->calculatedModelMatrices.at(n.topo.hd));
     }
   }
 
@@ -698,30 +698,30 @@ SceneObjectMeshLine Scene::pickLineOnScreen(const RenderOptions &options,
     Box3 detectionBox = BoundingBox(centerP) | BoundingBox(nextCenterP);
     detectionBox.expand(stepLen);
 
-    _internal->lines.search(
-        detectionBox, [&lines, this, &centerRay, &options, &pOnScreen,
-                       &lineSegment](const SceneObjectMeshLine &m) {
-          auto &transformedVertPositions =
-              _internal->transformedVerticesPositions.at(m.first);
-          auto &vo = _tree.data(m.first);
-          if (!vo->selectable()) {
-            return true;
-          }
-          TriMesh::VertHandle v1, v2;
-          vo->mesh().fetchLineVerts(m.second, v1, v2);
-          Line3 lineInst(transformedVertPositions[v1],
-                         transformedVertPositions[v2]);
-          auto np = DistanceBetweenTwoLines(lineSegment, lineInst)
-                        .second.second.position;
-          auto npOnScreen = options.camera().toScreen(np); ///// test
-          if (!options.camera().isVisibleOnScreen(np))
-            return true;
-          double distance = Distance(npOnScreen, pOnScreen);
-          if (distance <= vo->lineWidth() / 2.0) {
-            lines[m] = distance;
-          }
-          return true;
-        });
+    _internal->lines.search(detectionBox, [&lines, this, &centerRay, &options,
+                                           &pOnScreen, &lineSegment](
+                                              const SceneObjectMeshLine &m) {
+      auto &transformedVertPositions =
+          _internal->transformedVerticesPositions.at(m.first);
+      auto &vo = _tree.data(m.first);
+      if (!vo->selectable()) {
+        return true;
+      }
+      TriMesh::VertHandle v1, v2;
+      vo->mesh().fetchLineVerts(m.second, v1, v2);
+      Line3 lineInst(transformedVertPositions[v1],
+                     transformedVertPositions[v2]);
+      auto np =
+          DistanceBetweenTwoLines(lineSegment, lineInst).second.second.position;
+      auto npOnScreen = options.camera().toScreen(np); ///// test
+      if (!options.camera().isVisibleOnScreen(np))
+        return true;
+      double distance = Distance(npOnScreen, pOnScreen);
+      if (distance <= vo->lineWidth() / 2.0) {
+        lines[m] = distance;
+      }
+      return true;
+    });
   }
 
   double minDist = std::numeric_limits<double>::max();
@@ -1025,6 +1025,20 @@ QWidget *MakeGuiAgent(Noted<T> &value, QWidget *parent = nullptr) {
   return spinBox;
 }
 
+QWidget *MakeGuiAgent(Noted<int> &value, QWidget *parent = nullptr) {
+  QSpinBox *spinBox = new QSpinBox(parent);
+  spinBox->setValue(value.component);
+  spinBox->setSingleStep(1);
+  spinBox->setRange(0, std::numeric_limits<int>::max());
+  auto signal = static_cast<void (QSpinBox::*)(int)>(&QSpinBox::valueChanged);
+  QObject::connect(spinBox, signal, [&value](int v) {
+    // std::cout << "value of " << value.note << " is set to " << v << "!" <<
+    // std::endl;
+    value.component = v;
+  });
+  return spinBox;
+}
+
 QWidget *MakeGuiAgent(Noted<bool> &value, QWidget *parent = nullptr) {
   QCheckBox *checkBox = new QCheckBox(parent);
   checkBox->setCheckable(true);
@@ -1070,10 +1084,12 @@ void PopUpGui(RenderOptions &options, QWidget *widget) {
       options.panoramaHoriCenterRatio(), "Panorama Horizon Center Ratio");
   Noted<float> panoramaAspectRatio =
       NoteAs(options.panoramaAspectRatio(), "Panorama Aspect Ratio (h/w)");
+  Noted<int> camFocal =
+      NoteAs((int)options.camera().focal(), "Camera Focal Length");
 
   PopUpDialog(widget, bwColor, bwTexColor, cullFrontFace, cullBackFace,
               showPoints, showLines, showFaces, panoramaHoriCenterRatio,
-              panoramaAspectRatio);
+              panoramaAspectRatio, camFocal);
   options.bwColor() = bwColor.component;
   options.bwTexColor() = bwTexColor.component;
   options.cullFrontFace() = cullFrontFace.component;
@@ -1084,6 +1100,7 @@ void PopUpGui(RenderOptions &options, QWidget *widget) {
       (showFaces.component ? RenderModeFlag::Triangles : RenderModeFlag::None);
   options.panoramaHoriCenterRatio() = panoramaHoriCenterRatio.component;
   options.panoramaAspectRatio() = panoramaAspectRatio.component;
+  options.camera().setFocal(camFocal.component);
 }
 
 SceneBuilder::SceneBuilder() {

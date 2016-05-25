@@ -38,8 +38,8 @@ inline void DrawRay2OnImage(Image &im, const Ray2 &ray,
 // 2d
 template <class T> class Canvas {
 public:
-  Canvas(ImageOf<T> &im) : _image(im) { resetPaintingOptions(); }
-  Canvas(ImageOf<T> &&im) : _image(im) { resetPaintingOptions(); }
+  Canvas(Image_<T> &im) : _image(im) { resetPaintingOptions(); }
+  Canvas(Image_<T> &&im) : _image(im) { resetPaintingOptions(); }
 
   void resetPaintingOptions() {
     _paintingOptions.color = gui::White;
@@ -50,7 +50,7 @@ public:
     _paintingOptions.colorTable = ColorTableDescriptor::AllColors;
   }
 
-  ImageOf<T> &image() { return _image; }
+  Image_<T> &image() { return _image; }
 
   PaintingOptions &paintingOptions() { return _paintingOptions; }
   const PaintingOptions &paintingOptions() const { return _paintingOptions; }
@@ -83,7 +83,7 @@ public:
   }
 
   inline Canvas &add(const Pixel &pp) {
-    if (Contains(image(), pp)) {
+    if (Contains(image().size(), pp)) {
       image()(pp) = paintingOptions().color;
     }
     return *this;
@@ -171,7 +171,7 @@ public:
     return *this;
   }
 
-  template <class TT> inline Canvas &add(const ImageOf<TT> &im) {
+  template <class TT> inline Canvas &add(const Image_<TT> &im) {
     cv::addWeighted(image(), (1.0f - paintingOptions().alpha), im,
                     paintingOptions().alpha, 0.0, image());
     return *this;
@@ -230,17 +230,17 @@ public:
 
 private:
   PaintingOptions _paintingOptions;
-  ImageOf<T> _image;
+  Image_<T> _image;
 };
 
-template <class T> inline Canvas<T> AsCanvas(ImageOf<T> &im) {
+template <class T> inline Canvas<T> AsCanvas(Image_<T> &im) {
   return Canvas<T>(im);
 }
-template <class T> inline Canvas<T> AsCanvas(ImageOf<T> &&im) {
+template <class T> inline Canvas<T> AsCanvas(Image_<T> &&im) {
   return Canvas<T>(std::move(im));
 }
 
-template <class T> inline Canvas<T> MakeCanvas(const ImageOf<T> &im) {
+template <class T> inline Canvas<T> MakeCanvas(const Image_<T> &im) {
   return Canvas<T>(im.clone());
 }
 

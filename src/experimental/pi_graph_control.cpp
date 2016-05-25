@@ -16,7 +16,7 @@ std::vector<int> CollectSegsIntersectingDirection(
     auto &contours = mg.seg2contours[i];
     for (auto &cs : contours) {
       for (auto &c : cs) {
-        double angle = AngleBetweenDirections(mg.seg2center[i], c);
+        double angle = AngleBetweenDirected(mg.seg2center[i], c);
         if (angle > radiusAngle) {
           radiusAngle = angle;
         }
@@ -24,8 +24,8 @@ std::vector<int> CollectSegsIntersectingDirection(
     }
 
     if ((alsoConsiderBackward
-             ? AngleBetweenUndirectedVectors(direction, mg.seg2center[i])
-             : AngleBetweenDirections(direction, mg.seg2center[i])) >
+             ? AngleBetweenUndirected(direction, mg.seg2center[i])
+             : AngleBetweenDirected(direction, mg.seg2center[i])) >
         radiusAngle) {
       continue;
     }
@@ -63,13 +63,13 @@ std::vector<int> CollectSegsIntersectingDirection(
         if (intersected)
           break;
         auto pp = Pixel(p.x + x, p.y + y);
-        if (Contains(mask, pp) && mask(pp)) {
+        if (Contains(mask.size(), pp) && mask(pp)) {
           peakySegs.push_back(i);
           intersected = true;
         }
         if (alsoConsiderBackward) {
           auto pp2 = Pixel(p2.x + x, p2.y + y);
-          if (Contains(mask, pp2) && mask(pp2)) {
+          if (Contains(mask.size(), pp2) && mask(pp2)) {
             peakySegs.push_back(i);
             intersected = true;
           }
@@ -144,7 +144,7 @@ bool MakeRegionPlaneAlsoAlong(int seg, int alongVPId,
   auto newNormal = dir.cross(mg.vps[p.orientationNotClaz]);
   double minAngle = M_PI;
   for (int i = 0; i < mg.vps.size(); i++) {
-    double angle = AngleBetweenUndirectedVectors(mg.vps[i], newNormal);
+    double angle = AngleBetweenUndirected(mg.vps[i], newNormal);
     if (angle < minAngle) {
       p.orientationClaz = i;
       minAngle = angle;
@@ -206,7 +206,7 @@ void AttachWallConstraints(PIGraph<PanoramicCamera> &mg, double rangeAngle) {
       if (intersected)
         break;
       for (auto &c : cs) {
-        double angle = M_PI_2 - AngleBetweenUndirectedVectors(c, vertical);
+        double angle = M_PI_2 - AngleBetweenUndirected(c, vertical);
         if (angle <= rangeAngle) {
           intersected = true;
           break;

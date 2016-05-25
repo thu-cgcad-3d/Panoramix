@@ -8,7 +8,7 @@ namespace experimental {
 
 inline double DepthAt(const Vec3 &direction, const Plane3 &plane,
                       const Point3 &eye = Point3(0, 0, 0)) {
-  return norm(IntersectionOfLineAndPlane(Ray3(eye, direction), plane).position);
+  return norm(Intersection(Ray3(eye, direction), plane));
 }
 inline double DepthAt(const Vec3 &direction, const Line3 &line,
                       const Point3 &eye = Point3(0, 0, 0)) {
@@ -17,7 +17,8 @@ inline double DepthAt(const Vec3 &direction, const Line3 &line,
           .second.first);
 }
 
-double DepthOfVertexAt(const PIConstraintGraph &cg, const PIGraph<PanoramicCamera> &mg, int ent,
+double DepthOfVertexAt(const PIConstraintGraph &cg,
+                       const PIGraph<PanoramicCamera> &mg, int ent,
                        const Vec3 &direction, const Point3 &eye = Origin()) {
   auto &v = cg.entities[ent];
   auto &plane = v.supportingPlane.reconstructed;
@@ -33,7 +34,8 @@ void VisualizeReconstruction(
   gui::ResourceStore::set("texture", mg.view.image);
 
   gui::SceneBuilder viz;
-  viz.installingOptions().discretizeOptions.colorTable(gui::ColorTableDescriptor::RGB);
+  viz.installingOptions().discretizeOptions.colorTable(
+      gui::ColorTableDescriptor::RGB);
   std::vector<core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int>>
       spps;
   std::vector<core::Decorated<gui::Colored<core::Line3>, int>> lines;
@@ -50,12 +52,11 @@ void VisualizeReconstruction(
         continue;
       }
       // filter corners
-      core::ForeachCompatibleWithLastElement(
-          contours.front().begin(), contours.front().end(),
-          std::back_inserter(spp.corners),
-          [](const core::Vec3 &a, const core::Vec3 &b) -> bool {
-            return core::AngleBetweenDirections(a, b) > 0.0;
-          });
+      core::FilterBy(contours.front().begin(), contours.front().end(),
+                     std::back_inserter(spp.corners),
+                     [](const core::Vec3 &a, const core::Vec3 &b) -> bool {
+                       return core::AngleBetweenDirected(a, b) > 0.0;
+                     });
       if (spp.corners.size() < 3)
         continue;
 
@@ -72,11 +73,8 @@ void VisualizeReconstruction(
       auto &plane = v.supportingPlane.reconstructed;
       auto &projectedLine = mg.lines[line].component;
       Line3 reconstructedLine(
-          IntersectionOfLineAndPlane(Ray3(Origin(), projectedLine.first), plane)
-              .position,
-          IntersectionOfLineAndPlane(Ray3(Origin(), projectedLine.second),
-                                     plane)
-              .position);
+          Intersection(Ray3(Origin(), projectedLine.first), plane),
+          Intersection(Ray3(Origin(), projectedLine.second), plane));
       if (HasValue(reconstructedLine, IsInfOrNaN<double>)) {
         WARNNING("inf line");
         continue;
@@ -219,7 +217,8 @@ void VisualizeReconstruction(
 void VisualizeReconstructionCompact(const Image &im,
                                     const PICGDeterminablePart &dp,
                                     const PIConstraintGraph &cg,
-                                    const PIGraph<PanoramicCamera> &mg, bool doModel) {
+                                    const PIGraph<PanoramicCamera> &mg,
+                                    bool doModel) {
   gui::ResourceStore::set("texture", im);
 
   auto compactPolygons = CompactModel(dp, cg, mg, 0.1);
@@ -231,7 +230,8 @@ void VisualizeReconstructionCompact(const Image &im,
   compactPolygons.erase(e, compactPolygons.end());
 
   gui::SceneBuilder viz;
-  viz.installingOptions().discretizeOptions.colorTable(gui::ColorTableDescriptor::RGB);
+  viz.installingOptions().discretizeOptions.colorTable(
+      gui::ColorTableDescriptor::RGB);
   viz.begin(compactPolygons /*, sppCallbackFun*/)
       .shaderSource(gui::OpenGLShaderSourceDescriptor::XPhong)
       .resource("texture")
@@ -245,11 +245,8 @@ void VisualizeReconstructionCompact(const Image &im,
       auto &plane = v.supportingPlane.reconstructed;
       auto &projectedLine = mg.lines[line].component;
       Line3 reconstructedLine(
-          IntersectionOfLineAndPlane(Ray3(Origin(), projectedLine.first), plane)
-              .position,
-          IntersectionOfLineAndPlane(Ray3(Origin(), projectedLine.second),
-                                     plane)
-              .position);
+          Intersection(Ray3(Origin(), projectedLine.first), plane),
+          Intersection(Ray3(Origin(), projectedLine.second), plane));
       if (HasValue(reconstructedLine, IsInfOrNaN<double>)) {
         WARNNING("inf line");
         continue;
@@ -296,9 +293,8 @@ void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,
       for (int face : corner2faces[corner]) {
         auto &plane = anno.face2plane[face];
         if (plane.normal != Origin()) {
-          double depth = norm(IntersectionOfLineAndPlane(
-                                  Ray3(Origin(), anno.corners[corner]), plane)
-                                  .position);
+          double depth =
+              norm(Intersection(Ray3(Origin(), anno.corners[corner]), plane));
           faceDepths[face] = depth;
         }
       }
@@ -349,16 +345,15 @@ void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,
       auto &poly = face2polygon[face];
       poly.normal = anno.face2plane[face].normal;
       for (int corner : anno.face2corners[face]) {
-        poly.corners.push_back(
-            IntersectionOfLineAndPlane(Ray3(Origin(), anno.corners[corner]),
-                                       anno.face2plane[face])
-                .position);
+        poly.corners.push_back(Intersection(
+            Ray3(Origin(), anno.corners[corner]), anno.face2plane[face]));
       }
     }
   }
 
   gui::SceneBuilder viz;
-  viz.installingOptions().discretizeOptions.colorTable(gui::ColorTableDescriptor::RGB);
+  viz.installingOptions().discretizeOptions.colorTable(
+      gui::ColorTableDescriptor::RGB);
   std::vector<core::Decorated<gui::Colored<Polygon3>, int>> spps;
   // std::vector<core::Decorated<gui::Colored<Polygon3>, int>> pps;
 

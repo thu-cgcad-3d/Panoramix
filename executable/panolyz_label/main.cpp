@@ -3,7 +3,7 @@
 #include <QtCore>
 
 #include "../../src/gui/singleton.hpp"
-#include "../../src/gui/utility.hpp"
+#include "../../src/gui/gui_util.hpp"
 
 #include "../../src/experimental/pi_graph_annotation.hpp"
 #include "../../src/experimental/pi_graph_solve.hpp"
@@ -19,10 +19,14 @@ int main(int argc, char **argv) {
   misc::Matlab matlab;
 
   std::vector<std::string> impaths;
-  gui::PickImages("H:\\DataSet\\pi\\dataset\\selected\\", &impaths);
+  //gui::PickImages("H:\\DataSet\\pi\\dataset\\selected\\", &impaths);
+  
+  impaths.push_back("");
+  gui::PickAnImage("F:\\CVPR2016", &(impaths[0]));
 
   for (auto &impath : impaths) {
     auto anno = pano::experimental::LoadOrInitializeNewLayoutAnnotation(impath);
+    
     while (true) {
       pano::experimental::EditLayoutAnnotation(impath, anno);
       pano::experimental::ReconstructLayoutAnnotation(anno, matlab);

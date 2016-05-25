@@ -1,6 +1,5 @@
 #include "basic_types.hpp"
 #include "forest.hpp"
-#include "homo_graph.hpp"
 
 #include <random>
 
@@ -58,48 +57,48 @@ TEST(Serialization, BasicTypes) {
   }
 }
 
-TEST(Serialization, HomogeneousGraph) {
-
-  using CGraph =
-      core::HomogeneousGraph<core::Dummy,
-                             core::LayerConfig<core::Dummy, core::Dynamic>,
-                             core::LayerConfig<core::Point3, 4>>;
-
-  CGraph cgraph, cgraph2;
-  auto c0 = cgraph.add();
-  auto c1 = cgraph.add();
-  auto c2 = cgraph.add();
-  auto c3 = cgraph.add();
-
-  auto cc012 = cgraph.add<1>({c0, c1, c2});
-  auto cc123 = cgraph.add<1>({c1, c2, c3});
-  auto cc230 = cgraph.add<1>({c2, c3, c0});
-  auto cc301 = cgraph.add<1>({c3, c0, c1});
-
-  auto ccc = cgraph.add<2>({cc012, cc123, cc230, cc301}, core::Point3(1, 2, 3));
-
-  {
-    std::ofstream os(ProjectDataDirStrings::Serialization + "/gm.cereal",
-                     std::ios::binary);
-    cereal::BinaryOutputArchive archive(os);
-    archive(cgraph);
-  }
-  {
-    std::ifstream is(ProjectDataDirStrings::Serialization + "/gm.cereal",
-                     std::ios::binary);
-    cereal::BinaryInputArchive archive(is);
-    archive(cgraph2);
-  }
-
-  EXPECT_EQ(cgraph.internalElements<0>().size(),
-            cgraph2.internalElements<0>().size());
-  EXPECT_EQ(cgraph.internalElements<1>().size(),
-            cgraph2.internalElements<1>().size());
-  EXPECT_EQ(cgraph.internalElements<2>().size(),
-            cgraph2.internalElements<2>().size());
-
-  EXPECT_TRUE(cgraph.data(ccc) == cgraph2.data(ccc));
-}
+//TEST(Serialization, HomogeneousGraph) {
+//
+//  using CGraph =
+//      core::HomogeneousGraph<core::Dummy,
+//                             core::LayerConfig<core::Dummy, core::Dynamic>,
+//                             core::LayerConfig<core::Point3, 4>>;
+//
+//  CGraph cgraph, cgraph2;
+//  auto c0 = cgraph.add();
+//  auto c1 = cgraph.add();
+//  auto c2 = cgraph.add();
+//  auto c3 = cgraph.add();
+//
+//  auto cc012 = cgraph.add<1>({c0, c1, c2});
+//  auto cc123 = cgraph.add<1>({c1, c2, c3});
+//  auto cc230 = cgraph.add<1>({c2, c3, c0});
+//  auto cc301 = cgraph.add<1>({c3, c0, c1});
+//
+//  auto ccc = cgraph.add<2>({cc012, cc123, cc230, cc301}, core::Point3(1, 2, 3));
+//
+//  {
+//    std::ofstream os(ProjectDataDirStrings::Serialization + "/gm.cereal",
+//                     std::ios::binary);
+//    cereal::BinaryOutputArchive archive(os);
+//    archive(cgraph);
+//  }
+//  {
+//    std::ifstream is(ProjectDataDirStrings::Serialization + "/gm.cereal",
+//                     std::ios::binary);
+//    cereal::BinaryInputArchive archive(is);
+//    archive(cgraph2);
+//  }
+//
+//  EXPECT_EQ(cgraph.internalElements<0>().size(),
+//            cgraph2.internalElements<0>().size());
+//  EXPECT_EQ(cgraph.internalElements<1>().size(),
+//            cgraph2.internalElements<1>().size());
+//  EXPECT_EQ(cgraph.internalElements<2>().size(),
+//            cgraph2.internalElements<2>().size());
+//
+//  EXPECT_TRUE(cgraph.data(ccc) == cgraph2.data(ccc));
+//}
 
 TEST(Serialization, FileTime) {
 

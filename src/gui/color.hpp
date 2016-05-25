@@ -218,10 +218,10 @@ public:
       : _colors(c), _exceptionalColor(exceptColor) {}
 
   template <
-      class ColorIteratorT,
+      class ColorIterT,
       class = std::enable_if_t<std::is_same<
-          std::iterator_traits<ColorIteratorT>::value_type, Color>::value>>
-  inline ColorTable(ColorIteratorT begin, ColorIteratorT end,
+          std::iterator_traits<ColorIterT>::value_type, Color>::value>>
+  inline ColorTable(ColorIterT begin, ColorIterT end,
                     const Color &exceptColor = ColorTag::Transparent)
       : _colors(begin, end), _exceptionalColor(exceptColor) {}
 

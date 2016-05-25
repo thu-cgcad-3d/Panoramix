@@ -17,7 +17,7 @@ inline bool AllAlong(const ContT &pts, const Vec3 &from, const Vec3 &to,
                      double angleThres) {
   auto n = normalize(from.cross(to));
   return core::AllOf<Vec3>(pts, [&n, angleThres](const Vec3 &p) {
-    return abs(M_PI_2 - AngleBetweenDirections(n, p)) < angleThres;
+    return abs(M_PI_2 - AngleBetweenDirected(n, p)) < angleThres;
   });
 }
 }
@@ -43,814 +43,814 @@ struct SegLabel {
   }
 };
 
-void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
-
-  core::FactorGraph fg;
-
-  std::cout << "building factor graph" << std::endl;
-
-  //// vars
-
-  // segs
-  std::vector<core::FactorGraph::VarHandle> seg2vh(mg.nsegs);
-  std::vector<std::vector<SegLabel>> seg2allowedLabels(mg.nsegs);
-  std::map<core::FactorGraph::VarHandle, int> vh2seg;
-  for (int i = 0; i < mg.nsegs; i++) {
-    auto &c = mg.seg2control[i];
-    if (!c.used)
-      continue;
-
-    std::vector<SegLabel> allowedLabels;
-    double c_i = mg.seg2areaRatio[i] * 4 * M_PI;
-
-    if (c.orientationClaz != -1) {
-      allowedLabels = {{c.orientationClaz, -1}};
-    } else if (c.orientationNotClaz != -1) {
-      allowedLabels = {{-1, c.orientationNotClaz}};
-    } else {
-      allowedLabels.push_back({-1, -1});
-    }
-
-    auto vh = fg.addVar(fg.addVarCategory(allowedLabels.size(), c_i));
-    seg2vh[i] = vh;
-    seg2allowedLabels[i] = std::move(allowedLabels);
-    vh2seg[vh] = i;
-  }
-
-  // bndPieces
-  enum BndPieceLabel : int {
-    // Coplanar = (int)SegRelation::Coplanar,
-    Connected = (int)SegRelation::Connected,
-    LeftIsFront = (int)SegRelation::LeftIsFront,
-    RightIsFront = (int)SegRelation::RightIsFront
-  };
-  std::vector<core::FactorGraph::VarHandle> bndPiece2vh(mg.nbndPieces());
-  std::vector<std::vector<BndPieceLabel>> bndPiece2allowedLabels(
-      mg.nbndPieces());
-  std::map<core::FactorGraph::VarHandle, int> vh2bndPiece;
-  for (int i = 0; i < mg.nbndPieces(); i++) {
-    std::vector<BndPieceLabel> allowedLabels;
-    double c_i = mg.bndPiece2length[i];
-
-    if (mg.bndPiece2segRelation[i] != SegRelation::Unknown) {
-      allowedLabels = {(BndPieceLabel)mg.bndPiece2segRelation[i]};
-    } else if (mg.bndPiece2length[i] <
-               DegreesToRadians(1)) { // always disconnect tiny bndPieces
-      allowedLabels = {LeftIsFront, RightIsFront};
-    } else {
-      allowedLabels = {Connected, LeftIsFront, RightIsFront};
-    }
-    int vc = fg.addVarCategory(allowedLabels.size(), c_i);
-    auto vh = fg.addVar(vc);
-    bndPiece2vh[i] = vh;
-    bndPiece2allowedLabels[i] = std::move(allowedLabels);
-    vh2bndPiece[vh] = i;
-  }
-
-  // linePieces
-  enum LinePieceLabel {
-    Attached = (int)SegLineRelation::Attached,
-    Detached = (int)SegLineRelation::Detached
-  };
-  std::vector<core::FactorGraph::VarHandle> linePiece2vh(mg.nlinePieces());
-  std::vector<std::vector<LinePieceLabel>> linePiece2allowedLabels(
-      mg.nlinePieces());
-  std::map<core::FactorGraph::VarHandle, int> vh2linePiece;
-  for (int i = 0; i < mg.nlinePieces(); i++) {
-    std::vector<LinePieceLabel> allowedLabels;
-    if (mg.linePiece2segLineRelation[i] != SegLineRelation::Unknown) {
-      allowedLabels = {(LinePieceLabel)mg.linePiece2segLineRelation[i]};
-    } else if (mg.linePiece2length[i] < DegreesToRadians(1)) {
-      allowedLabels = {Detached};
-    } else {
-      allowedLabels = {Attached, Detached};
-    }
-    int vc = fg.addVarCategory(allowedLabels.size(), mg.linePiece2length[i]);
-    auto vh = fg.addVar(vc);
-    linePiece2vh[i] = vh;
-    linePiece2allowedLabels[i] = std::move(allowedLabels);
-    vh2linePiece[vh] = i;
-  }
-
-  //// factors
-
-  // seg
-  for (int seg = 0; seg < mg.nsegs; seg++) {
-    if (seg2vh[seg].invalid()) {
-      continue;
-    }
-    int fc = fg.addFactorCategory(
-        [seg, &seg2allowedLabels, &mg](const int *varlabels, size_t nvar,
-                                       core::FactorGraph::FactorCategoryId fcid,
-                                       void *givenData) -> double {
-          assert(nvar == 1);
-          return 0.0;
-        },
-        1.0);
-    fg.addFactor({seg2vh[seg]}, fc);
-  }
-
-  // bndPiece
-  for (int bndPiece = 0; bndPiece < mg.nbndPieces(); bndPiece++) {
-    if (bndPiece2vh[bndPiece].invalid()) {
-      continue;
-    }
-    int fc = fg.addFactorCategory(
-        [bndPiece, &bndPiece2allowedLabels, &mg](
-            const int *varlabels, size_t nvar,
-            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
-          assert(nvar == 1);
-          BndPieceLabel label = bndPiece2allowedLabels[bndPiece][varlabels[0]];
-          double len = mg.bndPiece2length[bndPiece];
-          switch (label) {
-          case Connected:
-            return 0.0;
-          case LeftIsFront:
-          case RightIsFront:
-          default:
-            return len;
-          }
-        },
-        1.0);
-    fg.addFactor({bndPiece2vh[bndPiece]}, fc);
-  }
-
-  // linePiece
-  for (int linePiece = 0; linePiece < mg.nlinePieces(); linePiece++) {
-    if (linePiece2vh[linePiece].invalid()) {
-      continue;
-    }
-    int fc = fg.addFactorCategory(
-        [linePiece, &linePiece2allowedLabels, &mg](
-            const int *varlabels, size_t nvar,
-            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
-          assert(nvar == 1);
-          LinePieceLabel label =
-              linePiece2allowedLabels[linePiece][varlabels[0]];
-          double len = mg.linePiece2length[linePiece];
-          switch (label) {
-          case Attached:
-            return 0.0;
-          case Detached:
-          default:
-            return len;
-          }
-        },
-        1.0);
-    fg.addFactor({linePiece2vh[linePiece]}, fc);
-  }
-
-  // orientation consistency term between seg and line
-  const auto costBetweenSegAndLine = [&mg](const SegLabel &seglabel,
-                                           const LinePieceLabel &linePieceLabel,
-                                           int seg, int linePiece) -> double {
-    int lineClaz = mg.lines[mg.linePiece2line[linePiece]].claz;
-    double len = mg.linePiece2length[linePiece];
-    if (linePieceLabel == Detached) {
-      return 0.0;
-    } else if (lineClaz == -1) {
-      return 0.0;
-    } else if (seglabel.orientationNotClaz == lineClaz) {
-      return len * 20.0;
-    } else {
-      return 0.0;
-    }
-  };
-  // seg-linePiece-line, orientation consistency term between seg and line
-  for (int linePiece = 0; linePiece < mg.nlinePieces(); linePiece++) {
-    if (linePiece2vh[linePiece].invalid()) {
-      continue;
-    }
-    int seg = mg.linePiece2seg[linePiece];
-    if (seg == -1 || seg2vh[seg].invalid()) {
-      continue;
-    }
-    int fc = fg.addFactorCategory(
-        [seg, linePiece, &seg2allowedLabels, &linePiece2allowedLabels, &mg,
-         &costBetweenSegAndLine](const int *varlabels, size_t nvar,
-                                 core::FactorGraph::FactorCategoryId fcid,
-                                 void *givenData) -> double {
-          assert(nvar == 2);
-          const SegLabel &seglabel = seg2allowedLabels[seg][varlabels[0]];
-          LinePieceLabel lplabel =
-              linePiece2allowedLabels[linePiece][varlabels[1]];
-          return costBetweenSegAndLine(seglabel, lplabel, seg, linePiece);
-        },
-        1.0);
-    fg.addFactor({seg2vh[seg], linePiece2vh[linePiece]}, fc);
-  }
-
-  // seg1/seg2-bndPiece-linePiece-line, orientation consistency term between seg
-  // and line
-  for (int linePiece = 0; linePiece < mg.nlinePieces(); linePiece++) {
-    if (linePiece2vh[linePiece].invalid()) {
-      continue;
-    }
-    int bndPiece = mg.linePiece2bndPiece[linePiece];
-    if (bndPiece == -1 || bndPiece2vh[bndPiece].invalid()) {
-      continue;
-    }
-    int seg1 = -1, seg2 = -1;
-    std::tie(seg1, seg2) = mg.bnd2segs[mg.bndPiece2bnd[bndPiece]];
-    if (seg2vh[seg1].invalid() || seg2vh[seg2].invalid()) {
-      continue;
-    }
-    int line = mg.linePiece2line[linePiece];
-    int fc = fg.addFactorCategory(
-        [seg1, seg2, bndPiece, linePiece, line, &seg2allowedLabels,
-         &bndPiece2allowedLabels, &linePiece2allowedLabels, &mg,
-         &costBetweenSegAndLine](const int *varlabels, size_t nvar,
-                                 core::FactorGraph::FactorCategoryId fcid,
-                                 void *givenData) -> double {
-          assert(nvar == 4); // 0-seg1 1-seg2 2-bndPiece 3-linePiece
-          int segs[] = {seg1, seg2};
-          BndPieceLabel bndPieceLabel =
-              bndPiece2allowedLabels[bndPiece][varlabels[2]];
-          bool segRelated[] = {
-              bndPieceLabel == LeftIsFront || bndPieceLabel == Connected,
-              bndPieceLabel == RightIsFront || bndPieceLabel == Connected};
-          double cost = 0.0;
-          for (int i = 0; i < 2; i++) {
-            if (segRelated[i]) {
-              cost += costBetweenSegAndLine(
-                  seg2allowedLabels[segs[i]][varlabels[i]],
-                  linePiece2allowedLabels[linePiece][varlabels[3]], segs[i],
-                  linePiece);
-            }
-          }
-          return cost;
-        },
-        1.0);
-    fg.addFactor({seg2vh[seg1], seg2vh[seg2], bndPiece2vh[bndPiece],
-                  linePiece2vh[linePiece]},
-                 fc);
-  }
-
-  // {line-lineRelation-line} -> linePiece -> bndPiece, occlusion hints
-  // suggested by line's t-junction
-  static const double angleThresForTJunction = DegreesToRadians(5);
-  std::vector<std::pair<int, int>> tjunctionLines; // [hline, vline]
-  std::vector<bool> tjunctionVLineLiesOnTheRightOfHLine;
-  for (int lineRelation = 0; lineRelation < mg.nlineRelations();
-       lineRelation++) {
-    if (mg.lineRelation2IsIncidence[lineRelation]) {
-      continue;
-    }
-    int line1 = -1, line2 = -1;
-    std::tie(line1, line2) = mg.lineRelation2lines[lineRelation];
-    // whether this forms a t-junction?
-    if (mg.lines[line1].claz == mg.lines[line2].claz) {
-      continue;
-    }
-    auto l1 = normalize(mg.lines[line1].component);
-    Vec3 n1 = normalize(l1.first.cross(l1.second));
-    auto l2 = normalize(mg.lines[line2].component);
-    Vec3 n2 = normalize(l2.first.cross(l2.second));
-    if (AngleBetweenUndirectedVectors(n1, n2) < DegreesToRadians(3)) {
-      continue;
-    }
-
-    if (AngleBetweenDirections(l1.first, l1.second) < DegreesToRadians(3) ||
-        AngleBetweenDirections(l2.first, l2.second) < DegreesToRadians(3)) {
-      continue;
-    }
-
-    int hline = -1, vline = -1;
-    double lambda1 = 0, lambda2 = 0;
-    DistanceBetweenTwoLines(l1.ray(), l2.ray(), &lambda1, &lambda2);
-    static const double shrinkRatio = 0.2;
-    if (lambda1 < (1.0 - shrinkRatio) && lambda1 > shrinkRatio &&
-        (lambda2 < -shrinkRatio || lambda2 > (1.0 + shrinkRatio))) {
-      hline = line1;
-      vline = line2;
-    } else if (lambda2 < (1.0 - shrinkRatio) && lambda2 > shrinkRatio &&
-               (lambda1 < -shrinkRatio || lambda1 > (1.0 + shrinkRatio))) {
-      hline = line2;
-      vline = line1;
-    } else {
-      continue;
-    }
-
-    // Q: what if three lines form a T structure, and the center lies between
-    // the two hlines?
-    // A: if the two hlines are close and are colinear, then they should have
-    // been merged after the line extraction step
-
-    tjunctionLines.emplace_back(hline, vline);
-    auto vlcenter = normalize(mg.lines[vline].component.center());
-    auto &hl = mg.lines[hline].component;
-    auto hlleft = hl.first.cross(hl.second);
-    bool vlIsOnRightOfHl = (vlcenter - hl.first).dot(hlleft) < 0;
-    tjunctionVLineLiesOnTheRightOfHLine.push_back(vlIsOnRightOfHl);
-
-    bool leftOfLineIsFront = vlIsOnRightOfHl;
-  }
-
-  if (true) {
-    auto pim =
-        Print(mg, ConstantFunctor<gui::Color>(gui::White),
-              [&tjunctionLines, &mg](int lp) { return gui::Transparent; },
-              ConstantFunctor<gui::Color>(gui::LightGray), 2, 3);
-    const auto drawBndPiece = [&mg, &pim](int bp, const gui::Color &color) {
-      auto &e = mg.bndPiece2dirs[bp];
-      for (int i = 1; i < e.size(); i++) {
-        auto p1 = core::ToPixel(mg.view.camera.toScreen(e[i - 1]));
-        auto p2 = core::ToPixel(mg.view.camera.toScreen(e[i]));
-        if (Distance(p1, p2) >= pim.cols / 2) {
-          continue;
-        }
-        cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), p1, p2);
-        cv::line(pim, p1, p2, (cv::Scalar)color / 255.0, 2);
-      }
-    };
-    const auto drawLine = [&mg, &pim](const Line3 &line,
-                                      const gui::Color &color) {
-      double angle = AngleBetweenDirections(line.first, line.second);
-      std::vector<Pixel> ps;
-      for (double a = 0.0; a <= angle; a += 0.01) {
-        ps.push_back(ToPixel(mg.view.camera.toScreen(
-            RotateDirection(line.first, line.second, a))));
-      }
-      for (int i = 1; i < ps.size(); i++) {
-        auto p1 = ps[i - 1];
-        auto p2 = ps[i];
-        if (Distance(p1, p2) >= pim.cols / 2) {
-          continue;
-        }
-        cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), p1, p2);
-        cv::line(pim, p1, p2, (cv::Scalar)color / 255.0, 2);
-      }
-    };
-    auto randctable =
-        gui::CreateRandomColorTableWithSize(tjunctionLines.size());
-    int i = 0;
-    for (auto &tj : tjunctionLines) {
-      drawLine(mg.lines[tj.first].component, randctable[i]);
-      // drawLine(mg.lines[tj.second].component, randctable[i]);
-    }
-    gui::AsCanvas(pim).show();
-  }
-
-  struct TJunctionHLineVotes {
-    double rightCanNeverBeFrontVoteSum;
-    double leftCanNeverBeFrontVoteSum;
-    TJunctionHLineVotes()
-        : rightCanNeverBeFrontVoteSum(0), leftCanNeverBeFrontVoteSum(0) {}
-  };
-  std::map<int, TJunctionHLineVotes> tjunctionHLine2votes;
-  for (int i = 0; i < tjunctionLines.size(); i++) {
-    auto &votes = tjunctionHLine2votes[tjunctionLines[i].first];
-    auto &vl = mg.lines[tjunctionLines[i].second].component;
-    double vllen = AngleBetweenDirections(vl.first, vl.second);
-    if (tjunctionVLineLiesOnTheRightOfHLine[i]) {
-      votes.rightCanNeverBeFrontVoteSum += vllen;
-    } else {
-      votes.leftCanNeverBeFrontVoteSum += vllen;
-    }
-  }
-  for (auto &tjunctionHLineWithVotes : tjunctionHLine2votes) {
-    int hline = tjunctionHLineWithVotes.first;
-    auto &votes = tjunctionHLineWithVotes.second;
-    for (int lpOnHLine : mg.line2linePieces[hline]) {
-      int bp = mg.linePiece2bndPiece[lpOnHLine];
-      if (bp == -1) {
-        continue;
-      }
-      double bpRightCanNeverBeFrontVoteSum = votes.rightCanNeverBeFrontVoteSum;
-      double bpLeftCanNeverBeFrontVoteSum = votes.leftCanNeverBeFrontVoteSum;
-      if (!mg.linePiece2bndPieceInSameDirection[lpOnHLine]) {
-        std::swap(bpRightCanNeverBeFrontVoteSum, bpLeftCanNeverBeFrontVoteSum);
-      }
-
-      // add a factor about this
-      int fc = fg.addFactorCategory(
-          [bp, bpRightCanNeverBeFrontVoteSum, bpLeftCanNeverBeFrontVoteSum, &mg,
-           &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
-                                    core::FactorGraph::FactorCategoryId fcid,
-                                    void *givenData) -> double {
-            assert(nvar == 1);
-            BndPieceLabel label = bndPiece2allowedLabels[bp][varlabels[0]];
-            switch (label) {
-            case LeftIsFront:
-              return bpLeftCanNeverBeFrontVoteSum;
-            case RightIsFront:
-              return bpRightCanNeverBeFrontVoteSum;
-            case Connected:
-            default:
-              return 0.0;
-            }
-          },
-          1.0);
-      fg.addFactor({bndPiece2vh[bp]}, fc);
-    }
-  }
-
-  // seg-bndPiece-seg, occlusion consistency term
-  for (int bnd = 0; bnd < mg.nbnds(); bnd++) {
-    int seg1 = mg.bnd2segs[bnd].first;  // left
-    int seg2 = mg.bnd2segs[bnd].second; // right
-    auto sv1 = seg2vh[seg1], sv2 = seg2vh[seg2];
-    if (sv1.invalid() || sv2.invalid())
-      continue;
-
-    auto &bndPieces = mg.bnd2bndPieces[bnd];
-    for (int i = 0; i < bndPieces.size(); i++) {
-      int bndPiece = bndPieces[i];
-
-      int fc = fg.addFactorCategory(
-          [seg1, seg2, bndPiece, &mg, &seg2allowedLabels,
-           &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
-                                    core::FactorGraph::FactorCategoryId fcid,
-                                    void *givenData) -> double {
-            assert(nvar == 3);
-
-            const auto &seglabel1 = seg2allowedLabels[seg1][varlabels[0]];
-            const auto &seglabel2 = seg2allowedLabels[seg2][varlabels[1]];
-            BndPieceLabel bndPieceLabel =
-                bndPiece2allowedLabels[bndPiece][varlabels[2]];
-
-            int bndPieceClaz = mg.bndPiece2classes[bndPiece];
-            double bndPieceLen = mg.bndPiece2length[bndPiece];
-
-            if (seglabel1.dof() == 3 || seglabel2.dof() == 3) {
-              return 0.0;
-            }
-
-            if (seglabel1.dof() == 1 && seglabel2.dof() == 1 &&
-                seglabel1.orientationClaz != seglabel2.orientationClaz &&
-                bndPieceClaz == -1 && bndPieceLabel == Connected) {
-              return bndPieceLen * 0.1;
-            }
-            if (seglabel1.dof() == 1 && seglabel2.dof() == 1 &&
-                seglabel1.orientationClaz != seglabel2.orientationClaz &&
-                (bndPieceClaz == seglabel1.orientationClaz ||
-                 bndPieceClaz == seglabel2.orientationClaz) &&
-                bndPieceLabel == Connected) {
-              return bndPieceLen * 20.0;
-            }
-
-            if (seglabel1.dof() == 1 && seglabel2.dof() == 1 &&
-                seglabel1.orientationClaz != seglabel2.orientationClaz &&
-                bndPieceClaz == seglabel1.orientationClaz &&
-                bndPieceLabel != RightIsFront) {
-              return bndPieceLen * 20.0;
-            }
-            if (seglabel1.dof() == 1 && seglabel2.dof() == 1 &&
-                seglabel1.orientationClaz != seglabel2.orientationClaz &&
-                bndPieceClaz == seglabel2.orientationClaz &&
-                bndPieceLabel != LeftIsFront) {
-              return bndPieceLen * 20.0;
-            }
-
-            if (seglabel1.dof() == 1 && seglabel2.dof() == 2 &&
-                seglabel1.orientationClaz == seglabel2.orientationNotClaz &&
-                bndPieceClaz == seglabel1.orientationClaz &&
-                bndPieceLabel != RightIsFront) {
-              return bndPieceLen * 20.0;
-            }
-            if (seglabel1.dof() == 2 && seglabel2.dof() == 1 &&
-                seglabel1.orientationNotClaz == seglabel2.orientationClaz &&
-                bndPieceClaz == seglabel2.orientationClaz &&
-                bndPieceLabel != LeftIsFront) {
-              return bndPieceLen * 20.0;
-            }
-
-            return 0.0;
-          },
-          1.0);
-      fg.addFactor({sv1, sv2, bndPiece2vh[bndPiece]}, fc);
-    }
-  }
-
-  //// seg supporting by bnd
-  // for (int seg = 0; seg < mg.nsegs; seg++) {
-  //    auto sv = seg2vh[seg];
-  //    if (sv.invalid()) continue;
-
-  //    int bndPiecesNum = 0;
-  //    for (int bnd : mg.seg2bnds[seg]) {
-  //        bndPiecesNum += mg.bnd2bndPieces[bnd].size();
-  //    }
-
-  //    for (int bnd : mg.seg2bnds[seg]) {
-  //        for (int bndPiece : mg.bnd2bndPieces[bnd]) {
-  //            int fc = fg.addFactorCategory([seg, bndPiece, bndPiecesNum, &mg,
-  //            &seg2allowedLabels, &bndPiece2allowedLabels](
-  //                const int * varlabels, size_t nvar,
-  //                core::FactorGraph::FactorCategoryId fcid, void * givenData) {
-  //                assert(nvar == 2);
-  //                auto seglabel = seg2allowedLabels[seg][varlabels[0]];
-  //                BndPieceLabel bndPieceLabel =
-  //                bndPiece2allowedLabels[bndPiece][varlabels[1]];
-  //
-  //                int bndPieceClaz = mg.bndPiece2classes[bndPiece];
-
-  //                if (bndPieceLabel == Connected) {
-  //                    return 0.0;
-  //                }
-  //                return 1.0 / bndPiecesNum * 0.01;
-  //                //return 0.0;
-  //            }, 1.0);
-  //            fg.addFactor({ sv, bndPiece2vh[bndPiece] }, fc);
-  //        }
-  //    }
-  //}
-
-  // seg hinted by bnd
-  /*for (int seg = 0; seg < mg.nsegs; seg++) {
-      auto sv = seg2vh[seg];
-      if (sv.invalid()) continue;
-
-      double surroundingBndPiecesLen = 0;
-      for (int bnd : mg.seg2bnds[seg]) {
-          for (int bndPiece : mg.bnd2bndPieces[bnd]) {
-              surroundingBndPiecesLen += mg.bndPiece2length[bndPiece];
-          }
-      }
-
-      for (int bnd : mg.seg2bnds[seg]) {
-          for (int bndPiece : mg.bnd2bndPieces[bnd]) {
-              int fc = fg.addFactorCategory([seg, bndPiece,
-  surroundingBndPiecesLen, &mg, &seg2allowedLabels, &bndPiece2allowedLabels](
-                  const int * varlabels, size_t nvar,
-                  core::FactorGraph::FactorCategoryId fcid, void * givenData) {
-                  assert(nvar == 2);
-                  auto seglabel = seg2allowedLabels[seg][varlabels[0]];
-                  BndPieceLabel bndPieceLabel =
-  bndPiece2allowedLabels[bndPiece][varlabels[1]];
-
-                  int bndPieceClaz = mg.bndPiece2classes[bndPiece];
-                  double bndPieceLen = mg.bndPiece2length[bndPiece];
-
-                  static const double bndPieceLenThres = DegreesToRadians(5);
-
-                  if (seglabel.dof() == 1 && bndPieceClaz ==
-  seglabel.orientationClaz && bndPieceLen >= bndPieceLenThres) {
-                      return bndPieceLen * 0.1;
-                  }
-
-                  return 0.0;
-
-              }, 1.0);
-              fg.addFactor({ sv, bndPiece2vh[bndPiece] }, fc);
-          }
-      }
-  }*/
-
-  // line consistency
-  for (int line = 0; line < mg.nlines(); line++) {
-    auto &linePieces = mg.line2linePieces[line];
-    if (linePieces.size() == 1)
-      continue;
-    // bndPiece - bndPiece
-    for (int i = 0; i < linePieces.size(); i++) {
-      for (int j = i + 1; j < linePieces.size(); j++) {
-
-        int linePiece1 = linePieces[i];
-        int linePiece2 = linePieces[j];
-
-        int bndPiece1 = mg.linePiece2bndPiece[linePiece1];
-        int bndPiece2 = mg.linePiece2bndPiece[linePiece2];
-        if (bndPiece1 == -1 || bndPiece2 == -1) {
-          continue;
-        }
-
-        bool sameDirection = mg.linePiece2bndPieceInSameDirection[linePiece1] ==
-                             mg.linePiece2bndPieceInSameDirection[linePiece2];
-
-        int fc = fg.addFactorCategory(
-            [linePiece1, linePiece2, bndPiece1, bndPiece2, sameDirection, &mg,
-             &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
-                                      core::FactorGraph::FactorCategoryId fcid,
-                                      void *givenData) {
-
-              assert(nvar == 2);
-              BndPieceLabel bndPieceLabel1 =
-                  bndPiece2allowedLabels[bndPiece1][varlabels[0]];
-              BndPieceLabel bndPieceLabel2 =
-                  bndPiece2allowedLabels[bndPiece2][varlabels[1]];
-              double bndPieceLen1 = mg.bndPiece2length[bndPiece1];
-              double bndPieceLen2 = mg.bndPiece2length[bndPiece2];
-              double weight = bndPieceLen1 + bndPieceLen2;
-
-              if (bndPieceLabel1 == Connected && bndPieceLabel2 == Connected) {
-                return 0.0;
-              }
-              if ((bndPieceLabel1 == Connected) ||
-                  (bndPieceLabel2 == Connected)) {
-                return weight * 20;
-              }
-              if (sameDirection && bndPieceLabel1 != bndPieceLabel2) {
-                return weight * 20;
-              }
-              if (!sameDirection && bndPieceLabel1 == bndPieceLabel2) {
-                return weight * 20;
-              }
-
-              return 0.0;
-
-            },
-            1.0);
-
-        fg.addFactor({bndPiece2vh[bndPiece1], bndPiece2vh[bndPiece2]}, fc);
-      }
-    }
-    // bndPiece - linePiece
-    for (int i = 0; i < linePieces.size(); i++) {
-      int bndPiece = mg.linePiece2bndPiece[linePieces[i]];
-      if (bndPiece == -1) {
-        continue;
-      }
-      for (int j = 0; j < linePieces.size(); j++) {
-        int linePiece = linePieces[j];
-        if (mg.linePiece2bndPiece[linePiece] != -1) {
-          continue;
-        }
-        int fc = fg.addFactorCategory(
-            [bndPiece, linePiece, &mg, &bndPiece2allowedLabels,
-             &linePiece2allowedLabels](const int *varlabels, size_t nvar,
-                                       core::FactorGraph::FactorCategoryId fcid,
-                                       void *givenData) {
-
-              assert(nvar == 2);
-              BndPieceLabel bndPieceLabel =
-                  bndPiece2allowedLabels[bndPiece][varlabels[0]];
-              LinePieceLabel linePieceLabel =
-                  linePiece2allowedLabels[linePiece][varlabels[1]];
-              double bndPieceLen = mg.bndPiece2length[bndPiece];
-              double linePieceLen = mg.linePiece2length[linePiece];
-              double weight = bndPieceLen + linePieceLen;
-
-              if (bndPieceLabel != Connected) {
-                if (linePieceLabel == Attached) {
-                  return weight * 10;
-                } else {
-                  return 0.0;
-                }
-              }
-              return 0.0;
-            },
-            1.0);
-        fg.addFactor({bndPiece2vh[bndPiece], linePiece2vh[linePiece]}, fc);
-      }
-    }
-  }
-
-  // bnd consistency
-  for (int bnd = 0; bnd < mg.nbnds(); bnd++) {
-    auto &bndPieces = mg.bnd2bndPieces[bnd];
-    if (bndPieces.size() == 1)
-      continue;
-    for (int i = 1; i < bndPieces.size(); i++) {
-      int bndPiece1 = bndPieces[i - 1];
-      int bndPiece2 = bndPieces[i];
-
-      int fc = fg.addFactorCategory(
-          [bndPiece1, bndPiece2, &mg, &bndPiece2allowedLabels](
-              const int *varlabels, size_t nvar,
-              core::FactorGraph::FactorCategoryId fcid, void *givenData) {
-
-            assert(nvar == 2);
-            BndPieceLabel bndPieceLabel1 =
-                bndPiece2allowedLabels[bndPiece1][varlabels[0]];
-            BndPieceLabel bndPieceLabel2 =
-                bndPiece2allowedLabels[bndPiece2][varlabels[1]];
-            double bndPieceLen1 = mg.bndPiece2length[bndPiece1];
-            double bndPieceLen2 = mg.bndPiece2length[bndPiece2];
-            double weight = bndPieceLen1 + bndPieceLen2;
-
-            if (bndPieceLabel1 == Connected && bndPieceLabel2 == Connected) {
-              return 0.0;
-            }
-            if ((bndPieceLabel1 == Connected) ||
-                (bndPieceLabel2 == Connected)) {
-              return weight * 5;
-            }
-            if (bndPieceLabel1 != bndPieceLabel2) {
-              return weight * 5;
-            }
-            return 0.0;
-
-          },
-          1.0);
-
-      fg.addFactor({bndPiece2vh[bndPiece1], bndPiece2vh[bndPiece2]}, fc);
-    }
-  }
-
-  // junction validity
-  for (int junc = 0; junc < mg.njuncs(); junc++) {
-    auto &bnds = mg.junc2bnds[junc];
-    if (bnds.size() <= 2) {
-      continue;
-    }
-
-    std::vector<int> bndPieces(bnds.size());
-    std::vector<bool> bndPiecesTowardJunc(bnds.size(), false);
-    std::vector<core::FactorGraph::VarHandle> bpvhs(bnds.size());
-
-    double bndPieceLenSum = 0.0;
-
-    for (int i = 0; i < bnds.size(); i++) {
-      int bnd = bnds[i];
-      auto &juncs = mg.bnd2juncs[bnd];
-      bool toThisJunc = juncs.second == junc;
-      int adjacentBndPiece = toThisJunc ? mg.bnd2bndPieces[bnd].back()
-                                        : mg.bnd2bndPieces[bnd].front();
-      bndPieces[i] = adjacentBndPiece;
-      bndPiecesTowardJunc[i] = toThisJunc;
-      bpvhs[i] = bndPiece2vh[adjacentBndPiece];
-
-      bndPieceLenSum += mg.bndPiece2length[adjacentBndPiece];
-    }
-
-    int fc = fg.addFactorCategory(
-        [bndPieceLenSum, bndPieces, bndPiecesTowardJunc, &mg,
-         &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
-                                  core::FactorGraph::FactorCategoryId fcid,
-                                  void *givenData) {
-
-          assert(nvar == bndPieces.size() &&
-                 nvar == bndPiecesTowardJunc.size());
-          int clockwiseFrontCount = 0, counterClockwiseFrontCount = 0;
-          for (int i = 0; i < nvar; i++) {
-            int bndPiece = bndPieces[i];
-            bool towardJunc = bndPiecesTowardJunc[i];
-            BndPieceLabel bplabel =
-                bndPiece2allowedLabels[bndPiece][varlabels[i]];
-            switch (bplabel) {
-            case Connected:
-              break;
-            case LeftIsFront:
-              towardJunc ? (clockwiseFrontCount += 1)
-                         : (counterClockwiseFrontCount += 1);
-              break;
-            case RightIsFront:
-              towardJunc ? (counterClockwiseFrontCount += 1)
-                         : (clockwiseFrontCount += 1);
-              break;
-            }
-          }
-
-          if (clockwiseFrontCount + counterClockwiseFrontCount >= 3) {
-            return bndPieceLenSum * 3.0;
-          }
-          if (clockwiseFrontCount + counterClockwiseFrontCount == 1) {
-            return 0.0;
-          }
-          if (clockwiseFrontCount != counterClockwiseFrontCount) {
-            return bndPieceLenSum * 5.0;
-          }
-
-          return 0.0;
-
-        },
-        1.0);
-
-    assert(bpvhs.size() >= 3);
-    fg.addFactor(bpvhs.begin(), bpvhs.end(), fc);
-  }
-
-  // solve
-  std::cout << "solving factor graph" << std::endl;
-
-  core::FactorGraph::ResultTable bestLabels;
-  double minEnergy = std::numeric_limits<double>::infinity();
-  fg.solve(1000, 10, [&bestLabels, &minEnergy](
-                         int epoch, double energy, double denergy,
-                         const core::FactorGraph::ResultTable &results) -> bool {
-    std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
-    if (energy < minEnergy) {
-      bestLabels = results;
-      minEnergy = energy;
-    }
-    if (denergy / std::max(energy, 1.0) > 0.01) {
-      return false;
-    }
-    return true;
-  });
-
-  // fill back labels
-  // segs
-  for (int seg = 0; seg < mg.nsegs; seg++) {
-    auto sv = seg2vh[seg];
-    if (sv.invalid()) {
-      continue;
-    }
-    int varlabel = bestLabels[sv];
-    const SegLabel &seglabel = seg2allowedLabels[seg][varlabel];
-    auto &c = mg.seg2control[seg];
-    c.orientationClaz = seglabel.orientationClaz;
-    c.orientationNotClaz = seglabel.orientationNotClaz;
-  }
-
-  for (int bndPiece = 0; bndPiece < mg.nbndPieces(); bndPiece++) {
-    auto bpv = bndPiece2vh[bndPiece];
-    int varlabel = bestLabels[bpv];
-    BndPieceLabel bplabel = bndPiece2allowedLabels[bndPiece][varlabel];
-    mg.bndPiece2segRelation[bndPiece] = (SegRelation)bplabel;
-  }
-}
+//void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
+//
+//  core::FactorGraph fg;
+//
+//  std::cout << "building factor graph" << std::endl;
+//
+//  //// vars
+//
+//  // segs
+//  std::vector<core::FactorGraph::VarHandle> seg2vh(mg.nsegs);
+//  std::vector<std::vector<SegLabel>> seg2allowedLabels(mg.nsegs);
+//  std::map<core::FactorGraph::VarHandle, int> vh2seg;
+//  for (int i = 0; i < mg.nsegs; i++) {
+//    auto &c = mg.seg2control[i];
+//    if (!c.used)
+//      continue;
+//
+//    std::vector<SegLabel> allowedLabels;
+//    double c_i = mg.seg2areaRatio[i] * 4 * M_PI;
+//
+//    if (c.orientationClaz != -1) {
+//      allowedLabels = {{c.orientationClaz, -1}};
+//    } else if (c.orientationNotClaz != -1) {
+//      allowedLabels = {{-1, c.orientationNotClaz}};
+//    } else {
+//      allowedLabels.push_back({-1, -1});
+//    }
+//
+//    auto vh = fg.addVar(fg.addVarCategory(allowedLabels.size(), c_i));
+//    seg2vh[i] = vh;
+//    seg2allowedLabels[i] = std::move(allowedLabels);
+//    vh2seg[vh] = i;
+//  }
+//
+//  // bndPieces
+//  enum BndPieceLabel : int {
+//    // Coplanar = (int)SegRelation::Coplanar,
+//    Connected = (int)SegRelation::Connected,
+//    LeftIsFront = (int)SegRelation::LeftIsFront,
+//    RightIsFront = (int)SegRelation::RightIsFront
+//  };
+//  std::vector<core::FactorGraph::VarHandle> bndPiece2vh(mg.nbndPieces());
+//  std::vector<std::vector<BndPieceLabel>> bndPiece2allowedLabels(
+//      mg.nbndPieces());
+//  std::map<core::FactorGraph::VarHandle, int> vh2bndPiece;
+//  for (int i = 0; i < mg.nbndPieces(); i++) {
+//    std::vector<BndPieceLabel> allowedLabels;
+//    double c_i = mg.bndPiece2length[i];
+//
+//    if (mg.bndPiece2segRelation[i] != SegRelation::Unknown) {
+//      allowedLabels = {(BndPieceLabel)mg.bndPiece2segRelation[i]};
+//    } else if (mg.bndPiece2length[i] <
+//               DegreesToRadians(1)) { // always disconnect tiny bndPieces
+//      allowedLabels = {LeftIsFront, RightIsFront};
+//    } else {
+//      allowedLabels = {Connected, LeftIsFront, RightIsFront};
+//    }
+//    int vc = fg.addVarCategory(allowedLabels.size(), c_i);
+//    auto vh = fg.addVar(vc);
+//    bndPiece2vh[i] = vh;
+//    bndPiece2allowedLabels[i] = std::move(allowedLabels);
+//    vh2bndPiece[vh] = i;
+//  }
+//
+//  // linePieces
+//  enum LinePieceLabel {
+//    Attached = (int)SegLineRelation::Attached,
+//    Detached = (int)SegLineRelation::Detached
+//  };
+//  std::vector<core::FactorGraph::VarHandle> linePiece2vh(mg.nlinePieces());
+//  std::vector<std::vector<LinePieceLabel>> linePiece2allowedLabels(
+//      mg.nlinePieces());
+//  std::map<core::FactorGraph::VarHandle, int> vh2linePiece;
+//  for (int i = 0; i < mg.nlinePieces(); i++) {
+//    std::vector<LinePieceLabel> allowedLabels;
+//    if (mg.linePiece2segLineRelation[i] != SegLineRelation::Unknown) {
+//      allowedLabels = {(LinePieceLabel)mg.linePiece2segLineRelation[i]};
+//    } else if (mg.linePiece2length[i] < DegreesToRadians(1)) {
+//      allowedLabels = {Detached};
+//    } else {
+//      allowedLabels = {Attached, Detached};
+//    }
+//    int vc = fg.addVarCategory(allowedLabels.size(), mg.linePiece2length[i]);
+//    auto vh = fg.addVar(vc);
+//    linePiece2vh[i] = vh;
+//    linePiece2allowedLabels[i] = std::move(allowedLabels);
+//    vh2linePiece[vh] = i;
+//  }
+//
+//  //// factors
+//
+//  // seg
+//  for (int seg = 0; seg < mg.nsegs; seg++) {
+//    if (seg2vh[seg].invalid()) {
+//      continue;
+//    }
+//    int fc = fg.addFactorCategory(
+//        [seg, &seg2allowedLabels, &mg](const int *varlabels, size_t nvar,
+//                                       core::FactorGraph::FactorCategoryId fcid,
+//                                       void *givenData) -> double {
+//          assert(nvar == 1);
+//          return 0.0;
+//        },
+//        1.0);
+//    fg.addFactor({seg2vh[seg]}, fc);
+//  }
+//
+//  // bndPiece
+//  for (int bndPiece = 0; bndPiece < mg.nbndPieces(); bndPiece++) {
+//    if (bndPiece2vh[bndPiece].invalid()) {
+//      continue;
+//    }
+//    int fc = fg.addFactorCategory(
+//        [bndPiece, &bndPiece2allowedLabels, &mg](
+//            const int *varlabels, size_t nvar,
+//            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+//          assert(nvar == 1);
+//          BndPieceLabel label = bndPiece2allowedLabels[bndPiece][varlabels[0]];
+//          double len = mg.bndPiece2length[bndPiece];
+//          switch (label) {
+//          case Connected:
+//            return 0.0;
+//          case LeftIsFront:
+//          case RightIsFront:
+//          default:
+//            return len;
+//          }
+//        },
+//        1.0);
+//    fg.addFactor({bndPiece2vh[bndPiece]}, fc);
+//  }
+//
+//  // linePiece
+//  for (int linePiece = 0; linePiece < mg.nlinePieces(); linePiece++) {
+//    if (linePiece2vh[linePiece].invalid()) {
+//      continue;
+//    }
+//    int fc = fg.addFactorCategory(
+//        [linePiece, &linePiece2allowedLabels, &mg](
+//            const int *varlabels, size_t nvar,
+//            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+//          assert(nvar == 1);
+//          LinePieceLabel label =
+//              linePiece2allowedLabels[linePiece][varlabels[0]];
+//          double len = mg.linePiece2length[linePiece];
+//          switch (label) {
+//          case Attached:
+//            return 0.0;
+//          case Detached:
+//          default:
+//            return len;
+//          }
+//        },
+//        1.0);
+//    fg.addFactor({linePiece2vh[linePiece]}, fc);
+//  }
+//
+//  // orientation consistency term between seg and line
+//  const auto costBetweenSegAndLine = [&mg](const SegLabel &seglabel,
+//                                           const LinePieceLabel &linePieceLabel,
+//                                           int seg, int linePiece) -> double {
+//    int lineClaz = mg.lines[mg.linePiece2line[linePiece]].claz;
+//    double len = mg.linePiece2length[linePiece];
+//    if (linePieceLabel == Detached) {
+//      return 0.0;
+//    } else if (lineClaz == -1) {
+//      return 0.0;
+//    } else if (seglabel.orientationNotClaz == lineClaz) {
+//      return len * 20.0;
+//    } else {
+//      return 0.0;
+//    }
+//  };
+//  // seg-linePiece-line, orientation consistency term between seg and line
+//  for (int linePiece = 0; linePiece < mg.nlinePieces(); linePiece++) {
+//    if (linePiece2vh[linePiece].invalid()) {
+//      continue;
+//    }
+//    int seg = mg.linePiece2seg[linePiece];
+//    if (seg == -1 || seg2vh[seg].invalid()) {
+//      continue;
+//    }
+//    int fc = fg.addFactorCategory(
+//        [seg, linePiece, &seg2allowedLabels, &linePiece2allowedLabels, &mg,
+//         &costBetweenSegAndLine](const int *varlabels, size_t nvar,
+//                                 core::FactorGraph::FactorCategoryId fcid,
+//                                 void *givenData) -> double {
+//          assert(nvar == 2);
+//          const SegLabel &seglabel = seg2allowedLabels[seg][varlabels[0]];
+//          LinePieceLabel lplabel =
+//              linePiece2allowedLabels[linePiece][varlabels[1]];
+//          return costBetweenSegAndLine(seglabel, lplabel, seg, linePiece);
+//        },
+//        1.0);
+//    fg.addFactor({seg2vh[seg], linePiece2vh[linePiece]}, fc);
+//  }
+//
+//  // seg1/seg2-bndPiece-linePiece-line, orientation consistency term between seg
+//  // and line
+//  for (int linePiece = 0; linePiece < mg.nlinePieces(); linePiece++) {
+//    if (linePiece2vh[linePiece].invalid()) {
+//      continue;
+//    }
+//    int bndPiece = mg.linePiece2bndPiece[linePiece];
+//    if (bndPiece == -1 || bndPiece2vh[bndPiece].invalid()) {
+//      continue;
+//    }
+//    int seg1 = -1, seg2 = -1;
+//    std::tie(seg1, seg2) = mg.bnd2segs[mg.bndPiece2bnd[bndPiece]];
+//    if (seg2vh[seg1].invalid() || seg2vh[seg2].invalid()) {
+//      continue;
+//    }
+//    int line = mg.linePiece2line[linePiece];
+//    int fc = fg.addFactorCategory(
+//        [seg1, seg2, bndPiece, linePiece, line, &seg2allowedLabels,
+//         &bndPiece2allowedLabels, &linePiece2allowedLabels, &mg,
+//         &costBetweenSegAndLine](const int *varlabels, size_t nvar,
+//                                 core::FactorGraph::FactorCategoryId fcid,
+//                                 void *givenData) -> double {
+//          assert(nvar == 4); // 0-seg1 1-seg2 2-bndPiece 3-linePiece
+//          int segs[] = {seg1, seg2};
+//          BndPieceLabel bndPieceLabel =
+//              bndPiece2allowedLabels[bndPiece][varlabels[2]];
+//          bool segRelated[] = {
+//              bndPieceLabel == LeftIsFront || bndPieceLabel == Connected,
+//              bndPieceLabel == RightIsFront || bndPieceLabel == Connected};
+//          double cost = 0.0;
+//          for (int i = 0; i < 2; i++) {
+//            if (segRelated[i]) {
+//              cost += costBetweenSegAndLine(
+//                  seg2allowedLabels[segs[i]][varlabels[i]],
+//                  linePiece2allowedLabels[linePiece][varlabels[3]], segs[i],
+//                  linePiece);
+//            }
+//          }
+//          return cost;
+//        },
+//        1.0);
+//    fg.addFactor({seg2vh[seg1], seg2vh[seg2], bndPiece2vh[bndPiece],
+//                  linePiece2vh[linePiece]},
+//                 fc);
+//  }
+//
+//  // {line-lineRelation-line} -> linePiece -> bndPiece, occlusion hints
+//  // suggested by line's t-junction
+//  static const double angleThresForTJunction = DegreesToRadians(5);
+//  std::vector<std::pair<int, int>> tjunctionLines; // [hline, vline]
+//  std::vector<bool> tjunctionVLineLiesOnTheRightOfHLine;
+//  for (int lineRelation = 0; lineRelation < mg.nlineRelations();
+//       lineRelation++) {
+//    if (mg.lineRelation2IsIncidence[lineRelation]) {
+//      continue;
+//    }
+//    int line1 = -1, line2 = -1;
+//    std::tie(line1, line2) = mg.lineRelation2lines[lineRelation];
+//    // whether this forms a t-junction?
+//    if (mg.lines[line1].claz == mg.lines[line2].claz) {
+//      continue;
+//    }
+//    auto l1 = normalize(mg.lines[line1].component);
+//    Vec3 n1 = normalize(l1.first.cross(l1.second));
+//    auto l2 = normalize(mg.lines[line2].component);
+//    Vec3 n2 = normalize(l2.first.cross(l2.second));
+//    if (AngleBetweenUndirected(n1, n2) < DegreesToRadians(3)) {
+//      continue;
+//    }
+//
+//    if (AngleBetweenDirected(l1.first, l1.second) < DegreesToRadians(3) ||
+//        AngleBetweenDirected(l2.first, l2.second) < DegreesToRadians(3)) {
+//      continue;
+//    }
+//
+//    int hline = -1, vline = -1;
+//    double lambda1 = 0, lambda2 = 0;
+//    DistanceBetweenTwoLines(l1.ray(), l2.ray(), &lambda1, &lambda2);
+//    static const double shrinkRatio = 0.2;
+//    if (lambda1 < (1.0 - shrinkRatio) && lambda1 > shrinkRatio &&
+//        (lambda2 < -shrinkRatio || lambda2 > (1.0 + shrinkRatio))) {
+//      hline = line1;
+//      vline = line2;
+//    } else if (lambda2 < (1.0 - shrinkRatio) && lambda2 > shrinkRatio &&
+//               (lambda1 < -shrinkRatio || lambda1 > (1.0 + shrinkRatio))) {
+//      hline = line2;
+//      vline = line1;
+//    } else {
+//      continue;
+//    }
+//
+//    // Q: what if three lines form a T structure, and the center lies between
+//    // the two hlines?
+//    // A: if the two hlines are close and are colinear, then they should have
+//    // been merged after the line extraction step
+//
+//    tjunctionLines.emplace_back(hline, vline);
+//    auto vlcenter = normalize(mg.lines[vline].component.center());
+//    auto &hl = mg.lines[hline].component;
+//    auto hlleft = hl.first.cross(hl.second);
+//    bool vlIsOnRightOfHl = (vlcenter - hl.first).dot(hlleft) < 0;
+//    tjunctionVLineLiesOnTheRightOfHLine.push_back(vlIsOnRightOfHl);
+//
+//    bool leftOfLineIsFront = vlIsOnRightOfHl;
+//  }
+//
+//  if (true) {
+//    auto pim =
+//        Print(mg, ConstantFunctor<gui::Color>(gui::White),
+//              [&tjunctionLines, &mg](int lp) { return gui::Transparent; },
+//              ConstantFunctor<gui::Color>(gui::LightGray), 2, 3);
+//    const auto drawBndPiece = [&mg, &pim](int bp, const gui::Color &color) {
+//      auto &e = mg.bndPiece2dirs[bp];
+//      for (int i = 1; i < e.size(); i++) {
+//        auto p1 = core::ToPixel(mg.view.camera.toScreen(e[i - 1]));
+//        auto p2 = core::ToPixel(mg.view.camera.toScreen(e[i]));
+//        if (Distance(p1, p2) >= pim.cols / 2) {
+//          continue;
+//        }
+//        cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), p1, p2);
+//        cv::line(pim, p1, p2, (cv::Scalar)color / 255.0, 2);
+//      }
+//    };
+//    const auto drawLine = [&mg, &pim](const Line3 &line,
+//                                      const gui::Color &color) {
+//      double angle = AngleBetweenDirected(line.first, line.second);
+//      std::vector<Pixel> ps;
+//      for (double a = 0.0; a <= angle; a += 0.01) {
+//        ps.push_back(ToPixel(mg.view.camera.toScreen(
+//            RotateDirection(line.first, line.second, a))));
+//      }
+//      for (int i = 1; i < ps.size(); i++) {
+//        auto p1 = ps[i - 1];
+//        auto p2 = ps[i];
+//        if (Distance(p1, p2) >= pim.cols / 2) {
+//          continue;
+//        }
+//        cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), p1, p2);
+//        cv::line(pim, p1, p2, (cv::Scalar)color / 255.0, 2);
+//      }
+//    };
+//    auto randctable =
+//        gui::CreateRandomColorTableWithSize(tjunctionLines.size());
+//    int i = 0;
+//    for (auto &tj : tjunctionLines) {
+//      drawLine(mg.lines[tj.first].component, randctable[i]);
+//      // drawLine(mg.lines[tj.second].component, randctable[i]);
+//    }
+//    gui::AsCanvas(pim).show();
+//  }
+//
+//  struct TJunctionHLineVotes {
+//    double rightCanNeverBeFrontVoteSum;
+//    double leftCanNeverBeFrontVoteSum;
+//    TJunctionHLineVotes()
+//        : rightCanNeverBeFrontVoteSum(0), leftCanNeverBeFrontVoteSum(0) {}
+//  };
+//  std::map<int, TJunctionHLineVotes> tjunctionHLine2votes;
+//  for (int i = 0; i < tjunctionLines.size(); i++) {
+//    auto &votes = tjunctionHLine2votes[tjunctionLines[i].first];
+//    auto &vl = mg.lines[tjunctionLines[i].second].component;
+//    double vllen = AngleBetweenDirected(vl.first, vl.second);
+//    if (tjunctionVLineLiesOnTheRightOfHLine[i]) {
+//      votes.rightCanNeverBeFrontVoteSum += vllen;
+//    } else {
+//      votes.leftCanNeverBeFrontVoteSum += vllen;
+//    }
+//  }
+//  for (auto &tjunctionHLineWithVotes : tjunctionHLine2votes) {
+//    int hline = tjunctionHLineWithVotes.first;
+//    auto &votes = tjunctionHLineWithVotes.second;
+//    for (int lpOnHLine : mg.line2linePieces[hline]) {
+//      int bp = mg.linePiece2bndPiece[lpOnHLine];
+//      if (bp == -1) {
+//        continue;
+//      }
+//      double bpRightCanNeverBeFrontVoteSum = votes.rightCanNeverBeFrontVoteSum;
+//      double bpLeftCanNeverBeFrontVoteSum = votes.leftCanNeverBeFrontVoteSum;
+//      if (!mg.linePiece2bndPieceInSameDirection[lpOnHLine]) {
+//        std::swap(bpRightCanNeverBeFrontVoteSum, bpLeftCanNeverBeFrontVoteSum);
+//      }
+//
+//      // add a factor about this
+//      int fc = fg.addFactorCategory(
+//          [bp, bpRightCanNeverBeFrontVoteSum, bpLeftCanNeverBeFrontVoteSum, &mg,
+//           &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
+//                                    core::FactorGraph::FactorCategoryId fcid,
+//                                    void *givenData) -> double {
+//            assert(nvar == 1);
+//            BndPieceLabel label = bndPiece2allowedLabels[bp][varlabels[0]];
+//            switch (label) {
+//            case LeftIsFront:
+//              return bpLeftCanNeverBeFrontVoteSum;
+//            case RightIsFront:
+//              return bpRightCanNeverBeFrontVoteSum;
+//            case Connected:
+//            default:
+//              return 0.0;
+//            }
+//          },
+//          1.0);
+//      fg.addFactor({bndPiece2vh[bp]}, fc);
+//    }
+//  }
+//
+//  // seg-bndPiece-seg, occlusion consistency term
+//  for (int bnd = 0; bnd < mg.nbnds(); bnd++) {
+//    int seg1 = mg.bnd2segs[bnd].first;  // left
+//    int seg2 = mg.bnd2segs[bnd].second; // right
+//    auto sv1 = seg2vh[seg1], sv2 = seg2vh[seg2];
+//    if (sv1.invalid() || sv2.invalid())
+//      continue;
+//
+//    auto &bndPieces = mg.bnd2bndPieces[bnd];
+//    for (int i = 0; i < bndPieces.size(); i++) {
+//      int bndPiece = bndPieces[i];
+//
+//      int fc = fg.addFactorCategory(
+//          [seg1, seg2, bndPiece, &mg, &seg2allowedLabels,
+//           &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
+//                                    core::FactorGraph::FactorCategoryId fcid,
+//                                    void *givenData) -> double {
+//            assert(nvar == 3);
+//
+//            const auto &seglabel1 = seg2allowedLabels[seg1][varlabels[0]];
+//            const auto &seglabel2 = seg2allowedLabels[seg2][varlabels[1]];
+//            BndPieceLabel bndPieceLabel =
+//                bndPiece2allowedLabels[bndPiece][varlabels[2]];
+//
+//            int bndPieceClaz = mg.bndPiece2classes[bndPiece];
+//            double bndPieceLen = mg.bndPiece2length[bndPiece];
+//
+//            if (seglabel1.dof() == 3 || seglabel2.dof() == 3) {
+//              return 0.0;
+//            }
+//
+//            if (seglabel1.dof() == 1 && seglabel2.dof() == 1 &&
+//                seglabel1.orientationClaz != seglabel2.orientationClaz &&
+//                bndPieceClaz == -1 && bndPieceLabel == Connected) {
+//              return bndPieceLen * 0.1;
+//            }
+//            if (seglabel1.dof() == 1 && seglabel2.dof() == 1 &&
+//                seglabel1.orientationClaz != seglabel2.orientationClaz &&
+//                (bndPieceClaz == seglabel1.orientationClaz ||
+//                 bndPieceClaz == seglabel2.orientationClaz) &&
+//                bndPieceLabel == Connected) {
+//              return bndPieceLen * 20.0;
+//            }
+//
+//            if (seglabel1.dof() == 1 && seglabel2.dof() == 1 &&
+//                seglabel1.orientationClaz != seglabel2.orientationClaz &&
+//                bndPieceClaz == seglabel1.orientationClaz &&
+//                bndPieceLabel != RightIsFront) {
+//              return bndPieceLen * 20.0;
+//            }
+//            if (seglabel1.dof() == 1 && seglabel2.dof() == 1 &&
+//                seglabel1.orientationClaz != seglabel2.orientationClaz &&
+//                bndPieceClaz == seglabel2.orientationClaz &&
+//                bndPieceLabel != LeftIsFront) {
+//              return bndPieceLen * 20.0;
+//            }
+//
+//            if (seglabel1.dof() == 1 && seglabel2.dof() == 2 &&
+//                seglabel1.orientationClaz == seglabel2.orientationNotClaz &&
+//                bndPieceClaz == seglabel1.orientationClaz &&
+//                bndPieceLabel != RightIsFront) {
+//              return bndPieceLen * 20.0;
+//            }
+//            if (seglabel1.dof() == 2 && seglabel2.dof() == 1 &&
+//                seglabel1.orientationNotClaz == seglabel2.orientationClaz &&
+//                bndPieceClaz == seglabel2.orientationClaz &&
+//                bndPieceLabel != LeftIsFront) {
+//              return bndPieceLen * 20.0;
+//            }
+//
+//            return 0.0;
+//          },
+//          1.0);
+//      fg.addFactor({sv1, sv2, bndPiece2vh[bndPiece]}, fc);
+//    }
+//  }
+//
+//  //// seg supporting by bnd
+//  // for (int seg = 0; seg < mg.nsegs; seg++) {
+//  //    auto sv = seg2vh[seg];
+//  //    if (sv.invalid()) continue;
+//
+//  //    int bndPiecesNum = 0;
+//  //    for (int bnd : mg.seg2bnds[seg]) {
+//  //        bndPiecesNum += mg.bnd2bndPieces[bnd].size();
+//  //    }
+//
+//  //    for (int bnd : mg.seg2bnds[seg]) {
+//  //        for (int bndPiece : mg.bnd2bndPieces[bnd]) {
+//  //            int fc = fg.addFactorCategory([seg, bndPiece, bndPiecesNum, &mg,
+//  //            &seg2allowedLabels, &bndPiece2allowedLabels](
+//  //                const int * varlabels, size_t nvar,
+//  //                core::FactorGraph::FactorCategoryId fcid, void * givenData) {
+//  //                assert(nvar == 2);
+//  //                auto seglabel = seg2allowedLabels[seg][varlabels[0]];
+//  //                BndPieceLabel bndPieceLabel =
+//  //                bndPiece2allowedLabels[bndPiece][varlabels[1]];
+//  //
+//  //                int bndPieceClaz = mg.bndPiece2classes[bndPiece];
+//
+//  //                if (bndPieceLabel == Connected) {
+//  //                    return 0.0;
+//  //                }
+//  //                return 1.0 / bndPiecesNum * 0.01;
+//  //                //return 0.0;
+//  //            }, 1.0);
+//  //            fg.addFactor({ sv, bndPiece2vh[bndPiece] }, fc);
+//  //        }
+//  //    }
+//  //}
+//
+//  // seg hinted by bnd
+//  /*for (int seg = 0; seg < mg.nsegs; seg++) {
+//      auto sv = seg2vh[seg];
+//      if (sv.invalid()) continue;
+//
+//      double surroundingBndPiecesLen = 0;
+//      for (int bnd : mg.seg2bnds[seg]) {
+//          for (int bndPiece : mg.bnd2bndPieces[bnd]) {
+//              surroundingBndPiecesLen += mg.bndPiece2length[bndPiece];
+//          }
+//      }
+//
+//      for (int bnd : mg.seg2bnds[seg]) {
+//          for (int bndPiece : mg.bnd2bndPieces[bnd]) {
+//              int fc = fg.addFactorCategory([seg, bndPiece,
+//  surroundingBndPiecesLen, &mg, &seg2allowedLabels, &bndPiece2allowedLabels](
+//                  const int * varlabels, size_t nvar,
+//                  core::FactorGraph::FactorCategoryId fcid, void * givenData) {
+//                  assert(nvar == 2);
+//                  auto seglabel = seg2allowedLabels[seg][varlabels[0]];
+//                  BndPieceLabel bndPieceLabel =
+//  bndPiece2allowedLabels[bndPiece][varlabels[1]];
+//
+//                  int bndPieceClaz = mg.bndPiece2classes[bndPiece];
+//                  double bndPieceLen = mg.bndPiece2length[bndPiece];
+//
+//                  static const double bndPieceLenThres = DegreesToRadians(5);
+//
+//                  if (seglabel.dof() == 1 && bndPieceClaz ==
+//  seglabel.orientationClaz && bndPieceLen >= bndPieceLenThres) {
+//                      return bndPieceLen * 0.1;
+//                  }
+//
+//                  return 0.0;
+//
+//              }, 1.0);
+//              fg.addFactor({ sv, bndPiece2vh[bndPiece] }, fc);
+//          }
+//      }
+//  }*/
+//
+//  // line consistency
+//  for (int line = 0; line < mg.nlines(); line++) {
+//    auto &linePieces = mg.line2linePieces[line];
+//    if (linePieces.size() == 1)
+//      continue;
+//    // bndPiece - bndPiece
+//    for (int i = 0; i < linePieces.size(); i++) {
+//      for (int j = i + 1; j < linePieces.size(); j++) {
+//
+//        int linePiece1 = linePieces[i];
+//        int linePiece2 = linePieces[j];
+//
+//        int bndPiece1 = mg.linePiece2bndPiece[linePiece1];
+//        int bndPiece2 = mg.linePiece2bndPiece[linePiece2];
+//        if (bndPiece1 == -1 || bndPiece2 == -1) {
+//          continue;
+//        }
+//
+//        bool sameDirection = mg.linePiece2bndPieceInSameDirection[linePiece1] ==
+//                             mg.linePiece2bndPieceInSameDirection[linePiece2];
+//
+//        int fc = fg.addFactorCategory(
+//            [linePiece1, linePiece2, bndPiece1, bndPiece2, sameDirection, &mg,
+//             &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
+//                                      core::FactorGraph::FactorCategoryId fcid,
+//                                      void *givenData) {
+//
+//              assert(nvar == 2);
+//              BndPieceLabel bndPieceLabel1 =
+//                  bndPiece2allowedLabels[bndPiece1][varlabels[0]];
+//              BndPieceLabel bndPieceLabel2 =
+//                  bndPiece2allowedLabels[bndPiece2][varlabels[1]];
+//              double bndPieceLen1 = mg.bndPiece2length[bndPiece1];
+//              double bndPieceLen2 = mg.bndPiece2length[bndPiece2];
+//              double weight = bndPieceLen1 + bndPieceLen2;
+//
+//              if (bndPieceLabel1 == Connected && bndPieceLabel2 == Connected) {
+//                return 0.0;
+//              }
+//              if ((bndPieceLabel1 == Connected) ||
+//                  (bndPieceLabel2 == Connected)) {
+//                return weight * 20;
+//              }
+//              if (sameDirection && bndPieceLabel1 != bndPieceLabel2) {
+//                return weight * 20;
+//              }
+//              if (!sameDirection && bndPieceLabel1 == bndPieceLabel2) {
+//                return weight * 20;
+//              }
+//
+//              return 0.0;
+//
+//            },
+//            1.0);
+//
+//        fg.addFactor({bndPiece2vh[bndPiece1], bndPiece2vh[bndPiece2]}, fc);
+//      }
+//    }
+//    // bndPiece - linePiece
+//    for (int i = 0; i < linePieces.size(); i++) {
+//      int bndPiece = mg.linePiece2bndPiece[linePieces[i]];
+//      if (bndPiece == -1) {
+//        continue;
+//      }
+//      for (int j = 0; j < linePieces.size(); j++) {
+//        int linePiece = linePieces[j];
+//        if (mg.linePiece2bndPiece[linePiece] != -1) {
+//          continue;
+//        }
+//        int fc = fg.addFactorCategory(
+//            [bndPiece, linePiece, &mg, &bndPiece2allowedLabels,
+//             &linePiece2allowedLabels](const int *varlabels, size_t nvar,
+//                                       core::FactorGraph::FactorCategoryId fcid,
+//                                       void *givenData) {
+//
+//              assert(nvar == 2);
+//              BndPieceLabel bndPieceLabel =
+//                  bndPiece2allowedLabels[bndPiece][varlabels[0]];
+//              LinePieceLabel linePieceLabel =
+//                  linePiece2allowedLabels[linePiece][varlabels[1]];
+//              double bndPieceLen = mg.bndPiece2length[bndPiece];
+//              double linePieceLen = mg.linePiece2length[linePiece];
+//              double weight = bndPieceLen + linePieceLen;
+//
+//              if (bndPieceLabel != Connected) {
+//                if (linePieceLabel == Attached) {
+//                  return weight * 10;
+//                } else {
+//                  return 0.0;
+//                }
+//              }
+//              return 0.0;
+//            },
+//            1.0);
+//        fg.addFactor({bndPiece2vh[bndPiece], linePiece2vh[linePiece]}, fc);
+//      }
+//    }
+//  }
+//
+//  // bnd consistency
+//  for (int bnd = 0; bnd < mg.nbnds(); bnd++) {
+//    auto &bndPieces = mg.bnd2bndPieces[bnd];
+//    if (bndPieces.size() == 1)
+//      continue;
+//    for (int i = 1; i < bndPieces.size(); i++) {
+//      int bndPiece1 = bndPieces[i - 1];
+//      int bndPiece2 = bndPieces[i];
+//
+//      int fc = fg.addFactorCategory(
+//          [bndPiece1, bndPiece2, &mg, &bndPiece2allowedLabels](
+//              const int *varlabels, size_t nvar,
+//              core::FactorGraph::FactorCategoryId fcid, void *givenData) {
+//
+//            assert(nvar == 2);
+//            BndPieceLabel bndPieceLabel1 =
+//                bndPiece2allowedLabels[bndPiece1][varlabels[0]];
+//            BndPieceLabel bndPieceLabel2 =
+//                bndPiece2allowedLabels[bndPiece2][varlabels[1]];
+//            double bndPieceLen1 = mg.bndPiece2length[bndPiece1];
+//            double bndPieceLen2 = mg.bndPiece2length[bndPiece2];
+//            double weight = bndPieceLen1 + bndPieceLen2;
+//
+//            if (bndPieceLabel1 == Connected && bndPieceLabel2 == Connected) {
+//              return 0.0;
+//            }
+//            if ((bndPieceLabel1 == Connected) ||
+//                (bndPieceLabel2 == Connected)) {
+//              return weight * 5;
+//            }
+//            if (bndPieceLabel1 != bndPieceLabel2) {
+//              return weight * 5;
+//            }
+//            return 0.0;
+//
+//          },
+//          1.0);
+//
+//      fg.addFactor({bndPiece2vh[bndPiece1], bndPiece2vh[bndPiece2]}, fc);
+//    }
+//  }
+//
+//  // junction validity
+//  for (int junc = 0; junc < mg.njuncs(); junc++) {
+//    auto &bnds = mg.junc2bnds[junc];
+//    if (bnds.size() <= 2) {
+//      continue;
+//    }
+//
+//    std::vector<int> bndPieces(bnds.size());
+//    std::vector<bool> bndPiecesTowardJunc(bnds.size(), false);
+//    std::vector<core::FactorGraph::VarHandle> bpvhs(bnds.size());
+//
+//    double bndPieceLenSum = 0.0;
+//
+//    for (int i = 0; i < bnds.size(); i++) {
+//      int bnd = bnds[i];
+//      auto &juncs = mg.bnd2juncs[bnd];
+//      bool toThisJunc = juncs.second == junc;
+//      int adjacentBndPiece = toThisJunc ? mg.bnd2bndPieces[bnd].back()
+//                                        : mg.bnd2bndPieces[bnd].front();
+//      bndPieces[i] = adjacentBndPiece;
+//      bndPiecesTowardJunc[i] = toThisJunc;
+//      bpvhs[i] = bndPiece2vh[adjacentBndPiece];
+//
+//      bndPieceLenSum += mg.bndPiece2length[adjacentBndPiece];
+//    }
+//
+//    int fc = fg.addFactorCategory(
+//        [bndPieceLenSum, bndPieces, bndPiecesTowardJunc, &mg,
+//         &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
+//                                  core::FactorGraph::FactorCategoryId fcid,
+//                                  void *givenData) {
+//
+//          assert(nvar == bndPieces.size() &&
+//                 nvar == bndPiecesTowardJunc.size());
+//          int clockwiseFrontCount = 0, counterClockwiseFrontCount = 0;
+//          for (int i = 0; i < nvar; i++) {
+//            int bndPiece = bndPieces[i];
+//            bool towardJunc = bndPiecesTowardJunc[i];
+//            BndPieceLabel bplabel =
+//                bndPiece2allowedLabels[bndPiece][varlabels[i]];
+//            switch (bplabel) {
+//            case Connected:
+//              break;
+//            case LeftIsFront:
+//              towardJunc ? (clockwiseFrontCount += 1)
+//                         : (counterClockwiseFrontCount += 1);
+//              break;
+//            case RightIsFront:
+//              towardJunc ? (counterClockwiseFrontCount += 1)
+//                         : (clockwiseFrontCount += 1);
+//              break;
+//            }
+//          }
+//
+//          if (clockwiseFrontCount + counterClockwiseFrontCount >= 3) {
+//            return bndPieceLenSum * 3.0;
+//          }
+//          if (clockwiseFrontCount + counterClockwiseFrontCount == 1) {
+//            return 0.0;
+//          }
+//          if (clockwiseFrontCount != counterClockwiseFrontCount) {
+//            return bndPieceLenSum * 5.0;
+//          }
+//
+//          return 0.0;
+//
+//        },
+//        1.0);
+//
+//    assert(bpvhs.size() >= 3);
+//    fg.addFactor(bpvhs.begin(), bpvhs.end(), fc);
+//  }
+//
+//  // solve
+//  std::cout << "solving factor graph" << std::endl;
+//
+//  core::FactorGraph::ResultTable bestLabels;
+//  double minEnergy = std::numeric_limits<double>::infinity();
+//  fg.solve(1000, 10, [&bestLabels, &minEnergy](
+//                         int epoch, double energy, double denergy,
+//                         const core::FactorGraph::ResultTable &results) -> bool {
+//    std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
+//    if (energy < minEnergy) {
+//      bestLabels = results;
+//      minEnergy = energy;
+//    }
+//    if (denergy / std::max(energy, 1.0) > 0.01) {
+//      return false;
+//    }
+//    return true;
+//  });
+//
+//  // fill back labels
+//  // segs
+//  for (int seg = 0; seg < mg.nsegs; seg++) {
+//    auto sv = seg2vh[seg];
+//    if (sv.invalid()) {
+//      continue;
+//    }
+//    int varlabel = bestLabels[sv];
+//    const SegLabel &seglabel = seg2allowedLabels[seg][varlabel];
+//    auto &c = mg.seg2control[seg];
+//    c.orientationClaz = seglabel.orientationClaz;
+//    c.orientationNotClaz = seglabel.orientationNotClaz;
+//  }
+//
+//  for (int bndPiece = 0; bndPiece < mg.nbndPieces(); bndPiece++) {
+//    auto bpv = bndPiece2vh[bndPiece];
+//    int varlabel = bestLabels[bpv];
+//    BndPieceLabel bplabel = bndPiece2allowedLabels[bndPiece][varlabel];
+//    mg.bndPiece2segRelation[bndPiece] = (SegRelation)bplabel;
+//  }
+//}
 
 
 struct LineLabel {
@@ -890,7 +890,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
   RTreeMap<Vec3, std::pair<Line3, int>> lineSamplesTree;
   for (int i = 0; i < mg.nlines(); i++) {
     auto &line = mg.lines[i].component;
-    double spanAngle = AngleBetweenDirections(line.first, line.second);
+    double spanAngle = AngleBetweenDirected(line.first, line.second);
     for (double a = 0.0; a < spanAngle;
          a += angleSizeForPixelsNearLines / 3.0) {
       Vec3 sample1 = normalize(RotateDirection(line.first, line.second, a));
@@ -921,7 +921,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
           auto line = normalize(mg.lines[lineSample.second.second].component);
           auto dirOnLine = DistanceFromPointToLine(dir, lineSample.second.first)
                                .second.position;
-          double angleDist = AngleBetweenDirections(dir, dirOnLine);
+          double angleDist = AngleBetweenDirected(dir, dirOnLine);
           double lambda = ProjectionOfPointOnLine(dir, line)
                               .ratio; // the projected position on line
           if (angleDist < angleSizeForPixelsNearLines &&
@@ -984,8 +984,8 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
   std::cout << "building factor graph" << std::endl;
 
   std::vector<std::vector<LineLabel>> line2allowedLabels(mg.nlines());
-  std::vector<core::FactorGraph::VarHandle> line2vh(mg.nlines());
-  std::map<core::FactorGraph::VarHandle, int> vh2line;
+  std::vector<int> line2vh(mg.nlines(), -1);
+  std::map<int, int> vh2line;
   for (int line = 0; line < mg.nlines(); line++) {
     if (mg.lines[line].claz == -1) {
       continue;
@@ -994,7 +994,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     std::vector<LineLabel> allowedLabels = {
         {true, true}, {true, false}, {false, true}, {false, false}};
     auto vh = fg.addVar(fg.addVarCategory(
-        allowedLabels.size(), AngleBetweenDirections(l.first, l.second)));
+        allowedLabels.size(), AngleBetweenDirected(l.first, l.second)));
     line2vh[line] = vh;
     vh2line[vh] = line;
     line2allowedLabels[line] = std::move(allowedLabels);
@@ -1008,7 +1008,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
 
   for (int line = 0; line < mg.nlines(); line++) {
     auto vh = line2vh[line];
-    if (vh.invalid()) {
+    if (vh == -1) {
       continue;
     }
     int claz = mg.lines[line].claz;
@@ -1054,13 +1054,13 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     Vec3 n1 = normalize(l1.first.cross(l1.second));
     auto l2 = normalize(mg.lines[line2].component);
     Vec3 n2 = normalize(l2.first.cross(l2.second));
-    if (AngleBetweenUndirectedVectors(n1, n2) < DegreesToRadians(3)) {
+    if (AngleBetweenUndirected(n1, n2) < DegreesToRadians(3)) {
       continue;
     }
 
-    if (AngleBetweenDirections(l1.first, l1.second) <
+    if (AngleBetweenDirected(l1.first, l1.second) <
             minAngleSizeOfLineInTJunction ||
-        AngleBetweenDirections(l2.first, l2.second) <
+        AngleBetweenDirected(l2.first, l2.second) <
             minAngleSizeOfLineInTJunction) {
       continue;
     }
@@ -1098,7 +1098,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
   for (int i = 0; i < tjunctionLines.size(); i++) {
     auto &labelCosts = line2labelCost[tjunctionLines[i].first];
     auto &vl = mg.lines[tjunctionLines[i].second].component;
-    double vllen = AngleBetweenDirections(vl.first, vl.second);
+    double vllen = AngleBetweenDirected(vl.first, vl.second);
     double weight = Gaussian(vllen, DegreesToRadians(10)) * DegreesToRadians(5);
     if (tjunctionVLineLiesOnTheRightOfHLine[i]) {
       labelCosts.disconnectLeftConnectRight += vllen;
@@ -1114,7 +1114,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
               ConstantFunctor<gui::Color>(gui::LightGray), 2, 3);
     const auto drawLine = [&mg, &pim](
         const Line3 &line, const gui::Color &color, const std::string &text) {
-      double angle = AngleBetweenDirections(line.first, line.second);
+      double angle = AngleBetweenDirected(line.first, line.second);
       std::vector<Pixel> ps;
       for (double a = 0.0; a <= angle; a += 0.01) {
         ps.push_back(ToPixel(mg.view.camera.toScreen(
@@ -1154,13 +1154,13 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
   // data term
   for (int line = 0; line < mg.nlines(); line++) {
     auto vh = line2vh[line];
-    if (vh.invalid()) {
+    if (vh == -1) {
       continue;
     }
     int fc = fg.addFactorCategory(
-        [&line2labelCost, &mg, &line2allowedLabels, line](
-            const int *varlabels, size_t nvar,
-            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+        [&line2labelCost, &mg, &line2allowedLabels,
+         line](const std::vector<int> &varlabels, void *givenData) -> double {
+          size_t nvar = varlabels.size();
           assert(nvar == 1);
           auto &labelCosts = line2labelCost[line];
 
@@ -1185,7 +1185,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
           return ret / costSum * 1.0;
         },
         1.0);
-    fg.addFactor({vh}, fc);
+    fg.addFactor(fc, {vh});
   }
 
   // smooth term
@@ -1197,22 +1197,22 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     int line1, line2;
     std::tie(line1, line2) = mg.lineRelation2lines[lineRelation];
     auto vh1 = line2vh[line1], vh2 = line2vh[line2];
-    if (vh1.invalid() || vh2.invalid()) {
+    if (vh1 == -1 || vh2 == -1) {
       continue;
     }
     auto &l1 = mg.lines[line1].component;
     auto &l2 = mg.lines[line2].component;
     auto nearest = DistanceBetweenTwoLines(l1, l2);
-    double angleDist = AngleBetweenDirections(nearest.second.first.position,
+    double angleDist = AngleBetweenDirected(nearest.second.first.position,
                                               nearest.second.second.position);
     double weight = Gaussian(angleDist, DegreesToRadians(5));
     bool sameDirection =
         l1.first.cross(l1.second).dot(l2.first.cross(l2.second)) > 0;
 
     int fc = fg.addFactorCategory(
-        [&line2allowedLabels, line1, line2, sameDirection, weight](
-            const int *varlabels, size_t nvar,
-            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+        [&line2allowedLabels, line1, line2, sameDirection,
+         weight](const std::vector<int> &varlabels, void *givenData) -> double {
+          size_t nvar = varlabels.size();
           assert(nvar == 2);
           const LineLabel &label1 = line2allowedLabels[line1][varlabels[0]];
           const LineLabel &label2 = line2allowedLabels[line2][varlabels[1]];
@@ -1223,17 +1223,17 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
           return 0.0;
         },
         1.0);
-    fg.addFactor({vh1, vh2}, fc);
+    fg.addFactor(fc, {vh1, vh2});
   }
 
   // solve
   std::cout << "solving factor graph" << std::endl;
 
-  core::FactorGraph::ResultTable bestLabels;
+  std::vector<int> bestLabels;
   double minEnergy = std::numeric_limits<double>::infinity();
-  fg.solve(20, 10, [&bestLabels, &minEnergy](
-                       int epoch, double energy, double denergy,
-                       const core::FactorGraph::ResultTable &results) -> bool {
+  fg.solve(20, 10, [&bestLabels,
+                    &minEnergy](int epoch, double energy, double denergy,
+                                const std::vector<int> &results) -> bool {
     std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
     if (energy < minEnergy) {
       bestLabels = results;
@@ -1256,7 +1256,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
           bool isSomeFrontSeg = false;
           for (int line = 0; line < mg.nlines(); line++) {
             auto vh = line2vh[line];
-            if (vh.invalid()) {
+            if (vh == -1) {
               continue;
             }
             auto &lineLabel = line2allowedLabels[line][bestLabels[vh]];
@@ -1293,7 +1293,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
         ConstantFunctor<gui::Color>(gui::LightGray), 2, 3);
     auto drawLine = [&mg, &pim](const Line3 &line, const std::string &text,
                                 gui::Color &color) {
-      double angle = AngleBetweenDirections(line.first, line.second);
+      double angle = AngleBetweenDirected(line.first, line.second);
       std::vector<Pixel> ps;
       for (double a = 0.0; a <= angle; a += 0.01) {
         ps.push_back(ToPixel(mg.view.camera.toScreen(
@@ -1313,7 +1313,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     };
     for (int line = 0; line < line2labelCost.size(); line++) {
       auto vh = line2vh[line];
-      if (vh.invalid()) {
+      if (vh == -1) {
         continue;
       }
       // if (line != 94 && line != 1006) {
@@ -1355,7 +1355,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
   std::map<int, LineLabel> cutline2label;
   for (int line = 0; line < mg.nlines(); line++) {
     auto vh = line2vh[line];
-    if (vh.invalid()) {
+    if (vh == -1) {
       continue;
     }
     const LineLabel &label = line2allowedLabels[line][bestLabels[vh]];
@@ -1415,10 +1415,10 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
                 }
               }
@@ -1428,10 +1428,10 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
                 }
               }
@@ -1455,10 +1455,10 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
                 }
               }
@@ -1468,10 +1468,10 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
                 }
               }
@@ -1540,7 +1540,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     for (auto &lineLabelPair : cutline2label) {
       int line = lineLabelPair.first;
       auto &l = mg.lines[line].component;
-      double spanAngle = AngleBetweenDirections(l.first, l.second);
+      double spanAngle = AngleBetweenDirected(l.first, l.second);
       Vec3 lastDir = l.first;
       for (double a = cutLinePieceAngle; a <= spanAngle;
            a += cutLinePieceAngle) {
@@ -1555,7 +1555,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                         &mg](const Line3 &connection) -> bool {
       bool isCutBySomeLine = false;
       double spanAngle =
-          AngleBetweenDirections(connection.first, connection.second);
+          AngleBetweenDirected(connection.first, connection.second);
       for (double a = 0.0; a <= spanAngle; a += cutLinePieceAngle) {
         Vec3 dir = RotateDirection(connection.first, connection.second, a);
         cutLinePiecesTree.search(
@@ -1569,10 +1569,8 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
                   1e-5) {
                 return true;
               }
-              auto interp =
-                  normalize(IntersectionOfLineAndPlane(
-                                connection.ray(), Plane3(Origin(), vertDir))
-                                .position);
+              auto interp = normalize(
+                  Intersection(connection.ray(), Plane3(Origin(), vertDir)));
               if (cutLine.first.cross(interp)
                       .dot(cutLine.second.cross(interp)) > 1e-5) {
                 return true;
@@ -1686,8 +1684,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       Vec3 lineRight = l.first.cross(l.second);
       bool onLeft = (vp - l.first).dot(lineRight) < 0;
 
-      double lineAngleToVP = std::min(AngleBetweenDirections(l.first, vp),
-                                      AngleBetweenDirections(l.second, vp));
+      double lineAngleToVP = std::min(AngleBetweenDirected(l.first, vp),
+                                      AngleBetweenDirected(l.second, vp));
       double sweepAngle =
           std::min(angleSizeForPixelsNearLines, lineAngleToVP - 1e-4);
       std::vector<Vec3> sweepQuad = {normalize(l.first), normalize(l.second),
@@ -1699,7 +1697,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       const double focal = mg.view.camera.focal() * 1.2;
       int w = std::ceil(tan(sweepAngle + 0.01) * focal * 2 * 1.5);
       int h = std::ceil(
-          (2 * tan(AngleBetweenDirections(l.first, l.second) / 2.0) + 0.01) *
+          (2 * tan(AngleBetweenDirected(l.first, l.second) / 2.0) + 0.01) *
           focal * 1.5);
       PerspectiveCamera pc(w, h, Point2(w / 2.0, h / 2.0), focal, Origin(), z,
                            y);
@@ -1759,13 +1757,13 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
     Vec3 n1 = normalize(l1.first.cross(l1.second));
     auto l2 = normalize(mg.lines[line2].component);
     Vec3 n2 = normalize(l2.first.cross(l2.second));
-    if (AngleBetweenUndirectedVectors(n1, n2) < DegreesToRadians(3)) {
+    if (AngleBetweenUndirected(n1, n2) < DegreesToRadians(3)) {
       continue;
     }
 
-    if (AngleBetweenDirections(l1.first, l1.second) <
+    if (AngleBetweenDirected(l1.first, l1.second) <
             minAngleSizeOfLineInTJunction ||
-        AngleBetweenDirections(l2.first, l2.second) <
+        AngleBetweenDirected(l2.first, l2.second) <
             minAngleSizeOfLineInTJunction) {
       continue;
     }
@@ -1815,23 +1813,23 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
 
   std::cout << "building factor graph" << std::endl;
 
-  std::vector<std::array<core::FactorGraph::VarHandle, 2>>
-      line2vhConnectLeftRight(mg.nlines());
+  std::vector<std::array<int, 2>> line2vhConnectLeftRight(mg.nlines(),
+                                                          {{-1, -1}});
   static const int LineLabelDisconnect = 0;
   static const int LineLabelConnect = 1;
 
-  std::map<core::FactorGraph::VarHandle, int> vh2line;
+  std::map<int, int> vh2line;
   for (int line = 0; line < mg.nlines(); line++) {
     if (mg.lines[line].claz == -1) {
       continue;
     }
     auto &l = mg.lines[line].component;
     auto vhConnectLeft = fg.addVar(
-        fg.addVarCategory(2, AngleBetweenDirections(l.first, l.second)));
+        fg.addVarCategory(2, AngleBetweenDirected(l.first, l.second)));
     line2vhConnectLeftRight[line][0] = vhConnectLeft;
     vh2line[vhConnectLeft] = line;
     auto vhConnectRight = fg.addVar(
-        fg.addVarCategory(2, AngleBetweenDirections(l.first, l.second)));
+        fg.addVarCategory(2, AngleBetweenDirected(l.first, l.second)));
     line2vhConnectLeftRight[line][1] = vhConnectRight;
     vh2line[vhConnectRight] = line;
   }
@@ -1848,13 +1846,13 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       auto vh = vhs[k];
       bool vhIsLeft = k == 0;
 
-      if (vh.invalid()) {
+      if (vh == -1) {
         continue;
       }
 
       int claz = mg.lines[line].claz;
       auto &l = mg.lines[line].component;
-      double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+      double lineAngleLen = AngleBetweenDirected(l.first, l.second);
       const auto &lps = mg.line2linePieces[line];
 
       // orientation consistency term between seg and line
@@ -1889,13 +1887,13 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       auto vh = vhs[k];
       bool vhIsLeft = k == 0;
 
-      if (vh.invalid()) {
+      if (vh == -1) {
         continue;
       }
 
       int claz = mg.lines[line].claz;
       auto &l = mg.lines[line].component;
-      double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+      double lineAngleLen = AngleBetweenDirected(l.first, l.second);
       const auto &lps = mg.line2linePieces[line];
 
       // orientation consistency term between seg and line
@@ -1922,7 +1920,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
                      ConstantFunctor<gui::Color>(gui::Gray), 2, 0);
     auto drawLine = [&mg, &pim](const Line3 &line, const std::string &text,
                                 const gui::Color &color, bool withTeeth) {
-      double angle = AngleBetweenDirections(line.first, line.second);
+      double angle = AngleBetweenDirected(line.first, line.second);
       std::vector<Pixel> ps;
       for (double a = 0.0; a <= angle; a += 0.01) {
         ps.push_back(ToPixel(mg.view.camera.toScreen(
@@ -1975,7 +1973,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
     auto &vhs = line2vhConnectLeftRight[line];
     static const bool vhIsLefts[] = {true, false};
 
-    if (vhs[0].invalid() || vhs[1].invalid()) {
+    if (vhs[0] == -1 || vhs[1] == -1) {
       continue;
     }
 
@@ -1984,7 +1982,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       auto vh = vhs[k];
       bool vhIsLeft = vhIsLefts[k];
 
-      if (vh.invalid()) {
+      if (vh == -1) {
         continue;
       }
       double labelConnectCost = line2labelConnectCostLeftRight[line][k];
@@ -1992,9 +1990,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
 
       int fc = fg.addFactorCategory(
           [labelConnectCost, labelDisconnectCost, &mg,
-           line](const int *varlabels, size_t nvar,
-                 core::FactorGraph::FactorCategoryId fcid,
-                 void *givenData) -> double {
+           line](const std::vector<int> &varlabels, void *givenData) -> double {
+            size_t nvar = varlabels.size();
             assert(nvar == 1);
             int label = varlabels[0];
             if (label == LineLabelConnect) {
@@ -2003,16 +2000,16 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
             return labelDisconnectCost;
           },
           1.0);
-      fg.addFactor({vh}, fc);
+      fg.addFactor(fc, {vh});
     }
 
     // punish on both disconnected case
     auto &l = mg.lines[line].component;
-    double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+    double lineAngleLen = AngleBetweenDirected(l.first, l.second);
     int fc = fg.addFactorCategory(
-        [lineAngleLen](const int *varlabels, size_t nvar,
-                       core::FactorGraph::FactorCategoryId fcid,
+        [lineAngleLen](const std::vector<int> &varlabels,
                        void *givenData) -> double {
+          size_t nvar = varlabels.size();
           assert(nvar == 2);
           int label1 = varlabels[0], label2 = varlabels[1];
           if (label1 == LineLabelDisconnect && label2 == LineLabelDisconnect) {
@@ -2021,7 +2018,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
           return 0.0;
         },
         1.0);
-    fg.addFactor({vhs[0], vhs[1]}, fc);
+    fg.addFactor(fc, {vhs[0], vhs[1]});
   }
 
   // smooth term
@@ -2034,18 +2031,18 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
     std::tie(line1, line2) = mg.lineRelation2lines[lineRelation];
     auto vhs1 = line2vhConnectLeftRight[line1],
          vhs2 = line2vhConnectLeftRight[line2];
-    if (vhs1[0].invalid() || vhs1[1].invalid() || vhs2[0].invalid() ||
-        vhs2[1].invalid()) {
+    if (vhs1[0] == -1 || vhs1[1] == -1 || vhs2[0] == -1 ||
+        vhs2[1] == -1) {
       continue;
     }
     auto &l1 = mg.lines[line1].component;
     auto &l2 = mg.lines[line2].component;
     auto nearest = DistanceBetweenTwoLines(l1, l2);
-    double angleDist = AngleBetweenDirections(nearest.second.first.position,
+    double angleDist = AngleBetweenDirected(nearest.second.first.position,
                                               nearest.second.second.position);
     auto n1 = l1.first.cross(l1.second);
     auto n2 = l2.first.cross(l2.second);
-    double normalAngle = AngleBetweenUndirectedVectors(n1, n2);
+    double normalAngle = AngleBetweenUndirected(n1, n2);
     bool sameDirection =
         l1.first.cross(l1.second).dot(l2.first.cross(l2.second)) > 0;
 
@@ -2057,10 +2054,9 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
       auto vh1 = vhs1[k];
       auto vh2 = vhs2[k];
       int fc = fg.addFactorCategory(
-          [line1, line2, angleDist,
-           normalAngle](const int *varlabels, size_t nvar,
-                        core::FactorGraph::FactorCategoryId fcid,
-                        void *givenData) -> double {
+          [line1, line2, angleDist, normalAngle](
+              const std::vector<int> &varlabels, void *givenData) -> double {
+            size_t nvar = varlabels.size();
             assert(nvar == 2);
             int label1 = varlabels[0];
             int label2 = varlabels[1];
@@ -2070,18 +2066,18 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
             return 0.0;
           },
           1.0);
-      fg.addFactor({vh1, vh2}, fc);
+      fg.addFactor(fc, {vh1, vh2});
     }
   }
 
   // solve
   std::cout << "solving factor graph" << std::endl;
 
-  core::FactorGraph::ResultTable bestLabels;
+  std::vector<int> bestLabels;
   double minEnergy = std::numeric_limits<double>::infinity();
   fg.solve(5, 10, [&bestLabels, &minEnergy](
                       int epoch, double energy, double denergy,
-                      const core::FactorGraph::ResultTable &results) -> bool {
+                      const std::vector<int> &results) -> bool {
     std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
     if (energy < minEnergy) {
       bestLabels = results;
@@ -2096,7 +2092,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
   std::vector<LineSidingWeight> lsw(mg.nlines(), LineSidingWeight{0.5, 0.5});
   for (int line = 0; line < mg.nlines(); line++) {
     auto &vhs = line2vhConnectLeftRight[line];
-    if (vhs[0].invalid() || vhs[1].invalid()) {
+    if (vhs[0] == -1 || vhs[1] == -1) {
       continue;
     }
     auto &lineSidingWeight = lsw[line];
@@ -2162,8 +2158,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       Vec3 lineRight = l.first.cross(l.second);
       bool onLeft = (vp - l.first).dot(lineRight) < 0;
 
-      double lineAngleToVP = std::min(AngleBetweenDirections(l.first, vp),
-                                      AngleBetweenDirections(l.second, vp));
+      double lineAngleToVP = std::min(AngleBetweenDirected(l.first, vp),
+                                      AngleBetweenDirected(l.second, vp));
       double sweepAngle =
           std::min(angleSizeForPixelsNearLines, lineAngleToVP - 1e-4);
       std::vector<Vec3> sweepQuad = {normalize(l.first), normalize(l.second),
@@ -2175,7 +2171,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       const double focal = mg.view.camera.focal() * 1.2;
       int w = std::ceil(tan(sweepAngle + 0.01) * focal * 2 * 1.5);
       int h = std::ceil(
-          (2 * tan(AngleBetweenDirections(l.first, l.second) / 2.0) + 0.01) *
+          (2 * tan(AngleBetweenDirected(l.first, l.second) / 2.0) + 0.01) *
           focal * 1.5);
       PerspectiveCamera pc(w, h, Point2(w / 2.0, h / 2.0), focal, Origin(), z,
                            y);
@@ -2235,13 +2231,13 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
     Vec3 n1 = normalize(l1.first.cross(l1.second));
     auto l2 = normalize(mg.lines[line2].component);
     Vec3 n2 = normalize(l2.first.cross(l2.second));
-    if (AngleBetweenUndirectedVectors(n1, n2) < DegreesToRadians(3)) {
+    if (AngleBetweenUndirected(n1, n2) < DegreesToRadians(3)) {
       continue;
     }
 
-    if (AngleBetweenDirections(l1.first, l1.second) <
+    if (AngleBetweenDirected(l1.first, l1.second) <
             minAngleSizeOfLineInTJunction ||
-        AngleBetweenDirections(l2.first, l2.second) <
+        AngleBetweenDirected(l2.first, l2.second) <
             minAngleSizeOfLineInTJunction) {
       continue;
     }
@@ -2291,23 +2287,23 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
 
   std::cout << "building factor graph" << std::endl;
 
-  std::vector<std::array<core::FactorGraph::VarHandle, 2>>
-      line2vhConnectLeftRight(mg.nlines());
+  std::vector<std::array<int, 2>> line2vhConnectLeftRight(mg.nlines(),
+                                                          {{-1, -1}});
   static const int LineLabelDisconnect = 0;
   static const int LineLabelConnect = 1;
 
-  std::map<core::FactorGraph::VarHandle, int> vh2line;
+  std::map<int, int> vh2line;
   for (int line = 0; line < mg.nlines(); line++) {
     if (mg.lines[line].claz == -1) {
       continue;
     }
     auto &l = mg.lines[line].component;
     auto vhConnectLeft = fg.addVar(
-        fg.addVarCategory(2, AngleBetweenDirections(l.first, l.second)));
+        fg.addVarCategory(2, AngleBetweenDirected(l.first, l.second)));
     line2vhConnectLeftRight[line][0] = vhConnectLeft;
     vh2line[vhConnectLeft] = line;
     auto vhConnectRight = fg.addVar(
-        fg.addVarCategory(2, AngleBetweenDirections(l.first, l.second)));
+        fg.addVarCategory(2, AngleBetweenDirected(l.first, l.second)));
     line2vhConnectLeftRight[line][1] = vhConnectRight;
     vh2line[vhConnectRight] = line;
   }
@@ -2324,13 +2320,13 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       auto vh = vhs[k];
       bool vhIsLeft = k == 0;
 
-      if (vh.invalid()) {
+      if (vh == -1) {
         continue;
       }
 
       int claz = mg.lines[line].claz;
       auto &l = mg.lines[line].component;
-      double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+      double lineAngleLen = AngleBetweenDirected(l.first, l.second);
       const auto &lps = mg.line2linePieces[line];
 
       // orientation consistency term between seg and line
@@ -2365,13 +2361,13 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       auto vh = vhs[k];
       bool vhIsLeft = k == 0;
 
-      if (vh.invalid()) {
+      if (vh == -1) {
         continue;
       }
 
       int claz = mg.lines[line].claz;
       auto &l = mg.lines[line].component;
-      double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+      double lineAngleLen = AngleBetweenDirected(l.first, l.second);
       const auto &lps = mg.line2linePieces[line];
 
       // orientation consistency term between seg and line
@@ -2399,7 +2395,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
     auto &vhs = line2vhConnectLeftRight[line];
     static const bool vhIsLefts[] = {true, false};
 
-    if (vhs[0].invalid() || vhs[1].invalid()) {
+    if (vhs[0] == -1 || vhs[1] == -1) {
       continue;
     }
 
@@ -2408,7 +2404,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       auto vh = vhs[k];
       bool vhIsLeft = vhIsLefts[k];
 
-      if (vh.invalid()) {
+      if (vh == -1) {
         continue;
       }
       double labelConnectCost = line2labelConnectCostLeftRight[line][k];
@@ -2416,10 +2412,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
 
       int fc = fg.addFactorCategory(
           [labelConnectCost, labelDisconnectCost, &mg,
-           line](const int *varlabels, size_t nvar,
-                 core::FactorGraph::FactorCategoryId fcid,
-                 void *givenData) -> double {
-            assert(nvar == 1);
+           line](const std::vector<int> &varlabels, void *givenData) -> double {
+            assert(varlabels.size() == 1);
             int label = varlabels[0];
             if (label == LineLabelConnect) {
               return labelConnectCost;
@@ -2427,17 +2421,16 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
             return labelDisconnectCost;
           },
           1.0);
-      fg.addFactor({vh}, fc);
+      fg.addFactor(fc, {vh});
     }
 
     // punish on both disconnected case
     auto &l = mg.lines[line].component;
-    double lineAngleLen = AngleBetweenDirections(l.first, l.second);
+    double lineAngleLen = AngleBetweenDirected(l.first, l.second);
     int fc = fg.addFactorCategory(
-        [lineAngleLen](const int *varlabels, size_t nvar,
-                       core::FactorGraph::FactorCategoryId fcid,
+        [lineAngleLen](const std::vector<int> &varlabels,
                        void *givenData) -> double {
-          assert(nvar == 2);
+          assert(varlabels.size() == 2);
           int label1 = varlabels[0], label2 = varlabels[1];
           if (label1 == LineLabelDisconnect && label2 == LineLabelDisconnect) {
             return 5.0;
@@ -2448,7 +2441,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
           return 0.0;
         },
         1.0);
-    fg.addFactor({vhs[0], vhs[1]}, fc);
+	fg.addFactor(fc, {vhs[0], vhs[1]});
   }
 
   // smooth term
@@ -2461,18 +2454,18 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
     std::tie(line1, line2) = mg.lineRelation2lines[lineRelation];
     auto vhs1 = line2vhConnectLeftRight[line1],
          vhs2 = line2vhConnectLeftRight[line2];
-    if (vhs1[0].invalid() || vhs1[1].invalid() || vhs2[0].invalid() ||
-        vhs2[1].invalid()) {
+    if (vhs1[0] == -1 || vhs1[1] == -1 || vhs2[0] == -1 ||
+        vhs2[1] == -1) {
       continue;
     }
     auto &l1 = mg.lines[line1].component;
     auto &l2 = mg.lines[line2].component;
     auto nearest = DistanceBetweenTwoLines(l1, l2);
-    double angleDist = AngleBetweenDirections(nearest.second.first.position,
+    double angleDist = AngleBetweenDirected(nearest.second.first.position,
                                               nearest.second.second.position);
     auto n1 = l1.first.cross(l1.second);
     auto n2 = l2.first.cross(l2.second);
-    double normalAngle = AngleBetweenUndirectedVectors(n1, n2);
+    double normalAngle = AngleBetweenUndirected(n1, n2);
     bool sameDirection =
         l1.first.cross(l1.second).dot(l2.first.cross(l2.second)) > 0;
 
@@ -2484,11 +2477,9 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
       auto vh1 = vhs1[k];
       auto vh2 = vhs2[k];
       int fc = fg.addFactorCategory(
-          [line1, line2, angleDist,
-           normalAngle](const int *varlabels, size_t nvar,
-                        core::FactorGraph::FactorCategoryId fcid,
-                        void *givenData) -> double {
-            assert(nvar == 2);
+          [line1, line2, angleDist, normalAngle](
+              const std::vector<int> &varlabels, void *givenData) -> double {
+            assert(varlabels.size() == 2);
             int label1 = varlabels[0];
             int label2 = varlabels[1];
             if (label1 != label2) {
@@ -2497,18 +2488,18 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
             return 0.0;
           },
           1.0);
-      fg.addFactor({vh1, vh2}, fc);
+      fg.addFactor(fc, {vh1, vh2});
     }
   }
 
   // solve
   std::cout << "solving factor graph" << std::endl;
 
-  core::FactorGraph::ResultTable bestLabels;
+  std::vector<int> bestLabels;
   double minEnergy = std::numeric_limits<double>::infinity();
-  fg.solve(5, 10, [&bestLabels, &minEnergy](
-                      int epoch, double energy, double denergy,
-                      const core::FactorGraph::ResultTable &results) -> bool {
+  fg.solve(5, 10, [&bestLabels,
+                   &minEnergy](int epoch, double energy, double denergy,
+                               const std::vector<int> &results) -> bool {
     std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
     if (energy < minEnergy) {
       bestLabels = results;
@@ -2523,7 +2514,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
   std::vector<LineSidingWeight> lsw(mg.nlines(), LineSidingWeight{0.5, 0.5});
   for (int line = 0; line < mg.nlines(); line++) {
     auto &vhs = line2vhConnectLeftRight[line];
-    if (vhs[0].invalid() || vhs[1].invalid()) {
+    if (vhs[0] == -1 || vhs[1] == -1) {
       continue;
     }
     auto &lineSidingWeight = lsw[line];
@@ -2574,7 +2565,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
     auto &cs = anno.border2corners[border];
     auto p1 = anno.corners[cs.first];
     auto p2 = anno.corners[cs.second];
-    double spanAngle = AngleBetweenDirections(p1, p2);
+    double spanAngle = AngleBetweenDirected(p1, p2);
     for (double a = 0.0; a < spanAngle; a += sampleAngleStep) {
       Vec3 sample1 = normalize(RotateDirection(p1, p2, a));
       Vec3 sample2 = normalize(RotateDirection(p1, p2, a + sampleAngleStep));
@@ -2627,10 +2618,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
           });
       assert(dirInFace != Origin());
       double rightDegree = dirInFace.dot(rightOfBorderLine);
-      double depthOnBorderOfFace =
-          norm(IntersectionOfLineAndPlane(Ray3(Origin(), borderLine.center()),
-                                          anno.face2plane[face])
-                   .position);
+      double depthOnBorderOfFace = norm(Intersection(
+          Ray3(Origin(), borderLine.center()), anno.face2plane[face]));
       assert(depthOnBorderOfFace > 0.0);
       rightDegree2depth.push_back(ScoreAs(depthOnBorderOfFace, rightDegree));
     }
@@ -2650,7 +2639,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
     }
     auto p1 = l.first;
     auto p2 = l.second;
-    double spanAngle = AngleBetweenDirections(l.first, l.second);
+    double spanAngle = AngleBetweenDirected(l.first, l.second);
     auto lineN = normalize(l.first.cross(l.second));
 
     std::map<int, int> nearbyBorder2count;
@@ -2668,7 +2657,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
             auto borderN =
                 normalize(borderPiece.first.cross(borderPiece.second));
             auto nearest = DistanceBetweenTwoLines(piece, borderPiece).second;
-            double angleDist = AngleBetweenDirections(nearest.first.position,
+            double angleDist = AngleBetweenDirected(nearest.first.position,
                                                       nearest.second.position);
             if (angleDist < angleThres) {
               nearbyBorder2count[border]++;
@@ -2719,7 +2708,7 @@ CollectSegsNearLines(const PIGraph<PanoramicCamera> &mg, double angleSizeForPixe
   RTreeMap<Vec3, std::pair<Line3, int>> lineSamplesTree;
   for (int i = 0; i < mg.nlines(); i++) {
     auto &line = mg.lines[i].component;
-    double spanAngle = AngleBetweenDirections(line.first, line.second);
+    double spanAngle = AngleBetweenDirected(line.first, line.second);
     for (double a = 0.0; a < spanAngle;
          a += angleSizeForPixelsNearLines / 3.0) {
       Vec3 sample1 = normalize(RotateDirection(line.first, line.second, a));
@@ -2752,7 +2741,7 @@ CollectSegsNearLines(const PIGraph<PanoramicCamera> &mg, double angleSizeForPixe
           // [0, 1]
           auto dirOnLine = DistanceFromPointToLine(dir, lineSample.second.first)
                                .second.position;
-          double angleDist = AngleBetweenDirections(dir, dirOnLine);
+          double angleDist = AngleBetweenDirected(dir, dirOnLine);
           double lambda = ProjectionOfPointOnLine(dir, line)
                               .ratio; // the projected position on line
           if (angleDist < angleSizeForPixelsNearLines &&
@@ -2870,10 +2859,10 @@ void ApplyLinesSidingWeights(
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
                 }
               }
@@ -2883,10 +2872,10 @@ void ApplyLinesSidingWeights(
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
                 }
               }
@@ -2909,10 +2898,10 @@ void ApplyLinesSidingWeights(
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::LeftIsFront;
                 }
               }
@@ -2922,10 +2911,10 @@ void ApplyLinesSidingWeights(
                 auto &d2 = mg.bndPiece2dirs[bndPiece].back();
                 auto &l = mg.lines[line].component;
                 double angleRadius =
-                    (AngleBetweenDirections(l.first, l.second) / 2.0) *
+                    (AngleBetweenDirected(l.first, l.second) / 2.0) *
                     affectSegRangeRatio;
-                if (AngleBetweenDirections(d1, l.center()) <= angleRadius &&
-                    AngleBetweenDirections(d2, l.center()) <= angleRadius) {
+                if (AngleBetweenDirected(d1, l.center()) <= angleRadius &&
+                    AngleBetweenDirected(d2, l.center()) <= angleRadius) {
                   mg.bndPiece2segRelation[bndPiece] = SegRelation::RightIsFront;
                 }
               }
@@ -2996,7 +2985,7 @@ void ApplyLinesSidingWeights(
     for (auto &lineLabelPair : cutline2label) {
       int line = lineLabelPair.first;
       auto &l = mg.lines[line].component;
-      double spanAngle = AngleBetweenDirections(l.first, l.second);
+      double spanAngle = AngleBetweenDirected(l.first, l.second);
       Vec3 lastDir = l.first;
       for (double a = cutLinePieceAngle; a <= spanAngle;
            a += cutLinePieceAngle) {
@@ -3011,7 +3000,7 @@ void ApplyLinesSidingWeights(
                         &mg](const Line3 &connection) -> bool {
       bool isCutBySomeLine = false;
       double spanAngle =
-          AngleBetweenDirections(connection.first, connection.second);
+          AngleBetweenDirected(connection.first, connection.second);
       for (double a = 0.0; a <= spanAngle; a += cutLinePieceAngle) {
         Vec3 dir = RotateDirection(connection.first, connection.second, a);
         cutLinePiecesTree.search(
@@ -3025,10 +3014,8 @@ void ApplyLinesSidingWeights(
                   1e-5) {
                 return true;
               }
-              auto interp =
-                  normalize(IntersectionOfLineAndPlane(
-                                connection.ray(), Plane3(Origin(), vertDir))
-                                .position);
+              auto interp = normalize(
+                  Intersection(connection.ray(), Plane3(Origin(), vertDir)));
               if (cutLine.first.cross(interp)
                       .dot(cutLine.second.cross(interp)) > 1e-5) {
                 return true;

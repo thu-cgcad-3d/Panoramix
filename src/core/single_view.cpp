@@ -74,7 +74,7 @@ std::vector<int> ComputeSpatialRegionPropertiesTemplated(
     // get max angle distance from center direction
     double radiusAngle = 0.0;
     for (auto &d : directions) {
-      double a = AngleBetweenDirections(centerDirection, d);
+      double a = AngleBetweenDirected(centerDirection, d);
       if (radiusAngle < a) {
         radiusAngle = a;
       }
@@ -178,7 +178,7 @@ PerfectRegionMaskView(const std::vector<std::vector<Vec3>> &contours,
   double radiusAngle = 0.0;
   for (auto &cs : contours) {
     for (auto &c : cs) {
-      double angle = AngleBetweenDirections(center, c);
+      double angle = AngleBetweenDirected(center, c);
       if (angle > radiusAngle) {
         radiusAngle = angle;
       }

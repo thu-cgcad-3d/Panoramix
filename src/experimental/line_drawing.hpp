@@ -1,7 +1,11 @@
 #pragma once
 
+#include <unordered_map>
+#include <unordered_set>
+
 #include "../core/basic_types.hpp"
 #include "../core/mesh.hpp"
+#include "../core/mesh_util.hpp"
 
 #include "../misc/eigen.hpp"
 
@@ -32,7 +36,38 @@ LineDrawing<Point3> LoadLineDrawing(const std::string &filename,
 // ToMesh
 template <class T, class PointConvertT = std::identity<T>>
 Mesh<std::decay_t<typename FunctionTraits<PointConvertT>::ResultType>>
-ToMesh(const LineDrawing<T> &ld, PointConvertT cvtFun = PointConvertT()) {
+ToMesh(const LineDrawing<T> &ld, PointConvertT cvtFun = PointConvertT());
+
+// ToLineDrawing
+template <class T, class H, class F, class VertConvertT = std::identity<T>>
+LineDrawing<std::decay_t<typename FunctionTraits<VertConvertT>::ResultType>>
+ToLineDrawing(const Mesh<T, H, F> &mesh, VertConvertT cvtFun = VertConvertT());
+
+// Transform
+template <class T, class FunT>
+auto Transform(const LineDrawing<T> &in, const FunT &fun);
+template <class T, class FunT>
+auto Transform(LineDrawing<T> &&in, const FunT &fun);
+}
+
+namespace core {
+template <class PointT>
+inline auto
+BoundingBox(const pano::experimental::LineDrawing<PointT> &drawing) {
+  return BoundingBoxOfContainer(drawing.corners);
+}
+}
+}
+
+////////////////////////////////////////////////
+//// implementations
+////////////////////////////////////////////////
+namespace pano {
+namespace experimental {
+// ToMesh
+template <class T, class PointConvertT>
+Mesh<std::decay_t<typename FunctionTraits<PointConvertT>::ResultType>>
+ToMesh(const LineDrawing<T> &ld, PointConvertT cvtFun) {
   Mesh<std::decay_t<typename FunctionTraits<PointConvertT>::ResultType>> mesh;
   using VHandle = VertHandle;
   mesh.internalVertices().reserve(ld.corners.size());
@@ -90,9 +125,9 @@ ToMesh(const LineDrawing<T> &ld, PointConvertT cvtFun = PointConvertT()) {
 }
 
 // ToLineDrawing
-template <class T, class H, class F, class VertConvertT = std::identity<T>>
+template <class T, class H, class F, class VertConvertT>
 LineDrawing<std::decay_t<typename FunctionTraits<VertConvertT>::ResultType>>
-ToLineDrawing(const Mesh<T, H, F> &mesh, VertConvertT cvtFun = VertConvertT()) {
+ToLineDrawing(const Mesh<T, H, F> &mesh, VertConvertT cvtFun) {
   LineDrawing<std::decay_t<typename FunctionTraits<VertConvertT>::ResultType>>
       ld;
   using VHandle = VertHandle;
@@ -144,193 +179,6 @@ auto Transform(LineDrawing<T> &&in, const FunT &fun) {
   out.line2type = std::move(in.line2type);
   out.face2corners = std::move(in.face2corners);
   return out;
-}
-
-// SubMesh
-struct SubMesh {
-  std::unordered_set<VertHandle> vhs;
-  std::unordered_set<HalfHandle> hhs;
-  std::unordered_set<FaceHandle> fhs;
-  int drfub;
-  template <class ArchiverT> void serialize(ArchiverT &ar) {
-    ar(vhs, hhs, fhs, drfub);
-  }
-};
-
-// ExtractSubMeshes
-// - HalfEdgeColinearFunT: (HalfEdgeIterT hhsBegin, HalfEdgeIterT hhsEnd) ->
-// bool
-template <class VertDataT, class HalfDataT, class FaceDataT,
-          class HalfEdgeColinearFunT>
-std::vector<SubMesh>
-ExtractSubMeshes(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-                 HalfEdgeColinearFunT colinearFun, int drfTryNum = 10) {
-  using MeshT = Mesh<VertDataT, HalfDataT, FaceDataT>;
-  std::unordered_map<int, std::unordered_set<VertHandle>> cc2vhs;
-  HandledTable<VertHandle, int> vh2ccid(mesh.internalVertices().size(), -1);
-  int nccs = ConnectedComponents(
-      mesh, [&cc2vhs, &vh2ccid](const MeshT &, VertHandle vh, int ccid) {
-        cc2vhs[ccid].insert(vh);
-        vh2ccid[vh] = ccid;
-      });
-
-  std::vector<SubMesh> subMeshes(nccs);
-  for (int i = 0; i < nccs; i++) {
-    subMeshes[i].vhs = std::move(cc2vhs[i]);
-  }
-
-  HandledTable<HalfHandle, int> hh2ccid(mesh.internalHalfEdges().size(), -1);
-  for (auto &h : mesh.halfedges()) {
-    assert(vh2ccid[h.topo.from()] == vh2ccid[h.topo.to()]);
-    int ccid = vh2ccid[h.topo.from()];
-    subMeshes[ccid].hhs.insert(h.topo.hd);
-    hh2ccid[h.topo.hd] = ccid;
-  }
-
-  for (auto &f : mesh.faces()) {
-    int ccid = hh2ccid[f.topo.halfedges.front()];
-    assert(std::all_of(
-        f.topo.halfedges.begin(), f.topo.halfedges.end(),
-        [ccid, &hh2ccid](HalfHandle hh) { return hh2ccid[hh] == ccid; }));
-    subMeshes[ccid].fhs.insert(f.topo.hd);
-  }
-
-  // compute drfub
-  std::default_random_engine rng;
-  for (int i = 0; i < nccs; i++) {
-    std::vector<FaceHandle> fhs(subMeshes[i].fhs.begin(),
-                                subMeshes[i].fhs.end());
-    subMeshes[i].drfub = 0;
-    for (int k = 0; k < drfTryNum; k++) {
-      std::shuffle(fhs.begin(), fhs.end(), rng);
-      int ub = FindUpperBoundOfDRF(mesh, fhs.begin(), fhs.end(), colinearFun);
-      if (subMeshes[i].drfub < ub) {
-        subMeshes[i].drfub = ub;
-      }
-    }
-  }
-
-  return subMeshes;
-}
-
-
-// Reconstruct (TPAMI 2008, Plane Based Optimization ... )
-// - PlaneObjectiveFunT: ( ((FaceHandle)[int]->double) fh2planeeq) -> double
-// - VertDataToDirectionFunT: (VertDataT) -> Vec3
-template <class VertDataT, class HalfDataT, class FaceDataT,
-          class PlaneObjectiveFunT,
-          class VertDataToDirectionFunT = std::identity<VertDataT>>
-std::unordered_map<FaceHandle, Plane3>
-Reconstruct(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-            const SubMesh &sub,
-            PlaneObjectiveFunT planes2energy,
-            VertDataToDirectionFunT vert2dir = VertDataToDirectionFunT(),
-            int drfSlack = 2, int maxIters = 10000) {
-
-  using namespace Eigen;
-
-  int nverts = sub.vhs.size();
-  int nhalves = sub.hhs.size();
-  int nedges = nhalves / 2;
-  int nfaces = sub.fhs.size();
-
-  int nequations = nedges * 2 - nverts;
-  int nvars = nfaces * 3;
-
-  // order faces
-  std::vector<FaceHandle> fhs(sub.fhs.begin(), sub.fhs.end());
-  std::unordered_map<FaceHandle, int> fh2varStart;
-  int varid = 0;
-  for (FaceHandle fh : fhs) {
-    fh2varStart[fh] = varid;
-    varid += 3;
-  }
-
-  // construct projection matrix P
-  MatrixXd P = MatrixXd::Zero(nequations, nvars);
-  int eid = 0;
-  for (VertHandle vh : sub.vhs) {
-    auto &hhs = mesh.topo(vh).halfedges;
-    for (auto it = std::next(hhs.begin()); it != hhs.end(); ++it) {
-      auto hh = *it;
-      assert(Contains(sub.hhs, hh));
-      HalfHandle oppohh = mesh.topo(hh).opposite;
-      FaceHandle fh1 = mesh.topo(hh).face;
-      FaceHandle fh2 = mesh.topo(oppohh).face;
-      int varStartId1 = fh2varStart.at(fh1);
-      int varStartId2 = fh2varStart.at(fh2);
-      assert(varStartId1 != -1 && varStartId2 != -1);
-
-      auto p = normalize(vert2dir(mesh.data(vh)));
-      for (int i = 0; i < 3; i++) {
-        P(eid, varStartId1 + i) = p[i];
-        P(eid, varStartId2 + i) = -p[i];
-      }
-      eid++;
-    }
-  }
-
-  // perform SVD on P
-  // P = USV^t
-  JacobiSVD<MatrixXd> svd(P, ComputeFullV);
-  auto deltas = svd.singularValues(); // decreasing order defaultly
-  auto V = svd.matrixV();
-  assert(V.cols() == nvars);
-  assert(sub.drfub + drfSlack <= nvars);
-  // see Algorithm 2 of the paper
-  MatrixXd H = V.rightCols(sub.drfub + drfSlack);
-  assert(H.cols() == sub.drfub + drfSlack && H.rows() == nvars);
-
-  // initialize vars
-  VectorXd X = VectorXd::Ones(H.cols());
-
-  std::default_random_engine rng;
-  SimulatedAnnealing(
-      X,
-      [&planes2energy, &H, &fh2varStart](const VectorXd &curX) -> double {
-        VectorXd planeEqVec = H * curX;
-        planeEqVec /= planeEqVec.cwiseAbs().maxCoeff();
-        return planes2energy(
-            [&planeEqVec, &fh2varStart](FaceHandle fh) -> const double * {
-              return planeEqVec.data() + fh2varStart.at(fh);
-            });
-      },
-      [](int iter) { return std::max(1.0 / log(log(iter + 2)), 1e-10); }, // temperature
-      [maxIters](VectorXd curX, int iter, auto &&forEachNeighborFun) {
-        if (iter >= maxIters) {
-          return;
-        }
-        double step = std::max(1.0 / log(iter + 2), 1e-10);
-        for (int i = 0; i < curX.size(); i++) {
-          double curXHere = curX[i];
-          curX[i] = curXHere + step;
-          forEachNeighborFun(curX);
-          curX[i] = curXHere - step;
-          forEachNeighborFun(curX);
-          curX[i] = curXHere;
-        }
-      },
-      rng);
-
-  // convert to planes
-  std::unordered_map<FaceHandle, Plane3> planes;
-  VectorXd planeEqVec = H * X;
-  for (FaceHandle fh : fhs) {
-    int varStart = fh2varStart[fh];
-    planes[fh] =
-        Plane3FromEquation(planeEqVec[varStart], planeEqVec[varStart + 1],
-                           planeEqVec[varStart + 2]);
-  }
-  return planes;
-}
-}
-
-
-namespace core {
-template <class PointT>
-inline auto
-BoundingBox(const pano::experimental::LineDrawing<PointT> &drawing) {
-  return BoundingBoxOfContainer(drawing.corners);
 }
 }
 }

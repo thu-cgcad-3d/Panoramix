@@ -5,7 +5,6 @@
 
 namespace pano {
 namespace test {
-
 std::string ProjectDataDirStrings::Base = PANORAMIX_TEST_DATA_DIR_STR;
 std::string ProjectDataDirStrings::Normal = PANORAMIX_TEST_DATA_DIR_STR "/normal";
 std::string ProjectDataDirStrings::PanoramaIndoor =
@@ -18,8 +17,6 @@ std::string ProjectDataDirStrings::LocalManhattan =
     PANORAMIX_TEST_DATA_DIR_STR "/localmanh";
 std::string ProjectDataDirStrings::MeshSMF =
     PANORAMIX_TEST_DATA_DIR_STR "/mesh/smf";
-std::string ProjectDataDirStrings::Scripts =
-    PANORAMIX_TEST_DATA_DIR_STR "/scripts";
 std::string ProjectDataDirStrings::BPTests =
     PANORAMIX_TEST_DATA_DIR_STR "/bptests";
 }
@@ -29,8 +26,8 @@ int main(int argc, char *argv[], char *envp[]) {
   pano::gui::Singleton::SetCmdArgs(argc, argv, envp);
   testing::InitGoogleTest(&argc, argv);
 
-  // testing::GTEST_FLAG(catch_exceptions) = false;
-  // testing::GTEST_FLAG(throw_on_failure) = true;
+  //testing::GTEST_FLAG(catch_exceptions) = false;
+  //testing::GTEST_FLAG(throw_on_failure) = true;
   // testing::GTEST_FLAG(filter) = "MatlabEngine.*";
   // testing::GTEST_FLAG(filter) = "BasicType.Line";
   // testing::GTEST_FLAG(filter) = "BasicType.VecCast";
@@ -68,7 +65,7 @@ int main(int argc, char *argv[], char *envp[]) {
   // testing::GTEST_FLAG(filter) = "Feature.SegmentationExtractorInPanorama";
   // testing::GTEST_FLAG(filter) = "Meta.WhatOf";
   // testing::GTEST_FLAG(filter) = "Mesh.Basic";
-  testing::GTEST_FLAG(filter) = "AlgorithmTest.SimulatedAnnealing";
+  // testing::GTEST_FLAG(filter) = "AlgorithmTest.SimulatedAnnealing";
 
   return RUN_ALL_TESTS();
 }

@@ -25,8 +25,8 @@ public:
       : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()),
         _bbox(bboxFun) {}
 
-  template <class IteratorT>
-  inline RTreeSet(IteratorT begin, IteratorT end,
+  template <class IterT>
+  inline RTreeSet(IterT begin, IterT end,
                   const BoundingBoxFunctorT &bboxFun = BoundingBoxFunctorT())
       : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()),
         _bbox(bboxFun) {
@@ -55,7 +55,7 @@ public:
     _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
   }
 
-  template <class IteratorT> void insert(IteratorT begin, IteratorT end) {
+  template <class IterT> void insert(IterT begin, IterT end) {
     while (begin != end) {
       insert(*begin);
       ++begin;
@@ -92,8 +92,8 @@ public:
                third_party::RTree<std::pair<T, ValT>, ValueType, Dimension>>()),
         _bbox(bboxFun) {}
 
-  template <class IteratorT>
-  inline RTreeMap(IteratorT begin, IteratorT end,
+  template <class IterT>
+  inline RTreeMap(IterT begin, IterT end,
                   const BoundingBoxFunctorT &bboxFun = BoundingBoxFunctorT())
       : _rtree(std::make_unique<
                third_party::RTree<std::pair<T, ValT>, ValueType, Dimension>>()),
@@ -128,7 +128,7 @@ public:
                    std::make_pair(key, val));
   }
 
-  template <class IteratorT> void insert(IteratorT begin, IteratorT end) {
+  template <class IterT> void insert(IterT begin, IterT end) {
     while (begin != end) {
       insert(*begin);
       ++begin;
@@ -161,8 +161,8 @@ public:
       : _rtree(
             std::make_unique<third_party::RTree<T, ValueType, Dimension>>()) {}
 
-  template <class IteratorT>
-  inline RTree(IteratorT begin, IteratorT end)
+  template <class IterT>
+  inline RTree(IterT begin, IterT end)
       : _rtree(
             std::make_unique<third_party::RTree<T, ValueType, Dimension>>()) {
     insert(begin, end);
@@ -191,7 +191,7 @@ public:
     _rtree->Insert(p.first.minCorner.val, p.first.maxCorner.val, p.second);
   }
 
-  template <class IteratorT> void insert(IteratorT begin, IteratorT end) {
+  template <class IterT> void insert(IterT begin, IterT end) {
     while (begin != end) {
       insert(*begin);
       ++begin;
@@ -226,8 +226,8 @@ public:
       : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()),
         _getBoundingBox(getBB) {}
 
-  template <class IteratorT>
-  inline RTreeWrapper(IteratorT begin, IteratorT end,
+  template <class IterT>
+  inline RTreeWrapper(IterT begin, IterT end,
                       BoundingBoxFunctorT getBB = BoundingBoxFunctorT())
       : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()),
         _getBoundingBox(getBB) {
@@ -281,7 +281,7 @@ public:
     _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
   }
 
-  template <class IteratorT> void insert(IteratorT begin, IteratorT end) {
+  template <class IterT> void insert(IterT begin, IterT end) {
     while (begin != end) {
       insert(*begin);
       ++begin;
@@ -336,10 +336,10 @@ public:
   inline MaxHeap(const ScoreCompareT &cmp = ScoreCompareT())
       : _scoreCompare(cmp) {}
 
-  template <class IteratorT, class = std::enable_if_t<std::is_same<
-                                 std::iterator_traits<IteratorT>::value_type,
+  template <class IterT, class = std::enable_if_t<std::is_same<
+                                 std::iterator_traits<IterT>::value_type,
                                  core::Scored<KeyT, ScoreT>>::value>>
-  inline MaxHeap(IteratorT begin, IteratorT end,
+  inline MaxHeap(IterT begin, IterT end,
                  const ScoreCompareT &cmp = ScoreCompareT())
       : _scoreCompare(cmp) {
     _data.reserve(std::distance(begin, end));
@@ -351,10 +351,10 @@ public:
     makeMaxHeap();
   }
 
-  template <class IteratorT,
+  template <class IterT,
             class = std::enable_if_t<std::is_same<
-                std::iterator_traits<IteratorT>::value_type, KeyT>::value>>
-  inline MaxHeap(IteratorT vbegin, IteratorT vend,
+                std::iterator_traits<IterT>::value_type, KeyT>::value>>
+  inline MaxHeap(IterT vbegin, IterT vend,
                  const ScoreT &defaultScore = ScoreT(),
                  const ScoreCompareT &cmp = ScoreCompareT())
       : _scoreCompare(cmp) {
@@ -367,14 +367,14 @@ public:
     // makeMaxHeap(); no need to make heap since all scores are same
   }
 
-  template <class IteratorT, class FuncT,
+  template <class IterT, class FuncT,
             class = std::enable_if_t<
-                std::is_same<std::iterator_traits<IteratorT>::value_type,
+                std::is_same<std::iterator_traits<IterT>::value_type,
                              KeyT>::value &&
                 std::is_same<
-                    decltype(std::declval<FuncT>()(*std::declval<IteratorT>())),
+                    decltype(std::declval<FuncT>()(*std::declval<IterT>())),
                     ScoreT>::value>>
-  inline MaxHeap(IteratorT vbegin, IteratorT vend, FuncT &&fun) {
+  inline MaxHeap(IterT vbegin, IterT vend, FuncT &&fun) {
     _data.reserve(std::distance(vbegin, vend));
     while (vbegin != vend) {
       _data.push_back(core::ScoreAs(*vbegin, fun(*vbegin)));
@@ -640,7 +640,7 @@ template <class T> class MergeFindSet {
 
 public:
   MergeFindSet() {}
-  template <class IteratorT> MergeFindSet(IteratorT b, IteratorT e) {
+  template <class IterT> MergeFindSet(IterT b, IterT e) {
     init(b, e);
   }
 
@@ -669,7 +669,7 @@ public:
   }
 
 private:
-  template <class IteratorT> void init(IteratorT b, IteratorT e) {
+  template <class IterT> void init(IterT b, IterT e) {
     _elements.reserve(std::distance(b, e));
     int i = 0;
     _nsets = 0;

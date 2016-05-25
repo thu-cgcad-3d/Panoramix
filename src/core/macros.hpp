@@ -11,6 +11,12 @@
 namespace pano {
 namespace core {
 
+#define ASSERT_OR_PANIC(cond)                                                  \
+  if (!cond) {                                                                 \
+    std::cerr << #cond << std::endl;                                           \
+    std::exit(0);                                                              \
+  }
+
 #define CONCAT_IMPL(x, y) x##y
 #define MACRO_CONCAT(x, y) CONCAT_IMPL(x, y)
 
@@ -66,7 +72,5 @@ namespace core {
 #define WARNNING(...)                                                          \
   std::cout << "[WARNNING!] #######" << (std::string("  ") + __VA_ARGS__)      \
             << " #######" << std::endl
-
-#define pano_unstable
 }
 }

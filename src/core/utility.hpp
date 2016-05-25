@@ -1,8 +1,9 @@
 #pragma once
 
-#include "rtree.h"
 #include <Eigen/Dense>
 #include <iterator>
+
+#include "rtree.h"
 
 #include "basic_types.hpp"
 
@@ -45,23 +46,23 @@ inline std::ostream &PrintWithSeperator(SepT &&sep, const Ts &... args) {
 }
 // Println
 template <class... Ts> inline std::ostream &Println(const Ts &... args) {
-  return Print(args...) << std::endl;
+  return Print(args...) << '\n';
 }
 // PrintWithSeperator
 template <class SepT, class... Ts>
 inline std::ostream &PrintlnWithSeperator(SepT &&sep, const Ts &... args) {
-  return PrintToWithSeperator(std::cout, sep, args...) << std::endl;
+  return PrintToWithSeperator(std::cout, sep, args...) << '\n';
 }
 
 // test value
 // can be used to check whether NaN exists by invoking: HasValue(a, std::isnan)
-template <class TesterT> inline bool HasValue(double v, const TesterT &tester) {
+template <class TesterT> inline bool HasValue(double v, TesterT tester) {
   return tester(v);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Vec<T, N> &v, const TesterT &tester) {
+inline bool HasValue(const Vec<T, N> &v, TesterT tester) {
   for (int i = 0; i < N; i++) {
     if (tester(v[i]))
       return true;
@@ -70,48 +71,48 @@ inline bool HasValue(const Vec<T, N> &v, const TesterT &tester) {
 }
 
 template <class T, class S, class TesterT>
-inline bool HasValue(const Ratio<T, S> &r, const TesterT &tester) {
+inline bool HasValue(const Ratio<T, S> &r, TesterT tester) {
   return HasValue(r.numerator, tester) || HasValue(r.denominator, tester);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Line<T, N> &v, const TesterT &tester) {
+inline bool HasValue(const Line<T, N> &v, TesterT tester) {
   return HasValue(v.first, tester) || HasValue(v.second, tester);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Ray<T, N> &v, const TesterT &tester) {
+inline bool HasValue(const Ray<T, N> &v, TesterT tester) {
   return HasValue(v.anchor, tester) || HasValue(v.direction, tester);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Plane<T, N> &p, const TesterT &tester) {
+inline bool HasValue(const Plane<T, N> &p, TesterT tester) {
   return HasValue(p.anchor, tester) || HasValue(p.normal, tester);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Sphere<T, N> &s, const TesterT &tester) {
-  return HasValue(s.center) || tester(s.radius);
+inline bool HasValue(const Sphere<T, N> &s, TesterT tester) {
+  return HasValue(s.center, tester) || HasValue(s.radius, tester);
 }
 
 template <class T, int N, class TesterT,
           class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Box<T, N> &b, const TesterT &tester) {
+inline bool HasValue(const Box<T, N> &b, TesterT tester) {
   return HasValue(b.minCorner, tester) || HasValue(b.maxCorner, tester);
 }
 
 template <class T1, class T2, class TesterT>
-inline bool HasValue(const std::pair<T1, T2> &p, const TesterT &tester) {
-  return HasValue(p.first) || HasValue(p.second);
+inline bool HasValue(const std::pair<T1, T2> &p, TesterT tester) {
+  return HasValue(p.first, tester) || HasValue(p.second, tester);
 }
 
 template <class T, class AllocT, class TesterT>
-inline bool HasValue(const std::vector<T, AllocT> &v, const TesterT &tester) {
-  for (auto &e : v) {
+inline bool HasValue(const std::vector<T, AllocT> &v, TesterT tester) {
+  for (auto &&e : v) {
     if (HasValue(e, tester))
       return true;
   }
@@ -119,8 +120,8 @@ inline bool HasValue(const std::vector<T, AllocT> &v, const TesterT &tester) {
 }
 
 template <class T, class TesterT>
-inline bool HasValue(std::initializer_list<T> list, const TesterT &tester) {
-  for (auto &e : list) {
+inline bool HasValue(std::initializer_list<T> list, TesterT tester) {
+  for (auto &&e : list) {
     if (HasValue(e, tester))
       return true;
   }
@@ -130,6 +131,12 @@ inline bool HasValue(std::initializer_list<T> list, const TesterT &tester) {
 template <class T, class = std::enable_if_t<std::is_floating_point<T>::value>>
 inline bool IsInfOrNaN(const T &v) {
   return std::isinf(v) || std::isnan(v);
+}
+
+template <class T> inline T NonZeroize(T d, T epsilon = 1e-6) {
+  assert(epsilon >= 0);
+  return -epsilon < d && d < 0 ? -epsilon
+                               : (0 < d && d < +epsilon ? +epsilon : d);
 }
 
 // contains
@@ -168,20 +175,16 @@ inline bool Contains(const std::unordered_set<KeyT, HasherT, KeyeqT, AllocT> &m,
   return m.find(k) != m.end();
 }
 
-inline bool Contains(const Image &im, const Pixel &pixel) {
-  return 0 <= pixel.x && pixel.x < im.cols && 0 <= pixel.y && pixel.y < im.rows;
+template <class T>
+inline std::enable_if_t<std::is_integral<T>::value, bool>
+Contains(const Size_<T> &sz, const Pixel &pixel) {
+  return 0 <= pixel.x && pixel.x < sz.width && 0 <= pixel.y &&
+         pixel.y < sz.height;
 }
-
-template <class T> bool Contains(const ImageOf<T> &im, const Pixel &pixel) {
-  return 0 <= pixel.x && pixel.x < im.cols && 0 <= pixel.y && pixel.y < im.rows;
-}
-
-bool Contains(const Polygon3 &poly, const Point2 &p);
 
 // all same
-template <class IteratorT, class EqualT = std::equal_to<void>>
-inline bool AllSameInRange(IteratorT begin, IteratorT end,
-                           EqualT eq = EqualT()) {
+template <class IterT, class EqualT = std::equal_to<void>>
+inline bool AllSameInRange(IterT begin, IterT end, EqualT eq = EqualT()) {
   for (auto i = begin; i != end; ++i) {
     if (!eq(*i, *begin))
       return false;
@@ -222,8 +225,8 @@ template <class T, class K> inline T Pitfall(T x, K sigma) {
 }
 
 // entropy [-factor, 0]
-template <class IteratorT, class T = double>
-inline T EntropyOfRange(IteratorT begin, IteratorT end, const T &factor = 1.0) {
+template <class IterT, class T = double>
+inline T EntropyOfRange(IterT begin, IterT end, const T &factor = 1.0) {
   T e = 0;
   while (begin != end) {
     auto &v = *begin;
@@ -294,15 +297,14 @@ struct DefaultDistanceFunctor {
   }
 };
 
-template <class IterT> inline double AccumulatedLength(IterT begin, IterT end) {
-  double dist = 0.0;
+// AccumulatedLength
+template <class IterT, class T = double>
+inline T AccumulatedLength(IterT begin, IterT end, T base = (T)0) {
   for (auto it = begin, it2 = std::next(begin); it2 != end; ++it, ++it2) {
-    dist += Distance(*it, *it2);
+    base += Distance(*it, *it2);
   }
-  return dist;
+  return base;
 }
-
-/// bounding box functions for basic types
 
 // for scalars
 template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
@@ -408,20 +410,17 @@ inline auto BoundingBox(const Decorated<T, D> &s)
 }
 
 // return null box if s.enabled == false
-template <class T>
-inline auto BoundingBox(const Enabled<T> &s) {
+template <class T> inline auto BoundingBox(const Enabled<T> &s) {
   using BoxType = decltype(BoundingBox(s.component));
   return s.enabled ? BoundingBox(s.component) : BoxType();
 }
 
 // bounding box of range
-template <class IteratorT>
-auto BoundingBoxOfRange(IteratorT begin, IteratorT end) {
+template <class IterT> auto BoundingBoxOfRange(IterT begin, IterT end) {
   using BoxType = decltype(BoundingBox(*begin));
   BoxType box; // a null box
   while (begin != end) {
-    auto b = BoundingBox(*begin);
-    box |= b;
+    box |= BoundingBox(*begin);
     ++begin;
   }
   return box;
@@ -439,13 +438,12 @@ inline auto BoundingBoxOfContainer(std::initializer_list<T> ilist) {
 }
 
 // bounding box of pair-range
-template <class PairIteratorT>
-auto BoundingBoxOfPairRange(PairIteratorT begin, PairIteratorT end) {
+template <class PairIterT>
+auto BoundingBoxOfPairRange(PairIterT begin, PairIterT end) {
   using BoxType = decltype(BoundingBox((*begin).second));
   BoxType box;
   while (begin != end) {
-    auto b = BoundingBox((*begin).second);
-    box |= b;
+    box |= BoundingBox((*begin).second);
     ++begin;
   }
   return box;
@@ -453,8 +451,7 @@ auto BoundingBoxOfPairRange(PairIteratorT begin, PairIteratorT end) {
 
 // the default bounding box functor
 struct DefaultBoundingBoxFunctor {
-  template <class T>
-  inline auto operator()(const T &t) const {
+  template <class T> inline auto operator()(const T &t) const {
     return BoundingBox(t);
   }
 };
@@ -484,6 +481,313 @@ inline int DiracDelta(const T &v,
   return std::abs(v) <= epsilon ? 1 : 0;
 }
 
+// [low, high] for float v, [low, high) for nonfloat v
+template <class T, class K1, class K2>
+inline bool IsBetween(const T &v, const K1 &low, const K2 &high);
+
+// [low, high]
+template <class T, class K1, class K2>
+inline T BoundBetween(const T &v, const K1 &low, const K2 &high) {
+  if (v < low)
+    return low;
+  return v < high ? v : high;
+}
+
+// returns [low, high)
+template <class T>
+inline T WrapBetween(const T &input, const T &low, const T &high);
+
+template <class T, int N>
+T EncodeSubscriptToIndex(const Point<T, N> &subscript,
+                         const Vec<T, N> &dimension) {
+  T index = subscript[0];
+  for (int i = 1; i < N; i++) {
+    index = index * dimension[i] + subscript[i];
+  }
+  return index;
+}
+
+inline int EncodeSubscriptToIndex(const Pixel &p, const Sizei &size) {
+  return p.x * size.height + p.y;
+}
+
+template <class T, int N>
+inline Point<T, N> DecodeIndexToSubscript(T index, const Vec<T, N> &dimension);
+
+inline Pixel DecodeIndexToSubscript(int index, const Sizei &size) {
+  return Pixel(index / size.height, index % size.height);
+}
+
+// for vectors
+template <class T> inline Vec<T, 2> PerpendicularDirection(const Vec<T, 2> &d) {
+  return Vec<T, 2>(-d(1), d(0));
+}
+
+template <class T>
+inline Vec<T, 2> LeftPerpendicularDirectiion(const Vec<T, 2> &d) {
+  return Vec<T, 2>(-d(1), d(0));
+}
+
+template <class T>
+inline Vec<T, 2> RightPerpendicularDirectiion(const Vec<T, 2> &d) {
+  return Vec<T, 2>(d(1), -d(0));
+}
+
+template <class T>
+inline std::pair<Vec<T, 3>, Vec<T, 3>>
+ProposeXYDirectionsFromZDirection(const Vec<T, 3> &z) {
+  auto y = z.cross(Vec<T, 3>(1, 0, 0));
+  if (y(0) == 0 && y(1) == 0 && y(2) == 0) {
+    y = z.cross(Vec<T, 3>(0, 1, 0));
+  }
+  auto x = y.cross(z);
+  return std::make_pair(normalize(x), normalize(y));
+}
+
+// returns [0, pi]
+template <class T, int N>
+inline T AngleBetweenDirected(const Vec<T, N> &v1, const Vec<T, N> &v2) {
+  auto s = v1.dot(v2) / norm(v1) / norm(v2);
+  return s >= 1.0 - 1e-9 ? 0.0 : (s <= -1.0 + 1e-9 ? M_PI : acos(s));
+}
+
+// returns [0, pi/2]
+template <class T, int N>
+inline T AngleBetweenUndirected(const Vec<T, N> &v1, const Vec<T, N> &v2) {
+  auto s = abs(v1.dot(v2) / norm(v1) / norm(v2));
+  return s >= 1.0 ? 0.0 : acos(s);
+}
+
+template <class T>
+inline T SignedAngle(const Vec<T, 2> &from, const Vec<T, 2> &to,
+                     bool clockwiseAsPositive = true) {
+  double angle = atan2(-from(0) * to(1) + to(0) * from(1),
+                       from(1) * to(1) + from(0) * to(0));
+  return clockwiseAsPositive ? angle : -angle;
+}
+
+template <class T, int N>
+inline bool IsFuzzyParallel(const Vec<T, N> &v1, const Vec<T, N> &v2,
+                            const T &epsilon = 0.1) {
+  auto s = v1.dot(v2) / norm(v1) / norm(v2);
+  return s >= 1.0 - epsilon || s <= -1.0 + epsilon;
+}
+
+template <class T, int N>
+inline bool IsFuzzyPerpendicular(const Vec<T, N> &v1, const Vec<T, N> &v2,
+                                 const T &epsilon = 0.1) {
+  auto s = v1.dot(v2) / norm(v1) / norm(v2);
+  return abs(s) <= epsilon;
+}
+
+template <class PointIterT, class T>
+inline bool IsFuzzyColinear(PointIterT points_begin, PointIterT points_end,
+                            const T &epsilon = 0.1);
+
+// for lines and points
+// returns projection position
+template <class T, int N>
+PositionOnLine<T, N> ProjectionOfPointOnLine(const Point<T, N> &p,
+                                             const Line<T, N> &line);
+
+// returns (distance, nearest point)
+template <class T, int N>
+std::pair<T, Point<T, N>> DistanceFromPointToLine(const Point<T, N> &p,
+                                                  const Ray<T, N> &line);
+
+template <class T, int N>
+inline T Distance(const Point<T, N> &p, const Ray<T, N> &line) {
+  return DistanceFromPointToLine(p, line).first;
+}
+template <class T, int N>
+inline T Distance(const Ray<T, N> &line, const Point<T, N> &p) {
+  return DistanceFromPointToLine(p, line).first;
+}
+
+// returns signed distance
+template <class T>
+T SignedDistanceFromPointToLine(const Point<T, 2> &p, const Ray<T, 2> &line);
+
+// returns (distance, nearest position)
+template <class T, int N>
+std::pair<T, PositionOnLine<T, N>>
+DistanceFromPointToLine(const Point<T, N> &p, const Line<T, N> &line);
+
+template <class T, int N>
+inline T Distance(const Point<T, N> &p, const Line<T, N> &line) {
+  return DistanceFromPointToLine(p, line).first;
+}
+template <class T, int N>
+inline T Distance(const Line<T, N> &line, const Point<T, N> &p) {
+  return DistanceFromPointToLine(p, line).first;
+}
+
+// returns (distance, (nearest point on line1, nearest point on line2))
+// see http://geomalgorithms.com/a07-_distance.html for explainations
+template <class T, int N>
+std::pair<T, std::pair<Point<T, N>, Point<T, N>>>
+DistanceBetweenTwoLines(const Ray<T, N> &line1, const Ray<T, N> &line2,
+                        T *lambda1 = nullptr, T *lambda2 = nullptr);
+
+template <class T, int N>
+inline T Distance(const Ray<T, N> &line1, const Ray<T, N> &line2) {
+  return DistanceBetweenTwoLines(line1, line2).first;
+}
+
+template <class T>
+inline Point<T, 2> Intersection(const Ray<T, 2> &line1, const Ray<T, 2> &line2);
+
+// returns (distance, (nearest position on line1, nearest position on line2))
+// see http://geomalgorithms.com/a07-_distance.html for explainations
+template <class T, int N>
+std::pair<T, std::pair<PositionOnLine<T, N>, PositionOnLine<T, N>>>
+DistanceBetweenTwoLines(const Line<T, N> &line1, const Line<T, N> &line2);
+
+template <class T, int N>
+inline T Distance(const Line<T, N> &line1, const Line<T, N> &line2) {
+  return DistanceBetweenTwoLines(line1, line2).first;
+}
+
+// intersecton between line and plane
+template <class T, int N>
+PositionOnLine<T, N> IntersectionOfLineAndPlane(const Ray<T, N> &line,
+                                                const Plane<T, N> &plane) {
+  T lambda = (plane.anchor - line.anchor).dot(plane.normal) /
+             line.direction.dot(plane.normal);
+  return PositionOnLine<T, N>(line, lambda);
+}
+
+template <class T, int N>
+inline Point<T, N> Intersection(const Ray<T, N> &line,
+                                const Plane<T, N> &plane) {
+  return IntersectionOfLineAndPlane(line, plane).position;
+}
+
+template <class T, int N>
+inline Point<T, N> Intersection(const Plane<T, N> &plane,
+                                const Ray<T, N> &line) {
+  return IntersectionOfLineAndPlane(line, plane).position;
+}
+
+// intersection o
+template <class T>
+Failable<Ray<T, 3>> IntersectionOfPlaneAndPlane(const Plane<T, 3> &p1,
+                                                const Plane<T, 3> &p2);
+
+// triangulate polygon
+// VertPoint2GetterT: (Vert) -> Point2
+// AddTriFaceFunT: (Vert, Vert, Vert) -> void
+template <class VertIterT, class VertPoint2GetterT, class AddTriFaceFunT>
+int TriangulatePolygon(VertIterT vertsBegin, VertIterT vertsEnd,
+                       VertPoint2GetterT &&getPoint2, AddTriFaceFunT &&addFace);
+
+// intersection of line and polygon
+template <class T>
+Failable<Point<T, 3>> IntersectionOfLineAndPolygon(const Ray<T, 3> &ray,
+                                                   const Polygon<T, 3> &polygon,
+                                                   T epsilon = 0);
+
+// distance from point to plane
+template <class T, int N>
+inline std::pair<T, Point<T, N>>
+DistanceFromPointToPlane(const Point<T, N> &p, const Plane<T, N> &plane);
+
+template <class T, int N>
+Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
+    const Ray<T, N> &line, const Point<T, N> *cornersData);
+
+template <class T, int N>
+inline Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
+    const Ray<T, N> &line, const std::array<Point<T, N>, N> &corners);
+
+// eigen vectors and eigen values from points
+template <class T, int N>
+std::array<Scored<Vec<T, N>, T>, N>
+EigenVectorAndValuesFromPoints(const Point<T, N> *ptsData, size_t n);
+
+template <class T, int N, int M>
+inline std::array<Scored<Vec<T, N>, T>, N>
+EigenVectorAndValuesFromPoints(const Point<T, N> (&ptsData)[M]);
+
+template <class T, int N>
+inline std::array<Scored<Vec<T, N>, T>, N>
+EigenVectorAndValuesFromPoints(const std::vector<Point<T, N>> &pts);
+
+// rotate a vec3 toward another with given rotation angle
+// resulted vec is normalized
+template <class T>
+inline Vec<T, 3> RotateDirection(const Vec<T, 3> &originalDirection,
+                                 const Vec<T, 3> &toDirection, double angle);
+
+// on left
+template <class T>
+inline bool IsOnLeftSide(const Point<T, 2> &p, const Point<T, 2> &a,
+                         const Point<T, 2> &b);
+
+// area of triangle
+template <class T> inline T AreaOfTriangle(const T &a, const T &b, const T &c);
+
+template <class T, int N>
+inline T AreaOfTriangle(const Point<T, N> &a, const Point<T, N> &b,
+                        const Point<T, N> &c);
+
+// in triangle
+template <class T>
+inline bool IsInTriangle(const Point<T, 2> &p, const Point<T, 2> &a,
+                         const Point<T, 2> &b, const Point<T, 2> &c);
+
+template <int N, class T, int M>
+inline Vec<T, N> TransformCoordinate(const Point<T, M> &p,
+                                     const std::vector<Vec<T, M>> &axis,
+                                     const Point<T, M> &origin = Point<T, M>());
+
+// generate Fibonacci Directions
+template <class AddVec3FunT>
+inline void GenerateFibonacciDirections(int n, AddVec3FunT &&addVec3);
+
+// mesh makers
+// make tetrahedron
+template <class AddVertex3FunT, class AddTriFaceFunT>
+void MakeTetrahedron(AddVertex3FunT &&addVertex, AddTriFaceFunT &&addFace);
+
+// make quad faced cube
+template <class AddVertex3FunT, class AddQuadFaceFunT>
+void MakeQuadFacedCube(AddVertex3FunT &&addVertex, AddQuadFaceFunT &&addFace);
+
+// make tri faced cube
+template <class AddVertex3FunT, class AddTriFaceFunT>
+void MakeTriFacedCube(AddVertex3FunT &&addVertex, AddTriFaceFunT &&addFace);
+
+// make quad faced sphere
+template <class AddVertex3FunT, class AddQuadFaceFunT>
+void MakeQuadFacedSphere(AddVertex3FunT &&addVertex, AddQuadFaceFunT &&addFace,
+                         int m, int n);
+
+// make tri faced sphere
+template <class AddVertex3FunT, class AddTriFaceFunT>
+void MakeTriFacedSphere(AddVertex3FunT &&addVertex, AddTriFaceFunT &&addFace,
+                        int m, int n);
+
+// make an icosahedron
+template <class AddVertex3FunT, class AddTriFaceFunT>
+void MakeIcosahedron(AddVertex3FunT &&addVertex, AddTriFaceFunT &&addFace);
+
+// make mesh from simple mesh file
+template <class AddVertex3FunT, class AddTriFaceFunT>
+void MakeTriMeshFromSMFFile(AddVertex3FunT &&addVertex,
+                            AddTriFaceFunT &&addFace,
+                            const std::string &fileName);
+}
+}
+
+
+
+////////////////////////////////////////////////
+//// implementations
+////////////////////////////////////////////////
+namespace pano {
+namespace core {
+
 namespace {
 // [low, high] for float v
 template <class T, class K1, class K2>
@@ -503,14 +807,6 @@ inline bool IsBetweenPrivate(const T &v, const K1 &low, const K2 &high,
 template <class T, class K1, class K2>
 inline bool IsBetween(const T &v, const K1 &low, const K2 &high) {
   return IsBetweenPrivate(v, low, high, std::is_floating_point<T>());
-}
-
-// [low, high]
-template <class T, class K1, class K2>
-inline T BoundBetween(const T &v, const K1 &low, const K2 &high) {
-  if (v < low)
-    return low;
-  return v < high ? v : high;
 }
 
 namespace {
@@ -545,20 +841,6 @@ inline T WrapBetween(const T &input, const T &low, const T &high) {
   return WrapBetweenPrivate(input, low, high, std::is_integral<T>());
 }
 
-template <class T, int N>
-T EncodeSubscriptToIndex(const Point<T, N> &subscript,
-                         const Vec<T, N> &dimension) {
-  T index = subscript[0];
-  for (int i = 1; i < N; i++) {
-    index = index * dimension[i] + subscript[i];
-  }
-  return index;
-}
-
-inline int EncodeSubscriptToIndex(const Pixel &p, const Sizei &size) {
-  return p.x * size.height + p.y;
-}
-
 namespace {
 template <class T, int N>
 Point<T, N> DecodeIndexToSubscriptPrivate(T index, const Vec<T, N> &dimension,
@@ -588,72 +870,26 @@ inline Point<T, N> DecodeIndexToSubscript(T index, const Vec<T, N> &dimension) {
   return DecodeIndexToSubscriptPrivate(index, dimension, std::is_integral<T>());
 }
 
-inline Pixel DecodeIndexToSubscript(int index, const Sizei &size) {
-  return Pixel(index / size.height, index % size.height);
-}
-
-// for vectors
-template <class T> inline Vec<T, 2> PerpendicularDirection(const Vec<T, 2> &d) {
-  return Vec<T, 2>(-d(1), d(0));
-}
-
-template <class T>
-inline Vec<T, 2> LeftPerpendicularDirectiion(const Vec<T, 2> &d) {
-  return Vec<T, 2>(-d(1), d(0));
-}
-
-template <class T>
-inline Vec<T, 2> RightPerpendicularDirectiion(const Vec<T, 2> &d) {
-  return Vec<T, 2>(d(1), -d(0));
-}
-
-template <class T>
-inline std::pair<Vec<T, 3>, Vec<T, 3>>
-ProposeXYDirectionsFromZDirection(const Vec<T, 3> &z) {
-  auto y = z.cross(Vec<T, 3>(1, 0, 0));
-  if (y(0) == 0 && y(1) == 0 && y(2) == 0) {
-    y = z.cross(Vec<T, 3>(0, 1, 0));
+template <class PointIterT, class T>
+inline bool IsFuzzyColinear(PointIterT points_begin, PointIterT points_end,
+                            const T &epsilon) {
+  if (points_begin == points_end) {
+    return true;
   }
-  auto x = y.cross(z);
-  return std::make_pair(normalize(x), normalize(y));
-}
-
-// returns [0, pi]
-template <class T, int N>
-inline T AngleBetweenDirections(const Vec<T, N> &v1, const Vec<T, N> &v2) {
-  auto s = v1.dot(v2) / norm(v1) / norm(v2);
-  return s >= 1.0 - 1e-9 ? 0.0 : (s <= -1.0 + 1e-9 ? M_PI : acos(s));
-}
-
-// returns [0, pi/2]
-template <class T, int N>
-inline T AngleBetweenUndirectedVectors(const Vec<T, N> &v1,
-                                       const Vec<T, N> &v2) {
-  auto s = abs(v1.dot(v2) / norm(v1) / norm(v2));
-  return s >= 1.0 ? 0.0 : acos(s);
-}
-
-template <class T, int N>
-inline bool IsFuzzyParallel(const Vec<T, N> &v1, const Vec<T, N> &v2,
-                            const T &epsilon = 0.1) {
-  auto s = v1.dot(v2) / norm(v1) / norm(v2);
-  return s >= 1.0 - epsilon || s <= -1.0 + epsilon;
-}
-
-template <class T, int N>
-inline bool IsFuzzyPerpendicular(const Vec<T, N> &v1, const Vec<T, N> &v2,
-                                 const T &epsilon = 0.1) {
-  auto s = v1.dot(v2) / norm(v1) / norm(v2);
-  return abs(s) <= epsilon;
-}
-
-template <class T>
-inline T SignedAngleBetweenDirections(const Vec<T, 2> &from,
-                                      const Vec<T, 2> &to,
-                                      bool clockwiseAsPositive = true) {
-  double angle = atan2(-from(0) * to(1) + to(0) * from(1),
-                       from(1) * to(1) + from(0) * to(0));
-  return clockwiseAsPositive ? angle : -angle;
+  using PointT = typename std::iterator_traits<PointIterT>::value_type;
+  PointT dir = PointT();
+  PointT first_point = *points_begin;
+  while (points_begin != points_end && dir == PointT()) {
+    dir = *points_begin - first_point;
+    ++points_begin;
+  }
+  while (points_begin != points_end) {
+    if (!IsFuzzyParallel(dir, *points_begin - first_point, epsilon)) {
+      return false;
+    }
+    ++points_begin;
+  }
+  return true;
 }
 
 // for lines and points
@@ -702,7 +938,7 @@ DistanceFromPointToLine(const Point<T, N> &p, const Line<T, N> &line) {
 template <class T, int N>
 std::pair<T, std::pair<Point<T, N>, Point<T, N>>>
 DistanceBetweenTwoLines(const Ray<T, N> &line1, const Ray<T, N> &line2,
-                        T *lambda1 = nullptr, T *lambda2 = nullptr) {
+                        T *lambda1, T *lambda2) {
 
   auto u = normalize(line1.direction);
   auto v = normalize(line2.direction);
@@ -733,6 +969,19 @@ DistanceBetweenTwoLines(const Ray<T, N> &line1, const Ray<T, N> &line2,
   auto p1 = line1.anchor + sc * u;
   auto p2 = line2.anchor + tc * v;
   return std::make_pair(Distance(p1, p2), std::make_pair(p1, p2));
+}
+
+template <class T>
+inline Point<T, 2> Intersection(const Ray<T, 2> &line1,
+                                const Ray<T, 2> &line2) {
+  auto eq1 = GetCoeffs(line1);
+  auto eq2 = GetCoeffs(line2);
+  auto hinterp = eq1.cross(eq2);
+  if (hinterp == Origin<3, T>()) { // lines overlapped
+    hinterp[0] = -eq1[1];
+    hinterp[1] = eq1[0];
+  }
+  return Point<T, 2>(hinterp[0], hinterp[1]) / NonZeroize(hinterp[2], 1e-10);
 }
 
 // returns (distance, (nearest position on line1, nearest position on line2))
@@ -808,15 +1057,7 @@ DistanceBetweenTwoLines(const Line<T, N> &line1, const Line<T, N> &line2) {
   return std::make_pair(dist, std::make_pair(pos1, pos2));
 }
 
-// intersecton between line and plane
-template <class T, int N>
-PositionOnLine<T, N> IntersectionOfLineAndPlane(const Ray<T, N> &line,
-                                                const Plane<T, N> &plane) {
-  T lambda = (plane.anchor - line.anchor).dot(plane.normal) /
-             line.direction.dot(plane.normal);
-  return PositionOnLine<T, N>(line, lambda);
-}
-
+// intersection o
 template <class T>
 Failable<Ray<T, 3>> IntersectionOfPlaneAndPlane(const Plane<T, 3> &p1,
                                                 const Plane<T, 3> &p2) {
@@ -832,12 +1073,14 @@ Failable<Ray<T, 3>> IntersectionOfPlaneAndPlane(const Plane<T, 3> &p1,
 }
 
 // triangulate polygon
-template <class VertIteratorT, class VertPoint2GetterT, class AddTriFaceFunT>
-int TriangulatePolygon(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
+// VertPoint2GetterT: (Vert) -> Point2
+// AddTriFaceFunT: (Vert, Vert, Vert) -> void
+template <class VertIterT, class VertPoint2GetterT, class AddTriFaceFunT>
+int TriangulatePolygon(VertIterT vertsBegin, VertIterT vertsEnd,
                        VertPoint2GetterT &&getPoint2,
                        AddTriFaceFunT &&addFace) {
 
-  using VHandleT = typename std::iterator_traits<VertIteratorT>::value_type;
+  using VHandleT = typename std::iterator_traits<VertIterT>::value_type;
   std::deque<std::vector<VHandleT>> vhGroupQ;
   vhGroupQ.emplace_back(vertsBegin, vertsEnd);
 
@@ -924,7 +1167,7 @@ int TriangulatePolygon(VertIteratorT vertsBegin, VertIteratorT vertsEnd,
 template <class T>
 Failable<Point<T, 3>> IntersectionOfLineAndPolygon(const Ray<T, 3> &ray,
                                                    const Polygon<T, 3> &polygon,
-                                                   T epsilon = 0) {
+                                                   T epsilon) {
   Vec<T, 3> x, y;
   std::tie(x, y) = ProposeXYDirectionsFromZDirection(polygon.normal);
   bool hasIntersection = false;
@@ -1104,7 +1347,7 @@ inline bool IsInTriangle(const Point<T, 2> &p, const Point<T, 2> &a,
 template <int N, class T, int M>
 inline Vec<T, N>
 TransformCoordinate(const Point<T, M> &p, const std::vector<Vec<T, M>> &axis,
-                    const Point<T, M> &origin = Point<T, M>()) {
+                    const Point<T, M> &origin) {
   assert(axis.size() >= N);
   Vec<T, N> c;
   for (int i = 0; i < N; i++)

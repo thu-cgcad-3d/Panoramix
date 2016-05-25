@@ -3,7 +3,7 @@
 #include "../core/single_view.hpp"
 #include "../core/utility.hpp"
 #include "../gui/canvas.hpp"
-#include "../gui/utility.hpp"
+#include "../gui/gui_util.hpp"
 
 #include "../panoramix.unittest.hpp"
 

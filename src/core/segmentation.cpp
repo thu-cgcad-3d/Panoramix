@@ -403,7 +403,7 @@ std::pair<Imagei, Image> SegmentImage(const Image &im, float sigma, float c,
   Imagei linesOccupation(im.size(), -1);
   for (int i = 0; i < lines.size(); i++) {
     auto &l = lines[i];
-    double spanAngle = AngleBetweenDirections(l.first, l.second);
+    double spanAngle = AngleBetweenDirected(l.first, l.second);
     std::vector<std::vector<Pixel>> pline(1);
     for (double a = 0.0; a <= spanAngle; a += 0.01) {
       auto direction = RotateDirection(l.first, l.second, a);
@@ -1005,7 +1005,7 @@ void RemoveEmbededRegionsInSegmentation(Imagei &segs, bool crossBorder) {
         if (crossBorder) {
           nb.x = (nb.x + segs.cols) % segs.cols;
         }
-        if (Contains(segs, nb)) {
+        if (Contains(segs.size(), nb)) {
           int seg2 = segs(nb);
           segNeighbors[seg1].insert(seg2);
           segNeighbors[seg2].insert(seg1);
@@ -1326,7 +1326,7 @@ void ExtractSegmentationTopology(const Imagei &segs,
           for (int x = -1; x <= 1; x++) {
             for (int y = -1; y <= 1; y++) {
               auto nextp = curp + Pixel(x, y);
-              if (!Contains(segs, nextp) && !crossBorder) {
+              if (!Contains(segs.size(), nextp) && !crossBorder) {
                 continue;
               }
               if (!Contains(pixelsForThisSegPair, nextp)) {

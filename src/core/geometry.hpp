@@ -56,7 +56,7 @@ using Vec5f = Vec<float, 5>;
 using Vec7 = Vec<double, 7>;
 using Vec7f = Vec<float, 7>;
 
-template <class T, int N> struct IsNotContainerByHand<Point<T, N>> : yes {};
+template <class T, int N> struct MarkedAsNonContainer<Point<T, N>> : yes {};
 
 // matrix
 template <class T, int M, int N> using Mat = cv::Matx<T, M, N>;
@@ -66,7 +66,7 @@ using Mat3f = Mat<float, 3, 3>;
 using Mat4f = Mat<float, 4, 4>;
 
 template <class T, int M, int N>
-struct IsNotContainerByHand<Mat<T, M, N>> : yes {};
+struct MarkedAsNonContainer<Mat<T, M, N>> : yes {};
 
 using cv::norm;
 template <class T> inline T normalize(const T &d) { return d / norm(d); }
@@ -106,23 +106,23 @@ inline std::vector<Vec<To, N>> ecast(const std::vector<Vec<From, N>> &v) {
 }
 
 template <class T, int M, int N>
-inline Vec<T, M + N> cat(const Vec<T, M> &a, const Vec<T, N> &b) {
+inline Vec<T, M + N> cat(const Mat<T, M, 1> &a, const Mat<T, N, 1> &b) {
   Vec<T, M + N> ab;
   std::copy(a.val, a.val + M, ab.val);
   std::copy(b.val, b.val + N, ab.val + M);
   return ab;
 }
 
-template <class T, int M, class K>
-inline Vec<T, M + 1> cat(const Vec<T, M> &a, const K &b) {
+template <class T, int M>
+inline Vec<T, M + 1> cat(const Mat<T, M, 1> &a, const T &b) {
   Vec<T, M + 1> ab;
   std::copy(a.val, a.val + M, ab.val);
   ab[M] = b;
   return ab;
 }
 
-template <class T, int M, class K>
-inline Vec<T, M + 1> cat(const K &a, const Vec<T, M> &b) {
+template <class T, int M>
+inline Vec<T, M + 1> cat(const T &a, const Mat<T, M, 1> &b) {
   Vec<T, M + 1> ab;
   ab.val[0] = a;
   std::copy(b.val, b.val + M, ab.val + 1);
@@ -159,7 +159,7 @@ using HPoint4 = HPoint<double, 4>;
 
 // matrix transform
 template <class T> Mat<T, 3, 3> MakeMat3Rotate(const Vec<T, 3> &axis, T angle) {
-  auto a = core::normalize(axis);
+  auto a = normalize(axis);
   double l = a[0], m = a[1], n = a[2];
   double cosv = cos(angle), sinv = sin(angle);
   return Mat<T, 3, 3>(l * l * (1 - cosv) + cosv, m * l * (1 - cosv) - n * sinv,
@@ -171,7 +171,7 @@ template <class T> Mat<T, 3, 3> MakeMat3Rotate(const Vec<T, 3> &axis, T angle) {
 }
 
 template <class T> Mat<T, 4, 4> MakeMat4Rotate(const Vec<T, 3> &axis, T angle) {
-  auto a = core::normalize(axis);
+  auto a = normalize(axis);
   double l = a[0], m = a[1], n = a[2];
   double cosv = cos(angle), sinv = sin(angle);
   return Mat<T, 4, 4>(
@@ -275,8 +275,9 @@ template <class Archive> inline void serialize(Archive &ar, GeoCoord &gc) {
 using KeyPoint = cv::KeyPoint;
 
 // size
-using Size = cv::Size2f;
-using Sizei = cv::Size2i;
+template <class T> using Size_ = cv::Size_<T>;
+using Size = Size_<float>;
+using Sizei = Size_<int>;
 
 // infinite line
 template <class T, int N> struct Ray {
@@ -449,10 +450,19 @@ inline void serialize(Archive &ar, PositionOnLine<T, N> &p) {
 using PositionOnLine2 = PositionOnLine<double, 2>;
 using PositionOnLine3 = PositionOnLine<double, 3>;
 
+template <class T, int N>
+T AngleBetweenUndirected(const Vec<T, N> &v1, const Vec<T, N> &v2);
+
 // chain
 template <class T, int N> struct Chain {
   std::vector<Point<T, N>> points;
   bool closed;
+
+  Chain() : closed(true) {}
+  explicit Chain(const std::vector<Point<T, N>> &ps, bool c = true)
+      : points(ps), closed(c) {}
+  explicit Chain(std::vector<Point<T, N>> &&ps, bool c = true)
+      : points(std::move(ps)), closed(c) {}
 
   const Point<T, N> &at(size_t i) const { return points.at(i % points.size()); }
   const Point<T, N> &prev(size_t i) const {
@@ -589,6 +599,10 @@ template <class T, int N> struct Box {
   Box(const Point<T, N> &c1, const Point<T, N> &c2)
       : minCorner(AllMinOf(c1, c2)), maxCorner(AllMaxOf(c1, c2)),
         isNull(false) {}
+  template <class = std::enable_if_t<N == 1>>
+  Box(const T &c1, const T &c2)
+      : minCorner(std::min(c1, c2)), maxCorner(std::max(c1, c2)),
+        isNull(false) {}
 
   Point<T, N> corner(std::initializer_list<bool> isMaxes) const {
     Point<T, N> c;
@@ -602,6 +616,14 @@ template <class T, int N> struct Box {
 
   Vec<T, N> size() const { return maxCorner - minCorner; }
   T size(size_t i) const { return maxCorner[i] - minCorner[i]; }
+  T volume() const {
+    T v = 1.0;
+    for (int i = 0; i < N; i++) {
+      v *= (maxCorner[i] - minCorner[i]);
+    }
+    return v;
+  }
+
   Point<T, N> center() const { return (maxCorner + minCorner) * (0.5); }
   Sphere<T, N> outerSphere() const {
     return Sphere<T, N>{center(),
@@ -660,6 +682,7 @@ inline Box<T, N> operator|(const Box<T, N> &b1, const Box<T, N> &b2) {
   Box<T, N> b12 = b1;
   return b12 |= b2;
 }
+using Box1 = Box<double, 1>;
 using Box2 = Box<double, 2>;
 using Box3 = Box<double, 3>;
 
@@ -749,87 +772,6 @@ inline void serialize(Archive &ar, LayeredShape<T, N> &p) {
 }
 using LayeredShape3 = LayeredShape<double, 3>;
 
-// transformed in 3d space
-template <class T, class E = double> struct TransformedIn3D {
-  T component;
-  Mat<E, 4, 4> mat4;
-
-  TransformedIn3D() : mat4(Mat<E, 4, 4>::eye()) {}
-  TransformedIn3D(const T &c, const Mat<E, 4, 4> &m = Mat<E, 4, 4>::eye())
-      : component(c), mat4(m) {}
-  TransformedIn3D(T &&c, const Mat<E, 4, 4> &m = Mat<E, 4, 4>::eye())
-      : component(std::move(c)), mat4(m) {}
-
-  TransformedIn3D &translate(const Vec<E, 3> &t) {
-    mat4 = MakeMat4Translate(t) * mat4;
-    return *this;
-  }
-  TransformedIn3D &rotate(const Vec<E, 3> &axis, E angle) {
-    mat4 = MakeMat4Rotate(axis, angle) * mat4;
-    return *this;
-  }
-  TransformedIn3D &scale(E s) {
-    mat4 = MakeMat4Scale(s) * mat4;
-    return *this;
-  }
-  TransformedIn3D &scale(E sx, E sy, E sz) {
-    mat4 = MakeMat4Scale(sx, sy, sz) * mat4;
-    return *this;
-  }
-  TransformedIn3D &reset() {
-    mat4 = Mat<E, 4, 4>::eye();
-    return *this;
-  }
-
-  Point<E, 3> toWorld(const Point<E, 3> &p) const {
-    Vec<E, 4> c = mat4 * cat(p, 1.0);
-    return Point<E, 3>(c[0] / c[3], c[1] / c[3], c[2] / c[3]);
-  }
-  Point<E, 3> toLocal(const Point<E, 3> &p) const {
-    Vec<E, 4> c = mat4 * cat(p, 1.0);
-    Vec<E, 4> localc;
-    bool solvable = cv::solve(mat4, c, localc);
-    assert(solvable);
-    return Point<E, 3>(localc[0] / localc[3], localc[1] / localc[3],
-                       localc[2] / localc[3]);
-  }
-
-  template <class = std::enable_if_t<std::is_same<T, Line<E, 3>>::value>>
-  Point<E, 3> first() const {
-    return toWorld(component.first);
-  }
-  template <class = std::enable_if_t<std::is_same<T, Line<E, 3>>::value>>
-  Point<E, 3> second() const {
-    return toWorld(component.second);
-  }
-  template <class = std::enable_if_t<std::is_same<T, Box<E, 3>>::value>>
-  Point<E, 3> corner(std::initializer_list<bool> isMaxes) const {
-    return toWorld(component.corner(isMaxes));
-  }
-};
-
-template <class E = double, class T>
-TransformedIn3D<std::decay_t<T>, E> MakeTransformableIn3D(T &&c) {
-  return TransformedIn3D<std::decay_t<T>, E>(std::forward<T>(c));
-}
-
-template <class E = double, class T>
-TransformedIn3D<std::decay_t<T>, E>
-AsInLocalCoordinates(T &&c, const Vec<E, 3> &x, const Vec<E, 3> &y,
-                     const Vec<E, 3> &z, const Point<E, 3> &o) {
-  return TransformedIn3D<std::decay_t<T>, E>(std::forward<T>(c),
-                                             MakeMat4LocalToWorld(x, y, z, o));
-}
-
-template <class T, class E>
-inline bool operator==(const TransformedIn3D<T, E> &a,
-                       const TransformedIn3D<T, E> &b) {
-  return a.component == b.component && a.mat4 == b.mat4;
-}
-template <class Archive, class T, class E>
-inline void serialize(Archive &ar, TransformedIn3D<T, E> &b) {
-  ar(b.component, b.mat4);
-}
 }
 }
 

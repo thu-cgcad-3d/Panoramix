@@ -185,7 +185,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
       for (auto &l : line3s) {
         static const double sampleAngle = M_PI / 100.0;
         auto &line = l.component;
-        double spanAngle = AngleBetweenDirections(line.first, line.second);
+        double spanAngle = AngleBetweenDirected(line.first, line.second);
         std::vector<Point2> ps;
         ps.reserve(spanAngle / sampleAngle);
         for (double angle = 0.0; angle <= spanAngle; angle += sampleAngle) {
@@ -327,7 +327,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
       if (claz >= mg.vps.size()) {
         claz = -1;
       }
-      double spanAngle = AngleBetweenDirections(line.first, line.second);
+      double spanAngle = AngleBetweenDirected(line.first, line.second);
       std::vector<Point2> ps;
       ps.reserve(spanAngle / sampleAngle);
       for (double angle = 0.0; angle <= spanAngle; angle += sampleAngle) {
@@ -353,28 +353,24 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
     return canvas.image();
   };
 
-  static const std::string folder =
-      "F:\\GitHub\\write-papers\\papers\\a\\video\\material\\";
+  const std::string folder =
+      "D:\\Panoramix\\Panorama\\images\\" + misc::Tagify(identity) + "\\";
+  misc::MakeDir(folder);
+
   if (writeToFile) {
-    cv::imwrite(folder + misc::NameOfFile(anno.impath) +
-                    options.algorithmOptionsTag() + ".im.png",
-                anno.view.image);
+    cv::imwrite(folder + "im.png", anno.view.image);
   }
 
   if (false) {
     auto backup = mg;
     AttachPrincipleDirectionConstraints(mg);
-    printPIGraph(0, folder + misc::NameOfFile(anno.impath) +
-                        options.algorithmOptionsTag() +
-                        ".principledirections.png");
+    printPIGraph(0, folder + "principledirections.png");
     mg = backup;
     AttachWallConstraints(mg, M_PI / 60.0);
-    printPIGraph(0, folder + misc::NameOfFile(anno.impath) +
-                        options.algorithmOptionsTag() + ".wall.png");
+    printPIGraph(0, folder + "wall.png");
     mg = backup;
     AttachGCConstraints(mg, gc, 0.7, 0.7, true);
-    printPIGraph(0, folder + misc::NameOfFile(anno.impath) +
-                        options.algorithmOptionsTag() + ".gc.png");
+    printPIGraph(0, folder + "gc.png");
     mg = backup;
   }
 
@@ -439,7 +435,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
   const auto drawLine = [&mg](Image3f &pim, const Line3 &line,
                               const std::string &text, const gui::Color &color,
                               bool withTeeth, int linewidth, double stepAngle) {
-    double angle = AngleBetweenDirections(line.first, line.second);
+    double angle = AngleBetweenDirected(line.first, line.second);
     std::vector<Pixel> ps;
     for (double a = 0.0; a <= angle; a += stepAngle) {
       ps.push_back(ToPixel(mg.view.camera.toScreen(
@@ -471,7 +467,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
       static gui::ColorTable ctable = gui::RGBGreys;
       ctable.exceptionalColor() = gui::Gray;
       Image3f pim = mg.view.image.clone() / 255.0;
-      pim = pim * 0.7 + 0.3;
+      pim = pim * 0.3 + 0.7;
       for (int line = 0; line < mg.nlines(); line++) {
         auto &ws = lsw[line];
         auto l = mg.lines[line].component;

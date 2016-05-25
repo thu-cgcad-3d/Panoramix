@@ -5,7 +5,6 @@
 
 namespace pano {
 namespace core {
-
 std::vector<int> ComputeSpatialRegionProperties(
     const Imagei &segmentedRegions, const PerspectiveCamera &cam,
     std::vector<std::vector<std::vector<Vec3>>> *ncontoursPtr = nullptr,

@@ -2,7 +2,7 @@
 #include "feature.hpp"
 #include "utility.hpp"
 #include "../gui/canvas.hpp"
-#include "../gui/utility.hpp"
+#include "../gui/gui_util.hpp"
 
 #include "../experimental/pi_graph.hpp"
 
@@ -98,7 +98,7 @@ TEST(Feature, SegmentationExtractorInPanorama) {
            core::Y());
 
   static const std::string folder =
-      "F:\\GitHub\\write-papers\\papers\\a\\figure\\supp\\";
+      "H:\\GitHub\\write-papers\\papers\\a\\figure\\supp\\";
 
   double alpha = 0.7;
   double beta = 1 - alpha;
@@ -107,13 +107,13 @@ TEST(Feature, SegmentationExtractorInPanorama) {
       gui::CreateRandomColorTableWithSize(nsegs, gui::Transparent)(segs);
   imsegs = imsegs * alpha + im * beta;
 
-  gui::AsCanvas(im).saveAs(folder + "pano.png");
-  gui::AsCanvas(core::MakeView(im, cam).sampled(cam1).image)
-      .show()
-      .saveAs(folder + "pano_polar1.png");
-  gui::AsCanvas(core::MakeView(im, cam).sampled(cam2).image)
-      .show()
-      .saveAs(folder + "pano_polar2.png");
+  //gui::AsCanvas(im).saveAs(folder + "pano.png");
+  //gui::AsCanvas(core::MakeView(im, cam).sampled(cam1).image)
+  //    .show()
+  //    .saveAs(folder + "pano_polar1.png");
+  //gui::AsCanvas(core::MakeView(im, cam).sampled(cam2).image)
+  //    .show()
+  //    .saveAs(folder + "pano_polar2.png");
 
   // gui::AsCanvas(imsegs).show().saveAs(folder + "panosegs.png");
   // gui::AsCanvas(core::MakeView(imsegs,
@@ -308,14 +308,14 @@ TEST(Feature, LocalManhattanVanishingPointDetector) {
         continue;
       if (abs(line3norms[j].dot(vp1)) < 0.01)
         continue;
-      double dist = DistanceBetweenTwoLines(line2s[i], line2s[j]).first;
+      double dist = Distance(line2s[i], line2s[j]);
       auto &n1 = line3norms[i];
       auto &n2 = line3norms[j];
       auto inter = n1.cross(n2);
       auto interp = cam.toScreen(inter);
       double dd = 40;
-      if (dist < dd && DistanceFromPointToLine(interp, line2s[i]).first < dd &&
-          DistanceFromPointToLine(interp, line2s[j]).first < dd) {
+      if (dist < dd && Distance(interp, line2s[i]) < dd &&
+          Distance(interp, line2s[j]) < dd) {
         pairs.emplace_back(i, j);
       }
     }

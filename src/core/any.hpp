@@ -138,6 +138,5 @@ private:
 }
 
 namespace std {
-
 inline void swap(pano::core::Any &a, pano::core::Any &b) { a.swap(b); }
 }

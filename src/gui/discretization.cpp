@@ -200,7 +200,7 @@ void Discretize(TriMesh &mesh, const core::LayeredShape3 &m,
       auto n = normalize(p - origin);
       vhs[i].push_back(mesh.addVertex(p, n, o, false));
       Vec2 proj((p - origin).dot(x), (p - origin).dot(y));
-      projAngles[i].push_back(SignedAngleBetweenDirections(Vec2(1, 0), proj));
+      projAngles[i].push_back(SignedAngle(Vec2(1, 0), proj));
     }
     ids[i].resize(m.layers[i].size());
     std::iota(ids[i].begin(), ids[i].end(), 0);
@@ -321,7 +321,7 @@ void Discretize(TriMesh &mesh, const SpatialProjectedPolygon &spp,
   std::vector<Vec3> cs(spp.corners.size());
   for (int i = 0; i < spp.corners.size(); i++) {
     Ray3 line(spp.projectionCenter, spp.corners[i] - spp.projectionCenter);
-    cs[i] = IntersectionOfLineAndPlane(line, spp.plane).position;
+    cs[i] = Intersection(line, spp.plane);
   }
   std::vector<TriMesh::VertHandle> vhandles(cs.size());
   for (int i = 0; i < cs.size(); i++) {
