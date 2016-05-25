@@ -1,47 +1,66 @@
 #pragma once
 
 #include "../core/cameras.hpp"
-#include "basic_types.hpp"
-#include "scene.hpp"
+
+#include "color.hpp"
 
 class QWidget;
 
 namespace pano {
-    namespace gui {
+namespace gui {
 
-        int SelectFrom(const std::vector<std::string> & strs,
-            const std::string & title = std::string(),
-            const std::string & text = std::string(),
-            int acceptId = -1, int rejectId = -1);
+class Scene;
+class RenderOptions;
 
-        core::Image PickAnImage(const std::string & dir = std::string(), std::string * picked = nullptr);
+// spatial projected polygon for panorama reconstruction
+struct SpatialProjectedPolygon {
+  std::vector<Vec3> corners;
+  Point3 projectionCenter;
+  Plane3 plane;
+};
 
-        std::vector<core::Image> PickImages(const std::string & dir = std::string(), std::vector<std::string> * picked = nullptr);
+int SelectFrom(const std::vector<std::string> &strs,
+               const std::string &title = std::string(),
+               const std::string &text = std::string(), int acceptId = -1,
+               int rejectId = -1);
 
-        std::vector<core::Image> PickAllImagesFromAFolder(const std::string & dir = std::string(), std::vector<std::string> * picked = nullptr);
-        void ForEachImageFromAFolder(const std::string & dir, const std::function<bool(const std::string & impath)> & fun);
+Image PickAnImage(const std::string &dir = std::string(),
+                        std::string *picked = nullptr);
 
+std::vector<Image> PickImages(const std::string &dir = std::string(),
+                                    std::vector<std::string> *picked = nullptr);
 
-        bool MakePanoramaByHand(core::Image & im, bool * extendedOnTop = nullptr, bool * extendedOnBottom = nullptr);
+std::vector<Image>
+PickAllImagesFromAFolder(const std::string &dir = std::string(),
+                         std::vector<std::string> *picked = nullptr);
+void ForEachImageFromAFolder(
+    const std::string &dir,
+    const std::function<bool(const std::string &impath)> &fun);
 
+bool MakePanoramaByHand(Image &im, bool *extendedOnTop = nullptr,
+                        bool *extendedOnBottom = nullptr,
+                        bool *topIsPlanar = nullptr,
+                        bool *bottomIsPlanar = nullptr);
 
-        void PaintWith(const std::function<core::Image()> & updater,
-            const std::vector<PenConfig> & penConfigs,
-            const std::function<bool(const std::vector<core::Point2> & polyline, int penId)> & callback);
+void PaintWith(
+    const std::function<Image()> &updater,
+    const std::vector<PenConfig> &penConfigs,
+    const std::function<bool(const std::vector<Point2> &polyline,
+                             int penId)> &callback);
 
+void VisualizeWithPanoramicOperation(const Scene &scene,
+                                     const RenderOptions &options);
 
-        void VisualizeWithPanoramicOperation(const Scene & scene, const RenderOptions & options);
+void VisualizeAll(const View<PanoramicCamera, Image3ub> &view,
+                  const std::vector<Classified<Line3>> &lines,
+                  const Imagei &segs, int nsegs, const Image5d &gc);
 
+void DrawChainsInPanorama(const PanoramicView &view,
+                          const std::vector<PenConfig> &penConfigs,
+                          std::vector<Chain3> &chains);
+}
 
-        void VisualizeAll(const core::View<core::PanoramicCamera, core::Image3ub> & view,
-            const std::vector<core::Classified<core::Line3>> & lines,
-            const core::Imagei & segs, int nsegs,
-            const core::Image5d & gc);
-
-        void DrawChainsInPanorama(const core::PanoramicView & view,
-            const std::vector<PenConfig> & penConfigs,
-            std::vector<core::Chain3> & chains);
-        
-
-    }
+namespace core {
+Box3 BoundingBox(const gui::SpatialProjectedPolygon &spp);
+}
 }

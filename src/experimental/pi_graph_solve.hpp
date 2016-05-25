@@ -3,61 +3,59 @@
 #include "../misc/matlab_api.hpp"
 #include "pi_graph.hpp"
 #include "pi_graph_annotation.hpp"
+#include "pi_graph_cg.hpp"
 
 namespace pano {
-    namespace experimental {
-        
-        void ReconstructLayoutAnnotation(PILayoutAnnotation & anno, misc::Matlab & matlab);
+namespace experimental {
 
-        struct PIConstraintGraph {
-            struct Entity {
-                enum Type {
-                    IsSeg,
-                    IsLine
-                } type;
-                bool isSeg() const { return type == IsSeg; }
-                bool isLine() const { return type == IsLine; }
-                int id;
-                //int dof;
-                //int orientationNotClaz; // for isSeg() && dof == 2
-                double size;
-                template <class Archiver>
-                void serialize(Archiver & ar) { ar(type, id/*, dof, orientationNotClaz*/, size); }
-            };
-            struct Constraint {
-                enum Type {
-                    SegCoplanarity,
-                    Connection
-                } type;
-                bool isSegCoplanarity() const { return type == SegCoplanarity; }
-                bool isConnection() const { return type == Connection; }
-                int ent1, ent2;
-                double weight;
-                std::vector<Vec3> anchors;
-                //int anchorOrientation; // for anchors.size() >= 2
-                template <class Archiver>
-                void serialize(Archiver & ar) { ar(type, ent1, ent2, weight, anchors/*, anchorOrientation*/); }
-            };
+void ReconstructLayoutAnnotation(PILayoutAnnotation &anno,
+                                 misc::Matlab &matlab);
 
-            std::vector<Entity> entities;
-            std::vector<Constraint> constraints;
+// use general plane representation method
+void ReconstructLayoutAnnotation2(PILayoutAnnotation &anno,
+                                  misc::Matlab &matlab);
+void ReconstructLayoutAnnotation3(PILayoutAnnotation &anno,
+                                  misc::Matlab &matlab);
 
-            std::vector<int> seg2ent;
-            std::vector<int> line2ent;
+double Solve(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
+             misc::Matlab &matlab,
+             int maxIter = std::numeric_limits<int>::max(),
+             double connectionWeightRatioOverCoplanarity = 1e7,
+             bool useCoplanarity = true);
 
-            std::set<int> determinableEnts;
+int DisableUnsatisfiedConstraints(
+    const PICGDeterminablePart &dp, PIConstraintGraph &cg,
+    const std::function<bool(double distRankRatio, double avgDist,
+                             double maxDist)> &whichToDisable);
 
-            template <class Archiver>
-            inline void serialize(Archiver & ar) {
-                ar(entities, constraints, seg2ent, line2ent, determinableEnts);
-            }
-        };
+// disorient invalid entities according to current reconstuction
+void DisorientDanglingLines(const PICGDeterminablePart &dp,
+                            PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg, double ratio);
 
+void DisorientDanglingLines2(const PICGDeterminablePart &dp,
+                             PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
+                             double thresRatio);
 
-        PIConstraintGraph BuildPIConstraintGraph(const PIGraph & mg, 
-            double minAngleThresForAWideEdge, double angleThresForColinearity);
+void DisorientDanglingLines3(const PICGDeterminablePart &dp,
+                             PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
+                             double disorientRatio, double thresRatio);
 
-        double Solve(PIGraph & mg, const PIConstraintGraph & cg, misc::Matlab & matlab);
+void DisorientDanglingSegs(const PICGDeterminablePart &dp,
+                           PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
+                           double thresRatio);
 
-    }
+// disorient those that are not compatible with neighbor segs
+// also disconnect their connections with lines
+void DisorientDanglingSegs2(const PICGDeterminablePart &dp,
+                            PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
+                            double thresRatio);
+
+void DisorientDanglingSegs3(const PICGDeterminablePart &dp,
+                            PIConstraintGraph &cg, PIGraph<PanoramicCamera> &mg,
+                            double disorientRatio, double thresRatio);
+
+void OverorientSkewSegs(const PICGDeterminablePart &dp, PIConstraintGraph &cg,
+                        PIGraph<PanoramicCamera> &mg, double angleThres,
+                        double positionAngleThres, double oriRatio);
+}
 }

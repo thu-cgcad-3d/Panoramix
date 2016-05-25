@@ -1,2 +1,0 @@
-set path=%path%;${LD_PATH};
-call cmd
