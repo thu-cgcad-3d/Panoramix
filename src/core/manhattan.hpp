@@ -122,9 +122,5 @@ Imagei ComputeOrientationMaps(const std::vector<Classified<Line2>> &lines,
 
 // ConvertToImage3d
 Image3d ConvertToImage3d(const Image5d &gc);
-
-
-
-
 }
 }

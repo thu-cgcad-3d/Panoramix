@@ -5,7 +5,8 @@
 
 #include "color.hpp"
 #include "shader.hpp"
-#include "utility.hpp"
+#include "transform.hpp"
+#include "gui_util.hpp"
 
 namespace pano {
 namespace core {

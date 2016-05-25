@@ -1,7 +1,7 @@
 #include "../core/containers.hpp"
 #include "../gui/qttools.hpp"
 #include "../gui/singleton.hpp"
-#include "../gui/utility.hpp"
+#include "../gui/gui_util.hpp"
 
 #include "pi_graph_annotation.hpp"
 #include "pi_graph_annotation_widgets.hpp"

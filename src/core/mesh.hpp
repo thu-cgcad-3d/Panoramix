@@ -70,25 +70,31 @@ public:
   inline const FacesTable &internalFaces() const { return _faces; }
 
   inline auto vertices() {
-    return ConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts);
+    // return ConditionalContainerWrapper<VertsTable, VertExistsPred>(&_verts);
+    return MakeConditionalRange(_verts.begin(), _verts.end(), VertExistsPred());
   }
   inline auto halfedges() {
-    return ConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs);
+    // return ConditionalContainerWrapper<HalfsTable, HalfExistsPred>(&_halfs);
+    return MakeConditionalRange(_halfs.begin(), _halfs.end(), HalfExistsPred());
   }
   inline auto faces() {
-    return ConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces);
+    // return ConditionalContainerWrapper<FacesTable, FaceExistsPred>(&_faces);
+    return MakeConditionalRange(_faces.begin(), _faces.end(), FaceExistsPred());
   }
   inline auto vertices() const {
-    return ConstConditionalContainerWrapper<VertsTable, VertExistsPred>(
-        &_verts);
+    /*return ConstConditionalContainerWrapper<VertsTable, VertExistsPred>(
+        &_verts);*/
+    return MakeConditionalRange(_verts.begin(), _verts.end(), VertExistsPred());
   }
   inline auto halfedges() const {
-    return ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred>(
-        &_halfs);
+    // return ConstConditionalContainerWrapper<HalfsTable, HalfExistsPred>(
+    //    &_halfs);
+    return MakeConditionalRange(_halfs.begin(), _halfs.end(), HalfExistsPred());
   }
   inline auto faces() const {
-    return ConstConditionalContainerWrapper<FacesTable, FaceExistsPred>(
-        &_faces);
+    // return ConstConditionalContainerWrapper<FacesTable, FaceExistsPred>(
+    //    &_faces);
+    return MakeConditionalRange(_faces.begin(), _faces.end(), FaceExistsPred());
   }
 
   inline VertTopo &topo(VertHandle v) { return _verts[v.id].topo; }

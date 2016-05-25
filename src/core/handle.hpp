@@ -340,34 +340,34 @@ struct TripletExistsPredFromTripletType<Triplet<TopoT, DataT>> {
 
 template <class TopoT, class DataT>
 using TripletArray = std::vector<Triplet<TopoT, DataT>>;
-template <class TripletArrayT>
-struct ConditionalContainerTypeFromTripletArrayType {};
-template <class TopoT, class DataT>
-struct ConditionalContainerTypeFromTripletArrayType<
-    TripletArray<TopoT, DataT>> {
-  using type = ConditionalContainerWrapper<TripletArray<TopoT, DataT>,
-                                           TripletExistsPred<TopoT, DataT>>;
-  using const_type =
-      ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>,
-                                       TripletExistsPred<TopoT, DataT>>;
-};
-
-template <class TopoT, class DataT>
-inline ConditionalContainerWrapper<TripletArray<TopoT, DataT>,
-                                   TripletExistsPred<TopoT, DataT>>
-MakeConditionalContainer(TripletArray<TopoT, DataT> &arr) {
-  return ConditionalContainerWrapper<TripletArray<TopoT, DataT>,
-                                     TripletExistsPred<TopoT, DataT>>(
-      &arr, TripletExistsPred<TopoT, DataT>());
-}
-template <class TopoT, class DataT>
-inline ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>,
-                                        TripletExistsPred<TopoT, DataT>>
-MakeConditionalContainer(const TripletArray<TopoT, DataT> &arr) {
-  return ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>,
-                                          TripletExistsPred<TopoT, DataT>>(
-      &arr, TripletExistsPred<TopoT, DataT>());
-}
+//template <class TripletArrayT>
+//struct ConditionalContainerTypeFromTripletArrayType {};
+//template <class TopoT, class DataT>
+//struct ConditionalContainerTypeFromTripletArrayType<
+//    TripletArray<TopoT, DataT>> {
+//  using type = ConditionalContainerWrapper<TripletArray<TopoT, DataT>,
+//                                           TripletExistsPred<TopoT, DataT>>;
+//  using const_type =
+//      ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>,
+//                                       TripletExistsPred<TopoT, DataT>>;
+//};
+//
+//template <class TopoT, class DataT>
+//inline ConditionalContainerWrapper<TripletArray<TopoT, DataT>,
+//                                   TripletExistsPred<TopoT, DataT>>
+//MakeConditionalContainer(TripletArray<TopoT, DataT> &arr) {
+//  return ConditionalContainerWrapper<TripletArray<TopoT, DataT>,
+//                                     TripletExistsPred<TopoT, DataT>>(
+//      &arr, TripletExistsPred<TopoT, DataT>());
+//}
+//template <class TopoT, class DataT>
+//inline ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>,
+//                                        TripletExistsPred<TopoT, DataT>>
+//MakeConditionalContainer(const TripletArray<TopoT, DataT> &arr) {
+//  return ConstConditionalContainerWrapper<TripletArray<TopoT, DataT>,
+//                                          TripletExistsPred<TopoT, DataT>>(
+//      &arr, TripletExistsPred<TopoT, DataT>());
+//}
 
 template <class TopoT, class DataT>
 inline auto BoundingBox(const Triplet<TopoT, DataT> &t)

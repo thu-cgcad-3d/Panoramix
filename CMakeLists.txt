@@ -72,12 +72,13 @@ if (MSVC)
 endif ()
 
 
+set (TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" CACHE PATH "path to test data")
+set (CACHE_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cache/" CACHE PATH "path to cache data")
+set (MATLAB_CODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/matlab/" CACHE PATH "path to matlab code")
 
-get_filename_component(TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" REALPATH)
+
 message (STATUS "test data directory: " ${TEST_DATA_DIR})
-get_filename_component(CACHE_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cache/" REALPATH)
 message (STATUS "default cache data directory: " ${CACHE_DATA_DIR})
-get_filename_component(MATLAB_CODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/matlab/" REALPATH)
 message (STATUS "matlab code directory: " ${MATLAB_CODE_DIR})
 if (MSVC)
     add_definitions ( "/D_USE_MATH_DEFINES")

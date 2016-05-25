@@ -29,8 +29,8 @@ using Image5d = Image_<Vec<double, 5>>;
 using Image6d = Image_<Vec<double, 6>>;
 using Image7d = Image_<Vec<double, 7>>;
 
-template <> struct IsNotContainerByHand<Image> : yes {};
-template <class T> struct IsNotContainerByHand<Image_<T>> : yes {};
+template <> struct MarkedAsNonContainer<Image> : yes {};
+template <class T> struct MarkedAsNonContainer<Image_<T>> : yes {};
 
 namespace {
 template <class To, class From>

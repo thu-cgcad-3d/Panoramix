@@ -2,7 +2,7 @@
 #include "feature.hpp"
 #include "utility.hpp"
 #include "../gui/canvas.hpp"
-#include "../gui/utility.hpp"
+#include "../gui/gui_util.hpp"
 
 #include "../experimental/pi_graph.hpp"
 

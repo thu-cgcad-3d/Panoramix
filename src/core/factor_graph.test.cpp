@@ -1,30 +1,28 @@
 #include "../core/utility.hpp"
 #include "../gui/color.hpp"
 #include "../gui/shader.hpp"
-#include "factor_graph.hpp"
 #include "../panoramix.unittest.hpp"
+#include "factor_graph.hpp"
 
 using namespace pano;
 using namespace test;
 
 TEST(FactorGraph, Simple) {
-
   core::FactorGraph fg;
-  auto vcid = fg.addVarCategory(core::FactorGraph::VarCategory{2, 1.0});
-  auto fcid = fg.addFactorCategory(core::FactorGraph::FactorCategory{
-      [](const int *labels, size_t nvars,
-         core::FactorGraph::FactorCategoryId fcid,
-         void *) -> double { return labels[0] == 0 ? 1.0 : 0.0; },
-      1.0});
+  auto vcid = fg.addVarCategory(2, 1.0);
+  auto fcid = fg.addFactorCategory(
+      [](const std::vector<int> &labels, void *) -> double {
+        return labels[0] == 0 ? 1.0 : 0.0;
+      },
+      1.0);
 
   auto vh = fg.addVar(vcid);
-  auto fh = fg.addFactor({vh}, fcid);
+  auto fh = fg.addFactor(fcid, {vh});
 
-  auto results =
-      fg.solveWithSimpleCallback(50, 10, [](int epoch, double energy) {
-        std::cout << "energy: " << energy << std::endl;
-        return true;
-      });
+  auto results = fg.solve(50, 10, [](int epoch, double energy) {
+    std::cout << "energy: " << energy << std::endl;
+    return true;
+  });
 
   ASSERT(results[vh] == 1);
 }
@@ -50,27 +48,25 @@ TEST(FactorGraph, Denoise) {
   const core::Vec3 foreground = gui::Color(gui::Black);
 
   core::FactorGraph fg;
-  auto vcid = fg.addVarCategory(core::FactorGraph::VarCategory{2, 1.0});
+  auto vcid = fg.addVarCategory(2, 1.0);
 
   fg.reserveFactorCategories(im.cols * im.rows + 2);
   fg.reserveVars(im.cols * im.rows);
   fg.reserveFactors(im.cols * im.rows * 4);
 
-  std::vector<core::FactorGraph::VarHandle> vhs(im.cols * im.rows);
+  std::vector<int> vhs(im.cols * im.rows);
 
   // add varCategories and data costs
   for (auto it = noised.begin(); it != noised.end(); ++it) {
     // add var node
-    core::FactorGraph::VarHandle vh = fg.addVar(vcid);
+    int vh = fg.addVar(vcid);
     vhs[core::EncodeSubscriptToIndex(it.pos(), noised.size())] = vh;
 
     // append new factor type
-    core::FactorGraph::FactorCategory fd;
     double distToBackground = core::Distance(background, *it);
     double distToForeground = core::Distance(foreground, *it);
-    fd.costs = [distToBackground, distToForeground](
-        const int *labels, size_t nvars, core::FactorGraph::FactorCategoryId fcid,
-        void *) -> double {
+    auto fCost = [distToBackground, distToForeground](
+        const std::vector<int> &labels, void *) -> double {
       int label = labels[0];
       if (label == 0) { // judge as background
         return distToBackground;
@@ -78,54 +74,54 @@ TEST(FactorGraph, Denoise) {
         return distToForeground;
       }
     };
-    fd.c_alpha = 1.0;
-    auto fcid = fg.addFactorCategory(std::move(fd));
+    auto fcid = fg.addFactorCategory(fCost, 1.0);
 
     // add factor node
-    fg.addFactor({vh}, fcid);
+    fg.addFactor(fcid, {vh});
   }
 
   // append smoothness factor types
-  auto smoothnessfcid1 = fg.addFactorCategory(core::FactorGraph::FactorCategory{
-      [](const int *labels, size_t nvars,
-         core::FactorGraph::FactorCategoryId fcid,
-         void *) -> double { return labels[0] == labels[1] ? 0.0 : 5; },
-      1.0});
-  auto smoothnessfcid2 = fg.addFactorCategory(core::FactorGraph::FactorCategory{
-      [](const int *labels, size_t nvars,
-         core::FactorGraph::FactorCategoryId fcid,
-         void *) -> double { return labels[0] == labels[1] ? 0.0 : 3; },
-      1.0});
+  auto smoothnessfcid1 = fg.addFactorCategory(
+      [](const std::vector<int> &labels, void *) -> double {
+        return labels[0] == labels[1] ? 0.0 : 5;
+      },
+      1.0);
+  auto smoothnessfcid2 = fg.addFactorCategory(
+      [](const std::vector<int> &labels, void *) -> double {
+        return labels[0] == labels[1] ? 0.0 : 3;
+      },
+      1.0);
 
-  auto smoothnessfcid3 = fg.addFactorCategory(core::FactorGraph::FactorCategory{
-      [](const int *labels, size_t nvars,
-         core::FactorGraph::FactorCategoryId fcid, void *) -> double {
-        if (labels[4] == 0 && std::accumulate(labels, labels + nvars, 0) == 8)
+  auto smoothnessfcid3 = fg.addFactorCategory(
+      [](const std::vector<int> &labels, void *) -> double {
+        if (labels[4] == 0 &&
+            std::accumulate(labels.begin(), labels.end(), 0) == 8)
           return 1.0; // return std::numeric_limits<double>::infinity();
-        if (labels[4] == 1 && std::accumulate(labels, labels + nvars, 0) == 1)
+        if (labels[4] == 1 &&
+            std::accumulate(labels.begin(), labels.end(), 0) == 1)
           return 1.0; // return std::numeric_limits<double>::infinity();
         return 0.0;
       },
-      1.0});
+      1.0);
 
   // add smoothness factor nodes
   for (int i = 0; i < noised.rows - 1; i++) {
     for (int j = 0; j < noised.cols - 1; j++) {
       auto vh =
           vhs[core::EncodeSubscriptToIndex(core::Pixel(j, i), noised.size())];
-      fg.addFactor({vh, vhs[core::EncodeSubscriptToIndex(core::Pixel(j + 1, i),
-                                                         noised.size())]},
-                   smoothnessfcid1);
-      fg.addFactor({vh, vhs[core::EncodeSubscriptToIndex(core::Pixel(j, i + 1),
-                                                         noised.size())]},
-                   smoothnessfcid1);
-      fg.addFactor({vh, vhs[core::EncodeSubscriptToIndex(
-                            core::Pixel(j + 1, i + 1), noised.size())]},
-                   smoothnessfcid2);
+      fg.addFactor(smoothnessfcid1,
+                   {vh, vhs[core::EncodeSubscriptToIndex(core::Pixel(j + 1, i),
+                                                         noised.size())]});
+      fg.addFactor(smoothnessfcid1,
+                   {vh, vhs[core::EncodeSubscriptToIndex(core::Pixel(j, i + 1),
+                                                         noised.size())]});
+      fg.addFactor(smoothnessfcid2,
+                   {vh, vhs[core::EncodeSubscriptToIndex(
+                            core::Pixel(j + 1, i + 1), noised.size())]});
       if (i > 0) {
-        fg.addFactor({vh, vhs[core::EncodeSubscriptToIndex(
-                              core::Pixel(j + 1, i - 1), noised.size())]},
-                     smoothnessfcid2);
+        fg.addFactor(smoothnessfcid2,
+                     {vh, vhs[core::EncodeSubscriptToIndex(
+                              core::Pixel(j + 1, i - 1), noised.size())]});
       }
       /*std::vector<core::FactorGraph::VarHandle> localVhs;
         for (int x = -1; x <= 1; x++) {
@@ -141,7 +137,7 @@ TEST(FactorGraph, Denoise) {
     }
   }
 
-  auto results = fg.solveWithSimpleCallback(100, 3, [](int epoch, double e) {
+  auto results = fg.solve(100, 3, [](int epoch, double e) {
     std::cout << "#" << epoch << "  energy: " << e << std::endl;
     return true;
   });

@@ -1,6 +1,8 @@
 #include "../gui/scene.hpp"
 #include "../panoramix.unittest.hpp"
+
 #include "mesh.hpp"
+#include "mesh_util.hpp"
 
 using namespace pano;
 using namespace pano::core;

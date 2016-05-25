@@ -9,7 +9,7 @@
 #include "../../src/gui/qttools.hpp"
 #include "../../src/gui/scene.hpp"
 #include "../../src/gui/singleton.hpp"
-#include "../../src/gui/utility.hpp"
+#include "../../src/gui/gui_util.hpp"
 
 #include "../../src/experimental/line_drawing.hpp"
 #include "../../src/experimental/mesh_advanced_util.hpp"
@@ -535,7 +535,7 @@ void EstimateEdgeOrientations(
 
   // construct a factor graph to optimize edge-vp bindings
   FactorGraph fg;
-  std::vector<FactorGraph::VarHandle> edge2vh(nedges);
+  std::vector<int> edge2vh(nedges, -1);
   {
     for (int edge = 0; edge < nedges; edge++) {
       auto vc =
@@ -549,10 +549,9 @@ void EstimateEdgeOrientations(
       auto vh = edge2vh[edge];
       auto &relatedVPAndAngles = edge2ordered_vp_and_angles[edge];
       auto fc = fg.addFactorCategory(
-          [&relatedVPAndAngles, nedges](const int *varlabels, size_t nvar,
-                                        FactorGraph::FactorCategoryId fcid,
+          [&relatedVPAndAngles, nedges](const std::vector<int> & varlabels,
                                         void *givenData) -> double {
-            assert(nvar == 1);
+            assert(varlabels.size() == 1);
             int label = varlabels[0];
             assert(label <= relatedVPAndAngles.size());
             const double K = 50.0 / nedges;
@@ -564,7 +563,7 @@ void EstimateEdgeOrientations(
             return (1.0 - Gaussian(angle, DegreesToRadians(3))) * K;
           },
           1.0);
-      fg.addFactor({vh}, fc);
+	  fg.addFactor(fc, {vh});
     }
 
     // potential 2: two adjacent edges should not bind to a near vp
@@ -585,10 +584,9 @@ void EstimateEdgeOrientations(
         auto vh2 = edge2vh[edge2];
         auto fc = fg.addFactorCategory(
             [edge1, edge2, &relatedVPAndAngles1, &relatedVPAndAngles2,
-             &vp_positions, ncorners, scale](const int *varlabels, size_t nvar,
-                                             FactorGraph::FactorCategoryId fcid,
+             &vp_positions, ncorners, scale](const std::vector<int> &varlabels,
                                              void *givenData) -> double {
-              assert(nvar == 2);
+              assert(varlabels.size() == 2);
               int bindedVP1 =
                   varlabels[0] == relatedVPAndAngles1.size()
                       ? -1
@@ -610,7 +608,7 @@ void EstimateEdgeOrientations(
               return 0.0;
             },
             1.0);
-        fg.addFactor({vh1, vh2}, fc);
+        fg.addFactor(fc, {vh1, vh2});
       }
     }
 
@@ -639,10 +637,9 @@ void EstimateEdgeOrientations(
           int nextEdge = hh2d2edge[hhs[(i + gap) % hhs.size()]];
           auto fc = fg.addFactorCategory(
               [&edge2ordered_vp_and_angles, &vp_positions, prevEdge, edge,
-               nextEdge, ntris](const int *varlabels, size_t nvar,
-                                FactorGraph::FactorCategoryId fcid,
+               nextEdge, ntris](const std::vector<int> &varlabels,
                                 void *givenData) -> double {
-                assert(nvar == 3);
+                assert(varlabels.size() == 3);
                 int vp1 =
                     varlabels[0] == edge2ordered_vp_and_angles[prevEdge].size()
                         ? -1
@@ -678,8 +675,8 @@ void EstimateEdgeOrientations(
                 return (1.0 - Gaussian(angle, DegreesToRadians(10))) * K;
               },
               1.0);
-          fg.addFactor({edge2vh[prevEdge], edge2vh[edge], edge2vh[nextEdge]},
-                       fc);
+          fg.addFactor(fc,
+                       {edge2vh[prevEdge], edge2vh[edge], edge2vh[nextEdge]});
         }
       }
     }
@@ -725,12 +722,11 @@ void EstimateEdgeOrientations(
   }
 
   // solve the factor graph
-  auto result =
-      fg.solve(5, 1, [](int epoch, double energy, double denergy,
-                        const FactorGraph::ResultTable &results) -> bool {
-        Println("epoch: ", epoch, "  energy: ", energy);
-        return true;
-      });
+  auto result = fg.solve(5, 1, [](int epoch, double energy, double denergy,
+                                  const std::vector<int> &results) -> bool {
+    Println("epoch: ", epoch, "  energy: ", energy);
+    return true;
+  });
 
   for (int edge = 0; edge < nedges; edge++) {
     int id = result[edge2vh[edge]];
@@ -1270,7 +1266,9 @@ Mesh3 ReconstructWithOrientations(
                        plane));
       sb.add(line3);
     }
-    sb.show(true, true);
+    sb.show(true, true, gui::RenderOptions()
+                            .winName("After CLLS")
+                            .fixUpDirectionInCameraMove(false));
   }
 
   // reconstruct vertex positions
@@ -1586,13 +1584,14 @@ auto main(int argc, char **argv, char **env) -> int {
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
-   static const std::string name = "gate";
-  // static const std::string name = "towerx";
+  // static const std::string name = "gate";
+  static const std::string name = "towerx";
   // static const std::string name = "tower";
   // static const std::string name = "hex";
   // static const std::string name = "triangle";
   // static const std::string name = "twotriangles";
   //static const std::string name = "bridge";
+  //static const std::string name = "gundam";
 
   static const std::string cam_name = "cam1";
   static constexpr bool reset_cam = false;

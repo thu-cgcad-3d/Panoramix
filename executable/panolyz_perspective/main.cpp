@@ -4,7 +4,7 @@
 
 #include "../../src/gui/canvas.hpp"
 #include "../../src/gui/singleton.hpp"
-#include "../../src/gui/utility.hpp"
+#include "../../src/gui/gui_util.hpp"
 
 #include "../../src/experimental/pi_graph_annotation.hpp"
 #include "../../src/experimental/pi_graph_cg.hpp"

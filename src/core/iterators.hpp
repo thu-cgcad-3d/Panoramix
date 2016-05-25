@@ -28,13 +28,13 @@ struct IsContainerOfType
 // IsIterator
 template <class T, class = void> struct IsIterator : no {};
 template <class T>
-struct IsIterator<
-    T, void_t<typename T::iterator_category, typename T::value_type,
-                   typename T::difference_type, typename T::pointer,
-                   typename T::reference>> : yes {};
+struct IsIterator<T, void_t<typename T::iterator_category,
+                            typename T::value_type, typename T::difference_type,
+                            typename T::pointer, typename T::reference>> : yes {
+};
 template <class T> struct IsIterator<T *> : yes {};
 
-// range
+// Range
 template <class IterT> struct Range {
   IterT b, e;
   Range(IterT bb, IterT ee) : b(bb), e(ee) {}
@@ -43,15 +43,19 @@ template <class IterT> struct Range {
   IterT begin() const { return b; }
   IterT end() const { return e; }
 
-  template <class FunT> inline void forEach(FunT &&fun) const {
+  template <class FunT> void forEach(FunT &&fun) const {
     IterT i = b;
     while (i != e) {
       fun(*i);
       ++i;
     }
   }
+
+  bool operator==(const Range &r) const { return b == r.b && e == r.e; }
+  bool operator!=(const Range &r) const { return !(*this == r); }
 };
 
+// MakeRange
 template <class IterT> Range<IterT> MakeRange(IterT b, IterT e) {
   return Range<IterT>(b, e);
 }
@@ -133,7 +137,6 @@ constexpr bool operator<(const TransformIterator<T, IterT, FunT> &i1,
                          const TransformIterator<T, IterT, FunT> &i2) {
   return i1.base() < i2.base();
 }
-
 template <class T, class IterT, class FunT>
 constexpr auto operator-(const TransformIterator<T, IterT, FunT> &i1,
                          const TransformIterator<T, IterT, FunT> &i2) {
@@ -145,6 +148,49 @@ template <class IterT, class FunT>
 constexpr auto MakeTransformIterator(IterT it, FunT f) {
   using value_t = std::decay_t<decltype(f(*it))>;
   return TransformIterator<value_t, IterT, FunT>(it, f);
+}
+
+// ConcatedIterator
+template <class T, class IterT1, class IterT2>
+class ConcatedIterator : public std::iterator<std::forward_iterator_tag, T> {
+  static_assert(
+      std::is_same<typename std::iterator_traits<IterT1>::value_type,
+                   typename std::iterator_traits<IterT2>::value_type>::value,
+      "Value types mismatched!");
+
+public:
+  constexpr ConcatedIterator(IterT1 i1, IterT1 e1, IterT2 i2, IterT2 e2)
+      : iter1(i1), end1(e1), iter2(i2), end2(e2) {}
+
+  ConcatedIterator &operator++() {
+    if (iter1 == end1) {
+      assert(iter2 != end2);
+      ++iter2;
+    } else {
+      ++iter1;
+    }
+    return *this;
+  }
+
+  T &operator*() const { return iter1 == end1 ? *iter2 : *iter1; }
+  T *operator->() const { return iter1 == end1 ? &(*iter2) : &(*iter1); }
+  bool operator==(const ConcatedIterator &i) const {
+    return std::make_tuple(iter1, end1, iter2, end2) ==
+           std::make_tuple(i.iter1, i.end1, i.iter2, i.end2);
+  }
+  bool operator!=(const ConcatedIterator &i) const { return !(*this == i); }
+
+protected:
+  IterT1 iter1, end1;
+  IterT2 iter2, end2;
+};
+
+// MakeConcatedRange
+template <class IterT1, class IterT2>
+constexpr auto MakeConcatedRange(IterT1 b1, IterT1 e1, IterT2 b2, IterT2 e2) {
+  using ValueT = typename std::iterator_traits<IterT1>::value_type;
+  return MakeRange(ConcatedIterator<ValueT, IterT1, IterT2>(b1, e1, b2, e2),
+                   ConcatedIterator<ValueT, IterT1, IterT2>(e1, e1, e2, e2));
 }
 
 // element of container MUST support PredT(ele) -> bool
@@ -161,14 +207,12 @@ class ConditionalIterator
 
 public:
   using Iterator = IterT;
-
-  inline ConditionalIterator(Iterator it_, Iterator end_, PredT pred_ = PredT())
+  ConditionalIterator(Iterator it_, Iterator end_, PredT pred_ = PredT())
       : _it(it_), _end(end_), _pred(pred_) {
     if (_it != _end && !_pred(*_it))
       ++(*this);
   }
-
-  inline ConditionalIterator &operator++() {
+  ConditionalIterator &operator++() {
     assert(_it != _end);
     ++_it;
     while (_it != _end && !_pred(*_it))
@@ -176,19 +220,11 @@ public:
     return *this;
   }
 
-  inline reference operator*() const { return *_it; }
-
-  inline pointer operator->() const { return &(*_it); }
-
-  inline bool operator==(const ConditionalIterator &i) const {
-    return _it == i._it;
-  }
-
-  inline bool operator!=(const ConditionalIterator &i) const {
-    return !(*this == i);
-  }
-
-  inline Iterator internalIterator() const { return _it; }
+  reference operator*() const { return *_it; }
+  pointer operator->() const { return &(*_it); }
+  bool operator==(const ConditionalIterator &i) const { return _it == i._it; }
+  bool operator!=(const ConditionalIterator &i) const { return !(*this == i); }
+  Iterator internalIterator() const { return _it; }
 
 private:
   IterT _it;
@@ -196,72 +232,84 @@ private:
   PredT _pred;
 };
 
-// class ConditionalContainerWrapper
-template <class ContainerT, class ElementPredT>
-class ConditionalContainerWrapper {
-public:
-  using OriginalIterator = typename ContainerT::iterator;
-  using iterator = ConditionalIterator<OriginalIterator, ElementPredT>;
-  using value_type = typename std::iterator_traits<iterator>::value_type;
-
-  inline ConditionalContainerWrapper(ContainerT *cont_,
-                                     ElementPredT elePred_ = ElementPredT())
-      : _cont(cont_), _elePred(elePred_) {}
-  inline iterator begin() {
-    return iterator(std::begin(*_cont), std::end(*_cont), _elePred);
-  }
-  inline iterator end() {
-    return iterator(std::end(*_cont), std::end(*_cont), _elePred);
-  }
-  inline iterator begin() const {
-    return iterator(std::begin(*_cont), std::end(*_cont), _elePred);
-  }
-  inline iterator end() const {
-    return iterator(std::end(*_cont), std::end(*_cont), _elePred);
-  }
-
-private:
-  ContainerT *_cont;
-  ElementPredT _elePred;
-};
-
-// class ConstConditionalContainerWrapper
-template <class ContainerT, class ElementPredT>
-class ConstConditionalContainerWrapper {
-public:
-  using OriginalIterator = typename ContainerT::const_iterator;
-  using iterator = ConditionalIterator<OriginalIterator, ElementPredT>;
-  using value_type = typename std::iterator_traits<iterator>::value_type;
-
-  inline ConstConditionalContainerWrapper(
-      const ContainerT *cont_, ElementPredT elePred_ = ElementPredT())
-      : _cont(cont_), _elePred(elePred_) {}
-  inline iterator begin() const {
-    return iterator(std::begin(*_cont), std::end(*_cont), _elePred);
-  }
-  inline iterator end() const {
-    return iterator(std::end(*_cont), std::end(*_cont), _elePred);
-  }
-
-private:
-  const ContainerT *_cont;
-  ElementPredT _elePred;
-};
-
-// make conditional container
-template <class ContainerT, class ElementPredT>
-inline ConditionalContainerWrapper<ContainerT, ElementPredT>
-MakeConditionalContainer(ContainerT *cont_,
-                         ElementPredT elePred_ = ElementPredT()) {
-  return ConditionalContainerWrapper<ContainerT, ElementPredT>(cont_, elePred_);
+// MakeConditionalRange
+template <class IterT, class PredT>
+constexpr auto MakeConditionalRange(IterT b, IterT e, PredT pred) {
+  return MakeRange(ConditionalIterator<IterT, PredT>(b, e, pred),
+                   ConditionalIterator<IterT, PredT>(e, e, pred));
 }
 
-template <class ContainerT, class ElementPredT>
-inline ConstConditionalContainerWrapper<ContainerT, ElementPredT>
-MakeConditionalContainer(const ContainerT *cont_,
-                         ElementPredT elePred_ = ElementPredT()) {
-  return ConstConditionalContainerWrapper<ContainerT, ElementPredT>(cont_,
-                                                                    elePred_);
-}
+
+//// MakeConditionalIterator
+//template <class IterT, class PredT>
+//constexpr auto MakeConditionalIterator(IterT iter, IterT end, PredT pred) {
+//  return ConditionalIterator<IterT, PredT>(iter, end, pred);
+//}
+
+//// class ConditionalContainerWrapper
+//template <class ContainerT, class ElementPredT>
+//class ConditionalContainerWrapper {
+//public:
+//  using OriginalIterator = typename ContainerT::iterator;
+//  using iterator = ConditionalIterator<OriginalIterator, ElementPredT>;
+//  using value_type = typename std::iterator_traits<iterator>::value_type;
+//
+//  ConditionalContainerWrapper(ContainerT *cont_,
+//                              ElementPredT elePred_ = ElementPredT())
+//      : _cont(cont_), _elePred(elePred_) {}
+//  iterator begin() {
+//    return iterator(std::begin(*_cont), std::end(*_cont), _elePred);
+//  }
+//  iterator end() {
+//    return iterator(std::end(*_cont), std::end(*_cont), _elePred);
+//  }
+//  iterator begin() const {
+//    return iterator(std::begin(*_cont), std::end(*_cont), _elePred);
+//  }
+//  iterator end() const {
+//    return iterator(std::end(*_cont), std::end(*_cont), _elePred);
+//  }
+//
+//private:
+//  ContainerT *_cont;
+//  ElementPredT _elePred;
+//};
+//
+//// class ConstConditionalContainerWrapper
+//template <class ContainerT, class ElementPredT>
+//class ConstConditionalContainerWrapper {
+//public:
+//  using OriginalIterator = typename ContainerT::const_iterator;
+//  using iterator = ConditionalIterator<OriginalIterator, ElementPredT>;
+//  using value_type = typename std::iterator_traits<iterator>::value_type;
+//
+//  ConstConditionalContainerWrapper(const ContainerT *cont_,
+//                                   ElementPredT elePred_ = ElementPredT())
+//      : _cont(cont_), _elePred(elePred_) {}
+//  iterator begin() const {
+//    return iterator(std::begin(*_cont), std::end(*_cont), _elePred);
+//  }
+//  iterator end() const {
+//    return iterator(std::end(*_cont), std::end(*_cont), _elePred);
+//  }
+//
+//private:
+//  const ContainerT *_cont;
+//  ElementPredT _elePred;
+//};
+//
+//// make conditional container
+//template <class ContainerT, class ElementPredT>
+//ConditionalContainerWrapper<ContainerT, ElementPredT>
+//MakeConditionalContainer(ContainerT *cont, ElementPredT elePred) {
+//  return ConditionalContainerWrapper<ContainerT, ElementPredT>(cont, elePred);
+//}
+//
+//template <class ContainerT, class ElementPredT>
+//ConstConditionalContainerWrapper<ContainerT, ElementPredT>
+//MakeConditionalContainer(const ContainerT *cont, ElementPredT elePred) {
+//  return ConstConditionalContainerWrapper<ContainerT, ElementPredT>(cont,
+//                                                                    elePred);
+//}
 }
 }

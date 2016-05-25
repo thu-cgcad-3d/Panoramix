@@ -19,25 +19,26 @@ struct Dummy {
   template <class... ParamTs> void operator()(ParamTs &&... params) const {}
 };
 
-template <class T> inline const Dummy &operator+(const Dummy &d, const T &) {
+template <class T> constexpr const Dummy &operator+(const Dummy &d, const T &) {
   return d;
 }
-template <class T> inline const Dummy &operator+(const T &, const Dummy &d) {
+template <class T> constexpr const Dummy &operator+(const T &, const Dummy &d) {
   return d;
 }
-template <class T> inline const Dummy &operator-(const Dummy &d, const T &) {
+template <class T> constexpr const Dummy &operator-(const Dummy &d, const T &) {
   return d;
 }
-template <class T> inline const Dummy &operator-(const T &, const Dummy &d) {
+template <class T> constexpr const Dummy &operator-(const T &, const Dummy &d) {
   return d;
 }
-template <class T> inline const Dummy &operator*(const Dummy &d, const T &) {
+template <class T> constexpr const Dummy &operator*(const Dummy &d, const T &) {
   return d;
 }
-template <class T> inline const Dummy &operator*(const T &, const Dummy &d) {
+template <class T> constexpr const Dummy &operator*(const T &, const Dummy &d) {
   return d;
 }
 
+// AlwaysFalse
 template <class... T> struct AlwaysFalse {
   enum { value = false };
 };
@@ -201,7 +202,7 @@ template <size_t I, class T> inline const T &Get(std::initializer_list<T> &v) {
 }
 
 // registered as not a container
-template <class T> struct IsNotContainerByHand : std::false_type {};
+template <class T> struct MarkedAsNonContainer : std::false_type {};
 
 // determine whether T is a container
 namespace {
@@ -223,7 +224,7 @@ template <class T> struct IsContainerImp {
 template <class T>
 struct IsContainer
     : std::integral_constant<bool, IsContainerImp<T>::value &&
-                                       !IsNotContainerByHand<T>::value> {};
+                                       !MarkedAsNonContainer<T>::value> {};
 
 // CountOf
 namespace {

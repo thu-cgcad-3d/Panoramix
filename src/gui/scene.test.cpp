@@ -114,7 +114,7 @@ TEST(Scene, Interaction) {
   gui::ResourceStore::set(
       "texture",
       core::ImageRead(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
-  auto box = core::MakeTransformableIn3D(core::BoundingBoxOfContainer(ss))
+  auto box = gui::MakeTransformableIn3D(core::BoundingBoxOfContainer(ss))
                  .rotate(core::Vec3(1, 0, 1), M_PI / 3);
 
   int clickedCount = 0;
@@ -144,18 +144,18 @@ TEST(Scene, Interaction) {
       .end();
 
   int n = 5;
-  std::vector<gui::Colored<core::TransformedIn3D<core::Box3>>> boxes;
+  std::vector<gui::Colored<gui::TransformedIn3D<core::Box3>>> boxes;
   auto ctable = gui::CreateGreyColorTableWithSize(n + 1);
   for (int i = 0; i < n; i++) {
     boxes.push_back(gui::ColorAs(
-        core::MakeTransformableIn3D(core::BoundingBoxOfContainer(ss))
+        gui::MakeTransformableIn3D(core::BoundingBoxOfContainer(ss))
             .scale(0.1)
             .translate(core::Vec3(0, 3, 0))
             .rotate(core::Vec3(1, 0, 0), M_PI / n * i)
             .translate(core::Vec3(0, 0, -1)),
         ctable[i]));
     boxes.push_back(gui::ColorAs(
-        core::MakeTransformableIn3D(core::BoundingBoxOfContainer(ss))
+        gui::MakeTransformableIn3D(core::BoundingBoxOfContainer(ss))
             .scale(0.1)
             .translate(core::Vec3(0, 5, 0))
             .rotate(core::Vec3(1, 0, 0), M_PI / n * i)

@@ -8,7 +8,7 @@
 #include "../../src/gui/qttools.hpp"
 #include "../../src/gui/scene.hpp"
 #include "../../src/gui/singleton.hpp"
-#include "../../src/gui/utility.hpp"
+#include "../../src/gui/gui_util.hpp"
 
 #include "../../src/experimental/line_drawing.hpp"
 #include "../../src/experimental/mesh_advanced_util.hpp"

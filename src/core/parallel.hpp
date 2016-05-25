@@ -4,7 +4,17 @@
 
 namespace pano {
 namespace core {
+template <class FunT> void ParallelRun(int n, int concurrency_num, FunT &&fun);
+template <class FunT>
+void ParallelRun(int n, int concurrency_num, int batch_num, FunT &&fun);
+}
+}
 
+////////////////////////////////////////////////
+//// implementations
+////////////////////////////////////////////////
+namespace pano {
+namespace core {
 template <class FunT> void ParallelRun(int n, int concurrency_num, FunT &&fun) {
   std::vector<std::thread> threads;
   threads.reserve(concurrency_num);
