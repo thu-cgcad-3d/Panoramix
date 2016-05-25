@@ -10,6 +10,8 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <iterator>
+#include <type_traits>
 
 #include "meta.hpp"
 
@@ -40,8 +42,11 @@ template <class IterT> struct Range {
   Range(IterT bb, IterT ee) : b(bb), e(ee) {}
   template <class ContainerT>
   explicit Range(ContainerT &&cont) : b(std::begin(cont)), e(std::end(cont)) {}
+
   IterT begin() const { return b; }
   IterT end() const { return e; }
+  IterT cbegin() const { return b; }
+  IterT cend() const { return e; }
 
   template <class FunT> void forEach(FunT &&fun) const {
     IterT i = b;
@@ -150,6 +155,20 @@ constexpr auto MakeTransformIterator(IterT it, FunT f) {
   return TransformIterator<value_t, IterT, FunT>(it, f);
 }
 
+// MakeTransformRange
+template <class IterT, class FunT>
+constexpr auto MakeTransformRange(IterT b, IterT e, FunT f) {
+  using value_t = std::decay_t<decltype(f(*b))>;
+  return MakeRange(TransformIterator<value_t, IterT, FunT>(b, f),
+                   TransformIterator<value_t, IterT, FunT>(e, f));
+}
+template <class ContainerT, class FunT>
+constexpr auto MakeTransformRange(ContainerT &&c, FunT f) {
+  static_assert(IsContainer<std::decay_t<ContainerT>>::value,
+                "ContainerT must be a container");
+  return MakeTransformRange(std::begin(c), std::end(c), f);
+}
+
 // ConcatedIterator
 template <class T, class IterT1, class IterT2>
 class ConcatedIterator : public std::iterator<std::forward_iterator_tag, T> {
@@ -192,6 +211,12 @@ constexpr auto MakeConcatedRange(IterT1 b1, IterT1 e1, IterT2 b2, IterT2 e2) {
   return MakeRange(ConcatedIterator<ValueT, IterT1, IterT2>(b1, e1, b2, e2),
                    ConcatedIterator<ValueT, IterT1, IterT2>(e1, e1, e2, e2));
 }
+template <class ContainerT1, class ContainerT2>
+constexpr auto MakeConcatedRange(ContainerT1 &&c1, ContainerT2 &&c2) {
+  return MakeConcatedRange(std::begin(c1), std::end(c1), std::begin(c2),
+                           std::end(c2));
+}
+
 
 // element of container MUST support PredT(ele) -> bool
 // ConditionalIterator will automatically skip elements which DO NOT satisfy
@@ -238,78 +263,9 @@ constexpr auto MakeConditionalRange(IterT b, IterT e, PredT pred) {
   return MakeRange(ConditionalIterator<IterT, PredT>(b, e, pred),
                    ConditionalIterator<IterT, PredT>(e, e, pred));
 }
-
-
-//// MakeConditionalIterator
-//template <class IterT, class PredT>
-//constexpr auto MakeConditionalIterator(IterT iter, IterT end, PredT pred) {
-//  return ConditionalIterator<IterT, PredT>(iter, end, pred);
-//}
-
-//// class ConditionalContainerWrapper
-//template <class ContainerT, class ElementPredT>
-//class ConditionalContainerWrapper {
-//public:
-//  using OriginalIterator = typename ContainerT::iterator;
-//  using iterator = ConditionalIterator<OriginalIterator, ElementPredT>;
-//  using value_type = typename std::iterator_traits<iterator>::value_type;
-//
-//  ConditionalContainerWrapper(ContainerT *cont_,
-//                              ElementPredT elePred_ = ElementPredT())
-//      : _cont(cont_), _elePred(elePred_) {}
-//  iterator begin() {
-//    return iterator(std::begin(*_cont), std::end(*_cont), _elePred);
-//  }
-//  iterator end() {
-//    return iterator(std::end(*_cont), std::end(*_cont), _elePred);
-//  }
-//  iterator begin() const {
-//    return iterator(std::begin(*_cont), std::end(*_cont), _elePred);
-//  }
-//  iterator end() const {
-//    return iterator(std::end(*_cont), std::end(*_cont), _elePred);
-//  }
-//
-//private:
-//  ContainerT *_cont;
-//  ElementPredT _elePred;
-//};
-//
-//// class ConstConditionalContainerWrapper
-//template <class ContainerT, class ElementPredT>
-//class ConstConditionalContainerWrapper {
-//public:
-//  using OriginalIterator = typename ContainerT::const_iterator;
-//  using iterator = ConditionalIterator<OriginalIterator, ElementPredT>;
-//  using value_type = typename std::iterator_traits<iterator>::value_type;
-//
-//  ConstConditionalContainerWrapper(const ContainerT *cont_,
-//                                   ElementPredT elePred_ = ElementPredT())
-//      : _cont(cont_), _elePred(elePred_) {}
-//  iterator begin() const {
-//    return iterator(std::begin(*_cont), std::end(*_cont), _elePred);
-//  }
-//  iterator end() const {
-//    return iterator(std::end(*_cont), std::end(*_cont), _elePred);
-//  }
-//
-//private:
-//  const ContainerT *_cont;
-//  ElementPredT _elePred;
-//};
-//
-//// make conditional container
-//template <class ContainerT, class ElementPredT>
-//ConditionalContainerWrapper<ContainerT, ElementPredT>
-//MakeConditionalContainer(ContainerT *cont, ElementPredT elePred) {
-//  return ConditionalContainerWrapper<ContainerT, ElementPredT>(cont, elePred);
-//}
-//
-//template <class ContainerT, class ElementPredT>
-//ConstConditionalContainerWrapper<ContainerT, ElementPredT>
-//MakeConditionalContainer(const ContainerT *cont, ElementPredT elePred) {
-//  return ConstConditionalContainerWrapper<ContainerT, ElementPredT>(cont,
-//                                                                    elePred);
-//}
+template <class ContainerT, class PredT>
+constexpr auto MakeConditionalRange(ContainerT &&c, PredT pred) {
+  return MakeConditionalRange(std::begin(c), std::end(c), pred);
+}
 }
 }

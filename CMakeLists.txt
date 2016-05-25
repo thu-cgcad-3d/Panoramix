@@ -1,5 +1,5 @@
-project (Panoramix)
-cmake_minimum_required (VERSION 3.0.0)
+cmake_minimum_required (VERSION 3.0)
+project (Panoramix VERSION 0.1 LANGUAGES CXX)
 
 set (CMAKE_ALLOW_LOOSE_CONSTRUCTS true)
 list (APPEND CMAKE_MODULE_PATH 
@@ -10,19 +10,16 @@ if (NOT DEFINED MSVC)
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
 endif ()
 
+set (TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" CACHE PATH "path to test data")
+set (CACHE_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cache/" CACHE PATH "path to cache data")
+set (MATLAB_CODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/matlab/" CACHE PATH "path to matlab code")
+
+
+set (DEPENDENCY_NAMES "")
 set (DEPENDENCY_INCLUDES "")
 set (DEPENDENCY_LIBS "")
 set (DEPENDENCY_BIN_PATHS "")
 
-
-
-# add eigen
-find_package(Eigen3 REQUIRED)
-list (APPEND DEPENDENCY_INCLUDES ${EIGEN3_INCLUDE_DIR})
-
-# add cereal
-find_package(Cereal REQUIRED)
-list (APPEND DEPENDENCY_INCLUDES ${CEREAL_INCLUDE_DIR})
 
 # add opencv
 find_package(OpenCV REQUIRED)
@@ -71,12 +68,6 @@ if (MSVC)
         "do not forget to add QT_QPA_PLATFORM_PLUGIN_PATH=${Qt_DIR}/plugins/platforms to env")
 endif ()
 
-
-set (TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" CACHE PATH "path to test data")
-set (CACHE_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cache/" CACHE PATH "path to cache data")
-set (MATLAB_CODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/matlab/" CACHE PATH "path to matlab code")
-
-
 message (STATUS "test data directory: " ${TEST_DATA_DIR})
 message (STATUS "default cache data directory: " ${CACHE_DATA_DIR})
 message (STATUS "matlab code directory: " ${MATLAB_CODE_DIR})
@@ -95,12 +86,11 @@ endif ()
 
 # include third party codes
 add_subdirectory ("thirdparty")
+list (APPEND DEPENDENCY_NAMES ${ThirdParty_NAMES})
 list (APPEND DEPENDENCY_INCLUDES ${ThirdParty_INCLUDES})
 list (APPEND DEPENDENCY_LIBS ${ThirdParty_LIBS})
 
-
 list (APPEND DEPENDENCY_INCLUDES ".")
-include_directories (${DEPENDENCY_INCLUDES})
 
 
 # panoramix_add_executable

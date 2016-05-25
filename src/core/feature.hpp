@@ -132,9 +132,5 @@ Image6d MergeGeometricContextLabelsHoiem(const Image7d &rawgc,
 Image6d ComputeGeometricContext(misc::Matlab &matlab, const Image &im,
                                 const Vec3 &forward, const Vec3 &hvp1,
                                 bool outdoor, bool useHedauForIndoor = false);
-
-/// occlusion boundary detector
-std::vector<Scored<Chain2>> DetectOcclusionBoundary(misc::Matlab &matlab,
-                                                    const Image &im);
 }
 }

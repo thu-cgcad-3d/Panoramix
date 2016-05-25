@@ -60,8 +60,7 @@ template <class TesterT> inline bool HasValue(double v, TesterT tester) {
   return tester(v);
 }
 
-template <class T, int N, class TesterT,
-          class = std::enable_if_t<std::is_floating_point<T>::value>>
+template <class T, int N, class TesterT>
 inline bool HasValue(const Vec<T, N> &v, TesterT tester) {
   for (int i = 0; i < N; i++) {
     if (tester(v[i]))
@@ -75,8 +74,7 @@ inline bool HasValue(const Ratio<T, S> &r, TesterT tester) {
   return HasValue(r.numerator, tester) || HasValue(r.denominator, tester);
 }
 
-template <class T, int N, class TesterT,
-          class = std::enable_if_t<std::is_floating_point<T>::value>>
+template <class T, int N, class TesterT>
 inline bool HasValue(const Line<T, N> &v, TesterT tester) {
   return HasValue(v.first, tester) || HasValue(v.second, tester);
 }
@@ -87,20 +85,17 @@ inline bool HasValue(const Ray<T, N> &v, TesterT tester) {
   return HasValue(v.anchor, tester) || HasValue(v.direction, tester);
 }
 
-template <class T, int N, class TesterT,
-          class = std::enable_if_t<std::is_floating_point<T>::value>>
+template <class T, int N, class TesterT>
 inline bool HasValue(const Plane<T, N> &p, TesterT tester) {
   return HasValue(p.anchor, tester) || HasValue(p.normal, tester);
 }
 
-template <class T, int N, class TesterT,
-          class = std::enable_if_t<std::is_floating_point<T>::value>>
+template <class T, int N, class TesterT>
 inline bool HasValue(const Sphere<T, N> &s, TesterT tester) {
   return HasValue(s.center, tester) || HasValue(s.radius, tester);
 }
 
-template <class T, int N, class TesterT,
-          class = std::enable_if_t<std::is_floating_point<T>::value>>
+template <class T, int N, class TesterT>
 inline bool HasValue(const Box<T, N> &b, TesterT tester) {
   return HasValue(b.minCorner, tester) || HasValue(b.maxCorner, tester);
 }
@@ -780,8 +775,6 @@ void MakeTriMeshFromSMFFile(AddVertex3FunT &&addVertex,
 }
 }
 
-
-
 ////////////////////////////////////////////////
 //// implementations
 ////////////////////////////////////////////////
@@ -1345,9 +1338,9 @@ inline bool IsInTriangle(const Point<T, 2> &p, const Point<T, 2> &a,
 }
 
 template <int N, class T, int M>
-inline Vec<T, N>
-TransformCoordinate(const Point<T, M> &p, const std::vector<Vec<T, M>> &axis,
-                    const Point<T, M> &origin) {
+inline Vec<T, N> TransformCoordinate(const Point<T, M> &p,
+                                     const std::vector<Vec<T, M>> &axis,
+                                     const Point<T, M> &origin) {
   assert(axis.size() >= N);
   Vec<T, N> c;
   for (int i = 0; i < N; i++)
