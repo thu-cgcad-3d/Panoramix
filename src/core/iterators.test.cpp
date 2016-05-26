@@ -6,7 +6,7 @@ using namespace pano::core;
 
 TEST(IteratorsTest, TransformAndConcated) {
   double a[] = {1, 2, 3, 4, 5};
-  std::vector<double> b = {6, 7, 8, 9, 10};
+  const std::vector<double> b = {6, 7, 8, 9, 10};
 
   double test = 1.0;
   int count = 0;

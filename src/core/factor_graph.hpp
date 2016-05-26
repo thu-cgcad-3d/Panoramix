@@ -17,15 +17,6 @@ struct VarCategory {
 
 // factor graph
 class FactorGraph {
-  std::vector<FactorCategory> factor_cats_;
-  std::vector<VarCategory> var_cats_;
-
-  std::vector<int> var2cat_;
-  std::vector<std::set<int>> var2factors_;
-
-  std::vector<int> factor2cat_;
-  std::vector<std::vector<int>> factor2vars_;
-
 public:
   void reserveFactorCategories(size_t cap);
   void reserveVarCategories(size_t cap);
@@ -45,8 +36,8 @@ public:
   int addFactor(int factor_cat, std::vector<int> &&vars);
   int addFactor(int factor_cat, std::initializer_list<int> vars);
 
-  inline size_t nvars() const { return var2cat_.size(); }
-  inline size_t nfactors() const { return factor2cat_.size(); }
+  inline size_t nvars() const { return _var2cat.size(); }
+  inline size_t nfactors() const { return _factor2cat.size(); }
 
   void clear();
   bool valid() const;
@@ -74,6 +65,16 @@ public:
         },
         additional_data);
   }
+
+private:
+  std::vector<FactorCategory> _factorCats;
+  std::vector<VarCategory> _varCats;
+
+  std::vector<int> _var2cat;
+  std::vector<std::set<int>> _var2factors;
+
+  std::vector<int> _factor2cat;
+  std::vector<std::vector<int>> _factor2vars;
 };
 }
 }

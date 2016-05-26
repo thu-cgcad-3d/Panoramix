@@ -4,7 +4,7 @@
 using namespace pano;
 using namespace pano::experimental;
 
-TEST(AlgorithmTest, SimulatedAnnealing) {
+TEST(OptimizationTest, SimulatedAnnealing) {
   double solution = 0.0;
   std::default_random_engine rng;
   int niters =
@@ -18,6 +18,4 @@ TEST(AlgorithmTest, SimulatedAnnealing) {
                          },
                          rng);
   ASSERT_TRUE(abs(solution - 1) < 0.1);
-  double d = log(243) / log(3);
-
 }

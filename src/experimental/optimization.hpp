@@ -6,7 +6,7 @@
 namespace pano {
 namespace experimental {
 
-	// SimulatedAnnealing
+// SimulatedAnnealing
 // - EnergyFunT: (StateT)->Scalar
 // - TemperatureFunT: (int iter)->Scalar
 // - NeighborsFunT: (StateT, int iter, ((StateT)->void) callback )
@@ -16,11 +16,8 @@ int SimulatedAnnealing(StateT &initialState, EnergyFunT energyFun,
                        TemperatureFunT temperatureFun,
                        NeighborsFunT neighborsFun, RNG &&rng,
                        double stopWhenEnergyIsLowerThan = 1e-5);
-
 }
 }
-
-
 
 ////////////////////////////////////////////////
 //// implementations
@@ -30,7 +27,7 @@ namespace experimental {
 // SimulatedAnnealing
 // - EnergyFunT: (StateT)->Scalar
 // - TemperatureFunT: (int iter)->Scalar
-// - NeighborsFunT: (StateT, int iter, ((StateT)->void) callback )
+// - NeighborsFunT: (StateT, int iter, ((StateT)->void) forEachNeighbor )
 template <class StateT, class EnergyFunT, class TemperatureFunT,
           class NeighborsFunT, class RNG>
 int SimulatedAnnealing(StateT &initialState, EnergyFunT energyFun,
@@ -89,7 +86,5 @@ int SimulatedAnnealing(StateT &initialState, EnergyFunT energyFun,
   std::cout << "final energy: " << finalEnergy << '\n';
   return i;
 }
-
-
 }
 }

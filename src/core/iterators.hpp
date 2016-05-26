@@ -4,14 +4,14 @@
 #include <chrono>
 #include <iostream>
 #include <iterator>
+#include <iterator>
 #include <map>
 #include <set>
 #include <stack>
 #include <string>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
-#include <iterator>
-#include <type_traits>
 
 #include "meta.hpp"
 
@@ -36,6 +36,13 @@ struct IsIterator<T, void_t<typename T::iterator_category,
 };
 template <class T> struct IsIterator<T *> : yes {};
 
+template <class ContainerT, class FunT>
+constexpr auto MakeTransformRange(ContainerT &&c, FunT f);
+template <class ContainerT1, class ContainerT2>
+constexpr auto MakeConcatedRange(ContainerT1 &&c1, ContainerT2 &&c2);
+template <class ContainerT, class PredT>
+constexpr auto MakeConditionalRange(ContainerT &&c, PredT pred);
+
 // Range
 template <class IterT> struct Range {
   IterT b, e;
@@ -54,6 +61,12 @@ template <class IterT> struct Range {
       fun(*i);
       ++i;
     }
+  }
+  template <class FunT> auto transform(FunT &&fun) const {
+    return MakeTransformRange(*this, std::forward<FunT>(fun));
+  }
+  template <class PredT> auto filter(PredT &&pred) const {
+    return MakeConditionalRange(*this, std::forward<PredT>(pred));
   }
 
   bool operator==(const Range &r) const { return b == r.b && e == r.e; }
@@ -170,13 +183,19 @@ constexpr auto MakeTransformRange(ContainerT &&c, FunT f) {
 }
 
 // ConcatedIterator
-template <class T, class IterT1, class IterT2>
-class ConcatedIterator : public std::iterator<std::forward_iterator_tag, T> {
-  static_assert(
-      std::is_same<typename std::iterator_traits<IterT1>::value_type,
-                   typename std::iterator_traits<IterT2>::value_type>::value,
-      "Value types mismatched!");
-
+template <class IterT1, class IterT2>
+class ConcatedIterator
+    : public std::iterator<
+          std::forward_iterator_tag,
+          typename std::iterator_traits<IterT1>::value_type,
+          std::common_type_t<
+              typename std::iterator_traits<IterT1>::difference_type,
+              typename std::iterator_traits<IterT2>::difference_type>,
+          std::common_type_t<typename std::iterator_traits<IterT1>::pointer,
+                             typename std::iterator_traits<IterT2>::pointer>,
+          std::common_type_t<
+              typename std::iterator_traits<IterT1>::reference,
+              typename std::iterator_traits<IterT2>::reference>> {
 public:
   constexpr ConcatedIterator(IterT1 i1, IterT1 e1, IterT2 i2, IterT2 e2)
       : iter1(i1), end1(e1), iter2(i2), end2(e2) {}
@@ -191,8 +210,10 @@ public:
     return *this;
   }
 
-  T &operator*() const { return iter1 == end1 ? *iter2 : *iter1; }
-  T *operator->() const { return iter1 == end1 ? &(*iter2) : &(*iter1); }
+  decltype(auto) operator*() const { return iter1 == end1 ? *iter2 : *iter1; }
+  decltype(auto) operator-> () const {
+    return iter1 == end1 ? &(*iter2) : &(*iter1);
+  }
   bool operator==(const ConcatedIterator &i) const {
     return std::make_tuple(iter1, end1, iter2, end2) ==
            std::make_tuple(i.iter1, i.end1, i.iter2, i.end2);
@@ -207,16 +228,18 @@ protected:
 // MakeConcatedRange
 template <class IterT1, class IterT2>
 constexpr auto MakeConcatedRange(IterT1 b1, IterT1 e1, IterT2 b2, IterT2 e2) {
-  using ValueT = typename std::iterator_traits<IterT1>::value_type;
-  return MakeRange(ConcatedIterator<ValueT, IterT1, IterT2>(b1, e1, b2, e2),
-                   ConcatedIterator<ValueT, IterT1, IterT2>(e1, e1, e2, e2));
+  using ValueT1 = typename std::iterator_traits<IterT1>::value_type;
+  using ValueT2 = typename std::iterator_traits<IterT2>::value_type;
+  static_assert(std::is_same<ValueT1, ValueT2>::value,
+                "Value types mismatched!");
+  return MakeRange(ConcatedIterator<IterT1, IterT2>(b1, e1, b2, e2),
+                   ConcatedIterator<IterT1, IterT2>(e1, e1, e2, e2));
 }
 template <class ContainerT1, class ContainerT2>
 constexpr auto MakeConcatedRange(ContainerT1 &&c1, ContainerT2 &&c2) {
   return MakeConcatedRange(std::begin(c1), std::end(c1), std::begin(c2),
                            std::end(c2));
 }
-
 
 // element of container MUST support PredT(ele) -> bool
 // ConditionalIterator will automatically skip elements which DO NOT satisfy

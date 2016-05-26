@@ -1,6 +1,6 @@
 #pragma once
 
-#include <nanoflann.hpp>
+#include <memory>
 
 #include "basic_types.hpp"
 #include "handle.hpp"
@@ -20,22 +20,21 @@ public:
   using ValueType = typename BoxType::Type;
   static const int Dimension = BoxType::Dimension;
 
-  inline explicit RTreeSet(
-      const BoundingBoxFunctorT &bboxFun = BoundingBoxFunctorT())
+  explicit RTreeSet(const BoundingBoxFunctorT &bboxFun = BoundingBoxFunctorT())
       : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()),
         _bbox(bboxFun) {}
 
   template <class IterT>
-  inline RTreeSet(IterT begin, IterT end,
-                  const BoundingBoxFunctorT &bboxFun = BoundingBoxFunctorT())
+  RTreeSet(IterT begin, IterT end,
+           const BoundingBoxFunctorT &bboxFun = BoundingBoxFunctorT())
       : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()),
         _bbox(bboxFun) {
     insert(begin, end);
   }
 
-  inline RTreeSet(RTreeSet &&r)
+  RTreeSet(RTreeSet &&r)
       : _rtree(std::move(r._rtree)), _bbox(std::move(r._bbox)) {}
-  inline RTreeSet &operator=(RTreeSet &&r) {
+  RTreeSet &operator=(RTreeSet &&r) {
     _rtree = std::move(r._rtree);
     _bbox = std::move(r._bbox);
     return *this;
@@ -45,12 +44,12 @@ public:
   RTreeSet &operator=(const RTreeSet &) = delete;
 
 public:
-  inline size_t size() const { return _rtree->Count(); }
-  inline bool empty() const { return size() == 0; }
+  size_t size() const { return _rtree->Count(); }
+  bool empty() const { return size() == 0; }
 
-  inline void clear() { return _rtree->RemoveAll(); }
+  void clear() { return _rtree->RemoveAll(); }
 
-  inline void insert(const T &t) {
+  void insert(const T &t) {
     auto box = bbox(t);
     _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
   }
@@ -63,10 +62,10 @@ public:
   }
 
   template <class CallbackFunctorT>
-  inline int search(const BoxType &b, CallbackFunctorT &&callback) const {
+  int search(const BoxType &b, CallbackFunctorT &&callback) const {
     return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
   }
-  inline int count(const BoxType &b) const {
+  int count(const BoxType &b) const {
     return _rtree->Search(b.minCorner.val, b.maxCorner.val,
                           StaticConstantFunctor<bool, true>());
   }
@@ -86,24 +85,23 @@ public:
   using ValueType = typename BoxType::Type;
   static const int Dimension = BoxType::Dimension;
 
-  inline explicit RTreeMap(
-      const BoundingBoxFunctorT &bboxFun = BoundingBoxFunctorT())
+  explicit RTreeMap(const BoundingBoxFunctorT &bboxFun = BoundingBoxFunctorT())
       : _rtree(std::make_unique<
                third_party::RTree<std::pair<T, ValT>, ValueType, Dimension>>()),
         _bbox(bboxFun) {}
 
   template <class IterT>
-  inline RTreeMap(IterT begin, IterT end,
-                  const BoundingBoxFunctorT &bboxFun = BoundingBoxFunctorT())
+  RTreeMap(IterT begin, IterT end,
+           const BoundingBoxFunctorT &bboxFun = BoundingBoxFunctorT())
       : _rtree(std::make_unique<
                third_party::RTree<std::pair<T, ValT>, ValueType, Dimension>>()),
         _bbox(bboxFun) {
     insert(begin, end);
   }
 
-  inline RTreeMap(RTreeMap &&r)
+  RTreeMap(RTreeMap &&r)
       : _rtree(std::move(r._rtree)), _bbox(std::move(r._bbox)) {}
-  inline RTreeMap &operator=(RTreeMap &&r) {
+  RTreeMap &operator=(RTreeMap &&r) {
     _rtree = std::move(r._rtree);
     _bbox = std::move(r._bbox);
     return *this;
@@ -113,16 +111,16 @@ public:
   RTreeMap &operator=(const RTreeMap &) = delete;
 
 public:
-  inline size_t size() const { return _rtree->Count(); }
-  inline bool empty() const { return size() == 0; }
+  size_t size() const { return _rtree->Count(); }
+  bool empty() const { return size() == 0; }
 
-  inline void clear() { return _rtree->RemoveAll(); }
+  void clear() { return _rtree->RemoveAll(); }
 
-  inline void insert(const std::pair<T, ValT> &p) {
+  void insert(const std::pair<T, ValT> &p) {
     auto box = _bbox(p.first);
     _rtree->Insert(box.minCorner.val, box.maxCorner.val, p);
   }
-  inline void emplace(const T &key, const ValT &val) {
+  void emplace(const T &key, const ValT &val) {
     auto box = _bbox(key);
     _rtree->Insert(box.minCorner.val, box.maxCorner.val,
                    std::make_pair(key, val));
@@ -136,10 +134,10 @@ public:
   }
 
   template <class CallbackFunctorT>
-  inline int search(const BoxType &b, CallbackFunctorT &&callback) const {
+  int search(const BoxType &b, CallbackFunctorT &&callback) const {
     return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
   }
-  inline int count(const BoxType &b) const {
+  int count(const BoxType &b) const {
     return _rtree->Search(b.minCorner.val, b.maxCorner.val,
                           StaticConstantFunctor<bool, true>());
   }
@@ -157,19 +155,19 @@ public:
   using ValueType = typename BoxType::Type;
   static const int Dimension = BoxType::Dimension;
 
-  inline explicit RTree()
+  explicit RTree()
       : _rtree(
             std::make_unique<third_party::RTree<T, ValueType, Dimension>>()) {}
 
   template <class IterT>
-  inline RTree(IterT begin, IterT end)
+  RTree(IterT begin, IterT end)
       : _rtree(
             std::make_unique<third_party::RTree<T, ValueType, Dimension>>()) {
     insert(begin, end);
   }
 
-  inline RTree(RTree &&r) : _rtree(std::move(r._rtree)) {}
-  inline RTree &operator=(RTree &&r) {
+  RTree(RTree &&r) : _rtree(std::move(r._rtree)) {}
+  RTree &operator=(RTree &&r) {
     _rtree = std::move(r._rtree);
     return *this;
   }
@@ -178,16 +176,16 @@ public:
   RTree &operator=(const RTree &) = delete;
 
 public:
-  inline size_t size() const { return _rtree->Count(); }
-  inline bool empty() const { return size() == 0; }
+  size_t size() const { return _rtree->Count(); }
+  bool empty() const { return size() == 0; }
 
-  inline void clear() { return _rtree->RemoveAll(); }
+  void clear() { return _rtree->RemoveAll(); }
 
-  inline void insert(const BoxType &box, const T &t) {
+  void insert(const BoxType &box, const T &t) {
     _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
   }
 
-  inline void insert(const std::pair<BoxType, T> &p) {
+  void insert(const std::pair<BoxType, T> &p) {
     _rtree->Insert(p.first.minCorner.val, p.first.maxCorner.val, p.second);
   }
 
@@ -199,11 +197,11 @@ public:
   }
 
   template <class CallbackFunctorT>
-  inline int search(const BoxType &b, CallbackFunctorT &&callback) const {
+  int search(const BoxType &b, CallbackFunctorT &&callback) const {
     return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
   }
 
-  inline int count(const BoxType &b) const {
+  int count(const BoxType &b) const {
     return _rtree->Search(b.minCorner.val, b.maxCorner.val,
                           StaticConstantFunctor<bool, true>());
   }
@@ -221,23 +219,22 @@ public:
   using ValueType = typename BoxType::Type;
   static const int Dimension = BoxType::Dimension;
 
-  inline explicit RTreeWrapper(
-      BoundingBoxFunctorT getBB = BoundingBoxFunctorT())
+  explicit RTreeWrapper(BoundingBoxFunctorT getBB = BoundingBoxFunctorT())
       : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()),
         _getBoundingBox(getBB) {}
 
   template <class IterT>
-  inline RTreeWrapper(IterT begin, IterT end,
-                      BoundingBoxFunctorT getBB = BoundingBoxFunctorT())
+  RTreeWrapper(IterT begin, IterT end,
+               BoundingBoxFunctorT getBB = BoundingBoxFunctorT())
       : _rtree(std::make_unique<third_party::RTree<T, ValueType, Dimension>>()),
         _getBoundingBox(getBB) {
     insert(begin, end);
   }
 
-  inline RTreeWrapper(RTreeWrapper &&r)
+  RTreeWrapper(RTreeWrapper &&r)
       : _rtree(std::move(r._rtree)),
         _getBoundingBox(std::move(r._getBoundingBox)) {}
-  inline RTreeWrapper &operator=(RTreeWrapper &&r) {
+  RTreeWrapper &operator=(RTreeWrapper &&r) {
     _rtree = std::move(r._rtree);
     _getBoundingBox = std::move(r._getBoundingBox);
     return *this;
@@ -247,19 +244,17 @@ public:
   RTreeWrapper &operator=(const RTreeWrapper &) = delete;
 
 public:
-  inline size_t size() const { return _rtree->Count(); }
-  inline bool empty() const { return size() == 0; }
+  size_t size() const { return _rtree->Count(); }
+  bool empty() const { return size() == 0; }
 
-  inline void clear() { return _rtree->RemoveAll(); }
-  inline const BoundingBoxFunctorT &getBoundingBox() const {
-    return _getBoundingBox;
-  }
+  void clear() { return _rtree->RemoveAll(); }
+  const BoundingBoxFunctorT &getBoundingBox() const { return _getBoundingBox; }
 
-  inline void insert(const BoxType &box, const T &t) {
+  void insert(const BoxType &box, const T &t) {
     _rtree->Insert(box.minCorner.val, box.maxCorner.val, t);
   }
 
-  inline void insert(const T &t) {
+  void insert(const T &t) {
     BoxType box = _getBoundingBox(t);
     for (int i = 0; i < Dimension; i++) {
       if (isnan(box.minCorner[i]) || isnan(box.maxCorner[i])) {
@@ -289,17 +284,17 @@ public:
   }
 
   template <class CallbackFunctorT>
-  inline int search(const BoxType &b, CallbackFunctorT &&callback) const {
+  int search(const BoxType &b, CallbackFunctorT &&callback) const {
     return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
   }
 
-  inline int count(const BoxType &b) const {
+  int count(const BoxType &b) const {
     return _rtree->Search(b.minCorner.val, b.maxCorner.val,
                           StaticConstantFunctor<bool, true>());
   }
 
   template <class CallbackFunctorT>
-  inline int searchNear(const T &t, CallbackFunctorT &&callback) const {
+  int searchNear(const T &t, CallbackFunctorT &&callback) const {
     auto b = _getBoundingBox(t);
     return _rtree->Search(b.minCorner.val, b.maxCorner.val, callback);
   }
@@ -333,14 +328,12 @@ public:
       typename std::vector<Scored<KeyT, ScoreT>>::const_iterator;
   using value_type = Scored<KeyT, ScoreT>;
 
-  inline MaxHeap(const ScoreCompareT &cmp = ScoreCompareT())
-      : _scoreCompare(cmp) {}
+  MaxHeap(const ScoreCompareT &cmp = ScoreCompareT()) : _scoreCompare(cmp) {}
 
   template <class IterT, class = std::enable_if_t<std::is_same<
-                                 std::iterator_traits<IterT>::value_type,
-                                 core::Scored<KeyT, ScoreT>>::value>>
-  inline MaxHeap(IterT begin, IterT end,
-                 const ScoreCompareT &cmp = ScoreCompareT())
+                             std::iterator_traits<IterT>::value_type,
+                             core::Scored<KeyT, ScoreT>>::value>>
+  MaxHeap(IterT begin, IterT end, const ScoreCompareT &cmp = ScoreCompareT())
       : _scoreCompare(cmp) {
     _data.reserve(std::distance(begin, end));
     while (begin != end) {
@@ -354,9 +347,8 @@ public:
   template <class IterT,
             class = std::enable_if_t<std::is_same<
                 std::iterator_traits<IterT>::value_type, KeyT>::value>>
-  inline MaxHeap(IterT vbegin, IterT vend,
-                 const ScoreT &defaultScore = ScoreT(),
-                 const ScoreCompareT &cmp = ScoreCompareT())
+  MaxHeap(IterT vbegin, IterT vend, const ScoreT &defaultScore = ScoreT(),
+          const ScoreCompareT &cmp = ScoreCompareT())
       : _scoreCompare(cmp) {
     _data.reserve(std::distance(vbegin, vend));
     while (vbegin != vend) {
@@ -367,14 +359,13 @@ public:
     // makeMaxHeap(); no need to make heap since all scores are same
   }
 
-  template <class IterT, class FuncT,
-            class = std::enable_if_t<
-                std::is_same<std::iterator_traits<IterT>::value_type,
-                             KeyT>::value &&
-                std::is_same<
-                    decltype(std::declval<FuncT>()(*std::declval<IterT>())),
-                    ScoreT>::value>>
-  inline MaxHeap(IterT vbegin, IterT vend, FuncT &&fun) {
+  template <
+      class IterT, class FuncT,
+      class = std::enable_if_t<
+          std::is_same<std::iterator_traits<IterT>::value_type, KeyT>::value &&
+          std::is_same<decltype(std::declval<FuncT>()(*std::declval<IterT>())),
+                       ScoreT>::value>>
+  MaxHeap(IterT vbegin, IterT vend, FuncT &&fun) {
     _data.reserve(std::distance(vbegin, vend));
     while (vbegin != vend) {
       _data.push_back(core::ScoreAs(*vbegin, fun(*vbegin)));
@@ -384,24 +375,22 @@ public:
     makeMaxHeap(); // need to make heap
   }
 
-  inline const_iterator begin() const { return _data.begin(); }
-  inline const_iterator end() const { return _data.end(); }
-  inline const_iterator cbegin() const { return _data.cbegin(); }
-  inline const_iterator cend() const { return _data.cend(); }
+  const_iterator begin() const { return _data.begin(); }
+  const_iterator end() const { return _data.end(); }
+  const_iterator cbegin() const { return _data.cbegin(); }
+  const_iterator cend() const { return _data.cend(); }
 
-  inline const KeyT &top() const { return _data.front().component; }
-  inline const ScoreT &topScore() const { return _data.front().score; }
-  inline const ScoreT &operator[](const KeyT &key) const {
+  const KeyT &top() const { return _data.front().component; }
+  const ScoreT &topScore() const { return _data.front().score; }
+  const ScoreT &operator[](const KeyT &key) const {
     return _data[_keyToId.at(key)].score;
   }
-  inline const ScoreT &at(const KeyT &key) const {
+  const ScoreT &at(const KeyT &key) const {
     return _data[_keyToId.at(key)].score;
   }
-  inline size_t size() const { return _data.size(); }
-  inline bool empty() const { return _data.empty(); }
-  inline size_t height() const {
-    return static_cast<size_t>(log2(_data.size()));
-  }
+  size_t size() const { return _data.size(); }
+  bool empty() const { return _data.empty(); }
+  size_t height() const { return static_cast<size_t>(log2(_data.size())); }
 
   void pop() {
     if (_data.empty())
@@ -442,25 +431,25 @@ public:
     }
   }
 
-  inline void clear() {
+  void clear() {
     _data.clear();
     _keyToId.clear();
   }
-  inline void swap(MaxHeap<KeyT, ScoreT> &h) {
+  void swap(MaxHeap<KeyT, ScoreT> &h) {
     _data.swap(h._data);
     _keyToId.swap(h._keyToId);
   }
 
-  inline bool contains(const KeyT &k) const {
+  bool contains(const KeyT &k) const {
     return _keyToId.find(k) != _keyToId.end();
   }
 
 private:
-  static inline int parentId(int id) { return (id - 1) / 2; }
-  static inline int leftId(int id) { return id * 2 + 1; }
-  static inline int rightId(int id) { return id * 2 + 2; }
+  static int parentId(int id) { return (id - 1) / 2; }
+  static int leftId(int id) { return id * 2 + 1; }
+  static int rightId(int id) { return id * 2 + 2; }
 
-  inline void swapKeys(int id1, int id2) {
+  void swapKeys(int id1, int id2) {
     std::swap(_keyToId[_data[id1].component], _keyToId[_data[id2].component]);
     std::swap(_data[id1], _data[id2]);
   }
@@ -482,7 +471,7 @@ private:
     }
   }
 
-  inline void makeMaxHeap() {
+  void makeMaxHeap() {
     for (int i = _data.size() / 2 - 1; i >= 0; --i) {
       maxHeapify(i);
     }
@@ -495,8 +484,8 @@ private:
 };
 
 template <class KeyT, class ScoreT, class ScoreCompareT, class KeyToIdT>
-inline bool Contains(const MaxHeap<KeyT, ScoreT, ScoreCompareT, KeyToIdT> &h,
-                     const KeyT &k) {
+bool Contains(const MaxHeap<KeyT, ScoreT, ScoreCompareT, KeyToIdT> &h,
+              const KeyT &k) {
   return h.contains(k);
 }
 
@@ -640,9 +629,7 @@ template <class T> class MergeFindSet {
 
 public:
   MergeFindSet() {}
-  template <class IterT> MergeFindSet(IterT b, IterT e) {
-    init(b, e);
-  }
+  template <class IterT> MergeFindSet(IterT b, IterT e) { init(b, e); }
 
   int setsCount() const { return _nsets; }
   const T &data(int id) const { return _elements[id].data; }

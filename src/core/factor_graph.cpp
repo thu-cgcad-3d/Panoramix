@@ -4,53 +4,53 @@
 namespace pano {
 namespace core {
 void FactorGraph::reserveFactorCategories(size_t cap) {
-  factor_cats_.reserve(cap);
+  _factorCats.reserve(cap);
 }
-void FactorGraph::reserveVarCategories(size_t cap) { var_cats_.reserve(cap); }
+void FactorGraph::reserveVarCategories(size_t cap) { _varCats.reserve(cap); }
 
 int FactorGraph::addVarCategory(size_t nlabels, double c_i) {
   assert(nlabels > 0);
-  var_cats_.push_back(VarCategory{nlabels, c_i});
-  return static_cast<int>(var_cats_.size()) - 1;
+  _varCats.push_back(VarCategory{nlabels, c_i});
+  return static_cast<int>(_varCats.size()) - 1;
 }
 int FactorGraph::addFactorCategory(FactorCategory::CostFunction cost,
                                    double c_alpha) {
   assert(cost);
-  factor_cats_.push_back(FactorCategory{cost, c_alpha});
-  return static_cast<int>(factor_cats_.size()) - 1;
+  _factorCats.push_back(FactorCategory{cost, c_alpha});
+  return static_cast<int>(_factorCats.size()) - 1;
 }
 
 void FactorGraph::reserveFactors(size_t cap) {
-  factor2cat_.reserve(cap);
-  factor2vars_.reserve(cap);
+  _factor2cat.reserve(cap);
+  _factor2vars.reserve(cap);
 }
 
 void FactorGraph::reserveVars(size_t cap) {
-  var2cat_.reserve(cap);
-  var2factors_.reserve(cap);
+  _var2cat.reserve(cap);
+  _var2factors.reserve(cap);
 }
 
 int FactorGraph::addVar(int var_cat) {
-  var2cat_.push_back(var_cat);
-  var2factors_.push_back({});
-  return var2cat_.size() - 1;
+  _var2cat.push_back(var_cat);
+  _var2factors.push_back({});
+  return _var2cat.size() - 1;
 }
 int FactorGraph::addFactor(int factor_cat, const std::vector<int> &vars) {
-  int factor = factor2cat_.size();
+  int factor = _factor2cat.size();
   for (int var : vars) {
-    var2factors_[var].insert(factor);
+    _var2factors[var].insert(factor);
   }
-  factor2cat_.push_back(factor_cat);
-  factor2vars_.push_back(vars);
+  _factor2cat.push_back(factor_cat);
+  _factor2vars.push_back(vars);
   return factor;
 }
 int FactorGraph::addFactor(int factor_cat, std::vector<int> &&vars) {
-  int factor = factor2cat_.size();
+  int factor = _factor2cat.size();
   for (int var : vars) {
-    var2factors_[var].insert(factor);
+    _var2factors[var].insert(factor);
   }
-  factor2cat_.push_back(factor_cat);
-  factor2vars_.push_back(std::move(vars));
+  _factor2cat.push_back(factor_cat);
+  _factor2vars.push_back(std::move(vars));
   return factor;
 }
 int FactorGraph::addFactor(int factor_cat, std::initializer_list<int> vars) {
@@ -58,29 +58,29 @@ int FactorGraph::addFactor(int factor_cat, std::initializer_list<int> vars) {
 }
 
 void FactorGraph::clear() {
-  factor_cats_.clear();
-  var_cats_.clear();
-  var2cat_.clear();
-  var2factors_.clear();
-  factor2cat_.clear();
-  factor2vars_.clear();
+  _factorCats.clear();
+  _varCats.clear();
+  _var2cat.clear();
+  _var2factors.clear();
+  _factor2cat.clear();
+  _factor2vars.clear();
 }
 
 bool FactorGraph::valid() const {
-  if (var2cat_.size() != var2factors_.size()) {
+  if (_var2cat.size() != _var2factors.size()) {
     return false;
   }
-  if (factor2cat_.size() != factor2vars_.size()) {
+  if (_factor2cat.size() != _factor2vars.size()) {
     return false;
   }
-  for (int var_cat : var2cat_) {
-    if (var_cat < 0 || var_cat >= var_cats_.size()) {
+  for (int var_cat : _var2cat) {
+    if (var_cat < 0 || var_cat >= _varCats.size()) {
       return false;
     }
   }
-  for (auto &factors : var2factors_) {
+  for (auto &factors : _var2factors) {
     for (int factor : factors) {
-      if (factor < 0 || factor >= factor2cat_.size()) {
+      if (factor < 0 || factor >= _factor2cat.size()) {
         return false;
       }
     }
@@ -93,14 +93,14 @@ double FactorGraph::cost(const std::vector<int> &var_labels,
   assert(valid());
   double cost = 0.0;
   for (int factor = 0; factor < nfactors(); factor++) {
-    const auto &vars = factor2vars_[factor];
+    const auto &vars = _factor2vars[factor];
     std::vector<int> local_var_labels;
     local_var_labels.reserve(vars.size());
     for (int var : vars) {
       local_var_labels.push_back(var_labels[var]);
     }
-    double factor_cost = factor_cats_[factor2cat_[factor]].cost(
-        local_var_labels, additional_data);
+    double factor_cost = _factorCats[_factor2cat[factor]].cost(local_var_labels,
+                                                               additional_data);
     cost += factor_cost;
   }
   return cost;
@@ -118,7 +118,7 @@ std::vector<int> FactorGraph::solve(
 
   size_t nconnections = 0;
   for (int factor = 0; factor < nfactors(); factor++) {
-    nconnections += factor2vars_[factor].size();
+    nconnections += _factor2vars[factor].size();
   }
 
   std::vector<int> con2factor(nconnections, -1);
@@ -130,10 +130,10 @@ std::vector<int> FactorGraph::solve(
   std::vector<std::vector<int>> factor2cons(nfactors());
 
   for (int factor = 0, con = 0; factor < nfactors(); factor++) {
-    for (int var : factor2vars_[factor]) {
+    for (int var : _factor2vars[factor]) {
       con2factor[con] = factor;
       con2var[con] = var;
-      size_t var_nlabels = var_cats_[var2cat_[var]].nlabels;
+      size_t var_nlabels = _varCats[_var2cat[var]].nlabels;
       fv_messages[con] = vf_messages[con] = VecX::Zero(var_nlabels);
       var2cons[var].push_back(con);
       factor2cons[factor].push_back(con);
@@ -145,9 +145,9 @@ std::vector<int> FactorGraph::solve(
   std::vector<double> c_i_hats(nvars());
   for (int var = 0; var < nvars(); var++) {
     double &c_i_hat = c_i_hats[var];
-    c_i_hat = var_cats_[var2cat_[var]].c_i;
-    for (auto factor : var2factors_[var]) {
-      c_i_hat += factor_cats_[factor2cat_[factor]].c_alpha;
+    c_i_hat = _varCats[_var2cat[var]].c_i;
+    for (auto factor : _var2factors[var]) {
+      c_i_hat += _factorCats[_factor2cat[factor]].c_alpha;
     }
   }
 
@@ -155,16 +155,16 @@ std::vector<int> FactorGraph::solve(
   std::vector<std::vector<size_t>> factor2var_dims(nfactors());
   for (int factor = 0; factor < nfactors(); factor++) {
     auto &var_dims = factor2var_dims[factor];
-    var_dims.reserve(factor2vars_[factor].size());
-    for (int var : factor2vars_[factor]) {
-      var_dims.push_back(var_cats_[var2cat_[var]].nlabels);
+    var_dims.reserve(_factor2vars[factor].size());
+    for (int var : _factor2vars[factor]) {
+      var_dims.push_back(_varCats[_var2cat[var]].nlabels);
     }
   }
 
   // var marginals
   std::vector<VecX> var2marginals(nvars());
   for (int var = 0; var < nvars(); var++) {
-    var2marginals[var] = VecX::Zero(var_cats_[var2cat_[var]].nlabels);
+    var2marginals[var] = VecX::Zero(_varCats[_var2cat[var]].nlabels);
   }
 
   double last_cost = std::numeric_limits<double>::infinity();
@@ -189,7 +189,7 @@ std::vector<int> FactorGraph::solve(
 
         assert(oppose_fv_con != -1);
 
-        auto &factor_cat_data = factor_cats_[factor2cat_[factor]];
+        auto &factor_cat_data = _factorCats[_factor2cat[factor]];
         vf_messages[vf_con] =
             vf_messages[vf_con] * factor_cat_data.c_alpha / c_i_hats[var] -
             fv_messages[oppose_fv_con];
@@ -198,7 +198,7 @@ std::vector<int> FactorGraph::solve(
 
       // factor -> var
       for (int factor = 0; factor < nfactors(); factor++) {
-        auto &vars = factor2vars_[factor];
+        auto &vars = _factor2vars[factor];
         auto &cons_here = factor2cons[factor];
         assert(cons_here.size() == vars.size());
 
@@ -208,7 +208,7 @@ std::vector<int> FactorGraph::solve(
         }
 
         // dispatch messages from this factor
-        auto &factor_cat_data = factor_cats_[factor2cat_[factor]];
+        auto &factor_cat_data = _factorCats[_factor2cat[factor]];
         auto &cost_fun = factor_cat_data.cost;
         auto &dims = factor2var_dims[factor];
         assert(dims.size() > 0);
