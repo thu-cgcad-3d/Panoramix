@@ -113,10 +113,10 @@ endmacro()
 
 
 # the libs
-add_subdirectory (src lib)
+add_subdirectory (panoramix)
 
 
 # executable
-add_subdirectory (executable executable)
+add_subdirectory (executable)
 
 

@@ -2,12 +2,12 @@
 #include <QFileDialog>
 #include <QtCore>
 
-#include "../../src/gui/singleton.hpp"
-#include "../../src/gui/gui_util.hpp"
+#include "singleton.hpp"
+#include "gui_util.hpp"
 
-#include "../../src/experimental/pi_graph_annotation.hpp"
-#include "../../src/experimental/pi_graph_solve.hpp"
-#include "../../src/experimental/pi_graph_vis.hpp"
+#include "pi_graph_annotation.hpp"
+#include "pi_graph_solve.hpp"
+#include "pi_graph_vis.hpp"
 
 using namespace pano;
 using namespace pano::core;

@@ -1,4 +1,5 @@
-#include "../../src/core/containers.hpp"
+#include "containers.hpp"
+
 #include "panoramix.hpp"
 #include <ctime>
 #include <tuple>

@@ -1,17 +1,17 @@
-#include "../../src/core/parallel.hpp"
-#include "../../src/misc/cache.hpp"
-#include "../../src/misc/clock.hpp"
+#include "parallel.hpp"
+#include "cache.hpp"
+#include "clock.hpp"
 
-#include "../../src/gui/canvas.hpp"
-#include "../../src/gui/singleton.hpp"
-#include "../../src/gui/gui_util.hpp"
+#include "canvas.hpp"
+#include "singleton.hpp"
+#include "gui_util.hpp"
 
-#include "../../src/experimental/pi_graph_annotation.hpp"
-#include "../../src/experimental/pi_graph_cg.hpp"
-#include "../../src/experimental/pi_graph_control.hpp"
-#include "../../src/experimental/pi_graph_occlusion.hpp"
-#include "../../src/experimental/pi_graph_optimize.hpp"
-#include "../../src/experimental/pi_graph_vis.hpp"
+#include "pi_graph_annotation.hpp"
+#include "pi_graph_cg.hpp"
+#include "pi_graph_control.hpp"
+#include "pi_graph_occlusion.hpp"
+#include "pi_graph_optimize.hpp"
+#include "pi_graph_vis.hpp"
 
 using namespace pano;
 using namespace pano::core;
