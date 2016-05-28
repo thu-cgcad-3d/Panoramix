@@ -48,6 +48,10 @@ template <class T1, class T2>
 inline auto MakeOrderedPair(const T1 &a, const T2 &b) {
   return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
 }
+template <class T1, class T2>
+inline auto MakeOrderedPair(const std::pair<T1, T2> &p) {
+  return MakeOrderedPair(p.first, p.second);
+}
 
 // a templated integer sequence
 template <int...> struct Sequence {};

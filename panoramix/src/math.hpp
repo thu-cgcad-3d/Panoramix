@@ -273,3 +273,34 @@ Mat<T, 4, 4> MakeMat4Perspective(const T &fx, const T &fy, const T &cx,
 }
 }
 }
+
+
+namespace std {
+template <class T, int N, int M>
+const T *begin(const pano::core::Mat<T, N, M> &v) {
+  return v.val;
+}
+
+template <class T, int N, int M>
+const T *end(const pano::core::Mat<T, N, M> &v) {
+  return v.val + N * M;
+}
+
+template <class T, int N, int M>
+const T *cbegin(const pano::core::Mat<T, N, M> &v) {
+  return v.val;
+}
+
+template <class T, int N, int M>
+const T *cend(const pano::core::Mat<T, N, M> &v) {
+  return v.val + N * M;
+}
+
+template <class T, int N, int M> T *begin(pano::core::Mat<T, N, M> &v) {
+  return v.val;
+}
+
+template <class T, int N, int M> T *end(pano::core::Mat<T, N, M> &v) {
+  return v.val + N * M;
+}
+}

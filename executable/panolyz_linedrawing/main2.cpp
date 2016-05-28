@@ -1588,7 +1588,7 @@ std::map<VertT, double> PerspectiveReconstruction(
   return vert2depth;
 }
 
-int main(int argc, char **argv, char **env) {
+int main2(int argc, char **argv, char **env) {
   gui::Singleton::SetCmdArgs(argc, argv, env);
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
@@ -1612,7 +1612,7 @@ int main(int argc, char **argv, char **env) {
                         "\\" + name + ".obj." + cam_name + ".cereal";
 
   //// [Load Mesh]
-  auto mesh = LoadFromObjFile(obj_file_name);
+  auto mesh = LoadMeshFromObjFile(obj_file_name);
 
   if (true) { // show original mesh
     gui::SceneBuilder sb;

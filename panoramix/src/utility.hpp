@@ -74,19 +74,18 @@ inline bool HasValue(const Ratio<T, S> &r, TesterT tester) {
   return HasValue(r.numerator, tester) || HasValue(r.denominator, tester);
 }
 
-template <class T, int N, class TesterT>
-inline bool HasValue(const Line<T, N> &v, TesterT tester) {
+template <class PointT, class TesterT>
+inline bool HasValue(const Line<PointT> &v, TesterT tester) {
   return HasValue(v.first, tester) || HasValue(v.second, tester);
 }
 
-template <class T, int N, class TesterT,
-          class = std::enable_if_t<std::is_floating_point<T>::value>>
-inline bool HasValue(const Ray<T, N> &v, TesterT tester) {
+template <class PointT, class DirT, class TesterT>
+inline bool HasValue(const Ray<PointT, DirT> &v, TesterT tester) {
   return HasValue(v.anchor, tester) || HasValue(v.direction, tester);
 }
 
-template <class T, int N, class TesterT>
-inline bool HasValue(const Plane<T, N> &p, TesterT tester) {
+template <class PointT, class DirT, class TesterT>
+inline bool HasValue(const Plane<PointT, DirT> &p, TesterT tester) {
   return HasValue(p.anchor, tester) || HasValue(p.normal, tester);
 }
 
@@ -273,9 +272,9 @@ inline Ratio<T, T> Distance(const HPoint<T, N> &a, const HPoint<T, N> &b) {
   return norm(a - b);
 }
 
-template <class T, int N>
-inline T Distance(const PositionOnLine<T, N> &a,
-                  const PositionOnLine<T, N> &b) {
+template <class PointT>
+inline auto Distance(const PositionOnLine<PointT> &a,
+                     const PositionOnLine<PointT> &b) {
   return norm(a.position - b.position);
 }
 
@@ -333,12 +332,12 @@ inline Box2 BoundingBox(const KeyPoint &p) {
   return Box2(Point2(p.pt.x, p.pt.y), Point2(p.pt.x, p.pt.y));
 }
 
-template <class T, int N> inline Box<T, N> BoundingBox(const Line<T, N> &l) {
-  return Box<T, N>(l.first, l.second);
+template <class PointT> inline auto BoundingBox(const Line<PointT> &l) {
+  return BoundingBox(l.first) | BoundingBox(l.second);
 }
 
-template <class T, int N>
-inline Box<T, N> BoundingBox(const PositionOnLine<T, N> &p) {
+template <class PointT>
+inline auto BoundingBox(const PositionOnLine<PointT> &p) {
   return BoundingBox(p.position);
 }
 
@@ -350,12 +349,9 @@ template <class T, int N> inline Box<T, N> BoundingBox(const Sphere<T, N> &s) {
   return Box<T, N>(s.center, s.center).expand(s.radius);
 }
 
-template <class T, int N> inline Box<T, N> BoundingBox(const Polygon<T, N> &p) {
-  Box<T, N> b;
-  for (auto &c : p.corners) {
-    b |= BoundingBox(c);
-  }
-  return b;
+template <class PointT, class DirT>
+inline auto BoundingBox(const Polygon<PointT, DirT> &p) {
+  return BoundingBoxOfRange(b.corners.begin(), b.corners.end());
 }
 
 // pointers
@@ -553,38 +549,39 @@ inline bool IsFuzzyColinear(PointIterT points_begin, PointIterT points_end,
 // for lines and points
 // returns projection position
 template <class T, int N>
-PositionOnLine<T, N> ProjectionOfPointOnLine(const Point<T, N> &p,
-                                             const Line<T, N> &line);
+PositionOnLine<Point<T, N>>
+ProjectionOfPointOnLine(const Point<T, N> &p, const Line<Point<T, N>> &line);
 
 // returns (distance, nearest point)
 template <class T, int N>
 std::pair<T, Point<T, N>> DistanceFromPointToLine(const Point<T, N> &p,
-                                                  const Ray<T, N> &line);
+                                                  const Ray<Point<T, N>> &line);
 
 template <class T, int N>
-inline T Distance(const Point<T, N> &p, const Ray<T, N> &line) {
+inline T Distance(const Point<T, N> &p, const Ray<Point<T, N>> &line) {
   return DistanceFromPointToLine(p, line).first;
 }
 template <class T, int N>
-inline T Distance(const Ray<T, N> &line, const Point<T, N> &p) {
+inline T Distance(const Ray<Point<T, N>> &line, const Point<T, N> &p) {
   return DistanceFromPointToLine(p, line).first;
 }
 
 // returns signed distance
 template <class T>
-T SignedDistanceFromPointToLine(const Point<T, 2> &p, const Ray<T, 2> &line);
+T SignedDistanceFromPointToLine(const Point<T, 2> &p,
+                                const Ray<Point<T, 2>> &line);
 
 // returns (distance, nearest position)
 template <class T, int N>
-std::pair<T, PositionOnLine<T, N>>
-DistanceFromPointToLine(const Point<T, N> &p, const Line<T, N> &line);
+std::pair<T, PositionOnLine<Point<T, N>>>
+DistanceFromPointToLine(const Point<T, N> &p, const Line<Point<T, N>> &line);
 
 template <class T, int N>
-inline T Distance(const Point<T, N> &p, const Line<T, N> &line) {
+inline T Distance(const Point<T, N> &p, const Line<Point<T, N>> &line) {
   return DistanceFromPointToLine(p, line).first;
 }
 template <class T, int N>
-inline T Distance(const Line<T, N> &line, const Point<T, N> &p) {
+inline T Distance(const Line<Point<T, N>> &line, const Point<T, N> &p) {
   return DistanceFromPointToLine(p, line).first;
 }
 
@@ -592,53 +589,61 @@ inline T Distance(const Line<T, N> &line, const Point<T, N> &p) {
 // see http://geomalgorithms.com/a07-_distance.html for explainations
 template <class T, int N>
 std::pair<T, std::pair<Point<T, N>, Point<T, N>>>
-DistanceBetweenTwoLines(const Ray<T, N> &line1, const Ray<T, N> &line2,
-                        T *lambda1 = nullptr, T *lambda2 = nullptr);
+DistanceBetweenTwoLines(const Ray<Point<T, N>> &line1,
+                        const Ray<Point<T, N>> &line2, T *lambda1 = nullptr,
+                        T *lambda2 = nullptr);
 
 template <class T, int N>
-inline T Distance(const Ray<T, N> &line1, const Ray<T, N> &line2) {
+inline T Distance(const Ray<Point<T, N>> &line1,
+                  const Ray<Point<T, N>> &line2) {
   return DistanceBetweenTwoLines(line1, line2).first;
 }
 
 template <class T>
-inline Point<T, 2> Intersection(const Ray<T, 2> &line1, const Ray<T, 2> &line2);
+inline Point<T, 2> Intersection(const Ray<Point<T, 2>> &line1,
+                                const Ray<Point<T, 2>> &line2);
 
 // returns (distance, (nearest position on line1, nearest position on line2))
 // see http://geomalgorithms.com/a07-_distance.html for explainations
 template <class T, int N>
-std::pair<T, std::pair<PositionOnLine<T, N>, PositionOnLine<T, N>>>
-DistanceBetweenTwoLines(const Line<T, N> &line1, const Line<T, N> &line2);
+std::pair<T,
+          std::pair<PositionOnLine<Point<T, N>>, PositionOnLine<Point<T, N>>>>
+DistanceBetweenTwoLines(const Line<Point<T, N>> &line1,
+                        const Line<Point<T, N>> &line2);
 
 template <class T, int N>
-inline T Distance(const Line<T, N> &line1, const Line<T, N> &line2) {
+inline T Distance(const Line<Point<T, N>> &line1,
+                  const Line<Point<T, N>> &line2) {
   return DistanceBetweenTwoLines(line1, line2).first;
 }
 
 // intersecton between line and plane
 template <class T, int N>
-PositionOnLine<T, N> IntersectionOfLineAndPlane(const Ray<T, N> &line,
-                                                const Plane<T, N> &plane) {
+PositionOnLine<Point<T, N>>
+IntersectionOfLineAndPlane(const Ray<Point<T, N>> &line,
+                           const Plane<Point<T, N>> &plane) {
   T lambda = (plane.anchor - line.anchor).dot(plane.normal) /
              line.direction.dot(plane.normal);
-  return PositionOnLine<T, N>(line, lambda);
+  return PositionOnLine<Point<T, N>>(line, lambda);
 }
 
 template <class T, int N>
-inline Point<T, N> Intersection(const Ray<T, N> &line,
-                                const Plane<T, N> &plane) {
+inline Point<T, N> Intersection(const Ray<Point<T, N>> &line,
+                                const Plane<Point<T, N>> &plane) {
   return IntersectionOfLineAndPlane(line, plane).position;
 }
 
 template <class T, int N>
-inline Point<T, N> Intersection(const Plane<T, N> &plane,
-                                const Ray<T, N> &line) {
+inline Point<T, N> Intersection(const Plane<Point<T, N>> &plane,
+                                const Ray<Point<T, N>> &line) {
   return IntersectionOfLineAndPlane(line, plane).position;
 }
 
 // intersection o
 template <class T>
-Failable<Ray<T, 3>> IntersectionOfPlaneAndPlane(const Plane<T, 3> &p1,
-                                                const Plane<T, 3> &p2);
+Failable<Ray<Point<T, 3>>>
+IntersectionOfPlaneAndPlane(const Plane<Point<T, 3>> &p1,
+                            const Plane<Point<T, 3>> &p2);
 
 // triangulate polygon
 // VertPoint2GetterT: (Vert) -> Point2
@@ -648,26 +653,27 @@ int TriangulatePolygon(VertIterT vertsBegin, VertIterT vertsEnd,
                        VertPoint2GetterT &&getPoint2, AddTriFaceFunT &&addFace);
 
 // area of polygon
-template <class T> T Area(const Polygon<T, 3> &polygon);
+template <class T> T Area(const Polygon<Point<T, 3>> &polygon);
 
 // intersection of line and polygon
 template <class T>
-Failable<Point<T, 3>> IntersectionOfLineAndPolygon(const Ray<T, 3> &ray,
-                                                   const Polygon<T, 3> &polygon,
-                                                   T epsilon = 0);
+Failable<Point<T, 3>>
+IntersectionOfLineAndPolygon(const Ray<Point<T, 3>> &ray,
+                             const Polygon<Point<T, 3>> &polygon,
+                             T epsilon = 0);
 
 // distance from point to plane
 template <class T, int N>
 inline std::pair<T, Point<T, N>>
-DistanceFromPointToPlane(const Point<T, N> &p, const Plane<T, N> &plane);
+DistanceFromPointToPlane(const Point<T, N> &p, const Plane<Point<T, N>> &plane);
 
 template <class T, int N>
 Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
-    const Ray<T, N> &line, const Point<T, N> *cornersData);
+    const Ray<Point<T, N>> &line, const Point<T, N> *cornersData);
 
 template <class T, int N>
 inline Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
-    const Ray<T, N> &line, const std::array<Point<T, N>, N> &corners);
+    const Ray<Point<T, N>> &line, const std::array<Point<T, N>, N> &corners);
 
 // eigen vectors and eigen values from points
 template <class T, int N>
@@ -906,18 +912,18 @@ ProposeXYDirectionsFromZDirection(const Vec<T, 3> &z) {
 // for lines and points
 // returns projection position
 template <class T, int N>
-PositionOnLine<T, N> ProjectionOfPointOnLine(const Point<T, N> &p,
-                                             const Line<T, N> &line) {
+PositionOnLine<Point<T, N>>
+ProjectionOfPointOnLine(const Point<T, N> &p, const Line<Point<T, N>> &line) {
   Vec<T, N> lineDir = line.direction();
   lineDir /= norm(lineDir);
   T projRatio = (p - line.first).dot(lineDir) / line.length();
-  return PositionOnLine<T, N>(line, projRatio);
+  return PositionOnLine<Point<T, N>>(line, projRatio);
 }
 
 // returns (distance, nearest point)
 template <class T, int N>
-std::pair<T, Point<T, N>> DistanceFromPointToLine(const Point<T, N> &p,
-                                                  const Ray<T, N> &line) {
+std::pair<T, Point<T, N>>
+DistanceFromPointToLine(const Point<T, N> &p, const Ray<Point<T, N>> &line) {
   Vec<T, N> lineDir = line.direction;
   lineDir /= norm(lineDir);
   auto root = (p - line.anchor).dot(lineDir) * lineDir + line.anchor;
@@ -926,7 +932,8 @@ std::pair<T, Point<T, N>> DistanceFromPointToLine(const Point<T, N> &p,
 
 // returns signed distance
 template <class T>
-T SignedDistanceFromPointToLine(const Point<T, 2> &p, const Ray<T, 2> &line) {
+T SignedDistanceFromPointToLine(const Point<T, 2> &p,
+                                const Ray<Point<T, 2>> &line) {
   auto coeffs = GetCoeffs(line);
   return (coeffs[0] * p[0] + coeffs[1] * p[1] + coeffs[2]) /
          sqrt(Square(coeffs[0]) + Square(coeffs[1]));
@@ -934,13 +941,13 @@ T SignedDistanceFromPointToLine(const Point<T, 2> &p, const Ray<T, 2> &line) {
 
 // returns (distance, nearest position)
 template <class T, int N>
-std::pair<T, PositionOnLine<T, N>>
-DistanceFromPointToLine(const Point<T, N> &p, const Line<T, N> &line) {
+std::pair<T, PositionOnLine<Point<T, N>>>
+DistanceFromPointToLine(const Point<T, N> &p, const Line<Point<T, N>> &line) {
   Vec<T, N> lineDir = line.direction();
   lineDir /= norm(lineDir);
   T projRatio = (p - line.first).dot(lineDir) / line.length();
   projRatio = BoundBetween(projRatio, 0, 1);
-  PositionOnLine<T, N> pos(line, projRatio);
+  PositionOnLine<Point<T, N>> pos(line, projRatio);
   return std::make_pair(norm(p - pos.position), pos);
 }
 
@@ -948,8 +955,8 @@ DistanceFromPointToLine(const Point<T, N> &p, const Line<T, N> &line) {
 // see http://geomalgorithms.com/a07-_distance.html for explainations
 template <class T, int N>
 std::pair<T, std::pair<Point<T, N>, Point<T, N>>>
-DistanceBetweenTwoLines(const Ray<T, N> &line1, const Ray<T, N> &line2,
-                        T *lambda1, T *lambda2) {
+DistanceBetweenTwoLines(const Ray<Point<T, N>> &line1,
+                        const Ray<Point<T, N>> &line2, T *lambda1, T *lambda2) {
 
   auto u = normalize(line1.direction);
   auto v = normalize(line2.direction);
@@ -983,8 +990,8 @@ DistanceBetweenTwoLines(const Ray<T, N> &line1, const Ray<T, N> &line2,
 }
 
 template <class T>
-inline Point<T, 2> Intersection(const Ray<T, 2> &line1,
-                                const Ray<T, 2> &line2) {
+inline Point<T, 2> Intersection(const Ray<Point<T, 2>> &line1,
+                                const Ray<Point<T, 2>> &line2) {
   auto eq1 = GetCoeffs(line1);
   auto eq2 = GetCoeffs(line2);
   auto hinterp = eq1.cross(eq2);
@@ -998,8 +1005,10 @@ inline Point<T, 2> Intersection(const Ray<T, 2> &line1,
 // returns (distance, (nearest position on line1, nearest position on line2))
 // see http://geomalgorithms.com/a07-_distance.html for explainations
 template <class T, int N>
-std::pair<T, std::pair<PositionOnLine<T, N>, PositionOnLine<T, N>>>
-DistanceBetweenTwoLines(const Line<T, N> &line1, const Line<T, N> &line2) {
+std::pair<T,
+          std::pair<PositionOnLine<Point<T, N>>, PositionOnLine<Point<T, N>>>>
+DistanceBetweenTwoLines(const Line<Point<T, N>> &line1,
+                        const Line<Point<T, N>> &line2) {
 
   auto u = line1.direction();
   auto v = line2.direction();
@@ -1062,16 +1071,17 @@ DistanceBetweenTwoLines(const Line<T, N> &line1, const Line<T, N> &line2) {
   sc = (IsBetween(sN, -SMALL_NUM, +SMALL_NUM) ? 0.0 : sN / sD);
   tc = (IsBetween(tN, -SMALL_NUM, +SMALL_NUM) ? 0.0 : tN / tD);
 
-  PositionOnLine<T, N> pos1(line1, sc);
-  PositionOnLine<T, N> pos2(line2, tc);
+  PositionOnLine<Point<T, N>> pos1(line1, sc);
+  PositionOnLine<Point<T, N>> pos2(line2, tc);
   auto dist = norm(pos1.position - pos2.position);
   return std::make_pair(dist, std::make_pair(pos1, pos2));
 }
 
 // intersection o
 template <class T>
-Failable<Ray<T, 3>> IntersectionOfPlaneAndPlane(const Plane<T, 3> &p1,
-                                                const Plane<T, 3> &p2) {
+Failable<Ray<Point<T, 3>>>
+IntersectionOfPlaneAndPlane(const Plane<Point<T, 3>> &p1,
+                            const Plane<Point<T, 3>> &p2) {
   Vec<T, 3> dir = p1.normal.cross(p2.normal);
   Mat<T, 3, 3> mat(p1.normal[0], p1.normal[1], p1.normal[2], p2.normal[0],
                    p2.normal[1], p2.normal[2], dir[0], dir[1], dir[2]);
@@ -1080,7 +1090,7 @@ Failable<Ray<T, 3>> IntersectionOfPlaneAndPlane(const Plane<T, 3> &p1,
       mat, Vec3(p1.anchor.dot(p1.normal), p2.anchor.dot(p2.normal), 0), anchor);
   if (!success)
     return nullptr;
-  return Ray<T, 3>(anchor, dir);
+  return Ray<Point<T, 3>>(anchor, dir);
 }
 
 // triangulate polygon
@@ -1175,7 +1185,7 @@ int TriangulatePolygon(VertIterT vertsBegin, VertIterT vertsEnd,
 }
 
 // area of polygon
-template <class T> T Area(const Polygon<T, 3> &polygon) {
+template <class T> T Area(const Polygon<Point<T, 3>> &polygon) {
   T area = 0.0;
   Vec<T, 3> x, y;
   std::tie(x, y) = ProposeXYDirectionsFromZDirection(polygon.normal);
@@ -1194,9 +1204,9 @@ template <class T> T Area(const Polygon<T, 3> &polygon) {
 
 // intersection of line and polygon
 template <class T>
-Failable<Point<T, 3>> IntersectionOfLineAndPolygon(const Ray<T, 3> &ray,
-                                                   const Polygon<T, 3> &polygon,
-                                                   T epsilon) {
+Failable<Point<T, 3>>
+IntersectionOfLineAndPolygon(const Ray<Point<T, 3>> &ray,
+                             const Polygon<Point<T, 3>> &polygon, T epsilon) {
   Vec<T, 3> x, y;
   std::tie(x, y) = ProposeXYDirectionsFromZDirection(polygon.normal);
   bool hasIntersection = false;
@@ -1256,7 +1266,8 @@ Failable<Point<T, 3>> IntersectionOfLineAndPolygon(const Ray<T, 3> &ray,
 // distance from point to plane
 template <class T, int N>
 inline std::pair<T, Point<T, N>>
-DistanceFromPointToPlane(const Point<T, N> &p, const Plane<T, N> &plane) {
+DistanceFromPointToPlane(const Point<T, N> &p,
+                         const Plane<Point<T, N>> &plane) {
   auto signedDist = plane.signedDistanceTo(p);
   return std::make_pair(abs(signedDist),
                         p - signedDist * normalize(plane.normal));
@@ -1264,7 +1275,7 @@ DistanceFromPointToPlane(const Point<T, N> &p, const Plane<T, N> &plane) {
 
 template <class T, int N>
 Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
-    const Ray<T, N> &line, const Point<T, N> *cornersData) {
+    const Ray<Point<T, N>> &line, const Point<T, N> *cornersData) {
   using namespace Eigen;
   Map<const Matrix<T, N, N, Eigen::ColMajor>> corners((const T *)cornersData, N,
                                                       N);
@@ -1288,7 +1299,7 @@ Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
 
 template <class T, int N>
 inline Vec<T, N> BarycentricCoordinatesOfLineAndPlaneUnitIntersection(
-    const Ray<T, N> &line, const std::array<Point<T, N>, N> &corners) {
+    const Ray<Point<T, N>> &line, const std::array<Point<T, N>, N> &corners) {
   return BarycentricCoordinatesOfLineAndPlaneUnitIntersection(line,
                                                               corners.data());
 }

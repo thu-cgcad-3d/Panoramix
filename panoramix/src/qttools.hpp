@@ -98,12 +98,13 @@ inline core::Sizei MakeCoreSize(const QSize & sz) {
 }
 
 // lines
-template <class T> inline QLineF MakeQLineF(const core::Line<T, 2> &line) {
+template <class T>
+inline QLineF MakeQLineF(const core::Line<Point<T, 2>> &line) {
   return QLineF(MakeQPointF(line.first), MakeQPointF(line.second));
 }
-inline core::Line<qreal, 2> MakeCoreLine(const QLineF &line) {
-  return core::Line<qreal, 2>(MakeCorePoint(line.p1()),
-                              MakeCorePoint(line.p2()));
+inline core::Line<Point<qreal, 2>> MakeCoreLine(const QLineF &line) {
+  return core::Line<Point<qreal, 2>>(MakeCorePoint(line.p1()),
+                                     MakeCorePoint(line.p2()));
 }
 
 // image

@@ -163,7 +163,7 @@ Mesh<VertHandle, HalfHandle, FaceHandle>
 MakeMeshProxy(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
 
 // LoadFromObjFile
-Mesh<Point3> LoadFromObjFile(const std::string &fname);
+Mesh<Point3> LoadMeshFromObjFile(const std::string &fname);
 }
 }
 

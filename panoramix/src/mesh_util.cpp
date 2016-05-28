@@ -2,7 +2,7 @@
 
 namespace pano {
 namespace core {
-Mesh<Point3> LoadFromObjFile(const std::string &fname) {
+Mesh<Point3> LoadMeshFromObjFile(const std::string &fname) {
   Mesh<Point3> mesh;
   std::ifstream ifs(fname);
   if (ifs.is_open()) {

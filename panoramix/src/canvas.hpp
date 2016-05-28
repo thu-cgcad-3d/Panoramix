@@ -94,7 +94,7 @@ public:
   }
 
   // lines
-  template <class TT> inline Canvas &add(const Line<TT, 2> &line) {
+  template <class TT> inline Canvas &add(const Line<Point<TT, 2>> &line) {
     cv::line(image(), cv::Point(static_cast<int>(line.first(0)),
                                 static_cast<int>(line.first(1))),
              cv::Point(static_cast<int>(line.second(0)),
@@ -109,12 +109,12 @@ public:
     return *this;
   }
 
-  template <class TT> inline Canvas &add(const Ray<TT, 2> &line) {
+  template <class TT> inline Canvas &add(const Ray<Point<TT, 2>> &line) {
     return add(Ray2(core::ecast<double>(line.anchor),
                     core::ecast<double>(line.direction)));
   }
 
-  template <class TT> inline Canvas &add(const Chain<TT, 2> &c) {
+  template <class TT> inline Canvas &add(const Chain<Point<TT, 2>> &c) {
     for (int i = 0; i < (c.closed ? c.size() : (c.size() - 1)); i++) {
       add(c.edge(i));
     }

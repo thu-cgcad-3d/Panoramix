@@ -146,7 +146,7 @@ inline void Discretize(TriMesh &mesh, const Point<T, 2> &p,
 }
 
 template <class T>
-inline void Discretize(TriMesh &mesh, const Line<T, 3> &l,
+inline void Discretize(TriMesh &mesh, const Line<Point<T, 3>> &l,
                        const DiscretizeOptions &o) {
   TriMesh::Vertex v1, v2;
   v1.position = cat(ecast<float>(l.first), 1.0f);
@@ -157,13 +157,13 @@ inline void Discretize(TriMesh &mesh, const Line<T, 3> &l,
 }
 
 template <class T>
-inline void Discretize(TriMesh &mesh, const Line<T, 2> &l,
+inline void Discretize(TriMesh &mesh, const Line<Point<T, 2>> &l,
                        const DiscretizeOptions &o) {
-  Discretize(mesh, Line<T, 3>(cat(l.first, 0.0), cat(l.second, 0.0)), o);
+  Discretize(mesh, Line<Point<T, 3>>(cat(l.first, 0.0), cat(l.second, 0.0)), o);
 }
 
 template <class T>
-inline void Discretize(TriMesh &mesh, const Chain<T, 3> &c,
+inline void Discretize(TriMesh &mesh, const Chain<Point<T, 3>> &c,
                        const DiscretizeOptions &o) {
   if (c.size() == 0)
     return;
@@ -243,7 +243,7 @@ void Discretize(TriMesh &mesh, const Box<T, 3> &b, const DiscretizeOptions &o) {
 }
 
 template <class T>
-void Discretize(TriMesh &mesh, const Polygon<T, 3> &p,
+void Discretize(TriMesh &mesh, const Polygon<Point<T, 3>> &p,
                 const DiscretizeOptions &o) {
   std::vector<TriMesh::VertHandle> vhandles(p.corners.size());
   for (int i = 0; i < p.corners.size(); i++) {

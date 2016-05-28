@@ -16,38 +16,86 @@ namespace experimental {
 
 using namespace pano::core;
 
-// LineDrawing
-enum LineType { SolidLine, DashedLine };
-template <class PointT> struct LineDrawing {
-  std::vector<PointT> corners;
-  std::vector<std::pair<int, int>> line2corners;
-  std::vector<LineType> line2type;
-  std::vector<std::vector<int>> face2corners;
+class LineDrawingTopo {
+public:
+  LineDrawingTopo() {}
+  LineDrawingTopo(const std::vector<std::pair<int, int>> &e2cs,
+                  const std::vector<std::vector<int>> &f2cs);
+
   template <class ArchiverT> void serialize(ArchiverT &ar) {
-    ar(corners, line2corners, line2type, face2corners);
+    ar(face2corners, edge2corners, face2edges, edge2faces, corner2edges,
+       corners2edge, corner2faces);
   }
+
+  size_t ncorners() const { return corner2edges.size(); }
+  size_t nedges() const { return edge2corners.size(); }
+  size_t nfaces() const { return face2corners.size(); }
+
+public:
+  std::vector<std::vector<int>> face2corners;
+  std::vector<std::pair<int, int>> edge2corners;
+  std::vector<std::vector<int>> face2edges;
+  std::vector<std::vector<int>> edge2faces;
+  std::vector<std::vector<int>> corner2edges;
+  std::map<std::pair<int, int>, int> corners2edge;
+  std::vector<std::vector<int>> corner2faces;
 };
 
-// LoadLineDrawing
-LineDrawing<Point2> LoadLineDrawing(const std::string &filename);
-LineDrawing<Point3> LoadLineDrawing(const std::string &filename,
-                                    const std::string &gtfilename);
+// LineDrawing
+template <class CornerDataT, class EdgeDataT = Dummy, class FaceDataT = Dummy>
+class LineDrawing {
+public:
+  LineDrawing() {}
+  explicit LineDrawing(const std::vector<std::pair<int, int>> &e2cs,
+                       const std::vector<std::vector<int>> &f2cs,
+                       const std::vector<CornerDataT> &cs = {},
+                       const std::vector<EdgeDataT> &es = {},
+                       const std::vector<FaceDataT> &fs = {})
+      : corners(cs), edges(es), faces(fs), topo(e2cs, f2cs) {
+    if (corners.empty()) {
+      corners.resize(topo.ncorners());
+    }
+    if (edges.empty()) {
+      edges.resize(topo.nedges());
+    }
+    if (faces.empty()) {
+      faces.resize(topo.nfaces());
+    }
+  }
+
+  size_t ncorners() const { return corners.size(); }
+  size_t nedges() const { return edges.size(); }
+  size_t nfaces() const { return faces.size(); }
+
+  template <class ArchiverT> void serialize(ArchiverT &ar) {
+    ar(corners, edges, faces, topo);
+  }
+
+public:
+  std::vector<CornerDataT> corners;
+  std::vector<EdgeDataT> edges;
+  std::vector<FaceDataT> faces;
+  LineDrawingTopo topo;
+};
+
+// LoadLineDrawingFromObjFile
+LineDrawing<Point3> LoadLineDrawingFromObjFile(const std::string & fname);
 
 // ToMesh
-template <class T, class PointConvertT = std::identity<T>>
-Mesh<std::decay_t<typename FunctionTraits<PointConvertT>::ResultType>>
-ToMesh(const LineDrawing<T> &ld, PointConvertT cvtFun = PointConvertT());
+template <class CT, class ET, class FT,
+          class CornerConvertT = std::identity<CT>,
+          class EdgeConvertT = std::identity<ET>,
+          class FaceConvertT = std::identity<FT>>
+Mesh<std::decay_t<typename FunctionTraits<CornerConvertT>::ResultType>,
+     std::decay_t<typename FunctionTraits<EdgeConvertT>::ResultType>,
+     std::decay_t<typename FunctionTraits<FaceConvertT>::ResultType>>
+ToMesh(const LineDrawing<CT, ET, FT> &ld,
+       CornerConvertT cornerCvtFun = CornerConvertT(),
+       EdgeConvertT edgeCvtFun = EdgeConvertT(),
+       FaceConvertT faceCvtFun = FaceConvertT());
 
-// ToLineDrawing
-template <class T, class H, class F, class VertConvertT = std::identity<T>>
-LineDrawing<std::decay_t<typename FunctionTraits<VertConvertT>::ResultType>>
-ToLineDrawing(const Mesh<T, H, F> &mesh, VertConvertT cvtFun = VertConvertT());
 
-// Transform
-template <class T, class FunT>
-auto Transform(const LineDrawing<T> &in, const FunT &fun);
-template <class T, class FunT>
-auto Transform(LineDrawing<T> &&in, const FunT &fun);
+
 }
 
 namespace core {
@@ -64,36 +112,42 @@ BoundingBox(const pano::experimental::LineDrawing<PointT> &drawing) {
 ////////////////////////////////////////////////
 namespace pano {
 namespace experimental {
+
 // ToMesh
-template <class T, class PointConvertT>
-Mesh<std::decay_t<typename FunctionTraits<PointConvertT>::ResultType>>
-ToMesh(const LineDrawing<T> &ld, PointConvertT cvtFun) {
+template <class CT, class ET, class FT, class CornerConvertT,
+          class EdgeConvertT, class FaceConvertT>
+Mesh<std::decay_t<typename FunctionTraits<CornerConvertT>::ResultType>,
+     std::decay_t<typename FunctionTraits<EdgeConvertT>::ResultType>,
+     std::decay_t<typename FunctionTraits<FaceConvertT>::ResultType>>
+ToMesh(const LineDrawing<CT, ET, FT> &ld, CornerConvertT cornerCvtFun,
+       EdgeConvertT edgeCvtFun, FaceConvertT faceCvtFun) {
   Mesh<std::decay_t<typename FunctionTraits<PointConvertT>::ResultType>> mesh;
   using VHandle = VertHandle;
-  mesh.internalVertices().reserve(ld.corners.size());
-  mesh.internalHalfEdges().reserve(ld.line2corners.size() * 2);
-  mesh.internalFaces().reserve(ld.face2corners.size());
+  mesh.internalVertices().reserve(ld.ncorners());
+  mesh.internalHalfEdges().reserve(ld.nedges() * 2);
+  mesh.internalFaces().reserve(ld.nfaces());
   for (int i = 0; i < ld.corners.size(); i++) {
-    mesh.addVertex(cvtFun(ld.corners[i]));
+    mesh.addVertex(cornerCvtFun(ld.corners[i]));
   }
-  for (int i = 0; i < ld.line2corners.size(); i++) {
-    mesh.addEdge(VHandle(ld.line2corners[i].first),
-                 VHandle(ld.line2corners[i].second));
+  for (int i = 0; i < ld.topo.edge2corners.size(); i++) {
+    mesh.addEdge(VHandle(ld.topo.edge2corners[i].first),
+                 VHandle(ld.topo.edge2corners[i].second),
+                 edgeCvtFun(ld.edges[i]));
   }
-  if (ld.face2corners.empty()) {
+  if (ld.topo.face2corners.empty()) {
     return mesh;
   }
   std::vector<int> faceInsertOrder = {0};
   std::set<int> notInsertedFace;
-  for (int i = 1; i < ld.face2corners.size(); i++) {
+  for (int i = 1; i < ld.topo.face2corners.size(); i++) {
     notInsertedFace.insert(i);
   }
   while (!notInsertedFace.empty()) {
   LabelInsertFace:
     for (int candFace : notInsertedFace) {
       for (int insertedFace : faceInsertOrder) {
-        auto &candCorners = ld.face2corners[candFace];
-        auto &insertedCorners = ld.face2corners[insertedFace];
+        auto &candCorners = ld.topo.face2corners[candFace];
+        auto &insertedCorners = ld.topo.face2corners[insertedFace];
         for (int i1 = 0; i1 < candCorners.size(); i1++) {
           int from1 = candCorners[i1];
           int to1 = candCorners[(i1 + 1) % candCorners.size()];
@@ -113,72 +167,15 @@ ToMesh(const LineDrawing<T> &ld, PointConvertT cvtFun) {
   }
 
   for (int i : faceInsertOrder) {
-    std::vector<VHandle> vhs(ld.face2corners[i].size());
+    std::vector<VHandle> vhs(ld.topo.face2corners[i].size());
     for (int j = 0; j < vhs.size(); j++) {
-      vhs[j] = VHandle(ld.face2corners[i][j]);
+      vhs[j] = VHandle(ld.topo.face2corners[i][j]);
     }
-    mesh.addFace(vhs, true);
+    mesh.addFace(vhs, true, faceCvtFun(ld.faces[i]));
   }
 
   AssertEdgesAreStiched(mesh);
   return mesh;
-}
-
-// ToLineDrawing
-template <class T, class H, class F, class VertConvertT>
-LineDrawing<std::decay_t<typename FunctionTraits<VertConvertT>::ResultType>>
-ToLineDrawing(const Mesh<T, H, F> &mesh, VertConvertT cvtFun) {
-  LineDrawing<std::decay_t<typename FunctionTraits<VertConvertT>::ResultType>>
-      ld;
-  using VHandle = VertHandle;
-  std::vector<int> vh2corner(mesh.internalVertices().size(), -1);
-  for (auto &v : mesh.vertices()) {
-    ld.corners.push_back(cvtFun(v.data));
-    vh2corner[v.topo.hd.id] = ld.corners.size() - 1;
-  }
-  std::vector<bool> hh2used(mesh.internalHalfEdges().size(), false);
-  for (auto &h : mesh.halfedges()) {
-    if (hh2used[h.topo.hd.id] || hh2used[mesh.topo(h.topo.hd).opposite.id]) {
-      continue;
-    }
-    ld.line2corners.emplace_back(vh2corner[mesh.topo(h.topo.hd).from().id],
-                                 vh2corner[mesh.topo(h.topo.hd).to().id]);
-    hh2used[h.topo.hd.id] = true;
-  }
-  ld.line2type.resize(ld.line2corners.size(), SolidLine);
-  for (auto &f : mesh.faces()) {
-    std::vector<int> corners(f.topo.halfedges.size());
-    for (int j = 0; j < corners.size(); j++) {
-      corners[j] = vh2corner[mesh.topo(f.topo.halfedges[j]).to().id];
-    }
-    ld.face2corners.push_back(std::move(corners));
-  }
-  return ld;
-}
-
-// Transform
-template <class T, class FunT>
-auto Transform(const LineDrawing<T> &in, const FunT &fun) {
-  LineDrawing<typename FunctionTraits<FunT>::ResultType> out;
-  out.corners.resize(in.corners.size());
-  std::transform(in.corners.begin(), in.corners.end(), out.corners.begin(),
-                 fun);
-  out.line2corners = in.line2corners;
-  out.line2type = in.line2type;
-  out.face2corners = in.face2corners;
-  return out;
-}
-
-template <class T, class FunT>
-auto Transform(LineDrawing<T> &&in, const FunT &fun) {
-  LineDrawing<typename FunctionTraits<FunT>::ResultType> out;
-  out.corners.resize(in.corners.size());
-  std::transform(in.corners.begin(), in.corners.end(), out.corners.begin(),
-                 fun);
-  out.line2corners = std::move(in.line2corners);
-  out.line2type = std::move(in.line2type);
-  out.face2corners = std::move(in.face2corners);
-  return out;
 }
 }
 }

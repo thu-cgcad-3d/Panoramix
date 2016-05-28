@@ -1,8 +1,8 @@
-#include "utility.hpp"
-#include "color.hpp"
-#include "shader.hpp"
 #include "../panoramix.unittest.hpp"
+#include "color.hpp"
 #include "factor_graph.hpp"
+#include "shader.hpp"
+#include "utility.hpp"
 
 using namespace pano;
 using namespace test;
@@ -11,7 +11,7 @@ TEST(FactorGraph, Simple) {
   core::FactorGraph fg;
   auto vcid = fg.addVarCategory(2, 1.0);
   auto fcid = fg.addFactorCategory(
-      [](const std::vector<int> &labels, void *) -> double {
+      [](const std::vector<int> &labels) -> double {
         return labels[0] == 0 ? 1.0 : 0.0;
       },
       1.0);
@@ -65,8 +65,8 @@ TEST(FactorGraph, Denoise) {
     // append new factor type
     double distToBackground = core::Distance(background, *it);
     double distToForeground = core::Distance(foreground, *it);
-    auto fCost = [distToBackground, distToForeground](
-        const std::vector<int> &labels, void *) -> double {
+    auto fCost = [distToBackground,
+                  distToForeground](const std::vector<int> &labels) -> double {
       int label = labels[0];
       if (label == 0) { // judge as background
         return distToBackground;
@@ -82,18 +82,18 @@ TEST(FactorGraph, Denoise) {
 
   // append smoothness factor types
   auto smoothnessfcid1 = fg.addFactorCategory(
-      [](const std::vector<int> &labels, void *) -> double {
+      [](const std::vector<int> &labels) -> double {
         return labels[0] == labels[1] ? 0.0 : 5;
       },
       1.0);
   auto smoothnessfcid2 = fg.addFactorCategory(
-      [](const std::vector<int> &labels, void *) -> double {
+      [](const std::vector<int> &labels) -> double {
         return labels[0] == labels[1] ? 0.0 : 3;
       },
       1.0);
 
   auto smoothnessfcid3 = fg.addFactorCategory(
-      [](const std::vector<int> &labels, void *) -> double {
+      [](const std::vector<int> &labels) -> double {
         if (labels[4] == 0 &&
             std::accumulate(labels.begin(), labels.end(), 0) == 8)
           return 1.0; // return std::numeric_limits<double>::infinity();

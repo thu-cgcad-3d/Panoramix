@@ -25,6 +25,15 @@ public:
   int addVarCategory(size_t nlabels, double c_i);
   // returns factor_cat
   int addFactorCategory(FactorCategory::CostFunction cost, double c_alpha);
+  template <class CostFunT>
+  auto addFactorCategory(CostFunT cost, double c_alpha)
+      -> decltype(cost(std::declval<std::vector<int>>()), (int)0) {
+    return addFactorCategory(
+        [cost](const std::vector<int> &var_labels, void *) -> double {
+          return cost(var_labels);
+        },
+        c_alpha);
+  }
 
   void reserveFactors(size_t cap);
   void reserveVars(size_t cap);
