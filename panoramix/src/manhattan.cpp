@@ -417,25 +417,28 @@ ComputePrinciplePointAndFocalLength(const Point2 &vp1, const Point2 &vp2,
 
 std::vector<Scored<std::pair<Point2, double>>>
 ComputePrinciplePointAndFocalLengthCandidates(
-    const std::vector<std::vector<Line2>> &line_groups) {
+    const std::vector<std::vector<Line2>> &lineGroups) {
   //// [Estimate PP & Focal Candidates from 2D Line Groups]
   Box2 box;
-  for (auto &g : line_groups) {
+  for (auto &g : lineGroups) {
     box |= BoundingBoxOfContainer(g);
   }
   double scale = box.outerSphere().radius;
 
-  std::vector<Scored<std::pair<Point2, double>>> pp_focal_candidates;
-  pp_focal_candidates.reserve(line_groups.size() * 3);
+  std::vector<Scored<std::pair<Point2, double>>> ppFocalCandidates;
+  ppFocalCandidates.reserve(lineGroups.size() * 3);
 
-  for (auto & group : line_groups) {
+  for (auto & group : lineGroups) {
     // collect edge intersections in each face
     std::vector<Point2> interps;
 
   }
 
+  // 
   NOT_IMPLEMENTED_YET();
 }
+
+
 
 namespace {
 

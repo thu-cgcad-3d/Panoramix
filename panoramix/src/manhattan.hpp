@@ -69,7 +69,7 @@ ComputePrinciplePointAndFocalLength(const Point2 &vp1, const Point2 &vp2,
 // ComputePrinciplePointAndFocalLengthCandidates
 std::vector<Scored<std::pair<Point2, double>>>
 ComputePrinciplePointAndFocalLengthCandidates(
-    const std::vector<std::vector<Line2>> &line_groups);
+    const std::vector<std::vector<Line2>> &lineGroups);
 
 // 2d vanishing point detection
 class VanishingPointsDetector {

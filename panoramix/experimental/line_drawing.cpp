@@ -64,6 +64,40 @@ LineDrawingTopo::LineDrawingTopo(const std::vector<std::pair<int, int>> &e2cs,
   }
 }
 
+bool LineDrawingTopo::maybeManifold() const {
+  for (int c = 0; c < ncorners(); c++) {
+    if (corner2edges[c].size() <= 1) {
+      return false;
+    }
+    if (corner2faces[c].size() <= 1) {
+      return false;
+    }
+    if (corner2edges[c].size() != corner2faces[c].size()) {
+      return false;
+    }
+  }
+  for (int e = 0; e < nedges(); e++) {
+    if (edge2corners[e].first == edge2corners[e].second) {
+      return false;
+    }
+    if (edge2faces[e].size() != 2) {
+      return false;
+    }
+  }
+  for (int f = 0; f < nfaces(); f++) {
+    if (face2corners[f].size() <= 2) {
+      return false;
+    }
+    if (face2edges[f].size() <= 2) {
+      return false;
+    }
+    if (face2corners[f].size() != face2edges[f].size()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 LineDrawing<Point3> LoadLineDrawingFromObjFile(const std::string &fname) {
   std::ifstream ifs(fname);
   if (ifs.is_open()) {
@@ -105,7 +139,7 @@ LineDrawing<Point3> LoadLineDrawingFromObjFile(const std::string &fname) {
       }
     }
 
-    return LineDrawing<Point3>({}, face2corners);
+    return LineDrawing<Point3>({}, face2corners, std::move(corners));
   }
   return LineDrawing<Point3>();
 }

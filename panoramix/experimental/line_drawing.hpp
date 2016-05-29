@@ -11,6 +11,8 @@
 
 #include "optimization.hpp"
 
+#include "discretization.hpp"
+
 namespace pano {
 namespace experimental {
 
@@ -30,6 +32,8 @@ public:
   size_t ncorners() const { return corner2edges.size(); }
   size_t nedges() const { return edge2corners.size(); }
   size_t nfaces() const { return face2corners.size(); }
+
+  bool maybeManifold() const;
 
 public:
   std::vector<std::vector<int>> face2corners;
@@ -93,9 +97,6 @@ ToMesh(const LineDrawing<CT, ET, FT> &ld,
        CornerConvertT cornerCvtFun = CornerConvertT(),
        EdgeConvertT edgeCvtFun = EdgeConvertT(),
        FaceConvertT faceCvtFun = FaceConvertT());
-
-
-
 }
 
 namespace core {
@@ -103,6 +104,33 @@ template <class PointT>
 inline auto
 BoundingBox(const pano::experimental::LineDrawing<PointT> &drawing) {
   return BoundingBoxOfContainer(drawing.corners);
+}
+}
+
+namespace gui {
+template <class T, class E, class F>
+void Discretize(TriMesh &mesh,
+                const experimental::LineDrawing<Point<T, 3>, E, F> &ld,
+                const DiscretizeOptions &o) {
+  std::vector<TriMesh::VertHandle> vhandles;
+  for (const Point<T, 3> &c : ld.corners) {
+    TriMesh::Vertex v;
+    v.position = cat(c, (T)1.0);
+    v.color = o.color();
+    vhandles.push_back(mesh.addVertex(v, true, o.entity()));
+  }
+  for (int edge = 0; edge < ld.nedges(); edge++) {
+    mesh.addLine(vhandles[ld.topo.edge2corners[edge].first],
+                 vhandles[ld.topo.edge2corners[edge].second], o.entity());
+  }
+  for (int face = 0; face < ld.nfaces(); face++) {
+    std::vector<TriMesh::VertHandle> vhs;
+    vhs.reserve(ld.topo.face2corners[face].size());
+    for (int c : ld.topo.face2corners[face]) {
+      vhs.push_back(vhandles[c]);
+    }
+    mesh.addPolygon(vhs, o.entity());
+  }
 }
 }
 }
