@@ -82,15 +82,16 @@ Mesh3 ReconstructWithOrientations(
     const HandledTable<HalfHandle, int> &hh2d2edge,
     const PerspectiveCamera &cur_cam,
     const Mesh<VertHandle, HalfHandle, FaceHandle> &mesh_proxy,
-    const Mesh2 &mesh2d, misc::Matlab &matlab);
+    const Mesh2 &mesh2d, misc::Matlab &matlab,
+    double energy_ratio_con_over_ortho = 1e3);
 
-//// OptimizeWithoutOrientations
-//void OptimizeWithoutOrientations(
-//    Mesh3 &cur_reconstruction, const PerspectiveCamera &cur_cam,
-//    const Mesh<VertHandle, HalfHandle, FaceHandle> &mesh_proxy,
-//    const std::vector<SubMesh> &submeshes,
-//    const std::unordered_set<VertHandle> &non_corner_vh_proxies);
-//
+// OptimizeWithoutOrientations
+void OptimizeWithoutOrientations(
+    Mesh3 &cur_reconstruction, const PerspectiveCamera &cur_cam,
+    const Mesh<VertHandle, HalfHandle, FaceHandle> &mesh_proxy,
+    const std::vector<SubMesh> &submeshes,
+    const std::unordered_set<VertHandle> &non_corner_vh_proxies);
+
 
 
 // VHFSelectedFunT: (VertHandle/HalfHandle/FaceHandle) -> bool
@@ -246,4 +247,115 @@ std::map<VertT, double> PerspectiveReconstruction(
   std::map<VertT, double> vert2depth;
   // TODO:
   return vert2depth;
+}
+
+
+// EnergyWeights
+struct EnergyWeights {
+  double vert_msda_weight;
+  double face_msda_weight;
+  double face_angle_weight;
+  double all_msda_weight;
+};
+
+// ComputeEnergy
+template <class VT, class HT, class FT, class FaceHandleIterT,
+          class VertHandleToPoint3FunT, class FaceHandleToVec3EquationFunT,
+          class VertHandle2BeIgnoredFunT>
+std::vector<double> ComputeEnergy(
+    const Mesh<VT, HT, FT> &mesh, FaceHandleIterT fhs_begin,
+    FaceHandleIterT fhs_end, const EnergyWeights &weights,
+    VertHandleToPoint3FunT vh2point3, FaceHandleToVec3EquationFunT fh2vec3_eq,
+    VertHandle2BeIgnoredFunT vh2ignored, const Point3 &eye = Point3()) {
+  using namespace Eigen;
+  std::vector<double> energy_terms;
+
+  std::vector<double> all_angles;
+  std::map<VertHandle, std::vector<double>> vh2angles;
+  for (FaceHandle fh : MakeRange(fhs_begin, fhs_end)) {
+    auto &loophhs = mesh.topo(fh).halfedges;
+    std::vector<double> face_angles(loophhs.size(), 0.0);
+    for (int k = 0; k < loophhs.size(); k++) {
+      int knext = (k + 1) % loophhs.size();
+      HalfHandle hh1 = loophhs[k];
+      HalfHandle hh2 = loophhs[knext];
+      assert(mesh.topo(hh1).to() == mesh.topo(hh2).from());
+      VertHandle v1 = mesh.topo(hh1).from();
+      VertHandle v2 = mesh.topo(hh1).to();
+      VertHandle v3 = mesh.topo(hh2).to();
+
+      if (vh2ignored(v2)) {
+        continue;
+      }
+
+      auto &p1 = vh2point3(v1);
+      auto &p2 = vh2point3(v2);
+      auto &p3 = vh2point3(v3);
+      double angle = AngleBetweenDirected(p1 - p2, p3 - p2);
+      face_angles[k] = angle;
+      vh2angles[v2].push_back(angle);
+      all_angles.push_back(angle);
+    }
+    double face_mean_angle =
+        std::accumulate(face_angles.begin(), face_angles.end(), 0.0) /
+        face_angles.size();
+    for (double a : face_angles) {
+      energy_terms.push_back((a - face_mean_angle) * weights.face_msda_weight /
+                             face_angles.size());
+    }
+  }
+
+  for (auto &vhangles : vh2angles) {
+    VertHandle vh = vhangles.first;
+    auto &angles = vhangles.second;
+    double vert_mean_angle =
+        std::accumulate(angles.begin(), angles.end(), 0.0) / angles.size();
+    for (double a : angles) {
+      energy_terms.push_back((a - vert_mean_angle) * weights.vert_msda_weight /
+                             angles.size());
+    }
+  }
+
+  double all_mean_angle =
+      std::accumulate(all_angles.begin(), all_angles.end(), 0.0) /
+      all_angles.size();
+  for (double a : all_angles) {
+    energy_terms.push_back((a - all_mean_angle) * weights.all_msda_weight /
+                           all_angles.size());
+  }
+
+  std::set<HalfHandle> valid_hhs;
+  // for (auto &h : mesh.halfedges()) {
+  //  auto hh = h.topo.hd;
+  //  auto fh1 = mesh.topo(hh).face;
+  //  auto fh2 = mesh.topo(mesh.topo(hh).opposite).face;
+  //  if (std::find(fhs_begin, fhs_end, fh1) != fhs_end &&
+  //      std::find(fhs_begin, fhs_end, fh2) != fhs_end) {
+  //    valid_hhs.push_back(hh);
+  //  }
+  //}
+  for (FaceHandle fh1 : MakeRange(fhs_begin, fhs_end)) {
+    for (HalfHandle hh : mesh.topo(fh1).halfedges) {
+      HalfHandle oppohh = mesh.topo(hh).opposite;
+      if (Contains(MakeRange(fhs_begin, fhs_end), mesh.topo(oppohh).face)) {
+        valid_hhs.insert(hh);
+        valid_hhs.insert(oppohh);
+      }
+    }
+  }
+
+  for (auto &hh : valid_hhs) {
+    auto fh1 = mesh.topo(hh).face;
+    auto planeEq1 = fh2vec3_eq(fh1);
+    auto fh2 = mesh.topo(mesh.topo(hh).opposite).face;
+    auto planeEq2 = fh2vec3_eq(fh2);
+    double cos_angle =
+        normalize(Vec3(planeEq1[0], planeEq1[1], planeEq1[2]))
+            .dot(normalize(Vec3(planeEq2[0], planeEq2[1], planeEq2[2])));
+    assert(!IsInfOrNaN(cos_angle));
+    energy_terms.push_back((cos_angle)*weights.face_angle_weight /
+                           valid_hhs.size());
+  }
+
+  return energy_terms;
 }

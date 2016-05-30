@@ -53,6 +53,12 @@ inline auto MakeOrderedPair(const std::pair<T1, T2> &p) {
   return MakeOrderedPair(p.first, p.second);
 }
 
+// ReversePair
+template <class T1, class T2>
+inline auto ReversePair(const std::pair<T1, T2> &p) {
+  return std::make_pair(p.second, p.first);
+}
+
 // a templated integer sequence
 template <int...> struct Sequence {};
 

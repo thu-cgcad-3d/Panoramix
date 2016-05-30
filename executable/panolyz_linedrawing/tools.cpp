@@ -659,7 +659,8 @@ Mesh3 ReconstructWithOrientations(
     const HandledTable<HalfHandle, int> &hh2d2edge,
     const PerspectiveCamera &cur_cam,
     const Mesh<VertHandle, HalfHandle, FaceHandle> &mesh_proxy,
-    const Mesh2 &mesh2d, misc::Matlab &matlab) {
+    const Mesh2 &mesh2d, misc::Matlab &matlab,
+    double energy_ratio_con_over_ortho) {
 
   int nedges = edge2line.size();
   assert(edge2vp.size() == nedges);
@@ -906,6 +907,7 @@ Mesh3 ReconstructWithOrientations(
   // matlab << "Prev_AvgAngleCos = zeros(nangles, 1);";
 
   matlab.setPrintMessage(false);
+  matlab.setVar("energy_ratio_con_over_ortho", energy_ratio_con_over_ortho);
   for (int t = 0; t < maxIter; t++) {
     matlab << "cvx_begin quiet";
     matlab << "variable X(nvars);";
@@ -996,8 +998,9 @@ Mesh3 ReconstructWithOrientations(
       matlab << "EnergyOfOrthogonalFaceAngles = sum_square(AngleCosines);";
 
       // energy
-      matlab << (objectiveVarName + " = 1e3 * EnergyOfConnections + "
-                                    "EnergyOfOrthogonalFaceAngles;");
+      matlab << (objectiveVarName +
+                 " = energy_ratio_con_over_ortho * EnergyOfConnections + "
+                 "EnergyOfOrthogonalFaceAngles;");
     };
 
     constructProblem("ObjectiveEnergy");
@@ -1114,182 +1117,164 @@ Mesh3 ReconstructWithOrientations(
   return curReconstruction;
 }
 
-//// OptimizeWithoutOrientations
-//void OptimizeWithoutOrientations(
-//    Mesh3 &cur_reconstruction, const PerspectiveCamera &cur_cam,
-//    const Mesh<VertHandle, HalfHandle, FaceHandle> &mesh_proxy,
-//    const std::vector<SubMesh> &submeshes,
-//    const std::unordered_set<VertHandle> &non_corner_vh_proxies) {
-//  using namespace Eigen;
-//
-//  if(false){ // show together
-//    auto color_table = gui::CreateRandomColorTableWithSize(submeshes.size());
-//    gui::SceneBuilder sb;
-//    sb.installingOptions().defaultShaderSource =
-//        gui::OpenGLShaderSourceDescriptor::XLines;
-//    sb.installingOptions().lineWidth = 10;
-//    for (int i = 0; i < submeshes.size(); i++) {
-//      sb.installingOptions().discretizeOptions.color(color_table[i]);
-//      for (HalfHandle hh : submeshes[i].hhs) {
-//        VertHandle vh1 = mesh_proxy.topo(hh).from();
-//        VertHandle vh2 = mesh_proxy.topo(hh).to();
-//        Point3 p1 = cur_reconstruction.data(mesh_proxy.data(vh1));
-//        Point3 p2 = cur_reconstruction.data(mesh_proxy.data(vh2));
-//        sb.add(Line3(p1, p2));
-//      }
-//    }
-//    sb.show(true, true, gui::RenderOptions()
-//                            .winName("Together Before Optimization")
-//                            .fixUpDirectionInCameraMove(false));
-//  }
-//
-//  //EnergyWeights weights;
-//  //weights.face_angle_weight = 1e2;
-//  //weights.face_msda_weight = 1e1;
-//  //weights.vert_msda_weight = 1e3;
-//  //weights.all_msda_weight = 1e5;
-//
-//  // holistic optimization
-//  {
-//    std::vector<FaceHandle> fhs;
-//    for (auto &f : cur_reconstruction.faces()) {
-//      fhs.push_back(f.topo.hd);
-//    }
-//    // get fundamental vhs and sort fhs
-//    auto fundamental_vhs_set = SortFacesWithPlanarityDependency(
-//        cur_reconstruction, fhs.begin(), fhs.end(),
-//        [&cur_reconstruction](auto vhs_begin, auto vhs_end) -> bool {
-//          auto trans_fun =
-//              [&cur_reconstruction](VertHandle vh) -> const Point3 & {
-//            return cur_reconstruction.data(vh);
-//          };
-//          return IsFuzzyColinear(MakeTransformIterator(vhs_begin, trans_fun),
-//                                 MakeTransformIterator(vhs_end, trans_fun),
-//                                 1e-6);
-//        });
-//
-//    std::vector<VertHandle> fundamental_vhs(fundamental_vhs_set.begin(),
-//                                            fundamental_vhs_set.end());
-//
-//	// get v2matrix and f2matrix
-//    std::map<VertHandle, DenseMatd> v2matrix;
-//    std::map<FaceHandle, DenseMatd> f2matrix;
-//    ConstructSingleViewTransformMatrices(
-//        fundamental_vhs, fhs, // face2related_verts
-//        [&cur_reconstruction](FaceHandle fh) -> std::vector<VertHandle> {
-//          std::vector<VertHandle> related_vhs;
-//          for (HalfHandle hh : cur_reconstruction.topo(fh).halfedges) {
-//            related_vhs.push_back(cur_reconstruction.topo(hh).from());
-//          }
-//          return related_vhs;
-//        }, // vert2direction
-//        [&cur_reconstruction, &cur_cam](VertHandle vh) -> Vec3 {
-//          Vec3 dir = cur_reconstruction.data(vh);
-//          return normalize(dir);
-//        },
-//        v2matrix, f2matrix);
-//
-//    DenseMatd inversed_depths_vector;
-//    {
-//      inversed_depths_vector = EstimateSingleViewInversedDepths(
-//          v2matrix, f2matrix,
-//          // vert2initial_depth
-//          [&cur_reconstruction, &cur_cam](VertHandle vh) -> double {
-//            // return 1.0 / vh2inversed_depth[vh];
-//            return Distance(cur_reconstruction.data(vh), cur_cam.eye());
-//          },
-//          // energy_fun
-//          [&cur_reconstruction, &mesh_proxy, &cur_cam, &submeshes,
-//           &non_corner_vh_proxies](auto &&vh2depth,
-//                                   auto &&fh2eq) -> std::vector<double> {
-//            std::vector<double> energy_terms;
-//            for (auto &submesh : submeshes) {
-//              auto energy_terms_submesh = ComputeEnergy(
-//                  mesh_proxy, submesh.fhs.begin(), submesh.fhs.end(), weights,
-//                  [&cur_reconstruction, &mesh_proxy,
-//                   &vh2depth](VertHandle vh_proxy) -> Point3 {
-//                    VertHandle vh = mesh_proxy.data(vh_proxy);
-//                    return normalize(cur_reconstruction.data(vh)) *
-//                           vh2depth(vh);
-//                  },
-//                  [&cur_reconstruction, &mesh_proxy, &vh2depth, &fh2eq,
-//                   &non_corner_vh_proxies](FaceHandle fh_proxy) -> Vec3 {
-//                    FaceHandle fh = mesh_proxy.data(fh_proxy);
-//                    if (fh.valid()) {
-//                      return fh2eq(fh);
-//                    } else {
-//                      auto &hh_proxies = mesh_proxy.topo(fh_proxy).halfedges;
-//                      assert(hh_proxies.size() >= 3);
-//                      for (int i1 = 0; i1 < hh_proxies.size(); i1++) {
-//                        VertHandle vh1 = mesh_proxy.data(
-//                            mesh_proxy.topo(hh_proxies[i1]).from());
-//                        Point3 point1 =
-//                            normalize(cur_reconstruction.data(vh1)) *
-//                            vh2depth(vh1);
-//                        for (int i2 = i1 + 1; i2 < hh_proxies.size(); i2++) {
-//                          VertHandle vh2 = mesh_proxy.data(
-//                              mesh_proxy.topo(hh_proxies[i2]).from());
-//                          Point3 point2 =
-//                              normalize(cur_reconstruction.data(vh2)) *
-//                              vh2depth(vh2);
-//                          for (int i3 = i2 + 1; i3 < hh_proxies.size(); i3++) {
-//                            VertHandle vh3 = mesh_proxy.data(
-//                                mesh_proxy.topo(hh_proxies[i3]).from());
-//                            Point3 point3 =
-//                                normalize(cur_reconstruction.data(vh3)) *
-//                                vh2depth(vh3);
-//                            Vec3 eq = Plane3ToEquation(
-//                                Plane3From3Points(point1, point2, point3));
-//                            if (norm(eq) > 1e-5 && !HasValue(eq, [](auto &v) {
-//                                  return IsInfOrNaN(v);
-//                                })) {
-//                              return eq;
-//                            }
-//                          }
-//                        }
-//                      }
-//                      ASSERT_OR_PANIC(false && "degenerated face!");
-//                      return Vec3();
-//                    }
-//                  },
-//                  [&non_corner_vh_proxies](VertHandle vh_proxy) -> bool {
-//                    return Contains(non_corner_vh_proxies, vh_proxy);
-//                  },
-//                  cur_cam.eye());
-//              energy_terms.insert(energy_terms.end(),
-//                                  energy_terms_submesh.begin(),
-//                                  energy_terms_submesh.end());
-//            }
-//            return energy_terms;
-//          });
-//
-//      assert(std::all_of(inversed_depths_vector.begin(),
-//                         inversed_depths_vector.end(),
-//                         [](double e) { return e > 0; }));
-//    }
-//
-//    if (true) {
-//      gui::SceneBuilder sb;
-//      sb.installingOptions().defaultShaderSource =
-//          gui::OpenGLShaderSourceDescriptor::XTriangles;
-//      sb.installingOptions().discretizeOptions.color(gui::Black);
-//      sb.installingOptions().lineWidth = 10;
-//
-//      for (auto &h : cur_reconstruction.halfedges()) {
-//        HalfHandle hh = h.topo.hd;
-//        VertHandle vh1 = cur_reconstruction.topo(hh).from();
-//        VertHandle vh2 = cur_reconstruction.topo(hh).to();
-//        Point3 p1 = normalize(cur_reconstruction.data(vh1)) /
-//                    DenseMatd(v2matrix.at(vh1) * inversed_depths_vector)(0, 0);
-//        Point3 p2 = normalize(cur_reconstruction.data(vh2)) /
-//                    DenseMatd(v2matrix.at(vh2) * inversed_depths_vector)(0, 0);
-//        sb.add(Line3(p1, p2));
-//      }
-//      sb.show(true, true, gui::RenderOptions()
-//                               .camera(cur_cam)
-//                               .winName("After Holistic Optimization")
-//                               .fixUpDirectionInCameraMove(false));
-//    }
-//  }
-//}
-//
+// OptimizeWithoutOrientations
+void OptimizeWithoutOrientations(
+    Mesh3 &cur_reconstruction, const PerspectiveCamera &cur_cam,
+    const Mesh<VertHandle, HalfHandle, FaceHandle> &mesh_proxy,
+    const std::vector<SubMesh> &submeshes,
+    const std::unordered_set<VertHandle> &non_corner_vh_proxies) {
+  using namespace Eigen;
+
+  if(false){ // show together
+    auto color_table = gui::CreateRandomColorTableWithSize(submeshes.size());
+    gui::SceneBuilder sb;
+    sb.installingOptions().defaultShaderSource =
+        gui::OpenGLShaderSourceDescriptor::XLines;
+    sb.installingOptions().lineWidth = 10;
+    for (int i = 0; i < submeshes.size(); i++) {
+      sb.installingOptions().discretizeOptions.color(color_table[i]);
+      for (HalfHandle hh : submeshes[i].hhs) {
+        VertHandle vh1 = mesh_proxy.topo(hh).from();
+        VertHandle vh2 = mesh_proxy.topo(hh).to();
+        Point3 p1 = cur_reconstruction.data(mesh_proxy.data(vh1));
+        Point3 p2 = cur_reconstruction.data(mesh_proxy.data(vh2));
+        sb.add(Line3(p1, p2));
+      }
+    }
+    sb.show(true, true, gui::RenderOptions()
+                            .winName("Together Before Optimization")
+                            .fixUpDirectionInCameraMove(false));
+  }
+
+  EnergyWeights weights;
+  weights.face_angle_weight = 1e2;
+  weights.face_msda_weight = 1e1;
+  weights.vert_msda_weight = 1e3;
+  weights.all_msda_weight = 1e5;
+
+  // holistic optimization
+  {
+    std::vector<FaceHandle> fhs;
+    for (auto &f : cur_reconstruction.faces()) {
+      fhs.push_back(f.topo.hd);
+    }
+    // get fundamental vhs and sort fhs
+    auto fundamental_vhs_set = SortFacesWithPlanarityDependency(
+        cur_reconstruction, fhs.begin(), fhs.end(),
+        [&cur_reconstruction](auto vhs_begin, auto vhs_end) -> bool {
+          auto trans_fun =
+              [&cur_reconstruction](VertHandle vh) -> const Point3 & {
+            return cur_reconstruction.data(vh);
+          };
+          return IsFuzzyColinear(MakeTransformIterator(vhs_begin, trans_fun),
+                                 MakeTransformIterator(vhs_end, trans_fun),
+                                 1e-6);
+        });
+
+    std::vector<VertHandle> fundamental_vhs(fundamental_vhs_set.begin(),
+                                            fundamental_vhs_set.end());
+
+	// get v2matrix and f2matrix
+    std::map<VertHandle, DenseMatd> v2matrix;
+    std::map<FaceHandle, DenseMatd> f2matrix;
+    ConstructSingleViewTransformMatrices(
+        fundamental_vhs, fhs, // face2related_verts
+        [&cur_reconstruction](FaceHandle fh) -> std::vector<VertHandle> {
+          std::vector<VertHandle> related_vhs;
+          for (HalfHandle hh : cur_reconstruction.topo(fh).halfedges) {
+            related_vhs.push_back(cur_reconstruction.topo(hh).from());
+          }
+          return related_vhs;
+        }, // vert2direction
+        [&cur_reconstruction, &cur_cam](VertHandle vh) -> Vec3 {
+          Vec3 dir = cur_reconstruction.data(vh);
+          return normalize(dir);
+        },
+        v2matrix, f2matrix);
+
+    DenseMatd inversed_depths_vector;
+    {
+      inversed_depths_vector = EstimateSingleViewInversedDepths(
+          v2matrix, f2matrix,
+          // vert2initial_depth
+          [&cur_reconstruction, &cur_cam](VertHandle vh) -> double {
+            // return 1.0 / vh2inversed_depth[vh];
+            return Distance(cur_reconstruction.data(vh), cur_cam.eye());
+          },
+          // energy_fun
+          [&cur_reconstruction, &mesh_proxy, &cur_cam, &submeshes,
+           &non_corner_vh_proxies, &weights](auto &&vh2depth,
+                                   auto &&fh2eq) -> std::vector<double> {
+            std::vector<double> energy_terms;
+            for (auto &submesh : submeshes) {
+              auto energy_terms_submesh = ComputeEnergy(
+                  mesh_proxy, submesh.fhs.begin(), submesh.fhs.end(), weights,
+                  [&cur_reconstruction, &mesh_proxy,
+                   &vh2depth](VertHandle vh_proxy) -> Point3 {
+                    VertHandle vh = mesh_proxy.data(vh_proxy);
+                    return normalize(cur_reconstruction.data(vh)) *
+                           vh2depth(vh);
+                  },
+                  [&cur_reconstruction, &mesh_proxy, &vh2depth, &fh2eq,
+                   &non_corner_vh_proxies](FaceHandle fh_proxy) -> Vec3 {
+                    FaceHandle fh = mesh_proxy.data(fh_proxy);
+                    if (fh.valid()) {
+                      return fh2eq(fh);
+                    } else {
+                      auto &hh_proxies = mesh_proxy.topo(fh_proxy).halfedges;
+                      assert(hh_proxies.size() >= 3);
+                      for (int i1 = 0; i1 < hh_proxies.size(); i1++) {
+                        VertHandle vh1 = mesh_proxy.data(
+                            mesh_proxy.topo(hh_proxies[i1]).from());
+                        Point3 point1 =
+                            normalize(cur_reconstruction.data(vh1)) *
+                            vh2depth(vh1);
+                        for (int i2 = i1 + 1; i2 < hh_proxies.size(); i2++) {
+                          VertHandle vh2 = mesh_proxy.data(
+                              mesh_proxy.topo(hh_proxies[i2]).from());
+                          Point3 point2 =
+                              normalize(cur_reconstruction.data(vh2)) *
+                              vh2depth(vh2);
+                          for (int i3 = i2 + 1; i3 < hh_proxies.size(); i3++) {
+                            VertHandle vh3 = mesh_proxy.data(
+                                mesh_proxy.topo(hh_proxies[i3]).from());
+                            Point3 point3 =
+                                normalize(cur_reconstruction.data(vh3)) *
+                                vh2depth(vh3);
+                            Vec3 eq = Plane3ToEquation(
+                                Plane3From3Points(point1, point2, point3));
+                            if (norm(eq) > 1e-5 && !HasValue(eq, [](auto &v) {
+                                  return IsInfOrNaN(v);
+                                })) {
+                              return eq;
+                            }
+                          }
+                        }
+                      }
+                      ASSERT_OR_PANIC(false && "degenerated face!");
+                      return Vec3();
+                    }
+                  },
+                  [&non_corner_vh_proxies](VertHandle vh_proxy) -> bool {
+                    return Contains(non_corner_vh_proxies, vh_proxy);
+                  },
+                  cur_cam.eye());
+              energy_terms.insert(energy_terms.end(),
+                                  energy_terms_submesh.begin(),
+                                  energy_terms_submesh.end());
+            }
+            return energy_terms;
+          });
+
+      assert(std::all_of(inversed_depths_vector.begin(),
+                         inversed_depths_vector.end(),
+                         [](double e) { return e > 0; }));
+    }
+
+    // update cur_reconstruction
+    for (auto &v : cur_reconstruction.vertices()) {
+      v.data = normalize(v.data) /
+               DenseMatd(v2matrix.at(v.topo.hd) * inversed_depths_vector)(0, 0);
+    }
+  }
+}

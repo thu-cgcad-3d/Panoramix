@@ -16,43 +16,52 @@ using namespace pano;
 using namespace pano::core;
 using namespace pano::experimental;
 
+struct AlgorithmInput {
+  LineDrawingTopo lineDrawingTopo;
+  std::vector<Point2> corners2d;
+  std::vector<Point3> cornersGT;
+  PerspectiveCamera cameraGT;
+};
+
+// ParseInput
+AlgorithmInput ParseInput(const std::string &modelName,
+                          const std::string &camName) {
+  auto lineDrawingGT = LoadLineDrawingFromObjFile(
+      "F:\\LineDrawings\\manifold\\" + modelName + "\\" + modelName + ".obj");
+  assert(lineDrawingGT.ncorners() > 0);
+  PerspectiveCamera cam;
+  std::string camPath = "F:\\LineDrawings\\manifold\\" + modelName + "\\" +
+                        modelName + ".obj." + camName + ".cereal";
+  bool succ = LoadFromDisk(camPath, cam);
+  if (!succ) {
+    gui::SceneBuilder sb;
+    sb.add(lineDrawingGT);
+    cam = sb.show(true, true, gui::RenderOptions()
+                                  .renderMode(gui::Lines)
+                                  .fixUpDirectionInCameraMove(false))
+              .camera;
+    SaveToDisk(camPath, cam);
+  }
+  
+  std::vector<Point2> corners2d(lineDrawingGT.corners.size());
+  for (int i = 0; i < corners2d.size(); i++) {
+    corners2d[i] = cam.toScreen(lineDrawingGT.corners[i]);
+  }
+  return AlgorithmInput{std::move(lineDrawingGT.topo), std::move(corners2d),
+                        std::move(lineDrawingGT.corners), std::move(cam)};
+}
+
 int main3(int argc, char **argv, char **env) {
   gui::Singleton::SetCmdArgs(argc, argv, env);
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
-  // std::string name = "gate";
-  // std::string name = "towerx";
-  std::string name = "tower";
-  // std::string name = "hex";
-  // std::string name = "triangle";
-  // std::string name = "twotriangles";
-  // std::string name = "bridge";
-  std::string cam_name = "cam1";
+  AlgorithmInput input = ParseInput("tower", "cam1");
 
-  auto lineDrawing = LoadLineDrawingFromObjFile("F:\\LineDrawings\\manifold\\" +
-                                                name + "\\" + name + ".obj");
-  PerspectiveCamera cam;
-  LoadFromDisk("F:\\LineDrawings\\manifold\\" + name + "\\" + name + ".obj." +
-                   cam_name + ".cereal",
-               cam);
-
+  // group line drawing entities
   {
-    gui::SceneBuilder sb;
-    sb.add(lineDrawing);
-    sb.show(true, true, gui::RenderOptions()
-                            .renderMode(gui::Lines)
-                            .fixUpDirectionInCameraMove(false));
-  }
-
-  // decompose line drawings
-  {
-	  if (lineDrawing.topo.maybeManifold()) {
-
-	  } else {
-		  NOT_IMPLEMENTED_YET();
-	  }
+	  
   }
 
 

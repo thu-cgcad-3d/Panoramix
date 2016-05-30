@@ -39,6 +39,7 @@ using VertHandle = Handle<VertTopo>;
 using HalfHandle = Handle<HalfTopo>;
 using FaceHandle = Handle<FaceTopo>;
 
+// the half edge mesh representing a manifold
 template <class VertDataT, class HalfDataT = Dummy, class FaceDataT = Dummy>
 class Mesh {
 public:

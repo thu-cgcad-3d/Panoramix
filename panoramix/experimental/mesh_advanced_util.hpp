@@ -153,6 +153,21 @@ int GuessUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   return drfub;
 }
 
+// ExtractDeterminacy
+// VH2Vec3DirT: (VertHandle vh) -> Vec3
+// HH2VPIdT: (HalfHandle hh) -> int
+// FH2VPIdT: (FaceHandle fh) -> int
+template <class VertDataT, class HalfDataT, class FaceDataT, class VH2Vec3DirT,
+          class HH2VPIdT, class FH2VPIdT>
+void ExtractSingleViewMatrices(
+    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, const SubMesh &subMesh,
+    const std::vector<Vec3> &vpdirs, VH2Vec3DirT vh2dir, HH2VPIdT hh2vp,
+    FH2VPIdT fh2vp, std::map<VertHandle, DenseMatd> &vh2mats,
+    std::map<FaceHandle, DenseMatd> &fh2mats) {
+  //
+
+}
+
 // Reconstruct (TPAMI 2008, Plane Based Optimization ... )
 // - PlaneObjectiveFunT: ( ((FaceHandle)[int]->double) fh2planeeq) -> double
 // - VertDataToDirectionFunT: (VertDataT) -> Vec3
