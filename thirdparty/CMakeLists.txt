@@ -2,6 +2,7 @@ add_subdirectory ("lsd_1.6")
 add_subdirectory ("slic")
 add_subdirectory ("vanishingpoint-msac")
 add_subdirectory ("vpdetection")
+add_subdirectory ("wclique")
 
 set (_ThirdParty_INCLUDES 
 	${CMAKE_CURRENT_SOURCE_DIR}/eigen
@@ -10,6 +11,7 @@ set (_ThirdParty_INCLUDES
 	${CMAKE_CURRENT_SOURCE_DIR}/slic
 	${CMAKE_CURRENT_SOURCE_DIR}/vanishingpoint-msac
 	${CMAKE_CURRENT_SOURCE_DIR}/vpdetection
+	${CMAKE_CURRENT_SOURCE_DIR}/wclique
 	${CMAKE_CURRENT_SOURCE_DIR}/misc)
 
 set (_ThirdParty_LIBS 
@@ -17,6 +19,7 @@ set (_ThirdParty_LIBS
 	"slic" 
 	"vanishingpoint-msac" 
 	"vpdetection" 
+	"wclique"
 )
 
 set (_ThirdParty_NAMES "")

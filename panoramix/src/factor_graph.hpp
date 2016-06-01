@@ -44,6 +44,10 @@ public:
   int addFactor(int factor_cat, const std::vector<int> &vars);
   int addFactor(int factor_cat, std::vector<int> &&vars);
   int addFactor(int factor_cat, std::initializer_list<int> vars);
+  template <class VarIterT>
+  int addFactor(int factor_cat, VarIterT vars_begin, VarIterT vars_end) {
+    return addFactor(factor_cat, std::vector<int>(vars_begin, vars_end));
+  }
 
   inline size_t nvars() const { return _var2cat.size(); }
   inline size_t nfactors() const { return _factor2cat.size(); }
