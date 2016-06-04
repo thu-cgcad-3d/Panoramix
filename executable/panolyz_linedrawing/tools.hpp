@@ -57,6 +57,12 @@ std::vector<Point2> CollectVanishingPoints(
     const std::vector<Line2> &lines, double focal, const Point2 &pp,
     const CollectVanishingPointsParam &param = CollectVanishingPointsParam());
 
+// MergeColinearLines
+std::vector<Line2>
+MergeColinearLines(const std::vector<Line2> &lines,
+                   const CameraParam &cam_param, double angle_thres,
+                   std::vector<int> *oldline2newline = nullptr);
+
 // EstimateEdgeOrientations
 struct EstimateEdgeOrientationsParam { // best params so far
   double angle_thres_allowed_vp_line_deviation = DegreesToRadians(10);
@@ -66,7 +72,7 @@ struct EstimateEdgeOrientationsParam { // best params so far
   double coeff_vp_line_fitness = 50.0;
   double coeff_noncolinear_adj_line_exlusiveness = 10.0;
   double coeff_line_triplet_coplanar = 30.0;
-  int vp_min_degree = 4;
+  int vp_min_degree = 3;
   int solve_max_iter = 5;
 };
 std::vector<int> EstimateEdgeOrientations(
@@ -75,15 +81,24 @@ std::vector<int> EstimateEdgeOrientations(
     const Point2 &pp, const EstimateEdgeOrientationsParam &param =
                           EstimateEdgeOrientationsParam());
 
-// ExtractFundamentalVariables
-// plane2restrict_mat: stores a [(3-D) x 3] matrix, D is the DoF of the plane
-std::vector<double> SolveVertexInversedDepths(
-    const std::vector<Vec3> &vp2dir, const std::vector<Vec3> &vert2dir,
-    const std::vector<std::vector<int>> &plane2verts,
-    const std::vector<DenseMatd> &plane2restrict_mat,
-    std::function<double(const std::vector<double> &vert2inv_depth)>
-        energy_fun);
+// PlaneConstraint
+struct PlaneConstraint {
+  std::vector<int> verts;
+  DenseMatd P; // the matrix P_i in my cvpr16 paper
+};
+DenseMatd MakePlaneMatrix();
+DenseMatd MakePlaneMatrixAlongDirection(const Vec3 & dir);
+DenseMatd MakePlaneMatrixTowardDirection(const Vec3 & dir);
 
-
+// InferenceFunctors
+struct InferenceFunctors {
+  DenseMatd variables;
+  std::function<Vec3(int plane)> getPlaneEquation;
+  std::function<double(int vert)> getInversedDepth;
+};
+// GenerateInferenceFunctors
+InferenceFunctors
+GenerateInferenceFunctors(int nverts,
+                          const std::vector<PlaneConstraint> &constraints);
 }
 }

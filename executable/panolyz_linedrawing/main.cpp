@@ -14,7 +14,7 @@ struct LineDrawingInput {
 // ParseInput
 LineDrawingInput ParseInput(const std::string &modelName,
                             const std::string &camName) {
-  std::string folder = "F:\\LineDrawings\\manifold\\" + modelName + "\\";
+  std::string folder = "F:\\LineDrawings\\nonmanifold\\" + modelName + "\\";
 
   auto line_drawing_gt =
       LoadLineDrawingFromObjFile(folder + modelName + "_w_intf.obj");
@@ -47,7 +47,7 @@ int main(int argc, char **argv, char **env) {
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
-  auto input = ParseInput("hex", "cam1");
+  auto input = ParseInput("1", "cam1");
   Println("nedges: ", input.topo.nedges());
 
   auto face_sets = DecomposeFaces(input.topo.face2corners, input.corners2d);
@@ -75,7 +75,30 @@ int main(int argc, char **argv, char **env) {
 
   for (auto &pp_focal : pp_focals) {
     Println("current focal = ", pp_focal.focal, " pp = ", pp_focal.pp);
-    auto vps = CollectVanishingPoints(edge2line, pp_focal.focal, pp_focal.pp);
+
+    // merge lines
+    std::vector<int> edge2merged_line(edge2line.size());
+    std::vector<Line2> merged_lines = MergeColinearLines(
+        edge2line, pp_focal, DegreesToRadians(0.1), &edge2merged_line);
+    
+    // show merged lines
+    if (true) {
+      Image3ub im(input.cameraGT.screenSize(), Vec3ub(255, 255, 255));
+      auto canvas = gui::MakeCanvas(im);
+      canvas.color(gui::LightGray);
+      canvas.colorTable(
+          gui::CreateRandomColorTableWithSize(merged_lines.size()));
+      canvas.thickness(2);
+      for (int i = 0; i < merged_lines.size(); i++) {
+        canvas.add(ClassifyAs(merged_lines[i], i));
+      }
+      canvas.show(0, "merged lines");
+    }
+
+    // collect vanishing points using merged lines
+    auto vps = CollectVanishingPoints(merged_lines, pp_focal.focal, pp_focal.pp);
+
+    // show vanishing points
     if (false) {
       auto vp2lines = BindPointsToLines(vps, edge2line, DegreesToRadians(8));
       for (int i = 0; i < vps.size(); i++) {
@@ -102,14 +125,33 @@ int main(int argc, char **argv, char **env) {
       }
     }
 
+    // build relation of face to merged lines
+    std::vector<std::vector<int>> face2merged_lines(input.topo.nfaces());
+    for (int face = 0; face < input.topo.nfaces(); face++) {
+      auto & edges = input.topo.face2edges[face];
+      auto & mlines = face2merged_lines[face];
+      for (int edge : input.topo.face2edges[face]) {
+        int mline = edge2merged_line[edge];
+        if (!mlines.empty() && mlines.back() == mline) {
+          continue;
+        }
+        mlines.push_back(mline);
+      }
+    }
 
-    auto line2vp = EstimateEdgeOrientations(
-        edge2line, vps, input.topo.face2edges, pp_focal.focal, pp_focal.pp);
+    // estimate orientations of merged lines using vps
+    auto merged_line2vp = EstimateEdgeOrientations(
+        merged_lines, vps, face2merged_lines, pp_focal.focal, pp_focal.pp);
+    std::vector<int> edge2vp(input.topo.nedges(), -1);
+    for (int edge = 0; edge < edge2vp.size(); edge++) {
+      edge2vp[edge] = merged_line2vp[edge2merged_line[edge]];
+    }
 
-    if (true) { // show line classification results
+    // show line orientation results
+    if (true) { 
       std::vector<std::set<int>> vp2lines(vps.size());
-      for (int l = 0; l < line2vp.size(); l++) {
-        int vp = line2vp[l];
+      for (int l = 0; l < edge2vp.size(); l++) {
+        int vp = edge2vp[l];
         if (vp != -1) {
           vp2lines[vp].insert(l);
         }
@@ -138,6 +180,7 @@ int main(int argc, char **argv, char **env) {
       }
     }
 
+    // reconstruct
 
   }
 

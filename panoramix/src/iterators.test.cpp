@@ -18,3 +18,14 @@ TEST(IteratorsTest, TransformAndConcated) {
   }
   ASSERT_EQ(count, 10);
 }
+
+TEST(IteratorsTest, Iota) {
+  std::vector<int> es;
+  for (auto e : MakeConcatedRange(MakeIotaRange(5), MakeIotaRange(5, 8))) {
+    es.push_back(e);
+  }
+  ASSERT_TRUE(es.size() == 8);
+  for (int i = 0; i < es.size(); i++) {
+    ASSERT_EQ(es[i], i);
+  }
+}

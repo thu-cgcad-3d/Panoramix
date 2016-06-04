@@ -78,6 +78,90 @@ template <class IterT> Range<IterT> MakeRange(IterT b, IterT e) {
   return Range<IterT>(b, e);
 }
 
+// IotaIterator
+template <class T>
+class IotaIterator : public std::iterator<std::random_access_iterator_tag, T, T,
+                                          const T *, const T &> {
+public:
+  explicit IotaIterator(T v) : value(v){}
+  const T &operator*() const { return value; }
+  const T *operator->() const { return &value; }
+
+  IotaIterator &operator++() {
+    ++value;
+    return *this;
+  }
+  IotaIterator &operator++(int) {
+    auto tmp = *this;
+    ++value;
+    return tmp;
+  }
+  IotaIterator &operator--() {
+    --value;
+    return *this;
+  }
+  IotaIterator &operator--(int) {
+    auto tmp = *this;
+    --value;
+    return tmp;
+  }
+
+  IotaIterator &operator+=(difference_type off) { // increment by integer
+    value += off;
+    return (*this);
+  }
+  IotaIterator
+  operator+(difference_type off) const { // return this + integer
+    return (IotaIterator(value + off));
+  }
+
+  IotaIterator &operator-=(difference_type off) { // decrement by integer
+    current -= off;
+    return (*this);
+  }
+  IotaIterator
+  operator-(difference_type off) const { // return this - integer
+    return (IotaIterator(value - off));
+  }
+
+public:
+  T value;
+};
+
+template <class T>
+constexpr bool operator==(const IotaIterator<T> &i1,
+                          const IotaIterator<T> &i2) {
+  return i1.value == i2.value;
+}
+template <class T>
+constexpr bool operator!=(const IotaIterator<T> &i1,
+                          const IotaIterator<T> &i2) {
+  return !(i1 == i2);
+}
+template <class T>
+constexpr bool operator<(const IotaIterator<T> &i1, const IotaIterator<T> &i2) {
+  return i1.value < i2.value;
+}
+template <class T>
+constexpr auto operator-(const IotaIterator<T> &i1, const IotaIterator<T> &i2) {
+  return i1.value - i2.value;
+}
+// MakeIotaIterator
+template <class T> constexpr auto MakeIotaIterator(T v) {
+  return IotaIterator<T>(v);
+}
+// MakeIotaRange
+template <class T>
+constexpr auto MakeIotaRange(T v) {
+  return MakeRange(IotaIterator<T>(0), IotaIterator<T>(v));
+}
+// MakeIotaRange
+template <class T>
+constexpr auto MakeIotaRange(T start, T end) {
+  return MakeRange(IotaIterator<T>(start), IotaIterator<T>(end));
+}
+
+
 // TransformIterator
 template <class T, class IterT, class FunT>
 class TransformIterator

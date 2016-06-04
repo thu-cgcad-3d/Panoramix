@@ -4,13 +4,14 @@ extern "C" {
 #include <wclique.h>
 }
 
+#include "math.hpp"
 #include "tools.hpp"
 #include "utility.hpp"
 
 namespace pano {
 namespace experimental {
 
-using namespace pano::core;
+using namespace ::pano::core;
 
 // ICCV 2013 Complex 3D General Object Reconstruction from Line Drawings
 // Algorithm 1
@@ -317,7 +318,9 @@ template <class T> struct BinaryRelationTable {
   explicit BinaryRelationTable(size_t n, const T &v)
       : nelements(n), relations(n * (n - 1) / 2, v) {}
   decltype(auto) operator()(int i, int j) const {
-    assert(i != j);
+    if (i == j) {
+      return T();
+    }
     int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
     return relations[offset];
   }
@@ -325,6 +328,10 @@ template <class T> struct BinaryRelationTable {
     assert(i != j);
     int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
     return relations[offset];
+  }
+  constexpr auto neighbors(int i) const {
+    return MakeConditionalRange(MakeIotaRange<int>(nelements),
+                                [this, i](int ind) { return (*this)(i, ind); });
   }
 };
 
@@ -556,6 +563,67 @@ inline bool LinesAreColinear(const Line2 &line1, const Line2 &line2,
   return AngleBetweenUndirected(dir1, dir2) < angle_thres;
 }
 
+std::vector<Line2>
+MergeColinearLines(const std::vector<Line2> &lines,
+  const CameraParam &cam_param, double angle_thres,
+  std::vector<int> *oldline2newline) {
+
+  BinaryRelationTable<bool> lines_colinear(lines.size(), false);
+  for (int i = 0; i < lines.size(); i++) {
+    for (int j = i + 1; j < lines.size(); j++) {
+      lines_colinear(i, j) = LinesAreColinear(
+          lines[i], lines[j], cam_param.focal, cam_param.pp, angle_thres);
+    }
+  }
+  std::vector<std::vector<int>> groups(lines.size());
+  if (oldline2newline) {
+    oldline2newline->resize(lines.size(), -1);
+  }
+  int ccs = ConnectedComponents(
+      MakeIotaIterator<int>(0), MakeIotaIterator<int>(lines.size()),
+      [&lines_colinear](int lineid) {
+        return lines_colinear.neighbors(lineid);
+      },
+      [oldline2newline, &groups](int oldline, int newline) {
+        groups[newline].push_back(oldline);
+        if (oldline2newline) {
+          (*oldline2newline)[oldline] = newline;
+        }
+      });
+  groups.resize(ccs);
+
+  std::vector<Line2> merged_lines(groups.size());
+  for (int i = 0; i < groups.size(); i++) {
+    assert(groups[i].size() > 0);
+    const Line2 & first_line = lines[groups[i][0]];
+    Ray2 ray = first_line.ray();
+    assert(ray.direction != Vec2());
+    merged_lines[i] = first_line;
+    double minproj = 0.0;
+    double maxproj = first_line.length();
+    for (int lineid : groups[i]) {
+      for (auto p : {lines[lineid].first, lines[lineid].second}) {
+        double proj =
+            (p - first_line.first).dot(normalize(first_line.direction()));
+        if (proj < minproj) {
+          minproj = proj;
+          merged_lines[i].first = p;
+        }
+        if (proj > maxproj) {
+          maxproj = proj;
+          merged_lines[i].second = p;
+        }
+      }
+    }
+
+    assert(first_line.length() <= merged_lines[i].length());
+    assert(IsFuzzyParallel(merged_lines[i].direction(), first_line.direction(),
+                           0.1));
+  }
+
+  return merged_lines;
+}
+
 // EstimateEdgeOrientations
 std::vector<int> EstimateEdgeOrientations(
     const std::vector<Line2> &lines, const std::vector<Point2> &vps,
@@ -757,61 +825,47 @@ std::vector<int> EstimateEdgeOrientations(
     vp2lines[line2vp[l]].insert(l);
   }
 
-  // invalidate the bindings for vps who have too few edges
-  std::vector<int> line2colinear_ray(lines.size(), -1);
-  BinaryRelationTable<bool> lines_are_colinear(lines.size(), false);
-  for (int i = 0; i < lines.size(); i++) {
-    for (int j = i + 1; j < lines.size(); j++) {
-      if (LinesAreColinear(lines[i], lines[j], focal, pp,
-                           DegreesToRadians(1))) {
-        lines_are_colinear(i, j) = true;
-      }
-    }
-  }
-  std::vector<int> lineids(lines.size());
-  std::iota(lineids.begin(), lineids.end(), 0);
-  ConnectedComponents(lineids.begin(), lineids.end(),
-                      [&lines_are_colinear](int lineid) -> std::vector<int> {
-                        std::vector<int> colinear_lineids;
-                        for (int i = 0; i < lines_are_colinear.nelements; i++) {
-                          if (i == lineid) {
-                            continue;
-                          }
-                          if (lines_are_colinear(lineid, i)) {
-                            colinear_lineids.push_back(i);
-                          }
-                        }
-                        return colinear_lineids;
-                      },
-                      [&line2colinear_ray](int lineid, int rayid) {
-                        line2colinear_ray[lineid] = rayid;
-                      });
-
   for (int vp = 0; vp < nvps; vp++) {
-    std::set<int> related_rays;
-    for (int l : vp2lines[vp]) {
-      related_rays.insert(line2colinear_ray[l]);
-    }
-    if (related_rays.size() < param.vp_min_degree) {
+    if (vp2lines[vp].size() < param.vp_min_degree) {
       for (int l : vp2lines[vp]) {
         line2vp[l] = -1;
       }
       vp2lines[vp].clear();
     }
   }
-
   return line2vp;
 }
 
-// SolveVertexInversedDepths
-std::vector<double> SolveVertexInversedDepths(
-    const std::vector<Vec3> &vp2dir, const std::vector<Vec3> &vert2dir,
-    const std::vector<std::vector<int>> &plane2verts,
-    const std::vector<DenseMatd> &plane2restrict_mat,
-    std::function<double(const std::vector<double> &vert2inv_depth)>
-        energy_fun) {
-  return std::vector<double>();
+DenseMatd MakePlaneMatrix() { return DenseMatd::eye(3, 3); }
+DenseMatd MakePlaneMatrixAlongDirection(const Vec3 &dir) {
+  Vec3 u = normalize(dir);
+  DenseMatd mat = DenseMatd::zeros(3, 2);
+  Vec3 abs_u(abs(u[0]), abs(u[1]), abs(u[2]));
+  if (abs_u[2] >= abs_u[1] && abs_u[2] >= abs_u[0]) {
+    mat(0, 0) = mat(1, 1) = 1;
+    mat(2, 0) = -u[0] / u[2];
+    mat(2, 1) = -u[1] / u[2];
+  } else if (abs_u[1] >= abs_u[2] && abs_u[1] >= abs_u[0]) {
+    mat(0, 0) = mat(2, 1) = 1;
+    mat(1, 0) = -u[0] / u[1];
+    mat(1, 1) = -u[2] / u[1];
+  } else {
+    mat(1, 0) = mat(2, 1) = 1;
+    mat(0, 0) = -u[1] / u[0];
+    mat(0, 1) = -u[2] / u[0];
+  }
+  return mat;
+}
+DenseMatd MakePlaneMatrixTowardDirection(const Vec3 &dir) {
+  return DenseMatd(normalize(dir));
 }
 
+// GenerateInferenceFunctors
+InferenceFunctors
+GenerateInferenceFunctors(int nverts,
+                          const std::vector<PlaneConstraint> &constraints) {
+  // TODO
+  return InferenceFunctors();
+}
 }
 }
