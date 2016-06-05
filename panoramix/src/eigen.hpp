@@ -23,6 +23,17 @@ core::DenseMat<T> ToCVMat(const Eigen::Matrix<T, M, N, O, MaxM, MaxN> &m) {
   return result;
 }
 
+template <class T, int M, int N, int O, int MaxM, int MaxN>
+void ToEigenMat(const core::DenseMat<T> &cvm,
+                Eigen::Matrix<T, M, N, O, MaxM, MaxN> &m) {
+  m.resize(cvm.rows, cvm.cols);
+  for (int i = 0; i < m.rows(); i++) {
+    for (int j = 0; j < m.cols(); j++) {
+      m(i, j) = cvm(i, j);
+    }
+  }
+}
+
 // Generic functor
 template <class InternalFunctorT, class T, int NX = Eigen::Dynamic,
           int NY = Eigen::Dynamic>

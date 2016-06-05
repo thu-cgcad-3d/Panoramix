@@ -18,16 +18,6 @@ struct SubMesh {
   }
 };
 
-inline bool Contains(const SubMesh &subMesh, VertHandle vh) {
-  return Contains(subMesh.vhs, vh);
-}
-inline bool Contains(const SubMesh &subMesh, HalfHandle hh) {
-  return Contains(subMesh.hhs, hh);
-}
-inline bool Contains(const SubMesh &subMesh, FaceHandle fh) {
-  return Contains(subMesh.fhs, fh);
-}
-
 // ExtractSubMeshes
 // - HalfEdgeColinearFunT: (HalfEdgeIterT hhsBegin, HalfEdgeIterT hhsEnd) ->
 // bool
@@ -80,15 +70,20 @@ EstimateSingleViewInversedDepths(const std::map<VertT, DenseMatd> &v2matrix,
                                   const std::map<FaceT, DenseMatd> &f2matrix,
                                   Vert2InitialDepthFunT vert2initial_depth,
                                   EnergyFunT energy_fun);
-
-
-}
 }
 
-
-
-
-
+namespace core {
+inline bool Contains(const experimental::SubMesh &subMesh, VertHandle vh) {
+  return Contains(subMesh.vhs, vh);
+}
+inline bool Contains(const experimental::SubMesh &subMesh, HalfHandle hh) {
+  return Contains(subMesh.hhs, hh);
+}
+inline bool Contains(const experimental::SubMesh &subMesh, FaceHandle fh) {
+  return Contains(subMesh.fhs, fh);
+}
+}
+}
 
 ////////////////////////////////////////////////
 //// implementations

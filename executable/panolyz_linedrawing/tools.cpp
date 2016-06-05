@@ -4,6 +4,12 @@ extern "C" {
 #include <wclique.h>
 }
 
+#include "algorithms.hpp"
+#include "containers.hpp"
+#include "eigen.hpp"
+#include "factor_graph.hpp"
+#include "iterators.hpp"
+#include "manhattan.hpp"
 #include "math.hpp"
 #include "tools.hpp"
 #include "utility.hpp"
@@ -563,10 +569,10 @@ inline bool LinesAreColinear(const Line2 &line1, const Line2 &line2,
   return AngleBetweenUndirected(dir1, dir2) < angle_thres;
 }
 
-std::vector<Line2>
-MergeColinearLines(const std::vector<Line2> &lines,
-  const CameraParam &cam_param, double angle_thres,
-  std::vector<int> *oldline2newline) {
+std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
+                                      const CameraParam &cam_param,
+                                      double angle_thres,
+                                      std::vector<int> *oldline2newline) {
 
   BinaryRelationTable<bool> lines_colinear(lines.size(), false);
   for (int i = 0; i < lines.size(); i++) {
@@ -595,7 +601,7 @@ MergeColinearLines(const std::vector<Line2> &lines,
   std::vector<Line2> merged_lines(groups.size());
   for (int i = 0; i < groups.size(); i++) {
     assert(groups[i].size() > 0);
-    const Line2 & first_line = lines[groups[i][0]];
+    const Line2 &first_line = lines[groups[i][0]];
     Ray2 ray = first_line.ray();
     assert(ray.direction != Vec2());
     merged_lines[i] = first_line;
@@ -732,7 +738,7 @@ std::vector<int> EstimateEdgeOrientations(
             }
             auto &vp_pos1 = vps[bindedVP1];
             auto &vp_pos2 = vps[bindedVP2];
-            //const double thres = scale / 10.0;
+            // const double thres = scale / 10.0;
             const double K = param.coeff_noncolinear_adj_line_exlusiveness /
                              noncolineear_adj_vh_pairs.size(); // 10.0
             // if (Distance(vp_pos1, vp_pos2) < thres) { // todo
@@ -861,11 +867,172 @@ DenseMatd MakePlaneMatrixTowardDirection(const Vec3 &dir) {
 }
 
 // GenerateInferenceFunctors
-InferenceFunctors
-GenerateInferenceFunctors(int nverts,
-                          const std::vector<PlaneConstraint> &constraints) {
-  // TODO
-  return InferenceFunctors();
+std::unique_ptr<Inferencer>
+GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
+                          const std::vector<Vec3> &vert2dir) {
+  size_t nverts = vert2dir.size();
+  assert(nverts > 0);
+  size_t ncons = constraints.size();
+
+  using Eigen::Matrix3Xd;
+  using Eigen::MatrixX3d;
+  using Eigen::RowVectorXd;
+  using Eigen::RowVector3d;
+  using Eigen::MatrixXd;
+
+  std::vector<Matrix3Xd> Ps(ncons);
+  for (int c = 0; c < ncons; c++) {
+    misc::ToEigenMat(constraints[c].P, Ps[c]);
+  }
+
+  std::vector<int> cons_order;
+  cons_order.reserve(ncons);
+  std::unordered_map<int, MatrixXd> cons_fixed2DP;
+  std::unordered_map<int, std::vector<int>> cons_fixed2parent_verts;
+  std::unordered_map<int, int> vert_fixed2parent_cons;
+  vert_fixed2parent_cons[0] = -1; // -1 indicates this is a fundamental vert
+
+  while (vert_fixed2parent_cons.size() < nverts || cons_order.size() < ncons) {
+    bool more_cons_fixed = false;
+    // find fixable constraints and compute its DP matrix
+    for (int c = 0; c < constraints.size(); c++) {
+      if (Contains(cons_fixed2DP, c)) {
+        continue;
+      }
+      // collect all related verts fixed
+      std::vector<int> related_verts_fixed;
+      related_verts_fixed.reserve(constraints[c].verts.size());
+      for (int v : constraints[c].verts) {
+        if (Contains(vert_fixed2parent_cons, v)) {
+          related_verts_fixed.push_back(v);
+        }
+      }
+      if (related_verts_fixed.empty()) {
+        continue;
+      }
+      // build the D matrix from vert dirs
+      MatrixX3d D = MatrixX3d::Zero(related_verts_fixed.size(), 3);
+      for (int r = 0; r < related_verts_fixed.size(); r++) {
+        Vec3 dir = normalize(vert2dir[related_verts_fixed[r]]);
+        for (int c = 0; c < 3; c++) {
+          D(r, c) = dir[c];
+        }
+      }
+
+      // D_i * P_i * \\pi_i = \\inv_depths_i
+      MatrixXd DP = D * Ps[c];
+      assert(DP.cols() == Ps[c].cols());
+      Eigen::FullPivLU<MatrixXd> lu_decomp(DP);
+      lu_decomp.setThreshold(0.001);
+      if (lu_decomp.rank() == Ps[c].cols()) { // full rank, fixable
+        cons_fixed2DP[c] = DP;
+        cons_fixed2parent_verts[c] = std::move(related_verts_fixed);
+        cons_order.push_back(c);
+        more_cons_fixed = true;
+        // update all its related unfixed verts
+        for (int v : constraints[c].verts) {
+          if (!Contains(vert_fixed2parent_cons, v)) {
+            vert_fixed2parent_cons[v] = c;
+          }
+        }
+      }
+    }
+    // no more cons are fixed
+    if (!more_cons_fixed) {
+      // but still has unfixed verts
+      if (vert_fixed2parent_cons.size() < nverts) {
+        // then make a new fundamental vert
+        for (int v = 0; v < nverts; v++) {
+          if (!Contains(vert_fixed2parent_cons, v)) {
+            vert_fixed2parent_cons[v] = -1;
+            break;
+          }
+        }
+      } else {
+        break;
+      }
+    }
+  }
+
+  assert(cons_order.size() == ncons);
+
+  // now let's build the matrices
+  std::vector<RowVectorXd> v2matrix(nverts);
+  std::vector<MatrixXd> c2matrix(ncons);
+
+  // collect vars
+  size_t nvars = 0;
+  std::map<int, int> root_vert2pos_in_vars;
+  for (auto &p : vert_fixed2parent_cons) {
+    if (p.second == -1) {
+      root_vert2pos_in_vars[p.first] = nvars;
+      nvars++;
+    }
+  }
+
+  // initialize the matrices of fundamental verts
+  for (auto &p : vert_fixed2parent_cons) {
+    if (p.second == -1) {
+      v2matrix[p.first] = RowVectorXd::Zero(nvars);
+      v2matrix[p.first][root_vert2pos_in_vars.at(p.first)] = 1.0;
+    }
+  }
+
+  // follow the cons order
+  for (int cons : cons_order) {
+    auto &parent_verts = cons_fixed2parent_verts.at(cons);
+    auto &DP = cons_fixed2DP.at(cons);
+    // construct the inversed depth matrix of parent verts
+    MatrixXd verts_mat = MatrixXd::Zero(parent_verts.size(), nvars);
+    for (int r = 0; r < parent_verts.size(); r++) {
+      verts_mat.row(r) = v2matrix.at(parent_verts.at(r));
+      assert(verts_mat.row(r).norm() != 0.0);
+    }
+    // D * P * \pi = verts_mat * X
+    // \pi = (DP)^-1 * verts_mat * X
+    // equation = P * (DP)^-1 * verts_mat * X
+    c2matrix[cons] = Ps[cons] * DP.fullPivLu().solve(verts_mat);
+
+    // update the matrices of nonparent verts of this cons
+    for (int v : constraints[cons].verts) {
+      if (Contains(parent_verts, v)) {
+        continue;
+      }
+      assert(vert_fixed2parent_cons.at(v) == cons);
+      // inv_depth = dir^T * equation
+      RowVector3d dir(vert2dir.at(v)[0], vert2dir.at(v)[1], vert2dir.at(v)[2]);
+      v2matrix[v] = dir.normalized() * c2matrix[cons];
+    }
+  }
+
+  struct InferImpl : public Inferencer {
+    std::vector<DenseMatd> v2matrix;
+    std::vector<DenseMatd> c2matrix;
+    virtual Vec3 getPlaneEquation(int cons) const override {
+      DenseMatd eq = c2matrix.at(cons) * this->variables;
+      return Vec3(eq(0, 0), eq(1, 0), eq(2, 0));
+    }
+    virtual double getInversedDepth(int vert) const override {
+      DenseMatd inv_depth = v2matrix.at(vert) * this->variables;
+      return inv_depth(0, 0);
+    }
+  };
+
+  auto infer_ptr = std::make_unique<InferImpl>();
+  InferImpl &infer = *infer_ptr;
+  infer.v2matrix.resize(nverts);
+  for (int v = 0; v < nverts; v++) {
+    infer.v2matrix[v] = misc::ToCVMat(v2matrix.at(v));
+    assert(!infer.v2matrix.at(v).empty());
+  }
+  infer.c2matrix.resize(ncons);
+  for (int c = 0; c < ncons; c++) {
+    infer.c2matrix[c] = misc::ToCVMat(c2matrix.at(c));
+    assert(!infer.c2matrix.at(c).empty());
+  }
+  infer.variables = DenseMatd::ones(nvars, 1);
+
+  return infer_ptr;
 }
 }
 }

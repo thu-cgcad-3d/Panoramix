@@ -1,27 +1,11 @@
 #pragma once
 
-#include "cache.hpp"
-#include "clock.hpp"
-#include "factor_graph.hpp"
-#include "parallel.hpp"
-
-#include "canvas.hpp"
-#include "gui_util.hpp"
-#include "qttools.hpp"
-#include "scene.hpp"
-#include "singleton.hpp"
-
-#include "line_drawing.hpp"
-#include "mesh_advanced_util.hpp"
-#include "pi_graph_annotation.hpp"
-#include "pi_graph_cg.hpp"
-#include "pi_graph_control.hpp"
-#include "pi_graph_occlusion.hpp"
-#include "pi_graph_optimize.hpp"
-#include "pi_graph_vis.hpp"
+#include "basic_types.hpp"
 
 namespace pano {
 namespace experimental {
+
+using namespace ::pano::core;
 
 // DecomposeFaces
 // assume all internal faces are already collected in face2verts
@@ -33,6 +17,7 @@ DecomposeFaces(const std::vector<std::vector<int>> &face2verts,
 struct CameraParam {
   Point2 pp;
   double focal;
+  template <class ArchiverT> void serialize(ArchiverT &ar) { ar(pp, focal); }
 };
 
 // CalibrateCamera
@@ -91,14 +76,14 @@ DenseMatd MakePlaneMatrixAlongDirection(const Vec3 & dir);
 DenseMatd MakePlaneMatrixTowardDirection(const Vec3 & dir);
 
 // InferenceFunctors
-struct InferenceFunctors {
+struct Inferencer {
   DenseMatd variables;
-  std::function<Vec3(int plane)> getPlaneEquation;
-  std::function<double(int vert)> getInversedDepth;
+  virtual Vec3 getPlaneEquation(int cons) const = 0;
+  virtual double getInversedDepth(int vert) const = 0;
 };
 // GenerateInferenceFunctors
-InferenceFunctors
-GenerateInferenceFunctors(int nverts,
-                          const std::vector<PlaneConstraint> &constraints);
+std::unique_ptr<Inferencer>
+GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
+                          const std::vector<Vec3> &vert2dir);
 }
 }
