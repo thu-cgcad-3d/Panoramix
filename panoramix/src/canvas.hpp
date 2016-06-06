@@ -76,7 +76,7 @@ public:
     int x = static_cast<int>(std::round(p[0]));
     int y = static_cast<int>(std::round(p[1]));
     auto pp = Pixel(x, y);
-    if (Contains(image(), pp)) {
+    if (Contains(image().size(), pp)) {
       image()(pp) = paintingOptions().color;
     }
     return *this;
@@ -112,6 +112,13 @@ public:
   template <class TT> inline Canvas &add(const Ray<Point<TT, 2>> &line) {
     return add(Ray2(core::ecast<double>(line.anchor),
                     core::ecast<double>(line.direction)));
+  }
+
+  Canvas &add(const Circle &c) {
+    cv::circle(image(), (cv::Point)c.center, c.radius, paintingOptions().color,
+               paintingOptions().thickness, paintingOptions().lineType,
+               paintingOptions().shift);
+    return *this;
   }
 
   template <class TT> inline Canvas &add(const Chain<Point<TT, 2>> &c) {

@@ -406,22 +406,9 @@ std::vector<Point2> MergePoints(const std::vector<Point2> &intersections,
   }
   // merge
   std::vector<Vec3> merged_directions(directions.size(), Vec3());
-  std::vector<int> ids(directions.size());
-  std::iota(ids.begin(), ids.end(), 0);
   int ccs = ConnectedComponents(
-      ids.begin(), ids.end(),
-      [&adj_relation](int id) -> std::vector<int> {
-        std::vector<int> neighbors;
-        for (int i = 0; i < adj_relation.nelements; i++) {
-          if (i == id) {
-            continue;
-          }
-          if (adj_relation(i, id)) {
-            neighbors.push_back(i);
-          }
-        }
-        return neighbors;
-      },
+      MakeIotaIterator<int>(0), MakeIotaIterator<int>(directions.size()),
+      [&adj_relation](int id) { return adj_relation.neighbors(id); },
       [&merged_directions, &directions](int id, int group) {
         AddToDirection(merged_directions[group], directions[id]);
       });
@@ -869,7 +856,8 @@ DenseMatd MakePlaneMatrixTowardDirection(const Vec3 &dir) {
 // GenerateInferenceFunctors
 std::unique_ptr<Inferencer>
 GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
-                          const std::vector<Vec3> &vert2dir) {
+                          const std::vector<Vec3> &vert2dir,
+                          std::vector<int> *fundamental_verts) {
   size_t nverts = vert2dir.size();
   assert(nverts > 0);
   size_t ncons = constraints.size();
@@ -879,6 +867,7 @@ GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
   using Eigen::RowVectorXd;
   using Eigen::RowVector3d;
   using Eigen::MatrixXd;
+  using Eigen::VectorXd;
 
   std::vector<Matrix3Xd> Ps(ncons);
   for (int c = 0; c < ncons; c++) {
@@ -956,6 +945,15 @@ GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
 
   assert(cons_order.size() == ncons);
 
+  if (fundamental_verts) {
+    fundamental_verts->clear();
+    for (auto &p : vert_fixed2parent_cons) {
+      if (p.second == -1) {
+        fundamental_verts->push_back(p.first);
+      }
+    }
+  }
+
   // now let's build the matrices
   std::vector<RowVectorXd> v2matrix(nverts);
   std::vector<MatrixXd> c2matrix(ncons);
@@ -1006,15 +1004,32 @@ GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
   }
 
   struct InferImpl : public Inferencer {
+    size_t nvariables;
     std::vector<DenseMatd> v2matrix;
     std::vector<DenseMatd> c2matrix;
-    virtual Vec3 getPlaneEquation(int cons) const override {
-      DenseMatd eq = c2matrix.at(cons) * this->variables;
+    virtual size_t nvars() const override { return nvariables; }
+    virtual Vec3 getPlaneEquation(int cons,
+                                  const DenseMatd &variables) const override {
+      DenseMatd eq = c2matrix.at(cons) * variables;
       return Vec3(eq(0, 0), eq(1, 0), eq(2, 0));
     }
-    virtual double getInversedDepth(int vert) const override {
-      DenseMatd inv_depth = v2matrix.at(vert) * this->variables;
+    virtual double getInversedDepth(int vert,
+                                    const DenseMatd &variables) const override {
+      DenseMatd inv_depth = v2matrix.at(vert) * variables;
       return inv_depth(0, 0);
+    }
+    virtual DenseMatd recoverVariables(
+        const std::vector<double> &vert2inversed_depths) const override {
+      MatrixXd vmat =
+          MatrixXd::Zero(vert2inversed_depths.size(), this->nvars());
+      for (int v = 0; v < vert2inversed_depths.size(); v++) {
+        RowVectorXd r;
+        misc::ToEigenMat(v2matrix.at(v), r);
+        vmat.row(v) = r;
+      }
+      VectorXd vars = vmat.fullPivLu().solve(VectorXd::Map(
+          vert2inversed_depths.data(), vert2inversed_depths.size()));
+      return misc::ToCVMat(vars);
     }
   };
 
@@ -1030,9 +1045,68 @@ GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
     infer.c2matrix[c] = misc::ToCVMat(c2matrix.at(c));
     assert(!infer.c2matrix.at(c).empty());
   }
-  infer.variables = DenseMatd::ones(nvars, 1);
+  infer.nvariables = nvars;
 
   return infer_ptr;
+}
+
+std::vector<double>
+AnglesBetweenAdjacentEdges(const std::vector<Vec3> &vert2dir,
+                           const std::vector<std::vector<int>> &face2verts,
+                           const DenseMatd &variables, const Inferencer &infer,
+                           std::function<bool(int face)> face_selected) {
+  std::vector<double> edge_angles;
+  std::vector<Point3> vert2pos(vert2dir.size());
+  for (int v = 0; v < vert2dir.size(); v++) {
+    vert2pos[v] = normalize(vert2dir[v]) / infer.getInversedDepth(v, variables);
+  }
+  for (int face = 0; face < face2verts.size(); face++) {
+    if (face_selected && !face_selected(face)) {
+      continue;
+    }
+    auto & vs = face2verts[face];
+    assert(vs.size() >= 3);
+    for (int i = 0; i < vs.size(); i++) {
+      int v1 = vs[i];
+      int v2 = vs[(i + 1) % vs.size()];
+      int v3 = vs[(i + 2) % vs.size()];
+      double angle = AngleBetweenDirected(vert2pos[v1] - vert2pos[v2],
+                                          vert2pos[v3] - vert2pos[v2]);
+      edge_angles.push_back(angle);
+    }
+  }
+  return edge_angles;
+}
+
+std::vector<double>
+AnglesBetweenAdjacentFaces(size_t nfaces,
+                           const std::vector<std::vector<int>> &edge2faces,
+                           const DenseMatd &variables, const Inferencer &infer,
+                           std::function<bool(int face)> face_selected) {
+  std::vector<double> face_angles;
+  std::vector<Vec3> face_equations(nfaces);
+  for (int face = 0; face < nfaces; face++) {
+    face_equations[face] = infer.getPlaneEquation(face, variables);
+  }
+  for (auto &fs : edge2faces) {
+    if (fs.size() < 2) {
+      continue;
+    }
+    for (int i = 0; i < fs.size(); i++) {
+      if (face_selected && !face_selected(fs[i])) {
+        continue;
+      }
+      for (int j = i + 1; j < fs.size(); j++) {
+        if (face_selected && !face_selected(fs[j])) {
+          continue;
+        }
+        double angle = AngleBetweenUndirected(face_equations[fs[i]],
+                                              face_equations[fs[j]]);
+        face_angles.push_back(angle);
+      }
+    }
+  }
+  return face_angles;
 }
 }
 }

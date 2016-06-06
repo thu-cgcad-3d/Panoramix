@@ -233,7 +233,7 @@ void VisualizeReconstructionCompact(const Image &im,
   viz.installingOptions().discretizeOptions.colorTable(
       gui::ColorTableDescriptor::RGB);
   viz.begin(compactPolygons /*, sppCallbackFun*/)
-      .shaderSource(gui::OpenGLShaderSourceDescriptor::XPhong)
+      .shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
       .resource("texture")
       .end();
 

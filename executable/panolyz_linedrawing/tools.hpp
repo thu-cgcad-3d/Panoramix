@@ -77,13 +77,72 @@ DenseMatd MakePlaneMatrixTowardDirection(const Vec3 & dir);
 
 // InferenceFunctors
 struct Inferencer {
-  DenseMatd variables;
-  virtual Vec3 getPlaneEquation(int cons) const = 0;
-  virtual double getInversedDepth(int vert) const = 0;
+  virtual size_t nvars() const = 0;
+  virtual Vec3 getPlaneEquation(int cons, const DenseMatd &variables) const = 0;
+  virtual double getInversedDepth(int vert,
+                                  const DenseMatd &variables) const = 0;
+  virtual DenseMatd
+  recoverVariables(const std::vector<double> &vert2inversed_depths) const = 0;
 };
 // GenerateInferenceFunctors
 std::unique_ptr<Inferencer>
 GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
-                          const std::vector<Vec3> &vert2dir);
+                          const std::vector<Vec3> &vert2dir,
+                          std::vector<int> *fundamental_verts = nullptr);
+
+
+// The Energy Terms
+std::vector<double> AnglesBetweenAdjacentEdges(
+    const std::vector<Vec3> &vert2dir,
+    const std::vector<std::vector<int>> &face2verts, const DenseMatd &variables,
+    const Inferencer &infer,
+    std::function<bool(int face)> face_selected = nullptr);
+
+std::vector<double> AnglesBetweenAdjacentFaces(
+    size_t nfaces, const std::vector<std::vector<int>> &edge2faces,
+    const DenseMatd &variables, const Inferencer &infer,
+    std::function<bool(int face)> face_selected = nullptr);
+
+template <class IterT> auto MeanSquaredDeviation(IterT begin, IterT end) {
+  using T = typename std::iterator_traits<IterT>::value_type;
+  auto n = std::distance(begin, end);
+  T mean = std::accumulate(begin, end, T(0)) / double(n);
+  T msd = 0;
+  while (begin != end) {
+    msd += Square(*begin - mean);
+    ++ begin;
+  }
+  return msd / double(n);
+}
+
+template <class ContT> auto MeanSquaredDeviationOfContainer(const ContT &cont) {
+  return MeanSquaredDeviation(std::begin(cont), std::end(cont));
+}
+
+template <class IterT, class T>
+auto MeanSquaredDeviation(IterT begin, IterT end,
+                          std::initializer_list<T> vals) {
+  auto n = std::distance(begin, end);
+  T msd = 0;
+  while (begin != end) {
+    auto min_dev = std::numeric_limits<T>::max();
+    for (auto val : vals) {
+      auto dev = Square(*begin - val);
+      if (dev < min_dev) {
+        min_dev = dev;
+      }
+    }
+    msd += min_dev;
+    ++ begin;
+  }
+  return msd / double(n);
+}
+
+template <class ContT, class T>
+auto MeanSquaredDeviationOfContainer(const ContT &cont,
+                                     std::initializer_list<T> vals) {
+  return MeanSquaredDeviation(std::begin(cont), std::end(cont), vals);
+}
+
 }
 }
