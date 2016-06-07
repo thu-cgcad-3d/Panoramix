@@ -11,6 +11,7 @@ extern "C" {
 #include "iterators.hpp"
 #include "manhattan.hpp"
 #include "math.hpp"
+#include "optimization.hpp"
 #include "tools.hpp"
 #include "utility.hpp"
 
@@ -856,9 +857,10 @@ DenseMatd MakePlaneMatrixTowardDirection(const Vec3 &dir) {
 // GenerateInferenceFunctors
 std::unique_ptr<Inferencer>
 GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
-                          const std::vector<Vec3> &vert2dir,
+                          const std::vector<Vec3> &vert2dir, int root_vert,
                           std::vector<int> *fundamental_verts) {
   size_t nverts = vert2dir.size();
+  assert(root_vert >= 0 && root_vert < nverts);
   assert(nverts > 0);
   size_t ncons = constraints.size();
 
@@ -879,7 +881,8 @@ GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
   std::unordered_map<int, MatrixXd> cons_fixed2DP;
   std::unordered_map<int, std::vector<int>> cons_fixed2parent_verts;
   std::unordered_map<int, int> vert_fixed2parent_cons;
-  vert_fixed2parent_cons[0] = -1; // -1 indicates this is a fundamental vert
+  vert_fixed2parent_cons[root_vert] =
+      -1; // -1 indicates this is a fundamental vert
 
   while (vert_fixed2parent_cons.size() < nverts || cons_order.size() < ncons) {
     bool more_cons_fixed = false;
@@ -1064,7 +1067,7 @@ AnglesBetweenAdjacentEdges(const std::vector<Vec3> &vert2dir,
     if (face_selected && !face_selected(face)) {
       continue;
     }
-    auto & vs = face2verts[face];
+    auto &vs = face2verts[face];
     assert(vs.size() >= 3);
     for (int i = 0; i < vs.size(); i++) {
       int v1 = vs[i];
@@ -1107,6 +1110,85 @@ AnglesBetweenAdjacentFaces(size_t nfaces,
     }
   }
   return face_angles;
+}
+
+double PerformReconstruction(
+    const std::vector<PlaneConstraint> &constraints,
+    const std::vector<Vec3> &vert2dir, int root_vert,
+    std::function<double(const Inferencer &infer, const DenseMatd &variables,
+                         const std::vector<Vec3> &vert2dir)>
+        energy_fun,
+    std::default_random_engine &rng, std::vector<Point3> &vert2pos,
+    std::vector<int> *fundamental_verts_ptr) {
+
+  core::Println("reconstructing with root_vert = ", root_vert);
+
+  std::vector<int> fundamental_verts;
+  auto infer = GenerateInferenceFunctors(constraints, vert2dir, root_vert,
+                                         &fundamental_verts);
+
+  // if (true) { // show fundamental verts
+  //  Image3ub im(config.cameraGT.screenSize(), Vec3ub(255, 255, 255));
+  //  auto canvas = gui::MakeCanvas(im);
+  //  canvas.color(gui::LightGray);
+  //  canvas.thickness(2);
+  //  canvas.add(edge2line);
+  //  canvas.color(gui::Red);
+  //  for (int v : fundamental_verts) {
+  //    canvas.add(Circle{config.corners2d[v], 2});
+  //  }
+  //  canvas.show(0, "fundamental verts");
+  //}
+
+  // reconstruct
+  std::vector<double> vars(infer->nvars(), 1);
+  SimulatedAnnealing(
+      vars,
+      [&energy_fun, &infer,
+       &vert2dir](const std::vector<double> &vars) -> double {
+        return energy_fun(*infer, DenseMatd(vars, false), vert2dir);
+      },
+      [](int iter) { return std::max(1.0 / log(log(log(iter + 2))), 1e-10); },
+      [](std::vector<double> curX, int iter, auto &&forEachNeighborFun) {
+        if (iter >= 100) {
+          return;
+        }
+        double step = std::max(1.0 / (iter + 2), 1e-10);
+        for (int i = 0; i < curX.size(); i++) {
+          double curXHere = curX[i];
+          curX[i] = curXHere + step;
+          forEachNeighborFun(curX);
+          curX[i] = curXHere - step;
+          forEachNeighborFun(curX);
+          curX[i] = curXHere;
+        }
+      },
+      rng);
+
+  // if (false) {
+  //  std::vector<double> corner2gt_inv_depths(config.corners2d.size(), 1.0);
+  //  for (int c = 0; c < config.corners2d.size(); c++) {
+  //    corner2gt_inv_depths[c] = 1.0 / norm(config.corners2d[c]);
+  //  }
+  //  DenseMatd ground_truth_vars_mat =
+  //      infer->recoverVariables(corner2gt_inv_depths);
+  //  core::Println("groundtruth energy: ", energy_fun(ground_truth_vars_mat));
+  //}
+
+  DenseMatd variables = cv::abs(DenseMatd(vars, false)) / cv::norm(vars);
+  double energy = energy_fun(*infer, variables, vert2dir) /*+
+                  (vps_in_use.size() - enabled_vps_in_use.size()) * 0.1*/;
+  vert2pos.resize(vert2dir.size());
+  for (int c = 0; c < vert2dir.size(); c++) {
+    vert2pos[c] =
+        normalize(vert2dir[c]) / infer->getInversedDepth(c, variables);
+  }
+
+  if (fundamental_verts_ptr) {
+    *fundamental_verts_ptr = std::move(fundamental_verts);
+  }
+
+  return energy;
 }
 }
 }

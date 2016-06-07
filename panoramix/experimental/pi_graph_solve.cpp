@@ -935,7 +935,8 @@ void DisorientDanglingSegs2(const PICGDeterminablePart &dp,
   }
 
   if (true) {
-    auto pim = Print(mg,
+    auto pim =
+        PrintPIGraph(mg,
                      [&seg2determined](int seg) {
                        return seg2determined[seg] ? gui::Red : gui::White;
                      },

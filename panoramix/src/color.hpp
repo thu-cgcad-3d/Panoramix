@@ -5,7 +5,7 @@
 namespace pano {
 namespace gui {
 
-using namespace pano::core;
+using namespace ::pano::core;
 
 // color
 enum ColorTag {

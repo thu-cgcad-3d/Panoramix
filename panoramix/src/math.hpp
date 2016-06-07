@@ -26,7 +26,7 @@ inline bool operator<(const Vec<T, N> &a, const Vec<T, N> &b) {
 namespace pano {
 namespace core {
 // vectors/points
-template <class T, int N> using Vec = cv::Vec<T, N>;
+template <class T, int N> using Vec = ::cv::Vec<T, N>;
 using Vec2 = Vec<double, 2>;
 using Vec3 = Vec<double, 3>;
 using Vec4 = Vec<double, 4>;
@@ -39,7 +39,7 @@ using Vec4i = Vec<int, 4>;
 using Vec2ub = Vec<uint8_t, 2>;
 using Vec3ub = Vec<uint8_t, 3>;
 using Vec4ub = Vec<uint8_t, 4>;
-template <class T, int N> using Point = cv::Vec<T, N>;
+template <class T, int N> using Point = ::cv::Vec<T, N>;
 using Point2 = Point<double, 2>;
 using Point3 = Point<double, 3>;
 using Point4 = Point<double, 4>;
@@ -58,7 +58,7 @@ using Vec7f = Vec<float, 7>;
 template <class T, int N> struct MarkedAsNonContainer<Point<T, N>> : yes {};
 
 // matrix
-template <class T, int M, int N> using Mat = cv::Matx<T, M, N>;
+template <class T, int M, int N> using Mat = ::cv::Matx<T, M, N>;
 using Mat3 = Mat<double, 3, 3>;
 using Mat4 = Mat<double, 4, 4>;
 using Mat3f = Mat<float, 3, 3>;
@@ -67,7 +67,7 @@ using Mat4f = Mat<float, 4, 4>;
 template <class T, int M, int N>
 struct MarkedAsNonContainer<Mat<T, M, N>> : yes {};
 
-using cv::norm;
+using ::cv::norm;
 template <class T> inline T normalize(const T &d) { return d / norm(d); }
 
 template <int N = 3, class T = double> inline const Point<T, N> &Origin() {
@@ -129,12 +129,12 @@ inline Vec<T, M + 1> cat(const T &a, const Mat<T, M, 1> &b) {
 }
 
 // dense mat
-template <class T> using DenseMat = cv::Mat_<T>;
+template <class T> using DenseMat = ::cv::Mat_<T>;
 using DenseMati = DenseMat<int>;
 using DenseMatd = DenseMat<double>;
 
 // sparse mat
-template <class T> using SparseMat = cv::SparseMat_<T>;
+template <class T> using SparseMat = ::cv::SparseMat_<T>;
 using SparseMatd = SparseMat<double>;
 template <class T> struct SparseMatElement {
   using ValueType = T;

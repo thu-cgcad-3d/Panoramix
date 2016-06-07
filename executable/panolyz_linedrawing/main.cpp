@@ -4,6 +4,7 @@
 #include "line_drawing.hpp"
 #include "scene.hpp"
 #include "singleton.hpp"
+#include "optimization.hpp"
 
 #include "tools.hpp"
 
@@ -18,19 +19,19 @@ struct Configuration {
   std::vector<Point3> cornersGT;
   PerspectiveCamera cameraGT;
 
-  template <class ... Ts>
-  bool loadCache(const std::string & what, Ts & ... ts) const {
-    return misc::LoadCache(model_name + "_" + cam_name, what, ts ...);
+  template <class... Ts>
+  bool loadCache(const std::string &what, Ts &... ts) const {
+    return misc::LoadCache(model_name + "_" + cam_name, what, ts...);
   }
-  template <class ... Ts>
-  bool saveCache(const std::string & what, Ts & ... ts) const {
-    return misc::SaveCache(model_name + "_" + cam_name, what, ts ...);
+  template <class... Ts>
+  bool saveCache(const std::string &what, Ts &... ts) const {
+    return misc::SaveCache(model_name + "_" + cam_name, what, ts...);
   }
 };
 
 // ParseConfig
 Configuration ParseConfig(const std::string &modelName,
-                            const std::string &camName) {
+                          const std::string &camName) {
   std::string folder = "F:\\LineDrawings\\nonmanifold\\" + modelName + "\\";
 
   auto line_drawing_gt =
@@ -49,17 +50,17 @@ Configuration ParseConfig(const std::string &modelName,
     SaveToDisk(camPath, cam);
   }
 
-  Println("gt focal = ", cam.focal(), " gt pp = ", cam.principlePoint());
+  core::Println("gt focal = ", cam.focal(), " gt pp = ", cam.principlePoint());
   std::vector<Point2> corners2d(line_drawing_gt.corners.size());
   for (int i = 0; i < corners2d.size(); i++) {
     corners2d[i] = cam.toScreen(line_drawing_gt.corners[i]);
   }
   return Configuration{modelName,
-                          camName,
-                          std::move(line_drawing_gt.topo),
-                          std::move(corners2d),
-                          std::move(line_drawing_gt.corners),
-                          std::move(cam)};
+                       camName,
+                       std::move(line_drawing_gt.topo),
+                       std::move(corners2d),
+                       std::move(line_drawing_gt.corners),
+                       std::move(cam)};
 }
 
 int main(int argc, char **argv, char **env) {
@@ -68,9 +69,8 @@ int main(int argc, char **argv, char **env) {
   misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
   misc::Matlab matlab;
 
-  auto config = ParseConfig("2", "cam1");
-  Println("nedges: ", config.topo.nedges());
-
+  auto config = ParseConfig("1", "cam1");
+  core::Println("nedges: ", config.topo.nedges());
 
   bool rerun_preprocess = false;
   bool rerun_vps = false;
@@ -112,7 +112,7 @@ int main(int argc, char **argv, char **env) {
   // pick the best!
   assert(!pp_focals.empty());
   auto &pp_focal = pp_focals.front();
-  Println("current focal = ", pp_focal.focal, " pp = ", pp_focal.pp);
+  core::Println("current focal = ", pp_focal.focal, " pp = ", pp_focal.pp);
   PerspectiveCamera cam(lines_box.size(0), lines_box.size(1), pp_focal.pp,
                         pp_focal.focal);
 
@@ -130,6 +130,20 @@ int main(int argc, char **argv, char **env) {
     canvas.thickness(2);
     for (int i = 0; i < merged_lines.size(); i++) {
       canvas.add(ClassifyAs(merged_lines[i], i));
+    }
+    // show noted corners
+    canvas.color(gui::Black);
+    canvas.paintingOptions().fontScale = 1.0;
+    for (int i = 0; i < config.corners2d.size(); i++) {
+      canvas.add(NoteAs(config.corners2d[i], std::to_string(i)));
+    }
+    canvas.color(gui::Blue);
+    canvas.paintingOptions().fontScale = 0.9;
+    for (int i = 0; i < config.topo.nedges(); i++) {
+      canvas.add(NoteAs((config.corners2d[config.topo.edge2corners[i].first] +
+                         config.corners2d[config.topo.edge2corners[i].second]) /
+                            2.0,
+                        "[" + std::to_string(i) + "]"));
     }
     canvas.show(0, "merged lines");
   }
@@ -192,9 +206,6 @@ int main(int argc, char **argv, char **env) {
   }
 
   std::vector<int> edge2vp(config.topo.nedges(), -1);
-  for (int edge = 0; edge < edge2vp.size(); edge++) {
-    edge2vp[edge] = merged_line2vp[edge2merged_line[edge]];
-  }
 
   // show line orientation results
   if (true) {
@@ -235,27 +246,21 @@ int main(int argc, char **argv, char **env) {
     corner2dir[i] = normalize(cam.direction(config.corners2d[i]));
   }
 
-  while (true) {
-    // collect constraints
-    std::vector<PlaneConstraint> constraints;
+  std::vector<int> vps_in_use;
+  for (int edge = 0; edge < edge2vp.size(); edge++) {
+    edge2vp[edge] = merged_line2vp[edge2merged_line[edge]];
+    if (edge2vp[edge] != -1 && !Contains(vps_in_use, edge2vp[edge])) {
+      vps_in_use.push_back(edge2vp[edge]);
+    }
+  }
+
+  // basic_constraints
+  std::vector<PlaneConstraint> basic_constraints;
+  {
     // add face coplanarities
     for (int face = 0; face < config.topo.nfaces(); face++) {
-      constraints.push_back(
+      basic_constraints.push_back(
           PlaneConstraint{config.topo.face2corners[face], MakePlaneMatrix()});
-    }
-    // add oriented edges
-    for (int edge = 0; edge < edge2vp.size(); edge++) {
-      if (edge2vp[edge] != -1) {
-        auto &line = edge2line[edge];
-        Vec3 vp = cam.direction(vps[edge2vp[edge]]);
-        Vec3 line_perp_dir =
-            cam.direction(line.first).cross(cam.direction(line.second));
-        Vec3 normal = normalize(vp.cross(line_perp_dir));
-        constraints.push_back(
-            PlaneConstraint{{config.topo.edge2corners[edge].first,
-                             config.topo.edge2corners[edge].second},
-                            MakePlaneMatrixTowardDirection(normal)});
-      }
     }
     // add colinear edges
     std::vector<std::set<int>> colinear_edge_groups(edge2vp.size());
@@ -298,140 +303,212 @@ int main(int argc, char **argv, char **env) {
       if (colinear_corners.size() < 3) {
         continue;
       }
-      auto & merged_line = merged_lines[edge2merged_line[*colinear_edges.begin()]];
+      auto &merged_line =
+          merged_lines[edge2merged_line[*colinear_edges.begin()]];
       Vec3 line_perp_dir = cam.direction(merged_line.first)
                                .cross(cam.direction(merged_line.second));
-      constraints.push_back(PlaneConstraint{
+      basic_constraints.push_back(PlaneConstraint{
           std::vector<int>(colinear_corners.begin(), colinear_corners.end()),
           MakePlaneMatrixAlongDirection(line_perp_dir)});
     }
+  }
+
+  // BeamSearch
+  std::vector<Point3> best_corner2position(corner2dir.size());
+  double lowest_energy = std::numeric_limits<double>::infinity();
+
+  auto beam_search_energy_fun = [&basic_constraints, &edge2vp, &config,
+                                 &face_sets, &corner2dir, &edge2line, &cam,
+                                 &vps, &vps_in_use, &lowest_energy,
+                                 &best_corner2position](
+      const std::vector<bool> &vps_in_use_disable_flags) -> double {
+    std::set<int> enabled_vps_in_use;
+    for (int i = 0; i < vps_in_use.size(); i++) {
+      if (!vps_in_use_disable_flags[i]) {
+        enabled_vps_in_use.insert(vps_in_use[i]);
+      }
+    }
+
+    core::Print("searching with enabled_vps_in_use = {");
+    for (int vp : enabled_vps_in_use) {
+      core::Print(vp, " ");
+    }
+    core::Println("}");
+
+    // show line orientations enabled
+    if (true) {
+      std::vector<std::set<int>> vp2lines(vps.size());
+      for (int l = 0; l < edge2vp.size(); l++) {
+        int vp = edge2vp[l];
+        if (Contains(enabled_vps_in_use, vp)) {
+          vp2lines[vp].insert(l);
+        }
+      }
+      for (int i = 0; i < vps.size(); i++) {
+        if (vp2lines[i].empty()) {
+          continue;
+        }
+        Image3ub im(config.cameraGT.screenSize(), Vec3ub(255, 255, 255));
+        auto canvas = gui::MakeCanvas(im);
+        canvas.color(gui::LightGray);
+        canvas.thickness(2);
+        for (auto &line : edge2line) {
+          canvas.add(line);
+        }
+        canvas.color(gui::Gray);
+        canvas.thickness(2);
+        for (int edge : vp2lines[i]) {
+          canvas.add(edge2line[edge].ray());
+        }
+        canvas.color(gui::Black);
+        for (int edge : vp2lines[i]) {
+          canvas.add(edge2line[edge]);
+        }
+        canvas.show(0, "enabled vp_" + std::to_string(i));
+      }
+    }
+
+    std::vector<PlaneConstraint> constraints = basic_constraints;
+    // add oriented edges
+    for (int edge = 0; edge < edge2vp.size(); edge++) {
+      if (Contains(enabled_vps_in_use, edge2vp[edge])) { //
+        auto &line = edge2line[edge];
+        Vec3 vp = cam.direction(vps[edge2vp[edge]]);
+        Vec3 line_perp_dir =
+            cam.direction(line.first).cross(cam.direction(line.second));
+        Vec3 normal = normalize(vp.cross(line_perp_dir));
+        constraints.push_back(
+            PlaneConstraint{{config.topo.edge2corners[edge].first,
+                             config.topo.edge2corners[edge].second},
+                            MakePlaneMatrixTowardDirection(normal)});
+      }
+    }
 
     // analyze the dependency matrices of verts and constraints
-    std::vector<int> fundamental_verts;
-    auto infer =
-        GenerateInferenceFunctors(constraints, corner2dir, &fundamental_verts);
-
-    if (true) { // show fundamental verts
-      Image3ub im(config.cameraGT.screenSize(), Vec3ub(255, 255, 255));
-      auto canvas = gui::MakeCanvas(im);
-      canvas.color(gui::LightGray);
-      canvas.thickness(2);
-      canvas.add(edge2line);
-      canvas.color(gui::Red);
-      for (int v : fundamental_verts) {
-        canvas.add(Circle{config.corners2d[v], 2});
-      }
-      canvas.show(0, "fundamental verts");
-    }
-
-    // energy terms
-    auto energy_fun = [&infer, &corner2dir, &config,
-                       &face_sets](const std::vector<double> &vars) -> double {
-      DenseMatd variables = cv::abs(DenseMatd(vars, false)) / cv::norm(vars);
-      auto edge_angles = AnglesBetweenAdjacentEdges(
-          corner2dir, config.topo.face2corners, variables, *infer);
-      auto face_angles = AnglesBetweenAdjacentFaces(
-          config.topo.nfaces(), config.topo.edge2faces, variables, *infer);
-
-      double edge_msda = MeanSquaredDeviationOfContainer(edge_angles);
-      double face_msda = MeanSquaredDeviationOfContainer(face_angles);
-      double edge_ortho =
-          MeanSquaredDeviationOfContainer(edge_angles, {M_PI_2, 0.0, M_PI});
-      double face_ortho =
-          MeanSquaredDeviationOfContainer(face_angles, {M_PI_2, 0.0, M_PI});
-
-      double edge_msda_face_set = 0.0;
-      {
-        std::vector<double> each_face_set(face_sets.size(), 0.0);
-        for (int i = 0; i < face_sets.size(); i++) {
-          each_face_set[i] =
-              MeanSquaredDeviationOfContainer(AnglesBetweenAdjacentEdges(
-                  corner2dir, config.topo.face2corners, variables, *infer,
-                  [i, &face_sets](int face) {
-                    return Contains(face_sets[i], face);
-                  }));
-        }
-        edge_msda_face_set =
-            std::accumulate(each_face_set.begin(), each_face_set.end(), 0.0) /
-            face_sets.size();
-      }
-
-      double face_ortho_face_set = 0.0;
-      {
-        std::vector<double> each_face_set(face_sets.size(), 0.0);
-        for (int i = 0; i < face_sets.size(); i++) {
-          each_face_set[i] = MeanSquaredDeviationOfContainer(
-              AnglesBetweenAdjacentFaces(config.topo.nfaces(),
-                                         config.topo.edge2faces, variables,
-                                         *infer,
-                                         [i, &face_sets](int face) {
-                                           return Contains(face_sets[i], face);
-                                         }),
-              {M_PI_2, 0.0, M_PI});
-        }
-        face_ortho_face_set =
-            std::accumulate(each_face_set.begin(), each_face_set.end(), 0.0) /
-            face_sets.size();
-      }
-
-      double e = 100.0 * edge_msda + 0.1 * face_msda + 10 * edge_ortho +
-                 20 * face_ortho + 100.0 * edge_msda_face_set +
-                 100 * face_ortho_face_set;
-      Println("e = ", e, " edge_msda = ", edge_msda, " face_msda = ", face_msda,
-              " edge_ortho = ", edge_ortho, " face_ortho = ", face_ortho,
-              " edge_msda_face_set = ", edge_msda_face_set,
-              " face_ortho_face_set = ", face_ortho_face_set);
-      return e;
-    };
-
-    // reconstruct
     std::default_random_engine rng;
-    std::vector<double> vars(infer->nvars(), 1);
-    SimulatedAnnealing(
-        vars, energy_fun,
-        [](int iter) { return std::max(1.0 / log(log(log(iter + 2))), 1e-10); },
-        [](std::vector<double> curX, int iter, auto &&forEachNeighborFun) {
-          if (iter >= 100) {
-            return;
-          }
-          double step = std::max(1.0 / (iter + 2), 1e-10);
-          for (int i = 0; i < curX.size(); i++) {
-            double curXHere = curX[i];
-            curX[i] = curXHere + step;
-            forEachNeighborFun(curX);
-            curX[i] = curXHere - step;
-            forEachNeighborFun(curX);
-            curX[i] = curXHere;
-          }
-        },
-        rng);
+    std::vector<Point3> best_corner2positon_under_cur_constraints;
+    double lowest_energy_under_cur_constraints =
+        std::numeric_limits<double>::infinity();
+    for (int repeat = 0; repeat < 1; repeat++) {
+      // energy terms
+      auto energy_fun =
+          [&config, &face_sets](const Inferencer &infer, const DenseMatd &vars,
+                                const std::vector<Vec3> &vert2dir) -> double {
+        DenseMatd variables = cv::abs(vars) / cv::norm(vars);
+        auto edge_angles = AnglesBetweenAdjacentEdges(
+            vert2dir, config.topo.face2corners, variables, infer);
+        auto face_angles = AnglesBetweenAdjacentFaces(
+            config.topo.nfaces(), config.topo.edge2faces, variables, infer);
 
-    std::vector<double> corner2gt_inv_depths(config.corners2d.size(), 1.0);
-    for (int c = 0; c < config.corners2d.size(); c++) {
-      corner2gt_inv_depths[c] = 1.0 / norm(config.corners2d[c]);
-    }
-    DenseMatd ground_truth_vars_mat =
-        infer->recoverVariables(corner2gt_inv_depths);
-    Println("groundtruth energy:");
-    energy_fun(ground_truth_vars_mat);
+        double edge_msda = MeanSquaredDeviationOfContainer(edge_angles);
+        double face_msda = MeanSquaredDeviationOfContainer(face_angles);
+        double edge_ortho =
+            MeanSquaredDeviationOfContainer(edge_angles, {M_PI_2, 0.0, M_PI});
+        double face_ortho =
+            MeanSquaredDeviationOfContainer(face_angles, {M_PI_2, 0.0, M_PI});
+
+        double edge_msda_face_set = 0.0;
+        {
+          std::vector<double> each_face_set(face_sets.size(), 0.0);
+          for (int i = 0; i < face_sets.size(); i++) {
+            each_face_set[i] =
+                MeanSquaredDeviationOfContainer(AnglesBetweenAdjacentEdges(
+                    vert2dir, config.topo.face2corners, variables, infer,
+                    [i, &face_sets](int face) {
+                      return Contains(face_sets[i], face);
+                    }));
+          }
+          edge_msda_face_set =
+              std::accumulate(each_face_set.begin(), each_face_set.end(), 0.0) /
+              face_sets.size();
+        }
+
+        double face_ortho_face_set = 0.0;
+        {
+          std::vector<double> each_face_set(face_sets.size(), 0.0);
+          for (int i = 0; i < face_sets.size(); i++) {
+            each_face_set[i] = MeanSquaredDeviationOfContainer(
+                AnglesBetweenAdjacentFaces(
+                    config.topo.nfaces(), config.topo.edge2faces, variables,
+                    infer,
+                    [i, &face_sets](int face) {
+                      return Contains(face_sets[i], face);
+                    }),
+                {M_PI_2, 0.0, M_PI});
+          }
+          face_ortho_face_set =
+              std::accumulate(each_face_set.begin(), each_face_set.end(), 0.0) /
+              face_sets.size();
+        }
+
+        double e = 100.0 * edge_msda + 0.1 * face_msda + 10 * edge_ortho +
+                   20 * face_ortho + 100.0 * edge_msda_face_set +
+                   100 * face_ortho_face_set;
+        /* core::Println("e = ", e, " edge_msda = ", edge_msda, " face_msda = ",
+                       face_msda, " edge_ortho = ", edge_ortho, " face_ortho =
+           ",
+                       face_ortho, " edge_msda_face_set = ", edge_msda_face_set,
+                       " face_ortho_face_set = ", face_ortho_face_set);*/
+        return e;
+      };
+
+      std::vector<int> fundamental_verts;
+      std::vector<Point3> cur_corner2position;
+      double cur_energy =
+          PerformReconstruction(
+              constraints, corner2dir,
+              std::uniform_int_distribution<int>(0, corner2dir.size() - 1)(rng),
+              energy_fun, rng, cur_corner2position, &fundamental_verts) +
+          (vps_in_use.size() - enabled_vps_in_use.size()) * 1.0; // compensation
+
+      if (cur_energy < lowest_energy_under_cur_constraints) {
+        lowest_energy_under_cur_constraints = cur_energy;
+        best_corner2positon_under_cur_constraints =
+            std::move(cur_corner2position);
+
+        if (lowest_energy_under_cur_constraints < lowest_energy) {
+          lowest_energy = lowest_energy_under_cur_constraints;
+          best_corner2position = best_corner2positon_under_cur_constraints;
+        }
+      }
+    } // for (int repeat = 0; repeat = 5; repeat++)
 
     if (true) { // show results
-      DenseMatd variables = cv::abs(DenseMatd(vars, false)) / cv::norm(vars);
-      std::vector<Point3> final_corner2position(corner2dir.size());
-      for (int c = 0; c < corner2dir.size(); c++) {
-        final_corner2position[c] =
-            normalize(corner2dir[c]) / infer->getInversedDepth(c, variables);
-      }
       gui::SceneBuilder sb;
       for (int e = 0; e < config.topo.nedges(); e++) {
-        auto &p1 = final_corner2position[config.topo.edge2corners[e].first];
-        auto &p2 = final_corner2position[config.topo.edge2corners[e].second];
+        auto &p1 = best_corner2positon_under_cur_constraints
+            [config.topo.edge2corners[e].first];
+        auto &p2 = best_corner2positon_under_cur_constraints
+            [config.topo.edge2corners[e].second];
         sb.add(Line3(p1, p2));
       }
-      sb.show(true, true, gui::RenderOptions()
-                              .renderMode(gui::Lines)
-                              .fixUpDirectionInCameraMove(false));
+      sb.show(true, true,
+              gui::RenderOptions()
+                  .renderMode(gui::Lines)
+                  .fixUpDirectionInCameraMove(false)
+                  .winName("best result in current searching node"));
     }
+
+    return lowest_energy_under_cur_constraints;
+  };
+
+  auto best_vps_in_use_disable_flags =
+      BeamSearch(vps_in_use.size(), beam_search_energy_fun, 1);
+
+  core::Println("final energy after beam searching = ", lowest_energy);
+
+  if (true) { // show results
+    gui::SceneBuilder sb;
+    for (int e = 0; e < config.topo.nedges(); e++) {
+      auto &p1 = best_corner2position[config.topo.edge2corners[e].first];
+      auto &p2 = best_corner2position[config.topo.edge2corners[e].second];
+      sb.add(Line3(p1, p2));
+    }
+    sb.show(true, true, gui::RenderOptions()
+                            .renderMode(gui::Lines)
+                            .fixUpDirectionInCameraMove(false)
+                            .winName("final result"));
   }
+
   return 0;
 }

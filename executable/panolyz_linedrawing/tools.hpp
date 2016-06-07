@@ -87,9 +87,8 @@ struct Inferencer {
 // GenerateInferenceFunctors
 std::unique_ptr<Inferencer>
 GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
-                          const std::vector<Vec3> &vert2dir,
+                          const std::vector<Vec3> &vert2dir, int root_vert = 0,
                           std::vector<int> *fundamental_verts = nullptr);
-
 
 // The Energy Terms
 std::vector<double> AnglesBetweenAdjacentEdges(
@@ -144,5 +143,14 @@ auto MeanSquaredDeviationOfContainer(const ContT &cont,
   return MeanSquaredDeviation(std::begin(cont), std::end(cont), vals);
 }
 
+// PerformReconstruction
+double PerformReconstruction(
+    const std::vector<PlaneConstraint> &constraints,
+    const std::vector<Vec3> &vert2dir, int root_vert,
+    std::function<double(const Inferencer &infer, const DenseMatd &variables,
+                         const std::vector<Vec3> &vert2dir)>
+        energy_fun,
+    std::default_random_engine &rng, std::vector<Point3> &vert2pos,
+    std::vector<int> *fundamental_verts_ptr = nullptr);
 }
 }

@@ -14,11 +14,11 @@ namespace experimental {
 template <class SegColorerT = core::ConstantFunctor<gui::ColorTag>,
           class LinePieceColorerT = core::ConstantFunctor<gui::ColorTag>,
           class BndPieceColorerT = core::ConstantFunctor<gui::ColorTag>>
-inline Image3f Print(const PIGraph<PanoramicCamera> &mg,
-                     SegColorerT &&segColor = gui::Transparent,
-                     LinePieceColorerT &&lpColor = gui::Transparent,
-                     BndPieceColorerT &&bpColor = gui::Transparent,
-                     int boundaryWidth = 1, int lineWidth = 2) {
+inline Image3f PrintPIGraph(const PIGraph<PanoramicCamera> &mg,
+                            SegColorerT &&segColor = gui::Transparent,
+                            LinePieceColorerT &&lpColor = gui::Transparent,
+                            BndPieceColorerT &&bpColor = gui::Transparent,
+                            int boundaryWidth = 1, int lineWidth = 2) {
   Image3f rendered = Image3f::zeros(mg.segs.size());
   // segs
   for (auto it = rendered.begin(); it != rendered.end(); ++it) {
@@ -65,15 +65,15 @@ inline Image3f Print(const PIGraph<PanoramicCamera> &mg,
   return rendered;
 }
 
-// Print PIGraph<PanoramicCamera>
+// PrintPIGraph2 PIGraph<PanoramicCamera>
 template <class SegColorerT = core::ConstantFunctor<gui::ColorTag>,
           class LinePieceColorerT = core::ConstantFunctor<gui::ColorTag>,
           class BndPieceColorerT = core::ConstantFunctor<gui::ColorTag>>
-inline Image3f Print2(const PIGraph<PanoramicCamera> &mg,
-                      SegColorerT &&segColor = gui::Transparent,
-                      LinePieceColorerT &&lpColor = gui::Transparent,
-                      BndPieceColorerT &&bpColor = gui::Transparent,
-                      int boundaryWidth = 1, int lineWidth = 2) {
+inline Image3f PrintPIGraph2(const PIGraph<PanoramicCamera> &mg,
+                             SegColorerT &&segColor = gui::Transparent,
+                             LinePieceColorerT &&lpColor = gui::Transparent,
+                             BndPieceColorerT &&bpColor = gui::Transparent,
+                             int boundaryWidth = 1, int lineWidth = 2) {
   Image3f rendered = Image3f::zeros(mg.segs.size());
   // segs
   for (auto it = rendered.begin(); it != rendered.end(); ++it) {

@@ -348,7 +348,7 @@ struct SegLabel {
 //
 //  if (true) {
 //    auto pim =
-//        Print(mg, ConstantFunctor<gui::Color>(gui::White),
+//        PrintPIGraph(mg, ConstantFunctor<gui::Color>(gui::White),
 //              [&tjunctionLines, &mg](int lp) { return gui::Transparent; },
 //              ConstantFunctor<gui::Color>(gui::LightGray), 2, 3);
 //    const auto drawBndPiece = [&mg, &pim](int bp, const gui::Color &color) {
@@ -416,15 +416,18 @@ struct SegLabel {
 //      if (bp == -1) {
 //        continue;
 //      }
-//      double bpRightCanNeverBeFrontVoteSum = votes.rightCanNeverBeFrontVoteSum;
+//      double bpRightCanNeverBeFrontVoteSum =
+//      votes.rightCanNeverBeFrontVoteSum;
 //      double bpLeftCanNeverBeFrontVoteSum = votes.leftCanNeverBeFrontVoteSum;
 //      if (!mg.linePiece2bndPieceInSameDirection[lpOnHLine]) {
-//        std::swap(bpRightCanNeverBeFrontVoteSum, bpLeftCanNeverBeFrontVoteSum);
+//        std::swap(bpRightCanNeverBeFrontVoteSum,
+//        bpLeftCanNeverBeFrontVoteSum);
 //      }
 //
 //      // add a factor about this
 //      int fc = fg.addFactorCategory(
-//          [bp, bpRightCanNeverBeFrontVoteSum, bpLeftCanNeverBeFrontVoteSum, &mg,
+//          [bp, bpRightCanNeverBeFrontVoteSum, bpLeftCanNeverBeFrontVoteSum,
+//          &mg,
 //           &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
 //                                    core::FactorGraph::FactorCategoryId fcid,
 //                                    void *givenData) -> double {
@@ -534,10 +537,12 @@ struct SegLabel {
 //
 //  //    for (int bnd : mg.seg2bnds[seg]) {
 //  //        for (int bndPiece : mg.bnd2bndPieces[bnd]) {
-//  //            int fc = fg.addFactorCategory([seg, bndPiece, bndPiecesNum, &mg,
+//  //            int fc = fg.addFactorCategory([seg, bndPiece, bndPiecesNum,
+//  &mg,
 //  //            &seg2allowedLabels, &bndPiece2allowedLabels](
 //  //                const int * varlabels, size_t nvar,
-//  //                core::FactorGraph::FactorCategoryId fcid, void * givenData) {
+//  //                core::FactorGraph::FactorCategoryId fcid, void *
+//  givenData) {
 //  //                assert(nvar == 2);
 //  //                auto seglabel = seg2allowedLabels[seg][varlabels[0]];
 //  //                BndPieceLabel bndPieceLabel =
@@ -573,7 +578,8 @@ struct SegLabel {
 //              int fc = fg.addFactorCategory([seg, bndPiece,
 //  surroundingBndPiecesLen, &mg, &seg2allowedLabels, &bndPiece2allowedLabels](
 //                  const int * varlabels, size_t nvar,
-//                  core::FactorGraph::FactorCategoryId fcid, void * givenData) {
+//                  core::FactorGraph::FactorCategoryId fcid, void * givenData)
+//                  {
 //                  assert(nvar == 2);
 //                  auto seglabel = seg2allowedLabels[seg][varlabels[0]];
 //                  BndPieceLabel bndPieceLabel =
@@ -615,13 +621,15 @@ struct SegLabel {
 //          continue;
 //        }
 //
-//        bool sameDirection = mg.linePiece2bndPieceInSameDirection[linePiece1] ==
+//        bool sameDirection = mg.linePiece2bndPieceInSameDirection[linePiece1]
+//        ==
 //                             mg.linePiece2bndPieceInSameDirection[linePiece2];
 //
 //        int fc = fg.addFactorCategory(
 //            [linePiece1, linePiece2, bndPiece1, bndPiece2, sameDirection, &mg,
 //             &bndPiece2allowedLabels](const int *varlabels, size_t nvar,
-//                                      core::FactorGraph::FactorCategoryId fcid,
+//                                      core::FactorGraph::FactorCategoryId
+//                                      fcid,
 //                                      void *givenData) {
 //
 //              assert(nvar == 2);
@@ -633,7 +641,8 @@ struct SegLabel {
 //              double bndPieceLen2 = mg.bndPiece2length[bndPiece2];
 //              double weight = bndPieceLen1 + bndPieceLen2;
 //
-//              if (bndPieceLabel1 == Connected && bndPieceLabel2 == Connected) {
+//              if (bndPieceLabel1 == Connected && bndPieceLabel2 == Connected)
+//              {
 //                return 0.0;
 //              }
 //              if ((bndPieceLabel1 == Connected) ||
@@ -669,7 +678,8 @@ struct SegLabel {
 //        int fc = fg.addFactorCategory(
 //            [bndPiece, linePiece, &mg, &bndPiece2allowedLabels,
 //             &linePiece2allowedLabels](const int *varlabels, size_t nvar,
-//                                       core::FactorGraph::FactorCategoryId fcid,
+//                                       core::FactorGraph::FactorCategoryId
+//                                       fcid,
 //                                       void *givenData) {
 //
 //              assert(nvar == 2);
@@ -818,7 +828,8 @@ struct SegLabel {
 //  double minEnergy = std::numeric_limits<double>::infinity();
 //  fg.solve(1000, 10, [&bestLabels, &minEnergy](
 //                         int epoch, double energy, double denergy,
-//                         const core::FactorGraph::ResultTable &results) -> bool {
+//                         const core::FactorGraph::ResultTable &results) ->
+//                         bool {
 //    std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
 //    if (energy < minEnergy) {
 //      bestLabels = results;
@@ -851,7 +862,6 @@ struct SegLabel {
 //    mg.bndPiece2segRelation[bndPiece] = (SegRelation)bplabel;
 //  }
 //}
-
 
 struct LineLabel {
   bool connectLeft, connectRight;
@@ -970,9 +980,9 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     }
   };
   if (false) {
-    auto pim = Print(mg, ConstantFunctor<gui::Color>(gui::White),
-                     ConstantFunctor<gui::Color>(gui::Transparent),
-                     ConstantFunctor<gui::Color>(gui::LightGray), 1, 2);
+    auto pim = PrintPIGraph(mg, ConstantFunctor<gui::Color>(gui::White),
+                            ConstantFunctor<gui::Color>(gui::Transparent),
+                            ConstantFunctor<gui::Color>(gui::LightGray), 1, 2);
     for (int i = 0; i < mg.nlines(); i++) {
       paintLineWithNearbyPixels(pim, i, gui::Green, gui::Blue);
     }
@@ -1108,10 +1118,10 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
   }
 
   if (false) {
-    auto pim =
-        Print(mg, ConstantFunctor<gui::Color>(gui::White),
-              [&line2labelCost, &mg](int lp) { return gui::Transparent; },
-              ConstantFunctor<gui::Color>(gui::LightGray), 2, 3);
+    auto pim = PrintPIGraph(
+        mg, ConstantFunctor<gui::Color>(gui::White),
+        [&line2labelCost, &mg](int lp) { return gui::Transparent; },
+        ConstantFunctor<gui::Color>(gui::LightGray), 2, 3);
     const auto drawLine = [&mg, &pim](
         const Line3 &line, const gui::Color &color, const std::string &text) {
       double angle = AngleBetweenDirected(line.first, line.second);
@@ -1246,7 +1256,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
   });
 
   if (true) {
-    auto pim = Print(
+    auto pim = PrintPIGraph(
         mg,
         [&line2nearbySegsWithOnLeftFlag, &line2allowedLabels, &line2vh,
          &bestLabels, &mg](int seg) -> gui::Color {
@@ -1915,9 +1925,9 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
   }
 
   if (false) {
-    auto pim = Print(mg, ConstantFunctor<gui::Color>(gui::White),
-                     ConstantFunctor<gui::Color>(gui::Transparent),
-                     ConstantFunctor<gui::Color>(gui::Gray), 2, 0);
+    auto pim = PrintPIGraph(mg, ConstantFunctor<gui::Color>(gui::White),
+                            ConstantFunctor<gui::Color>(gui::Transparent),
+                            ConstantFunctor<gui::Color>(gui::Gray), 2, 0);
     auto drawLine = [&mg, &pim](const Line3 &line, const std::string &text,
                                 const gui::Color &color, bool withTeeth) {
       double angle = AngleBetweenDirected(line.first, line.second);

@@ -18,6 +18,7 @@ struct PaintingOptions {
   int shift;
   float alpha; // for new image
   ColorTable colorTable;
+  float fontScale;
 };
 
 namespace {
@@ -48,6 +49,7 @@ public:
     _paintingOptions.shift = 0;
     _paintingOptions.alpha = 0.5f;
     _paintingOptions.colorTable = ColorTableDescriptor::AllColors;
+    _paintingOptions.fontScale = 0.5;
   }
 
   Image_<T> &image() { return _image; }
@@ -151,7 +153,7 @@ public:
     auto center = core::BoundingBox(thing.component).center();
     cv::putText(image(), thing.note, cv::Point(static_cast<int>(center[0]),
                                                static_cast<int>(center[1])),
-                1, 0.5, paintingOptions().color);
+                1, paintingOptions().fontScale, paintingOptions().color);
     return add(thing.component);
   }
 

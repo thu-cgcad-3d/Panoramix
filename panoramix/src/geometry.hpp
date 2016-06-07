@@ -7,10 +7,10 @@ namespace pano {
 namespace core {
 
 // key point
-using KeyPoint = cv::KeyPoint;
+using KeyPoint = ::cv::KeyPoint;
 
 // size
-template <class T> using Size_ = cv::Size_<T>;
+template <class T> using Size_ = ::cv::Size_<T>;
 using Size = Size_<float>;
 using Sizei = Size_<int>;
 
