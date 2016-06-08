@@ -162,8 +162,9 @@ DecomposeFaces(const std::vector<std::vector<int>> &face2verts,
         }
       }
       // get the max connected mwc
-      mwcs[*std::max_element(mwc2adjcount.begin(), mwc2adjcount.end())].insert(
-          f);
+      mwcs[std::max_element(mwc2adjcount.begin(), mwc2adjcount.end()) -
+           mwc2adjcount.begin()]
+          .insert(f);
     }
   }
 
@@ -397,6 +398,87 @@ std::vector<Point2> MergePoints(const std::vector<Point2> &intersections,
   return merged_points;
 }
 
+std::vector<Point2>
+MergePointsMeanShift(const std::vector<Point2> &intersections, double focal,
+                     const Point2 &pp, double angle_thres,
+                     double converge_angle_thres = DegreesToRadians(0.01)) {
+  // unproject to space
+  std::vector<Vec3> directions(intersections.size());
+  for (int i = 0; i < intersections.size(); i++) {
+    directions[i] = NormalizedSpatialDirection(intersections[i], focal, pp);
+  }
+  // initialize modes
+  struct Mode {
+    Vec3 center;
+    std::set<int> group;
+  };
+  std::vector<Mode> modes;
+  modes.reserve(intersections.size());
+  for (int k = 0; k < directions.size(); k++) {
+    auto &dir = directions[k];
+    int where_to_merge = -1;
+    double min_angle = angle_thres;
+    for (int i = 0; i < modes.size(); i++) {
+      double angle = AngleBetweenUndirected(dir, modes[i].center);
+      if (angle <= min_angle) {
+        min_angle = angle;
+        where_to_merge = i;
+      }
+    }
+    if (where_to_merge != -1) {
+      modes[where_to_merge].group.insert(k);
+    } else {
+      modes.push_back(Mode{dir, {k}});
+    }
+  }
+
+  while (true) {
+    // refresh mode centers
+    bool mode_shifted = false;
+    for (auto &mode : modes) {
+      auto old_center = mode.center;
+      mode.center = Vec3();
+      for (int i : mode.group) {
+        AddToDirection(mode.center, directions[i]);
+      }
+      mode.center /= norm(mode.center);
+      if (old_center != Vec3() &&
+          AngleBetweenUndirected(mode.center, old_center) >
+              converge_angle_thres) {
+        mode_shifted = true;
+      }
+    }
+    if (!mode_shifted) {
+      break;
+    }
+
+    // regroup
+    for (auto &mode : modes) {
+      mode.group.clear();
+    }
+    for (int k = 0; k < directions.size(); k++) {
+      auto &dir = directions[k];
+      int where_to_merge = -1;
+      double min_angle = std::numeric_limits<double>::infinity();
+      for (int i = 0; i < modes.size(); i++) {
+        double angle = AngleBetweenUndirected(dir, modes[i].center);
+        if (angle <= min_angle) {
+          min_angle = angle;
+          where_to_merge = i;
+        }
+      }
+      assert(where_to_merge != -1);
+      modes[where_to_merge].group.insert(k);
+    }
+  }
+
+  std::vector<Point2> merged_points(modes.size());
+  for (int i = 0; i < merged_points.size(); i++) {
+    merged_points[i] = PlanarPoint(modes[i].center, focal, pp);
+  }
+  return merged_points;
+}
+
 std::vector<Point2> MergePoints(const std::vector<Point2> &intersections,
                                 double focal, const Point2 &pp,
                                 const BinaryRelationTable<bool> &adj_relation) {
@@ -479,8 +561,11 @@ CollectVanishingPoints(const std::vector<Line2> &lines, double focal,
     size_t prev_intersections_num = intersections.size();
 
     // phase 1: directly merge intersections
-    intersections =
-        MergePoints(intersections, focal, pp, param.angle_thres_phase1);
+    intersections = param.use_mean_shift_merge_phase1
+                        ? MergePointsMeanShift(intersections, focal, pp,
+                                               param.angle_thres_phase1)
+                        : MergePoints(intersections, focal, pp,
+                                      param.angle_thres_phase1); ///
     Println("1: after directly merge, intersecitons num = ",
             intersections.size());
 
@@ -859,6 +944,13 @@ std::unique_ptr<Inferencer>
 GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
                           const std::vector<Vec3> &vert2dir, int root_vert,
                           std::vector<int> *fundamental_verts) {
+
+  for (int i = 0; i < constraints.size(); i++) {
+    for (int j = i + 1; j < constraints.size(); j++) {
+      assert(constraints[i].verts != constraints[j].verts);
+    }
+  }
+
   size_t nverts = vert2dir.size();
   assert(root_vert >= 0 && root_vert < nverts);
   assert(nverts > 0);
@@ -946,6 +1038,14 @@ GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
     }
   }
 
+  if (cons_order.size() < ncons) {
+    std::vector<int> lost_cons_ids;
+    for (int i : MakeIotaRange<int>(ncons)) {
+      if (!Contains(cons_order, i)) {
+        lost_cons_ids.push_back(i);
+      }
+    }
+  }
   assert(cons_order.size() == ncons);
 
   if (fundamental_verts) {
@@ -1086,6 +1186,7 @@ AnglesBetweenAdjacentFaces(size_t nfaces,
                            const std::vector<std::vector<int>> &edge2faces,
                            const DenseMatd &variables, const Inferencer &infer,
                            std::function<bool(int face)> face_selected) {
+
   std::vector<double> face_angles;
   std::vector<Vec3> face_equations(nfaces);
   for (int face = 0; face < nfaces; face++) {
@@ -1112,6 +1213,41 @@ AnglesBetweenAdjacentFaces(size_t nfaces,
   return face_angles;
 }
 
+std::vector<double> AnglesBetweenAdjacentFaces(
+    size_t nfaces, const std::vector<std::vector<int>> &edge2faces,
+    const DenseMatd &variables, const Inferencer &infer,
+    const std::map<std::pair<int, int>, bool> &faces_overlap,
+    std::function<bool(int face)> face_selected) {
+
+  std::vector<double> face_angles;
+  std::vector<Vec3> face_equations(nfaces);
+  for (int face = 0; face < nfaces; face++) {
+    face_equations[face] = infer.getPlaneEquation(face, variables);
+  }
+  for (auto &fs : edge2faces) {
+    if (fs.size() < 2) {
+      continue;
+    }
+    for (int i = 0; i < fs.size(); i++) {
+      if (face_selected && !face_selected(fs[i])) {
+        continue;
+      }
+      for (int j = i + 1; j < fs.size(); j++) {
+        if (face_selected && !face_selected(fs[j])) {
+          continue;
+        }
+        double angle =
+            AngleBetweenDirected(face_equations[fs[i]],
+                                 faces_overlap.at(MakeOrderedPair(fs[i], fs[j]))
+                                     ? face_equations[fs[j]]
+                                     : -face_equations[fs[j]]);
+        face_angles.push_back(angle);
+      }
+    }
+  }
+  return face_angles;
+}
+
 double PerformReconstruction(
     const std::vector<PlaneConstraint> &constraints,
     const std::vector<Vec3> &vert2dir, int root_vert,
@@ -1119,7 +1255,8 @@ double PerformReconstruction(
                          const std::vector<Vec3> &vert2dir)>
         energy_fun,
     std::default_random_engine &rng, std::vector<Point3> &vert2pos,
-    std::vector<int> *fundamental_verts_ptr) {
+    std::vector<int> *fundamental_verts_ptr,
+    const PerformReconstructionParam &param) {
 
   core::Println("reconstructing with root_vert = ", root_vert);
 
@@ -1149,8 +1286,8 @@ double PerformReconstruction(
         return energy_fun(*infer, DenseMatd(vars, false), vert2dir);
       },
       [](int iter) { return std::max(1.0 / log(log(log(iter + 2))), 1e-10); },
-      [](std::vector<double> curX, int iter, auto &&forEachNeighborFun) {
-        if (iter >= 100) {
+      [&param](std::vector<double> curX, int iter, auto &&forEachNeighborFun) {
+        if (iter >= param.max_iters) {
           return;
         }
         double step = std::max(1.0 / (iter + 2), 1e-10);

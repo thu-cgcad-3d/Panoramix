@@ -119,6 +119,7 @@ template <class T, class S = double> struct Scored {
   S score;
   T component;
   const S &weight() const { return score; }
+  S &weight() { return score; }
   template <class K> Scored<std::decay_t<K>, S> converted(K &&k) const {
     return Scored<std::decay_t<K>, S>{score, std::forward<K>(k)};
   }

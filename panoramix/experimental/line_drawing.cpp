@@ -60,6 +60,27 @@ LineDrawingTopo::LineDrawingTopo(const std::vector<std::pair<int, int>> &e2cs,
       int edge = corners2edge.at(cpair);
       face2edges[face].push_back(edge);
       edge2faces[edge].push_back(face);
+      if (c1 < c2) {
+        edge_face2same_direction[std::make_pair(edge, face)] = true;
+      } else {
+        edge_face2same_direction[std::make_pair(edge, face)] = false;
+      }
+    }
+  }
+
+  for (int edge = 0; edge < nedges; edge++) {
+    auto & fs = edge2faces.at(edge);
+    if (fs.size() <= 1) {
+      continue;
+    }
+    for (int i = 0; i < fs.size(); i++) {
+      for (int j = i + 1; j < fs.size(); j++) {
+        int face1 = fs[i];
+        int face2 = fs[j];
+        adjecent_faces2same_direction[MakeOrderedPair(face1, face2)] =
+            edge_face2same_direction.at(std::make_pair(edge, face1)) !=
+            edge_face2same_direction.at(std::make_pair(edge, face2));
+      }
     }
   }
 }

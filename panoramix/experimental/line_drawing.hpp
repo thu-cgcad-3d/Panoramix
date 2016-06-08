@@ -26,7 +26,8 @@ public:
 
   template <class ArchiverT> void serialize(ArchiverT &ar) {
     ar(face2corners, edge2corners, face2edges, edge2faces, corner2edges,
-       corners2edge, corner2faces);
+       corners2edge, corner2faces, edge_face2same_direction,
+       adjecent_faces2same_direction);
   }
 
   size_t ncorners() const { return corner2edges.size(); }
@@ -43,6 +44,8 @@ public:
   std::vector<std::vector<int>> corner2edges;
   std::map<std::pair<int, int>, int> corners2edge;
   std::vector<std::vector<int>> corner2faces;
+  std::map<std::pair<int, int>, bool> edge_face2same_direction;
+  std::map<std::pair<int, int>, bool> adjecent_faces2same_direction;
 };
 
 // LineDrawing

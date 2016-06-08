@@ -37,6 +37,7 @@ struct CollectVanishingPointsParam { // best params so far
   double angle_thres_phase2 = DegreesToRadians(0.1);
   double angle_thres_phase3 = DegreesToRadians(8);
   int max_iters = std::numeric_limits<int>::max();
+  bool use_mean_shift_merge_phase1 = false;
 };
 std::vector<Point2> CollectVanishingPoints(
     const std::vector<Line2> &lines, double focal, const Point2 &pp,
@@ -70,6 +71,7 @@ std::vector<int> EstimateEdgeOrientations(
 struct PlaneConstraint {
   std::vector<int> verts;
   DenseMatd P; // the matrix P_i in my cvpr16 paper
+  template <class ArchiverT> void serialize(ArchiverT &ar) { ar(verts, P); }
 };
 DenseMatd MakePlaneMatrix();
 DenseMatd MakePlaneMatrixAlongDirection(const Vec3 & dir);
@@ -100,6 +102,12 @@ std::vector<double> AnglesBetweenAdjacentEdges(
 std::vector<double> AnglesBetweenAdjacentFaces(
     size_t nfaces, const std::vector<std::vector<int>> &edge2faces,
     const DenseMatd &variables, const Inferencer &infer,
+    std::function<bool(int face)> face_selected = nullptr);
+
+std::vector<double> AnglesBetweenAdjacentFaces(
+    size_t nfaces, const std::vector<std::vector<int>> &edge2faces,
+    const DenseMatd &variables, const Inferencer &infer,
+    const std::map<std::pair<int, int>, bool> &faces_overlap,
     std::function<bool(int face)> face_selected = nullptr);
 
 template <class IterT> auto MeanSquaredDeviation(IterT begin, IterT end) {
@@ -144,6 +152,9 @@ auto MeanSquaredDeviationOfContainer(const ContT &cont,
 }
 
 // PerformReconstruction
+struct PerformReconstructionParam {
+  int max_iters = 100;
+};
 double PerformReconstruction(
     const std::vector<PlaneConstraint> &constraints,
     const std::vector<Vec3> &vert2dir, int root_vert,
@@ -151,6 +162,7 @@ double PerformReconstruction(
                          const std::vector<Vec3> &vert2dir)>
         energy_fun,
     std::default_random_engine &rng, std::vector<Point3> &vert2pos,
-    std::vector<int> *fundamental_verts_ptr = nullptr);
+    std::vector<int> *fundamental_verts_ptr = nullptr,
+    const PerformReconstructionParam &param = PerformReconstructionParam());
 }
 }
