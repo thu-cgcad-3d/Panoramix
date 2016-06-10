@@ -35,7 +35,7 @@ struct Configuration {
 // ParseConfig
 Configuration ParseConfig(const std::string &modelName,
                           const std::string &camName) {
-  std::string folder = PANORAMIX_TEST_DATA_DIR_STR "\\" + modelName + "\\";
+  std::string folder = PANORAMIX_TEST_DATA_DIR_STR "\\linedrawing\\" + modelName + "\\";
 
   auto line_drawing_gt =
       LoadLineDrawingOldFromObjFile(folder + modelName + "_w_intf.obj");

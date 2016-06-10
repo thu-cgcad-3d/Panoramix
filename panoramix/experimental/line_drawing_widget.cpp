@@ -47,7 +47,7 @@ void LineDrawingWidget::paintEvent(QPaintEvent *e) {
     }
     for (int i = 0; i < ps.size(); i++) {
       int p1 = ps[i];
-      int p2 = ps[(i + 1) % f.size()];
+      int p2 = ps[(i + 1) % ps.size()];
       painter.drawLine(gui::MakeQPointF(points[p1]),
                        gui::MakeQPointF(points[p2]));
     }
