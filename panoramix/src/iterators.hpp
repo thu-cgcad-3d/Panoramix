@@ -325,6 +325,86 @@ constexpr auto MakeConcatedRange(ContainerT1 &&c1, ContainerT2 &&c2) {
                            std::end(c2));
 }
 
+// StepIterator
+template <class IterT>
+class StepIterator
+    : public std::iterator<
+          typename std::iterator_traits<IterT>::iterator_category,
+          typename std::iterator_traits<IterT>::value_type,
+          typename std::iterator_traits<IterT>::difference_type,
+          typename std::iterator_traits<IterT>::pointer,
+          typename std::iterator_traits<IterT>::reference> {
+  using difference_type = typename std::iterator_traits<IterT>::difference_type;
+
+public:
+  StepIterator(IterT it, difference_type s) : _it(it), _step(s) {}
+
+  const IterT &base() const { return _iter; }
+
+  decltype(auto) operator*() const { return *_iter; }
+  decltype(auto) operator-> () const { return &(**this); }
+
+  StepIterator &operator++() {
+    std::advance(_it, _step);
+    return *this;
+  }
+  StepIterator &operator++(int) {
+    auto tmp = *this;
+    std::advance(_it, _step);
+    return tmp;
+  }
+  StepIterator &operator--() {
+    std::advance(_it, -_step);
+    return *this;
+  }
+  StepIterator &operator--(int) {
+    auto tmp = *this;
+    std::advance(_it, -_step);
+    return tmp;
+  }
+
+  StepIterator &operator+=(difference_type off) { // increment by integer
+    std::advance(_it, _step * off);
+    return (*this);
+  }
+  StepIterator operator+(difference_type off) const { // return this + integer
+    return (StepIterator(_it + _step * off, _step));
+  }
+
+  StepIterator &operator-=(difference_type off) { // decrement by integer
+    std::advance(_it, -_step * off);
+    return (*this);
+  }
+  StepIterator operator-(difference_type off) const { // return this - integer
+    return (StepIterator(_it - _step * off, _step));
+  }
+
+private:
+  IterT _it;
+  typename std::iterator_traits<IterT>::difference_type _step;
+};
+
+template <class IterT>
+constexpr bool operator==(const StepIterator<IterT> &i1,
+                          const StepIterator<IterT> &i2) {
+  return i1.base() == i2.base();
+}
+template <class IterT>
+constexpr bool operator!=(const StepIterator<IterT> &i1,
+                          const StepIterator<IterT> &i2) {
+  return !(i1 == i2);
+}
+template <class IterT>
+constexpr bool operator<(const StepIterator<IterT> &i1,
+                         const StepIterator<IterT> &i2) {
+  return i1.base() < i2.base();
+}
+template <class IterT>
+constexpr auto operator-(const StepIterator<IterT> &i1,
+                         const StepIterator<IterT> &i2) {
+  return i1.base() - i2.base();
+}
+
 // element of container MUST support PredT(ele) -> bool
 // ConditionalIterator will automatically skip elements which DO NOT satisfy
 // PredT in iteration

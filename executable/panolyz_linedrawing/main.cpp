@@ -35,10 +35,10 @@ struct Configuration {
 // ParseConfig
 Configuration ParseConfig(const std::string &modelName,
                           const std::string &camName) {
-  std::string folder = "F:\\LineDrawings\\dataset\\" + modelName + "\\";
+  std::string folder = PANORAMIX_TEST_DATA_DIR_STR "\\" + modelName + "\\";
 
   auto line_drawing_gt =
-      LoadLineDrawingFromObjFile(folder + modelName + "_w_intf.obj");
+      LoadLineDrawingOldFromObjFile(folder + modelName + "_w_intf.obj");
   assert(line_drawing_gt.ncorners() > 0);
   PerspectiveCamera cam;
   std::string camPath = folder + modelName + ".obj." + camName + ".cereal";
@@ -121,15 +121,15 @@ Configuration ParseConfig(const std::string &modelName,
 int main(int argc, char **argv, char **env) {
   gui::Singleton::SetCmdArgs(argc, argv, env);
   gui::Singleton::InitGui(argc, argv);
-  misc::SetCachePath("D:\\Panoramix\\LineDrawing\\");
+  misc::SetCachePath(PANORAMIX_CACHE_DATA_DIR_STR "\\LineDrawing\\");
   misc::Matlab matlab;
 
-  auto config = ParseConfig("towers", "cam1");
+  auto config = ParseConfig("plane", "cam1");
   core::Println("nedges: ", config.topo.nedges());
 
   bool rerun_preprocess = false;
-  bool rerun_vps = true;
-  bool rerun_orientation_estimation = true;
+  bool rerun_vps = false;
+  bool rerun_orientation_estimation = false;
 
   std::vector<std::set<int>> face_sets;
   std::vector<CameraParam> pp_focals;

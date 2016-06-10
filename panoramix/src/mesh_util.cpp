@@ -3,12 +3,16 @@
 namespace pano {
 namespace core {
 Mesh<Point3> LoadMeshFromObjFile(const std::string &fname) {
+  using VertHandle = Mesh<Point3>::VertHandle;
+  using HalfHandle = Mesh<Point3>::HalfHandle;
+  using FaceHandle = Mesh<Point3>::FaceHandle;
+
   Mesh<Point3> mesh;
   std::ifstream ifs(fname);
   if (ifs.is_open()) {
     std::string line;
 
-	std::vector<std::vector<VertHandle>> face2vhs; 
+    std::vector<std::vector<VertHandle>> face2vhs;
 
     while (std::getline(ifs, line)) {
       if (line.empty()) {
@@ -38,7 +42,7 @@ Mesh<Point3> LoadMeshFromObjFile(const std::string &fname) {
           vhs.push_back(VertHandle(vid - 1));
         }
         if (!vhs.empty()) {
-			face2vhs.push_back(std::move(vhs));
+          face2vhs.push_back(std::move(vhs));
         }
       }
     }

@@ -24,9 +24,6 @@ template <class Tag> struct Handle {
   template <class Archive> void serialize(Archive &ar) { ar(id); }
 };
 
-template <class Tag> using HandleArray = std::vector<Handle<Tag>>;
-template <class Tag> using HandlePtrArray = std::vector<Handle<Tag> *>;
-
 template <class Tag>
 bool operator<(const Handle<Tag> &a, const Handle<Tag> &b) {
   return a.id < b.id;
@@ -310,6 +307,11 @@ template <class TopoT, class DataT> struct Triplet {
   Triplet(TopoTT &&t, DataTT &&d, bool e = true)
       : topo(std::forward<TopoTT>(t)), exists(e),
         data(std::forward<DataTT>(d)) {}
+
+  static constexpr size_t dataOffset() {
+    return offsetof(Triplet<TopoT, DataT>, data);
+  }
+
   template <class Archive> void serialize(Archive &ar) {
     ar(topo, exists, data);
   }

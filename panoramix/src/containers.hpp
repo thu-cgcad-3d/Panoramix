@@ -11,6 +11,72 @@
 namespace pano {
 namespace core {
 
+// ArrayView
+template <class T>
+class ArrayView {
+public:
+  using ValueType = T;
+
+  explicit ArrayView(T &d)
+      : _data(static_cast<const uint8_t *>(&d)), _size(1),
+        _offset_bytes(sizeof(T)) {}
+  ArrayView(T *d, size_t s)
+      : _data(static_cast<const uint8_t *>(d)), _size(s),
+        _offset_bytes(sizeof(T)) {}
+  ArrayView(T *d, size_t s, ptrdiff_t ofs)
+      : _data(static_cast<const uint8_t *>(d)), _size(s), _offset_bytes(ofs) {}
+
+  const T &at(size_t i) const {
+    assert(i < _size);
+    return static_cast<const T &>(_data[i * _offset_bytes]);
+  }
+  const T &operator[](size_t i) const {
+    assert(i < _size);
+    return static_cast<const T &>(_data[i * _offset_bytes]);
+  }
+  T &operator[](size_t i) {
+    assert(i < _size);
+    return static_cast<T &>(_data[i * _offset_bytes]);
+  }
+
+  const T &front() const { return at(0); }
+  T &front() { return (*this)[0]; }
+  const T &back() const { return at(_size - 1); }
+  T &back() { return (*this)[_size - 1]; }
+
+  size_t size() const { return _size; }
+
+  auto begin() const {
+    return MakeTransformIterator(MakeIotaIterator<ptrdiff_t>(0),
+                                 _index_functor());
+  }
+  auto end() const {
+    return MakeTransformIterator(MakeIotaIterator<ptrdiff_t>(_size),
+                                 _index_functor());
+  }
+  auto begin() {
+    return MakeTransformIterator(MakeIotaIterator<ptrdiff_t>(0),
+                                 _index_functor());
+  }
+  auto end() {
+    return MakeTransformIterator(MakeIotaIterator<ptrdiff_t>(_size),
+                                 _index_functor());
+  }
+
+private:
+  constexpr auto _index_functor() const {
+    return [this](ptrdiff_t i) { return this->at(i); };
+  }
+  auto _index_functor() {
+    return [this](ptrdiff_t i) { return (*this)[i]; };
+  }
+
+private:
+  const uint8_t *_data;
+  size_t _size;
+  ptrdiff_t _offset_bytes;
+};
+
 // RTreeSet
 template <class T, class BoundingBoxFunctorT = DefaultBoundingBoxFunctor>
 class RTreeSet {

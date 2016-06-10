@@ -21,8 +21,10 @@ auto Transform(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class ConstVertexCallbackT // bool callback(const Mesh & m, VertH v)
           >
-bool DepthFirstSearchOneTree(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-                             VertHandle root, ConstVertexCallbackT vCallBack);
+bool DepthFirstSearchOneTree(
+    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+    typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle root,
+    ConstVertexCallbackT vCallBack);
 
 // DepthFirstSearch
 template <class VertDataT, class HalfDataT, class FaceDataT,
@@ -68,13 +70,15 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class HalfEdgeIntersectFunT>
 auto ConstructInternalLoopFrom(
-    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, Handle<HalfTopo> initial,
+    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+    typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle initial,
     HalfEdgeIntersectFunT intersectFun);
 
 // DecomposeOnInternalLoop (liqi)
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class HalfHandleIterT, class FD1 = FaceDataT, class FD2 = FaceDataT>
-std::pair<Handle<FaceTopo>, Handle<FaceTopo>>
+std::pair<typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle,
+          typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle>
 DecomposeOnInternalLoop(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                         HalfHandleIterT loopBegin, HalfHandleIterT loopEnd,
                         FD1 &&faceData = FD1(), FD2 &&oppoFaceData = FD2());
@@ -99,7 +103,9 @@ struct CompareLoopDefault {
 // first loop is better, return true, otherwise false
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class HalfEdgeIntersectFunT, class CompareLoopT = CompareLoopDefault>
-std::vector<std::pair<FaceHandle, FaceHandle>>
+std::vector<
+    std::pair<typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle,
+              typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle>>
 DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
              HalfEdgeIntersectFunT intersectFun,
              CompareLoopT compareLoop = CompareLoopT());
@@ -119,7 +125,8 @@ int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class VertColinearFunT, class FaceHandleIterT,
           class FaceDependencyCallbackFunT = Dummy>
-std::unordered_set<VertHandle> SortFacesWithPlanarityDependency(
+std::unordered_set<typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle>
+SortFacesWithPlanarityDependency(
     const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
     FaceHandleIterT fhs_begin, FaceHandleIterT fhs_end,
     VertColinearFunT vhs_colinear_fun,
@@ -159,15 +166,15 @@ void MakeStarPrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
 
 // MakeMeshProxy
 template <class VertDataT, class HalfDataT, class FaceDataT>
-Mesh<VertHandle, HalfHandle, FaceHandle>
+Mesh<typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle,
+     typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle,
+     typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle>
 MakeMeshProxy(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh);
 
 // LoadFromObjFile
 Mesh<Point3> LoadMeshFromObjFile(const std::string &fname);
 }
 }
-
-
 
 ////////////////////////////////////////////////
 //// implementations
@@ -192,24 +199,27 @@ auto Transform(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
   toMesh.internalVertices().reserve(mesh.internalVertices().size());
   toMesh.internalHalfEdges().reserve(mesh.internalHalfEdges().size());
   toMesh.internalFaces().reserve(mesh.internalFaces().size());
-  std::transform(mesh.internalVertices().begin(), mesh.internalVertices().end(),
-                 std::back_inserter(toMesh.internalVertices()),
-                 [transVert](auto &&from) {
-                   return Triplet<VertTopo, ToVertDataT>(
-                       from.topo, transVert(from.data), from.exists);
-                 });
+  std::transform(
+      mesh.internalVertices().begin(), mesh.internalVertices().end(),
+      std::back_inserter(toMesh.internalVertices()), [transVert](auto &&from) {
+        return Triplet<Mesh<VertDataT, HalfDataT, FaceDataT>::VertTopo,
+                       ToVertDataT>(from.topo, transVert(from.data),
+                                    from.exists);
+      });
   std::transform(
       mesh.internalHalfEdges().begin(), mesh.internalHalfEdges().end(),
       std::back_inserter(toMesh.internalHalfEdges()), [transHalf](auto &&from) {
-        return Triplet<HalfTopo, ToHalfDataT>(from.topo, transHalf(from.data),
-                                              from.exists);
+        return Triplet<Mesh<VertDataT, HalfDataT, FaceDataT>::HalfTopo,
+                       ToHalfDataT>(from.topo, transHalf(from.data),
+                                    from.exists);
       });
-  std::transform(mesh.internalFaces().begin(), mesh.internalFaces().end(),
-                 std::back_inserter(toMesh.internalFaces()),
-                 [transFace](auto &&from) {
-                   return Triplet<FaceTopo, ToFaceDataT>(
-                       from.topo, transFace(from.data), from.exists);
-                 });
+  std::transform(
+      mesh.internalFaces().begin(), mesh.internalFaces().end(),
+      std::back_inserter(toMesh.internalFaces()), [transFace](auto &&from) {
+        return Triplet<Mesh<VertDataT, HalfDataT, FaceDataT>::FaceTopo,
+                       ToFaceDataT>(from.topo, transFace(from.data),
+                                    from.exists);
+      });
   return toMesh;
 }
 
@@ -217,8 +227,10 @@ auto Transform(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class ConstVertexCallbackT // bool callback(const Mesh & m, VertH v)
           >
-bool DepthFirstSearchOneTree(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
-                             VertHandle root, ConstVertexCallbackT vCallBack) {
+bool DepthFirstSearchOneTree(
+    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+    typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle root,
+    ConstVertexCallbackT vCallBack) {
   using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
   using VertH = typename MeshType::VertHandle;
   using HalfH = typename MeshType::HalfHandle;
@@ -345,9 +357,9 @@ template <
 int ConnectedComponents(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                         ConstVertexTypeRecorderT vtr) {
   using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
-  using VertH = VertHandle;
-  using HalfH = HalfHandle;
-  using FaceH = FaceHandle;
+  using VertH = typename MeshType::VertHandle;
+  using HalfH = typename MeshType::HalfHandle;
+  using FaceH = typename MeshType::FaceHandle;
 
   struct {
     bool operator()(const MeshType &mesh, VertH root,
@@ -429,13 +441,13 @@ template <class VertDataT, class HalfDataT, class FaceDataT,
 void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                        EdgeParallelScorerT epj, EdgeMaskerT emsk) {
   using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
-  using VertH = VertHandle;
-  using HalfH = HalfHandle;
-  using FaceH = FaceHandle;
+  using VertH = typename MeshType::VertHandle;
+  using HalfH = typename MeshType::HalfHandle;
+  using FaceH = typename MeshType::FaceHandle;
 
   // the loop struct for each half edge
   struct Loop {
-    HandleArray<HalfTopo> halfArr;
+    std::vector<HalfH> halfArr;
     int priority;
   };
   using LoopPtr = std::shared_ptr<Loop>;
@@ -1063,9 +1075,9 @@ Label_End:
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   using MeshType = Mesh<VertDataT, HalfDataT, FaceDataT>;
-  using VertH = VertHandle;
-  using HalfH = HalfHandle;
-  using FaceH = FaceHandle;
+  using VertH = typename MeshType::VertHandle;
+  using HalfH = typename MeshType::HalfHandle;
+  using FaceH = typename MeshType::FaceHandle;
 
   auto eParallelJudger = [](const MeshType &mesh, HalfH h1, HalfH h2) {
     VertH h1v1 = mesh.topo(h1).from();
@@ -1102,8 +1114,13 @@ void SearchAndAddFaces(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class HalfEdgeIntersectFunT>
 auto ConstructInternalLoopFrom(
-    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, Handle<HalfTopo> initial,
+    const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
+    typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle initial,
     HalfEdgeIntersectFunT intersectFun) {
+
+  using VertHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle;
+  using HalfHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle;
+  using FaceHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle;
 
   if (mesh.degree(mesh.topo(initial).from()) < 4 ||
       mesh.degree(mesh.topo(initial).to()) < 4) {
@@ -1201,16 +1218,21 @@ auto ConstructInternalLoopFrom(
 // DecomposeOnInternalLoop (liqi)
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class HalfHandleIterT, class FD1, class FD2>
-std::pair<Handle<FaceTopo>, Handle<FaceTopo>>
+std::pair<typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle,
+          typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle>
 DecomposeOnInternalLoop(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                         HalfHandleIterT loopBegin, HalfHandleIterT loopEnd,
                         FD1 &&faceData, FD2 &&oppoFaceData) {
+
+  using VertHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle;
+  using HalfHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle;
+  using FaceHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle;
 
   if (loopBegin == loopEnd) {
     return std::pair<Handle<FaceTopo>, Handle<FaceTopo>>();
   }
 
-  HandleArray<HalfTopo> loop(loopBegin, loopEnd);
+  std::vector<HalfHandle> loop(loopBegin, loopEnd);
   assert(mesh.topo(loop.front()).from() == mesh.topo(loop.back()).to());
 
   std::vector<VertHandle> thisVhs;
@@ -1347,9 +1369,15 @@ AssertEdgesAreStiched(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 // first loop is better, return true, otherwise false
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class HalfEdgeIntersectFunT, class CompareLoopT>
-std::vector<std::pair<FaceHandle, FaceHandle>>
+std::vector<
+    std::pair<typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle,
+              typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle>>
 DecomposeAll(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
              HalfEdgeIntersectFunT intersectFun, CompareLoopT compareLoop) {
+  using VertHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle;
+  using HalfHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle;
+  using FaceHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle;
+
   AssertEdgesAreStiched(mesh);
   std::vector<std::pair<FaceHandle, FaceHandle>> cutFaces;
   while (true) {
@@ -1387,6 +1415,10 @@ template <class VertDataT, class HalfDataT, class FaceDataT,
 int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
                         FaceHandleIterT fhsBegin, FaceHandleIterT fhsEnd,
                         HalfEdgeColinearFunT colinearFun) {
+  using VertHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle;
+  using HalfHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle;
+  using FaceHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle;
+
   if (fhsBegin == fhsEnd) {
     return 0;
   }
@@ -1445,11 +1477,15 @@ int FindUpperBoundOfDRF(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
 template <class VertDataT, class HalfDataT, class FaceDataT,
           class VertColinearFunT, class FaceHandleIterT,
           class FaceDependencyCallbackFunT>
-std::unordered_set<VertHandle> SortFacesWithPlanarityDependency(
+std::unordered_set<typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle>
+SortFacesWithPlanarityDependency(
     const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh,
     FaceHandleIterT fhs_begin, FaceHandleIterT fhs_end,
     VertColinearFunT vhs_colinear_fun,
     FaceDependencyCallbackFunT face_dependency_callback_fun) {
+  using VertHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle;
+  using HalfHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle;
+  using FaceHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle;
 
   std::unordered_set<VertHandle> fundamental_anchors;
   std::unordered_set<VertHandle> vhs_determined;
@@ -1641,11 +1677,14 @@ void MakeTriFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
   auto v7 = mesh.addVertex(VertDataT(1, 0, 0));
   auto v8 = mesh.addVertex(VertDataT(0, 0, 0));
 
-  static auto addTriFace = [&](Handle<VertTopo> a, Handle<VertTopo> b,
-                               Handle<VertTopo> c, Handle<VertTopo> d) {
-    mesh.addFace({a, b, c});
-    mesh.addFace({a, c, d});
-  };
+  static auto addTriFace =
+      [&](typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle a,
+          typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle b,
+          typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle c,
+          typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle d) {
+        mesh.addFace({a, b, c});
+        mesh.addFace({a, c, d});
+      };
 
   addTriFace(v1, v2, v3, v4);
   addTriFace(v2, v6, v7, v3);
@@ -1658,6 +1697,11 @@ void MakeTriFacedCube(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 // MakeIcosahedron
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakeIcosahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
+
+  using VertHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle;
+  using HalfHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle;
+  using FaceHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle;
+
   mesh.clear();
   double vertices[12][3]; /* 12 vertices with x, y, z coordinates */
   static const double Pi = 3.141592653589793238462643383279502884197;
@@ -1727,6 +1771,10 @@ void MakeIcosahedron(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakePrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
                double height) {
+  using VertHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle;
+  using HalfHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle;
+  using FaceHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle;
+
   mesh.clear();
   double angleStep = M_PI * 2.0 / nsides;
   std::vector<VertHandle> vhs1(nsides), vhs2(nsides);
@@ -1748,6 +1796,10 @@ void MakePrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakeCone(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
               double height) {
+  using VertHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle;
+  using HalfHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle;
+  using FaceHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle;
+
   mesh.clear();
   double angleStep = M_PI * 2.0 / nsides;
   VertHandle topVh = mesh.addVertex(VertDataT(0, 0, height));
@@ -1767,6 +1819,10 @@ void MakeCone(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
 template <class VertDataT, class HalfDataT, class FaceDataT>
 void MakeStarPrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
                    double innerRadius, double outerRadius, double height) {
+  using VertHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle;
+  using HalfHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle;
+  using FaceHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle;
+
   mesh.clear();
   double angleStep = M_PI / nsides;
   std::vector<VertHandle> vhs1(nsides * 2), vhs2(nsides * 2);
@@ -1787,8 +1843,14 @@ void MakeStarPrism(Mesh<VertDataT, HalfDataT, FaceDataT> &mesh, int nsides,
 
 // MakeMeshProxy
 template <class VertDataT, class HalfDataT, class FaceDataT>
-Mesh<VertHandle, HalfHandle, FaceHandle>
+Mesh<typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle,
+     typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle,
+     typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle>
 MakeMeshProxy(const Mesh<VertDataT, HalfDataT, FaceDataT> &mesh) {
+  using VertHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::VertHandle;
+  using HalfHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::HalfHandle;
+  using FaceHandle = typename Mesh<VertDataT, HalfDataT, FaceDataT>::FaceHandle;
+
   Mesh<VertHandle, HalfHandle, FaceHandle> proxy;
   proxy.internalVertices().reserve(mesh.internalVertices().size());
   proxy.internalHalfEdges().reserve(mesh.internalHalfEdges().size());

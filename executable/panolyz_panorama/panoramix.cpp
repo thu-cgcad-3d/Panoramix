@@ -292,7 +292,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
         gui::CreateRandomColorTableWithSize(mg.nsegs);
     static gui::ColorTable rgbColors = gui::RGBGreys;
     rgbColors.exceptionalColor() = gui::Gray;
-    auto pim = Print2(
+    auto pim = PrintPIGraph2(
         mg,
         [&mg](int seg, Pixel pos) -> gui::Color {
           static const gui::ColorTable ctable =
@@ -482,7 +482,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
     {
       static const gui::ColorTable randColors =
           gui::CreateRandomColorTableWithSize(mg.nsegs);
-      auto pim = Print2(
+      auto pim = PrintPIGraph2(
           mg,
           [&mg](int seg, Pixel pos) -> gui::Color {
             static const gui::ColorTable ctable =

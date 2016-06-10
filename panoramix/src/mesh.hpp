@@ -6,39 +6,7 @@
 
 namespace pano {
 namespace core {
-
 // the mesh class
-struct VertTopo;
-struct HalfTopo;
-struct FaceTopo;
-struct VertTopo {
-  Handle<VertTopo> hd;
-  HandleArray<HalfTopo> halfedges;
-  template <class Archive> void serialize(Archive &ar) { ar(hd, halfedges); }
-};
-struct HalfTopo {
-  Handle<HalfTopo> hd;
-  Handle<VertTopo> endVertices[2];
-  Handle<VertTopo> &from() { return endVertices[0]; }
-  Handle<VertTopo> &to() { return endVertices[1]; }
-  const Handle<VertTopo> &from() const { return endVertices[0]; }
-  const Handle<VertTopo> &to() const { return endVertices[1]; }
-  Handle<HalfTopo> opposite;
-  Handle<FaceTopo> face;
-  template <class Archive> void serialize(Archive &ar) {
-    ar(hd, endVertices, opposite, face);
-  }
-};
-struct FaceTopo {
-  Handle<FaceTopo> hd;
-  HandleArray<HalfTopo> halfedges;
-  template <class Archive> void serialize(Archive &ar) { ar(hd, halfedges); }
-};
-
-using VertHandle = Handle<VertTopo>;
-using HalfHandle = Handle<HalfTopo>;
-using FaceHandle = Handle<FaceTopo>;
-
 // the half edge mesh representing a manifold
 template <class VertDataT, class HalfDataT = Dummy, class FaceDataT = Dummy>
 class Mesh {
@@ -47,35 +15,68 @@ public:
   using HalfData = HalfDataT;
   using FaceData = FaceDataT;
 
-  using VertsTable = TripletArray<VertTopo, VertDataT>;
-  using HalfsTable = TripletArray<HalfTopo, HalfDataT>;
-  using FacesTable = TripletArray<FaceTopo, FaceDataT>;
+  struct VertTopo;
+  struct HalfTopo;
+  struct FaceTopo;
+  using VertHandle = Handle<VertTopo>;
+  using HalfHandle = Handle<HalfTopo>;
+  using FaceHandle = Handle<FaceTopo>;
 
-  using VertExistsPred = TripletExistsPred<VertTopo, VertDataT>;
-  using HalfExistsPred = TripletExistsPred<HalfTopo, HalfDataT>;
-  using FaceExistsPred = TripletExistsPred<FaceTopo, FaceDataT>;
+  struct VertTopo {
+    Handle<VertTopo> hd;
+    std::vector<HalfHandle> halfedges;
+    template <class Archive> void serialize(Archive &ar) { ar(hd, halfedges); }
+  };
+  struct HalfTopo {
+    Handle<HalfTopo> hd;
+    Handle<VertTopo> endVertices[2];
+    Handle<VertTopo> &from() { return endVertices[0]; }
+    Handle<VertTopo> &to() { return endVertices[1]; }
+    const Handle<VertTopo> &from() const { return endVertices[0]; }
+    const Handle<VertTopo> &to() const { return endVertices[1]; }
+    Handle<HalfTopo> opposite;
+    Handle<FaceTopo> face;
+    template <class Archive> void serialize(Archive &ar) {
+      ar(hd, endVertices, opposite, face);
+    }
+  };
+  struct FaceTopo {
+    Handle<FaceTopo> hd;
+    std::vector<HalfHandle> halfedges;
+    template <class Archive> void serialize(Archive &ar) { ar(hd, halfedges); }
+  };
 
-  using Vertex = typename VertsTable::value_type;
-  using HalfEdge = typename HalfsTable::value_type;
-  using Face = typename FacesTable::value_type;
+  decltype(auto) internalVertices() { return _verts; }
+  decltype(auto) internalHalfEdges() { return _halfs; }
+  decltype(auto) internalFaces() { return _faces; }
+  decltype(auto) internalVertices() const { return _verts; }
+  decltype(auto) internalHalfEdges() const { return _halfs; }
+  decltype(auto) internalFaces() const { return _faces; }
 
-  VertsTable &internalVertices() { return _verts; }
-  HalfsTable &internalHalfEdges() { return _halfs; }
-  FacesTable &internalFaces() { return _faces; }
-  const VertsTable &internalVertices() const { return _verts; }
-  const HalfsTable &internalHalfEdges() const { return _halfs; }
-  const FacesTable &internalFaces() const { return _faces; }
-
-  auto vertices() { return MakeConditionalRange(_verts, VertExistsPred()); }
-  auto halfedges() { return MakeConditionalRange(_halfs, HalfExistsPred()); }
-  auto faces() { return MakeConditionalRange(_faces, FaceExistsPred()); }
+  auto vertices() {
+    return MakeConditionalRange(_verts,
+                                TripletExistsPred<VertTopo, VertDataT>());
+  }
+  auto halfedges() {
+    return MakeConditionalRange(_halfs,
+                                TripletExistsPred<HalfTopo, HalfDataT>());
+  }
+  auto faces() {
+    return MakeConditionalRange(_faces,
+                                TripletExistsPred<FaceTopo, FaceDataT>());
+  }
   auto vertices() const {
-    return MakeConditionalRange(_verts, VertExistsPred());
+    return MakeConditionalRange(_verts,
+                                TripletExistsPred<VertTopo, VertDataT>());
   }
   auto halfedges() const {
-    return MakeConditionalRange(_halfs, HalfExistsPred());
+    return MakeConditionalRange(_halfs,
+                                TripletExistsPred<HalfTopo, HalfDataT>());
   }
-  auto faces() const { return MakeConditionalRange(_faces, FaceExistsPred()); }
+  auto faces() const {
+    return MakeConditionalRange(_faces,
+                                TripletExistsPred<FaceTopo, FaceDataT>());
+  }
 
   VertTopo &topo(VertHandle v) { return _verts[v.id].topo; }
   HalfTopo &topo(HalfHandle h) { return _halfs[h.id].topo; }
@@ -142,7 +143,8 @@ public:
   }
 
   template <class FDT = FaceDataT>
-  FaceHandle addFace(const HandleArray<HalfTopo> &halfedges, FDT &&fd = FDT()) {
+  FaceHandle addFace(const std::vector<HalfHandle> &halfedges,
+                     FDT &&fd = FDT()) {
     Triplet<FaceTopo, FaceDataT> ft;
     ft.topo.hd.id = _faces.size();
     ft.topo.halfedges = halfedges;
@@ -157,9 +159,9 @@ public:
   }
 
   template <class FDT = FaceDataT>
-  FaceHandle addFace(const HandleArray<VertTopo> &vertices,
+  FaceHandle addFace(const std::vector<VertHandle> &vertices,
                      bool autoflip = true, FDT &&fd = FDT()) {
-    HandleArray<HalfTopo> halfs;
+    std::vector<HalfHandle> halfs;
     assert(vertices.size() >= 3);
     auto verts = vertices;
 
@@ -186,8 +188,8 @@ public:
                              VertHandle>::value>>
   FaceHandle addFace(VertHandleIterT vhBegin, VertHandleIterT vhEnd,
                      bool autoflip = true, FDT &&fd = FDT()) {
-    HandleArray<HalfTopo> halfs;
-    HandleArray<VertTopo> verts(vhBegin, vhEnd);
+    std::vector<HalfHandle> halfs;
+    std::vector<VertHandle> verts(vhBegin, vhEnd);
     assert(verts.size() >= 3);
 
     if (autoflip) {
@@ -304,7 +306,7 @@ public:
           addEdge(newfrom, newto, h.data, m.data(h.topo.opposite));
     }
     for (auto f : m.faces()) {
-      HandleArray<HalfTopo> hs;
+      std::vector<HalfHandle> hs;
       hs.reserve(f.topo.halfedges.size());
       for (auto hh : f.topo.halfedges) {
         hs.push_back(htable[hh.id]);
@@ -316,9 +318,9 @@ public:
   }
 
   // garbage collection
-  template <class VertHandlePtrContainerT = HandlePtrArray<VertTopo>,
-            class HalfHandlePtrContainerT = HandlePtrArray<HalfTopo>,
-            class FaceHandlePtrContainerT = HandlePtrArray<FaceTopo>>
+  template <class VertHandlePtrContainerT = std::vector<VertHandle *>,
+            class HalfHandlePtrContainerT = std::vector<HalfHandle *>,
+            class FaceHandlePtrContainerT = std::vector<FaceHandle *>>
   void gc(const VertHandlePtrContainerT &vps = VertHandlePtrContainerT(),
           const HalfHandlePtrContainerT &hps = HalfHandlePtrContainerT(),
           const FaceHandlePtrContainerT &fps = FaceHandlePtrContainerT()) {
@@ -380,9 +382,9 @@ public:
   }
 
 private:
-  VertsTable _verts;
-  HalfsTable _halfs;
-  FacesTable _faces;
+  TripletArray<VertTopo, VertDataT> _verts;
+  TripletArray<HalfTopo, HalfDataT> _halfs;
+  TripletArray<FaceTopo, FaceDataT> _faces;
 };
 
 using Mesh2 = Mesh<Point2>;

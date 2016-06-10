@@ -119,7 +119,7 @@ bool LineDrawingTopo::maybeManifold() const {
   return true;
 }
 
-LineDrawing<Point3> LoadLineDrawingFromObjFile(const std::string &fname) {
+LineDrawingOld<Point3> LoadLineDrawingOldFromObjFile(const std::string &fname) {
   std::ifstream ifs(fname);
   if (ifs.is_open()) {
     std::string line;
@@ -160,9 +160,9 @@ LineDrawing<Point3> LoadLineDrawingFromObjFile(const std::string &fname) {
       }
     }
 
-    return LineDrawing<Point3>({}, face2corners, std::move(corners));
+    return LineDrawingOld<Point3>({}, face2corners, std::move(corners));
   }
-  return LineDrawing<Point3>();
+  return LineDrawingOld<Point3>();
 }
 // LineDrawing<Point2> LoadLineDrawing(const std::string &filename) {
 //  std::ifstream ifs(filename);

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "utility.hpp"
 #include "scene.hpp"
+#include "utility.hpp"
 
 #include "pi_graph.hpp"
 #include "pi_graph_annotation.hpp"
@@ -9,7 +9,6 @@
 
 namespace pano {
 namespace experimental {
-
 // Print PIGraph<PanoramicCamera>
 template <class SegColorerT = core::ConstantFunctor<gui::ColorTag>,
           class LinePieceColorerT = core::ConstantFunctor<gui::ColorTag>,
@@ -18,7 +17,48 @@ inline Image3f PrintPIGraph(const PIGraph<PanoramicCamera> &mg,
                             SegColorerT &&segColor = gui::Transparent,
                             LinePieceColorerT &&lpColor = gui::Transparent,
                             BndPieceColorerT &&bpColor = gui::Transparent,
-                            int boundaryWidth = 1, int lineWidth = 2) {
+                            int boundaryWidth = 1, int lineWidth = 2);
+
+template <class SegColorerT = core::ConstantFunctor<gui::ColorTag>,
+          class LinePieceColorerT = core::ConstantFunctor<gui::ColorTag>,
+          class BndPieceColorerT = core::ConstantFunctor<gui::ColorTag>>
+inline Image3f PrintPIGraph2(const PIGraph<PanoramicCamera> &mg,
+                             SegColorerT &&segColor = gui::Transparent,
+                             LinePieceColorerT &&lpColor = gui::Transparent,
+                             BndPieceColorerT &&bpColor = gui::Transparent,
+                             int boundaryWidth = 1, int lineWidth = 2);
+
+// VisualizeReconstruction
+void VisualizeReconstruction(
+    const PICGDeterminablePart &dp, const PIConstraintGraph &cg,
+    const PIGraph<PanoramicCamera> &mg, bool showConnectionLines = true,
+    const std::function<gui::Color(int vert)> &vertColor =
+        core::ConstantFunctor<gui::Color>(gui::Black),
+    const std::function<void(int vert)> &vertClick =
+        core::ConstantFunctor<void>(),
+    bool doModal = true);
+
+// the compact version
+void VisualizeReconstructionCompact(const Image &im,
+                                    const PICGDeterminablePart &dp,
+                                    const PIConstraintGraph &cg,
+                                    const PIGraph<PanoramicCamera> &mg,
+                                    bool doModel);
+
+// VisualizeLayoutAnnotation
+void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,
+                               double mergeDepthsThres = 0.0);
+}
+}
+
+namespace pano {
+namespace experimental {
+// Print PIGraph<PanoramicCamera>
+template <class SegColorerT, class LinePieceColorerT, class BndPieceColorerT>
+inline Image3f PrintPIGraph(const PIGraph<PanoramicCamera> &mg,
+                            SegColorerT &&segColor, LinePieceColorerT &&lpColor,
+                            BndPieceColorerT &&bpColor, int boundaryWidth,
+                            int lineWidth) {
   Image3f rendered = Image3f::zeros(mg.segs.size());
   // segs
   for (auto it = rendered.begin(); it != rendered.end(); ++it) {
@@ -66,14 +106,11 @@ inline Image3f PrintPIGraph(const PIGraph<PanoramicCamera> &mg,
 }
 
 // PrintPIGraph2 PIGraph<PanoramicCamera>
-template <class SegColorerT = core::ConstantFunctor<gui::ColorTag>,
-          class LinePieceColorerT = core::ConstantFunctor<gui::ColorTag>,
-          class BndPieceColorerT = core::ConstantFunctor<gui::ColorTag>>
-inline Image3f PrintPIGraph2(const PIGraph<PanoramicCamera> &mg,
-                             SegColorerT &&segColor = gui::Transparent,
-                             LinePieceColorerT &&lpColor = gui::Transparent,
-                             BndPieceColorerT &&bpColor = gui::Transparent,
-                             int boundaryWidth = 1, int lineWidth = 2) {
+template <class SegColorerT, class LinePieceColorerT, class BndPieceColorerT>
+inline Image3f
+PrintPIGraph2(const PIGraph<PanoramicCamera> &mg, SegColorerT &&segColor,
+              LinePieceColorerT &&lpColor, BndPieceColorerT &&bpColor,
+              int boundaryWidth, int lineWidth) {
   Image3f rendered = Image3f::zeros(mg.segs.size());
   // segs
   for (auto it = rendered.begin(); it != rendered.end(); ++it) {
@@ -119,28 +156,5 @@ inline Image3f PrintPIGraph2(const PIGraph<PanoramicCamera> &mg,
   }
   return rendered;
 }
-
-// Print Constraints
-// void PrintConstriants(const PIGraph<PanoramicCamera> & mg);
-
-// VisualizeReconstruction
-void VisualizeReconstruction(
-    const PICGDeterminablePart &dp, const PIConstraintGraph &cg,
-    const PIGraph<PanoramicCamera> &mg, bool showConnectionLines = true,
-    const std::function<gui::Color(int vert)> &vertColor =
-        core::ConstantFunctor<gui::Color>(gui::Black),
-    const std::function<void(int vert)> &vertClick =
-        core::ConstantFunctor<void>(),
-    bool doModal = true);
-
-// the compact version
-void VisualizeReconstructionCompact(const Image &im,
-                                    const PICGDeterminablePart &dp,
-                                    const PIConstraintGraph &cg,
-                                    const PIGraph<PanoramicCamera> &mg, bool doModel);
-
-// VisualizeLayoutAnnotation
-void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,
-                               double mergeDepthsThres = 0.0);
 }
 }
