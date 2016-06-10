@@ -307,11 +307,6 @@ template <class TopoT, class DataT> struct Triplet {
   Triplet(TopoTT &&t, DataTT &&d, bool e = true)
       : topo(std::forward<TopoTT>(t)), exists(e),
         data(std::forward<DataTT>(d)) {}
-
-  static constexpr size_t dataOffset() {
-    return offsetof(Triplet<TopoT, DataT>, data);
-  }
-
   template <class Archive> void serialize(Archive &ar) {
     ar(topo, exists, data);
   }

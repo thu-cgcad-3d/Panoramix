@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "cameras.hpp"
 #include "utility.hpp"
 
@@ -164,12 +166,12 @@ void PerspectiveCamera::setUp(const Vec3 &up, bool updateMat) {
     updateMatrices();
 }
 
-void PerspectiveCamera::setNearAndFarPlanes(double near, double far,
+void PerspectiveCamera::setNearAndFarPlanes(double n, double f,
                                             bool updateMat) {
-  if (_near == near && _far == far)
+  if (_near == n && _far == f)
     return;
-  _near = near;
-  _far = far;
+  _near = n;
+  _far = f;
   if (updateMat)
     updateMatrices();
 }

@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include <SLIC.h>
 
 #include "cameras.hpp"

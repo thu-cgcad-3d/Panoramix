@@ -1,5 +1,6 @@
+#include "pch.hpp"
+
 #include "eigen.hpp"
-#include <Eigen/SVD>
 
 #include "line_drawing.hpp"
 #include "mesh.hpp"

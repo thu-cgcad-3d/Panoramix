@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "color.hpp"
 
 namespace pano {

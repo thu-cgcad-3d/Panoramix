@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "scene2.hpp"
 
 namespace pano {

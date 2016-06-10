@@ -1,6 +1,4 @@
-#include <QtGui>
-#include <QtOpenGL>
-#include <QtWidgets>
+#include "pch.hpp"
 
 #include "cameras.hpp"
 

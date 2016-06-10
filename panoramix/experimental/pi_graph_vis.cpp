@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "algorithms.hpp"
 
 #include "pi_graph_optimize.hpp"

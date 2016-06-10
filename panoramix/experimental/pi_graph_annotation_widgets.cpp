@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "qttools.hpp"
 #include "pi_graph_annotation_widgets.hpp"
 

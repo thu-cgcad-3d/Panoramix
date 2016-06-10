@@ -28,3 +28,4 @@
 #include "meta.hpp"
 #include "ratio.hpp"
 #include "serialization.hpp"
+#include "eigen.hpp"

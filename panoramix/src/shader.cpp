@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "shader.hpp"
 
 #include "utility.hpp"

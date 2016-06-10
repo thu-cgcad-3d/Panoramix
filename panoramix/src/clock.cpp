@@ -1,6 +1,6 @@
+#include "pch.hpp"
+
 #include "clock.hpp"
-#include <algorithm>
-#include <utility>
 
 namespace pano {
 namespace misc {

@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "algorithms.hpp"
 #include "basic_types.hpp"
 #include "cameras.hpp"

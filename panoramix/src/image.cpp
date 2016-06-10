@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "image.hpp"
 #include "macros.hpp"
 

@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "factor_graph.hpp"
 #include "eigen.hpp"
 

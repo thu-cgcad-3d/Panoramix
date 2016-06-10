@@ -1,6 +1,6 @@
-#include "qttools.hpp"
+#include "pch.hpp"
 
-#include <QtDebug>
+#include "qttools.hpp"
 
 namespace pano {
 namespace gui {

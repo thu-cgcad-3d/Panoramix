@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "utility.hpp"
 #include "qttools.hpp"
 #include "resource.hpp"

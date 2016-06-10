@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "mesh_util.hpp"
 
 namespace pano {

@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "containers.hpp"
 #include "utility.hpp"
 #include "factor_graph.hpp"

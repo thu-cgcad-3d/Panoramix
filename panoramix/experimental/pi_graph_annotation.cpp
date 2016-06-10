@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "containers.hpp"
 #include "qttools.hpp"
 #include "singleton.hpp"

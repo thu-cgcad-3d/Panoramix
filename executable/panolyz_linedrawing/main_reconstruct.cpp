@@ -118,7 +118,7 @@ Configuration ParseConfig(const std::string &modelName,
                        std::move(cam)};
 }
 
-int main(int argc, char **argv, char **env) {
+int main_(int argc, char **argv, char **env) {
   gui::Singleton::SetCmdArgs(argc, argv, env);
   gui::Singleton::InitGui(argc, argv);
   misc::SetCachePath(PANORAMIX_CACHE_DATA_DIR_STR "\\LineDrawing\\");

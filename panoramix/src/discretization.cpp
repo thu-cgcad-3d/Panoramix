@@ -1,3 +1,6 @@
+#include "pch.hpp"
+
+
 #include "algorithms.hpp"
 #include "discretization.hpp"
 

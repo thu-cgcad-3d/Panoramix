@@ -1,3 +1,5 @@
+#include "pch.hpp"
+
 #include "serialization.hpp"
 
 #ifdef _MSC_VER

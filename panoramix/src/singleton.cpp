@@ -1,6 +1,4 @@
-#include <QApplication>
-#include <QtGui>
-#include <QtOpenGL>
+#include "pch.hpp"
 
 #include "qttools.hpp"
 #include "singleton.hpp"
