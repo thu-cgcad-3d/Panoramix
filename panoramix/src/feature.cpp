@@ -755,26 +755,14 @@ ComputeStraightness(const std::vector<std::vector<Pixel>> &edges,
   return std::make_pair(straightness, fittedLine);
 }
 
-
-Image_<Vec<double, 7>> ComputeRawGeometricContext(misc::Matlab &matlab,
-                                                   const Image &im,
-                                                   bool outdoor,
-                                                   bool useHedauForIndoor) {
+Image_<Vec<double, 7>>
+ComputeRawIndoorGeometricContextHedau(misc::Matlab &matlab, const Image &im) {
   matlab << "clear;";
   matlab.setVar("im", im);
-  if (useHedauForIndoor) {
-    if (outdoor) {
-      SHOULD_NEVER_BE_CALLED(
-          "hedau'a algorithm only aplies for indoor scenes!");
-    }
-    matlab << "addMatlabCodes;";
-    matlab << "[~, ~, slabelConfMap] = gc(im);";
-  } else {
-    matlab << (std::string("slabelConfMap = panoramix_wrapper_gc(im, ") +
-               (outdoor ? "true" : "false") + ");");
-  }
-  Image_<Vec<double, 7>> gc;
-  gc = matlab.var("slabelConfMap");
+
+  matlab << "[~, ~, slabelConfMap] = gc(im);";
+
+  Image_<Vec<double, 7>> gc = matlab.var("slabelConfMap");
   assert(gc.channels() == 7);
   assert(gc.size() == im.size());
   return gc;
@@ -821,12 +809,10 @@ Image5d MergeGeometricContextLabelsHedau(const Image7d &rawgc) {
   return result;
 }
 
-Image5d ComputeGeometricContext(misc::Matlab &matlab, const Image &im,
-                                bool outdoor, bool useHedauForIndoor) {
-  auto rawgc =
-      ComputeRawGeometricContext(matlab, im, outdoor, useHedauForIndoor);
-  return useHedauForIndoor ? MergeGeometricContextLabelsHedau(rawgc)
-                           : MergeGeometricContextLabelsHoiem(rawgc);
+Image5d ComputeIndoorGeometricContextHedau(misc::Matlab &matlab,
+                                           const Image &im) {
+  auto rawgc = ComputeRawIndoorGeometricContextHedau(matlab, im);
+  return MergeGeometricContextLabelsHedau(rawgc);
 }
 
 Image6d MergeGeometricContextLabelsHedau(const Image7d &rawgc,
@@ -899,15 +885,10 @@ Image6d MergeGeometricContextLabelsHoiem(const Image7d &rawgc,
   return result;
 }
 
-Image6d ComputeGeometricContext(misc::Matlab &matlab, const Image &im,
-                                const Vec3 &forward, const Vec3 &hvp1,
-                                bool outdoor,
-                                bool useHedauForIndoor /*= false*/) {
-  auto rawgc =
-      ComputeRawGeometricContext(matlab, im, outdoor, useHedauForIndoor);
-  return useHedauForIndoor
-             ? MergeGeometricContextLabelsHedau(rawgc, forward, hvp1)
-             : MergeGeometricContextLabelsHoiem(rawgc, forward, hvp1);
+Image6d ComputeIndoorGeometricContextHedau(misc::Matlab &matlab, const Image &im,
+                                const Vec3 &forward, const Vec3 &hvp1) {
+  auto rawgc = ComputeRawIndoorGeometricContextHedau(matlab, im);
+  return MergeGeometricContextLabelsHedau(rawgc, forward, hvp1);
 }
 
 Image3d ConvertToImage3d(const Image5d &gc) {

@@ -235,7 +235,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
     gcs.resize(hcams.size());
     for (int i = 0; i < hcams.size(); i++) {
       auto pim = view.sampled(hcams[i]);
-      auto pgc = ComputeGeometricContext(matlab, pim.image, false, true);
+      auto pgc = ComputeIndoorGeometricContextHedau(matlab, pim.image);
       gcs[i].component.camera = hcams[i];
       gcs[i].component.image = pgc;
       gcs[i].score = abs(

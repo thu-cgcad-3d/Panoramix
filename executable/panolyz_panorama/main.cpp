@@ -97,7 +97,7 @@ GeometricContext(const PILayoutAnnotation &anno,
   std::vector<Image7d> rawgcs(testCams.size());
   for (int i = 0; i < testCams.size(); i++) {
     auto pim = anno.view.sampled(testCams[i]).image;
-    rawgcs[i] = ComputeRawGeometricContext(matlab, pim, false, true);
+    rawgcs[i] = ComputeRawIndoorGeometricContextHedau(matlab, pim);
   }
   return rawgcs;
 }

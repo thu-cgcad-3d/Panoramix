@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
     // gc
     Image5d gc;
     if (options.refresh_gc || !misc::LoadCache(dir, "gc", gc)) {
-      gc = ComputeGeometricContext(matlab, im, false, true);
+      gc = ComputeIndoorGeometricContextHedau(matlab, im);
       misc::SaveCache(dir, "gc", gc);
     }
 
@@ -180,7 +180,7 @@ int main(int argc, char **argv) {
           gui::CreateRandomColorTableWithSize(mg.nsegs);
       static gui::ColorTable rgbColors = gui::RGBGreys;
       rgbColors.exceptionalColor() = gui::Gray;
-      auto pim = Print2(
+      auto pim = PrintPIGraph2(
           mg,
           [&mg](int seg, Pixel pos) -> gui::Color {
             static const gui::ColorTable ctable =

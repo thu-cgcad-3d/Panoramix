@@ -87,8 +87,8 @@ ComputeStraightness(const std::vector<std::vector<Pixel>> &edges,
 
 
 /// geometric context estimator
-Image7d ComputeRawGeometricContext(misc::Matlab &matlab, const Image &im,
-                                   bool outdoor, bool useHedauForIndoor);
+Image7d ComputeRawIndoorGeometricContextHedau(misc::Matlab &matlab,
+                                              const Image &im);
 
 // GeometricContextIndex
 enum class GeometricContextIndex : size_t {
@@ -104,8 +104,8 @@ Image5d MergeGeometricContextLabelsHoiem(const Image7d &rawgc);
 Image5d MergeGeometricContextLabelsHedau(const Image7d &rawgc);
 
 // ComputeGeometricContext
-Image5d ComputeGeometricContext(misc::Matlab &matlab, const Image &im,
-                                bool outdoor, bool useHedauForIndoor = false);
+Image5d ComputeIndoorGeometricContextHedau(misc::Matlab &matlab,
+                                           const Image &im);
 
 inline GeometricContextIndex MaxGeometricIndex(const Vec5 &gcv) {
   return (GeometricContextIndex)(std::max_element(gcv.val, gcv.val + 5) -
@@ -129,8 +129,8 @@ Image6d MergeGeometricContextLabelsHoiem(const Image7d &rawgc,
                                          const Vec3 &forward, const Vec3 &hvp1);
 
 // ComputeGeometricContext
-Image6d ComputeGeometricContext(misc::Matlab &matlab, const Image &im,
-                                const Vec3 &forward, const Vec3 &hvp1,
-                                bool outdoor, bool useHedauForIndoor = false);
+Image6d ComputeIndoorGeometricContextHedau(misc::Matlab &matlab,
+                                           const Image &im, const Vec3 &forward,
+                                           const Vec3 &hvp1);
 }
 }
