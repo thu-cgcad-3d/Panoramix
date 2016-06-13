@@ -177,7 +177,7 @@ std::vector<Point2> ProposeVanishingPoints(const Chain2 &chain) {
   if (chain.size() == 3) {
     return {};
   }
-  if (chain.size() == 4) {
+  if (chain.size() == 4 && chain.closed) {
     return {Intersection(chain.edge(0).ray(), chain.edge(2).ray()),
             Intersection(chain.edge(1).ray(), chain.edge(3).ray())};
   }
@@ -185,7 +185,13 @@ std::vector<Point2> ProposeVanishingPoints(const Chain2 &chain) {
     std::vector<Point2> vp_positions;
     vp_positions.reserve(chain.size() * chain.size() / 4);
     for (int i = 0; i < chain.size(); i++) {
+      if (!chain.closed && i == chain.size() - 1) {
+        continue;
+			}
       int j = (i + chain.size() / 2) % chain.size();
+			if (!chain.closed && j == chain.size() - 1) {
+				continue;
+			}
       vp_positions.push_back(
           Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
     }
@@ -194,19 +200,36 @@ std::vector<Point2> ProposeVanishingPoints(const Chain2 &chain) {
     std::vector<Point2> vp_positions;
     for (int i = 0; i < chain.size(); i++) {
       int j = (i + chain.size() / 2) % chain.size();
-      vp_positions.push_back(
-          Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
-      vp_positions.push_back(
-          Intersection(chain.edge(i).ray(), chain.edge(j + 1).ray()));
+      if (chain.closed || i != chain.size() - 1 && j != chain.size() - 1) {
+        vp_positions.push_back(
+            Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
+      }
+      if (chain.closed || i != chain.size() - 1 && j + 1 != chain.size() - 1) {
+        vp_positions.push_back(
+            Intersection(chain.edge(i).ray(), chain.edge(j + 1).ray()));
+      }
     }
     return vp_positions;
   }
 }
 
+//std::vector<Point2> ProposeVanishingPoints(const std::vector<Line2> & lines) {
+//	assert(lines.size() > 2);
+//  if (lines.size() == 3) {
+//    return {};
+//  }
+//	if (lines.size() == 4) {
+//    return {Intersection(lines[0].ray(), lines[2].ray()),
+//            Intersection(lines[1].ray(), lines[3].ray())};
+//  }
+//
+//}
+
 // CalibrateCamera
 std::vector<CameraParam>
 CalibrateCamera(const Box2 &box, const std::vector<std::set<int>> &face_groups,
-                std::function<Chain2(int face)> face2chain_fun, int k) {
+                std::function<std::vector<Chain2>(int face)> face2chain_fun,
+                int k) {
 
   double scale = box.outerSphere().radius;
 
@@ -218,20 +241,21 @@ CalibrateCamera(const Box2 &box, const std::vector<std::set<int>> &face_groups,
     // collect edge intersections in each face
     std::vector<Point2> interps;
     for (int face : group) {
-      Chain2 corners = face2chain_fun(face);
-      auto key_vps = ProposeVanishingPoints(corners);
-      // remove all vps that lie on certain lines
-      for (auto &key_vp : key_vps) {
-        bool overlaped = false;
-        for (int i = 0; i < corners.size(); i++) {
-          Line2 edge = corners.edge(i);
-          if (Distance(key_vp, edge) < 1e-3) {
-            overlaped = true;
-            break;
+      for (auto &corners : face2chain_fun(face)) {
+        auto key_vps = ProposeVanishingPoints(corners);
+        // remove all vps that lie on certain lines
+        for (auto &key_vp : key_vps) {
+          bool overlaped = false;
+          for (int i = 0; i < corners.size(); i++) {
+            Line2 edge = corners.edge(i);
+            if (Distance(key_vp, edge) < 1e-3) {
+              overlaped = true;
+              break;
+            }
           }
-        }
-        if (!overlaped) {
-          interps.push_back(key_vp);
+          if (!overlaped) {
+            interps.push_back(key_vp);
+          }
         }
       }
     }
@@ -1290,6 +1314,11 @@ double PerformReconstruction(
 
   // reconstruct
   std::vector<double> vars(infer->nvars(), 1);
+	std::uniform_real_distribution<double> dist(5, 10);
+	for (double & v : vars) {
+		v = dist(rng);
+	}
+
   SimulatedAnnealing(
       vars,
       [&energy_fun, &infer,

@@ -24,7 +24,7 @@ struct CameraParam {
 // CalibrateCamera
 std::vector<CameraParam>
 CalibrateCamera(const Box2 &box, const std::vector<std::set<int>> &face_groups,
-                std::function<Chain2(int face)> face2chain_fun,
+                std::function<std::vector<Chain2>(int face)> face2chain_fun,
                 int k = std::numeric_limits<int>::max());
 
 // BindPointsToLines

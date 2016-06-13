@@ -124,8 +124,9 @@ struct Configuration {
 
 void RoutineReconstruct() {
 
-  //auto config = Configuration::FromObjFile("towers", "cam1");
-  auto config = Configuration::FromImageAnnotation("washington.jpg");
+  //auto config = Configuration::FromObjFile("hex", "cam1");
+	auto config = Configuration::FromImageAnnotation("house_sketch.jpg");
+  //auto config = Configuration::FromImageAnnotation("washington.jpg");
 
   const size_t npoints = config.anno.points.size();
   const size_t nedges = config.anno.edges.size();
@@ -135,6 +136,7 @@ void RoutineReconstruct() {
   bool rerun_preprocess = false;
   bool rerun_vps = false;
   bool rerun_orientation_estimation = false;
+	bool rerun_reconstruction = false;
 
   // compute additional data
   std::vector<std::set<int>> point2edges(npoints);
@@ -236,18 +238,53 @@ void RoutineReconstruct() {
     // decompose the drawing
     face_sets = DecomposeFaces(config.anno.coplanar_points, config.anno.points);
     // calibrate camera
-    pp_focals =
-        CalibrateCamera(BoundingBoxOfContainer(config.anno.points), face_sets,
-                        [&config](int face) {
-                          Chain2 face_loop;
-                          auto &vs = config.anno.coplanar_points[face];
-                          face_loop.points.reserve(vs.size());
-                          for (int v : vs) {
-                            face_loop.append(config.anno.points[v]);
-                          }
-                          return face_loop;
-                        },
-                        5);
+    pp_focals = CalibrateCamera(
+        BoundingBoxOfContainer(config.anno.points), face_sets,
+        [&config, &points2edge](int face) {
+          std::vector<std::vector<int>> pids = {{}};
+          auto &vs = config.anno.coplanar_points[face];
+          for (int v : vs) {
+            if (pids.back().empty() ||
+                Contains(points2edge, MakeOrderedPair(pids.back().back(), v))) {
+              pids.back().push_back(v);
+            } else {
+              pids.push_back({v});
+            }
+          }
+          bool first_last_connected =
+              Contains(points2edge, MakeOrderedPair(vs.back(), vs.front()));
+          if (pids.size() > 1 &&
+              first_last_connected) { // merge the first and the last chain
+            pids.back().insert(pids.back().end(), pids.front().begin(),
+                               pids.front().end());
+            pids.front().clear();
+          }
+          std::vector<Chain2> face_loops;
+          for (auto &ps : pids) {
+            if (ps.size() <= 2) {
+              continue;
+            }
+            Chain2 chain;
+            chain.closed = false;
+            for (int p : ps) {
+              chain.append(config.anno.points[p]);
+            }
+            face_loops.push_back(std::move(chain));
+          }
+          if (face_loops.size() == 1 && first_last_connected) {
+            face_loops.front().closed = true;
+          }
+          for (auto &loop : face_loops) {
+            if (!loop.closed) {
+              core::Println("a non-closed loop of size ", loop.size());
+            } else {
+              assert(face_loops.size() == 1 &&
+                     face_loops.front().size() == vs.size());
+            }
+          }
+          return face_loops;
+        },
+        5);
     config.saveCache("preprocess", face_sets, pp_focals);
   }
 
@@ -484,239 +521,242 @@ void RoutineReconstruct() {
   Weighted<std::vector<Point3>> best_result;
   best_result.weight() = std::numeric_limits<double>::infinity();
 
-  std::default_random_engine rng;
-  std::vector<int> vps_table;
-  for (auto &vp_edges : vp2edges) {
-    vps_table.push_back(vp_edges.first);
-  }
-
-  auto beam_search_energy_fun =
-      [&basic_constraints, &edge2vp, &config, &faces_overlap, &face_sets,
-       &points2edge, &edge2faces, &point2dir, &edge2line, &cam, &vps,
-       &vps_table, &best_result, &rng, nfaces, nedges,
-       npoints](const std::vector<bool> &vps_in_use_disable_flags) -> double {
-
-    std::set<int> enabled_vps_in_use;
-    for (int i = 0; i < vps_table.size(); i++) {
-      if (!vps_in_use_disable_flags[i]) {
-        enabled_vps_in_use.insert(vps_table[i]);
-      }
+  if (rerun_reconstruction || !config.loadCache("best_result", best_result)) {
+    std::default_random_engine rng;
+    std::vector<int> vps_table;
+    for (auto &vp_edges : vp2edges) {
+      vps_table.push_back(vp_edges.first);
     }
 
-    std::string msg = "searching with enabled_vps_in_use = {";
-    for (int vp : enabled_vps_in_use) {
-      msg += std::to_string(vp) + " ";
-    }
-    msg += "}";
-    misc::Clock clock(msg);
+    auto beam_search_energy_fun =
+        [&basic_constraints, &edge2vp, &config, &faces_overlap, &face_sets,
+         &points2edge, &edge2faces, &point2dir, &edge2line, &cam, &vps,
+         &vps_table, &best_result, &rng, nfaces, nedges,
+         npoints](const std::vector<bool> &vps_in_use_disable_flags) -> double {
 
-    // show current configured line orientations
-    if (false) {
-      std::vector<std::set<int>> vp2lines(vps.size());
-      for (int l = 0; l < edge2vp.size(); l++) {
-        int vp = edge2vp[l];
-        if (Contains(enabled_vps_in_use, vp)) {
-          vp2lines[vp].insert(l);
+      std::set<int> enabled_vps_in_use;
+      for (int i = 0; i < vps_table.size(); i++) {
+        if (!vps_in_use_disable_flags[i]) {
+          enabled_vps_in_use.insert(vps_table[i]);
         }
       }
-      for (int i = 0; i < vps.size(); i++) {
-        if (vp2lines[i].empty()) {
-          continue;
-        }
-        auto canvas = gui::MakeCanvas(config.anno.image);
-        canvas.color(gui::LightGray);
-        canvas.thickness(2);
-        for (auto &line : edge2line) {
-          canvas.add(line);
-        }
-        canvas.color(gui::Gray);
-        canvas.thickness(2);
-        for (int edge : vp2lines[i]) {
-          canvas.add(edge2line[edge].ray());
-        }
-        canvas.color(gui::Black);
-        for (int edge : vp2lines[i]) {
-          canvas.add(edge2line[edge]);
-        }
-        canvas.show(0, "enabled vp_" + std::to_string(i));
+
+      std::string msg = "searching with enabled_vps_in_use = {";
+      for (int vp : enabled_vps_in_use) {
+        msg += std::to_string(vp) + " ";
       }
-    }
+      msg += "}";
+      misc::Clock clock(msg);
 
-    std::vector<PlaneConstraint> constraints = basic_constraints;
-    // add oriented edges
-    for (int edge = 0; edge < edge2vp.size(); edge++) {
-      if (Contains(enabled_vps_in_use, edge2vp[edge])) { //
-        auto &line = edge2line[edge];
-        Vec3 vp = cam.direction(vps[edge2vp[edge]]);
-        Vec3 line_perp_dir =
-            cam.direction(line.first).cross(cam.direction(line.second));
-        Vec3 normal = normalize(vp.cross(line_perp_dir));
-        constraints.push_back(PlaneConstraint{
-            {config.anno.edges[edge].first, config.anno.edges[edge].second},
-            MakePlaneMatrixTowardDirection(normal)});
-      }
-    }
-
-    // analyze the dependency matrices of verts and constraints
-    static const int repeat_num = 3;
-    std::vector<Weighted<std::vector<Point3>>>
-        results_table_under_cur_constraints(repeat_num);
-
-    // energy terms
-    auto energy_fun = [&config, &face_sets, &edge2line, &faces_overlap,
-                       &points2edge, &edge2faces, nfaces, nedges,
-                       npoints](const Inferencer &infer, const DenseMatd &vars,
-                                const std::vector<Vec3> &vert2dir) -> double {
-      DenseMatd variables = cv::abs(vars) / cv::norm(vars);
-      // edge msda & edge ortho
-      auto edge_angles = AnglesBetweenAdjacentEdges(
-          vert2dir, config.anno.coplanar_points, variables, infer,
-          [&points2edge](int p1, int p2) -> bool {
-            return Contains(points2edge, MakeOrderedPair(p1, p2));
-          }); ///
-      double edge_msda = MeanSquaredDeviationOfContainer(edge_angles);
-      double edge_ortho =
-          MeanSquaredDeviationOfContainer(edge_angles, {0.0, M_PI_2});
-
-      // face msda & face ortho
-      double face_msda = MeanSquaredDeviationOfContainer(
-          AnglesBetweenAdjacentFaces(nfaces, edge2faces, variables, infer));
-      double face_ortho = MeanSquaredDeviationOfContainer(
-          AnglesBetweenAdjacentFaces(nfaces, edge2faces, variables, infer,
-                                     faces_overlap),
-          {M_PI_2, M_PI, M_PI_2 * 3});
-
-      // edge_msda_each_face_set
-      double edge_msda_each_face_set = 0.0;
-      {
-        std::vector<double> each_face_set(face_sets.size(), 0.0);
-        for (int i = 0; i < face_sets.size(); i++) {
-          each_face_set[i] =
-              MeanSquaredDeviationOfContainer(AnglesBetweenAdjacentEdges(
-                  vert2dir, config.anno.coplanar_points, variables, infer,
-                  [&points2edge](int p1, int p2) -> bool {
-                    return Contains(points2edge, MakeOrderedPair(p1, p2));
-                  },
-                  [i, &face_sets](int face) -> bool {
-                    return Contains(face_sets[i], face);
-                  }));
+      // show current configured line orientations
+      if (false) {
+        std::vector<std::set<int>> vp2lines(vps.size());
+        for (int l = 0; l < edge2vp.size(); l++) {
+          int vp = edge2vp[l];
+          if (Contains(enabled_vps_in_use, vp)) {
+            vp2lines[vp].insert(l);
+          }
         }
-        edge_msda_each_face_set =
-            std::accumulate(each_face_set.begin(), each_face_set.end(), 0.0) /
-            face_sets.size();
+        for (int i = 0; i < vps.size(); i++) {
+          if (vp2lines[i].empty()) {
+            continue;
+          }
+          auto canvas = gui::MakeCanvas(config.anno.image);
+          canvas.color(gui::LightGray);
+          canvas.thickness(2);
+          for (auto &line : edge2line) {
+            canvas.add(line);
+          }
+          canvas.color(gui::Gray);
+          canvas.thickness(2);
+          for (int edge : vp2lines[i]) {
+            canvas.add(edge2line[edge].ray());
+          }
+          canvas.color(gui::Black);
+          for (int edge : vp2lines[i]) {
+            canvas.add(edge2line[edge]);
+          }
+          canvas.show(0, "enabled vp_" + std::to_string(i));
+        }
       }
 
-      // face_ortho_each_face_set
-      double face_ortho_each_face_set = 0.0;
-      {
-        std::vector<double> each_face_set(face_sets.size(), 0.0);
-        for (int i = 0; i < face_sets.size(); i++) {
-          each_face_set[i] = MeanSquaredDeviationOfContainer(
-              AnglesBetweenAdjacentFaces(nfaces, edge2faces, variables, infer,
-                                         faces_overlap,
-                                         [i, &face_sets](int face) {
-                                           return Contains(face_sets[i], face);
-                                         }),
-              {M_PI_2, M_PI, M_PI_2 * 3});
+      std::vector<PlaneConstraint> constraints = basic_constraints;
+      // add oriented edges
+      for (int edge = 0; edge < edge2vp.size(); edge++) {
+        if (Contains(enabled_vps_in_use, edge2vp[edge])) { //
+          auto &line = edge2line[edge];
+          Vec3 vp = cam.direction(vps[edge2vp[edge]]);
+          Vec3 line_perp_dir =
+              cam.direction(line.first).cross(cam.direction(line.second));
+          Vec3 normal = normalize(vp.cross(line_perp_dir));
+          constraints.push_back(PlaneConstraint{
+              {config.anno.edges[edge].first, config.anno.edges[edge].second},
+              MakePlaneMatrixTowardDirection(normal)});
         }
-        face_ortho_each_face_set =
-            std::accumulate(each_face_set.begin(), each_face_set.end(), 0.0) /
-            face_sets.size();
       }
 
-      // edge skew ratio
-      double max_edge_skew_ratio_score = 0.0;
-      {
-        std::vector<double> edge_proj_ratios(nedges);
-        for (int edge = 0; edge < nedges; edge++) {
-          double length2d = edge2line[edge].length();
-          auto &edge_corners = config.anno.edges[edge];
-          double length3d =
-              Distance(normalize(vert2dir[edge_corners.first]) /
-                           infer.getInversedDepth(edge_corners.first, vars),
-                       normalize(vert2dir[edge_corners.second]) /
-                           infer.getInversedDepth(edge_corners.second, vars));
-          edge_proj_ratios[edge] = length3d / length2d;
+      // analyze the dependency matrices of verts and constraints
+      static const int repeat_num = 3;
+      std::vector<Weighted<std::vector<Point3>>>
+          results_table_under_cur_constraints(repeat_num);
+
+      // energy terms
+      auto energy_fun = [&config, &face_sets, &edge2line, &faces_overlap,
+                         &points2edge, &edge2faces, nfaces, nedges, npoints](
+          const Inferencer &infer, const DenseMatd &vars,
+          const std::vector<Vec3> &vert2dir) -> double {
+        DenseMatd variables = cv::abs(vars) / cv::norm(vars);
+        // edge msda & edge ortho
+        auto edge_angles = AnglesBetweenAdjacentEdges(
+            vert2dir, config.anno.coplanar_points, variables, infer,
+            [&points2edge](int p1, int p2) -> bool {
+              return Contains(points2edge, MakeOrderedPair(p1, p2));
+            }); ///
+        double edge_msda = MeanSquaredDeviationOfContainer(edge_angles);
+        double edge_ortho =
+            MeanSquaredDeviationOfContainer(edge_angles, {0.0, M_PI_2});
+
+        // face msda & face ortho
+        double face_msda = MeanSquaredDeviationOfContainer(
+            AnglesBetweenAdjacentFaces(nfaces, edge2faces, variables, infer));
+        double face_ortho = MeanSquaredDeviationOfContainer(
+            AnglesBetweenAdjacentFaces(nfaces, edge2faces, variables, infer,
+                                       faces_overlap),
+            {M_PI_2, M_PI, M_PI_2 * 3});
+
+        // edge_msda_each_face_set
+        double edge_msda_each_face_set = 0.0;
+        {
+          std::vector<double> each_face_set(face_sets.size(), 0.0);
+          for (int i = 0; i < face_sets.size(); i++) {
+            each_face_set[i] =
+                MeanSquaredDeviationOfContainer(AnglesBetweenAdjacentEdges(
+                    vert2dir, config.anno.coplanar_points, variables, infer,
+                    [&points2edge](int p1, int p2) -> bool {
+                      return Contains(points2edge, MakeOrderedPair(p1, p2));
+                    },
+                    [i, &face_sets](int face) -> bool {
+                      return Contains(face_sets[i], face);
+                    }));
+          }
+          edge_msda_each_face_set =
+              std::accumulate(each_face_set.begin(), each_face_set.end(), 0.0) /
+              face_sets.size();
         }
-        std::sort(edge_proj_ratios.begin(), edge_proj_ratios.end());
-        max_edge_skew_ratio_score =
-            edge_proj_ratios.back() /
-            edge_proj_ratios[edge_proj_ratios.size() / 2];
+
+        // face_ortho_each_face_set
+        double face_ortho_each_face_set = 0.0;
+        {
+          std::vector<double> each_face_set(face_sets.size(), 0.0);
+          for (int i = 0; i < face_sets.size(); i++) {
+            each_face_set[i] = MeanSquaredDeviationOfContainer(
+                AnglesBetweenAdjacentFaces(
+                    nfaces, edge2faces, variables, infer, faces_overlap,
+                    [i, &face_sets](int face) {
+                      return Contains(face_sets[i], face);
+                    }),
+                {M_PI_2, M_PI, M_PI_2 * 3});
+          }
+          face_ortho_each_face_set =
+              std::accumulate(each_face_set.begin(), each_face_set.end(), 0.0) /
+              face_sets.size();
+        }
+
+        // edge skew ratio
+        double max_edge_skew_ratio_score = 0.0;
+        {
+          std::vector<double> edge_proj_ratios(nedges);
+          for (int edge = 0; edge < nedges; edge++) {
+            double length2d = edge2line[edge].length();
+            auto &edge_corners = config.anno.edges[edge];
+            double length3d =
+                Distance(normalize(vert2dir[edge_corners.first]) /
+                             infer.getInversedDepth(edge_corners.first, vars),
+                         normalize(vert2dir[edge_corners.second]) /
+                             infer.getInversedDepth(edge_corners.second, vars));
+            edge_proj_ratios[edge] = length3d / length2d;
+          }
+          std::sort(edge_proj_ratios.begin(), edge_proj_ratios.end());
+          max_edge_skew_ratio_score =
+              edge_proj_ratios.back() /
+              edge_proj_ratios[edge_proj_ratios.size() / 2];
+        }
+
+        double e = 0.0;
+        //{ // classic params
+        //  e = 100.0 * edge_msda + 0.1 * face_msda + 10 * edge_ortho +
+        //      20 * face_ortho + 100.0 * edge_msda_each_face_set +
+        //      100 * face_ortho_each_face_set;
+        //}
+        {
+          e = 100.0 * edge_msda + 0 * face_msda + 0 * edge_ortho +
+              100 * face_ortho + 100.0 * edge_msda_each_face_set +
+              100 * face_ortho_each_face_set +
+              std::max(max_edge_skew_ratio_score - 2.5, 0.0) * 100;
+        }
+        /* core::Println("e = ", e, " edge_msda = ", edge_msda, " face_msda = ",
+                       face_msda, " edge_ortho = ", edge_ortho, " face_ortho =
+           ",
+                       face_ortho, " edge_msda_each_face_set = ",
+           edge_msda_each_face_set,
+                       " face_ortho_each_face_set = ",
+           face_ortho_each_face_set);*/
+        return e;
+      };
+      size_t disabled_vps_num = vps_table.size() - enabled_vps_in_use.size();
+      ParallelRun(
+          repeat_num, std::thread::hardware_concurrency() - 1,
+          [&constraints, &point2dir, &rng, &energy_fun, disabled_vps_num,
+           &results_table_under_cur_constraints](int repeat_id) {
+            std::vector<int> fundamental_verts;
+            std::vector<Point3> cur_corner2position;
+            PerformReconstructionParam param;
+            param.max_iters = 1000;
+            double cur_energy =
+                PerformReconstruction(constraints, point2dir,
+                                      std::uniform_int_distribution<int>(
+                                          0, point2dir.size() - 1)(rng),
+                                      energy_fun, rng, cur_corner2position,
+                                      &fundamental_verts, param) +
+                disabled_vps_num * 0.1; // compensation
+            // fill cur_energy and cur_corner2position to the tables
+            results_table_under_cur_constraints[repeat_id].component =
+                std::move(cur_corner2position);
+            results_table_under_cur_constraints[repeat_id].weight() =
+                cur_energy;
+          });
+
+      auto &best_result_under_cur_constraints =
+          *std::min_element(results_table_under_cur_constraints.begin(),
+                            results_table_under_cur_constraints.end());
+      core::Println("best energy in this beam tree node = ",
+                    best_result_under_cur_constraints.weight());
+      if (best_result_under_cur_constraints < best_result) {
+        best_result = best_result_under_cur_constraints;
       }
 
-      double e = 0.0;
-      //{ // classic params
-      //  e = 100.0 * edge_msda + 0.1 * face_msda + 10 * edge_ortho +
-      //      20 * face_ortho + 100.0 * edge_msda_each_face_set +
-      //      100 * face_ortho_each_face_set;
-      //}
-      {
-        e = 100.0 * edge_msda + 0 * face_msda + 0 * edge_ortho +
-            100 * face_ortho + 100.0 * edge_msda_each_face_set +
-            100 * face_ortho_each_face_set +
-            std::max(max_edge_skew_ratio_score - 2.5, 0.0) * 100;
+      if (false) { // show current node result
+        gui::SceneBuilder sb;
+        for (int e = 0; e < nedges; e++) {
+          auto &p1 = best_result_under_cur_constraints
+                         .component[config.anno.edges[e].first];
+          auto &p2 = best_result_under_cur_constraints
+                         .component[config.anno.edges[e].second];
+          sb.add(Line3(p1, p2));
+        }
+        sb.show(true, true,
+                gui::RenderOptions()
+                    .renderMode(gui::Lines)
+                    .fixUpDirectionInCameraMove(false)
+                    .winName("best result in current searching node"));
       }
-      /* core::Println("e = ", e, " edge_msda = ", edge_msda, " face_msda = ",
-                     face_msda, " edge_ortho = ", edge_ortho, " face_ortho =
-         ",
-                     face_ortho, " edge_msda_each_face_set = ",
-         edge_msda_each_face_set,
-                     " face_ortho_each_face_set = ",
-         face_ortho_each_face_set);*/
-      return e;
+
+      return best_result_under_cur_constraints.weight();
     };
-    size_t disabled_vps_num = vps_table.size() - enabled_vps_in_use.size();
-    ParallelRun(repeat_num, std::thread::hardware_concurrency() - 1,
-                [&constraints, &point2dir, &rng, &energy_fun, disabled_vps_num,
-                 &results_table_under_cur_constraints](int repeat_id) {
-                  std::vector<int> fundamental_verts;
-                  std::vector<Point3> cur_corner2position;
-                  PerformReconstructionParam param;
-                  param.max_iters = 100;
-                  double cur_energy = PerformReconstruction(
-                                          constraints, point2dir,
-                                          std::uniform_int_distribution<int>(
-                                              0, point2dir.size() - 1)(rng),
-                                          energy_fun, rng, cur_corner2position,
-                                          &fundamental_verts, param) +
-                                      disabled_vps_num * 0.1; // compensation
-                  // fill cur_energy and cur_corner2position to the tables
-                  results_table_under_cur_constraints[repeat_id].component =
-                      std::move(cur_corner2position);
-                  results_table_under_cur_constraints[repeat_id].weight() =
-                      cur_energy;
-                });
-
-    auto &best_result_under_cur_constraints =
-        *std::min_element(results_table_under_cur_constraints.begin(),
-                          results_table_under_cur_constraints.end());
-    core::Println("best energy in this beam tree node = ",
-                  best_result_under_cur_constraints.weight());
-    if (best_result_under_cur_constraints < best_result) {
-      best_result = best_result_under_cur_constraints;
-    }
-
-    if (false) { // show current node result
-      gui::SceneBuilder sb;
-      for (int e = 0; e < nedges; e++) {
-        auto &p1 = best_result_under_cur_constraints
-                       .component[config.anno.edges[e].first];
-        auto &p2 = best_result_under_cur_constraints
-                       .component[config.anno.edges[e].second];
-        sb.add(Line3(p1, p2));
-      }
-      sb.show(true, true,
-              gui::RenderOptions()
-                  .renderMode(gui::Lines)
-                  .fixUpDirectionInCameraMove(false)
-                  .winName("best result in current searching node"));
-    }
-
-    return best_result_under_cur_constraints.weight();
-  };
-
-  auto best_vps_in_use_disable_flags =
-      BeamSearch(vps_table.size(), beam_search_energy_fun, 1);
+    auto best_vps_in_use_disable_flags =
+        BeamSearch(vps_table.size(), beam_search_energy_fun, 1);
+    config.saveCache("best_result", best_result);
+  }
 
   core::Println("final energy after beam searching = ", best_result.weight());
 
@@ -727,9 +767,10 @@ void RoutineReconstruct() {
       auto &p2 = best_result.component[config.anno.edges[e].second];
       sb.add(Line3(p1, p2));
     }
-    sb.show(true, true, gui::RenderOptions()
-                            .renderMode(gui::Lines)
-                            .fixUpDirectionInCameraMove(false)
-                            .winName("final result"));
+    sb.show(true, false, gui::RenderOptions()
+                             .camera(cam)
+                             .renderMode(gui::Lines)
+                             .fixUpDirectionInCameraMove(false)
+                             .winName("final result"));
   }
 }
