@@ -10,12 +10,13 @@ namespace pano {
 namespace experimental {
 
 struct LineDrawingAnnotation {
+  Image3ub image;
   std::vector<Point2> points;
+  std::vector<std::pair<int, int>> edges;
   std::vector<std::vector<int>> coplanar_points;
   std::vector<std::vector<int>> colinear_points;
-  template <class ArchiveT>
-  void serialize(ArchiveT & ar) {
-    ar(points, coplanar_points, colinear_points);
+  template <class ArchiveT> void serialize(ArchiveT &ar) {
+    ar(image, points, edges, coplanar_points, colinear_points);
   }
 };
 

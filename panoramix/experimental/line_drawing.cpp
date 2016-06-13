@@ -120,51 +120,51 @@ bool LineDrawingTopo::maybeManifold() const {
   return true;
 }
 
-LineDrawingOld<Point3> LoadLineDrawingOldFromObjFile(const std::string &fname) {
-  std::ifstream ifs(fname);
-  if (ifs.is_open()) {
-    std::string line;
-
-    std::vector<Point3> corners;
-    std::vector<std::vector<int>> face2corners;
-
-    while (std::getline(ifs, line)) {
-      if (line.empty()) {
-        continue;
-      }
-      std::istringstream ss(line);
-      std::string token;
-      ss >> token;
-      if (token == "v") {
-        Point3 pos;
-        ss >> pos[0] >> pos[1] >> pos[2];
-        corners.push_back(pos);
-      } else if (token == "f") {
-        std::vector<int> corners;
-        while (ss >> token) {
-          if (token.empty()) {
-            continue;
-          }
-          int vid = -1;
-          size_t p = token.find_first_of('/');
-          if (p == std::string::npos) {
-            vid = std::stoi(token);
-          } else {
-            vid = std::stoi(token.substr(0, p));
-          }
-          assert(vid != -1);
-          corners.push_back(vid - 1);
-        }
-        if (!corners.empty()) {
-          face2corners.push_back(std::move(corners));
-        }
-      }
-    }
-
-    return LineDrawingOld<Point3>({}, face2corners, std::move(corners));
-  }
-  return LineDrawingOld<Point3>();
-}
+//LineDrawingOld<Point3> LoadLineDrawingOldFromObjFile(const std::string &fname) {
+//  std::ifstream ifs(fname);
+//  if (ifs.is_open()) {
+//    std::string line;
+//
+//    std::vector<Point3> corners;
+//    std::vector<std::vector<int>> face2corners;
+//
+//    while (std::getline(ifs, line)) {
+//      if (line.empty()) {
+//        continue;
+//      }
+//      std::istringstream ss(line);
+//      std::string token;
+//      ss >> token;
+//      if (token == "v") {
+//        Point3 pos;
+//        ss >> pos[0] >> pos[1] >> pos[2];
+//        corners.push_back(pos);
+//      } else if (token == "f") {
+//        std::vector<int> corners;
+//        while (ss >> token) {
+//          if (token.empty()) {
+//            continue;
+//          }
+//          int vid = -1;
+//          size_t p = token.find_first_of('/');
+//          if (p == std::string::npos) {
+//            vid = std::stoi(token);
+//          } else {
+//            vid = std::stoi(token.substr(0, p));
+//          }
+//          assert(vid != -1);
+//          corners.push_back(vid - 1);
+//        }
+//        if (!corners.empty()) {
+//          face2corners.push_back(std::move(corners));
+//        }
+//      }
+//    }
+//
+//    return LineDrawingOld<Point3>({}, face2corners, std::move(corners));
+//  }
+//  return LineDrawingOld<Point3>();
+//}
 // LineDrawing<Point2> LoadLineDrawing(const std::string &filename) {
 //  std::ifstream ifs(filename);
 //  if (!ifs.is_open()) {

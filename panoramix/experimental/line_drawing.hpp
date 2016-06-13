@@ -152,7 +152,8 @@ public:
   }
 
   template <class FDT = FaceDataT>
-  FaceHandle addFace(const std::vector<VertHandle> &verts, FDT &&fd = FDT()) {
+  FaceHandle addFace(const std::vector<VertHandle> &verts, FDT &&fd = FDT(),
+                     bool addBoundaryEdges = true) {
     assert(verts.size() >= 3);
     Triplet<FaceTopo, FaceDataT> ft;
     ft.topo.hd.id = _faces.size();
@@ -165,11 +166,13 @@ public:
       VertHandle vh1 = verts[i];
       VertHandle vh2 = verts[(i + 1) % verts.size()];
       _verts[vh1.id].topo.faces.insert(_faces.back().topo.hd);
-      EdgeHandle eh = findEdge(vh1, vh2);
-      if (eh.invalid()) {
-        eh = addEdge(vh1, vh2);
+      if (addBoundaryEdges) {
+        EdgeHandle eh = findEdge(vh1, vh2);
+        if (eh.invalid()) {
+          eh = addEdge(vh1, vh2);
+        }
+        _edges[eh.id].topo.faces.insert(_faces.back().topo.hd);
       }
-      _edges[eh.id].topo.faces.insert(_faces.back().topo.hd);
     }
     return _faces.back().topo.hd;
   }
@@ -205,7 +208,6 @@ private:
 
 
 
-
 class LineDrawingTopo {
 public:
   LineDrawingTopo() {}
@@ -236,45 +238,45 @@ public:
   std::map<std::pair<int, int>, bool> adjecent_faces2same_direction;
 };
 
-// LineDrawing
-template <class CornerDataT, class EdgeDataT = Dummy, class FaceDataT = Dummy>
-class LineDrawingOld {
-public:
-  LineDrawingOld() {}
-  explicit LineDrawingOld(const std::vector<std::pair<int, int>> &e2cs,
-                          const std::vector<std::vector<int>> &f2cs,
-                          const std::vector<CornerDataT> &cs = {},
-                          const std::vector<EdgeDataT> &es = {},
-                          const std::vector<FaceDataT> &fs = {})
-      : corners(cs), edges(es), faces(fs), topo(e2cs, f2cs) {
-    if (corners.empty()) {
-      corners.resize(topo.ncorners());
-    }
-    if (edges.empty()) {
-      edges.resize(topo.nedges());
-    }
-    if (faces.empty()) {
-      faces.resize(topo.nfaces());
-    }
-  }
-
-  size_t ncorners() const { return corners.size(); }
-  size_t nedges() const { return edges.size(); }
-  size_t nfaces() const { return faces.size(); }
-
-  template <class ArchiverT> void serialize(ArchiverT &ar) {
-    ar(corners, edges, faces, topo);
-  }
-
-public:
-  std::vector<CornerDataT> corners;
-  std::vector<EdgeDataT> edges;
-  std::vector<FaceDataT> faces;
-  LineDrawingTopo topo;
-};
+//// LineDrawing
+//template <class CornerDataT, class EdgeDataT = Dummy, class FaceDataT = Dummy>
+//class LineDrawingOld {
+//public:
+//  LineDrawingOld() {}
+//  explicit LineDrawingOld(const std::vector<std::pair<int, int>> &e2cs,
+//                          const std::vector<std::vector<int>> &f2cs,
+//                          const std::vector<CornerDataT> &cs = {},
+//                          const std::vector<EdgeDataT> &es = {},
+//                          const std::vector<FaceDataT> &fs = {})
+//      : corners(cs), edges(es), faces(fs), topo(e2cs, f2cs) {
+//    if (corners.empty()) {
+//      corners.resize(topo.ncorners());
+//    }
+//    if (edges.empty()) {
+//      edges.resize(topo.nedges());
+//    }
+//    if (faces.empty()) {
+//      faces.resize(topo.nfaces());
+//    }
+//  }
+//
+//  size_t ncorners() const { return corners.size(); }
+//  size_t nedges() const { return edges.size(); }
+//  size_t nfaces() const { return faces.size(); }
+//
+//  template <class ArchiverT> void serialize(ArchiverT &ar) {
+//    ar(corners, edges, faces, topo);
+//  }
+//
+//public:
+//  std::vector<CornerDataT> corners;
+//  std::vector<EdgeDataT> edges;
+//  std::vector<FaceDataT> faces;
+//  LineDrawingTopo topo;
+//};
 
 // LoadLineDrawingFromObjFile
-LineDrawingOld<Point3> LoadLineDrawingOldFromObjFile(const std::string &fname);
+//LineDrawingOld<Point3> LoadLineDrawingOldFromObjFile(const std::string &fname);
 
 //// ToMesh
 // template <class CT, class ET, class FT,
@@ -299,10 +301,10 @@ LineDrawingOld<Point3> LoadLineDrawingOldFromObjFile(const std::string &fname);
 //}
 //
 namespace gui {
-template <class T, class E, class F>
-void Discretize(TriMesh &mesh,
-                const experimental::LineDrawingOld<Point<T, 3>, E, F> &ld,
-                const DiscretizeOptions &o);
+//template <class T, class E, class F>
+//void Discretize(TriMesh &mesh,
+//                const experimental::LineDrawingOld<Point<T, 3>, E, F> &ld,
+//                const DiscretizeOptions &o);
 }
 }
 
@@ -380,29 +382,29 @@ namespace pano {
 //}
 //
 namespace gui {
-template <class T, class E, class F>
-void Discretize(TriMesh &mesh,
-                const experimental::LineDrawingOld<Point<T, 3>, E, F> &ld,
-                const DiscretizeOptions &o) {
-  std::vector<TriMesh::VertHandle> vhandles;
-  for (const Point<T, 3> &c : ld.corners) {
-    TriMesh::Vertex v;
-    v.position = cat(c, (T)1.0);
-    v.color = o.color();
-    vhandles.push_back(mesh.addVertex(v, true, o.entity()));
-  }
-  for (int edge = 0; edge < ld.nedges(); edge++) {
-    mesh.addLine(vhandles[ld.topo.edge2corners[edge].first],
-                 vhandles[ld.topo.edge2corners[edge].second], o.entity());
-  }
-  for (int face = 0; face < ld.nfaces(); face++) {
-    std::vector<TriMesh::VertHandle> vhs;
-    vhs.reserve(ld.topo.face2corners[face].size());
-    for (int c : ld.topo.face2corners[face]) {
-      vhs.push_back(vhandles[c]);
-    }
-    mesh.addPolygon(vhs, o.entity());
-  }
-}
+//template <class T, class E, class F>
+//void Discretize(TriMesh &mesh,
+//                const experimental::LineDrawingOld<Point<T, 3>, E, F> &ld,
+//                const DiscretizeOptions &o) {
+//  std::vector<TriMesh::VertHandle> vhandles;
+//  for (const Point<T, 3> &c : ld.corners) {
+//    TriMesh::Vertex v;
+//    v.position = cat(c, (T)1.0);
+//    v.color = o.color();
+//    vhandles.push_back(mesh.addVertex(v, true, o.entity()));
+//  }
+//  for (int edge = 0; edge < ld.nedges(); edge++) {
+//    mesh.addLine(vhandles[ld.topo.edge2corners[edge].first],
+//                 vhandles[ld.topo.edge2corners[edge].second], o.entity());
+//  }
+//  for (int face = 0; face < ld.nfaces(); face++) {
+//    std::vector<TriMesh::VertHandle> vhs;
+//    vhs.reserve(ld.topo.face2corners[face].size());
+//    for (int c : ld.topo.face2corners[face]) {
+//      vhs.push_back(vhandles[c]);
+//    }
+//    mesh.addPolygon(vhs, o.entity());
+//  }
+//}
 }
 }

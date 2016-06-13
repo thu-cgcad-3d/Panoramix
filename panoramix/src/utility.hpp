@@ -1602,5 +1602,47 @@ void MakeTriMeshFromSMFFile(AddVertex3FunT &&addVertex,
             vhs[fvs[2] - minFvid]);
   }
 }
+
+// make mesh from simple obj file
+template <class AddVertex3FunT, class AddFaceFunT>
+void MakeMeshFromObjFile(AddVertex3FunT &&addVertex, AddFaceFunT &&addFace,
+                         const std::string &fname) {
+  std::ifstream ifs(fname);
+  if (ifs.is_open()) {
+    std::string line;
+    while (std::getline(ifs, line)) {
+      if (line.empty()) {
+        continue;
+      }
+      std::istringstream ss(line);
+      std::string token;
+      ss >> token;
+      if (token == "v") {
+        float x, y, z;
+        ss >> x >> y >> z;
+        addVertex(x, y, z);
+      } else if (token == "f") {
+        std::vector<int> corners;
+        while (ss >> token) {
+          if (token.empty()) {
+            continue;
+          }
+          int vid = -1;
+          size_t p = token.find_first_of('/');
+          if (p == std::string::npos) {
+            vid = std::stoi(token);
+          } else {
+            vid = std::stoi(token.substr(0, p));
+          }
+          assert(vid != -1);
+          corners.push_back(vid - 1);
+        }
+        if (!corners.empty()) {
+          addFace(std::move(corners));
+        }
+      }
+    }
+  }
+}
 }
 }

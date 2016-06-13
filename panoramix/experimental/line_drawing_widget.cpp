@@ -37,23 +37,28 @@ void LineDrawingWidget::paintEvent(QPaintEvent *e) {
     }
   }
 
+  // draw edges
+  painter.setPen(QPen(Qt::black, kLineWidth, Qt::SolidLine));
+  if (show_edges_) {
+    for (auto & e : anno.edges) {
+      painter.drawLine(gui::MakeQPointF(anno.points[e.first]),
+                       gui::MakeQPointF(anno.points[e.second]));
+    }
+  }
+
   // draw coplanar points
   painter.setPen(Qt::NoPen);
-  for (int k = 0; k < anno.coplanar_points.size(); k++) {
-    auto &ps = anno.coplanar_points[k];
-    assert(ps.size() >= 3);
-    auto color = gui::MakeQColor(kColorTable[k % kColorTable.size()]);
-    color.setAlpha(100);
-    painter.setBrush(color);
-    QPolygonF polygon(ps.size());
-    for (int i = 0; i < ps.size(); i++) {
-      polygon[i] = gui::MakeQPointF(anno.points[ps[i]]);
-    }
-    if (show_coplanarities_){
-      painter.drawPolygon(polygon);
-    }
-    if (show_edges_) {
-      painter.setPen(QPen(Qt::black, kLineWidth, Qt::SolidLine));
+  if (show_coplanarities_) {
+    for (int k = 0; k < anno.coplanar_points.size(); k++) {
+      auto &ps = anno.coplanar_points[k];
+      assert(ps.size() >= 3);
+      auto color = gui::MakeQColor(kColorTable[k % kColorTable.size()]);
+      color.setAlpha(100);
+      painter.setBrush(color);
+      QPolygonF polygon(ps.size());
+      for (int i = 0; i < ps.size(); i++) {
+        polygon[i] = gui::MakeQPointF(anno.points[ps[i]]);
+      }
       painter.drawPolygon(polygon);
     }
   }
@@ -179,6 +184,21 @@ void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
     } else {
       selected_points_.clear();
     }
+  } else if (e->key() == Qt::Key_E) { // make edges
+    core::Println("E pressed");
+    if (selected_points_.size() >= 2) {
+      for (int i = 0; i + 1 < selected_points_.size(); i++) {
+        auto e = MakeOrderedPair(selected_points_[i], selected_points_[i + 1]);
+        if (e.first != e.second && !Contains(anno.edges, e)) {
+          anno.edges.push_back(e);
+        } else {
+          core::Println("two corners of this edge are same!");
+        }
+      }
+      selected_points_.clear();
+    } else {
+      core::Println("two few points selected");
+    }
   } else if (e->key() == Qt::Key_F) { // make coplanar constraints (faces)
     core::Println("F pressed");
     if (selected_points_.size() >= 3) {
@@ -289,5 +309,6 @@ std::pair<int, int> LineDrawingWidget::selectEdge(const QPointF &p,
   }
   return MakeOrderedPair(selected);
 }
+
 }
 }

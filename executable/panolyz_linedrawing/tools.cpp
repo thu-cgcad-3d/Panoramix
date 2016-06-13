@@ -939,6 +939,44 @@ DenseMatd MakePlaneMatrixTowardDirection(const Vec3 &dir) {
   return DenseMatd(normalize(dir));
 }
 
+namespace {
+struct InferImpl : public Inferencer {
+  size_t nvariables;
+  std::vector<DenseMatd> v2matrix;
+  std::vector<DenseMatd> c2matrix;
+  virtual size_t nvars() const override { return nvariables; }
+  virtual Vec3 getPlaneEquation(int cons,
+                                const DenseMatd &variables) const override {
+    DenseMatd eq = c2matrix.at(cons) * variables;
+    return Vec3(eq(0, 0), eq(1, 0), eq(2, 0));
+  }
+  virtual double getInversedDepth(int vert,
+                                  const DenseMatd &variables) const override {
+    DenseMatd inv_depth = v2matrix.at(vert) * variables;
+    return inv_depth(0, 0);
+  }
+  virtual DenseMatd recoverVariables(
+      const std::vector<double> &vert2inversed_depths) const override {
+
+    using Eigen::Matrix3Xd;
+    using Eigen::MatrixX3d;
+    using Eigen::RowVectorXd;
+    using Eigen::RowVector3d;
+    using Eigen::MatrixXd;
+    using Eigen::VectorXd;
+    MatrixXd vmat = MatrixXd::Zero(vert2inversed_depths.size(), this->nvars());
+    for (int v = 0; v < vert2inversed_depths.size(); v++) {
+      RowVectorXd r;
+      misc::ToEigenMat(v2matrix.at(v), r);
+      vmat.row(v) = r;
+    }
+    VectorXd vars = vmat.fullPivLu().solve(VectorXd::Map(
+        vert2inversed_depths.data(), vert2inversed_depths.size()));
+    return misc::ToCVMat(vars);
+  }
+};
+}
+
 // GenerateInferenceFunctors
 std::unique_ptr<Inferencer>
 GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
@@ -1105,37 +1143,6 @@ GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
       v2matrix[v] = dir.normalized() * c2matrix[cons];
     }
   }
-
-  struct InferImpl : public Inferencer {
-    size_t nvariables;
-    std::vector<DenseMatd> v2matrix;
-    std::vector<DenseMatd> c2matrix;
-    virtual size_t nvars() const override { return nvariables; }
-    virtual Vec3 getPlaneEquation(int cons,
-                                  const DenseMatd &variables) const override {
-      DenseMatd eq = c2matrix.at(cons) * variables;
-      return Vec3(eq(0, 0), eq(1, 0), eq(2, 0));
-    }
-    virtual double getInversedDepth(int vert,
-                                    const DenseMatd &variables) const override {
-      DenseMatd inv_depth = v2matrix.at(vert) * variables;
-      return inv_depth(0, 0);
-    }
-    virtual DenseMatd recoverVariables(
-        const std::vector<double> &vert2inversed_depths) const override {
-      MatrixXd vmat =
-          MatrixXd::Zero(vert2inversed_depths.size(), this->nvars());
-      for (int v = 0; v < vert2inversed_depths.size(); v++) {
-        RowVectorXd r;
-        misc::ToEigenMat(v2matrix.at(v), r);
-        vmat.row(v) = r;
-      }
-      VectorXd vars = vmat.fullPivLu().solve(VectorXd::Map(
-          vert2inversed_depths.data(), vert2inversed_depths.size()));
-      return misc::ToCVMat(vars);
-    }
-  };
-
   auto infer_ptr = std::make_unique<InferImpl>();
   InferImpl &infer = *infer_ptr;
   infer.v2matrix.resize(nverts);
@@ -1157,6 +1164,7 @@ std::vector<double>
 AnglesBetweenAdjacentEdges(const std::vector<Vec3> &vert2dir,
                            const std::vector<std::vector<int>> &face2verts,
                            const DenseMatd &variables, const Inferencer &infer,
+                           std::function<bool(int v1, int v2)> edge_selected,
                            std::function<bool(int face)> face_selected) {
   std::vector<double> edge_angles;
   std::vector<Point3> vert2pos(vert2dir.size());
@@ -1173,6 +1181,9 @@ AnglesBetweenAdjacentEdges(const std::vector<Vec3> &vert2dir,
       int v1 = vs[i];
       int v2 = vs[(i + 1) % vs.size()];
       int v3 = vs[(i + 2) % vs.size()];
+      if (edge_selected && (!edge_selected(v1, v2) || !edge_selected(v2, v3))) {
+        continue;
+      }
       double angle = AngleBetweenDirected(vert2pos[v1] - vert2pos[v2],
                                           vert2pos[v3] - vert2pos[v2]);
       edge_angles.push_back(angle);
@@ -1183,7 +1194,7 @@ AnglesBetweenAdjacentEdges(const std::vector<Vec3> &vert2dir,
 
 std::vector<double>
 AnglesBetweenAdjacentFaces(size_t nfaces,
-                           const std::vector<std::vector<int>> &edge2faces,
+                           const std::vector<std::set<int>> &edge2faces,
                            const DenseMatd &variables, const Inferencer &infer,
                            std::function<bool(int face)> face_selected) {
 
@@ -1196,16 +1207,16 @@ AnglesBetweenAdjacentFaces(size_t nfaces,
     if (fs.size() < 2) {
       continue;
     }
-    for (int i = 0; i < fs.size(); i++) {
-      if (face_selected && !face_selected(fs[i])) {
+    for (auto it1 = fs.begin(); it1 != fs.end(); ++it1) {
+      if (face_selected && !face_selected(*it1)) {
         continue;
       }
-      for (int j = i + 1; j < fs.size(); j++) {
-        if (face_selected && !face_selected(fs[j])) {
+      for (auto it2 = std::next(it1); it2 != fs.end(); ++it2) {
+        if (face_selected && !face_selected(*it2)) {
           continue;
         }
-        double angle = AngleBetweenUndirected(face_equations[fs[i]],
-                                              face_equations[fs[j]]);
+        double angle =
+            AngleBetweenUndirected(face_equations[*it1], face_equations[*it2]);
         face_angles.push_back(angle);
       }
     }
@@ -1214,7 +1225,7 @@ AnglesBetweenAdjacentFaces(size_t nfaces,
 }
 
 std::vector<double> AnglesBetweenAdjacentFaces(
-    size_t nfaces, const std::vector<std::vector<int>> &edge2faces,
+    size_t nfaces, const std::vector<std::set<int>> &edge2faces,
     const DenseMatd &variables, const Inferencer &infer,
     const std::map<std::pair<int, int>, bool> &faces_overlap,
     std::function<bool(int face)> face_selected) {
@@ -1228,19 +1239,19 @@ std::vector<double> AnglesBetweenAdjacentFaces(
     if (fs.size() < 2) {
       continue;
     }
-    for (int i = 0; i < fs.size(); i++) {
-      if (face_selected && !face_selected(fs[i])) {
+    for (auto it1 = fs.begin(); it1 != fs.end(); ++it1) {
+      if (face_selected && !face_selected(*it1)) {
         continue;
       }
-      for (int j = i + 1; j < fs.size(); j++) {
-        if (face_selected && !face_selected(fs[j])) {
+      for (auto it2 = std::next(it1); it2 != fs.end(); ++it2) {
+        if (face_selected && !face_selected(*it2)) {
           continue;
         }
         double angle =
-            AngleBetweenDirected(face_equations[fs[i]],
-                                 faces_overlap.at(MakeOrderedPair(fs[i], fs[j]))
-                                     ? face_equations[fs[j]]
-                                     : -face_equations[fs[j]]);
+            AngleBetweenDirected(face_equations[*it1],
+                                 faces_overlap.at(MakeOrderedPair(*it1, *it2))
+                                     ? face_equations[*it2]
+                                     : -face_equations[*it2]);
         face_angles.push_back(angle);
       }
     }

@@ -23,18 +23,18 @@ PerspectiveCamera::PerspectiveCamera(int w, int h)
 PerspectiveCamera::PerspectiveCamera(int w, int h, const Point2 &pp,
                                      const Vec2 &focalxy, const Vec3 &eye,
                                      const Vec3 &center, const Vec3 &up,
-                                     double near, double far)
+                                     double n, double f)
     : _screenW(w), _screenH(h), _principlePoint(pp), _focalxy(focalxy),
-      _eye(eye), _center(center), _up(up), _near(near), _far(far) {
+      _eye(eye), _center(center), _up(up), _near(n), _far(f) {
   updateMatrices();
 }
 
 PerspectiveCamera::PerspectiveCamera(int w, int h, const Point2 &pp,
                                      double focal, const Vec3 &eye,
                                      const Vec3 &center, const Vec3 &up,
-                                     double near, double far)
+                                     double n, double f)
     : _screenW(w), _screenH(h), _principlePoint(pp), _focalxy(focal, focal),
-      _eye(eye), _center(center), _up(up), _near(near), _far(far) {
+      _eye(eye), _center(center), _up(up), _near(n), _far(f) {
   updateMatrices();
 }
 

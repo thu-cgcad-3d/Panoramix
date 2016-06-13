@@ -1,6 +1,7 @@
 #pragma once
 
 #include "basic_types.hpp"
+#include "utility.hpp"
 
 namespace pano {
 namespace experimental {
@@ -97,15 +98,16 @@ std::vector<double> AnglesBetweenAdjacentEdges(
     const std::vector<Vec3> &vert2dir,
     const std::vector<std::vector<int>> &face2verts, const DenseMatd &variables,
     const Inferencer &infer,
+    std::function<bool(int v1, int v2)> edge_selected = nullptr,
     std::function<bool(int face)> face_selected = nullptr);
 
 std::vector<double> AnglesBetweenAdjacentFaces(
-    size_t nfaces, const std::vector<std::vector<int>> &edge2faces,
+    size_t nfaces, const std::vector<std::set<int>> &edge2faces,
     const DenseMatd &variables, const Inferencer &infer,
     std::function<bool(int face)> face_selected = nullptr);
 
 std::vector<double> AnglesBetweenAdjacentFaces(
-    size_t nfaces, const std::vector<std::vector<int>> &edge2faces,
+    size_t nfaces, const std::vector<std::set<int>> &edge2faces,
     const DenseMatd &variables, const Inferencer &infer,
     const std::map<std::pair<int, int>, bool> &faces_overlap,
     std::function<bool(int face)> face_selected = nullptr);
