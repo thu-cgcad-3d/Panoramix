@@ -133,9 +133,9 @@ void RoutineReconstruct() {
   const size_t nfaces = config.anno.coplanar_points.size();
   core::Println("nedges: ", config.anno.edges.size());
 
-  bool rerun_preprocess = false;
-  bool rerun_vps = false;
-  bool rerun_orientation_estimation = false;
+  bool rerun_preprocess = true;
+  bool rerun_vps = true;
+  bool rerun_orientation_estimation = true;
 	bool rerun_reconstruction = true;
 
   // compute additional data
