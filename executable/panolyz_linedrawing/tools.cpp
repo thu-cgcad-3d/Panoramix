@@ -371,12 +371,20 @@ inline Vec3 NormalizedSpatialDirection(const Point2 &p2, double focal,
                                        const Point2 &pp) {
   return normalize(Vec3(p2[0] - pp[0], p2[1] - pp[1], focal));
 }
+inline Vec3 NormalizedSpatialDirection(const Point2 &p2,
+                                       const CameraParam &cam_param) {
+  return NormalizedSpatialDirection(p2, cam_param.focal, cam_param.pp);
+}
+
 inline Point2 PlanarPoint(const Vec3 &dir, double focal, const Point2 &pp) {
   double dir2 = dir[2];
   if (dir2 == 0) {
     dir2 = 1e-10;
   }
   return focal * Point2(dir[0] / dir2, dir[1] / dir2) + pp;
+}
+inline Point2 PlanarPoint(const Vec3 &dir, const CameraParam &cam_param) {
+  return PlanarPoint(dir, cam_param.focal, cam_param.pp);
 }
 
 inline void AddToDirection(Vec3 &dir, const Vec3 &add) {
@@ -422,24 +430,19 @@ std::vector<Point2> MergePoints(const std::vector<Point2> &intersections,
   return merged_points;
 }
 
-std::vector<Point2>
-MergePointsMeanShift(const std::vector<Point2> &intersections, double focal,
-                     const Point2 &pp, double angle_thres,
+std::vector<Vec3>
+MergePointsMeanShift(const std::vector<Vec3> &normalized_directions,
+                     double angle_thres,
                      double converge_angle_thres = DegreesToRadians(0.01)) {
-  // unproject to space
-  std::vector<Vec3> directions(intersections.size());
-  for (int i = 0; i < intersections.size(); i++) {
-    directions[i] = NormalizedSpatialDirection(intersections[i], focal, pp);
-  }
   // initialize modes
   struct Mode {
     Vec3 center;
     std::set<int> group;
   };
   std::vector<Mode> modes;
-  modes.reserve(intersections.size());
-  for (int k = 0; k < directions.size(); k++) {
-    auto &dir = directions[k];
+  modes.reserve(normalized_directions.size());
+  for (int k = 0; k < normalized_directions.size(); k++) {
+    auto &dir = normalized_directions[k];
     int where_to_merge = -1;
     double min_angle = angle_thres;
     for (int i = 0; i < modes.size(); i++) {
@@ -463,7 +466,7 @@ MergePointsMeanShift(const std::vector<Point2> &intersections, double focal,
       auto old_center = mode.center;
       mode.center = Vec3();
       for (int i : mode.group) {
-        AddToDirection(mode.center, directions[i]);
+        AddToDirection(mode.center, normalized_directions[i]);
       }
       mode.center /= norm(mode.center);
       if (old_center != Vec3() &&
@@ -480,8 +483,8 @@ MergePointsMeanShift(const std::vector<Point2> &intersections, double focal,
     for (auto &mode : modes) {
       mode.group.clear();
     }
-    for (int k = 0; k < directions.size(); k++) {
-      auto &dir = directions[k];
+    for (int k = 0; k < normalized_directions.size(); k++) {
+      auto &dir = normalized_directions[k];
       int where_to_merge = -1;
       double min_angle = std::numeric_limits<double>::infinity();
       for (int i = 0; i < modes.size(); i++) {
@@ -496,34 +499,63 @@ MergePointsMeanShift(const std::vector<Point2> &intersections, double focal,
     }
   }
 
-  std::vector<Point2> merged_points(modes.size());
-  for (int i = 0; i < merged_points.size(); i++) {
-    merged_points[i] = PlanarPoint(modes[i].center, focal, pp);
+  std::vector<Vec3> merged_directions(modes.size());
+  for (int i = 0; i < merged_directions.size(); i++) {
+    merged_directions[i] = normalize(modes[i].center);
   }
-  return merged_points;
+  return merged_directions;
+}
+
+std::vector<Point2>
+MergePointsMeanShift(const std::vector<Point2> &intersections, double focal,
+                     const Point2 &pp, double angle_thres,
+                     double converge_angle_thres = DegreesToRadians(0.01)) {
+  auto normalized_directions =
+      MakeRange(intersections)
+          .transform([&focal, &pp](const Point2 &p2) -> Vec3 {
+            return NormalizedSpatialDirection(p2, focal, pp);
+          })
+          .evalAs<std::vector<Vec3>>();
+  auto merged_directions = MergePointsMeanShift(
+      normalized_directions, angle_thres, converge_angle_thres);
+  return MakeRange(merged_directions)
+      .transform([&focal, &pp](const Vec3 &dir) -> Point2 {
+        return PlanarPoint(dir, focal, pp);
+      })
+      .evalAs<std::vector<Point2>>();
+}
+
+std::vector<Vec3> MergePoints(const std::vector<Vec3> &normalized_directions,
+                              const BinaryRelationTable<bool> &adj_relation) {
+  // merge
+  std::vector<Vec3> merged_directions(normalized_directions.size(), Vec3());
+  int ccs = ConnectedComponents(
+      MakeIotaIterator<int>(0),
+      MakeIotaIterator<int>(normalized_directions.size()),
+      [&adj_relation](int id) { return adj_relation.neighbors(id); },
+      [&merged_directions, &normalized_directions](int id, int group) {
+        AddToDirection(merged_directions[group], normalized_directions[id]);
+      });
+  merged_directions.resize(ccs);
+  MakeRange(merged_directions).forEach([](Vec3 &dir) { dir /= norm(dir); });
+  return merged_directions;
 }
 
 std::vector<Point2> MergePoints(const std::vector<Point2> &intersections,
                                 double focal, const Point2 &pp,
                                 const BinaryRelationTable<bool> &adj_relation) {
-  // unproject to space
-  std::vector<Vec3> directions(intersections.size());
-  for (int i = 0; i < intersections.size(); i++) {
-    directions[i] = NormalizedSpatialDirection(intersections[i], focal, pp);
-  }
-  // merge
-  std::vector<Vec3> merged_directions(directions.size(), Vec3());
-  int ccs = ConnectedComponents(
-      MakeIotaIterator<int>(0), MakeIotaIterator<int>(directions.size()),
-      [&adj_relation](int id) { return adj_relation.neighbors(id); },
-      [&merged_directions, &directions](int id, int group) {
-        AddToDirection(merged_directions[group], directions[id]);
-      });
-  std::vector<Point2> merged_points(ccs);
-  for (int i = 0; i < ccs; i++) {
-    merged_points[i] = PlanarPoint(merged_directions[i], focal, pp);
-  }
-  return merged_points;
+  auto normalized_directions =
+      MakeRange(intersections)
+          .transform([&focal, &pp](const Point2 &p2) -> Vec3 {
+            return NormalizedSpatialDirection(p2, focal, pp);
+          })
+          .evalAs<std::vector<Vec3>>();
+  auto merged_directions = MergePoints(normalized_directions, adj_relation);
+  return MakeRange(merged_directions)
+      .transform([&focal, &pp](const Vec3 &dir) -> Point2 {
+        return PlanarPoint(dir, focal, pp);
+      })
+      .evalAs<std::vector<Point2>>();
 }
 
 std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
@@ -552,28 +584,194 @@ std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
   return point2lines;
 }
 
+bool DirectionIsOnLine(Vec3 d, const Line3 &line, double thres = 0.1) {
+  if (d.dot(line.center()) < 0) {
+    d = -d;
+  }
+  double lambda = ProjectionOfPointOnLine(normalize(d), normalize(line)).ratio;
+  return lambda >= -thres && lambda <= 1.0 + thres;
+}
+
+std::vector<std::set<int>> BindPointsToLines(const std::vector<Vec3> &points,
+                                             const std::vector<Line3> &lines,
+                                             double angle_thres) {
+  std::vector<std::set<int>> point2lines(points.size());
+  for (int inter = 0; inter < points.size(); inter++) {
+    const Vec3 & interp = points[inter];
+    for (int l = 0; l < lines.size(); l++) {
+      auto &line3 = lines[l];
+      // if the intersection projects on the body of the line, pass
+      if (DirectionIsOnLine(interp, line3, 0.1)) {
+        continue;
+      }
+      double angle = M_PI_2 - AngleBetweenUndirected(
+                                  line3.first.cross(line3.second), interp);
+      assert(!IsInfOrNaN(angle));
+      if (angle >= angle_thres) {
+        continue;
+      }
+      point2lines[inter].insert(l);
+    }
+  }
+  return point2lines;
+}
+
+std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
+                                             const std::vector<Line2> &lines,
+                                             const CameraParam &cam_param,
+                                             double angle_thres) {
+  std::vector<std::set<int>> point2lines(points.size());
+  std::vector<Line3> line3s(lines.size());
+  for (int i = 0; i < line3s.size(); i++) {
+    line3s[i].first = NormalizedSpatialDirection(lines[i].first, cam_param);
+    line3s[i].second = NormalizedSpatialDirection(lines[i].second, cam_param);
+  }
+  for (int inter = 0; inter < points.size(); inter++) {
+    Vec3 interp = NormalizedSpatialDirection(points[inter], cam_param);
+    for (int l = 0; l < lines.size(); l++) {
+      auto &line3 = line3s[l];
+      // if the intersection projects on the body of the line, pass
+      if (DirectionIsOnLine(interp, line3, 0.1)) {
+        continue;
+      }
+      double angle = M_PI_2 - AngleBetweenUndirected(
+                                  line3.first.cross(line3.second), interp);
+      assert(!IsInfOrNaN(angle));
+      if (angle >= angle_thres) {
+        continue;
+      }
+      point2lines[inter].insert(l);
+    }
+  }
+  return point2lines;
+}
+
 // CollectVanishingPoints
-std::vector<Point2>
-CollectVanishingPoints(const std::vector<Line2> &lines, double focal,
-                       const Point2 &pp,
+//std::vector<Point2>
+//CollectVanishingPoints(const std::vector<Line2> &lines,
+//                       const CameraParam &cam_param,
+//                       const CollectVanishingPointsParam &param) {
+//
+//  Box2 box = BoundingBoxOfContainer(lines);
+//  double scale = box.outerSphere().radius;
+//
+//  // collect intersections
+//  std::vector<Point2> intersections;
+//  intersections.reserve(lines.size() * (lines.size() - 1) / 2);
+//  for (int i = 0; i < lines.size(); i++) {
+//    const Line2 &linei = lines[i];
+//    for (int j = i + 1; j < lines.size(); j++) {
+//      const Line2 &linej = lines[j];
+//      Point2 interp = Intersection(linei.ray(), linej.ray());
+//      if (IsFuzzyParallel(linei.direction(), linej.direction(), 1e-8)) {
+//        interp = normalize(linei.direction()) * 1e8;
+//      }
+//      if (std::min(Distance(interp, linei), Distance(interp, linej)) <=
+//          scale / 10.0) {
+//        continue;
+//      }
+//      intersections.push_back(interp);
+//    }
+//  }
+//
+//  for (int iteration = 0; iteration < param.max_iters; iteration++) {
+//    Println("intersecitons num = ", intersections.size());
+//    size_t prev_intersections_num = intersections.size();
+//
+//    // phase 1: directly merge intersections
+//    intersections =
+//        param.use_mean_shift_merge_phase1
+//            ? MergePointsMeanShift(intersections, cam_param.focal, cam_param.pp,
+//                                   param.angle_thres_phase1)
+//            : MergePoints(intersections, cam_param.focal, cam_param.pp,
+//                          param.angle_thres_phase1); ///
+//    Println("1: after directly merge, intersecitons num = ",
+//            intersections.size());
+//
+//    // phase 2: merge intersections who share two or more lines
+//    // first get adjacency relations
+//    auto intersection2lines =
+//        //// BindPointsToLines(intersections, lines, param.angle_thres_phase2);
+//        BindPointsToLines(intersections, lines, cam_param,
+//                          param.angle_thres_phase2);
+//    BinaryRelationTable<bool> intersection_sharing_many_lines(
+//        intersections.size(), false);
+//    for (int i = 0; i < intersections.size(); i++) {
+//      auto &linesi = intersection2lines[i];
+//      for (int j = i + 1; j < intersections.size(); j++) {
+//        auto &linesj = intersection2lines[j];
+//        // get common lines
+//        std::vector<int> common_lines;
+//        common_lines.reserve(std::min(linesi.size(), linesj.size()));
+//        std::set_intersection(linesi.begin(), linesi.end(), linesj.begin(),
+//                              linesj.end(), std::back_inserter(common_lines));
+//        if (common_lines.size() >= 2) { // should merge i and j
+//          intersection_sharing_many_lines(i, j) = true;
+//        }
+//      }
+//    }
+//    // merge using connected components
+//    auto group_centers =
+//        MergePoints(intersections, cam_param.focal, cam_param.pp,
+//                    intersection_sharing_many_lines);
+//    for (auto &pos : group_centers) {
+//      assert(!(IsInfOrNaN(pos[0]) || IsInfOrNaN(pos[1])));
+//    }
+//    Println("2: after CC, group nums = ", group_centers.size());
+//
+//    // phase 3: remove group centers that bind to too few lines
+//    auto group_center2lines =
+//        //// BindPointsToLines(group_centers, lines, param.angle_thres_phase3);
+//        BindPointsToLines(group_centers, lines, cam_param,
+//                          param.angle_thres_phase3);
+//    intersections.clear();
+//    for (int group = 0; group < group_centers.size(); group++) {
+//      if (group_center2lines[group].size() >= 3) {
+//        intersections.push_back(group_centers[group]);
+//      }
+//    }
+//    Println("3: after removing lonely intersections, intersection nums = ",
+//            intersections.size());
+//
+//    {
+//      double min_dist_in_vps = std::numeric_limits<double>::infinity();
+//      for (int i = 0; i < intersections.size(); i++) {
+//        for (int j = i + 1; j < intersections.size(); j++) {
+//          double dist = Distance(intersections[i], intersections[j]);
+//          if (dist < min_dist_in_vps) {
+//            min_dist_in_vps = dist;
+//          }
+//        }
+//      }
+//      Println("the min distance between two different vps is ",
+//              min_dist_in_vps);
+//    }
+//
+//    assert(intersections.size() <= prev_intersections_num);
+//    if (intersections.size() == prev_intersections_num) {
+//      break;
+//    }
+//  }
+//
+//  return intersections;
+//}
+
+std::vector<Vec3>
+CollectVanishingPoints(const std::vector<Line3> &lines,
                        const CollectVanishingPointsParam &param) {
 
-  Box2 box = BoundingBoxOfContainer(lines);
-  double scale = box.outerSphere().radius;
-
   // collect intersections
-  std::vector<Point2> intersections;
+  std::vector<Vec3> intersections;
   intersections.reserve(lines.size() * (lines.size() - 1) / 2);
   for (int i = 0; i < lines.size(); i++) {
-    const Line2 &linei = lines[i];
+    const Line3 &linei = lines[i];
+    Vec3 linei_normal = linei.first.cross(linei.second);
     for (int j = i + 1; j < lines.size(); j++) {
-      const Line2 &linej = lines[j];
-      Point2 interp = Intersection(linei.ray(), linej.ray());
-      if (IsFuzzyParallel(linei.direction(), linej.direction(), 1e-8)) {
-        interp = normalize(linei.direction()) * 1e8;
-      }
-      if (std::min(Distance(interp, linei), Distance(interp, linej)) <=
-          scale / 10.0) {
+      const Line3 &linej = lines[j];
+      Vec3 linej_normal = linej.first.cross(linej.second);
+      Vec3 interp = normalize(linei_normal.cross(linej_normal));
+      if (DirectionIsOnLine(interp, linei, 0.1) ||
+          DirectionIsOnLine(interp, linej, 0.1)) {
         continue;
       }
       intersections.push_back(interp);
@@ -585,11 +783,8 @@ CollectVanishingPoints(const std::vector<Line2> &lines, double focal,
     size_t prev_intersections_num = intersections.size();
 
     // phase 1: directly merge intersections
-    intersections = param.use_mean_shift_merge_phase1
-                        ? MergePointsMeanShift(intersections, focal, pp,
-                                               param.angle_thres_phase1)
-                        : MergePoints(intersections, focal, pp,
-                                      param.angle_thres_phase1); ///
+    intersections =
+        MergePointsMeanShift(intersections, param.angle_thres_phase1);
     Println("1: after directly merge, intersecitons num = ",
             intersections.size());
 
@@ -615,7 +810,7 @@ CollectVanishingPoints(const std::vector<Line2> &lines, double focal,
     }
     // merge using connected components
     auto group_centers =
-        MergePoints(intersections, focal, pp, intersection_sharing_many_lines);
+        MergePoints(intersections, intersection_sharing_many_lines);
     for (auto &pos : group_centers) {
       assert(!(IsInfOrNaN(pos[0]) || IsInfOrNaN(pos[1])));
     }
@@ -637,13 +832,14 @@ CollectVanishingPoints(const std::vector<Line2> &lines, double focal,
       double min_dist_in_vps = std::numeric_limits<double>::infinity();
       for (int i = 0; i < intersections.size(); i++) {
         for (int j = i + 1; j < intersections.size(); j++) {
-          double dist = Distance(intersections[i], intersections[j]);
+          double dist =
+              AngleBetweenUndirected(intersections[i], intersections[j]);
           if (dist < min_dist_in_vps) {
             min_dist_in_vps = dist;
           }
         }
       }
-      Println("the min distance between two different vps is ",
+      Println("the min distance angle between two different vps is ",
               min_dist_in_vps);
     }
 
@@ -664,6 +860,10 @@ inline bool LinesAreColinear(const Line2 &line1, const Line2 &line2,
   Vec3 dir2 = NormalizedSpatialDirection(line2.first, focal, pp)
                   .cross(NormalizedSpatialDirection(line2.second, focal, pp));
   return AngleBetweenUndirected(dir1, dir2) < angle_thres;
+}
+inline bool LinesAreColinear(const Line3 & line1, const Line3 & line2, double angle_thres) {
+  return AngleBetweenUndirected(line1.first.cross(line1.second),
+                                line2.first.cross(line2.second)) < angle_thres;
 }
 
 std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
@@ -727,11 +927,251 @@ std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
   return merged_lines;
 }
 
+//std::map<std::pair<int, int>, double>
+//EstimateParallelism(const std::vector<Line2> &lines,
+//                    const CameraParam &cam_param, double angle_thres) {
+//  std::map<std::pair<int, int>, double> relations;
+//  for (int i = 0; i < lines.size(); i++) {
+//    Line3 line3i(NormalizedSpatialDirection(lines[i].first, cam_param.focal,
+//                                            cam_param.pp),
+//                 NormalizedSpatialDirection(lines[i].second, cam_param.focal,
+//                                            cam_param.pp));
+//    Vec3 line_normal_i = line3i.first.cross(line3i.second);
+//    for (int j = i + 1; j < lines.size(); j++) {
+//      Line3 line3j(NormalizedSpatialDirection(lines[j].first, cam_param.focal,
+//                                            cam_param.pp),
+//                 NormalizedSpatialDirection(lines[j].second, cam_param.focal,
+//                                            cam_param.pp));
+//      Vec3 line_normal_j = line3j.first.cross(line3j.second);
+//      Vec3 inter = normalize(line_normal_i.cross(line_normal_j));
+//
+//    }
+//  }
+//}
+
+//// EstimateEdgeOrientations
+//std::vector<int> EstimateEdgeOrientations(
+//    const std::vector<Line2> &lines, const std::vector<Point2> &vps,
+//    const std::vector<std::vector<int>> &face2ordered_lines, double focal,
+//    const Point2 &pp, const EstimateEdgeOrientationsParam &param) {
+//
+//  size_t nlines = lines.size();
+//  size_t nvps = vps.size();
+//  std::vector<std::vector<Scored<int>>> line2ordered_vp_angles(nlines);
+//
+//  for (int l = 0; l < nlines; l++) {
+//    auto &line = lines[l];
+//    for (int vp = 0; vp < nvps; vp++) {
+//      auto &vp_pos = vps[vp];
+//      double lambda = ProjectionOfPointOnLine(vp_pos, line).ratio;
+//      static const double thres = 0.1;
+//      if (lambda >= -thres &&
+//          lambda <= 1.0 + thres) { // if vp's projection lies on the line, pass
+//        continue;
+//      }
+//      double angle =
+//          AngleBetweenUndirected(line.direction(), vp_pos - line.center());
+//      assert(!IsInfOrNaN(angle));
+//      if (angle >= param.angle_thres_allowed_vp_line_deviation) { // deviation
+//                                                                  // too big,
+//                                                                  // pass //
+//        // DegreesToRadians(10)
+//        continue;
+//      }
+//      line2ordered_vp_angles[l].push_back(ScoreAs(vp, angle));
+//    }
+//    std::sort(line2ordered_vp_angles[l].begin(),
+//              line2ordered_vp_angles[l].end());
+//  }
+//
+//  // construct a factor graph to optimize line-vp bindings
+//  FactorGraph fg;
+//  std::vector<int> result;
+//  {
+//    // add lines as vars
+//    for (int l = 0; l < nlines; l++) {
+//      fg.addVar(fg.addVarCategory(line2ordered_vp_angles[l].size() + 1, 1.0));
+//    }
+//
+//    // potential 1: the edge should bind to some vp with better
+//    // scored
+//    for (int vh = 0; vh < nlines; vh++) {
+//      auto &related_vp_angles = line2ordered_vp_angles[vh];
+//      auto fc = fg.addFactorCategory(
+//          [&related_vp_angles, nlines, &param](
+//              const std::vector<int> &varlabels, void *givenData) -> double {
+//            assert(varlabels.size() == 1);
+//            int label = varlabels[0];
+//            assert(label <= related_vp_angles.size());
+//            const double K = param.coeff_vp_line_fitness / nlines; // 50.0
+//            if (label == related_vp_angles.size()) { // not bind to any vp
+//              return K;
+//            }
+//            double angle = related_vp_angles[label].score;
+//            assert(!IsInfOrNaN(angle));
+//            return (1.0 - Gaussian(angle, DegreesToRadians(3))) * K;
+//          },
+//          1.0);
+//      fg.addFactor(fc, {vh});
+//    }
+//
+//    // potential 2: two adjacent but not colinear lines should not bind to a
+//    // near vp
+//    // first collect all adjacent vh(line) pairs and record whether they are
+//    // colinear in 2d
+//    std::set<std::pair<int, int>> noncolineear_adj_vh_pairs;
+//    for (int face = 0; face < face2ordered_lines.size(); face++) {
+//      auto &face_lines = face2ordered_lines[face];
+//      for (int i = 0; i < face_lines.size(); i++) {
+//        auto vh1 = face_lines[i];
+//        auto vh2 = face_lines[(i + 1) % face_lines.size()];
+//        auto &line1 = lines[vh1];
+//        auto &line2 = lines[vh2];
+//        if (!LinesAreColinear(
+//                line1, line2, focal, pp,
+//                param.angle_thres_judging_colinearility /* / 5.0*/)) {
+//          noncolineear_adj_vh_pairs.insert(MakeOrderedPair(vh1, vh2));
+//        }
+//      }
+//    }
+//    double scale = BoundingBoxOfContainer(lines).outerSphere().radius;
+//    // second add factors
+//    for (auto &p : noncolineear_adj_vh_pairs) {
+//      auto vh1 = p.first;
+//      auto vh2 = p.second;
+//      auto fc = fg.addFactorCategory(
+//          [vh1, vh2, &line2ordered_vp_angles, &vps, scale,
+//           &noncolineear_adj_vh_pairs, focal, pp, &param](
+//              const std::vector<int> &varlabels, void *givenData) -> double {
+//            auto &related_vp_angles1 = line2ordered_vp_angles[vh1];
+//            auto &related_vp_angles2 = line2ordered_vp_angles[vh2];
+//            assert(varlabels.size() == 2);
+//            int bindedVP1 = varlabels[0] == related_vp_angles1.size()
+//                                ? -1
+//                                : (related_vp_angles1[varlabels[0]].component);
+//            int bindedVP2 = varlabels[1] == related_vp_angles2.size()
+//                                ? -1
+//                                : (related_vp_angles2[varlabels[1]].component);
+//            if (bindedVP1 == -1 || bindedVP2 == -1) {
+//              return 0;
+//            }
+//            auto &vp_pos1 = vps[bindedVP1];
+//            auto &vp_pos2 = vps[bindedVP2];
+//            // const double thres = scale / 10.0;
+//            const double K = param.coeff_noncolinear_adj_line_exlusiveness /
+//                             noncolineear_adj_vh_pairs.size(); // 10.0
+//            // if (Distance(vp_pos1, vp_pos2) < thres) { // todo
+//            //    return K;
+//            //  }
+//            if (AngleBetweenUndirected(
+//                    NormalizedSpatialDirection(vp_pos1, focal, pp),
+//                    NormalizedSpatialDirection(vp_pos2, focal, pp)) <
+//                param.angle_thres_distinguishing_vps) { // todo //
+//                                                        // DegreesToRadians(2)
+//              return K;
+//            }
+//            return 0.0;
+//          },
+//          1.0);
+//      fg.addFactor(fc, {vh1, vh2});
+//    }
+//
+//    // potential 3: the vps of edges sharing a same face should lie on
+//    // the same line (the vanishing line of the face)
+//    // first collect all line triplets that should be coplanar in space
+//    std::vector<std::array<int, 3>> coplanar_line_triplets;
+//    for (int face = 0; face < face2ordered_lines.size(); face++) {
+//      auto &face_lines = face2ordered_lines[face];
+//      assert(face_lines.size() >= 3);
+//      for (int gap = 1; gap <= (face_lines.size() > 4 ? 2 : 1); gap++) {
+//        for (int i = 0; i < face_lines.size(); i++) {
+//          int prev_l =
+//              face_lines[(i + face_lines.size() - gap) % face_lines.size()];
+//          int l = face_lines[i];
+//          int next_l = face_lines[(i + gap) % face_lines.size()];
+//          coplanar_line_triplets.push_back({{prev_l, l, next_l}});
+//        }
+//      }
+//    }
+//    // second add factors
+//    for (auto &triplet : coplanar_line_triplets) {
+//      auto fc = fg.addFactorCategory(
+//          [&line2ordered_vp_angles, &vps, &triplet, &coplanar_line_triplets,
+//           focal, pp, &param](const std::vector<int> &varlabels,
+//                              void *givenData) -> double {
+//            assert(varlabels.size() == 3);
+//            int vp_ids[3] = {-1, -1, -1};
+//            for (int i = 0; i < 3; i++) {
+//              if (varlabels[i] == line2ordered_vp_angles[triplet[i]].size()) {
+//                return 0.0;
+//              }
+//              vp_ids[i] =
+//                  line2ordered_vp_angles[triplet[i]][varlabels[i]].component;
+//            }
+//            if (vp_ids[0] == vp_ids[1] || vp_ids[1] == vp_ids[2] ||
+//                vp_ids[2] == vp_ids[0]) {
+//              return 0.0;
+//            }
+//            Vec3 vpdirs[3];
+//            for (int i = 0; i < 3; i++) {
+//              vpdirs[i] = NormalizedSpatialDirection(vps[vp_ids[i]], focal, pp);
+//            }
+//            double angle = AngleBetweenUndirected(vpdirs[0].cross(vpdirs[1]),
+//                                                  vpdirs[1].cross(vpdirs[2]));
+//            assert(!IsInfOrNaN(angle));
+//            const double K = param.coeff_line_triplet_coplanar /
+//                             coplanar_line_triplets.size(); // 30.0
+//            return (1.0 -
+//                    Gaussian(angle, param.angle_thres_juding_coplanarity)) *
+//                   K; // DegreesToRadians(10)
+//          },
+//          1.0);
+//      fg.addFactor(fc, triplet.begin(), triplet.end());
+//    }
+//
+//    // solve the factor graph
+//    result = fg.solve(param.solve_max_iter, 1,
+//                      [](int epoch, double energy, double denergy,
+//                         const std::vector<int> &results) -> bool {
+//                        Println("epoch: ", epoch, "  energy: ", energy);
+//                        return true;
+//                      });
+//  }
+//
+//  // install the vp labels to line2vp and vp2lines
+//  std::vector<int> line2vp(nlines, -1);
+//  std::vector<std::set<int>> vp2lines(nvps);
+//  for (int l = 0; l < nlines; l++) {
+//    int id = result[l];
+//    if (id == line2ordered_vp_angles[l].size()) {
+//      continue;
+//    }
+//    line2vp[l] = line2ordered_vp_angles[l][id].component;
+//    vp2lines[line2vp[l]].insert(l);
+//  }
+//
+//  for (int vp = 0; vp < nvps; vp++) {
+//    if (vp2lines[vp].size() < param.vp_min_degree) {
+//      for (int l : vp2lines[vp]) {
+//        line2vp[l] = -1;
+//      }
+//      vp2lines[vp].clear();
+//    }
+//  }
+//  return line2vp;
+//}
+
+
+
+
+
+
+
 // EstimateEdgeOrientations
 std::vector<int> EstimateEdgeOrientations(
-    const std::vector<Line2> &lines, const std::vector<Point2> &vps,
-    const std::vector<std::vector<int>> &face2ordered_lines, double focal,
-    const Point2 &pp, const EstimateEdgeOrientationsParam &param) {
+    const std::vector<Line3> &lines, const std::vector<Vec3> &vps,
+    const std::vector<std::vector<int>> &face2ordered_lines,
+    const EstimateEdgeOrientationsParam &param) {
 
   size_t nlines = lines.size();
   size_t nvps = vps.size();
@@ -740,16 +1180,14 @@ std::vector<int> EstimateEdgeOrientations(
   for (int l = 0; l < nlines; l++) {
     auto &line = lines[l];
     for (int vp = 0; vp < nvps; vp++) {
-      auto &vp_pos = vps[vp];
-      double lambda = ProjectionOfPointOnLine(vp_pos, line).ratio;
-      static const double thres = 0.1;
-      if (lambda >= -thres &&
-          lambda <= 1.0 + thres) { // if vp's projection lies on the line, pass
+      Vec3 vp_pos = normalize(vps[vp]);
+      if (DirectionIsOnLine(vp_pos, line,
+                            0.1)) { // if vp's projection lies on the line, pass
         continue;
       }
-      double angle =
-          AngleBetweenUndirected(line.direction(), vp_pos - line.center());
-      assert(!IsInfOrNaN(angle));
+      double angle = M_PI_2 - AngleBetweenUndirected(
+                                  line.first.cross(line.second), vp_pos);
+      assert(angle >= 0.0 && !IsInfOrNaN(angle));
       if (angle >= param.angle_thres_allowed_vp_line_deviation) { // deviation
                                                                   // too big,
                                                                   // pass //
@@ -793,67 +1231,6 @@ std::vector<int> EstimateEdgeOrientations(
       fg.addFactor(fc, {vh});
     }
 
-    // potential 2: two adjacent but not colinear lines should not bind to a
-    // near vp
-    // first collect all adjacent vh(line) pairs and record whether they are
-    // colinear in 2d
-    std::set<std::pair<int, int>> noncolineear_adj_vh_pairs;
-    for (int face = 0; face < face2ordered_lines.size(); face++) {
-      auto &face_lines = face2ordered_lines[face];
-      for (int i = 0; i < face_lines.size(); i++) {
-        auto vh1 = face_lines[i];
-        auto vh2 = face_lines[(i + 1) % face_lines.size()];
-        auto &line1 = lines[vh1];
-        auto &line2 = lines[vh2];
-        if (!LinesAreColinear(
-                line1, line2, focal, pp,
-                param.angle_thres_judging_colinearility /* / 5.0*/)) {
-          noncolineear_adj_vh_pairs.insert(MakeOrderedPair(vh1, vh2));
-        }
-      }
-    }
-    double scale = BoundingBoxOfContainer(lines).outerSphere().radius;
-    // second add factors
-    for (auto &p : noncolineear_adj_vh_pairs) {
-      auto vh1 = p.first;
-      auto vh2 = p.second;
-      auto fc = fg.addFactorCategory(
-          [vh1, vh2, &line2ordered_vp_angles, &vps, scale,
-           &noncolineear_adj_vh_pairs, focal, pp, &param](
-              const std::vector<int> &varlabels, void *givenData) -> double {
-            auto &related_vp_angles1 = line2ordered_vp_angles[vh1];
-            auto &related_vp_angles2 = line2ordered_vp_angles[vh2];
-            assert(varlabels.size() == 2);
-            int bindedVP1 = varlabels[0] == related_vp_angles1.size()
-                                ? -1
-                                : (related_vp_angles1[varlabels[0]].component);
-            int bindedVP2 = varlabels[1] == related_vp_angles2.size()
-                                ? -1
-                                : (related_vp_angles2[varlabels[1]].component);
-            if (bindedVP1 == -1 || bindedVP2 == -1) {
-              return 0;
-            }
-            auto &vp_pos1 = vps[bindedVP1];
-            auto &vp_pos2 = vps[bindedVP2];
-            // const double thres = scale / 10.0;
-            const double K = param.coeff_noncolinear_adj_line_exlusiveness /
-                             noncolineear_adj_vh_pairs.size(); // 10.0
-            // if (Distance(vp_pos1, vp_pos2) < thres) { // todo
-            //    return K;
-            //  }
-            if (AngleBetweenUndirected(
-                    NormalizedSpatialDirection(vp_pos1, focal, pp),
-                    NormalizedSpatialDirection(vp_pos2, focal, pp)) <
-                param.angle_thres_distinguishing_vps) { // todo //
-                                                        // DegreesToRadians(2)
-              return K;
-            }
-            return 0.0;
-          },
-          1.0);
-      fg.addFactor(fc, {vh1, vh2});
-    }
-
     // potential 3: the vps of edges sharing a same face should lie on
     // the same line (the vanishing line of the face)
     // first collect all line triplets that should be coplanar in space
@@ -875,8 +1252,8 @@ std::vector<int> EstimateEdgeOrientations(
     for (auto &triplet : coplanar_line_triplets) {
       auto fc = fg.addFactorCategory(
           [&line2ordered_vp_angles, &vps, &triplet, &coplanar_line_triplets,
-           focal, pp, &param](const std::vector<int> &varlabels,
-                              void *givenData) -> double {
+           &param](const std::vector<int> &varlabels,
+                   void *givenData) -> double {
             assert(varlabels.size() == 3);
             int vp_ids[3] = {-1, -1, -1};
             for (int i = 0; i < 3; i++) {
@@ -892,7 +1269,7 @@ std::vector<int> EstimateEdgeOrientations(
             }
             Vec3 vpdirs[3];
             for (int i = 0; i < 3; i++) {
-              vpdirs[i] = NormalizedSpatialDirection(vps[vp_ids[i]], focal, pp);
+              vpdirs[i] = normalize(vps[vp_ids[i]]);
             }
             double angle = AngleBetweenUndirected(vpdirs[0].cross(vpdirs[1]),
                                                   vpdirs[1].cross(vpdirs[2]));
@@ -938,6 +1315,11 @@ std::vector<int> EstimateEdgeOrientations(
   }
   return line2vp;
 }
+
+
+
+
+
 
 DenseMatd MakePlaneMatrix() { return DenseMatd::eye(3, 3); }
 DenseMatd MakePlaneMatrixAlongDirection(const Vec3 &dir) {

@@ -31,6 +31,13 @@ CalibrateCamera(const Box2 &box, const std::vector<std::set<int>> &face_groups,
 std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
                                              const std::vector<Line2> &lines,
                                              double angle_thres);
+std::vector<std::set<int>> BindPointsToLines(const std::vector<Vec3> &points,
+                                             const std::vector<Line3> &lines,
+                                             double angle_thres);
+std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
+                                             const std::vector<Line2> &lines,
+                                             const CameraParam &cam_param,
+                                             double angle_thres);
 
 // CollectVanishingPoints
 struct CollectVanishingPointsParam { // best params so far
@@ -40,8 +47,11 @@ struct CollectVanishingPointsParam { // best params so far
   int max_iters = std::numeric_limits<int>::max();
   bool use_mean_shift_merge_phase1 = false;
 };
-std::vector<Point2> CollectVanishingPoints(
-    const std::vector<Line2> &lines, double focal, const Point2 &pp,
+//std::vector<Point2> CollectVanishingPoints(
+//    const std::vector<Line2> &lines, const CameraParam &cam_param,
+//    const CollectVanishingPointsParam &param = CollectVanishingPointsParam());
+std::vector<Vec3> CollectVanishingPoints(
+    const std::vector<Line3> &lines,
     const CollectVanishingPointsParam &param = CollectVanishingPointsParam());
 
 // MergeColinearLines
@@ -49,6 +59,11 @@ std::vector<Line2>
 MergeColinearLines(const std::vector<Line2> &lines,
                    const CameraParam &cam_param, double angle_thres,
                    std::vector<int> *oldline2newline = nullptr);
+
+//// EstimateParallelism
+//std::map<std::pair<int, int>, double>
+//EstimateParallelism(const std::vector<Line2> &lines,
+//                    const CameraParam &cam_param, double angle_thres);
 
 // EstimateEdgeOrientations
 struct EstimateEdgeOrientationsParam { // best params so far
@@ -62,11 +77,16 @@ struct EstimateEdgeOrientationsParam { // best params so far
   int vp_min_degree = 3;
   int solve_max_iter = 5;
 };
+//std::vector<int> EstimateEdgeOrientations(
+//    const std::vector<Line2> &lines, const std::vector<Point2> &vps,
+//    const std::vector<std::vector<int>> &face2ordered_lines, double focal,
+//    const Point2 &pp, const EstimateEdgeOrientationsParam &param =
+//                          EstimateEdgeOrientationsParam());
 std::vector<int> EstimateEdgeOrientations(
-    const std::vector<Line2> &lines, const std::vector<Point2> &vps,
-    const std::vector<std::vector<int>> &face2ordered_lines, double focal,
-    const Point2 &pp, const EstimateEdgeOrientationsParam &param =
-                          EstimateEdgeOrientationsParam());
+    const std::vector<Line3> &lines, const std::vector<Vec3> &vps,
+    const std::vector<std::vector<int>> &face2ordered_lines,
+    const EstimateEdgeOrientationsParam &param =
+        EstimateEdgeOrientationsParam());
 
 // PlaneConstraint
 struct PlaneConstraint {
@@ -92,6 +112,7 @@ std::unique_ptr<Inferencer>
 GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
                           const std::vector<Vec3> &vert2dir, int root_vert = 0,
                           std::vector<int> *fundamental_verts = nullptr);
+
 
 // The Energy Terms
 std::vector<double> AnglesBetweenAdjacentEdges(

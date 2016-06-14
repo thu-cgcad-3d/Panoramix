@@ -69,6 +69,10 @@ template <class IterT> struct Range {
     return MakeConditionalRange(*this, std::forward<PredT>(pred));
   }
 
+  template <class ContainerT> ContainerT evalAs() const {
+    return ContainerT(b, e);
+  }
+
   bool operator==(const Range &r) const { return b == r.b && e == r.e; }
   bool operator!=(const Range &r) const { return !(*this == r); }
 };
@@ -76,6 +80,9 @@ template <class IterT> struct Range {
 // MakeRange
 template <class IterT> Range<IterT> MakeRange(IterT b, IterT e) {
   return Range<IterT>(b, e);
+}
+template <class ContainerT> auto MakeRange(ContainerT &&cont) {
+  return MakeRange(std::begin(cont), std::end(cont));
 }
 
 // IotaIterator
@@ -298,16 +305,25 @@ public:
   decltype(auto) operator-> () const {
     return iter1 == end1 ? &(*iter2) : &(*iter1);
   }
-  bool operator==(const ConcatedIterator &i) const {
-    return std::make_tuple(iter1, end1, iter2, end2) ==
-           std::make_tuple(i.iter1, i.end1, i.iter2, i.end2);
-  }
-  bool operator!=(const ConcatedIterator &i) const { return !(*this == i); }
 
-protected:
+public:
   IterT1 iter1, end1;
   IterT2 iter2, end2;
 };
+
+template <class IterT1, class IterT2>
+constexpr bool operator==(const ConcatedIterator<IterT1, IterT2> &i1,
+                          const ConcatedIterator<IterT1, IterT2> &i2) {
+  return std::make_tuple(i1.iter1, i1.end1, i1.iter2, i1.end2) ==
+         std::make_tuple(i2.iter1, i2.end1, i2.iter2, i2.end2);
+}
+template <class IterT1, class IterT2>
+constexpr bool operator!=(const ConcatedIterator<IterT1, IterT2> &i1,
+                          const ConcatedIterator<IterT1, IterT2> &i2) {
+  return !(i1 == i2);
+}
+
+
 
 // MakeConcatedRange
 template <class IterT1, class IterT2>

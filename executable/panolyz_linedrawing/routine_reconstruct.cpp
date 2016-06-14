@@ -124,8 +124,8 @@ struct Configuration {
 
 void RoutineReconstruct() {
 
-  //auto config = Configuration::FromObjFile("hex", "cam1");
-	auto config = Configuration::FromImageAnnotation("house_sketch.jpg");
+  auto config = Configuration::FromObjFile("towers", "cam1");
+	//auto config = Configuration::FromImageAnnotation("house_sketch.jpg");
   //auto config = Configuration::FromImageAnnotation("washington.jpg");
 
   const size_t npoints = config.anno.points.size();
@@ -136,7 +136,7 @@ void RoutineReconstruct() {
   bool rerun_preprocess = false;
   bool rerun_vps = false;
   bool rerun_orientation_estimation = false;
-	bool rerun_reconstruction = false;
+	bool rerun_reconstruction = true;
 
   // compute additional data
   std::vector<std::set<int>> point2edges(npoints);
@@ -288,14 +288,6 @@ void RoutineReconstruct() {
     config.saveCache("preprocess", face_sets, pp_focals);
   }
 
-  if (true) { // show individual face sets
-    for (auto & fs : face_sets) {
-      auto canvas = gui::MakeCanvas(config.anno.image);
-      canvas.colorTable(gui::CreateRandomColorTableWithSize(nfaces));
-
-    }
-  }
-
 
   // pick the top pp focal as the camera parameter
   assert(!pp_focals.empty());
@@ -308,6 +300,20 @@ void RoutineReconstruct() {
   std::vector<int> edge2merged_line(edge2line.size());
   std::vector<Line2> merged_lines = MergeColinearLines(
       edge2line, pp_focal, DegreesToRadians(0.1), &edge2merged_line);
+  std::vector<Line3> edge2line3 =
+      MakeRange(edge2line)
+          .transform([&cam](const Line2 &line2) -> Line3 {
+            return Line3(normalize(cam.direction(line2.first)),
+                         normalize(cam.direction(line2.second)));
+          })
+          .evalAs<std::vector<Line3>>();
+  std::vector<Line3> merged_line3s =
+      MakeRange(merged_lines)
+          .transform([&cam](const Line2 &line2) -> Line3 {
+            return Line3(normalize(cam.direction(line2.first)),
+                         normalize(cam.direction(line2.second)));
+          })
+          .evalAs<std::vector<Line3>>();
 
   // show merged lines
   if (true) {
@@ -337,17 +343,16 @@ void RoutineReconstruct() {
   }
 
   // collect vanishing points using merged lines
-  std::vector<Point2> vps;
+  std::vector<Vec3> vps;
   if (rerun_vps || !config.loadCache("vps", vps)) {
     CollectVanishingPointsParam param;
-    // param.angle_thres_phase1 = DegreesToRadians(2);
-    // param.angle_thres_phase2 = DegreesToRadians(0.2);
-    // param.angle_thres_phase3 = DegreesToRadians(1);
+    param.angle_thres_phase1 = DegreesToRadians(2);
+    param.angle_thres_phase2 = DegreesToRadians(0.1);
+    param.angle_thres_phase3 = DegreesToRadians(1);
     param.use_mean_shift_merge_phase1 = true;
     for (int k = 0; k < 1; k++) {
       core::Println(k, "-th call of CollectVanishingPoints");
-      vps = CollectVanishingPoints(merged_lines, pp_focal.focal, pp_focal.pp,
-                                   param);
+      vps = CollectVanishingPoints(merged_line3s, param);
       if (vps.size() < 500) {
         break;
       }
@@ -359,7 +364,7 @@ void RoutineReconstruct() {
 
   // show vanishing points
   if (false) {
-    auto vp2lines = BindPointsToLines(vps, edge2line, DegreesToRadians(8));
+    auto vp2lines = BindPointsToLines(vps, edge2line3, DegreesToRadians(1));
     for (int i = 0; i < vps.size(); i++) {
       if (vp2lines[i].empty()) {
         continue;
@@ -403,9 +408,12 @@ void RoutineReconstruct() {
       !config.loadCache("merged_line2vp", merged_line2vp)) {
     EstimateEdgeOrientationsParam param;
     // param.angle_thres_allowed_vp_line_deviation = DegreesToRadians(5);
+    param.angle_thres_allowed_vp_line_deviation = DegreesToRadians(2);
+    param.angle_thres_judging_colinearility = DegreesToRadians(1);
+    param.angle_thres_distinguishing_vps = DegreesToRadians(2);
+    param.angle_thres_juding_coplanarity = DegreesToRadians(2);
     merged_line2vp =
-        EstimateEdgeOrientations(merged_lines, vps, face2merged_lines,
-                                 pp_focal.focal, pp_focal.pp, param);
+        EstimateEdgeOrientations(merged_line3s, vps, face2merged_lines, param);
     config.saveCache("merged_line2vp", merged_line2vp);
   }
 
@@ -447,6 +455,8 @@ void RoutineReconstruct() {
       canvas.show(0, "optimized vp_" + std::to_string(vp_edges.first));
     }
   }
+
+
 
   // basic_constraints
   std::vector<PlaneConstraint> basic_constraints;
@@ -536,7 +546,7 @@ void RoutineReconstruct() {
 
       std::set<int> enabled_vps_in_use;
       for (int i = 0; i < vps_table.size(); i++) {
-        if (!vps_in_use_disable_flags[i]) {
+        if (vps_in_use_disable_flags[i]) { // reversed
           enabled_vps_in_use.insert(vps_table[i]);
         }
       }
@@ -585,7 +595,7 @@ void RoutineReconstruct() {
       for (int edge = 0; edge < edge2vp.size(); edge++) {
         if (Contains(enabled_vps_in_use, edge2vp[edge])) { //
           auto &line = edge2line[edge];
-          Vec3 vp = cam.direction(vps[edge2vp[edge]]);
+          Vec3 vp = vps[edge2vp[edge]];
           Vec3 line_perp_dir =
               cam.direction(line.first).cross(cam.direction(line.second));
           Vec3 normal = normalize(vp.cross(line_perp_dir));
@@ -681,6 +691,9 @@ void RoutineReconstruct() {
               edge_proj_ratios.back() /
               edge_proj_ratios[edge_proj_ratios.size() / 2];
         }
+
+        // parallelism
+
 
         double e = 0.0;
         //{ // classic params
