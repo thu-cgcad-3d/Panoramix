@@ -1163,14 +1163,11 @@ std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
 
 
 
-
-
-
-
 // EstimateEdgeOrientations
 std::vector<int> EstimateEdgeOrientations(
     const std::vector<Line3> &lines, const std::vector<Vec3> &vps,
-    const std::vector<std::vector<int>> &face2ordered_lines,
+    const std::vector<std::pair<int, int>> &adjacent_line_pairs,
+    const std::vector<std::vector<int>> &coplanar_ordered_lines,
     const EstimateEdgeOrientationsParam &param) {
 
   size_t nlines = lines.size();
@@ -1231,12 +1228,48 @@ std::vector<int> EstimateEdgeOrientations(
       fg.addFactor(fc, {vh});
     }
 
+    // potential 2: orthogonal
+		// second add factors
+    for (auto &pair : adjacent_line_pairs) {
+      auto fc = fg.addFactorCategory(
+          [&line2ordered_vp_angles, &vps, pair, &adjacent_line_pairs, &param](
+              const std::vector<int> &varlabels, void *givenData) -> double {
+            assert(varlabels.size() == 2);
+            int line_ids[] = {pair.first, pair.second};
+            int vp_ids[2] = {-1, -1};
+            for (int i = 0; i < 2; i++) {
+              if (varlabels[i] == line2ordered_vp_angles[line_ids[i]].size()) {
+                return 0.0;
+              }
+              vp_ids[i] =
+                  line2ordered_vp_angles[line_ids[i]][varlabels[i]].component;
+            }
+            if (vp_ids[0] == vp_ids[1]) {
+              return 0.0;
+            }
+            Vec3 vpdirs[2];
+            for (int i = 0; i < 2; i++) {
+              vpdirs[i] = normalize(vps[vp_ids[i]]);
+            }
+            double angle = AngleBetweenUndirected(vpdirs[0], vpdirs[1]);
+            assert(!IsInfOrNaN(angle));
+            const double K = param.coeff_line_pair_orthogonality /
+                             adjacent_line_pairs.size(); // 30.0
+            return (1.0 - Gaussian(std::min({angle - M_PI_2, angle - M_PI,
+                                             angle - 3 * M_PI_2, angle}),
+                                   param.angle_thres_juding_orthogonality)) *
+                   K; // DegreesToRadians(10)
+          },
+          1.0);
+      fg.addFactor(fc, {pair.first, pair.second});
+    }
+
     // potential 3: the vps of edges sharing a same face should lie on
     // the same line (the vanishing line of the face)
     // first collect all line triplets that should be coplanar in space
     std::vector<std::array<int, 3>> coplanar_line_triplets;
-    for (int face = 0; face < face2ordered_lines.size(); face++) {
-      auto &face_lines = face2ordered_lines[face];
+    for (int face = 0; face < coplanar_ordered_lines.size(); face++) {
+      auto &face_lines = coplanar_ordered_lines[face];
       assert(face_lines.size() >= 3);
       for (int gap = 1; gap <= (face_lines.size() > 4 ? 2 : 1); gap++) {
         for (int i = 0; i < face_lines.size(); i++) {

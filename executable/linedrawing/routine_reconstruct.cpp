@@ -133,8 +133,8 @@ void RoutineReconstruct() {
   const size_t nfaces = config.anno.coplanar_points.size();
   core::Println("nedges: ", config.anno.edges.size());
 
-  bool rerun_preprocess = true;
-  bool rerun_vps = true;
+  bool rerun_preprocess = false;
+  bool rerun_vps = false;
   bool rerun_orientation_estimation = true;
 	bool rerun_reconstruction = true;
 
@@ -306,14 +306,14 @@ void RoutineReconstruct() {
             return Line3(normalize(cam.direction(line2.first)),
                          normalize(cam.direction(line2.second)));
           })
-          .evalAs<std::vector<Line3>>();
+          .evalAsStdVector();
   std::vector<Line3> merged_line3s =
       MakeRange(merged_lines)
           .transform([&cam](const Line2 &line2) -> Line3 {
             return Line3(normalize(cam.direction(line2.first)),
                          normalize(cam.direction(line2.second)));
           })
-          .evalAs<std::vector<Line3>>();
+          .evalAsStdVector();
 
   // show merged lines
   if (true) {
@@ -388,6 +388,20 @@ void RoutineReconstruct() {
     }
   }
 
+  // build relation of adjacent merged lines
+  std::vector<std::pair<int, int>> adjacent_merged_line_pairs;
+  for (int p = 0; p < npoints; p++) {
+    auto &edges = point2edges[p];
+    for (auto i = edges.begin(); i != edges.end(); ++i) {
+      int mlinei = edge2merged_line[*i];
+      for (auto j = std::next(i); j != edges.end(); ++j) {
+        int mlinej = edge2merged_line[*j];
+        if (mlinei != mlinej) {
+          adjacent_merged_line_pairs.emplace_back(mlinei, mlinej);
+        }
+      }
+    }
+  }
   // build relation of face to merged lines
   std::vector<std::vector<int>> face2merged_lines(nfaces);
   for (int face = 0; face < nfaces; face++) {
@@ -412,8 +426,10 @@ void RoutineReconstruct() {
     param.angle_thres_judging_colinearility = DegreesToRadians(1);
     param.angle_thres_distinguishing_vps = DegreesToRadians(2);
     param.angle_thres_juding_coplanarity = DegreesToRadians(2);
+		param.solve_max_iter = 20;
     merged_line2vp =
-        EstimateEdgeOrientations(merged_line3s, vps, face2merged_lines, param);
+        EstimateEdgeOrientations(merged_line3s, vps, adjacent_merged_line_pairs,
+                                 face2merged_lines, param);
     config.saveCache("merged_line2vp", merged_line2vp);
   }
 

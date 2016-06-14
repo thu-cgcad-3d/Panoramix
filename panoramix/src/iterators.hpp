@@ -72,6 +72,10 @@ template <class IterT> struct Range {
   template <class ContainerT> ContainerT evalAs() const {
     return ContainerT(b, e);
   }
+  auto evalAsStdVector() const {
+    using ValueType = typename std::iterator_traits<IterT>::value_type;
+    return std::vector<ValueType>(b, e);
+  }
 
   bool operator==(const Range &r) const { return b == r.b && e == r.e; }
   bool operator!=(const Range &r) const { return !(*this == r); }

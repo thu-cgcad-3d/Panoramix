@@ -70,9 +70,11 @@ struct EstimateEdgeOrientationsParam { // best params so far
   double angle_thres_allowed_vp_line_deviation = DegreesToRadians(10);
   double angle_thres_judging_colinearility = DegreesToRadians(1);
   double angle_thres_distinguishing_vps = DegreesToRadians(2);
+	double angle_thres_juding_orthogonality = DegreesToRadians(10);
   double angle_thres_juding_coplanarity = DegreesToRadians(10);
   double coeff_vp_line_fitness = 50.0;
   double coeff_noncolinear_adj_line_exlusiveness = 10.0;
+	double coeff_line_pair_orthogonality = 20.0;
   double coeff_line_triplet_coplanar = 30.0;
   int vp_min_degree = 3;
   int solve_max_iter = 5;
@@ -84,7 +86,8 @@ struct EstimateEdgeOrientationsParam { // best params so far
 //                          EstimateEdgeOrientationsParam());
 std::vector<int> EstimateEdgeOrientations(
     const std::vector<Line3> &lines, const std::vector<Vec3> &vps,
-    const std::vector<std::vector<int>> &face2ordered_lines,
+	  const std::vector<std::pair<int, int>> & adjacent_line_pairs,
+    const std::vector<std::vector<int>> &coplanar_ordered_lines,
     const EstimateEdgeOrientationsParam &param =
         EstimateEdgeOrientationsParam());
 
