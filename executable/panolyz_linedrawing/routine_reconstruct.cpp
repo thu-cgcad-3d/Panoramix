@@ -546,7 +546,7 @@ void RoutineReconstruct() {
 
       std::set<int> enabled_vps_in_use;
       for (int i = 0; i < vps_table.size(); i++) {
-        if (vps_in_use_disable_flags[i]) { // reversed
+        if (!vps_in_use_disable_flags[i]) {
           enabled_vps_in_use.insert(vps_table[i]);
         }
       }
