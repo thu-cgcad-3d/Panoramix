@@ -67,7 +67,6 @@ Failable<std::vector<Vec3>> FindOrthogonalPrinicipleDirections(
 
   // collect votes of intersection directions
   Imagef votePanel = Imagef::zeros(longitudeDivideNum, latitudeDivideNum);
-  size_t pn = intersections.size();
   for (const Vec3 &p : intersections) {
     Pixel pixel =
         PixelFromGeoCoord(GeoCoord(p), longitudeDivideNum, latitudeDivideNum);

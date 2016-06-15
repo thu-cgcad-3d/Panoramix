@@ -122,7 +122,7 @@ struct Configuration {
   }
 };
 
-void RoutineReconstruct() {
+void RoutineReconstruct0() {
 
   auto config = Configuration::FromObjFile("towers", "cam1");
 	//auto config = Configuration::FromImageAnnotation("house_sketch.jpg");

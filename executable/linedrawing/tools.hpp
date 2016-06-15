@@ -1,12 +1,70 @@
 #pragma once
 
 #include "basic_types.hpp"
+#include "iterators.hpp"
 #include "utility.hpp"
 
 namespace pano {
 namespace experimental {
 
 using namespace ::pano::core;
+
+// HalfCubeMap
+struct CubeMapLocation {
+  int panel_id;
+  Pixel pixel;
+	CubeMapLocation(){}
+	CubeMapLocation(int pid, const Pixel & p, size_t sz);
+	Vec3 direction(size_t sz) const;
+
+  static CubeMapLocation FromDirection(size_t sz, const Vec3 &dir);
+};
+template <class T> struct HalfCubeMap {
+  Image_<T> panels[3];
+  explicit HalfCubeMap(size_t sz)
+      : panels{Image_<T>::zeros(sz, sz), Image_<T>::zeros(sz, sz),
+               Image_<T>::zeros(sz, sz)} {}
+  const T &at(const CubeMapLocation &loc) const {
+    return panels[loc.panel_id](loc.pixel);
+  }
+  const T &operator()(const CubeMapLocation &loc) const { return at(loc); }
+  T &operator()(const CubeMapLocation &loc) {
+    return panels[loc.panel_id](loc.pixel);
+  }
+  const T &at(const Vec3 &dir) const {
+    return at(CubeMapLocation::FromDirection(panels[0].cols, dir));
+  }
+  const T &operator()(const Vec3 &dir) const { return at(dir); }
+  T &operator()(const Vec3 &dir) {
+    return (*this)(CubeMapLocation::FromDirection(panels[0].cols, dir));
+  }
+};
+
+// BinaryRelationTable
+template <class T> struct BinaryRelationTable {
+  std::vector<T> relations;
+  size_t nelements;
+  explicit BinaryRelationTable(size_t n, const T &v)
+      : nelements(n), relations(n * (n - 1) / 2, v) {}
+  decltype(auto) operator()(int i, int j) const {
+    if (i == j) {
+      return T();
+    }
+    int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
+    return relations[offset];
+  }
+  decltype(auto) operator()(int i, int j) {
+    assert(i != j);
+    int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
+    return relations[offset];
+  }
+  constexpr auto nonZeroNeighbors(int i) const {
+    return MakeConditionalRange(MakeIotaRange<int>(nelements),
+                                [this, i](int ind) { return (*this)(i, ind); });
+  }
+};
+
+
 
 // DecomposeFaces
 // assume all internal faces are already collected in face2verts
@@ -38,6 +96,11 @@ std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
                                              const std::vector<Line2> &lines,
                                              const CameraParam &cam_param,
                                              double angle_thres);
+
+// CollectLineIntersections
+std::vector<Vec3>
+CollectLineIntersections(const std::vector<Line3> &lines,
+                         std::vector<std::pair<int, int>> *line_ids = nullptr);
 
 // CollectVanishingPoints
 struct CollectVanishingPointsParam { // best params so far

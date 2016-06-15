@@ -20,6 +20,54 @@ namespace experimental {
 
 using namespace ::pano::core;
 
+CubeMapLocation::CubeMapLocation(int pid, const Pixel & p, size_t sz) : panel_id(pid), pixel(p) {
+	assert(IsBetween(pid, 0, 3));
+	if (IsBetween(p.x, 0, sz) && IsBetween(p.y, 0, sz)) {
+		return;
+	}
+	NOT_IMPLEMENTED_YET();
+}
+
+Vec3 CubeMapLocation::direction(size_t sz) const {
+	//// 
+	NOT_IMPLEMENTED_YET();
+}
+
+CubeMapLocation CubeMapLocation::FromDirection(size_t sz, const Vec3 &dir) {
+  assert(norm(dir) != 0);
+  Vec3 abs_dir(abs(dir[0]), abs(dir[1]), abs(dir[2]));
+  CubeMapLocation loc;
+  if (abs_dir[0] >= abs_dir[1] && abs_dir[0] >= abs_dir[2]) {
+    // panel 0
+    loc.panel_id = 0;
+    double x_ratio = dir[1] / dir[0]; // [-1, 1]
+    double y_ratio = dir[2] / dir[0]; // [-1, 1]
+    int x = static_cast<int>(std::round((x_ratio / 2.0 + 0.5) * sz));
+    int y = static_cast<int>(std::round((y_ratio / 2.0 + 0.5) * sz));
+    loc.pixel.x = core::BoundBetween(x, 0, sz - 1);
+    loc.pixel.y = core::BoundBetween(y, 0, sz - 1);
+  } else if (abs_dir[1] >= abs_dir[0] && abs_dir[1] >= abs_dir[2]) {
+    // panel 1
+    loc.panel_id = 1;
+    double x_ratio = dir[0] / dir[1]; // [-1, 1]
+    double y_ratio = dir[2] / dir[1]; // [-1, 1]
+    int x = static_cast<int>(std::round((x_ratio / 2.0 + 0.5) * sz));
+    int y = static_cast<int>(std::round((y_ratio / 2.0 + 0.5) * sz));
+    loc.pixel.x = core::BoundBetween(x, 0, sz - 1);
+    loc.pixel.y = core::BoundBetween(y, 0, sz - 1);
+  } else {
+    // panel 2
+    loc.panel_id = 2;
+    double x_ratio = dir[0] / dir[2]; // [-1, 1]
+    double y_ratio = dir[1] / dir[2]; // [-1, 1]
+    int x = static_cast<int>(std::round((x_ratio / 2.0 + 0.5) * sz));
+    int y = static_cast<int>(std::round((y_ratio / 2.0 + 0.5) * sz));
+    loc.pixel.x = core::BoundBetween(x, 0, sz - 1);
+    loc.pixel.y = core::BoundBetween(y, 0, sz - 1);
+  }
+	return loc;
+}
+
 // ICCV 2013 Complex 3D General Object Reconstruction from Line Drawings
 // Algorithm 1
 std::set<int> ExtendFaces(const std::vector<std::vector<int>> &face2verts,
@@ -64,6 +112,7 @@ std::set<int> ExtendFaces(const std::vector<std::vector<int>> &face2verts,
   }
   return f_fixed;
 }
+
 
 // ICCV 2013 Complex 3D General Object Reconstruction from Line Drawings
 // Algorithm 2
@@ -344,29 +393,6 @@ CalibrateCamera(const Box2 &box, const std::vector<std::set<int>> &face_groups,
   return pp_focal_candidates;
 }
 
-template <class T> struct BinaryRelationTable {
-  std::vector<T> relations;
-  size_t nelements;
-  explicit BinaryRelationTable(size_t n, const T &v)
-      : nelements(n), relations(n * (n - 1) / 2, v) {}
-  decltype(auto) operator()(int i, int j) const {
-    if (i == j) {
-      return T();
-    }
-    int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
-    return relations[offset];
-  }
-  decltype(auto) operator()(int i, int j) {
-    assert(i != j);
-    int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
-    return relations[offset];
-  }
-  constexpr auto neighbors(int i) const {
-    return MakeConditionalRange(MakeIotaRange<int>(nelements),
-                                [this, i](int ind) { return (*this)(i, ind); });
-  }
-};
-
 inline Vec3 NormalizedSpatialDirection(const Point2 &p2, double focal,
                                        const Point2 &pp) {
   return normalize(Vec3(p2[0] - pp[0], p2[1] - pp[1], focal));
@@ -532,7 +558,7 @@ std::vector<Vec3> MergePoints(const std::vector<Vec3> &normalized_directions,
   int ccs = ConnectedComponents(
       MakeIotaIterator<int>(0),
       MakeIotaIterator<int>(normalized_directions.size()),
-      [&adj_relation](int id) { return adj_relation.neighbors(id); },
+      [&adj_relation](int id) { return adj_relation.nonZeroNeighbors(id); },
       [&merged_directions, &normalized_directions](int id, int group) {
         AddToDirection(merged_directions[group], normalized_directions[id]);
       });
@@ -757,10 +783,11 @@ std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
 //}
 
 std::vector<Vec3>
-CollectVanishingPoints(const std::vector<Line3> &lines,
-                       const CollectVanishingPointsParam &param) {
-
-  // collect intersections
+CollectLineIntersections(const std::vector<Line3> &lines,
+                         std::vector<std::pair<int, int>> *line_ids) {
+  if (line_ids) {
+    line_ids->clear();
+  }
   std::vector<Vec3> intersections;
   intersections.reserve(lines.size() * (lines.size() - 1) / 2);
   for (int i = 0; i < lines.size(); i++) {
@@ -775,8 +802,20 @@ CollectVanishingPoints(const std::vector<Line3> &lines,
         continue;
       }
       intersections.push_back(interp);
+      if (line_ids) {
+        line_ids->emplace_back(i, j);
+      }
     }
   }
+  return intersections;
+}
+
+std::vector<Vec3>
+CollectVanishingPoints(const std::vector<Line3> &lines,
+                       const CollectVanishingPointsParam &param) {
+
+  // collect intersections
+  std::vector<Vec3> intersections = CollectLineIntersections(lines);
 
   for (int iteration = 0; iteration < param.max_iters; iteration++) {
     Println("intersecitons num = ", intersections.size());
@@ -885,7 +924,7 @@ std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
   int ccs = ConnectedComponents(
       MakeIotaIterator<int>(0), MakeIotaIterator<int>(lines.size()),
       [&lines_colinear](int lineid) {
-        return lines_colinear.neighbors(lineid);
+        return lines_colinear.nonZeroNeighbors(lineid);
       },
       [oldline2newline, &groups](int oldline, int newline) {
         groups[newline].push_back(oldline);

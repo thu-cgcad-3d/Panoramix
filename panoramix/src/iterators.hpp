@@ -62,6 +62,16 @@ template <class IterT> struct Range {
       ++i;
     }
   }
+
+  // (0, 1), (0, 2), ..., (0, n-1), (1, 2), (1, 3), ... (n-2, n-1)
+  template <class FunT> void forEachTwo(FunT &&fun) const {
+    for (IterT i = b; i != e; ++i) {
+      for (IterT j = std::next(i); j != e; ++j) {
+        fun(*i, *j);
+      }
+    }
+  }
+
   template <class FunT> auto transform(FunT &&fun) const {
     return MakeTransformRange(*this, std::forward<FunT>(fun));
   }
