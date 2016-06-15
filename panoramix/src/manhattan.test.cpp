@@ -4,8 +4,6 @@
 #include "canvas.hpp"
 #include "gui_util.hpp"
 
-#include "../experimental/pi_graph.hpp"
-
 #include "../panoramix.unittest.hpp"
 
 using namespace pano;

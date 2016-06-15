@@ -40,31 +40,6 @@ template <class T> struct HalfCubeMap {
   }
 };
 
-// BinaryRelationTable
-template <class T> struct BinaryRelationTable {
-  std::vector<T> relations;
-  size_t nelements;
-  explicit BinaryRelationTable(size_t n, const T &v)
-      : nelements(n), relations(n * (n - 1) / 2, v) {}
-  decltype(auto) operator()(int i, int j) const {
-    if (i == j) {
-      return T();
-    }
-    int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
-    return relations[offset];
-  }
-  decltype(auto) operator()(int i, int j) {
-    assert(i != j);
-    int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
-    return relations[offset];
-  }
-  constexpr auto nonZeroNeighbors(int i) const {
-    return MakeConditionalRange(MakeIotaRange<int>(nelements),
-                                [this, i](int ind) { return (*this)(i, ind); });
-  }
-};
-
-
 
 // DecomposeFaces
 // assume all internal faces are already collected in face2verts

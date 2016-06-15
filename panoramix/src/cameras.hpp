@@ -46,7 +46,7 @@ public:
   Point3 toSpace(const Point2 &p2d) const;
   Point3 toSpace(const Pixel &p) const { return toSpace(Point2(p.x, p.y)); }
   Vec3 direction(const Point2 &p2d) const { return toSpace(p2d) - _eye; }
-  Vec3 direction(const Pixel &p) const { return direction(p); }
+  Vec3 direction(const Pixel &p) const { return direction(Point2(p.x, p.y)); }
 
   const Mat4 &viewMatrix() const { return _viewMatrix; }
   const Mat4 &projectionMatrix() const { return _projectionMatrix; }
@@ -332,15 +332,29 @@ CreateCubicFacedCameras(const PanoramicCamera &panoCam, int width = 500,
 // view class
 template <class CameraT, class ImageT = Image,
           class = std::enable_if_t<IsCamera<CameraT>::value>>
-struct View {
+class View {
+public:
   ImageT image;
   CameraT camera;
 
+public:
   View() {}
   View(const ImageT &im, const CameraT &cam) : image(im), camera(cam) {}
+  explicit View(const CameraT &cam)
+      : image(ImageT::zeros(cam.screenSize())), camera(cam) {}
   View(const View<CameraT, Image> &v) : image(v.image), camera(v.camera) {}
   template <class T>
   View(const View<CameraT, Image_<T>> &v) : image(v.image), camera(v.camera) {}
+
+public:
+  auto size() const {return image.size(); }
+  decltype(auto) at(const Vec3 &p3d) const {
+    return image(ToPixel(camera.toScreen(p3d)));
+  }
+  decltype(auto) operator()(const Vec3 &p3d) const { return at(p3d); }
+  decltype(auto) operator()(const Vec3 &p3d) {
+    return image(ToPixel(camera.toScreen(p3d)));
+  }
 
   template <
       class AnotherCameraT,
@@ -360,6 +374,10 @@ template <class CameraT, class ImageT>
 View<CameraT, ImageT> MakeView(const ImageT &im, const CameraT &c) {
   assert(im.size() == c.screenSize());
   return View<CameraT, ImageT>(im, c);
+}
+template <class T, class CameraT>
+View<CameraT, Image_<T>> MakeView(const CameraT &c) {
+  return View<CameraT, Image_<T>>(c);
 }
 
 template <class OutCameraT, class InCameraT, class T,

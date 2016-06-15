@@ -55,6 +55,9 @@ template <class IterT> struct Range {
   IterT cbegin() const { return b; }
   IterT cend() const { return e; }
 
+  decltype(auto) operator[](size_t i) const { return *(b + i); }
+  decltype(auto) operator()(size_t i) const { return *(b + i); }
+
   template <class FunT> void forEach(FunT &&fun) const {
     IterT i = b;
     while (i != e) {

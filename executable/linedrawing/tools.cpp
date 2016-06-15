@@ -20,17 +20,18 @@ namespace experimental {
 
 using namespace ::pano::core;
 
-CubeMapLocation::CubeMapLocation(int pid, const Pixel & p, size_t sz) : panel_id(pid), pixel(p) {
-	assert(IsBetween(pid, 0, 3));
-	if (IsBetween(p.x, 0, sz) && IsBetween(p.y, 0, sz)) {
-		return;
-	}
-	NOT_IMPLEMENTED_YET();
+CubeMapLocation::CubeMapLocation(int pid, const Pixel &p, size_t sz)
+    : panel_id(pid), pixel(p) {
+  assert(IsBetween(pid, 0, 3));
+  if (IsBetween(p.x, 0, sz) && IsBetween(p.y, 0, sz)) {
+    return;
+  }
+  NOT_IMPLEMENTED_YET();
 }
 
 Vec3 CubeMapLocation::direction(size_t sz) const {
-	//// 
-	NOT_IMPLEMENTED_YET();
+  ////
+  NOT_IMPLEMENTED_YET();
 }
 
 CubeMapLocation CubeMapLocation::FromDirection(size_t sz, const Vec3 &dir) {
@@ -65,7 +66,7 @@ CubeMapLocation CubeMapLocation::FromDirection(size_t sz, const Vec3 &dir) {
     loc.pixel.x = core::BoundBetween(x, 0, sz - 1);
     loc.pixel.y = core::BoundBetween(y, 0, sz - 1);
   }
-	return loc;
+  return loc;
 }
 
 // ICCV 2013 Complex 3D General Object Reconstruction from Line Drawings
@@ -112,7 +113,6 @@ std::set<int> ExtendFaces(const std::vector<std::vector<int>> &face2verts,
   }
   return f_fixed;
 }
-
 
 // ICCV 2013 Complex 3D General Object Reconstruction from Line Drawings
 // Algorithm 2
@@ -236,11 +236,11 @@ std::vector<Point2> ProposeVanishingPoints(const Chain2 &chain) {
     for (int i = 0; i < chain.size(); i++) {
       if (!chain.closed && i == chain.size() - 1) {
         continue;
-			}
+      }
       int j = (i + chain.size() / 2) % chain.size();
-			if (!chain.closed && j == chain.size() - 1) {
-				continue;
-			}
+      if (!chain.closed && j == chain.size() - 1) {
+        continue;
+      }
       vp_positions.push_back(
           Intersection(chain.edge(i).ray(), chain.edge(j).ray()));
     }
@@ -262,7 +262,8 @@ std::vector<Point2> ProposeVanishingPoints(const Chain2 &chain) {
   }
 }
 
-//std::vector<Point2> ProposeVanishingPoints(const std::vector<Line2> & lines) {
+// std::vector<Point2> ProposeVanishingPoints(const std::vector<Line2> & lines)
+// {
 //	assert(lines.size() > 2);
 //  if (lines.size() == 3) {
 //    return {};
@@ -551,8 +552,9 @@ MergePointsMeanShift(const std::vector<Point2> &intersections, double focal,
       .evalAs<std::vector<Point2>>();
 }
 
-std::vector<Vec3> MergePoints(const std::vector<Vec3> &normalized_directions,
-                              const BinaryRelationTable<bool> &adj_relation) {
+std::vector<Vec3>
+MergePoints(const std::vector<Vec3> &normalized_directions,
+            const ElementBinaryRelations<bool> &adj_relation) {
   // merge
   std::vector<Vec3> merged_directions(normalized_directions.size(), Vec3());
   int ccs = ConnectedComponents(
@@ -567,9 +569,10 @@ std::vector<Vec3> MergePoints(const std::vector<Vec3> &normalized_directions,
   return merged_directions;
 }
 
-std::vector<Point2> MergePoints(const std::vector<Point2> &intersections,
-                                double focal, const Point2 &pp,
-                                const BinaryRelationTable<bool> &adj_relation) {
+std::vector<Point2>
+MergePoints(const std::vector<Point2> &intersections, double focal,
+            const Point2 &pp,
+            const ElementBinaryRelations<bool> &adj_relation) {
   auto normalized_directions =
       MakeRange(intersections)
           .transform([&focal, &pp](const Point2 &p2) -> Vec3 {
@@ -623,7 +626,7 @@ std::vector<std::set<int>> BindPointsToLines(const std::vector<Vec3> &points,
                                              double angle_thres) {
   std::vector<std::set<int>> point2lines(points.size());
   for (int inter = 0; inter < points.size(); inter++) {
-    const Vec3 & interp = points[inter];
+    const Vec3 &interp = points[inter];
     for (int l = 0; l < lines.size(); l++) {
       auto &line3 = lines[l];
       // if the intersection projects on the body of the line, pass
@@ -673,8 +676,8 @@ std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
 }
 
 // CollectVanishingPoints
-//std::vector<Point2>
-//CollectVanishingPoints(const std::vector<Line2> &lines,
+// std::vector<Point2>
+// CollectVanishingPoints(const std::vector<Line2> &lines,
 //                       const CameraParam &cam_param,
 //                       const CollectVanishingPointsParam &param) {
 //
@@ -707,7 +710,8 @@ std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
 //    // phase 1: directly merge intersections
 //    intersections =
 //        param.use_mean_shift_merge_phase1
-//            ? MergePointsMeanShift(intersections, cam_param.focal, cam_param.pp,
+//            ? MergePointsMeanShift(intersections, cam_param.focal,
+//            cam_param.pp,
 //                                   param.angle_thres_phase1)
 //            : MergePoints(intersections, cam_param.focal, cam_param.pp,
 //                          param.angle_thres_phase1); ///
@@ -717,10 +721,11 @@ std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
 //    // phase 2: merge intersections who share two or more lines
 //    // first get adjacency relations
 //    auto intersection2lines =
-//        //// BindPointsToLines(intersections, lines, param.angle_thres_phase2);
+//        //// BindPointsToLines(intersections, lines,
+//        param.angle_thres_phase2);
 //        BindPointsToLines(intersections, lines, cam_param,
 //                          param.angle_thres_phase2);
-//    BinaryRelationTable<bool> intersection_sharing_many_lines(
+//    ElementBinaryRelations<bool> intersection_sharing_many_lines(
 //        intersections.size(), false);
 //    for (int i = 0; i < intersections.size(); i++) {
 //      auto &linesi = intersection2lines[i];
@@ -747,7 +752,8 @@ std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
 //
 //    // phase 3: remove group centers that bind to too few lines
 //    auto group_center2lines =
-//        //// BindPointsToLines(group_centers, lines, param.angle_thres_phase3);
+//        //// BindPointsToLines(group_centers, lines,
+//        param.angle_thres_phase3);
 //        BindPointsToLines(group_centers, lines, cam_param,
 //                          param.angle_thres_phase3);
 //    intersections.clear();
@@ -831,7 +837,7 @@ CollectVanishingPoints(const std::vector<Line3> &lines,
     // first get adjacency relations
     auto intersection2lines =
         BindPointsToLines(intersections, lines, param.angle_thres_phase2);
-    BinaryRelationTable<bool> intersection_sharing_many_lines(
+    ElementBinaryRelations<bool> intersection_sharing_many_lines(
         intersections.size(), false);
     for (int i = 0; i < intersections.size(); i++) {
       auto &linesi = intersection2lines[i];
@@ -900,7 +906,8 @@ inline bool LinesAreColinear(const Line2 &line1, const Line2 &line2,
                   .cross(NormalizedSpatialDirection(line2.second, focal, pp));
   return AngleBetweenUndirected(dir1, dir2) < angle_thres;
 }
-inline bool LinesAreColinear(const Line3 & line1, const Line3 & line2, double angle_thres) {
+inline bool LinesAreColinear(const Line3 &line1, const Line3 &line2,
+                             double angle_thres) {
   return AngleBetweenUndirected(line1.first.cross(line1.second),
                                 line2.first.cross(line2.second)) < angle_thres;
 }
@@ -910,7 +917,7 @@ std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
                                       double angle_thres,
                                       std::vector<int> *oldline2newline) {
 
-  BinaryRelationTable<bool> lines_colinear(lines.size(), false);
+  ElementBinaryRelations<bool> lines_colinear(lines.size(), false);
   for (int i = 0; i < lines.size(); i++) {
     for (int j = i + 1; j < lines.size(); j++) {
       lines_colinear(i, j) = LinesAreColinear(
@@ -966,8 +973,8 @@ std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
   return merged_lines;
 }
 
-//std::map<std::pair<int, int>, double>
-//EstimateParallelism(const std::vector<Line2> &lines,
+// std::map<std::pair<int, int>, double>
+// EstimateParallelism(const std::vector<Line2> &lines,
 //                    const CameraParam &cam_param, double angle_thres) {
 //  std::map<std::pair<int, int>, double> relations;
 //  for (int i = 0; i < lines.size(); i++) {
@@ -989,7 +996,7 @@ std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
 //}
 
 //// EstimateEdgeOrientations
-//std::vector<int> EstimateEdgeOrientations(
+// std::vector<int> EstimateEdgeOrientations(
 //    const std::vector<Line2> &lines, const std::vector<Point2> &vps,
 //    const std::vector<std::vector<int>> &face2ordered_lines, double focal,
 //    const Point2 &pp, const EstimateEdgeOrientationsParam &param) {
@@ -1005,7 +1012,8 @@ std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
 //      double lambda = ProjectionOfPointOnLine(vp_pos, line).ratio;
 //      static const double thres = 0.1;
 //      if (lambda >= -thres &&
-//          lambda <= 1.0 + thres) { // if vp's projection lies on the line, pass
+//          lambda <= 1.0 + thres) { // if vp's projection lies on the line,
+//          pass
 //        continue;
 //      }
 //      double angle =
@@ -1087,10 +1095,12 @@ std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
 //            assert(varlabels.size() == 2);
 //            int bindedVP1 = varlabels[0] == related_vp_angles1.size()
 //                                ? -1
-//                                : (related_vp_angles1[varlabels[0]].component);
+//                                :
+//                                (related_vp_angles1[varlabels[0]].component);
 //            int bindedVP2 = varlabels[1] == related_vp_angles2.size()
 //                                ? -1
-//                                : (related_vp_angles2[varlabels[1]].component);
+//                                :
+//                                (related_vp_angles2[varlabels[1]].component);
 //            if (bindedVP1 == -1 || bindedVP2 == -1) {
 //              return 0;
 //            }
@@ -1153,7 +1163,8 @@ std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
 //            }
 //            Vec3 vpdirs[3];
 //            for (int i = 0; i < 3; i++) {
-//              vpdirs[i] = NormalizedSpatialDirection(vps[vp_ids[i]], focal, pp);
+//              vpdirs[i] = NormalizedSpatialDirection(vps[vp_ids[i]], focal,
+//              pp);
 //            }
 //            double angle = AngleBetweenUndirected(vpdirs[0].cross(vpdirs[1]),
 //                                                  vpdirs[1].cross(vpdirs[2]));
@@ -1199,8 +1210,6 @@ std::vector<Line2> MergeColinearLines(const std::vector<Line2> &lines,
 //  }
 //  return line2vp;
 //}
-
-
 
 // EstimateEdgeOrientations
 std::vector<int> EstimateEdgeOrientations(
@@ -1268,7 +1277,7 @@ std::vector<int> EstimateEdgeOrientations(
     }
 
     // potential 2: orthogonal
-		// second add factors
+    // second add factors
     for (auto &pair : adjacent_line_pairs) {
       auto fc = fg.addFactorCategory(
           [&line2ordered_vp_angles, &vps, pair, &adjacent_line_pairs, &param](
@@ -1387,11 +1396,6 @@ std::vector<int> EstimateEdgeOrientations(
   }
   return line2vp;
 }
-
-
-
-
-
 
 DenseMatd MakePlaneMatrix() { return DenseMatd::eye(3, 3); }
 DenseMatd MakePlaneMatrixAlongDirection(const Vec3 &dir) {
@@ -1725,11 +1729,10 @@ std::vector<double> AnglesBetweenAdjacentFaces(
         if (face_selected && !face_selected(*it2)) {
           continue;
         }
-        double angle =
-            AngleBetweenDirected(face_equations[*it1],
-                                 faces_overlap.at(MakeOrderedPair(*it1, *it2))
-                                     ? face_equations[*it2]
-                                     : -face_equations[*it2]);
+        double angle = AngleBetweenDirected(
+            face_equations[*it1], faces_overlap.at(MakeOrderedPair(*it1, *it2))
+                                      ? face_equations[*it2]
+                                      : -face_equations[*it2]);
         face_angles.push_back(angle);
       }
     }
@@ -1768,10 +1771,10 @@ double PerformReconstruction(
 
   // reconstruct
   std::vector<double> vars(infer->nvars(), 1);
-	std::uniform_real_distribution<double> dist(5, 10);
-	for (double & v : vars) {
-		v = dist(rng);
-	}
+  std::uniform_real_distribution<double> dist(5, 10);
+  for (double &v : vars) {
+    v = dist(rng);
+  }
 
   SimulatedAnnealing(
       vars,

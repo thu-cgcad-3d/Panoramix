@@ -12,8 +12,7 @@ namespace pano {
 namespace core {
 
 // ArrayView
-template <class T>
-class ArrayView {
+template <class T> class ArrayView {
 public:
   using ValueType = T;
 
@@ -76,6 +75,57 @@ private:
   size_t _size;
   ptrdiff_t _offset_bytes;
 };
+
+// ElementBinaryRelations
+template <class T> class ElementBinaryRelations {
+public:
+  ElementBinaryRelations() : _nelements(0) {}
+  explicit ElementBinaryRelations(size_t n)
+      : _nelements(n), _relations(n * (n - 1) / 2) {}
+  ElementBinaryRelations(size_t n, const T &v)
+      : _nelements(n), _relations(n * (n - 1) / 2, v) {}
+
+public:
+  size_t size() const { return _relations.size(); }
+  size_t nelements() const { return _nelements; }
+  bool empty() const { return _relations.empty(); }
+  decltype(auto) operator()(int i, int j) const {
+    if (i == j) {
+      return T();
+    }
+    int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
+    return _relations[offset];
+  }
+  decltype(auto) operator()(int i, int j) {
+    if (i == j) {
+      throw std::invalid_argument("i and j should not be the same");
+    }
+    int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
+    return _relations[offset];
+  }
+  constexpr auto nonZeroNeighbors(int i) const {
+    return MakeConditionalRange(MakeIotaRange<int>(_nelements),
+                                [this, i](int ind) { return (*this)(i, ind); });
+  }
+
+  template <class ArchiveT>
+  void serialize(ArchiveT & ar) {
+    ar(_relations, _nelements);
+  }
+
+private:
+  std::vector<T> _relations;
+  size_t _nelements;
+};
+
+// SphericalImage
+template <class T> class SphericalImage {
+public:
+
+private:
+
+};
+
 
 // RTreeSet
 template <class T, class BoundingBoxFunctorT = DefaultBoundingBoxFunctor>

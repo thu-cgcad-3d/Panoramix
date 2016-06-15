@@ -122,22 +122,22 @@ struct Input {
 
 void RoutineReconstruct1() {
 
-  auto input = Input::FromObjFile("towers", "cam1");
-  // auto input = Configuration::FromImageAnnotation("house_sketch.jpg");
+  // auto input = Input::FromObjFile("towers", "cam1");
+  auto input = Input::FromImageAnnotation("house_sketch.jpg");
   // auto input = Configuration::FromImageAnnotation("washington.jpg");
 
   const size_t npoints = input.anno.points.size();
   const size_t nedges = input.anno.edges.size();
   const size_t nfaces = input.anno.coplanar_points.size();
 
-  bool rerun_preprocess = false;
-  bool rerun_vps = false;
+  bool rerun_preprocess = true;
+  bool rerun_line_weights = false;
   bool rerun_reconstruction = true;
 
-  
-	
-	////////////////////////////////////////////////
-	// STEP 1: compute additional data
+
+
+  ////////////////////////////////////////////////
+  // STEP 1: compute additional data
   std::vector<std::set<int>> point2edges(npoints);
   std::map<std::pair<int, int>, int> points2edge;
   std::vector<std::set<int>> edge2faces(nedges);
@@ -227,10 +227,11 @@ void RoutineReconstruct1() {
     lines_box = BoundingBoxOfContainer(edge2line);
   }
 
-  
-	
-	////////////////////////////////////////////////
-	// STEP 2: decompose into face sets and estimate camera parameters
+
+
+
+  ////////////////////////////////////////////////
+  // STEP 2: decompose into face sets and estimate camera parameters
   std::vector<std::set<int>> face_sets;
   std::vector<CameraParam> cam_params;
   if (rerun_preprocess ||
@@ -278,8 +279,7 @@ void RoutineReconstruct1() {
             if (!loop.closed) {
               core::Println("a non-closed loop of size ", loop.size());
             } else {
-              assert(face_loops.size() == 1 &&
-                     face_loops.front().size() == vs.size());
+              assert(face_loops.size() == 1);
             }
           }
           return face_loops;
@@ -290,10 +290,11 @@ void RoutineReconstruct1() {
 
 
 
+
   ////////////////////////////////////////////////
   // STEP 3: recover camera and merge lines
   PerspectiveCamera cam;
-	std::vector<Vec3> point2dir;
+  std::vector<Vec3> point2dir;
   std::vector<int> edge2merged_line;
   std::vector<Line2> merged_lines;
   std::vector<Line3> edge2line3;
@@ -365,28 +366,67 @@ void RoutineReconstruct1() {
   // STEP 4: collect intersections and build the lines voting panel
   std::vector<Vec3> intersections;
   std::vector<std::pair<int, int>> intersection_merged_line_pairs;
-  HalfCubeMap<float> vote_cubemap(50);
-  BinaryRelationTable<float> merged_lines_parallelism_weight(
+  auto vote_map = MakeView<float>(PanoramicCamera(64));
+  ElementBinaryRelations<float> merged_lines_parallelism_weights(
       merged_lines.size(), 0.0f);
-  //BinaryRelationTable<float> merged_lines_orthogonal_weight(merged_lines.size(),
-  //                                                          0.0f);
-  {
+  if (rerun_line_weights ||
+      !input.loadCache("line_weights", intersections,
+                       intersection_merged_line_pairs, vote_map,
+                       merged_lines_parallelism_weights)) {
     intersections = CollectLineIntersections(merged_line3s,
                                              &intersection_merged_line_pairs);
     assert(intersections.size() == intersection_merged_line_pairs.size());
     for (auto &inter : intersections) {
-      vote_cubemap(inter) += 1.0f / intersections.size();
+      vote_map(inter) += 1.0f;
+      vote_map(-inter) += 1.0f;
     }
+    Imagef new_votes(vote_map.size(), 0.0f);
+    static const double kernal_angle = DegreesToRadians(10.0);
+    Image_<Vec3> dirs_map(vote_map.size());
+    for (auto it = dirs_map.begin(); it != dirs_map.end(); ++it) {
+      *it = cam.direction(it.pos());
+    }
+    const double radius = kernal_angle * vote_map.camera.focal() / 2.0;
+    for (int y = 0; y < new_votes.rows; y++) {
+      int y2_lb = std::max(y - radius, 0.0);
+      int y2_ub = std::min<int>(y + radius, new_votes.rows - 1);
+      double pixel_weight =
+          std::max(cos((y2_lb - new_votes.rows / 2.0) / new_votes.rows * M_PI),
+                   cos((y2_ub - new_votes.rows / 2.0) / new_votes.rows * M_PI));
+      double xspan = radius / pixel_weight;
+      if (xspan > new_votes.cols) {
+        xspan = new_votes.cols;
+      }
+      for (int x = 0; x < new_votes.cols; x++) {
+        int count = 0;
+        for (int y2 = y2_lb; y2 <= y2_ub; y2++) {
+          for (int x2 = x - xspan / 2; x2 <= x + xspan / 2; x2++) {
+            Pixel p2(WrapBetween(x2, 0, new_votes.cols), y2);
+            double angle = AngleBetweenUndirected(dirs_map(y, x), dirs_map(p2));
+            if (angle >= kernal_angle / 5.0) {
+              continue;
+            }
+            count ++;
+            double v =
+                (Gaussian(angle, kernal_angle / 10.0)) * (vote_map.image(p2));
+            if (v > new_votes(y, x)) {
+              new_votes(y, x) = v;
+            }
+          }
+        }
+      }
+    }
+    vote_map.image = new_votes;
     for (int i = 0; i < intersections.size(); i++) {
-      merged_lines_parallelism_weight(
+      merged_lines_parallelism_weights(
           intersection_merged_line_pairs[i].first,
           intersection_merged_line_pairs[i].second) =
-          vote_cubemap.at(intersections[i]);
+          vote_map.at(intersections[i]);
     }
+    input.saveCache("line_weights", intersections,
+                    intersection_merged_line_pairs, vote_map,
+                    merged_lines_parallelism_weights);
   }
-
-
-
 
   ////////////////////////////////////////////////
   // STEP 5: collect constraints
@@ -395,8 +435,8 @@ void RoutineReconstruct1() {
   {
     // add face coplanarities
     for (int face = 0; face < nfaces; face++) {
-      basic_constraints.push_back(PlaneConstraint{
-          input.anno.coplanar_points[face], MakePlaneMatrix()});
+      basic_constraints.push_back(
+          PlaneConstraint{input.anno.coplanar_points[face], MakePlaneMatrix()});
     }
     // add colinearity from assignment
     for (auto &ps : input.anno.colinear_points) {
@@ -458,9 +498,6 @@ void RoutineReconstruct1() {
           MakePlaneMatrixAlongDirection(line_perp_dir)});
     }
   }
-
-
-
 
   ////////////////////////////////////////////////
   // STEP 6: build the energy function
