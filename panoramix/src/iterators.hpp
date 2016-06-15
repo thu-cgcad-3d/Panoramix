@@ -62,6 +62,16 @@ template <class IterT> struct Range {
       ++i;
     }
   }
+
+  // (0, 1), (0, 2), ..., (0, n-1), (1, 2), (1, 3), ... (n-2, n-1)
+  template <class FunT> void forEachTwo(FunT &&fun) const {
+    for (IterT i = b; i != e; ++i) {
+      for (IterT j = std::next(i); j != e; ++j) {
+        fun(*i, *j);
+      }
+    }
+  }
+
   template <class FunT> auto transform(FunT &&fun) const {
     return MakeTransformRange(*this, std::forward<FunT>(fun));
   }
@@ -71,6 +81,10 @@ template <class IterT> struct Range {
 
   template <class ContainerT> ContainerT evalAs() const {
     return ContainerT(b, e);
+  }
+  auto evalAsStdVector() const {
+    using ValueType = typename std::iterator_traits<IterT>::value_type;
+    return std::vector<ValueType>(b, e);
   }
 
   bool operator==(const Range &r) const { return b == r.b && e == r.e; }

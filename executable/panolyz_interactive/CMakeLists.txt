@@ -1,8 +1,0 @@
-set(CMAKE_AUTOMOC on)
-set(CMAKE_AUTOUIC on)
-set(CMAKE_AUTORCC on)
-file (GLOB SOURCES "." *.cpp *.hpp *.qrc *.ui)
-include_directories (${DEPENDENCY_INCLUDES})
-panoramix_add_executable (Panolyz_Interactive ${SOURCES})
-target_link_libraries (Panolyz_Interactive Panoramix ${DEPENDENCY_LIBS})
-set_property(TARGET Panolyz_Interactive PROPERTY FOLDER "Panoramix.Executable")

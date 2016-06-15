@@ -1,5 +1,0 @@
-file (GLOB SOURCES "." *.cpp *.hpp)
-include_directories (${DEPENDENCY_INCLUDES})
-panoramix_add_executable (Panolyz_Perspective ${SOURCES})
-target_link_libraries (Panolyz_Perspective Panoramix ${DEPENDENCY_LIBS})
-set_property(TARGET Panolyz_Perspective PROPERTY FOLDER "Panoramix.Executable")

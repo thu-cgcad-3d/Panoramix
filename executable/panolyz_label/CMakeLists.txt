@@ -1,5 +1,0 @@
-file (GLOB SOURCES "." *.cpp *.hpp)
-include_directories (${DEPENDENCY_INCLUDES})
-panoramix_add_executable (Panolyz_Label ${SOURCES})
-target_link_libraries (Panolyz_Label Panoramix ${DEPENDENCY_LIBS})
-set_property(TARGET Panolyz_Label PROPERTY FOLDER "Panoramix.Executable")

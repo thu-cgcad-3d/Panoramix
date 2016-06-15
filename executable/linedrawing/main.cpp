@@ -9,8 +9,8 @@ using namespace pano::experimental;
 
 
 void RoutineEditImageAnno();
-void RoutineReconstruct();
-
+void RoutineReconstruct0();
+void RoutineReconstruct1();
 
 int main(int argc, char **argv, char **env) {
   gui::Singleton::SetCmdArgs(argc, argv, env);
@@ -18,7 +18,9 @@ int main(int argc, char **argv, char **env) {
   misc::SetCachePath(PANORAMIX_CACHE_DATA_DIR_STR "\\LineDrawing\\");
 
   //RoutineEditImageAnno();
-  RoutineReconstruct();
+  //RoutineReconstruct0();
+	RoutineReconstruct1();
+
 
   return 0;
 }

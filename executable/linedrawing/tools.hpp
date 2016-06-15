@@ -1,12 +1,70 @@
 #pragma once
 
 #include "basic_types.hpp"
+#include "iterators.hpp"
 #include "utility.hpp"
 
 namespace pano {
 namespace experimental {
 
 using namespace ::pano::core;
+
+// HalfCubeMap
+struct CubeMapLocation {
+  int panel_id;
+  Pixel pixel;
+	CubeMapLocation(){}
+	CubeMapLocation(int pid, const Pixel & p, size_t sz);
+	Vec3 direction(size_t sz) const;
+
+  static CubeMapLocation FromDirection(size_t sz, const Vec3 &dir);
+};
+template <class T> struct HalfCubeMap {
+  Image_<T> panels[3];
+  explicit HalfCubeMap(size_t sz)
+      : panels{Image_<T>::zeros(sz, sz), Image_<T>::zeros(sz, sz),
+               Image_<T>::zeros(sz, sz)} {}
+  const T &at(const CubeMapLocation &loc) const {
+    return panels[loc.panel_id](loc.pixel);
+  }
+  const T &operator()(const CubeMapLocation &loc) const { return at(loc); }
+  T &operator()(const CubeMapLocation &loc) {
+    return panels[loc.panel_id](loc.pixel);
+  }
+  const T &at(const Vec3 &dir) const {
+    return at(CubeMapLocation::FromDirection(panels[0].cols, dir));
+  }
+  const T &operator()(const Vec3 &dir) const { return at(dir); }
+  T &operator()(const Vec3 &dir) {
+    return (*this)(CubeMapLocation::FromDirection(panels[0].cols, dir));
+  }
+};
+
+// BinaryRelationTable
+template <class T> struct BinaryRelationTable {
+  std::vector<T> relations;
+  size_t nelements;
+  explicit BinaryRelationTable(size_t n, const T &v)
+      : nelements(n), relations(n * (n - 1) / 2, v) {}
+  decltype(auto) operator()(int i, int j) const {
+    if (i == j) {
+      return T();
+    }
+    int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
+    return relations[offset];
+  }
+  decltype(auto) operator()(int i, int j) {
+    assert(i != j);
+    int offset = i < j ? (j * (j - 1) / 2 + i) : (i * (i - 1) / 2 + j);
+    return relations[offset];
+  }
+  constexpr auto nonZeroNeighbors(int i) const {
+    return MakeConditionalRange(MakeIotaRange<int>(nelements),
+                                [this, i](int ind) { return (*this)(i, ind); });
+  }
+};
+
+
 
 // DecomposeFaces
 // assume all internal faces are already collected in face2verts
@@ -39,6 +97,11 @@ std::vector<std::set<int>> BindPointsToLines(const std::vector<Point2> &points,
                                              const CameraParam &cam_param,
                                              double angle_thres);
 
+// CollectLineIntersections
+std::vector<Vec3>
+CollectLineIntersections(const std::vector<Line3> &lines,
+                         std::vector<std::pair<int, int>> *line_ids = nullptr);
+
 // CollectVanishingPoints
 struct CollectVanishingPointsParam { // best params so far
   double angle_thres_phase1 = DegreesToRadians(2);
@@ -70,9 +133,11 @@ struct EstimateEdgeOrientationsParam { // best params so far
   double angle_thres_allowed_vp_line_deviation = DegreesToRadians(10);
   double angle_thres_judging_colinearility = DegreesToRadians(1);
   double angle_thres_distinguishing_vps = DegreesToRadians(2);
+	double angle_thres_juding_orthogonality = DegreesToRadians(10);
   double angle_thres_juding_coplanarity = DegreesToRadians(10);
   double coeff_vp_line_fitness = 50.0;
   double coeff_noncolinear_adj_line_exlusiveness = 10.0;
+	double coeff_line_pair_orthogonality = 20.0;
   double coeff_line_triplet_coplanar = 30.0;
   int vp_min_degree = 3;
   int solve_max_iter = 5;
@@ -84,7 +149,8 @@ struct EstimateEdgeOrientationsParam { // best params so far
 //                          EstimateEdgeOrientationsParam());
 std::vector<int> EstimateEdgeOrientations(
     const std::vector<Line3> &lines, const std::vector<Vec3> &vps,
-    const std::vector<std::vector<int>> &face2ordered_lines,
+	  const std::vector<std::pair<int, int>> & adjacent_line_pairs,
+    const std::vector<std::vector<int>> &coplanar_ordered_lines,
     const EstimateEdgeOrientationsParam &param =
         EstimateEdgeOrientationsParam());
 
