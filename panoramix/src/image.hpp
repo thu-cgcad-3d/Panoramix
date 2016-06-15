@@ -142,6 +142,10 @@ template <class T> inline T Mean(const Image_<T> &im, const Imageub &mask) {
 template <class T> inline Pixel ToPixel(const Point<T, 2> &p) {
   return Pixel(static_cast<int>(p[0]), static_cast<int>(p[1]));
 }
+template <class T> inline Pixel RoundToPixel(const Point<T, 2> & p) {
+  return Pixel(static_cast<int>(std::round(p[0])),
+               static_cast<int>(std::round(p[1])));
+}
 
 inline int Sub2Ind(const Pixel &p, int w, int h) { return p.x * h + p.y; }
 inline int Sub2Ind(const Pixel &p, const Sizei &sz) {

@@ -128,7 +128,7 @@ public:
   Point3 toSpace(const Pixel &p) const { return toSpace(Vec2(p.x, p.y)); }
   Point3 toSpace(const HPoint2 &p) const { return toSpace(p.value()); }
   Vec3 direction(const Point2 &p2d) const;
-  Vec3 direction(const Pixel &p) const { return direction(p); }
+  Vec3 direction(const Pixel &p) const { return direction(Point2(p.x, p.y)); }
 
 private:
   double _focal;
@@ -168,7 +168,7 @@ public:
   Point3 toSpace(const Point2 &p2d) const;
   Point3 toSpace(const Pixel &p) const { return toSpace(Vec2(p.x, p.y)); }
   Vec3 direction(const Point2 &p2d) const;
-  Vec3 direction(const Pixel &p) const { return direction(p); }
+  Vec3 direction(const Pixel &p) const { return direction(Point2(p.x, p.y)); }
   PanoramicCamera toPanoramic() const {
     return PanoramicCamera(_focal, _eye, _center, _up);
   }

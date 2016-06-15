@@ -56,13 +56,17 @@ endforeach()
 
 panoramix_add_library(Panoramix 
     ${panoramix_sources} 
-    ${panoramix_experimental_sources})
+    ${panoramix_experimental_sources} pch.hpp pch.cpp)
 target_include_directories(Panoramix PUBLIC ${DEPENDENCY_INCLUDES} 
-     ${CMAKE_CURRENT_SOURCE_DIR}/src 
-     ${CMAKE_CURRENT_SOURCE_DIR}/experimental)
+    ${CMAKE_CURRENT_SOURCE_DIR}
+	${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src 
+    ${CMAKE_CURRENT_SOURCE_DIR}/experimental)
 target_link_libraries (Panoramix ${DEPENDENCY_LIBS})
 add_dependencies(Panoramix ${DEPENDENCY_NAMES})
 
+include(../cmake/PrecompiledHeader.cmake)
+add_precompiled_header(Panoramix "pch.hpp" SOURCE_CXX "pch.cpp")
 
 # the test project
 message(STATUS "panoramix_test_sources:")
@@ -75,10 +79,11 @@ panoramix_add_executable(Panoramix.UnitTest
     ${panoramix_experimental_test_sources}
     ./panoramix.unittest.hpp ./panoramix.unittest.cpp)
 target_include_directories(Panoramix.UnitTest PUBLIC ${DEPENDENCY_INCLUDES}
-     ${CMAKE_CURRENT_SOURCE_DIR}/src 
-     ${CMAKE_CURRENT_SOURCE_DIR}/experimental)
+    ${CMAKE_CURRENT_SOURCE_DIR}
+	${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src 
+    ${CMAKE_CURRENT_SOURCE_DIR}/experimental)
 target_link_libraries (Panoramix.UnitTest Panoramix)
 target_link_libraries (Panoramix.UnitTest ${DEPENDENCY_LIBS})
 add_dependencies(Panoramix.UnitTest Panoramix)
 add_dependencies(Panoramix.UnitTest ${DEPENDENCY_NAMES})
-
