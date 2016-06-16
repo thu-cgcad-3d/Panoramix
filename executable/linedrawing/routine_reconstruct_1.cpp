@@ -392,6 +392,13 @@ void RoutineReconstruct1() {
       std::vector<Pixel> peaky_pixels;
       NonMaximaSuppression(vote_map.image, suppressed_votes, 5, &peaky_pixels);
 
+      //{
+      //  auto test = MakeView<float>(PanoramicCamera());
+      //  ForEachPixelWithinViewCone(
+      //      test, Vec3(1, 0, 0), DegreesToRadians(10),
+      //      [&test](Pixel px) { test.image(px) = 20.0; });
+      //}
+
       int orthogonal_pairs_num = 0;
       MakeRange(peaky_pixels)
           .forEachTwo([&vote_map, &orthogonal_pairs_num](const Pixel &p1,

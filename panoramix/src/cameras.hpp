@@ -330,9 +330,9 @@ CreateCubicFacedCameras(const PanoramicCamera &panoCam, int width = 500,
                         int height = 500, double focal = 250.0);
 
 // view class
-template <class CameraT, class ImageT = Image,
-          class = std::enable_if_t<IsCamera<CameraT>::value>>
+template <class CameraT, class ImageT = Image>
 class View {
+  static_assert(IsCamera<CameraT>::value, "CameraT MUST BE a camera!");
 public:
   ImageT image;
   CameraT camera;
