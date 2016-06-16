@@ -229,7 +229,9 @@ public:
       cv::merge(cs, im);
     }
     cv::imshow(winName, im);
-    cv::waitKey(delay);
+		if(delay != -1){
+			cv::waitKey(delay);
+		}
     return *this;
   }
 
