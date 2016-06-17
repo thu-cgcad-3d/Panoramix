@@ -4,6 +4,9 @@
 #include "qttools.hpp"
 #include "singleton.hpp"
 #include "gui_util.hpp"
+#include "segmentation.hpp"
+#include "line_detection.hpp"
+#include "geo_context.hpp"
 
 #include "pi_graph_annotation.hpp"
 #include "pi_graph_annotation_widgets.hpp"

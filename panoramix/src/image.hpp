@@ -48,7 +48,7 @@ inline Image_<To> VecCastPrivate(const Image_<To> &v, std::true_type) {
 
 template <class To, class From, int N>
 inline Image_<Vec<To, N>> VecCastPrivate(const Image_<Vec<From, N>> &im,
-                                          std::false_type) {
+                                         std::false_type) {
   Image_<Vec<To, N>> cim(im.size());
   for (auto it = im.begin(); it != im.end(); ++it) {
     cim(it.pos()) = ecast<To>(*it);
@@ -57,13 +57,12 @@ inline Image_<Vec<To, N>> VecCastPrivate(const Image_<Vec<From, N>> &im,
 }
 template <class To, int N>
 inline Image_<Vec<To, N>> VecCastPrivate(const Image_<Vec<To, N>> &v,
-                                          std::true_type) {
+                                         std::true_type) {
   return v.clone();
 }
 }
 
-template <class To, class From>
-inline Image_<To> ecast(const Image_<From> &v) {
+template <class To, class From> inline Image_<To> ecast(const Image_<From> &v) {
   return VecCastPrivate<To>(
       v, std::integral_constant<bool, std::is_same<To, From>::value>());
 }
@@ -117,7 +116,7 @@ template <class T> inline void ReverseRows(Image_<T> &im) {
 
 void ResizeToWidth(Image &im, int width);
 void ResizeToHeight(Image &im, int height);
-void ResizeToArea(Image & im, int area);
+void ResizeToArea(Image &im, int area);
 void ResizeToMakeWidthUnder(Image &im, int widthUpperBound);
 void ResizeToMakeHeightUnder(Image &im, int heightUpperBound);
 bool MayBeAPanorama(const Image &im);
@@ -142,7 +141,7 @@ template <class T> inline T Mean(const Image_<T> &im, const Imageub &mask) {
 template <class T> inline Pixel ToPixel(const Point<T, 2> &p) {
   return Pixel(static_cast<int>(p[0]), static_cast<int>(p[1]));
 }
-template <class T> inline Pixel RoundToPixel(const Point<T, 2> & p) {
+template <class T> inline Pixel RoundToPixel(const Point<T, 2> &p) {
   return Pixel(static_cast<int>(std::round(p[0])),
                static_cast<int>(std::round(p[1])));
 }
@@ -158,5 +157,10 @@ inline Pixel Ind2Sub(int ind, const Sizei &sz) {
 
 Pixel PixelFromGeoCoord(const GeoCoord &p, int longidiv, int latidiv);
 GeoCoord GeoCoordFromPixel(const Pixel &pixel, int longidiv, int latidiv);
+
+// non maxima suppression
+void NonMaximaSuppression(const Image &src, Image &dst, int sz = 50,
+                          std::vector<Pixel> *pixels = nullptr,
+                          const Imageb &mask = Imageb());
 }
 }

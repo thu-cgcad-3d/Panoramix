@@ -1,5 +1,8 @@
 #include <chrono>
 
+#include "segmentation.hpp"
+#include "geo_context.hpp"
+#include "line_detection.hpp"
 #include "panoramix.hpp"
 
 template <class T> double ElapsedInMS(const T &start) {

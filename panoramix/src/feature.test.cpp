@@ -1,5 +1,6 @@
 #include "cameras.hpp"
-#include "feature.hpp"
+#include "line_detection.hpp"
+#include "segmentation.hpp"
 #include "utility.hpp"
 #include "canvas.hpp"
 #include "gui_util.hpp"

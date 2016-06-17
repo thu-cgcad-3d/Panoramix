@@ -1,5 +1,9 @@
 #include "pch.hpp"
 
+#include "geo_context.hpp"
+#include "line_detection.hpp"
+#include "segmentation.hpp"
+
 #include "pi_graph_optimize.hpp"
 
 namespace pano {
@@ -7,7 +11,8 @@ namespace experimental {
 
 std::vector<Polygon3> CompactModel(const PICGDeterminablePart &dp,
                                    const PIConstraintGraph &cg,
-                                   const PIGraph<PanoramicCamera> &mg, double distThres) {
+                                   const PIGraph<PanoramicCamera> &mg,
+                                   double distThres) {
 
   struct Corner {
     int junction; //

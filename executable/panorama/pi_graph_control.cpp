@@ -1,7 +1,10 @@
 #include "pch.hpp"
 
-#include "utility.hpp"
 #include "clock.hpp"
+#include "geo_context.hpp"
+#include "line_detection.hpp"
+#include "segmentation.hpp"
+#include "utility.hpp"
 
 #include "pi_graph_control.hpp"
 

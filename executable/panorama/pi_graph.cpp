@@ -4,9 +4,12 @@
 #include "basic_types.hpp"
 #include "cameras.hpp"
 #include "containers.hpp"
+#include "geo_context.hpp"
 #include "image.hpp"
-#include "utility.hpp"
+#include "line_detection.hpp"
 #include "pi_graph.hpp"
+#include "segmentation.hpp"
+#include "utility.hpp"
 
 #include "canvas.hpp"
 
