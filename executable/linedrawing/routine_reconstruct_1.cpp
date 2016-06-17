@@ -122,22 +122,27 @@ struct Input {
 
 void RoutineReconstruct1() {
 
-	int gui_level = 0;
+	int gui_level = 2;
   bool rerun_preprocess = false;
   bool rerun_find_vps = false;
   bool rerun_estimate_orientations = false;
   bool rerun_reconstruction = false;
 
-  std::vector<Input> inputs = {Input::FromObjFile("plane", "cam1"),
-                               Input::FromObjFile("towers", "cam1"),
-                               Input::FromObjFile("tower", "cam1"),
-                               Input::FromObjFile("towerx", "cam1"),
-                               Input::FromObjFile("car", "cam1"),
-                               Input::FromObjFile("gate", "cam1"),
-                               Input::FromObjFile("smallgate", "cam1"),
-                               Input::FromObjFile("castle", "cam1"),
-                               Input::FromObjFile("desk", "cam1"),
-                               Input::FromImageAnnotation("house_sketch.jpg")};
+  std::vector<Input> inputs = {
+      //
+      // Input::FromObjFile("plane", "cam1"),           //
+      Input::FromObjFile("towers", "cam1"), // CAUSE:
+      // Input::FromObjFile("tower", "cam1"),           //
+      // Input::FromObjFile("towerx", "cam1"),          //
+      // Input::FromObjFile("car", "cam1"),             // CAUSE: energy
+      // function not good enough
+      // Input::FromObjFile("gate", "cam1"),            //
+      // Input::FromObjFile("smallgate", "cam1"),       //
+      // Input::FromObjFile("castle", "cam1"),          //
+      // Input::FromObjFile("desk", "cam1"),            //
+      // Input::FromImageAnnotation("house_sketch.jpg") //
+      //
+  };
 
   for (auto &input : inputs) {
     core::Println("#### input.model_name = [", input.model_name,
@@ -844,13 +849,32 @@ void RoutineReconstruct1() {
         input.saveCache(decorated_name_with_cam_param_id("best_result"),
                         best_result, best_cam_param_id);
       }
+
+      core::Println("best energy till cam param id = ", cam_param_id, " is ",
+                    best_result.weight());
+      if (gui_level >= 2) { // best result current
+        gui::SceneBuilder sb;
+        for (int e = 0; e < nedges; e++) {
+          auto &p1 = best_result.component[input.anno.edges[e].first];
+          auto &p2 = best_result.component[input.anno.edges[e].second];
+          sb.add(Line3(p1, p2));
+        }
+        sb.show(true, false,
+                gui::RenderOptions()
+                    .camera(PerspectiveCamera(
+                        input.anno.image.cols, input.anno.image.rows,
+                        cam_params[best_cam_param_id].pp,
+                        cam_params[best_cam_param_id].focal))
+                    .renderMode(gui::Lines)
+                    .fixUpDirectionInCameraMove(false)
+                    .winName("best result till cam param id = " +
+                             std::to_string(cam_param_id)));
+      }
     }
 
     auto best_cam = PerspectiveCamera(
         input.anno.image.cols, input.anno.image.rows,
         cam_params[best_cam_param_id].pp, cam_params[best_cam_param_id].focal);
-    
-		input.saveCache("final_result", best_result, best_cam);
 
     if (gui_level >= 1) { // show final result
       gui::SceneBuilder sb;
