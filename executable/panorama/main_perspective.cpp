@@ -5,6 +5,9 @@
 #include "canvas.hpp"
 #include "singleton.hpp"
 #include "gui_util.hpp"
+#include "segmentation.hpp"
+#include "geo_context.hpp"
+#include "line_detection.hpp"
 
 #include "pi_graph_annotation.hpp"
 #include "pi_graph_cg.hpp"

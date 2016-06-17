@@ -7,7 +7,6 @@
 
 #include "cameras.hpp"
 #include "containers.hpp"
-#include "feature.hpp"
 #include "manhattan.hpp"
 #include "utility.hpp"
 

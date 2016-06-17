@@ -1,7 +1,8 @@
 #pragma once
 
 #include "basic_types.hpp"
-#include "feature.hpp"
+#include "line_detection.hpp"
+#include "manhattan.hpp"
 
 namespace pano {
 namespace core {

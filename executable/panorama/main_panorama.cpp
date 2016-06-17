@@ -1,8 +1,12 @@
-#include "containers.hpp"
-
-#include "panoramix.hpp"
 #include <ctime>
 #include <tuple>
+
+#include "segmentation.hpp"
+#include "line_detection.hpp"
+#include "geo_context.hpp"
+
+#include "containers.hpp"
+#include "panoramix.hpp"
 
 template <class CameraT>
 std::vector<Imagei> GTFaceLabels(const PILayoutAnnotation &anno,
@@ -183,7 +187,7 @@ int SurfaceNormalToLabel(const Vec3 &normal, const Vec3 &up,
 int main_panorama(int argc, char **argv) {
 
   gui::Singleton::InitGui(argc, argv);
-  misc::SetCachePath("E:\\STORAGE\\CACHE\\Panoramix\\");
+  misc::SetCachePath(PANORAMIX_CACHE_DATA_DIR_STR"\\Panorama\\");
   misc::Matlab matlab;
 
   using TaskQueue =
@@ -525,7 +529,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || true;
 
-    RunPanoramix(anno, options, matlab, true, true);
+    RunPanoramix(anno, options, matlab, false, false);
     return misc::MXA();
   });
 
@@ -1016,7 +1020,7 @@ int main_panorama(int argc, char **argv) {
 
   TaskQueue QfindBestCuboids;
   QfindBestCuboids.push_back([&](const std::string &impath) -> misc::MXA {
-    misc::Clock clock = "processing" + impath;
+    misc::Clock clock = "processing " + impath;
 
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
@@ -1663,7 +1667,7 @@ int main_panorama(int argc, char **argv) {
 
   if (true) {
     std::vector<std::string> impaths;
-    gui::PickImages("F:\\PanoContext\\", &impaths);
+    gui::PickImages("F:\\CVPR2016\\", &impaths);
     for (int i = 0; i < activeQ.size(); i++) {
       auto &task = activeQ[i];
       std::cout << "[[[[[[[[[ TASK " << i << "]]]]]]]]" << std::endl;

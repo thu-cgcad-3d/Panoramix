@@ -1,8 +1,11 @@
 #include "pch.hpp"
 
 #include "containers.hpp"
-#include "utility.hpp"
 #include "factor_graph.hpp"
+#include "geo_context.hpp"
+#include "line_detection.hpp"
+#include "segmentation.hpp"
+#include "utility.hpp"
 
 #include "canvas.hpp"
 

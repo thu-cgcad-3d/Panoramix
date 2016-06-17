@@ -1,6 +1,9 @@
 #include "pch.hpp"
 
 #include "containers.hpp"
+#include "geo_context.hpp"
+#include "line_detection.hpp"
+#include "segmentation.hpp"
 
 #include "pi_graph_annotation.hpp"
 #include "pi_graph_cg.hpp"
