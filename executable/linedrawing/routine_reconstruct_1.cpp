@@ -122,7 +122,7 @@ struct Input {
 
 void RoutineReconstruct1() {
 
-	int gui_level = 2;
+	int gui_level = 1;
   bool rerun_preprocess = false;
   bool rerun_find_vps = false;
   bool rerun_estimate_orientations = false;
@@ -451,6 +451,13 @@ void RoutineReconstruct1() {
         }
         core::Println("initial vps num = ", vps.size());
 
+        // filter
+        double thres = std::max_element(vps.begin(), vps.end())->score / 2.0;
+        vps = MakeRange(vps)
+                  .filter([thres](auto &vp) { return vp.score > thres; })
+                  .evalAsStdVector();
+        core::Println("filtered vps num = ", vps.size());
+
         std::vector<int> initial_vps_ortho_count(vps.size(), 0);
         for (int i = 0; i < vps.size(); i++) {
           for (int j = i + 1; j < vps.size(); j++) {
@@ -470,6 +477,8 @@ void RoutineReconstruct1() {
                 .transform([&vps](int i) { return vps[i]; })
                 .evalAsStdVector();
         vps = std::move(filtered_vps);
+				std::sort(vps.begin(), vps.end(), std::greater<>());
+				vps.resize(std::min<int>(10, vps.size()));
 
         core::Println("num of final vps with orthogonal relations = ",
                       vps.size());
@@ -542,7 +551,7 @@ void RoutineReconstruct1() {
 
         EstimateEdgeOrientationsParam param;
         param.solve_max_iter = 10;
-        param.angle_thres_allowed_vp_line_deviation = DegreesToRadians(5);
+        param.angle_thres_allowed_vp_line_deviation = DegreesToRadians(2);
         merged_line2vp = EstimateEdgeOrientations(
             merged_line3s,
             MakeRange(vps)
