@@ -215,6 +215,35 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
                     vertVPId, segs, nsegs);
   }
 
+  //if (showGUI) {
+  //  auto ctable = gui::CreateGreyColorTableWithSize(nsegs);
+  //  ctable.randomize();
+  //  gui::ColorTable rgb = gui::RGBGreys;
+  //  rgb.exceptionalColor() = gui::Black;
+  //  auto canvas = gui::MakeCanvas(view.image).alpha(0.9);
+  //  for (auto &l : line3s) {
+  //    static const double sampleAngle = M_PI / 100.0;
+  //    auto &line = l.component;
+  //    double spanAngle = AngleBetweenDirected(line.first, line.second);
+  //    std::vector<Point2> ps;
+  //    ps.reserve(spanAngle / sampleAngle);
+  //    for (double angle = 0.0; angle <= spanAngle; angle += sampleAngle) {
+  //      Vec3 dir = RotateDirection(line.first, line.second, angle);
+  //      ps.push_back(view.camera.toScreen(dir));
+  //    }
+  //    for (int i = 1; i < ps.size(); i++) {
+  //      auto &p1 = ps[i - 1];
+  //      auto &p2 = ps[i];
+  //      if (Distance(p1, p2) >= view.image.cols / 2) {
+  //        continue;
+  //      }
+  //      canvas.thickness(2);
+  //      canvas.colorTable(rgb).add(gui::ClassifyAs(Line2(p1, p2), -1));
+  //    }
+  //  }
+  //  canvas.show();
+  //}
+
   // gc !!!!
   std::vector<PerspectiveCamera> hcams;
   std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
@@ -258,10 +287,13 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
     misc::SaveCache(anno.impath, gcmergedFileName, gc);
   }
 
-  if (0) {
+  if (true) {
     std::vector<Imaged> gcChannels;
     cv::split(gc, gcChannels);
-    gui::AsCanvas(ConvertToImage3d(gc)).show(1, "gc");
+    auto gc3d = ConvertToImage3d(gc);
+    //cv::cvtColor(gc3d, gc3d, CV_RGB2BGR);
+    cv::imwrite("C:\\Users\\YANGHAO\\Pictures\\55_gc3d.png", gc3d * 255);
+    gui::AsCanvas(gc3d).show(1, "gc");
   }
 
   // build pigraph!

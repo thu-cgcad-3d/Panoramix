@@ -158,7 +158,7 @@ Image6d ComputeIndoorGeometricContextHedau(misc::Matlab &matlab, const Image &im
 
 Image3d ConvertToImage3d(const Image5d &gc) {
   Image3d vv(gc.size());
-  std::vector<Vec3> colors = {Vec3(1, 0, 0), Vec3(0, 1, 0), Vec3(0, 0, 1),
+  std::vector<Vec3> colors = {Vec3(0, 0, 1), Vec3(0, 1, 0), Vec3(1, 0, 0),
                               normalize(Vec3(1, 1, 1))};
   for (auto it = gc.begin(); it != gc.end(); ++it) {
     const Vec5 &v = *it;

@@ -529,7 +529,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || true;
 
-    RunPanoramix(anno, options, matlab, false, false);
+    RunPanoramix(anno, options, matlab, true, false);
     return misc::MXA();
   });
 

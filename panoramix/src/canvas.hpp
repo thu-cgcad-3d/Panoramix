@@ -165,6 +165,12 @@ public:
     return *this;
   }
 
+  // colored
+  template <class T> inline Canvas &add(const Colored<T> & t) {
+    paintingOptions().color = t.color;
+    return add(t.component);
+  }
+
   // enabled thing
   template <class T, class S> inline Canvas &add(const Scored<T, S> &thing) {
     if (thing.score > 0) {
