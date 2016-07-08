@@ -64,6 +64,9 @@ public:
     ar(anchor, direction);
   }
 
+  template <class B = void> auto coeffs() const -> decltype(GetCoeffs(*this)) {
+    return GetCoeffs(*this);
+  }
 public:
   PointT anchor;
   DirT direction;

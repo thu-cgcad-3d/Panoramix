@@ -4,7 +4,12 @@ namespace pano {
 namespace core {
 
 // sphere
-template <class T, int N> struct Sphere {
+template <class T, int N> class Sphere {
+public:
+  Sphere() {}
+  Sphere(const Point<T, N> &c, const T &r) : center(c), radius(r) {}
+
+public:
   Point<T, N> center;
   T radius;
 };
@@ -44,13 +49,10 @@ Vec<T, N> AllMaxOf(const Vec<T, N> &v1, const Vec<T, N> &v2) {
 }
 
 // box
-template <class T, int N> struct Box {
+template <class T, int N> class Box {
+public:
   using Type = T;
   static const int Dimension = N;
-
-  Point<T, N> minCorner, maxCorner;
-  bool isNull;
-
   Box() : isNull(true) {}
   Box(const Point<T, N> &c1, const Point<T, N> &c2)
       : minCorner(AllMinOf(c1, c2)), maxCorner(AllMaxOf(c1, c2)),
@@ -123,6 +125,10 @@ template <class T, int N> struct Box {
     maxCorner = AllMaxOf(maxCorner, b.maxCorner);
     return *this;
   }
+
+public:
+  Point<T, N> minCorner, maxCorner;
+  bool isNull;
 };
 template <class T, int N>
 bool operator==(const Box<T, N> &a, const Box<T, N> &b) {

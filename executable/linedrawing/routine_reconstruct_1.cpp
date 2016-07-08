@@ -122,7 +122,7 @@ struct Input {
 
 void RoutineReconstruct1() {
 
-	int gui_level = 0;
+	int gui_level = 2;
   bool rerun_preprocess = true;
   bool rerun_find_vps = rerun_preprocess || false;
   bool rerun_estimate_orientations = rerun_find_vps || false;
@@ -131,10 +131,10 @@ void RoutineReconstruct1() {
   std::vector<Input> inputs = {
       // Input::FromObjFile("hex", "cam1"), //
       // Input::FromObjFile("triangle", "cam1"), //
-      Input::FromObjFile("twotriangles", "cam1"), //
+      // Input::FromObjFile("twotriangles", "cam1"), //
       // Input::FromObjFile("stool", "cam1"), //
       // Input::FromObjFile("plane", "cam1"),           //
-      // Input::FromObjFile("towers", "cam1"), // skewed a bit
+      Input::FromObjFile("towers", "cam1"), // skewed a bit
       // Input::FromObjFile("tower", "cam1"),           //
       // Input::FromObjFile("towerx", "cam1"),          //
       // Input::FromObjFile("car", "cam1"),             //
@@ -453,12 +453,12 @@ void RoutineReconstruct1() {
         }
         core::Println("initial vps num = ", vps.size());
 
-        // filter
-        double thres = std::max_element(vps.begin(), vps.end())->score / 2.0;
-        vps = MakeRange(vps)
-                  .filter([thres](auto &vp) { return vp.score > thres; })
-                  .evalAsStdVector();
-        core::Println("filtered vps num = ", vps.size());
+        //// filter
+        //double thres = std::max_element(vps.begin(), vps.end())->score / 2.0;
+        //vps = MakeRange(vps)
+        //          .filter([thres](auto &vp) { return vp.score > thres; })
+        //          .evalAsStdVector();
+        //core::Println("filtered vps num = ", vps.size());
 
         std::vector<int> initial_vps_ortho_count(vps.size(), 0);
         for (int i = 0; i < vps.size(); i++) {
@@ -479,8 +479,8 @@ void RoutineReconstruct1() {
                 .transform([&vps](int i) { return vps[i]; })
                 .evalAsStdVector();
         vps = std::move(filtered_vps);
-				std::sort(vps.begin(), vps.end(), std::greater<>());
-				vps.resize(std::min<int>(10, vps.size()));
+				/*std::sort(vps.begin(), vps.end(), std::greater<>());
+				vps.resize(std::min<int>(10, vps.size()));*/
 
         core::Println("num of final vps with orthogonal relations = ",
                       vps.size());
