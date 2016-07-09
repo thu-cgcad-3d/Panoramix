@@ -122,25 +122,27 @@ struct Input {
 
 void RoutineReconstruct1() {
 
-	int gui_level = 1;
-  bool rerun_preprocess = false;
-  bool rerun_find_vps = false;
-  bool rerun_estimate_orientations = false;
-  bool rerun_reconstruction = false;
+	int gui_level = 0;
+  bool rerun_preprocess = true;
+  bool rerun_find_vps = rerun_preprocess || false;
+  bool rerun_estimate_orientations = rerun_find_vps || false;
+  bool rerun_reconstruction = rerun_estimate_orientations || false;
 
   std::vector<Input> inputs = {
-      //
+      // Input::FromObjFile("hex", "cam1"), //
+      // Input::FromObjFile("triangle", "cam1"), //
+      Input::FromObjFile("twotriangles", "cam1"), //
+      // Input::FromObjFile("stool", "cam1"), //
       // Input::FromObjFile("plane", "cam1"),           //
-      Input::FromObjFile("towers", "cam1"), // CAUSE:
+      // Input::FromObjFile("towers", "cam1"), // skewed a bit
       // Input::FromObjFile("tower", "cam1"),           //
       // Input::FromObjFile("towerx", "cam1"),          //
-      // Input::FromObjFile("car", "cam1"),             // CAUSE: energy
-      // function not good enough
-      // Input::FromObjFile("gate", "cam1"),            //
+      // Input::FromObjFile("car", "cam1"),             //
+      // Input::FromObjFile("gate", "cam1"),            // skewed a bit
       // Input::FromObjFile("smallgate", "cam1"),       //
       // Input::FromObjFile("castle", "cam1"),          //
       // Input::FromObjFile("desk", "cam1"),            //
-      // Input::FromImageAnnotation("house_sketch.jpg") //
+      // Input::FromImageAnnotation("house_sketch.jpg") // <-
       //
   };
 
@@ -215,7 +217,7 @@ void RoutineReconstruct1() {
               }
             });
       }
-      // the we compute face overlapnesss
+      // then we compute face overlapnesss
       for (int edge = 0; edge < nedges; edge++) {
         Line2 line(input.anno.points[input.anno.edges[edge].first],
                    input.anno.points[input.anno.edges[edge].second]);

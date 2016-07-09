@@ -361,6 +361,7 @@ void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,
 
   Image3ub reversedIm = anno.rectifiedImage.clone();
   ReverseRows(reversedIm);
+  cv::cvtColor(reversedIm, reversedIm, CV_BGR2RGB);
   gui::ResourceStore::set("texture", reversedIm);
   for (int face = 0; face < anno.nfaces(); face++) {
     auto &polygon = face2polygon[face];
@@ -391,7 +392,7 @@ void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,
                .cullBackFace(false)
                .bwColor(0.1)
                .bwTexColor(0.9)
-               .camera(PerspectiveCamera(500, 500, Point2(250, 250), 300,
+               .camera(PerspectiveCamera(800, 800, Point2(250, 250), 500,
                                          Point3(1, 1, 1), Point3(0, 0, 0))));
 }
 }

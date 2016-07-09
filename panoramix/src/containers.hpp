@@ -118,14 +118,6 @@ private:
   size_t _nelements;
 };
 
-// SphericalImage
-template <class T> class SphericalImage {
-public:
-
-private:
-
-};
-
 
 // RTreeSet
 template <class T, class BoundingBoxFunctorT = DefaultBoundingBoxFunctor>
