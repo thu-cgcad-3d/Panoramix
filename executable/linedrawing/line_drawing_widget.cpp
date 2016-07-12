@@ -1,7 +1,11 @@
 #include "pch.hpp"
 
+#include "cache.hpp"
+#include "gui_util.hpp"
+#include "iterators.hpp"
 #include "line_drawing_widget.hpp"
 #include "qttools.hpp"
+#include "utility.hpp"
 
 namespace pano {
 namespace experimental {
@@ -32,7 +36,7 @@ void LineDrawingWidget::paintEvent(QPaintEvent *e) {
   // draw points
   painter.setBrush(Qt::black);
   if (show_points_) {
-    for (auto &p : anno.points) {
+    for (auto &p : projection.line_drawing.points) {
       painter.drawEllipse(gui::MakeQPointF(p), kPointRadius, kPointRadius);
     }
   }
@@ -40,24 +44,26 @@ void LineDrawingWidget::paintEvent(QPaintEvent *e) {
   // draw edges
   painter.setPen(QPen(Qt::black, kLineWidth, Qt::SolidLine));
   if (show_edges_) {
-    for (auto & e : anno.edges) {
-      painter.drawLine(gui::MakeQPointF(anno.points[e.first]),
-                       gui::MakeQPointF(anno.points[e.second]));
+    for (auto &e : projection.line_drawing.topo.edges) {
+      painter.drawLine(
+          gui::MakeQPointF(projection.line_drawing.points[e.first]),
+          gui::MakeQPointF(projection.line_drawing.points[e.second]));
     }
   }
 
   // draw coplanar points
   painter.setPen(Qt::NoPen);
   if (show_coplanarities_) {
-    for (int k = 0; k < anno.coplanar_points.size(); k++) {
-      auto &ps = anno.coplanar_points[k];
+    for (int k = 0; k < projection.line_drawing.topo.coplanar_points.size();
+         k++) {
+      auto &ps = projection.line_drawing.topo.coplanar_points[k];
       assert(ps.size() >= 3);
       auto color = gui::MakeQColor(kColorTable[k % kColorTable.size()]);
       color.setAlpha(100);
       painter.setBrush(color);
       QPolygonF polygon(ps.size());
       for (int i = 0; i < ps.size(); i++) {
-        polygon[i] = gui::MakeQPointF(anno.points[ps[i]]);
+        polygon[i] = gui::MakeQPointF(projection.line_drawing.points[ps[i]]);
       }
       painter.drawPolygon(polygon);
     }
@@ -67,13 +73,13 @@ void LineDrawingWidget::paintEvent(QPaintEvent *e) {
   painter.setBrush(Qt::NoBrush);
   if (show_colinearities_) {
     painter.setPen(QPen(Qt::blue, 2.0, Qt::DashLine));
-    for (auto &ps : anno.colinear_points) {
+    for (auto &ps : projection.line_drawing.topo.colinear_points) {
       assert(ps.size() >= 3);
       for (int i = 0; i < ps.size(); i++) {
         int p1 = ps[i];
         int p2 = ps[(i + 1) % ps.size()];
-        painter.drawLine(gui::MakeQPointF(anno.points[p1]),
-                         gui::MakeQPointF(anno.points[p2]));
+        painter.drawLine(gui::MakeQPointF(projection.line_drawing.points[p1]),
+                         gui::MakeQPointF(projection.line_drawing.points[p2]));
       }
     }
   }
@@ -82,14 +88,15 @@ void LineDrawingWidget::paintEvent(QPaintEvent *e) {
   painter.setBrush(Qt::NoBrush);
   for (int p : selected_points_) {
     painter.setPen(QPen(Qt::red, 3.0, Qt::DashLine));
-    painter.drawEllipse(gui::MakeQPointF(anno.points[p]), kPointRadius * 2,
-                        kPointRadius * 2);
+    painter.drawEllipse(gui::MakeQPointF(projection.line_drawing.points[p]),
+                        kPointRadius * 2, kPointRadius * 2);
   }
   // draw selected edges
   for (auto &e : selected_edges_) {
     painter.setPen(QPen(Qt::red, kLineWidth + 2, Qt::SolidLine));
-    painter.drawLine(gui::MakeQPointF(anno.points[e.first]),
-                     gui::MakeQPointF(anno.points[e.second]));
+    painter.drawLine(
+        gui::MakeQPointF(projection.line_drawing.points[e.first]),
+        gui::MakeQPointF(projection.line_drawing.points[e.second]));
   }
 }
 
@@ -135,8 +142,9 @@ void LineDrawingWidget::mousePressEvent(QMouseEvent *e) {
     } else if (mode_ == AddMode) {
       if (last_touched_point_ == -1 && last_touched_edge_.first == -1) {
         // add a point
-        anno.points.push_back(gui::MakeCorePoint(e->pos()));
-        selected_points_ = {static_cast<int>(anno.points.size()) - 1};
+        projection.line_drawing.points.push_back(gui::MakeCorePoint(e->pos()));
+        selected_points_ = {
+            static_cast<int>(projection.line_drawing.points.size()) - 1};
       }
     }
   }
@@ -148,7 +156,8 @@ void LineDrawingWidget::mouseMoveEvent(QMouseEvent *e) {
   if (e->buttons() & Qt::LeftButton) {
     if (mode_ == SelectOrMoveMode) {
       for (int p : selected_points_) {
-        anno.points[p] += gui::MakeCoreVec(e->pos() - last_point_);
+        projection.line_drawing.points[p] +=
+            gui::MakeCoreVec(e->pos() - last_point_);
       }
     }
   }
@@ -162,7 +171,7 @@ void LineDrawingWidget::wheelEvent(QWheelEvent *e) {}
 
 void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
   if (e->key() == Qt::Key_C) { // switch edit mode
-    core::Println("C pressed");
+    Println("C pressed");
     if (mode_ == AddMode) {
       mode_ = SelectOrMoveMode;
       setCursor(Qt::PointingHandCursor);
@@ -178,9 +187,10 @@ void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
     selected_edges_.clear();
   } else if (e->key() == Qt::Key_A) { // select all/none points
     core::Println("A pressed");
-    if (selected_points_.size() < anno.points.size()) {
+    if (selected_points_.size() < projection.line_drawing.points.size()) {
       selected_points_ = std::vector<int>(
-          MakeIotaIterator<int>(0), MakeIotaIterator<int>(anno.points.size()));
+          MakeIotaIterator<int>(0),
+          MakeIotaIterator<int>(projection.line_drawing.points.size()));
     } else {
       selected_points_.clear();
     }
@@ -189,8 +199,9 @@ void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
     if (selected_points_.size() >= 2) {
       for (int i = 0; i + 1 < selected_points_.size(); i++) {
         auto e = MakeOrderedPair(selected_points_[i], selected_points_[i + 1]);
-        if (e.first != e.second && !Contains(anno.edges, e)) {
-          anno.edges.push_back(e);
+        if (e.first != e.second &&
+            !Contains(projection.line_drawing.topo.edges, e)) {
+          projection.line_drawing.topo.edges.push_back(e);
         } else {
           core::Println("two corners of this edge are same!");
         }
@@ -202,7 +213,8 @@ void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
   } else if (e->key() == Qt::Key_F) { // make coplanar constraints (faces)
     core::Println("F pressed");
     if (selected_points_.size() >= 3) {
-      anno.coplanar_points.push_back(std::move(selected_points_));
+      projection.line_drawing.topo.coplanar_points.push_back(
+          std::move(selected_points_));
       selected_points_.clear();
     } else {
       core::Println("too few points selected");
@@ -210,7 +222,8 @@ void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
   } else if (e->key() == Qt::Key_L) { // make colinear constraints
     core::Println("L pressed");
     if (selected_points_.size() >= 3) {
-      anno.colinear_points.push_back(std::move(selected_points_));
+      projection.line_drawing.topo.colinear_points.push_back(
+          std::move(selected_points_));
       selected_points_.clear();
     } else {
       core::Println("too few points selected");
@@ -220,9 +233,11 @@ void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
     core::Println("X pressed");
     if (selected_edges_.size() == 2) {
       auto it = selected_edges_.begin();
-      Line2 line1(anno.points[it->first], anno.points[it->second]);
+      Line2 line1(projection.line_drawing.points[it->first],
+                  projection.line_drawing.points[it->second]);
       ++it;
-      Line2 line2(anno.points[it->first], anno.points[it->second]);
+      Line2 line2(projection.line_drawing.points[it->first],
+                  projection.line_drawing.points[it->second]);
       Point2 inter =
           DistanceBetweenTwoLines(line1.ray(), line2.ray()).second.first;
       if (line1.first == line2.first || line1.first == line2.second ||
@@ -235,12 +250,14 @@ void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
                       "edges you selected should intersect, or is it necessary "
                       "to create such an intersection?");
       } else {
-        anno.points.push_back(inter);
-        int inter_id = anno.points.size() - 1;
+        projection.line_drawing.points.push_back(inter);
+        int inter_id = projection.line_drawing.points.size() - 1;
         auto it = selected_edges_.begin();
-        anno.colinear_points.push_back({it->first, it->second, inter_id});
+        projection.line_drawing.topo.colinear_points.push_back(
+            {it->first, it->second, inter_id});
         ++it;
-        anno.colinear_points.push_back({it->first, it->second, inter_id});
+        projection.line_drawing.topo.colinear_points.push_back(
+            {it->first, it->second, inter_id});
         selected_edges_.clear();
       }
     } else {
@@ -249,13 +266,13 @@ void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
   } else if (e->key() == Qt::Key_Delete) { // delete selected points
     core::Println("Delete pressed");
     std::vector<Point2> new_points;
-    new_points.reserve(anno.points.size());
-    for (int i = 0; i < anno.points.size(); i++) {
+    new_points.reserve(projection.line_drawing.points.size());
+    for (int i = 0; i < projection.line_drawing.points.size(); i++) {
       if (!Contains(selected_points_, i)) {
-        new_points.push_back(anno.points[i]);
+        new_points.push_back(projection.line_drawing.points[i]);
       }
     }
-    anno.points = std::move(new_points);
+    projection.line_drawing.points = std::move(new_points);
     selected_points_.clear();
     selected_edges_.clear();
   } else if (e->key() == Qt::Key_S && (e->modifiers() & Qt::ControlModifier) &&
@@ -263,7 +280,7 @@ void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
     QString filename = QFileDialog::getSaveFileName(
         this, tr("Save current line drawing"), QString(), tr("*.cereal"));
     if (!filename.isEmpty()) {
-      SaveToDisk(filename.toStdString(), anno);
+      SaveToDisk(filename.toStdString(), projection);
     }
   } else if (e->key() == Qt::Key_0) {
     show_edges_ = !show_edges_;
@@ -280,8 +297,9 @@ void LineDrawingWidget::keyPressEvent(QKeyEvent *e) {
 int LineDrawingWidget::selectPoint(const QPointF &p, double dist_thres) const {
   double min_dist = dist_thres;
   int selected = -1;
-  for (int i = 0; i < anno.points.size(); i++) {
-    double dist = Distance(gui::MakeCorePoint(p), anno.points[i]);
+  for (int i = 0; i < projection.line_drawing.points.size(); i++) {
+    double dist =
+        Distance(gui::MakeCorePoint(p), projection.line_drawing.points[i]);
     if (dist < min_dist) {
       selected = i;
       min_dist = dist;
@@ -294,13 +312,14 @@ std::pair<int, int> LineDrawingWidget::selectEdge(const QPointF &p,
                                                   double dist_thres) const {
   std::pair<int, int> selected{-1, -1};
   double min_dist = dist_thres;
-  for (auto &f : anno.coplanar_points) {
+  for (auto &f : projection.line_drawing.topo.coplanar_points) {
     assert(f.size() >= 3);
     for (int i = 0; i < f.size(); i++) {
       int p1 = f[i];
       int p2 = f[(i + 1) % f.size()];
       double dist = Distance(gui::MakeCorePoint(p),
-                             Line2(anno.points[p1], anno.points[p2]));
+                             Line2(projection.line_drawing.points[p1],
+                                   projection.line_drawing.points[p2]));
       if (dist < min_dist) {
         selected = std::make_pair(p1, p2);
         min_dist = dist;
@@ -309,6 +328,5 @@ std::pair<int, int> LineDrawingWidget::selectEdge(const QPointF &p,
   }
   return MakeOrderedPair(selected);
 }
-
 }
 }

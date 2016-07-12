@@ -1,5 +1,6 @@
 #include <QOpenGLFunctions_3_3_Core>
 
+#include "pch.hpp"
 #include "visualize.hpp"
 
 namespace pano {

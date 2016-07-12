@@ -319,7 +319,7 @@ void Discretize(TriMesh &mesh, const core::Sphere3 &s,
   }
 }
 
-void Discretize(TriMesh &mesh, const SpatialProjectedPolygon &spp,
+void Discretize(TriMesh &mesh, const SingleViewPolygon3 &spp,
                 const DiscretizeOptions &o) {
   std::vector<Vec3> cs(spp.corners.size());
   for (int i = 0; i < spp.corners.size(); i++) {

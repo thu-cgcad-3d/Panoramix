@@ -35,7 +35,7 @@ struct PerspectiveOptions {
 int main_perspective(int argc, char **argv) {
 
   gui::Singleton::InitGui(argc, argv);
-  misc::SetCachePath("D:\\Panoramix\\Perspective\\");
+  misc::SetCachePath("D:\\PanoramaReconstruction\\Perspective\\");
   misc::Matlab matlab;
 
   PerspectiveOptions options;
@@ -50,7 +50,7 @@ int main_perspective(int argc, char **argv) {
   options.useWallPrior = true;
 
   std::vector<std::string> dirs;
-  auto images = gui::PickImages("F:\\DataSets\\CVPR2016EXT", &dirs);
+  auto images = gui::FileDialog::PickImages("F:\\DataSets\\CVPR2016EXT", &dirs);
 
   for (int i = 0; i < dirs.size(); i++) {
     Image3ub original = images[i];

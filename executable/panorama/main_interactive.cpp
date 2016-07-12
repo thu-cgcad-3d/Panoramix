@@ -119,9 +119,9 @@ void DrawOn(const Image &im, std::vector<Classified<Line2>> &lines) {
 
 int main_interactive(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
-  misc::SetCachePath("D:\\Panoramix\\Interactive\\");
+  misc::SetCachePath("D:\\PanoramaReconstruction\\Interactive\\");
   std::string path;
-  auto im = gui::PickAnImage(PANORAMIX_TEST_DATA_DIR_STR "\\house\\", &path);
+  auto im = gui::FileDialog::PickAnImage(PANORAMIX_TEST_DATA_DIR_STR "\\house\\", &path);
   if (im.empty()) {
     return 0;
   }
@@ -137,9 +137,9 @@ int main_interactive(int argc, char **argv) {
 
 int DISABLED_main(int argc, char **argv) {
   gui::Singleton::InitGui(argc, argv);
-  misc::SetCachePath("D:\\Panoramix\\Interactive\\");
+  misc::SetCachePath("D:\\PanoramaReconstruction\\Interactive\\");
   std::string path;
-  gui::PickAnImage(PANORAMIX_TEST_DATA_DIR_STR "\\house\\", &path);
+  gui::FileDialog::PickAnImage(PANORAMIX_TEST_DATA_DIR_STR "\\house\\", &path);
   if (path.empty()) {
     return 0;
   }

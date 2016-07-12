@@ -3,88 +3,14 @@
 #include "basic_types.hpp"
 #include "cameras.hpp"
 #include "iterators.hpp"
+#include "line_drawing.hpp"
+#include "line_drawing_widget.hpp"
 #include "utility.hpp"
 
 namespace pano {
 namespace experimental {
 
 using namespace ::pano::core;
-
-template <class T, class FunT>
-void ForEachPixelWithinViewCone(const View<PanoramicCamera, Image_<T>> &view,
-                                const Vec3 &center, double angle_radius,
-                                FunT fun) {
-  double R = view.camera.focal(); // the radius of sphere
-  double alpha = angle_radius;
-  double phi = AngleBetweenDirected(
-      center, view.camera.up()); // angle from center to up direction
-
-  // line equation of the 2d projection of the circle plane is
-  // sin(\phi) x + cos(\phi) y = R cos(\alpha)
-  // -> x = (R cos(\alpha) - cos(\phi) y) / sin(\phi)
-
-  // half span angle
-  // \beta = acos(x / \sqrt(R^2 - y^2))
-
-  Point2 pcenter = view.camera.toScreen(center);
-  for (int row = 0; row < view.image.rows; row++) {
-    double vertical_angle = (row / double(view.image.rows) - 0.5) * M_PI;
-    double y = R * sin(vertical_angle);
-    double x = (R * cos(alpha) - cos(phi) * y) / sin(phi);
-
-    double circle_radius_this_row = cos(vertical_angle) * R;
-    assert(circle_radius_this_row >= 0);
-    double beta = 0.0;
-    if (x >= circle_radius_this_row) {
-      beta = 0.0;
-    } else if (x <= -circle_radius_this_row) {
-      beta = M_PI;
-    } else {
-      beta = acos(x / circle_radius_this_row);
-    }
-    if (beta == 0) {
-      continue;
-    }
-
-    double half_span_cols = beta * R;
-    for (int col = static_cast<int>(pcenter[0] - half_span_cols);
-         col <= static_cast<int>(pcenter[0] + half_span_cols); col++) {
-      fun(Pixel(WrapBetween(col, 0, view.image.cols), row));
-    }
-  }
-}
-
-// HalfCubeMap
-struct CubeMapLocation {
-  int panel_id;
-  Pixel pixel;
-	CubeMapLocation(){}
-	CubeMapLocation(int pid, const Pixel & p, size_t sz);
-	Vec3 direction(size_t sz) const;
-
-  static CubeMapLocation FromDirection(size_t sz, const Vec3 &dir);
-};
-template <class T> struct HalfCubeMap {
-  Image_<T> panels[3];
-  explicit HalfCubeMap(size_t sz)
-      : panels{Image_<T>::zeros(sz, sz), Image_<T>::zeros(sz, sz),
-               Image_<T>::zeros(sz, sz)} {}
-  const T &at(const CubeMapLocation &loc) const {
-    return panels[loc.panel_id](loc.pixel);
-  }
-  const T &operator()(const CubeMapLocation &loc) const { return at(loc); }
-  T &operator()(const CubeMapLocation &loc) {
-    return panels[loc.panel_id](loc.pixel);
-  }
-  const T &at(const Vec3 &dir) const {
-    return at(CubeMapLocation::FromDirection(panels[0].cols, dir));
-  }
-  const T &operator()(const Vec3 &dir) const { return at(dir); }
-  T &operator()(const Vec3 &dir) {
-    return (*this)(CubeMapLocation::FromDirection(panels[0].cols, dir));
-  }
-};
-
 
 // DecomposeFaces
 // assume all internal faces are already collected in face2verts
@@ -130,7 +56,7 @@ struct CollectVanishingPointsParam { // best params so far
   int max_iters = std::numeric_limits<int>::max();
   bool use_mean_shift_merge_phase1 = false;
 };
-//std::vector<Point2> CollectVanishingPoints(
+// std::vector<Point2> CollectVanishingPoints(
 //    const std::vector<Line2> &lines, const CameraParam &cam_param,
 //    const CollectVanishingPointsParam &param = CollectVanishingPointsParam());
 std::vector<Vec3> CollectVanishingPoints(
@@ -144,8 +70,8 @@ MergeColinearLines(const std::vector<Line2> &lines,
                    std::vector<int> *oldline2newline = nullptr);
 
 //// EstimateParallelism
-//std::map<std::pair<int, int>, double>
-//EstimateParallelism(const std::vector<Line2> &lines,
+// std::map<std::pair<int, int>, double>
+// EstimateParallelism(const std::vector<Line2> &lines,
 //                    const CameraParam &cam_param, double angle_thres);
 
 // EstimateEdgeOrientations
@@ -153,23 +79,23 @@ struct EstimateEdgeOrientationsParam { // best params so far
   double angle_thres_allowed_vp_line_deviation = DegreesToRadians(10);
   double angle_thres_judging_colinearility = DegreesToRadians(1);
   double angle_thres_distinguishing_vps = DegreesToRadians(2);
-	double angle_thres_juding_orthogonality = DegreesToRadians(10);
+  double angle_thres_juding_orthogonality = DegreesToRadians(10);
   double angle_thres_juding_coplanarity = DegreesToRadians(10);
   double coeff_vp_line_fitness = 50.0;
   double coeff_noncolinear_adj_line_exlusiveness = 10.0;
-	double coeff_line_pair_orthogonality = 20.0;
+  double coeff_line_pair_orthogonality = 20.0;
   double coeff_line_triplet_coplanar = 30.0;
   int vp_min_degree = 3;
   int solve_max_iter = 5;
 };
-//std::vector<int> EstimateEdgeOrientations(
+// std::vector<int> EstimateEdgeOrientations(
 //    const std::vector<Line2> &lines, const std::vector<Point2> &vps,
 //    const std::vector<std::vector<int>> &face2ordered_lines, double focal,
 //    const Point2 &pp, const EstimateEdgeOrientationsParam &param =
 //                          EstimateEdgeOrientationsParam());
 std::vector<int> EstimateEdgeOrientations(
     const std::vector<Line3> &lines, const std::vector<Vec3> &vps,
-	  const std::vector<std::pair<int, int>> & adjacent_line_pairs,
+    const std::vector<std::pair<int, int>> &adjacent_line_pairs,
     const std::vector<std::vector<int>> &coplanar_ordered_lines,
     const EstimateEdgeOrientationsParam &param =
         EstimateEdgeOrientationsParam());
@@ -181,8 +107,8 @@ struct PlaneConstraint {
   template <class ArchiverT> void serialize(ArchiverT &ar) { ar(verts, P); }
 };
 DenseMatd MakePlaneMatrix();
-DenseMatd MakePlaneMatrixAlongDirection(const Vec3 & dir);
-DenseMatd MakePlaneMatrixTowardDirection(const Vec3 & dir);
+DenseMatd MakePlaneMatrixAlongDirection(const Vec3 &dir);
+DenseMatd MakePlaneMatrixTowardDirection(const Vec3 &dir);
 
 // InferenceFunctors
 struct Inferencer {
@@ -198,7 +124,6 @@ std::unique_ptr<Inferencer>
 GenerateInferenceFunctors(const std::vector<PlaneConstraint> &constraints,
                           const std::vector<Vec3> &vert2dir, int root_vert = 0,
                           std::vector<int> *fundamental_verts = nullptr);
-
 
 // The Energy Terms
 std::vector<double> AnglesBetweenAdjacentEdges(
@@ -218,47 +143,6 @@ std::vector<double> AnglesBetweenAdjacentFaces(
     const DenseMatd &variables, const Inferencer &infer,
     const std::map<std::pair<int, int>, bool> &faces_overlap,
     std::function<bool(int face)> face_selected = nullptr);
-
-template <class IterT> auto MeanSquaredDeviation(IterT begin, IterT end) {
-  using T = typename std::iterator_traits<IterT>::value_type;
-  auto n = std::distance(begin, end);
-  T mean = std::accumulate(begin, end, T(0)) / double(n);
-  T msd = 0;
-  while (begin != end) {
-    msd += Square(*begin - mean);
-    ++ begin;
-  }
-  return msd / double(n);
-}
-
-template <class ContT> auto MeanSquaredDeviationOfContainer(const ContT &cont) {
-  return MeanSquaredDeviation(std::begin(cont), std::end(cont));
-}
-
-template <class IterT, class T>
-auto MeanSquaredDeviation(IterT begin, IterT end,
-                          std::initializer_list<T> vals) {
-  auto n = std::distance(begin, end);
-  T msd = 0;
-  while (begin != end) {
-    auto min_dev = std::numeric_limits<T>::max();
-    for (auto val : vals) {
-      auto dev = Square(*begin - val);
-      if (dev < min_dev) {
-        min_dev = dev;
-      }
-    }
-    msd += min_dev;
-    ++ begin;
-  }
-  return msd / double(n);
-}
-
-template <class ContT, class T>
-auto MeanSquaredDeviationOfContainer(const ContT &cont,
-                                     std::initializer_list<T> vals) {
-  return MeanSquaredDeviation(std::begin(cont), std::end(cont), vals);
-}
 
 // PerformReconstruction
 struct PerformReconstructionParam {

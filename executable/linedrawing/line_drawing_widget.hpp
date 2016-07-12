@@ -9,14 +9,12 @@
 namespace pano {
 namespace experimental {
 
-struct LineDrawingAnnotation {
+// LineDrawingImageProjection
+struct LineDrawingImageProjection {
   Image3ub image;
-  std::vector<Point2> points;
-  std::vector<std::pair<int, int>> edges;
-  std::vector<std::vector<int>> coplanar_points;
-  std::vector<std::vector<int>> colinear_points;
+  LineDrawing<Point2> line_drawing;
   template <class ArchiveT> void serialize(ArchiveT &ar) {
-    ar(image, points, edges, coplanar_points, colinear_points);
+    ar(image, line_drawing);
   }
 };
 
@@ -34,13 +32,13 @@ protected:
   virtual void keyPressEvent(QKeyEvent *e) override;
 
 private:
-  int selectPoint(const QPointF & p, double dist_thres = 0.1) const;
+  int selectPoint(const QPointF &p, double dist_thres = 0.1) const;
   std::pair<int, int> selectEdge(const QPointF &p,
                                  double dist_thres = 0.1) const;
 
 public:
   QImage image;
-  LineDrawingAnnotation anno;
+  LineDrawingImageProjection projection;
 
 private:
   QPointF last_point_;

@@ -3,25 +3,13 @@
 #include "cameras.hpp"
 
 #include "color.hpp"
+#include "gui_util.hpp"
 #include "qttools.hpp"
 #include "scene.hpp"
 #include "shader.hpp"
 #include "singleton.hpp"
-#include "gui_util.hpp"
 
 namespace pano {
-namespace core {
-Box3 BoundingBox(const gui::SpatialProjectedPolygon &spp) {
-  std::vector<Vec3> cs(spp.corners.size());
-  for (int i = 0; i < spp.corners.size(); i++) {
-    cs[i] = Intersection(
-        Ray3(spp.projectionCenter, spp.corners[i] - spp.projectionCenter),
-        spp.plane);
-  }
-  return BoundingBoxOfContainer(cs);
-}
-}
-
 namespace gui {
 
 using namespace core;
@@ -51,7 +39,7 @@ int SelectFrom(const std::vector<std::string> &strs, const std::string &title,
   return -1;
 }
 
-Image PickAnImage(const std::string &dir, std::string *picked) {
+Image FileDialog::PickAnImage(const std::string &dir, std::string *picked) {
   Singleton::InitGui();
   auto filename = QFileDialog::getOpenFileName(
       nullptr, QObject::tr("Select an image file"), QString::fromStdString(dir),
@@ -64,8 +52,8 @@ Image PickAnImage(const std::string &dir, std::string *picked) {
   return cv::imread(filename.toStdString());
 }
 
-std::vector<Image> PickImages(const std::string &dir,
-                              std::vector<std::string> *picked) {
+std::vector<Image> FileDialog::PickImages(const std::string &dir,
+                                          std::vector<std::string> *picked) {
   Singleton::InitGui();
   auto filenames = QFileDialog::getOpenFileNames(
       nullptr, QObject::tr("Select an image file"), QString::fromStdString(dir),
@@ -82,8 +70,9 @@ std::vector<Image> PickImages(const std::string &dir,
   return ims;
 }
 
-std::vector<Image> PickAllImagesFromAFolder(const std::string &dir,
-                                            std::vector<std::string> *picked) {
+std::vector<Image>
+FileDialog::PickAllImagesFromAFolder(const std::string &dir,
+                                     std::vector<std::string> *picked) {
   Singleton::InitGui();
   auto folder = QFileDialog::getExistingDirectory(
       nullptr, QObject::tr("Select a folder containing images"),
@@ -107,7 +96,7 @@ std::vector<Image> PickAllImagesFromAFolder(const std::string &dir,
   return ims;
 }
 
-void ForEachImageFromAFolder(
+void FileDialog::ForEachImageFromAFolder(
     const std::string &dir,
     const std::function<bool(const std::string &impath)> &fun) {
   Singleton::InitGui();
@@ -128,6 +117,19 @@ void ForEachImageFromAFolder(
       break;
     }
   }
+}
+
+std::vector<std::string> FileDialog::PickFiles(const std::string &dir,
+                                               const std::string &suffix) {
+  Singleton::InitGui();
+  auto filenames = QFileDialog::getOpenFileNames(
+      nullptr, QObject::tr("Select files"), QString::fromStdString(dir),
+      QObject::tr("Files (%1)").arg(QString::fromStdString(suffix)));
+  std::vector<std::string> picked;
+  for (auto &filename : filenames) {
+    picked.push_back(filename.toStdString());
+  }
+  return picked;
 }
 
 bool MakePanoramaByHand(Image &im, bool *extendedOnTop, bool *extendedOnBottom,

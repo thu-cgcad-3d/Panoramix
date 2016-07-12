@@ -9,65 +9,18 @@ extern "C" {
 #include "eigen.hpp"
 #include "factor_graph.hpp"
 #include "iterators.hpp"
+#include "line_drawing_tools.hpp"
 #include "manhattan.hpp"
 #include "math.hpp"
 #include "optimization.hpp"
-#include "tools.hpp"
+#include "scene.hpp"
+#include "singleton.hpp"
 #include "utility.hpp"
 
 namespace pano {
 namespace experimental {
 
 using namespace ::pano::core;
-
-CubeMapLocation::CubeMapLocation(int pid, const Pixel &p, size_t sz)
-    : panel_id(pid), pixel(p) {
-  assert(IsBetween(pid, 0, 3));
-  if (IsBetween(p.x, 0, sz) && IsBetween(p.y, 0, sz)) {
-    return;
-  }
-  NOT_IMPLEMENTED_YET();
-}
-
-Vec3 CubeMapLocation::direction(size_t sz) const {
-  ////
-  NOT_IMPLEMENTED_YET();
-}
-
-CubeMapLocation CubeMapLocation::FromDirection(size_t sz, const Vec3 &dir) {
-  assert(norm(dir) != 0);
-  Vec3 abs_dir(abs(dir[0]), abs(dir[1]), abs(dir[2]));
-  CubeMapLocation loc;
-  if (abs_dir[0] >= abs_dir[1] && abs_dir[0] >= abs_dir[2]) {
-    // panel 0
-    loc.panel_id = 0;
-    double x_ratio = dir[1] / dir[0]; // [-1, 1]
-    double y_ratio = dir[2] / dir[0]; // [-1, 1]
-    int x = static_cast<int>(std::round((x_ratio / 2.0 + 0.5) * sz));
-    int y = static_cast<int>(std::round((y_ratio / 2.0 + 0.5) * sz));
-    loc.pixel.x = core::BoundBetween(x, 0, sz - 1);
-    loc.pixel.y = core::BoundBetween(y, 0, sz - 1);
-  } else if (abs_dir[1] >= abs_dir[0] && abs_dir[1] >= abs_dir[2]) {
-    // panel 1
-    loc.panel_id = 1;
-    double x_ratio = dir[0] / dir[1]; // [-1, 1]
-    double y_ratio = dir[2] / dir[1]; // [-1, 1]
-    int x = static_cast<int>(std::round((x_ratio / 2.0 + 0.5) * sz));
-    int y = static_cast<int>(std::round((y_ratio / 2.0 + 0.5) * sz));
-    loc.pixel.x = core::BoundBetween(x, 0, sz - 1);
-    loc.pixel.y = core::BoundBetween(y, 0, sz - 1);
-  } else {
-    // panel 2
-    loc.panel_id = 2;
-    double x_ratio = dir[0] / dir[2]; // [-1, 1]
-    double y_ratio = dir[1] / dir[2]; // [-1, 1]
-    int x = static_cast<int>(std::round((x_ratio / 2.0 + 0.5) * sz));
-    int y = static_cast<int>(std::round((y_ratio / 2.0 + 0.5) * sz));
-    loc.pixel.x = core::BoundBetween(x, 0, sz - 1);
-    loc.pixel.y = core::BoundBetween(y, 0, sz - 1);
-  }
-  return loc;
-}
 
 // ICCV 2013 Complex 3D General Object Reconstruction from Line Drawings
 // Algorithm 1

@@ -67,7 +67,7 @@ int main(int argc, char *argv[], char *envp[]) {
   // testing::GTEST_FLAG(filter) = "Mesh.Basic";
   // testing::GTEST_FLAG(filter) = "AlgorithmTest.SimulatedAnnealing";
   // testing::GTEST_FLAG(filter) = "IteratorsTest.TransformAndConcated";
-  // testing::GTEST_FLAG(filter) = "FactorGraph.*";
-  testing::GTEST_FLAG(filter) = "Visualize.*";
+  testing::GTEST_FLAG(filter) = "FactorGraph.*";
+  //testing::GTEST_FLAG(filter) = "Visualize.*";
   return RUN_ALL_TESTS();
 }

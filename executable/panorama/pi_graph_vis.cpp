@@ -38,7 +38,7 @@ void VisualizeReconstruction(
   gui::SceneBuilder viz;
   viz.installingOptions().discretizeOptions.colorTable(
       gui::ColorTableDescriptor::RGB);
-  std::vector<core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int>>
+  std::vector<core::Decorated<gui::Colored<core::SingleViewPolygon3>, int>>
       spps;
   std::vector<core::Decorated<gui::Colored<core::Line3>, int>> lines;
 
@@ -48,7 +48,7 @@ void VisualizeReconstruction(
       int seg = v.id;
       if (!mg.seg2control[seg].used)
         continue;
-      gui::SpatialProjectedPolygon spp;
+      core::SingleViewPolygon3 spp;
       auto &contours = mg.seg2contours[seg];
       if (contours.empty() || contours.front().empty()) {
         continue;
@@ -100,7 +100,7 @@ void VisualizeReconstruction(
          spps,
          [&mg, &cg, &dp, &vertClick, ent2string](
              gui::InteractionID iid,
-             const core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>,
+             const core::Decorated<gui::Colored<core::SingleViewPolygon3>,
                                    int> &spp) {
            int ent = spp.decoration;
            std::cout << ent2string(ent) << std::endl;

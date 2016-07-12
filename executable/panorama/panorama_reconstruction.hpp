@@ -1,12 +1,12 @@
 #pragma once
 
-#include "parallel.hpp"
 #include "cache.hpp"
 #include "clock.hpp"
+#include "parallel.hpp"
 
 #include "canvas.hpp"
-#include "singleton.hpp"
 #include "gui_util.hpp"
+#include "singleton.hpp"
 
 #include "pi_graph_annotation.hpp"
 #include "pi_graph_cg.hpp"
@@ -20,7 +20,7 @@ using namespace pano::core;
 using namespace pano::experimental;
 
 // options
-struct PanoramixOptions {
+struct PanoramaReconstructionOptions {
   // algorithm options
   static const int LayoutVersion = 0;
   bool useWallPrior;
@@ -61,7 +61,7 @@ struct PanoramixOptions {
 };
 
 // report
-struct PanoramixReport {
+struct PanoramaReconstructionReport {
   double time_preparation;
   double time_mg_init;
   double time_line2leftRightSegs;
@@ -74,7 +74,7 @@ struct PanoramixReport {
 
   bool succeeded;
 
-  PanoramixReport();
+  PanoramaReconstructionReport();
 
   void print() const;
 
@@ -86,34 +86,36 @@ struct PanoramixReport {
 };
 
 // run the main algorithm
-PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
-                             const PanoramixOptions &options,
-                             misc::Matlab &matlab, bool showGUI,
-                             bool writeToFile = false);
+PanoramaReconstructionReport
+RunPanoramaReconstruction(const PILayoutAnnotation &anno,
+                          const PanoramaReconstructionOptions &options,
+                          misc::Matlab &matlab, bool showGUI,
+                          bool writeToFile = false);
 
 // get result
-bool GetPanoramixResult(const PILayoutAnnotation &anno,
-                        const PanoramixOptions &options,
-                        PIGraph<PanoramicCamera> &mg, PIConstraintGraph &cg,
-                        PICGDeterminablePart &dp);
-std::vector<LineSidingWeight>
-GetPanoramixOcclusionResult(const PILayoutAnnotation &anno,
-                            const PanoramixOptions &options);
+bool GetPanoramaReconstructionResult(
+    const PILayoutAnnotation &anno,
+    const PanoramaReconstructionOptions &options, PIGraph<PanoramicCamera> &mg,
+    PIConstraintGraph &cg, PICGDeterminablePart &dp);
+std::vector<LineSidingWeight> GetPanoramaReconstructionOcclusionResult(
+    const PILayoutAnnotation &anno,
+    const PanoramaReconstructionOptions &options);
 
 // get surface normal maps
 template <class CameraT>
-std::vector<Image3d> GetSurfaceNormalMapsOfPanoramix(
+std::vector<Image3d> GetSurfaceNormalMapsOfPanoramaReconstruction(
     const std::vector<CameraT> &testCams, const PILayoutAnnotation &anno,
-    const PanoramixOptions &options, misc::Matlab &matlab) {
+    const PanoramaReconstructionOptions &options, misc::Matlab &matlab) {
 
   PIGraph<PanoramicCamera> mg;
   PIConstraintGraph cg;
   PICGDeterminablePart dp;
-  if (!GetPanoramixResult(anno, options, mg, cg, dp)) {
-    std::cout << "failed to load panoramix result, performing RunPanoramix ..."
+  if (!GetPanoramaReconstructionResult(anno, options, mg, cg, dp)) {
+    std::cout << "failed to load panoramix result, performing "
+                 "RunPanoramaReconstruction ..."
               << std::endl;
-    RunPanoramix(anno, options, matlab, false);
-    GetPanoramixResult(anno, options, mg, cg, dp);
+    RunPanoramaReconstruction(anno, options, matlab, false);
+    GetPanoramaReconstructionResult(anno, options, mg, cg, dp);
   }
 
   std::vector<Image3d> surfaceNormalMaps(testCams.size());
@@ -131,18 +133,19 @@ std::vector<Image3d> GetSurfaceNormalMapsOfPanoramix(
 
 // get surface depth maps
 template <class CameraT>
-std::vector<Imaged> GetSurfaceDepthMapsOfPanoramix(
+std::vector<Imaged> GetSurfaceDepthMapsOfPanoramaReconstruction(
     const std::vector<CameraT> &testCams, const PILayoutAnnotation &anno,
-    const PanoramixOptions &options, misc::Matlab &matlab) {
+    const PanoramaReconstructionOptions &options, misc::Matlab &matlab) {
 
   PIGraph<PanoramicCamera> mg;
   PIConstraintGraph cg;
   PICGDeterminablePart dp;
-  if (!GetPanoramixResult(anno, options, mg, cg, dp)) {
-    std::cout << "failed to load panoramix result, performing RunPanoramix ..."
+  if (!GetPanoramaReconstructionResult(anno, options, mg, cg, dp)) {
+    std::cout << "failed to load panoramix result, performing "
+                 "RunPanoramaReconstruction ..."
               << std::endl;
-    RunPanoramix(anno, options, matlab, false);
-    GetPanoramixResult(anno, options, mg, cg, dp);
+    RunPanoramaReconstruction(anno, options, matlab, false);
+    GetPanoramaReconstructionResult(anno, options, mg, cg, dp);
   }
 
   std::vector<Imaged> surfaceDepthMaps(testCams.size());

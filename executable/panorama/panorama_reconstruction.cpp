@@ -1,9 +1,9 @@
 #include <chrono>
 
-#include "segmentation.hpp"
 #include "geo_context.hpp"
 #include "line_detection.hpp"
-#include "panoramix.hpp"
+#include "panorama_reconstruction.hpp"
+#include "segmentation.hpp"
 
 template <class T> double ElapsedInMS(const T &start) {
   return std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(
@@ -11,11 +11,11 @@ template <class T> double ElapsedInMS(const T &start) {
       .count();
 }
 
-const std::string PanoramixOptions::parseOption(bool b) {
+const std::string PanoramaReconstructionOptions::parseOption(bool b) {
   return b ? "_on" : "_off";
 }
 
-std::string PanoramixOptions::algorithmOptionsTag() const {
+std::string PanoramaReconstructionOptions::algorithmOptionsTag() const {
   std::stringstream ss;
   ss << "_LayoutVersion" << LayoutVersion << parseOption(useWallPrior)
      << parseOption(usePrincipleDirectionPrior)
@@ -31,11 +31,12 @@ std::string PanoramixOptions::algorithmOptionsTag() const {
   return ss.str();
 }
 
-std::string PanoramixOptions::identityOfImage(const std::string &impath) const {
+std::string PanoramaReconstructionOptions::identityOfImage(
+    const std::string &impath) const {
   return impath + algorithmOptionsTag();
 }
 
-void PanoramixOptions::print() const {
+void PanoramaReconstructionOptions::print() const {
   std::cout << "##############################" << std::endl;
   std::cout << " useWallPrior = " << useWallPrior << std::endl;
   std::cout << " usePrincipleDirectionPrior = " << usePrincipleDirectionPrior
@@ -63,7 +64,7 @@ void PanoramixOptions::print() const {
   std::cout << "##############################" << std::endl;
 }
 
-PanoramixReport::PanoramixReport() {
+PanoramaReconstructionReport::PanoramaReconstructionReport() {
   time_preparation = -1;
   time_mg_init = -1;
   time_line2leftRightSegs = -1;
@@ -74,7 +75,7 @@ PanoramixReport::PanoramixReport() {
   succeeded = false;
 }
 
-void PanoramixReport::print() const {
+void PanoramaReconstructionReport::print() const {
   std::cout << "##############################" << std::endl;
   std::cout << " time_preparation = " << time_preparation << std::endl;
   std::cout << " time_mg_init = " << time_mg_init << std::endl;
@@ -92,12 +93,13 @@ static const double thetaTiny = DegreesToRadians(2);
 static const double thetaMid = DegreesToRadians(5);
 static const double thetaLarge = DegreesToRadians(15);
 
-PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
-                             const PanoramixOptions &options,
-                             misc::Matlab &matlab, bool showGUI,
-                             bool writeToFile) {
+PanoramaReconstructionReport
+RunPanoramaReconstruction(const PILayoutAnnotation &anno,
+                          const PanoramaReconstructionOptions &options,
+                          misc::Matlab &matlab, bool showGUI,
+                          bool writeToFile) {
 
-  PanoramixReport report;
+  PanoramaReconstructionReport report;
 #define START_TIME_RECORD(name)                                                \
   auto start_##name = std::chrono::system_clock::now()
 
@@ -215,7 +217,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
                     vertVPId, segs, nsegs);
   }
 
-  //if (showGUI) {
+  // if (showGUI) {
   //  auto ctable = gui::CreateGreyColorTableWithSize(nsegs);
   //  ctable.randomize();
   //  gui::ColorTable rgb = gui::RGBGreys;
@@ -291,7 +293,7 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
     std::vector<Imaged> gcChannels;
     cv::split(gc, gcChannels);
     auto gc3d = ConvertToImage3d(gc);
-    //cv::cvtColor(gc3d, gc3d, CV_RGB2BGR);
+    // cv::cvtColor(gc3d, gc3d, CV_RGB2BGR);
     cv::imwrite("C:\\Users\\YANGHAO\\Pictures\\55_gc3d.png", gc3d * 255);
     gui::AsCanvas(gc3d).show(1, "gc");
   }
@@ -388,8 +390,8 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
     return canvas.image();
   };
 
-  const std::string folder =
-      "D:\\Panoramix\\Panorama\\images\\" + misc::Tagify(identity) + "\\";
+  const std::string folder = "D:\\PanoramaReconstruction\\Panorama\\images\\" +
+                             misc::Tagify(identity) + "\\";
   misc::MakeDir(folder);
 
   if (writeToFile) {
@@ -771,17 +773,17 @@ PanoramixReport RunPanoramix(const PILayoutAnnotation &anno,
   return report;
 }
 
-bool GetPanoramixResult(const PILayoutAnnotation &anno,
-                        const PanoramixOptions &options,
-                        PIGraph<PanoramicCamera> &mg, PIConstraintGraph &cg,
-                        PICGDeterminablePart &dp) {
+bool GetPanoramaReconstructionResult(
+    const PILayoutAnnotation &anno,
+    const PanoramaReconstructionOptions &options, PIGraph<PanoramicCamera> &mg,
+    PIConstraintGraph &cg, PICGDeterminablePart &dp) {
   auto identity = options.identityOfImage(anno.impath);
   return misc::LoadCache(identity, "mg_reconstructed", mg, cg, dp);
 }
 
-std::vector<LineSidingWeight>
-GetPanoramixOcclusionResult(const PILayoutAnnotation &anno,
-                            const PanoramixOptions &options) {
+std::vector<LineSidingWeight> GetPanoramaReconstructionOcclusionResult(
+    const PILayoutAnnotation &anno,
+    const PanoramaReconstructionOptions &options) {
   std::vector<LineSidingWeight> lsw;
   auto identity = options.identityOfImage(anno.impath);
   misc::LoadCache(identity, "lsw", lsw);

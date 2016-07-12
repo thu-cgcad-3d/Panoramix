@@ -23,10 +23,10 @@ int main_label(int argc, char **argv) {
   misc::Matlab matlab;
 
   std::vector<std::string> impaths;
-  //gui::PickImages("H:\\DataSet\\pi\\dataset\\selected\\", &impaths);
+  //gui::FileDialog::PickImages("H:\\DataSet\\pi\\dataset\\selected\\", &impaths);
   
   impaths.push_back("");
-  gui::PickAnImage("F:\\CVPR2016", &(impaths[0]));
+  gui::FileDialog::PickAnImage("F:\\CVPR2016", &(impaths[0]));
 
   for (auto &impath : impaths) {
     auto anno = pano::experimental::LoadOrInitializeNewLayoutAnnotation(impath);

@@ -6,7 +6,7 @@
 #include "geo_context.hpp"
 
 #include "containers.hpp"
-#include "panoramix.hpp"
+#include "panorama_reconstruction.hpp"
 
 template <class CameraT>
 std::vector<Imagei> GTFaceLabels(const PILayoutAnnotation &anno,
@@ -199,7 +199,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = true;
@@ -221,7 +221,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramix(anno, options, matlab, false).print();
+    RunPanoramaReconstruction(anno, options, matlab, false).print();
     return misc::MXA();
   });
 
@@ -233,7 +233,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = true;
@@ -255,7 +255,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramix(anno, options, matlab, false);
+    RunPanoramaReconstruction(anno, options, matlab, false);
     return misc::MXA();
   });
   // use gt occ
@@ -263,7 +263,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = true;
@@ -285,7 +285,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramix(anno, options, matlab, false);
+    RunPanoramaReconstruction(anno, options, matlab, false);
     return misc::MXA();
   });
   // without wall
@@ -293,7 +293,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = false;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = true;
@@ -315,7 +315,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramix(anno, options, matlab, false);
+    RunPanoramaReconstruction(anno, options, matlab, false);
     return misc::MXA();
   });
   // without principle direction
@@ -323,7 +323,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = false;
     options.useGeometricContextPrior = true;
@@ -345,7 +345,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramix(anno, options, matlab, false);
+    RunPanoramaReconstruction(anno, options, matlab, false);
     return misc::MXA();
   });
   // without gc!
@@ -353,7 +353,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = false;
@@ -375,7 +375,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramix(anno, options, matlab, false);
+    RunPanoramaReconstruction(anno, options, matlab, false);
     return misc::MXA();
   });
   // without gc + gt occ !
@@ -383,7 +383,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = false;
@@ -405,7 +405,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramix(anno, options, matlab, false);
+    RunPanoramaReconstruction(anno, options, matlab, false);
     return misc::MXA();
   });
   // only gc!
@@ -413,7 +413,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = false;
     options.usePrincipleDirectionPrior = false;
     options.useGeometricContextPrior = true;
@@ -435,7 +435,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramix(anno, options, matlab, false);
+    RunPanoramaReconstruction(anno, options, matlab, false);
     return misc::MXA();
   });
   // only gc + gt occ!
@@ -443,7 +443,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = false;
     options.usePrincipleDirectionPrior = false;
     options.useGeometricContextPrior = true;
@@ -465,7 +465,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramix(anno, options, matlab, false);
+    RunPanoramaReconstruction(anno, options, matlab, false);
     return misc::MXA();
   });
 
@@ -475,7 +475,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = true;
@@ -497,7 +497,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramix(anno, options, matlab, false);
+    RunPanoramaReconstruction(anno, options, matlab, false);
     return misc::MXA();
   });
 
@@ -507,7 +507,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = true;
@@ -529,7 +529,7 @@ int main_panorama(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || true;
 
-    RunPanoramix(anno, options, matlab, true, false);
+    RunPanoramaReconstruction(anno, options, matlab, true, false);
     return misc::MXA();
   });
 
@@ -621,7 +621,7 @@ int main_panorama(int argc, char **argv) {
 
     bool consider_horizontal_cams_only = true;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = false;
@@ -652,7 +652,7 @@ int main_panorama(int argc, char **argv) {
     }
 
     auto panoramixResults =
-        GetSurfaceNormalMapsOfPanoramix(testCams, anno, options, matlab);
+        GetSurfaceNormalMapsOfPanoramaReconstruction(testCams, anno, options, matlab);
 
     double error_pn = 0.0;
     double error_gc = 0.0;
@@ -757,7 +757,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = true;
@@ -788,7 +788,7 @@ int main_panorama(int argc, char **argv) {
     }
 
     auto panoramixResults =
-        GetSurfaceNormalMapsOfPanoramix(testCams, anno, options, matlab);
+        GetSurfaceNormalMapsOfPanoramaReconstruction(testCams, anno, options, matlab);
 
     double error_pn = 0.0;
     double error_om = 0.0;
@@ -900,7 +900,7 @@ int main_panorama(int argc, char **argv) {
     auto anno = LoadOrInitializeNewLayoutAnnotation(impath);
     anno.impath = impath;
 
-    PanoramixOptions options;
+    PanoramaReconstructionOptions options;
     options.useWallPrior = true;
     options.usePrincipleDirectionPrior = true;
     options.useGeometricContextPrior = true;
@@ -927,7 +927,7 @@ int main_panorama(int argc, char **argv) {
     PICGDeterminablePart dp;
 
    
-    bool succ = GetPanoramixResult(anno, options, mg, cg, dp);
+    bool succ = GetPanoramaReconstructionResult(anno, options, mg, cg, dp);
     if (!succ) {
         std::cout << "failed in " << impath << std::endl;
         return misc::MXA();
@@ -1367,7 +1367,7 @@ int main_panorama(int argc, char **argv) {
 
     // pn depths
     {
-      PanoramixOptions options;
+      PanoramaReconstructionOptions options;
       options.useWallPrior = true;
       options.usePrincipleDirectionPrior = true;
       options.useGeometricContextPrior = true;
@@ -1390,14 +1390,14 @@ int main_panorama(int argc, char **argv) {
       options.refresh_mg_reconstructed =
           options.refresh_mg_occdetected || false;
 
-      pnDepths = GetSurfaceDepthMapsOfPanoramix(
+      pnDepths = GetSurfaceDepthMapsOfPanoramaReconstruction(
                      std::vector<PanoramicCamera>{cam}, anno, options, matlab)
                      .front();
     }
 
     // pn depth no occ
     {
-      PanoramixOptions options;
+      PanoramaReconstructionOptions options;
       options.useWallPrior = true;
       options.usePrincipleDirectionPrior = true;
       options.useGeometricContextPrior = true;
@@ -1421,14 +1421,14 @@ int main_panorama(int argc, char **argv) {
           options.refresh_mg_occdetected || false;
 
       pnDepthNoOcc =
-          GetSurfaceDepthMapsOfPanoramix(std::vector<PanoramicCamera>{cam},
+          GetSurfaceDepthMapsOfPanoramaReconstruction(std::vector<PanoramicCamera>{cam},
                                          anno, options, matlab)
               .front();
     }
 
     // pn depth gt occ
     {
-      PanoramixOptions options;
+      PanoramaReconstructionOptions options;
       options.useWallPrior = true;
       options.usePrincipleDirectionPrior = true;
       options.useGeometricContextPrior = true;
@@ -1452,7 +1452,7 @@ int main_panorama(int argc, char **argv) {
           options.refresh_mg_occdetected || false;
 
       pnDepthGTOcc =
-          GetSurfaceDepthMapsOfPanoramix(std::vector<PanoramicCamera>{cam},
+          GetSurfaceDepthMapsOfPanoramaReconstruction(std::vector<PanoramicCamera>{cam},
                                          anno, options, matlab)
               .front();
     }
@@ -1481,7 +1481,7 @@ int main_panorama(int argc, char **argv) {
     Imaged pnDepthGTOcc;
     // pn depth gt occ
     {
-      PanoramixOptions options;
+      PanoramaReconstructionOptions options;
       options.useWallPrior = true;
       options.usePrincipleDirectionPrior = true;
       options.useGeometricContextPrior = true;
@@ -1505,7 +1505,7 @@ int main_panorama(int argc, char **argv) {
           options.refresh_mg_occdetected || false;
 
       pnDepthGTOcc =
-          GetSurfaceDepthMapsOfPanoramix(std::vector<PanoramicCamera>{cam},
+          GetSurfaceDepthMapsOfPanoramaReconstruction(std::vector<PanoramicCamera>{cam},
                                          anno, options, matlab)
               .front();
     }
@@ -1525,7 +1525,7 @@ int main_panorama(int argc, char **argv) {
     Imaged pnDepthNoCop;
     // pn depth gt occ
     {
-      PanoramixOptions options;
+      PanoramaReconstructionOptions options;
       options.useWallPrior = true;
       options.usePrincipleDirectionPrior = true;
       options.useGeometricContextPrior = true;
@@ -1549,7 +1549,7 @@ int main_panorama(int argc, char **argv) {
           options.refresh_mg_occdetected || false;
 
       pnDepthNoCop =
-          GetSurfaceDepthMapsOfPanoramix(std::vector<PanoramicCamera>{cam},
+          GetSurfaceDepthMapsOfPanoramaReconstruction(std::vector<PanoramicCamera>{cam},
                                          anno, options, matlab)
               .front();
     }
@@ -1667,7 +1667,7 @@ int main_panorama(int argc, char **argv) {
 
   if (true) {
     std::vector<std::string> impaths;
-    gui::PickImages("F:\\CVPR2016\\", &impaths);
+    gui::FileDialog::PickImages("F:\\CVPR2016\\", &impaths);
     for (int i = 0; i < activeQ.size(); i++) {
       auto &task = activeQ[i];
       std::cout << "[[[[[[[[[ TASK " << i << "]]]]]]]]" << std::endl;

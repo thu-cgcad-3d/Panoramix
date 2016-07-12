@@ -256,7 +256,7 @@ void Discretize(TriMesh &mesh, const Polygon<Point<T, 3>> &p,
   mesh.addPolygon(vhandles, o.entity());
 }
 
-void Discretize(TriMesh &mesh, const SpatialProjectedPolygon &spp,
+void Discretize(TriMesh &mesh, const SingleViewPolygon3 &spp,
                 const DiscretizeOptions &o);
 
 template <class T, class H, class F>

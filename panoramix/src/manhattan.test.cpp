@@ -23,7 +23,7 @@ TEST(ManhattanTest, VanishingPointsDetector) {
       "room13.jpg", "room14.jpg", "room15.jpg", "room16.jpg", "room17.jpg",
       "room18.jpg", "room19.jpg", "room20.jpg", "room21.jpg", "room22.jpg"};
 
-  auto images = gui::PickImages("F:\\DataSets\\YorkUrbanDB\\data\\");
+  auto images = gui::FileDialog::PickImages("F:\\DataSets\\YorkUrbanDB\\data\\");
 
   core::LineSegmentExtractor::Params lsParams;
   lsParams.minLength = 20;
