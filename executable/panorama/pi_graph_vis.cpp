@@ -212,7 +212,7 @@ void VisualizeReconstruction(
                .cullBackFace(true)
                .bwColor(1.0)
                .bwTexColor(0.0)
-               .camera(PerspectiveCamera(800, 800, Point2(400, 400), 600,
+               .camera(PerspectiveCamera(600, 600, Point2(300, 300), 450,
                                          Point3(2, 2, -2), Point3(0, 0, 0))));
 }
 
@@ -267,7 +267,7 @@ void VisualizeReconstructionCompact(const Image &im,
                .cullBackFace(false)
                .bwColor(0.0)
                .bwTexColor(1.0)
-               .camera(PerspectiveCamera(800, 800, Point2(400, 400), 600,
+               .camera(PerspectiveCamera(600, 600, Point2(300, 300), 450,
                                          Point3(2, 2, -2), Point3(0, 0, 0))));
 }
 

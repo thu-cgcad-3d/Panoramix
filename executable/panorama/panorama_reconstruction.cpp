@@ -697,55 +697,55 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
   }
 
   if (showGUI) {
-    std::pair<double, double> validRange;
-    Imaged depthMap = SurfaceDepthMap(mg.view.camera, dp, cg, mg, true);
-    std::vector<double> depthsArray(depthMap.begin(), depthMap.end());
-    std::sort(depthsArray.begin(), depthsArray.end());
-    double maxDepth = depthsArray.back();
-    double minDepth = depthsArray.front();
-    Imagei depthMapDisc2 = (depthMap - minDepth) / (maxDepth - minDepth) * 255;
-    Imagei depthMapDisc3 = depthMap / maxDepth * 255;
-    for (int &d : depthMapDisc3) {
-      if (d > 255) {
-        d = 255;
-      }
-    }
-    auto jetctable = gui::CreateJetColorTableWithSize(256, gui::Black);
-    auto greyctable = gui::CreateGreyColorTableWithSize(256, gui::Black);
-    auto mask = GuessMask(anno);
-    ResizeToHeight(mask, mg.view.image.rows);
-    if (writeToFile) {
-      // apply mask
-      auto greyDepth = greyctable(depthMapDisc3);
-      auto jetDepth = jetctable(depthMapDisc3);
-      for (auto it = mask.begin(); it != mask.end(); ++it) {
-        if (!*it) {
-          greyDepth(it.pos()) = Vec3ub();
-          jetDepth(it.pos()) = Vec3ub();
-        }
-      }
-      cv::imwrite(folder + "depth2.png", greyDepth);
-      cv::imwrite(folder + "depth.png", jetDepth);
-    }
+    //std::pair<double, double> validRange;
+    //Imaged depthMap = SurfaceDepthMap(mg.view.camera, dp, cg, mg, true);
+    //std::vector<double> depthsArray(depthMap.begin(), depthMap.end());
+    //std::sort(depthsArray.begin(), depthsArray.end());
+    //double maxDepth = depthsArray.back();
+    //double minDepth = depthsArray.front();
+    //Imagei depthMapDisc2 = (depthMap - minDepth) / (maxDepth - minDepth) * 255;
+    //Imagei depthMapDisc3 = depthMap / maxDepth * 255;
+    //for (int &d : depthMapDisc3) {
+    //  if (d > 255) {
+    //    d = 255;
+    //  }
+    //}
+    //auto jetctable = gui::CreateJetColorTableWithSize(256, gui::Black);
+    //auto greyctable = gui::CreateGreyColorTableWithSize(256, gui::Black);
+    //auto mask = GuessMask(anno);
+    //ResizeToHeight(mask, mg.view.image.rows);
+    //if (writeToFile) {
+    //  // apply mask
+    //  auto greyDepth = greyctable(depthMapDisc3);
+    //  auto jetDepth = jetctable(depthMapDisc3);
+    //  for (auto it = mask.begin(); it != mask.end(); ++it) {
+    //    if (!*it) {
+    //      greyDepth(it.pos()) = Vec3ub();
+    //      jetDepth(it.pos()) = Vec3ub();
+    //    }
+    //  }
+    //  cv::imwrite(folder + "depth2.png", greyDepth);
+    //  cv::imwrite(folder + "depth.png", jetDepth);
+    //}
 
-    // Imagei depthMapDisc2 =
-    auto surfaceNormalMap = SurfaceNormalMap(mg.view.camera, dp, cg, mg, true);
-    auto surfaceNormalMapForShow = surfaceNormalMap.clone();
-    for (auto &n : surfaceNormalMapForShow) {
-      auto nn = n;
-      for (int i = 0; i < 3; i++) {
-        n[i] = abs(nn.dot(vps[i]));
-      }
-      std::swap(n[0], n[2]);
-    }
-    if (writeToFile) {
-      for (auto it = mask.begin(); it != mask.end(); ++it) {
-        if (!*it) {
-          surfaceNormalMapForShow(it.pos()) = Vec3();
-        }
-      }
-      cv::imwrite(folder + "normals.png", surfaceNormalMapForShow * 255);
-    }
+    //// Imagei depthMapDisc2 =
+    //auto surfaceNormalMap = SurfaceNormalMap(mg.view.camera, dp, cg, mg, true);
+    //auto surfaceNormalMapForShow = surfaceNormalMap.clone();
+    //for (auto &n : surfaceNormalMapForShow) {
+    //  auto nn = n;
+    //  for (int i = 0; i < 3; i++) {
+    //    n[i] = abs(nn.dot(vps[i]));
+    //  }
+    //  std::swap(n[0], n[2]);
+    //}
+    //if (writeToFile) {
+    //  for (auto it = mask.begin(); it != mask.end(); ++it) {
+    //    if (!*it) {
+    //      surfaceNormalMapForShow(it.pos()) = Vec3();
+    //    }
+    //  }
+    //  cv::imwrite(folder + "normals.png", surfaceNormalMapForShow * 255);
+    //}
     VisualizeReconstruction(dp, cg, mg, false,
                             [&cg, &mg](int ent) -> gui::Color {
                               auto &e = cg.entities[ent];

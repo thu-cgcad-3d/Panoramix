@@ -1129,9 +1129,18 @@ SceneWidget *SceneBuilder::createWidget(const RenderOptions &options,
 RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
                                  const RenderOptions &options) {
   auto app = Singleton::InitGui();
-  SceneWidget *w = createWidget(options);
 
   QMainWindow *mwin = new QMainWindow;
+
+	SceneWidget *w = nullptr;
+  while (!w) {
+    try {
+      w = createWidget(options);
+    } catch (...) {
+			std::cout << "failed createWidget" << std::endl;
+    }
+  }
+
   mwin->setCentralWidget(w);
   mwin->setAttribute(Qt::WA_DeleteOnClose);
   if (!autoSetCamera) {

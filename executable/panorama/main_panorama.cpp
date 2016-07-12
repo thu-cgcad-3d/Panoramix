@@ -527,7 +527,7 @@ int main_panorama(int argc, char **argv) {
     options.refresh_lsw = options.refresh_mg_oriented || false;
     options.refresh_mg_occdetected =
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
-    options.refresh_mg_reconstructed = options.refresh_mg_occdetected || true;
+    options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
     RunPanoramaReconstruction(anno, options, matlab, true, false);
     return misc::MXA();
