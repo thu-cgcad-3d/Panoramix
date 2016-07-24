@@ -6,7 +6,7 @@ namespace pano {
 namespace experimental {
 
 std::function<std::vector<double>(const std::vector<double> &point_depths)>
-MakeLineDrawingEvaluator(
+MakeLineDrawingFeatureExtractor(
     const LineDrawing2 &line_drawing, const AuxiliaryData<LineDrawing2> &aux,
     const std::map<std::pair<int, int>, bool> &faces_overlap,
     const std::vector<std::set<int>> &face_sets, const PerspectiveCamera &cam) {
@@ -25,7 +25,8 @@ MakeLineDrawingEvaluator(
     std::vector<Point3> points(line_drawing.points.size());
     for (int i = 0; i < points.size(); i++) {
       points[i] =
-          normalize(cam.direction(line_drawing.points[i])) * point_depths[i];
+          normalize(cam.direction(line_drawing.points[i])) * point_depths[i] +
+          cam.eye();
     }
     // compute face equations from the given depths
     std::vector<Plane3> face_planes(nfaces);

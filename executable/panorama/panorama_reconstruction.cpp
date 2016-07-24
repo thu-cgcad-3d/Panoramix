@@ -294,8 +294,8 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
     cv::split(gc, gcChannels);
     auto gc3d = ConvertToImage3d(gc);
     // cv::cvtColor(gc3d, gc3d, CV_RGB2BGR);
-    cv::imwrite("C:\\Users\\YANGHAO\\Pictures\\55_gc3d.png", gc3d * 255);
-    gui::AsCanvas(gc3d).show(1, "gc");
+    //cv::imwrite("C:\\Users\\YANGHAO\\Pictures\\55_gc3d.png", gc3d * 255);
+    //gui::AsCanvas(gc3d).show(1, "gc");
   }
 
   // build pigraph!
@@ -390,7 +390,7 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
     return canvas.image();
   };
 
-  const std::string folder = "D:\\PanoramaReconstruction\\Panorama\\images\\" +
+  const std::string folder = "D:\\Panoramix\\Panorama\\images\\" +
                              misc::Tagify(identity) + "\\";
   misc::MakeDir(folder);
 
@@ -569,7 +569,7 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
         }
       }
       if (writeToFile) {
-        cv::imwrite(folder + "segs.png", Image3ub(pim * 255));
+        cv::imwrite(folder + "oriented_segs.png", Image3ub(pim * 255));
       }
       Image3f im = view.image.clone() / 255.0f;
       for (int line = 0; line < mg.nlines(); line++) {

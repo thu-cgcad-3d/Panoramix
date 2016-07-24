@@ -220,7 +220,7 @@ void VisualizeReconstructionCompact(const Image &im,
                                     const PICGDeterminablePart &dp,
                                     const PIConstraintGraph &cg,
                                     const PIGraph<PanoramicCamera> &mg,
-                                    bool doModel) {
+                                    bool doModel, bool autoCam) {
   gui::ResourceStore::set("texture", im);
 
   auto compactPolygons = CompactModel(dp, cg, mg, 0.1);
@@ -261,14 +261,22 @@ void VisualizeReconstructionCompact(const Image &im,
       .shaderSource(gui::OpenGLShaderSourceDescriptor::XLines)
       .end();
 
-  viz.show(doModel, false,
-           gui::RenderOptions()
-               .cullFrontFace(true)
-               .cullBackFace(false)
-               .bwColor(0.0)
-               .bwTexColor(1.0)
-               .camera(PerspectiveCamera(600, 600, Point2(300, 300), 450,
-                                         Point3(2, 2, -2), Point3(0, 0, 0))));
+  if (!autoCam) {
+    viz.show(doModel, false,
+             gui::RenderOptions()
+                 .cullFrontFace(true)
+                 .cullBackFace(false)
+                 .bwColor(0.0)
+                 .bwTexColor(1.0)
+                 .camera(PerspectiveCamera(600, 600, Point2(300, 300), 450,
+                                           Point3(2, 2, -2), Point3(0, 0, 0))));
+  } else {
+    viz.show(doModel, true, gui::RenderOptions()
+                                .cullFrontFace(true)
+                                .cullBackFace(false)
+                                .bwColor(0.0)
+                                .bwTexColor(1.0));
+  }
 }
 
 void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,

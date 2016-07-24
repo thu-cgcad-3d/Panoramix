@@ -432,12 +432,12 @@ using LayeredShape3 = LayeredShape<Point<double, 3>>;
 template <class PointT, class DirT = PointT> class SingleViewPolygon {
 public:
   template <class Archive> void serialize(Archive &ar) {
-    ar(corners, projectionCenter, plane);
+    ar(corners, projection_center, plane);
   }
 
 public:
   std::vector<PointT> corners;
-  PointT projectionCenter;
+  PointT projection_center;
   Plane<PointT, DirT> plane;
 };
 using SingleViewPolygon3 = SingleViewPolygon<Point<double, 3>>;

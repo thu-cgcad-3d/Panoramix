@@ -16,25 +16,15 @@
 
 namespace pano {
 namespace experimental {
-// LineDrawingGroundTruth
-struct LineDrawingGroundTruth {
-  LineDrawing<Point3> line_drawing;
-  PerspectiveCamera camera;
-  template <class Archive> void serialize(Archive &ar) {
-    ar(line_drawing, camera);
-  }
-};
 
 // LineDrawingInput
-class LineDrawingInput {
-public:
+struct LineDrawingInput {
   std::string model_name, cam_name;
+  std::string folder;
   LineDrawingImageProjection projection;
-  std::shared_ptr<LineDrawingGroundTruth> groundtruth;
-
-public:
+  std::shared_ptr<LineDrawingReconstruction> groundtruth;
   template <class Archive> void serialize(Archive &ar) {
-    ar(model_name, cam_name, projection, groundtruth);
+    ar(model_name, cam_name, folder, projection, groundtruth);
   }
 
   // FromObjFile
@@ -58,8 +48,8 @@ struct LineDrawingReconstructionSteps {
 enum GUILevel { GUILevelNone = 0, GUILevelNecessary = 1, GUILevelAll = 2 };
 
 // RunLineDrawingReconstruction
-void RunLineDrawingReconstruction(const LineDrawingInput &input,
-                                  LineDrawingReconstructionSteps &steps,
-                                  GUILevel gui_level = GUILevelAll);
+LineDrawing3 RunLineDrawingReconstruction(const LineDrawingInput &input,
+                                          LineDrawingReconstructionSteps &steps,
+                                          GUILevel gui_level = GUILevelAll);
 }
 }

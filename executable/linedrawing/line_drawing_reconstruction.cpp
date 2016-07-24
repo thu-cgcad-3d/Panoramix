@@ -15,44 +15,39 @@ LineDrawingInput LineDrawingInput::FromObjFile(const std::string &model_name,
   LineDrawingInput input;
   input.model_name = model_name;
   input.cam_name = cam_name;
+  input.folder = folder;
 
-  input.groundtruth = std::make_shared<LineDrawingGroundTruth>();
-  input.groundtruth->line_drawing =
+  auto original_line_drawing =
       LineDrawing3FromObjFile(folder + model_name + "_w_intf.obj");
 
   // setup a camera
+  PerspectiveCamera cam;
   std::string cam_path = folder + model_name + ".obj." + cam_name + ".cereal";
-  if (!LoadFromDisk(cam_path, input.groundtruth->camera)) {
+  if (!LoadFromDisk(cam_path, cam)) {
     gui::SceneBuilder sb;
-    for (auto &f : input.groundtruth->line_drawing.topo.coplanar_points) {
+    for (auto &f : original_line_drawing.topo.coplanar_points) {
       assert(f.size() >= 3);
       for (int i = 0; i < f.size(); i++) {
         sb.add(Line3(
-            input.groundtruth->line_drawing.points[f[i]],
-            input.groundtruth->line_drawing.points[f[(i + 1) % f.size()]]));
+            original_line_drawing.points[f[i]],
+            original_line_drawing.points[f[(i + 1) % f.size()]]));
       }
     }
-    input.groundtruth->camera =
+    cam =
         sb.show(true, true, gui::RenderOptions()
                                 .renderMode(gui::Lines)
                                 .fixUpDirectionInCameraMove(false))
             .camera();
-    SaveToDisk(cam_path, input.groundtruth->camera);
+    SaveToDisk(cam_path, cam);
   }
-  core::Println("gt focal = ", input.groundtruth->camera.focal(), " gt pp = ",
-                input.groundtruth->camera.principlePoint());
+  core::Println("gt focal = ", cam.focal(), " gt pp = ",
+                cam.principlePoint());
 
-  // build projection data
-  // points
-  input.projection.line_drawing.points.resize(
-      input.groundtruth->line_drawing.points.size());
-  for (int i = 0; i < input.projection.line_drawing.points.size(); i++) {
-    input.projection.line_drawing.points[i] =
-        input.groundtruth->camera.toScreen(
-            input.groundtruth->line_drawing.points[i]);
-  }
-  // topo
-  input.projection.line_drawing.topo = input.groundtruth->line_drawing.topo;
+  // generate groundtruth
+  input.groundtruth = std::make_shared<LineDrawingReconstruction>();
+  input.groundtruth->camera = cam;
+  std::tie(input.projection.line_drawing, input.groundtruth->point_depths) =
+      DecomposeProjectionAndDepths(original_line_drawing, cam);
 
   // image (white board)
   input.projection.image =
@@ -73,14 +68,14 @@ LineDrawingInput::FromImageAnnotation(const std::string &image_name) {
     core::Println("Failed to load ", image_name, "!");
     return LineDrawingInput();
   }
-  return LineDrawingInput{"image_" + image_name, "no_cam", std::move(anno),
-                          nullptr};
+  return LineDrawingInput{"image_" + image_name, "no_cam", folder,
+                          std::move(anno), nullptr};
 }
 
 // RunLineDrawingReconstruction
-void RunLineDrawingReconstruction(const LineDrawingInput &input,
-                                  LineDrawingReconstructionSteps &steps,
-                                  GUILevel gui_level) {
+LineDrawing3 RunLineDrawingReconstruction(const LineDrawingInput &input,
+                                          LineDrawingReconstructionSteps &steps,
+                                          GUILevel gui_level) {
 
   core::Println("#### input.model_name = [", input.model_name,
                 "], input.cam_name = [", input.cam_name, "]");
@@ -769,6 +764,11 @@ void RunLineDrawingReconstruction(const LineDrawingInput &input,
                              .fixUpDirectionInCameraMove(false)
                              .winName("final result"));
   }
+
+  LineDrawing3 result;
+  result.topo = input.projection.line_drawing.topo;
+  result.points = best_result.component;
+  return result;
 }
 }
 }

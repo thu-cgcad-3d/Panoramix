@@ -93,7 +93,7 @@ public:
   void clear() { _nodes.clear(); }
 
   template <class NodeHandlePtrContainerT = HandlePtrArray<ForestTopo>>
-  void gc(const NodeHandlePtrContainerT &nhPtrs = NodeHandlePtrContainerT()) {
+  void gc(const NodeHandlePtrContainerT &nh_ptrs = NodeHandlePtrContainerT()) {
     std::vector<NodeHandle> nnlocs;
     RemoveAndMap(_nodes, nnlocs);
     for (auto &node : _nodes) {
@@ -102,18 +102,18 @@ public:
       UpdateOldHandleContainer(nnlocs, node.topo.children);
       RemoveInValidHandleFromContainer(node.topo.children);
     }
-    for (auto &nhPtr : nhPtrs) {
+    for (auto &nhPtr : nh_ptrs) {
       UpdateOldHandle(nnlocs, *nhPtr);
     }
   }
 
   template <class NodeHandleCallbackFunT>
-  bool depthFirstSearch(NodeHandle asRoot,
+  bool depthFirstSearch(NodeHandle as_root,
                         const NodeHandleCallbackFunT &callback) const {
-    assert(_nodes[asRoot.id].exists);
-    if (!callback(asRoot))
+    assert(_nodes[as_root.id].exists);
+    if (!callback(as_root))
       return false;
-    for (auto &ch : _nodes[asRoot.id].topo.children) {
+    for (auto &ch : _nodes[as_root.id].topo.children) {
       if (_nodes[ch.id].exists) {
         if (!depthFirstSearch(ch, callback))
           return false;
@@ -123,11 +123,11 @@ public:
   }
 
   template <class NodeHandleCallbackFunT>
-  bool breadthFirstSearch(NodeHandle asRoot,
+  bool breadthFirstSearch(NodeHandle as_root,
                           const NodeHandleCallbackFunT &callback) const {
-    assert(_nodes[asRoot.id].exists);
+    assert(_nodes[as_root.id].exists);
     std::queue<NodeHandle> nhs;
-    nhs.push(asRoot);
+    nhs.push(as_root);
     while (!nhs.empty()) {
       NodeHandle nh = nhs.front();
       nhs.pop();

@@ -304,6 +304,30 @@ auto MeanSquaredDeviationOfContainer(const ContT &cont,
   return MeanSquaredDeviation(std::begin(cont), std::end(cont), vals, clamp);
 }
 
+// Normalize
+template <class IterT> void Normalize(IterT begin, IterT end) {
+  double norm = 0.0;
+  for (IterT i = begin; i != end; ++i) {
+    norm += Square(*i);
+  }
+  norm = sqrt(norm);
+  for (IterT i = begin; i != end; ++i) {
+    (*i) /= norm;
+  }
+}
+
+// L2Distance
+template <class IterT1, class IterT2>
+auto L2Distance(IterT1 begin1, IterT1 end1, IterT2 begin2, IterT2 end2) {
+  assert(std::distance(begin1, end1) == std::distance(begin2, end2));
+  typename std::iterator_traits<IterT1>::value_type d = 0.0;
+  while (begin1 != end1 && begin2 != end2) {
+    d += Square(*begin1 - *begin2);
+    ++begin1;
+    ++begin2;
+  }
+  return sqrt(d);
+}
 
 // degrees to radians
 template <class T> inline double DegreesToRadians(T degrees) {

@@ -157,5 +157,15 @@ double PerformReconstruction(
     std::default_random_engine &rng, std::vector<Point3> &vert2pos,
     std::vector<int> *fundamental_verts_ptr = nullptr,
     const PerformReconstructionParam &param = PerformReconstructionParam());
+
+// ForEachSampledCamera
+void ForEachSampledCamera(
+    int ndirections, const std::vector<double> &fov_angles,
+    int npp_offset_angles, const std::vector<double> &pp_offset_ratios,
+    const Box3 &workspace_box, const Sizei &screen_size,
+    std::function<void(const PerspectiveCamera &cam)> callback);
+
+// ForEachPointDepths
+
 }
 }

@@ -35,22 +35,22 @@ struct PerspectiveOptions {
 int main_perspective(int argc, char **argv) {
 
   gui::Singleton::InitGui(argc, argv);
-  misc::SetCachePath("D:\\PanoramaReconstruction\\Perspective\\");
+  misc::SetCachePath("D:\\Panoramix\\Perspective\\");
   misc::Matlab matlab;
 
   PerspectiveOptions options;
   options.refresh_preparation = false;
-  options.refresh_gc = false;
-  options.refresh_mg_init = false;
-  options.refresh_mg_oriented = true;
-  options.refresh_mg_reconstructed = true;
+  options.refresh_gc = options.refresh_preparation || false;
+  options.refresh_mg_init = options.refresh_gc || false;
+  options.refresh_mg_oriented = options.refresh_mg_init || false;
+  options.refresh_mg_reconstructed = options.refresh_mg_oriented || false;
 
   options.usePrincipleDirectionPrior = true;
   options.useGeometricContextPrior = true;
   options.useWallPrior = true;
 
   std::vector<std::string> dirs;
-  auto images = gui::FileDialog::PickImages("F:\\DataSets\\CVPR2016EXT", &dirs);
+  auto images = gui::FileDialog::PickImages("F:\\IndoorPerspective", &dirs);
 
   for (int i = 0; i < dirs.size(); i++) {
     Image3ub original = images[i];
@@ -276,7 +276,7 @@ int main_perspective(int argc, char **argv) {
       misc::SaveCache(dir, "mg_reconstructed", mg, cg, dp);
     }
 
-    VisualizeReconstructionCompact(view.image, dp, cg, mg, true);
+    VisualizeReconstructionCompact(view.image, dp, cg, mg, true, true);
   }
 
 	return 0;

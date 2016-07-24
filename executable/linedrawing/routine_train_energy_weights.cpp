@@ -149,7 +149,7 @@ void RoutineTrainEnergyWeights() {
     auto energy_terms = [&](const PerspectiveCamera &cam,
                             const std::vector<double> &point_depths) {
       assert(input.projection.line_drawing.points.size() ==
-                 input.groundtruth->line_drawing.points.size() &&
+                 input.groundtruth->point_depths.size() &&
              input.projection.line_drawing.points.size() ==
                  point_depths.size());
       // compute 3d points from the given depths

@@ -3,10 +3,12 @@
 #include "cameras.hpp"
 #include "geometry.hpp"
 #include "image.hpp"
+#include "discretization.hpp"
 
 namespace pano {
 namespace experimental {
 using namespace ::pano::core;
+
 // LineDrawingTopo
 struct LineDrawingTopo {
   std::vector<std::pair<int, int>> edges;
@@ -26,6 +28,8 @@ template <class PointT> struct LineDrawing {
 using LineDrawing2 = LineDrawing<Point2>;
 using LineDrawing3 = LineDrawing<Point3>;
 LineDrawing3 LineDrawing3FromObjFile(const std::string &obj_file);
+void SaveLineDrawing3ToObjFile(const std::string &obj_file,
+                               const LineDrawing3 &line_drawing);
 
 // AuxiliaryData
 template <class EssentialDataT> struct AuxiliaryData {};
@@ -51,6 +55,39 @@ MakeAuxiliary(const LineDrawing<PointT> &line_drawing);
 std::map<std::pair<int, int>, bool>
 ComputeFacesOverlap(const LineDrawing2 &line_drawing,
                     const AuxiliaryData<LineDrawing2> &aux);
+
+// LineDrawingReconstruction
+struct LineDrawingReconstruction {
+  std::vector<double> point_depths;
+  PerspectiveCamera camera;
+  template <class Archive> void serialize(Archive &ar) {
+    ar(point_depths, camera);
+  }
+};
+// DecomposeProjectionAndDepths
+std::pair<LineDrawing2, std::vector<double>>
+DecomposeProjectionAndDepths(const LineDrawing3 &line_drawing,
+                             const PerspectiveCamera &cam);
+}
+
+namespace core {
+template <class PointT>
+auto BoundingBox(const experimental::LineDrawing<PointT> &line_drawing) {
+  return BoundingBoxOfContainer(line_drawing.points);
+}
+}
+
+namespace gui {
+template <class PointT>
+void Discretize(TriMesh &mesh,
+                const experimental::LineDrawing<PointT> &line_drawing,
+                const DiscretizeOptions &o) {
+  for (auto &e : line_drawing.topo.edges) {
+    Discretize(mesh, Line<PointT>(line_drawing.points[e.first],
+                                  line_drawing.points[e.second]),
+               o);
+  }
+}
 }
 }
 

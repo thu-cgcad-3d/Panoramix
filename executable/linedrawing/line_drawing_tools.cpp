@@ -1777,5 +1777,44 @@ double PerformReconstruction(
 
   return energy;
 }
+
+void ForEachSampledCamera(
+    int ndirections, const std::vector<double> &fov_angles,
+    int npp_offset_angles, const std::vector<double> &pp_offset_ratios,
+    const Box3 &workspace_box, const Sizei &screen_size,
+    std::function<void(const PerspectiveCamera &cam)> callback) {
+  GenerateFibonacciDirections(ndirections, [&](float x, float y, float z) {
+    Point3 center = workspace_box.center();
+    double screen_scale = norm(Vec2(screen_size.width, screen_size.height));
+    Point2 screen_center(screen_size.width / 2.0, screen_size.height / 2.0);
+
+    Vec3 xdir, ydir;
+    std::tie(xdir, ydir) = ProposeXYDirectionsFromZDirection(Vec3(x, y, z));
+    for (double fov_angle : fov_angles) {
+      //Println("fov_angle = ", fov_angle);
+      double half_fov = fov_angle / 2.0;
+      double focal = screen_size.height / tan(half_fov);
+
+      Point3 eye = normalize(Vec3(x, y, z)) *
+                       workspace_box.outerSphere().radius / tan(half_fov) +
+                   center;
+
+      for (int i = 0; i < npp_offset_angles; i++) {
+        double pp_offset_angle = M_PI * 2.0 / npp_offset_angles * i;
+        //Println("pp_offset_angle = ", pp_offset_angle);
+
+        for (double pp_offset_ratio : pp_offset_ratios) {
+          //Println("pp_offset_ratio = ", pp_offset_ratio);
+          Point2 pp = screen_center +
+                      Vec2(sin(pp_offset_angle), cos(pp_offset_angle)) *
+                          pp_offset_ratio * screen_scale;
+
+          callback(PerspectiveCamera(screen_size.width, screen_size.height, pp,
+                                     focal, eye, center, ydir));
+        }
+      }
+    }
+  });
+}
 }
 }

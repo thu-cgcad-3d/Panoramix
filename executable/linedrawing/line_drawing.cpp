@@ -1,4 +1,5 @@
 #include "line_drawing.hpp"
+#include "iterators.hpp"
 #include "utility.hpp"
 
 namespace pano {
@@ -23,6 +24,27 @@ LineDrawing3 LineDrawing3FromObjFile(const std::string &obj_file) {
   }
   ld.topo.edges = std::vector<std::pair<int, int>>(edges.begin(), edges.end());
   return ld;
+}
+
+void SaveLineDrawing3ToObjFile(const std::string &obj_file,
+                               const LineDrawing3 &line_drawing) {
+  std::ofstream ofs(obj_file);
+  if (ofs.is_open()) {
+    for (int i = 0; i < line_drawing.points.size(); i++) {
+      ofs << 'v';
+      for (int k = 0; k < 3; k++) {
+        ofs << ' ' << line_drawing.points[i][k];
+      }
+      ofs << '\n';
+    }
+    for (auto &f : line_drawing.topo.coplanar_points) {
+      ofs << 'f';
+      for (auto v : f) {
+        ofs << ' ' << (v + 1);
+      }
+      ofs << '\n';
+    }
+  }
 }
 
 std::map<std::pair<int, int>, bool>
@@ -90,5 +112,33 @@ ComputeFacesOverlap(const LineDrawing2 &line_drawing,
 
   return faces_overlap;
 }
+
+std::pair<LineDrawing2, std::vector<double>>
+DecomposeProjectionAndDepths(const LineDrawing3 &line_drawing,
+                             const PerspectiveCamera &cam) {
+  std::vector<double> point_depths =
+      MakeRange(line_drawing.points)
+          .transform([&cam](const Point3 &p3) -> double {
+            return Distance(p3, cam.eye());
+          })
+          .evalAsStdVector();
+  double mean_depth =
+      std::accumulate(point_depths.begin(), point_depths.end(), 0.0) /
+      point_depths.size();
+  for (auto &d : point_depths) {
+    d /= mean_depth;
+  }
+
+  LineDrawing2 projection;
+  projection.topo = line_drawing.topo;
+  projection.points = MakeRange(line_drawing.points)
+                          .transform([&cam](const Point3 &p3) -> Point2 {
+                            return cam.toScreen(p3);
+                          })
+                          .evalAsStdVector();
+  return std::make_pair(projection, point_depths);
+}
+
+
 }
 }
