@@ -876,49 +876,51 @@ PerspectiveCamera Scene::perfectView(int width, int height,
 }
 
 // SceneWidget
-class SceneWidget : public QGLWidget {
+class SceneWidget : public QOpenGLWidget {
 public:
   std::shared_ptr<RenderOptions> options;
   Scene scene;
 
   SceneWidget(Scene &&v, std::shared_ptr<RenderOptions> ro,
               QWidget *parent = nullptr)
-      : QGLWidget(parent), options(ro), scene(std::move(v)) {
+      : QOpenGLWidget(parent), options(ro), scene(std::move(v)) {
+		Println("SceneWidget(...) called");
     setMouseTracking(true);
-    setAutoBufferSwap(false);
     grabKeyboard();
   }
 
 protected:
-  void initializeGL() {
-    makeCurrent();
-    glEnable(GL_MULTISAMPLE);
-    GLint bufs;
-    GLint samples;
-    glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
-    glGetIntegerv(GL_SAMPLES, &samples);
-    qDebug("Have %d buffers and %d samples", bufs, samples);
-    qglClearColor(MakeQColor(options->backgroundColor()));
+  void initializeGL() override {
+		//Println("initializeGL()");
+    //makeCurrent();
+    //glEnable(GL_MULTISAMPLE);
+    //GLint bufs;
+    //GLint samples;
+    //glGetIntegerv(GL_SAMPLE_BUFFERS, &bufs);
+    //glGetIntegerv(GL_SAMPLES, &samples);
+    //qDebug("Have %d buffers and %d samples", bufs, samples);
+    glClearColor(options->backgroundColor().redf(),
+                 options->backgroundColor().greenf(),
+                 options->backgroundColor().bluef(),
+                 options->backgroundColor().alphaf());
     scene.initialize();
   }
 
-  void paintGL() {
-    QPainter painter;
-    painter.begin(this);
-    painter.beginNativePainting();
-    qglClearColor(MakeQColor(options->backgroundColor()));
+  void paintGL() override {
+		//Println("paintGL()");
+    glClearColor(options->backgroundColor().redf(),
+                 options->backgroundColor().greenf(),
+                 options->backgroundColor().bluef(),
+                 options->backgroundColor().alphaf());
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     PerspectiveCamera &camera = options->camera();
     camera.resizeScreen(Size(width(), height()));
 
     scene.render(*options);
-
-    painter.endNativePainting();
-    swapBuffers();
   }
 
-  void resizeGL(int w, int h) {
+  void resizeGL(int w, int h) override {
     PerspectiveCamera &camera = options->camera();
     camera.resizeScreen(Size(w, h));
     camera.setFocal(std::max(width(), height()));
@@ -1122,7 +1124,7 @@ SceneBuilder::SceneBuilder(const SceneObjectInstallingOptions &defaultO)
 SceneWidget *SceneBuilder::createWidget(const RenderOptions &options,
                                         QWidget *parent) {
   return new SceneWidget(
-      scene(), std::shared_ptr<RenderOptions>(new RenderOptions(options)),
+      scene(), std::make_shared<RenderOptions>(options),
       parent);
 }
 
@@ -1132,16 +1134,6 @@ RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
 
   QMainWindow *mwin = new QMainWindow;
 
-	SceneWidget *w = nullptr;
-  while (!w) {
-    try {
-      w = createWidget(options);
-    } catch (...) {
-			std::cout << "failed createWidget" << std::endl;
-    }
-  }
-
-  mwin->setCentralWidget(w);
   mwin->setAttribute(Qt::WA_DeleteOnClose);
   if (!autoSetCamera) {
     mwin->resize(MakeQSize(options.camera().screenSize()));
@@ -1154,10 +1146,6 @@ RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
 
   auto menuView = mwin->menuBar()->addMenu(QObject::tr("View"));
   auto actionSettings = menuView->addAction(QObject::tr("Settings"));
-  QObject::connect(actionSettings, &QAction::triggered, [w]() {
-    PopUpGui(*w->options, w);
-    w->update();
-  });
   auto menuAbout = mwin->menuBar()->addMenu(QObject::tr("About"));
   auto actionAbout = menuAbout->addAction(QObject::tr("About"));
   QObject::connect(actionAbout, &QAction::triggered, [mwin]() {
@@ -1166,17 +1154,39 @@ RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
         QObject::tr("Panoramix.Vis is the visulization module of project "
                     "Panoramix developped by Yang Hao."));
   });
-  mwin->statusBar()->show();
+  //mwin->statusBar()->show();
 
   auto palette = mwin->palette();
   palette.setColor(QPalette::Window, MakeQColor(options.backgroundColor()));
   mwin->setPalette(palette);
   // qDebug() << mwin->styleSheet();
+
+  SceneWidget *w = nullptr;
+  while (!w) {
+    try {
+			Println("createWidget begin");
+      w = createWidget(options);
+			Println("createWidget end");
+    } catch (...) {
+      std::cout << "failed createWidget" << std::endl;
+    }
+  }
+
+  QObject::connect(actionSettings, &QAction::triggered, [w]() {
+    PopUpGui(*w->options, w);
+    w->update();
+  });
+  auto adjusted = w->options;
   if (autoSetCamera) {
     w->autoSetCamera();
   }
-  auto adjusted = w->options;
+  mwin->setCentralWidget(w);
+
+	using namespace std::chrono_literals;
+	std::this_thread::sleep_for(5s);
+	Println("mwin show begin");
   mwin->show();
+	Println("mwin show end");
   if (doModal) {
     Singleton::ContinueGui();
   }

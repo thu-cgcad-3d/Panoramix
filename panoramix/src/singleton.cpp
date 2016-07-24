@@ -34,13 +34,6 @@ QApplication *Singleton::InitGui(int argc, char **argv) {
   _argc = argc;
   _argv = argv;
 
-  //QTextCodec *xcodec = QTextCodec::codecForLocale();
-  //QString exeDir = xcodec->toUnicode(QByteArray(argv[0]));
-  //// qt has a bug in 5.2.1(windows)? so I use setLibraryPaths
-  //QApplication::setLibraryPaths(QApplication::libraryPaths()
-  //                              << QFileInfo(exeDir).path());
-
-  //QCoreApplication::addLibraryPath("./");
   QApplication *app = new QApplication(argc, argv);
 
   defaultIcon = QIcon(":/icons/icon.png");
@@ -53,11 +46,11 @@ QApplication *Singleton::InitGui(int argc, char **argv) {
   app->setStyleSheet(defaultCSS);
 
   app->setQuitOnLastWindowClosed(true);
-  QGLFormat glf = QGLFormat::defaultFormat();
-  qDebug("OpenGL version: %d.%d", glf.majorVersion(), glf.minorVersion());
-  glf.setSampleBuffers(true);
-  glf.setSamples(16);
-  QGLFormat::setDefaultFormat(glf);
+	QSurfaceFormat sf = QSurfaceFormat::defaultFormat();
+	sf.setSamples(16);
+	 qDebug("OpenGL version: %d.%d", sf.majorVersion(), sf.minorVersion());
+	QSurfaceFormat::setDefaultFormat(sf);
+
   return app;
 }
 
