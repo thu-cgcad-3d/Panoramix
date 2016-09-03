@@ -5,7 +5,6 @@
 
 namespace pano {
 namespace core {
-
 // generic algorithms
 template <class IterT, class OutIterT, class IsCompatibleFunT>
 void FilterBy(IterT begin, IterT end, OutIterT out,

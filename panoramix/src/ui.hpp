@@ -6,9 +6,7 @@ class QApplication;
 
 namespace pano {
 namespace gui {
-
-struct Singleton {
-
+struct UI {
   static const QIcon &DefaultIcon();
   static const QString &DefaultCSS();
 

@@ -8,7 +8,6 @@
 
 namespace pano {
 namespace experimental {
-
 std::vector<Polygon3> CompactModel(const PICGDeterminablePart &dp,
                                    const PIConstraintGraph &cg,
                                    const PIGraph<PanoramicCamera> &mg,

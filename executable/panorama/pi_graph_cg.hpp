@@ -4,20 +4,21 @@
 
 namespace pano {
 namespace experimental {
-
+// PIConstraintGraph
 struct PIConstraintGraph {
   struct Entity {
     enum Type { IsSeg, IsLine } type;
     bool isSeg() const { return type == IsSeg; }
     bool isLine() const { return type == IsLine; }
     int id;
+    // supporting plane
     struct SupportingPlane {
       int dof;
       Vec3 center;
       Vec3 toward;
       Vec3 along;
       Plane3 reconstructed;
-      SupportingPlane();
+      explicit SupportingPlane();
       explicit SupportingPlane(const SegControl &control, const Vec3 &center,
                                const std::vector<Vec3> &vps);
       explicit SupportingPlane(const Classified<Line3> &line,
@@ -33,6 +34,7 @@ struct PIConstraintGraph {
       ar(type, id, supportingPlane, size);
     }
   };
+  // constraint
   struct Constraint {
     enum Type { Coplanarity, Connection } type;
     bool isCoplanarity() const { return type == Coplanarity; }
@@ -58,6 +60,8 @@ struct PIConstraintGraph {
   }
 };
 
+// PICGDeterminablePart
+// the determinable subgraph of PIConstraintGraph
 struct PICGDeterminablePart {
   int rootEnt;
   std::set<int> determinableEnts;
@@ -69,17 +73,18 @@ struct PICGDeterminablePart {
 };
 
 PIConstraintGraph
-BuildPIConstraintGraph(const PIGraph<PanoramicCamera> &mg, double minAngleThresForAWideEdge,
+BuildPIConstraintGraph(const PIGraph<PanoramicCamera> &mg,
+                       double minAngleThresForAWideEdge,
                        double weightRatioForCoplanarityWithLines = 0.0);
 
 PIConstraintGraph BuildPIConstraintGraph(
-    const PIGraph<PanoramicCamera> &mg, const std::vector<LineSidingWeight> &lsw,
+    const PIGraph<PanoramicCamera> &mg,
+    const std::vector<LineSidingWeight> &lsw,
     const std::vector<std::array<std::set<int>, 2>> &line2leftRightSegs,
     double minAngleThresForAWideEdge);
 
 PICGDeterminablePart LocateDeterminablePart(const PIConstraintGraph &cg,
                                             double angleThres, bool connectAll);
-
 
 // from annotation
 class PILayoutAnnotation;
@@ -89,6 +94,5 @@ PIConstraintGraph BuildPIConstraintGraph(const PILayoutAnnotation &anno,
 PIConstraintGraph
 BuildPIConstraintGraphWithLines(const PILayoutAnnotation &anno,
                                 double minAngleThresForAWideEdge);
-
 }
 }

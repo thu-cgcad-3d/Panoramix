@@ -113,6 +113,16 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
   misc::SaveCache(identity, "options", options);
   misc::SaveCache(identity, "report", report);
 
+  const std::string folder = misc::FolderOfFile(anno.impath) + "\\images\\" +
+                             misc::Tagify(identity) + "\\";
+
+  if (writeToFile) {
+    misc::MakeDir(folder);
+  }
+  if (writeToFile) {
+    cv::imwrite(folder + "im.png", anno.view.image);
+  }
+
   auto image = anno.rectifiedImage.clone();
   ResizeToHeight(image, 700);
 
@@ -217,35 +227,6 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
                     vertVPId, segs, nsegs);
   }
 
-  // if (showGUI) {
-  //  auto ctable = gui::CreateGreyColorTableWithSize(nsegs);
-  //  ctable.randomize();
-  //  gui::ColorTable rgb = gui::RGBGreys;
-  //  rgb.exceptionalColor() = gui::Black;
-  //  auto canvas = gui::MakeCanvas(view.image).alpha(0.9);
-  //  for (auto &l : line3s) {
-  //    static const double sampleAngle = M_PI / 100.0;
-  //    auto &line = l.component;
-  //    double spanAngle = AngleBetweenDirected(line.first, line.second);
-  //    std::vector<Point2> ps;
-  //    ps.reserve(spanAngle / sampleAngle);
-  //    for (double angle = 0.0; angle <= spanAngle; angle += sampleAngle) {
-  //      Vec3 dir = RotateDirection(line.first, line.second, angle);
-  //      ps.push_back(view.camera.toScreen(dir));
-  //    }
-  //    for (int i = 1; i < ps.size(); i++) {
-  //      auto &p1 = ps[i - 1];
-  //      auto &p2 = ps[i];
-  //      if (Distance(p1, p2) >= view.image.cols / 2) {
-  //        continue;
-  //      }
-  //      canvas.thickness(2);
-  //      canvas.colorTable(rgb).add(gui::ClassifyAs(Line2(p1, p2), -1));
-  //    }
-  //  }
-  //  canvas.show();
-  //}
-
   // gc !!!!
   std::vector<PerspectiveCamera> hcams;
   std::vector<Weighted<View<PerspectiveCamera, Image5d>>> gcs;
@@ -289,30 +270,19 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
     misc::SaveCache(anno.impath, gcmergedFileName, gc);
   }
 
-  if (true) {
-    std::vector<Imaged> gcChannels;
-    cv::split(gc, gcChannels);
-    auto gc3d = ConvertToImage3d(gc);
-    // cv::cvtColor(gc3d, gc3d, CV_RGB2BGR);
-    //cv::imwrite("C:\\Users\\YANGHAO\\Pictures\\55_gc3d.png", gc3d * 255);
-    //gui::AsCanvas(gc3d).show(1, "gc");
-  }
-
   // build pigraph!
   PIGraph<PanoramicCamera> mg;
   if (options.refresh_mg_init || !misc::LoadCache(identity, "mg_init", mg)) {
     std::cout << "########## refreshing mg init ###########" << std::endl;
     START_TIME_RECORD(mg_init);
     mg = BuildPIGraph(view, vps, vertVPId, segs, line3s, DegreesToRadians(1),
-                      DegreesToRadians(1), DegreesToRadians(1),
-                      ///!!!0.04,
-                      thetaTiny, thetaLarge, thetaTiny);
+                      DegreesToRadians(1), DegreesToRadians(1), thetaTiny,
+                      thetaLarge, thetaTiny);
     STOP_TIME_RECORD(mg_init);
     misc::SaveCache(identity, "mg_init", mg);
   }
 
   std::vector<std::array<std::set<int>, 2>> line2leftRightSegs;
-  // static const double angleDistForSegLineNeighborhood = DegreesToRadians(5);
   if (options.refresh_line2leftRightSegs ||
       !misc::LoadCache(identity, "line2leftRightSegs", line2leftRightSegs)) {
     std::cout << "########## refreshing line2leftRightSegs ###########"
@@ -321,94 +291,6 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
     line2leftRightSegs = CollectSegsNearLines(mg, thetaMid * 2);
     STOP_TIME_RECORD(line2leftRightSegs);
     misc::SaveCache(identity, "line2leftRightSegs", line2leftRightSegs);
-  }
-
-  const auto printPIGraph = [&mg, &identity](int delay,
-                                             const std::string &saveAs) {
-    static const gui::ColorTable randColors =
-        gui::CreateRandomColorTableWithSize(mg.nsegs);
-    static gui::ColorTable rgbColors = gui::RGBGreys;
-    rgbColors.exceptionalColor() = gui::Gray;
-    auto pim = PrintPIGraph2(
-        mg,
-        [&mg](int seg, Pixel pos) -> gui::Color {
-          static const gui::ColorTable ctable =
-              gui::ColorTableDescriptor::RGBGreys;
-          auto &c = mg.seg2control[seg];
-          if (!c.used) {
-            return gui::Black;
-          }
-          /*if (c.orientationClaz == 0) {
-              return gui::Red;
-          }*/
-          if (c.orientationClaz != -1) {
-            return ctable[c.orientationClaz].blendWith(gui::White, 0.3);
-          }
-          if (c.orientationNotClaz != -1) {
-            static const int w = 10;
-            if (IsBetween((pos.x + pos.y) % w, 0, w / 2)) {
-              return ctable[c.orientationNotClaz].blendWith(gui::White, 0.3);
-            } else {
-              return gui::White;
-            }
-          }
-          return gui::White;
-        },
-        [&mg](int lp) { return gui::Transparent; },
-        [&mg](int bp) -> gui::Color { return gui::Black; }, 1, 0);
-    auto canvas = gui::AsCanvas(pim);
-    for (auto &l : mg.lines) {
-      static const double sampleAngle = M_PI / 100.0;
-      auto &line = l.component;
-      int claz = l.claz;
-      if (claz >= mg.vps.size()) {
-        claz = -1;
-      }
-      double spanAngle = AngleBetweenDirected(line.first, line.second);
-      std::vector<Point2> ps;
-      ps.reserve(spanAngle / sampleAngle);
-      for (double angle = 0.0; angle <= spanAngle; angle += sampleAngle) {
-        Vec3 dir = RotateDirection(line.first, line.second, angle);
-        ps.push_back(mg.view.camera.toScreen(dir));
-      }
-      for (int i = 1; i < ps.size(); i++) {
-        auto p1 = ToPixel(ps[i - 1]);
-        auto p2 = ToPixel(ps[i]);
-        if (Distance(p1, p2) >= mg.view.image.cols / 2) {
-          continue;
-        }
-        gui::Color color = rgbColors[claz];
-        cv::clipLine(cv::Rect(0, 0, canvas.image().cols, canvas.image().rows),
-                     p1, p2);
-        cv::line(canvas.image(), p1, p2, (cv::Scalar)color / 255.0, 2);
-      }
-    }
-    canvas.show(delay, "pi graph");
-    if (saveAs != "") {
-      cv::imwrite(saveAs, Image3ub(canvas.image() * 255));
-    }
-    return canvas.image();
-  };
-
-  const std::string folder = "D:\\Panoramix\\Panorama\\images\\" +
-                             misc::Tagify(identity) + "\\";
-  misc::MakeDir(folder);
-
-  if (writeToFile) {
-    cv::imwrite(folder + "im.png", anno.view.image);
-  }
-
-  if (false) {
-    auto backup = mg;
-    AttachPrincipleDirectionConstraints(mg);
-    printPIGraph(0, folder + "principledirections.png");
-    mg = backup;
-    AttachWallConstraints(mg, M_PI / 60.0);
-    printPIGraph(0, folder + "wall.png");
-    mg = backup;
-    AttachGCConstraints(mg, gc, 0.7, 0.7, true);
-    printPIGraph(0, folder + "gc.png");
-    mg = backup;
   }
 
   // attach orientation constraints
@@ -420,7 +302,6 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
       AttachPrincipleDirectionConstraints(mg);
     }
     if (options.useWallPrior) {
-      ///!!!AttachWallConstraints(mg, M_PI / 60.0);
       AttachWallConstraints(mg, thetaTiny);
     }
     if (options.useGeometricContextPrior) {
@@ -430,21 +311,6 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
     misc::SaveCache(identity, "mg_oriented", mg);
   }
 
-  if (false) {
-    Image3ub lsim = printPIGraph(0, "") * 255;
-    ReverseRows(lsim);
-    gui::SceneBuilder sb;
-    gui::ResourceStore::set("tex", lsim);
-    Sphere3 sphere;
-    sphere.center = Origin();
-    sphere.radius = 1.0;
-    sb.begin(sphere)
-        .shaderSource(gui::OpenGLShaderSourceDescriptor::XPanorama)
-        .resource("tex")
-        .end();
-    sb.show(true, true);
-  }
-
   // detect occlusions
   std::vector<LineSidingWeight> lsw;
   if (options.refresh_lsw || !misc::LoadCache(identity, "lsw", lsw)) {
@@ -452,155 +318,15 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
     START_TIME_RECORD(lsw);
     if (options.notUseOcclusions) {
       lsw.resize(mg.nlines(), LineSidingWeight{0.5, 0.5});
+    } else if (!options.useGTOcclusions) {
+      lsw = ComputeLinesSidingWeights2(mg, DegreesToRadians(3), 0.2, 0.1,
+                                       thetaMid);
     } else {
-      if (!options.useGTOcclusions) {
-        lsw = ComputeLinesSidingWeights2(mg, DegreesToRadians(3), 0.2, 0.1,
-                                         thetaMid);
-      } else {
-        lsw = ComputeLinesSidingWeightsFromAnnotation(
-            mg, anno, DegreesToRadians(0.5), DegreesToRadians(8), 0.6);
-      }
+      lsw = ComputeLinesSidingWeightsFromAnnotation(
+          mg, anno, DegreesToRadians(0.5), DegreesToRadians(8), 0.6);
     }
     STOP_TIME_RECORD(lsw);
     misc::SaveCache(identity, "lsw", lsw);
-  }
-
-  if (showGUI) {
-    // printPIGraph(0, folder + misc::NameOfFile(anno.impath) +
-    // options.algorithmOptionsTag() + ".lines_segs.png");
-  }
-  const auto drawLine = [&mg](Image3f &pim, const Line3 &line,
-                              const std::string &text, const gui::Color &color,
-                              bool withTeeth, int linewidth, double stepAngle) {
-    double angle = AngleBetweenDirected(line.first, line.second);
-    std::vector<Pixel> ps;
-    for (double a = 0.0; a <= angle; a += stepAngle) {
-      ps.push_back(ToPixel(mg.view.camera.toScreen(
-          RotateDirection(line.first, line.second, a))));
-    }
-    for (int i = 1; i < ps.size(); i++) {
-      auto p1 = ps[i - 1];
-      auto p2 = ps[i];
-      if (Distance(p1, p2) >= pim.cols / 2) {
-        continue;
-      }
-      cv::clipLine(cv::Rect(0, 0, pim.cols, pim.rows), p1, p2);
-      cv::line(pim, p1, p2, (cv::Scalar)color / 255.0, linewidth);
-      if (withTeeth) {
-        auto teethp =
-            ToPixel(RightPerpendicularDirectiion(ecast<double>(p2 - p1))) +
-            ToPixel((ecast<double>(p1) + ecast<double>(p2)) / 2.0);
-        std::vector<Pixel> triangle = {p1, teethp, p2};
-        cv::fillConvexPoly(pim, triangle, (cv::Scalar)color / 255.0);
-      }
-    }
-    if (!text.empty()) {
-      cv::putText(pim, text, ps.back() + Pixel(5, 0), 1, 0.7, color);
-    }
-  };
-  if (showGUI) {
-    Image3f pim1;
-    {
-      static gui::ColorTable ctable = gui::RGBGreys;
-      ctable.exceptionalColor() = gui::Gray;
-      Image3f pim = mg.view.image.clone() / 255.0;
-      pim = pim * 0.3 + 0.7;
-      for (int line = 0; line < mg.nlines(); line++) {
-        auto &ws = lsw[line];
-        auto l = mg.lines[line].component;
-        drawLine(pim, l, "", ctable[mg.lines[line].claz], false, 5, 0.005);
-      }
-      if (writeToFile) {
-        cv::imwrite(folder + "lines.png", Image3ub(pim * 255));
-      }
-      pim1 = pim;
-    }
-    Image3f pim2;
-    {
-      static const gui::ColorTable randColors =
-          gui::CreateRandomColorTableWithSize(mg.nsegs);
-      auto pim = PrintPIGraph2(
-          mg,
-          [&mg](int seg, Pixel pos) -> gui::Color {
-            static const gui::ColorTable ctable =
-                gui::ColorTableDescriptor::RGBGreys;
-            auto &c = mg.seg2control[seg];
-            if (!c.used) {
-              return gui::White; ////
-            }
-            if (c.orientationClaz != -1) {
-              return ctable[c.orientationClaz].blendWith(gui::White, 0.3);
-            }
-            if (c.orientationNotClaz != -1) {
-              static const int w = 10;
-              if (IsBetween((pos.x + pos.y) % w, 0, w / 2)) {
-                return ctable[c.orientationNotClaz].blendWith(gui::White, 0.3);
-              } else {
-                return gui::White;
-              }
-            }
-            return gui::White;
-          },
-          [&mg](int lp) { return gui::Transparent; },
-          [&mg](int bp) -> gui::Color { return gui::Black; }, 0, 0);
-      // draw boundaries in a better way
-      {
-        Imageb bndMask(mg.segs.size(), false);
-        for (auto it = mg.segs.begin(); it != mg.segs.end(); ++it) {
-          auto p = it.pos();
-          for (auto p2 : {Pixel(p.x + 1, p.y), Pixel(p.x, p.y + 1),
-                          Pixel(p.x + 1, p.y + 1), Pixel(p.x - 1, p.y + 1)}) {
-            if (!IsBetween(p2.y, 0, mg.segs.rows)) {
-              continue;
-            }
-            p2.x = WrapBetween(p2.x, 0, mg.segs.cols);
-            if (*it != mg.segs(p2)) {
-              bndMask(p) = true;
-            }
-          }
-        }
-        cv::Mat element = cv::getStructuringElement(
-            cv::MORPH_ELLIPSE, cv::Size(2 * 1 + 1, 2 * 1 + 1), cv::Point(1, 1));
-        cv::dilate(bndMask, bndMask, element);
-        for (auto it = bndMask.begin(); it != bndMask.end(); ++it) {
-          if (*it) {
-            pim(it.pos()) = Vec3f();
-          }
-        }
-      }
-      if (writeToFile) {
-        cv::imwrite(folder + "oriented_segs.png", Image3ub(pim * 255));
-      }
-      Image3f im = view.image.clone() / 255.0f;
-      for (int line = 0; line < mg.nlines(); line++) {
-        auto &ws = lsw[line];
-        auto l = mg.lines[line].component;
-        if (!ws.isOcclusion()) {
-          continue;
-        } else if (ws.onlyConnectLeft()) {
-          drawLine(pim, l, "", gui::Blue, true, 1, 0.04);
-          drawLine(im, l, "", gui::Blue, true, 1, 0.04);
-        } else if (ws.onlyConnectRight()) {
-          drawLine(pim, l.reversed(), "", gui::Blue, true, 1, 0.04);
-          drawLine(im, l.reversed(), "", gui::Blue, true, 1, 0.04);
-        } else {
-          drawLine(pim, l, "", gui::Gray, false, 2, 0.005);
-          drawLine(im, l, "", gui::Gray, false, 2, 0.005);
-        }
-      }
-      if (writeToFile) {
-        cv::imwrite(folder + "oriented_segs_occ.png", Image3ub(pim * 255));
-        cv::imwrite(folder + "occ.png", Image3ub(im * 255));
-      }
-      pim2 = pim;
-    }
-
-    Image3f bar(3, pim1.cols, Vec3f(1, 1, 1));
-    Image3f pim;
-    cv::vconcat(std::vector<Image3f>{pim1, bar, pim2}, pim);
-    if (writeToFile) {
-      cv::imwrite(folder + "combinedinfo.png", Image3ub(pim * 255));
-    }
   }
 
   if (options.refresh_mg_occdetected ||
@@ -628,9 +354,6 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
     START_TIME_RECORD(mg_reconstructed);
     cg = BuildPIConstraintGraph(mg, DegreesToRadians(1), 0.01);
 
-    // bool hasSecondTime = options.looseLinesSecondTime ||
-    // options.looseSegsSecondTime || options.restrictSegsSecondTime;
-    // for (int i = 0; i < (hasSecondTime ? 2 : 1); i++) {
     dp = LocateDeterminablePart(cg, DegreesToRadians(3), false);
     auto start = std::chrono::system_clock::now();
     double energy = Solve(dp, cg, matlab, 5, 1e6, !options.notUseCoplanarity);
@@ -639,113 +362,11 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
       std::cout << "solve failed" << std::endl;
       return report;
     }
-    //}
     STOP_TIME_RECORD(mg_reconstructed);
     misc::SaveCache(identity, "mg_reconstructed", mg, cg, dp);
   }
 
-  // if (options.refresh_mg_reconstructed || !misc::LoadCache(identity,
-  // "mg_reconstructed_connectall", mg, cg, dp)) {
-  //    std::cout << "########## refreshing mg reconstructed connectall
-  //    ###########" << std::endl;
-  //    //START_TIME_RECORD(mg_reconstructed);
-  //    cg = BuildPIConstraintGraph(mg, DegreesToRadians(1), 0.01);
-
-  //    //bool hasSecondTime = options.looseLinesSecondTime ||
-  //    options.looseSegsSecondTime || options.restrictSegsSecondTime;
-  //    //for (int i = 0; i < (hasSecondTime ? 2 : 1); i++) {
-  //        dp = LocateDeterminablePart(cg, DegreesToRadians(3), true);
-  //        auto start = std::chrono::system_clock::now();
-  //        double energy = Solve(dp, cg, matlab, 5, 1e6,
-  //        !options.notUseCoplanarity);
-  //        report.time_solve_lp = ElapsedInMS(start);
-  //        if (IsInfOrNaN(energy)) {
-  //            std::cout << "solve failed" << std::endl;
-  //            return report;
-  //        }
-  //    //}
-  //    //STOP_TIME_RECORD(mg_reconstructed);
-  //    misc::SaveCache(identity, "mg_reconstructed_connectall", mg, cg, dp);
-  //}
-
-  if (false) {
-    // if (options.looseLinesSecondTime) {
-    if (mg.line2used.empty()) {
-      mg.line2used.resize(mg.nlines(), true);
-    }
-    // DisorientDanglingLines3(dp, cg, mg, 0.01, 0.2);
-    //}
-    // if (options.looseSegsSecondTime) {
-    DisorientDanglingSegs3(dp, cg, mg, 0.01, 0.3);
-    //}
-    // if (options.restrictSegsSecondTime) {
-    // OverorientSkewSegs(dp, cg, mg, DegreesToRadians(3), DegreesToRadians(60),
-    // 0.2);
-    //}
-    cg = BuildPIConstraintGraph(mg, DegreesToRadians(1), 0.01);
-    dp = LocateDeterminablePart(cg, DegreesToRadians(3), true);
-
-    auto start = std::chrono::system_clock::now();
-    double energy = Solve(dp, cg, matlab, 5, 1e6, !options.notUseCoplanarity);
-    report.time_solve_lp = ElapsedInMS(start);
-
-    if (IsInfOrNaN(energy)) {
-      std::cout << "solve failed" << std::endl;
-      return report;
-    }
-    misc::SaveCache(identity, "mg_reconstructed2", mg, cg, dp);
-  }
-
   if (showGUI) {
-    //std::pair<double, double> validRange;
-    //Imaged depthMap = SurfaceDepthMap(mg.view.camera, dp, cg, mg, true);
-    //std::vector<double> depthsArray(depthMap.begin(), depthMap.end());
-    //std::sort(depthsArray.begin(), depthsArray.end());
-    //double maxDepth = depthsArray.back();
-    //double minDepth = depthsArray.front();
-    //Imagei depthMapDisc2 = (depthMap - minDepth) / (maxDepth - minDepth) * 255;
-    //Imagei depthMapDisc3 = depthMap / maxDepth * 255;
-    //for (int &d : depthMapDisc3) {
-    //  if (d > 255) {
-    //    d = 255;
-    //  }
-    //}
-    //auto jetctable = gui::CreateJetColorTableWithSize(256, gui::Black);
-    //auto greyctable = gui::CreateGreyColorTableWithSize(256, gui::Black);
-    //auto mask = GuessMask(anno);
-    //ResizeToHeight(mask, mg.view.image.rows);
-    //if (writeToFile) {
-    //  // apply mask
-    //  auto greyDepth = greyctable(depthMapDisc3);
-    //  auto jetDepth = jetctable(depthMapDisc3);
-    //  for (auto it = mask.begin(); it != mask.end(); ++it) {
-    //    if (!*it) {
-    //      greyDepth(it.pos()) = Vec3ub();
-    //      jetDepth(it.pos()) = Vec3ub();
-    //    }
-    //  }
-    //  cv::imwrite(folder + "depth2.png", greyDepth);
-    //  cv::imwrite(folder + "depth.png", jetDepth);
-    //}
-
-    //// Imagei depthMapDisc2 =
-    //auto surfaceNormalMap = SurfaceNormalMap(mg.view.camera, dp, cg, mg, true);
-    //auto surfaceNormalMapForShow = surfaceNormalMap.clone();
-    //for (auto &n : surfaceNormalMapForShow) {
-    //  auto nn = n;
-    //  for (int i = 0; i < 3; i++) {
-    //    n[i] = abs(nn.dot(vps[i]));
-    //  }
-    //  std::swap(n[0], n[2]);
-    //}
-    //if (writeToFile) {
-    //  for (auto it = mask.begin(); it != mask.end(); ++it) {
-    //    if (!*it) {
-    //      surfaceNormalMapForShow(it.pos()) = Vec3();
-    //    }
-    //  }
-    //  cv::imwrite(folder + "normals.png", surfaceNormalMapForShow * 255);
-    //}
     VisualizeReconstruction(dp, cg, mg, false,
                             [&cg, &mg](int ent) -> gui::Color {
                               auto &e = cg.entities[ent];
@@ -764,7 +385,8 @@ RunPanoramaReconstruction(const PILayoutAnnotation &anno,
                             },
                             nullptr, true);
 
-    VisualizeReconstructionCompact(anno.rectifiedImage, dp, cg, mg, true);
+    VisualizeReconstructionCompact(anno.rectifiedImage, dp, cg, mg, true,
+                                   false);
   }
 
   report.succeeded = true;
@@ -788,4 +410,135 @@ std::vector<LineSidingWeight> GetPanoramaReconstructionOcclusionResult(
   auto identity = options.identityOfImage(anno.impath);
   misc::LoadCache(identity, "lsw", lsw);
   return lsw;
+}
+
+void SaveMatlabResultsOfPanoramaReconstruction(
+    const PILayoutAnnotation &anno,
+    const PanoramaReconstructionOptions &options, misc::Matlab &matlab,
+    const std::string &fileName) {
+  PIGraph<PanoramicCamera> mg;
+  PIConstraintGraph cg;
+  PICGDeterminablePart dp;
+  if (!GetPanoramaReconstructionResult(anno, options, mg, cg, dp)) {
+    std::cout << "failed to load panoramix result, performing "
+                 "RunPanoramaReconstruction ..."
+              << std::endl;
+    RunPanoramaReconstruction(anno, options, matlab, false);
+    GetPanoramaReconstructionResult(anno, options, mg, cg, dp);
+  }
+
+  misc::MAT matFile(fileName, misc::MAT::Write);
+
+  // segs
+  matFile.setVar("segs", cv::InputArray(mg.segs + 1));
+  auto planes = misc::MXA::createStructMatrix(mg.nsegs, 1,
+                                              {"reconstructed", "plane_coeff"});
+  for (int seg = 0; seg < mg.nsegs; seg++) {
+    int ent = cg.seg2ent[seg];
+    bool reconstructed = Contains(dp.determinableEnts, ent);
+    planes.setField("reconstructed", seg, reconstructed);
+    if (reconstructed) {
+      planes.setField("plane_coeff", seg,
+                      misc::MXA(Plane3ToEquation(
+                          cg.entities[ent].supportingPlane.reconstructed)));
+    }
+  }
+  matFile.setVar("planes", planes);
+
+  // lines
+  std::vector<Line3> reconstructedLines;
+  for (int line = 0; line < mg.nlines(); line++) {
+    int ent = cg.line2ent[line];
+    bool reconstructed = Contains(dp.determinableEnts, ent);
+    if (reconstructed) {
+      auto &plane = cg.entities[ent].supportingPlane.reconstructed;
+      double d1 =
+          norm(IntersectionOfLineAndPlane(
+                   Ray3(Origin(), mg.lines[line].component.first), plane)
+                   .position);
+      double d2 =
+          norm(IntersectionOfLineAndPlane(
+                   Ray3(Origin(), mg.lines[line].component.second), plane)
+                   .position);
+      reconstructedLines.push_back(
+          Line3(d1 * normalize(mg.lines[line].component.first),
+                d2 * normalize(mg.lines[line].component.second)));
+    }
+  }
+
+  auto lines = misc::MXA::createStructMatrix(reconstructedLines.size(), 1,
+                                             {"line_p1", "line_p2"});
+  for (int i = 0; i < reconstructedLines.size(); i++) {
+    lines.setField("line_p1", i, misc::MXA(reconstructedLines[i].first));
+    lines.setField("line_p2", i, misc::MXA(reconstructedLines[i].second));
+  }
+  matFile.setVar("lines", lines);
+
+
+  // depthMap
+  Imaged depthMap(mg.segs.size(), 0.0);
+  for (auto it = depthMap.begin(); it != depthMap.end(); ++it) {
+    int seg = mg.segs(it.pos());
+    int ent = cg.seg2ent[seg];
+    bool reconstructed = Contains(dp.determinableEnts, ent);
+    if (reconstructed) {
+      auto & plane = cg.entities[ent].supportingPlane.reconstructed;
+      Vec3 dir = mg.view.camera.direction(it.pos());
+      double depth = norm(Intersection(Ray3(Origin(), dir), plane));
+      *it = depth;
+    }
+  }
+  matFile.setVar("depths", depthMap);
+}
+
+void SaveObjModelResultsOfPanoramaReconstruction(
+    const PILayoutAnnotation &anno,
+    const PanoramaReconstructionOptions &options, misc::Matlab &matlab,
+    const std::string &fileName) {
+
+  std::ofstream ofs(fileName);
+  if (!ofs) {
+    return;
+  }
+
+  PIGraph<PanoramicCamera> mg;
+  PIConstraintGraph cg;
+  PICGDeterminablePart dp;
+  if (!GetPanoramaReconstructionResult(anno, options, mg, cg, dp)) {
+    std::cout << "failed to load panoramix result, performing "
+                 "RunPanoramaReconstruction ..."
+              << std::endl;
+    RunPanoramaReconstruction(anno, options, matlab, false);
+    GetPanoramaReconstructionResult(anno, options, mg, cg, dp);
+  }
+
+  auto compactPolygons = CompactModel(dp, cg, mg, 0.1);
+  
+  // write vertex
+  std::vector<Point3> vertices;
+  std::vector<std::vector<int>> faceInds;
+  for (auto & poly : compactPolygons) {
+    if (poly.corners.empty()) {
+      continue;
+    }
+    int prevVertNum = vertices.size();
+    vertices.insert(vertices.end(), poly.corners.begin(), poly.corners.end());
+    faceInds.push_back(
+        MakeIotaRange<int>(prevVertNum, prevVertNum + poly.corners.size())
+            .evalAsStdVector());
+  }
+
+  for (auto & v : vertices) {
+    ofs << "v " << v[0] << " " << v[1] << " " << v[2] << std::endl;
+  }
+  for (auto & f : faceInds) {
+    if (f.size() < 3) {
+      continue;
+    }
+    ofs << "f ";
+    for (int vid : f) {
+      ofs << (vid + 1) << "/" << 1 << "/" << 1 << " ";
+    }
+    ofs << std::endl;
+  }
 }

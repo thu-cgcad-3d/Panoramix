@@ -6,7 +6,7 @@
 
 #include "canvas.hpp"
 #include "gui_util.hpp"
-#include "singleton.hpp"
+#include "ui.hpp"
 
 #include "pi_graph_annotation.hpp"
 #include "pi_graph_cg.hpp"
@@ -100,6 +100,18 @@ bool GetPanoramaReconstructionResult(
 std::vector<LineSidingWeight> GetPanoramaReconstructionOcclusionResult(
     const PILayoutAnnotation &anno,
     const PanoramaReconstructionOptions &options);
+
+// save matlab results
+void SaveMatlabResultsOfPanoramaReconstruction(
+    const PILayoutAnnotation &anno,
+    const PanoramaReconstructionOptions &options, misc::Matlab &matlab,
+    const std::string &fileName);
+
+// save .obj model files
+void SaveObjModelResultsOfPanoramaReconstruction(
+    const PILayoutAnnotation &anno,
+    const PanoramaReconstructionOptions &options, misc::Matlab &matlab,
+    const std::string &fileName);
 
 // get surface normal maps
 template <class CameraT>

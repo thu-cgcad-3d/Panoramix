@@ -301,7 +301,7 @@ void PILayoutAnnotationWidget::setCurAnnotation(PILayoutAnnotation *anno,
   _options.panoramaAspectRatio(im.rows / float(im.cols));
   _options.panoramaHoriCenterRatio(0.5f);
   _options.camera(
-      PerspectiveCamera(500, 500, Point2(250, 250), 200, Origin(), X(), -Z()));
+      PerspectiveCamera(500, 500, Point2(250, 250), 200, Origin(), X(), Z()));
   _options.renderMode(gui::RenderModeFlag::All);
   _options.cullBackFace(false);
   _options.cullFrontFace(false);

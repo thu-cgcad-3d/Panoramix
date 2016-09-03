@@ -9,7 +9,6 @@
 
 namespace pano {
 namespace core {
-
 // AnyPtr
 class AnyPtr {
 public:

@@ -7,7 +7,7 @@
 #include "qttools.hpp"
 #include "scene.hpp"
 #include "shader.hpp"
-#include "singleton.hpp"
+#include "ui.hpp"
 
 namespace pano {
 namespace gui {
@@ -16,7 +16,7 @@ using namespace core;
 
 int SelectFrom(const std::vector<std::string> &strs, const std::string &title,
                const std::string &text, int acceptId, int rejectId) {
-  Singleton::InitGui();
+  UI::InitGui();
   QMessageBox mbox;
   std::vector<QAbstractButton *> buttons(strs.size(), nullptr);
   for (int i = 0; i < strs.size(); i++) {
@@ -40,7 +40,7 @@ int SelectFrom(const std::vector<std::string> &strs, const std::string &title,
 }
 
 Image FileDialog::PickAnImage(const std::string &dir, std::string *picked) {
-  Singleton::InitGui();
+  UI::InitGui();
   auto filename = QFileDialog::getOpenFileName(
       nullptr, QObject::tr("Select an image file"), QString::fromStdString(dir),
       QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
@@ -54,7 +54,7 @@ Image FileDialog::PickAnImage(const std::string &dir, std::string *picked) {
 
 std::vector<Image> FileDialog::PickImages(const std::string &dir,
                                           std::vector<std::string> *picked) {
-  Singleton::InitGui();
+  UI::InitGui();
   auto filenames = QFileDialog::getOpenFileNames(
       nullptr, QObject::tr("Select an image file"), QString::fromStdString(dir),
       QObject::tr("Image Files (*.png;*.jpg;*.jpeg);;All Files (*.*)"));
@@ -73,7 +73,7 @@ std::vector<Image> FileDialog::PickImages(const std::string &dir,
 std::vector<Image>
 FileDialog::PickAllImagesFromAFolder(const std::string &dir,
                                      std::vector<std::string> *picked) {
-  Singleton::InitGui();
+  UI::InitGui();
   auto folder = QFileDialog::getExistingDirectory(
       nullptr, QObject::tr("Select a folder containing images"),
       QString::fromStdString(dir));
@@ -99,7 +99,7 @@ FileDialog::PickAllImagesFromAFolder(const std::string &dir,
 void FileDialog::ForEachImageFromAFolder(
     const std::string &dir,
     const std::function<bool(const std::string &impath)> &fun) {
-  Singleton::InitGui();
+  UI::InitGui();
   auto folder = QFileDialog::getExistingDirectory(
       nullptr, QObject::tr("Select a folder containing images"),
       QString::fromStdString(dir));
@@ -121,7 +121,7 @@ void FileDialog::ForEachImageFromAFolder(
 
 std::vector<std::string> FileDialog::PickFiles(const std::string &dir,
                                                const std::string &suffix) {
-  Singleton::InitGui();
+  UI::InitGui();
   auto filenames = QFileDialog::getOpenFileNames(
       nullptr, QObject::tr("Select files"), QString::fromStdString(dir),
       QObject::tr("Files (%1)").arg(QString::fromStdString(suffix)));
@@ -243,9 +243,9 @@ bool MakePanoramaByHand(Image &im, bool *extendedOnTop, bool *extendedOnBottom,
   options.panoramaAspectRatio(im.rows / float(im.cols));
   options.panoramaHoriCenterRatio(0.5f);
   options.camera(
-      PerspectiveCamera(500, 500, Point2(250, 250), 200, Origin(), X(), -Z()));
+      PerspectiveCamera(500, 500, Point2(250, 250), 200, Origin(), X(), Z()));
 
-  auto app = Singleton::InitGui();
+  auto app = UI::InitGui();
   Widget *w = new Widget(sb.scene(), options);
 
   QMainWindow *mwin = new QMainWindow;
@@ -253,8 +253,8 @@ bool MakePanoramaByHand(Image &im, bool *extendedOnTop, bool *extendedOnBottom,
   mwin->setAttribute(Qt::WA_DeleteOnClose);
   mwin->resize(MakeQSize(options.camera().screenSize()));
   mwin->setWindowTitle(QString::fromStdString(options.winName()));
-  mwin->setWindowIcon(Singleton::DefaultIcon());
-  mwin->setStyleSheet(Singleton::DefaultCSS());
+  mwin->setWindowIcon(UI::DefaultIcon());
+  mwin->setStyleSheet(UI::DefaultCSS());
 
   auto menuView = mwin->menuBar()->addMenu(QObject::tr("View"));
   auto actionSettings = menuView->addAction(QObject::tr("Settings"));
@@ -277,7 +277,7 @@ bool MakePanoramaByHand(Image &im, bool *extendedOnTop, bool *extendedOnBottom,
   mwin->setPalette(palette);
 
   mwin->show();
-  Singleton::ContinueGui();
+  UI::ContinueGui();
 
   float panoHCenterRatio = 1.0f - options.panoramaHoriCenterRatio();
 
@@ -424,7 +424,7 @@ void PaintWith(const std::function<Image()> &updater,
                const std::function<bool(const std::vector<Point2> &polyline,
                                         int penId)> &callback) {
 
-  Singleton::InitGui();
+  UI::InitGui();
 
   class Widget : public PaintableWidget<QWidget> {
     using BaseClass = PaintableWidget<QWidget>;
@@ -533,7 +533,7 @@ void PaintWith(const std::function<Image()> &updater,
   Widget w(updater, penConfigs, callback);
   w.show();
 
-  Singleton::ContinueGui();
+  UI::ContinueGui();
 }
 
 void VisualizeWithPanoramicOperation(const Scene &scene,
@@ -541,7 +541,7 @@ void VisualizeWithPanoramicOperation(const Scene &scene,
 
   using namespace pano::core;
 
-  Singleton::InitGui();
+  UI::InitGui();
 
   class Widget : public PaintableWidget<QGLWidget> {
     using BaseClass = PaintableWidget<QGLWidget>;
@@ -645,7 +645,7 @@ void VisualizeWithPanoramicOperation(const Scene &scene,
   Widget w(scene, options);
   w.show();
 
-  Singleton::ContinueGui();
+  UI::ContinueGui();
 }
 
 void DrawChainsInPanorama(const PanoramicView &view,
@@ -653,7 +653,7 @@ void DrawChainsInPanorama(const PanoramicView &view,
                           std::vector<Chain3> &chains) {
   using namespace pano::core;
 
-  Singleton::InitGui();
+  UI::InitGui();
 
   class Widget : public UIWidget<QGLWidget> {
     using BaseClass = UIWidget<QGLWidget>;
@@ -852,7 +852,7 @@ void DrawChainsInPanorama(const PanoramicView &view,
   Widget w(penConfigs, view, chains);
   w.show();
 
-  Singleton::ContinueGui();
+  UI::ContinueGui();
 }
 
 void VisualizeAll(const View<PanoramicCamera, Image3ub> &view,
@@ -861,7 +861,7 @@ void VisualizeAll(const View<PanoramicCamera, Image3ub> &view,
 
   using namespace core;
 
-  Singleton::InitGui();
+  UI::InitGui();
 
   auto segim = CreateRandomColorTableWithSize(nsegs)(segs);
   segim = (segim * 2.0 + view.image) / 3.0;
@@ -991,7 +991,7 @@ void VisualizeAll(const View<PanoramicCamera, Image3ub> &view,
   Widget w(PanoramicView(segim, view.camera), lines);
   w.show();
 
-  Singleton::ContinueGui();
+  UI::ContinueGui();
 }
 }
 }

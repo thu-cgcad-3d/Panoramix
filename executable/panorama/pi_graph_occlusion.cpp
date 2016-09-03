@@ -48,7 +48,7 @@ struct SegLabel {
   }
 };
 
-//void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
+// void DetectOcclusions_lecacy(PIGraph<PanoramicCamera> &mg) {
 //
 //  core::FactorGraph fg;
 //
@@ -146,7 +146,8 @@ struct SegLabel {
 //    }
 //    int fc = fg.addFactorCategory(
 //        [seg, &seg2allowedLabels, &mg](const int *varlabels, size_t nvar,
-//                                       core::FactorGraph::FactorCategoryId fcid,
+//                                       core::FactorGraph::FactorCategoryId
+//                                       fcid,
 //                                       void *givenData) -> double {
 //          assert(nvar == 1);
 //          return 0.0;
@@ -163,9 +164,11 @@ struct SegLabel {
 //    int fc = fg.addFactorCategory(
 //        [bndPiece, &bndPiece2allowedLabels, &mg](
 //            const int *varlabels, size_t nvar,
-//            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+//            core::FactorGraph::FactorCategoryId fcid, void *givenData) ->
+//            double {
 //          assert(nvar == 1);
-//          BndPieceLabel label = bndPiece2allowedLabels[bndPiece][varlabels[0]];
+//          BndPieceLabel label =
+//          bndPiece2allowedLabels[bndPiece][varlabels[0]];
 //          double len = mg.bndPiece2length[bndPiece];
 //          switch (label) {
 //          case Connected:
@@ -188,7 +191,8 @@ struct SegLabel {
 //    int fc = fg.addFactorCategory(
 //        [linePiece, &linePiece2allowedLabels, &mg](
 //            const int *varlabels, size_t nvar,
-//            core::FactorGraph::FactorCategoryId fcid, void *givenData) -> double {
+//            core::FactorGraph::FactorCategoryId fcid, void *givenData) ->
+//            double {
 //          assert(nvar == 1);
 //          LinePieceLabel label =
 //              linePiece2allowedLabels[linePiece][varlabels[0]];
@@ -207,7 +211,8 @@ struct SegLabel {
 //
 //  // orientation consistency term between seg and line
 //  const auto costBetweenSegAndLine = [&mg](const SegLabel &seglabel,
-//                                           const LinePieceLabel &linePieceLabel,
+//                                           const LinePieceLabel
+//                                           &linePieceLabel,
 //                                           int seg, int linePiece) -> double {
 //    int lineClaz = mg.lines[mg.linePiece2line[linePiece]].claz;
 //    double len = mg.linePiece2length[linePiece];
@@ -245,7 +250,8 @@ struct SegLabel {
 //    fg.addFactor({seg2vh[seg], linePiece2vh[linePiece]}, fc);
 //  }
 //
-//  // seg1/seg2-bndPiece-linePiece-line, orientation consistency term between seg
+//  // seg1/seg2-bndPiece-linePiece-line, orientation consistency term between
+//  seg
 //  // and line
 //  for (int linePiece = 0; linePiece < mg.nlinePieces(); linePiece++) {
 //    if (linePiece2vh[linePiece].invalid()) {
@@ -894,7 +900,8 @@ struct LineLabelCost {
 };
 
 // assume that all oclcusions are described by lines
-void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInTJunction,
+void DetectOcclusions(PIGraph<PanoramicCamera> &mg,
+                      double minAngleSizeOfLineInTJunction,
                       double lambdaShrinkForHLineDetectionInTJunction,
                       double lambdaShrinkForVLineDetectionInTJunction,
                       double angleSizeForPixelsNearLines) {
@@ -943,8 +950,8 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
               IsBetween(lambda, 0.0, 1.0)) {
             line2nearbyPixels[lineSample.second.second].insert(p);
             auto &localCenterDir =
-                line2nearbySegsWithLocalCenterDir[lineSample.second
-                                                      .second][seg];
+                line2nearbySegsWithLocalCenterDir[lineSample.second.second]
+                                                 [seg];
             localCenterDir += dir * weight;
             double &segWeight =
                 line2nearbySegsWithWeight[lineSample.second.second][seg];
@@ -1219,7 +1226,7 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
     auto &l2 = mg.lines[line2].component;
     auto nearest = DistanceBetweenTwoLines(l1, l2);
     double angleDist = AngleBetweenDirected(nearest.second.first.position,
-                                              nearest.second.second.position);
+                                            nearest.second.second.position);
     double weight = Gaussian(angleDist, DegreesToRadians(5));
     bool sameDirection =
         l1.first.cross(l1.second).dot(l2.first.cross(l2.second)) > 0;
@@ -1586,8 +1593,8 @@ void DetectOcclusions(PIGraph<PanoramicCamera> &mg, double minAngleSizeOfLineInT
               }
               auto interp = normalize(
                   Intersection(connection.ray(), Plane3(Origin(), vertDir)));
-              if (cutLine.first.cross(interp)
-                      .dot(cutLine.second.cross(interp)) > 1e-5) {
+              if (cutLine.first.cross(interp).dot(
+                      cutLine.second.cross(interp)) > 1e-5) {
                 return true;
               }
               isCutBySomeLine = true;
@@ -2046,15 +2053,14 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
     std::tie(line1, line2) = mg.lineRelation2lines[lineRelation];
     auto vhs1 = line2vhConnectLeftRight[line1],
          vhs2 = line2vhConnectLeftRight[line2];
-    if (vhs1[0] == -1 || vhs1[1] == -1 || vhs2[0] == -1 ||
-        vhs2[1] == -1) {
+    if (vhs1[0] == -1 || vhs1[1] == -1 || vhs2[0] == -1 || vhs2[1] == -1) {
       continue;
     }
     auto &l1 = mg.lines[line1].component;
     auto &l2 = mg.lines[line2].component;
     auto nearest = DistanceBetweenTwoLines(l1, l2);
     double angleDist = AngleBetweenDirected(nearest.second.first.position,
-                                              nearest.second.second.position);
+                                            nearest.second.second.position);
     auto n1 = l1.first.cross(l1.second);
     auto n2 = l2.first.cross(l2.second);
     double normalAngle = AngleBetweenUndirected(n1, n2);
@@ -2090,9 +2096,9 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights(
 
   std::vector<int> bestLabels;
   double minEnergy = std::numeric_limits<double>::infinity();
-  fg.solve(5, 10, [&bestLabels, &minEnergy](
-                      int epoch, double energy, double denergy,
-                      const std::vector<int> &results) -> bool {
+  fg.solve(5, 10, [&bestLabels,
+                   &minEnergy](int epoch, double energy, double denergy,
+                               const std::vector<int> &results) -> bool {
     std::cout << "epoch: " << epoch << "\t energy: " << energy << std::endl;
     if (energy < minEnergy) {
       bestLabels = results;
@@ -2456,7 +2462,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
           return 0.0;
         },
         1.0);
-	fg.addFactor(fc, {vhs[0], vhs[1]});
+    fg.addFactor(fc, {vhs[0], vhs[1]});
   }
 
   // smooth term
@@ -2469,15 +2475,14 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
     std::tie(line1, line2) = mg.lineRelation2lines[lineRelation];
     auto vhs1 = line2vhConnectLeftRight[line1],
          vhs2 = line2vhConnectLeftRight[line2];
-    if (vhs1[0] == -1 || vhs1[1] == -1 || vhs2[0] == -1 ||
-        vhs2[1] == -1) {
+    if (vhs1[0] == -1 || vhs1[1] == -1 || vhs2[0] == -1 || vhs2[1] == -1) {
       continue;
     }
     auto &l1 = mg.lines[line1].component;
     auto &l2 = mg.lines[line2].component;
     auto nearest = DistanceBetweenTwoLines(l1, l2);
     double angleDist = AngleBetweenDirected(nearest.second.first.position,
-                                              nearest.second.second.position);
+                                            nearest.second.second.position);
     auto n1 = l1.first.cross(l1.second);
     auto n2 = l2.first.cross(l2.second);
     double normalAngle = AngleBetweenUndirected(n1, n2);
@@ -2566,8 +2571,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeights2(
 }
 
 std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
-    const PIGraph<PanoramicCamera> &mg, const PILayoutAnnotation &anno, double sampleAngleStep,
-    double angleThres, double ratioThres) {
+    const PIGraph<PanoramicCamera> &mg, const PILayoutAnnotation &anno,
+    double sampleAngleStep, double angleThres, double ratioThres) {
 
   assert(anno.nfaces() > 0);
 
@@ -2673,7 +2678,7 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
                 normalize(borderPiece.first.cross(borderPiece.second));
             auto nearest = DistanceBetweenTwoLines(piece, borderPiece).second;
             double angleDist = AngleBetweenDirected(nearest.first.position,
-                                                      nearest.second.position);
+                                                    nearest.second.position);
             if (angleDist < angleThres) {
               nearbyBorder2count[border]++;
             }
@@ -2715,7 +2720,8 @@ std::vector<LineSidingWeight> ComputeLinesSidingWeightsFromAnnotation(
 }
 
 std::vector<std::array<std::set<int>, 2>>
-CollectSegsNearLines(const PIGraph<PanoramicCamera> &mg, double angleSizeForPixelsNearLines) {
+CollectSegsNearLines(const PIGraph<PanoramicCamera> &mg,
+                     double angleSizeForPixelsNearLines) {
 
   int width = mg.segs.cols;
   int height = mg.segs.rows;
@@ -2763,8 +2769,8 @@ CollectSegsNearLines(const PIGraph<PanoramicCamera> &mg, double angleSizeForPixe
               IsBetween(lambda, 0.0, 1.0)) {
             line2nearbyPixels[lineSample.second.second].insert(p);
             auto &localCenterDir =
-                line2nearbySegsWithLocalCenterDir[lineSample.second
-                                                      .second][seg];
+                line2nearbySegsWithLocalCenterDir[lineSample.second.second]
+                                                 [seg];
             localCenterDir += dir * weight;
             double &segWeight =
                 line2nearbySegsWithWeight[lineSample.second.second][seg];
@@ -3031,8 +3037,8 @@ void ApplyLinesSidingWeights(
               }
               auto interp = normalize(
                   Intersection(connection.ray(), Plane3(Origin(), vertDir)));
-              if (cutLine.first.cross(interp)
-                      .dot(cutLine.second.cross(interp)) > 1e-5) {
+              if (cutLine.first.cross(interp).dot(
+                      cutLine.second.cross(interp)) > 1e-5) {
                 return true;
               }
               isCutBySomeLine = true;

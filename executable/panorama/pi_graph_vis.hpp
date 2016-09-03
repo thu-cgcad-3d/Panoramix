@@ -43,7 +43,8 @@ void VisualizeReconstructionCompact(const Image &im,
                                     const PICGDeterminablePart &dp,
                                     const PIConstraintGraph &cg,
                                     const PIGraph<PanoramicCamera> &mg,
-                                    bool doModel, bool autoCam = false);
+                                    bool doModel, bool autoCam = false,
+                                    bool fixCamUpDir = true);
 
 // VisualizeLayoutAnnotation
 void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,

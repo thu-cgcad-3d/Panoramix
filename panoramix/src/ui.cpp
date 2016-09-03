@@ -1,27 +1,27 @@
 #include "pch.hpp"
 
 #include "qttools.hpp"
-#include "singleton.hpp"
+#include "ui.hpp"
 
 namespace pano {
 namespace gui {
 
 static QIcon defaultIcon;
-const QIcon &Singleton::DefaultIcon() { return defaultIcon; }
+const QIcon &UI::DefaultIcon() { return defaultIcon; }
 static QString defaultCSS;
-const QString &Singleton::DefaultCSS() { return defaultCSS; }
+const QString &UI::DefaultCSS() { return defaultCSS; }
 
 static int _argc = 1;
 static char **_argv;
 static char **_envp;
 
-void Singleton::SetCmdArgs(int argc, char **argv, char **envp) {
+void UI::SetCmdArgs(int argc, char **argv, char **envp) {
   _argc = argc;
   _argv = argv;
   _envp = envp;
 }
 
-QApplication *Singleton::InitGui(int argc, char **argv) {
+QApplication *UI::InitGui(int argc, char **argv) {
   if (qApp)
     return qApp;
 
@@ -58,9 +58,9 @@ QApplication *Singleton::InitGui(int argc, char **argv) {
   return app;
 }
 
-QApplication *Singleton::InitGui() { return InitGui(_argc, _argv); }
+QApplication *UI::InitGui() { return InitGui(_argc, _argv); }
 
-int Singleton::ContinueGui() {
+int UI::ContinueGui() {
   if (!qApp) {
     qDebug() << "call InitGui first!";
     return 0;

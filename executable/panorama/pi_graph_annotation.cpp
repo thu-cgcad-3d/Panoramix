@@ -2,7 +2,7 @@
 
 #include "containers.hpp"
 #include "qttools.hpp"
-#include "singleton.hpp"
+#include "ui.hpp"
 #include "gui_util.hpp"
 #include "segmentation.hpp"
 #include "line_detection.hpp"
@@ -256,14 +256,14 @@ LoadOrInitializeNewLayoutAnnotation(const std::string &imagePath) {
 
 void EditLayoutAnnotation(const std::string &imagePath,
                           PILayoutAnnotation &anno) {
-  gui::Singleton::InitGui();
+  gui::UI::InitGui();
   PILayoutAnnotationWidget w;
   QString impath = QString::fromStdString(imagePath);
   w.setWindowTitle(QObject::tr("Annotate Indoor Layouts"));
   w.setCurAnnotation(&anno, &impath);
   w.resize(900, 900);
   w.show();
-  gui::Singleton::ContinueGui();
+  gui::UI::ContinueGui();
 }
 
 void SaveLayoutAnnotation(const std::string &imagePath,

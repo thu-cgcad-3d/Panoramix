@@ -62,7 +62,7 @@ void VisualizeReconstruction(
       if (spp.corners.size() < 3)
         continue;
 
-      spp.projectionCenter = core::Point3(0, 0, 0);
+      spp.projection_center = core::Point3(0, 0, 0);
       spp.plane = v.supportingPlane.reconstructed;
       if (HasValue(spp.plane, IsInfOrNaN<double>)) {
         WARNNING("inf plane");
@@ -220,8 +220,11 @@ void VisualizeReconstructionCompact(const Image &im,
                                     const PICGDeterminablePart &dp,
                                     const PIConstraintGraph &cg,
                                     const PIGraph<PanoramicCamera> &mg,
-                                    bool doModel, bool autoCam) {
-  gui::ResourceStore::set("texture", im);
+                                    bool doModel, bool autoCam,
+                                    bool fixCamUpDir) {
+  Image3ub reversedIm = im.clone();
+  ReverseRows(reversedIm);
+  gui::ResourceStore::set("texture", reversedIm);
 
   auto compactPolygons = CompactModel(dp, cg, mg, 0.1);
   auto e = std::remove_if(
@@ -275,7 +278,8 @@ void VisualizeReconstructionCompact(const Image &im,
                                 .cullFrontFace(true)
                                 .cullBackFace(false)
                                 .bwColor(0.0)
-                                .bwTexColor(1.0));
+                                .bwTexColor(1.0)
+                                .fixUpDirectionInCameraMove(fixCamUpDir));
   }
 }
 
