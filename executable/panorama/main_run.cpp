@@ -34,7 +34,7 @@ int main_run(int argc, char **argv) {
         options.refresh_lsw || options.refresh_line2leftRightSegs || false;
     options.refresh_mg_reconstructed = options.refresh_mg_occdetected || false;
 
-    RunPanoramaReconstruction(anno, options, matlab, false, false);
+    RunPanoramaReconstruction(anno, options, matlab, true, false);
 
     SaveMatlabResultsOfPanoramaReconstruction(anno, options, matlab,
                                               impath + ".result.mat");

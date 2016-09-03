@@ -32,31 +32,26 @@ public:
   void *data() const;
   void setData(void *d);
 
-#define DECL_MXARRAY_MEMBERFUNCTION_IS(what) bool is##what() const;
-
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Numeric)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Cell)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Logical)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Char)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Struct)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Opaque)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(FunctionHandle)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Object)
-
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Complex)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Sparse)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Double)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Single)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Int8)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Uint8)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Int16)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Uint16)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Int32)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Uint32)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Int64)
-  DECL_MXARRAY_MEMBERFUNCTION_IS(Uint64)
-
-#undef DECL_MXARRAY_MEMBERFUNCTION_IS
+  bool isNumeric() const;
+  bool isCell() const;
+  bool isLogical() const;
+  bool isChar() const;
+  bool isStruct() const;
+  bool isOpaque() const;
+  bool isFunctionHandle() const;
+  bool isObject() const;
+  bool isComplex() const;
+  bool isSparse() const;
+  bool isDouble() const;
+  bool isSingle() const;
+  bool isInt8() const;
+  bool isUint8() const;
+  bool isInt16() const;
+  bool isUint16() const;
+  bool isInt32() const;
+  bool isUint32() const;
+  bool isInt64() const;
+  bool isUint64() const;
 
   template <class T> bool is() const { return false; }
   template <> bool is<double>() const { return isDouble(); }
