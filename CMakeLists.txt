@@ -10,9 +10,9 @@ if (NOT DEFINED MSVC)
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y")
 endif ()
 
-set (TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/data/" CACHE PATH "path to test data")
+set (TEST_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/testdata/" CACHE PATH "path to test data")
 set (CACHE_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cache/" CACHE PATH "path to cache data")
-set (MATLAB_CODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/matlab/" CACHE PATH "path to matlab code")
+set (MATLAB_CODE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../MATLABTools/" CACHE PATH "path to matlab code")
 
 
 set (DEPENDENCY_NAMES "")

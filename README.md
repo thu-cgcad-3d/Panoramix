@@ -1,10 +1,8 @@
 # Panoramix
-Codes of the CVPR'16 paper: 
+Code of the paper: 
 <cite>
 Hao Yang and Hui Zhang. "Efficient 3D Room Shape Recovery From a Single Panorama." Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition. 2016.
 </cite>
-
-Author: Hao Yang (yangh2007@gmail.com)
 
 ## Build
 
@@ -22,3 +20,7 @@ Author: Hao Yang (yangh2007@gmail.com)
 * Set `Qt_DIR` to the path of Qt;
 * Set `MATLAB_CODE_DIR` to the path of MATLABTools;
 * Build.
+
+### Set the Environment Variables
+* Add Qt/OpenCV/MATLAB bin paths to `PATH`;
+* Set `QT_QPA_PLATFORM_PLUGIN_PATH=$(Qt_DIR)/plugins/platforms`.

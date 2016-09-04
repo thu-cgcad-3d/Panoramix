@@ -49,7 +49,6 @@ TEST(AlgorithmsTest, MergeNearNaiveCorrectness) {
 }
 
 TEST(AlgorithmsTest, MergeNearRTreeCorrectness) {
-
   std::list<double> arr1;
   arr1.resize(1000);
   std::generate(arr1.begin(), arr1.end(), std::rand);
@@ -219,7 +218,6 @@ TEST(AlgorithmsTest, DFS_CC) {
 }
 
 TEST(AlgorithmsTest, TopologicalSort) {
-
   {
     std::vector<int> verts = {0, 1, 2, 3, 4, 5, 6};
     std::random_shuffle(verts.begin(), verts.end());

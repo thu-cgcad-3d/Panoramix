@@ -35,7 +35,6 @@ TEST(BasicType, HPoint) {
 }
 
 TEST(BasicType, Line) {
-
   std::vector<core::Line2> lines = {
       {core::Point2(1, 2), core::Point2(3, 4)},
       {core::Point2(5, 6), core::Point2(7, 8)},
@@ -50,7 +49,6 @@ TEST(BasicType, Line) {
 }
 
 TEST(BasicType, VecCast) {
-
   core::Imaged im(100, 100, 0.0);
   auto imi = core::ecast<int>(im);
 

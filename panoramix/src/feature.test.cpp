@@ -8,12 +8,15 @@
 #include "../panoramix.unittest.hpp"
 
 using namespace pano;
-using namespace test;
+
 
 TEST(Feature, LineSegmentExtractor) {
   core::LineSegmentExtractor lineseg;
-  core::Image3ub im = core::ImageRead(ProjectDataDirStrings::LocalManhattan +
-                                      "/buildings2.jpg");
+  core::Image3ub im =
+      core::ImageRead(PANORAMIX_TEST_DATA_DIR_STR "/building.jpg");
+  if (im.empty()) {
+    return;
+  }
   core::LineSegmentExtractor::Params params;
   params.algorithm = core::LineSegmentExtractor::LSD;
   core::LineSegmentExtractor lineseg2(params);
@@ -31,9 +34,12 @@ TEST(Feature, FeatureExtractor) {
   core::LineSegmentExtractor lineSegmentExtractor(params);
 
   for (int i = 0; i < 4; i++) {
-    std::string name = ProjectDataDirStrings::Normal + "/" + "sampled_" +
-                       std::to_string(i) + ".png";
+    std::string name =
+        PANORAMIX_TEST_DATA_DIR_STR "/sampled_" + std::to_string(i) + ".png";
     core::Image3ub im = core::ImageRead(name);
+    if (im.empty()) {
+      continue;
+    }
     auto segs = segmenter(im);
     gui::AsCanvas(im)
         .colorTable(gui::CreateRandomColorTableWithSize(segs.second))

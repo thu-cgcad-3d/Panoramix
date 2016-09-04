@@ -2,9 +2,6 @@
 #include <random>
 #include <vector>
 
-//#include "algorithms.hpp"
-//#include "containers.hpp"
-//#include "iterators.hpp"
 #include "utility.hpp"
 
 #include "../panoramix.unittest.hpp"
@@ -14,7 +11,6 @@ using namespace pano;
 inline double randf() { return (std::rand() % 100000) / 100000.0; }
 
 TEST(UtilityTest, HasValue) {
-
   std::vector<std::pair<core::Line2, double>> hlines = {
       {{{1.0, 2.0}, {4.0, 5.0}}, 0.0},
       {{{1.0, 2.0}, {NAN, 5.0}}, 0.0},
@@ -34,7 +30,6 @@ TEST(UtilityTest, Distance) {
 }
 
 TEST(UtilityTest, BoundingBox) {
-
   using namespace core;
   Line3 l1(Point3(0.5, 0.1, 1), Point3(1, 0.4, 0.7));
   Line3 l2(Point3(0.6, 1, 0.9), Point3(0.2, -1, 0.5));
@@ -107,7 +102,6 @@ TEST(UtilityTest, WrapBetween) {
 }
 
 TEST(UtilityTest, SubscriptAndIndex) {
-
   auto i = core::EncodeSubscriptToIndex(core::Point<int, 2>(1, 2),
                                         core::Vec<int, 2>(2, 3));
   ASSERT_EQ(5, i);
@@ -313,7 +307,6 @@ TEST(UtilityTest, DistanceBetweenTwoLines) {
 }
 
 TEST(UtilityTest, BarycentricCoordinatesOfLineAndPlaneUnitIntersection) {
-
   core::Point3 pts[] = {core::Point3(1, 0, 0), core::Point3(0, 1, 0),
                         core::Point3(0, 0, 1)};
 

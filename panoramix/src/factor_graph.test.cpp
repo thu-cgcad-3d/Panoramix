@@ -5,7 +5,7 @@
 #include "utility.hpp"
 
 using namespace pano;
-using namespace test;
+
 
 TEST(FactorGraph, Simple) {
   core::FactorGraph fg;
@@ -28,8 +28,11 @@ TEST(FactorGraph, Simple) {
 }
 
 TEST(FactorGraph, Denoise) {
+  auto im = core::ImageRead(PANORAMIX_TEST_DATA_DIR_STR"/horse.jpg");
+  if (im.empty()) {
+    return;
+  }
 
-  auto im = core::ImageRead(ProjectDataDirStrings::BPTests + "/horse.jpg");
   core::ResizeToMakeHeightUnder(im, 200);
   core::Image3d noised(im.size(), core::Vec3());
   for (auto it = noised.begin(); it != noised.end(); ++it) {
@@ -111,7 +114,7 @@ TEST(FactorGraph, Denoise) {
     }
   }
 
-  auto results = fg.solve(100, 3, [](int epoch, double e) {
+  auto results = fg.solve(20, 3, [](int epoch, double e) {
     std::cout << "#" << epoch << "  energy: " << e << std::endl;
     return true;
   });

@@ -9,7 +9,6 @@
 using namespace pano;
 
 TEST(FailableTest, Failable) {
-
   core::Failable<std::vector<int>> opt;
   ASSERT_TRUE(opt.null());
   opt = core::AsResult(std::vector<int>{1, 2, 3, 4});

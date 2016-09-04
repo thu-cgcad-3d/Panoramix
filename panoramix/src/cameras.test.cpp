@@ -4,7 +4,6 @@
 #include "../panoramix.unittest.hpp"
 
 using namespace pano;
-using namespace test;
 
 static_assert(core::IsCamera<core::PerspectiveCamera>::value, "");
 static_assert(core::IsCamera<core::PanoramicCamera>::value, "");
@@ -59,7 +58,10 @@ TEST(Camera, PerspectiveCameraRandom) {
 }
 
 TEST(Camera, CameraSampler) {
-  auto im = core::ImageRead(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg");
+  auto im = core::ImageRead(PANORAMIX_TEST_DATA_DIR_STR "/indoor_pano1.jpg");
+  if (im.empty()) {
+    return;
+  }
 
   EXPECT_EQ(2000, im.cols);
   EXPECT_EQ(1000, im.rows);

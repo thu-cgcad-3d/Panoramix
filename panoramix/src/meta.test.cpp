@@ -8,7 +8,6 @@
 using namespace pano;
 
 TEST(Tuples, Invoke) {
-
   static_assert(
       core::SequenceElement<2, core::Sequence<1, 2, 3, 4>>::value == 3, "");
   static_assert(

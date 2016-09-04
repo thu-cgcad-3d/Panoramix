@@ -9,10 +9,9 @@
 
 using namespace pano;
 using namespace core;
-using namespace test;
+
 
 TEST(SingleView, ComputeSpatialRegionProperties) {
-
   Image3ub im = gui::FileDialog::PickAnImage();
   SegmentationExtractor segmenter;
   segmenter.params().algorithm = SegmentationExtractor::GraphCut;

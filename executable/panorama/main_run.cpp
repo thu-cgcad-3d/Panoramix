@@ -3,6 +3,8 @@
 int main_run(int argc, char **argv) {
   gui::UI::InitGui(argc, argv);
   misc::SetCachePath(PANORAMIX_CACHE_DATA_DIR_STR "\\Panorama\\");
+  pano::misc::MakeDir(pano::misc::CachePath());
+
   misc::Matlab matlab;
 
   std::vector<std::string> impaths;

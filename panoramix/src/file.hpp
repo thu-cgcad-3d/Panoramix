@@ -4,7 +4,6 @@
 
 namespace pano {
 namespace misc {
-
 std::string Tagify(const std::string &path);
 
 std::string CachePath();

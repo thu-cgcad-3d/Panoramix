@@ -68,7 +68,6 @@ TEST(ContainerTest, MaxHeap) {
 }
 
 TEST(ContainerTest, Dictionary) {
-
   core::Dictionary<std::string> dict({3, 5, 4, 3});
   dict.insert({1, 2, 3, 1}, "1231");
   dict.insert({1, 3, 2, 1}, "1321");

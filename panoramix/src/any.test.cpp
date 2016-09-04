@@ -9,7 +9,6 @@
 using namespace pano;
 
 TEST(MiscTest, Any) {
-
   using namespace core;
 
   Any aInt = 1;
@@ -45,8 +44,6 @@ TEST(MiscTest, Any) {
   ASSERT_FALSE(something.is<std::list<int>>());
   ASSERT_TRUE(something.is<std::set<double>>());
 
-  // see
-  // http://stackoverflow.com/questions/20165166/double-delete-in-initializer-list-vs-2013
   Any mess =
       std::list<Any>{std::make_tuple(1, 3.0, "123"),
                      std::vector<Any>{std::array<int, 3>{{1, 2, 3}},

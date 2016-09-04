@@ -1,29 +1,16 @@
 #include "cameras.hpp"
-#include "manhattan.hpp"
-#include "utility.hpp"
 #include "canvas.hpp"
 #include "gui_util.hpp"
+#include "manhattan.hpp"
+#include "utility.hpp"
 
 #include "../panoramix.unittest.hpp"
 
 using namespace pano;
-using namespace test;
 
 TEST(ManhattanTest, VanishingPointsDetector) {
-
-  std::vector<std::string> filenames = {
-      //"buildings.jpg",
-      //"room.png",
-      //"room2e.jpg",
-      //"room3.jpg",
-      /* "room4.jpg",
-       "room5.jpg",
-       "room6.jpg",*/
-      "room7.jpg",  "room8.jpg",  "room10.jpg", "room11.jpg", "room12.png",
-      "room13.jpg", "room14.jpg", "room15.jpg", "room16.jpg", "room17.jpg",
-      "room18.jpg", "room19.jpg", "room20.jpg", "room21.jpg", "room22.jpg"};
-
-  auto images = gui::FileDialog::PickImages("F:\\DataSets\\YorkUrbanDB\\data\\");
+  auto imNames = {PANORAMIX_TEST_DATA_DIR_STR "/indoor_persp1.jpg",
+                  PANORAMIX_TEST_DATA_DIR_STR "/indoor_persp2.jpg"};
 
   core::LineSegmentExtractor::Params lsParams;
   lsParams.minLength = 20;
@@ -33,11 +20,8 @@ TEST(ManhattanTest, VanishingPointsDetector) {
 
   std::vector<std::string> failedFileNames;
 
-  for (auto &image : images) {
-    // std::cout << "testing image file: " << filename << std::endl;
-    // core::Image3ub im = core::ImageRead(ProjectDataDirStrings::Normal + "/" +
-    // filename);
-    core::Image3ub im = image;
+  for (auto &imName : imNames) {
+    core::Image3ub im = core::ImageRead(imName);
     core::ResizeToMakeWidthUnder(im, 400);
 
     std::vector<core::HPoint2> vps;
@@ -50,7 +34,6 @@ TEST(ManhattanTest, VanishingPointsDetector) {
     auto result = vpdetector(classifiedLines, im.size());
     if (result.null()) {
       std::cout << "failed to find vanishing points!" << std::endl;
-      // failedFileNames.push_back(filename);
       continue;
     }
     std::tie(vps, focalLength) = result.unwrap();
@@ -81,21 +64,22 @@ TEST(ManhattanTest, VanishingPointsDetector) {
 }
 
 TEST(ManhattanTest, LocalManhattanVanishingPointDetector) {
-
   using namespace core;
 
   // forged experiment for panorama
   core::Image3ub im =
-      core::ImageRead(ProjectDataDirStrings::PanoramaIndoor + "/14.jpg");
+      core::ImageRead(PANORAMIX_TEST_DATA_DIR_STR "/indoor_pano1.jpg");
+  if (im.empty()) {
+    return;
+  }
+
   core::ResizeToMakeWidthUnder(im, 2000);
-  // gui::Visualizer2D(im) << gui::manip2d::Show();
 
   core::PanoramicCamera ocam(im.cols / M_PI / 2.0);
   core::PerspectiveCamera cam(800, 800, core::Point2(400, 400), ocam.focal(),
                               {0, 0, 0}, {-2, 0, -0.5}, {0, 0, -1});
 
   auto pim = core::MakeCameraSampler(cam, ocam)(im);
-  // gui::Visualizer2D(pim) << gui::manip2d::Show();
 
   core::LineSegmentExtractor lineseg;
   lineseg.params().minLength = 5;
@@ -150,8 +134,6 @@ TEST(ManhattanTest, LocalManhattanVanishingPointDetector) {
   for (int i = 0; i < line2s.size(); i++) {
     if (line3s[i].claz == 0) {
       viz.color(gui::ColorTag::Red).add(line2s[i]);
-    } else {
-      // viz << gui::manip2d::SetColor(gui::ColorTag::Black) << line2s[i];
     }
   }
   for (auto &op : orthoPairs) {

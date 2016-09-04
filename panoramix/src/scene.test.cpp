@@ -10,7 +10,7 @@
 #include "../panoramix.unittest.hpp"
 
 using namespace pano;
-using namespace test;
+
 
 TEST(Canvas, Color) {
   int m = 600;
@@ -83,9 +83,11 @@ TEST(Scene, LayeredShape3) {
        Point3(0, 1, 1)}};
   ls.normal = Vec3(0, 0, 1);
 
-  gui::ResourceStore::set(
-      "texture",
-      core::ImageRead(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
+  auto tex = core::ImageRead(PANORAMIX_TEST_DATA_DIR_STR "/indoor_pano1.jpg");
+  if (tex.empty()) {
+    return;
+  }
+  gui::ResourceStore::set("texture", tex);
   SceneBuilder()
       .begin(ls)
       .resource("texture")
@@ -111,9 +113,11 @@ TEST(Scene, Interaction) {
                    gui::Blue)};
   auto origin = gui::ColorAs(core::Point3(), gui::Black);
 
-  gui::ResourceStore::set(
-      "texture",
-      core::ImageRead(ProjectDataDirStrings::PanoramaIndoor + "/13.jpg"));
+  auto tex = core::ImageRead(PANORAMIX_TEST_DATA_DIR_STR "/indoor_pano1.jpg");
+  if (tex.empty()) {
+    return;
+  }
+  gui::ResourceStore::set("texture", tex);
   auto box = gui::MakeTransformableIn3D(core::BoundingBoxOfContainer(ss))
                  .rotate(core::Vec3(1, 0, 1), M_PI / 3);
 
