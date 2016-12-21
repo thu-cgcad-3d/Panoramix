@@ -1,7 +1,6 @@
 #pragma once
 
 #include "math.hpp"
-#include "bounding.hpp"
 
 namespace pano {
 namespace core {
@@ -62,6 +61,10 @@ public:
 
   template <class Archive> void serialize(Archive &ar) {
     ar(anchor, direction);
+  }
+
+  template <class B = void> auto coeffs() const -> decltype(GetCoeffs(*this)) {
+    return GetCoeffs(*this);
   }
 
 public:
@@ -425,5 +428,18 @@ public:
 };
 using LayeredShape3 = LayeredShape<Point<double, 3>>;
 
+// SingleViewPolygon
+template <class PointT, class DirT = PointT> class SingleViewPolygon {
+public:
+  template <class Archive> void serialize(Archive &ar) {
+    ar(corners, projection_center, plane);
+  }
+
+public:
+  std::vector<PointT> corners;
+  PointT projection_center;
+  Plane<PointT, DirT> plane;
+};
+using SingleViewPolygon3 = SingleViewPolygon<Point<double, 3>>;
 }
 }

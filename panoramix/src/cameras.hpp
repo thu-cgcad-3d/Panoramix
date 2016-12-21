@@ -467,6 +467,11 @@ PanoramicCamera CreatePanoramicCamera(const Image &panorama,
                                       const Point3 &center = Point3(1, 0, 0),
                                       const Vec3 &up = Vec3(0, 0, 1));
 
+PerspectiveCamera CreatePerspeciveCamera(const Point3 &eye,
+                                         const Point3 &center,
+                                         const Sizei &ssize, double focal,
+                                         const Point2 &pp);
+
 Failable<PerspectiveCamera> CreatePerspectiveCamera(
     const Image &perspectiveImage, const Point3 &eye = Point3(0, 0, 0),
     const Point3 &center = Point3(1, 0, 0), const Vec3 &up = Vec3(0, 0, -1),

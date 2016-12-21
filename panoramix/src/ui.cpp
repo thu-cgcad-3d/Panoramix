@@ -1,36 +1,36 @@
 #include "pch.hpp"
 
 #include "qttools.hpp"
-#include "singleton.hpp"
+#include "ui.hpp"
 
 namespace pano {
 namespace gui {
 
 static QIcon defaultIcon;
-const QIcon &Singleton::DefaultIcon() { return defaultIcon; }
+const QIcon &UI::DefaultIcon() { return defaultIcon; }
 static QString defaultCSS;
-const QString &Singleton::DefaultCSS() { return defaultCSS; }
+const QString &UI::DefaultCSS() { return defaultCSS; }
 
 static int _argc = 1;
 static char **_argv;
 static char **_envp;
 
-void Singleton::SetCmdArgs(int argc, char **argv, char **envp) {
+void UI::SetCmdArgs(int argc, char **argv, char **envp) {
   _argc = argc;
   _argv = argv;
   _envp = envp;
 }
 
-QApplication *Singleton::InitGui(int argc, char **argv) {
+QApplication *UI::InitGui(int argc, char **argv) {
   if (qApp)
     return qApp;
 
   auto p = qgetenv("QT_QPA_PLATFORM_PLUGIN_PATH");
   std::cout << "QT_QPA_PLATFORM_PLUGIN_PATH=" << p.toStdString() << std::endl;
 
-  //Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
+  // Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin);
   Q_INIT_RESOURCE(gui);
-  //Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin)
+  // Q_IMPORT_PLUGIN(QWindowsIntegrationPlugin)
   _argc = argc;
   _argv = argv;
 
@@ -46,17 +46,29 @@ QApplication *Singleton::InitGui(int argc, char **argv) {
   app->setStyleSheet(defaultCSS);
 
   app->setQuitOnLastWindowClosed(true);
+// <<<<<<< HEAD:panoramix/src/singleton.cpp
 	QSurfaceFormat sf = QSurfaceFormat::defaultFormat();
 	sf.setSamples(16);
 	 qDebug("OpenGL version: %d.%d", sf.majorVersion(), sf.minorVersion());
 	QSurfaceFormat::setDefaultFormat(sf);
 
+// =======
+
+//   // set opengl version
+//   QGLFormat glf = QGLFormat::defaultFormat();
+//   glf.setVersion(2, 0); // whatever version
+//   glf.setProfile(QGLFormat::CoreProfile);
+//   qDebug("OpenGL version: %d.%d", glf.majorVersion(), glf.minorVersion());
+//   glf.setSampleBuffers(true);
+//   glf.setSamples(16);
+//   QGLFormat::setDefaultFormat(glf);
+// >>>>>>> cf894b331e5685438f2feda48eb84d4bdaa300da:panoramix/src/ui.cpp
   return app;
 }
 
-QApplication *Singleton::InitGui() { return InitGui(_argc, _argv); }
+QApplication *UI::InitGui() { return InitGui(_argc, _argv); }
 
-int Singleton::ContinueGui() {
+int UI::ContinueGui() {
   if (!qApp) {
     qDebug() << "call InitGui first!";
     return 0;

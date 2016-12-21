@@ -1168,7 +1168,8 @@ BuildPIConstraintGraphWithLines(const PILayoutAnnotation &anno,
         int b = corners2border.at(std::make_pair(c2, c1));
         border2face[b].second = i;
       } else {
-        SHOULD_NEVER_BE_CALLED();
+        throw std::runtime_error(
+            "neither (c1, c2) nor (c2, c1) is stored in corners2border!");
       }
     }
   }

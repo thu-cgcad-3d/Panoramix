@@ -319,11 +319,11 @@ void Discretize(TriMesh &mesh, const core::Sphere3 &s,
   }
 }
 
-void Discretize(TriMesh &mesh, const SpatialProjectedPolygon &spp,
+void Discretize(TriMesh &mesh, const SingleViewPolygon3 &spp,
                 const DiscretizeOptions &o) {
   std::vector<Vec3> cs(spp.corners.size());
   for (int i = 0; i < spp.corners.size(); i++) {
-    Ray3 line(spp.projectionCenter, spp.corners[i] - spp.projectionCenter);
+    Ray3 line(spp.projection_center, spp.corners[i] - spp.projection_center);
     cs[i] = Intersection(line, spp.plane);
   }
   std::vector<TriMesh::VertHandle> vhandles(cs.size());

@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "../src/singleton.hpp"
+#include "../src/ui.hpp"
 #include "panoramix.unittest.hpp"
 
 namespace pano {
@@ -23,7 +23,7 @@ std::string ProjectDataDirStrings::BPTests =
 }
 
 int main(int argc, char *argv[], char *envp[]) {
-  pano::gui::Singleton::SetCmdArgs(argc, argv, envp);
+  pano::gui::UI::SetCmdArgs(argc, argv, envp);
   testing::InitGoogleTest(&argc, argv);
 
   //testing::GTEST_FLAG(catch_exceptions) = false;
@@ -67,7 +67,7 @@ int main(int argc, char *argv[], char *envp[]) {
   // testing::GTEST_FLAG(filter) = "Mesh.Basic";
   // testing::GTEST_FLAG(filter) = "AlgorithmTest.SimulatedAnnealing";
   // testing::GTEST_FLAG(filter) = "IteratorsTest.TransformAndConcated";
-  // testing::GTEST_FLAG(filter) = "FactorGraph.*";
-  testing::GTEST_FLAG(filter) = "IteratorsTest.*";
+  testing::GTEST_FLAG(filter) = "FactorGraph.*";
+  //testing::GTEST_FLAG(filter) = "Visualize.*";
   return RUN_ALL_TESTS();
 }

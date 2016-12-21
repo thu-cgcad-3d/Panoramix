@@ -4,7 +4,7 @@
 #include "macros.hpp"
 #include "qttools.hpp"
 #include "scene.hpp"
-#include "singleton.hpp"
+#include "ui.hpp"
 
 namespace pano {
 namespace gui {
@@ -1130,7 +1130,7 @@ SceneWidget *SceneBuilder::createWidget(const RenderOptions &options,
 
 RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
                                  const RenderOptions &options) {
-  auto app = Singleton::InitGui();
+  auto app = UI::InitGui();
 
   QMainWindow *mwin = new QMainWindow;
 
@@ -1141,8 +1141,8 @@ RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
     mwin->resize(800, 800);
   }
   mwin->setWindowTitle(QString::fromStdString(options.winName()));
-  mwin->setWindowIcon(Singleton::DefaultIcon());
-  mwin->setStyleSheet(Singleton::DefaultCSS());
+  mwin->setWindowIcon(UI::DefaultIcon());
+  mwin->setStyleSheet(UI::DefaultCSS());
 
   auto menuView = mwin->menuBar()->addMenu(QObject::tr("View"));
   auto actionSettings = menuView->addAction(QObject::tr("Settings"));
@@ -1188,7 +1188,7 @@ RenderOptions SceneBuilder::show(bool doModal, bool autoSetCamera,
   mwin->show();
 	Println("mwin show end");
   if (doModal) {
-    Singleton::ContinueGui();
+    UI::ContinueGui();
   }
   return *adjusted;
 }

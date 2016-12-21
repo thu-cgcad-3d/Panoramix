@@ -10,7 +10,7 @@ using namespace pano;
 using namespace test;
 
 TEST(SegmentationTest, SegmentationExtractor) {
-  core::Image3ub im = gui::PickAnImage();
+  core::Image3ub im = gui::FileDialog::PickAnImage();
   if (im.empty())
     return;
 
@@ -78,7 +78,7 @@ TEST(SegmentationTest, SegmentationBoundaryJunction) {
 //TEST(SegmentationTest, SegmentationExtractorInPanorama) {
 //  // core::Image im = core::ImageRead(ProjectDataDirStrings::PanoramaOutdoor +
 //  // "/univ0.jpg");
-//  core::Image3ub im = gui::PickAnImage(ProjectDataDirStrings::PanoramaIndoor);
+//  core::Image3ub im = gui::FileDialog::PickAnImage(ProjectDataDirStrings::PanoramaIndoor);
 //  auto cam = core::CreatePanoramicCamera(im);
 //  if (im.empty()) {
 //    return;
@@ -140,7 +140,7 @@ TEST(SegmentationTest, SegmentationBoundaryJunction) {
 //}
 
 TEST(SegmentationTest, RemoveSmallRegionInSegmentation) {
-  core::Image3ub im = gui::PickAnImage(ProjectDataDirStrings::PanoramaIndoor);
+  core::Image3ub im = gui::FileDialog::PickAnImage(ProjectDataDirStrings::PanoramaIndoor);
   core::ResizeToMakeHeightUnder(im, 800);
   core::SegmentationExtractor segmenter;
   segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
@@ -160,7 +160,7 @@ TEST(SegmentationTest, RemoveSmallRegionInSegmentation) {
 }
 
 TEST(SegmentationTest, RemoveThinRegionInSegmentation) {
-  core::Image3ub im = gui::PickAnImage(ProjectDataDirStrings::PanoramaIndoor);
+  core::Image3ub im = gui::FileDialog::PickAnImage(ProjectDataDirStrings::PanoramaIndoor);
   core::ResizeToMakeHeightUnder(im, 800);
   core::SegmentationExtractor segmenter;
   segmenter.params().algorithm = core::SegmentationExtractor::GraphCut;
@@ -181,7 +181,7 @@ TEST(SegmentationTest, RemoveThinRegionInSegmentation) {
 TEST(SegmentationTest, ExtractSegmentationTopology) {
   using namespace core;
 
-  Image3ub im = gui::PickAnImage("H:\\GitHub\\Panoramix\\data\\normal");
+  Image3ub im = gui::FileDialog::PickAnImage("H:\\GitHub\\Panoramix\\data\\normal");
   if (im.empty())
     return;
 

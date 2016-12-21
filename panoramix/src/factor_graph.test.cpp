@@ -92,18 +92,6 @@ TEST(FactorGraph, Denoise) {
       },
       1.0);
 
-  auto smoothnessfcid3 = fg.addFactorCategory(
-      [](const std::vector<int> &labels) -> double {
-        if (labels[4] == 0 &&
-            std::accumulate(labels.begin(), labels.end(), 0) == 8)
-          return 1.0; // return std::numeric_limits<double>::infinity();
-        if (labels[4] == 1 &&
-            std::accumulate(labels.begin(), labels.end(), 0) == 1)
-          return 1.0; // return std::numeric_limits<double>::infinity();
-        return 0.0;
-      },
-      1.0);
-
   // add smoothness factor nodes
   for (int i = 0; i < noised.rows - 1; i++) {
     for (int j = 0; j < noised.cols - 1; j++) {
@@ -115,25 +103,11 @@ TEST(FactorGraph, Denoise) {
       fg.addFactor(smoothnessfcid1,
                    {vh, vhs[core::EncodeSubscriptToIndex(core::Pixel(j, i + 1),
                                                          noised.size())]});
-      fg.addFactor(smoothnessfcid2,
-                   {vh, vhs[core::EncodeSubscriptToIndex(
-                            core::Pixel(j + 1, i + 1), noised.size())]});
       if (i > 0) {
         fg.addFactor(smoothnessfcid2,
                      {vh, vhs[core::EncodeSubscriptToIndex(
                               core::Pixel(j + 1, i - 1), noised.size())]});
       }
-      /*std::vector<core::FactorGraph::VarHandle> localVhs;
-        for (int x = -1; x <= 1; x++) {
-            for (int y = -1; y <= 1; y++) {
-                auto p = core::Pixel(j + x, i + y);
-                if (!core::Contains(noised, p))
-                    continue;
-                localVhs.push_back(vhs[core::EncodeSubscriptToIndex(p,
-        noised.size())]);
-            }
-        }
-        fg.addFactor(localVhs.begin(), localVhs.end(), smoothnessfcid3);*/
     }
   }
 

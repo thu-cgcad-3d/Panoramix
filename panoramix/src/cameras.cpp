@@ -505,6 +505,16 @@ CreateCubicFacedCameras(const PanoramicCamera &panoCam, int width /* = 500*/,
   return cams;
 }
 
+PerspectiveCamera CreatePerspeciveCamera(const Point3 &eye,
+                                         const Point3 &center,
+                                         const Sizei &ssize, double focal,
+                                         const Point2 &pp) {
+  Vec3 x, y;
+  std::tie(x, y) = ProposeXYDirectionsFromZDirection(center - eye);
+  return PerspectiveCamera(ssize.width, ssize.height, pp, focal, eye, center,
+                           y);
+}
+
 PanoramicCamera CreatePanoramicCamera(const Image &panorama, const Point3 &eye,
                                       const Point3 &center, const Vec3 &up) {
   assert(abs(panorama.cols - panorama.rows * 2) < panorama.rows / 10.0f);

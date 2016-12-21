@@ -13,7 +13,7 @@ using namespace test;
 
 TEST(SingleView, ComputeSpatialRegionProperties) {
 
-  Image3ub im = gui::PickAnImage();
+  Image3ub im = gui::FileDialog::PickAnImage();
   SegmentationExtractor segmenter;
   segmenter.params().algorithm = SegmentationExtractor::GraphCut;
 

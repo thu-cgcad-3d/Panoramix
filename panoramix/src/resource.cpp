@@ -29,8 +29,8 @@ ResourcePtr MakeResource(const core::Image &image) {
         return;
       }
       Q_ASSERT(texture->textureId());
-      QImage mirrored = MakeQImage(image).mirrored();
-      texture->setData(mirrored);
+      //QImage mirrored = MakeQImage(image).mirrored();
+      texture->setData(MakeQImage(image.clone()));
       texture->setMinificationFilter(QOpenGLTexture::Linear);
       texture->setMagnificationFilter(QOpenGLTexture::Linear);
       texture->release();

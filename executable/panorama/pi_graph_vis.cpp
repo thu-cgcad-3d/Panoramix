@@ -2,7 +2,7 @@
 
 #include "algorithms.hpp"
 
-#include "pi_graph_optimize.hpp"
+#include "pi_graph_postprocess.hpp"
 #include "pi_graph_vis.hpp"
 
 namespace pano {
@@ -38,7 +38,7 @@ void VisualizeReconstruction(
   gui::SceneBuilder viz;
   viz.installingOptions().discretizeOptions.colorTable(
       gui::ColorTableDescriptor::RGB);
-  std::vector<core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>, int>>
+  std::vector<core::Decorated<gui::Colored<core::SingleViewPolygon3>, int>>
       spps;
   std::vector<core::Decorated<gui::Colored<core::Line3>, int>> lines;
 
@@ -48,7 +48,7 @@ void VisualizeReconstruction(
       int seg = v.id;
       if (!mg.seg2control[seg].used)
         continue;
-      gui::SpatialProjectedPolygon spp;
+      core::SingleViewPolygon3 spp;
       auto &contours = mg.seg2contours[seg];
       if (contours.empty() || contours.front().empty()) {
         continue;
@@ -62,7 +62,7 @@ void VisualizeReconstruction(
       if (spp.corners.size() < 3)
         continue;
 
-      spp.projectionCenter = core::Point3(0, 0, 0);
+      spp.projection_center = core::Point3(0, 0, 0);
       spp.plane = v.supportingPlane.reconstructed;
       if (HasValue(spp.plane, IsInfOrNaN<double>)) {
         WARNNING("inf plane");
@@ -100,7 +100,7 @@ void VisualizeReconstruction(
          spps,
          [&mg, &cg, &dp, &vertClick, ent2string](
              gui::InteractionID iid,
-             const core::Decorated<gui::Colored<gui::SpatialProjectedPolygon>,
+             const core::Decorated<gui::Colored<core::SingleViewPolygon3>,
                                    int> &spp) {
            int ent = spp.decoration;
            std::cout << ent2string(ent) << std::endl;
@@ -220,8 +220,11 @@ void VisualizeReconstructionCompact(const Image &im,
                                     const PICGDeterminablePart &dp,
                                     const PIConstraintGraph &cg,
                                     const PIGraph<PanoramicCamera> &mg,
-                                    bool doModel) {
-  gui::ResourceStore::set("texture", im);
+                                    bool doModel, bool autoCam,
+                                    bool fixCamUpDir) {
+  Image3ub reversedIm = im.clone();
+  ReverseRows(reversedIm);
+  gui::ResourceStore::set("texture", reversedIm);
 
   auto compactPolygons = CompactModel(dp, cg, mg, 0.1);
   auto e = std::remove_if(
@@ -261,14 +264,23 @@ void VisualizeReconstructionCompact(const Image &im,
       .shaderSource(gui::OpenGLShaderSourceDescriptor::XLines)
       .end();
 
-  viz.show(doModel, false,
-           gui::RenderOptions()
-               .cullFrontFace(true)
-               .cullBackFace(false)
-               .bwColor(0.0)
-               .bwTexColor(1.0)
-               .camera(PerspectiveCamera(600, 600, Point2(300, 300), 450,
-                                         Point3(2, 2, -2), Point3(0, 0, 0))));
+  if (!autoCam) {
+    viz.show(doModel, false,
+             gui::RenderOptions()
+                 .cullFrontFace(true)
+                 .cullBackFace(false)
+                 .bwColor(0.0)
+                 .bwTexColor(1.0)
+                 .camera(PerspectiveCamera(600, 600, Point2(300, 300), 450,
+                                           Point3(2, 2, -2), Point3(0, 0, 0))));
+  } else {
+    viz.show(doModel, true, gui::RenderOptions()
+                                .cullFrontFace(true)
+                                .cullBackFace(false)
+                                .bwColor(0.0)
+                                .bwTexColor(1.0)
+                                .fixUpDirectionInCameraMove(fixCamUpDir));
+  }
 }
 
 void VisualizeLayoutAnnotation(const PILayoutAnnotation &anno,

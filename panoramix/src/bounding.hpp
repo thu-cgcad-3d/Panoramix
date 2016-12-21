@@ -1,10 +1,18 @@
+#include "decorate.hpp"
+#include "geometry.hpp"
+#include "image.hpp"
 #include "math.hpp"
 
 namespace pano {
 namespace core {
 
 // sphere
-template <class T, int N> struct Sphere {
+template <class T, int N> class Sphere {
+public:
+  Sphere() {}
+  Sphere(const Point<T, N> &c, const T &r) : center(c), radius(r) {}
+
+public:
   Point<T, N> center;
   T radius;
 };
@@ -44,13 +52,12 @@ Vec<T, N> AllMaxOf(const Vec<T, N> &v1, const Vec<T, N> &v2) {
 }
 
 // box
-template <class T, int N> struct Box {
+template <class T, int N> class Box {
+public:
   using Type = T;
   static const int Dimension = N;
 
-  Point<T, N> minCorner, maxCorner;
-  bool isNull;
-
+public:
   Box() : isNull(true) {}
   Box(const Point<T, N> &c1, const Point<T, N> &c2)
       : minCorner(AllMinOf(c1, c2)), maxCorner(AllMaxOf(c1, c2)),
@@ -123,6 +130,10 @@ template <class T, int N> struct Box {
     maxCorner = AllMaxOf(maxCorner, b.maxCorner);
     return *this;
   }
+
+public:
+  Point<T, N> minCorner, maxCorner;
+  bool isNull;
 };
 template <class T, int N>
 bool operator==(const Box<T, N> &a, const Box<T, N> &b) {
@@ -150,5 +161,160 @@ template <int N = 3, class T = double> const Box<T, N> &UnitBox() {
 template <class T> struct IsBox : std::false_type {};
 
 template <class T, int N> struct IsBox<Box<T, N>> : std::true_type {};
+
+// for scalars
+template <class T, class = std::enable_if_t<std::is_arithmetic<T>::value>>
+inline Box<T, 1> BoundingBox(const T &t) {
+  return Box<T, 1>(Point<T, 1>(t), Point<T, 1>(t));
+}
+
+template <class T> inline Box<T, 2> BoundingBox(const std::complex<T> &c) {
+  return Box<T, 2>(Point<T, 2>(c.real(), c.imag()),
+                   Point<T, 2>(c.real(), c.imag()));
+}
+
+template <class T, int N> inline Box<T, N> BoundingBox(const Box<T, N> &b) {
+  return b;
+}
+
+template <class T, int N> inline Box<T, N> BoundingBox(const Point<T, N> &p) {
+  return Box<T, N>(p, p);
+}
+
+template <class T, int N> inline Box<T, N> BoundingBox(const HPoint<T, N> &hp) {
+  return BoundingBox(hp.value());
+}
+
+inline Box2 BoundingBox(const Pixel &p) {
+  return Box2(Point2(static_cast<double>(p.x), static_cast<double>(p.y)),
+              Point2(static_cast<double>(p.x), static_cast<double>(p.y)));
+}
+
+inline Box2 BoundingBox(const KeyPoint &p) {
+  return Box2(Point2(p.pt.x, p.pt.y), Point2(p.pt.x, p.pt.y));
+}
+
+template <class PointT> inline auto BoundingBox(const Line<PointT> &l) {
+  return BoundingBox(l.first) | BoundingBox(l.second);
+}
+
+template <class PointT>
+inline auto BoundingBox(const PositionOnLine<PointT> &p) {
+  return BoundingBox(p.position);
+}
+
+inline Box2 BoundingBox(const Image &im) {
+  return Box2(Point2(0, 0), Point2(im.cols, im.rows));
+}
+
+template <class T, int N> inline Box<T, N> BoundingBox(const Sphere<T, N> &s) {
+  return Box<T, N>(s.center, s.center).expand(s.radius);
+}
+
+template <class PointT, class DirT>
+inline auto BoundingBox(const Polygon<PointT, DirT> &p) {
+  return BoundingBoxOfRange(b.corners.begin(), b.corners.end());
+}
+
+template <class PointT, class DirT>
+inline Box3 BoundingBox(const SingleViewPolygon<PointT, DirT> &spp) {
+  std::vector<PointT> cs(spp.corners.size());
+  for (int i = 0; i < spp.corners.size(); i++) {
+    cs[i] =
+        Intersection(Ray<PointT, DirT>(spp.projectionCenter,
+                                       spp.corners[i] - spp.projectionCenter),
+                     spp.plane);
+  }
+  return BoundingBoxOfContainer(cs);
+}
+
+// pointers
+template <class T>
+inline auto BoundingBox(T const *const ptr) -> decltype(BoundingBox(*ptr)) {
+  return BoundingBox(*ptr);
+}
+
+template <class T>
+inline auto BoundingBox(std::shared_ptr<T> ptr) -> decltype(BoundingBox(*ptr)) {
+  return BoundingBox(*ptr);
+}
+
+template <class T>
+inline auto BoundingBox(std::unique_ptr<T> ptr) -> decltype(BoundingBox(*ptr)) {
+  return BoundingBox(*ptr);
+}
+
+template <class T>
+inline auto BoundingBox(std::weak_ptr<T> ptr) -> decltype(BoundingBox(*ptr)) {
+  return BoundingBox(*ptr);
+}
+
+// decorators
+template <class T, class C>
+inline auto BoundingBox(const Classified<T, C> &c)
+    -> decltype(BoundingBox(c.component)) {
+  return BoundingBox(c.component);
+}
+
+template <class T>
+inline auto BoundingBox(const Noted<T> &n)
+    -> decltype(BoundingBox(n.component)) {
+  return BoundingBox(n.component);
+}
+
+template <class T, class S>
+inline auto BoundingBox(const Scored<T, S> &s)
+    -> decltype(BoundingBox(s.component)) {
+  return BoundingBox(s.component);
+}
+
+template <class T, class D>
+inline auto BoundingBox(const Decorated<T, D> &s)
+    -> decltype(BoundingBox(s.component)) {
+  return BoundingBox(s.component);
+}
+
+// return null box if s.enabled == false
+template <class T> inline auto BoundingBox(const Enabled<T> &s) {
+  using BoxType = decltype(BoundingBox(s.component));
+  return s.enabled ? BoundingBox(s.component) : BoxType();
+}
+
+// bounding box of range
+template <class IterT> auto BoundingBoxOfRange(IterT begin, IterT end);
+
+// bounding box of container
+template <class ContainerT>
+inline auto BoundingBoxOfContainer(const ContainerT &cont) {
+  return BoundingBoxOfRange(std::begin(cont), std::end(cont));
+}
+
+template <class T>
+inline auto BoundingBoxOfContainer(std::initializer_list<T> ilist) {
+  return BoundingBoxOfRange(ilist.begin(), ilist.end());
+}
+
+// bounding box of pair-range
+template <class PairIterT>
+auto BoundingBoxOfPairRange(PairIterT begin, PairIterT end);
+
+// the default bounding box functor
+struct DefaultBoundingBoxFunctor {
+  template <class T> inline auto operator()(const T &t) const {
+    return BoundingBox(t);
+  }
+};
+
+// the default influence box functor
+template <class ScalarT> struct DefaultInfluenceBoxFunctor {
+  inline explicit DefaultInfluenceBoxFunctor(const ScalarT &extSz = 0)
+      : extendedSize(extSz) {}
+  template <class T>
+  inline auto operator()(const T &t) const
+      -> decltype(BoundingBox(std::declval<T>())) {
+    return BoundingBox(t).expand(extendedSize);
+  }
+  const ScalarT extendedSize;
+};
 }
 }
