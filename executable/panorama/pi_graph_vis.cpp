@@ -2,7 +2,7 @@
 
 #include "algorithms.hpp"
 
-#include "pi_graph_optimize.hpp"
+#include "pi_graph_postprocess.hpp"
 #include "pi_graph_vis.hpp"
 
 namespace pano {

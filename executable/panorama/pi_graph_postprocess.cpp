@@ -4,7 +4,7 @@
 #include "line_detection.hpp"
 #include "segmentation.hpp"
 
-#include "pi_graph_optimize.hpp"
+#include "pi_graph_postprocess.hpp"
 
 namespace pano {
 namespace experimental {

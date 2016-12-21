@@ -12,7 +12,7 @@
 #include "pi_graph_cg.hpp"
 #include "pi_graph_control.hpp"
 #include "pi_graph_occlusion.hpp"
-#include "pi_graph_optimize.hpp"
+#include "pi_graph_postprocess.hpp"
 #include "pi_graph_vis.hpp"
 
 using namespace pano;
